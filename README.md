@@ -20,13 +20,13 @@
 ---
 
 ### 💥 MARM v2.0 Release on 8/16 💥
+- MARM protocol has been transformed using Identity-Based Prompt Architecture, a method that fuses the AI's core identity with its function to ensure unwavering focus and reliability.
 - Visual walkthroughs and logic flowcharts
 - Modern UI: Card-style chat, new colors, and interactive buttons
 - Command Menu Overhaul: Redesigned commands and notebook menus
 - Session Fixes: Persistent sessions and improved stability
 - Security & Testing: Real XSS protection and full test suite
-- Protocol Command Overhaul: Streamlined logging, context refresh, and notebook management
-- Plus more 
+- Protocol Command Overhaul: Streamlined logging, context refresh, and notebook.             nagement
 
 ---
 
