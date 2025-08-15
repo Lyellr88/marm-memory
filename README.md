@@ -26,6 +26,23 @@ MARM is a protocol for AI reliability. It gives you control over memory and logi
 
 ---
 
+<br><br>
+<div align="center">
+  <h3>🚀 Try MARM Now - No Setup Required</h3>
+  <a href="https://marm-systems-chatbot.onrender.com">
+    <img src="https://img.shields.io/badge/Launch_Live_Demo-MARM_Chatbot-FF6B6B?style=for-the-badge&logo=rocket&logoColor=white" width="300">
+  </a>
+  <p><i>Experience all features instantly in your browser</i></p>
+</div>
+<br><br>
+<div align="center">
+  <img src="media/marm-chatbot1.png" width="300" style="margin:10px"/>
+  <img src="media/marm-chatbot2.png" width="300" style="margin:10px"/>
+  <img src="media/marm-chatbot3.png" width="300" style="margin:10px"/>
+</div> 
+
+---
+
 ## 📄 Table of Contents  
 - [Overview](#-overview)  
 - [Who is Marm Built For?](#-built-for-research--real-use)  
@@ -109,23 +126,7 @@ Advanced Tools
 ```   
 
 Need a walkthrough or troubleshooting help? The [`HANDBOOK.md`](./HANDBOOK.md) covers all aspects of using MARM.
-
----
-
-<br><br>
-<div align="center">
-  <h3>🚀 Try MARM Now - No Setup Required</h3>
-  <a href="https://marm-systems-chatbot.onrender.com">
-    <img src="https://img.shields.io/badge/Launch_Live_Demo-MARM_Chatbot-FF6B6B?style=for-the-badge&logo=rocket&logoColor=white" width="300">
-  </a>
-  <p><i>Experience all features instantly in your browser</i></p>
-</div>
-<br><br>
-<div align="center">
-  <img src="media/marm-chatbot1.png" width="300" style="margin:10px"/>
-  <img src="media/marm-chatbot2.png" width="300" style="margin:10px"/>
-  <img src="media/marm-chatbot3.png" width="300" style="margin:10px"/>
-</div>  
+ 
 
 ### User Experience (Chatbot)   
 
@@ -144,7 +145,6 @@ Need a walkthrough or troubleshooting help? The [`HANDBOOK.md`](./HANDBOOK.md) c
 - **Professional error handling** - Clear feedback when things go wrong
 
 ---
-
 
 ## 🛠️ Install Locally
 
