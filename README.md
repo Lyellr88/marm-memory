@@ -4,16 +4,14 @@
 
 ![Last Update](https://img.shields.io/badge/last_update-August_08_2025-blue?style=flat-square) ![Stars](https://img.shields.io/github/stars/Lyellr88/MARM-Protocol?style=flat-square) ![Forks](https://img.shields.io/github/forks/Lyellr88/MARM-Protocol?style=flat-square) ![Commit Activity](https://img.shields.io/github/commit-activity/m/Lyellr88/MARM-Systems?style=flat-square) [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/LICENSE) ![Code Size](https://img.shields.io/github/languages/code-size/Lyellr88/MARM-Systems?style=flat-square) ![Top Language](https://img.shields.io/github/languages/top/Lyellr88/MARM-Systems?style=flat-square) ![Version](https://img.shields.io/badge/version-1.5.0-blue?style=flat-square)
 
-
-
-
-💥**Coming Soon to MARM Systems**💥   
-- visual walkthroughs and logic flowcharts
+### 💥 MARM v2.0 Release on 8/16 💥
+- Visual walkthroughs and logic flowcharts
 - Modern UI: Card-style chat, new colors, and interactive buttons
 - Command Menu Overhaul: Redesigned commands and notebook menus
 - Session Fixes: Persistent sessions and improved stability
 - Security & Testing: Real XSS protection and full test suite
 - Protocol Command Overhaul: Streamlined logging, context refresh, and notebook management
+- Plus more 
 
 ---
 
