@@ -33,7 +33,7 @@ Every feature in MARM v2.0 came from user feedback:
 - **Llama 4 Maverick integration** - Because people wanted better AI with lower costs
 - **File upload system** - Because people wanted to analyze code and documents
 - **Professional testing** - Because people wanted reliable, production-ready software
-- **XSS security protection** - Because people wanted enterprise-grade safety
+- **XSS security protection** - Because people wanted professional-grade safety
 - **Session persistence** - Because people wanted to continue conversations
 - **Voice synthesis** - Because some users prefer audio
 - **Live chatbot** - Because people wanted to try it without setup
@@ -53,7 +53,7 @@ MARM v2.0 is stable and production-ready, but this is just the beginning. The ro
 - **Dual-RAG System** - Personal user memory + general knowledge base
 - **MCP Integration** - Model Context Protocol support for developer ecosystem
 - **n8n Workflows** - Automated session processing and memory updates
-- **Enterprise Solutions** - Team memory management and deployment options
+- **Professional Solutions** - Team memory management and deployment options
 
 ### Get Involved
 
