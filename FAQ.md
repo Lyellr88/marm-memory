@@ -1,3 +1,4 @@
+
 # FAQ
 
 ## 🎯 Quick Start
@@ -28,8 +29,7 @@ Works everywhere - ChatGPT, Claude, API, local models. Manual commands ensure co
 
 ---
 
-<details>
-<summary>🚀 Getting Started & What is MARM</summary>
+## 🚀 Getting Started & What is MARM
 
 ### Q: What is MARM and why should I use it?
 
@@ -72,12 +72,10 @@ MARM (Memory Accurate Response Mode) is an AI protocol that gives any chatbot pe
 
 - Quick, one-off questions
 - Users who want fully automated AI (MARM requires manual commands)
-</details>
 
 ---
 
-<details>
-<summary>⚙️ Setup & Installation</summary>
+## ⚙️ Setup & Installation
 
 ### Q: How do I install MARM locally?
 
@@ -89,10 +87,10 @@ MARM (Memory Accurate Response Mode) is an AI protocol that gives any chatbot pe
 
 **For online chatbot:** No - just visit the link and start using
 
-**For local installation:** Yes - Replicate API token (free tier includes $10 credit)
+**For local installation:** Yes - Replicate API token (free trial for new customers)
 
 - Get token at [replicate.com/account/api-tokens](https://replicate.com/account/api-tokens)
-- $10 credit = thousands of conversations
+- Free trial for new customers
 - 96% cheaper than premium AI services
 
 ### Q: What are the system requirements?
@@ -111,12 +109,10 @@ Yes! MARM works with 1000+ models on Replicate:
 - **Default**: Llama 4 Maverick (400B params, multimodal)
 - **Alternatives**: Claude, GPT, Mistral, Code Llama, etc.
 - **Easy switching**: Change one line in server.js (see SETUP.md)
-</details>
 
 ---
 
-<details>
-<summary>🔍 How MARM Compares</summary>
+## 🔍 How MARM Compares
 
 ### Q: Why not just use ChatGPT memory?
 
@@ -165,12 +161,10 @@ Yes! MARM works with 1000+ models on Replicate:
 - **Session persistence** - Build knowledge that transfers anywhere
 
 **Philosophy**: Memory accuracy through user control, not black box automation.
-</details>
 
 ---
 
-<details>
-<summary>🤖 Live Chatbot</summary>
+## 🤖 Live Chatbot
 
 ### Q: How do I use the live MARM chatbot?
 
@@ -195,12 +189,10 @@ Open [marm-systems-chatbot.onrender.com](https://marm-systems-chatbot.onrender.c
 2. `/notebook show:` to check context
 3. `/deep dive` for next response
 4. Re-explain your work briefly
-</details>
 
 ---
 
-<details>
-<summary>🧠 Core Concepts</summary>
+## 🧠 Core Concepts
 
 ### Q: Why manual commands instead of automation?
 
@@ -217,12 +209,10 @@ No. MARM is a user-side protocol, not a model fix. It helps mitigate hallucinati
 - Enhanced `/notebook` with `add:`, `use:`, `show:`, `clear:`, `status:`
 - Improved live chatbot with session persistence
 - Updated command syntax throughout
-</details>
 
 ---
 
-<details>
-<summary>⚙️ Commands</summary>
+## ⚙️ Commands
 
 ### Q: Essential command patterns?
 
@@ -249,12 +239,10 @@ No. MARM is a user-side protocol, not a model fix. It helps mitigate hallucinati
 ### Q: When to use `/deep dive`?
 
 Use when you need maximum accuracy, detailed reasoning, or responses grounded in session context. It forces strict guardrails and shows reasoning.
-</details>
 
 ---
 
-<details>
-<summary>🛠️ Troubleshooting</summary>
+## 🛠️ Troubleshooting
 
 ### Q: Session losing context?
 
@@ -270,7 +258,7 @@ Use when you need maximum accuracy, detailed reasoning, or responses grounded in
 - **ChatGPT:** Use `/refresh marm` every 5-7 turns to counter assumption drift
 - **Claude:** Requires disciplined reseed workflow, benefits from `/notebook` entries  
 - **API/Local:** Treat as stateless, implement reseed blocks in system prompts
-</details>
+
 
 ---
 
