@@ -14,5 +14,4 @@ export * from './docs.js';
 export * from './summary.js';
 export * from './utils.js';
 
-// Optionally, export as grouped namespaces
 export { constants, session, notebook, docs, summary, utils }; 
