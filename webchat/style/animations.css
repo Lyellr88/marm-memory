@@ -1,5 +1,17 @@
 /* animations.css - All animations and transitions */
 
+/* Loading dots bounce animation */
+@keyframes bounce {
+  0%, 80%, 100% {
+    transform: scale(0.8);
+    opacity: 0.5;
+  }
+  40% {
+    transform: scale(1.2);
+    opacity: 1;
+  }
+}
+
 /* Loading wave animation */
 @keyframes loading-wave {
   0%, 80%, 100% {
@@ -60,7 +72,7 @@
 
 /* Hover animations */
 .command-item:hover {
-  transform: translateX(5px);
+  transform: translateX(0.3125rem);
 }
 
 .voice-btn:hover {
@@ -82,14 +94,50 @@ input,
 .command-item,
 .modal,
 .command-menu {
-  transition: all var(--transition-fast) ease;
+  transition: background var(--transition-fast) ease, border-color var(--transition-fast) ease, opacity var(--transition-fast) ease, transform var(--transition-fast) ease;
+}
+
+/* Wave animation for chat messages */
+.wave {
+  display: inline-block;
+  animation: wave 1.5s ease-in-out 3 forwards;
+  transform-origin: 70% 70%;
+}
+@keyframes wave {
+  0%, 60%, 100% { transform: rotate(0deg); }
+  10%, 30%, 50% { transform: rotate(20deg); }
+  20%, 40% { transform: rotate(-15deg); }
+}
+
+/* Pulsating Brain */
+.pulse-brain {
+  display: inline-block;
+  animation: pulse 1.5s ease-in-out 3 forwards;
+}
+@keyframes pulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+
+/* Shaking "No" sign */
+.shake-no {
+  display: inline-block;
+  animation: shake 0.4s ease-in-out 3 forwards;
+}
+@keyframes shake {
+  0% { transform: translate(0, 0) rotate(0); }
+  25% { transform: translate(-1px, 0) rotate(-5deg); }
+  50% { transform: translate(1px, 0) rotate(5deg); }
+  75% { transform: translate(-1px, 0) rotate(-5deg); }
+  100% { transform: translate(0, 0) rotate(0); }
 }
 
 /* Reduced motion support */
 @media (prefers-reduced-motion: reduce) {
   * {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms;
+    animation-iteration-count: 1;
+    transition-duration: 0.01ms;
   }
 } 
