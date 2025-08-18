@@ -1,7 +1,11 @@
-# Environment variables
+# Environment variables and API keys
 .env
 .env.local
 .env.production
+config.js
+
+# Development files (local only)
+debug.js
 
 # Node modules (if you add any)
 node_modules/
@@ -30,3 +34,9 @@ coverage/
 # OS
 .DS_Store
 Thumbs.db
+
+# Development/Testing files (local only)
+debug.js
+
+# Claude Code CLI files
+.claude/
