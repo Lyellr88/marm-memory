@@ -1,14 +1,20 @@
 // state.js - Centralized state management for MARM chatbot
 
+// ===== Centralized State Management for MARM Chatbot =====
 const STATE_KEY = 'marm-current-state';
 
-// ===== APPLICATION STATE =====
-export const state = { 
+// --- Application State (Private) ---
+const state = { 
   isMarmActive: false, 
   currentSessionId: null 
 };
 
-// ===== STATE PERSISTENCE =====
+// --- State Getter ---
+export function getState() {
+  return { ...state };
+}
+
+// --- State Persistence ---
 function persistState() {
   try {
     localStorage.setItem(STATE_KEY, JSON.stringify(state));
@@ -17,8 +23,8 @@ function persistState() {
   }
 }
 
-// ===== STATE RESTORATION =====
-function restoreState() {
+// --- State Restoration ---
+export function restoreState() {
   try {
     const saved = localStorage.getItem(STATE_KEY);
     if (saved) {
@@ -26,7 +32,6 @@ function restoreState() {
       try {
         validateState(parsedState);
         Object.assign(state, parsedState);
-        console.log('State restored:', state);
       } catch (validationError) {
         console.warn('Saved state failed validation, resetting to defaults:', validationError);
         resetToDefaults();
@@ -38,15 +43,16 @@ function restoreState() {
   }
 }
 
-// ===== STATE RESET =====
+// --- State Reset ---
 function resetToDefaults() {
   state.isMarmActive = false;
   state.currentSessionId = null;
+  persistState(); 
 }
 
 restoreState();
 
-// ===== STATE VALIDATION =====
+// --- State Validation ---
 export function validateState(newState) {
   if (typeof newState.isMarmActive !== 'boolean') {
     throw new Error('isMarmActive must be boolean');
@@ -57,21 +63,20 @@ export function validateState(newState) {
   return true;
 }
 
-// ===== STATE MANAGEMENT FUNCTIONS =====
+// ===== State Management Functions =====
 export function updateState(updates) {
   const newState = { ...state, ...updates };
   validateState(newState);
+  
   Object.assign(state, newState);
+  
   persistState();
-  return state;
-}
-
-export function getState() {
   return { ...state };
 }
 
 export function resetState() {
-  state.isMarmActive = false;
-  state.currentSessionId = null;
-  persistState();
+  return updateState({
+    isMarmActive: false,
+    currentSessionId: null
+  });
 } 
