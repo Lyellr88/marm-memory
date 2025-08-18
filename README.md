@@ -21,8 +21,8 @@
 <picture>
     <img src="https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/media/google-overview.png"
          alt="MARM - The AI That Remembers Your Conversations"
-         width="700"
-         height="350"
+         width="525"
+         height="600"
          style="filter: brightness(0.9) contrast(1.05);">
 </picture>
 </div>
