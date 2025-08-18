@@ -5,28 +5,20 @@
        width="700"
        height="350">
 </picture>
-</div>
-
- <h1 align="center">MARM: The AI That Remembers Your Conversations</h1> 
-
-<p align="center">**Memory Accurate Response Mode v2.0** - Build smarter AI conversations with structured memory and transparent logic.
-
-<div align="center">
+<h1 align="center">MARM: The AI That Remembers Your Conversations</h1> 
+<h4 align="center">Memory Accurate Response Mode v2.0 - Build smarter AI conversations with structured memory and transparent logic.</h4>
     
-![Stars](https://img.shields.io/github/stars/Lyellr88/MARM-Protocol?style=flat-square) ![Forks](https://img.shields.io/github/forks/Lyellr88/MARM-Protocol?style=flat-square) [![Tests](https://github.com/Lyellr88/MARM-Systems/actions/workflows/test.yml/badge.svg)](https://github.com/Lyellr88/MARM-Systems/actions/workflows/test.yml) [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/LICENSE) ![Version](https://img.shields.io/badge/version-2.0-blue?style=flat-square)
-</div>
-<h2 align="center">🎯 What is MARM? </h2> 
+![Stars](https://img.shields.io/github/stars/Lyellr88/MARM-Protocol?style=flat-square) ![Forks](https://img.shields.io/github/forks/Lyellr88/MARM-Protocol?style=flat-square) ![Tests](https://img.shields.io/badge/tests-74%20passing-brightgreen?style=flat-square) [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/LICENSE) ![Version](https://img.shields.io/badge/version-2.0-blue?style=flat-square)
 
-<div align="center">
+<h2 align="center">🎯 What is MARM? </h2> 
 <picture>
     <img src="https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/media/google-overview.png"
          alt="MARM - The AI That Remembers Your Conversations"
-         width="600"
-         height="750"
+         width="525"
+         height="600"
          style="filter: brightness(0.9) contrast(1.05);">
 </picture>
 </div>
-  
 <p align="center">*As recognized by Google AI Overview:*
 
   ---
@@ -50,6 +42,7 @@
 ## 📌 Overview
 
 MARM is a protocol for AI reliability. It gives you control over memory and logic by letting you log sessions, store your own notes, and compile summaries. The result: fewer hallucinations, transparent reasoning, and conversations that stay on track.  
+
 **Steer the AI instead of chasing it.**
 
 > For copy-and-paste prompt users and full technical details, see [`PROTOCOL.md`](./PROTOCOL.md)
@@ -249,6 +242,13 @@ Small talk • Throwaway chats • Passive use
 
 ---
 
+<div align="center">
+  
+  [![Star History Chart](https://api.star-history.com/svg?repos=Lyellr88/MARM-Systems&type=Date)](https://star-history.com/#Lyellr88/MARM-Systems&Date)
+</div>
+
+---
+
 ## 🚀 Join the MARM Community
 
 **Help build the future of AI memory - no coding required!**
@@ -292,5 +292,3 @@ MARM is actively being tested and adopted across platforms.
 [Reddit Feedback 2 (View Image)](media/Reddit%20Community%20Feedback%202.jpg)
 
 *Additional feedback and screenshots will be added as adoption grows.*
-- [SETUP.md](SETUP.md) - Local download setup guide.
-- [PROTOCOL.md](PROTOCOL.md) - Quick Start, Copy and Paste Protocol, and Limitations.
