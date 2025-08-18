@@ -1,78 +1,259 @@
 # FAQ
 
----
+## 🎯 Quick Start
 
-### 🔹 Core Concepts
-<details>
+**Q: How do I start using MARM?**  
+Use `/start marm` as your first command, then `/log session: [name]` to organize your work.
 
-**Q: What’s new in MARM v1.2?**  
-A: MARM v1.2 promotes session relay tools /compile, **reseeding**, and **structured log enforcement* as core protocol features. These tools are now standard for managing session continuity.
+**Q: Key commands?**  
+`/deep dive` (accuracy), `/summary: [session]` (recap), `/notebook add:` (memory), `/show reasoning` (transparency).
 
-**Q: Why does MARM rely on manual steps and user-controlled commands?**  
-A: MARM is designed for **transparency**, **control**, and **cross-platform stability**. Manual commands like /log and /compile ensure users decide **what gets remembered and when**. This avoids hidden automation, reduces drift, and makes MARM consistent even when AI memory features vary or fail.
+**Q: When to log?**  
+Use `/log entry: [YYYY-MM-DD-topic-summary]` for milestones, decisions, or breakthroughs.
 
-**Q: Does MARM claim to fix hallucinations or eliminate memory loss?**  
-A: No. MARM is **not a backend patch** or model-level override. It’s a **user-side protocol** built from structured prompting, manual session logging, and reseed logic. While many users report fewer hallucinations and more stable responses, MARM does **not claim to "fix" or "eliminate"** these issues only to help **mitigate** their impact through guided structure and intentional interaction.
-</details>
+**Q: Session getting generic?**  
+Run `/refresh marm` → `/summary:` → `/deep dive` → reseed if needed.
 
----
+**Q: How to resume work?**  
+Use `/summary: [session]` to generate reseed block, paste in new chat with `/start marm`.
 
-### 🔹 Starting & Managing Sessions
-<details>
+**Q: Live chatbot?**  
+Available at [marm-systems-chatbot.onrender.com](https://marm-systems-chatbot.onrender.com) - no setup required.
 
-**Q: How do I start a new session with MARM?**  
-A: Use the /start marm command to activate **memory and accuracy layers** for your session.  For more details, see the [Handbook.](HANDBOOK.md) 
+**Q: What's new in v2.0?**  
+Updated commands: `/deep dive` (was /contextual), `/summary:` (was /compile), enhanced `/notebook` verbs.
 
-**Q: How do I name or rename a session?**  
-A: Use /log [SessionName] (e.g., /log SessionA). To rename, just repeat the command with a new name.
-
-**Q: What happens if I don’t name a session?**  
-A: MARM will assign a **default session name** (e.g., “Session”) until you specify one.
-
-**Q: What if I forget to log context or name a session?**  
-A: MARM continues using the default session. You can log or rename at **any time** with /log [SessionName].
-
-**Q: How often or when should I log context using the /log command?**  
-A: Use /log at the start of any **new topic, project, or session**. Log again after **major decisions**, **breakthroughs**, or pivots. For long threads, logging every few steps improves clarity and makes summaries more effective.
-</details>
+**Q: Platform support?**  
+Works everywhere - ChatGPT, Claude, API, local models. Manual commands ensure consistency.
 
 ---
 
-### 🔹 Resuming & Reusing Sessions
-<details>
+## 🚀 Getting Started & What is MARM
 
-**Q: How do I resume or continue a previous session?**  
-A: Because session memory doesn’t persist across chats, use /compile to summarize your logs. Then paste the **reseed block** into a new session alongside /start marm and /log.
+### Q: What is MARM and why should I use it?
 
-**Q: What is a reseed prompt?**  
-A: After running /compile, MARM generates a **paste-ready context block**. Use it to restore state in a new chat or LLM session.
-</details>
+MARM (Memory Accurate Response Mode) is an AI protocol that gives any chatbot persistent memory and enhanced reasoning. Unlike standard AI that forgets previous conversations, MARM builds living context that grows with each interaction.
+
+**Key benefits:**
+
+- **True memory** - Remembers everything across long projects
+- **Session organization** - Folder-style structure for complex work
+- **Enhanced accuracy** - Built-in fact-checking and reasoning validation
+- **Platform universal** - Works with any AI (ChatGPT, Claude, local models)
+
+### Q: How is MARM different from ChatGPT memory or Claude Projects?
+
+**ChatGPT/Claude built-in memory:**
+
+- Limited, opaque, no user control
+- Platform-specific, can't transfer
+- No validation or accuracy guarantees
+
+**MARM:**
+
+- Manual control over what gets remembered
+- Portable across any AI platform
+- Built-in accuracy validation with `/deep dive`
+- Session summaries you can copy/paste anywhere
+- Transparent - you see and control all context
+
+### Q: Who is MARM for?
+
+**Perfect for:**
+
+- **Developers** - Long coding projects with context continuity
+- **Researchers** - Complex analysis requiring memory accuracy
+- **Writers** - Multi-session creative projects
+- **Consultants** - Client work requiring detailed context retention
+- **Anyone** doing serious work with AI over multiple conversations
+
+**Not ideal for:**
+
+- Quick, one-off questions
+- Users who want fully automated AI (MARM requires manual commands)
 
 ---
 
-### 🔹 Commands & Functionality
-<details>
-  
-**Q: What does the /compile command do?**  
-A: It creates a **one-line-per-entry digest** of your session logs. You can filter output using --fields=Intent,Outcome. This helps **recap session history** and supports reseeding.
+## ⚙️ Setup & Installation
 
-**Q: What if I mess up a /log entry?**  
-A: MARM automatically **checks formatting**. If a field is missing (like today’s date) or malformed, it will **prompt you to fix it** or auto-suggest corrections.
+### Q: How do I install MARM locally?
 
-**Q: Can I see the reasoning behind a response?**  
-A: Yes. Use /show reasoning to reveal the AI’s **logic chain** behind its most recent answer.
-</details>
-  
+1. **Try online first**: [marm-systems-chatbot.onrender.com](https://marm-systems-chatbot.onrender.com) - no setup required
+2. **For local setup**: See [SETUP.md](SETUP.md) for complete installation guide
+3. **Quick summary**: Node.js + Replicate API token + `npm start`
+
+### Q: Do I need an API key?
+
+**For online chatbot:** No - just visit the link and start using
+
+**For local installation:** Yes - Replicate API token (free trial for new customers)
+
+- Get token at [replicate.com/account/api-tokens](https://replicate.com/account/api-tokens)
+- Free trial for new customers
+- 96% cheaper than premium AI services
+
+### Q: What are the system requirements?
+
+**Minimal requirements:**
+
+- **Online**: Any modern browser
+- **Local**: Node.js v16+, 50MB storage
+- **AI Backend**: Replicate account (or any AI API)
+- **Platform**: Works on Windows, Mac, Linux
+
+### Q: Can I use different AI models?
+
+Yes! MARM works with 1000+ models on Replicate:
+
+- **Default**: Llama 4 Maverick (400B params, multimodal)
+- **Alternatives**: Claude, GPT, Mistral, Code Llama, etc.
+- **Easy switching**: Change one line in server.js (see SETUP.md)
+
 ---
 
-### 🔹 Troubleshooting & Platform Support
-<details>
-  
-**Q: What should I do if the session gets too long or starts to lose context?**  
-A: Use /log to checkpoint your current session, then /compile to create a **summary**. This keeps your place and reduces drift when continuing later.
+## 🔍 How MARM Compares
 
-**Q: Does MARM work with all AI platforms?**  
-A: Yes. MARM is **platform-agnostic**. with core tools like /log and /compile work consistently everywhere.
-</details>
+### Q: Why not just use ChatGPT memory?
+
+**ChatGPT Memory limitations:**
+
+- No control over what gets remembered
+- Can't export or transfer conversations
+- Memory degrades over time
+- Platform-locked
+
+**MARM advantages:**
+
+- You control what gets logged with `/log entry:`
+- Export summaries with `/summary:` for any platform
+- Memory stays accurate with validation protocols
+- Works with any AI, not just ChatGPT
+
+### Q: How does this compare to other AI tools?
+
+**vs. Claude Projects:**
+
+- MARM is portable, Claude Projects are platform-locked
+- MARM has validation protocols, Claude doesn't
+- MARM works with any model, Claude is single-provider
+
+**vs. Custom GPTs:**
+
+- MARM focuses on memory architecture, not specific use cases
+- MARM is transparent, Custom GPTs are black boxes
+- MARM works everywhere, Custom GPTs only in ChatGPT Plus
+
+**vs. RAG systems:**
+
+- MARM is user-controlled, RAG is automated
+- MARM uses session-based memory, RAG uses vector search
+- MARM is lightweight, RAG requires infrastructure
+
+### Q: What makes MARM different?
+
+**Unique approach:**
+
+- **Manual control** - You decide what gets remembered
+- **Universal compatibility** - Works with any AI backend
+- **Identity-based protocol** - AI becomes a memory architect, not just a chatbot
+- **Transparent validation** - See the reasoning with `/show reasoning`
+- **Session persistence** - Build knowledge that transfers anywhere
+
+**Philosophy**: Memory accuracy through user control, not black box automation.
 
 ---
+
+## 🤖 Live Chatbot
+
+### Q: How do I use the live MARM chatbot?
+
+Open [marm-systems-chatbot.onrender.com](https://marm-systems-chatbot.onrender.com):
+
+1. Type `/start marm` to activate MARM v2.0 protocol
+2. Use command menu (⚡ button) for quick access
+3. Sessions auto-save and persist across refreshes
+4. **Powered by Llama 4 Maverick** - 400B parameter multimodal model
+5. Includes voice synthesis, adaptive dark/light mode, and file uploads (features are MVP)
+
+### Q: Best practices for the chatbot?
+
+- Start with `/start marm` and give context about your work
+- Use `/notebook add:` for preferences, project context, or communication style
+- Log regularly: `/log session: [name]` and `/log entry: [YYYY-MM-DD-topic-summary]`
+- Run `/refresh marm` every 8-10 turns to prevent drift
+
+### Q: Troubleshooting generic responses?
+
+1. `/refresh marm` to recenter
+2. `/notebook show:` to check context
+3. `/deep dive` for next response
+4. Re-explain your work briefly
+
+---
+
+## 🧠 Core Concepts
+
+### Q: Why manual commands instead of automation?
+
+MARM prioritizes transparency and control. Manual commands like `/log` and `/summary:` ensure you decide what gets remembered and when. This prevents hidden automation, reduces drift, and works consistently across platforms.
+
+### Q: Does MARM fix hallucinations?
+
+No. MARM is a user-side protocol, not a model fix. It helps mitigate hallucinations through structured prompting and manual session logging, but doesn't claim to eliminate them.
+
+### Q: What's new in v2.0?
+
+- `/deep dive` replaces `/contextual reply`
+- `/summary:` replaces `/compile`  
+- Enhanced `/notebook` with `add:`, `use:`, `show:`, `clear:`, `status:`
+- Improved live chatbot with session persistence
+- Updated command syntax throughout
+
+---
+
+## ⚙️ Commands
+
+### Q: Essential command patterns?
+
+```text
+/start marm
+/log session: ProjectName
+/log entry: [2025-08-11-feature-completed]
+/notebook add: style_guide [preferences]
+/notebook use: style_guide
+/deep dive [your question]
+/summary: ProjectName
+```
+
+### Q: How does `/notebook` work?
+
+- `add: [name] [data]` - Store information
+- `use: [name1,name2]` - Activate as instructions  
+- `show:` - List all entries
+- `clear:` - Remove active entries
+- `status:` - Show current active list
+
+**Limitations:** Session-bound, doesn't persist across chats
+
+### Q: When to use `/deep dive`?
+
+Use when you need maximum accuracy, detailed reasoning, or responses grounded in session context. It forces strict guardrails and shows reasoning.
+
+---
+
+## 🛠️ Troubleshooting
+
+### Q: Session losing context?
+
+**4-step fix:**
+
+1. `/refresh marm` to recenter
+2. `/summary: [session]` to recap  
+3. `/deep dive` for next response
+4. Reseed in new chat if token limits hit
+
+### Q: Platform-specific tips?
+
+- **ChatGPT:** Use `/refresh marm` every 5-7 turns to counter assumption drift
+- **Claude:** Requires disciplined reseed workflow, benefits from `/notebook` entries  
+- **API/Local:** Treat as stateless, implement reseed blocks in system prompts
