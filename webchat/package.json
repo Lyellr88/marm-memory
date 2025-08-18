@@ -8,9 +8,9 @@
   "author": "Lyell",
   "license": "MIT",
   "scripts": {
-    "test": "jest",
     "start": "node src/chatbot/server.js",
-    "dev": "nodemon src/chatbot/server.js"
+    "dev": "node src/chatbot/server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
     "dotenv": "^17.2.1",
