@@ -34,6 +34,7 @@ export async function loadDocs() {
   return docsCache;
 }
 
+// --- Documentation Search Logic ---
 export function searchDocs(query) {
   if (!docsCache) return '';
   const q = query.toLowerCase();
