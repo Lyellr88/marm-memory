@@ -5,19 +5,12 @@
        width="700"
        height="350">
 </picture>
-</div>
-
- <h1 align="center">MARM: The AI That Remembers Your Conversations</h1> 
-
+<h1 align="center">MARM: The AI That Remembers Your Conversations</h1> 
 <h4 align="center">Memory Accurate Response Mode v2.0 - Build smarter AI conversations with structured memory and transparent logic.</h4>
-
-<div align="center">
     
-![Stars](https://img.shields.io/github/stars/Lyellr88/MARM-Protocol?style=flat-square) ![Forks](https://img.shields.io/github/forks/Lyellr88/MARM-Protocol?style=flat-square) [![Tests](https://github.com/Lyellr88/MARM-Systems/actions/workflows/test.yml/badge.svg)](https://github.com/Lyellr88/MARM-Systems/actions/workflows/test.yml) [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/LICENSE) ![Version](https://img.shields.io/badge/version-2.0-blue?style=flat-square)
-</div>
-<h2 align="center">🎯 What is MARM? </h2> 
+![Stars](https://img.shields.io/github/stars/Lyellr88/MARM-Protocol?style=flat-square) ![Forks](https://img.shields.io/github/forks/Lyellr88/MARM-Protocol?style=flat-square) ![Tests](https://img.shields.io/badge/tests-74%20passing-brightgreen?style=flat-square) [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/LICENSE) ![Version](https://img.shields.io/badge/version-2.0-blue?style=flat-square)
 
-<div align="center">
+<h2 align="center">🎯 What is MARM? </h2> 
 <picture>
     <img src="https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/media/google-overview.png"
          alt="MARM - The AI That Remembers Your Conversations"
@@ -26,7 +19,6 @@
          style="filter: brightness(0.9) contrast(1.05);">
 </picture>
 </div>
-  
 <p align="center">*As recognized by Google AI Overview:*
 
   ---
@@ -247,6 +239,13 @@ MARM is both a power-user tool and a research scaffold:
 ### Not built for
 
 Small talk • Throwaway chats • Passive use  
+
+---
+
+<div align="center">
+  
+  [![Star History Chart](https://api.star-history.com/svg?repos=Lyellr88/MARM-Systems&type=Date)](https://star-history.com/#Lyellr88/MARM-Systems&Date)
+</div>
 
 ---
 
