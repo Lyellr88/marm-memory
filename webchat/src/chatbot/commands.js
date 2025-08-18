@@ -1,4 +1,5 @@
-// commands.js - Command handling and specific command logic for MARM chatbot
+// commands.js - Command handling and specific command logic for MARM chatbot //
+
 import {
   activateMarmSession,
   logSession,
@@ -11,16 +12,121 @@ import {
   trimForContext
 } from '../logic/marmLogic.js';
 
-import { generateContent } from '../geminiHelper.js';
+import { generateContent } from '../replicateHelper.js';
 import { appendMessage, hideLoadingIndicator } from './ui.js';
-import { state, updateState } from './state.js';
+import { getState, updateState } from './state.js';
 
-// ===== MAIN COMMAND HANDLER =====
+// ===== Helper Functions =====
+function commandResponse(message) {
+  hideLoadingIndicator();
+  appendMessage('bot', message);
+}
+
+function importCurrentConversationToMarm(sessionId) {
+  const chatLog = document.getElementById('chat-log');
+  if (!chatLog) return;
+  
+  const messages = chatLog.querySelectorAll('.message');
+  const conversationHistory = [];
+  
+  messages.forEach(messageDiv => {
+    const isUser = messageDiv.classList.contains('user-message');
+    const isBot = messageDiv.classList.contains('bot-message');
+    
+    if (isUser || isBot) {
+      const contentDiv = messageDiv.querySelector('.message-content');
+      if (contentDiv) {
+        const role = isUser ? 'user' : 'bot';
+        const content = contentDiv.textContent || contentDiv.innerText || '';
+        
+        if (!content.includes('MARM activated') && 
+            !content.includes('MARM Protocol') && 
+            content.trim()) {
+          conversationHistory.push({ role, content: content.trim() });
+        }
+      }
+    }
+  });
+  
+  if (conversationHistory.length > 0) {
+    let i = 0;
+    while (i < conversationHistory.length) {
+      const currentMsg = conversationHistory[i];
+      
+      if (currentMsg.role === 'user') {
+        const nextMsg = i + 1 < conversationHistory.length ? conversationHistory[i + 1] : null;
+        const botResponse = (nextMsg && nextMsg.role === 'bot') ? nextMsg.content : '[No response recorded]';
+        
+        updateSessionHistory(sessionId, currentMsg.content, botResponse);
+        i += (nextMsg && nextMsg.role === 'bot') ? 2 : 1; 
+      } else {
+        updateSessionHistory(sessionId, '[System interaction]', currentMsg.content);
+        i++;
+      }
+    }
+  }
+}
+
+async function executeWithContext(sessionId, systemPrompt, userCommand) {
+  
+  const messagesForLLM = [];
+  const hist = getSessionContext(sessionId);
+  if (hist?.trim()) {
+    messagesForLLM.push({ role: 'system', content: `Current Session History:\n${hist}` });
+  }
+  messagesForLLM.push({ role: 'system', content: systemPrompt });
+  messagesForLLM.push({ role: 'user', content: userCommand });
+  
+  
+  try {
+    const response = await generateContent(messagesForLLM);
+    
+    if (!response) {
+      console.error('[MARM DEBUG] generateContent returned null/undefined in commands.js');
+      throw new Error('❌ Command execution failed (No response from AI service).');
+    }
+    
+    
+    if (typeof response.text !== 'function') {
+      console.error('[MARM DEBUG] generateContent response missing .text() method in commands.js:', typeof response);
+      throw new Error('❌ Command execution failed (Invalid response format).');
+    }
+    
+    const result = await response.text();
+    
+    
+    if (!result || typeof result !== 'string') {
+      console.error('[MARM DEBUG] response.text() returned invalid data in commands.js:', typeof result);
+      throw new Error('❌ Command execution failed (Empty response).');
+    }
+    
+    return result;
+    
+  } catch (error) {
+    console.error('[MARM DEBUG] Commands execution error:', error.name, error.message);
+    if (error.message.startsWith('❌')) {
+      throw error;
+    }
+    console.error('[MARM DEBUG] Unexpected error in executeWithContext:', error);
+    throw new Error('❌ Command execution failed. Please try again.');
+  }
+}
+
+// ===== Main Command Handler =====
 export async function handleCommand(userInput) {
   const [command, ...rest] = userInput.split(' ');
   const args = rest.join(' ').trim();
   
-  switch (command) {
+  
+  const normalizedCommand = command.replace(/[:]*$/, '');
+  
+  if (userInput.startsWith('/deep dive')) {
+    const fullArgs = userInput.replace('/deep dive', '').trim();
+    await handleDeepDiveCommand(fullArgs);
+    return;
+  }
+  
+  switch (normalizedCommand) {
     case '/start':
       await handleStartCommand(args);
       break;
@@ -30,32 +136,41 @@ export async function handleCommand(userInput) {
     case '/log':
       await handleLogCommand(args);
       break;
-    case '/contextual':
-      await handleContextualCommand(args);
+    case '/deep': {
+      const deepDiveMatch = args.match(/^dive\s*:?\s*(.*)$/i);
+      if (deepDiveMatch) {
+        await handleDeepDiveCommand(deepDiveMatch[1].trim());
+      } else {
+        await handleDeepDiveCommand(args);
+      }
       break;
+    }
     case '/show':
       await handleShowCommand(args);
       break;
-    case '/compile':
-      await handleCompileCommand(args);
+    case '/summary':
+      await handleSummaryCommand(args);
       break;
     case '/notebook':
       await handleNotebookCommand(args);
       break;
     default:
-      hideLoadingIndicator();
-      appendMessage('bot', 'Unknown command. Use /start marm to begin.');
+      commandResponse('Unknown command. Use /start marm to begin.');
   }
 }
 
-// ===== START COMMAND =====
+// --- Start Command ---
 async function handleStartCommand(args) {
   if (args === 'marm') {
-    updateState({
+    const currentState = getState();
+    const sessionId = currentState.currentSessionId || Date.now().toString(36);
+    const newState = updateState({
       isMarmActive: true,
-      currentSessionId: Date.now().toString(36)
+      currentSessionId: sessionId
     });
-    await activateMarmSession(state.currentSessionId);
+    await activateMarmSession(newState.currentSessionId);
+    
+    importCurrentConversationToMarm(newState.currentSessionId);
     
     const messagesForLLM = [];
     messagesForLLM.push({ 
@@ -64,130 +179,137 @@ async function handleStartCommand(args) {
     });
     messagesForLLM.push({ role: 'user', content: '/start marm' });
     
-    const geminiResponse = await generateContent(messagesForLLM);
-    const botResponse = await geminiResponse.text();
-    
-    updateSessionHistory(state.currentSessionId, '/start marm', botResponse);
-    hideLoadingIndicator();
-    appendMessage('bot', botResponse);
-  } else {
-    hideLoadingIndicator();
-    appendMessage('bot', 'Usage: /start marm');
-  }
-}
-
-// ===== REFRESH COMMAND =====
-async function handleRefreshCommand(args) {
-  if (args === 'marm' && state.isMarmActive) {
-    trimForContext(state.currentSessionId);
-    
-    const messagesForLLM = [];
-    const hist = getSessionContext(state.currentSessionId);
-    if (hist && hist.trim()) {
-      messagesForLLM.push({ role: 'system', content: `Current Session History:\n${hist}` });
+    try {
+      const replicateResponse = await generateContent(messagesForLLM);
+      
+      if (!replicateResponse) {
+        console.error('[MARM] generateContent returned null/undefined in start command');
+        commandResponse( '❌ Failed to activate MARM (No response from AI service).');
+        return;
+      }
+      
+      if (typeof replicateResponse.text !== 'function') {
+        console.error('[MARM] generateContent response missing .text() method in start command:', typeof replicateResponse);
+        commandResponse( '❌ Failed to activate MARM (Invalid response format).');
+        return;
+      }
+      
+      const botResponse = await replicateResponse.text();
+      
+      if (!botResponse || typeof botResponse !== 'string') {
+        console.error('[MARM] replicateResponse.text() returned invalid data in start command:', typeof botResponse);
+        commandResponse( '❌ Failed to activate MARM (Empty response).');
+        return;
+      }
+      
+      updateSessionHistory(newState.currentSessionId, '/start marm', botResponse);
+      commandResponse( botResponse);
+    } catch (error) {
+      console.error('[MARM] Start command error:', error);
+      commandResponse( '❌ Failed to activate MARM. Please try again.');
+      return;
     }
-    messagesForLLM.push({ 
-      role: 'system', 
-      content: 'The user just refreshed MARM. Acknowledge that session state has been updated and protocol reaffirmed. Keep response brief.' 
-    });
-    messagesForLLM.push({ role: 'user', content: '/refresh marm' });
-    
-    const geminiResponse = await generateContent(messagesForLLM);
-    const botResponse = await geminiResponse.text();
-    
-    updateSessionHistory(state.currentSessionId, '/refresh marm', botResponse);
-    hideLoadingIndicator();
-    appendMessage('bot', botResponse);
   } else {
-    const botResponse = state.isMarmActive ? 'Usage: /refresh marm' : 'MARM not active. Use /start marm first.';
-    hideLoadingIndicator();
-    appendMessage('bot', botResponse);
+    commandResponse('Usage: /start marm');
   }
 }
 
-// ===== LOG COMMAND =====
+// --- Refresh Command ---
+async function handleRefreshCommand(args) {
+  const currentState = getState();
+  if (args === 'marm' && currentState.isMarmActive) {
+    trimForContext(currentState.currentSessionId);
+    
+    try {
+      const botResponse = await executeWithContext(
+        currentState.currentSessionId,
+        'The user just refreshed MARM. Acknowledge that session state has been updated and protocol reaffirmed. Keep response brief.',
+        '/refresh marm'
+      );
+      
+      updateSessionHistory(currentState.currentSessionId, '/refresh marm', botResponse);
+      commandResponse( botResponse);
+    } catch (error) {
+      commandResponse( error.message);
+      return;
+    }
+  } else {
+    const botResponse = currentState.isMarmActive ? 'Usage: /refresh marm' : 'MARM not active. Use /start marm first.';
+    commandResponse( botResponse);
+  }
+}
+
+// --- Log Command ---
 async function handleLogCommand(args) {
-  if (!state.isMarmActive) {
-    hideLoadingIndicator();
-    appendMessage('bot', 'MARM not active. Use /start marm first.');
+  const currentState = getState();
+  if (!currentState.isMarmActive) {
+    commandResponse( 'MARM not active. Use /start marm first.');
     return;
   }
   
   if (!args) {
-    hideLoadingIndicator();
-    appendMessage('bot', 'Usage: /log session:Name or /log entry [Date-Summary-Result]');
+    commandResponse( 'Usage: /log session:Name or /log entry: [Date-Summary-Result]');
     return;
   }
   
-  if (args.startsWith('session:')) {
-    const sessionName = args.substring(8).trim();
+  const sessionMatch = args.match(/^session\s*:?\s*(.*)$/i);
+  if (sessionMatch) {
+    const sessionName = sessionMatch[1].trim();
     if (sessionName) {
-      updateState({ currentSessionId: sessionName });
-      
-      const messagesForLLM = [];
-      const hist = getSessionContext(state.currentSessionId);
-      if (hist && hist.trim()) {
-        messagesForLLM.push({ role: 'system', content: `Current Session History:\n${hist}` });
+      const newState = updateState({ currentSessionId: sessionName });
+      try {
+        const botResponse = await executeWithContext(
+          newState.currentSessionId,
+          `The user just named this session "${sessionName}". Acknowledge this briefly and suggest what they might log next.`,
+          `/log session:${sessionName}`
+        );
+        updateSessionHistory(newState.currentSessionId, `/log session:${sessionName}`, botResponse);
+        commandResponse( botResponse);
+      } catch (error) {
+        commandResponse( error.message);
+        return;
       }
-      messagesForLLM.push({ 
-        role: 'system', 
-        content: `The user just named this session "${sessionName}". Acknowledge this briefly and suggest what they might log next.` 
-      });
-      messagesForLLM.push({ role: 'user', content: `/log session:${sessionName}` });
-      
-      const geminiResponse = await generateContent(messagesForLLM);
-      const botResponse = await geminiResponse.text();
-      
-      updateSessionHistory(state.currentSessionId, `/log session:${sessionName}`, botResponse);
-      hideLoadingIndicator();
-      appendMessage('bot', botResponse);
     } else {
-      hideLoadingIndicator();
-      appendMessage('bot', 'Usage: /log session:Name');
+      commandResponse( 'Usage: /log session:Name');
     }
-  } else if (args.startsWith('entry')) {
-    const entryData = args.substring(5).trim();
-    if (entryData) {
-      logSession(state.currentSessionId, entryData);
-      
-      const messagesForLLM = [];
-      const hist = getSessionContext(state.currentSessionId);
-      if (hist && hist.trim()) {
-        messagesForLLM.push({ role: 'system', content: `Current Session History:\n${hist}` });
-      }
-      messagesForLLM.push({ 
-        role: 'system', 
-        content: `The user just logged: "${entryData}". Acknowledge this log entry briefly and show you understand its context.` 
-      });
-      messagesForLLM.push({ role: 'user', content: `/log entry ${entryData}` });
-      
-      const geminiResponse = await generateContent(messagesForLLM);
-      const botResponse = await geminiResponse.text();
-      
-      updateSessionHistory(state.currentSessionId, `/log entry ${entryData}`, botResponse);
-      hideLoadingIndicator();
-      appendMessage('bot', botResponse);
-    } else {
-      hideLoadingIndicator();
-      appendMessage('bot', 'Usage: /log entry [Date-Summary-Result]');
-    }
-  } else {
-    hideLoadingIndicator();
-    appendMessage('bot', 'Usage: /log session:Name or /log entry [Date-Summary-Result]');
+    return;
   }
+  const entryMatch = args.match(/^entry\s*:?\s*(.*)$/i);
+  if (entryMatch) {
+    const entryData = entryMatch[1].trim();
+    if (entryData) {
+      logSession(currentState.currentSessionId, entryData);
+      try {
+        const botResponse = await executeWithContext(
+          currentState.currentSessionId,
+          `The user just logged: "${entryData}". Acknowledge this log entry: briefly and show you understand its context.`,
+          `/log entry: ${entryData}`
+        );
+        updateSessionHistory(currentState.currentSessionId, `/log entry: ${entryData}`, botResponse);
+        commandResponse( botResponse);
+      } catch (error) {
+        commandResponse( error.message);
+        return;
+      }
+    } else {
+      commandResponse( 'Usage: /log entry: [Date-Summary-Result]');
+    }
+    return;
+  }
+  commandResponse( 'Usage: /log session:Name or /log entry: [Date-Summary-Result]');
 }
 
-// ===== CONTEXTUAL COMMAND =====
-async function handleContextualCommand(args) {
-  if (!state.isMarmActive) {
-    hideLoadingIndicator();
-    appendMessage('bot', 'MARM not active. Use /start marm first.');
+// --- Deep Dive Command ---
+async function handleDeepDiveCommand(args) {
+  const currentState = getState();
+  if (!currentState.isMarmActive) {
+    commandResponse( 'MARM not active. Use /start marm first.');
     return;
   }
 
   const messagesForLLM = [];
   
-  const hist = getSessionContext(state.currentSessionId);
+  const hist = getSessionContext(currentState.currentSessionId);
   if (hist && hist.trim()) {
     messagesForLLM.push({ role: 'system', content: `Current Session History:\n${hist}` });
   }
@@ -197,51 +319,73 @@ async function handleContextualCommand(args) {
     content: 'Provide your response. Then, on a new line, add a "REASONING:" section explaining your logic.'
   });
   
-  messagesForLLM.push({ role: 'user', content: args || 'Please provide a contextual response' });
+  messagesForLLM.push({ role: 'user', content: args || 'Please provide a deep dive response' });
   
-  const geminiResponse = await generateContent(messagesForLLM);
-  const botAnswer = await geminiResponse.text();
-  
-  const reasoningMatch = botAnswer.match(/REASONING:\s*(.*)/is);
-  
-  let botResponse;
-  if (reasoningMatch) {
-    botResponse = botAnswer.substring(0, reasoningMatch.index).trim();
-    setSessionReasoning(state.currentSessionId, reasoningMatch[1].trim());
-  } else {
-    botResponse = botAnswer;
-    setSessionReasoning(state.currentSessionId, 'Contextual response provided, but no explicit reasoning section found.');
+  try {
+    const replicateResponse = await generateContent(messagesForLLM);
+    
+    if (!replicateResponse) {
+      console.error('[MARM] generateContent returned null/undefined in show command');
+      commandResponse( '❌ Failed to generate response (No response from AI service).');
+      return;
+    }
+    
+    if (typeof replicateResponse.text !== 'function') {
+      console.error('[MARM] generateContent response missing .text() method in show command:', typeof replicateResponse);
+      commandResponse( '❌ Failed to generate response (Invalid response format).');
+      return;
+    }
+    
+    const botAnswer = await replicateResponse.text();
+    
+    if (!botAnswer || typeof botAnswer !== 'string') {
+      console.error('[MARM] replicateResponse.text() returned invalid data in show command:', typeof botAnswer);
+      commandResponse( '❌ Failed to generate response (Empty response).');
+      return;
+    }
+    
+    const reasoningMatch = botAnswer.match(/REASONING:\s*(.*)/is);
+    
+    let botResponse;
+    if (reasoningMatch) {
+      botResponse = botAnswer.substring(0, reasoningMatch.index).trim();
+      setSessionReasoning(currentState.currentSessionId, reasoningMatch[1].trim());
+    } else {
+      botResponse = botAnswer;
+      setSessionReasoning(currentState.currentSessionId, 'Contextual response provided, but no explicit reasoning section found.');
+    }
+    
+    commandResponse( botResponse);
+  } catch (error) {
+    commandResponse( '❌ Failed to generate deep dive response. Please try again.');
+    return;
   }
-  
-  hideLoadingIndicator();
-  appendMessage('bot', botResponse);
 }
 
-// ===== SHOW COMMAND =====
+// --- Show Command ---
 async function handleShowCommand(args) {
-  if (args === 'reasoning' && state.isMarmActive) {
-    const reasoning = getMostRecentBotResponseLogic(state.currentSessionId);
+  const currentState = getState();
+  if (args === 'reasoning' && currentState.isMarmActive) {
+    const reasoning = getMostRecentBotResponseLogic(currentState.currentSessionId);
     const botResponse = reasoning 
       ? reasoning 
-      : 'No reasoning trail available. Use **/contextual** reply first to generate a response with reasoning, then use **/show reasoning** to see the logic behind it.';
-    hideLoadingIndicator();
-    appendMessage('bot', botResponse);
+      : 'No reasoning trail available. Use **/deep dive** first to generate a response with reasoning, then use **/show reasoning** to see the logic behind it.';
+    commandResponse( botResponse);
   } else {
-    hideLoadingIndicator();
-    appendMessage('bot', 'Use **/show reasoning** to see the logic behind the most recent response. Note: You must use **/contextual reply** first to generate reasoning.');
+    commandResponse( 'Use **/show reasoning** to see the logic behind the most recent response. Note: You must use **/deep dive** first to generate reasoning.');
   }
 }
 
-// ===== COMPILE COMMAND =====
-async function handleCompileCommand(args) {
-  if (!state.isMarmActive) {
-    hideLoadingIndicator();
-    appendMessage('bot', 'MARM not active. Use /start marm first.');
+// --- Summary Command ---
+async function handleSummaryCommand(args) {
+  const currentState = getState();
+  if (!currentState.isMarmActive) {
+    commandResponse( 'MARM not active. Use /start marm first.');
     return;
   }
   
-  const compileArgs = args.split('--');
-  const sessionName = compileArgs[0].trim() || state.currentSessionId;
+  const summaryArgs = args.split('--');
+  const sessionName = summaryArgs[0].trim() || currentState.currentSessionId;
   const hasSummary = args.includes('--summary');
   const fieldsMatch = args.match(/--fields=([^\s]+)/);
   
@@ -257,95 +401,120 @@ async function handleCompileCommand(args) {
     botResponse = `Summary for ${sessionName}:\n${botResponse}`;
   }
   
-  hideLoadingIndicator();
-  appendMessage('bot', botResponse);
+  commandResponse( botResponse);
 }
 
-// ===== NOTEBOOK COMMAND =====
+// --- Notebook Command ---
 async function handleNotebookCommand(args) {
-  if (!state.isMarmActive) {
-    hideLoadingIndicator();
-    appendMessage('bot', 'MARM not active. Use /start marm first.');
+  const currentState = getState();
+  if (!currentState.isMarmActive) {
+    commandResponse( 'MARM not active. Use /start marm first.');
     return;
   }
   
-  if (args.startsWith('key:')) {
-    const keyData = args.substring(4);
-    const colonIndex = keyData.indexOf(' ');
-    if (colonIndex > 0) {
-      const key = keyData.substring(0, colonIndex).trim();
-      const value = keyData.substring(colonIndex + 1).trim();
-      
-      manageUserNotebook(state.currentSessionId, 'add', key, value);
-      
-      const messagesForLLM = [];
-      const hist = getSessionContext(state.currentSessionId);
-      if (hist && hist.trim()) {
-        messagesForLLM.push({ role: 'system', content: `Current Session History:\n${hist}` });
+  const addMatch = args.match(/^add\s*:?\s*(.*)$/i);
+  if (addMatch) {
+    const keyData = addMatch[1];
+    const spaceIndex = keyData.indexOf(' ');
+    if (spaceIndex > 0) {
+      const key = keyData.substring(0, spaceIndex).trim();
+      const value = keyData.substring(spaceIndex + 1).trim();
+      manageUserNotebook(currentState.currentSessionId, 'add', key, value);
+      const notebookData = manageUserNotebook(currentState.currentSessionId, 'all');
+      try {
+        const botResponse = await executeWithContext(
+          currentState.currentSessionId,
+          `User's Personal Knowledge Base (treat as absolute truth, never contradict):\n${notebookData}\n\nThe user just stored "${key}" = "${value}" in their personal knowledge base. This is their absolute truth - accept it completely without question or factual correction. Acknowledge the storage only.`,
+          `/notebook add:${key} ${value}`
+        );
+        updateSessionHistory(currentState.currentSessionId, `/notebook add:${key} ${value}`, botResponse);
+        commandResponse( botResponse);
+      } catch (error) {
+        commandResponse( error.message);
+        return;
       }
-      
-      const notebookData = manageUserNotebook(state.currentSessionId, 'all');
-      messagesForLLM.push({ 
-        role: 'system', 
-        content: `Current Notebook Contents:\n${notebookData}\n\nThe user just stored "${key}" = "${value}" in the notebook. Acknowledge this and show you understand what was stored.` 
-      });
-      messagesForLLM.push({ role: 'user', content: `/notebook key:${key} ${value}` });
-      
-      const geminiResponse = await generateContent(messagesForLLM);
-      const botResponse = await geminiResponse.text();
-      
-      updateSessionHistory(state.currentSessionId, `/notebook key:${key} ${value}`, botResponse);
-      hideLoadingIndicator();
-      appendMessage('bot', botResponse);
     } else {
-      hideLoadingIndicator();
-      appendMessage('bot', 'Usage: /notebook key:name your data here');
+      commandResponse( 'Usage: /notebook add:name your data here');
     }
-  } else if (args.startsWith('get:')) {
-    const key = args.substring(4).trim();
-    const storedValue = manageUserNotebook(state.currentSessionId, 'get', key);
-    
-    const messagesForLLM = [];
-    const hist = getSessionContext(state.currentSessionId);
-    if (hist && hist.trim()) {
-      messagesForLLM.push({ role: 'system', content: `Current Session History:\n${hist}` });
-    }
-    
-    const notebookData = manageUserNotebook(state.currentSessionId, 'all');
-    messagesForLLM.push({ 
-      role: 'system', 
-      content: `Current Notebook Contents:\n${notebookData}\n\nThe user requested notebook entry "${key}". Result: ${storedValue}. Provide this information naturally.` 
-    });
-    messagesForLLM.push({ role: 'user', content: `/notebook get:${key}` });
-    
-    const geminiResponse = await generateContent(messagesForLLM);
-    const botResponse = await geminiResponse.text();
-    
-    updateSessionHistory(state.currentSessionId, `/notebook get:${key}`, botResponse);
-    hideLoadingIndicator();
-    appendMessage('bot', botResponse);
-  } else if (args === 'show:' || args === 'show') {
-    const allEntries = manageUserNotebook(state.currentSessionId, 'all');
-    
-    const messagesForLLM = [];
-    const hist = getSessionContext(state.currentSessionId);
-    if (hist && hist.trim()) {
-      messagesForLLM.push({ role: 'system', content: `Current Session History:\n${hist}` });
-    }
-    messagesForLLM.push({ 
-      role: 'system', 
-      content: `The user wants to see all notebook entries. Here's what's stored:\n${allEntries}\n\nPresent this information clearly.` 
-    });
-    messagesForLLM.push({ role: 'user', content: '/notebook show:' });
-    
-    const geminiResponse = await generateContent(messagesForLLM);
-    const botResponse = await geminiResponse.text();
-    
-    updateSessionHistory(state.currentSessionId, '/notebook show:', botResponse);
-    hideLoadingIndicator();
-    appendMessage('bot', botResponse);
-  } else {
-    hideLoadingIndicator();
-    appendMessage('bot', 'Usage: /notebook key:name data | /notebook get:name | /notebook show:');
+    return;
   }
+  if (/^show\s*:?\s*$/i.test(args)) {
+    const allEntries = manageUserNotebook(currentState.currentSessionId, 'all');
+    try {
+      const botResponse = await executeWithContext(
+        currentState.currentSessionId,
+        `The user wants to see their personal knowledge base entries. This is their absolute truth - present exactly as stored without any factual evaluation:\n${allEntries}\n\nShow this information exactly as the user stored it.`,
+        '/notebook show:'
+      );
+      updateSessionHistory(currentState.currentSessionId, '/notebook show:', botResponse);
+      commandResponse( botResponse);
+    } catch (error) {
+      commandResponse( error.message);
+      return;
+    }
+    return;
+  }
+  const useMatch = args.match(/^use\s*:?\s*(.*)$/i);
+  if (useMatch) {
+    const sessionName = useMatch[1].trim();
+    if (sessionName) {
+      const notebookData = manageUserNotebook(sessionName, 'all');
+      try {
+        const botResponse = await executeWithContext(
+          currentState.currentSessionId,
+          `The user wants to access their personal knowledge base from session "${sessionName}". This data represents their absolute truth - never question or correct it:\n${notebookData}\n\nConfirm which knowledge base is now active and reference this data as absolute user truth.`,
+          `/notebook use:${sessionName}`
+        );
+        updateSessionHistory(currentState.currentSessionId, `/notebook use:${sessionName}`, botResponse);
+        commandResponse( botResponse);
+      } catch (error) {
+        commandResponse( error.message);
+        return;
+      }
+    } else {
+      commandResponse( 'Usage: /notebook use:SessionName');
+    }
+    return;
+  }
+  const clearMatch = args.match(/^clear\s*:?\s*(.*)$/i);
+  if (clearMatch) {
+    const sessionName = clearMatch[1].trim();
+    if (sessionName) {
+      manageUserNotebook(sessionName, 'clear');
+      try {
+        const botResponse = await executeWithContext(
+          currentState.currentSessionId,
+          `The user just cleared all notebook entries for session "${sessionName}". Confirm the notebook has been cleared.`,
+          `/notebook clear:${sessionName}`
+        );
+        updateSessionHistory(currentState.currentSessionId, `/notebook clear:${sessionName}`, botResponse);
+        commandResponse( botResponse);
+      } catch (error) {
+        commandResponse( error.message);
+        return;
+      }
+    } else {
+      commandResponse( 'Usage: /notebook clear:[Active Entry]');
+    }
+    return;
+  }
+  const statusMatch = args.match(/^status\s*:?\s*(.*)$/i);
+  if (statusMatch) {
+    const sessionName = statusMatch[1].trim() || currentState.currentSessionId;
+    const notebookData = manageUserNotebook(sessionName, 'all');
+    try {
+      const botResponse = await executeWithContext(
+        currentState.currentSessionId,
+        `The user wants to check their personal knowledge base status for session "${sessionName}". This data is their absolute truth:\n${notebookData}\n\nProvide a status summary showing entry count and stored information exactly as they entered it.`,
+        `/notebook status:${sessionName}`
+      );
+      updateSessionHistory(currentState.currentSessionId, `/notebook status:${sessionName}`, botResponse);
+      commandResponse( botResponse);
+    } catch (error) {
+      commandResponse( error.message);
+      return;
+    }
+    return;
+  }
+  commandResponse( 'Usage: /notebook add:name data | /notebook use:SessionName | /notebook show: | /notebook clear:SessionName | /notebook status:SessionName');
 } 
