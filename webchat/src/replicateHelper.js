@@ -62,7 +62,9 @@ function getErrorMessage(status, attempt, maxAttempts) {
 // ===== MAIN API FUNCTION =====
 export async function generateContent(messages) {
   
-  const url = 'http://localhost:8080/api/replicate';
+  const url = window.location.hostname === 'localhost'
+    ? '/api/replicate'
+    : `${window.location.origin}/api/replicate`;
   const maxAttempts = 5;
   
   const systemMessages = messages.filter(msg => msg.role === 'system');
