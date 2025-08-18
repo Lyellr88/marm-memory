@@ -1,28 +1,65 @@
 // session.js - Session storage, persistence, and lifecycle management for MARM
 
-import { PROTOCOL_VERSION, MARM_PROTOCOL_TEXT, RESPONSE_FORMATTING_RULES } from './constants.js';
+// ===== Session Storage & Lifecycle Management =====
+import { PROTOCOL_VERSION, MARM_PROTOCOL_TEXT, } from './constants.js';
 import { validateLogEntry, estimateTokens } from './utils.js';
 import { loadDocs } from './docs.js';
+import { 
+  persistSessions, 
+  persistCurrentSession, 
+  restoreSessions, 
+  setSessionsReference,
+  LS_KEY,
+  CURRENT_SESSION_KEY 
+} from './storage.js';
 
 let sessions = {};
-const LS_KEY = 'marm-sessions-v1';
-const CURRENT_SESSION_KEY = 'marm-current-session'; 
 const MAX_SESSIONS = 50;
 const SESSION_EXPIRY_DAYS = 30;
 const MAX_SESSION_SIZE = 35000;
 const PRUNING_THRESHOLD = 5000; 
-function ensureSession(id) {
-  if (!sessions[id]) sessions[id] = {
-    history: [],
-    logs: [],
-    notebook: {},
-    lastReasoning: '',
-    created: Date.now()
-  };
+
+setSessionsReference(sessions); 
+
+export function ensureSession(id) {
+  if (!sessions[id]) {
+    const currentSessionCount = Object.keys(sessions).length;
+    if (currentSessionCount >= MAX_SESSIONS) {
+            const persistenceEnabled = localStorage.getItem('marm-persistence-enabled') === 'true';
+      if (persistenceEnabled) {
+        pruneOldSessions();
+      }
+      const remainingSessions = Object.keys(sessions);
+      if (remainingSessions.length >= MAX_SESSIONS) {
+        const oldestSession = remainingSessions.sort((a, b) => 
+          (sessions[a].created || 0) - (sessions[b].created || 0))[0];
+        delete sessions[oldestSession];
+      }
+    }
+    
+    sessions[id] = {
+      history: [],
+      logs: [],
+      notebook: {},
+      notebookSize: 0,  
+      lastReasoning: '',
+      created: Date.now()
+    };
+  } else if (sessions[id].notebookSize === undefined) {
+    sessions[id].notebookSize = JSON.stringify(sessions[id].notebook).length;
+  }
   return sessions[id];
 }
 
-function pruneOldSessions() {
+// --- Session Object Management & Pruning ---
+export function updateNotebookSize(sessionId, sizeDelta) {
+  const s = sessions[sessionId];
+  if (s) {
+    s.notebookSize = (s.notebookSize || 0) + sizeDelta;
+  }
+}
+
+export function pruneOldSessions() {
   const now = Date.now();
   const ids = Object.keys(sessions);
   ids.forEach(id => {
@@ -38,7 +75,7 @@ function pruneOldSessions() {
   }
 }
 
-function trimSessionSize(s) {
+export function trimSessionSize(s) {
   let total = (JSON.stringify(s.history).length + JSON.stringify(s.logs).length);
   while (total > PRUNING_THRESHOLD && s.history.length > 0) {
     s.history.shift();
@@ -50,47 +87,10 @@ function trimSessionSize(s) {
   }
 }
 
-function persistSessions() {
-  pruneOldSessions();
-  const isPersistenceEnabled = localStorage.getItem('marm-persistence-enabled') === 'true';
-  if (isPersistenceEnabled) {
-    try { localStorage.setItem(LS_KEY, JSON.stringify(sessions)); } catch (_) {}
-  }
-}
-
-function persistCurrentSession() {
-  try { 
-    localStorage.setItem(CURRENT_SESSION_KEY, JSON.stringify(sessions)); 
-  } catch (_) {}
-}
-
-function restoreSessions() {
-  try {
-    const currentRaw = localStorage.getItem(CURRENT_SESSION_KEY);
-    if (currentRaw) sessions = JSON.parse(currentRaw);
-  } catch (_) { sessions = {}; }
-  
-  const isPersistenceEnabled = localStorage.getItem('marm-persistence-enabled') === 'true';
-  if (isPersistenceEnabled) {
-    try {
-      const savedRaw = localStorage.getItem(LS_KEY);
-      if (savedRaw) {
-        const savedSessions = JSON.parse(savedRaw);
-        sessions = { ...savedSessions, ...sessions };
-      }
-    } catch (_) {}
-  }
-}
 restoreSessions();
 
 export {
   sessions,
-  ensureSession,
-  pruneOldSessions,
-  trimSessionSize,
-  persistSessions,
-  persistCurrentSession,
-  restoreSessions,
   LS_KEY,
   CURRENT_SESSION_KEY,
   MAX_SESSIONS,
@@ -100,14 +100,25 @@ export {
 };
 
 // ===== CORE API FUNCTIONS =====
-
 export function getSessionContext(id) {
+  console.log('[MARM DEBUG] getSessionContext called for session ID:', id);
+  
+  // Debug functions removed - they were causing undefined errors
+  // debugProtocolText();
+  // debugMarmKeywords();
+  
   const s = sessions[id];
   if (!s) {
-    return `MARM v${PROTOCOL_VERSION}\n\n` + MARM_PROTOCOL_TEXT + '\n\n' + RESPONSE_FORMATTING_RULES;
+    const basicContext = `MARM v${PROTOCOL_VERSION}\n\n` + MARM_PROTOCOL_TEXT;
+    console.log('[MARM DEBUG] No session found, returning basic context length:', basicContext.length);
+    console.log('[MARM DEBUG] Basic context preview:', basicContext.substring(0, 200) + '...');
+    return basicContext;
   }
-  let context = `You are operating under MARM v${PROTOCOL_VERSION} protocol:\n\n${MARM_PROTOCOL_TEXT}\n\n${RESPONSE_FORMATTING_RULES}\n\n`;
+  
+  let context = `You are operating under MARM v${PROTOCOL_VERSION} protocol:\n\n${MARM_PROTOCOL_TEXT}\n\n`;
   context += `Current Session ID: ${id}\n\n`;
+  
+  console.log('[MARM DEBUG] Session found, building context...');
   const notebookKeys = Object.keys(s.notebook || {});
   if (notebookKeys.length > 0) {
     context += `Current Notebook Contents:\n`;
@@ -127,11 +138,19 @@ export function getSessionContext(id) {
   if (tail) {
     context += `Conversation History:\n${tail}`;
   }
+  
+  console.log('[MARM DEBUG] Final context length:', context.length, 'characters');
+  console.log('[MARM DEBUG] Final context preview:', context.substring(0, 300) + '...');
+  
   return context;
 }
 
+// ===== Session Context & Activation =====
 export async function activateMarmSession(id = 'default_session') {
-  pruneOldSessions();
+  const persistenceEnabled = localStorage.getItem('marm-persistence-enabled') === 'true';
+  if (persistenceEnabled) {
+    pruneOldSessions();
+  }  
   await loadDocs();
   ensureSession(id);
   persistCurrentSession();
@@ -158,21 +177,35 @@ export function setSessionReasoning(id, reasoning) {
 
 export function logSession(id, logLine) {
   if (!validateLogEntry(logLine)) {
-    return 'Invalid log entry format. Use: [Date-Summary-Result]';
+    return 'Invalid log entry format. Use: [YYYY-MM-DD-topic-summary]';
   }
   const s = ensureSession(id);
-  s.logs.push(logLine);
-  trimSessionSize(s);
-  persistCurrentSession(); 
-  persistSessions(); 
-  return `Logged: ${logLine}`;
+  
+  try {
+    s.logs.push(logLine);
+    trimSessionSize(s);
+    persistCurrentSession(); 
+    persistSessions(); 
+    return `Logged: ${logLine}`;
+  } catch (e) {
+    console.error('MARM: Failed to log session entry:', e);
+    return 'Failed to log entry due to internal error';
+  }
 }
 
 export function trimForContext(id, maxTokens = 8000) {
   const s = sessions[id];
-  if (!s) return;
+  if (!s) return false;
+  
   const estTokens = arr => arr.reduce((t, m) => t + estimateTokens(m.content), 0);
-  while (estTokens(s.history) > maxTokens) s.history.shift();
+  let trimmed = false;
+  
+  while (estTokens(s.history) > maxTokens) {
+    s.history.shift();
+    trimmed = true;
+  }
+  
+  return trimmed;
 }
 
 export function resetSession(id) {
