@@ -50,6 +50,7 @@
 ## 📌 Overview
 
 MARM is a protocol for AI reliability. It gives you control over memory and logic by letting you log sessions, store your own notes, and compile summaries. The result: fewer hallucinations, transparent reasoning, and conversations that stay on track.  
+
 **Steer the AI instead of chasing it.**
 
 > For copy-and-paste prompt users and full technical details, see [`PROTOCOL.md`](./PROTOCOL.md)
