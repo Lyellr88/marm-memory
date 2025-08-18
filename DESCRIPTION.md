@@ -22,7 +22,7 @@ MARM gives you control over AI conversations in a way that feels natural. Instea
 
 ### Community-Driven Development
 
-MARM started as a Reddit post and grew into something bigger. The 90+ GitHub stars aren't just vanity metrics - they represent real people using MARM and finding value in it.
+MARM started as a Reddit post and grew into something bigger. The 100+ GitHub stars aren't just vanity metrics. It represents real people using MARM and finding value in it.
 
 Every feature in MARM v1.5.0 came from user feedback:
 - **Session persistence** - Because people wanted to continue conversations
