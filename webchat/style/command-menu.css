@@ -1,45 +1,72 @@
 /* command-menu.css - Command system and menu styling */
 
-/* Command menu container - Scrolls with content */
-.command-menu {
-  position: absolute;
-  left: 35px;
-  bottom: 48px;  
-  background: #e4e4e4b9;
-  border: 2px solid #000000;
-  border-radius: var(--border-radius);
-  padding: 0;
-  min-width: 245px;
-  max-width: 700px;
-  z-index: 100;
-  transition: all var(--transition-medium) ease;
-  box-shadow: var(--shadow-medium);
-  display: flex;
-  flex-direction: column-reverse;  
+/* Menu Container */
+#chatbox {
+  position: relative;
 }
 
+/* Command menu container - Popup positioned */
+.command-menu {
+  position: absolute;
+  bottom: 100%;
+  left: -5.5rem;
+  margin-bottom: 0.5rem;
+  background: rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: var(--border-radius);
+  padding: 0;
+  min-width: 8.4rem; 
+  max-width: 13rem; 
+  z-index: var(--z-modal);
+  transition: opacity var(--transition-medium) ease, transform var(--transition-medium) ease;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  display: none;
+  flex-direction: column;
+  overflow: visible; 
+}
+
+.command-menu.visible {
+  display: flex;
+}
+
+.command-menu-content {
+  padding: 0.9375rem; 
+  max-height: 25rem; 
+  overflow-y: auto;
+  overflow-x: visible;
+  transition: opacity var(--transition-medium) ease, transform var(--transition-medium) ease;
+  border-radius: 0 0 var(--border-radius) var(--border-radius);
+  scrollbar-width: none; 
+}
+
+.command-menu-content::-webkit-scrollbar {
+  display: none;
+}
+
+/* Menu Header & Toggle */
 .command-menu-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 15px;
-  background: rgba(61, 90, 128, 0.1);
-  border-radius: 0 0 var(--border-radius) var(--border-radius);
+  padding: 0.625rem 0.9375rem;
+  background: var(--command-menu-header-bg);
+  border-radius: var(--border-radius) var(--border-radius) 0 0;
   cursor: pointer;
   user-select: none;
 }
 
 .command-menu-title {
   font-weight: 600;
-  color: #000000;
-  font-size: 14px;
+  color: #000;
+  font-size: 0.875rem;
 }
 
 .command-menu-toggle {
   background: none;
   border: none;
-  color: #000000;
-  font-size: 18px;
+  color: #000;
+  font-size: 1.125rem;
   cursor: pointer;
   transition: transform var(--transition-medium) ease;
   padding: 0;
@@ -50,36 +77,20 @@
   transform: rotate(180deg);
 }
 
-.command-menu,
-.command-menu-content {
-  overflow-x: hidden;
-}
-
-.command-menu-content {
-  padding: 15px;
-  max-height: 400px;
-  overflow-y: auto;
-  transition: all var(--transition-medium) ease;
-  border-radius: var(--border-radius) var(--border-radius) 0 0;
-  scrollbar-width: none;
-}
-.command-menu-content::-webkit-scrollbar {
-  display: none; 
-}
-
 .command-menu.collapsed .command-menu-content {
   max-height: 0;
-  padding: 0 15px;
+  padding: 0 0.9375rem;
   overflow: hidden;
 }
 
-/* Command items */
+/* Command Items */
 .command-item {
   position: relative;
-  margin-bottom: 10px;
-  padding: 8px 12px;
-  background: #e4e4e4b9;
-  border-radius: 6px;
+  margin-bottom: 0.625rem; 
+  padding: 0.5rem 0.75rem; 
+  background: var(--command-menu-bg);
+  border: 4px ridge #000000;
+  border-radius: 0.375rem;
   cursor: pointer;
   transition: background var(--transition-fast) ease, padding var(--transition-fast) ease;
 }
@@ -89,22 +100,30 @@
 }
 
 .command-item:hover {
-  background: rgba(61, 90, 128, 0.15);
-  padding-left: 17px;
-  border-left: 3px solid #3d5a80 !important;
+  background: var(--command-item-hover-bg);
+  padding-left: 1.0625rem; 
+  border-left: 3px solid #3d5a80;
 }
 
 .command-name {
   font-weight: 600;
-  color: #000000;
-  font-size: 14px;
+  color: white;
+  font-size: 0.875rem;
+  flex: 1;
+}
+
+.command-name::before {
+  content: '⚡';
+  margin-right: 0.5rem;
+  opacity: 0.7;
+  font-size: 0.75rem; 
 }
 
 .command-desc {
   display: none;
 }
 
-/* Notebook submenu */
+/* Notebook Submenu */
 .notebook-item {
   position: relative;
 }
@@ -113,32 +132,73 @@
   position: absolute;
   left: 100%;
   bottom: 0;
-  margin-left: -55px;
-  background: #fff;
-  border: 1px solid var(--primary-color);
-  border-radius: 6px;
-  padding: 5px 0;
+  margin-left: -3.4375rem; 
+  background: rgba(255,255,255,0.1);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 0.375rem;
+  padding: 0.3125rem 0; 
   min-width: auto;
-  box-shadow: 0 2px 8px rgba(30,30,50,0.15);
-  z-index: 101;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+  z-index: var(--z-tooltip);
+  display: none; 
+}
+
+.notebook-item:hover .notebook-submenu {
+  display: block;
+}
+
+/* Log Submenu */
+.log-item {
+  position: relative;
+}
+
+.log-submenu {
+  position: absolute;
+  left: 100%;
+  bottom: 0;
+  margin-left: -3.4375rem; 
+  background: rgba(255,255,255,0.1);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 0.375rem;
+  padding: 0.3125rem 0; 
+  min-width: auto;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+  z-index: var(--z-tooltip);
+  display: none; 
+}
+
+.log-item:hover .log-submenu {
+  display: block;
 }
 
 .submenu-item {
-  padding: 6px 15px;
+  padding: 0.375rem 0.75rem;
   cursor: pointer;
-  font-size: 13px;
-  color: var(--primary-color);
-  transition: all var(--transition-fast) ease;
+  font-size: 0.8125rem;
+  color: white;
+  background: var(--command-menu-bg);
+  border: 2px solid #000000;
+  border-radius: 0.375rem;
+  margin: 0.1rem 0.2rem;
+  box-shadow: 0 2px 8px rgba(30, 30, 50, 0.10);
+  transition: background var(--transition-fast) ease, color var(--transition-fast) ease, box-shadow var(--transition-fast) ease;
 }
 
 .submenu-item:hover {
-  background: rgba(61, 90, 128, 0.15);
+  background: var(--command-item-hover-bg);
 }
 
-/* Arrow indicator for expandable item */
 .notebook-item .command-name::after {
   content: ' ▶';
-  font-size: 10px;
+  font-size: 0.625rem; 
+  opacity: 0.7;
+}
+
+.log-item .command-name::after {
+  content: ' ▶';
+  font-size: 0.625rem; 
   opacity: 0.7;
 }
 
@@ -153,13 +213,13 @@
   left: 100%;
   top: 50%;
   transform: translateY(-50%);
-  margin-left: 10px;
-  padding: 5px 10px;
-  background: rgba(0,0,0,0.8);
+  margin-left: 0.625rem; 
+  padding: 0.3125rem 0.625rem; 
+  background: var(--tooltip-bg);
   color: white;
-  font-size: 12px;
-  border-radius: 4px;
+  font-size: 0.75rem;
+  border-radius: 0.25rem; 
   white-space: nowrap;
-  z-index: 102;
+  z-index: var(--z-tooltip);
   pointer-events: none;
 }
