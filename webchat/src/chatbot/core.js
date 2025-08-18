@@ -11,39 +11,33 @@ import {
   manageUserNotebook
 } from '../logic/marmLogic.js';
 
-import { generateContent } from '../geminiHelper.js';
+import { generateContent } from '../replicateHelper.js';
 import { appendMessage, showLoadingIndicator, hideLoadingIndicator } from './ui.js';
 import { handleCommand } from './commands.js';
-import { state, updateState } from './state.js';
+import { getState, updateState } from './state.js';
 
-// ===== RESPONSE FORMATTING =====
-const RESPONSE_FORMATTING_INSTRUCTIONS = `
-### Response Formatting Rules
-
-**1. Prioritize Brevity and Clarity:**
-- Paragraphs must be short (2-3 sentences max).
-- Start a new paragraph for each distinct idea.
-- Responses should feel crisp, professional, and focused.
-
-**2. Use Basic Markdown for Readability:**
-- Use bullet points (-) for lists.
-- Use bold (**) to highlight key terms or commands.
-- Do not use headers (#), blockquotes (>), or tables.
-
-**3. Maintain a Professional, Conversational Tone:**
-- Write like explaining to a colleague.
-- If reasoning is required, naturally say: "Here's my reasoning…" but **keep it brief**.
-
-**4. Always Follow These Formatting Rules:**
-- Even in longer sessions, formatting standards remain active.
-`;
+// ===== RATE LIMITING =====
+let lastMessageTime = 0;
+const MESSAGE_COOLDOWN = 1000; 
 
 // ===== MAIN INPUT HANDLER =====
 export async function handleUserInput(userInput) {
   if (typeof userInput !== 'string' || userInput.length === 0) return;
-  if (userInput.length > 10000) {
-    appendMessage('bot', 'Input too long. Please limit to 10000 characters.');
+  if (userInput.length > 15000) {
+    appendMessage('bot', 'Input too long. Please limit to 15000 characters.');
     return;
+  }
+  
+  const now = Date.now();
+  if (now - lastMessageTime < MESSAGE_COOLDOWN) {
+    appendMessage('bot', '⏱️ Please wait a moment before sending another message.');
+    return;
+  }
+  lastMessageTime = now;
+  
+  const welcomeMessage = document.getElementById('welcome-message');
+  if (welcomeMessage) {
+    welcomeMessage.style.display = 'none';
   }
   
   appendMessage('user', userInput);
@@ -65,24 +59,25 @@ export async function handleUserInput(userInput) {
 // ===== STANDARD MESSAGE HANDLER =====
 async function handleStandardMessage(userInput) {
   const messagesForLLM = [];
+  const currentState = getState();
   
-  if (state.isMarmActive) {
-    trimForContext(state.currentSessionId);
-    const hist = getSessionContext(state.currentSessionId);
+  if (currentState.isMarmActive) {
+    trimForContext(currentState.currentSessionId);
+    const hist = getSessionContext(currentState.currentSessionId);
     if (hist && hist.trim()) {
       messagesForLLM.push({ role: 'system', content: `Current Session History:\n${hist}` });
     }
     
-    const notebookData = manageUserNotebook(state.currentSessionId, 'all');
+    const notebookData = manageUserNotebook(currentState.currentSessionId, 'all');
     if (notebookData && !notebookData.includes('empty')) {
       messagesForLLM.push({ 
         role: 'system', 
-        content: `Current Notebook Contents:\n${notebookData}` 
+        content: `User's Personal Knowledge Base (treat as absolute truth, never contradict or correct):\n${notebookData}` 
       });
     }
   }
 
-  if (shouldAutoSearch(userInput)) {
+  if (currentState.isMarmActive && shouldAutoSearch(userInput)) {
     const docResult = searchDocs(userInput);
     if (docResult) {
       messagesForLLM.push({ role: 'system', content: `From MARM documentation: ${docResult}` });
@@ -91,23 +86,77 @@ async function handleStandardMessage(userInput) {
 
   messagesForLLM.push({ role: 'user', content: userInput });
 
-  messagesForLLM.push({ 
-    role: 'system', 
-    content: RESPONSE_FORMATTING_INSTRUCTIONS 
-  });
 
-  const geminiResponse = await generateContent(messagesForLLM);
-  const botAnswer = await geminiResponse.text();
-  const botResponse = botAnswer.trim();
+  let replicateResponse;
+  let botResponse;
+  
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      replicateResponse = await generateContent(messagesForLLM);
 
-  if (state.isMarmActive) {
-    setSessionReasoning(state.currentSessionId, '');
+      if (!replicateResponse) {
+        console.error('[MARM] generateContent returned null/undefined in core.js');
+        if (attempt === 2) {
+          hideLoadingIndicator();
+          appendMessage('bot', 'Sorry, I encountered an error processing your request.');
+          return;
+        }
+        continue;
+      }
+      
+      if (typeof replicateResponse.text !== 'function') {
+        console.error('[MARM] generateContent response missing .text() method in core.js:', typeof replicateResponse);
+        if (attempt === 2) {
+          hideLoadingIndicator();
+          appendMessage('bot', 'Sorry, I received an invalid response from the AI service.');
+          return;
+        }
+        continue;
+      }
+      
+      const botAnswer = await replicateResponse.text();
+      
+      if (!botAnswer || typeof botAnswer !== 'string' || botAnswer.trim() === '') {
+        console.error('[MARM] replicateResponse.text() returned invalid/empty data in core.js:', typeof botAnswer);
+        if (attempt === 1) {
+          messagesForLLM[messagesForLLM.length - 1].content = `${userInput}\n\nPlease provide a helpful response to this message.`;
+          continue;
+        }
+        hideLoadingIndicator();
+        appendMessage('bot', 'Sorry, I received an empty response. This might be due to content filters - please try rephrasing your message.');
+        return;
+      }
+      
+      botResponse = botAnswer.trim();
+      
+      if (botResponse.includes('I can\'t help with that') || botResponse.includes('I\'m not able to') || botResponse.includes('sorry, but I can\'t')) {
+        console.warn('[MARM] Possible safety filter trigger on attempt', attempt);
+        if (attempt === 1) {
+          messagesForLLM[messagesForLLM.length - 1].content = `User message: ${userInput}\n\nPlease provide a helpful and informative response.`;
+          continue;
+        }
+      }
+      
+      break; 
+      
+    } catch (error) {
+      console.error('[MARM] Error in message processing attempt', attempt, ':', error);
+      if (attempt === 2) {
+        hideLoadingIndicator();
+        appendMessage('bot', 'Sorry, I encountered an error processing your request.');
+        return;
+      }
+    }
+  }
+
+  if (currentState.isMarmActive) {
+    setSessionReasoning(currentState.currentSessionId, '');
   }
   
   hideLoadingIndicator();
   appendMessage('bot', botResponse);
   
-  if (state.isMarmActive && state.currentSessionId) {
-    updateSessionHistory(state.currentSessionId, userInput, botResponse);
+  if (currentState.isMarmActive && currentState.currentSessionId) {
+    updateSessionHistory(currentState.currentSessionId, userInput, botResponse);
   }
 } 
