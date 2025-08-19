@@ -10,7 +10,7 @@
 Memory Accurate Response Mode v2.0 — The memory protocol for AI.  
 Stop losing context. Stop hallucinations. Start controlling your conversations.
 </h4>
-</div>
+
 
 ---
 
@@ -19,6 +19,7 @@ Stop losing context. Stop hallucinations. Start controlling your conversations.
 ---
    
 ![Stars](https://img.shields.io/github/stars/Lyellr88/MARM-Protocol?style=flat-square) ![Forks](https://img.shields.io/github/forks/Lyellr88/MARM-Protocol?style=flat-square) ![Tests](https://img.shields.io/badge/tests-74%20passing-brightgreen?style=flat-square) [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/LICENSE) ![Version](https://img.shields.io/badge/version-2.0-blue?style=flat-square)
+<div>
 
 <h2 align="center">🎯 What is MARM? </h2> 
 <picture>
