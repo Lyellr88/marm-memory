@@ -1,4 +1,4 @@
-<<div align="center">
+<div align="center">
 <picture>
   <img src="https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/media/marm-main.JPG?raw=true"
        alt="MARM - The AI That Remembers Your Conversations"
@@ -10,10 +10,12 @@
 Memory Accurate Response Mode v2.0 — The memory protocol for AI.  
 Stop losing context. Stop hallucinations. Start controlling your conversations.
 </h4>
+<div>
 
 
 ---
 
+<div align="center">
 [![Try MARM Live](https://img.shields.io/badge/Try_MARM-Live_Demo-FF6B6B?style=for-the-badge&logo=rocket&logoColor=white)](https://marm-systems-chatbot.onrender.com)
 
 ---
