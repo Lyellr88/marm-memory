@@ -1,4 +1,4 @@
-<div align="center">
+<<div align="center">
 <picture>
   <img src="https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/media/marm-main.JPG?raw=true"
        alt="MARM - The AI That Remembers Your Conversations"
@@ -6,8 +6,18 @@
        height="350">
 </picture>
 <h1 align="center">MARM: The AI That Remembers Your Conversations</h1> 
-<h4 align="center">Memory Accurate Response Mode v2.0 - Build smarter AI conversations with structured memory and transparent logic.</h4>
-    
+<h4 align="center">
+Memory Accurate Response Mode v2.0 — The memory protocol for AI.  
+Stop losing context. Stop hallucinations. Start controlling your conversations.
+</h4>
+</div>
+
+---
+
+[![Try MARM Live](https://img.shields.io/badge/Try_MARM-Live_Demo-FF6B6B?style=for-the-badge&logo=rocket&logoColor=white)](https://marm-systems-chatbot.onrender.com)
+
+---
+   
 ![Stars](https://img.shields.io/github/stars/Lyellr88/MARM-Protocol?style=flat-square) ![Forks](https://img.shields.io/github/forks/Lyellr88/MARM-Protocol?style=flat-square) ![Tests](https://img.shields.io/badge/tests-74%20passing-brightgreen?style=flat-square) [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/LICENSE) ![Version](https://img.shields.io/badge/version-2.0-blue?style=flat-square)
 
 <h2 align="center">🎯 What is MARM? </h2> 
@@ -25,14 +35,14 @@
 
 ## ❌ Before MARM vs ✅ After MARM
 
-**❌ Without MARM:**
+**Without MARM:**
 
 - "Wait, what were we discussing about the database schema?"
 - AI repeats previous suggestions you already rejected
 - Loses track of project requirements mid-conversation
 - Starts from scratch every time you return
 
-**✅ With MARM:**
+**With MARM:**
 
 - AI references your logged project notes and decisions
 - Maintains context across multiple sessions  
