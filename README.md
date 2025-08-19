@@ -140,7 +140,7 @@ Need a walkthrough or troubleshooting help? The [`HANDBOOK.md`](./HANDBOOK.md) c
   
 ### User Experience (Chatbot)
 
-**Browser optimized** - Professional web interface (mobile support coming soon)  
+**Browser optimized** - Professional web interface (browser only)  
 **Modern card-style chat** - Glass effects with indigo/amber color palette  
 **File upload system** - Upload and analyze text/code files with syntax highlighting  
 **MARM protocol toggle** - Switch between structured MARM mode and free conversation  
