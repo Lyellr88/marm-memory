@@ -21,7 +21,8 @@
   margin: 0;
   line-height: 1.5;
   color: #3d5a80;
-  font-weight: 700;
+  font-weight: 650;
+  filter: brightness(0.8);
 }
 
 .welcome-content code {
