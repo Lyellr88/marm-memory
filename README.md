@@ -10,20 +10,26 @@
 Memory Accurate Response Mode v2.0 — The memory protocol for AI.  
 Stop losing context. Stop hallucinations. Start controlling your conversations.
 </h4>
-<div>
-
+</div>
 
 ---
 
 <div align="center">
+  
 [![Try MARM Live](https://img.shields.io/badge/Try_MARM-Live_Demo-FF6B6B?style=for-the-badge&logo=rocket&logoColor=white)](https://marm-systems-chatbot.onrender.com)
 
+</div>
+  
 ---
-   
+
+<div align="center">
+  
 ![Stars](https://img.shields.io/github/stars/Lyellr88/MARM-Protocol?style=flat-square) ![Forks](https://img.shields.io/github/forks/Lyellr88/MARM-Protocol?style=flat-square) ![Tests](https://img.shields.io/badge/tests-74%20passing-brightgreen?style=flat-square) [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/LICENSE) ![Version](https://img.shields.io/badge/version-2.0-blue?style=flat-square)
-<div>
+
+</div>
 
 <h2 align="center">🎯 What is MARM? </h2> 
+<div align="center">
 <picture>
     <img src="https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/media/google-overview.png"
          alt="MARM - The AI That Remembers Your Conversations"
