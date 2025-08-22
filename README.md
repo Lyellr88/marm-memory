@@ -115,7 +115,7 @@ Modern LLMs often lose context or fabricate information. MARM introduces a sessi
 <Summary>Click here for local Chatbot install</Summary>
 <br>
 
-Run MARM on your own machine using Replicate API (LLaMA 4 Maverick). Great for developers, power users, or those who want full control.  
+Run MARM on your own machine using Replicate API (Claude Sonnet 3.7). Great for developers, power users, or those who want full control.  
 
 ### Requirements
 
@@ -268,7 +268,6 @@ Need a walkthrough or troubleshooting help? The [`HANDBOOK.md`](./HANDBOOK.md) c
 - **Enhanced notebook system** - Store user knowledge with add/use/clear/status commands  
 - **Voice synthesis** - Listen to MARM responses (Chrome/Edge recommended)    
 - **XSS protection** - Professional -level security with comprehensive input sanitization  
-- **Llama 4 Maverick powered** - 400B parameter model with 10M token context  
 - **No setup required** - Just open and start chatting    
 - **Professional error handling** - Clear feedback with improved timeout handling  
 
