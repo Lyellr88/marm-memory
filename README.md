@@ -30,10 +30,10 @@ Stop losing context. Stop hallucinations. Start controlling your conversations.
 
 - [Overview](#-overview)
 - [Why I Built MARM](#-why-i-built-marm)
-- [Before Using & After](#-try-marm-chatbot-now---no-setup-required)
-- [Why Use MARM?](#-try-marm-chatbot-now---no-setup-required)
+- [Before Using & After](#-before-marm-vs--after-marm)
+- [Why Use MARM?](#-why-use-marm)
 - [Install Locally](#%EF%B8%8F-install-locally)  
-- [Who is Marm Built For?](#-why-i-built-marm)  
+- [Who is Marm Built For?](#-built-for-research--real-use)  
 - [Commands & Features](#-key-features--command-overview)  
 - [Live Demo](#-try-marm-chatbot-now---no-setup-required)  
 - [Community](#-join-the-marm-community)  
@@ -48,7 +48,7 @@ MARM is a protocol for AI reliability. It gives you control over memory and logi
 
 **Steer the AI instead of chasing it.**  
 
-> For copy-and-paste prompt users and full technical details, see [`PROTOCOL.md`](./PROTOCOL.md)
+> For copy-and-paste protocol  users and full technical details, see [`PROTOCOL.md`](./PROTOCOL.md)
 
 <div align="center">
 <picture>
@@ -58,7 +58,7 @@ MARM is a protocol for AI reliability. It gives you control over memory and logi
          height="350"
 </picture>
 </div>
-<p align="center">*As recognized by Google AI Overview:*
+<p align="center">*Appears in Google AI Overview for AI memory protocol queries (as of Aug 2025)*
 
 ---
 
@@ -293,7 +293,6 @@ Need a walkthrough or troubleshooting help? The [`HANDBOOK.md`](./HANDBOOK.md) c
 
 ### Growing Community
 
-- **126+ GitHub stars** and growing
 - **Active discussions** on Reddit and Discord
 - **Real users** solving daily AI frustration
 
