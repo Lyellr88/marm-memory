@@ -7,8 +7,7 @@
 </picture>
 <h1 align="center">MARM: The AI That Remembers Your Conversations</h1> 
 
-Memory Accurate Response Mode v2.0 - The memory protocol for AI.  
-Stop losing context. Stop hallucinations. Start controlling your conversations.   
+Memory Accurate Response Mode v2.0 - The memory protocol for AI. Stop losing context. Stop hallucinations. Start controlling your conversations.   
 
 <h4 align="center"> A product of CFS (CogniFlow Solutions)
 
@@ -26,7 +25,7 @@ Stop losing context. Stop hallucinations. Start controlling your conversations.
 ![Stars](https://img.shields.io/github/stars/Lyellr88/MARM-Protocol?style=flat-square) ![Forks](https://img.shields.io/github/forks/Lyellr88/MARM-Protocol?style=flat-square) ![Tests](https://img.shields.io/badge/tests-74%20passing-brightgreen?style=flat-square) [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/LICENSE) ![Version](https://img.shields.io/badge/version-2.0-blue?style=flat-square)
 </div>
 
-## 📄 Table of Contents  
+## Table of Contents  
 
 - [Overview](#-overview)
 - [Why I Built MARM](#-why-i-built-marm)
@@ -42,7 +41,7 @@ Stop losing context. Stop hallucinations. Start controlling your conversations.
 
 ---
 
-## 📌 Overview
+## Overview
 
 MARM is a protocol for AI reliability. It gives you control over memory and logic by letting you log sessions, store your own notes, and compile summaries. The result: fewer hallucinations, transparent reasoning, and conversations that stay on track.  
 
@@ -62,7 +61,7 @@ MARM is a protocol for AI reliability. It gives you control over memory and logi
 
 ---
 
-## 🌱 Why I Built MARM  
+## Why I Built MARM  
 
 MARM started with my own frustrations: AI losing context, repeating itself, and drifting off track. But I didn’t stop there. I asked a simple question in a few AI subreddits:  
 *“What’s the one thing you wish your LLM could do better?”*  
@@ -78,7 +77,7 @@ MARM is the result of combining individual persistence with collective needs, a 
 
 ---
 
-## ❌ Before MARM vs ✅ After MARM
+## Before MARM vs After MARM
 
 **Without MARM:**
 
@@ -96,7 +95,7 @@ MARM is the result of combining individual persistence with collective needs, a 
 
 ---
 
-## ❓ Why Use MARM?
+## Why Use MARM?
 
 Modern LLMs often lose context or fabricate information. MARM introduces a session memory kernel, structured logs, and a user-controlled knowledge library. Anchoring the AI to *your* logic and data. It’s more than a chatbot wrapper. It’s a methodology for accountable AI.
 
@@ -109,7 +108,7 @@ Modern LLMs often lose context or fabricate information. MARM introduces a sessi
 
 ---
 
-## 🛠️ Install Locally
+## Install Locally
 
 <details> 
 <Summary>Click here for local Chatbot install</Summary>
@@ -173,7 +172,7 @@ See [`SETUP.md`](./SETUP.md) for complete installation guide with Node.js setup 
 
 ---
 
-## 🧪 Built For Research + Real Use
+## Built For Research + Real Use
 
 MARM is both a power-user tool and a research scaffold:
 
@@ -201,7 +200,7 @@ Small talk • Throwaway chats • Passive use
 
 ---
 
-## 🔑 Key Features & Command Overview
+## Key Features & Command Overview
 
 ### Key Features
 
@@ -273,7 +272,7 @@ Need a walkthrough or troubleshooting help? The [`HANDBOOK.md`](./HANDBOOK.md) c
 
 ---
 
-## 🚀 Join the MARM Community
+## Join the MARM Community
 
 **Help build the future of AI memory - no coding required!**
 
@@ -300,7 +299,7 @@ Need a walkthrough or troubleshooting help? The [`HANDBOOK.md`](./HANDBOOK.md) c
 
 ---
 
-## 📣 Feedback & Community Mentions
+## Feedback & Community Mentions
 
 MARM is actively being tested and adopted across platforms.
 
@@ -325,7 +324,7 @@ MARM is actively being tested and adopted across platforms.
 
 ---
 
-## 📂 Project Files
+## Project Files
 
 - [README.md](README.md) – Core introduction and quick start for using MARM.  
 - [FAQ.md](FAQ.md) – Answers to common questions about how and why to use MARM.  
