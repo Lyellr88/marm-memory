@@ -9,8 +9,6 @@
 
 Memory Accurate Response Mode v2.0 - The memory protocol for AI. Stop losing context. Stop hallucinations. Start controlling your conversations.   
 
-<h4 align="center"> A product of CFS (CogniFlow Solutions)
-
 ---
 
 </div>
