@@ -28,7 +28,32 @@ fi
 
 if [ -z "$PYTHON_CMD" ]; then
     echo "❌ Python 3.8+ is required but not found"
-    echo "Please install Python 3.8 or later and try again"
+    echo ""
+    echo "📥 Please install Python 3.8+ for your operating system:"
+    echo ""
+    if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+        echo "🐧 Linux:"
+        echo "   Ubuntu/Debian: sudo apt update && sudo apt install python3 python3-pip"
+        echo "   RHEL/CentOS:   sudo yum install python3 python3-pip"
+        echo "   Arch:          sudo pacman -S python python-pip"
+        echo "   Or download:   https://www.python.org/downloads/"
+    elif [[ "$OSTYPE" == "darwin"* ]]; then
+        echo "🍎 macOS:"
+        echo "   Homebrew:      brew install python"
+        echo "   MacPorts:      sudo port install python39 +universal"
+        echo "   Or download:   https://www.python.org/downloads/macos/"
+    elif [[ "$OSTYPE" == "msys" || "$OSTYPE" == "cygwin" ]]; then
+        echo "🪟 Windows:"
+        echo "   Microsoft Store: Search 'Python' in Microsoft Store"
+        echo "   Direct download: https://www.python.org/downloads/windows/"
+        echo "   Chocolatey:      choco install python"
+        echo "   Scoop:           scoop install python"
+    else
+        echo "🌐 Generic:"
+        echo "   Download from:   https://www.python.org/downloads/"
+    fi
+    echo ""
+    echo "After installation, run this script again."
     exit 1
 fi
 
