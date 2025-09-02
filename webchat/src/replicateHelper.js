@@ -42,6 +42,8 @@ function getErrorMessage(status, attempt, maxAttempts) {
   const retryText = isRetrying ? ` (Attempt ${attempt}/${maxAttempts}, retrying...)` : '';
   
   switch (status) {
+    case 402:
+      return `💳 Your Replicate account needs credit to use this AI model. Please visit https://replicate.com/account/billing to add funds and try again.`;
     case 429:
       return `🚫 Rate limit reached${retryText}`;
     case 500:
@@ -109,7 +111,7 @@ export async function generateContent(messages) {
         const errText = await res.text();
         console.error(`[MARM DEBUG] Replicate API Error (Attempt ${attempt}):`, res.status, errText);
         
-        if (res.status === 401 || res.status === 403 || res.status === 400) {
+        if (res.status === 401 || res.status === 403 || res.status === 400 || res.status === 402) {
           return {
             text: () => getErrorMessage(res.status, attempt, maxAttempts)
           };

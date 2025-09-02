@@ -111,6 +111,17 @@ app.post('/api/replicate', async (req, res) => {
         return;
       }
       
+      // Handle payment required error with friendly message
+      if (response.status === 402) {
+        res.status(402).json({ 
+          error: 'Payment Required', 
+          message: 'Your Replicate account needs credit to use this AI model. Please visit https://replicate.com/account/billing to add funds and try again.',
+          friendly: true,
+          details: data.detail || 'Insufficient credit'
+        });
+        return;
+      }
+      
       res.status(response.status).json(data);
     } catch (e) {
       console.error('[MARM DEBUG] Failed to parse Replicate API response as JSON:', e.message);
