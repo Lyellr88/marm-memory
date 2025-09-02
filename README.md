@@ -7,15 +7,11 @@
 </picture>
 <h1 align="center">MARM: The AI That Remembers Your Conversations</h1> 
 
-Memory Accurate Response Mode v2.0 - The memory protocol for AI. Stop losing context. Stop hallucinations. Start controlling your conversations.   
+Memory Accurate Response Mode v2.0 - The memory protocol for AI. Stop losing context. Stop hallucinations. Start controlling your conversations.  
 
----
+[![Official MARM](https://img.shields.io/badge/Official-MARM-blue?style=for-the-badge)](https://github.com/Lyellr88/MARM-Systems)
 
-</div>
 
-<div align="center">
-  
-[![Unlock Full Session Memory](https://img.shields.io/badge/Try_MARM-Live_Demo-FF6B6B?style=for-the-badge&logo=rocket&logoColor=white)](https://marm-systems-chatbot.onrender.com)
 </div>
   
 <div align="center">
@@ -23,19 +19,10 @@ Memory Accurate Response Mode v2.0 - The memory protocol for AI. Stop losing con
 ![Stars](https://img.shields.io/github/stars/Lyellr88/MARM-Protocol?style=flat-square) ![Forks](https://img.shields.io/github/forks/Lyellr88/MARM-Protocol?style=flat-square) ![Tests](https://img.shields.io/badge/tests-74%20passing-brightgreen?style=flat-square) [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/LICENSE) ![Version](https://img.shields.io/badge/version-2.0-blue?style=flat-square)
 </div>
 
-## Table of Contents  
+<div align="center">
 
-- [Overview](#-overview)
-- [Why I Built MARM](#-why-i-built-marm)
-- [Before Using & After](#-before-marm-vs--after-marm)
-- [Why Use MARM?](#-why-use-marm)
-- [Install Locally](#%EF%B8%8F-install-locally)  
-- [Who is Marm Built For?](#-built-for-research--real-use)  
-- [Commands & Features](#-key-features--command-overview)  
-- [Live Demo](#-try-marm-chatbot-now---no-setup-required)  
-- [Community](#-join-the-marm-community)  
-- [Feedback](#-feedback--community-mentions)  
-- [Project Files](#-project-files)
+[![Unlock Full Session Memory](https://img.shields.io/badge/Try_MARM-Live_Demo-FF6B6B?style=for-the-badge&logo=rocket&logoColor=white)](https://marm-systems-chatbot.onrender.com)
+</div>
 
 ---
 
@@ -298,6 +285,12 @@ Need a walkthrough or troubleshooting help? The [`HANDBOOK.md`](./HANDBOOK.md) c
 ---
 
 ## Feedback & Community Mentions
+
+MARM Systems is the official upstream kernel for all MARM-based tools.
+Community forks and experiments (e.g., MARMalade, OAuth Wrappers) demonstrate the strength and adaptability of the protocol.
+
+We welcome experimentation, these projects increase visibility and test new ideas.
+For stable releases, full protocol governance, and long-term roadmap support, refer to this repository as the source of truth.****
 
 MARM is actively being tested and adopted across platforms.
 
