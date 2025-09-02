@@ -1,8 +1,8 @@
 test('Security, HTML, and replicateHelper test placeholder', () => {
   expect(true).toBe(true);
 });
-import { sanitizeText, sanitizeHTML, sanitizeHTMLStrict } from '../webchat/src/security/xssProtection.js';
-import { stripHTML, validateNotebookEntry, validateLogEntry, checkProtocolCompliance } from '../webchat/src/logic/utils.js';
+import { sanitizeText, sanitizeHTML, sanitizeHTMLStrict } from '../src/security/xssProtection.js';
+import { stripHTML, validateNotebookEntry, validateLogEntry, checkProtocolCompliance } from '../src/logic/utils.js';
 import { 
   cleanupUI, 
   showLoadingIndicator, 
@@ -14,7 +14,7 @@ import {
   insertCommand, 
   setupHelpModal, 
   setupDarkMode 
-} from '../webchat/src/chatbot/ui.js';
+} from '../src/chatbot/ui.js';
 
 describe('Security: XSS Protection', () => {
   test('sanitizeText escapes HTML', () => {

@@ -1,0 +1,19 @@
+{
+  "name": "marm-systems",
+  "version": "2.0.1",
+  "description": "MARM Systems - Memory Accurate Response Mode Protocol",
+  "main": "webchat/src/chatbot/server.js",
+  "type": "module",
+  "scripts": {
+    "start": "cd webchat && npm start",
+    "dev": "cd webchat && npm run dev",
+    "install-deps": "cd webchat && npm install",
+    "test": "cd webchat && npm test"
+  },
+  "keywords": ["ai", "chatbot", "memory", "marm", "protocol"],
+  "author": "Lyell",
+  "license": "MIT",
+  "engines": {
+    "node": ">=16.0.0"
+  }
+}

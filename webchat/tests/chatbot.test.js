@@ -1,4 +1,4 @@
-import { handleUserInput } from '../webchat/src/chatbot/core.js';
+import { handleUserInput } from '../src/chatbot/core.js';
 import { 
   voiceConfig, 
   loadVoices, 
@@ -7,7 +7,7 @@ import {
   cleanupVoice, 
   voiceTimers, 
   voiceListeners 
-} from '../webchat/src/chatbot/voice.js';
+} from '../src/chatbot/voice.js';
 
 describe('Chatbot Core', () => {
   test('handleUserInput returns undefined for empty input', async () => {
@@ -213,16 +213,16 @@ describe('Commands Module', () => {
     mockCompileSessionSummary = jest.fn();
 
     // Mock module imports
-    jest.doMock('../webchat/src/replicateHelper.js', () => ({
+    jest.doMock('../src/replicateHelper.js', () => ({
       generateContent: mockGenerateContent
     }));
 
-    jest.doMock('../webchat/src/chatbot/state.js', () => ({
+    jest.doMock('../src/chatbot/state.js', () => ({
       getState: mockGetState,
       updateState: mockUpdateState
     }));
 
-    jest.doMock('../webchat/src/logic/marmLogic.js', () => ({
+    jest.doMock('../src/logic/marmLogic.js', () => ({
       activateMarmSession: mockActivateMarmSession,
       logSession: mockLogSession,
       manageUserNotebook: mockManageUserNotebook,
@@ -254,7 +254,7 @@ describe('Commands Module', () => {
   });
 
   test('handleCommand parses commands correctly', async () => {
-    const { handleCommand } = await import('../webchat/src/chatbot/commands.js');
+    const { handleCommand } = await import('../src/chatbot/commands.js');
     
     // Test unknown command
     await handleCommand('/unknown');
@@ -262,7 +262,7 @@ describe('Commands Module', () => {
   });
 
   test('handleCommand handles /start marm command', async () => {
-    const { handleCommand } = await import('../webchat/src/chatbot/commands.js');
+    const { handleCommand } = await import('../src/chatbot/commands.js');
     
     mockUpdateState.mockReturnValue({
       isMarmActive: true,
@@ -280,7 +280,7 @@ describe('Commands Module', () => {
   });
 
   test('handleCommand handles /refresh marm command when MARM is active', async () => {
-    const { handleCommand } = await import('../webchat/src/chatbot/commands.js');
+    const { handleCommand } = await import('../src/chatbot/commands.js');
     
     mockGetState.mockReturnValue({
       isMarmActive: true,
@@ -294,7 +294,7 @@ describe('Commands Module', () => {
   });
 
   test('handleCommand handles /log entry command', async () => {
-    const { handleCommand } = await import('../webchat/src/chatbot/commands.js');
+    const { handleCommand } = await import('../src/chatbot/commands.js');
     
     mockGetState.mockReturnValue({
       isMarmActive: true,
@@ -308,7 +308,7 @@ describe('Commands Module', () => {
   });
 
   test('handleCommand handles /log session command', async () => {
-    const { handleCommand } = await import('../webchat/src/chatbot/commands.js');
+    const { handleCommand } = await import('../src/chatbot/commands.js');
     
     mockGetState.mockReturnValue({
       isMarmActive: true,
@@ -327,7 +327,7 @@ describe('Commands Module', () => {
   });
 
   test('handleCommand handles /deep dive command', async () => {
-    const { handleCommand } = await import('../webchat/src/chatbot/commands.js');
+    const { handleCommand } = await import('../src/chatbot/commands.js');
     
     mockGetState.mockReturnValue({
       isMarmActive: true,
@@ -346,7 +346,7 @@ describe('Commands Module', () => {
   });
 
   test('handleCommand handles /show reasoning command', async () => {
-    const { handleCommand } = await import('../webchat/src/chatbot/commands.js');
+    const { handleCommand } = await import('../src/chatbot/commands.js');
     
     mockGetState.mockReturnValue({
       isMarmActive: true,
@@ -361,7 +361,7 @@ describe('Commands Module', () => {
   });
 
   test('handleCommand handles /summary command', async () => {
-    const { handleCommand } = await import('../webchat/src/chatbot/commands.js');
+    const { handleCommand } = await import('../src/chatbot/commands.js');
     
     mockGetState.mockReturnValue({
       isMarmActive: true,
@@ -376,7 +376,7 @@ describe('Commands Module', () => {
   });
 
   test('handleCommand handles /notebook add command', async () => {
-    const { handleCommand } = await import('../webchat/src/chatbot/commands.js');
+    const { handleCommand } = await import('../src/chatbot/commands.js');
     
     mockGetState.mockReturnValue({
       isMarmActive: true,
@@ -392,7 +392,7 @@ describe('Commands Module', () => {
   });
 
   test('handleCommand handles /notebook show command', async () => {
-    const { handleCommand } = await import('../webchat/src/chatbot/commands.js');
+    const { handleCommand } = await import('../src/chatbot/commands.js');
     
     mockGetState.mockReturnValue({
       isMarmActive: true,
@@ -408,7 +408,7 @@ describe('Commands Module', () => {
   });
 
   test('handleCommand rejects commands when MARM not active', async () => {
-    const { handleCommand } = await import('../webchat/src/chatbot/commands.js');
+    const { handleCommand } = await import('../src/chatbot/commands.js');
     
     // Keep MARM inactive
     mockGetState.mockReturnValue({
@@ -426,7 +426,7 @@ describe('Commands Module', () => {
   });
 
   test('handleCommand handles API errors gracefully', async () => {
-    const { handleCommand } = await import('../webchat/src/chatbot/commands.js');
+    const { handleCommand } = await import('../src/chatbot/commands.js');
     
     mockGetState.mockReturnValue({
       isMarmActive: true,
@@ -443,7 +443,7 @@ describe('Commands Module', () => {
   });
 
   test('handleCommand validates input formats', async () => {
-    const { handleCommand } = await import('../webchat/src/chatbot/commands.js');
+    const { handleCommand } = await import('../src/chatbot/commands.js');
     
     mockGetState.mockReturnValue({
       isMarmActive: true,
