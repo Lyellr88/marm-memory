@@ -49,13 +49,22 @@ app.post('/api/replicate', async (req, res) => {
   try {
     const url = 'https://api.replicate.com/v1/models/meta/llama-4-maverick-instruct/predictions';
     
+    // Use API key from request body if provided, otherwise use environment variable
+    const apiKey = req.body.apiKey || REPLICATE_API_TOKEN;
+    
+    if (!apiKey) {
+      return res.status(401).json({ 
+        error: 'API key required', 
+        message: 'Please provide an API key or use /setupreplicate command to configure one.' 
+      });
+    }
     
     const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Accept': 'application/json',
-        'Authorization': `Bearer ${REPLICATE_API_TOKEN}`,
+        'Authorization': `Bearer ${apiKey}`,
         'User-Agent': 'MARM-Systems/1.4'
       },
       body: JSON.stringify({

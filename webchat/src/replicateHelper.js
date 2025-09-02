@@ -1,5 +1,7 @@
 // replicateHelper.js - Replicate API integration and request handling
 
+import { getReplicateApiKey } from './logic/storage.js';
+
 // ===== CONNECTION OPTIMIZATION =====
 let connectionsWarmed = 0;
 const targetWarmConnections = 3;
@@ -79,7 +81,20 @@ export async function generateContent(messages) {
   const prompt = systemInstructions + userContent;
 
 
-  const requestBody = createRequestBody(prompt);
+  // Get stored API key from localStorage
+  const storedApiKey = getReplicateApiKey();
+  
+  const requestBody = {
+    prompt: prompt,
+    temperature: 0.7,
+    max_tokens: 8192,
+    top_p: 0.9
+  };
+  
+  // Add API key to request if available
+  if (storedApiKey) {
+    requestBody.apiKey = storedApiKey;
+  }
 
  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
   let controller;

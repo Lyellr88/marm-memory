@@ -12,6 +12,12 @@ import {
   trimForContext
 } from '../logic/marmLogic.js';
 
+import {
+  saveReplicateApiKey,
+  getReplicateApiKey,
+  hasReplicateApiKey
+} from '../logic/storage.js';
+
 import { generateContent } from '../replicateHelper.js';
 import { appendMessage, hideLoadingIndicator } from './ui.js';
 import { getState, updateState } from './state.js';
@@ -154,8 +160,11 @@ export async function handleCommand(userInput) {
     case '/notebook':
       await handleNotebookCommand(args);
       break;
+    case '/setupreplicate':
+      await handleSetupReplicateCommand(args);
+      break;
     default:
-      commandResponse('Unknown command. Use /start marm to begin.');
+      commandResponse('Unknown command. Use /start marm to begin, or /setupreplicate to configure API key.');
   }
 }
 
@@ -517,4 +526,42 @@ async function handleNotebookCommand(args) {
     return;
   }
   commandResponse( 'Usage: /notebook add:name data | /notebook use:SessionName | /notebook show: | /notebook clear:SessionName | /notebook status:SessionName');
+}
+
+// --- Setup Replicate Command ---
+async function handleSetupReplicateCommand(args) {
+  if (!args || args.trim().length === 0) {
+    // Show current status
+    if (hasReplicateApiKey()) {
+      const apiKey = getReplicateApiKey();
+      const maskedKey = apiKey.substring(0, 8) + '*'.repeat(Math.max(0, apiKey.length - 8));
+      commandResponse(`🔑 **Replicate API Key Status**\n\n✅ API key configured: ${maskedKey}\n\nTo update: \`/setupreplicate YOUR_NEW_API_KEY\`\nTo remove: \`/setupreplicate clear\`\n\n💡 Get your API key at: https://replicate.com/account/api-tokens`);
+    } else {
+      commandResponse(`🔑 **Setup Replicate API Key**\n\n❌ No API key configured\n\nUsage: \`/setupreplicate YOUR_API_KEY\`\n\n💡 Get your API key at: https://replicate.com/account/api-tokens\n\n⚠️ Note: Your API key will be stored securely in your browser's local storage.`);
+    }
+    return;
+  }
+
+  const apiKey = args.trim();
+  
+  if (apiKey === 'clear') {
+    saveReplicateApiKey(null);
+    commandResponse(`🗑️ **API Key Cleared**\n\n✅ Replicate API key has been removed from local storage.\n\nTo set a new key: \`/setupreplicate YOUR_API_KEY\``);
+    return;
+  }
+
+  // Validate API key format (Replicate keys start with r8_)
+  if (!apiKey.startsWith('r8_') || apiKey.length < 20) {
+    commandResponse(`❌ **Invalid API Key Format**\n\nReplicate API keys should:\n• Start with \`r8_\`\n• Be at least 20 characters long\n\n💡 Get your API key at: https://replicate.com/account/api-tokens`);
+    return;
+  }
+
+  // Save the API key and show success message
+  const saved = saveReplicateApiKey(apiKey);
+  if (saved) {
+    const maskedKey = apiKey.substring(0, 8) + '*'.repeat(Math.max(0, apiKey.length - 8));
+    commandResponse(`✅ **API Key Configured Successfully!**\n\n🔑 Key: ${maskedKey}\n💾 Storage: Saved to local storage\n\n🚀 You can now use MARM with your own Replicate account!\n\n💡 Test it with: \`/start marm\``);
+  } else {
+    commandResponse(`❌ **Storage Error**\n\nCouldn't save API key to local storage. Please try again.`);
+  }
 } 

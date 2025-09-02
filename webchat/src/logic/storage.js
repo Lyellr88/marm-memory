@@ -3,6 +3,7 @@
 
 export const LS_KEY = 'marm-sessions-v1';
 export const CURRENT_SESSION_KEY = 'marm-current-session';
+export const REPLICATE_API_KEY = 'marm-replicate-api-key';
 
 let hasDataChanged = false;
 let sessionsRef = null;
@@ -108,4 +109,34 @@ export function restoreSessions() {
       console.error('MARM: Failed to restore saved sessions:', e);
     }
   }
+}
+
+// ===== API KEY MANAGEMENT =====
+export function saveReplicateApiKey(apiKey) {
+  try {
+    if (apiKey && apiKey.trim()) {
+      localStorage.setItem(REPLICATE_API_KEY, apiKey.trim());
+      return true;
+    } else {
+      localStorage.removeItem(REPLICATE_API_KEY);
+      return true;
+    }
+  } catch (error) {
+    console.error('Error saving Replicate API key:', error);
+    return false;
+  }
+}
+
+export function getReplicateApiKey() {
+  try {
+    return localStorage.getItem(REPLICATE_API_KEY);
+  } catch (error) {
+    console.error('Error retrieving Replicate API key:', error);
+    return null;
+  }
+}
+
+export function hasReplicateApiKey() {
+  const apiKey = getReplicateApiKey();
+  return apiKey && apiKey.length > 0;
 }

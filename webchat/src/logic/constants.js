@@ -95,6 +95,7 @@ Examples -
 - /notebook use: [prompt 1] or [prompt 1] [prompt 2]
 - /notebook show: This will display all saved notebook entries
 - /notebook clear: This will clear all entries in use
+- /setupreplicate YOUR_API_KEY - Configure your own Replicate API key
 - /notebook status: This will show you all active entries in your session
 
 Paste this section alongside /start marm in a new chat to continue with minimal drift`;
