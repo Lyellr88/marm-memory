@@ -1,0 +1,21 @@
+{
+  "name": "marm-mcp-server",
+  "version": "1.0.0",
+  "description": "MARM (Memory Accurate Response Mode) MCP Server - Session management and memory tools for AI conversations",
+  "main": "server.py",
+  "type": "module",
+  "scripts": {
+    "start": "python server.py",
+    "dev": "python server.py --debug"
+  },
+  "keywords": ["mcp", "ai", "memory", "session", "marm", "claude"],
+  "author": "MARM Systems",
+  "license": "MIT",
+  "dependencies": {},
+  "python": {
+    "requirements": [
+      "fastmcp>=0.4.0",
+      "pydantic>=2.0.0"
+    ]
+  }
+}

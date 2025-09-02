@@ -1,0 +1,13 @@
+{
+  "mcp": {
+    "servers": {
+      "marm-memory": {
+        "command": "python3",
+        "args": ["/home/contact/MARM-Systems/mcp-server/server.py"],
+        "env": {
+          "PYTHONPATH": "/home/contact/MARM-Systems/mcp-server"
+        }
+      }
+    }
+  }
+}
