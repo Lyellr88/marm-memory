@@ -1,7 +1,7 @@
 # FastMCP Cloud Deployment Instructions
 
 ## Package Contents
-- ✅ `server.py` - Enhanced OAuth 2.1 MARM Wrapper v2.0.0
+- ✅ `server.py` - Enhanced OAuth 2.1 MARM Wrapper v2.0.2
 - ✅ `requirements.txt` - Minimal dependencies (fastmcp + httpx)
 - ✅ `README.md` - Full documentation
 - ✅ `.env` - Configuration file
@@ -23,7 +23,7 @@ MARM_SERVER_URL=https://marm-systems.fastmcp.app/mcp
 
 ### 3. Expected Deployment Result
 - **Service Name**: `enhanced-oauth-marm-wrapper`
-- **Version**: 2.0.0
+- **Version**: 2.0.2
 - **Transport**: HTTP (FastMCP Cloud compatible)
 - **OAuth 2.1**: Enhanced implementation ready
 

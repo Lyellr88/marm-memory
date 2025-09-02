@@ -28,7 +28,7 @@ except ImportError:
 
 # Server Configuration
 SERVER_NAME = "enhanced-oauth-marm-wrapper"
-SERVER_VERSION = "2.0.0"
+SERVER_VERSION = "2.0.2"
 MARM_SERVER_URL = os.getenv("MARM_SERVER_URL", "https://marm-systems.fastmcp.app/mcp")
 
 # Initialize FastMCP server

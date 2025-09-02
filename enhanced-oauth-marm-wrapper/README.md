@@ -73,7 +73,7 @@ curl -X POST http://localhost:9000/mcp \
 - **Full MARM Support**: All original MARM features preserved and enhanced
 
 ## Version History
-- **v2.0.0**: Production-ready OAuth 2.1 wrapper with enhanced features
+- **v2.0.2**: Production-ready OAuth 2.1 wrapper with enhanced features
 - **v1.0.0**: Initial OAuth wrapper implementation
 
 ---
