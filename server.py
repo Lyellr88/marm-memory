@@ -37,58 +37,33 @@ SERVER_VERSION = "2.0.2"
 # MARM Protocol Version
 PROTOCOL_VERSION = "2.0.2"
 
-# Storage paths - Use relative directory for cloud compatibility
-DATA_DIR = Path("./marm-data")
-SESSIONS_FILE = DATA_DIR / "sessions.json"
-NOTEBOOKS_FILE = DATA_DIR / "notebooks.json"
-CONFIG_FILE = DATA_DIR / "config.json"
-
-# Ensure data directory exists
-DATA_DIR.mkdir(exist_ok=True)
+# Cloud-compatible in-memory storage (no file system access needed)
+# All data is stored in memory and reset on server restart
 
 class MARMStorage:
-    """Handles persistent storage for MARM data"""
+    """Handles in-memory storage for MARM data (cloud-compatible)"""
     
     def __init__(self):
-        self.sessions = self._load_json(SESSIONS_FILE, {})
-        self.notebooks = self._load_json(NOTEBOOKS_FILE, {})
-        self.config = self._load_json(CONFIG_FILE, {
+        # Initialize with in-memory data structures
+        self.sessions = {}
+        self.notebooks = {}
+        self.config = {
             "current_session": None,
             "active_protocol": False,
             "default_session": "main"
-        })
-    
-    def _load_json(self, file_path: Path, default: Any) -> Any:
-        """Load JSON from file or return default"""
-        try:
-            if file_path.exists():
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-        except Exception as e:
-            print(f"Warning: Could not load {file_path}: {e}", file=sys.stderr)
-        return default
-    
-    def _save_json(self, file_path: Path, data: Any) -> bool:
-        """Save data to JSON file"""
-        try:
-            with open(file_path, 'w', encoding='utf-8') as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
-            return True
-        except Exception as e:
-            print(f"Error: Could not save {file_path}: {e}", file=sys.stderr)
-            return False
+        }
     
     def save_sessions(self) -> bool:
-        """Save sessions to disk"""
-        return self._save_json(SESSIONS_FILE, self.sessions)
+        """Mock save - always returns True for cloud compatibility"""
+        return True
     
     def save_notebooks(self) -> bool:
-        """Save notebooks to disk"""
-        return self._save_json(NOTEBOOKS_FILE, self.notebooks)
+        """Mock save - always returns True for cloud compatibility"""
+        return True
     
     def save_config(self) -> bool:
-        """Save config to disk"""
-        return self._save_json(CONFIG_FILE, self.config)
+        """Mock save - always returns True for cloud compatibility"""
+        return True
     
     def get_current_session_id(self) -> str:
         """Get current session ID"""
