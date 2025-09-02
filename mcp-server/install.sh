@@ -1,12 +1,12 @@
 #!/bin/bash
 
 # MARM MCP Server Installation Script
-# Version: 2.0.1
+# Version: 2.0.2
 # Author: MARM Systems
 
 set -e
 
-echo "🚀 MARM MCP Server v2.0.1 Installation"
+echo "🚀 MARM MCP Server v2.0.2 Installation"
 echo "======================================"
 
 # Check if Python 3.8+ is available

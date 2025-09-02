@@ -32,10 +32,10 @@ except ImportError:
 
 # MCP Server Configuration
 SERVER_NAME = "marm-memory-server"
-SERVER_VERSION = "2.0.1"
+SERVER_VERSION = "2.0.2"
 
 # MARM Protocol Version
-PROTOCOL_VERSION = "2.0.1"
+PROTOCOL_VERSION = "2.0.2"
 
 # Storage paths
 DATA_DIR = Path.home() / ".marm-mcp"
@@ -398,6 +398,9 @@ def main():
     """Main entry point for the MCP server"""
     parser = argparse.ArgumentParser(description="MARM MCP Server")
     parser.add_argument("--debug", action="store_true", help="Enable debug mode")
+    parser.add_argument("--http", action="store_true", help="Run as HTTP server")
+    parser.add_argument("--port", type=int, default=9999, help="Port for HTTP server (default: 9999)")
+    parser.add_argument("--host", default="localhost", help="Host for HTTP server (default: localhost)")
     args = parser.parse_args()
     
     if args.debug:
@@ -407,7 +410,14 @@ def main():
         print(f"📚 Notebooks: {sum(len(nb) for nb in storage.notebooks.values())}")
     
     # Run the FastMCP server
-    mcp.run()
+    if args.http:
+        if args.debug:
+            print(f"🌐 Starting HTTP server on {args.host}:{args.port}")
+        mcp.run(transport="http", host=args.host, port=args.port)
+    else:
+        if args.debug:
+            print("📡 Starting STDIO server")
+        mcp.run()
 
 if __name__ == "__main__":
     main()

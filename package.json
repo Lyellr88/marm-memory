@@ -1,6 +1,6 @@
 {
   "name": "marm-systems",
-  "version": "2.0.1",
+  "version": "2.0.2",
   "description": "MARM Systems - Memory Accurate Response Mode Protocol",
   "main": "webchat/src/chatbot/server.js",
   "type": "module",
