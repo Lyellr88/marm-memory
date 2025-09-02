@@ -37,8 +37,8 @@ SERVER_VERSION = "2.0.2"
 # MARM Protocol Version
 PROTOCOL_VERSION = "2.0.2"
 
-# Storage paths
-DATA_DIR = Path.home() / ".marm-mcp"
+# Storage paths - Use relative directory for cloud compatibility
+DATA_DIR = Path("./marm-data")
 SESSIONS_FILE = DATA_DIR / "sessions.json"
 NOTEBOOKS_FILE = DATA_DIR / "notebooks.json"
 CONFIG_FILE = DATA_DIR / "config.json"
