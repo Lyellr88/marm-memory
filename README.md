@@ -8,20 +8,17 @@
 <h1 align="center">MARM: The AI That Remembers Your Conversations</h1> 
 
 Memory Accurate Response Mode v2.0 - The memory protocol for AI. Stop losing context. Stop hallucinations. Start controlling your conversations.  
-
-[![Official MARM](https://img.shields.io/badge/Official-MARM-blue?style=for-the-badge)](https://github.com/Lyellr88/MARM-Systems)
-
-
-</div>
-  
-<div align="center">
   
 ![Stars](https://img.shields.io/github/stars/Lyellr88/MARM-Protocol?style=flat-square) ![Forks](https://img.shields.io/github/forks/Lyellr88/MARM-Protocol?style=flat-square) ![Tests](https://img.shields.io/badge/tests-74%20passing-brightgreen?style=flat-square) [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/LICENSE) ![Version](https://img.shields.io/badge/version-2.0-blue?style=flat-square)
-</div>
-
-<div align="center">
 
 [![Unlock Full Session Memory](https://img.shields.io/badge/Try_MARM-Live_Demo-FF6B6B?style=for-the-badge&logo=rocket&logoColor=white)](https://marm-systems-chatbot.onrender.com)
+  
+[![Official MARM](https://img.shields.io/badge/Official-MARM-blue?style=for-the-badge)](https://github.com/Lyellr88/MARM-Systems)
+
+**Note:** This is the *official* MARM repository. All official versions and releases are managed here.
+
+Forks may experiment, but official updates will always come from this repo.
+
 </div>
 
 ---
@@ -286,11 +283,11 @@ Need a walkthrough or troubleshooting help? The [`HANDBOOK.md`](./HANDBOOK.md) c
 
 ## Feedback & Community Mentions
 
-MARM Systems is the official upstream kernel for all MARM-based tools.
+MARM Systems is the official upstream source for all MARM-based tools.
 Community forks and experiments (e.g., MARMalade, OAuth Wrappers) demonstrate the strength and adaptability of the protocol.
 
 We welcome experimentation, these projects increase visibility and test new ideas.
-For stable releases, full protocol governance, and long-term roadmap support, refer to this repository as the source of truth.****
+For stable releases, full protocol governance, and long-term roadmap support, refer to this repository as the source of truth.
 
 MARM is actively being tested and adopted across platforms.
 
@@ -312,6 +309,15 @@ MARM is actively being tested and adopted across platforms.
   
   [![Star History Chart](https://api.star-history.com/svg?repos=Lyellr88/MARM-Systems&type=Date)](https://star-history.com/#Lyellr88/MARM-Systems&Date)
 </div>
+
+---
+
+### License & Usage Notice
+
+This project is licensed under the MIT License. Forks and derivative works are permitted.  
+However, use of the **MARM name** and **version numbering** is reserved for releases from the  
+[official MARM repository](https://github.com/Lyellr88/MARM-Systems). Derivatives should clearly  
+indicate they are unofficial or experimental.
 
 ---
 
