@@ -57,6 +57,12 @@ That feedback confirmed the gap I already saw. I took those shared frustrations,
 
 MARM is the result of combining individual persistence with collective needs, a protocol designed to solve what we all kept running into.  
 
+### Discord
+
+Join Discord for upcoming features and builds, plus a safe space to share your work and get constructive feedback.
+
+[MARM Discord](https://discord.gg/deYpMSRP)
+
 ---
 
 ## Before MARM vs After MARM
@@ -258,6 +264,8 @@ Need a walkthrough or troubleshooting help? The [`HANDBOOK.md`](./HANDBOOK.md) c
 
 **Help build the future of AI memory - no coding required!**
 
+[MARM Discord](https://discord.gg/deYpMSRP)
+
 ### Easy Ways to Get Involved
 
 - **Try the demo** and share your experience
@@ -276,8 +284,6 @@ Need a walkthrough or troubleshooting help? The [`HANDBOOK.md`](./HANDBOOK.md) c
 
 - **Active discussions** on Reddit and Discord
 - **Real users** solving daily AI frustration
-
-[Discord server link coming soon]
 
 ---
 
