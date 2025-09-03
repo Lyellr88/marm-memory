@@ -141,11 +141,23 @@ Sparked the architectural concept behind MARM's "Session Relay Tools" patch by p
 
 ---
 
+### u/LanaAugustine 
+
+**Active Tester** | Private DM - August 29, 2025
+
+This user has helped a lot even before MARM with actively testing and giving me feedback with the protocol that run MARM. Without active testers its harder to see the user side so thank you for your contribution to this project! 
+
+**Impact** Valuable feedback that has helped shape the protocols I build 
+
+
+
+
+---
+
+
 ## 📞 Connect with the Creator
 
 **Lyell** - MARM Creator & Lead Developer
-
-The philosophy: *"Just because you have all this power doesn't mean you don't need guidance. We're building what humans call a relationship."*
 
 **Reach out for:**
 
@@ -186,33 +198,6 @@ MARM was born from one person's frustration with AI memory problems but grew int
 - **AI-assisted development** - LLMs used extensively for drafting, testing, and learning
 
 Special thanks to the Reddit prompt engineering community for the early feedback, frustrations shared, and validation that MARM addresses real needs. The v2.0 testing infrastructure, glassmorphism UI, and 95% cost reduction through Llama 4 migration all happened because the community asked for better, faster, more reliable AI tools.
-
----
-
-## 📚 Project Navigation
-
-**Core Documentation:**
-
-- **[README.md](README.md)** – Project introduction and quick start
-- **[PROTOCOL.md](PROTOCOL.md)** – Copy-paste protocol for any AI chat
-- **[HANDBOOK.md](HANDBOOK.md)** – Complete MARM usage guide with examples
-
-**Community & Support:**
-
-- **[FAQ.md](FAQ.md)** – Common questions and troubleshooting
-- **[CONTRIBUTING.md](CONTRIBUTING.md)** – How to join the MARM community (you are here!)
-- **[CHANGELOG.md](CHANGELOG.md)** – Complete project history and updates
-
-**Technical Resources:**
-
-- **[SETUP.md](SETUP.md)** – Local installation guide
-- **[DESCRIPTION.md](DESCRIPTION.md)** – Project vision and technical overview
-- **[ROADMAP.md](ROADMAP.md)** – Future features and ecosystem expansion
-- **[LICENSE](LICENSE)** – MIT license terms
-
----
-
-🎯 **Ready to contribute?** Start by starring the repo and joining our GitHub Discussions!
 
 ---
 
