@@ -57,7 +57,7 @@ That feedback confirmed the gap I already saw. I took those shared frustrations,
 
 MARM is the result of combining individual persistence with collective needs, a protocol designed to solve what we all kept running into.  
 
-### Discord
+**Discord**
 
 Join Discord for upcoming features and builds, plus a safe space to share your work and get constructive feedback.
 
