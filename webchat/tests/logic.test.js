@@ -3,7 +3,7 @@ import {
   validateNotebookEntry,
   validateLogEntry,
   checkProtocolCompliance
-} from '../webchat/src/logic/utils.js';
+} from '../src/logic/utils.js';
 
 import {
   ensureSession,
@@ -17,7 +17,7 @@ import {
   resetSession,
   getAllSessions,
   getMostRecentBotResponseLogic
-} from '../webchat/src/logic/session.js';
+} from '../src/logic/session.js';
 
 describe('Logic Utilities', () => {
   test('stripHTML removes HTML tags', () => {
