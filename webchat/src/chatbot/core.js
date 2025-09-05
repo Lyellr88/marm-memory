@@ -130,7 +130,6 @@ async function handleStandardMessage(userInput) {
       botResponse = botAnswer.trim();
       
       if (botResponse.includes('I can\'t help with that') || botResponse.includes('I\'m not able to') || botResponse.includes('sorry, but I can\'t')) {
-        console.warn('[MARM] Possible safety filter trigger on attempt', attempt);
         if (attempt === 1) {
           messagesForLLM[messagesForLLM.length - 1].content = `User message: ${userInput}\n\nPlease provide a helpful and informative response.`;
           continue;
