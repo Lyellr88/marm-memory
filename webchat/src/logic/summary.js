@@ -77,7 +77,6 @@ export async function compileSessionSummary(id, options = {}) {
       }
 
       if (summary.includes("I can't help with that") || summary.includes("I'm not able to") || summary.includes("sorry, but I can't")) {
-        console.warn('[MARM] Possible safety filter trigger in summary on attempt', attempt);
         if (attempt === 1) continue;
       }
 
