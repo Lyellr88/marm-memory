@@ -101,7 +101,6 @@ export {
 
 // ===== CORE API FUNCTIONS =====
 export function getSessionContext(id) {
-  console.log('[MARM DEBUG] getSessionContext called for session ID:', id);
   
   // Debug functions removed - they were causing undefined errors
   // debugProtocolText();
@@ -110,15 +109,12 @@ export function getSessionContext(id) {
   const s = sessions[id];
   if (!s) {
     const basicContext = `MARM v${PROTOCOL_VERSION}\n\n` + MARM_PROTOCOL_TEXT;
-    console.log('[MARM DEBUG] No session found, returning basic context length:', basicContext.length);
-    console.log('[MARM DEBUG] Basic context preview:', basicContext.substring(0, 200) + '...');
     return basicContext;
   }
   
   let context = `You are operating under MARM v${PROTOCOL_VERSION} protocol:\n\n${MARM_PROTOCOL_TEXT}\n\n`;
   context += `Current Session ID: ${id}\n\n`;
   
-  console.log('[MARM DEBUG] Session found, building context...');
   const notebookKeys = Object.keys(s.notebook || {});
   if (notebookKeys.length > 0) {
     context += `Current Notebook Contents:\n`;
@@ -138,9 +134,6 @@ export function getSessionContext(id) {
   if (tail) {
     context += `Conversation History:\n${tail}`;
   }
-  
-  console.log('[MARM DEBUG] Final context length:', context.length, 'characters');
-  console.log('[MARM DEBUG] Final context preview:', context.substring(0, 300) + '...');
   
   return context;
 }
