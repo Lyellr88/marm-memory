@@ -174,7 +174,6 @@ export async function generateContent(messages) {
         };
       }
       
-      console.log('[MARM] API request successful');
       return {
         text: () => reply
       };
