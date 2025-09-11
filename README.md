@@ -61,7 +61,7 @@ MARM is the result of combining individual persistence with collective needs, a 
 
 Join Discord for upcoming features and builds, plus a safe space to share your work and get constructive feedback.
 
-[MARM Discord](https://discord.gg/deYpMSRP)
+[MARM Discord](https://discord.gg/EuBsHvSRks)
 
 ---
 
