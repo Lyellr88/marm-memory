@@ -410,9 +410,10 @@ If MARM helps with your AI memory needs, please star the repository to support d
 ### License & Usage Notice
 
 This project is licensed under the MIT License. Forks and derivative works are permitted.  
-However, use of the **MARM name** and **version numbering** is reserved for releases from the  
-[official MARM repository](https://github.com/Lyellr88/MARM-Systems). Derivatives should clearly  
-indicate they are unofficial or experimental.
+
+However, use of the **MARM name** and **version numbering** is reserved for releases from the [official MARM repository](https://github.com/Lyellr88/MARM-Systems). 
+
+Derivatives should clearly indicate they are unofficial or experimental.
 
 ---
 
