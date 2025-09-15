@@ -26,6 +26,7 @@ MARM started from frustration with AI conversations that felt like talking to so
 MARM evolved from a simple conversation protocol into a comprehensive AI memory platform through community feedback and multi-agent development collaboration.
 
 **Current Ecosystem:**
+
 - **Universal MCP Server** - Production-ready memory intelligence (primary focus)
 - **Live Chatbot Demo** - Interactive testing environment at <https://marm-systems-chatbot.onrender.com>
 - **Original Protocol** - Copy/paste instructions that work with any AI
@@ -37,6 +38,7 @@ This project showcases advanced multi-agent collaboration, with Claude handling 
 ### Get Started
 
 **🐳 Production MCP Server (Recommended):**
+
 ```bash
 docker pull lyellr88/marmcp-beta:latest
 docker run -d --name marm-mcp-server -p 8001:8001 lyellr88/marmcp-beta:latest

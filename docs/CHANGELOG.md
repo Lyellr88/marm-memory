@@ -494,43 +494,24 @@ This release introduces a complete UI/UX transformation with the implementation 
 
 ## **August 6-18, 2025: MARM v2.0 Production Launch**
 
-**Comprehensive security hardening, complete AI provider migration (Gemini → Llama 4), MARM protocol evolution to v2.0, major UI/UX modernization, and professional testing infrastructure deployment.**
+**Core achievements: 95% cost reduction (Gemini → Llama 4), professional test suite (74 tests), protocol v2.0 evolution, security hardening, and complete UI modernization.**
 
----
-
-### ** Professional Testing Infrastructure Implementation**
+### **Professional Testing Infrastructure Implementation**
 
 - **Comprehensive Test Suite**: Added 74 passing tests across 4 modules - Voice (13), UI (16), State/Session (15), Commands (15), Security/Logic (15)
 - **GitHub Actions Integration**: Automated testing on push/PR with Node.js 18.x & 20.x, test status badge added to README
 - **ES Module Testing**: Full Jest configuration supporting modern JavaScript imports, browser API mocking (speechSynthesis, localStorage, DOM)
-- **Test Files**: Created `tests/chatbot.test.js`, `tests/logic.test.js`, `tests/security_replicate_html.test.js` with comprehensive coverage
 - **Quality Assurance**: 42.39% test coverage with detailed reports, error handling validation, edge case testing for all core functionality
-- **Developer Infrastructure**: Professional-grade testing setup ensuring code quality, regression prevention, and contributor confidence
 
-### ** Modern Glassmorphism UI Revolution**
-
-- **Floating Card Architecture**: Eliminated nested windows - message cards now float directly on glassmorphism background for 2025 aesthetic
-- **Color-Coded Conversations**: White user message cards with clean backgrounds, subtle gold AI response cards creating warm contrast against cool glass
-- **Visual Hierarchy Enhancement**: Perfect contrast ratios with readable text, beautiful backdrop blur effects, and modern single-layer design
-- **Chat Container Transformation**: Removed opaque chat window container, allowing transparent background to show through with floating message elements
-- **Professional Polish**: Clean card shadows, hover effects, and smooth transitions creating professional-grade visual experience
-- **Mobile-Ready Design**: Responsive glassmorphism that adapts to different screen sizes while maintaining visual integrity
-
----
-
-### ** Complete AI Provider Migration: Gemini → Llama 4 Maverick**
+### **Complete AI Provider Migration: Gemini → Llama 4 Maverick**
 
 - **Backend Transformation**: Complete migration from Google Gemini API to Replicate Llama 4 Maverick (400B total parameters, 17B active × 128 experts)
 - **Cost Optimization**: Achieved 95% operational cost reduction (.65 per million tokens output vs Claude Sonnet pricing)
 - **Performance Upgrade**: Access to 10M token context limit with significantly improved response times
 - **API Architecture**: Converted from Gemini's complex message format to Replicate's streamlined prompt-based system
-- **Streaming Implementation**: Rebuilt streaming with proper Replicate 2-step process (create prediction → connect stream URL)
-- **Polling System**: Added server-side prediction polling for regular API calls to prevent duplicate predictions
 - **Technical Implementation**: Complete rewrite of `server.js` streaming endpoint, new `replicateHelper.js` replacing `geminiHelper.js`
-- **Core Files Update**: Updated all imports and references across core.js, commands.js, chatbot.js, summary.js
-- **UI Updates**: Changed display text from "Gemini 2.5 Pro" to "Llama 4 Maverick" throughout interface
 
-### ** MARM Protocol Evolution: v1.5 → v2.0**
+### **MARM Protocol Evolution: v1.5 → v2.0**
 
 - **Identity Transformation**: Updated from generic assistant mode to "MARM IS memory incarnate" - core identity evolution
 - **Response Optimization**: Replaced verbose "Response Contract" with concise "💭 Thinking Trail" format for user-friendly output
@@ -538,130 +519,134 @@ This release introduces a complete UI/UX transformation with the implementation 
   - `/contextual reply` → `/deep dive` (clearer functionality naming)
   - `/compile [SessionName] --summary` → `/summary: [session name] --summary` (better syntax)
   - Enhanced notebook commands: `/notebook use:`, `/notebook clear:`, `/notebook status:` (active management)
-  - Improved `/deep dive` command parsing (removed erroneous colon requirement)
-- **Memory System Overhaul**:
-  - Added conversation import system for mid-session MARM activation with complete context preservation
-  - Intelligent message pairing to maintain proper user/bot conversation flow
-  - Filters out system messages to prevent context confusion
-- **Natural Language Enhancement**: Removed over-literal template formatting that caused bracket/symbol responses
-- **Protocol Maturity**: Advanced from v1.4 development prompt to v2.0 production-ready specification
-- **Enhanced Mission**: Clearer articulation of memory architect and conversation continuity guardian role
+- **Memory System Overhaul**: Added conversation import system for mid-session MARM activation with complete context preservation
 
-### ** Complete UI/UX Modernization**
+### **Complete UI/UX Modernization**
 
 - **Visual Transformation**: Complete overhaul from "2010 vibes" to modern design standards with indigo (#6366f1) and amber (#f59e0b) color palette
 - **Glassmorphism Effects**: Enhanced shadows and glass effects throughout interface for premium feel
 - **Chat Message Cards**: Implemented card-style messages with glass effects, proper shadows, and user/bot visual distinction
 - **Command Menu Redesign**: Complete transformation from sidebar to contextual popup button (⚡) positioned next to input field
-  - Popup functionality with proper positioning and auto-close behavior
-  - Maintained notebook and log submenus with improved dropdown behavior
-  - Freed up sidebar space for expanded chat interface
-- **Interface Enhancements**:
-  - Emoji animations for enhanced micro-interactions (⚡💾🤔📎)
-  - Perfect uniform alignment between Send, File, and Command buttons
-  - Button modernization with hover animations, scale effects, and modern styling
-  - Send button modernized as overlay inside textarea (Discord/WhatsApp style)
-- **Complete HTML/JavaScript Separation**:
-  - Moved all HTML templates from JavaScript files to HTML templates
-  - Clean separation of concerns with template-based system
-  - JavaScript now finds existing elements instead of creating HTML strings
-  - Voice settings, chats menu, loading indicators, code windows moved to HTML
+- **Complete HTML/JavaScript Separation**: Moved all HTML templates from JavaScript files to HTML templates, clean separation of concerns
 
-### ** Security & Architecture Hardening**
+### **Security & Architecture Hardening**
 
 - **XSS Protection System**: Comprehensive security module (`xssProtection.js`) with multiple sanitization levels
   - `sanitizeText()`: HTML entity escaping for plain text
   - `sanitizeHTML()`: Advanced sanitization with script/iframe blocking
   - `sanitizeHTMLStrict()`: Ultra-strict sanitization for user input
-  - Complete protection against script injection, event handlers, frame injection, CSS injection, data exfiltration
-- **Storage Architecture**: Created centralized `storage.js` for localStorage operations
-  - Eliminated circular dependency risks with dedicated storage layer
-  - Multi-tab synchronization matching ChatGPT/Claude standards
-  - Centralized storage operations for better consistency and maintainability
-- **State Management Enhancement**:
-  - Private state object no longer directly accessible, only through `getState()`
-  - Immutable patterns with all state access returning defensive copies
-  - Validation with all state changes going through `updateState()` with validation
-  - Unified state access patterns across entire codebase
-- **Memory Management System**:
-  - Trackable functions: `trackableTimeout()`, `trackableInterval()`, `trackableEventListener()`
-  - Comprehensive cleanup with module-specific cleanup functions and centralized coordination
-  - Resource tracking for event listeners, timers, and DOM elements
+- **Storage Architecture**: Created centralized `storage.js` for localStorage operations with multi-tab synchronization
+- **State Management Enhancement**: Private state object only accessible through `getState()`, immutable patterns with defensive copies
 
-### ** New Features & Capabilities**
+### **New Features & Capabilities**
 
-- **File Upload System**:
-  - File upload button (📎) with text/code file support for 15+ file types
-  - Smart detection for .txt, .js, .html, .css, .json, .md, .py, .java, .cpp, .c, .h, .xml, .yaml, .yml, .ini, .cfg, .log
-  - Automatic language detection and syntax highlighting with code block formatting
-  - AI integration for file content analysis with security restrictions for text-only uploads
-- **MARM Protocol Toggle**:
-  - Toggle button (🧠) in FAB menu for instant protocol switching between structured MARM and free mode
-  - Visual feedback with button color changes when MARM active, dynamic tooltip updates
-  - Complete bypass of MARM formatting, session context, and documentation search in free mode
-  - System messages for clear status updates when toggling between modes with persistent state
+- **File Upload System**: File upload button (📎) with text/code file support for 15+ file types, smart detection, automatic language detection and syntax highlighting
+- **MARM Protocol Toggle**: Toggle button (🧠) in FAB menu for instant protocol switching between structured MARM and free mode with visual feedback
 
-### ** Critical Bug Fixes & System Stability**
+### **Critical Bug Fixes & System Stability**
 
 - **MARM Memory Issues**: Fixed critical memory loss bug where MARM would lose all conversation context when activated mid-conversation
 - **Session Persistence**: Fixed MARM forgetting conversation when toggled off and back on, now preserves existing session IDs
-- **Runtime Stability**: Resolved 12+ `state.currentSessionId` bugs in commands.js and broken module exports in voice.js
-- **Performance Optimization**:
-  - Eliminated 60+ lines of duplicate code with helper functions
-  - Replaced expensive JSON.stringify operations with O(1) incremental tracking
-  - Request timeout optimization increased from 15s → 45s per attempt preventing connection resets
-  - Total max timeout now ~135 seconds (45s × 3 attempts + retry delays)
+- **Performance Optimization**: Eliminated 60+ lines of duplicate code, replaced expensive JSON.stringify operations, request timeout optimization (15s → 45s)
 - **Voice System**: Fixed TTS "interrupted" errors in speech synthesis by adding proper cancellation logic
 - **Browser Compatibility**: Added cache-busting headers to server.js and version strings to prevent stale file serving
-- **UI Fixes**:
-  - FAB MARM Toggle functionality restored
-  - Button consistency across header buttons, chats menu buttons, and form buttons
-  - Font consistency with all buttons inheriting Georgia serif font matching chatbot theme
-  - Copy buttons now work with selective button allowlisting
-  - Input optimization to prevent overlap with new file upload button
-
-### **🛠 Development & Testing Infrastructure**
-
-- **Production Testing**: Browser-safe console-based XSS detection without screen-locking popups
-- **Comprehensive Coverage**: Memory leak, state management, and performance validation across 8 categories
-- **GitHub Publication Ready**: Comprehensive testing for open source sharing with production safety checks
-- **Code Quality**: Template-based architecture with clean separation of concerns and modern development patterns
-- **Performance Improvements**:
-  - Dynamic import elimination removing all lazy-loading bottlenecks for faster module loading
-  - Menu responsiveness with instant loading of saved chats and auto/manual refresh
-  - Better cleanup and state handling preventing resource leaks
-
----
 
 ### **Impact Summary**
 
-- **Security**: Zero XSS vulnerabilities with comprehensive multi-layer protection across all user-facing components
-- **Performance**: 95% cost reduction while improving AI capabilities, response times, and eliminating runtime crashes
-- **User Experience**: Complete interface modernization with intuitive command access, visual polish, and natural conversation flow
-- **Stability**: Eliminated memory leaks, data loss prevention, and significantly improved system stability
-- **Architecture**: Production-ready codebase with modern web standards, clean separation of concerns, and comprehensive error handling
-
-- **Total Files Modified**: 50+ files across frontend, backend, and configuration
-- **Lines of Code Changed**: 1000+ modifications including new features, optimizations, and fixes
-- **Cost Savings**: 95% operational cost reduction through AI provider migration
-- **Protocol Version**: v2.0 production-ready specification
-- **Major New Features**: 3 (File Upload System, MARM Protocol Toggle, Conversation Memory Import)
-- **Critical Issues Resolved**: 15+ including XSS vulnerabilities, memory leaks, and runtime crashes
-- **Architectural Changes**: 2 (Complete HTML/JS Separation, Centralized Security/Storage Architecture)
+- **95% cost reduction** through AI provider optimization
+- **Zero XSS vulnerabilities** with comprehensive protection
+- **Production-ready architecture** with modern web standards
+- **50+ files modified**, 1000+ lines changed
+- **3 major new features**, 15+ critical issues resolved
 
 </details>
 
 ---
 
-## Project Files
+<details>
+<summary>August 20th – September 12th, 2025: Universal MCP Server Development (v2.1.0 Launch)</summary>
 
-- [README.md](README.md) – Core introduction and quick start for using MARM.  
-- [FAQ.md](FAQ.md) – Answers to common questions about how and why to use MARM.  
-- [CHANGELOG.md](CHANGELOG.md) – Tracks updates, edits, and refinements to the protocol.  
-- [CONTRIBUTING.md](CONTRIBUTING.md) – Contribution guidelines and collaborator credits.  
-- [DESCRIPTION.md](DESCRIPTION.md) – Protocol purpose and vision overview.  
-- [LICENSE](LICENSE) – Terms of use for this project.
-- [HANDBOOK.md](HANDBOOK.md) – Full guide to MARM usage, including commands, examples, and beginner to advanced tips.
-- [ROADMAP.md](ROADMAP.md) – Planned features, upcoming enhancements, and related protocols under development.
-- [SETUP.md](SETUP.md) - Local download setup guide
-- [PROTOCOL.md](PROTOCOL.md) - Quick Start, Copy and Paste Protocol, and Limitations.
+### Added
+
+**Universal MCP Server Architecture:**
+
+- **Production-ready FastAPI server** with Model Context Protocol implementation
+- **19 complete MCP tools** for AI memory intelligence across all platforms
+- **Docker containerization** with multi-stage builds and health monitoring
+- **Semantic search engine** using sentence-transformers (all-MiniLM-L6-v2) with vector embeddings
+- **Cross-platform memory database** - SQLite with WAL mode optimization and connection pooling
+- **Multi-agent development workflow** - Claude (architecture), Gemini (validation), Qwen (research), ChatGPT (testing)
+
+**MCP Tools Suite:**
+
+- **Memory Intelligence**: `marm_smart_recall` (global semantic search), `marm_contextual_log` (intelligent storage)
+- **Session Management**: `marm_start`, `marm_refresh` with enhanced protocol adherence
+- **Logging System**: `marm_log_session`, `marm_log_entry`, `marm_log_show`, `marm_log_delete`
+- **Notebook Management**: Complete CRUD operations with `marm_notebook_add`, `marm_notebook_use`, etc.
+- **Workflow Tools**: `marm_summary`, `marm_context_bridge` for seamless transitions
+- **System Utilities**: `marm_current_context`, `marm_system_info`, `marm_reload_docs`
+
+**Production Features:**
+
+- **Production-ready architecture** - FastAPI backend with rate limiting, IP-based protection, graceful degradation
+- **Professional test suite** - 5 comprehensive diagnostic tests (security, performance, integration, memory usage, MCP compliance)
+- **Health monitoring** - Comprehensive system status and performance tracking
+- **Database optimization** - SQLite with connection pooling, WAL mode, efficient storage
+- **Security hardening** - Input validation, error isolation, production-ready deployment
+- **Analytics system** - Privacy-conscious usage tracking for platform optimization
+
+**Multi-Platform Integration:**
+
+- **Claude Code** integration with CLI commands (`claude mcp add marm-memory`)
+- **Qwen CLI** and **Gemini CLI** full MCP tool access
+- **Universal MCP compatibility** for any Model Context Protocol client
+- **Cross-AI memory sharing** - All connected agents contribute to unified knowledge base
+
+### Changed
+
+- **Architecture evolution** from chatbot-focused to Universal MCP Server platform
+- **Protocol enhancement** - Original MARM commands now available as MCP tools
+- **Documentation restructure** - MCP server as primary product, chatbot as secondary demo
+- **Development approach** - Multi-agent collaboration showcasing AI-assisted development
+- **Memory model** - From session-based to persistent, searchable, semantic database
+
+### Technical Achievements
+
+- **Docker Hub deployment** - `lyellr88/marmcp-beta:latest` for production use
+- **Semantic search implementation** - AI embeddings for intelligent memory retrieval
+- **Universal MCP Server implementation** - Platform-agnostic memory intelligence
+- **Multi-AI workflows** - Demonstrated collaborative development between AI agents
+- **Production deployment** - Production-ready with monitoring, health checks, and scaling
+
+</details>
+
+---
+
+## 📁 Project Documentation
+
+### **Usage Guides**
+
+- **[MARM-HANDBOOK.md](HANDBOOK.md)** - Original MARM protocol handbook for chatbot usage
+- **[MCP-HANDBOOK.md](MCP-HANDBOOK.md)** - Complete MCP server usage guide with commands, workflows, and examples
+- **[PROTOCOL.md](PROTOCOL.md)** - Quick start commands and protocol reference
+- **[FAQ.md](FAQ.md)** - Answers to common questions about using MARM
+
+### **MCP Server Installation**
+
+- **[INSTALL-DOCKER.md](INSTALL-DOCKER.md)** - Docker deployment (recommended)
+- **[INSTALL-WINDOWS.md](INSTALL-WINDOWS.md)** - Windows installation guide
+- **[INSTALL-LINUX.md](INSTALL-LINUX.md)** - Linux installation guide
+- **[INSTALL-PLATFORMS.md](INSTALL-PLATFORMS.md) - Platfrom installtion guide
+
+### **Chatbot Installation**
+
+- **[CHATBOT-SETUP.md](CHATBOT-SETUP.md)** - Web chatbot setup guide
+
+### **Project Information**
+
+- **[README.md](README.md)** - This file - ecosystem overview and MCP server guide
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** - How to contribute to MARM
+- **[DESCRIPTION.md](DESCRIPTION.md)** - Protocol purpose and vision overview
+- **[CHANGELOG.md](CHANGELOG.md)** - Version history and updates
+- **[ROADMAP.md](ROADMAP.md)** - Planned features and development roadmap
+- **[LICENSE](LICENSE)** - MIT license terms

@@ -25,7 +25,7 @@ MARM Systems is building the memory layer that makes AI truly useful for long-te
 
 ### Phase 2: Advanced AI Protocols
 
-**Enhanced Reasoning Capabilities**
+#### Enhanced Reasoning Capabilities**
 
 - Advanced conversation protocols for specialized use cases
 - Enhanced memory integration and context management
@@ -34,7 +34,7 @@ MARM Systems is building the memory layer that makes AI truly useful for long-te
 
 ### Phase 3: Platform Integration
 
-**Unified AI Experience**
+#### Unified AI Experience**
 
 - Seamless protocol switching and management
 - Advanced memory systems across all interactions
@@ -90,15 +90,31 @@ MARM v2.0 establishes our foundation. The growing community and proven protocol 
 
 ---
 
-### Project Files
+## 📁 Project Documentation
 
-- [README.md](README.md) – Core introduction and quick start for using MARM.  
-- [FAQ.md](FAQ.md) – Answers to common questions about how and why to use MARM.  
-- [CHANGELOG.md](CHANGELOG.md) – Tracks updates, edits, and refinements to the protocol.  
-- [CONTRIBUTING.md](CONTRIBUTING.md) – Contribution guidelines and collaborator credits.  
-- [DESCRIPTION.md](DESCRIPTION.md) – Protocol purpose and vision overview.  
-- [LICENSE](LICENSE) – Terms of use for this project.
-- [HANDBOOK.md](HANDBOOK.md) – Full guide to MARM usage, including commands, examples, and beginner to advanced tips.
-- [ROADMAP.md](ROADMAP.md) – Planned features, upcoming enhancements, and related protocols under development.
-- [SETUP.md](SETUP.md) - Local download setup guide.
-- [PROTOCOL.md](PROTOCOL.md) - Quick Start, Copy and Paste Protocol, and Limitations.
+### **Usage Guides**
+
+- **[MARM-HANDBOOK.md](HANDBOOK.md)** - Original MARM protocol handbook for chatbot usage
+- **[MCP-HANDBOOK.md](MCP-HANDBOOK.md)** - Complete MCP server usage guide with commands, workflows, and examples
+- **[PROTOCOL.md](PROTOCOL.md)** - Quick start commands and protocol reference
+- **[FAQ.md](FAQ.md)** - Answers to common questions about using MARM
+
+### **MCP Server Installation**
+
+- **[INSTALL-DOCKER.md](INSTALL-DOCKER.md)** - Docker deployment (recommended)
+- **[INSTALL-WINDOWS.md](INSTALL-WINDOWS.md)** - Windows installation guide
+- **[INSTALL-LINUX.md](INSTALL-LINUX.md)** - Linux installation guide
+- **[INSTALL-PLATFORMS.md](INSTALL-PLATFORMS.md) - Platfrom installtion guide
+
+### **Chatbot Installation**
+
+- **[CHATBOT-SETUP.md](CHATBOT-SETUP.md)** - Web chatbot setup guide
+
+### **Project Information**
+
+- **[README.md](README.md)** - This file - ecosystem overview and MCP server guide
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** - How to contribute to MARM
+- **[DESCRIPTION.md](DESCRIPTION.md)** - Protocol purpose and vision overview
+- **[CHANGELOG.md](CHANGELOG.md)** - Version history and updates
+- **[ROADMAP.md](ROADMAP.md)** - Planned features and development roadmap
+- **[LICENSE](LICENSE)** - MIT license terms

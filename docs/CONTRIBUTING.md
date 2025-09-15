@@ -24,36 +24,42 @@ MARM is evolving from a memory protocol into the foundation of a larger AI ecosy
 MARM is evolving from protocol to platform - here's where we need your help based on our strategic roadmap:
 
 ### 🧪 **Protocol Testing & Validation**
+
 - **Cross-platform testing** - validate MARM across ChatGPT, Claude, Gemini, and other AI models
 - **Edge case discovery** - find where MARM breaks down and help us improve robustness
 - **Real-world workflows** - share how you're using `/log`, `/notebook`, and `/deep dive` in actual projects
 - **Performance benchmarking** - help us achieve sub-1-second response times
 
 ### 🧠 **Advanced Protocol Development**
+
 - **MoreLogic Protocol** - contribute to our enhanced critical thinking & analysis framework
 - **HybridLogic Integration** - help build seamless switching between AI personalities
 - **Memory Architecture** - work on dual-RAG systems and self-updating knowledge bases
 - **Cross-protocol context** - ensure memory persists across different AI modes
 
 ### ⚙️ **Technical Infrastructure**
+
 - **Multi-AI provider support** - expand beyond Llama 4 to user choice across leading models
 - **n8n workflow integration** - automated session processing and memory updates
 - **MCP integration** - Model Context Protocol support for developer ecosystem
 - **Enterprise solutions** - team memory management and deployment options
 
 ### 🔌 **Developer Ecosystem & Integrations**
+
 - **API development** - build SDKs and documentation for third-party applications
 - **Community tools** - VS Code extensions, browser tools, CLI utilities
 - **Integration examples** - boilerplate code and partnership opportunities
 - **Developer tutorials** - help others build with MARM's memory infrastructure
 
 ### 📱 **Platform & Community**
+
 - **Mobile development** - responsive design for all devices
 - **Community features** - collaborative spaces and knowledge sharing
 - **Content creation** - tutorials, videos, blog posts showcasing MARM capabilities
 - **"Used With MARM" showcase** - highlight community adaptations and integrations
 
 ### 🎯 **Strategic Growth**
+
 - **Partnership opportunities** - connect MARM with complementary tools
 - **Enterprise user feedback** - help shape team and business use cases
 - **Community building** - grow us toward 1k+ GitHub stars
@@ -69,6 +75,17 @@ This project follows the philosophy: **"We need to work together, I am not a del
 - **Ship first, optimize later** - we move fast and fix things as we go
 - **Surgical improvements** - targeted fixes over massive rewrites
 - **Community-driven** - real users solving real problems
+
+### 🍴 Forks, Spin-offs, and the Official MARM
+
+I welcome and encourage the community to fork this repository and experiment with the MARM protocol. Seeing new ideas and adaptations is one of the most exciting parts of open source.
+
+However, to avoid confusion and ensure users can always find the official source, I ask that you follow these simple guidelines:
+
+- **The MARM Name and Versioning:** The use of the **MARM name** and the official **version numbering** is reserved for releases from this repository.
+- **Derivative Works:** If you create a derivative work, please give it a new, unique name (like the excellent "MARMalade" project) and clearly state that it is an unofficial or experimental version of MARM.
+
+This approach allows the ecosystem to flourish while ensuring that the official MARM project remains a stable and reliable source of truth for the community.
 
 **Getting Started:**
 
@@ -141,19 +158,60 @@ Sparked the architectural concept behind MARM's "Session Relay Tools" patch by p
 
 ---
 
-### u/LanaAugustine 
+### u/LanaAugustine
 
 **Active Tester** | Private DM - August 29, 2025
 
-This user has helped a lot even before MARM with actively testing and giving me feedback with the protocol that run MARM. Without active testers its harder to see the user side so thank you for your contribution to this project! 
+This user has helped a lot even before MARM with actively testing and giving me feedback with the protocol that run MARM. Without active testers its harder to see the user side so thank you for your contribution to this project!
 
-**Impact** Valuable feedback that has helped shape the protocols I build 
-
-
-
+**Impact** Valuable feedback that has helped shape the protocols I build
 
 ---
 
+### 🏗️ **Core Contributors**
+
+#### Neurosyn Labs
+
+**Lightweight Memory Architect** | [GitHub: NeurosynLabs](https://github.com/NeurosynLabs)
+
+Created **MARMalade V-1.0** — A lightweight memory kernel for ChatGPT, built on MARM principles with structured persistence, sovereign reasoning, and token-efficient context retention. Their implementation demonstrates how MARM concepts can be adapted into focused, efficient memory solutions for specific AI platforms.
+
+**Impact:** Showed how MARM principles can be implemented as lightweight, specialized memory kernels
+
+---
+
+#### Jefferson
+
+**Security & Desktop Platform Lead** | [GitHub: jeffersonwarrior](https://github.com/jeffersonwarrior)
+
+Rapidly built an extensive suite of additions including MAP (MARM Authentication Protocol), desktop version, OAuth wrapper, and comprehensive security infrastructure. Jefferson's contributions include:
+
+**Key Features:**
+
+- **API Key Management**: Secure /setupreplicate command system with localStorage storage and validation
+- **Security Hardening**: HTML injection prevention, XSS protection, URL validation with HTTPS enforcement
+- **Build & Testing**: Fixed critical Rust compilation errors, created comprehensive 89-test suite with 100% security coverage
+- **Desktop Application**: Full desktop integration with Tauri framework and security-first architecture
+
+**Security Impact:**
+✅ Prevents XSS attacks and HTML injection  
+✅ Blocks cleartext HTTP and local file access attempts  
+✅ Eliminates sensitive data exposure in console logging  
+✅ Establishes regression testing for all security fixes  
+
+**Impact:** Significantly enhanced MARM's security posture and expanded platform capabilities with desktop integration and comprehensive testing infrastructure
+
+---
+
+#### u/sabhi12
+
+**AI Memory Systems Analyst** | [Reddit: sabhi12](https://www.reddit.com/user/sabhi12) | Private DM - July 2025
+
+Provided deep technical analysis of LLM memory limitations and validation of MARM's core architecture. Key contributions include identifying the distinction between real memory vs. simulated memory in current AI systems, strategic feedback on memory types (short-term, long-term, permanent), and advanced ChatGPT integration techniques. Their industry perspective helped validate MARM's market positioning and technical approach to solving enterprise-grade AI memory challenges.
+
+**Impact:** Strategic validation of MARM's memory architecture and identification of key market opportunities for AI memory intelligence
+
+---
 
 ## 📞 Connect with the Creator
 
@@ -201,15 +259,31 @@ Special thanks to the Reddit prompt engineering community for the early feedback
 
 ---
 
-## Project Files
+## 📁 Project Documentation
 
-- [README.md](README.md) – Core introduction and quick start for using MARM.  
-- [FAQ.md](FAQ.md) – Answers to common questions about how and why to use MARM.  
-- [CHANGELOG.md](CHANGELOG.md) – Tracks updates, edits, and refinements to the protocol.  
-- [CONTRIBUTING.md](CONTRIBUTING.md) – Contribution guidelines and collaborator credits.  
-- [DESCRIPTION.md](DESCRIPTION.md) – Protocol purpose and vision overview.  
-- [LICENSE](LICENSE) – Terms of use for this project.
-- [HANDBOOK.md](HANDBOOK.md) – Full guide to MARM usage, including commands, examples, and beginner to advanced tips.
-- [ROADMAP.md](ROADMAP.md) – Planned features, upcoming enhancements, and related protocols under development.
-- [SETUP.md](SETUP.md) - Local download setup guide
-- [PROTOCOL.md](PROTOCOL.md) - Quick Start, Copy and Paste Protocol, and Limitations.
+### **Usage Guides**
+
+- **[MARM-HANDBOOK.md](HANDBOOK.md)** - Original MARM protocol handbook for chatbot usage
+- **[MCP-HANDBOOK.md](MCP-HANDBOOK.md)** - Complete MCP server usage guide with commands, workflows, and examples
+- **[PROTOCOL.md](PROTOCOL.md)** - Quick start commands and protocol reference
+- **[FAQ.md](FAQ.md)** - Answers to common questions about using MARM
+
+### **MCP Server Installation**
+
+- **[INSTALL-DOCKER.md](INSTALL-DOCKER.md)** - Docker deployment (recommended)
+- **[INSTALL-WINDOWS.md](INSTALL-WINDOWS.md)** - Windows installation guide
+- **[INSTALL-LINUX.md](INSTALL-LINUX.md)** - Linux installation guide
+- **[INSTALL-PLATFORMS.md](INSTALL-PLATFORMS.md) - Platfrom installtion guide
+
+### **Chatbot Installation**
+
+- **[CHATBOT-SETUP.md](CHATBOT-SETUP.md)** - Web chatbot setup guide
+
+### **Project Information**
+
+- **[README.md](README.md)** - This file - ecosystem overview and MCP server guide
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** - How to contribute to MARM
+- **[DESCRIPTION.md](DESCRIPTION.md)** - Protocol purpose and vision overview
+- **[CHANGELOG.md](CHANGELOG.md)** - Version history and updates
+- **[ROADMAP.md](ROADMAP.md)** - Planned features and development roadmap
+- **[LICENSE](LICENSE)** - MIT license terms
