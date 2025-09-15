@@ -71,27 +71,27 @@ Whether you're testing MARM, suggesting improvements, or just curious about AI c
 
 ### **Usage Guides**
 
-- **[MARM-HANDBOOK.md](HANDBOOK.md)** - Original MARM protocol handbook for chatbot usage
-- **[MCP-HANDBOOK.md](MCP-HANDBOOK.md)** - Complete MCP server usage guide with commands, workflows, and examples
-- **[PROTOCOL.md](PROTOCOL.md)** - Quick start commands and protocol reference
-- **[FAQ.md](FAQ.md)** - Answers to common questions about using MARM
+- **[MARM-HANDBOOK.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/MARM-HANDBOOK.md)** - Original MARM protocol handbook for chatbot usage
+- **[MCP-HANDBOOK.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/MCP-HANDBOOK.md)** - Complete MCP server usage guide with commands, workflows, and examples
+- **[PROTOCOL.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/PROTOCOL.md)** - Quick start commands and protocol reference
+- **[FAQ.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/FAQ.md)** - Answers to common questions about using MARM
 
-### **MCP Server Installation**
+### **MCP Server Installation** 
 
-- **[INSTALL-DOCKER.md](INSTALL-DOCKER.md)** - Docker deployment (recommended)
-- **[INSTALL-WINDOWS.md](INSTALL-WINDOWS.md)** - Windows installation guide
-- **[INSTALL-LINUX.md](INSTALL-LINUX.md)** - Linux installation guide
-- **[INSTALL-PLATFORMS.md](INSTALL-PLATFORMS.md) - Platfrom installtion guide
+- **[INSTALL-DOCKER.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-DOCKER.md)** - Docker deployment (recommended)
+- **[INSTALL-WINDOWS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-WINDOWS.md)** - Windows installation guide
+- **[INSTALL-LINUX.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-LINUX.md)** - Linux installation guide
+- **[INSTALL-PLATFORMS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-PLATFORMS.md)** - Platfrom installtion guide
 
 ### **Chatbot Installation**
 
-- **[CHATBOT-SETUP.md](CHATBOT-SETUP.md)** - Web chatbot setup guide
+- **[CHATBOT-SETUP.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/CHATBOT-SETUP.md)** - Web chatbot setup guide
 
 ### **Project Information**
 
-- **[README.md](README.md)** - This file - ecosystem overview and MCP server guide
-- **[CONTRIBUTING.md](CONTRIBUTING.md)** - How to contribute to MARM
-- **[DESCRIPTION.md](DESCRIPTION.md)** - Protocol purpose and vision overview
-- **[CHANGELOG.md](CHANGELOG.md)** - Version history and updates
-- **[ROADMAP.md](ROADMAP.md)** - Planned features and development roadmap
-- **[LICENSE](LICENSE)** - MIT license terms
+- **[README.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/README.md)** - This file - ecosystem overview and MCP server guide
+- **[CONTRIBUTING.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/CONTRIBUTING.md)** - How to contribute to MARM
+- **[DESCRIPTION.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/DESCRIPTION.md)** - Protocol purpose and vision overview
+- **[CHANGELOG.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/CHANGELOG.md)** - Version history and updates
+- **[ROADMAP.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/ROADMAP.md)** - Planned features and development roadmap
+- **[LICENSE](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/LICENSE)** - MIT license terms
