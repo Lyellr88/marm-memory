@@ -59,10 +59,10 @@ claude mcp add marm-memory http://localhost:8001/mcp
 
 | Installation Type | Guide | Best For |
 |-------------------|-------|----------|
-| **Docker** | **[INSTALL-DOCKER.md](INSTALL-DOCKER.md)** | Cross-platform, production deployment |
-| **Windows** | **[INSTALL-WINDOWS.md](INSTALL-WINDOWS.md)** | Native Windows development |
-| **Linux** | **[INSTALL-LINUX.md](INSTALL-LINUX.md)** | Native Linux development |
-| **Platforms** | **[INSTALL-PLATFORM.md](INSTALL-PLATFORM.md)** | App & API integration |
+| **Docker** | **[INSTALL-DOCKER.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-DOCKER.md)** | Cross-platform, production deployment |
+| **Windows** | **[INSTALL-WINDOWS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-WINDOWS.md)** | Native Windows development |
+| **Linux** | **[INSTALL-LINUX.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-LINUX.md)** | Native Linux development |
+| **Platforms** | **[INSTALL-PLATFORM.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-PLATFORM.md)** | App & API integration |
 
 ---
 
