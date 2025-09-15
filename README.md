@@ -7,7 +7,7 @@
 </picture>
 <h1 align="center">MARM: The AI That Remembers Your Conversations</h1>
 
-Memory Accurate Response Mode v2.0 - The intelligent memory protocol for AI agents. Stop losing context. Stop hallucinations. Start controlling your LLM conversations.  
+Memory Accurate Response Mode v2.0 - The intelligent memory system for AI agents. Stop losing context. Stop hallucinations. Start controlling your LLM conversations.  
   
 ![Stars](https://img.shields.io/github/stars/Lyellr88/MARM-Protocol?style=flat-square) ![Forks](https://img.shields.io/github/forks/Lyellr88/MARM-Protocol?style=flat-square) [![Version](https://img.shields.io/badge/version-2.1.0-blue.svg)](https://github.com/MARM-Systems/MARM) [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/LICENSE) ![Version](https://img.shields.io/badge/version-2.0-blue?style=flat-square)[![Python](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://python.org) [![FastAPI](https://img.shields.io/badge/FastAPI-0.115.4-009688.svg)](https://fastapi.tiangolo.com)
   
