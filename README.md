@@ -69,23 +69,23 @@ claude mcp add marm-memory http://localhost:8001/mcp
 The MARM Chatbot is a web-based interface for interacting with the MARM protocol. To install it, you'll need Node.js and a Replicate API key.
 
 
-# 1. Clone the repository
+### 1. Clone the repository
 ```bash
 git clone https://github.com/MARM-Systems/MARM.git
 ```
 
-# 2. Install dependencies
+### 2. Install dependencies
 ```bash
 cd MARM-Systems/webchat
 npm install
 ```
 
-# 3. Add your Replicate API key to a .env file
+### 3. Add your Replicate API key to a .env file
 ```bash
 echo "REPLICATE_API_TOKEN=your_replicate_api_token_here" > .env
 ```
 
-# 4. Start the server
+### 4. Start the server
 ```bash
 npm start
 ```
