@@ -40,8 +40,6 @@ cd MARM/marm-mcp-server/MARMcp-beta
 claude mcp add marm-memory http://localhost:8001/mcp
 ```
 
-**Complete Setup:** See **[docs](https://github.com/Lyellr88/MARM-Systems/tree/MARM-main/docs)** for all installation methods
-
 **Key Information:**
 
 - **Server Endpoint**: `http://localhost:8001/mcp`
