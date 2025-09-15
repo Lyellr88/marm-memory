@@ -422,7 +422,7 @@ indicate they are unofficial or experimental.
 - **[INSTALL-DOCKER.md](INSTALL-DOCKER.md)** - Docker deployment (recommended)
 - **[INSTALL-WINDOWS.md](INSTALL-WINDOWS.md)** - Windows installation guide
 - **[INSTALL-LINUX.md](INSTALL-LINUX.md)** - Linux installation guide
-- **[INSTALL-PLATFORMS.md](INSTALL-PLATFORMS.md) - Platfrom installtion guide
+- **[INSTALL-PLATFORMS.md](INSTALL-PLATFORMS.md)** - Platfrom installtion guide
 
 ### **Chatbot Installation**
 
