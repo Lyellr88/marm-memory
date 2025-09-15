@@ -40,7 +40,7 @@ cd MARM/marm-mcp-server/MARMcp-beta
 claude mcp add marm-memory http://localhost:8001/mcp
 ```
 
-**Complete Setup:** See **[INSTALL.md](INSTALL.md)** for all installation methods
+**Complete Setup:** See **[docs](https://github.com/Lyellr88/MARM-Systems/tree/MARM-main/docs)** for all installation methods
 
 **Key Information:**
 
@@ -192,7 +192,7 @@ Modern LLMs often lose context or fabricate information. MARM introduces a sessi
 | **Advanced** | `/deep dive` | Request context-aware response |
 | | `/show reasoning` | Reveal logic trail of last answer |  
 
-Need a walkthrough or troubleshooting help? The [`HANDBOOK.md`](./HANDBOOK.md) covers all aspects of using MARM.
+Need a walkthrough or troubleshooting help? The [`MARM-HANDBOOK.md`](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/MARM-HANDBOOK.md) covers all aspects of using MARM.
 
 ---
 
@@ -214,7 +214,7 @@ Need a walkthrough or troubleshooting help? The [`HANDBOOK.md`](./HANDBOOK.md) c
 
 ### Need detailed steps, troubleshooting, or multi-provider setup?
 
-See [CHATBOT-SETUP.md](CHATBOT-SETUP.md) for complete installation guide with Node.js setup and troubleshooting.
+See [CHATBOT-SETUP.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/CHATBOT-SETUP.md) for complete installation guide with Node.js setup and troubleshooting.
 
 # 🛠️ MARM MCP Server Guide
 
@@ -243,7 +243,6 @@ Now that you understand the ecosystem, here's info and how to actually use the M
 | | `marm_notebook_clear` | Clear the active instruction list |
 | | `marm_notebook_status` | Show current active instruction list |
 | **⚙️ System Utilities** | `marm_current_context` | Get current date/time for accurate log entry timestamps |
-
 | | `marm_system_info` | Comprehensive system information, health status, and loaded docs |
 | | `marm_reload_docs` | Reload documentation into memory system |
 
@@ -316,12 +315,15 @@ CREATE TABLE sessions (
 
 ---
 
-## 📚 Documentation for MCP (this section will need to be updated with the new install docs)
+## 📚 Documentation for MCP
 
-**Complete Guides Available:**
-
-- **[HANDBOOK.md](HANDBOOK.md)** - Complete usage guide with all 19 MCP tools, cross-app memory strategies, pro tips, and FAQ
-- **[INSTALL.md](INSTALL.md)** - Comprehensive installation guide for all platforms, client configurations, Docker deployment, and troubleshooting
+| Guide Type | Document | Description |
+|------------|----------|-------------|
+| **Docker Setup** | **[INSTALL-DOCKER.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-DOCKER.md)** | Cross-platform, production deployment |
+| **Windows Setup** | **[INSTALL-WINDOWS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-WINDOWS.md)** | Native Windows development |
+| **Linux Setup** | **[INSTALL-LINUX.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-LINUX.md)** | Native Linux development |
+| **Platform Integration** | **[INSTALL-PLATFORM.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-PLATFORM.md)** | App & API integration |
+| **MCP Handbook** | **[MCP-HANDBOOK.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/MCP-HANDBOOK.md)** | Complete usage guide with all 19 MCP tools, cross-app memory strategies, pro tips, and FAQ |
 
 ---
 
