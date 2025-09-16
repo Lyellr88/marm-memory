@@ -1,5 +1,19 @@
 # MARM Handbook v2.1 (mainly for copy & paste users)
 
+## Table of Contents
+
+- [Short Introduction](#short-introduction)
+- [What's New](#whats-new)
+- [Part I: Core Principles](#part-i-core-principles)
+- [Live Chatbot Demo](#live-chatbot-demo)
+- [Part II: Quick Start Walkthrough](#part-ii-quick-start-walkthrough)
+- [Part III: Command Reference](#part-iii-command-reference)
+- [Part IV: Beyond the Basics](#part-iv-beyond-the-basics)
+- [Quick Reference Table](#quick-reference-table)
+- [Troubleshooting Guide](#troubleshooting-guide)
+
+---
+
 ## Short Introduction
 
 MARM is a universal protocol designed to improve memory continuity and response accuracy during AI conversations. This handbook covers beginner guidance, command usage, and recovery strategies for when memory or accuracy begins to drift.
@@ -15,33 +29,30 @@ MARM is a universal protocol designed to improve memory continuity and response 
 | **v1.3** | Manual Knowledge Library | `/notebook` commands introduced |
 | **v1.4** | Enhanced Commands | Expanded `/log` and `/notebook` functionality |
 | **v1.5** | Live Chatbot | Session persistence, voice synthesis, command menu |
+| **v2.0** | Major Protocol Overhaul | Updated syntax, enhanced chatbot, Llama 4 Maverick |
 
-### v2.0 (Current) - Major Overhaul
+### v2.1 (Current) - Universal MCP Server
 
-#### Protocol Enhancements
+#### MCP Server Architecture
 
-- **Updated command syntax**: `/deep dive` replaces `/contextual reply`
-- **Enhanced `/notebook`**: New verbs (`add:`, `use:`, `show:`, `clear:`, `status:`)
-- **Improved protocol**: Identity-based approach for more consistent AI behavior
-- **Better validation**: Enhanced reasoning transparency with `/show reasoning`
+- **19 Complete MCP Tools** - Full Model Context Protocol implementation with semantic search
+- **Production FastAPI Backend** - SQLite with WAL mode, connection pooling, rate limiting
+- **Cross-Platform Compatibility** - Works with Claude Code, Qwen CLI, Gemini CLI, Grok CLI
+- **Docker Deployment** - Containerized with health monitoring and professional diagnostics
 
-#### Live Chatbot Improvements
+#### Memory Intelligence Features
 
-- **Llama 4 Maverick backend** - 400B parameter multimodal model
-- **Universal model support** - Switch between 1000+ models
-- **Adaptive dark/light mode** - Automatic theme detection
-- **File upload system** - Text/code file analysis with syntax highlighting
-- **Enhanced voice synthesis** - Response-only TTS (MVP)
-- **Improved session management** - Better persistence and state restoration
-- **Modern UI/UX** - Refined interface with floating action button menu
+- **Semantic Search** - AI-powered similarity search using sentence-transformers
+- **Auto-Classification** - Content intelligently categorized (code, project, book, general)
+- **Cross-Session Memory** - Memories persist across different AI agent conversations
+- **Smart Recall** - Vector similarity search with context-aware fallbacks
 
-#### Technical Upgrades
+#### Technical Excellence
 
-- **Replicate API migration** - From Gemini to Meta's Llama 4 Maverick
-- **Performance optimization** - 3-4 second response times with enhanced reliability
-- **Security enhancements** - XSS protection with selective allowlisting
-- **Cache management** - Improved browser cache handling
-- **Modular architecture** - Clean ES6 module separation
+- **Database Optimization** - Custom connection pooling with configurable limits
+- **MCP Compliance** - 1MB response size management with intelligent truncation
+- **Security Hardening** - IP-based rate limiting, XSS protection, error isolation
+- **Performance Monitoring** - Built-in diagnostic tests and health validation
 
 </details>
 
