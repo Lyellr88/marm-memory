@@ -1,8 +1,6 @@
 # MARM Systems Roadmap
 
-(Updated - September 16th, 2025)
-
----
+>(Updated - September 16th, 2025)
 
 ## Table of Contents
 
