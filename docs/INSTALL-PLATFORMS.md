@@ -1,4 +1,4 @@
-# MARM MCP Server - Platform Integration Guide
+# MARM V2.1 MCP Server - Platform Integration Guide
 
 ## 📖 Table of Contents
 
@@ -19,7 +19,7 @@
 
 This guide provides platform-specific instructions for integrating the MARM MCP Server with major AI applications and developer platforms as of September 2025.
 
-**Important:** This covers **base applications** and **API integrations** - not CLI tools. For CLI setup, see our dedicated [installation guides](README.md#-installation-guides).
+**Important:** This covers **base applications** and **API integrations** - not CLI tools. For CLI setup, see the dedicated docs folder for install guides [Docs](https://github.com/Lyellr88/MARM-Systems/tree/MARM-main/docs)
 
 ---
 
@@ -222,7 +222,17 @@ For developers who want simplified multi-provider support:
 
 ---
 
-**Need Help?** Check our [complete documentation](README.md) or [join our Discord](https://discord.gg/EuBsHvSRks) for integration support.
+**Need Help?** Check our **[README.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/README.md)**  or [join Discord](https://discord.gg/EuBsHvSRks) for integration support.
+
+---
+
+### **Found Issues? We Want to Hear!**
+
+If any tests fail or you encounter problems:
+
+- **🐛 Open an [Issue]((https://github.com/Lyellr88/MARM-Systems/issues)**: Report problems on GitHub
+- **🔧 Submit a [Pull Request](https://github.com/Lyellr88/MARM-Systems/pulls)**: Fixed it yourself? We welcome contributions!
+- **💬 Join Discussions**: Share feedback and get help from the community
 
 ---
 
