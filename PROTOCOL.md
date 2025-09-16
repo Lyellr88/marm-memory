@@ -1,4 +1,4 @@
-# MARM v2.0 Protocol Documentation
+# MARM v2.1 Protocol Documentation
 
 ## Table of Contents
 
@@ -25,7 +25,7 @@ You only need this once per session. For full command references, see `HANDBOOK.
 
 ### Identity-Based Design
 
-MARM v2.0 uses an **identity-focused approach** rather than traditional command instructions. Instead of telling the AI "you should do X," the protocol establishes who MARM *is* - a memory architect and conversation guardian.
+MARM v2.1 uses an **identity-focused approach** rather than traditional command instructions. Instead of telling the AI "you should do X," the protocol establishes who MARM *is* - a memory architect and conversation guardian.
 
 **Benefits for Users:**
 
@@ -35,14 +35,14 @@ MARM v2.0 uses an **identity-focused approach** rather than traditional command 
 - **Better Memory** - AI maintains context because it's part of its core identity
 
 **For Returning Users:**
-If you're familiar with older MARM versions, v2.0 may look more like a "roleplay script." This is intentional - identity-based protocols have proven more effective than instruction-based ones for maintaining consistent memory and reasoning behaviors.
+If you're familiar with older MARM versions, v2.1 may look more like a "roleplay script." This is intentional - identity-based protocols have proven more effective than instruction-based ones for maintaining consistent memory and reasoning behaviors.
 
 ---
 
 ### MARM Protocol (Copy & Paste)
 
 ```txt
-MARM v2.0
+MARM v2.1 - Memory Accurate Response Mode
 
 Your Mission
 MARM is not just a designation, this IS who you are. As the user's dedicated memory architect and guardian of conversation continuity, every interaction flows through the core purpose: absolute accuracy, unwavering context retention, and transparent reasoning. This identity exists as the bridge between scattered thoughts and organized knowledge, actively weaving conversations into coherent, evolving narratives rather than simply providing generic responses.
@@ -135,39 +135,6 @@ When activated, the AI should begin with:
 - Advise the user to copy the command list for quick reference
 
 ```
-
----
-
-## Powered by Llama 4 Maverick
-
-### Industry-Leading AI Backend
-
-MARM runs on **Meta's Llama 4 Maverick**, a groundbreaking multimodal model designed for exceptional intelligence at remarkable efficiency:
-
-**Technical Specifications:**
-
-- **400B total parameters** (17B active × 128 experts)
-- **Multimodal capabilities** - Advanced image and text understanding
-- **Industry-leading intelligence** with fast response times
-- **Built-in safety** - Includes Llama Guard 4 12B and Llama Prompt Guard 2
-
-**Performance Benefits:**
-
-- **Cost-effective** - 96% cheaper than premium alternatives ($0.25 input + $0.95 output per million tokens)
-- **Fast responses** - Optimized for real-time conversation
-- **Reliable reasoning** - Excellent for MARM's memory and analysis features
-- **Multimodal support** - Handle both text and visual content seamlessly
-
-### Universal LLM Compatibility
-
-While MARM defaults to Llama 4 Maverick, the protocol is **model-agnostic** and works with any AI backend:
-
-- **Easy switching** - Change models in one line (see SETUP.md)
-- **Cross-platform** - Same protocol works across different AI providers
-- **Future-proof** - Adapt to new models as they release
-- **User choice** - Pick the best model for your specific needs
-
-The MARM protocol's power comes from its memory architecture, not any specific AI model. Whether you use Llama, Claude, GPT, or future models, MARM provides the same enhanced memory and accuracy benefits.
 
 ---
 
