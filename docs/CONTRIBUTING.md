@@ -13,6 +13,7 @@ MARM started as one person's solution to AI memory problems and has grown into a
 - [Connect with the Creator](#-connect-with-the-creator)
 - [Ready to Join?](#-ready-to-join)
 - [Acknowledgments & Philosophy](#-acknowledgments--philosophy)
+- [Code of Conduct](#code-of-conduct)
 
 ---
 
@@ -204,6 +205,7 @@ Rapidly built an extensive suite of additions including MCP, desktop version, OA
 - **Desktop Application**: Full desktop integration with Tauri framework and security-first architecture
 
 **Security Impact:**
+
 - Prevents XSS attacks and HTML injection  
 - Blocks cleartext HTTP and local file access attempts  
 - Eliminates sensitive data exposure in console logging  
@@ -251,8 +253,6 @@ Whether you're here to test, build, design, or just share ideas - **welcome to t
 3. **Open an issue** with any bugs, ideas, or questions
 4. **Submit a PR** when you're ready to contribute code or docs
 
-**Remember:** This isn't a corporate project - it's a community building the future of AI memory together. Every contribution matters, every voice is heard, and every idea has the potential to shape where MARM goes next.  
-
 ## 💝 Acknowledgments & Philosophy  
 
 MARM was born from one person's frustration with AI memory problems but grew into something much bigger through community collaboration. Every feature, improvement, and design decision was shaped by real users sharing their experiences, testing edge cases, and believing that AI can be more reliable and transparent.
@@ -269,6 +269,21 @@ Special thanks to the Reddit prompt engineering community for the early feedback
 
 ---
 
+## Code of Conduct
+
+MARM is built on the principle of working together to solve real problems. Please follow these guidelines in all
+project interactions:
+
+- Be respectful and welcoming - Everyone was new to AI memory systems once
+- Stay collaborative - "We need to work together, I am not a delegator, I'm here to work with you"
+- Disagree constructively - When you disagree, help others understand your perspective
+- Embrace different viewpoints - Diverse experiences make MARM stronger for everyone
+
+This isn't a corporate project with formal processes - it's a community building better AI tools together. Every
+voice matters, every contribution counts.
+
+---
+
 ## 📁 Project Documentation
 
 ### **Usage Guides**
@@ -278,7 +293,7 @@ Special thanks to the Reddit prompt engineering community for the early feedback
 - **[PROTOCOL.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/PROTOCOL.md)** - Quick start commands and protocol reference
 - **[FAQ.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/FAQ.md)** - Answers to common questions about using MARM
 
-### **MCP Server Installation** 
+### **MCP Server Installation**
 
 - **[INSTALL-DOCKER.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-DOCKER.md)** - Docker deployment (recommended)
 - **[INSTALL-WINDOWS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-WINDOWS.md)** - Windows installation guide
