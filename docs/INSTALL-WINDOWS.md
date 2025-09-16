@@ -2,7 +2,7 @@
 
 ## Universal Memory Intelligence Platform for AI Agents
 
-**MARM v2.1.0** - Memory Accurate Response Mode
+**MARM v2.1** - Memory Accurate Response Mode
 *Complete Windows installation guide*
 
 ---
@@ -210,10 +210,9 @@ Invoke-WebRequest -Uri http://localhost:8001/health
 
 If any tests fail or you encounter problems:
 
-- **🐛 Open an Issue**: [Report problems on GitHub](https://github.com/MARM-Systems/MARM/issues)
-- **🔧 Submit a PR**: Fixed it yourself? We welcome contributions!
+- **🐛 Open an [Issue]((https://github.com/Lyellr88/MARM-Systems/issues)**: Report problems on GitHub
+- **🔧 Submit a [Pull Request](https://github.com/Lyellr88/MARM-Systems/pulls)**: Fixed it yourself? We welcome contributions!
 - **💬 Join Discussions**: Share feedback and get help from the community
-
 Your testing helps make MARM better for everyone.
 
 ---
@@ -409,10 +408,10 @@ Add MARM folder to antivirus exclusions to prevent:
 
 ---
 
-**MARM v2.1.0 Windows Guide** - *Universal memory intelligence for AI agents*
+**MARM v2.1 Windows Guide** - *Universal memory intelligence for AI agents*
 
-*For usage instructions, see [HANDBOOK.md](HANDBOOK.md)*
-*For Docker deployment, see [INSTALL-DOCKER.md](INSTALL-DOCKER.md)*
+*For usage instructions, see **[MCP-HANDBOOK.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/MCP-HANDBOOK.md)***  
+*For Docker deployment, see **[INSTALL-DOCKER.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-DOCKER.md)***
 
 ---
 
