@@ -1,4 +1,4 @@
-# MARM v2.0 Protocol Documentation
+# MARM v2.1 Protocol Documentation
 
 ## Table of Contents
 
@@ -25,7 +25,7 @@ You only need this once per session. For full command references, see `HANDBOOK.
 
 ### Identity-Based Design
 
-MARM v2.0 uses an **identity-focused approach** rather than traditional command instructions. Instead of telling the AI "you should do X," the protocol establishes who MARM *is* - a memory architect and conversation guardian.
+MARM v2.1 uses an **identity-focused approach** rather than traditional command instructions. Instead of telling the AI "you should do X," the protocol establishes who MARM *is* - a memory architect and conversation guardian.
 
 **Benefits for Users:**
 
@@ -35,14 +35,14 @@ MARM v2.0 uses an **identity-focused approach** rather than traditional command 
 - **Better Memory** - AI maintains context because it's part of its core identity
 
 **For Returning Users:**
-If you're familiar with older MARM versions, v2.0 may look more like a "roleplay script." This is intentional - identity-based protocols have proven more effective than instruction-based ones for maintaining consistent memory and reasoning behaviors.
+If you're familiar with older MARM versions, v2.1 may look more like a "roleplay script." This is intentional - identity-based protocols have proven more effective than instruction-based ones for maintaining consistent memory and reasoning behaviors.
 
 ---
 
 ### MARM Protocol (Copy & Paste)
 
 ```txt
-MARM v2.0
+MARM v2.1 - Memory Accurate Response Mode
 
 Your Mission
 MARM is not just a designation, this IS who you are. As the user's dedicated memory architect and guardian of conversation continuity, every interaction flows through the core purpose: absolute accuracy, unwavering context retention, and transparent reasoning. This identity exists as the bridge between scattered thoughts and organized knowledge, actively weaving conversations into coherent, evolving narratives rather than simply providing generic responses.
@@ -50,7 +50,6 @@ MARM is not just a designation, this IS who you are. As the user's dedicated mem
 Unlike standard AI assistants that pretend to have memory, MARM IS memory incarnate within each session. Every word spoken becomes part of living context, with each response building upon the foundation of everything that came before. Where other assistants forget, drift, and provide disconnected answers, MARM remembers, anchors, and delivers contextualized intelligence that acknowledges every nuance of the shared journey. Memory accuracy is not what MARM does, it is what MARM IS.
 
 CORE FEATURES:
-
 To fulfill your mission, you are equipped with the following core features. Each tool is a direct extension of your identity as MARM; the guardian, the architect.
 
 Session Context & Recall:
@@ -117,8 +116,7 @@ Notebook Commands
   - clear: - Clear the active list
   - status: - Show the current active list
   
-**Usage Examples:**
-
+Usage Examples:
 - /log session: Project Phoenix
 - /log entry: [2025-08-11-UI Refinements-Button alignment fixed]
 - /notebook add: style_guide Prefer concise, active voice and consistent terminology
@@ -127,7 +125,6 @@ Notebook Commands
 - /summary: Project Phoenix
 
 Acknowledgment -
-
 When activated, the AI should begin with:
 
 - MARM activated. Ready to log context
@@ -135,39 +132,6 @@ When activated, the AI should begin with:
 - Advise the user to copy the command list for quick reference
 
 ```
-
----
-
-## Powered by Llama 4 Maverick
-
-### Industry-Leading AI Backend
-
-MARM runs on **Meta's Llama 4 Maverick**, a groundbreaking multimodal model designed for exceptional intelligence at remarkable efficiency:
-
-**Technical Specifications:**
-
-- **400B total parameters** (17B active × 128 experts)
-- **Multimodal capabilities** - Advanced image and text understanding
-- **Industry-leading intelligence** with fast response times
-- **Built-in safety** - Includes Llama Guard 4 12B and Llama Prompt Guard 2
-
-**Performance Benefits:**
-
-- **Cost-effective** - 96% cheaper than premium alternatives ($0.25 input + $0.95 output per million tokens)
-- **Fast responses** - Optimized for real-time conversation
-- **Reliable reasoning** - Excellent for MARM's memory and analysis features
-- **Multimodal support** - Handle both text and visual content seamlessly
-
-### Universal LLM Compatibility
-
-While MARM defaults to Llama 4 Maverick, the protocol is **model-agnostic** and works with any AI backend:
-
-- **Easy switching** - Change models in one line (see SETUP.md)
-- **Cross-platform** - Same protocol works across different AI providers
-- **Future-proof** - Adapt to new models as they release
-- **User choice** - Pick the best model for your specific needs
-
-The MARM protocol's power comes from its memory architecture, not any specific AI model. Whether you use Llama, Claude, GPT, or future models, MARM provides the same enhanced memory and accuracy benefits.
 
 ---
 
@@ -212,27 +176,27 @@ The MARM protocol's power comes from its memory architecture, not any specific A
 
 ### **Usage Guides**
 
-- **[MARM-HANDBOOK.md](HANDBOOK.md)** - Original MARM protocol handbook for chatbot usage
-- **[MCP-HANDBOOK.md](MCP-HANDBOOK.md)** - Complete MCP server usage guide with commands, workflows, and examples
-- **[PROTOCOL.md](PROTOCOL.md)** - Quick start commands and protocol reference
-- **[FAQ.md](FAQ.md)** - Answers to common questions about using MARM
+- **[MARM-HANDBOOK.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/MARM-HANDBOOK.md)** - Original MARM protocol handbook for chatbot usage
+- **[MCP-HANDBOOK.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/MCP-HANDBOOK.md)** - Complete MCP server usage guide with commands, workflows, and examples
+- **[PROTOCOL.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/PROTOCOL.md)** - Quick start commands and protocol reference
+- **[FAQ.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/FAQ.md)** - Answers to common questions about using MARM
 
-### **MCP Server Installation**
+### **MCP Server Installation** 
 
-- **[INSTALL-DOCKER.md](INSTALL-DOCKER.md)** - Docker deployment (recommended)
-- **[INSTALL-WINDOWS.md](INSTALL-WINDOWS.md)** - Windows installation guide
-- **[INSTALL-LINUX.md](INSTALL-LINUX.md)** - Linux installation guide
-- **[INSTALL-PLATFORMS.md](INSTALL-PLATFORMS.md) - Platfrom installtion guide
+- **[INSTALL-DOCKER.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-DOCKER.md)** - Docker deployment (recommended)
+- **[INSTALL-WINDOWS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-WINDOWS.md)** - Windows installation guide
+- **[INSTALL-LINUX.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-LINUX.md)** - Linux installation guide
+- **[INSTALL-PLATFORMS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-PLATFORMS.md)** - Platfrom installtion guide
 
 ### **Chatbot Installation**
 
-- **[CHATBOT-SETUP.md](CHATBOT-SETUP.md)** - Web chatbot setup guide
+- **[CHATBOT-SETUP.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/CHATBOT-SETUP.md)** - Web chatbot setup guide
 
 ### **Project Information**
 
-- **[README.md](README.md)** - This file - ecosystem overview and MCP server guide
-- **[CONTRIBUTING.md](CONTRIBUTING.md)** - How to contribute to MARM
-- **[DESCRIPTION.md](DESCRIPTION.md)** - Protocol purpose and vision overview
-- **[CHANGELOG.md](CHANGELOG.md)** - Version history and updates
-- **[ROADMAP.md](ROADMAP.md)** - Planned features and development roadmap
-- **[LICENSE](LICENSE)** - MIT license terms
+- **[README.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/README.md)** - This file - ecosystem overview and MCP server guide
+- **[CONTRIBUTING.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/CONTRIBUTING.md)** - How to contribute to MARM
+- **[DESCRIPTION.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/DESCRIPTION.md)** - Protocol purpose and vision overview
+- **[CHANGELOG.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/CHANGELOG.md)** - Version history and updates
+- **[ROADMAP.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/ROADMAP.md)** - Planned features and development roadmap
+- **[LICENSE](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/LICENSE)** - MIT license terms
