@@ -1,4 +1,4 @@
-# MARM Handbook v2.0
+# MARM Handbook v2.1
 
 ## Short Introduction
 
@@ -69,7 +69,7 @@ This approach ensures the AI works with **user-led intent**, reducing drift acro
 
 ### Try MARM Online
 
-Experience MARM instantly at [marm-systems-chatbot.onrender.com](https://marm-systems-chatbot.onrender.com):
+Experience MARM instantly at [MARM Chatbot](https://marm-systems-chatbot.onrender.com):
 
 - **No setup required** - Start using MARM immediately
 - **Full protocol support** - All commands work as documented
