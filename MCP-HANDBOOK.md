@@ -331,13 +331,6 @@ A: Use `marm_system_info` to check server status and database statistics.
 
 ---
 
-**MARM v2.1.0 Handbook** - Complete guide to memory-augmented AI workflows
-
-*For installation instructions, see [INSTALL.md](INSTALL.md)*
-*For technical documentation, see [README.md](README.md)*
-
----
-
 ## 📁 Project Documentation
 
 ### **Usage Guides**
