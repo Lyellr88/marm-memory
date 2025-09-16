@@ -1,3 +1,5 @@
+[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/lyellr88-marm-systems-badge.png)](https://mseep.ai/app/lyellr88-marm-systems)
+
 <div align="center">
 <picture>
   <img src="https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/media/marm-main.jpg"
