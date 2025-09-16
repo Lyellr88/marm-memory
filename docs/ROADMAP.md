@@ -1,6 +1,20 @@
 # MARM Systems Roadmap
 
-(Updated - September 3rd, 2025)
+(Updated - September 16th, 2025)
+
+---
+
+## Table of Contents
+
+- [Strategic Vision](#strategic-vision)
+- [Current Focus (Phase 1: Foundation)](#current-focus-phase-1-foundation)
+- [Future Development](#future-development)
+- [Innovation Areas](#innovation-areas)
+- [Community Focus](#community-focus)
+- [Strategic Position](#strategic-position)
+- [What's Next](#whats-next)
+
+---
 
 ## Strategic Vision
 
