@@ -269,7 +269,7 @@ Special thanks to the Reddit prompt engineering community for the early feedback
 
 ---
 
-## Code of Conduct
+## ⚖️ Code of Conduct
 
 MARM is built on the principle of working together to solve real problems. Please follow these guidelines in all
 project interactions:
