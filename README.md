@@ -1,5 +1,3 @@
-[![MseeP.ai Security Assessment Badge](https://mseep.net/pr/lyellr88-marm-systems-badge.png)](https://mseep.ai/app/lyellr88-marm-systems)
-
 <div align="center">
 <picture>
   <img src="https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/media/marm-main.jpg"
@@ -17,7 +15,7 @@ Memory Accurate Response Mode v2.1.0 - The intelligent memory system for AI agen
 
 **Note:** This is the *official* MARM repository. All official versions and releases are managed here.
 
-Forks may experiment, but official updates will always come from this repo.
+Forks may experiment, but official updates will always come from this repo.  
 
 </div>
 
