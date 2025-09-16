@@ -387,8 +387,7 @@ source ~/.bashrc
 **MARM v2.1 Linux Guide** - *Universal memory intelligence for AI agents*
 
 *For usage instructions, see **[MCP-HANDBOOK.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/MCP-HANDBOOK.md)***  
-*For native installation, see **[INSTALL-WINDOWS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-WINDOWS.md)**  or **[INSTALL-LINUX.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-LINUX.md)***
-
+*For Docker deployment, see **[INSTALL-DOCKER.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-DOCKER.md)***
 ---
 
 ## 📁 Project Documentation
