@@ -104,7 +104,7 @@ This approach allows the ecosystem to flourish while ensuring that the official 
 
 ---
 
-### 🌟 **Early Pioneers**
+### **Early Pioneers**
 
 #### u/CalamityThorazine & u/CrazyCrayfish  
 
@@ -166,7 +166,7 @@ This user has helped a lot even before MARM with actively testing and giving me 
 
 ---
 
-### 🏗️ **Core Contributors**
+### **Core Contributors**
 
 #### Neurosyn Labs
 
@@ -180,9 +180,9 @@ Created **MARMalade V-1.0** — A lightweight memory kernel for ChatGPT, built o
 
 #### Jefferson
 
-**Security & Desktop Platform Lead** | [GitHub: jeffersonwarrior](https://github.com/jeffersonwarrior)
+**Security, MCP & Desktop Platform Lead** | [GitHub: jeffersonwarrior](https://github.com/jeffersonwarrior)
 
-Rapidly built an extensive suite of additions including MAP (MARM Authentication Protocol), desktop version, OAuth wrapper, and comprehensive security infrastructure. Jefferson's contributions include:
+Rapidly built an extensive suite of additions including MCP, desktop version, OAuth wrapper, and comprehensive security infrastructure. Jefferson's contributions include:
 
 **Key Features:**
 
@@ -213,7 +213,7 @@ Provided deep technical analysis of LLM memory limitations and validation of MAR
 
 ## 📞 Connect with the Creator
 
-**Lyell** - MARM Creator & Lead Developer
+Ryan Lyell - MARM Creator & Lead Developer
 
 **Reach out for:**
 
