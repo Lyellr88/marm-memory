@@ -1,6 +1,6 @@
 # Changelog
 
-## MARM Protocol – v2.0 Change Log  
+## MARM Protocol – v2.1 Change Log  
 
 ---
 
