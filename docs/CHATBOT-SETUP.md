@@ -133,7 +133,7 @@ MARM-Systems/
 │   │   │   ├── server.js     # Express server with Replicate integration
 │   │   │   ├── replicateHelper.js # Llama 4 Maverick API integration
 │   │   │   └── ...           # Other core modules
-│   │   ├── logic/            # MARM v2.0 protocol logic
+│   │   ├── logic/            # MARM v2.1 protocol logic
 │   │   └── style/            # Modular CSS components
 │   ├── package.json          # Dependencies
 │   ├── .env                  # Your Replicate API token (create this)
@@ -204,7 +204,7 @@ function createRequestBody(prompt) {
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](https://github.com/Lyellr88/MARM-Systems/blob/main/LICENSE) file for details.
+This project is licensed under the MIT License - see the [LICENSE](https://github.com/Lyellr88/MARM-Systems/blob/main/docs/LICENSE) file for details.
 
 ---
 
@@ -227,7 +227,7 @@ After local installation:
 1. **Try MARM commands:** `/start marm`, `/deep dive`, `/notebook`
 2. **Upload files:** Test the file analysis feature
 3. **Explore features:** Voice synthesis, session saving, dark mode
-4. **Read documentation:** [HANDBOOK.md](HANDBOOK.md) for full command reference
+4. **Read documentation:** [MARM-HANDBOOK.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/MARM-HANDBOOK.md) for full command reference
 5. **Join community:** Star the repo and share feedback!
 
 ---
