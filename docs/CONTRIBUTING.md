@@ -4,6 +4,18 @@ Welcome to MARM! If you're here, you've probably felt the frustration of AI that
 
 MARM started as one person's solution to AI memory problems and has grown into a community of developers, researchers, and AI enthusiasts who believe we can build something better together. This isn't a corporate project with formal processes, it's a collaborative effort where every voice matters and every contribution counts.
 
+## Table of Contents
+
+- [Why MARM Needs You](#-why-marm-needs-you)
+- [Ways to Get Involved](#-ways-to-get-involved)
+- [How We Work Together](#-how-we-work-together)
+- [Community Hall of Fame](#-community-hall-of-fame)
+- [Connect with the Creator](#-connect-with-the-creator)
+- [Ready to Join?](#-ready-to-join)
+- [Acknowledgments & Philosophy](#-acknowledgments--philosophy)
+
+---
+
 ## 🎯 Why MARM Needs You
 
 MARM is evolving from a memory protocol into the foundation of a larger AI ecosystem. We're building:
