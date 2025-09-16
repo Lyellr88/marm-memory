@@ -30,7 +30,10 @@ class MARMInstaller:
         """Execute command with error handling"""
         print(f"▶️  {description}")
         try:
-            result = subprocess.run(cmd, shell=True, check=True, 
+            # Use shell=False for security - split command into list
+            if isinstance(cmd, str):
+                cmd = cmd.split()
+            result = subprocess.run(cmd, shell=False, check=True,
                                   capture_output=True, text=True)
             return result.stdout
         except subprocess.CalledProcessError as e:
