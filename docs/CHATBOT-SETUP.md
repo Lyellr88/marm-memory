@@ -204,7 +204,7 @@ function createRequestBody(prompt) {
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](https://github.com/Lyellr88/MARM-Systems/blob/main/docs/LICENSE) file for details.
+This project is licensed under the MIT License - see the [LICENSE](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/LICENSE) file for details.
 
 ---
 
