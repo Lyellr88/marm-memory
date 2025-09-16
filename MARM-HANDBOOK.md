@@ -1,4 +1,4 @@
-# MARM Handbook v2.1
+# MARM Handbook v2.1 (mainly for copy & paste users)
 
 ## Short Introduction
 
