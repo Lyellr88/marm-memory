@@ -13,7 +13,7 @@ MARM started as one person's solution to AI memory problems and has grown into a
 - [Connect with the Creator](#-connect-with-the-creator)
 - [Ready to Join?](#-ready-to-join)
 - [Acknowledgments & Philosophy](#-acknowledgments--philosophy)
-- [Code of Conduct](#code-of-conduct)
+- [Code of Conduct](#%EF%B8%8F-code-of-conduct)
 
 ---
 
