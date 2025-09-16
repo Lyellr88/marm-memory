@@ -1,4 +1,18 @@
-# MARM Handbook v2.1.0
+# MARM Handbook v2.1 (mainly for copy & paste users)
+
+## Table of Contents
+
+- [Short Introduction](#short-introduction)
+- [What's New](#whats-new)
+- [Part I: Core Principles](#part-i-core-principles)
+- [Live Chatbot Demo](#live-chatbot-demo)
+- [Part II: Quick Start Walkthrough](#part-ii-quick-start-walkthrough)
+- [Part III: Command Reference](#part-iii-command-reference)
+- [Part IV: Beyond the Basics](#part-iv-beyond-the-basics)
+- [Quick Reference Table](#quick-reference-table)
+- [Troubleshooting Guide](#troubleshooting-guide)
+
+---
 
 ## Short Introduction
 
@@ -6,7 +20,8 @@ MARM is a universal protocol designed to improve memory continuity and response 
 
 ## What's New
 
-### View MARM version updates
+<details>
+<summary>View MARM version updates</summary>
 
 | Version | Key Features | Major Changes |
 |---------|-------------|---------------|
@@ -14,33 +29,32 @@ MARM is a universal protocol designed to improve memory continuity and response 
 | **v1.3** | Manual Knowledge Library | `/notebook` commands introduced |
 | **v1.4** | Enhanced Commands | Expanded `/log` and `/notebook` functionality |
 | **v1.5** | Live Chatbot | Session persistence, voice synthesis, command menu |
+| **v2.0** | Major Protocol Overhaul | Updated syntax, enhanced chatbot, Llama 4 Maverick |
 
-### v2.1.0  (Current) - Major Overhaul
+### v2.1 (Current) - Universal MCP Server
 
-#### Protocol Enhancements
+#### MCP Server Architecture
 
-- **Updated command syntax**: `/deep dive` replaces `/contextual reply`
-- **Enhanced `/notebook`**: New verbs (`add:`, `use:`, `show:`, `clear:`, `status:`)
-- **Improved protocol**: Identity-based approach for more consistent AI behavior
-- **Better validation**: Enhanced reasoning transparency with `/show reasoning`
+- **19 Complete MCP Tools** - Full Model Context Protocol implementation with semantic search
+- **Production FastAPI Backend** - SQLite with WAL mode, connection pooling, rate limiting
+- **Cross-Platform Compatibility** - Works with Claude Code, Qwen CLI, Gemini CLI, Grok CLI
+- **Docker Deployment** - Containerized with health monitoring and professional diagnostics
 
-#### Live Chatbot Improvements
+#### Memory Intelligence Features
 
-- **Llama 4 Maverick backend** - 400B parameter multimodal model
-- **Universal model support** - Switch between 1000+ models
-- **Adaptive dark/light mode** - Automatic theme detection
-- **File upload system** - Text/code file analysis with syntax highlighting
-- **Enhanced voice synthesis** - Response-only TTS (MVP)
-- **Improved session management** - Better persistence and state restoration
-- **Modern UI/UX** - Refined interface with floating action button menu
+- **Semantic Search** - AI-powered similarity search using sentence-transformers
+- **Auto-Classification** - Content intelligently categorized (code, project, book, general)
+- **Cross-Session Memory** - Memories persist across different AI agent conversations
+- **Smart Recall** - Vector similarity search with context-aware fallbacks
 
-#### Technical Upgrades
+#### Technical Excellence
 
-- **Replicate API migration** - From Gemini to Meta's Llama 4 Maverick
-- **Performance optimization** - 3-4 second response times with enhanced reliability
-- **Security enhancements** - XSS protection with selective allowlisting
-- **Cache management** - Improved browser cache handling
-- **Modular architecture** - Clean ES6 module separation
+- **Database Optimization** - Custom connection pooling with configurable limits
+- **MCP Compliance** - 1MB response size management with intelligent truncation
+- **Security Hardening** - IP-based rate limiting, XSS protection, error isolation
+- **Performance Monitoring** - Built-in diagnostic tests and health validation
+
+</details>
 
 ## Part I: Core Principles
 
@@ -66,7 +80,7 @@ This approach ensures the AI works with **user-led intent**, reducing drift acro
 
 ### Try MARM Online
 
-Experience MARM instantly at [marm-systems-chatbot.onrender.com](https://marm-systems-chatbot.onrender.com):
+Experience MARM instantly at [MARM Chatbot](https://marm-systems-chatbot.onrender.com):
 
 - **No setup required** - Start using MARM immediately
 - **Full protocol support** - All commands work as documented
@@ -76,7 +90,7 @@ Experience MARM instantly at [marm-systems-chatbot.onrender.com](https://marm-sy
 ### Quick Demo Steps
 
 1. **Visit the demo** → Type `/start marm` to activate
-2. **Use command menu** → Click comamnds button for quick access to all commands
+2. **Use command menu** → Click ⚡ button for quick access to all commands
 3. **Try key features** → Upload files, use voice synthesis, save sessions
 4. **Experience the difference** → Notice improved memory and context retention
 
@@ -268,7 +282,7 @@ Essential reseed template:
 | Start MARM               | `/start marm`                                  | Always first command |
 | Refresh MARM             | `/refresh marm`                                | Every 8-10 turns |
 | Log Session              | `/log session: ProjectX`                       | Use descriptive names |
-| Log Entry                | `/log entry: [YYYY-MM-DD-topic-summary]`       | Log key decisions only |
+| Log Entry                | `/log entry: [YYYY-MM-DD-topic-summary]`        | Log key decisions only |
 | Summary                  | `/summary: ProjectX`                           | Before session end |
 | Accuracy Mode            | `/deep dive`                                   | For critical outputs |
 | Show Reasoning           | `/show reasoning`                              | Verify logic paths |
@@ -289,3 +303,34 @@ Essential reseed template:
 | **Generic Responses** | Vague, unfocused answers | `/deep dive` → add context to notebook → `/log entry:` |
 | **Session Overload** | Too much context, poor performance | `/summary: [session]` → new session → reseed essentials |
 | **Platform Conflicts** | Native memory interfering | `/refresh marm` → trust MARM over platform suggestions |
+
+---
+
+## 📁 Project Documentation
+
+### **Usage Guides**
+
+- **[MARM-HANDBOOK.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/MARM-HANDBOOK.md)** - Original MARM protocol handbook for chatbot usage
+- **[MCP-HANDBOOK.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/MCP-HANDBOOK.md)** - Complete MCP server usage guide with commands, workflows, and examples
+- **[PROTOCOL.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/PROTOCOL.md)** - Quick start commands and protocol reference
+- **[FAQ.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/FAQ.md)** - Answers to common questions about using MARM
+
+### **MCP Server Installation** 
+
+- **[INSTALL-DOCKER.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-DOCKER.md)** - Docker deployment (recommended)
+- **[INSTALL-WINDOWS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-WINDOWS.md)** - Windows installation guide
+- **[INSTALL-LINUX.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-LINUX.md)** - Linux installation guide
+- **[INSTALL-PLATFORMS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-PLATFORMS.md)** - Platfrom installtion guide
+
+### **Chatbot Installation**
+
+- **[CHATBOT-SETUP.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/CHATBOT-SETUP.md)** - Web chatbot setup guide
+
+### **Project Information**
+
+- **[README.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/README.md)** - This file - ecosystem overview and MCP server guide
+- **[CONTRIBUTING.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/CONTRIBUTING.md)** - How to contribute to MARM
+- **[DESCRIPTION.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/DESCRIPTION.md)** - Protocol purpose and vision overview
+- **[CHANGELOG.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/CHANGELOG.md)** - Version history and updates
+- **[ROADMAP.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/ROADMAP.md)** - Planned features and development roadmap
+- **[LICENSE](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/LICENSE)** - MIT license terms
