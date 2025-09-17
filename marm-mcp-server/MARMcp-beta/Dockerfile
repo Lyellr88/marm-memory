@@ -61,6 +61,19 @@ EXPOSE 8001
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8001/health || exit 1
 
+# MCP Registry Labels for Docker Hub discovery
+LABEL org.opencontainers.image.title="MARM Universal MCP Server"
+LABEL org.opencontainers.image.description="Production-ready Universal MCP Server with advanced AI memory capabilities, semantic search, and professional-grade architecture"
+LABEL org.opencontainers.image.version="2.1"
+LABEL org.opencontainers.image.authors="Ryan Lyell - MARM Systems"
+LABEL org.opencontainers.image.url="https://marmsystems.com"
+LABEL org.opencontainers.image.source="https://github.com/Lyellr88/MARM-Systems"
+LABEL org.opencontainers.image.licenses="MIT"
+LABEL mcp.server="true"
+LABEL mcp.name="marm-mcp-server"
+LABEL mcp.tools="19"
+LABEL io.modelcontextprotocol.server.name="io.github.lyellr88/marm-mcp-server"
+
 # Set environment variables
 ENV PYTHONPATH=/app
 ENV MARM_DB_PATH=/app/data/marm_memory.db
@@ -83,18 +96,18 @@ CMD ["python", "server.py"]
 # claude mcp add marm-memory http://localhost:8001/mcp
 #
 # What gets packaged:
-# ✅ Python 3.11 (specific version, no "install Python" needed)
-# ✅ All pip dependencies (sentence-transformers, fastapi, etc.)
-# ✅ System libraries (gcc, build tools for numpy/scipy)
-# ✅ SQLite (built into Python, no external DB needed)
-# ✅ Complete MARM MCP server (all refactored modules)
-# ✅ Configuration files and defaults
-# ✅ Data directory setup and permissions
-# ✅ Health check endpoints for monitoring
-# ✅ Proper working directory setup
-# ✅ Port configuration (8001 exposed)
-# ✅ Volume mounts for persistent data
-# ✅ Log management and output handling
+# Python 3.11 (specific version, no "install Python" needed)
+# All pip dependencies (sentence-transformers, fastapi, etc.)
+# System libraries (gcc, build tools for numpy/scipy)
+# SQLite (built into Python, no external DB needed)
+# Complete MARM MCP server (all refactored modules)
+# Configuration files and defaults
+# Data directory setup and permissions
+# Health check endpoints for monitoring
+# Proper working directory setup
+# Port configuration (8001 exposed)
+# Volume mounts for persistent data
+# Log management and output handling
 #
 # User Experience:
 # - Zero prerequisites installation (just need Docker)
