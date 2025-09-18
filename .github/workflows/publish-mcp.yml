@@ -170,8 +170,8 @@ jobs:
           fi
 
           # Move the built binary to PATH
+          chmod +x bin/mcp-publisher
           sudo cp bin/mcp-publisher /usr/local/bin/
-          chmod +x /usr/local/bin/mcp-publisher
 
           echo "=== Publisher installed ==="
           ls -l /usr/local/bin/mcp-publisher
