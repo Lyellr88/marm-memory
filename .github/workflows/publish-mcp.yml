@@ -127,8 +127,17 @@ jobs:
           # Install the MCP publisher CLI
           # Using curl to get the latest release
           curl -L -o mcp-publisher https://github.com/modelcontextprotocol/publisher/releases/latest/download/mcp-publisher-linux-amd64
+          echo "Downloaded file size:"
+          ls -l mcp-publisher
+          echo "File contents (first 5 lines):"
+          head -5 mcp-publisher
+          file mcp-publisher
           chmod +x mcp-publisher
           sudo mv mcp-publisher /usr/local/bin/
+          echo "Installed file check:"
+          ls -l /usr/local/bin/mcp-publisher
+          echo "File type:"
+          file /usr/local/bin/mcp-publisher
 
       - name: Login to MCP Registry
         run: |
