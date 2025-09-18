@@ -51,9 +51,6 @@ COPY --chown=marm:marm . .
 USER marm
 ENV PATH=/home/marm/.local/bin:$PATH
 
-# Pre-download ML models to avoid runtime downloads and Hugging Face issues
-RUN python -c "from sentence_transformers import SentenceTransformer; print('Downloading semantic search model...'); SentenceTransformer('all-MiniLM-L6-v2'); print('✅ Semantic search model downloaded successfully')"
-
 # Expose MCP server port
 EXPOSE 8001
 
