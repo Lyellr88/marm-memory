@@ -26,13 +26,6 @@
       "transport": { "type": "stdio" }
     }
   ],
-  "remotes": [
-    {
-      "type": "sse",
-      "url": "https://api.marmsystems.com/mcp/sse",
-      "description": "Connect to MARM's hosted MCP server (coming soon)"
-    }
-  ],
   "tools": [
     {
       "name": "marm_log_entry",
