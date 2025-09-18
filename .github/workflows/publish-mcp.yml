@@ -69,12 +69,14 @@ jobs:
 
       - name: Build package
         run: |
+          cd marm-mcp-server/MARMcp-beta
           python -m build
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           password: ${{ secrets.PYPI_API_TOKEN }}
+          packages-dir: marm-mcp-server/MARMcp-beta/dist/
 
   publish-docker:
     needs: validate-and-test
@@ -106,7 +108,7 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-          context: .
+          context: marm-mcp-server/MARMcp-beta
           push: true
           tags: |
             lyellr88/marmcp-beta:${{ steps.version.outputs.version }}
