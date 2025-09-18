@@ -180,11 +180,13 @@ jobs:
       - name: Login to MCP Registry
         run: |
           # Use GitHub OIDC for authentication
+          cd marm-mcp-server
           mcp-publisher login github-oidc
 
       - name: Publish to MCP Registry
         run: |
           # Publish the server to the MCP registry
+          cd marm-mcp-server
           mcp-publisher publish
 
       - name: Verify publication
