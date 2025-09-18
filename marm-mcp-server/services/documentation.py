@@ -8,42 +8,113 @@ from typing import Dict, List
 # Import core components
 from core.memory import memory
 
+def guess_context_type(filename):
+    """Smart context classification based on filename"""
+    filename_lower = filename.lower()
+    if "protocol" in filename_lower:
+        return "protocol"
+    elif "handbook" in filename_lower:
+        return "handbook"
+    elif "faq" in filename_lower:
+        return "support"
+    elif "readme" in filename_lower:
+        return "general"
+    elif "description" in filename_lower:
+        return "general"
+    elif "tool" in filename_lower or "reference" in filename_lower:
+        return "reference"
+    elif "workflow" in filename_lower or "pattern" in filename_lower:
+        return "workflow"
+    elif "troubleshoot" in filename_lower or "debug" in filename_lower:
+        return "support"
+    elif "integration" in filename_lower or "setup" in filename_lower:
+        return "integration"
+    elif "api" in filename_lower:
+        return "api"
+    elif "security" in filename_lower or "auth" in filename_lower:
+        return "security"
+    elif "config" in filename_lower or "setting" in filename_lower:
+        return "config"
+    elif "install" in filename_lower or "deploy" in filename_lower:
+        return "installation"
+    else:
+        return "general"
+
+def get_docs_to_load():
+    """Auto-discover essential .md files only to avoid token overload"""
+    # Try local development path first
+    docs_dir = Path(__file__).parent.parent / "marm-docs"
+
+    # If not found, try Docker path
+    if not docs_dir.exists():
+        docs_dir = Path("/app/marm-docs")
+
+    # Essential files only - keep startup lean
+    essential_files = {
+        "PROTOCOL.md",    # Core commands - always needed
+        "README.md"      # Tool usage and getting started info
+    }
+
+    docs_to_load = []
+    seen_notebook_names = set()
+
+    if docs_dir.exists():
+        for md_file in sorted(docs_dir.glob("*.md")):
+            # Skip non-essential files to reduce token dump
+            if md_file.name not in essential_files:
+                continue
+
+            filename = md_file.stem.lower()  # "PROTOCOL.md" → "protocol"
+            notebook_name = f"marm_{filename}"
+
+            # Check for duplicate notebook names (same stem)
+            if notebook_name in seen_notebook_names:
+                print(f"WARNING: Duplicate notebook name detected: {notebook_name} (from {md_file.name})")
+                # Add timestamp to make unique
+                import time
+                timestamp = str(int(time.time()))[-4:]  # last 4 digits
+                notebook_name = f"marm_{filename}_{timestamp}"
+                print(f"         Renamed to: {notebook_name}")
+
+            seen_notebook_names.add(notebook_name)
+            context_type = guess_context_type(filename)
+
+            # Auto-generate config based on filename
+            docs_to_load.append({
+                "file_path": f"marm-docs/{md_file.name}",
+                "notebook_name": notebook_name,
+                "context_type": context_type,
+                "description": f"Essential: {md_file.name}"
+            })
+
+        # Print visual QA table of loaded docs
+        if docs_to_load:
+            print(f"\n📚 Loading essential documentation ({len(docs_to_load)} files):")
+            print("┌─────────────────────────────────┬──────────────┬─────────────────────────┐")
+            print("│ File                            │ Type         │ Notebook Name           │")
+            print("├─────────────────────────────────┼──────────────┼─────────────────────────┤")
+            for doc in docs_to_load:
+                filename = doc["file_path"].split("/")[-1]
+                print(f"│ {filename:<31} │ {doc['context_type']:<12} │ {doc['notebook_name']:<23} │")
+            print("└─────────────────────────────────┴──────────────┴─────────────────────────┘")
+
+            # Show what's available but not loaded
+            all_files = set(f.name for f in docs_dir.glob("*.md"))
+            skipped_files = all_files - essential_files
+            if skipped_files:
+                print(f"📋 Available via marm_smart_recall: {', '.join(sorted(skipped_files))}")
+        else:
+            print("No essential documentation files found")
+    else:
+        print(f"WARNING: Documentation directory not found: {docs_dir}")
+
+    return docs_to_load
+
 async def load_marm_documentation():
     """Pre-populate the MCP server with core MARM documentation"""
-    
-    # Define the documentation files to load
-    docs_to_load = [
-        {
-            "file_path": "marm-docs/PROTOCOL.md",
-            "notebook_name": "marm_protocol",
-            "context_type": "protocol",
-            "description": "Complete MARM protocol specification and commands"
-        },
-        {
-            "file_path": "marm-docs/HANDBOOK.md", 
-            "notebook_name": "marm_handbook",
-            "context_type": "handbook",
-            "description": "MARM user handbook and implementation guide"
-        },
-        {
-            "file_path": "marm-docs/README.md",
-            "notebook_name": "marm_readme", 
-            "context_type": "general",
-            "description": "MARM project overview and getting started"
-        },
-        {
-            "file_path": "marm-docs/FAQ.md",
-            "notebook_name": "marm_faq",
-            "context_type": "support", 
-            "description": "Frequently asked questions about MARM"
-        },
-        {
-            "file_path": "marm-docs/DESCRIPTION.md",
-            "notebook_name": "marm_description",
-            "context_type": "general",
-            "description": "MARM project description and core concepts"
-        }
-    ]
+
+    # Auto-discover all documentation files
+    docs_to_load = get_docs_to_load()
     
     print("Loading MARM documentation into memory system...")
     

@@ -48,7 +48,7 @@ Homepage = "https://marmsystems.com"
 Documentation = "https://docs.marmsystems.com"
 Repository = "https://github.com/Lyellr88/MARM-Systems"
 "Bug Tracker" = "https://github.com/Lyellr88/MARM-Systems/issues"
-"Docker Hub" = "https://hub.docker.com/r/lyellr88/marmcp-beta"
+"Docker Hub" = "https://hub.docker.com/r/lyellr88/marm-mcp-server"
 
 [project.scripts]
 marm-mcp-server = "server:main"

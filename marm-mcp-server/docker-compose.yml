@@ -3,7 +3,7 @@ services:
     build: 
       context: .
       dockerfile: Dockerfile
-    image: lyellr88/marmcp-beta:latest
+    image: lyellr88/marm-mcp-server:latest
     container_name: marm-mcp-server
     restart: unless-stopped
     

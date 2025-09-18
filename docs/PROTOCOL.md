@@ -1,5 +1,7 @@
 # MARM v2.1 Protocol Documentation
 
+>data in here is for copy and paste users, marm-mcp is fully automated
+
 ## Table of Contents
 
 - [Quick Start](#quick-start-full-initiation-prompt)

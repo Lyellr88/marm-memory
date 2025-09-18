@@ -59,8 +59,8 @@ Most distributions include these by default:
 ### **Option 1: Automated Installation** ⭐ **(Recommended)**
 
 ```bash
-git clone https://github.com/MARM-Systems/MARM.git
-cd MARM/marm-mcp-server/MARMcp-beta
+git clone https://github.com/Lyellr88/MARM-Systems.git
+cd MARM/marm-mcp-server
 chmod +x install.sh
 ./install.sh
 ```
@@ -68,8 +68,8 @@ chmod +x install.sh
 ### **Option 2: Quick Test** ⚡ **(Beginner-Friendly)**
 
 ```bash
-git clone https://github.com/MARM-Systems/MARM.git
-cd MARM/marm-mcp-server/MARMcp-beta
+git clone https://github.com/Lyellr88/MARM-Systems.git
+cd MARM/marm-mcp-server
 python3 server.py
 ```
 
@@ -78,8 +78,8 @@ python3 server.py
 ### **Option 3: Manual Installation** 🔧 **(Advanced)**
 
 ```bash
-git clone https://github.com/MARM-Systems/MARM.git
-cd MARM/marm-mcp-server/MARMcp-beta
+git clone https://github.com/Lyellr88/MARM-Systems.git
+cd MARM/marm-mcp-server
 
 # Create virtual environment (recommended)
 python3 -m venv marm-env
@@ -110,8 +110,8 @@ sudo apt update
 sudo apt install python3 python3-pip python3-venv git
 
 # Clone and install MARM
-git clone https://github.com/MARM-Systems/MARM.git
-cd MARM/marm-mcp-server/MARMcp-beta
+git clone https://github.com/Lyellr88/MARM-Systems.git
+cd MARM/marm-mcp-server
 ./install.sh
 ```
 
@@ -123,8 +123,8 @@ sudo dnf install python3 python3-pip git  # Fedora
 # sudo yum install python3 python3-pip git  # CentOS/RHEL
 
 # Clone and install MARM
-git clone https://github.com/MARM-Systems/MARM.git
-cd MARM/marm-mcp-server/MARMcp-beta
+git clone https://github.com/Lyellr88/MARM-Systems.git
+cd MARM/marm-mcp-server
 ./install.sh
 ```
 
@@ -135,8 +135,8 @@ cd MARM/marm-mcp-server/MARMcp-beta
 sudo pacman -S python python-pip git
 
 # Clone and install MARM
-git clone https://github.com/MARM-Systems/MARM.git
-cd MARM/marm-mcp-server/MARMcp-beta
+git clone https://github.com/Lyellr88/MARM-Systems.git
+cd MARM/marm-mcp-server
 ./install.sh
 ```
 
@@ -278,7 +278,7 @@ Your testing helps make MARM better for everyone.
 3. **Pull Latest Code**:
 
    ```bash
-   cd MARM/marm-mcp-server/MARMcp-beta
+   cd MARM/marm-mcp-server
    git pull origin main
    ```
 
@@ -303,8 +303,8 @@ rm -rf ~/.marm  # Unix/Mac
 # rmdir /s %USERPROFILE%\.marm  # Windows
 
 # Fresh installation
-git clone https://github.com/MARM-Systems/MARM.git
-cd MARM/marm-mcp-server/MARMcp-beta
+git clone https://github.com/Lyellr88/MARM-Systems.git
+cd MARM/marm-mcp-server
 ./install.sh  # or python setup.py on Windows
 ```
 

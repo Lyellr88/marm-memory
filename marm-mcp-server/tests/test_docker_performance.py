@@ -4,7 +4,7 @@ Tests actual production Docker container performance, not local development.
 
 Usage:
 1. Make sure MARM Docker container is running:
-   docker run -d --name marm-mcp-server -p 8001:8001 lyellr88/marmcp-beta:latest
+   docker run -d --name marm-mcp-server -p 8001:8001 lyellr88/marm-mcp-server:latest
 2. Run the script:
    python tests/test_docker_performance.py
 """
@@ -202,7 +202,7 @@ def main():
     # 1. Check if container is running and healthy
     if not check_server_health():
         print("ERROR: MARM Docker container is not running or not healthy!")
-        print("Start it with: docker run -d --name marm-mcp-server -p 8001:8001 lyellr88/marmcp-beta:latest")
+        print("Start it with: docker run -d --name marm-mcp-server -p 8001:8001 lyellr88/marm-mcp-server:latest")
         return
     
     print("Container is running and healthy, starting performance tests...\n")

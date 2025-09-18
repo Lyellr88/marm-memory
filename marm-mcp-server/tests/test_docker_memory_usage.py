@@ -8,7 +8,7 @@ This test works in two environments:
 
 Usage:
 1. Make sure MARM Docker container is running:
-   docker run -d --name marm-mcp-server -p 8001:8001 lyellr88/marmcp-beta:latest
+   docker run -d --name marm-mcp-server -p 8001:8001 lyellr88/marm-mcp-server:latest
 
 2a. Run locally (full memory stats):
    python tests/test_docker_memory_usage.py
@@ -95,7 +95,7 @@ def main():
             print("ERROR: MARM server not healthy inside container!")
         else:
             print("ERROR: MARM Docker container is not running or not healthy!")
-            print("Start it with: docker run -d --name marm-mcp-server -p 8001:8001 lyellr88/marmcp-beta:latest")
+            print("Start it with: docker run -d --name marm-mcp-server -p 8001:8001 lyellr88/marm-mcp-server:latest")
         return
 
     print("Container is running and healthy")

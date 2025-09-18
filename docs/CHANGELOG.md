@@ -13,7 +13,7 @@
 - Automatic reseed block generation for restoring context in new threads  
 - Log schema enforcement for structured logging: `[YYYY-MM-DD | User | Intent | Outcome]`  
 - Error handling for malformed log entries, including date autofill  
-- `/show reasoning` command to reveal the AI’s logic path  
+- `/show reasoning` command to reveal the AI's logic path  
 - Manual Steps Justification section added to `HANDBOOK.md`  
 - Consolidated Examples section showing real use cases for all major commands  
 - Clarified optional system prompt behavior (not built-in; manual only)  
@@ -45,7 +45,7 @@
 
 - `HANDBOOK.md`: full command reference and usage guide  
 - Collapsible section formatting for all major handbook parts (Beginner, Advanced, Examples, Quick Reference)  
-- “Why Manual Steps Matter” rationale  
+- "Why Manual Steps Matter" rationale  
 - Expanded Limitations section  
 - Slash-style command formatting standard:
   - `/start marm`  
@@ -64,7 +64,7 @@
 ### Removed
 
 - Embedded command list from README  
-- “Back to top” anchors (due to GitHub collapsible quirks)  
+- "Back to top" anchors (due to GitHub collapsible quirks)  
 
 </details>
 
@@ -84,8 +84,8 @@
 ### Changed
 
 - README focus shifted to narrative onboarding:
-  - “What → Why → How → Proof” sequence  
-  - Replaced “Use Cases” with community-backed examples  
+  - "What → Why → How → Proof" sequence  
+  - Replaced "Use Cases" with community-backed examples  
   - Light marketing layer added (clear, not exaggerated)  
 
 </details>
@@ -102,19 +102,19 @@
 - Passive reentry prompts to resume, archive, or reset context on return  
 - Error handling for invalid `/log` entries, including date autofill suggestions  
 - Filter support for `/compile --fields=` to create focused summaries  
-- “What’s New in v1.3” section added to `HANDBOOK.md`, with usage guide  
+- "What's New in v1.3" section added to `HANDBOOK.md`, with usage guide  
 - Inline user guide for `/notebook` under collapsible alert block  
-- New dropdown: “Key Info and Limitations” (moved from protocol body)  
+- New dropdown: "Key Info and Limitations" (moved from protocol body)  
 
 ### Changed
 
-- “What MARM Solves” and “Why It Exists” sections updated to reflect v1.3 behavior  
+- "What MARM Solves" and "Why It Exists" sections updated to reflect v1.3 behavior  
 - Activation response now includes summary and Quick Start command list  
 - Examples revised for clarity and real-world use  
 - AI now defaults to prioritizing `/notebook` entries over trained assumptions
 - Cleaned up main README for new-user clarity  
 - Reordered sections: **What MARM is → Why it helps → How to use it**  
-- Merged “Problem” and “Use Cases” into one purpose-driven section  
+- Merged "Problem" and "Use Cases" into one purpose-driven section  
 - Moved Contact, Credits, and auxiliary content to `CONTRIBUTING.md`  
 - Simplified Quick Start block  
 - Added audio walkthrough link with summary of included topics
@@ -612,11 +612,76 @@ This release introduces a complete UI/UX transformation with the implementation 
 
 ### Technical Achievements
 
-- **Docker Hub deployment** - `lyellr88/marmcp-beta:latest` for production use
+- **Docker Hub deployment** - `lyellr88/marm-mcp-server:latest` for production use
 - **Semantic search implementation** - AI embeddings for intelligent memory retrieval
 - **Universal MCP Server implementation** - Platform-agnostic memory intelligence
 - **Multi-AI workflows** - Demonstrated collaborative development between AI agents
 - **Production deployment** - Production-ready with monitoring, health checks, and scaling
+
+</details>
+
+---
+
+<details>
+<summary>September 15th – September 18th, 2025: Production Stabilization & Registry Preparation</summary>
+
+## **September 15th – September 18th, 2025: Production Stabilization & Registry Preparation**
+
+**Core achievements: Multi-platform publishing setup, CI/CD workflow validation, documentation system overhaul, and repository cleanup - all focused on preparing MARM for official listing in the GitHub MCP Registry and enabling seamless pip install deployment.**
+
+### **Multi-Platform Publishing & CI/CD**
+
+- **PyPI Integration:**
+  - Configured PyPI trusted publishing with proper project name alignment to `[project].name` in `pyproject.toml`
+  - Resolved repository, workflow, and naming inconsistencies to ensure smooth, automated PyPI package releases
+  - Enabled `pip install marm-mcp-server` for easy Python package installation
+
+- **Docker Hub Support:**
+  - Standardized source and build directories for clean Docker image creation
+  - Refactored documentation and codebase to support fast, reliable Docker builds and pushes
+  - Updated workflow scripts to match new folder structures after refactor
+  - Enabled `docker pull lyellr88/marm-mcp-server:latest` for containerized deployment
+
+- **MCP Registry Listing:**
+  - Prepared the MCP server for listing and integration with the official MARM MCP service/agent registry
+  - Ensured compliance with Model Context Protocol standards for automatic agent discovery
+  - Enabled seamless integration with Claude Desktop and other MCP-compatible AI clients
+
+### **CI/CD Workflows**
+
+- **GitHub Actions:**
+  - Enhanced, debugged, and validated workflows for PyPI, Docker, and registry deployment
+  - Ensured all actions/scripts reference the updated project and documentation structure, removing legacy/obsolete paths
+  - Implemented robust error handling and rollback mechanisms for production deployments
+
+### **Documentation System Overhaul**
+
+- **Auto-Loading/Modularized Docs:**
+  - Migrated from hardcoded manual documentation lists to an automated loader for all `.md` files
+  - Developed a context-type classifier and logging function for each loaded doc
+  - Implemented essential-only doc loading (now only `PROTOCOL.md` and `README.md` loaded by default, with others available via recall), drastically reducing token/context bloat
+
+- **Handbook and Docs Refactor:**
+  - Split large handbooks into six logically-focused, easily-maintainable files (3 for MCP, 3 for the main system), improving structure and modularity
+  - Maintained clear and robust logging for missing or misclassified essential docs
+
+### **Refactoring & Repo Cleanup**
+
+- **Legacy Removal:**
+  - Eliminated outdated or redundant folders (`MARMcp-beta`), consolidating all code and documentation under a single, standardized directory structure
+  - Validated and updated all file paths, scripts, and configuration files to ensure project integrity post-refactor
+
+- **Multi-AI Validation:**
+  - Coordinated use of Claude, Qwen, Gemini, and Comet for change verification, diff checking, and QA
+  - Used a centralized CP Dump method for capturing and tracking change logs, error traces, and validation outputs during the transition
+
+### **Impact Summary**
+
+- **Production readiness** - Stabilized Universal MCP Server for public release
+- **Registry compliance** - Prepared for official GitHub MCP Registry listing
+- **Multi-platform deployment** - Enabled pip install, Docker pull, and MCP registry integration
+- **Documentation excellence** - Modular, auto-loading system with reduced token overhead
+- **Codebase cleanliness** - Eliminated legacy artifacts and standardized structure
 
 </details>
 

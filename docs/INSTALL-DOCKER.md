@@ -41,13 +41,13 @@
 
 ```bash
 # Pull the latest image
-docker pull lyellr88/marmcp-beta:latest
+docker pull lyellr88/marm-mcp-server:latest
 
 # Basic setup (temporary data)
-docker run -d --name marm-mcp-server -p 8001:8001 lyellr88/marmcp-beta:latest
+docker run -d --name marm-mcp-server -p 8001:8001 lyellr88/marm-mcp-server:latest
 
 # Recommended setup (persistent data)
-docker run -d --name marm-mcp-server -p 8001:8001 -v marm-data:/home/marm/.marm --restart unless-stopped lyellr88/marmcp-beta:latest
+docker run -d --name marm-mcp-server -p 8001:8001 -v marm-data:/home/marm/.marm --restart unless-stopped lyellr88/marm-mcp-server:latest
 ```
 
 **Why choose this:**
@@ -67,7 +67,7 @@ Create a `docker-compose.yml` file:
 version: '3.8'
 services:
   marm-mcp-server:
-    image: lyellr88/marmcp-beta:latest
+    image: lyellr88/marm-mcp-server:latest
     ports:
       - "8001:8001"
     restart: unless-stopped
@@ -153,10 +153,10 @@ docker rm marm-mcp-server
 **Update to Latest:**
 
 ```bash
-docker pull lyellr88/marmcp-beta:latest
+docker pull lyellr88/marm-mcp-server:latest
 docker stop marm-mcp-server
 docker rm marm-mcp-server
-docker run -d --name marm-mcp-server -p 8001:8001 -v marm-data:/home/marm/.marm --restart unless-stopped lyellr88/marmcp-beta:latest
+docker run -d --name marm-mcp-server -p 8001:8001 -v marm-data:/home/marm/.marm --restart unless-stopped lyellr88/marm-mcp-server:latest
 ```
 
 **View Logs:**
@@ -192,7 +192,7 @@ docker-compose logs -f marm-mcp-server  # Follow logs live
 
 ```bash
 docker-compose down -v  # Removes volumes (⚠️ deletes all memory data)
-docker rmi lyellr88/marmcp-beta:latest  # Removes image
+docker rmi lyellr88/marm-mcp-server:latest  # Removes image
 ```
 
 ---
@@ -260,10 +260,10 @@ Your testing helps make MARM better for everyone.
 **🐳 Docker Update:**
 
 ```bash
-docker pull lyellr88/marmcp-beta:latest
+docker pull lyellr88/marm-mcp-server:latest
 docker stop marm-mcp-server
 docker rm marm-mcp-server
-docker run -d --name marm-mcp-server -p 8001:8001 -v marm-data:/home/marm/.marm --restart unless-stopped lyellr88/marmcp-beta:latest
+docker run -d --name marm-mcp-server -p 8001:8001 -v marm-data:/home/marm/.marm --restart unless-stopped lyellr88/marm-mcp-server:latest
 ```
 
 ---
@@ -321,7 +321,7 @@ For custom configuration, add environment variables to your Docker commands:
 **Docker Run:**
 
 ```bash
-docker run -d --name marm-mcp-server -p 8001:8001 -v marm-data:/home/marm/.marm -e SERVER_PORT=8002 -e ANALYTICS_ENABLED=false --restart unless-stopped lyellr88/marmcp-beta:latest
+docker run -d --name marm-mcp-server -p 8001:8001 -v marm-data:/home/marm/.marm -e SERVER_PORT=8002 -e ANALYTICS_ENABLED=false --restart unless-stopped lyellr88/marm-mcp-server:latest
 ```
 
 **Docker Compose:**
@@ -330,7 +330,7 @@ docker run -d --name marm-mcp-server -p 8001:8001 -v marm-data:/home/marm/.marm 
 version: '3.8'
 services:
   marm-mcp-server:
-    image: lyellr88/marmcp-beta:latest
+    image: lyellr88/marm-mcp-server:latest
     ports:
       - "8002:8002"  # Custom port
     restart: unless-stopped

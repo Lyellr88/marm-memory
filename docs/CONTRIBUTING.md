@@ -13,7 +13,7 @@ MARM started as one person's solution to AI memory problems and has grown into a
 - [Connect with the Creator](#-connect-with-the-creator)
 - [Ready to Join?](#-ready-to-join)
 - [Acknowledgments & Philosophy](#-acknowledgments--philosophy)
-- [Code of Conduct](#%EF%B8%8F-code-of-conduct)
+- [Code of Conduct](#code-of-conduct)
 
 ---
 
@@ -269,7 +269,7 @@ Special thanks to the Reddit prompt engineering community for the early feedback
 
 ---
 
-## ⚖️ Code of Conduct
+## Code of Conduct
 
 MARM is built on the principle of working together to solve real problems. Please follow these guidelines in all
 project interactions:

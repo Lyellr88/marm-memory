@@ -59,15 +59,15 @@
 
 ```powershell
 git clone https://github.com/MARM-Systems/MARM.git
-cd MARM\marm-mcp-server\MARMcp-beta
+cd MARM\marm-mcp-server
 python setup.py
 ```
 
 ### **Option 2: Quick Test** ⚡ **(Beginner-Friendly)**
 
 ```powershell
-git clone https://github.com/MARM-Systems/MARM.git
-cd MARM\marm-mcp-server\MARMcp-beta
+git clone https://github.com/Lyellr88/MARM-Systems.git
+cd MARM\marm-mcp-server
 python server.py
 ```
 
@@ -76,8 +76,8 @@ python server.py
 ### **Option 3: Manual Installation** 🔧 **(Advanced)**
 
 ```powershell
-git clone https://github.com/MARM-Systems/MARM.git
-cd MARM\marm-mcp-server\MARMcp-beta
+git clone https://github.com/Lyellr88/MARM-Systems.git
+cd MARM\marm-mcp-server
 
 # Create virtual environment (recommended)
 python -m venv marm-env
@@ -210,7 +210,7 @@ Invoke-WebRequest -Uri http://localhost:8001/health
 
 If any tests fail or you encounter problems:
 
-- **🐛 Open an [Issue]((https://github.com/Lyellr88/MARM-Systems/issues)**: Report problems on GitHub
+- **🐛 Open an [Issue]((<https://github.com/Lyellr88/MARM-Systems/issues>)**: Report problems on GitHub
 - **🔧 Submit a [Pull Request](https://github.com/Lyellr88/MARM-Systems/pulls)**: Fixed it yourself? We welcome contributions!
 - **💬 Join Discussions**: Share feedback and get help from the community
 Your testing helps make MARM better for everyone.
@@ -233,7 +233,7 @@ Your testing helps make MARM better for everyone.
 3. **Pull Latest Code**:
 
    ```bash
-   cd MARM/marm-mcp-server/MARMcp-beta
+   cd MARM/marm-mcp-server
    git pull origin main
    ```
 
@@ -248,10 +248,10 @@ Your testing helps make MARM better for everyone.
 **🐳 Docker Update:**
 
 ```bash
-docker pull lyellr88/marmcp-beta:latest
+docker pull lyellr88/marm-mcp-server:latest
 docker stop marm-mcp-server
 docker rm marm-mcp-server
-docker run -d --name marm-mcp-server -p 8001:8001 -v marm-data:/home/marm/.marm --restart unless-stopped lyellr88/marmcp-beta:latest
+docker run -d --name marm-mcp-server -p 8001:8001 -v marm-data:/home/marm/.marm --restart unless-stopped lyellr88/marm-mcp-server:latest
 ```
 
 ### **Clean Reinstall (Reset Everything)** ⚠️ **(Advanced)**
@@ -265,8 +265,8 @@ rm -rf ~/.marm  # Unix/Mac
 # rmdir /s %USERPROFILE%\.marm  # Windows
 
 # Fresh installation
-git clone https://github.com/MARM-Systems/MARM.git
-cd MARM/marm-mcp-server/MARMcp-beta
+git clone https://github.com/Lyellr88/MARM-Systems.git
+cd MARM/marm-mcp-server
 ./install.sh  # or python setup.py on Windows
 ```
 
@@ -365,7 +365,7 @@ Create `start_marm.bat` for easy startup:
 
 ```batch
 @echo off
-cd /d "C:\path\to\MARM\marm-mcp-server\MARMcp-beta"
+cd /d "C:\path\to\MARM\marm-mcp-server"
 python server.py
 pause
 ```
@@ -376,8 +376,8 @@ MARM works perfectly in Windows Subsystem for Linux:
 
 ```bash
 # In WSL terminal
-git clone https://github.com/MARM-Systems/MARM.git
-cd MARM/marm-mcp-server/MARMcp-beta
+git clone https://github.com/Lyellr88/MARM-Systems.git
+cd MARM/marm-mcp-server
 python server.py
 ```
 
@@ -424,7 +424,7 @@ Add MARM folder to antivirus exclusions to prevent:
 - **[PROTOCOL.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/PROTOCOL.md)** - Quick start commands and protocol reference
 - **[FAQ.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/FAQ.md)** - Answers to common questions about using MARM
 
-### **MCP Server Installation** 
+### **MCP Server Installation**
 
 - **[INSTALL-DOCKER.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-DOCKER.md)** - Docker deployment (recommended)
 - **[INSTALL-WINDOWS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-WINDOWS.md)** - Windows installation guide

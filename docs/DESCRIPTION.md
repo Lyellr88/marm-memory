@@ -26,6 +26,7 @@ MARM started from frustration with AI conversations that felt like talking to so
 MARM evolved from a simple conversation protocol into a comprehensive AI memory platform through community feedback and multi-agent development collaboration.
 
 **Current Ecosystem:**
+
 - **Universal MCP Server** - Production-ready memory intelligence (primary focus)
 - **Live Chatbot Demo** - Interactive testing environment at <https://marm-systems-chatbot.onrender.com>
 - **Original Protocol** - Copy/paste instructions that work with any AI
@@ -37,9 +38,10 @@ This project showcases advanced multi-agent collaboration, with Claude handling 
 ### Get Started
 
 **🐳 Production MCP Server (Recommended):**
+
 ```bash
-docker pull lyellr88/marmcp-beta:latest
-docker run -d --name marm-mcp-server -p 8001:8001 lyellr88/marmcp-beta:latest
+docker pull lyellr88/marm-mcp-server:latest
+docker run -d --name marm-mcp-server -p 8001:8001 lyellr88/marm-mcp-server:latest
 claude mcp add marm-memory http://localhost:8001/mcp
 ```
 
@@ -76,7 +78,7 @@ Whether you're testing MARM, suggesting improvements, or just curious about AI c
 - **[PROTOCOL.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/PROTOCOL.md)** - Quick start commands and protocol reference
 - **[FAQ.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/FAQ.md)** - Answers to common questions about using MARM
 
-### **MCP Server Installation** 
+### **MCP Server Installation**
 
 - **[INSTALL-DOCKER.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-DOCKER.md)** - Docker deployment (recommended)
 - **[INSTALL-WINDOWS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-WINDOWS.md)** - Windows installation guide

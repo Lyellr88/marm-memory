@@ -44,7 +44,7 @@ Professional test suite for MARM Universal MCP Server v2.1.0
 
 **Prerequisites:** Docker container must be running:
 ```bash
-docker run -d --name marm-mcp-server -p 8001:8001 lyellr88/marmcp-beta:latest
+docker run -d --name marm-mcp-server -p 8001:8001 lyellr88/marm-mcp-server:latest
 ```
 
 **Run All Docker Tests:**

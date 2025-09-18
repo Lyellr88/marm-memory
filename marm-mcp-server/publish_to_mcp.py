@@ -146,8 +146,8 @@ def publish_instructions():
     print("   python -m twine upload dist/*")
 
     print("\n4. Build and push Docker image (optional):")
-    print("   docker build -t lyellr88/marmcp-beta:latest .")
-    print("   docker push lyellr88/marmcp-beta:latest")
+    print("   docker build -t lyellr88/marm-mcp-server:latest .")
+    print("   docker push lyellr88/marm-mcp-server:latest")
 
     print("\n5. Publish to MCP Registry:")
     print("   mcp-publisher publish")

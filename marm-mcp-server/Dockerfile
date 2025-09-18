@@ -96,18 +96,18 @@ CMD ["python", "server.py"]
 # claude mcp add marm-memory http://localhost:8001/mcp
 #
 # What gets packaged:
-# Python 3.11 (specific version, no "install Python" needed)
-# All pip dependencies (sentence-transformers, fastapi, etc.)
-# System libraries (gcc, build tools for numpy/scipy)
-# SQLite (built into Python, no external DB needed)
-# Complete MARM MCP server (all refactored modules)
-# Configuration files and defaults
-# Data directory setup and permissions
-# Health check endpoints for monitoring
-# Proper working directory setup
-# Port configuration (8001 exposed)
-# Volume mounts for persistent data
-# Log management and output handling
+# ✅ Python 3.11 (specific version, no "install Python" needed)
+# ✅ All pip dependencies (sentence-transformers, fastapi, etc.)
+# ✅ System libraries (gcc, build tools for numpy/scipy)
+# ✅ SQLite (built into Python, no external DB needed)
+# ✅ Complete MARM MCP server (all refactored modules)
+# ✅ Configuration files and defaults
+# ✅ Data directory setup and permissions
+# ✅ Health check endpoints for monitoring
+# ✅ Proper working directory setup
+# ✅ Port configuration (8001 exposed)
+# ✅ Volume mounts for persistent data
+# ✅ Log management and output handling
 #
 # User Experience:
 # - Zero prerequisites installation (just need Docker)

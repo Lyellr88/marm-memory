@@ -51,8 +51,8 @@ MARM Systems provides **Universal Memory Intelligence** for AI agents through th
 
 | Method | Commands | Time | Requirements |
 |--------|----------|------|--------------|
-| **Docker (Recommended)** | `docker pull lyellr88/marmcp-beta:latest`<br>`docker run -d --name marm-mcp-server -p 8001:8001 lyellr88/marmcp-beta:latest`<br>`claude mcp add marm-memory http://localhost:8001/mcp` | 2 minutes | Docker installed |
-| **Local Install** | `git clone https://github.com/MARM-Systems/MARM.git`<br>`cd MARM/marm-mcp-server/MARMcp-beta`<br>`./install.sh` (Unix) or `python setup.py` (Windows) | 5 minutes | Python 3.8+, Git |
+| **Docker (Recommended)** | `docker pull lyellr88/marm-mcp-server:latest`<br>`docker run -d --name marm-mcp-server -p 8001:8001 lyellr88/marm-mcp-server:latest`<br>`claude mcp add marm-memory http://localhost:8001/mcp` | 2 minutes | Docker installed |
+| **Local Install** | `git clone https://github.com/MARM-Systems/MARM.git`<br>`cd MARM/marm-mcp-server`<br>`./install.sh` (Unix) or `python setup.py` (Windows) | 5 minutes | Python 3.8+, Git |
 
 ### Q: What MCP tools does MARM provide?
 
@@ -163,34 +163,3 @@ MARM Systems provides **Universal Memory Intelligence** for AI agents through th
 - AI platforms without MCP support (like ChatGPT)
 - Users who prefer manual command-line style interaction
 - Cross-platform workflows where MCP isn't available
-
----
-
-## 📁 Project Documentation
-
-### **Usage Guides**
-
-- **[MARM-HANDBOOK.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/MARM-HANDBOOK.md)** - Original MARM protocol handbook for chatbot usage
-- **[MCP-HANDBOOK.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/MCP-HANDBOOK.md)** - Complete MCP server usage guide with commands, workflows, and examples
-- **[PROTOCOL.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/PROTOCOL.md)** - Quick start commands and protocol reference
-- **[FAQ.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/FAQ.md)** - Answers to common questions about using MARM
-
-### **MCP Server Installation** 
-
-- **[INSTALL-DOCKER.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-DOCKER.md)** - Docker deployment (recommended)
-- **[INSTALL-WINDOWS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-WINDOWS.md)** - Windows installation guide
-- **[INSTALL-LINUX.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-LINUX.md)** - Linux installation guide
-- **[INSTALL-PLATFORMS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-PLATFORMS.md)** - Platfrom installtion guide
-
-### **Chatbot Installation**
-
-- **[CHATBOT-SETUP.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/CHATBOT-SETUP.md)** - Web chatbot setup guide
-
-### **Project Information**
-
-- **[README.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/README.md)** - This file - ecosystem overview and MCP server guide
-- **[CONTRIBUTING.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/CONTRIBUTING.md)** - How to contribute to MARM
-- **[DESCRIPTION.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/DESCRIPTION.md)** - Protocol purpose and vision overview
-- **[CHANGELOG.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/CHANGELOG.md)** - Version history and updates
-- **[ROADMAP.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/ROADMAP.md)** - Planned features and development roadmap
-- **[LICENSE](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/LICENSE)** - MIT license terms
