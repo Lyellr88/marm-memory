@@ -64,14 +64,12 @@ jobs:
 
       - name: Install build dependencies
         run: |
-          cd marm-mcp-server/MARMcp-beta
           python -m pip install --upgrade pip
-          pip install build twine setuptools wheel
+          python -m pip install build twine setuptools wheel
 
       - name: Build package
-        run: |
-          cd marm-mcp-server/MARMcp-beta
-          python -m build
+        run: python -m build
+        working-directory: marm-mcp-server/MARMcp-beta
 
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
