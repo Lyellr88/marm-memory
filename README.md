@@ -445,6 +445,11 @@ Derivatives should clearly indicate they are unofficial or experimental.
 - **[CHANGELOG.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/CHANGELOG.md)** - Version history and updates
 - **[ROADMAP.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/ROADMAP.md)** - Planned features and development roadmap
 - **[LICENSE](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/LICENSE)** - MIT license terms
+
+---
+
+mcp-name: io.github.Lyellr88/marm-mcp-server
+
 ---
 
 >Built with ❤️ by MARM Systems - Universal MCP memory intelligence
