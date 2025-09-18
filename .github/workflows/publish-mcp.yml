@@ -25,12 +25,12 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r MARMcp-beta/requirements.txt
+          pip install -r marm-mcp-server/MARMcp-beta/requirements.txt
           pip install pytest pytest-asyncio jsonschema requests
 
       - name: Validate server.json
         run: |
-          cd MARMcp-beta
+          cd marm-mcp-server/MARMcp-beta
           python validate_server_json.py
 
       - name: Run tests
@@ -45,7 +45,7 @@ jobs:
       - name: Test server startup
         run: |
           # Test that the server can start up
-          cd MARMcp-beta
+          cd marm-mcp-server/MARMcp-beta
           timeout 10s python server.py || echo "Server startup test completed"
 
   publish-pypi:
