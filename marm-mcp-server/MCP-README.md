@@ -434,6 +434,6 @@ Derivatives should clearly indicate they are unofficial or experimental.
 
 ---
 
-mcp-name: io.github.lyellr88/marm-mcp-server
+mcp-name: io.github.Lyellr88/marm-mcp-server
 
 >Built with ❤️ by MARM Systems - Universal MCP memory intelligence
