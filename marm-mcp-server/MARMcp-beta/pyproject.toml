@@ -91,6 +91,3 @@ disallow_untyped_defs = true
 # MCP Server Configuration
 [project.entry-points."mcp.servers"]
 marm = "server:create_server"
-
-# MCPB Package metadata for MCP Registry
-mcpName = "marm-mcp-server"
