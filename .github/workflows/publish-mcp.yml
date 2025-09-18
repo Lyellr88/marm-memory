@@ -64,8 +64,9 @@ jobs:
 
       - name: Install build dependencies
         run: |
+          cd marm-mcp-server/MARMcp-beta
           python -m pip install --upgrade pip
-          pip install build twine
+          pip install build twine setuptools wheel
 
       - name: Build package
         run: |
