@@ -149,13 +149,29 @@ jobs:
           # Clone the registry repo and build the publisher
           git clone https://github.com/modelcontextprotocol/registry.git
           cd registry
+
+          echo "=== Building MCP Publisher ==="
           make publisher
+          echo "Build exit code: $?"
+
+          echo "=== Checking built files ==="
+          ls -lhR bin/
+
+          echo "=== Verifying binary ==="
+          if [ -f "bin/mcp-publisher" ]; then
+            file bin/mcp-publisher
+            echo "Binary exists and type verified"
+          else
+            echo "ERROR: bin/mcp-publisher not found!"
+            ls -la bin/
+            exit 1
+          fi
 
           # Move the built binary to PATH
           sudo cp bin/mcp-publisher /usr/local/bin/
           chmod +x /usr/local/bin/mcp-publisher
 
-          echo "Publisher installed:"
+          echo "=== Publisher installed ==="
           ls -l /usr/local/bin/mcp-publisher
           /usr/local/bin/mcp-publisher --help
 
