@@ -30,8 +30,10 @@ Forks may experiment, but official updates will always come from this repo.
 
 ---
 
-## ⚡ **INSTANT SETUP** - Ready in 60 seconds
+## ⚡ Instant Setup & Full Installation Guide - 
 
+<details>
+<summary> Click here to expand </summary>
 **Already have MARM running?** Connect instantly:
 
 **Claude Code users:**
@@ -113,6 +115,7 @@ claude mcp add marm-memory http://localhost:8001/mcp
 | **Windows** | **[INSTALL-WINDOWS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-WINDOWS.md)** | Native Windows development |
 | **Linux** | **[INSTALL-LINUX.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-LINUX.md)** | Native Linux development |
 | **Platforms** | **[INSTALL-PLATFORM.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-PLATFORM.md)** | App & API integration |
+</details>
 
 ---
 
