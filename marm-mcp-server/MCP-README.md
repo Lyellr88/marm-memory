@@ -9,7 +9,16 @@
 
 Memory Accurate Response Mode v2.2.4 - The intelligent memory system for AI agents. Stop losing context. Stop hallucinations. Start controlling your LLM conversations.  
   
-![Stars](https://img.shields.io/github/stars/Lyellr88/MARM-Protocol?style=flat-square) ![Forks](https://img.shields.io/github/forks/Lyellr88/MARM-Protocol?style=flat-square) [![Version](https://img.shields.io/badge/version-2.2.4-blue.svg)](https://github.com/MARM-Systems/MARM) [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/LICENSE) ![Version](https://img.shields.io/badge/version-2.2.4-blue?style=flat-square)[![Python](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://python.org) [![FastAPI](https://img.shields.io/badge/FastAPI-0.115.8%2B-blue.svg)](https://fastapi.tiangolo.com) [![Docker Pulls](https://img.shields.io/docker/pulls/lyellr88/marm-mcp-server)](https://hub.docker.com/r/lyellr88/marm-mcp-server)
+[![GitHub stars](https://img.shields.io/github/stars/Lyellr88/MARM-Systems?style=flat&color=blue)](https://github.com/Lyellr88/MARM-Systems/stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/Lyellr88/MARM-Systems?style=flat&color=blue)](https://github.com/Lyellr88/MARM-Systems/network)
+[![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/LICENSE)
+[![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115.4-blue)](https://fastapi.tiangolo.com/)
+[![Docker Hub](https://img.shields.io/badge/Docker-hub-blue)](https://hub.docker.com/r/lyellr88/marm-mcp-server)
+[![PyPI](https://img.shields.io/pypi/v/marm-mcp-server?color=blue&label=PyPI)](https://pypi.org/project/marm-mcp-server/)
+
+[![pip install](https://img.shields.io/badge/pip%20install-marm--mcp--server-blue)](https://pypi.org/project/marm-mcp-server/)
+[![MCP Registry](https://img.shields.io/badge/MCP%20Registry-LIVE-blue)](https://registry.modelcontextprotocol.io/)
   
 [![Official MARM](https://img.shields.io/badge/Official-MARM-blue?style=for-the-badge)](https://github.com/Lyellr88/MARM-Systems)
 
