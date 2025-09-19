@@ -66,7 +66,7 @@ python setup.py
 ### **Option 2: Quick Test** ⚡ **(Beginner-Friendly)**
 
 ```powershell
-pip install marm-mcp-server==2.2.3
+pip install marm-mcp-server==2.2.4
 cd MARM\marm-mcp-server
 marm-mcp-server
 ```
@@ -76,7 +76,7 @@ marm-mcp-server
 ### **Option 3: Manual Installation** 🔧 **(Advanced)**
 
 ```powershell
-pip install marm-mcp-server==2.2.3
+pip install marm-mcp-server==2.2.4
 cd MARM\marm-mcp-server
 
 # Create virtual environment (recommended)
@@ -84,7 +84,7 @@ python -m venv marm-env
 marm-env\Scripts\activate
 
 # Install dependencies
-pip install marm-mcp-server==2.2.3
+pip install marm-mcp-server==2.2.4
 
 # Start server
 marm-mcp-server
@@ -200,7 +200,7 @@ Invoke-WebRequest -Uri http://localhost:8001/health
 ```json
 {
   "status": "healthy",
-  "version": "2.2.3",
+  "version": "2.2.4",
   "memory_mb": 510.8,
   "uptime_seconds": 45
 }
@@ -240,7 +240,7 @@ Your testing helps make MARM better for everyone.
 4. **Update Dependencies**:
 
    ```bash
-   pip install marm-mcp-server==2.2.3 --upgrade
+   pip install marm-mcp-server==2.2.4 --upgrade
    ```
 
 5. **Restart Server**: `marm-mcp-server`
@@ -265,7 +265,7 @@ rm -rf ~/.marm  # Unix/Mac
 # rmdir /s %USERPROFILE%\.marm  # Windows
 
 # Fresh installation
-pip install marm-mcp-server==2.2.3
+pip install marm-mcp-server==2.2.4
 cd MARM/marm-mcp-server
 ./install.sh  # or python setup.py on Windows
 ```
@@ -376,7 +376,7 @@ MARM works perfectly in Windows Subsystem for Linux:
 
 ```bash
 # In WSL terminal
-pip install marm-mcp-server==2.2.3
+pip install marm-mcp-server==2.2.4
 cd MARM/marm-mcp-server
 marm-mcp-server
 ```
