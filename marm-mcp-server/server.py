@@ -5,7 +5,7 @@ This server integrates all modular components of the MARM protocol into a single
 FastAPI application, compliant with the MCP protocol via FastApiMCP.
 
 Author: Lyell - MARM Systems
-Version: 2.1.0 (Refactored)
+Version: 2.2.2
 """
 
 import uvicorn
