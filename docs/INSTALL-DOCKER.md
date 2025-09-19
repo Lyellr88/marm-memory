@@ -2,7 +2,7 @@
 
 ## Universal Memory Intelligence Platform for AI Agents
 
-**MARM v2.2.3* - Memory Accurate Response Mode  
+**MARM v2.2.4* - Memory Accurate Response Mode  
 *Docker deployment guide for Windows, Mac, and Linux*
 
 ---
@@ -270,7 +270,7 @@ docker run -d --name marm-mcp-server -p 8001:8001 -v marm-data:/home/marm/.marm 
 
 ### **Migration Notes**
 
-**v2.0 → v2.2.3 Migration:**
+**v2.0 → v2.2.4 Migration:**
 
 - Database schema is compatible - no migration needed
 - New tools automatically available after restart
@@ -373,7 +373,7 @@ volumes:
 
 ---
 
-**MARM v2.2.3 Docker Guide** - *Universal memory intelligence for AI agents*
+**MARM v2.2.4 Docker Guide** - *Universal memory intelligence for AI agents*
 
 *For usage instructions, see **[MCP-HANDBOOK.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/MCP-HANDBOOK.md)***  
 *For native installation, see **[INSTALL-WINDOWS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-WINDOWS.md)**  or **[INSTALL-LINUX.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-LINUX.md)***

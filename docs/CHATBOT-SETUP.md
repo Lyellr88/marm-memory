@@ -133,7 +133,7 @@ MARM-Systems/
 │   │   │   ├── server.js     # Express server with Replicate integration
 │   │   │   ├── replicateHelper.js # Llama 4 Maverick API integration
 │   │   │   └── ...           # Other core modules
-│   │   ├── logic/            # MARM v2.2.3 protocol logic
+│   │   ├── logic/            # MARM v2.2.4 protocol logic
 │   │   └── style/            # Modular CSS components
 │   ├── package.json          # Dependencies
 │   ├── .env                  # Your Replicate API token (create this)

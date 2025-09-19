@@ -1,4 +1,4 @@
-# MARM Handbook v2.2.3 (mainly for copy & paste users)
+# MARM Handbook v2.2.4 (mainly for copy & paste users)
 
 ## Table of Contents
 
@@ -31,7 +31,7 @@ MARM is a universal protocol designed to improve memory continuity and response 
 | **v1.5** | Live Chatbot | Session persistence, voice synthesis, command menu |
 | **v2.0** | Major Protocol Overhaul | Updated syntax, enhanced chatbot, Llama 4 Maverick |
 
-### v2.2.3 (Current) - Universal MCP Server
+### v2.2.4 (Current) - Universal MCP Server
 
 #### MCP Server Architecture
 

@@ -2,7 +2,7 @@
 
 ## Universal Memory Intelligence Platform for AI Agents
 
-**MARM v2.2.3* - Memory Accurate Response Mode
+**MARM v2.2.4* - Memory Accurate Response Mode
 *Complete Linux installation guide*
 
 ---
@@ -310,7 +310,7 @@ cd MARM/marm-mcp-server
 
 ### **Migration Notes**
 
-**v2.0 → v2.2.3 Migration:**
+**v2.0 → v2.2.4 Migration:**
 
 - Database schema is compatible - no migration needed
 - New tools automatically available after restart
@@ -384,7 +384,7 @@ source ~/.bashrc
 
 ---
 
-**MARM v2.2.3 Linux Guide** - *Universal memory intelligence for AI agents*
+**MARM v2.2.4 Linux Guide** - *Universal memory intelligence for AI agents*
 
 *For usage instructions, see **[MCP-HANDBOOK.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/MCP-HANDBOOK.md)***
 

@@ -1,6 +1,6 @@
 # Changelog
 
-## MARM Protocol – v2.2.3 Change Log  
+## MARM Protocol – v2.2.4 Change Log  
 
 ---
 
@@ -564,7 +564,7 @@ This release introduces a complete UI/UX transformation with the implementation 
 ---
 
 <details>
-<summary>August 20th – September 12th, 2025: Universal MCP Server Development (v2.2.3 Launch)</summary>
+<summary>August 20th – September 12th, 2025: Universal MCP Server Development (v2.2.4 Launch)</summary>
 
 ### Added
 
