@@ -21,7 +21,7 @@
     },
     {
       "registry_type": "oci",
-      "identifier": "Lyellr88/marm-mcp-server",
+      "identifier": "lyellr88/marm-mcp-server",
       "version": "2.2.3",
       "transport": { "type": "stdio" }
     }
