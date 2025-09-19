@@ -15,7 +15,7 @@ Memory Accurate Response Mode v2.2.4 - The intelligent memory system for AI agen
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115.4-blue)](https://fastapi.tiangolo.com/)
-[![Docker Hub](https://img.shields.io/badge/Docker-hub-blue)](https://hub.docker.com/r/lyellr88/marm-mcp-server)
+[![Docker Pulls](https://img.shields.io/docker/pulls/lyellr88/marm-mcp-server)](https://hub.docker.com/r/lyellr88/marm-mcp-server)
 [![PyPI](https://img.shields.io/pypi/v/marm-mcp-server?color=blue&label=PyPI)](https://pypi.org/project/marm-mcp-server/)
 
 [![pip install](https://img.shields.io/badge/pip%20install-marm--mcp--server-blue)](https://pypi.org/project/marm-mcp-server/)
@@ -33,7 +33,12 @@ Forks may experiment, but official updates will always come from this repo.
 
 ---
 
-## 🚀 Quick Start for MCP
+## 🚀 Quick Start for MCP & Chatbot 
+
+<details>
+<summary>Click here</summary>
+
+### **Quick Star for MCP**
 
 **Docker (Fastest - 30 seconds):**
 
@@ -75,35 +80,35 @@ claude mcp add marm-memory http://localhost:8001/mcp
 
 ---
 
-## 🚀 Quick Start for Chatbot
+### **Quick Start for Chatbot**
 
 The MARM Chatbot is a web-based interface for interacting with the MARM protocol. To install it, you'll need Node.js and a Replicate API key.
 
 
-### 1. Clone the repository
+1. **Clone the repository**
 ```bash
 git clone https://github.com/Lyellr88/MARM-Systems.git
 ```
 
-### 2. Install dependencies
+2. **Install dependencies**
 ```bash
 cd MARM-Systems/webchat
 npm install
 ```
 
-### 3. Add your Replicate API key to a .env file
+3. **Add your Replicate API key to a .env file**
 ```bash
 echo "REPLICATE_API_TOKEN=your_replicate_api_token_here" > .env
 ```
 
-### 4. Start the server
+4. **Start the server**
 ```bash
 npm start
 ```
 
 **Fastest**
 [MARM Chatbot](https://marm-systems-chatbot.onrender.com)
-
+</details>
 
 ---
 
