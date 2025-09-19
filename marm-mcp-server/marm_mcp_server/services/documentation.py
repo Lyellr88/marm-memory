@@ -6,7 +6,7 @@ import sqlite3
 from typing import Dict, List
 
 # Import core components
-from core.memory import memory
+from ..core.memory import memory
 
 def guess_context_type(filename):
     """Smart context classification based on filename"""

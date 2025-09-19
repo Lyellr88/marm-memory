@@ -8,9 +8,9 @@ from datetime import datetime, timezone
 from typing import Optional, List, Dict
 
 # Import core components
-from core.models import SessionRequest, LogEntryRequest
-from core.memory import memory
-from core.events import events
+from ..core.models import SessionRequest, LogEntryRequest
+from ..core.memory import memory
+from ..core.events import events
 
 # Create router for logging endpoints
 router = APIRouter(prefix="", tags=["Logging"])

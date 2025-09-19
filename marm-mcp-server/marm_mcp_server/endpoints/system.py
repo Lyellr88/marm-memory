@@ -6,11 +6,11 @@ from datetime import datetime, timezone
 from typing import List, Dict, Optional
 
 # Import core components
-from core.memory import memory
-from core.events import events
-from config.settings import SEMANTIC_SEARCH_AVAILABLE, SCHEDULER_AVAILABLE, SERVER_VERSION
-from core.response_limiter import MCPResponseLimiter
-from core.rate_limiter import rate_limiter
+from ..core.memory import memory
+from ..core.events import events
+from ..config.settings import SEMANTIC_SEARCH_AVAILABLE, SCHEDULER_AVAILABLE, SERVER_VERSION
+from ..core.response_limiter import MCPResponseLimiter
+from ..core.rate_limiter import rate_limiter
 
 # Import the documentation loader function
 # This will need to be imported from the services module when it's created

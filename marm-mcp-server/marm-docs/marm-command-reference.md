@@ -2,7 +2,7 @@
 
 ## Detailed Usage Guide for All MARM Commands
 
-**MARM v2.2.3** - Universal Protocol for AI Memory Intelligence
+**MARM v2.2.4** - Universal Protocol for AI Memory Intelligence
 
 ---
 

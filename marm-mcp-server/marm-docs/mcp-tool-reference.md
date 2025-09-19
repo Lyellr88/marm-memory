@@ -2,7 +2,7 @@
 
 ## 19 Essential MCP Tools for AI Memory Intelligence
 
-**MARM v2.2.3** - Universal MCP Server Tool Suite
+**MARM v2.2.4** - Universal MCP Server Tool Suite
 
 ---
 

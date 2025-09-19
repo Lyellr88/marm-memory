@@ -7,9 +7,9 @@
 </picture>
 <h1 align="center">MARM: The AI That Remembers Your Conversations</h1>
 
-Memory Accurate Response Mode v2.2.3 - The intelligent memory system for AI agents. Stop losing context. Stop hallucinations. Start controlling your LLM conversations.  
+Memory Accurate Response Mode v2.2.4 - The intelligent memory system for AI agents. Stop losing context. Stop hallucinations. Start controlling your LLM conversations.  
   
-![Stars](https://img.shields.io/github/stars/Lyellr88/MARM-Protocol?style=flat-square) ![Forks](https://img.shields.io/github/forks/Lyellr88/MARM-Protocol?style=flat-square) [![Version](https://img.shields.io/badge/version-2.2.3-blue.svg)](https://github.com/MARM-Systems/MARM) [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/LICENSE) ![Version](https://img.shields.io/badge/version-2.2.3-blue?style=flat-square)[![Python](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://python.org) [![FastAPI](https://img.shields.io/badge/FastAPI-0.115.8%2B-blue.svg)](https://fastapi.tiangolo.com) [![Docker Pulls](https://img.shields.io/docker/pulls/lyellr88/marm-mcp-server)](https://hub.docker.com/r/lyellr88/marm-mcp-server)
+![Stars](https://img.shields.io/github/stars/Lyellr88/MARM-Protocol?style=flat-square) ![Forks](https://img.shields.io/github/forks/Lyellr88/MARM-Protocol?style=flat-square) [![Version](https://img.shields.io/badge/version-2.2.4-blue.svg)](https://github.com/MARM-Systems/MARM) [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/LICENSE) ![Version](https://img.shields.io/badge/version-2.2.4-blue?style=flat-square)[![Python](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://python.org) [![FastAPI](https://img.shields.io/badge/FastAPI-0.115.8%2B-blue.svg)](https://fastapi.tiangolo.com) [![Docker Pulls](https://img.shields.io/docker/pulls/lyellr88/marm-mcp-server)](https://hub.docker.com/r/lyellr88/marm-mcp-server)
   
 [![Official MARM](https://img.shields.io/badge/Official-MARM-blue?style=for-the-badge)](https://github.com/Lyellr88/MARM-Systems)
 
@@ -77,9 +77,9 @@ claude mcp add marm-memory http://localhost:8001/mcp
 **Quick Local Install:**
 
 ```bash
-pip install marm-mcp-server==2.2.3
+pip install marm-mcp-server==2.2.4
 cd MARM-Systems/marm-mcp-server
-# Cross-platform: pip install marm-mcp-server==2.2.3
+# Cross-platform: pip install marm-mcp-server==2.2.4
 claude mcp add marm-memory http://localhost:8001/mcp
 ```
 
@@ -250,7 +250,7 @@ Now that you understand the ecosystem, here's info and how to actually use the M
 ### **Core Technology Stack**
 
 ```txt
-FastAPI (0.115.4) + FastAPI-MCP (0.4.0) - v2.2.3
+FastAPI (0.115.4) + FastAPI-MCP (0.4.0) - v2.2.4
 ├── SQLite with WAL Mode + Custom Connection Pooling  
 ├── Sentence Transformers (all-MiniLM-L6-v2) + Semantic Search
 ├── Structured Logging (structlog) + Memory Monitoring (psutil)
@@ -328,7 +328,7 @@ CREATE TABLE sessions (
 
 ### **vs. Basic MCP Implementations**
 
-| Feature | MARM v2.2.3 | Basic MCP Servers |
+| Feature | MARM v2.2.4 | Basic MCP Servers |
 |---------|-------------|-------------------|
 | **Memory Intelligence** | AI-powered semantic search with auto-classification | Basic key-value storage |
 | **Tool Coverage** | 19 complete MCP protocol tools | 3-5 basic wrappers |  

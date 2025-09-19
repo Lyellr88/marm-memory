@@ -3,7 +3,7 @@
 from fastapi import Request, HTTPException
 from fastapi.responses import JSONResponse
 import time
-from core.rate_limiter import rate_limiter
+from ..core.rate_limiter import rate_limiter
 
 def get_client_ip(request: Request) -> str:
     """Extract client IP from request, handling proxies"""
