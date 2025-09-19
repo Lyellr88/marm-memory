@@ -2,7 +2,7 @@
 
 ## Cross-App Memory Strategies, Migration Guide, and Best Practices
 
-**MARM v2.1** - Universal MCP Server for AI Memory Intelligence
+**MARM v2.2.3** - Universal MCP Server for AI Memory Intelligence
 
 ---
 

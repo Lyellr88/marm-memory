@@ -10,7 +10,7 @@ echo "🐳 Building MARM Universal MCP Server Docker Container..."
 # Build configuration
 IMAGE_NAME="marm-systems/marm-mcp-server"
 TAG="latest"
-VERSION="2.1.0"
+VERSION="2.2.3"
 
 # Create data directory for volume mounting
 mkdir -p ./data

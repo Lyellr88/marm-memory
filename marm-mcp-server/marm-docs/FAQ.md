@@ -112,7 +112,7 @@ MARM Systems provides **Universal Memory Intelligence** for AI agents through th
 
 | Step | Command/Action | Description |
 |------|----------------|-------------|
-| **1. Activate** | `/start marm` | Enables MARM v2.1 protocol |
+| **1. Activate** | `/start marm` | Enables MARM v2.2.3 protocol |
 | **2. Organize** | `/log session: ProjectName` | Create named session |
 | **3. Remember** | `/log entry: [YYYY-MM-DD-topic-summary]` | Log important milestones |
 | **4. Store** | `/notebook add: name [data]` | Save reusable instructions |

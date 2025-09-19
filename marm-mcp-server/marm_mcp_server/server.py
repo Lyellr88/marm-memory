@@ -5,7 +5,7 @@ This server integrates all modular components of the MARM protocol into a single
 FastAPI application, compliant with the MCP protocol via FastApiMCP.
 
 Author: Lyell - MARM Systems
-Version: 2.2.2
+Version: 2.2.3
 """
 
 import uvicorn
@@ -69,10 +69,10 @@ def track_usage(event_type: str, endpoint: str = None, user_data: dict = None):
         logger.warning("Analytics tracking failed", error=str(e))
 
 # Import rate limiting middleware
-from middleware.rate_limiting import rate_limit_middleware
+from .middleware.rate_limiting import rate_limit_middleware
 
 # Import configuration and services
-from config.settings import (
+from .config.settings import (
     SEMANTIC_SEARCH_AVAILABLE, 
     SCHEDULER_AVAILABLE,
     SERVER_HOST,
@@ -81,16 +81,16 @@ from config.settings import (
     DEFAULT_DB_PATH,
     ANALYTICS_DB_PATH
 )
-from services.documentation import load_marm_documentation
-from services.automation import register_event_handlers
+from .services.documentation import load_marm_documentation
+from .services.automation import register_event_handlers
 
 # Import all endpoint routers
-from endpoints.session import router as session_router
-from endpoints.logging import router as logging_router
-from endpoints.reasoning import router as reasoning_router
-from endpoints.notebook import router as notebook_router
-from endpoints.memory import router as memory_router
-from endpoints.system import router as system_router
+from .endpoints.session import router as session_router
+from .endpoints.logging import router as logging_router
+from .endpoints.reasoning import router as reasoning_router
+from .endpoints.notebook import router as notebook_router
+from .endpoints.memory import router as memory_router
+from .endpoints.system import router as system_router
 
 import httpx
 import asyncio
@@ -259,7 +259,7 @@ def main():
         sys.exit(0 if success else 1)
 
     logger.info("Starting MARM MCP Server",
-                version="v2.2.2",
+                version="v2.2.3",
                 mcp_endpoint="http://localhost:8001/mcp",
                 docs="http://localhost:8001/docs",
                 database=DEFAULT_DB_PATH)

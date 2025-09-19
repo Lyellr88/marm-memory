@@ -20,9 +20,9 @@ MARM Systems is building the memory layer that makes AI truly useful for long-te
 
 ## Current Focus (Phase 1: Foundation)
 
-### MARM Protocol v2.1 - Memory Accurate Response Mode
+### MARM Protocol v2.2.3 - Memory Accurate Response Mode
 
-- ✅ **Protocol Completed**: MARM v2.1 with enhanced conversation flow
+- ✅ **Protocol Completed**: MARM with enhanced conversation flow
 - ✅ **Live Chatbot**: Interactive demo with advanced AI integration
 - ✅ **Universal MCP Server**: Production-ready with 19 MCP tools, Docker deployment
 - ✅ **Core Features**: Session management, file uploads, voice synthesis, command system
@@ -92,7 +92,7 @@ MARM Systems focuses on solving the memory gap in AI interactions. While foundat
 
 ## What's Next
 
-MARM v2.1 establishes our foundation. The growing community and proven protocol position us for the next phase of development, focusing on enhanced capabilities and broader platform integration.
+MARM v2.2.3 establishes our foundation. The growing community and proven protocol position us for the next phase of development, focusing on enhanced capabilities and broader platform integration.
 
 **Current Priorities:**
 

@@ -133,7 +133,7 @@ Now that you understand the ecosystem, here's info and how to actually use the M
 ### **Core Technology Stack**
 
 ```txt
-FastAPI (0.115.4) + FastAPI-MCP (0.4.0) - v2.1.0
+FastAPI (0.115.8) + FastAPI-MCP (0.4.0) - v2.2.3
 ├── SQLite with WAL Mode + Custom Connection Pooling  
 ├── Sentence Transformers (all-MiniLM-L6-v2) + Semantic Search
 ├── Structured Logging (structlog) + Memory Monitoring (psutil)
@@ -211,7 +211,7 @@ CREATE TABLE sessions (
 
 ### **vs. Basic MCP Implementations**
 
-| Feature | MARM v2.1.0 | Basic MCP Servers |
+| Feature | MARM v2.2.3 | Basic MCP Servers |
 |---------|-------------|-------------------|
 | **Memory Intelligence** | AI-powered semantic search with auto-classification | Basic key-value storage |
 | **Tool Coverage** | 19 complete MCP protocol tools | 3-5 basic wrappers |  

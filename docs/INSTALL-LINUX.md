@@ -2,7 +2,7 @@
 
 ## Universal Memory Intelligence Platform for AI Agents
 
-**MARM v2.1** - Memory Accurate Response Mode
+**MARM v2.2.3* - Memory Accurate Response Mode
 *Complete Linux installation guide*
 
 ---
@@ -59,7 +59,7 @@ Most distributions include these by default:
 ### **Option 1: Automated Installation** ⭐ **(Recommended)**
 
 ```bash
-git clone https://github.com/Lyellr88/MARM-Systems.git
+pip install marm-mcp-server==2.2.3
 cd MARM/marm-mcp-server
 chmod +x install.sh
 ./install.sh
@@ -68,7 +68,7 @@ chmod +x install.sh
 ### **Option 2: Quick Test** ⚡ **(Beginner-Friendly)**
 
 ```bash
-git clone https://github.com/Lyellr88/MARM-Systems.git
+pip install marm-mcp-server==2.2.3
 cd MARM/marm-mcp-server
 python3 server.py
 ```
@@ -78,7 +78,7 @@ python3 server.py
 ### **Option 3: Manual Installation** 🔧 **(Advanced)**
 
 ```bash
-git clone https://github.com/Lyellr88/MARM-Systems.git
+pip install marm-mcp-server==2.2.3
 cd MARM/marm-mcp-server
 
 # Create virtual environment (recommended)
@@ -86,7 +86,7 @@ python3 -m venv marm-env
 source marm-env/bin/activate
 
 # Install dependencies
-pip install -r requirements.txt
+pip install marm-mcp-server==2.2.3
 
 # Start server
 python3 server.py
@@ -110,7 +110,7 @@ sudo apt update
 sudo apt install python3 python3-pip python3-venv git
 
 # Clone and install MARM
-git clone https://github.com/Lyellr88/MARM-Systems.git
+pip install marm-mcp-server==2.2.3
 cd MARM/marm-mcp-server
 ./install.sh
 ```
@@ -123,7 +123,7 @@ sudo dnf install python3 python3-pip git  # Fedora
 # sudo yum install python3 python3-pip git  # CentOS/RHEL
 
 # Clone and install MARM
-git clone https://github.com/Lyellr88/MARM-Systems.git
+pip install marm-mcp-server==2.2.3
 cd MARM/marm-mcp-server
 ./install.sh
 ```
@@ -135,7 +135,7 @@ cd MARM/marm-mcp-server
 sudo pacman -S python python-pip git
 
 # Clone and install MARM
-git clone https://github.com/Lyellr88/MARM-Systems.git
+pip install marm-mcp-server==2.2.3
 cd MARM/marm-mcp-server
 ./install.sh
 ```
@@ -244,7 +244,7 @@ curl -s http://localhost:8001/health
 ```json
 {
   "status": "healthy",
-  "version": "2.1.0",
+  "version": "2.2.3",
   "memory_mb": 510.8,
   "uptime_seconds": 45
 }
@@ -254,7 +254,7 @@ curl -s http://localhost:8001/health
 
 If any tests fail or you encounter problems:
 
-- **🐛 Open an [Issue]((https://github.com/Lyellr88/MARM-Systems/issues)**: Report problems on GitHub
+- **🐛 Open an [Issue]((<https://github.com/Lyellr88/MARM-Systems/issues>)**: Report problems on GitHub
 - **🔧 Submit a [Pull Request](https://github.com/Lyellr88/MARM-Systems/pulls)**: Fixed it yourself? We welcome contributions!
 - **💬 Join Discussions**: Share feedback and get help from the community
 
@@ -285,10 +285,10 @@ Your testing helps make MARM better for everyone.
 4. **Update Dependencies**:
 
    ```bash
-   pip install -r requirements.txt --upgrade
+   pip install marm-mcp-server==2.2.3 --upgrade
    ```
 
-5. **Restart Server**: `python server.py`
+5. **Restart Server**: `marm-mcp-server`
 
 ---
 
@@ -303,14 +303,14 @@ rm -rf ~/.marm  # Unix/Mac
 # rmdir /s %USERPROFILE%\.marm  # Windows
 
 # Fresh installation
-git clone https://github.com/Lyellr88/MARM-Systems.git
+pip install marm-mcp-server==2.2.3
 cd MARM/marm-mcp-server
 ./install.sh  # or python setup.py on Windows
 ```
 
 ### **Migration Notes**
 
-**v2.0 → v2.1 Migration:**
+**v2.0 → v2.2.3 Migration:**
 
 - Database schema is compatible - no migration needed
 - New tools automatically available after restart
@@ -384,10 +384,12 @@ source ~/.bashrc
 
 ---
 
-**MARM v2.1 Linux Guide** - *Universal memory intelligence for AI agents*
+**MARM v2.2.3 Linux Guide** - *Universal memory intelligence for AI agents*
 
-*For usage instructions, see **[MCP-HANDBOOK.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/MCP-HANDBOOK.md)***  
+*For usage instructions, see **[MCP-HANDBOOK.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/MCP-HANDBOOK.md)***
+
 *For Docker deployment, see **[INSTALL-DOCKER.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-DOCKER.md)***
+
 ---
 
 ## 📁 Project Documentation
@@ -399,7 +401,7 @@ source ~/.bashrc
 - **[PROTOCOL.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/PROTOCOL.md)** - Quick start commands and protocol reference
 - **[FAQ.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/FAQ.md)** - Answers to common questions about using MARM
 
-### **MCP Server Installation** 
+### **MCP Server Installation**
 
 - **[INSTALL-DOCKER.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-DOCKER.md)** - Docker deployment (recommended)
 - **[INSTALL-WINDOWS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-WINDOWS.md)** - Windows installation guide

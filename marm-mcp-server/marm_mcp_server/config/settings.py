@@ -76,4 +76,4 @@ RATE_LIMIT_SEARCH_REQUESTS = 30
 # Server configuration
 SERVER_HOST = "0.0.0.0"
 SERVER_PORT = int(os.environ.get('SERVER_PORT', 8001))
-SERVER_VERSION = "2.1.0"
+SERVER_VERSION = "2.2.3"

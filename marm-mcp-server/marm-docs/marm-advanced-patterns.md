@@ -2,7 +2,7 @@
 
 ## Beyond the Basics, Power-User Templates, and Troubleshooting
 
-**MARM v2.1** - Universal Protocol for AI Memory Intelligence
+**MARM v2.2.3** - Universal Protocol for AI Memory Intelligence
 
 ---
 

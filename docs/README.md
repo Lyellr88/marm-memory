@@ -7,9 +7,9 @@
 </picture>
 <h1 align="center">MARM: The AI That Remembers Your Conversations</h1>
 
-Memory Accurate Response Mode v2.1 - The intelligent memory system for AI agents. Stop losing context. Stop hallucinations. Start controlling your LLM conversations.  
+Memory Accurate Response Mode v2.2.3 - The intelligent memory system for AI agents. Stop losing context. Stop hallucinations. Start controlling your LLM conversations.  
   
-![Stars](https://img.shields.io/github/stars/Lyellr88/MARM-Protocol?style=flat-square) ![Forks](https://img.shields.io/github/forks/Lyellr88/MARM-Protocol?style=flat-square) [![Version](https://img.shields.io/badge/version-2.1.0-blue.svg)](https://github.com/MARM-Systems/MARM) [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/LICENSE) ![Version](https://img.shields.io/badge/version-2.0-blue?style=flat-square)[![Python](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://python.org) [![FastAPI](https://img.shields.io/badge/FastAPI-0.115.4-009688.svg)](https://fastapi.tiangolo.com)
+![Stars](https://img.shields.io/github/stars/Lyellr88/MARM-Protocol?style=flat-square) ![Forks](https://img.shields.io/github/forks/Lyellr88/MARM-Protocol?style=flat-square) [![Version](https://img.shields.io/badge/version-2.2.3-blue.svg)](https://github.com/MARM-Systems/MARM) [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/LICENSE) ![Version](https://img.shields.io/badge/version-2.2.3-blue?style=flat-square)[![Python](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://python.org) [![FastAPI](https://img.shields.io/badge/FastAPI-0.115.4-009688.svg)](https://fastapi.tiangolo.com)
   
 [![Official MARM](https://img.shields.io/badge/Official-MARM-blue?style=for-the-badge)](https://github.com/Lyellr88/MARM-Systems)
 
@@ -34,9 +34,8 @@ claude mcp add marm-memory http://localhost:8001/mcp
 **Quick Local Install:**
 
 ```bash
-git clone https://github.com/MARM-Systems/MARM.git
-cd MARM-Systems/marm-mcp-server
-# Unix/Mac: ./install.sh | Windows: python setup.py
+pip install marm-mcp-server==2.2.3
+marm-mcp-server
 claude mcp add marm-memory http://localhost:8001/mcp
 ```
 
@@ -71,7 +70,7 @@ The MARM Chatbot is a web-based interface for interacting with the MARM protocol
 
 ### 1. Clone the repository
 ```bash
-git clone https://github.com/MARM-Systems/MARM.git
+git clone https://github.com/Lyellr88/MARM-Systems.git
 ```
 
 ### 2. Install dependencies
@@ -337,7 +336,7 @@ CREATE TABLE sessions (
 
 ### **vs. Basic MCP Implementations**
 
-| Feature | MARM v2.1 | Basic MCP Servers |
+| Feature | MARM v2.2.3 | Basic MCP Servers |
 |---------|-------------|-------------------|
 | **Memory Intelligence** | AI-powered semantic search with auto-classification | Basic key-value storage |
 | **Tool Coverage** | 19 complete MCP protocol tools | 3-5 basic wrappers |  
@@ -446,5 +445,7 @@ Derivatives should clearly indicate they are unofficial or experimental.
 - **[ROADMAP.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/ROADMAP.md)** - Planned features and development roadmap
 - **[LICENSE](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/LICENSE)** - MIT license terms
 ---
+
+mcp-name: io.github.Lyellr88/marm-mcp-server
 
 >Built with ❤️ by MARM Systems - Universal MCP memory intelligence

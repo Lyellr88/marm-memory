@@ -2,7 +2,7 @@
 
 ## Universal Memory Intelligence Platform for AI Agents
 
-**MARM v2.1** - Memory Accurate Response Mode
+**MARM v2.2.3* - Memory Accurate Response Mode
 *Complete Windows installation guide*
 
 ---
@@ -66,9 +66,9 @@ python setup.py
 ### **Option 2: Quick Test** ⚡ **(Beginner-Friendly)**
 
 ```powershell
-git clone https://github.com/Lyellr88/MARM-Systems.git
+pip install marm-mcp-server==2.2.3
 cd MARM\marm-mcp-server
-python server.py
+marm-mcp-server
 ```
 
 >Dependencies auto-install if missing
@@ -76,7 +76,7 @@ python server.py
 ### **Option 3: Manual Installation** 🔧 **(Advanced)**
 
 ```powershell
-git clone https://github.com/Lyellr88/MARM-Systems.git
+pip install marm-mcp-server==2.2.3
 cd MARM\marm-mcp-server
 
 # Create virtual environment (recommended)
@@ -84,10 +84,10 @@ python -m venv marm-env
 marm-env\Scripts\activate
 
 # Install dependencies
-pip install -r requirements.txt
+pip install marm-mcp-server==2.2.3
 
 # Start server
-python server.py
+marm-mcp-server
 ```
 
 ### **After Installation:**
@@ -200,7 +200,7 @@ Invoke-WebRequest -Uri http://localhost:8001/health
 ```json
 {
   "status": "healthy",
-  "version": "2.1.0",
+  "version": "2.2.3",
   "memory_mb": 510.8,
   "uptime_seconds": 45
 }
@@ -240,10 +240,10 @@ Your testing helps make MARM better for everyone.
 4. **Update Dependencies**:
 
    ```bash
-   pip install -r requirements.txt --upgrade
+   pip install marm-mcp-server==2.2.3 --upgrade
    ```
 
-5. **Restart Server**: `python server.py`
+5. **Restart Server**: `marm-mcp-server`
 
 **🐳 Docker Update:**
 
@@ -265,14 +265,14 @@ rm -rf ~/.marm  # Unix/Mac
 # rmdir /s %USERPROFILE%\.marm  # Windows
 
 # Fresh installation
-git clone https://github.com/Lyellr88/MARM-Systems.git
+pip install marm-mcp-server==2.2.3
 cd MARM/marm-mcp-server
 ./install.sh  # or python setup.py on Windows
 ```
 
 ### **Migration Notes**
 
-**v2.0 → v2.1 Migration:**
+**v2.0 → v2.2.3 Migration:**
 
 - Database schema is compatible - no migration needed
 - New tools automatically available after restart
@@ -324,7 +324,7 @@ Set environment variables in PowerShell:
 ```powershell
 $env:SERVER_PORT="8002"
 $env:ANALYTICS_ENABLED="false"
-python server.py
+marm-mcp-server
 ```
 
 **Or permanently via System Properties:**
@@ -352,7 +352,7 @@ To run MARM as a Windows service:
 
 ```powershell
 # Install as service (requires admin)
-python server.py --install-service
+marm-mcp-server --install-service
 
 # Start/stop service
 net start MARMService
@@ -366,7 +366,7 @@ Create `start_marm.bat` for easy startup:
 ```batch
 @echo off
 cd /d "C:\path\to\MARM\marm-mcp-server"
-python server.py
+marm-mcp-server
 pause
 ```
 
@@ -376,9 +376,9 @@ MARM works perfectly in Windows Subsystem for Linux:
 
 ```bash
 # In WSL terminal
-git clone https://github.com/Lyellr88/MARM-Systems.git
+pip install marm-mcp-server==2.2.3
 cd MARM/marm-mcp-server
-python server.py
+marm-mcp-server
 ```
 
 Access from Windows: `http://localhost:8001`
@@ -408,7 +408,7 @@ Add MARM folder to antivirus exclusions to prevent:
 
 ---
 
-**MARM v2.1 Windows Guide** - *Universal memory intelligence for AI agents*
+**MARM v2.2.3 Windows Guide** - *Universal memory intelligence for AI agents*
 
 *For usage instructions, see **[MCP-HANDBOOK.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/MCP-HANDBOOK.md)***  
 *For Docker deployment, see **[INSTALL-DOCKER.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-DOCKER.md)***
