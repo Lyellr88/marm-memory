@@ -258,7 +258,7 @@ if __name__ == "__main__":
         sys.exit(0 if success else 1)
     
     logger.info("Starting MARM MCP Server", 
-                version="v2.1.0 (Refactored)",
+                version="v2.2.2",
                 mcp_endpoint="http://localhost:8001/mcp",
                 docs="http://localhost:8001/docs",
                 database=DEFAULT_DB_PATH)
