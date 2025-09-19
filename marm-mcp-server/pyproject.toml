@@ -90,4 +90,4 @@ disallow_untyped_defs = true
 
 # MCP Server Configuration
 [project.entry-points."mcp.servers"]
-marm = "marm_mcp_server.server:create_server"
+marm = "server:create_server"
