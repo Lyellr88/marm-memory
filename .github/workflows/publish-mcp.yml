@@ -133,7 +133,7 @@ jobs:
           cache-to: type=local,dest=/tmp/.buildx-cache,mode=max
 
   publish-mcp-registry:
-    needs: validate-and-test
+    needs: [publish-pypi, publish-docker]
     runs-on: ubuntu-latest
 
     steps:
