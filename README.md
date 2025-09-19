@@ -1,7 +1,7 @@
 <div align="center">
 <picture>
   <img src="https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/media/marm-main.jpg"
-       alt="MARM v2.1 - The AI That Remembers Your Conversations"
+       alt="MARM - The AI That Remembers Your Conversations"
        width="700"
        height="350"
 </picture>
@@ -26,8 +26,8 @@ Forks may experiment, but official updates will always come from this repo.
 **Docker (Fastest - 30 seconds):**
 
 ```bash
-docker pull lyellr88/marmcp-beta:latest
-docker run -d --name marm-mcp-server -p 8001:8001 lyellr88/marmcp-beta:latest
+docker pull lyellr88/marm-mcp-server:latest
+docker run -d --name marm-mcp-server -p 8001:8001 lyellr88/marm-mcp-server:latest
 claude mcp add marm-memory http://localhost:8001/mcp
 ```
 
@@ -35,7 +35,7 @@ claude mcp add marm-memory http://localhost:8001/mcp
 
 ```bash
 git clone https://github.com/MARM-Systems/MARM.git
-cd MARM/marm-mcp-server/MARMcp-beta
+cd MARM-Systems/marm-mcp-server
 # Unix/Mac: ./install.sh | Windows: python setup.py
 claude mcp add marm-memory http://localhost:8001/mcp
 ```
@@ -445,11 +445,8 @@ Derivatives should clearly indicate they are unofficial or experimental.
 - **[CHANGELOG.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/CHANGELOG.md)** - Version history and updates
 - **[ROADMAP.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/ROADMAP.md)** - Planned features and development roadmap
 - **[LICENSE](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/LICENSE)** - MIT license terms
-
 ---
 
 mcp-name: io.github.Lyellr88/marm-mcp-server
-
----
 
 >Built with ❤️ by MARM Systems - Universal MCP memory intelligence
