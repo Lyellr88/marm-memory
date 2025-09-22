@@ -369,7 +369,7 @@ CREATE TABLE sessions (
 
 **Aren't you sick of explaining every project you're working on to every LLM you work with?**
 
-MARM is building the solution to this. Support now to join a growing ecosystem - this is just **Phase 1 of a 3-part roadmap** and our next build will complement MARM like peanut butter and jelly.
+MARM is building the solution to this. Support now to join a growing ecosystem - this is just **Phase 1 of a 3-part roadmap** and my next build will complement MARM like debugging and coffee. 
 
 **Join the repo that's working to give YOU control over what is remembered and how it's remembered.**
 
