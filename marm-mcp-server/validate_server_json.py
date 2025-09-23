@@ -23,7 +23,7 @@ def validate_server_json():
     print(f"[OK] Loaded server.json: {server_config['name']} v{server_config['version']}")
 
     # Fetch the schema
-    schema_url = "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json"
+    schema_url = "https://static.modelcontextprotocol.io/schemas/2025-09-16/server.schema.json"
     print(f"[INFO] Fetching schema from {schema_url}")
 
     try:
