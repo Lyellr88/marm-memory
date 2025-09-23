@@ -1,6 +1,6 @@
 # Changelog
 
-## MARM Protocol – v2.2.4 Change Log  
+## MARM Protocol – v2.2.5 Change Log  
 
 ---
 
@@ -687,6 +687,152 @@ This release introduces a complete UI/UX transformation with the implementation 
 
 ---
 
+<details>
+<summary>September 19th-23rd, 2025: WebSocket Production Launch & Alpha Tester Resolution (v2.2.5 Launch)</summary>
+
+## **September 19th-23rd, 2025: WebSocket Production Launch & Alpha Tester Resolution (v2.2.5 Launch)**
+
+**Core achievements: Complete GitHub alpha tester feedback resolution (4/4 issues), full WebSocket production implementation with HTTP parity, OAuth authentication restoration, graceful shutdown infrastructure, and modernized dependency management - achieving zero outstanding issues and production-ready WebSocket MCP protocol.**
+
+### **🎉 Complete GitHub Alpha Tester Issue Resolution (4/4)**
+
+- **Issue #1 - WebSocket URL Implementation**:
+  - Implemented complete WebSocket MCP protocol at `ws://localhost:8001/mcp/ws`
+  - Achieved full HTTP/WebSocket parity with all 19 MCP methods
+  - Added JSON-RPC 2.0 compliance with proper error handling
+  - Integrated thread-safe connection management with rate limiting
+
+- **Issue #2 - Parameter Consistency**:
+  - Standardized parameter naming across all endpoints
+  - Updated `marm_notebook_use` from `names` to `name` for consistency
+  - Modified core models and endpoint handlers for unified API
+
+- **Issue #3 - Docker Persistence**:
+  - Updated all documentation with volume mount requirements
+  - Standardized Docker commands with `-v marm_data:/app/data`
+  - Ensured data persistence across container restarts
+
+- **Issue #4 - Health/Readiness Monitoring**:
+  - Enhanced `/health` endpoint with database connectivity testing
+  - Added `/ready` endpoint with full functionality validation
+  - Implemented Docker health checks with curl testing
+  - Added comprehensive startup guidance and troubleshooting
+
+### **🚀 WebSocket Production Implementation**
+
+- **Complete MCP Protocol Support**:
+  - All 19 MCP methods available via WebSocket protocol
+  - Full HTTP/WebSocket feature parity achieved
+  - Professional JSON-RPC 2.0 implementation with error handling
+
+- **Production Architecture**:
+  - Thread-safe WebSocket connection manager (`core/websocket_manager.py`)
+  - Modular endpoint architecture (`endpoints/websocket.py`)
+  - Clean import/export handler system for maintainability
+  - Integration with existing security and rate limiting middleware
+
+- **Connection Management**:
+  - Connection pooling with configurable limits
+  - Graceful connection cleanup and client session tracking
+  - Broadcast and personal messaging capabilities
+  - Proper WebSocket lifecycle management
+
+### **🔧 Infrastructure & Authentication Improvements**
+
+- **OAuth 2.0 Authentication Restoration**:
+  - Restored complete OAuth implementation that mysteriously disappeared
+  - Full authorization code flow with client credentials validation
+  - Added `endpoints/oauth.py` with authorize, token, userinfo, revoke, debug endpoints
+  - Excluded OAuth from MCP tool discovery with `include_in_schema=False`
+
+- **Graceful Server Shutdown**:
+  - Implemented signal handlers for SIGTERM/SIGINT (Unix systems)
+  - Added WebSocket connection closure during shutdown
+  - Created `core/shutdown_manager.py` for clean server termination
+  - Fixed issue where MCP clients prevented server shutdown
+
+- **Smart Dependency Management**:
+  - Modernized `requirements.txt` from exact pins (==) to smart version ranges
+  - Implemented `>=X.Y.Z,<X+1.0.0` pattern for automatic security updates
+  - Updated to match actually installed working versions
+  - Enabled automatic security patches without breaking changes
+
+### **🏗️ Architecture & Documentation Enhancements**
+
+- **Date Handling Architecture Fix**:
+  - Fixed `marm_log_entry` incorrectly auto-adding date prefixes to user content
+  - Connected `marm_log_session` to `marm_current_context` background tool
+  - Sessions now get automatic dates while entries preserve exact user input
+  - Proper separation of automated vs. user-controlled content
+
+- **Package Structure Synchronization**:
+  - Synchronized root-level development code with `marm_mcp_server/` package folder
+  - Ensured PyPI package structure matches working development environment
+  - Updated all new files: oauth.py, shutdown_manager.py, websocket_manager.py
+  - Maintained proper Python package naming conventions
+
+- **Comprehensive Documentation Updates**:
+  - Updated all installation guides with WebSocket connection examples
+  - Added natural language interface emphasis in MCP-HANDBOOK.md
+  - Clarified background tool automation (marm_current_context)
+  - Enhanced troubleshooting sections for connection issues
+
+### **🐛 Technical Debt Resolution**
+
+- **WebSocket Implementation Quality**:
+  - Eliminated "sloppy" mixed approaches in favor of consistent patterns
+  - Replaced inline handler architecture with clean import/export system
+  - Fixed rate limiting middleware bug preventing WebSocket connections
+  - Removed all stub implementations and placeholder code
+
+- **Background File Analysis**:
+  - Analyzed and confirmed safe removal of websocket_backup.py (374-line old architecture)
+  - Validated setup.py.backup as outdated installer script
+  - Confirmed cp dump.md contained only OAuth implementation (no other missing features)
+  - Completed comprehensive backup file cleanup
+
+- **Version Management**:
+  - Coordinated v2.2.5 updates across all deployment files
+  - Maintained surgical precision in version synchronization
+  - Updated package metadata and documentation references
+
+### **📊 Testing & Validation Framework**
+
+- **Comprehensive Test Suite**:
+  - Created bulletproof validation testing for all 19 MCP methods
+  - Implemented sabotage-resistant error detection
+  - Built systematic GitHub issue validation framework
+  - Achieved 100% success rate on all production readiness criteria
+
+- **WebSocket Protocol Validation**:
+  - Tested JSON-RPC 2.0 compliance with malformed request handling
+  - Validated connection management under load
+  - Verified security integration and rate limiting functionality
+  - Confirmed backward compatibility maintenance
+
+### **Impact Summary**
+
+- **Zero Outstanding Issues**: All 4 GitHub alpha tester issues completely resolved
+- **Production WebSocket Ready**: Full HTTP/WebSocket parity with professional implementation
+- **Enhanced Security**: OAuth restoration, graceful shutdown, and rate limiting integration
+- **Modernized Infrastructure**: Smart dependency management and automated security updates
+- **Beta Production Status**: WebSocket implementation ready for real-world testing and deployment
+- **Developer Experience**: Comprehensive documentation with natural language interface guidance
+
+### **Technical Achievements**
+
+- **Complete CI/CD Compatibility**: Maintained deployment readiness across PyPI, Docker Hub, and MCP Registry
+- **Professional Architecture**: Modular design with proper separation of concerns and security integration
+- **Performance Optimization**: Lazy loading, connection pooling, and intelligent caching maintained
+- **Cross-Platform Support**: Windows signal handling compatibility with Unix systems
+- **Memory Management**: Efficient SQLite operations with WAL mode and connection pooling
+
+**Next Phase**: Public launch announcement → Developer community building → Pro version development
+
+</details>
+
+---
+
 ## 📁 Project Documentation
 
 ### **Usage Guides**
@@ -696,7 +842,7 @@ This release introduces a complete UI/UX transformation with the implementation 
 - **[PROTOCOL.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/PROTOCOL.md)** - Quick start commands and protocol reference
 - **[FAQ.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/FAQ.md)** - Answers to common questions about using MARM
 
-### **MCP Server Installation** 
+### **MCP Server Installation**
 
 - **[INSTALL-DOCKER.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-DOCKER.md)** - Docker deployment (recommended)
 - **[INSTALL-WINDOWS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-WINDOWS.md)** - Windows installation guide

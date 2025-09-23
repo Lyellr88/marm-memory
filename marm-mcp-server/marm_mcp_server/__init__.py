@@ -14,13 +14,13 @@ Features:
 - Production-grade performance
 
 Author: Lyell - MARM Systems
-Version: 2.2.4
+Version: 2.2.5
 """
 
-__version__ = "2.2.4"
+__version__ = "2.2.5"
 __author__ = "Lyell"
 __email__ = "lyell@marmsystems.com"
 
-from .server import main
+from .server import create_server, main
 
-__all__ = ["main", "__version__"]
+__all__ = ["create_server", "main", "__version__"]

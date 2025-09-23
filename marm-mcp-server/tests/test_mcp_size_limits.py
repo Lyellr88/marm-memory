@@ -89,7 +89,7 @@ class TestMCPResponseLimiter:
             large_content.append({
                 "type": "memory",
                 "content": "Y" * 80000,  # 80KB each
-                "session": f"session_{i}",
+                "session_name": f"session_{i}",
                 "context_type": "project",
                 "similarity": 0.95 - (i * 0.05)
             })

@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
   "name": "io.github.Lyellr88/marm-mcp-server",
   "description": "Universal MCP Server with advanced AI memory capabilities and semantic search.",
-  "version": "2.2.4",
+  "version": "2.2.5",
   "author": "Ryan Lyell - MARM Systems",
   "license": "MIT",
   "homepage": "https://marmsystems.com",
@@ -16,13 +16,13 @@
     {
       "registry_type": "pypi",
       "identifier": "marm-mcp-server",
-      "version": "2.2.4",
+      "version": "2.2.5",
       "transport": { "type": "stdio" }
     },
     {
       "registry_type": "oci",
       "identifier": "lyellr88/marm-mcp-server",
-      "version": "2.2.4",
+      "version": "2.2.5",
       "transport": { "type": "stdio" }
     }
   ],

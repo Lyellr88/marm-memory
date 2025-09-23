@@ -17,7 +17,7 @@ MARM Systems provides **Universal Memory Intelligence** for AI agents through th
 
 | Product | Description | Best For |
 |---------|-------------|----------|
-| **MCP Server** | Production-ready universal memory server with 19 tools | Claude, Gemini, Qwen, and any MCP-compatible AI |
+| **MCP Server** | Production-ready universal memory server with 18 tools | Claude, Gemini, Qwen, and any MCP-compatible AI |
 | **Original Protocol** | Copy/paste instructions for manual memory management | Any AI platform (ChatGPT, Claude, local models) |
 | **Live Chatbot Demo** | Interactive testing environment | Quick testing and feature exploration |
 
@@ -51,12 +51,12 @@ MARM Systems provides **Universal Memory Intelligence** for AI agents through th
 
 | Method | Commands | Time | Requirements |
 |--------|----------|------|--------------|
-| **Docker (Recommended)** | `docker pull lyellr88/marm-mcp-server:latest`<br>`docker run -d --name marm-mcp-server -p 8001:8001 lyellr88/marm-mcp-server:latest`<br>`claude mcp add marm-memory http://localhost:8001/mcp` | 2 minutes | Docker installed |
+| **Docker (Recommended)** | `docker pull lyellr88/marm-mcp-server:latest`<br>`docker run -d --name marm-mcp-server -p 8001:8001 -v marm_data:/app/data lyellr88/marm-mcp-server:latest`<br>`claude mcp add marm-memory http://localhost:8001/mcp` | 2 minutes | Docker installed |
 | **PyPI Install** | `pip install marm-mcp-server==2.2.3`<br>`marm-mcp-server` | 1 minute | Python 3.10+ |
 
 ### Q: What MCP tools does MARM provide?
 
-**19 Complete MCP Tools organized by category:**
+**18 Complete MCP Tools organized by category:**
 
 | Category | Tools | Description |
 |----------|-------|-------------|
@@ -73,7 +73,7 @@ MARM Systems provides **Universal Memory Intelligence** for AI agents through th
 
 - ✅ **Claude Code** - Full integration with CLI command
 - ✅ **Qwen CLI** - Complete MCP tool access  
-- ✅ **Gemini CLI** - All 19 tools available
+- ✅ **Gemini CLI** - All 18 tools available
 - ✅ **Any MCP-compatible client** - Universal protocol support
 
 **Coming Soon:**
@@ -112,7 +112,7 @@ MARM Systems provides **Universal Memory Intelligence** for AI agents through th
 
 | Step | Command/Action | Description |
 |------|----------------|-------------|
-| **1. Activate** | `/start marm` | Enables MARM v2.2.4 protocol |
+| **1. Activate** | `/start marm` | Enables MARM v2.2.5 protocol |
 | **2. Organize** | `/log session: ProjectName` | Create named session |
 | **3. Remember** | `/log entry: [YYYY-MM-DD-topic-summary]` | Log important milestones |
 | **4. Store** | `/notebook add: name [data]` | Save reusable instructions |
@@ -125,7 +125,7 @@ MARM Systems provides **Universal Memory Intelligence** for AI agents through th
 | **Setup** | Zero setup - just visit link | 2-minute Docker install |
 | **Best For** | Testing, demos, quick experiments | Production use, multiple AI agents |
 | **Memory Scope** | Single chatbot session | Shared across Claude, Gemini, Qwen, etc. |
-| **Features** | Voice synthesis, file uploads, UI | 19 MCP tools, semantic search, enterprise features |
+| **Features** | Voice synthesis, file uploads, UI | 18 MCP tools, semantic search, enterprise features |
 | **Persistence** | Session-based | Cross-platform database |
 
 ### Q: Essential chatbot commands?

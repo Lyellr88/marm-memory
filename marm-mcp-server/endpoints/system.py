@@ -22,14 +22,58 @@ router = APIRouter(prefix="", tags=["System"])
 @router.get("/health", include_in_schema=False)
 async def health_check():
     """Health check endpoint for Docker and monitoring"""
-    return {
-        "status": "healthy",
-        "service": "MARM MCP Server",
-        "version": SERVER_VERSION,
-        "timestamp": datetime.now(timezone.utc).isoformat()
-    }
+    try:
+        # Test database connection
+        with memory.get_connection() as conn:
+            conn.execute("SELECT 1").fetchone()
 
-@router.get("/marm_current_context", operation_id="marm_current_context")
+        return {
+            "status": "healthy",
+            "service": "MARM MCP Server",
+            "version": SERVER_VERSION,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "database": "connected",
+            "semantic_search": "available" if SEMANTIC_SEARCH_AVAILABLE else "text_only"
+        }
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "service": "MARM MCP Server",
+            "version": SERVER_VERSION,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "error": str(e)
+        }
+
+@router.get("/ready", include_in_schema=False)
+async def readiness_check():
+    """Readiness check endpoint - service ready to handle requests"""
+    try:
+        # Test database connection and basic functionality
+        with memory.get_connection() as conn:
+            conn.execute("SELECT COUNT(*) FROM memories").fetchone()
+            conn.execute("SELECT COUNT(*) FROM sessions").fetchone()
+
+        return {
+            "status": "ready",
+            "service": "MARM MCP Server",
+            "version": SERVER_VERSION,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "endpoints": {
+                "mcp": "http://localhost:8001/mcp",
+                "websocket": "ws://localhost:8001/mcp/ws",
+                "docs": "http://localhost:8001/docs"
+            }
+        }
+    except Exception as e:
+        return {
+            "status": "not_ready",
+            "service": "MARM MCP Server",
+            "version": SERVER_VERSION,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "error": str(e)
+        }
+
+@router.get("/marm_current_context", operation_id="marm_current_context", include_in_schema=False)
 async def marm_current_context():
     """
     🕐 Get current date and system context

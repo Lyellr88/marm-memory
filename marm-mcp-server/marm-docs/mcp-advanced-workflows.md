@@ -2,39 +2,7 @@
 
 ## Cross-App Memory Strategies, Migration Guide, and Best Practices
 
-**MARM v2.2.4** - Universal MCP Server for AI Memory Intelligence
-
----
-
-## Table of Contents
-
-- [Cross-App Memory Strategies](#cross-app-memory-strategies)
-- [Multi-LLM Session Organization](#multi-llm-session-organization)
-- [Memory Sharing Workflow](#memory-sharing-workflow)
-- [Pro Tips & Best Practices](#pro-tips--best-practices)
-- [Memory Management](#memory-management)
-- [Search Strategies](#search-strategies)
-- [Workflow Optimization](#workflow-optimization)
-- [Advanced Workflows](#advanced-workflows)
-- [Project Memory Architecture](#project-memory-architecture)
-- [Knowledge Base Development](#knowledge-base-development)
-- [Multi-AI Collaboration Pattern](#multi-ai-collaboration-pattern)
-- [Migration from MARM Commands](#migration-from-marm-commands)
-- [Transitioning from Text-Based MARM](#transitioning-from-text-based-marm)
-- [Key Improvements in MCP Version](#key-improvements-in-mcp-version)
-- [Migration Tips](#migration-tips)
-- [Backward Compatibility](#backward-compatibility)
-- [Troubleshooting](#troubleshooting)
-- [Memory Not Finding Expected Results](#memory-not-finding-expected-results)
-- [Session Confusion](#session-confusion)
-- [Performance Issues](#performance-issues)
-- [Lost Context](#lost-context)
-- [FAQ](#faq)
-- [General Usage](#general-usage)
-- [Memory Management FAQ](#memory-management-faq)
-- [Technical Questions](#technical-questions)
-- [Best Practices FAQ](#best-practices-faq)
-- [Integration & Setup FAQ](#integration--setup-faq)
+**MARM v2.2.5** - Universal MCP Server for AI Memory Intelligence
 
 ---
 

@@ -7,7 +7,7 @@
 </picture>
 <h1 align="center">MARM: The AI That Remembers Your Conversations</h1>
 
-Memory Accurate Response Mode v2.2.4 - The intelligent memory system for AI agents. Stop losing context. Stop hallucinations. Start controlling your LLM conversations.  
+Memory Accurate Response Mode v2.2.5 - The intelligent memory system for AI agents with WebSocket support. Stop losing context. Stop hallucinations. Start controlling your LLM conversations.  
   
 [![GitHub stars](https://img.shields.io/github/stars/Lyellr88/MARM-Systems?style=flat&color=blue)](https://github.com/Lyellr88/MARM-Systems/stargazers)
 [![GitHub forks](https://img.shields.io/github/forks/Lyellr88/MARM-Systems?style=flat&color=blue)](https://github.com/Lyellr88/MARM-Systems/network)
@@ -30,16 +30,22 @@ Forks may experiment, but official updates will always come from this repo.
 
 ---
 
-## ⚡ Instant Setup & Full Installation Guide - 
+## ⚡ **INSTANT SETUP** - Ready in 60 seconds
 
-<details>
-<summary> Click here to expand </summary>
 **Already have MARM running?** Connect instantly:
 
 **Claude Code users:**
 
+**HTTP Connection (Standard):**
 ```bash
+claude mcp add marm-memory http://localhost:8001/mcp
 /mcp  # → Instant connection to your MARM server!
+```
+
+**WebSocket Connection (Beta):**
+```bash
+claude mcp add marm-memory ws://localhost:8001/mcp/ws
+/mcp  # → Real-time connection to your MARM server!
 ```
 
 **Claude Desktop users:**
@@ -56,22 +62,35 @@ Forks may experiment, but official updates will always come from this repo.
 }
 ```
 
-**✅ 19 memory tools loaded  ✅ Persistent sessions  ✅ Semantic search**
+**✅ 18 memory tools loaded  ✅ Persistent sessions  ✅ Semantic search**
 
 **Don't have MARM yet?** Install + Connect:
 
 ```bash
 # 1. Pull & Start (30 seconds)
-docker run -d --name marm-mcp-server -p 8001:8001 lyellr88/marm-mcp-server:latest
+docker run -d --name marm-mcp-server -p 8001:8001 -v marm_data:/app/data lyellr88/marm-mcp-server:latest
 
 # 2. Connect to Claude (5 seconds)
-/mcp add marm-memory http://localhost:8001/mcp
+claude mcp add marm-memory http://localhost:8001/mcp
 
 # 3. Activate (instant)
 /mcp
 ```
 
 **🎯 You now have AI with perfect memory across all conversations!**
+
+**WebSocket Connection (Beta - Complete MCP Protocol Support):**
+
+For real-time communication, you can also connect via WebSocket with full MCP protocol support:
+
+```bash
+# WebSocket endpoint (beta - full MCP functionality)
+ws://localhost:8001/mcp/ws
+```
+
+**✅ All 19 MCP methods supported  ✅ JSON-RPC 2.0 compliant  ✅ Rate limiting active**
+
+*Note: WebSocket support includes complete HTTP/WebSocket parity with proper error handling. Beta status due to ongoing real-world testing.*
 
 ---
 
@@ -81,24 +100,45 @@ docker run -d --name marm-mcp-server -p 8001:8001 lyellr88/marm-mcp-server:lates
 
 ```bash
 docker pull lyellr88/marm-mcp-server:latest
-docker run -d --name marm-mcp-server -p 8001:8001 lyellr88/marm-mcp-server:latest
+docker run -d --name marm-mcp-server -p 8001:8001 -v marm_data:/app/data \
+  --health-cmd="curl -f http://localhost:8001/health || exit 1" \
+  --health-interval=30s --health-timeout=10s --health-retries=3 \
+  lyellr88/marm-mcp-server:latest
+
+# Wait for service to be ready (10-15 seconds)
+echo "Waiting for MARM server to start..."
+sleep 15
+
 claude mcp add marm-memory http://localhost:8001/mcp
 ```
 
 **Quick Local Install:**
 
 ```bash
-pip install marm-mcp-server==2.2.4
+pip install marm-mcp-server==2.2.5
 cd MARM-Systems/marm-mcp-server
-# Cross-platform: pip install marm-mcp-server==2.2.4
+# Cross-platform: pip install marm-mcp-server==2.2.5
 claude mcp add marm-memory http://localhost:8001/mcp
 ```
 
 **Key Information:**
 
 - **Server Endpoint**: `http://localhost:8001/mcp`
+- **WebSocket Endpoint**: `ws://localhost:8001/mcp/ws` *(Beta - Full MCP Protocol)*
+- **Health Check**: `http://localhost:8001/health` (Docker monitoring)
+- **Readiness Check**: `http://localhost:8001/ready` (Service ready status)
 - **API Documentation**: `http://localhost:8001/docs`
 - **Supported Clients**: Claude Code, Qwen CLI, Gemini CLI, and any MCP-compatible LLM client or LLM platform
+- **WebSocket Features**: All 19 MCP methods, JSON-RPC 2.0, rate limiting, proper error handling
+
+**⚠️ Important**: Wait 10-15 seconds after Docker start before connecting. Check readiness: `curl http://localhost:8001/ready`
+
+**Troubleshooting Connection Issues:**
+- **"Connection closed" immediately after restart**: Service is still starting up. Wait 10-15 seconds.
+- **Check service status**: `docker ps` and `docker logs marm-mcp-server`
+- **Test health**: `curl http://localhost:8001/health`
+- **Test readiness**: `curl http://localhost:8001/ready`
+- **For production**: Use health checks in Docker Compose or Kubernetes
 
 **All Installation Options:**
 
@@ -115,7 +155,6 @@ claude mcp add marm-memory http://localhost:8001/mcp
 | **Windows** | **[INSTALL-WINDOWS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-WINDOWS.md)** | Native Windows development |
 | **Linux** | **[INSTALL-LINUX.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-LINUX.md)** | Native Linux development |
 | **Platforms** | **[INSTALL-PLATFORM.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-PLATFORM.md)** | App & API integration |
-</details>
 
 ---
 
@@ -152,7 +191,7 @@ The newest addition to the ecosystem is MARM MCP it represents an emerging categ
 | **🤝 Multi-AI** | **Unified Memory Layer** | Accessible by any connected LLM (Claude, Qwen, Gemini, etc.) |
 | | **Cross-Platform Intelligence** | Different AI agents learn from each other's interactions |
 | | **User-Controlled Memory** | Granular control over memory sharing and "Bring Your Own History" |
-| **🏗️ Architecture** | **19 Complete MCP Tools** | Full Model Context Protocol implementation |
+| **🏗️ Architecture** | **18 Complete MCP Tools** | Full Model Context Protocol implementation |
 | | **Database Optimization** | SQLite with WAL mode and connection pooling |
 | | **Rate Limiting** | IP-based protection for sustainable free service |
 | | **MCP Compliance** | Response size management for optimal performance |
@@ -231,7 +270,14 @@ Now that you understand the ecosystem, here's info and how to actually use the M
 
 ---
 
-## 🛠️ Complete MCP Tool Suite (19 Tools)
+## 🛠️ Complete MCP Tool Suite (18 Tools)
+
+**💡 Pro Tip:** You don't need to manually call these tools! Just tell your AI agent what you want in natural language:
+- *"Claude, log this session as 'Project Alpha' and add this conversation as 'database design discussion'"*
+- *"Remember this code snippet in your notebook for later"*
+- *"Search for what we discussed about authentication yesterday"*
+
+The AI agent will automatically use the appropriate tools. Manual tool access is available for power users who want direct control.
 
 | **Category** | **Tool** | **Description** |
 |--------------|----------|-----------------|
@@ -251,7 +297,7 @@ Now that you understand the ecosystem, here's info and how to actually use the M
 | | `marm_notebook_delete` | Delete specific notebook entry |
 | | `marm_notebook_clear` | Clear the active instruction list |
 | | `marm_notebook_status` | Show current active instruction list |
-| **⚙️ System Utilities** | `marm_current_context` | Get current date/time for accurate log entry timestamps |
+| **⚙️ System Utilities** | `marm_current_context` | **Background Tool** - Automatically provides current date/time for log entries (AI agents use automatically) |
 | | `marm_system_info` | Comprehensive system information, health status, and loaded docs |
 | | `marm_reload_docs` | Reload documentation into memory system |
 
@@ -262,9 +308,10 @@ Now that you understand the ecosystem, here's info and how to actually use the M
 ### **Core Technology Stack**
 
 ```txt
-FastAPI (0.115.4) + FastAPI-MCP (0.4.0) - v2.2.4
-├── SQLite with WAL Mode + Custom Connection Pooling  
+FastAPI (0.115.4) + FastAPI-MCP (0.4.0) - v2.2.5 + WebSocket Support
+├── SQLite with WAL Mode + Custom Connection Pooling
 ├── Sentence Transformers (all-MiniLM-L6-v2) + Semantic Search
+├── WebSocket Real-Time MCP Protocol (JSON-RPC 2.0)
 ├── Structured Logging (structlog) + Memory Monitoring (psutil)
 ├── IP-Based Rate Limiting + Usage Analytics
 ├── MCP Response Size Compliance (1MB limit)
@@ -332,7 +379,7 @@ CREATE TABLE sessions (
 | **Windows Setup** | **[INSTALL-WINDOWS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-WINDOWS.md)** | Native Windows development |
 | **Linux Setup** | **[INSTALL-LINUX.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-LINUX.md)** | Native Linux development |
 | **Platform Integration** | **[INSTALL-PLATFORM.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-PLATFORM.md)** | App & API integration |
-| **MCP Handbook** | **[MCP-HANDBOOK.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/MCP-HANDBOOK.md)** | Complete usage guide with all 19 MCP tools, cross-app memory strategies, pro tips, and FAQ |
+| **MCP Handbook** | **[MCP-HANDBOOK.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/MCP-HANDBOOK.md)** | Complete usage guide with all 18 MCP tools, cross-app memory strategies, pro tips, and FAQ |
 
 ---
 
@@ -340,10 +387,10 @@ CREATE TABLE sessions (
 
 ### **vs. Basic MCP Implementations**
 
-| Feature | MARM v2.2.4 | Basic MCP Servers |
+| Feature | MARM v2.2.5 | Basic MCP Servers |
 |---------|-------------|-------------------|
 | **Memory Intelligence** | AI-powered semantic search with auto-classification | Basic key-value storage |
-| **Tool Coverage** | 19 complete MCP protocol tools | 3-5 basic wrappers |  
+| **Tool Coverage** | 18 complete MCP protocol tools | 3-5 basic wrappers |  
 | **Scalability** | Database optimization + connection pooling | Single connection |
 | **MCP Compliance** | 1MB response size management | No size controls |
 | **Deployment** | Docker containerization + health monitoring | Local development only |

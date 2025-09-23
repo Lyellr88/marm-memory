@@ -1,4 +1,4 @@
-# MARM V2.2.4 MCP Server - Platform Integration Guide
+# MARM V2.2.5 MCP Server with WebSocket Support - Platform Integration Guide
 
 ## 📖 Table of Contents
 
@@ -230,7 +230,7 @@ For developers who want simplified multi-provider support:
 
 If any tests fail or you encounter problems:
 
-- **🐛 Open an [Issue]((https://github.com/Lyellr88/MARM-Systems/issues)**: Report problems on GitHub
+- **🐛 Open an [Issue](https://github.com/Lyellr88/MARM-Systems/issues)**: Report problems on GitHub
 - **🔧 Submit a [Pull Request](https://github.com/Lyellr88/MARM-Systems/pulls)**: Fixed it yourself? We welcome contributions!
 - **💬 Join Discussions**: Share feedback and get help from the community
 
@@ -245,7 +245,7 @@ If any tests fail or you encounter problems:
 - **[PROTOCOL.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/PROTOCOL.md)** - Quick start commands and protocol reference
 - **[FAQ.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/FAQ.md)** - Answers to common questions about using MARM
 
-### **MCP Server Installation** 
+### **MCP Server Installation**
 
 - **[INSTALL-DOCKER.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-DOCKER.md)** - Docker deployment (recommended)
 - **[INSTALL-WINDOWS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-WINDOWS.md)** - Windows installation guide

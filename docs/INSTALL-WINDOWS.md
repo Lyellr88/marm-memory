@@ -2,7 +2,7 @@
 
 ## Universal Memory Intelligence Platform for AI Agents
 
-**MARM v2.2.4* - Memory Accurate Response Mode
+**MARM v2.2.5* - Memory Accurate Response Mode with WebSocket Support
 *Complete Windows installation guide*
 
 ---
@@ -66,7 +66,7 @@ python setup.py
 ### **Option 2: Quick Test** ⚡ **(Beginner-Friendly)**
 
 ```powershell
-pip install marm-mcp-server==2.2.4
+pip install marm-mcp-server==2.2.5
 cd MARM\marm-mcp-server
 marm-mcp-server
 ```
@@ -76,7 +76,7 @@ marm-mcp-server
 ### **Option 3: Manual Installation** 🔧 **(Advanced)**
 
 ```powershell
-pip install marm-mcp-server==2.2.4
+pip install marm-mcp-server==2.2.5
 cd MARM\marm-mcp-server
 
 # Create virtual environment (recommended)
@@ -84,7 +84,7 @@ python -m venv marm-env
 marm-env\Scripts\activate
 
 # Install dependencies
-pip install marm-mcp-server==2.2.4
+pip install marm-mcp-server==2.2.5
 
 # Start server
 marm-mcp-server
@@ -102,8 +102,17 @@ marm-mcp-server
 
 ### **Claude Code (Recommended)**
 
+**HTTP Connection (Standard):**
+
 ```bash
 claude mcp add marm-memory http://localhost:8001/mcp
+```
+
+**WebSocket Connection (Beta):**
+
+```bash
+# For real-time applications - beta testing
+claude mcp add marm-memory ws://localhost:8001/mcp/ws
 ```
 
 ### **Grok CLI (Command Method)**
@@ -159,6 +168,7 @@ Then, add the following `mcpServers` configuration:
 | **Integration Test** | `python tests\test_integration.py` | End-to-end MCP tool functionality, API responses | ~25 seconds |
 | **Memory Usage** | `python tests\test_memory_usage.py` | Local process memory efficiency, resource usage | ~20 seconds |
 | **MCP Size Limits** | `python tests\test_mcp_size_limits.py` | MCP protocol 1MB response compliance | ~30 seconds |
+| **WebSocket Testing** | `python tests\test_websocket.py` | All 19 MCP methods, JSON-RPC 2.0, WebSocket connectivity | ~35 seconds |
 
 ### **When and Why to Use Each Test**
 
@@ -171,6 +181,8 @@ Then, add the following `mcpServers` configuration:
 **Memory Usage Test** - Measures local Python process memory consumption. Unlike Docker testing, this shows how MARM performs on your specific system with your available resources.
 
 **MCP Size Limits Test** - Ensures responses stay under the 1MB MCP protocol limit. Important for compatibility with MCP clients and preventing oversized responses that could cause issues.
+
+**WebSocket Test** - Validates all 19 MCP methods over WebSocket protocol with JSON-RPC 2.0 compliance. Essential for testing real-time communication features and WebSocket endpoint functionality.
 
 ### **Why Built-in Tests Beat Traditional Commands**
 
@@ -200,7 +212,7 @@ Invoke-WebRequest -Uri http://localhost:8001/health
 ```json
 {
   "status": "healthy",
-  "version": "2.2.4",
+  "version": "2.2.5",
   "memory_mb": 510.8,
   "uptime_seconds": 45
 }
@@ -240,7 +252,7 @@ Your testing helps make MARM better for everyone.
 4. **Update Dependencies**:
 
    ```bash
-   pip install marm-mcp-server==2.2.4 --upgrade
+   pip install marm-mcp-server==2.2.5 --upgrade
    ```
 
 5. **Restart Server**: `marm-mcp-server`
@@ -251,7 +263,7 @@ Your testing helps make MARM better for everyone.
 docker pull lyellr88/marm-mcp-server:latest
 docker stop marm-mcp-server
 docker rm marm-mcp-server
-docker run -d --name marm-mcp-server -p 8001:8001 -v marm-data:/home/marm/.marm --restart unless-stopped lyellr88/marm-mcp-server:latest
+docker run -d --name marm-mcp-server -p 8001:8001 -v marm_data:/app/data --restart unless-stopped lyellr88/marm-mcp-server:latest
 ```
 
 ### **Clean Reinstall (Reset Everything)** ⚠️ **(Advanced)**
@@ -265,14 +277,14 @@ rm -rf ~/.marm  # Unix/Mac
 # rmdir /s %USERPROFILE%\.marm  # Windows
 
 # Fresh installation
-pip install marm-mcp-server==2.2.4
+pip install marm-mcp-server==2.2.5
 cd MARM/marm-mcp-server
 ./install.sh  # or python setup.py on Windows
 ```
 
 ### **Migration Notes**
 
-**v2.0 → v2.2.4 Migration:**
+**v2.0 → v2.2.5 Migration:**
 
 - Database schema is compatible - no migration needed
 - New tools automatically available after restart
@@ -376,7 +388,7 @@ MARM works perfectly in Windows Subsystem for Linux:
 
 ```bash
 # In WSL terminal
-pip install marm-mcp-server==2.2.4
+pip install marm-mcp-server==2.2.5
 cd MARM/marm-mcp-server
 marm-mcp-server
 ```
@@ -408,7 +420,7 @@ Add MARM folder to antivirus exclusions to prevent:
 
 ---
 
-**MARM v2.2.4 Windows Guide** - *Universal memory intelligence for AI agents*
+**MARM v2.2.5 Windows Guide** - *Universal memory intelligence for AI agents*
 
 *For usage instructions, see **[MCP-HANDBOOK.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/MCP-HANDBOOK.md)***  
 *For Docker deployment, see **[INSTALL-DOCKER.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-DOCKER.md)***

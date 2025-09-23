@@ -2,7 +2,7 @@
 
 ## Complete Usage Guide for Memory-Augmented AI
 
-**MARM v2.2.4 - Universal MCP Server for AI Memory Intelligence
+**MARM v2.2.5 - Universal MCP Server for AI Memory Intelligence
 
 ---
 
@@ -10,7 +10,7 @@
 
 - [Getting Started](#getting-started)
 - [Understanding MARM Memory](#understanding-marm-memory)
-- [Complete Tool Reference (19 Tools)](#complete-tool-reference-19-tools)
+- [Complete Tool Reference (18 Tools)](#complete-tool-reference-18-tools)
 - [Cross-App Memory Strategies](#cross-app-memory-strategies)
 - [Pro Tips & Best Practices](#pro-tips--best-practices)
 - [Advanced Workflows](#advanced-workflows)
@@ -20,6 +20,17 @@
 ---
 
 ## Getting Started
+
+### 💡 **Key Point: Natural Language Interface**
+
+**You don't need to manually call MARM tools!** Just talk to your AI agent naturally:
+
+- *"Claude, log this session as 'Project Alpha'"*
+- *"Remember this code snippet for later"*
+- *"Search for what we discussed about authentication"*
+- *"Add this debugging approach to my notebook"*
+
+Your AI agent will automatically use the appropriate MARM tools. Manual tool access is available for power users, but most users should just **talk naturally** and let the AI handle the tool usage.
 
 ### What is MARM?
 
@@ -95,7 +106,7 @@ MARM provides three primary ways to store information:
 
 ---
 
-## Complete Tool Reference (19 Tools)
+## Complete Tool Reference (18 Tools)
 
 | Category | Tool | Description | Usage Notes |
 |----------|------|-------------|-------------|
@@ -104,7 +115,7 @@ MARM provides three primary ways to store information:
 | **🧠 Memory** | `marm_smart_recall` | Semantic similarity search across all memories | `query` (required), `limit` (default: 5), `session_name` (optional). Use natural language queries |
 | | `marm_contextual_log` | Auto-classifying memory storage with embeddings | Store important information that should be remembered |
 | **📚 Logging** | `marm_log_session` | Create or switch to named session container | Include LLM name, dates, be descriptive |
-| | `marm_log_entry` | Add structured log entry with auto-date formatting | Format: `YYYY-MM-DD-topic-summary` |
+| | `marm_log_entry` | Add structured log entry with auto-date formatting | No need to add dates manually - automatically handled by background tools |
 | | `marm_log_show` | Display all entries and sessions with filtering | `session_name` (optional) |
 | | `marm_log_delete` | Delete specified session or individual entries | Permanent deletion - use carefully |
 | **📔 Notebook** | `marm_notebook_add` | Add new notebook entry with semantic embeddings | Store reusable instructions, code snippets, procedures |
@@ -115,7 +126,7 @@ MARM provides three primary ways to store information:
 | | `marm_notebook_status` | Show current active instruction list | Check which instructions are currently active |
 | **🔄 Workflow** | `marm_summary` | Generate paste-ready context blocks with intelligent truncation | Create summaries for new conversations or context bridging |
 | | `marm_context_bridge` | Intelligent context bridging for workflow transitions | Smoothly transition between different topics or projects |
-| **⚙️ System** | `marm_current_context` | Get current date/time for accurate log entry timestamps | Prevent AI date confusion, ensure proper log chronology |
+| **⚙️ System** | `marm_current_context` | **Background Tool** - Automatically provides current date/time for log entries | AI agents use this automatically - you don't need to call it manually |
 | | `marm_system_info` | Comprehensive system information, health status, and loaded docs | Server version, database statistics, documentation, capabilities |
 | | `marm_reload_docs` | Reload documentation into memory system | Refresh MARM's knowledge after system updates |
 
@@ -145,7 +156,7 @@ Sessions:
 
 ## Pro Tips & Best Practices
 
-### Memory Management
+### Memory Management Tips
 
 **Log Compaction**: Use `marm_summary`, delete entries, replace with summary
 **Session Naming**: Include LLM name for cross-referencing
@@ -260,7 +271,7 @@ The MCP server maintains full compatibility with existing MARM concepts:
 
 ### Session Confusion
 
-**Solution**: Use `marm_current_context` to check current session
+**Solution**: Use `marm_system_info` to check current session status (current_context works automatically in background)
 
 ### Performance Issues
 
@@ -340,7 +351,7 @@ A: Use `marm_system_info` to check server status and database statistics.
 - **[PROTOCOL.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/PROTOCOL.md)** - Quick start commands and protocol reference
 - **[FAQ.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/FAQ.md)** - Answers to common questions about using MARM
 
-### **MCP Server Installation** 
+### **MCP Server Installation**
 
 - **[INSTALL-DOCKER.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-DOCKER.md)** - Docker deployment (recommended)
 - **[INSTALL-WINDOWS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-WINDOWS.md)** - Windows installation guide

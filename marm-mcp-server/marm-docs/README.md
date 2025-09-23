@@ -1,4 +1,10 @@
-# 🎯 Why MARM?
+# MARM: The AI That Remembers Your Conversations
+
+Memory Accurate Response Mode v2.2.5 - The intelligent memory system for AI agents with WebSocket support. Stop losing context. Stop hallucinations. Start controlling your LLM conversations.  
+
+---
+
+## 🎯 Why MARM?
 
 MARM (Memory Accurate Response Mode) is a comprehensive AI memory ecosystem I designed to solve the problem of context loss in large language models. What started as a simple protocol has evolved into a suite of tools that provide a persistent, intelligent, and cross-platform memory for any AI agent.
 
@@ -10,9 +16,9 @@ The MARM ecosystem consists of three main components:
 
 Whether you're a developer looking to build the next generation of AI agents, a researcher studying AI behavior, or simply a power user who wants to have more productive conversations with your AI, the MARM ecosystem provides the tools you need to unlock the full potential of large language models.
 
->*Appears in Google AI Overview for AI memory protocol queries (as of Aug 2025)*
+>Appears in Google AI Overview for AI memory protocol queries (as of Aug 2025)
 
-The newest addition to the ecosystem is MARM MCP it represents an emerging category of MCP server that integrates a complete protocol layer with intelligent memory systems. Built on FastAPI and SQLite, it combines the MARM protocol with semantic search, session management, and smart retrieval to bridge tool access with structured reasoning. This creates a more consistent, user-controlled LLM experience that goes beyond simple tool exposure.
+The newest addition tho the ecosystem is MARM MCP it represents an emerging category of MCP server that integrates a complete protocol layer with intelligent memory systems. Built on FastAPI and SQLite, it combines the MARM protocol with semantic search, session management, and smart retrieval to bridge tool access with structured reasoning. This creates a more consistent, user-controlled LLM experience that goes beyond simple tool exposure.
 
 | **Category** | **Feature** | **Description** |
 |--------------|-------------|-----------------|
@@ -23,7 +29,7 @@ The newest addition to the ecosystem is MARM MCP it represents an emerging categ
 | **🤝 Multi-AI** | **Unified Memory Layer** | Accessible by any connected LLM (Claude, Qwen, Gemini, etc.) |
 | | **Cross-Platform Intelligence** | Different AI agents learn from each other's interactions |
 | | **User-Controlled Memory** | Granular control over memory sharing and "Bring Your Own History" |
-| **🏗️ Architecture** | **19 Complete MCP Tools** | Full Model Context Protocol implementation |
+| **🏗️ Architecture** | **18 Complete MCP Tools** | Full Model Context Protocol implementation |
 | | **Database Optimization** | SQLite with WAL mode and connection pooling |
 | | **Rate Limiting** | IP-based protection for sustainable free service |
 | | **MCP Compliance** | Response size management for optimal performance |
@@ -49,12 +55,6 @@ The replies echoed the same pain points:
 That feedback confirmed the gap I already saw. I took those shared frustrations, found the middle ground, and built MARM. Early contributors validated the idea and shaped features, but the core system grew out of both personal trial and community insight.  
 
 MARM is the result of combining individual persistence with collective needs, a protocol designed to solve what we all kept running into.  
-
-### Discord
-
-Join Discord for upcoming features and builds, plus a safe space to share your work and get constructive feedback.
-
-[MARM Discord](https://discord.gg/EuBsHvSRks)
 
 ---
 
@@ -102,7 +102,15 @@ Now that you understand the ecosystem, here's info and how to actually use the M
 
 ---
 
-## 🛠️ Complete MCP Tool Suite (19 Tools)
+## 🛠️ Complete MCP Tool Suite (18 Tools)
+
+**💡 Pro Tip:** You don't need to manually call these tools! Just tell your AI agent what you want in natural language:
+
+- *"Claude, log this session as 'Project Alpha' and add this conversation as 'database design discussion'"*
+- *"Remember this code snippet in your notebook for later"*
+- *"Search for what we discussed about authentication yesterday"*
+
+The AI agent will automatically use the appropriate tools. Manual tool access is available for power users who want direct control.
 
 | **Category** | **Tool** | **Description** |
 |--------------|----------|-----------------|
@@ -122,7 +130,7 @@ Now that you understand the ecosystem, here's info and how to actually use the M
 | | `marm_notebook_delete` | Delete specific notebook entry |
 | | `marm_notebook_clear` | Clear the active instruction list |
 | | `marm_notebook_status` | Show current active instruction list |
-| **⚙️ System Utilities** | `marm_current_context` | Get current date/time for accurate log entry timestamps |
+| **⚙️ System Utilities** | `marm_current_context` | **Background Tool** - Automatically provides current date/time for log entries (AI agents use automatically) |
 | | `marm_system_info` | Comprehensive system information, health status, and loaded docs |
 | | `marm_reload_docs` | Reload documentation into memory system |
 
@@ -133,7 +141,7 @@ Now that you understand the ecosystem, here's info and how to actually use the M
 ### **Core Technology Stack**
 
 ```txt
-FastAPI (0.115.8) + FastAPI-MCP (0.4.0) - v2.2.4
+FastAPI (0.115.4) + FastAPI-MCP (0.4.0)
 ├── SQLite with WAL Mode + Custom Connection Pooling  
 ├── Sentence Transformers (all-MiniLM-L6-v2) + Semantic Search
 ├── Structured Logging (structlog) + Memory Monitoring (psutil)
@@ -195,93 +203,16 @@ CREATE TABLE sessions (
 
 ---
 
-## 📚 Documentation for MCP
-
-| Guide Type | Document | Description |
-|------------|----------|-------------|
-| **Docker Setup** | **[INSTALL-DOCKER.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-DOCKER.md)** | Cross-platform, production deployment |
-| **Windows Setup** | **[INSTALL-WINDOWS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-WINDOWS.md)** | Native Windows development |
-| **Linux Setup** | **[INSTALL-LINUX.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-LINUX.md)** | Native Linux development |
-| **Platform Integration** | **[INSTALL-PLATFORM.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-PLATFORM.md)** | App & API integration |
-| **MCP Handbook** | **[MCP-HANDBOOK.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/MCP-HANDBOOK.md)** | Complete usage guide with all 19 MCP tools, cross-app memory strategies, pro tips, and FAQ |
-
----
-
 ## 🆚 Competitive Advantage
 
 ### **vs. Basic MCP Implementations**
 
-| Feature | MARM v2.2.4 | Basic MCP Servers |
+| Feature | MARM v2.2.5 | Basic MCP Servers |
 |---------|-------------|-------------------|
 | **Memory Intelligence** | AI-powered semantic search with auto-classification | Basic key-value storage |
-| **Tool Coverage** | 19 complete MCP protocol tools | 3-5 basic wrappers |  
+| **Tool Coverage** | 18 complete MCP protocol tools | 3-5 basic wrappers |  
 | **Scalability** | Database optimization + connection pooling | Single connection |
 | **MCP Compliance** | 1MB response size management | No size controls |
 | **Deployment** | Docker containerization + health monitoring | Local development only |
 | **Analytics** | Usage tracking + business intelligence | No tracking |
 | **Codebase Maturity** | 2,500+ lines professional code | 200-800 lines |
-
----
-
-## 🤝 Contributing
-
-**Aren't you sick of explaining every project you're working on to every LLM you work with?**
-
-MARM is building the solution to this. Support now to join a growing ecosystem - this is just **Phase 1 of a 3-part roadmap** and our next build will complement MARM like peanut butter and jelly.
-
-**Join the repo that's working to give YOU control over what is remembered and how it's remembered.**
-
-### **Why Contribute Now?**
-
-- **Ground floor opportunity** - Be part of the MCP memory revolution from the beginning
-- **Real impact** - Your contributions directly solve problems you face daily with AI agents
-- **Growing ecosystem** - Help build the infrastructure that will power tomorrow's AI workflows
-- **Phase 1 complete** - Proven foundation ready for the next breakthrough features
-
-### **Development Priorities**
-
-1. **Load Testing**: Validate deployment performance under real AI workloads
-2. **Documentation**: Expand API documentation and LLM integration guides
-3. **Performance**: AI model caching and memory optimization
-4. **Features**: Additional MCP protocol tools and multi-tenant capabilities
-
----
-
-## Join the MARM Community
-
-**Help build the future of AI memory - no coding required!**
-
-**Connect:** [MARM Discord](https://discord.gg/EuBsHvSRks) | [GitHub Discussions](https://github.com/Lyellr88/MARM-Systems/discussions)
-
-### Easy Ways to Get Involved
-
-- **Try the MCP server or Chatbot** and share your experience
-- **Star the repo** if MARM solves a problem for you
-- **Share on social** - help others discover memory-enhanced AI
-- **Open [issues](https://github.com/Lyellr88/MARM-Systems/issues)** with bugs, feature requests, or use cases
-- **Join discussions** about AI reliability and memory
-
-### For Developers
-
-- **Build integrations** - MCP tools, browser extensions, API wrappers
-- **Enhance the memory system** - improve semantic search and storage
-- **Expand platform support** - new deployment targets and integrations
-- **Submit [Pull Requests](https://github.com/Lyellr88/MARM-Systems/pulls)** - Every PR helps MARM grow. Big or small, I review each with respect and openness to see how it can improve the project
-
-### ⭐ Star the Project
-
-If MARM helps with your AI memory needs, please star the repository to support development!
-
----
-
-### License & Usage Notice
-
-This project is licensed under the MIT License. Forks and derivative works are permitted.  
-
-However, use of the **MARM name** and **version numbering** is reserved for releases from the [official MARM repository](https://github.com/Lyellr88/MARM-Systems).
-
-Derivatives should clearly indicate they are unofficial or experimental.
-
----
-
->Built with ❤️ by MARM Systems - Universal MCP memory intelligence

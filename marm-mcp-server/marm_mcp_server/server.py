@@ -5,7 +5,7 @@ This server integrates all modular components of the MARM protocol into a single
 FastAPI application, compliant with the MCP protocol via FastApiMCP.
 
 Author: Lyell - MARM Systems
-Version: 2.2.4
+Version: 2.2.5
 """
 
 import uvicorn
@@ -23,6 +23,7 @@ from typing import Optional, Dict, Any
 from datetime import datetime
 from pathlib import Path
 import sqlite3
+
 
 # Configure structured logging
 logger = structlog.get_logger()
@@ -69,10 +70,10 @@ def track_usage(event_type: str, endpoint: str = None, user_data: dict = None):
         logger.warning("Analytics tracking failed", error=str(e))
 
 # Import rate limiting middleware
-from .middleware.rate_limiting import rate_limit_middleware
+from middleware.rate_limiting import rate_limit_middleware
 
 # Import configuration and services
-from .config.settings import (
+from config.settings import (
     SEMANTIC_SEARCH_AVAILABLE, 
     SCHEDULER_AVAILABLE,
     SERVER_HOST,
@@ -81,16 +82,18 @@ from .config.settings import (
     DEFAULT_DB_PATH,
     ANALYTICS_DB_PATH
 )
-from .services.documentation import load_marm_documentation
-from .services.automation import register_event_handlers
+from services.documentation import load_marm_documentation
+from services.automation import register_event_handlers
 
 # Import all endpoint routers
-from .endpoints.session import router as session_router
-from .endpoints.logging import router as logging_router
-from .endpoints.reasoning import router as reasoning_router
-from .endpoints.notebook import router as notebook_router
-from .endpoints.memory import router as memory_router
-from .endpoints.system import router as system_router
+from endpoints.session import router as session_router
+from endpoints.logging import router as logging_router
+from endpoints.reasoning import router as reasoning_router
+from endpoints.notebook import router as notebook_router
+from endpoints.memory import router as memory_router
+from endpoints.system import router as system_router
+from endpoints.websocket import router as websocket_router
+from endpoints.oauth import router as oauth_router
 
 import httpx
 import asyncio
@@ -149,6 +152,7 @@ app = FastAPI(
 # Add rate limiting middleware (applies to all routes)
 app.middleware("http")(rate_limit_middleware)
 
+# OAuth endpoints now handled by oauth_router
 
 def get_memory_usage():
     """Get current memory usage in MB."""
@@ -169,6 +173,9 @@ app.include_router(reasoning_router)
 app.include_router(notebook_router)
 app.include_router(memory_router)
 app.include_router(system_router)
+app.include_router(websocket_router)
+app.include_router(oauth_router)
+
 
 
 # Create and mount the MCP server wrapper
@@ -245,8 +252,61 @@ def check_dependencies():
         print("Ready to start MARM MCP Server")
         return True
 
-def main():
-    """Main entry point for the MARM MCP Server."""
+async def run_server_with_shutdown():
+    """Run server with proper signal handling and graceful shutdown"""
+    from core.shutdown_manager import shutdown_manager
+
+    # Setup signal handlers
+    await shutdown_manager.setup_signal_handlers()
+
+    # Configure uvicorn server
+    config = uvicorn.Config(
+        app,
+        host=SERVER_HOST,
+        port=SERVER_PORT,
+        log_level="info"
+    )
+    server = uvicorn.Server(config)
+
+    # Start server in background
+    server_task = asyncio.create_task(server.serve())
+
+    # Wait for shutdown signal
+    shutdown_task = asyncio.create_task(shutdown_manager.wait_for_shutdown())
+
+    # Wait for either server completion or shutdown signal
+    done, pending = await asyncio.wait(
+        [server_task, shutdown_task],
+        return_when=asyncio.FIRST_COMPLETED
+    )
+
+    # If shutdown signal received, perform graceful shutdown
+    if shutdown_task in done:
+        logger.info("Shutdown signal received, closing server")
+
+        # Perform graceful shutdown
+        await shutdown_manager.graceful_shutdown()
+
+        # Stop the server
+        server.should_exit = True
+
+        # Cancel pending tasks
+        for task in pending:
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+
+        # Wait for server to finish
+        try:
+            await server_task
+        except asyncio.CancelledError:
+            pass
+
+        logger.info("Server shutdown complete")
+
+if __name__ == "__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description='MARM MCP Server')
@@ -259,7 +319,7 @@ def main():
         sys.exit(0 if success else 1)
 
     logger.info("Starting MARM MCP Server",
-                version="v2.2.4",
+                version="v2.2.5",
                 mcp_endpoint="http://localhost:8001/mcp",
                 docs="http://localhost:8001/docs",
                 database=DEFAULT_DB_PATH)
@@ -268,7 +328,10 @@ def main():
                 semantic_search="ENABLED" if SEMANTIC_SEARCH_AVAILABLE else "DISABLED - install sentence-transformers",
                 scheduler="ENABLED" if SCHEDULER_AVAILABLE else "DISABLED - install apscheduler")
 
-    uvicorn.run(app, host=SERVER_HOST, port=SERVER_PORT)
-
-if __name__ == "__main__":
-    main()
+    try:
+        asyncio.run(run_server_with_shutdown())
+    except KeyboardInterrupt:
+        logger.info("Server interrupted by user")
+    except Exception as e:
+        logger.error("Server error", error=str(e))
+        sys.exit(1)

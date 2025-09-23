@@ -35,19 +35,6 @@ MARM evolved from a simple conversation protocol into a comprehensive AI memory 
 **Development Approach:**
 This project showcases advanced multi-agent collaboration, with Claude handling primary architecture and development, Gemini providing validation and code review, Qwen contributing research and analysis, and ChatGPT supporting testing workflows. This multi-LLM development process resulted in robust, well-validated solutions that no single AI agent could achieve alone.
 
-### Get Started
-
-**🐳 Production MCP Server (Recommended):**
-
-```bash
-docker pull lyellr88/marm-mcp-server:latest
-docker run -d --name marm-mcp-server -p 8001:8001 lyellr88/marm-mcp-server:latest
-claude mcp add marm-memory http://localhost:8001/mcp
-```
-
-**🌐 Live Demo:** <https://marm-systems-chatbot.onrender.com>  
-**📋 Original Protocol:** Copy/paste instructions that work with any AI
-
 ### Future Platform Development
 
 MARM's Universal MCP Server establishes the foundation for advanced AI memory ecosystems:
@@ -56,13 +43,3 @@ MARM's Universal MCP Server establishes the foundation for advanced AI memory ec
 - **Multi-tenant deployment** for team and enterprise environments  
 - **Extended semantic capabilities** with advanced embedding models
 - **Community marketplace** for memory-augmented AI tools and integrations
-
-### Get Involved
-
-Whether you're testing MARM, suggesting improvements, or just curious about AI conversation design. You're welcome here.
-
-**Questions?** Check the FAQ or open a GitHub issue.
-**Want to contribute?** See the CONTRIBUTING guide.
-**Found a bug?** Let me know and I'll fix it.
-
-**MARM is built by the community, for the community.**

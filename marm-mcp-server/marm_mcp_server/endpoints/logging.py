@@ -8,9 +8,10 @@ from datetime import datetime, timezone
 from typing import Optional, List, Dict
 
 # Import core components
-from ..core.models import SessionRequest, LogEntryRequest
-from ..core.memory import memory
-from ..core.events import events
+from core.models import SessionRequest, LogEntryRequest
+from core.memory import memory
+from core.events import events
+from endpoints.system import marm_current_context
 
 # Create router for logging endpoints
 router = APIRouter(prefix="", tags=["Logging"])
@@ -23,11 +24,15 @@ async def marm_log_session(request: SessionRequest):
     Equivalent to /log session: [name] command
     """
     try:
+        # Get current context from marm_current_context background tool
+        context_info = await marm_current_context()
+        current_timestamp = datetime.now(timezone.utc).isoformat()
+
         with memory.get_connection() as conn:
             conn.execute('''
                 INSERT OR REPLACE INTO sessions (session_name, last_accessed)
                 VALUES (?, ?)
-            ''', (request.session_name, datetime.now(timezone.utc).isoformat()))
+            ''', (request.session_name, current_timestamp))
             conn.commit()
         
         await events.emit('session_created', {'session': request.session_name})
@@ -52,29 +57,21 @@ async def marm_log_entry(request: LogEntryRequest):
     Equivalent to /log entry: [YYYY-MM-DD-topic-summary] command
     """
     try:
-        # Clean auto-date logic for log entries
+        # Store user entry exactly as provided - no auto-date formatting
+        formatted_entry = request.entry.strip()
+
+        # Parse entry for database storage (optional date extraction)
         entry_pattern = r'^(\d{4}-\d{2}-\d{2})-(.*?)-(.*?)$'
-        match = re.match(entry_pattern, request.entry)
-        
+        match = re.match(entry_pattern, formatted_entry)
+
         if match:
-            # Entry is already properly formatted
+            # Entry has date format - extract components
             entry_date, topic, summary = match.groups()
-            formatted_entry = request.entry
         else:
-            # Auto-format entry with current date
-            today = datetime.now().strftime("%Y-%m-%d")
-            
-            # Smart parsing: handle "topic-summary" or just "summary"
-            if '-' in request.entry:
-                topic, summary = request.entry.split('-', 1)
-                topic = topic.strip()
-                summary = summary.strip()
-            else:
-                topic = "general"
-                summary = request.entry.strip()
-            
-            entry_date = today
-            formatted_entry = f"{today}-{topic}-{summary}"
+            # Entry has no date - store as-is with null date
+            entry_date = None
+            topic = "general"
+            summary = formatted_entry
         
         entry_id = str(uuid.uuid4())
         with memory.get_connection() as conn:

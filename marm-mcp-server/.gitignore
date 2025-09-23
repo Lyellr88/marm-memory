@@ -48,3 +48,4 @@ logs/
 *.tmp
 *.temp
 cp dump.*
+.aider*

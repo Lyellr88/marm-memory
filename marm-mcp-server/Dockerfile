@@ -86,7 +86,7 @@ CMD ["python", "server.py"]
 # docker run -d \
 #   --name marm-mcp-server \
 #   -p 8001:8001 \
-#   -v marm-data:/app/data \
+#   -v marm_data:/app/data \
 #   marm-systems/marm-mcp-server:latest
 #
 # Connect to Claude Desktop:

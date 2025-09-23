@@ -6,9 +6,9 @@ from datetime import datetime, timezone
 from typing import List, Dict, Optional
 
 # Import core components
-from ..core.models import NotebookAddRequest, NotebookUseRequest
-from ..core.memory import memory
-from ..core.events import events
+from core.models import NotebookAddRequest, NotebookUseRequest
+from core.memory import memory
+from core.events import events
 
 # Create router for notebook endpoints
 router = APIRouter(prefix="", tags=["Notebook"])

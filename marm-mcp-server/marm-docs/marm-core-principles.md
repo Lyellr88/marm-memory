@@ -2,18 +2,7 @@
 
 ## Understanding the Foundation of Memory Accurate Response Mode
 
-**MARM v2.2.4** - Universal Protocol for AI Memory Intelligence
-
----
-
-## Table of Contents
-
-- [Short Introduction](#short-introduction)
-- [What's New in v2.2.4](#whats-new-in-v21)
-- [Part I: Core Principles](#part-i-core-principles)
-- [What is MARM?](#what-is-marm)
-- [Why Manual Steps Matter](#why-manual-steps-matter)
-- [User Controls](#user-controls)
+**MARM v2.2.5** - Universal Protocol for AI Memory Intelligence
 
 ---
 
@@ -21,7 +10,7 @@
 
 MARM is a universal protocol designed to improve memory continuity and response accuracy during AI conversations. This guide covers beginner guidance, command usage, and recovery strategies for when memory or accuracy begins to drift.
 
-## What's New in v2.2.4
+## What's New in v2.2.5
 
 ### MARM version updates
 
@@ -33,7 +22,7 @@ MARM is a universal protocol designed to improve memory continuity and response 
 | **v1.5** | Live Chatbot | Session persistence, voice synthesis, command menu |
 | **v2.0** | Major Protocol Overhaul | Updated syntax, enhanced chatbot, Llama 4 Maverick |
 
-### v2.2.4 (Current) - Universal MCP Server
+### v2.2.5 (Current) - Universal MCP Server
 
 #### MCP Server Architecture
 

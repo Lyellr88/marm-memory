@@ -2,19 +2,7 @@
 
 ## Complete Usage Guide for Memory-Augmented AI
 
-**MARM v2.2.4** - Universal MCP Server for AI Memory Intelligence
-
----
-
-## Table of Contents
-
-- [What is MARM?](#what-is-marm)
-- [Core Concepts](#core-concepts)
-- [Understanding MARM Memory](#understanding-marm-memory)
-- [How Memory Works](#how-memory-works)
-- [Memory Types](#memory-types)
-- [Content Classification](#content-classification)
-- [Revolutionary Multi-AI Memory System](#revolutionary-multi-ai-memory-system)
+**MARM v2.2.5** - Universal MCP Server for AI Memory Intelligence
 
 ---
 

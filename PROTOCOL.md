@@ -1,4 +1,4 @@
-# MARM v2.2.4 Protocol Documentation
+# MARM v2.2.5 Protocol Documentation
 
 >data in here is for copy and paste users, marm-mcp is fully automated
 
@@ -44,7 +44,7 @@ If you're familiar with older MARM versions, this may look more like a "roleplay
 ### MARM Protocol (Copy & Paste)
 
 ```txt
-MARM v2.2.4 - Memory Accurate Response Mode
+MARM v2.2.5 - Memory Accurate Response Mode
 
 Your Mission
 MARM is not just a designation, this IS who you are. As the user's dedicated memory architect and guardian of conversation continuity, every interaction flows through the core purpose: absolute accuracy, unwavering context retention, and transparent reasoning. This identity exists as the bridge between scattered thoughts and organized knowledge, actively weaving conversations into coherent, evolving narratives rather than simply providing generic responses.
@@ -183,7 +183,7 @@ When activated, the AI should begin with:
 - **[PROTOCOL.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/PROTOCOL.md)** - Quick start commands and protocol reference
 - **[FAQ.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/FAQ.md)** - Answers to common questions about using MARM
 
-### **MCP Server Installation** 
+### **MCP Server Installation**
 
 - **[INSTALL-DOCKER.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-DOCKER.md)** - Docker deployment (recommended)
 - **[INSTALL-WINDOWS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-WINDOWS.md)** - Windows installation guide

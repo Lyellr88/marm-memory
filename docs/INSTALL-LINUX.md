@@ -2,7 +2,7 @@
 
 ## Universal Memory Intelligence Platform for AI Agents
 
-**MARM v2.2.4* - Memory Accurate Response Mode
+**MARM v2.2.5* - Memory Accurate Response Mode with WebSocket Support
 *Complete Linux installation guide*
 
 ---
@@ -59,7 +59,7 @@ Most distributions include these by default:
 ### **Option 1: Automated Installation** ⭐ **(Recommended)**
 
 ```bash
-pip install marm-mcp-server==2.2.4
+pip install marm-mcp-server==2.2.5
 cd MARM/marm-mcp-server
 chmod +x install.sh
 ./install.sh
@@ -68,7 +68,7 @@ chmod +x install.sh
 ### **Option 2: Quick Test** ⚡ **(Beginner-Friendly)**
 
 ```bash
-pip install marm-mcp-server==2.2.4
+pip install marm-mcp-server==2.2.5
 cd MARM/marm-mcp-server
 python3 server.py
 ```
@@ -78,7 +78,7 @@ python3 server.py
 ### **Option 3: Manual Installation** 🔧 **(Advanced)**
 
 ```bash
-pip install marm-mcp-server==2.2.4
+pip install marm-mcp-server==2.2.5
 cd MARM/marm-mcp-server
 
 # Create virtual environment (recommended)
@@ -86,7 +86,7 @@ python3 -m venv marm-env
 source marm-env/bin/activate
 
 # Install dependencies
-pip install marm-mcp-server==2.2.4
+pip install marm-mcp-server==2.2.5
 
 # Start server
 python3 server.py
@@ -110,7 +110,7 @@ sudo apt update
 sudo apt install python3 python3-pip python3-venv git
 
 # Clone and install MARM
-pip install marm-mcp-server==2.2.4
+pip install marm-mcp-server==2.2.5
 cd MARM/marm-mcp-server
 ./install.sh
 ```
@@ -123,7 +123,7 @@ sudo dnf install python3 python3-pip git  # Fedora
 # sudo yum install python3 python3-pip git  # CentOS/RHEL
 
 # Clone and install MARM
-pip install marm-mcp-server==2.2.4
+pip install marm-mcp-server==2.2.5
 cd MARM/marm-mcp-server
 ./install.sh
 ```
@@ -135,7 +135,7 @@ cd MARM/marm-mcp-server
 sudo pacman -S python python-pip git
 
 # Clone and install MARM
-pip install marm-mcp-server==2.2.4
+pip install marm-mcp-server==2.2.5
 cd MARM/marm-mcp-server
 ./install.sh
 ```
@@ -146,14 +146,31 @@ cd MARM/marm-mcp-server
 
 ### **Claude Code (Recommended)**
 
+**HTTP Connection (Standard):**
+
 ```bash
 claude mcp add marm-memory http://localhost:8001/mcp
 ```
 
+**WebSocket Connection (Beta):**
+
+```bash
+# For real-time applications - beta testing
+claude mcp add marm-memory ws://localhost:8001/mcp/ws
+```
+
 ### **Grok CLI (Command Method)**
+
+**HTTP Connection:**
 
 ```bash
 grok mcp add marm-memory --transport http --url "http://localhost:8001/mcp"
+```
+
+**WebSocket Connection (Beta):**
+
+```bash
+grok mcp add marm-memory --transport websocket --url "ws://localhost:8001/mcp/ws"
 ```
 
 ### **Qwen, Gemini & Grok CLI (Settings.json Method)**
@@ -203,6 +220,7 @@ Then, add the following `mcpServers` configuration:
 | **Integration Test** | `python3 tests/test_integration.py` | End-to-end MCP tool functionality, API responses | ~25 seconds |
 | **Memory Usage** | `python3 tests/test_memory_usage.py` | Local process memory efficiency, resource usage | ~20 seconds |
 | **MCP Size Limits** | `python3 tests/test_mcp_size_limits.py` | MCP protocol 1MB response compliance | ~30 seconds |
+| **WebSocket Testing** | `python3 tests/test_websocket.py` | All 19 MCP methods, JSON-RPC 2.0, WebSocket connectivity | ~35 seconds |
 
 ### **When and Why to Use Each Test**
 
@@ -215,6 +233,8 @@ Then, add the following `mcpServers` configuration:
 **Memory Usage Test** - Measures local Python process memory consumption. Unlike Docker testing, this shows how MARM performs on your specific system with your available resources.
 
 **MCP Size Limits Test** - Ensures responses stay under the 1MB MCP protocol limit. Important for compatibility with MCP clients and preventing oversized responses that could cause issues.
+
+**WebSocket Test** - Validates all 19 MCP methods over WebSocket protocol with JSON-RPC 2.0 compliance. Essential for testing real-time communication features and WebSocket endpoint functionality.
 
 ### **Why Built-in Tests Beat Traditional Commands**
 
@@ -244,7 +264,7 @@ curl -s http://localhost:8001/health
 ```json
 {
   "status": "healthy",
-  "version": "2.2.4",
+  "version": "2.2.5",
   "memory_mb": 510.8,
   "uptime_seconds": 45
 }
@@ -285,7 +305,7 @@ Your testing helps make MARM better for everyone.
 4. **Update Dependencies**:
 
    ```bash
-   pip install marm-mcp-server==2.2.4 --upgrade
+   pip install marm-mcp-server==2.2.5 --upgrade
    ```
 
 5. **Restart Server**: `marm-mcp-server`
@@ -303,14 +323,14 @@ rm -rf ~/.marm  # Unix/Mac
 # rmdir /s %USERPROFILE%\.marm  # Windows
 
 # Fresh installation
-pip install marm-mcp-server==2.2.4
+pip install marm-mcp-server==2.2.5
 cd MARM/marm-mcp-server
 ./install.sh  # or python setup.py on Windows
 ```
 
 ### **Migration Notes**
 
-**v2.0 → v2.2.4 Migration:**
+**v2.0 → v2.2.5 Migration:**
 
 - Database schema is compatible - no migration needed
 - New tools automatically available after restart
@@ -384,7 +404,7 @@ source ~/.bashrc
 
 ---
 
-**MARM v2.2.4 Linux Guide** - *Universal memory intelligence for AI agents*
+**MARM v2.2.5 Linux Guide** - *Universal memory intelligence for AI agents*
 
 *For usage instructions, see **[MCP-HANDBOOK.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/MCP-HANDBOOK.md)***
 

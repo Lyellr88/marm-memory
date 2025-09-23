@@ -7,22 +7,19 @@
 </picture>
 <h1 align="center">MARM: The AI That Remembers Your Conversations</h1>
 
-Memory Accurate Response Mode v2.2.4 - The intelligent memory system for AI agents. Stop losing context. Stop hallucinations. Start controlling your LLM conversations.  
-
+Memory Accurate Response Mode v2.2.5 - The intelligent memory system for AI agents with WebSocket support. Stop losing context. Stop hallucinations. Start controlling your LLM conversations.  
 
 [![GitHub stars](https://img.shields.io/github/stars/Lyellr88/MARM-Systems?style=flat&color=blue)](https://github.com/Lyellr88/MARM-Systems/stargazers)
 [![GitHub forks](https://img.shields.io/github/forks/Lyellr88/MARM-Systems?style=flat&color=blue)](https://github.com/Lyellr88/MARM-Systems/network)
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115.4-blue)](https://fastapi.tiangolo.com/)
-[![Docker Pulls](https://img.shields.io/docker/pulls/lyellr88/marm-mcp-server)](https://hub.docker.com/r/lyellr88/marm-mcp-server)
+[![Docker Hub](https://img.shields.io/badge/Docker-hub-blue)](https://hub.docker.com/r/lyellr88/marm-mcp-server)
 [![PyPI](https://img.shields.io/pypi/v/marm-mcp-server?color=blue&label=PyPI)](https://pypi.org/project/marm-mcp-server/)
 
 [![pip install](https://img.shields.io/badge/pip%20install-marm--mcp--server-blue)](https://pypi.org/project/marm-mcp-server/)
 [![MCP Registry](https://img.shields.io/badge/MCP%20Registry-LIVE-blue)](https://registry.modelcontextprotocol.io/)
 
-
-  
 [![Official MARM](https://img.shields.io/badge/Official-MARM-blue?style=for-the-badge)](https://github.com/Lyellr88/MARM-Systems)
 
 **Note:** This is the *official* MARM repository. All official versions and releases are managed here.
@@ -33,25 +30,20 @@ Forks may experiment, but official updates will always come from this repo.
 
 ---
 
-## 🚀 Quick Start for MCP & Chatbot 
-
-<details>
-<summary>Click here</summary>
-
-### **Quick Star for MCP**
+## 🚀 Quick Start for MCP
 
 **Docker (Fastest - 30 seconds):**
 
 ```bash
 docker pull lyellr88/marm-mcp-server:latest
-docker run -d --name marm-mcp-server -p 8001:8001 lyellr88/marm-mcp-server:latest
+docker run -d --name marm-mcp-server -p 8001:8001 -v marm_data:/app/data lyellr88/marm-mcp-server:latest
 claude mcp add marm-memory http://localhost:8001/mcp
 ```
 
 **Quick Local Install:**
 
 ```bash
-pip install marm-mcp-server==2.2.4
+pip install marm-mcp-server==2.2.5
 marm-mcp-server
 claude mcp add marm-memory http://localhost:8001/mcp
 ```
@@ -80,35 +72,37 @@ claude mcp add marm-memory http://localhost:8001/mcp
 
 ---
 
-### **Quick Start for Chatbot**
+## 🚀 Quick Start for Chatbot
 
 The MARM Chatbot is a web-based interface for interacting with the MARM protocol. To install it, you'll need Node.js and a Replicate API key.
 
+### 1. Clone the repository
 
-1. **Clone the repository**
 ```bash
 git clone https://github.com/Lyellr88/MARM-Systems.git
 ```
 
-2. **Install dependencies**
+### 2. Install dependencies
+
 ```bash
 cd MARM-Systems/webchat
 npm install
 ```
 
-3. **Add your Replicate API key to a .env file**
+### 3. Add your Replicate API key to a .env file
+
 ```bash
 echo "REPLICATE_API_TOKEN=your_replicate_api_token_here" > .env
 ```
 
-4. **Start the server**
+### 4. Start the server
+
 ```bash
 npm start
 ```
 
 **Fastest**
 [MARM Chatbot](https://marm-systems-chatbot.onrender.com)
-</details>
 
 ---
 
@@ -145,7 +139,7 @@ The newest addition tho the ecosystem is MARM MCP it represents an emerging cate
 | **🤝 Multi-AI** | **Unified Memory Layer** | Accessible by any connected LLM (Claude, Qwen, Gemini, etc.) |
 | | **Cross-Platform Intelligence** | Different AI agents learn from each other's interactions |
 | | **User-Controlled Memory** | Granular control over memory sharing and "Bring Your Own History" |
-| **🏗️ Architecture** | **19 Complete MCP Tools** | Full Model Context Protocol implementation |
+| **🏗️ Architecture** | **18 Complete MCP Tools** | Full Model Context Protocol implementation |
 | | **Database Optimization** | SQLite with WAL mode and connection pooling |
 | | **Rate Limiting** | IP-based protection for sustainable free service |
 | | **MCP Compliance** | Response size management for optimal performance |
@@ -244,7 +238,15 @@ Now that you understand the ecosystem, here's info and how to actually use the M
 
 ---
 
-## 🛠️ Complete MCP Tool Suite (19 Tools)
+## 🛠️ Complete MCP Tool Suite (18 Tools)
+
+**💡 Pro Tip:** You don't need to manually call these tools! Just tell your AI agent what you want in natural language:
+
+- *"Claude, log this session as 'Project Alpha' and add this conversation as 'database design discussion'"*
+- *"Remember this code snippet in your notebook for later"*
+- *"Search for what we discussed about authentication yesterday"*
+
+The AI agent will automatically use the appropriate tools. Manual tool access is available for power users who want direct control.
 
 | **Category** | **Tool** | **Description** |
 |--------------|----------|-----------------|
@@ -264,7 +266,7 @@ Now that you understand the ecosystem, here's info and how to actually use the M
 | | `marm_notebook_delete` | Delete specific notebook entry |
 | | `marm_notebook_clear` | Clear the active instruction list |
 | | `marm_notebook_status` | Show current active instruction list |
-| **⚙️ System Utilities** | `marm_current_context` | Get current date/time for accurate log entry timestamps |
+| **⚙️ System Utilities** | `marm_current_context` | **Background Tool** - Automatically provides current date/time for log entries (AI agents use automatically) |
 | | `marm_system_info` | Comprehensive system information, health status, and loaded docs |
 | | `marm_reload_docs` | Reload documentation into memory system |
 
@@ -345,7 +347,7 @@ CREATE TABLE sessions (
 | **Windows Setup** | **[INSTALL-WINDOWS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-WINDOWS.md)** | Native Windows development |
 | **Linux Setup** | **[INSTALL-LINUX.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-LINUX.md)** | Native Linux development |
 | **Platform Integration** | **[INSTALL-PLATFORM.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-PLATFORM.md)** | App & API integration |
-| **MCP Handbook** | **[MCP-HANDBOOK.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/MCP-HANDBOOK.md)** | Complete usage guide with all 19 MCP tools, cross-app memory strategies, pro tips, and FAQ |
+| **MCP Handbook** | **[MCP-HANDBOOK.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/MCP-HANDBOOK.md)** | Complete usage guide with all 18 MCP tools, cross-app memory strategies, pro tips, and FAQ |
 
 ---
 
@@ -353,10 +355,10 @@ CREATE TABLE sessions (
 
 ### **vs. Basic MCP Implementations**
 
-| Feature | MARM v2.2.4 | Basic MCP Servers |
+| Feature | MARM v2.2.5 | Basic MCP Servers |
 |---------|-------------|-------------------|
 | **Memory Intelligence** | AI-powered semantic search with auto-classification | Basic key-value storage |
-| **Tool Coverage** | 19 complete MCP protocol tools | 3-5 basic wrappers |  
+| **Tool Coverage** | 18 complete MCP protocol tools | 3-5 basic wrappers |  
 | **Scalability** | Database optimization + connection pooling | Single connection |
 | **MCP Compliance** | 1MB response size management | No size controls |
 | **Deployment** | Docker containerization + health monitoring | Local development only |
@@ -369,7 +371,7 @@ CREATE TABLE sessions (
 
 **Aren't you sick of explaining every project you're working on to every LLM you work with?**
 
-MARM is building the solution to this. Support now to join a growing ecosystem - this is just **Phase 1 of a 3-part roadmap** and my next build will complement MARM like debugging and coffee. 
+MARM is building the solution to this. Support now to join a growing ecosystem - this is just **Phase 1 of a 3-part roadmap** and our next build will complement MARM like peanut butter and jelly.
 
 **Join the repo that's working to give YOU control over what is remembered and how it's remembered.**
 
@@ -427,7 +429,7 @@ If MARM helps with your AI memory needs, please star the repository to support d
 
 This project is licensed under the MIT License. Forks and derivative works are permitted.  
 
-However, use of the **MARM name** and **version numbering** is reserved for releases from the [official MARM repository](https://github.com/Lyellr88/MARM-Systems). 
+However, use of the **MARM name** and **version numbering** is reserved for releases from the [official MARM repository](https://github.com/Lyellr88/MARM-Systems).
 
 Derivatives should clearly indicate they are unofficial or experimental.
 
@@ -442,7 +444,7 @@ Derivatives should clearly indicate they are unofficial or experimental.
 - **[PROTOCOL.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/PROTOCOL.md)** - Quick start commands and protocol reference
 - **[FAQ.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/FAQ.md)** - Answers to common questions about using MARM
 
-### **MCP Server Installation** 
+### **MCP Server Installation**
 
 - **[INSTALL-DOCKER.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-DOCKER.md)** - Docker deployment (recommended)
 - **[INSTALL-WINDOWS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-WINDOWS.md)** - Windows installation guide
@@ -461,6 +463,7 @@ Derivatives should clearly indicate they are unofficial or experimental.
 - **[CHANGELOG.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/CHANGELOG.md)** - Version history and updates
 - **[ROADMAP.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/ROADMAP.md)** - Planned features and development roadmap
 - **[LICENSE](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/LICENSE)** - MIT license terms
+
 ---
 
 mcp-name: io.github.Lyellr88/marm-mcp-server

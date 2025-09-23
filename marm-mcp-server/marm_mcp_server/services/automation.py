@@ -3,8 +3,8 @@
 from typing import Dict, Any
 
 # Import core components
-from ..core.memory import memory
-from ..core.events import events
+from core.memory import memory
+from core.events import events
 
 async def auto_classify_content(data: dict):
     """Auto-classify log entries"""

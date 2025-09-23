@@ -12,7 +12,7 @@ import html
 import re
 
 # Import configuration
-from ..config.settings import (
+from config.settings import (
     SEMANTIC_SEARCH_AVAILABLE, 
     DEFAULT_DB_PATH, 
     MAX_DB_CONNECTIONS,

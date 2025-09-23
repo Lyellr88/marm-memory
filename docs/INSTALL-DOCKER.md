@@ -2,7 +2,7 @@
 
 ## Universal Memory Intelligence Platform for AI Agents
 
-**MARM v2.2.4* - Memory Accurate Response Mode  
+**MARM v2.2.5* - Memory Accurate Response Mode with WebSocket Support
 *Docker deployment guide for Windows, Mac, and Linux*
 
 ---
@@ -44,10 +44,10 @@
 docker pull lyellr88/marm-mcp-server:latest
 
 # Basic setup (temporary data)
-docker run -d --name marm-mcp-server -p 8001:8001 lyellr88/marm-mcp-server:latest
+docker run -d --name marm-mcp-server -p 8001:8001 -v marm_data:/app/data lyellr88/marm-mcp-server:latest
 
 # Recommended setup (persistent data)
-docker run -d --name marm-mcp-server -p 8001:8001 -v marm-data:/home/marm/.marm --restart unless-stopped lyellr88/marm-mcp-server:latest
+docker run -d --name marm-mcp-server -p 8001:8001 -v marm_data:/app/data --restart unless-stopped lyellr88/marm-mcp-server:latest
 ```
 
 **Why choose this:**
@@ -72,7 +72,7 @@ services:
       - "8001:8001"
     restart: unless-stopped
     volumes:
-      - marm-data:/home/marm/.marm
+      - marm_data:/app/data
 
 volumes:
   marm-data:
@@ -93,16 +93,43 @@ docker-compose up -d
 
 ## Client Connections
 
+### **Available Endpoints**
+
+- **HTTP MCP**: `http://localhost:8001/mcp` (Standard)
+- **WebSocket MCP**: `ws://localhost:8001/mcp/ws` (Beta - Real-time)
+- **Health Check**: `http://localhost:8001/health`
+- **Readiness Check**: `http://localhost:8001/ready`
+- **API Documentation**: `http://localhost:8001/docs`
+
 ### **Claude Code (Recommended)**
+
+**HTTP Connection (Standard):**
 
 ```bash
 claude mcp add marm-memory http://localhost:8001/mcp
 ```
 
+**WebSocket Connection (Beta):**
+
+```bash
+# For real-time applications - beta testing
+claude mcp add marm-memory ws://localhost:8001/mcp/ws
+```
+
+**Note**: WebSocket provides real-time communication with full MCP protocol support (all 19 methods).
+
 ### **Grok CLI (Command Method)**
+
+**HTTP Connection:**
 
 ```bash
 grok mcp add marm-memory --transport http --url "http://localhost:8001/mcp"
+```
+
+**WebSocket Connection (Beta):**
+
+```bash
+grok mcp add marm-memory --transport websocket --url "ws://localhost:8001/mcp/ws"
 ```
 
 ### **Qwen, Gemini & Grok CLI (Settings.json Method)**
@@ -156,7 +183,7 @@ docker rm marm-mcp-server
 docker pull lyellr88/marm-mcp-server:latest
 docker stop marm-mcp-server
 docker rm marm-mcp-server
-docker run -d --name marm-mcp-server -p 8001:8001 -v marm-data:/home/marm/.marm --restart unless-stopped lyellr88/marm-mcp-server:latest
+docker run -d --name marm-mcp-server -p 8001:8001 -v marm_data:/app/data --restart unless-stopped lyellr88/marm-mcp-server:latest
 ```
 
 **View Logs:**
@@ -209,6 +236,19 @@ docker rmi lyellr88/marm-mcp-server:latest  # Removes image
 | **MCP Compliance** | `docker exec marm-mcp-server python tests/test_docker_mcp_size_limits.py` | MCP protocol compliance, rate limiting, response sizes | ~45 seconds |
 | **Memory Usage** | `docker exec marm-mcp-server python tests/test_docker_memory_usage.py` | Container memory efficiency, resource optimization | ~20 seconds |
 | **Security Validation** | `docker exec marm-mcp-server python tests/test_security.py` | XSS protection, input validation, error handling | ~15 seconds |
+| **WebSocket Testing** | `docker exec marm-mcp-server python tests/test_websocket.py` | All 19 MCP methods, JSON-RPC 2.0, WebSocket connectivity | ~35 seconds |
+
+### **When and Why to Use Each Test**
+
+**Health & Performance Test** - Validates container performance, response times, and concurrent request handling. Essential for ensuring your Docker deployment meets professional speed standards.
+
+**MCP Compliance Test** - Ensures responses stay under the 1MB MCP protocol limit and validates rate limiting functionality. Critical for MCP client compatibility.
+
+**Memory Usage Test** - Measures container memory efficiency and resource optimization. Unlike local testing, this shows how MARM performs within Docker constraints.
+
+**Security Validation Test** - Run first to ensure your containerized MARM installation is secure from XSS attacks and handles malicious input properly. Essential for any deployment.
+
+**WebSocket Test** - Validates all 19 MCP methods over WebSocket protocol with JSON-RPC 2.0 compliance. Essential for testing real-time communication features and WebSocket endpoint functionality.
 
 ### **Why Built-in Tests Beat Traditional Commands**
 
@@ -247,7 +287,7 @@ Uvicorn running on http://0.0.0.0:8001
 
 If any tests fail or you encounter problems:
 
-- **🐛 Open an [Issue]((https://github.com/Lyellr88/MARM-Systems/issues)**: Report problems on GitHub
+- **🐛 Open an [Issue](https://github.com/Lyellr88/MARM-Systems/issues)**: Report problems on GitHub
 - **🔧 Submit a [Pull Request](https://github.com/Lyellr88/MARM-Systems/pulls)**: Fixed it yourself? We welcome contributions!
 - **💬 Join Discussions**: Share feedback and get help from the community
 
@@ -263,14 +303,14 @@ Your testing helps make MARM better for everyone.
 docker pull lyellr88/marm-mcp-server:latest
 docker stop marm-mcp-server
 docker rm marm-mcp-server
-docker run -d --name marm-mcp-server -p 8001:8001 -v marm-data:/home/marm/.marm --restart unless-stopped lyellr88/marm-mcp-server:latest
+docker run -d --name marm-mcp-server -p 8001:8001 -v marm_data:/app/data --restart unless-stopped lyellr88/marm-mcp-server:latest
 ```
 
 ---
 
 ### **Migration Notes**
 
-**v2.0 → v2.2.4 Migration:**
+**v2.0 → v2.2.5 Migration:**
 
 - Database schema is compatible - no migration needed
 - New tools automatically available after restart
@@ -321,7 +361,7 @@ For custom configuration, add environment variables to your Docker commands:
 **Docker Run:**
 
 ```bash
-docker run -d --name marm-mcp-server -p 8001:8001 -v marm-data:/home/marm/.marm -e SERVER_PORT=8002 -e ANALYTICS_ENABLED=false --restart unless-stopped lyellr88/marm-mcp-server:latest
+docker run -d --name marm-mcp-server -p 8001:8001 -v marm_data:/app/data -e SERVER_PORT=8002 -e ANALYTICS_ENABLED=false --restart unless-stopped lyellr88/marm-mcp-server:latest
 ```
 
 **Docker Compose:**
@@ -335,7 +375,7 @@ services:
       - "8002:8002"  # Custom port
     restart: unless-stopped
     volumes:
-      - marm-data:/home/marm/.marm
+      - marm_data:/app/data
     environment:
       - SERVER_PORT=8002
       - ANALYTICS_ENABLED=false
@@ -373,7 +413,7 @@ volumes:
 
 ---
 
-**MARM v2.2.4 Docker Guide** - *Universal memory intelligence for AI agents*
+**MARM v2.2.5 Docker Guide** - *Universal memory intelligence for AI agents*
 
 *For usage instructions, see **[MCP-HANDBOOK.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/MCP-HANDBOOK.md)***  
 *For native installation, see **[INSTALL-WINDOWS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-WINDOWS.md)**  or **[INSTALL-LINUX.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-LINUX.md)***
@@ -389,7 +429,7 @@ volumes:
 - **[PROTOCOL.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/PROTOCOL.md)** - Quick start commands and protocol reference
 - **[FAQ.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/FAQ.md)** - Answers to common questions about using MARM
 
-### **MCP Server Installation** 
+### **MCP Server Installation**
 
 - **[INSTALL-DOCKER.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-DOCKER.md)** - Docker deployment (recommended)
 - **[INSTALL-WINDOWS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-WINDOWS.md)** - Windows installation guide

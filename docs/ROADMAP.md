@@ -20,7 +20,7 @@ MARM Systems is building the memory layer that makes AI truly useful for long-te
 
 ## Current Focus (Phase 1: Foundation)
 
-### MARM Protocol v2.2.4 - Memory Accurate Response Mode
+### MARM Protocol v2.2.5 - Memory Accurate Response Mode
 
 - ✅ **Protocol Completed**: MARM with enhanced conversation flow
 - ✅ **Live Chatbot**: Interactive demo with advanced AI integration
@@ -92,7 +92,7 @@ MARM Systems focuses on solving the memory gap in AI interactions. While foundat
 
 ## What's Next
 
-MARM v2.2.4 establishes our foundation. The growing community and proven protocol position us for the next phase of development, focusing on enhanced capabilities and broader platform integration.
+MARM v2.2.5 establishes our foundation. The growing community and proven protocol position us for the next phase of development, focusing on enhanced capabilities and broader platform integration.
 
 **Current Priorities:**
 
@@ -112,7 +112,7 @@ MARM v2.2.4 establishes our foundation. The growing community and proven protoco
 - **[PROTOCOL.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/PROTOCOL.md)** - Quick start commands and protocol reference
 - **[FAQ.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/FAQ.md)** - Answers to common questions about using MARM
 
-### **MCP Server Installation** 
+### **MCP Server Installation**
 
 - **[INSTALL-DOCKER.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-DOCKER.md)** - Docker deployment (recommended)
 - **[INSTALL-WINDOWS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-WINDOWS.md)** - Windows installation guide
@@ -130,4 +130,4 @@ MARM v2.2.4 establishes our foundation. The growing community and proven protoco
 - **[DESCRIPTION.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/DESCRIPTION.md)** - Protocol purpose and vision overview
 - **[CHANGELOG.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/CHANGELOG.md)** - Version history and updates
 - **[ROADMAP.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/ROADMAP.md)** - Planned features and development roadmap
-- **[LICENSE](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/LICENSE)** - MIT license termsb
+- **[LICENSE](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/LICENSE)** - MIT license terms

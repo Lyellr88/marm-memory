@@ -1,4 +1,4 @@
-# MARM Handbook v2.2.4 (mainly for copy & paste users)
+# MARM Handbook v2.2.5 (mainly for copy & paste users)
 
 ## Table of Contents
 
@@ -31,7 +31,7 @@ MARM is a universal protocol designed to improve memory continuity and response 
 | **v1.5** | Live Chatbot | Session persistence, voice synthesis, command menu |
 | **v2.0** | Major Protocol Overhaul | Updated syntax, enhanced chatbot, Llama 4 Maverick |
 
-### v2.2.4 (Current) - Universal MCP Server
+### v2.2.5 (Current) - Universal MCP Server
 
 #### MCP Server Architecture
 
@@ -315,7 +315,7 @@ Essential reseed template:
 - **[PROTOCOL.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/PROTOCOL.md)** - Quick start commands and protocol reference
 - **[FAQ.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/FAQ.md)** - Answers to common questions about using MARM
 
-### **MCP Server Installation** 
+### **MCP Server Installation**
 
 - **[INSTALL-DOCKER.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-DOCKER.md)** - Docker deployment (recommended)
 - **[INSTALL-WINDOWS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-WINDOWS.md)** - Windows installation guide

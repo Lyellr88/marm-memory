@@ -2,19 +2,7 @@
 
 ## Detailed Usage Guide for All MARM Commands
 
-**MARM v2.2.4** - Universal Protocol for AI Memory Intelligence
-
----
-
-## Table of Contents
-
-- [Part III: Command Reference](#part-iii-command-reference)
-- [Critical Notebook Behaviors](#critical-notebook-behaviors)
-- [Session Management Commands](#session-management-commands)
-- [Logging Commands](#logging-commands)
-- [Accuracy Commands](#accuracy-commands)
-- [Summary Commands](#summary-commands)
-- [Notebook Commands](#notebook-commands)
+**MARM v2.2.5** - Universal Protocol for AI Memory Intelligence
 
 ---
 

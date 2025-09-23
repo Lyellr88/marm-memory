@@ -2,28 +2,7 @@
 
 ## Beyond the Basics, Power-User Templates, and Troubleshooting
 
-**MARM v2.2.4** - Universal Protocol for AI Memory Intelligence
-
----
-
-## Table of Contents
-
-- [Part IV: Beyond the Basics](#part-iv-beyond-the-basics)
-- [Real-World Use Cases](#real-world-use-cases)
-- [Multi-Session Projects](#multi-session-projects)
-- [Enhanced Accuracy Mode](#enhanced-accuracy-mode)
-- [Complex Topic Management](#complex-topic-management)
-- [Session Drift Management](#session-drift-management)
-- [When to Refresh/Reseed](#when-to-refreshreseed)
-- [Drift Recovery Process](#drift-recovery-process)
-- [Preventive Maintenance](#preventive-maintenance)
-- [Manual Knowledge Library Deep Dive](#manual-knowledge-library-deep-dive)
-- [Platform Compatibility](#platform-compatibility)
-- [Power-User Templates](#power-user-templates)
-- [Advanced Integration](#advanced-integration)
-- [Advanced Session Patterns](#advanced-session-patterns)
-- [Quick Reference Table](#quick-reference-table)
-- [Troubleshooting Guide](#troubleshooting-guide)
+**MARM v2.2.5** - Universal Protocol for AI Memory Intelligence
 
 ---
 

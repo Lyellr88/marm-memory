@@ -11,10 +11,8 @@
 - [About Llama 4 Maverick via Replicate](#about-llama-4-maverick-via-replicate)
 - [Troubleshooting](#troubleshooting)
 - [File Structure](#file-structure)
-- [Development](#development)
 - [Advanced: Using Different AI Models](#advanced-using-different-ai-models)
 - [Support](#support)
-- [Additional Features](#additional-features)
 - [Next Steps](#next-steps)
 
 ## Quick Start Options
@@ -56,7 +54,7 @@ npm install
 
 ### 3. Get Your Replicate API Token
 
-**MARM is powered by Meta Llama 4 Maverick via Replicate**
+>MARM is powered by Meta Llama 4 Maverick via Replicate
 
 1. **Visit:** <https://replicate.com/account/api-tokens>
 2. **Create account**
@@ -133,7 +131,7 @@ MARM-Systems/
 │   │   │   ├── server.js     # Express server with Replicate integration
 │   │   │   ├── replicateHelper.js # Llama 4 Maverick API integration
 │   │   │   └── ...           # Other core modules
-│   │   ├── logic/            # MARM v2.2.4 protocol logic
+│   │   ├── logic/            # MARM v2.2.5 protocol logic
 │   │   └── style/            # Modular CSS components
 │   ├── package.json          # Dependencies
 │   ├── .env                  # Your Replicate API token (create this)
@@ -241,7 +239,7 @@ After local installation:
 - **[PROTOCOL.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/PROTOCOL.md)** - Quick start commands and protocol reference
 - **[FAQ.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/FAQ.md)** - Answers to common questions about using MARM
 
-### **MCP Server Installation** 
+### **MCP Server Installation**
 
 - **[INSTALL-DOCKER.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-DOCKER.md)** - Docker deployment (recommended)
 - **[INSTALL-WINDOWS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-WINDOWS.md)** - Windows installation guide

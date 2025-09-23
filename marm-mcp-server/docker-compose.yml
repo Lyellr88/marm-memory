@@ -12,7 +12,7 @@ services:
     
     volumes:
       # Persistent data storage
-      - marm-data:/app/data
+      - marm_data:/app/data
       # Optional: Mount external database
       # - ./marm_memory.db:/app/marm_memory.db
     
@@ -51,7 +51,7 @@ services:
       start_period: 40s
 
 volumes:
-  marm-data:
+  marm_data:
     driver: local
 
 networks:

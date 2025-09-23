@@ -6,7 +6,7 @@ import sqlite3
 from typing import Dict, List
 
 # Import core components
-from ..core.memory import memory
+from core.memory import memory
 
 def guess_context_type(filename):
     """Smart context classification based on filename"""
@@ -89,20 +89,20 @@ def get_docs_to_load():
 
         # Print visual QA table of loaded docs
         if docs_to_load:
-            print(f"\n📚 Loading essential documentation ({len(docs_to_load)} files):")
-            print("┌─────────────────────────────────┬──────────────┬─────────────────────────┐")
-            print("│ File                            │ Type         │ Notebook Name           │")
-            print("├─────────────────────────────────┼──────────────┼─────────────────────────┤")
+            print(f"\n[DOCS] Loading essential documentation ({len(docs_to_load)} files):")
+            print("+---------------------------------+--------------+-------------------------+")
+            print("| File                            | Type         | Notebook Name           |")
+            print("+---------------------------------+--------------+-------------------------+")
             for doc in docs_to_load:
                 filename = doc["file_path"].split("/")[-1]
-                print(f"│ {filename:<31} │ {doc['context_type']:<12} │ {doc['notebook_name']:<23} │")
-            print("└─────────────────────────────────┴──────────────┴─────────────────────────┘")
+                print(f"| {filename:<31} | {doc['context_type']:<12} | {doc['notebook_name']:<23} |")
+            print("+---------------------------------+--------------+-------------------------+")
 
             # Show what's available but not loaded
             all_files = set(f.name for f in docs_dir.glob("*.md"))
             skipped_files = all_files - essential_files
             if skipped_files:
-                print(f"📋 Available via marm_smart_recall: {', '.join(sorted(skipped_files))}")
+                print(f"Available via marm_smart_recall: {', '.join(sorted(skipped_files))}")
         else:
             print("No essential documentation files found")
     else:
