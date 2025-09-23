@@ -1,5 +1,6 @@
 {
-  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-16/server.schema.json",
+  "_schema_date": "2025-09-16",
   "name": "io.github.Lyellr88/marm-mcp-server",
   "description": "Universal MCP Server with advanced AI memory capabilities and semantic search.",
   "version": "2.2.5",
@@ -14,13 +15,13 @@
   "categories": ["memory", "productivity", "development"],
   "packages": [
     {
-      "registry_type": "pypi",
+      "registryType": "pypi",
       "identifier": "marm-mcp-server",
       "version": "2.2.5",
       "transport": { "type": "stdio" }
     },
     {
-      "registry_type": "oci",
+      "registryType": "oci",
       "identifier": "lyellr88/marm-mcp-server",
       "version": "2.2.5",
       "transport": { "type": "stdio" }
@@ -126,7 +127,7 @@
     "docker": ">=20.10.0"
   },
   "configuration": {
-    "environment_variables": {
+    "environmentVariables": {
       "MARM_DB_PATH": {
         "description": "Path to SQLite database file",
         "default": "/app/data/marm_memory.db"
