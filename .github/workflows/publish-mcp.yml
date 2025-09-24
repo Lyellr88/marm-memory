@@ -110,15 +110,25 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Extract version from tag
+      - name: Extract version from pyproject.toml
         id: version
         run: |
+          echo "DEBUG: GITHUB_REF = $GITHUB_REF"
           if [[ $GITHUB_REF == refs/tags/* ]]; then
             VERSION=${GITHUB_REF#refs/tags/v}
+            echo "DEBUG: Extracted version from tag: $VERSION"
           else
-            VERSION=latest
+            VERSION=$(grep 'version = ' marm-mcp-server/pyproject.toml | cut -d '"' -f 2)
+            echo "DEBUG: Extracted version from pyproject.toml: $VERSION"
           fi
+          echo "DEBUG: Final version: $VERSION"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Debug Docker tags
+        run: |
+          echo "DEBUG: Will create Docker tags:"
+          echo "  - lyellr88/marm-mcp-server:${{ steps.version.outputs.version }}"
+          echo "  - lyellr88/marm-mcp-server:latest"
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
@@ -133,7 +143,7 @@ jobs:
           cache-to: type=local,dest=/tmp/.buildx-cache,mode=max
 
   publish-mcp-registry:
-    needs: validate-and-test
+    needs: [publish-pypi, publish-docker]
     runs-on: ubuntu-latest
 
     steps:
@@ -181,13 +191,33 @@ jobs:
         run: |
           # Use GitHub OIDC for authentication
           cd marm-mcp-server
-          mcp-publisher login github-oidc
+          echo "DEBUG: Attempting MCP Registry login..."
+          mcp-publisher login github-oidc || {
+            echo "ERROR: MCP Registry login failed"
+            exit 1
+          }
+          echo "DEBUG: MCP Registry login successful"
 
       - name: Publish to MCP Registry
         run: |
           # Publish the server to the MCP registry
           cd marm-mcp-server
-          mcp-publisher publish
+          echo "DEBUG: Validating server.json before publishing..."
+          python validate_server_json.py || {
+            echo "ERROR: server.json validation failed"
+            exit 1
+          }
+          echo "DEBUG: server.json validation passed"
+
+          echo "DEBUG: Current server.json content:"
+          cat server.json | head -10
+
+          echo "DEBUG: Attempting MCP Registry publish..."
+          mcp-publisher publish || {
+            echo "ERROR: MCP Registry publish failed"
+            exit 1
+          }
+          echo "DEBUG: MCP Registry publish successful"
 
       - name: Verify publication
         run: |
