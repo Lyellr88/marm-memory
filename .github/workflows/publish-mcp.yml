@@ -118,7 +118,7 @@ jobs:
             VERSION=${GITHUB_REF#refs/tags/v}
             echo "DEBUG: Extracted version from tag: $VERSION"
           else
-            VERSION=$(grep 'version = ' marm-mcp-server/pyproject.toml | cut -d '"' -f 2)
+            VERSION=$(grep '^version = ' marm-mcp-server/pyproject.toml | cut -d '"' -f 2)
             echo "DEBUG: Extracted version from pyproject.toml: $VERSION"
           fi
           echo "DEBUG: Final version: $VERSION"
