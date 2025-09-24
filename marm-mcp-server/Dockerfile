@@ -69,7 +69,7 @@ LABEL org.opencontainers.image.licenses="MIT"
 LABEL mcp.server="true"
 LABEL mcp.name="marm-mcp-server"
 LABEL mcp.tools="19"
-LABEL io.modelcontextprotocol.server.name="io.github.Lyellr88/marm-mcp-server"
+LABEL io.modelcontextprotocol.server.name="io.github.lyellr88/marm-mcp-server"
 
 # Set environment variables
 ENV PYTHONPATH=/app
