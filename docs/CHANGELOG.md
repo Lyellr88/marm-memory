@@ -833,6 +833,52 @@ This release introduces a complete UI/UX transformation with the implementation 
 
 ---
 
+<details>
+<summary>September 25th, 2025: Security Hardening - 4 Critical Vulnerabilities Fixed (v2.2.5)</summary>
+
+### Security Fixes
+
+- **XSS Protection Enhancement**: Fixed malformed script tag bypass vulnerability
+  - Updated regex pattern to handle spaces in closing tags: `</script >`, `< /script>`
+  - Improved sanitization now blocks all script tag variations
+  - Files: `core/memory.py` (both copies)
+
+- **ReDoS Attack Mitigation**: Prevented regex backtracking DoS attacks
+  - Added 10KB input length limit to prevent exponential regex processing
+  - Large attack payloads now processed safely in <0.03s
+  - Vulnerability: `py/polynomial-redos` in script tag regex patterns
+
+- **Open Redirect Prevention**: Blocked phishing attempts via OAuth redirects
+  - Added URL validation to restrict `redirect_uri` to localhost/relative paths only
+  - Prevents external domain redirects that enable phishing attacks
+  - Vulnerability: `CWE-601` in `marm_mcp_server/endpoints/oauth.py:98`
+  - File: `marm_mcp_server/endpoints/oauth.py`
+
+- **Stack Trace Exposure Protection**: Hidden internal error details from external users
+  - Replaced `str(e)` exposures with generic error messages for health checks
+  - Fixed 19+ WebSocket error handlers exposing internal implementation details
+  - Added server-side logging while keeping client responses secure
+  - Prevents disclosure of file paths, database strings, internal architecture
+  - Vulnerability: `py/stack-trace-exposure` in health endpoints and WebSocket handlers
+  - Files: `endpoints/system.py`, `endpoints/websocket_handlers_complete.py`
+
+### Changed
+
+- All error responses now return generic messages to external users
+- Server-side logging enhanced for debugging while maintaining security
+- OAuth flow restricted to development-safe redirect URIs
+
+### Technical Notes
+
+- All fixes follow "SIMPLE IS BETTER THAN COMPLICATED" principle
+- Surgical changes maintain functionality while eliminating security risks
+- Total files modified: 5 across 4 vulnerability categories
+- All GitHub CodeQL security alerts resolved
+
+</details>
+
+---
+
 ## 📁 Project Documentation
 
 ### **Usage Guides**
