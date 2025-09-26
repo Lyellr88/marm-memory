@@ -3,7 +3,11 @@
 from fastapi import WebSocket
 from typing import Dict, Any
 import sqlite3
+import logging
 from datetime import datetime, timezone
+
+# Setup logging for security error tracking
+logger = logging.getLogger(__name__)
 
 from core.memory import memory
 from core.events import events
@@ -39,7 +43,7 @@ async def handle_smart_recall(websocket: WebSocket, client_id: str, message: Dic
             "id": message.get("id"),
             "error": {
                 "code": -32603,
-                "message": f"Internal error: {str(e)}"
+                "message": "Request processing failed"
             }
         }
         await ws_manager.send_personal_message(response, client_id)
@@ -76,7 +80,7 @@ async def handle_contextual_log(websocket: WebSocket, client_id: str, message: D
             "id": message.get("id"),
             "error": {
                 "code": -32603,
-                "message": f"Internal error: {str(e)}"
+                "message": "Request processing failed"
             }
         }
         await ws_manager.send_personal_message(response, client_id)
@@ -120,7 +124,7 @@ async def handle_start(websocket: WebSocket, client_id: str, message: Dict[str, 
             "id": message.get("id"),
             "error": {
                 "code": -32603,
-                "message": f"Internal error: {str(e)}"
+                "message": "Request processing failed"
             }
         }
         await ws_manager.send_personal_message(response, client_id)
@@ -160,7 +164,7 @@ async def handle_refresh(websocket: WebSocket, client_id: str, message: Dict[str
             "id": message.get("id"),
             "error": {
                 "code": -32603,
-                "message": f"Internal error: {str(e)}"
+                "message": "Request processing failed"
             }
         }
         await ws_manager.send_personal_message(response, client_id)
@@ -197,7 +201,7 @@ async def handle_log_entry(websocket: WebSocket, client_id: str, message: Dict[s
             "id": message.get("id"),
             "error": {
                 "code": -32603,
-                "message": f"Internal error: {str(e)}"
+                "message": "Request processing failed"
             }
         }
         await ws_manager.send_personal_message(response, client_id)
@@ -236,7 +240,7 @@ async def handle_log_session(websocket: WebSocket, client_id: str, message: Dict
             "id": message.get("id"),
             "error": {
                 "code": -32603,
-                "message": f"Internal error: {str(e)}"
+                "message": "Request processing failed"
             }
         }
         await ws_manager.send_personal_message(response, client_id)
@@ -296,7 +300,7 @@ async def handle_log_show(websocket: WebSocket, client_id: str, message: Dict[st
             "id": message.get("id"),
             "error": {
                 "code": -32603,
-                "message": f"Internal error: {str(e)}"
+                "message": "Request processing failed"
             }
         }
         await ws_manager.send_personal_message(response, client_id)
@@ -349,7 +353,7 @@ async def handle_log_delete(websocket: WebSocket, client_id: str, message: Dict[
             "id": message.get("id"),
             "error": {
                 "code": -32603,
-                "message": f"Internal error: {str(e)}"
+                "message": "Request processing failed"
             }
         }
         await ws_manager.send_personal_message(response, client_id)
@@ -406,7 +410,7 @@ async def handle_notebook_add(websocket: WebSocket, client_id: str, message: Dic
             "id": message.get("id"),
             "error": {
                 "code": -32603,
-                "message": f"Internal error: {str(e)}"
+                "message": "Request processing failed"
             }
         }
         await ws_manager.send_personal_message(response, client_id)
@@ -451,7 +455,7 @@ async def handle_notebook_use(websocket: WebSocket, client_id: str, message: Dic
             "id": message.get("id"),
             "error": {
                 "code": -32603,
-                "message": f"Internal error: {str(e)}"
+                "message": "Request processing failed"
             }
         }
         await ws_manager.send_personal_message(response, client_id)
@@ -467,7 +471,7 @@ async def handle_notebook_show(websocket: WebSocket, client_id: str, message: Di
         response = {"jsonrpc": "2.0", "id": message.get("id"), "result": {"status": "success", "entries": entries, "total_count": len(entries)}}
         await ws_manager.send_personal_message(response, client_id)
     except Exception as e:
-        await ws_manager.send_personal_message({"jsonrpc": "2.0", "id": message.get("id"), "error": {"code": -32603, "message": f"Internal error: {str(e)}"}}, client_id)
+        await ws_manager.send_personal_message({"jsonrpc": "2.0", "id": message.get("id"), "error": {"code": -32603, "message": "Request processing failed"}}, client_id)
 
 async def handle_notebook_delete(websocket: WebSocket, client_id: str, message: Dict[str, Any]):
     """Handle notebook delete requests via WebSocket"""
@@ -484,7 +488,7 @@ async def handle_notebook_delete(websocket: WebSocket, client_id: str, message: 
         response = {"jsonrpc": "2.0", "id": message.get("id"), "result": {"status": "success" if deleted > 0 else "not_found", "deleted": deleted > 0}}
         await ws_manager.send_personal_message(response, client_id)
     except Exception as e:
-        await ws_manager.send_personal_message({"jsonrpc": "2.0", "id": message.get("id"), "error": {"code": -32603, "message": f"Internal error: {str(e)}"}}, client_id)
+        await ws_manager.send_personal_message({"jsonrpc": "2.0", "id": message.get("id"), "error": {"code": -32603, "message": "Request processing failed"}}, client_id)
 
 async def handle_notebook_clear(websocket: WebSocket, client_id: str, message: Dict[str, Any]):
     """Handle notebook clear requests via WebSocket"""
@@ -493,7 +497,7 @@ async def handle_notebook_clear(websocket: WebSocket, client_id: str, message: D
         response = {"jsonrpc": "2.0", "id": message.get("id"), "result": {"status": "success", "message": "🧹 Active notebook entries cleared", "active_count": 0}}
         await ws_manager.send_personal_message(response, client_id)
     except Exception as e:
-        await ws_manager.send_personal_message({"jsonrpc": "2.0", "id": message.get("id"), "error": {"code": -32603, "message": f"Internal error: {str(e)}"}}, client_id)
+        await ws_manager.send_personal_message({"jsonrpc": "2.0", "id": message.get("id"), "error": {"code": -32603, "message": "Request processing failed"}}, client_id)
 
 async def handle_notebook_status(websocket: WebSocket, client_id: str, message: Dict[str, Any]):
     """Handle notebook status requests via WebSocket"""
@@ -502,7 +506,7 @@ async def handle_notebook_status(websocket: WebSocket, client_id: str, message: 
         response = {"jsonrpc": "2.0", "id": message.get("id"), "result": {"status": "success", "active_entries": active_names, "active_count": len(active_names)}}
         await ws_manager.send_personal_message(response, client_id)
     except Exception as e:
-        await ws_manager.send_personal_message({"jsonrpc": "2.0", "id": message.get("id"), "error": {"code": -32603, "message": f"Internal error: {str(e)}"}}, client_id)
+        await ws_manager.send_personal_message({"jsonrpc": "2.0", "id": message.get("id"), "error": {"code": -32603, "message": "Request processing failed"}}, client_id)
 
 # ===== REASONING HANDLERS =====
 
@@ -617,7 +621,7 @@ async def handle_summary(websocket: WebSocket, client_id: str, message: Dict[str
             "id": message.get("id"),
             "error": {
                 "code": -32603,
-                "message": f"Internal error: {str(e)}"
+                "message": "Request processing failed"
             }
         }
         await ws_manager.send_personal_message(response, client_id)
@@ -633,7 +637,7 @@ async def handle_context_bridge(websocket: WebSocket, client_id: str, message: D
         response = {"jsonrpc": "2.0", "id": message.get("id"), "result": {"status": "success", "bridge_text": bridge_text, "session_name": session_name}}
         await ws_manager.send_personal_message(response, client_id)
     except Exception as e:
-        await ws_manager.send_personal_message({"jsonrpc": "2.0", "id": message.get("id"), "error": {"code": -32603, "message": f"Internal error: {str(e)}"}}, client_id)
+        await ws_manager.send_personal_message({"jsonrpc": "2.0", "id": message.get("id"), "error": {"code": -32603, "message": "Request processing failed"}}, client_id)
 
 # ===== SYSTEM HANDLERS =====
 
@@ -644,7 +648,7 @@ async def handle_current_context(websocket: WebSocket, client_id: str, message: 
         response = {"jsonrpc": "2.0", "id": message.get("id"), "result": {"status": "success", "current_datetime": current_time}}
         await ws_manager.send_personal_message(response, client_id)
     except Exception as e:
-        await ws_manager.send_personal_message({"jsonrpc": "2.0", "id": message.get("id"), "error": {"code": -32603, "message": f"Internal error: {str(e)}"}}, client_id)
+        await ws_manager.send_personal_message({"jsonrpc": "2.0", "id": message.get("id"), "error": {"code": -32603, "message": "Request processing failed"}}, client_id)
 
 async def handle_system_info(websocket: WebSocket, client_id: str, message: Dict[str, Any]):
     """Handle system info requests via WebSocket"""
@@ -652,7 +656,7 @@ async def handle_system_info(websocket: WebSocket, client_id: str, message: Dict
         response = {"jsonrpc": "2.0", "id": message.get("id"), "result": {"status": "success", "message": "MARM MCP Server - WebSocket Protocol", "version": "2.2.5-beta"}}
         await ws_manager.send_personal_message(response, client_id)
     except Exception as e:
-        await ws_manager.send_personal_message({"jsonrpc": "2.0", "id": message.get("id"), "error": {"code": -32603, "message": f"Internal error: {str(e)}"}}, client_id)
+        await ws_manager.send_personal_message({"jsonrpc": "2.0", "id": message.get("id"), "error": {"code": -32603, "message": "Request processing failed"}}, client_id)
 
 async def handle_reload_docs(websocket: WebSocket, client_id: str, message: Dict[str, Any]):
     """Handle reload docs requests via WebSocket"""
@@ -660,4 +664,4 @@ async def handle_reload_docs(websocket: WebSocket, client_id: str, message: Dict
         response = {"jsonrpc": "2.0", "id": message.get("id"), "result": {"status": "success", "message": "📚 Documentation reloaded"}}
         await ws_manager.send_personal_message(response, client_id)
     except Exception as e:
-        await ws_manager.send_personal_message({"jsonrpc": "2.0", "id": message.get("id"), "error": {"code": -32603, "message": f"Internal error: {str(e)}"}}, client_id)
+        await ws_manager.send_personal_message({"jsonrpc": "2.0", "id": message.get("id"), "error": {"code": -32603, "message": "Request processing failed"}}, client_id)

@@ -2,8 +2,12 @@
 
 from fastapi import HTTPException, APIRouter
 import sqlite3
+import logging
 from datetime import datetime, timezone
 from typing import List, Dict, Optional
+
+# Setup logging for security error tracking
+logger = logging.getLogger(__name__)
 
 # Import core components
 from core.memory import memory
@@ -36,12 +40,16 @@ async def health_check():
             "semantic_search": "available" if SEMANTIC_SEARCH_AVAILABLE else "text_only"
         }
     except Exception as e:
+        # Log detailed error server-side for debugging (secure)
+        logger.error(f"Health check failed: {str(e)}", exc_info=True)
+
+        # Return generic error message to external users (secure)
         return {
             "status": "unhealthy",
             "service": "MARM MCP Server",
             "version": SERVER_VERSION,
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "error": str(e)
+            "error": "Service temporarily unavailable"
         }
 
 @router.get("/ready", include_in_schema=False)
@@ -65,12 +73,16 @@ async def readiness_check():
             }
         }
     except Exception as e:
+        # Log detailed error server-side for debugging (secure)
+        logger.error(f"Readiness check failed: {str(e)}", exc_info=True)
+
+        # Return generic error message to external users (secure)
         return {
             "status": "not_ready",
             "service": "MARM MCP Server",
             "version": SERVER_VERSION,
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "error": str(e)
+            "error": "Service not ready"
         }
 
 @router.get("/marm_current_context", operation_id="marm_current_context", include_in_schema=False)

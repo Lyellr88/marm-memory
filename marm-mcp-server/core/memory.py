@@ -100,11 +100,15 @@ def sanitize_content(content: str) -> str:
     if not content:
         return content
 
+    # Prevent ReDoS attacks by limiting input length for regex processing
+    if len(content) > 10000:  # 10KB limit for safe regex processing
+        content = content[:10000]
+
     # Remove or neutralize common XSS patterns first (before HTML escaping)
     sanitized = content
 
-    # Remove script tags entirely
-    sanitized = re.sub(r'<script[^>]*>.*?</script>', '', sanitized, flags=re.IGNORECASE | re.DOTALL)
+    # Remove script tags entirely (handles malformed tags with spaces, ReDoS-safe)
+    sanitized = re.sub(r'<\s*script[^>]*>.*?<\s*/\s*script\s*>', '', sanitized, flags=re.IGNORECASE | re.DOTALL)
 
     # Remove javascript: protocols
     sanitized = re.sub(r'javascript:', 'blocked-javascript:', sanitized, flags=re.IGNORECASE)
