@@ -14,8 +14,8 @@ Memory Accurate Response Mode v2.2.5 - The intelligent memory system for AI agen
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115.4-blue)](https://fastapi.tiangolo.com/)
-[![Docker Hub](https://img.shields.io/badge/Docker-hub-blue)](https://hub.docker.com/r/lyellr88/marm-mcp-server)
-[![PyPI](https://img.shields.io/pypi/v/marm-mcp-server?color=blue&label=PyPI)](https://pypi.org/project/marm-mcp-server/)
+[![Docker Pulls](https://img.shields.io/docker/pulls/lyellr88/marm-mcp-server)](https://hub.docker.com/r/lyellr88/marm-mcp-server)
+[![Pip Downloads](https://pepy.tech/badge/marm-mcp-server)](https://pepy.tech/project/marm-mcp-server)
 
 [![pip install](https://img.shields.io/badge/pip%20install-marm--mcp--server-blue)](https://pypi.org/project/marm-mcp-server/)
 [![MCP Registry](https://img.shields.io/badge/MCP%20Registry-LIVE-blue)](https://registry.modelcontextprotocol.io/)
@@ -31,6 +31,16 @@ Forks may experiment, but official updates will always come from this repo.
 ---
 
 ## ⚡ **INSTANT SETUP** - Ready in 60 seconds
+
+<br>
+<div align="center">
+<picture>
+    <img src="https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/media/installation-flow.svg"
+         width="850"
+         height="500"
+</picture>
+</div>
+<br>
 
 **Already have MARM running?** Connect instantly:
 
@@ -79,13 +89,15 @@ claude mcp add marm-memory http://localhost:8001/mcp
 
 **🎯 You now have AI with perfect memory across all conversations!**
 
+<br>
 <div align="center">
 <picture>
-    <img src="https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/media/feature-showcase.svg"
-      height="550"   
-      width="800"         
+    <img src="https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/media/memory-intelligence.svg"
+         width="900"
+         height="625"
 </picture>
-</div>  
+</div>
+<br>
 
 **WebSocket Connection (Beta - Complete MCP Protocol Support):**
 
@@ -286,6 +298,16 @@ Now that you understand the ecosystem, here's info and how to actually use the M
 - *"Search for what we discussed about authentication yesterday"*
 
 The AI agent will automatically use the appropriate tools. Manual tool access is available for power users who want direct control.
+
+<br>
+<div align="center">
+<picture>
+    <img src="https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/media/feature-showcase.svg"
+         width="900"
+         height="650"
+</picture>
+</div>
+<br>
 
 | **Category** | **Tool** | **Description** |
 |--------------|----------|-----------------|
