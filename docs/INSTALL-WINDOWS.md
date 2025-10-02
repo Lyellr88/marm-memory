@@ -26,6 +26,16 @@
 
 **🚀 Fastest Path to MARM Memory on Windows:**
 
+<br>
+<div align="center">
+<picture>
+    <img src="https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/media/installation-flow.svg"
+         width="850"
+         height="500"
+</picture>
+</div>
+<br>
+
 1. **Install MARM**: Choose ⚡ **Quick Test** (Beginner) or ⭐ **Automated** (Easy) from options below
 2. **Connect Claude**: `claude mcp add marm-memory http://localhost:8001/mcp`
 3. **Test**: `marm_start` → `marm_system_info`
