@@ -222,6 +222,18 @@ For developers who want simplified multi-provider support:
 
 ---
 
+<br>
+<div align="center">
+<picture>
+    <img src="https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/media/installation-flow.svg"
+         width="850"
+         height="500"
+</picture>
+</div>
+<br>
+
+---
+
 **Need Help?** Check our **[README.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/README.md)**  or [join Discord](https://discord.gg/EuBsHvSRks) for integration support.
 
 ---
