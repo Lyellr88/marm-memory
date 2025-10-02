@@ -32,6 +32,16 @@ Forks may experiment, but official updates will always come from this repo.
 
 ## 🚀 Quick Start for MCP
 
+<br>
+<div align="center">
+<picture>
+    <img src="https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/media/installation-flow.svg"
+         width="850"
+         height="500"
+</picture>
+</div>
+<br>
+
 **Docker (Fastest - 30 seconds):**
 
 ```bash
