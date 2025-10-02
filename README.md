@@ -14,8 +14,8 @@ Memory Accurate Response Mode v2.2.5 - The intelligent memory system for AI agen
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115.4-blue)](https://fastapi.tiangolo.com/)
-[![Docker Hub](https://img.shields.io/badge/Docker-hub-blue)](https://hub.docker.com/r/lyellr88/marm-mcp-server)
-[![PyPI](https://img.shields.io/pypi/v/marm-mcp-server?color=blue&label=PyPI)](https://pypi.org/project/marm-mcp-server/)
+[![Docker Pulls](https://img.shields.io/docker/pulls/lyellr88/marm-mcp-server)](https://hub.docker.com/r/lyellr88/marm-mcp-server)
+[![Pip Downloads](https://pepy.tech/badge/marm-mcp-server)](https://pepy.tech/project/marm-mcp-server)
 
 [![pip install](https://img.shields.io/badge/pip%20install-marm--mcp--server-blue)](https://pypi.org/project/marm-mcp-server/)
 [![MCP Registry](https://img.shields.io/badge/MCP%20Registry-LIVE-blue)](https://registry.modelcontextprotocol.io/)
@@ -118,16 +118,6 @@ The MARM ecosystem consists of three main components:
 
 Whether you're a developer looking to build the next generation of AI agents, a researcher studying AI behavior, or simply a power user who wants to have more productive conversations with your AI, the MARM ecosystem provides the tools you need to unlock the full potential of large language models.
 
-<div align="center">
-<picture>
-    <img src="https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/media/google-overview.PNG"
-         alt="MARM - The AI That Remembers Your Conversations"
-         width="700"
-         height="350"
-</picture>
-</div>
-<p align="center">*Appears in Google AI Overview for AI memory protocol queries (as of Aug 2025)*
-
 The newest addition tho the ecosystem is MARM MCP it represents an emerging category of MCP server that integrates a complete protocol layer with intelligent memory systems. Built on FastAPI and SQLite, it combines the MARM protocol with semantic search, session management, and smart retrieval to bridge tool access with structured reasoning. This creates a more consistent, user-controlled LLM experience that goes beyond simple tool exposure.
 
 | **Category** | **Feature** | **Description** |
@@ -171,6 +161,16 @@ MARM is the result of combining individual persistence with collective needs, a 
 Join Discord for upcoming features and builds, plus a safe space to share your work and get constructive feedback.
 
 [MARM Discord](https://discord.gg/EuBsHvSRks)
+
+<div align="center">
+<picture>
+    <img src="https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/media/google-overview.PNG"
+         alt="MARM - The AI That Remembers Your Conversations"
+         width="700"
+         height="350"
+</picture>
+</div>
+<p align="center">*Appears in Google AI Overview for AI memory protocol queries (as of Aug 2025)*
 
 ---
 
@@ -237,6 +237,15 @@ See [CHATBOT-SETUP.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/d
 Now that you understand the ecosystem, here's info and how to actually use the MCP server with your AI agents
 
 ---
+
+<div align="center">
+<picture>
+    <img src="https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/media/feature-showcase.svg"
+      height="550"   
+      width="800"
+         
+</picture>
+</div>
 
 ## 🛠️ Complete MCP Tool Suite (18 Tools)
 
