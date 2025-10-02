@@ -1,5 +1,12 @@
 <svg viewBox="0 0 800 400" xmlns="http://www.w3.org/2000/svg">
   <defs>
+    <!-- Rounded corners mask -->
+    <clipPath id="roundedCorners">
+      <rect width="800" height="400" rx="20" ry="20"/>
+    </clipPath>
+  </defs>
+  <g clip-path="url(#roundedCorners)">
+  <defs>
     <!-- Animated gradient for chat bubble outline -->
     <linearGradient id="bubbleGrad" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" style="stop-color:#667eea;stop-opacity:1">
