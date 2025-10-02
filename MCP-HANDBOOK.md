@@ -17,17 +17,6 @@
 
 ---
 
-<div align="center">
-<picture>
-    <img src="https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/media/feature-showcase.svg"
-      height="550"   
-      width="800"
-         
-</picture>
-</div>
-
----
-
 ## Getting Started
 
 ### What is MARM?
