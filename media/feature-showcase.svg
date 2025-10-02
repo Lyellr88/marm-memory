@@ -1,0 +1,284 @@
+<svg viewBox="0 0 1000 700" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Modern gradients for different categories -->
+    <linearGradient id="memoryGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#667eea;stop-opacity:0.9"/>
+      <stop offset="100%" style="stop-color:#3b82f6;stop-opacity:0.8"/>
+    </linearGradient>
+
+    <linearGradient id="sessionGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:0.9"/>
+      <stop offset="100%" style="stop-color:#1e40af;stop-opacity:0.8"/>
+    </linearGradient>
+
+    <linearGradient id="loggingGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1e40af;stop-opacity:0.9"/>
+      <stop offset="100%" style="stop-color:#7c3aed;stop-opacity:0.8"/>
+    </linearGradient>
+
+    <linearGradient id="reasoningGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#7c3aed;stop-opacity:0.9"/>
+      <stop offset="100%" style="stop-color:#667eea;stop-opacity:0.8"/>
+    </linearGradient>
+
+    <linearGradient id="notebookGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#667eea;stop-opacity:0.9"/>
+      <stop offset="100%" style="stop-color:#3b82f6;stop-opacity:0.8"/>
+    </linearGradient>
+
+    <linearGradient id="systemGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:0.9"/>
+      <stop offset="100%" style="stop-color:#1e40af;stop-opacity:0.8"/>
+    </linearGradient>
+
+    <linearGradient id="connectGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f172a;stop-opacity:0.9"/>
+      <stop offset="100%" style="stop-color:#3b82f6;stop-opacity:0.8"/>
+    </linearGradient>
+
+    <!-- Card shadow -->
+    <filter id="cardShadow" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#000" flood-opacity="0.15"/>
+    </filter>
+
+    <!-- Icon glow -->
+    <filter id="iconGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1000" height="700" fill="#d0d0d0"/>
+
+  <!-- Title -->
+  <text x="500" y="40" text-anchor="middle" fill="#1e293b" font-family="Arial, sans-serif"
+        font-size="28" font-weight="bold">18 Complete MCP Tools</text>
+  <text x="500" y="65" text-anchor="middle" fill="#64748b" font-family="Arial, sans-serif"
+        font-size="16">Professional memory intelligence for any AI agent</text>
+
+  <!-- Large container card for all tools -->
+  <rect x="20" y="85" width="970" height="460" rx="20" fill="#0f172a" filter="url(#cardShadow)"/>
+  <rect x="28" y="93" width="954" height="444" rx="16" fill="rgba(255,255,255,0.15)" stroke="rgba(255,255,255,0.3)" stroke-width="2"/>
+
+  <!-- Memory Intelligence Category -->
+  <text x="40" y="120" fill="#667eea" font-family="Arial, sans-serif"
+        font-size="18" font-weight="bold">🧠 Memory Intelligence</text>
+
+  <!-- Smart Recall Card -->
+  <g transform="translate(40, 140)">
+    <rect width="200" height="100" rx="12" fill="url(#memoryGrad)" filter="url(#cardShadow)"/>
+    <rect x="8" y="8" width="184" height="84" rx="8" fill="rgba(255,255,255,0.2)" stroke="rgba(255,255,255,0.3)" stroke-width="1"/>
+
+    <circle cx="30" cy="35" r="8" fill="#000000" opacity="0.9" filter="url(#iconGlow)"/>
+    <text x="50" y="30" fill="#000000" font-family="Arial, sans-serif" font-size="14" font-weight="bold">Smart Recall</text>
+    <text x="50" y="45" fill="#000000" font-family="Arial, sans-serif" font-size="11" opacity="0.9">AI semantic search</text>
+    <text x="15" y="65" fill="#000000" font-family="Arial, sans-serif" font-size="10" opacity="0.8">Find memories by meaning,</text>
+    <text x="15" y="78" fill="#000000" font-family="Arial, sans-serif" font-size="10" opacity="0.8">not keywords</text>
+  </g>
+
+  <!-- Contextual Log Card -->
+  <g transform="translate(260, 140)">
+    <rect width="200" height="100" rx="12" fill="url(#memoryGrad)" filter="url(#cardShadow)"/>
+    <rect x="8" y="8" width="184" height="84" rx="8" fill="rgba(255,255,255,0.2)" stroke="rgba(255,255,255,0.3)" stroke-width="1"/>
+
+    <circle cx="30" cy="35" r="8" fill="#000000" opacity="0.9" filter="url(#iconGlow)"/>
+    <text x="50" y="30" fill="#000000" font-family="Arial, sans-serif" font-size="14" font-weight="bold">Contextual Log</text>
+    <text x="50" y="45" fill="#000000" font-family="Arial, sans-serif" font-size="11" opacity="0.9">Auto-classification</text>
+    <text x="15" y="65" fill="#000000" font-family="Arial, sans-serif" font-size="10" opacity="0.8">Intelligent storage with</text>
+    <text x="15" y="78" fill="#000000" font-family="Arial, sans-serif" font-size="10" opacity="0.8">vector embeddings</text>
+  </g>
+
+  <!-- Session Management Category -->
+  <text x="40" y="275" fill="#3b82f6" font-family="Arial, sans-serif"
+        font-size="18" font-weight="bold">🚀 Session Management</text>
+
+  <!-- MARM Start Card -->
+  <g transform="translate(40, 290)">
+    <rect width="200" height="100" rx="12" fill="url(#sessionGrad)" filter="url(#cardShadow)"/>
+    <rect x="8" y="8" width="184" height="84" rx="8" fill="rgba(255,255,255,0.2)" stroke="rgba(255,255,255,0.3)" stroke-width="1"/>
+
+    <circle cx="30" cy="35" r="8" fill="#000000" opacity="0.9" filter="url(#iconGlow)"/>
+    <text x="50" y="30" fill="#000000" font-family="Arial, sans-serif" font-size="14" font-weight="bold">MARM Start</text>
+    <text x="50" y="45" fill="#000000" font-family="Arial, sans-serif" font-size="11" opacity="0.9">Protocol activation</text>
+    <text x="15" y="65" fill="#000000" font-family="Arial, sans-serif" font-size="10" opacity="0.8">Activate memory layers</text>
+    <text x="15" y="78" fill="#000000" font-family="Arial, sans-serif" font-size="10" opacity="0.8">and response accuracy</text>
+  </g>
+
+  <!-- MARM Refresh Card -->
+  <g transform="translate(260, 290)">
+    <rect width="200" height="100" rx="12" fill="url(#sessionGrad)" filter="url(#cardShadow)"/>
+    <rect x="8" y="8" width="184" height="84" rx="8" fill="rgba(255,255,255,0.2)" stroke="rgba(255,255,255,0.3)" stroke-width="1"/>
+
+    <circle cx="30" cy="35" r="8" fill="#000000" opacity="0.9" filter="url(#iconGlow)"/>
+    <text x="50" y="30" fill="#000000" font-family="Arial, sans-serif" font-size="14" font-weight="bold">MARM Refresh</text>
+    <text x="50" y="45" fill="#000000" font-family="Arial, sans-serif" font-size="11" opacity="0.9">State management</text>
+    <text x="15" y="65" fill="#000000" font-family="Arial, sans-serif" font-size="10" opacity="0.8">Refresh agent state</text>
+    <text x="15" y="78" fill="#000000" font-family="Arial, sans-serif" font-size="10" opacity="0.8">and reaffirm protocol</text>
+  </g>
+
+  <!-- Logging System Category -->
+  <text x="510" y="120" fill="#3b82f6" font-family="Arial, sans-serif"
+        font-size="18" font-weight="bold">📚 Logging System</text>
+
+  <!-- Log Session Card -->
+  <g transform="translate(510, 140)">
+    <rect width="140" height="100" rx="12" fill="url(#loggingGrad)" filter="url(#cardShadow)"/>
+    <rect x="6" y="6" width="128" height="88" rx="8" fill="rgba(255,255,255,0.2)" stroke="rgba(255,255,255,0.3)" stroke-width="1"/>
+
+    <circle cx="25" cy="30" r="6" fill="#000000" opacity="0.9"/>
+    <text x="15" y="50" fill="#000000" font-family="Arial, sans-serif" font-size="12" font-weight="bold">Log Session</text>
+    <text x="15" y="65" fill="#000000" font-family="Arial, sans-serif" font-size="9" opacity="0.8">Named containers</text>
+    <text x="15" y="78" fill="#000000" font-family="Arial, sans-serif" font-size="9" opacity="0.8">for organized logs</text>
+  </g>
+
+  <!-- Log Entry Card -->
+  <g transform="translate(670, 140)">
+    <rect width="140" height="100" rx="12" fill="url(#loggingGrad)" filter="url(#cardShadow)"/>
+    <rect x="6" y="6" width="128" height="88" rx="8" fill="rgba(255,255,255,0.2)" stroke="rgba(255,255,255,0.3)" stroke-width="1"/>
+
+    <circle cx="25" cy="30" r="6" fill="#000000" opacity="0.9"/>
+    <text x="15" y="50" fill="#000000" font-family="Arial, sans-serif" font-size="12" font-weight="bold">Log Entry</text>
+    <text x="15" y="65" fill="#000000" font-family="Arial, sans-serif" font-size="9" opacity="0.8">Structured entries</text>
+    <text x="15" y="78" fill="#000000" font-family="Arial, sans-serif" font-size="9" opacity="0.8">with auto-dating</text>
+  </g>
+
+  <!-- Log Show Card -->
+  <g transform="translate(830, 140)">
+    <rect width="140" height="100" rx="12" fill="url(#loggingGrad)" filter="url(#cardShadow)"/>
+    <rect x="6" y="6" width="128" height="88" rx="8" fill="rgba(255,255,255,0.2)" stroke="rgba(255,255,255,0.3)" stroke-width="1"/>
+
+    <circle cx="25" cy="30" r="6" fill="#000000" opacity="0.9"/>
+    <text x="15" y="50" fill="#000000" font-family="Arial, sans-serif" font-size="12" font-weight="bold">Log Show</text>
+    <text x="15" y="65" fill="#000000" font-family="Arial, sans-serif" font-size="9" opacity="0.8">Display &amp; filter</text>
+    <text x="15" y="78" fill="#000000" font-family="Arial, sans-serif" font-size="9" opacity="0.8">all entries</text>
+  </g>
+
+  <!-- Reasoning &amp; Workflow Category -->
+  <text x="510" y="275" fill="#7c3aed" font-family="Arial, sans-serif"
+        font-size="18" font-weight="bold">🔄 Reasoning &amp; Workflow</text>
+
+  <!-- Summary Card -->
+  <g transform="translate(510, 290)">
+    <rect width="200" height="100" rx="12" fill="url(#reasoningGrad)" filter="url(#cardShadow)"/>
+    <rect x="8" y="8" width="184" height="84" rx="8" fill="rgba(255,255,255,0.2)" stroke="rgba(255,255,255,0.3)" stroke-width="1"/>
+
+    <circle cx="30" cy="35" r="8" fill="#000000" opacity="0.9"/>
+    <text x="50" y="30" fill="#000000" font-family="Arial, sans-serif" font-size="14" font-weight="bold">Summary</text>
+    <text x="50" y="45" fill="#000000" font-family="Arial, sans-serif" font-size="11" opacity="0.9">Context-aware</text>
+    <text x="15" y="65" fill="#000000" font-family="Arial, sans-serif" font-size="10" opacity="0.8">Generate summaries with</text>
+    <text x="15" y="78" fill="#000000" font-family="Arial, sans-serif" font-size="10" opacity="0.8">intelligent truncation</text>
+  </g>
+
+  <!-- Context Bridge Card -->
+  <g transform="translate(730, 290)">
+    <rect width="200" height="100" rx="12" fill="url(#reasoningGrad)" filter="url(#cardShadow)"/>
+    <rect x="8" y="8" width="184" height="84" rx="8" fill="rgba(255,255,255,0.2)" stroke="rgba(255,255,255,0.3)" stroke-width="1"/>
+
+    <circle cx="30" cy="35" r="8" fill="#000000" opacity="0.9"/>
+    <text x="50" y="30" fill="#000000" font-family="Arial, sans-serif" font-size="14" font-weight="bold">Context Bridge</text>
+    <text x="50" y="45" fill="#000000" font-family="Arial, sans-serif" font-size="11" opacity="0.9">Workflow transitions</text>
+    <text x="15" y="65" fill="#000000" font-family="Arial, sans-serif" font-size="10" opacity="0.8">Smart context bridging</text>
+    <text x="15" y="78" fill="#000000" font-family="Arial, sans-serif" font-size="10" opacity="0.8">for seamless flow</text>
+  </g>
+
+  <!-- Notebook Management Category -->
+  <text x="40" y="435" fill="#667eea" font-family="Arial, sans-serif"
+        font-size="18" font-weight="bold">📔 Notebook Management</text>
+
+  <!-- Notebook Add Card -->
+  <g transform="translate(40, 450)">
+    <rect width="120" height="80" rx="10" fill="url(#notebookGrad)" filter="url(#cardShadow)"/>
+    <rect x="5" y="5" width="110" height="70" rx="6" fill="rgba(255,255,255,0.2)" stroke="rgba(255,255,255,0.3)" stroke-width="1"/>
+
+    <circle cx="20" cy="25" r="5" fill="#000000" opacity="0.9"/>
+    <text x="12" y="40" fill="#000000" font-family="Arial, sans-serif" font-size="10" font-weight="bold">Add Entry</text>
+    <text x="12" y="55" fill="#000000" font-family="Arial, sans-serif" font-size="8" opacity="0.8">Store with</text>
+    <text x="12" y="65" fill="#000000" font-family="Arial, sans-serif" font-size="8" opacity="0.8">embeddings</text>
+  </g>
+
+  <!-- Notebook Use Card -->
+  <g transform="translate(170, 450)">
+    <rect width="120" height="80" rx="10" fill="url(#notebookGrad)" filter="url(#cardShadow)"/>
+    <rect x="5" y="5" width="110" height="70" rx="6" fill="rgba(255,255,255,0.2)" stroke="rgba(255,255,255,0.3)" stroke-width="1"/>
+
+    <circle cx="20" cy="25" r="5" fill="#000000" opacity="0.9"/>
+    <text x="12" y="40" fill="#000000" font-family="Arial, sans-serif" font-size="10" font-weight="bold">Use Entry</text>
+    <text x="12" y="55" fill="#000000" font-family="Arial, sans-serif" font-size="8" opacity="0.8">Activate as</text>
+    <text x="12" y="65" fill="#000000" font-family="Arial, sans-serif" font-size="8" opacity="0.8">instructions</text>
+  </g>
+
+  <!-- Notebook Show Card -->
+  <g transform="translate(300, 450)">
+    <rect width="120" height="80" rx="10" fill="url(#notebookGrad)" filter="url(#cardShadow)"/>
+    <rect x="5" y="5" width="110" height="70" rx="6" fill="rgba(255,255,255,0.2)" stroke="rgba(255,255,255,0.3)" stroke-width="1"/>
+
+    <circle cx="20" cy="25" r="5" fill="#000000" opacity="0.9"/>
+    <text x="12" y="40" fill="#000000" font-family="Arial, sans-serif" font-size="10" font-weight="bold">Show All</text>
+    <text x="12" y="55" fill="#000000" font-family="Arial, sans-serif" font-size="8" opacity="0.8">Display keys</text>
+    <text x="12" y="65" fill="#000000" font-family="Arial, sans-serif" font-size="8" opacity="0.8">&amp; summaries</text>
+  </g>
+
+  <!-- System Utilities Category -->
+  <text x="510" y="435" fill="#3b82f6" font-family="Arial, sans-serif"
+        font-size="18" font-weight="bold">⚙️ System Utilities</text>
+
+  <!-- System Info Card -->
+  <g transform="translate(510, 450)">
+    <rect width="160" height="80" rx="10" fill="url(#systemGrad)" filter="url(#cardShadow)"/>
+    <rect x="6" y="6" width="148" height="68" rx="6" fill="rgba(255,255,255,0.2)" stroke="rgba(255,255,255,0.3)" stroke-width="1"/>
+
+    <circle cx="22" cy="25" r="6" fill="#000000" opacity="0.9"/>
+    <text x="15" y="40" fill="#000000" font-family="Arial, sans-serif" font-size="11" font-weight="bold">System Info</text>
+    <text x="15" y="55" fill="#000000" font-family="Arial, sans-serif" font-size="9" opacity="0.8">Health &amp; status</text>
+    <text x="15" y="68" fill="#000000" font-family="Arial, sans-serif" font-size="9" opacity="0.8">monitoring</text>
+  </g>
+
+  <!-- Current Context Card -->
+  <g transform="translate(690, 450)">
+    <rect width="160" height="80" rx="10" fill="url(#systemGrad)" filter="url(#cardShadow)"/>
+    <rect x="6" y="6" width="148" height="68" rx="6" fill="rgba(255,255,255,0.2)" stroke="rgba(255,255,255,0.3)" stroke-width="1"/>
+
+    <circle cx="22" cy="25" r="6" fill="#000000" opacity="0.9"/>
+    <text x="15" y="40" fill="#000000" font-family="Arial, sans-serif" font-size="11" font-weight="bold">Current Context</text>
+    <text x="15" y="55" fill="#000000" font-family="Arial, sans-serif" font-size="9" opacity="0.8">Auto date/time</text>
+    <text x="15" y="68" fill="#000000" font-family="Arial, sans-serif" font-size="9" opacity="0.8">for log entries</text>
+  </g>
+
+  <!-- Bottom stats -->
+  <rect x="20" y="570" width="970" height="60" rx="15" fill="url(#connectGrad)" filter="url(#cardShadow)"/>
+
+  <text x="500" y="595" text-anchor="middle" fill="#000000" font-family="Arial, sans-serif"
+        font-size="16" font-weight="bold">Complete MCP Protocol Implementation</text>
+  <text x="500" y="615" text-anchor="middle" fill="#000000" font-family="Arial, sans-serif"
+        font-size="14">Natural language interface • AI agents use tools automatically • Manual control available for power users</text>
+
+  <!-- Feature badges -->
+  <g transform="translate(120, 650)">
+    <rect width="120" height="25" rx="12" fill="#3b82f6"/>
+    <text x="60" y="17" text-anchor="middle" fill="#000000" font-family="Arial, sans-serif" font-size="11" font-weight="bold">JSON-RPC 2.0</text>
+  </g>
+
+  <g transform="translate(260, 650)">
+    <rect width="120" height="25" rx="12" fill="#1e40af"/>
+    <text x="60" y="17" text-anchor="middle" fill="#000000" font-family="Arial, sans-serif" font-size="11" font-weight="bold">Vector Embeddings</text>
+  </g>
+
+  <g transform="translate(400, 650)">
+    <rect width="120" height="25" rx="12" fill="#7c3aed"/>
+    <text x="60" y="17" text-anchor="middle" fill="#000000" font-family="Arial, sans-serif" font-size="11" font-weight="bold">Cross-Session</text>
+  </g>
+
+  <g transform="translate(540, 650)">
+    <rect width="120" height="25" rx="12" fill="#667eea"/>
+    <text x="60" y="17" text-anchor="middle" fill="#000000" font-family="Arial, sans-serif" font-size="11" font-weight="bold">Rate Limited</text>
+  </g>
+
+  <g transform="translate(680, 650)">
+    <rect width="120" height="25" rx="12" fill="#3b82f6"/>
+    <text x="60" y="17" text-anchor="middle" fill="#000000" font-family="Arial, sans-serif" font-size="11" font-weight="bold">Docker Ready</text>
+  </g>
+</svg>
