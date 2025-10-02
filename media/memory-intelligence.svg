@@ -1,0 +1,245 @@
+<svg viewBox="0 0 1000 700" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Modern gradients for workflow steps -->
+    <linearGradient id="inputGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:0.9"/>
+      <stop offset="100%" style="stop-color:#1d4ed8;stop-opacity:0.8"/>
+    </linearGradient>
+
+    <linearGradient id="processGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1e40af;stop-opacity:0.9"/>
+      <stop offset="100%" style="stop-color:#3b82f6;stop-opacity:0.8"/>
+    </linearGradient>
+
+    <linearGradient id="searchGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#667eea;stop-opacity:0.9"/>
+      <stop offset="100%" style="stop-color:#7c3aed;stop-opacity:0.8"/>
+    </linearGradient>
+
+    <linearGradient id="memoryGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f172a;stop-opacity:0.9"/>
+      <stop offset="100%" style="stop-color:#1e293b;stop-opacity:0.8"/>
+    </linearGradient>
+
+    <linearGradient id="sessionGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#7c3aed;stop-opacity:0.9"/>
+      <stop offset="100%" style="stop-color:#667eea;stop-opacity:0.8"/>
+    </linearGradient>
+
+    <linearGradient id="loggingGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1e40af;stop-opacity:0.9"/>
+      <stop offset="100%" style="stop-color:#3b82f6;stop-opacity:0.8"/>
+    </linearGradient>
+
+    <linearGradient id="notebookGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:0.9"/>
+      <stop offset="100%" style="stop-color:#1d4ed8;stop-opacity:0.8"/>
+    </linearGradient>
+
+    <linearGradient id="aiGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#7c3aed;stop-opacity:0.9"/>
+      <stop offset="100%" style="stop-color:#667eea;stop-opacity:0.8"/>
+    </linearGradient>
+
+    <!-- Effects -->
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="8" stdDeviation="16" flood-color="#000" flood-opacity="0.2"/>
+    </filter>
+
+    <!-- Animated pulse -->
+    <filter id="pulse">
+      <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Connection arrows -->
+    <marker id="arrow" markerWidth="12" markerHeight="8" refX="12" refY="4" orient="auto">
+      <polygon points="0 0, 12 4, 0 8" fill="#64748b"/>
+    </marker>
+
+    <!-- Neural network pattern -->
+    <pattern id="neuralPattern" x="0" y="0" width="40" height="40" patternUnits="userSpaceOnUse">
+      <circle cx="20" cy="20" r="2" fill="#3b82f6" opacity="0.3"/>
+      <circle cx="5" cy="10" r="1" fill="#3b82f6" opacity="0.2"/>
+      <circle cx="35" cy="30" r="1" fill="#3b82f6" opacity="0.2"/>
+      <line x1="20" y1="20" x2="5" y2="10" stroke="#3b82f6" opacity="0.1"/>
+      <line x1="20" y1="20" x2="35" y2="30" stroke="#3b82f6" opacity="0.1"/>
+    </pattern>
+  </defs>
+
+  <!-- Background with subtle pattern -->
+  <rect width="1000" height="700" fill="#d0d0d0"/>
+  <rect width="1000" height="700" fill="url(#neuralPattern)" opacity="0.5"/>
+
+  <!-- Title -->
+  <text x="500" y="40" text-anchor="middle" fill="#1e293b" font-family="Arial, sans-serif"
+        font-size="26" font-weight="bold">Memory Intelligence Workflow</text>
+  <text x="500" y="65" text-anchor="middle" fill="#64748b" font-family="Arial, sans-serif"
+        font-size="15">Semantic search • Vector embeddings • Cross-session AI collaboration</text>
+
+  <!-- Step 1: User Input -->
+  <g transform="translate(80, 120)">
+    <rect width="160" height="100" rx="20" fill="url(#inputGrad)" filter="url(#shadow)"/>
+    <rect x="6" y="6" width="148" height="88" rx="16" fill="rgba(255,255,255,0.2)" stroke="rgba(255,255,255,0.4)" stroke-width="2"/>
+
+    <circle cx="80" cy="35" r="20" fill="#000000" opacity="0.9" filter="url(#glow)"/>
+    <text x="80" y="30" text-anchor="middle" fill="#3b82f6" font-family="Arial, sans-serif" font-size="12" font-weight="bold">💬</text>
+    <text x="80" y="40" text-anchor="middle" fill="#3b82f6" font-family="Arial, sans-serif" font-size="10" font-weight="bold">USER</text>
+
+    <text x="80" y="70" text-anchor="middle" fill="#000000" font-family="Arial, sans-serif" font-size="12" font-weight="bold">Natural Language</text>
+    <text x="80" y="85" text-anchor="middle" fill="#000000" font-family="Arial, sans-serif" font-size="10" opacity="0.9">Query or Command</text>
+  </g>
+
+  <!-- Step 2: MARM Processing -->
+  <g transform="translate(300, 120)">
+    <rect width="160" height="100" rx="20" fill="url(#processGrad)" filter="url(#shadow)"/>
+    <rect x="6" y="6" width="148" height="88" rx="16" fill="rgba(255,255,255,0.2)" stroke="rgba(255,255,255,0.4)" stroke-width="2"/>
+
+    <circle cx="80" cy="35" r="20" fill="#000000" opacity="0.9" filter="url(#glow)"/>
+    <text x="80" y="30" text-anchor="middle" fill="#10b981" font-family="Arial, sans-serif" font-size="12" font-weight="bold">⚡</text>
+    <text x="80" y="40" text-anchor="middle" fill="#10b981" font-family="Arial, sans-serif" font-size="10" font-weight="bold">MARM</text>
+
+    <text x="80" y="70" text-anchor="middle" fill="#000000" font-family="Arial, sans-serif" font-size="12" font-weight="bold">Intent Analysis</text>
+    <text x="80" y="85" text-anchor="middle" fill="#000000" font-family="Arial, sans-serif" font-size="10" opacity="0.9">Tool Selection</text>
+  </g>
+
+  <!-- Step 3: Vector Search -->
+  <g transform="translate(520, 120)">
+    <rect width="160" height="100" rx="20" fill="url(#searchGrad)" filter="url(#shadow)"/>
+    <rect x="6" y="6" width="148" height="88" rx="16" fill="rgba(255,255,255,0.2)" stroke="rgba(255,255,255,0.4)" stroke-width="2"/>
+
+    <circle cx="80" cy="35" r="20" fill="#000000" opacity="0.9" filter="url(#glow)"/>
+    <text x="80" y="30" text-anchor="middle" fill="#8b5cf6" font-family="Arial, sans-serif" font-size="12" font-weight="bold">🔍</text>
+    <text x="80" y="40" text-anchor="middle" fill="#8b5cf6" font-family="Arial, sans-serif" font-size="10" font-weight="bold">SEARCH</text>
+
+    <text x="80" y="70" text-anchor="middle" fill="#000000" font-family="Arial, sans-serif" font-size="12" font-weight="bold">Semantic Search</text>
+    <text x="80" y="85" text-anchor="middle" fill="#000000" font-family="Arial, sans-serif" font-size="10" opacity="0.9">Vector Similarity</text>
+  </g>
+
+  <!-- Step 4: Memory Retrieval -->
+  <g transform="translate(740, 120)">
+    <rect width="160" height="100" rx="20" fill="url(#memoryGrad)" filter="url(#shadow)"/>
+    <rect x="6" y="6" width="148" height="88" rx="16" fill="rgba(255,255,255,0.2)" stroke="rgba(255,255,255,0.4)" stroke-width="2"/>
+
+    <circle cx="80" cy="35" r="20" fill="#000000" opacity="0.9" filter="url(#glow)"/>
+    <text x="80" y="30" text-anchor="middle" fill="#f59e0b" font-family="Arial, sans-serif" font-size="12" font-weight="bold">🧠</text>
+    <text x="80" y="40" text-anchor="middle" fill="#f59e0b" font-family="Arial, sans-serif" font-size="10" font-weight="bold">MEMORY</text>
+
+    <text x="80" y="70" text-anchor="middle" fill="#000000" font-family="Arial, sans-serif" font-size="12" font-weight="bold">Context Retrieval</text>
+    <text x="80" y="85" text-anchor="middle" fill="#000000" font-family="Arial, sans-serif" font-size="10" opacity="0.9">Cross-Session Data</text>
+  </g>
+
+
+  <!-- Central Memory Intelligence Hub -->
+  <g transform="translate(400, 280)">
+    <rect width="200" height="140" rx="25" fill="url(#aiGrad)" filter="url(#shadow)"/>
+    <rect x="8" y="8" width="184" height="124" rx="20" fill="rgba(255,255,255,0.2)" stroke="rgba(255,255,255,0.4)" stroke-width="3"/>
+
+    <text x="100" y="30" text-anchor="middle" fill="#000000" font-family="Arial, sans-serif" font-size="16" font-weight="bold">🤖 AI Agent</text>
+    <text x="100" y="50" text-anchor="middle" fill="#000000" font-family="Arial, sans-serif" font-size="13" opacity="0.9">Enhanced with Memory</text>
+
+    <rect x="20" y="65" width="160" height="50" rx="10" fill="rgba(255,255,255,0.15)"/>
+    <text x="30" y="80" fill="#000000" font-family="Arial, sans-serif" font-size="11" font-weight="bold">✓ Semantic understanding</text>
+    <text x="30" y="95" fill="#000000" font-family="Arial, sans-serif" font-size="11" opacity="0.9">✓ Context-aware responses</text>
+    <text x="30" y="110" fill="#000000" font-family="Arial, sans-serif" font-size="11" opacity="0.9">✓ Learning from history</text>
+  </g>
+
+
+  <!-- Database Layer -->
+  <g transform="translate(150, 480)">
+    <rect width="700" height="120" rx="20" fill="rgba(71, 85, 105, 0.1)" stroke="rgba(71, 85, 105, 0.3)" stroke-width="2" filter="url(#shadow)"/>
+
+    <text x="350" y="30" text-anchor="middle" fill="#000000" font-family="Arial, sans-serif" font-size="18" font-weight="bold">🗄️ SQLite Database with Vector Embeddings</text>
+
+    <!-- Database components -->
+    <g transform="translate(50, 50)">
+      <rect width="120" height="50" rx="10" fill="url(#memoryGrad)" opacity="0.8"/>
+      <text x="60" y="20" text-anchor="middle" fill="#000000" font-family="Arial, sans-serif" font-size="11" font-weight="bold">Memories</text>
+      <text x="60" y="35" text-anchor="middle" fill="#000000" font-family="Arial, sans-serif" font-size="9" opacity="0.9">Vector embeddings</text>
+    </g>
+
+    <g transform="translate(190, 50)">
+      <rect width="120" height="50" rx="10" fill="url(#sessionGrad)" opacity="0.8"/>
+      <text x="60" y="20" text-anchor="middle" fill="#000000" font-family="Arial, sans-serif" font-size="11" font-weight="bold">Sessions</text>
+      <text x="60" y="35" text-anchor="middle" fill="#000000" font-family="Arial, sans-serif" font-size="9" opacity="0.9">Context management</text>
+    </g>
+
+    <g transform="translate(330, 50)">
+      <rect width="120" height="50" rx="10" fill="url(#loggingGrad)" opacity="0.8"/>
+      <text x="60" y="20" text-anchor="middle" fill="#000000" font-family="Arial, sans-serif" font-size="11" font-weight="bold">Log Entries</text>
+      <text x="60" y="35" text-anchor="middle" fill="#000000" font-family="Arial, sans-serif" font-size="9" opacity="0.9">Structured logs</text>
+    </g>
+
+    <g transform="translate(470, 50)">
+      <rect width="120" height="50" rx="10" fill="url(#notebookGrad)" opacity="0.8"/>
+      <text x="60" y="20" text-anchor="middle" fill="#000000" font-family="Arial, sans-serif" font-size="11" font-weight="bold">Notebook</text>
+      <text x="60" y="35" text-anchor="middle" fill="#000000" font-family="Arial, sans-serif" font-size="9" opacity="0.9">Instructions</text>
+    </g>
+  </g>
+
+
+  <!-- Output Response -->
+  <g transform="translate(200, 620)">
+    <rect width="600" height="60" rx="15" fill="url(#inputGrad)" filter="url(#shadow)"/>
+    <rect x="5" y="5" width="590" height="50" rx="12" fill="rgba(255,255,255,0.2)" stroke="rgba(255,255,255,0.4)" stroke-width="2"/>
+
+    <text x="300" y="25" text-anchor="middle" fill="#000000" font-family="Arial, sans-serif" font-size="14" font-weight="bold">📤 Enhanced AI Response</text>
+    <text x="300" y="45" text-anchor="middle" fill="#000000" font-family="Arial, sans-serif" font-size="12" opacity="0.9">Context-aware • Memory-informed • Intelligent • Persistent across sessions</text>
+  </g>
+
+
+  <!-- Feature highlights -->
+  <g transform="translate(50, 350)">
+    <rect width="280" height="100" rx="15" fill="rgba(30, 64, 175, 0.15)" stroke="rgba(30, 64, 175, 0.4)" stroke-width="2"/>
+    <text x="140" y="20" text-anchor="middle" fill="#1e40af" font-family="Arial, sans-serif" font-size="14" font-weight="bold">🎯 Key Features</text>
+    <text x="20" y="40" fill="#000000" font-family="Arial, sans-serif" font-size="11">• Semantic similarity search using AI embeddings</text>
+    <text x="20" y="55" fill="#000000" font-family="Arial, sans-serif" font-size="11">• Auto-classification (code, project, book, general)</text>
+    <text x="20" y="70" fill="#000000" font-family="Arial, sans-serif" font-size="11">• Cross-session memory sharing</text>
+    <text x="20" y="85" fill="#000000" font-family="Arial, sans-serif" font-size="11">• Multi-AI agent collaboration</text>
+  </g>
+
+  <g transform="translate(670, 350)">
+    <rect width="280" height="100" rx="15" fill="rgba(30, 64, 175, 0.15)" stroke="rgba(30, 64, 175, 0.4)" stroke-width="2"/>
+    <text x="140" y="20" text-anchor="middle" fill="#1e40af" font-family="Arial, sans-serif" font-size="14" font-weight="bold">⚡ Performance</text>
+    <text x="20" y="40" fill="#000000" font-family="Arial, sans-serif" font-size="11">• Lazy loading for resource efficiency</text>
+    <text x="20" y="55" fill="#000000" font-family="Arial, sans-serif" font-size="11">• SQLite WAL mode for concurrent access</text>
+    <text x="20" y="70" fill="#000000" font-family="Arial, sans-serif" font-size="11">• Connection pooling and rate limiting</text>
+    <text x="20" y="85" fill="#000000" font-family="Arial, sans-serif" font-size="11">• MCP 1MB response compliance</text>
+  </g>
+
+  <!-- CLEAN FLOWCHART LINES FOLLOWING DRAWING -->
+
+
+  <!-- Vertical drops from top boxes -->
+  <line x1="160" y1="220" x2="160" y2="245" stroke="#64748b" stroke-width="2"/>
+  <line x1="380" y1="220" x2="380" y2="245" stroke="#64748b" stroke-width="2"/>
+  <line x1="600" y1="220" x2="600" y2="245" stroke="#64748b" stroke-width="2"/>
+  <line x1="820" y1="220" x2="820" y2="245" stroke="#64748b" stroke-width="2"/>
+
+  <!-- Horizontal convergence line -->
+  <line x1="160" y1="245" x2="820" y2="245" stroke="#64748b" stroke-width="2"/>
+
+  <!-- Single drop to AI Agent -->
+  <line x1="500" y1="245" x2="500" y2="280" stroke="#64748b" stroke-width="2"/>
+
+  <!-- Symmetrical connections from side boxes to database -->
+  <line x1="190" y1="450" x2="190" y2="480" stroke="#64748b" stroke-width="2"/>
+  <line x1="810" y1="450" x2="810" y2="480" stroke="#64748b" stroke-width="2"/>
+
+  <!-- Symmetrical connections from database to output -->
+  <line x1="350" y1="600" x2="350" y2="620" stroke="#64748b" stroke-width="2"/>
+  <line x1="650" y1="600" x2="650" y2="620" stroke="#64748b" stroke-width="2"/>
+
+
+</svg>
