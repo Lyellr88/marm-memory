@@ -37,6 +37,19 @@ MARM is a **Universal MCP Server** providing intelligent memory that saves acros
 
 ---
 
+<br>
+<div align="center">
+<picture>
+    <img src="https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/media/memory-intelligence.svg"
+         width="900"
+         height="625"
+</picture>
+</div>
+<br>
+
+
+---
+
 ## Understanding MARM Memory
 
 ### How Memory Works
@@ -119,6 +132,18 @@ MARM provides three primary ways to store information:
 
 ---
 
+<br>
+<div align="center">
+<picture>
+    <img src="https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/media/feature-showcase.svg"
+         width="900"
+         height="650"
+</picture>
+</div>
+<br>
+
+---
+
 ## Cross-App Memory Strategies
 
 ### Multi-LLM Session Organization
@@ -140,6 +165,34 @@ Sessions:
 3. **Synthesis Sessions**: Create shared sessions where AIs build on each other's work
 
 ---
+
+## 🚀 Quick Start for MCP
+
+<br>
+<div align="center">
+<picture>
+    <img src="https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/media/installation-flow.svg"
+         width="850"
+         height="500"
+</picture>
+</div>
+<br>
+
+**Docker (Fastest - 30 seconds):**
+
+```bash
+docker pull lyellr88/marm-mcp-server:latest
+docker run -d --name marm-mcp-server -p 8001:8001 -v marm_data:/app/data lyellr88/marm-mcp-server:latest
+claude mcp add marm-memory http://localhost:8001/mcp
+```
+
+**Quick Local Install:**
+
+```bash
+pip install marm-mcp-server==2.2.5
+marm-mcp-server
+claude mcp add marm-memory http://localhost:8001/mcp
+```
 
 ## Pro Tips & Best Practices
 
@@ -254,19 +307,19 @@ The MCP server maintains full compatibility with existing MARM concepts:
 
 ### Memory Not Finding Expected Results
 
-**Solution**: Check content classification, use `marm_log_show` to browse manually
+- **Solution**: Check content classification, use `marm_log_show` to browse manually
 
 ### Session Confusion
 
-**Solution**: Use `marm_system_info` to check current session status (current_context works automatically in background)
+- **Solution**: Use `marm_system_info` to check current session status (current_context works automatically in background)
 
 ### Performance Issues
 
-**Solution**: Use log compaction, `marm_system_info` to check statistics
+- **Solution**: Use log compaction, `marm_system_info` to check statistics
 
 ### Lost Context
 
-**Solution**: `marm_refresh` to reset, `marm_smart_recall` to recover
+- **Solution**: `marm_refresh` to reset, `marm_smart_recall` to recover
 
 ---
 
