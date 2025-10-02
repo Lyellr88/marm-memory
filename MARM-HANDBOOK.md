@@ -1,11 +1,12 @@
-# MARM Handbook v2.2.5 (mainly for copy & paste users)
+# MARM Handbook v2.2.5
+
+> This handbook is the core of MARM that evolved into the MARM MCP (Model Context Protocol) server, **it contains all foundational MARM knowledge. It provides quick-reference commands and examples designed for immediate use.** For copy-and-paste users, this is the handbook you want to reference.
 
 ## Table of Contents
 
 - [Short Introduction](#short-introduction)
 - [What's New](#whats-new)
 - [Part I: Core Principles](#part-i-core-principles)
-- [Live Chatbot Demo](#live-chatbot-demo)
 - [Part II: Quick Start Walkthrough](#part-ii-quick-start-walkthrough)
 - [Part III: Command Reference](#part-iii-command-reference)
 - [Part IV: Beyond the Basics](#part-iv-beyond-the-basics)
@@ -299,18 +300,6 @@ Essential reseed template:
 | Notebook Show All        | `/notebook show:`                              | Check token usage |
 | Notebook Clear           | `/notebook clear:`                             | Clear active list only |
 | Notebook Status          | `/notebook status:`                            | View current active list |
-
----
-
-<br>
-<div align="center">
-<picture>
-    <img src="https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/media/feature-showcase.svg"
-         width="900"
-         height="650"
-</picture>
-</div>
-<br>
 
 ---
 
