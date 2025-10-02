@@ -1,0 +1,194 @@
+<svg viewBox="0 0 1200 600" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Modern gradients for installation methods -->
+    <linearGradient id="dockerGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:0.9"/>
+      <stop offset="100%" style="stop-color:#1d4ed8;stop-opacity:0.8"/>
+    </linearGradient>
+
+    <linearGradient id="pypiGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1e40af;stop-opacity:0.9"/>
+      <stop offset="100%" style="stop-color:#3b82f6;stop-opacity:0.8"/>
+    </linearGradient>
+
+    <linearGradient id="sourceGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#7c3aed;stop-opacity:0.9"/>
+      <stop offset="100%" style="stop-color:#667eea;stop-opacity:0.8"/>
+    </linearGradient>
+
+    <linearGradient id="connectGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f172a;stop-opacity:0.9"/>
+      <stop offset="100%" style="stop-color:#3b82f6;stop-opacity:0.8"/>
+    </linearGradient>
+
+    <linearGradient id="compareGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:0.8"/>
+      <stop offset="100%" style="stop-color:#0f172a;stop-opacity:0.9"/>
+    </linearGradient>
+
+    <!-- Card shadows and effects -->
+    <filter id="cardShadow" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="6" stdDeviation="12" flood-color="#000" flood-opacity="0.15"/>
+    </filter>
+
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Arrow marker -->
+    <marker id="arrowhead" markerWidth="10" markerHeight="7"
+     refX="10" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#64748b" />
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="600" fill="#d0d0d0"/>
+
+  <!-- Title -->
+  <text x="600" y="40" text-anchor="middle" fill="#1e293b" font-family="Arial, sans-serif"
+        font-size="28" font-weight="bold">Installation Options</text>
+  <text x="600" y="65" text-anchor="middle" fill="#64748b" font-family="Arial, sans-serif"
+        font-size="16">Choose your deployment method • Production ready in 60 seconds</text>
+
+  <!-- Docker Installation (Recommended) -->
+  <g transform="translate(100, 120)">
+    <!-- Main card -->
+    <rect width="300" height="320" rx="20" fill="url(#dockerGrad)" filter="url(#cardShadow)"/>
+    <rect x="8" y="8" width="284" height="304" rx="16" fill="rgba(255,255,255,0.15)" stroke="rgba(255,255,255,0.3)" stroke-width="2"/>
+
+    <!-- Header -->
+    <rect x="20" y="20" width="260" height="50" rx="10" fill="#000000"/>
+    <text x="150" y="38" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="16" font-weight="bold">🐳 Docker</text>
+    <text x="150" y="55" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="12" opacity="0.9">Recommended • Production Ready</text>
+
+    <!-- Step 1 -->
+    <circle cx="40" cy="100" r="12" fill="#000000" opacity="0.9"/>
+    <text x="40" y="105" text-anchor="middle" fill="#0ea5e9" font-family="Arial, sans-serif" font-size="12" font-weight="bold">1</text>
+    <text x="65" y="95" fill="#000000" font-family="Arial, sans-serif" font-size="13" font-weight="bold">Pull &amp; Start</text>
+    <text x="65" y="110" fill="#000000" font-family="Arial, sans-serif" font-size="11" opacity="0.9">docker run -d --name marm-mcp-server</text>
+
+    <!-- Step 2 -->
+    <circle cx="40" cy="150" r="12" fill="#000000" opacity="0.9"/>
+    <text x="40" y="155" text-anchor="middle" fill="#0ea5e9" font-family="Arial, sans-serif" font-size="12" font-weight="bold">2</text>
+    <text x="65" y="145" fill="#000000" font-family="Arial, sans-serif" font-size="13" font-weight="bold">Wait for Ready</text>
+    <text x="65" y="160" fill="#000000" font-family="Arial, sans-serif" font-size="11" opacity="0.9">~15 seconds startup time</text>
+
+    <!-- Step 3 -->
+    <circle cx="40" cy="200" r="12" fill="#000000" opacity="0.9"/>
+    <text x="40" y="205" text-anchor="middle" fill="#0ea5e9" font-family="Arial, sans-serif" font-size="12" font-weight="bold">3</text>
+    <text x="65" y="195" fill="#000000" font-family="Arial, sans-serif" font-size="13" font-weight="bold">Connect</text>
+    <text x="65" y="210" fill="#000000" font-family="Arial, sans-serif" font-size="11" opacity="0.9">claude mcp add marm-memory</text>
+
+    <!-- Benefits -->
+    <rect x="20" y="240" width="260" height="60" rx="10" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
+    <text x="30" y="255" fill="#000000" font-family="Arial, sans-serif" font-size="11" font-weight="bold">✅ Cross-platform compatibility</text>
+    <text x="30" y="270" fill="#000000" font-family="Arial, sans-serif" font-size="11" opacity="0.9">✅ Health monitoring included</text>
+    <text x="30" y="285" fill="#000000" font-family="Arial, sans-serif" font-size="11" opacity="0.9">✅ Data persistence with volumes</text>
+
+    <!-- Time badge -->
+    <rect x="220" y="310" width="60" height="20" rx="10" fill="#000000" opacity="0.9"/>
+    <text x="250" y="322" text-anchor="middle" fill="#0ea5e9" font-family="Arial, sans-serif" font-size="10" font-weight="bold">60 SEC</text>
+  </g>
+
+  <!-- PyPI Installation -->
+  <g transform="translate(450, 120)">
+    <!-- Main card -->
+    <rect width="300" height="320" rx="20" fill="url(#pypiGrad)" filter="url(#cardShadow)"/>
+    <rect x="8" y="8" width="284" height="304" rx="16" fill="rgba(255,255,255,0.15)" stroke="rgba(255,255,255,0.3)" stroke-width="2"/>
+
+    <!-- Header -->
+    <rect x="20" y="20" width="260" height="50" rx="10" fill="#000000"/>
+    <text x="150" y="38" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="16" font-weight="bold">📦 PyPI</text>
+    <text x="150" y="55" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="12" opacity="0.9">Python Package • Development</text>
+
+    <!-- Step 1 -->
+    <circle cx="40" cy="100" r="12" fill="#000000" opacity="0.9"/>
+    <text x="40" y="105" text-anchor="middle" fill="#f59e0b" font-family="Arial, sans-serif" font-size="12" font-weight="bold">1</text>
+    <text x="65" y="95" fill="#000000" font-family="Arial, sans-serif" font-size="13" font-weight="bold">Install Package</text>
+    <text x="65" y="110" fill="#000000" font-family="Arial, sans-serif" font-size="11" opacity="0.9">pip install marm-mcp-server==2.2.5</text>
+
+    <!-- Step 2 -->
+    <circle cx="40" cy="150" r="12" fill="#000000" opacity="0.9"/>
+    <text x="40" y="155" text-anchor="middle" fill="#f59e0b" font-family="Arial, sans-serif" font-size="12" font-weight="bold">2</text>
+    <text x="65" y="145" fill="#000000" font-family="Arial, sans-serif" font-size="13" font-weight="bold">Start Server</text>
+    <text x="65" y="160" fill="#000000" font-family="Arial, sans-serif" font-size="11" opacity="0.9">python -m marm_mcp_server</text>
+
+    <!-- Step 3 -->
+    <circle cx="40" cy="200" r="12" fill="#000000" opacity="0.9"/>
+    <text x="40" y="205" text-anchor="middle" fill="#f59e0b" font-family="Arial, sans-serif" font-size="12" font-weight="bold">3</text>
+    <text x="65" y="195" fill="#000000" font-family="Arial, sans-serif" font-size="13" font-weight="bold">Connect</text>
+    <text x="65" y="210" fill="#000000" font-family="Arial, sans-serif" font-size="11" opacity="0.9">claude mcp add marm-memory</text>
+
+    <!-- Benefits -->
+    <rect x="20" y="240" width="260" height="60" rx="10" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
+    <text x="30" y="255" fill="#000000" font-family="Arial, sans-serif" font-size="11" font-weight="bold">✅ Native Python integration</text>
+    <text x="30" y="270" fill="#000000" font-family="Arial, sans-serif" font-size="11" opacity="0.9">✅ Development &amp; customization</text>
+    <text x="30" y="285" fill="#000000" font-family="Arial, sans-serif" font-size="11" opacity="0.9">✅ Direct dependency management</text>
+
+    <!-- Time badge -->
+    <rect x="220" y="310" width="60" height="20" rx="10" fill="#000000" opacity="0.9"/>
+    <text x="250" y="322" text-anchor="middle" fill="#f59e0b" font-family="Arial, sans-serif" font-size="10" font-weight="bold">90 SEC</text>
+  </g>
+
+  <!-- Source Installation -->
+  <g transform="translate(800, 120)">
+    <!-- Main card -->
+    <rect width="300" height="320" rx="20" fill="url(#sourceGrad)" filter="url(#cardShadow)"/>
+    <rect x="8" y="8" width="284" height="304" rx="16" fill="rgba(255,255,255,0.15)" stroke="rgba(255,255,255,0.3)" stroke-width="2"/>
+
+    <!-- Header -->
+    <rect x="20" y="20" width="260" height="50" rx="10" fill="#000000"/>
+    <text x="150" y="38" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="16" font-weight="bold">🔧 Source</text>
+    <text x="150" y="55" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif" font-size="12" opacity="0.9">GitHub Clone • Advanced Users</text>
+
+    <!-- Step 1 -->
+    <circle cx="40" cy="100" r="12" fill="#000000" opacity="0.9"/>
+    <text x="40" y="105" text-anchor="middle" fill="#10b981" font-family="Arial, sans-serif" font-size="12" font-weight="bold">1</text>
+    <text x="65" y="95" fill="#000000" font-family="Arial, sans-serif" font-size="13" font-weight="bold">Clone Repository</text>
+    <text x="65" y="110" fill="#000000" font-family="Arial, sans-serif" font-size="11" opacity="0.9">git clone MARM-Systems</text>
+
+    <!-- Step 2 -->
+    <circle cx="40" cy="150" r="12" fill="#000000" opacity="0.9"/>
+    <text x="40" y="155" text-anchor="middle" fill="#10b981" font-family="Arial, sans-serif" font-size="12" font-weight="bold">2</text>
+    <text x="65" y="145" fill="#000000" font-family="Arial, sans-serif" font-size="13" font-weight="bold">Setup Environment</text>
+    <text x="65" y="160" fill="#000000" font-family="Arial, sans-serif" font-size="11" opacity="0.9">pip install -r requirements.txt</text>
+
+    <!-- Step 3 -->
+    <circle cx="40" cy="200" r="12" fill="#000000" opacity="0.9"/>
+    <text x="40" y="205" text-anchor="middle" fill="#10b981" font-family="Arial, sans-serif" font-size="12" font-weight="bold">3</text>
+    <text x="65" y="195" fill="#000000" font-family="Arial, sans-serif" font-size="13" font-weight="bold">Run &amp; Connect</text>
+    <text x="65" y="210" fill="#000000" font-family="Arial, sans-serif" font-size="11" opacity="0.9">python server.py</text>
+
+    <!-- Benefits -->
+    <rect x="20" y="240" width="260" height="60" rx="10" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.2)" stroke-width="1"/>
+    <text x="30" y="255" fill="#000000" font-family="Arial, sans-serif" font-size="11" font-weight="bold">✅ Full source code access</text>
+    <text x="30" y="270" fill="#000000" font-family="Arial, sans-serif" font-size="11" opacity="0.9">✅ Contributing &amp; modifications</text>
+    <text x="30" y="285" fill="#000000" font-family="Arial, sans-serif" font-size="11" opacity="0.9">✅ Latest development features</text>
+
+    <!-- Time badge -->
+    <rect x="220" y="310" width="60" height="20" rx="10" fill="#000000" opacity="0.9"/>
+    <text x="250" y="322" text-anchor="middle" fill="#10b981" font-family="Arial, sans-serif" font-size="10" font-weight="bold">2 MIN</text>
+  </g>
+
+  <!-- Connection Flow (Bottom) -->
+  <g transform="translate(100, 480)">
+    <rect width="1000" height="80" rx="15" fill="url(#connectGrad)" filter="url(#cardShadow)"/>
+    <rect x="8" y="8" width="984" height="64" rx="12" fill="rgba(255,255,255,0.15)" stroke="rgba(255,255,255,0.3)" stroke-width="2"/>
+
+    <text x="500" y="30" text-anchor="middle" fill="#000000" font-family="Arial, sans-serif"
+          font-size="16" font-weight="bold">🔗 Universal Connection</text>
+    <text x="500" y="50" text-anchor="middle" fill="#000000" font-family="Arial, sans-serif"
+          font-size="13" opacity="0.9">All methods connect to: http://localhost:8001/mcp (HTTP) • ws://localhost:8001/mcp/ws (WebSocket)</text>
+  </g>
+
+
+  <!-- Quick comparison -->
+  <rect x="50" y="80" width="1100" height="25" rx="12" fill="url(#compareGrad)" stroke="rgba(59, 130, 246, 0.5)" stroke-width="2"/>
+  <text x="600" y="97" text-anchor="middle" fill="#ffffff" font-family="Arial, sans-serif"
+        font-size="13" font-weight="bold">Choose: Docker for production deployment • PyPI for Python development • Source for contributions</text>
+</svg>
