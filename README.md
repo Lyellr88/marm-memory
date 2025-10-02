@@ -340,6 +340,16 @@ CREATE TABLE sessions (
 
 ---
 
+<div align="center">
+<picture>
+    <img src="https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/media/memory-intelligence.svg"
+         width="900"
+         height="625"
+</picture>
+</div>
+
+---
+
 ## 📈 Performance & Scalability
 
 ### **Production Optimizations**
