@@ -1,7 +1,5 @@
 # MARM MCP Server Handbook
 
-## Complete Usage Guide for Memory-Augmented AI
-
 **MARM v2.2.5 - Universal MCP Server for AI Memory Intelligence
 
 ---
@@ -19,18 +17,18 @@
 
 ---
 
+<div align="center">
+<picture>
+    <img src="https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/media/feature-showcase.svg"
+      height="550"   
+      width="800"
+         
+</picture>
+</div>
+
+---
+
 ## Getting Started
-
-### 💡 **Key Point: Natural Language Interface**
-
-**You don't need to manually call MARM tools!** Just talk to your AI agent naturally:
-
-- *"Claude, log this session as 'Project Alpha'"*
-- *"Remember this code snippet for later"*
-- *"Search for what we discussed about authentication"*
-- *"Add this debugging approach to my notebook"*
-
-Your AI agent will automatically use the appropriate MARM tools. Manual tool access is available for power users, but most users should just **talk naturally** and let the AI handle the tool usage.
 
 ### What is MARM?
 
