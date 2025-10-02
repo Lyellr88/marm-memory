@@ -1,6 +1,6 @@
 <div align="center">
 <picture>
-  <img src="https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/media/marm-main.jpg"
+  <img src="https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/media/marm-logo.svg"
        alt="MARM - The AI That Remembers Your Conversations"
        width="700"
        height="350"
