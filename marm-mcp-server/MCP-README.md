@@ -79,6 +79,14 @@ claude mcp add marm-memory http://localhost:8001/mcp
 
 **🎯 You now have AI with perfect memory across all conversations!**
 
+<div align="center">
+<picture>
+    <img src="https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/media/feature-showcase.svg"
+      height="550"   
+      width="800"         
+</picture>
+</div>  
+
 **WebSocket Connection (Beta - Complete MCP Protocol Support):**
 
 For real-time communication, you can also connect via WebSocket with full MCP protocol support:
@@ -88,7 +96,7 @@ For real-time communication, you can also connect via WebSocket with full MCP pr
 ws://localhost:8001/mcp/ws
 ```
 
-**✅ All 19 MCP methods supported  ✅ JSON-RPC 2.0 compliant  ✅ Rate limiting active**
+**✅ All 18 MCP methods supported  ✅ JSON-RPC 2.0 compliant  ✅ Rate limiting active**
 
 *Note: WebSocket support includes complete HTTP/WebSocket parity with proper error handling. Beta status due to ongoing real-world testing.*
 
@@ -129,7 +137,7 @@ claude mcp add marm-memory http://localhost:8001/mcp
 - **Readiness Check**: `http://localhost:8001/ready` (Service ready status)
 - **API Documentation**: `http://localhost:8001/docs`
 - **Supported Clients**: Claude Code, Qwen CLI, Gemini CLI, and any MCP-compatible LLM client or LLM platform
-- **WebSocket Features**: All 19 MCP methods, JSON-RPC 2.0, rate limiting, proper error handling
+- **WebSocket Features**: All 18 MCP methods, JSON-RPC 2.0, rate limiting, proper error handling
 
 **⚠️ Important**: Wait 10-15 seconds after Docker start before connecting. Check readiness: `curl http://localhost:8001/ready`
 
