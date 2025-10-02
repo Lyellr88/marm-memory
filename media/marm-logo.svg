@@ -147,7 +147,7 @@
   <rect width="800" height="400" fill="url(#bgGrad)"/>
 
   <!-- CIRCUIT BOARD PCB TRACES - Stretched to fill canvas -->
-  <g opacity="0.25" transform="scale(1.2, 1.15) translate(-10, -20)">
+  <g opacity="0.45" transform="scale(1.2, 1.15) translate(-10, -20)">
     <!-- Main horizontal traces (MARM blue/purple gradient) -->
     <path d="M30 80 L230 80 L250 100 L300 100 L320 80 L500 80 L520 60 L630 60"
           stroke="url(#bubbleGrad)" stroke-width="2.5" fill="none" opacity="0.8"/>
