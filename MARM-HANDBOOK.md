@@ -14,6 +14,18 @@
 
 ---
 
+<br>
+<div align="center">
+<picture>
+    <img src="https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/media/installation-flow.svg"
+         width="850"
+         height="500"
+</picture>
+</div>
+<br>
+
+---
+
 ## Short Introduction
 
 MARM is a universal protocol designed to improve memory continuity and response accuracy during AI conversations. This handbook covers beginner guidance, command usage, and recovery strategies for when memory or accuracy begins to drift.
@@ -35,7 +47,7 @@ MARM is a universal protocol designed to improve memory continuity and response 
 
 #### MCP Server Architecture
 
-- **19 Complete MCP Tools** - Full Model Context Protocol implementation with semantic search
+- **18 Complete MCP Tools** - Full Model Context Protocol implementation with semantic search
 - **Production FastAPI Backend** - SQLite with WAL mode, connection pooling, rate limiting
 - **Cross-Platform Compatibility** - Works with Claude Code, Qwen CLI, Gemini CLI, Grok CLI
 - **Docker Deployment** - Containerized with health monitoring and professional diagnostics
@@ -76,23 +88,18 @@ Manual logging, knowledge entry, and accuracy checks prevent silent drift. User 
 
 This approach ensures the AI works with **user-led intent**, reducing drift across sessions and platforms.
 
-## Live Chatbot Demo
+---
 
-### Try MARM Online
+<br>
+<div align="center">
+<picture>
+    <img src="https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/media/memory-intelligence.svg"
+         width="900"
+         height="625"
+</picture>
+</div>
+<br>
 
-Experience MARM instantly at [MARM Chatbot](https://marm-systems-chatbot.onrender.com):
-
-- **No setup required** - Start using MARM immediately
-- **Full protocol support** - All commands work as documented
-- **Modern interface** - Command menu, voice synthesis, file uploads
-- **Session persistence** - Conversations survive browser refreshes
-
-### Quick Demo Steps
-
-1. **Visit the demo** → Type `/start marm` to activate
-2. **Use command menu** → Click ⚡ button for quick access to all commands
-3. **Try key features** → Upload files, use voice synthesis, save sessions
-4. **Experience the difference** → Notice improved memory and context retention
 
 ---
 
@@ -292,6 +299,18 @@ Essential reseed template:
 | Notebook Show All        | `/notebook show:`                              | Check token usage |
 | Notebook Clear           | `/notebook clear:`                             | Clear active list only |
 | Notebook Status          | `/notebook status:`                            | View current active list |
+
+---
+
+<br>
+<div align="center">
+<picture>
+    <img src="https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/media/feature-showcase.svg"
+         width="900"
+         height="650"
+</picture>
+</div>
+<br>
 
 ---
 
