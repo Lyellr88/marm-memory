@@ -1,0 +1,462 @@
+<svg viewBox="0 0 800 400" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Animated gradient for chat bubble outline -->
+    <linearGradient id="bubbleGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#667eea;stop-opacity:1">
+        <animate attributeName="stop-color" values="#667eea; #3b82f6; #1e40af; #7c3aed; #667eea" dur="8s" repeatCount="indefinite"/>
+      </stop>
+      <stop offset="50%" style="stop-color:#3b82f6;stop-opacity:1">
+        <animate attributeName="stop-color" values="#3b82f6; #1e40af; #7c3aed; #667eea; #3b82f6" dur="8s" repeatCount="indefinite"/>
+      </stop>
+      <stop offset="100%" style="stop-color:#1e40af;stop-opacity:1">
+        <animate attributeName="stop-color" values="#1e40af; #7c3aed; #667eea; #3b82f6; #1e40af" dur="8s" repeatCount="indefinite"/>
+      </stop>
+    </linearGradient>
+
+    <!-- Neon glow effect for outline -->
+    <filter id="neonGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="8" result="blur1"/>
+      <feGaussianBlur in="SourceGraphic" stdDeviation="15" result="blur2"/>
+      <feGaussianBlur in="SourceGraphic" stdDeviation="25" result="blur3"/>
+      <feMerge>
+        <feMergeNode in="blur3"/>
+        <feMergeNode in="blur2"/>
+        <feMergeNode in="blur1"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Inner glow for text -->
+    <filter id="textGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="4" result="blur1"/>
+      <feGaussianBlur in="SourceGraphic" stdDeviation="8" result="blur2"/>
+      <feMerge>
+        <feMergeNode in="blur2"/>
+        <feMergeNode in="blur1"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Sparkle gradient -->
+    <radialGradient id="sparkle">
+      <stop offset="0%" style="stop-color:#ffffff;stop-opacity:0.9"/>
+      <stop offset="100%" style="stop-color:#3b82f6;stop-opacity:0"/>
+    </radialGradient>
+
+    <!-- Animated background gradient blending through MARM colors -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#667eea;stop-opacity:1">
+        <animate attributeName="stop-color" values="#667eea; #3b82f6; #7c3aed; #667eea" dur="12s" repeatCount="indefinite"/>
+      </stop>
+      <stop offset="50%" style="stop-color:#3b82f6;stop-opacity:1">
+        <animate attributeName="stop-color" values="#3b82f6; #1e40af; #667eea; #3b82f6" dur="12s" repeatCount="indefinite"/>
+      </stop>
+      <stop offset="100%" style="stop-color:#1e40af;stop-opacity:1">
+        <animate attributeName="stop-color" values="#1e40af; #7c3aed; #3b82f6; #1e40af" dur="12s" repeatCount="indefinite"/>
+      </stop>
+    </linearGradient>
+
+    <!-- Grid pattern for tech aesthetic -->
+    <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+      <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#3b82f6" stroke-width="0.5" opacity="0.1"/>
+    </pattern>
+
+    <!-- Circuit board pattern - Clean minimalist PCB style -->
+    <pattern id="circuitPattern" width="120" height="120" patternUnits="userSpaceOnUse">
+      <!-- Horizontal traces - thin, consistent width -->
+      <line x1="0" y1="25" x2="40" y2="25" stroke="#ffffff" stroke-width="1" opacity="0.15"/>
+      <line x1="60" y1="25" x2="120" y2="25" stroke="#ffffff" stroke-width="1" opacity="0.15"/>
+
+      <line x1="20" y1="55" x2="70" y2="55" stroke="#ffffff" stroke-width="1" opacity="0.15"/>
+      <line x1="85" y1="55" x2="120" y2="55" stroke="#ffffff" stroke-width="1" opacity="0.15"/>
+
+      <line x1="0" y1="85" x2="35" y2="85" stroke="#ffffff" stroke-width="1" opacity="0.15"/>
+      <line x1="50" y1="85" x2="100" y2="85" stroke="#ffffff" stroke-width="1" opacity="0.15"/>
+
+      <!-- Vertical traces -->
+      <line x1="40" y1="0" x2="40" y2="60" stroke="#ffffff" stroke-width="1" opacity="0.15"/>
+      <line x1="40" y1="75" x2="40" y2="120" stroke="#ffffff" stroke-width="1" opacity="0.15"/>
+
+      <line x1="70" y1="25" x2="70" y2="90" stroke="#ffffff" stroke-width="1" opacity="0.15"/>
+
+      <line x1="100" y1="0" x2="100" y2="50" stroke="#ffffff" stroke-width="1" opacity="0.15"/>
+      <line x1="100" y1="65" x2="100" y2="120" stroke="#ffffff" stroke-width="1" opacity="0.15"/>
+
+      <!-- Angled trace connections -->
+      <polyline points="40,60 50,70 50,85" fill="none" stroke="#ffffff" stroke-width="1" opacity="0.15"/>
+      <polyline points="85,55 95,65 100,65" fill="none" stroke="#ffffff" stroke-width="1" opacity="0.15"/>
+      <polyline points="35,85 45,95 60,95 60,120" fill="none" stroke="#ffffff" stroke-width="1" opacity="0.15"/>
+
+      <!-- Connection nodes with pulsing animation -->
+      <circle cx="40" cy="25" r="2" fill="#ffffff" opacity="0.25">
+        <animate attributeName="opacity" values="0.2; 0.4; 0.2" dur="4s" repeatCount="indefinite"/>
+      </circle>
+      <circle cx="70" cy="55" r="2" fill="#ffffff" opacity="0.25">
+        <animate attributeName="opacity" values="0.25; 0.45; 0.25" dur="5s" repeatCount="indefinite"/>
+      </circle>
+      <circle cx="100" cy="50" r="2" fill="#ffffff" opacity="0.25">
+        <animate attributeName="opacity" values="0.2; 0.35; 0.2" dur="4.5s" repeatCount="indefinite"/>
+      </circle>
+      <circle cx="50" cy="85" r="2" fill="#ffffff" opacity="0.25">
+        <animate attributeName="opacity" values="0.15; 0.4; 0.15" dur="6s" repeatCount="indefinite"/>
+      </circle>
+      <circle cx="40" cy="60" r="2" fill="#ffffff" opacity="0.25">
+        <animate attributeName="opacity" values="0.2; 0.38; 0.2" dur="3.5s" repeatCount="indefinite"/>
+      </circle>
+      <circle cx="85" cy="55" r="2" fill="#ffffff" opacity="0.25">
+        <animate attributeName="opacity" values="0.18; 0.42; 0.18" dur="5.5s" repeatCount="indefinite"/>
+      </circle>
+
+      <!-- Endpoint nodes (filled) -->
+      <circle cx="20" cy="55" r="1.5" fill="#ffffff" opacity="0.2"/>
+      <circle cx="60" cy="25" r="1.5" fill="#ffffff" opacity="0.2"/>
+      <circle cx="100" cy="85" r="1.5" fill="#ffffff" opacity="0.2"/>
+    </pattern>
+
+    <!-- Circuit board shadow filter -->
+    <filter id="pcbShadow" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="1" dy="1" stdDeviation="1" flood-color="#000000" flood-opacity="0.3"/>
+    </filter>
+
+    <!-- Progress bar gradient (MARM colors dark→bright) -->
+    <linearGradient id="progressGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#1e40af;stop-opacity:0.8"/>
+      <stop offset="30%" style="stop-color:#667eea;stop-opacity:0.9"/>
+      <stop offset="70%" style="stop-color:#3b82f6;stop-opacity:1"/>
+      <stop offset="100%" style="stop-color:#ffffff;stop-opacity:0.9"/>
+    </linearGradient>
+
+    <!-- Intense glow filter for loading bar -->
+    <filter id="intenseGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="5" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="400" fill="url(#bgGrad)"/>
+
+  <!-- CIRCUIT BOARD PCB TRACES - Stretched to fill canvas -->
+  <g opacity="0.25" transform="scale(1.2, 1.15) translate(-10, -20)">
+    <!-- Main horizontal traces (MARM blue/purple gradient) -->
+    <path d="M30 80 L230 80 L250 100 L300 100 L320 80 L500 80 L520 60 L630 60"
+          stroke="url(#bubbleGrad)" stroke-width="2.5" fill="none" opacity="0.8"/>
+    <path d="M70 133 L133 133 L153 153 L200 153 L220 133 L400 133 L420 113 L533 113"
+          stroke="url(#bubbleGrad)" stroke-width="2" fill="none" opacity="0.7"/>
+    <path d="M100 233 L167 233 L187 213 L267 213 L287 233 L433 233 L453 253 L567 253"
+          stroke="url(#bubbleGrad)" stroke-width="2.5" fill="none" opacity="0.8"/>
+    <path d="M53 333 L120 333 L140 313 L233 313 L253 333 L387 333 L407 353 L520 353"
+          stroke="url(#bubbleGrad)" stroke-width="2" fill="none" opacity="0.7"/>
+
+    <!-- Vertical traces -->
+    <path d="M133 33 L133 100 L153 120 L153 187 L133 207 L133 300"
+          stroke="url(#bubbleGrad)" stroke-width="2" fill="none" opacity="0.7"/>
+    <path d="M267 53 L267 120 L247 140 L247 207 L267 227 L267 320"
+          stroke="url(#bubbleGrad)" stroke-width="2.5" fill="none" opacity="0.8"/>
+    <path d="M400 67 L400 133 L420 153 L420 220 L400 240 L400 333"
+          stroke="url(#bubbleGrad)" stroke-width="2" fill="none" opacity="0.7"/>
+    <path d="M533 47 L533 113 L513 133 L513 200 L533 220 L533 313"
+          stroke="url(#bubbleGrad)" stroke-width="2.5" fill="none" opacity="0.8"/>
+
+    <!-- IC Chips (Integrated Circuits) -->
+    <rect x="213" y="120" width="53" height="40" fill="#2a2a2a" stroke="url(#bubbleGrad)" stroke-width="1.5" filter="url(#pcbShadow)"/>
+    <!-- IC pins left -->
+    <rect x="210" y="123" width="3" height="2" fill="#3b82f6"/>
+    <rect x="210" y="130" width="3" height="2" fill="#3b82f6"/>
+    <rect x="210" y="137" width="3" height="2" fill="#3b82f6"/>
+    <rect x="210" y="144" width="3" height="2" fill="#3b82f6"/>
+    <rect x="210" y="151" width="3" height="2" fill="#3b82f6"/>
+    <!-- IC pins right -->
+    <rect x="269" y="123" width="3" height="2" fill="#3b82f6"/>
+    <rect x="269" y="130" width="3" height="2" fill="#3b82f6"/>
+    <rect x="269" y="137" width="3" height="2" fill="#3b82f6"/>
+    <rect x="269" y="144" width="3" height="2" fill="#3b82f6"/>
+    <rect x="269" y="151" width="3" height="2" fill="#3b82f6"/>
+
+    <rect x="347" y="200" width="53" height="40" fill="#2a2a2a" stroke="url(#bubbleGrad)" stroke-width="1.5" filter="url(#pcbShadow)"/>
+    <!-- IC pins left -->
+    <rect x="344" y="203" width="3" height="2" fill="#7c3aed"/>
+    <rect x="344" y="210" width="3" height="2" fill="#7c3aed"/>
+    <rect x="344" y="217" width="3" height="2" fill="#7c3aed"/>
+    <rect x="344" y="224" width="3" height="2" fill="#7c3aed"/>
+    <rect x="344" y="231" width="3" height="2" fill="#7c3aed"/>
+    <!-- IC pins right -->
+    <rect x="403" y="203" width="3" height="2" fill="#7c3aed"/>
+    <rect x="403" y="210" width="3" height="2" fill="#7c3aed"/>
+    <rect x="403" y="217" width="3" height="2" fill="#7c3aed"/>
+    <rect x="403" y="224" width="3" height="2" fill="#7c3aed"/>
+    <rect x="403" y="231" width="3" height="2" fill="#7c3aed"/>
+
+    <!-- Resistors -->
+    <rect x="187" y="77" width="13" height="5" fill="#667eea" stroke="#3b82f6" stroke-width="0.7"/>
+    <rect x="320" y="130" width="13" height="5" fill="#667eea" stroke="#3b82f6" stroke-width="0.7"/>
+    <rect x="453" y="230" width="13" height="5" fill="#667eea" stroke="#3b82f6" stroke-width="0.7"/>
+
+    <!-- Capacitors -->
+    <rect x="300" y="77" width="8" height="10" fill="#4a4a4a" stroke="#3b82f6" stroke-width="0.7"/>
+    <rect x="167" y="230" width="8" height="10" fill="#4a4a4a" stroke="#7c3aed" stroke-width="0.7"/>
+    <rect x="433" y="130" width="8" height="10" fill="#4a4a4a" stroke="#667eea" stroke-width="0.7"/>
+
+    <!-- Via holes (small circles) -->
+    <circle cx="133" cy="80" r="2" fill="#2a2a2a" stroke="#3b82f6" stroke-width="0.7"/>
+    <circle cx="267" cy="133" r="2" fill="#2a2a2a" stroke="#667eea" stroke-width="0.7"/>
+    <circle cx="400" cy="233" r="2" fill="#2a2a2a" stroke="#7c3aed" stroke-width="0.7"/>
+    <circle cx="533" cy="333" r="2" fill="#2a2a2a" stroke="#3b82f6" stroke-width="0.7"/>
+    <circle cx="200" cy="80" r="2" fill="#2a2a2a" stroke="#667eea" stroke-width="0.7"/>
+    <circle cx="333" cy="80" r="2" fill="#2a2a2a" stroke="#7c3aed" stroke-width="0.7"/>
+
+    <!-- Solder pads -->
+    <circle cx="213" cy="140" r="2.5" fill="#3b82f6" opacity="0.8"/>
+    <circle cx="267" cy="140" r="2.5" fill="#667eea" opacity="0.8"/>
+    <circle cx="347" cy="220" r="2.5" fill="#7c3aed" opacity="0.8"/>
+    <circle cx="400" cy="220" r="2.5" fill="#3b82f6" opacity="0.8"/>
+
+    <!-- Component labels (silkscreen) -->
+    <text x="227" y="117" font-family="monospace" font-size="5" fill="#ffffff" opacity="0.6">U1</text>
+    <text x="360" y="197" font-family="monospace" font-size="5" fill="#ffffff" opacity="0.6">U2</text>
+    <text x="190" y="73" font-family="monospace" font-size="4" fill="#ffffff" opacity="0.5">R1</text>
+    <text x="323" y="127" font-family="monospace" font-size="4" fill="#ffffff" opacity="0.5">R2</text>
+    <text x="303" y="73" font-family="monospace" font-size="4" fill="#ffffff" opacity="0.5">C1</text>
+  </g>
+
+  <!-- MARM-Systems text - NEON TUBE STYLE (no bubble) -->
+  <g transform="translate(400, 200)">
+
+    <!-- OPTION 1: Drifting Ghost Layer - Trailing shadow that moves -->
+    <text x="0" y="10"
+          text-anchor="middle"
+          fill="none"
+          stroke="url(#bubbleGrad)"
+          stroke-width="12"
+          font-family="'Orbitron', 'Exo 2', 'Rajdhani', sans-serif"
+          font-size="80"
+          font-weight="300"
+          letter-spacing="4"
+          opacity="0.2">
+      MARM-Systems
+      <animateTransform attributeName="transform" type="translate" values="0 0; -8 4; 0 0; 8 -4; 0 0" dur="11.3s" repeatCount="indefinite" additive="sum"/>
+      <animate attributeName="opacity" values="0.2; 0.35; 0.2; 0.3; 0.2" dur="11.3s" repeatCount="indefinite"/>
+    </text>
+
+    <!-- OPTION 2: RGB Chromatic Split - Red channel offset -->
+    <text x="-3" y="11"
+          text-anchor="middle"
+          fill="none"
+          stroke="#ff0066"
+          stroke-width="8"
+          font-family="'Orbitron', 'Exo 2', 'Rajdhani', sans-serif"
+          font-size="80"
+          font-weight="300"
+          letter-spacing="4"
+          opacity="0.15">
+      MARM-Systems
+      <animate attributeName="opacity" values="0.15; 0.25; 0.15" dur="4.7s" repeatCount="indefinite"/>
+    </text>
+
+    <!-- OPTION 2: RGB Chromatic Split - Blue channel offset -->
+    <text x="3" y="9"
+          text-anchor="middle"
+          fill="none"
+          stroke="#00ffff"
+          stroke-width="8"
+          font-family="'Orbitron', 'Exo 2', 'Rajdhani', sans-serif"
+          font-size="80"
+          font-weight="300"
+          letter-spacing="4"
+          opacity="0.15">
+      MARM-Systems
+      <animate attributeName="opacity" values="0.15; 0.25; 0.15" dur="5.3s" repeatCount="indefinite"/>
+    </text>
+
+    <!-- OPTION 3: Motion Blur Echo - Trail 1 (farthest back) -->
+    <text x="-6" y="12"
+          text-anchor="middle"
+          fill="none"
+          stroke="url(#bubbleGrad)"
+          stroke-width="6"
+          font-family="'Orbitron', 'Exo 2', 'Rajdhani', sans-serif"
+          font-size="80"
+          font-weight="300"
+          letter-spacing="4"
+          filter="url(#textGlow)"
+          opacity="0.1">
+      MARM-Systems
+      <animate attributeName="opacity" values="0.08; 0.15; 0.08" dur="6.8s" repeatCount="indefinite"/>
+    </text>
+
+    <!-- OPTION 3: Motion Blur Echo - Trail 2 (middle) -->
+    <text x="-3" y="11"
+          text-anchor="middle"
+          fill="none"
+          stroke="url(#bubbleGrad)"
+          stroke-width="8"
+          font-family="'Orbitron', 'Exo 2', 'Rajdhani', sans-serif"
+          font-size="80"
+          font-weight="300"
+          letter-spacing="4"
+          filter="url(#textGlow)"
+          opacity="0.15">
+      MARM-Systems
+      <animate attributeName="opacity" values="0.12; 0.2; 0.12" dur="5.9s" repeatCount="indefinite"/>
+    </text>
+
+    <!-- TEXT: Pulsing expanding outer glow -->
+    <text x="0" y="10"
+          text-anchor="middle"
+          fill="none"
+          stroke="url(#bubbleGrad)"
+          stroke-width="30"
+          font-family="'Orbitron', 'Exo 2', 'Rajdhani', sans-serif"
+          font-size="80"
+          font-weight="300"
+          letter-spacing="4"
+          filter="url(#neonGlow)"
+          opacity="0.3">
+      MARM-Systems
+      <animate attributeName="opacity" values="0.2; 0.4; 0.2" dur="4s" repeatCount="indefinite"/>
+      <animate attributeName="stroke-width" values="25; 35; 25" dur="4s" repeatCount="indefinite"/>
+    </text>
+
+    <!-- TEXT: Outer glow halo -->
+    <text x="0" y="10"
+          text-anchor="middle"
+          fill="none"
+          stroke="url(#bubbleGrad)"
+          stroke-width="20"
+          font-family="'Orbitron', 'Exo 2', 'Rajdhani', sans-serif"
+          font-size="80"
+          font-weight="300"
+          letter-spacing="4"
+          filter="url(#textGlow)"
+          opacity="0.4">
+      MARM-Systems
+      <animate attributeName="opacity" values="0.3; 0.5; 0.3" dur="4s" repeatCount="indefinite"/>
+    </text>
+
+    <!-- TEXT: Colored glass tube -->
+    <text x="0" y="10"
+          text-anchor="middle"
+          fill="none"
+          stroke="url(#bubbleGrad)"
+          stroke-width="10"
+          font-family="'Orbitron', 'Exo 2', 'Rajdhani', sans-serif"
+          font-size="80"
+          font-weight="300"
+          letter-spacing="4"
+          opacity="0.85">
+      MARM-Systems
+      <animate attributeName="opacity" values="0.8; 0.95; 0.8" dur="4s" repeatCount="indefinite"/>
+    </text>
+
+    <!-- TEXT: White hot core -->
+    <text x="0" y="10"
+          text-anchor="middle"
+          fill="#ffffff"
+          stroke="#ffffff"
+          stroke-width="2"
+          font-family="'Orbitron', 'Exo 2', 'Rajdhani', sans-serif"
+          font-size="80"
+          font-weight="300"
+          letter-spacing="4"
+          opacity="0.9">
+      MARM-Systems
+      <animate attributeName="opacity" values="0.85; 1; 0.85" dur="3s" repeatCount="indefinite"/>
+    </text>
+
+    <!-- TEXT: Glitch overlay -->
+    <text x="0" y="10"
+          text-anchor="middle"
+          fill="none"
+          stroke="#00ffff"
+          stroke-width="3"
+          font-family="'Orbitron', 'Exo 2', 'Rajdhani', sans-serif"
+          font-size="80"
+          font-weight="300"
+          letter-spacing="4"
+          opacity="0">
+      MARM-Systems
+      <!-- Glitch flashes - more frequent -->
+      <animate attributeName="opacity" values="0; 0.7; 0; 0.5; 0" dur="0.15s" begin="2s"/>
+      <animate attributeName="opacity" values="0; 0.8; 0; 0.6; 0" dur="0.15s" begin="4.5s"/>
+      <animate attributeName="opacity" values="0; 0.6; 0; 0.7; 0" dur="0.15s" begin="7s"/>
+      <animate attributeName="opacity" values="0; 0.9; 0; 0.5; 0" dur="0.15s" begin="9.5s"/>
+      <animate attributeName="opacity" values="0; 0.7; 0; 0.8; 0" dur="0.15s" begin="12s"/>
+    </text>
+  </g>
+
+  <!-- ENHANCED LOADING BAR + TAGLINE - Canva Style -->
+  <g transform="translate(400, 280)">
+    <!-- Loading bar outer glow -->
+    <rect x="-220" y="-5" width="440" height="18" rx="9" fill="none" stroke="url(#bubbleGrad)" stroke-width="1" opacity="0.3" filter="url(#neonGlow)"/>
+
+    <!-- Loading bar background with subtle inner shadow -->
+    <rect x="-200" y="0" width="400" height="8" rx="4" fill="rgba(102,126,234,0.15)" stroke="rgba(59,130,246,0.3)" stroke-width="1"/>
+    <rect x="-200" y="0" width="400" height="2" rx="4" fill="rgba(59,130,246,0.1)"/>
+
+    <!-- Loading bar progress fill with enhanced gradient -->
+    <rect x="-200" y="0" width="0" height="8" rx="4" fill="url(#progressGrad)" opacity="1">
+      <animate attributeName="width" values="0; 400; 400; 0" dur="15s" repeatCount="indefinite"/>
+    </rect>
+
+    <!-- Loading bar bright core -->
+    <rect x="-200" y="1" width="0" height="6" rx="3" fill="url(#bubbleGrad)" opacity="0.8">
+      <animate attributeName="width" values="0; 400; 400; 0" dur="15s" repeatCount="indefinite"/>
+    </rect>
+
+    <!-- Loading bar intense glow effect -->
+    <rect x="-200" y="0" width="0" height="8" rx="4" fill="url(#bubbleGrad)" filter="url(#intenseGlow)" opacity="0.6">
+      <animate attributeName="width" values="0; 400; 400; 0" dur="15s" repeatCount="indefinite"/>
+    </rect>
+
+    <!-- Progress percentage display -->
+    <text x="0" y="-15" text-anchor="middle" fill="#1e40af" font-family="'Courier New', monospace" font-size="14" font-weight="bold" opacity="0.9">
+      <animate attributeName="opacity" values="0.9; 0.9; 0.9; 0" dur="15s" repeatCount="indefinite"/>
+      <animateTransform attributeName="transform" type="scale" values="1; 1.1; 1; 1" dur="15s" repeatCount="indefinite" additive="sum"/>
+      LOADING... 100%
+    </text>
+
+    <!-- Enhanced tagline with modern styling and slide-up animation -->
+    <text x="0" y="40" text-anchor="middle" fill="url(#bubbleGrad)" font-family="'Orbitron', 'Exo 2', 'Rajdhani', sans-serif" font-size="20" font-weight="bold" letter-spacing="3" opacity="0">
+      UNLOCKED MEMORY - YOUR WAY
+      <animate attributeName="opacity" values="0; 0; 0; 0.9; 0.9; 0" dur="15s" repeatCount="indefinite"/>
+      <animateTransform attributeName="transform" type="translate" values="0 10; 0 10; 0 10; 0 0; 0 0; 0 0" dur="15s" repeatCount="indefinite" additive="sum"/>
+    </text>
+
+    <!-- Tagline intense glow -->
+    <text x="0" y="40" text-anchor="middle" fill="#ffffff" font-family="'Orbitron', 'Exo 2', 'Rajdhani', sans-serif" font-size="20" font-weight="bold" letter-spacing="3" opacity="0" filter="url(#intenseGlow)">
+      UNLOCKED MEMORY - YOUR WAY
+      <animate attributeName="opacity" values="0; 0; 0; 0.4; 0.4; 0" dur="15s" repeatCount="indefinite"/>
+      <animateTransform attributeName="transform" type="translate" values="0 10; 0 10; 0 10; 0 0; 0 0; 0 0" dur="15s" repeatCount="indefinite" additive="sum"/>
+    </text>
+
+    <!-- Loading dots animation with staggered timing -->
+    <g opacity="0.7">
+      <circle cx="-30" cy="25" r="2" fill="#1e40af">
+        <animate attributeName="opacity" values="0.3; 1; 0.3" dur="1.5s" repeatCount="indefinite" begin="0s"/>
+      </circle>
+      <circle cx="0" cy="25" r="2" fill="#1e40af">
+        <animate attributeName="opacity" values="0.3; 1; 0.3" dur="1.5s" repeatCount="indefinite" begin="0.5s"/>
+      </circle>
+      <circle cx="30" cy="25" r="2" fill="#1e40af">
+        <animate attributeName="opacity" values="0.3; 1; 0.3" dur="1.5s" repeatCount="indefinite" begin="1s"/>
+      </circle>
+      <animate attributeName="opacity" values="0.7; 0.7; 0.7; 0" dur="15s" repeatCount="indefinite"/>
+    </g>
+
+    <!-- Progress indicator particles racing along bar -->
+    <g opacity="0.6">
+      <circle cx="-180" cy="4" r="1" fill="#ffffff">
+        <animateTransform attributeName="transform" type="translate" values="0 0; 380 0; 380 0; 0 0" dur="15s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0; 1; 1; 0" dur="15s" repeatCount="indefinite"/>
+      </circle>
+      <circle cx="-190" cy="4" r="0.8" fill="#3b82f6">
+        <animateTransform attributeName="transform" type="translate" values="0 0; 390 0; 390 0; 0 0" dur="15s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0; 0.8; 0.8; 0" dur="15s" repeatCount="indefinite"/>
+      </circle>
+    </g>
+  </g>
+
+</svg>
