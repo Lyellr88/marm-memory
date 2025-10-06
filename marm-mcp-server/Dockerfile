@@ -90,7 +90,7 @@ CMD ["python", "server.py"]
 #   marm-systems/marm-mcp-server:latest
 #
 # Connect to Claude Desktop:
-# claude mcp add marm-memory http://localhost:8001/mcp
+# claude mcp add --transport http marm-memory http://localhost:8001/mcp
 #
 # What gets packaged:
 # ✅ Python 3.11 (specific version, no "install Python" needed)
