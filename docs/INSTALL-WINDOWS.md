@@ -37,7 +37,7 @@
 <br>
 
 1. **Install MARM**: Choose ⚡ **Quick Test** (Beginner) or ⭐ **Automated** (Easy) from options below
-2. **Connect Claude**: `claude mcp add marm-memory http://localhost:8001/mcp`
+2. **Connect Claude**: `claude mcp add --transport http marm-memory http://localhost:8001/mcp`
 3. **Test**: `marm_start` → `marm_system_info`
 
 **That's it!** You now have AI memory that saves across sessions and platforms.
@@ -115,7 +115,7 @@ marm-mcp-server
 **HTTP Connection (Standard):**
 
 ```bash
-claude mcp add marm-memory http://localhost:8001/mcp
+claude mcp add --transport http marm-memory http://localhost:8001/mcp
 ```
 
 **WebSocket Connection (Beta):**
