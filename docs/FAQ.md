@@ -1,7 +1,4 @@
-
 # MARM Systems FAQ
-
----
 
 ## 🎯 Base Questions - General MARM
 
