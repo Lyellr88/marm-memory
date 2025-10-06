@@ -47,7 +47,7 @@ Forks may experiment, but official updates will always come from this repo.
 ```bash
 docker pull lyellr88/marm-mcp-server:latest
 docker run -d --name marm-mcp-server -p 8001:8001 -v marm_data:/app/data lyellr88/marm-mcp-server:latest
-claude mcp add marm-memory http://localhost:8001/mcp
+claude mcp add --transport http marm-memory http://localhost:8001/mcp
 ```
 
 **Quick Local Install:**
@@ -55,7 +55,7 @@ claude mcp add marm-memory http://localhost:8001/mcp
 ```bash
 pip install marm-mcp-server==2.2.5
 marm-mcp-server
-claude mcp add marm-memory http://localhost:8001/mcp
+claude mcp add --transport http marm-memory http://localhost:8001/mcp
 ```
 
 **Key Information:**
