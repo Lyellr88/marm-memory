@@ -36,7 +36,7 @@
 <br>
 
 1. **Pull & Run**: Choose Docker Run or Docker Compose below
-2. **Connect Claude**: `claude mcp add marm-memory http://localhost:8001/mcp`
+2. **Connect Claude**: `claude mcp add --transport http marm-memory http://localhost:8001/mcp`
 3. **Test**: `marm_start` → `marm_system_info`
 
 **That's it!** You now have AI memory that saves across sessions and platforms.
@@ -116,7 +116,7 @@ docker-compose up -d
 **HTTP Connection (Standard):**
 
 ```bash
-claude mcp add marm-memory http://localhost:8001/mcp
+claude mcp add --transport http marm-memory http://localhost:8001/mcp
 ```
 
 **WebSocket Connection (Beta):**
