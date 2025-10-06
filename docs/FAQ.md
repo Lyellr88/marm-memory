@@ -1,12 +1,6 @@
 
 # MARM Systems FAQ
 
-## Table of Contents
-
-- [Base Questions - General MARM](#-base-questions---general-marm)
-- [MCP Server Questions](#-mcp-server-questions)  
-- [Chatbot Questions](#-chatbot-questions)
-
 ---
 
 ## 🎯 Base Questions - General MARM
