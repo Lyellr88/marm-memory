@@ -4,9 +4,7 @@
     <clipPath id="roundedCorners">
       <rect width="800" height="400" rx="20" ry="20"/>
     </clipPath>
-  </defs>
-  <g clip-path="url(#roundedCorners)">
-  <defs>
+
     <!-- Animated gradient for chat bubble outline -->
     <linearGradient id="bubbleGrad" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" style="stop-color:#667eea;stop-opacity:1">
@@ -68,56 +66,44 @@
       <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#3b82f6" stroke-width="0.5" opacity="0.1"/>
     </pattern>
 
-    <!-- Circuit board pattern - Clean minimalist PCB style -->
+    <!-- Circuit board pattern - Clean minimalist PCB style (static, darker grey) -->
     <pattern id="circuitPattern" width="120" height="120" patternUnits="userSpaceOnUse">
       <!-- Horizontal traces - thin, consistent width -->
-      <line x1="0" y1="25" x2="40" y2="25" stroke="#ffffff" stroke-width="1" opacity="0.15"/>
-      <line x1="60" y1="25" x2="120" y2="25" stroke="#ffffff" stroke-width="1" opacity="0.15"/>
+      <line x1="0" y1="25" x2="40" y2="25" stroke="#4a4a4a" stroke-width="1" opacity="0.4"/>
+      <line x1="60" y1="25" x2="120" y2="25" stroke="#4a4a4a" stroke-width="1" opacity="0.4"/>
 
-      <line x1="20" y1="55" x2="70" y2="55" stroke="#ffffff" stroke-width="1" opacity="0.15"/>
-      <line x1="85" y1="55" x2="120" y2="55" stroke="#ffffff" stroke-width="1" opacity="0.15"/>
+      <line x1="20" y1="55" x2="70" y2="55" stroke="#4a4a4a" stroke-width="1" opacity="0.4"/>
+      <line x1="85" y1="55" x2="120" y2="55" stroke="#4a4a4a" stroke-width="1" opacity="0.4"/>
 
-      <line x1="0" y1="85" x2="35" y2="85" stroke="#ffffff" stroke-width="1" opacity="0.15"/>
-      <line x1="50" y1="85" x2="100" y2="85" stroke="#ffffff" stroke-width="1" opacity="0.15"/>
+      <line x1="0" y1="85" x2="35" y2="85" stroke="#4a4a4a" stroke-width="1" opacity="0.4"/>
+      <line x1="50" y1="85" x2="100" y2="85" stroke="#4a4a4a" stroke-width="1" opacity="0.4"/>
 
       <!-- Vertical traces -->
-      <line x1="40" y1="0" x2="40" y2="60" stroke="#ffffff" stroke-width="1" opacity="0.15"/>
-      <line x1="40" y1="75" x2="40" y2="120" stroke="#ffffff" stroke-width="1" opacity="0.15"/>
+      <line x1="40" y1="0" x2="40" y2="60" stroke="#4a4a4a" stroke-width="1" opacity="0.4"/>
+      <line x1="40" y1="75" x2="40" y2="120" stroke="#4a4a4a" stroke-width="1" opacity="0.4"/>
 
-      <line x1="70" y1="25" x2="70" y2="90" stroke="#ffffff" stroke-width="1" opacity="0.15"/>
+      <line x1="70" y1="25" x2="70" y2="90" stroke="#4a4a4a" stroke-width="1" opacity="0.4"/>
 
-      <line x1="100" y1="0" x2="100" y2="50" stroke="#ffffff" stroke-width="1" opacity="0.15"/>
-      <line x1="100" y1="65" x2="100" y2="120" stroke="#ffffff" stroke-width="1" opacity="0.15"/>
+      <line x1="100" y1="0" x2="100" y2="50" stroke="#4a4a4a" stroke-width="1" opacity="0.4"/>
+      <line x1="100" y1="65" x2="100" y2="120" stroke="#4a4a4a" stroke-width="1" opacity="0.4"/>
 
       <!-- Angled trace connections -->
-      <polyline points="40,60 50,70 50,85" fill="none" stroke="#ffffff" stroke-width="1" opacity="0.15"/>
-      <polyline points="85,55 95,65 100,65" fill="none" stroke="#ffffff" stroke-width="1" opacity="0.15"/>
-      <polyline points="35,85 45,95 60,95 60,120" fill="none" stroke="#ffffff" stroke-width="1" opacity="0.15"/>
+      <polyline points="40,60 50,70 50,85" fill="none" stroke="#4a4a4a" stroke-width="1" opacity="0.4"/>
+      <polyline points="85,55 95,65 100,65" fill="none" stroke="#4a4a4a" stroke-width="1" opacity="0.4"/>
+      <polyline points="35,85 45,95 60,95 60,120" fill="none" stroke="#4a4a4a" stroke-width="1" opacity="0.4"/>
 
-      <!-- Connection nodes with pulsing animation -->
-      <circle cx="40" cy="25" r="2" fill="#ffffff" opacity="0.25">
-        <animate attributeName="opacity" values="0.2; 0.4; 0.2" dur="4s" repeatCount="indefinite"/>
-      </circle>
-      <circle cx="70" cy="55" r="2" fill="#ffffff" opacity="0.25">
-        <animate attributeName="opacity" values="0.25; 0.45; 0.25" dur="5s" repeatCount="indefinite"/>
-      </circle>
-      <circle cx="100" cy="50" r="2" fill="#ffffff" opacity="0.25">
-        <animate attributeName="opacity" values="0.2; 0.35; 0.2" dur="4.5s" repeatCount="indefinite"/>
-      </circle>
-      <circle cx="50" cy="85" r="2" fill="#ffffff" opacity="0.25">
-        <animate attributeName="opacity" values="0.15; 0.4; 0.15" dur="6s" repeatCount="indefinite"/>
-      </circle>
-      <circle cx="40" cy="60" r="2" fill="#ffffff" opacity="0.25">
-        <animate attributeName="opacity" values="0.2; 0.38; 0.2" dur="3.5s" repeatCount="indefinite"/>
-      </circle>
-      <circle cx="85" cy="55" r="2" fill="#ffffff" opacity="0.25">
-        <animate attributeName="opacity" values="0.18; 0.42; 0.18" dur="5.5s" repeatCount="indefinite"/>
-      </circle>
+      <!-- Connection nodes (static, no animation) -->
+      <circle cx="40" cy="25" r="2" fill="#4a4a4a" opacity="0.4"/>
+      <circle cx="70" cy="55" r="2" fill="#4a4a4a" opacity="0.4"/>
+      <circle cx="100" cy="50" r="2" fill="#4a4a4a" opacity="0.4"/>
+      <circle cx="50" cy="85" r="2" fill="#4a4a4a" opacity="0.4"/>
+      <circle cx="40" cy="60" r="2" fill="#4a4a4a" opacity="0.4"/>
+      <circle cx="85" cy="55" r="2" fill="#4a4a4a" opacity="0.4"/>
 
       <!-- Endpoint nodes (filled) -->
-      <circle cx="20" cy="55" r="1.5" fill="#ffffff" opacity="0.2"/>
-      <circle cx="60" cy="25" r="1.5" fill="#ffffff" opacity="0.2"/>
-      <circle cx="100" cy="85" r="1.5" fill="#ffffff" opacity="0.2"/>
+      <circle cx="20" cy="55" r="1.5" fill="#4a4a4a" opacity="0.4"/>
+      <circle cx="60" cy="25" r="1.5" fill="#4a4a4a" opacity="0.4"/>
+      <circle cx="100" cy="85" r="1.5" fill="#4a4a4a" opacity="0.4"/>
     </pattern>
 
     <!-- Circuit board shadow filter -->
@@ -143,83 +129,84 @@
     </filter>
   </defs>
 
+  <g clip-path="url(#roundedCorners)">
   <!-- Background -->
   <rect width="800" height="400" fill="url(#bgGrad)"/>
 
-  <!-- CIRCUIT BOARD PCB TRACES - Stretched to fill canvas -->
+  <!-- CIRCUIT BOARD PCB TRACES - Stretched to fill canvas (static, darker grey) -->
   <g opacity="0.45" transform="scale(1.2, 1.15) translate(-10, -20)">
-    <!-- Main horizontal traces (MARM blue/purple gradient) -->
+    <!-- Main horizontal traces (dark grey, static) -->
     <path d="M30 80 L230 80 L250 100 L300 100 L320 80 L500 80 L520 60 L630 60"
-          stroke="url(#bubbleGrad)" stroke-width="2.5" fill="none" opacity="0.8"/>
+          stroke="#555555" stroke-width="2.5" fill="none" opacity="0.8"/>
     <path d="M70 133 L133 133 L153 153 L200 153 L220 133 L400 133 L420 113 L533 113"
-          stroke="url(#bubbleGrad)" stroke-width="2" fill="none" opacity="0.7"/>
+          stroke="#555555" stroke-width="2" fill="none" opacity="0.7"/>
     <path d="M100 233 L167 233 L187 213 L267 213 L287 233 L433 233 L453 253 L567 253"
-          stroke="url(#bubbleGrad)" stroke-width="2.5" fill="none" opacity="0.8"/>
+          stroke="#555555" stroke-width="2.5" fill="none" opacity="0.8"/>
     <path d="M53 333 L120 333 L140 313 L233 313 L253 333 L387 333 L407 353 L520 353"
-          stroke="url(#bubbleGrad)" stroke-width="2" fill="none" opacity="0.7"/>
+          stroke="#555555" stroke-width="2" fill="none" opacity="0.7"/>
 
     <!-- Vertical traces -->
     <path d="M133 33 L133 100 L153 120 L153 187 L133 207 L133 300"
-          stroke="url(#bubbleGrad)" stroke-width="2" fill="none" opacity="0.7"/>
+          stroke="#555555" stroke-width="2" fill="none" opacity="0.7"/>
     <path d="M267 53 L267 120 L247 140 L247 207 L267 227 L267 320"
-          stroke="url(#bubbleGrad)" stroke-width="2.5" fill="none" opacity="0.8"/>
+          stroke="#555555" stroke-width="2.5" fill="none" opacity="0.8"/>
     <path d="M400 67 L400 133 L420 153 L420 220 L400 240 L400 333"
-          stroke="url(#bubbleGrad)" stroke-width="2" fill="none" opacity="0.7"/>
+          stroke="#555555" stroke-width="2" fill="none" opacity="0.7"/>
     <path d="M533 47 L533 113 L513 133 L513 200 L533 220 L533 313"
-          stroke="url(#bubbleGrad)" stroke-width="2.5" fill="none" opacity="0.8"/>
+          stroke="#555555" stroke-width="2.5" fill="none" opacity="0.8"/>
 
     <!-- IC Chips (Integrated Circuits) -->
-    <rect x="213" y="120" width="53" height="40" fill="#2a2a2a" stroke="url(#bubbleGrad)" stroke-width="1.5" filter="url(#pcbShadow)"/>
+    <rect x="213" y="120" width="53" height="40" fill="#2a2a2a" stroke="#555555" stroke-width="1.5" filter="url(#pcbShadow)"/>
     <!-- IC pins left -->
-    <rect x="210" y="123" width="3" height="2" fill="#3b82f6"/>
-    <rect x="210" y="130" width="3" height="2" fill="#3b82f6"/>
-    <rect x="210" y="137" width="3" height="2" fill="#3b82f6"/>
-    <rect x="210" y="144" width="3" height="2" fill="#3b82f6"/>
-    <rect x="210" y="151" width="3" height="2" fill="#3b82f6"/>
+    <rect x="210" y="123" width="3" height="2" fill="#555555"/>
+    <rect x="210" y="130" width="3" height="2" fill="#555555"/>
+    <rect x="210" y="137" width="3" height="2" fill="#555555"/>
+    <rect x="210" y="144" width="3" height="2" fill="#555555"/>
+    <rect x="210" y="151" width="3" height="2" fill="#555555"/>
     <!-- IC pins right -->
-    <rect x="269" y="123" width="3" height="2" fill="#3b82f6"/>
-    <rect x="269" y="130" width="3" height="2" fill="#3b82f6"/>
-    <rect x="269" y="137" width="3" height="2" fill="#3b82f6"/>
-    <rect x="269" y="144" width="3" height="2" fill="#3b82f6"/>
-    <rect x="269" y="151" width="3" height="2" fill="#3b82f6"/>
+    <rect x="269" y="123" width="3" height="2" fill="#555555"/>
+    <rect x="269" y="130" width="3" height="2" fill="#555555"/>
+    <rect x="269" y="137" width="3" height="2" fill="#555555"/>
+    <rect x="269" y="144" width="3" height="2" fill="#555555"/>
+    <rect x="269" y="151" width="3" height="2" fill="#555555"/>
 
-    <rect x="347" y="200" width="53" height="40" fill="#2a2a2a" stroke="url(#bubbleGrad)" stroke-width="1.5" filter="url(#pcbShadow)"/>
+    <rect x="347" y="200" width="53" height="40" fill="#2a2a2a" stroke="#555555" stroke-width="1.5" filter="url(#pcbShadow)"/>
     <!-- IC pins left -->
-    <rect x="344" y="203" width="3" height="2" fill="#7c3aed"/>
-    <rect x="344" y="210" width="3" height="2" fill="#7c3aed"/>
-    <rect x="344" y="217" width="3" height="2" fill="#7c3aed"/>
-    <rect x="344" y="224" width="3" height="2" fill="#7c3aed"/>
-    <rect x="344" y="231" width="3" height="2" fill="#7c3aed"/>
+    <rect x="344" y="203" width="3" height="2" fill="#555555"/>
+    <rect x="344" y="210" width="3" height="2" fill="#555555"/>
+    <rect x="344" y="217" width="3" height="2" fill="#555555"/>
+    <rect x="344" y="224" width="3" height="2" fill="#555555"/>
+    <rect x="344" y="231" width="3" height="2" fill="#555555"/>
     <!-- IC pins right -->
-    <rect x="403" y="203" width="3" height="2" fill="#7c3aed"/>
-    <rect x="403" y="210" width="3" height="2" fill="#7c3aed"/>
-    <rect x="403" y="217" width="3" height="2" fill="#7c3aed"/>
-    <rect x="403" y="224" width="3" height="2" fill="#7c3aed"/>
-    <rect x="403" y="231" width="3" height="2" fill="#7c3aed"/>
+    <rect x="403" y="203" width="3" height="2" fill="#555555"/>
+    <rect x="403" y="210" width="3" height="2" fill="#555555"/>
+    <rect x="403" y="217" width="3" height="2" fill="#555555"/>
+    <rect x="403" y="224" width="3" height="2" fill="#555555"/>
+    <rect x="403" y="231" width="3" height="2" fill="#555555"/>
 
     <!-- Resistors -->
-    <rect x="187" y="77" width="13" height="5" fill="#667eea" stroke="#3b82f6" stroke-width="0.7"/>
-    <rect x="320" y="130" width="13" height="5" fill="#667eea" stroke="#3b82f6" stroke-width="0.7"/>
-    <rect x="453" y="230" width="13" height="5" fill="#667eea" stroke="#3b82f6" stroke-width="0.7"/>
+    <rect x="187" y="77" width="13" height="5" fill="#555555" stroke="#555555" stroke-width="0.7"/>
+    <rect x="320" y="130" width="13" height="5" fill="#555555" stroke="#555555" stroke-width="0.7"/>
+    <rect x="453" y="230" width="13" height="5" fill="#555555" stroke="#555555" stroke-width="0.7"/>
 
     <!-- Capacitors -->
-    <rect x="300" y="77" width="8" height="10" fill="#4a4a4a" stroke="#3b82f6" stroke-width="0.7"/>
-    <rect x="167" y="230" width="8" height="10" fill="#4a4a4a" stroke="#7c3aed" stroke-width="0.7"/>
-    <rect x="433" y="130" width="8" height="10" fill="#4a4a4a" stroke="#667eea" stroke-width="0.7"/>
+    <rect x="300" y="77" width="8" height="10" fill="#4a4a4a" stroke="#555555" stroke-width="0.7"/>
+    <rect x="167" y="230" width="8" height="10" fill="#4a4a4a" stroke="#555555" stroke-width="0.7"/>
+    <rect x="433" y="130" width="8" height="10" fill="#4a4a4a" stroke="#555555" stroke-width="0.7"/>
 
     <!-- Via holes (small circles) -->
-    <circle cx="133" cy="80" r="2" fill="#2a2a2a" stroke="#3b82f6" stroke-width="0.7"/>
-    <circle cx="267" cy="133" r="2" fill="#2a2a2a" stroke="#667eea" stroke-width="0.7"/>
-    <circle cx="400" cy="233" r="2" fill="#2a2a2a" stroke="#7c3aed" stroke-width="0.7"/>
-    <circle cx="533" cy="333" r="2" fill="#2a2a2a" stroke="#3b82f6" stroke-width="0.7"/>
-    <circle cx="200" cy="80" r="2" fill="#2a2a2a" stroke="#667eea" stroke-width="0.7"/>
-    <circle cx="333" cy="80" r="2" fill="#2a2a2a" stroke="#7c3aed" stroke-width="0.7"/>
+    <circle cx="133" cy="80" r="2" fill="#2a2a2a" stroke="#555555" stroke-width="0.7"/>
+    <circle cx="267" cy="133" r="2" fill="#2a2a2a" stroke="#555555" stroke-width="0.7"/>
+    <circle cx="400" cy="233" r="2" fill="#2a2a2a" stroke="#555555" stroke-width="0.7"/>
+    <circle cx="533" cy="333" r="2" fill="#2a2a2a" stroke="#555555" stroke-width="0.7"/>
+    <circle cx="200" cy="80" r="2" fill="#2a2a2a" stroke="#555555" stroke-width="0.7"/>
+    <circle cx="333" cy="80" r="2" fill="#2a2a2a" stroke="#555555" stroke-width="0.7"/>
 
     <!-- Solder pads -->
-    <circle cx="213" cy="140" r="2.5" fill="#3b82f6" opacity="0.8"/>
-    <circle cx="267" cy="140" r="2.5" fill="#667eea" opacity="0.8"/>
-    <circle cx="347" cy="220" r="2.5" fill="#7c3aed" opacity="0.8"/>
-    <circle cx="400" cy="220" r="2.5" fill="#3b82f6" opacity="0.8"/>
+    <circle cx="213" cy="140" r="2.5" fill="#555555" opacity="0.8"/>
+    <circle cx="267" cy="140" r="2.5" fill="#555555" opacity="0.8"/>
+    <circle cx="347" cy="220" r="2.5" fill="#555555" opacity="0.8"/>
+    <circle cx="400" cy="220" r="2.5" fill="#555555" opacity="0.8"/>
 
     <!-- Component labels (silkscreen) -->
     <text x="227" y="117" font-family="monospace" font-size="5" fill="#ffffff" opacity="0.6">U1</text>
@@ -466,5 +453,4 @@
     </g>
   </g>
   </g>
-
 </svg>
