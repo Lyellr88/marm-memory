@@ -48,7 +48,7 @@ Forks may experiment, but official updates will always come from this repo.
 
 **HTTP Connection (Standard):**
 ```bash
-claude mcp add marm-memory http://localhost:8001/mcp
+claude mcp add --transport http marm-memory http://localhost:8001/mcp
 /mcp  # → Instant connection to your MARM server!
 ```
 
@@ -81,7 +81,7 @@ claude mcp add marm-memory ws://localhost:8001/mcp/ws
 docker run -d --name marm-mcp-server -p 8001:8001 -v marm_data:/app/data lyellr88/marm-mcp-server:latest
 
 # 2. Connect to Claude (5 seconds)
-claude mcp add marm-memory http://localhost:8001/mcp
+claude mcp add --transport http marm-memory http://localhost:8001/mcp
 
 # 3. Activate (instant)
 /mcp
@@ -129,7 +129,7 @@ docker run -d --name marm-mcp-server -p 8001:8001 -v marm_data:/app/data \
 echo "Waiting for MARM server to start..."
 sleep 15
 
-claude mcp add marm-memory http://localhost:8001/mcp
+claude mcp add --transport http marm-memory http://localhost:8001/mcp
 ```
 
 **Quick Local Install:**
@@ -138,7 +138,7 @@ claude mcp add marm-memory http://localhost:8001/mcp
 pip install marm-mcp-server==2.2.5
 cd MARM-Systems/marm-mcp-server
 # Cross-platform: pip install marm-mcp-server==2.2.5
-claude mcp add marm-memory http://localhost:8001/mcp
+claude mcp add --transport http marm-memory http://localhost:8001/mcp
 ```
 
 **Key Information:**
