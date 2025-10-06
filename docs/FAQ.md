@@ -51,7 +51,7 @@ MARM Systems provides **Universal Memory Intelligence** for AI agents through th
 
 | Method | Commands | Time | Requirements |
 |--------|----------|------|--------------|
-| **Docker (Recommended)** | `docker pull lyellr88/marm-mcp-server:latest`<br>`docker run -d --name marm-mcp-server -p 8001:8001 -v marm_data:/app/data lyellr88/marm-mcp-server:latest`<br>`claude mcp add marm-memory http://localhost:8001/mcp` | 2 minutes | Docker installed |
+| **Docker (Recommended)** | `docker pull lyellr88/marm-mcp-server:latest`<br>`docker run -d --name marm-mcp-server -p 8001:8001 -v marm_data:/app/data lyellr88/marm-mcp-server:latest`<br>`claude mcp add --transport http marm-memory http://localhost:8001/mcp` | 2 minutes | Docker installed |
 | **PyPI Install** | `pip install marm-mcp-server==2.2.3`<br>`marm-mcp-server` | 1 minute | Python 3.10+ |
 
 ### Q: What MCP tools does MARM provide?
