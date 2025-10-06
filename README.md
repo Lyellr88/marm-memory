@@ -1,9 +1,9 @@
 <div align="center">
 <picture>
-  <img src="https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/media/marm-logo.svg"
-       alt="MARM - The AI That Remembers Your Conversations"
-       width="700"
-       height="350"
+<img src="https://raw.githubusercontent.com/Lyellr88/MARM-Systems/MARM-main/media/marm-logo.svg"
+     alt="MARM - The AI That Remembers Your Conversations"
+     width="700"
+     height="350">
 </picture>
 <h1 align="center">MARM: The AI That Remembers Your Conversations</h1>
 
@@ -15,7 +15,7 @@ Memory Accurate Response Mode v2.2.5 - The intelligent memory system for AI agen
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115.4-blue)](https://fastapi.tiangolo.com/)
 [![Docker Pulls](https://img.shields.io/docker/pulls/lyellr88/marm-mcp-server)](https://hub.docker.com/r/lyellr88/marm-mcp-server)
-[![Pip Downloads](https://pepy.tech/badge/marm-mcp-server)](https://pepy.tech/project/marm-mcp-server)
+[![PyPI Downloads](https://static.pepy.tech/personalized-badge/marm-mcp-server?period=total&units=NONE&left_color=GREY&right_color=BLUE&left_text=downloads)](https://pepy.tech/projects/marm-mcp-server)
 
 [![pip install](https://img.shields.io/badge/pip%20install-marm--mcp--server-blue)](https://pypi.org/project/marm-mcp-server/)
 [![MCP Registry](https://img.shields.io/badge/MCP%20Registry-LIVE-blue)](https://registry.modelcontextprotocol.io/)
@@ -35,9 +35,9 @@ Forks may experiment, but official updates will always come from this repo.
 <br>
 <div align="center">
 <picture>
-    <img src="https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/media/installation-flow.svg"
-         width="850"
-         height="500"
+<img src="https://raw.githubusercontent.com/Lyellr88/MARM-Systems/MARM-main/media/installation-flow.svg"
+   width="850"
+   height="500"
 </picture>
 </div>
 <br>
@@ -82,37 +82,13 @@ claude mcp add --transport http marm-memory http://localhost:8001/mcp
 
 ---
 
-## 🚀 Quick Start for Chatbot
+## What Users Are Saying
 
-The MARM Chatbot is a web-based interface for interacting with the MARM protocol. To install it, you'll need Node.js and a Replicate API key.
+> “MARM successfully handles our industrial automation workflows in production. We've validated session management, persistent logging, and smart recall across container restarts in our Windows 11 + Docker environment. The system reliably tracks complex technical decisions and maintains data integrity through deployment cycles.”  
+> @Ophy21, GitHub user (Industrial Automation Engineer)   
 
-### 1. Clone the repository
-
-```bash
-git clone https://github.com/Lyellr88/MARM-Systems.git
-```
-
-### 2. Install dependencies
-
-```bash
-cd MARM-Systems/webchat
-npm install
-```
-
-### 3. Add your Replicate API key to a .env file
-
-```bash
-echo "REPLICATE_API_TOKEN=your_replicate_api_token_here" > .env
-```
-
-### 4. Start the server
-
-```bash
-npm start
-```
-
-**Fastest**
-[MARM Chatbot](https://marm-systems-chatbot.onrender.com)
+> “MARM proved exceptionally valuable for DevOps and complex Docker projects. It maintained 100% memory accuracy, preserved context on 46 services and network configurations, and enabled standards-compliant Python/Terraform work. Semantic search and automated session logs made solving async and infrastructure issues far easier. **Value Rating:** 9.5/10 - indispensable for enterprise-grade memory, technical standards, and long-session code management.”    
+> @joe_nyc, Discord user (DevOps/Infrastructure Engineer)  
 
 ---
 
@@ -124,11 +100,11 @@ The MARM ecosystem consists of three main components:
 
 - **The MARM Protocol:** A set of rules and commands for structured, reliable AI interaction.
 - **The MARM Universal MCP Server:** A production-ready memory intelligence platform that provides a powerful, stateful backend for any MCP-compatible AI client.
-- **The MARM Chatbot:** A web-based interface for interacting with the MARM protocol directly.
+- **The MARM CLI:** MARM CLI is coming soon, bringing the full power of the MCP server experience to your command line.
 
 Whether you're a developer looking to build the next generation of AI agents, a researcher studying AI behavior, or simply a power user who wants to have more productive conversations with your AI, the MARM ecosystem provides the tools you need to unlock the full potential of large language models.
 
-The newest addition tho the ecosystem is MARM MCP it represents an emerging category of MCP server that integrates a complete protocol layer with intelligent memory systems. Built on FastAPI and SQLite, it combines the MARM protocol with semantic search, session management, and smart retrieval to bridge tool access with structured reasoning. This creates a more consistent, user-controlled LLM experience that goes beyond simple tool exposure.
+The newest addition to the ecosystem is MARM MCP it represents an emerging category of MCP server that integrates a complete protocol layer with intelligent memory systems. Built on FastAPI and SQLite, it combines the MARM protocol with semantic search, session management, and smart retrieval to bridge tool access with structured reasoning. This creates a more consistent, user-controlled LLM experience that goes beyond simple tool exposure.
 
 | **Category** | **Feature** | **Description** |
 |--------------|-------------|-----------------|
@@ -170,11 +146,11 @@ MARM is the result of combining individual persistence with collective needs, a 
 
 Join Discord for upcoming features and builds, plus a safe space to share your work and get constructive feedback.
 
-[MARM Discord](https://discord.gg/EuBsHvSRks)
+[MARM Discord](https://discord.gg/nhyJWPz2cf)
 
 <div align="center">
 <picture>
-    <img src="https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/media/google-overview.PNG"
+    <img src="https://raw.githubusercontent.com/Lyellr88/MARM-Systems/MARM-main/media/google-overview.PNG"
          alt="MARM - The AI That Remembers Your Conversations"
          width="700"
          height="350"
@@ -204,7 +180,7 @@ Join Discord for upcoming features and builds, plus a safe space to share your w
 
 ## Why Use MARM?
 
-Modern LLMs often lose context or fabricate information. MARM introduces a session memory kernel, structured logs, and a user-controlled knowledge library. Anchoring the AI to *your* logic and data. It’s more than a chatbot wrapper. It’s a methodology for accountable AI.
+Modern LLMs often lose context or fabricate information. MARM introduces a session memory kernel, structured logs, and a user-controlled knowledge library. Anchoring the AI to *your* logic and data. It’s more than a basic MCP/CLI. It’s a methodology for accountable AI.
 
 ### Command Overview
 
@@ -222,38 +198,17 @@ Need a walkthrough or troubleshooting help? The [`MARM-HANDBOOK.md`](https://git
 
 ---
 
-<div align="center">
-  <h3>🚀 Try MARM Chatbot Now - No Setup Required</h3>
-  <a href="https://marm-systems-chatbot.onrender.com">
-    <img src="https://img.shields.io/badge/Launch_Live_Demo-MARM_Chatbot-FF6B6B?style=for-the-badge&logo=rocket&logoColor=white" width="300">
-  </a>
-  <p><i>Experience all features instantly in your browser</i></p>
-</div>
-
-<div align="center">
-<picture>
-  <img src="https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/media/chatbot-dark.png"
-       width="700"
-       height="350">
-</picture>
-</div>
-
-### Need detailed steps, troubleshooting, or multi-provider setup?
-
-See [CHATBOT-SETUP.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/CHATBOT-SETUP.md) for complete installation guide with Node.js setup and troubleshooting.
-
 # 🛠️ MARM MCP Server Guide
 
-Now that you understand the ecosystem, here's info and how to actually use the MCP server with your AI agents
+Now that you understand the ecosystem, here's info and how to use the MCP server with your AI agents
 
 ---
 
 <div align="center">
 <picture>
-    <img src="https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/media/feature-showcase.svg"
-      height="550"   
-      width="800"
-         
+<img src="https://raw.githubusercontent.com/Lyellr88/MARM-Systems/MARM-main/media/feature-showcase.svg"
+   height="550"   
+   width="800"    
 </picture>
 </div>
 
@@ -342,9 +297,9 @@ CREATE TABLE sessions (
 
 <div align="center">
 <picture>
-    <img src="https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/media/memory-intelligence.svg"
-         width="900"
-         height="625"
+<img src="https://raw.githubusercontent.com/Lyellr88/MARM-Systems/MARM-main/media/memory-intelligence.svg"
+   width="900"
+   height="625"
 </picture>
 </div>
 
@@ -424,11 +379,11 @@ MARM is building the solution to this. Support now to join a growing ecosystem -
 
 **Help build the future of AI memory - no coding required!**
 
-**Connect:** [MARM Discord](https://discord.gg/EuBsHvSRks) | [GitHub Discussions](https://github.com/Lyellr88/MARM-Systems/discussions)
+**Connect:** [MARM Discord](https://discord.gg/nhyJWPz2cf) | [GitHub Discussions](https://github.com/Lyellr88/MARM-Systems/discussions)
 
 ### Easy Ways to Get Involved
 
-- **Try the MCP server or Chatbot** and share your experience
+- **Try the MCP server or Coming soon CLI** and share your experience
 - **Star the repo** if MARM solves a problem for you
 - **Share on social** - help others discover memory-enhanced AI
 - **Open [issues](https://github.com/Lyellr88/MARM-Systems/issues)** with bugs, feature requests, or use cases
@@ -478,7 +433,7 @@ Derivatives should clearly indicate they are unofficial or experimental.
 - **[INSTALL-DOCKER.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-DOCKER.md)** - Docker deployment (recommended)
 - **[INSTALL-WINDOWS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-WINDOWS.md)** - Windows installation guide
 - **[INSTALL-LINUX.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-LINUX.md)** - Linux installation guide
-- **[INSTALL-PLATFORMS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-PLATFORMS.md)** - Platfrom installtion guide
+- **[INSTALL-PLATFORMS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-PLATFORMS.md)** - Platform installation guide
 
 ### **Chatbot Installation**
 
