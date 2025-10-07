@@ -52,10 +52,10 @@ Modern LLMs lose context over time, repeat prior ideas, and drift off requiremen
 <br>
 <div align="center">
 <picture>
-  <img src="https://raw.githubusercontent.com/Lyellr88/MARM-Systems/MARM-main/media/google-overview.PNG"
+  <img src="https://raw.githubusercontent.com/Lyellr88/MARM-Systems/MARM-main/media/google-overview.png"
        alt="MARM appears in Google AI Overview for AI memory protocol queries"
-       width="700"
-       height="350"
+       width="900"
+       height="550"
   />
 </picture>
 </div>
