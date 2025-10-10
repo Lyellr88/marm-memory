@@ -1,0 +1,93 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "marm-mcp-server"
+version = "2.2.6"
+description = "MARM-Systems is a complete protocol and platform—combining an advanced memory backend, modular semantic search, and agent-to-agent coordination with a scientifically structured, community-vetted methodology for reasoning, session recall, and collaborative AI workflows. More then just a set of tools, it's a complete AI memory ecosystem"
+readme = "MCP-README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Ryan Lyell", email = "lyell@marmsystems.com"}
+]
+maintainers = [
+    {name = "Ryan Lyell", email = "lyell@marmsystems.com"}
+]
+keywords = ["mcp", "ai", "memory", "claude", "assistant", "protocol"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: Communications",
+]
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.115.4",
+    "fastapi-mcp>=0.4.0",
+    "uvicorn>=0.32.0",
+    "pydantic>=2.9.2",
+    "sentence-transformers>=3.3.1",
+    "numpy>=2.1.2",
+    "python-multipart>=0.0.12",
+    "apscheduler>=3.10.4",
+    "psutil>=6.1.0",
+    "structlog>=24.4.0",
+    "httpx>=0.27.0",
+    "torch>=1.13.0",
+]
+
+[project.urls]
+Homepage = "https://marmsystems.com"
+Documentation = "https://docs.marmsystems.com"
+Repository = "https://github.com/Lyellr88/MARM-Systems"
+"Bug Tracker" = "https://github.com/Lyellr88/MARM-Systems/issues"
+"Docker Hub" = "https://hub.docker.com/r/lyellr88/marm-mcp-server"
+
+[project.scripts]
+marm-mcp-server = "marm_mcp_server.server:main"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0.0",
+    "black>=22.0.0",
+    "isort>=5.10.0",
+    "flake8>=5.0.0",
+    "mypy>=1.0.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["marm_mcp_server*"]
+exclude = ["tests*", "*.tests*", "docs*"]
+
+[tool.setuptools.package-data]
+"*" = ["*.json", "*.yaml", "*.yml", "config/*", "templates/*"]
+
+[tool.black]
+line-length = 88
+target-version = ['py310']
+include = '\.pyi?$'
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+line_length = 88
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+
+# MCP Server Configuration
+[project.entry-points."mcp.servers"]
+marm = "server:create_server"

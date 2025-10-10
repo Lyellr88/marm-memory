@@ -1,0 +1,154 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-16/server.schema.json",
+  "_schema_date": "2025-09-16",
+  "name": "io.github.lyellr88/marm-mcp-server",
+  "description": "Universal MCP Server with advanced AI memory capabilities and semantic search.",
+  "version": "2.2.6",
+  "author": "Ryan Lyell - MARM Systems",
+  "license": "MIT",
+  "homepage": "https://marmsystems.com",
+  "repository": {
+    "url": "https://github.com/Lyellr88/MARM-Systems",
+    "source": "github"
+  },
+  "keywords": ["memory", "ai", "mcp", "claude", "assistant", "semantic-search", "fastapi"],
+  "categories": ["memory", "productivity", "development"],
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "marm-mcp-server",
+      "version": "2.2.6",
+      "transport": { "type": "stdio" }
+    },
+    {
+      "registryType": "oci",
+      "identifier": "lyellr88/marm-mcp-server",
+      "version": "2.2.6",
+      "transport": { "type": "stdio" }
+    }
+  ],
+  "tools": [
+    {
+      "name": "marm_log_entry",
+      "description": "Log important information to MARM's memory system"
+    },
+    {
+      "name": "marm_contextual_log",
+      "description": "Log contextual information with automatic categorization"
+    },
+    {
+      "name": "marm_smart_recall",
+      "description": "Intelligent memory recall using semantic search"
+    },
+    {
+      "name": "marm_summary",
+      "description": "Generate intelligent summaries from memory data"
+    },
+    {
+      "name": "marm_notebook_add",
+      "description": "Add structured information to MARM notebooks"
+    },
+    {
+      "name": "marm_notebook_use",
+      "description": "Retrieve and use notebook information"
+    },
+    {
+      "name": "marm_notebook_show",
+      "description": "Display notebook contents and structure"
+    },
+    {
+      "name": "marm_notebook_status",
+      "description": "Check notebook status and metadata"
+    },
+    {
+      "name": "marm_notebook_clear",
+      "description": "Clear notebook contents"
+    },
+    {
+      "name": "marm_log_show",
+      "description": "Display memory log entries"
+    },
+    {
+      "name": "marm_start",
+      "description": "Activate MARM intelligent memory and response accuracy layers"
+    },
+    {
+      "name": "marm_refresh",
+      "description": "Refresh AI agent session state and reaffirm protocol adherence"
+    },
+    {
+      "name": "marm_log_session",
+      "description": "Create or switch to named session container"
+    },
+    {
+      "name": "marm_log_delete",
+      "description": "Delete specified session or individual entries"
+    },
+    {
+      "name": "marm_context_bridge",
+      "description": "Smart context bridging for seamless AI agent workflow transitions"
+    },
+    {
+      "name": "marm_notebook_delete",
+      "description": "Delete specific notebook entry"
+    },
+    {
+      "name": "marm_current_context",
+      "description": "Get current date/time for accurate log entry timestamps"
+    },
+    {
+      "name": "marm_system_info",
+      "description": "Comprehensive system information, health status, and loaded docs"
+    },
+    {
+      "name": "marm_reload_docs",
+      "description": "Reload documentation into memory system"
+    }
+  ],
+  "capabilities": {
+    "memory": {
+      "persistent": true,
+      "semantic_search": true,
+      "contextual_understanding": true
+    },
+    "performance": {
+      "lazy_loading": true,
+      "connection_pooling": true,
+      "caching": true
+    },
+    "security": {
+      "rate_limiting": true,
+      "xss_protection": true,
+      "error_isolation": true
+    }
+  },
+  "requirements": {
+    "python": ">=3.10",
+    "docker": ">=20.10.0"
+  },
+  "configuration": {
+    "environmentVariables": {
+      "MARM_DB_PATH": {
+        "description": "Path to SQLite database file",
+        "default": "/app/data/marm_memory.db"
+      },
+      "MARM_LOG_LEVEL": {
+        "description": "Logging level (DEBUG, INFO, WARNING, ERROR)",
+        "default": "INFO"
+      },
+      "MARM_HOST": {
+        "description": "Host address to bind to",
+        "default": "0.0.0.0"
+      },
+      "MARM_PORT": {
+        "description": "Port number to bind to",
+        "default": "8001"
+      }
+    }
+  },
+  "documentation": {
+    "quick_start": "https://marmsystems.com/docs/quick-start",
+    "api_reference": "https://marmsystems.com/docs/api",
+    "examples": "https://github.com/MARM-Systems/MARM/tree/main/examples"
+  }
+}
