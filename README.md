@@ -30,6 +30,10 @@ Forks may experiment, but official updates will always come from this repo.
 
 ---
 
+https://github.com/user-attachments/assets/c7c6a162-5408-4eda-a461-610b7e713dfe
+
+---
+
 ## Why MARM MCP: The Problem & Solution
 
 **Your AI forgets everything. MARM MCP doesn't.**
