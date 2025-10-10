@@ -1,8 +1,6 @@
 # Changelog
 
-## MARM Protocol – v2.2.5 Change Log  
-
----
+## MARM Protocol – v2.2.5 Change Log
 
 <details>
 <summary> June 9th–13th: Initial Protocol Unification (v1.2 Launch)</summary>

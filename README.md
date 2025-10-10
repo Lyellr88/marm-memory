@@ -7,7 +7,7 @@
 </picture>
 <h1 align="center">MARM: The AI That Remembers Your Conversations</h1>
 
-Memory Accurate Response Mode v2.2.5 - The intelligent persistent memory system for AI agents, stop fighting your memory and control it. Experience long-term recall, session continuity, and reliable conversation history, so your LLMs never lose track of what matters. 
+Memory Accurate Response Mode v2.2.6 - The intelligent persistent memory system for AI agents, stop fighting your memory and control it. Experience long-term recall, session continuity, and reliable conversation history, so your LLMs never lose track of what matters.
 
 [![GitHub stars](https://img.shields.io/github/stars/Lyellr88/MARM-Systems?style=flat&color=blue)](https://github.com/Lyellr88/MARM-Systems/stargazers)
 [![GitHub forks](https://img.shields.io/github/forks/Lyellr88/MARM-Systems?style=flat&color=blue)](https://github.com/Lyellr88/MARM-Systems/network)
@@ -30,7 +30,7 @@ Forks may experiment, but official updates will always come from this repo.
 
 ---
 
-https://github.com/user-attachments/assets/c7c6a162-5408-4eda-a461-610b7e713dfe
+<https://github.com/user-attachments/assets/c7c6a162-5408-4eda-a461-610b7e713dfe>
 
 ---
 
@@ -85,9 +85,9 @@ Modern LLMs lose context over time, repeat prior ideas, and drift off requiremen
 ## What Users Are Saying
 
 > “MARM successfully handles our industrial automation workflows in production. We've validated session management, persistent logging, and smart recall across container restarts in our Windows 11 + Docker environment. The system reliably tracks complex technical decisions and maintains data integrity through deployment cycles.”  
-> @Ophy21, GitHub user (Industrial Automation Engineer)   
+> @Ophy21, GitHub user (Industrial Automation Engineer)
 
-> “MARM proved exceptionally valuable for DevOps and complex Docker projects. It maintained 100% memory accuracy, preserved context on 46 services and network configurations, and enabled standards-compliant Python/Terraform work. Semantic search and automated session logs made solving async and infrastructure issues far easier. **Value Rating:** 9.5/10 - indispensable for enterprise-grade memory, technical standards, and long-session code management.”    
+> “MARM proved exceptionally valuable for DevOps and complex Docker projects. It maintained 100% memory accuracy, preserved context on 46 services and network configurations, and enabled standards-compliant Python/Terraform work. Semantic search and automated session logs made solving async and infrastructure issues far easier. **Value Rating:** 9.5/10 - indispensable for enterprise-grade memory, technical standards, and long-session code management.”
 > @joe_nyc, Discord user (DevOps/Infrastructure Engineer)  
 
 ---
@@ -108,14 +108,14 @@ Modern LLMs lose context over time, repeat prior ideas, and drift off requiremen
 
 ```bash
 docker pull lyellr88/marm-mcp-server:latest
-docker run -d --name marm-mcp-server -p 8001:8001 -v marm_data:/app/data lyellr88/marm-mcp-server:latest
+docker run -d --name marm-mcp-server -p 8001:8001 -v ~/.marm:/home/marm/.marm lyellr88/marm-mcp-server:latest
 claude mcp add --transport http marm-memory http://localhost:8001/mcp
 ```
 
 **Quick Local Install:**
 
 ```bash
-pip install marm-mcp-server==2.2.5
+pip install marm-mcp-server==2.2.6
 marm-mcp-server
 claude mcp add --transport http marm-memory http://localhost:8001/mcp
 ```
@@ -153,8 +153,8 @@ Now that you understand the ecosystem, here's info and how to use the MCP server
 <div align="center">
 <picture>
 <img src="https://raw.githubusercontent.com/Lyellr88/MARM-Systems/MARM-main/media/feature-showcase.svg"
-   height="550"   
-   width="800"    
+   height="550"
+   width="800"
 </picture>
 </div>
 
@@ -287,7 +287,7 @@ CREATE TABLE sessions (
 
 ### **vs. Basic MCP Implementations**
 
-| Feature | MARM v2.2.5 | Basic MCP Servers |
+| Feature | MARM v2.2.6 | Basic MCP Servers |
 |---------|-------------|-------------------|
 | **Memory Intelligence** | AI-powered semantic search with auto-classification | Basic key-value storage |
 | **Tool Coverage** | 18 complete MCP protocol tools | 3-5 basic wrappers |  

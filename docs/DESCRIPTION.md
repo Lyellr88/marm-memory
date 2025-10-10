@@ -41,8 +41,8 @@ This project showcases advanced multi-agent collaboration, with Claude handling 
 
 ```bash
 docker pull lyellr88/marm-mcp-server:latest
-docker run -d --name marm-mcp-server -p 8001:8001 -v marm_data:/app/data lyellr88/marm-mcp-server:latest
-claude mcp add marm-memory http://localhost:8001/mcp
+docker run -d --name marm-mcp-server -p 8001:8001 -v ~/.marm:/home/marm/.marm lyellr88/marm-mcp-server:latest
+claude mcp add --transport http marm-memory http://localhost:8001/mcp
 ```
 
 **🌐 Live Demo:** <https://marm-systems-chatbot.onrender.com>  

@@ -1,4 +1,13 @@
+
 # MARM Systems FAQ
+
+## Table of Contents
+
+- [Base Questions - General MARM](#-base-questions---general-marm)
+- [MCP Server Questions](#-mcp-server-questions)  
+- [Chatbot Questions](#-chatbot-questions)
+
+---
 
 ## 🎯 Base Questions - General MARM
 
@@ -42,7 +51,7 @@ MARM Systems provides **Universal Memory Intelligence** for AI agents through th
 
 | Method | Commands | Time | Requirements |
 |--------|----------|------|--------------|
-| **Docker (Recommended)** | `docker pull lyellr88/marm-mcp-server:latest`<br>`docker run -d --name marm-mcp-server -p 8001:8001 -v marm_data:/app/data lyellr88/marm-mcp-server:latest`<br>`claude mcp add --transport http marm-memory http://localhost:8001/mcp` | 2 minutes | Docker installed |
+| **Docker (Recommended)** | `docker pull lyellr88/marm-mcp-server:latest`<br>`docker run -d --name marm-mcp-server -p 8001:8001 -v ~/.marm:/home/marm/.marm lyellr88/marm-mcp-server:latest`<br>`claude mcp add --transport http marm-memory http://localhost:8001/mcp` | 2 minutes | Docker installed |
 | **PyPI Install** | `pip install marm-mcp-server==2.2.3`<br>`marm-mcp-server` | 1 minute | Python 3.10+ |
 
 ### Q: What MCP tools does MARM provide?
@@ -103,7 +112,7 @@ MARM Systems provides **Universal Memory Intelligence** for AI agents through th
 
 | Step | Command/Action | Description |
 |------|----------------|-------------|
-| **1. Activate** | `/start marm` | Enables MARM v2.2.5 protocol |
+| **1. Activate** | `/start marm` | Enables MARM v2.2.6 protocol |
 | **2. Organize** | `/log session: ProjectName` | Create named session |
 | **3. Remember** | `/log entry: [YYYY-MM-DD-topic-summary]` | Log important milestones |
 | **4. Store** | `/notebook add: name [data]` | Save reusable instructions |

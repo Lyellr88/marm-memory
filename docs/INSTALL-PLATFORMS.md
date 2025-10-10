@@ -1,4 +1,4 @@
-# MARM V2.2.5 MCP Server with WebSocket Support - Platform Integration Guide
+# MARM V2.2.6 MCP Server with WebSocket Support - Platform Integration Guide
 
 ## 📖 Table of Contents
 
@@ -219,18 +219,6 @@ For developers who want simplified multi-provider support:
 - Use Playground/Studio for testing without execution
 - Test with multiple providers for compatibility
 - Implement fallback for unsupported platforms
-
----
-
-<br>
-<div align="center">
-<picture>
-    <img src="https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/media/installation-flow.svg"
-         width="850"
-         height="500"
-</picture>
-</div>
-<br>
 
 ---
 

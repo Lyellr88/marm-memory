@@ -2,7 +2,7 @@
 
 ## Universal Memory Intelligence Platform for AI Agents
 
-**MARM v2.2.5* - Memory Accurate Response Mode with WebSocket Support
+**MARM v2.2.6* - Memory Accurate Response Mode with WebSocket Support
 *Docker deployment guide for Windows, Mac, and Linux*
 
 ---
@@ -25,16 +25,6 @@
 
 **🚀 Fastest Path to MARM Memory:**
 
-<br>
-<div align="center">
-<picture>
-    <img src="https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/media/installation-flow.svg"
-         width="850"
-         height="500"
-</picture>
-</div>
-<br>
-
 1. **Pull & Run**: Choose Docker Run or Docker Compose below
 2. **Connect Claude**: `claude mcp add --transport http marm-memory http://localhost:8001/mcp`
 3. **Test**: `marm_start` → `marm_system_info`
@@ -54,10 +44,10 @@
 docker pull lyellr88/marm-mcp-server:latest
 
 # Basic setup (temporary data)
-docker run -d --name marm-mcp-server -p 8001:8001 -v marm_data:/app/data lyellr88/marm-mcp-server:latest
+docker run -d --name marm-mcp-server -p 8001:8001 -v ~/.marm:/home/marm/.marm lyellr88/marm-mcp-server:latest
 
 # Recommended setup (persistent data)
-docker run -d --name marm-mcp-server -p 8001:8001 -v marm_data:/app/data --restart unless-stopped lyellr88/marm-mcp-server:latest
+docker run -d --name marm-mcp-server -p 8001:8001 -v ~/.marm:/home/marm/.marm --restart unless-stopped lyellr88/marm-mcp-server:latest
 ```
 
 **Why choose this:**
@@ -82,10 +72,7 @@ services:
       - "8001:8001"
     restart: unless-stopped
     volumes:
-      - marm_data:/app/data
-
-volumes:
-  marm-data:
+      - ~/.marm:/home/marm/.marm
 ```
 
 ```bash
@@ -193,7 +180,7 @@ docker rm marm-mcp-server
 docker pull lyellr88/marm-mcp-server:latest
 docker stop marm-mcp-server
 docker rm marm-mcp-server
-docker run -d --name marm-mcp-server -p 8001:8001 -v marm_data:/app/data --restart unless-stopped lyellr88/marm-mcp-server:latest
+docker run -d --name marm-mcp-server -p 8001:8001 -v ~/.marm:/home/marm/.marm --restart unless-stopped lyellr88/marm-mcp-server:latest
 ```
 
 **View Logs:**
@@ -313,14 +300,14 @@ Your testing helps make MARM better for everyone.
 docker pull lyellr88/marm-mcp-server:latest
 docker stop marm-mcp-server
 docker rm marm-mcp-server
-docker run -d --name marm-mcp-server -p 8001:8001 -v marm_data:/app/data --restart unless-stopped lyellr88/marm-mcp-server:latest
+docker run -d --name marm-mcp-server -p 8001:8001 -v ~/.marm:/home/marm/.marm --restart unless-stopped lyellr88/marm-mcp-server:latest
 ```
 
 ---
 
 ### **Migration Notes**
 
-**v2.0 → v2.2.5 Migration:**
+**v2.0 → v2.2.6 Migration:**
 
 - Database schema is compatible - no migration needed
 - New tools automatically available after restart
@@ -371,7 +358,7 @@ For custom configuration, add environment variables to your Docker commands:
 **Docker Run:**
 
 ```bash
-docker run -d --name marm-mcp-server -p 8001:8001 -v marm_data:/app/data -e SERVER_PORT=8002 -e ANALYTICS_ENABLED=false --restart unless-stopped lyellr88/marm-mcp-server:latest
+docker run -d --name marm-mcp-server -p 8001:8001 -v ~/.marm:/home/marm/.marm -e SERVER_PORT=8002 -e ANALYTICS_ENABLED=false --restart unless-stopped lyellr88/marm-mcp-server:latest
 ```
 
 **Docker Compose:**
@@ -385,13 +372,10 @@ services:
       - "8002:8002"  # Custom port
     restart: unless-stopped
     volumes:
-      - marm_data:/app/data
+      - ~/.marm:/home/marm/.marm
     environment:
       - SERVER_PORT=8002
       - ANALYTICS_ENABLED=false
-
-volumes:
-  marm-data:
 ```
 
 ### **Available Environment Variables**
@@ -423,7 +407,7 @@ volumes:
 
 ---
 
-**MARM v2.2.5 Docker Guide** - *Universal memory intelligence for AI agents*
+**MARM v2.2.6 Docker Guide** - *Universal memory intelligence for AI agents*
 
 *For usage instructions, see **[MCP-HANDBOOK.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/MCP-HANDBOOK.md)***  
 *For native installation, see **[INSTALL-WINDOWS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-WINDOWS.md)**  or **[INSTALL-LINUX.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-LINUX.md)***

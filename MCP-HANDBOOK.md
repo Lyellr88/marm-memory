@@ -1,6 +1,8 @@
 # MARM MCP Server Handbook
 
-**MARM v2.2.5 - Universal MCP Server for AI Memory Intelligence
+## Complete Usage Guide for Memory-Augmented AI
+
+**MARM v2.2.6 - Universal MCP Server for AI Memory Intelligence
 
 ---
 
@@ -19,6 +21,17 @@
 
 ## Getting Started
 
+### 💡 **Key Point: Natural Language Interface**
+
+**You don't need to manually call MARM tools!** Just talk to your AI agent naturally:
+
+- *"Claude, log this session as 'Project Alpha'"*
+- *"Remember this code snippet for later"*
+- *"Search for what we discussed about authentication"*
+- *"Add this debugging approach to my notebook"*
+
+Your AI agent will automatically use the appropriate MARM tools. Manual tool access is available for power users, but most users should just **talk naturally** and let the AI handle the tool usage.
+
 ### What is MARM?
 
 MARM is a **Universal MCP Server** providing intelligent memory that saves across sessions for AI conversations with:
@@ -34,19 +47,6 @@ MARM is a **Universal MCP Server** providing intelligent memory that saves acros
 **Memories**: Stored content with semantic embeddings for intelligent search
 **Notebooks**: Reusable instructions and knowledge snippets
 **Logging**: Structured conversation history with timestamps
-
----
-
-<br>
-<div align="center">
-<picture>
-    <img src="https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/media/memory-intelligence.svg"
-         width="900"
-         height="625"
-</picture>
-</div>
-<br>
-
 
 ---
 
@@ -132,18 +132,6 @@ MARM provides three primary ways to store information:
 
 ---
 
-<br>
-<div align="center">
-<picture>
-    <img src="https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/media/feature-showcase.svg"
-         width="900"
-         height="650"
-</picture>
-</div>
-<br>
-
----
-
 ## Cross-App Memory Strategies
 
 ### Multi-LLM Session Organization
@@ -165,34 +153,6 @@ Sessions:
 3. **Synthesis Sessions**: Create shared sessions where AIs build on each other's work
 
 ---
-
-## 🚀 Quick Start for MCP
-
-<br>
-<div align="center">
-<picture>
-    <img src="https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/media/installation-flow.svg"
-         width="850"
-         height="500"
-</picture>
-</div>
-<br>
-
-**Docker (Fastest - 30 seconds):**
-
-```bash
-docker pull lyellr88/marm-mcp-server:latest
-docker run -d --name marm-mcp-server -p 8001:8001 -v marm_data:/app/data lyellr88/marm-mcp-server:latest
-claude mcp add --transport http marm-memory http://localhost:8001/mcp
-```
-
-**Quick Local Install:**
-
-```bash
-pip install marm-mcp-server==2.2.5
-marm-mcp-server
-claude mcp add --transport http marm-memory http://localhost:8001/mcp
-```
 
 ## Pro Tips & Best Practices
 
@@ -307,19 +267,19 @@ The MCP server maintains full compatibility with existing MARM concepts:
 
 ### Memory Not Finding Expected Results
 
-- **Solution**: Check content classification, use `marm_log_show` to browse manually
+**Solution**: Check content classification, use `marm_log_show` to browse manually
 
 ### Session Confusion
 
-- **Solution**: Use `marm_system_info` to check current session status (current_context works automatically in background)
+**Solution**: Use `marm_system_info` to check current session status (current_context works automatically in background)
 
 ### Performance Issues
 
-- **Solution**: Use log compaction, `marm_system_info` to check statistics
+**Solution**: Use log compaction, `marm_system_info` to check statistics
 
 ### Lost Context
 
-- **Solution**: `marm_refresh` to reset, `marm_smart_recall` to recover
+**Solution**: `marm_refresh` to reset, `marm_smart_recall` to recover
 
 ---
 

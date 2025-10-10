@@ -4,7 +4,7 @@ This module provides mock OAuth 2.0 endpoints for local development and testing.
 The OAuth implementation is for demonstration purposes and should not be used
 in production environments.
 Author: Lyell - MARM Systems
-Version: 2.2.5
+Version: 2.2.6
 """
 from fastapi import APIRouter, Request, Form, HTTPException, status
 from fastapi.responses import JSONResponse, RedirectResponse

@@ -2,7 +2,7 @@
 
 ## Universal Memory Intelligence Platform for AI Agents
 
-**MARM v2.2.5* - Memory Accurate Response Mode with WebSocket Support
+**MARM v2.2.6* - Memory Accurate Response Mode with WebSocket Support
 *Complete Linux installation guide*
 
 ---
@@ -24,16 +24,6 @@
 ## Quick Start (5 Minutes)
 
 **🚀 Fastest Path to MARM Memory on Linux:**
-
-<br>
-<div align="center">
-<picture>
-    <img src="https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/media/installation-flow.svg"
-         width="850"
-         height="500"
-</picture>
-</div>
-<br>
 
 1. **Install MARM**: Choose ⚡ **Quick Test** (Beginner) or ⭐ **Automated** (Easy) from options below
 2. **Connect Claude**: `claude mcp add --transport http marm-memory http://localhost:8001/mcp`
@@ -69,7 +59,7 @@ Most distributions include these by default:
 ### **Option 1: Automated Installation** ⭐ **(Recommended)**
 
 ```bash
-pip install marm-mcp-server==2.2.5
+pip install marm-mcp-server==2.2.6
 cd MARM/marm-mcp-server
 chmod +x install.sh
 ./install.sh
@@ -78,7 +68,7 @@ chmod +x install.sh
 ### **Option 2: Quick Test** ⚡ **(Beginner-Friendly)**
 
 ```bash
-pip install marm-mcp-server==2.2.5
+pip install marm-mcp-server==2.2.6
 cd MARM/marm-mcp-server
 python3 server.py
 ```
@@ -88,7 +78,7 @@ python3 server.py
 ### **Option 3: Manual Installation** 🔧 **(Advanced)**
 
 ```bash
-pip install marm-mcp-server==2.2.5
+pip install marm-mcp-server==2.2.6
 cd MARM/marm-mcp-server
 
 # Create virtual environment (recommended)
@@ -96,7 +86,7 @@ python3 -m venv marm-env
 source marm-env/bin/activate
 
 # Install dependencies
-pip install marm-mcp-server==2.2.5
+pip install marm-mcp-server==2.2.6
 
 # Start server
 python3 server.py
@@ -120,7 +110,7 @@ sudo apt update
 sudo apt install python3 python3-pip python3-venv git
 
 # Clone and install MARM
-pip install marm-mcp-server==2.2.5
+pip install marm-mcp-server==2.2.6
 cd MARM/marm-mcp-server
 ./install.sh
 ```
@@ -133,7 +123,7 @@ sudo dnf install python3 python3-pip git  # Fedora
 # sudo yum install python3 python3-pip git  # CentOS/RHEL
 
 # Clone and install MARM
-pip install marm-mcp-server==2.2.5
+pip install marm-mcp-server==2.2.6
 cd MARM/marm-mcp-server
 ./install.sh
 ```
@@ -145,7 +135,7 @@ cd MARM/marm-mcp-server
 sudo pacman -S python python-pip git
 
 # Clone and install MARM
-pip install marm-mcp-server==2.2.5
+pip install marm-mcp-server==2.2.6
 cd MARM/marm-mcp-server
 ./install.sh
 ```
@@ -274,7 +264,7 @@ curl -s http://localhost:8001/health
 ```json
 {
   "status": "healthy",
-  "version": "2.2.5",
+  "version": "2.2.6",
   "memory_mb": 510.8,
   "uptime_seconds": 45
 }
@@ -315,7 +305,7 @@ Your testing helps make MARM better for everyone.
 4. **Update Dependencies**:
 
    ```bash
-   pip install marm-mcp-server==2.2.5 --upgrade
+   pip install marm-mcp-server==2.2.6 --upgrade
    ```
 
 5. **Restart Server**: `marm-mcp-server`
@@ -333,14 +323,14 @@ rm -rf ~/.marm  # Unix/Mac
 # rmdir /s %USERPROFILE%\.marm  # Windows
 
 # Fresh installation
-pip install marm-mcp-server==2.2.5
+pip install marm-mcp-server==2.2.6
 cd MARM/marm-mcp-server
 ./install.sh  # or python setup.py on Windows
 ```
 
 ### **Migration Notes**
 
-**v2.0 → v2.2.5 Migration:**
+**v2.0 → v2.2.6 Migration:**
 
 - Database schema is compatible - no migration needed
 - New tools automatically available after restart
@@ -414,7 +404,7 @@ source ~/.bashrc
 
 ---
 
-**MARM v2.2.5 Linux Guide** - *Universal memory intelligence for AI agents*
+**MARM v2.2.6 Linux Guide** - *Universal memory intelligence for AI agents*
 
 *For usage instructions, see **[MCP-HANDBOOK.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/MCP-HANDBOOK.md)***
 

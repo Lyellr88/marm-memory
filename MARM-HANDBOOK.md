@@ -1,29 +1,16 @@
-# MARM Handbook v2.2.5
-
-> This handbook is the core of MARM that evolved into the MARM MCP (Model Context Protocol) server, **it contains all foundational MARM knowledge. It provides quick-reference commands and examples designed for immediate use.** For copy-and-paste users, this is the handbook you want to reference.
+# MARM Handbook v2.2.6 (mainly for copy & paste users)
 
 ## Table of Contents
 
 - [Short Introduction](#short-introduction)
 - [What's New](#whats-new)
 - [Part I: Core Principles](#part-i-core-principles)
+- [Live Chatbot Demo](#live-chatbot-demo)
 - [Part II: Quick Start Walkthrough](#part-ii-quick-start-walkthrough)
 - [Part III: Command Reference](#part-iii-command-reference)
 - [Part IV: Beyond the Basics](#part-iv-beyond-the-basics)
 - [Quick Reference Table](#quick-reference-table)
 - [Troubleshooting Guide](#troubleshooting-guide)
-
----
-
-<br>
-<div align="center">
-<picture>
-    <img src="https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/media/installation-flow.svg"
-         width="850"
-         height="500"
-</picture>
-</div>
-<br>
 
 ---
 
@@ -44,11 +31,11 @@ MARM is a universal protocol designed to improve memory continuity and response 
 | **v1.5** | Live Chatbot | Session persistence, voice synthesis, command menu |
 | **v2.0** | Major Protocol Overhaul | Updated syntax, enhanced chatbot, Llama 4 Maverick |
 
-### v2.2.5 (Current) - Universal MCP Server
+### v2.2.6 (Current) - Universal MCP Server
 
 #### MCP Server Architecture
 
-- **18 Complete MCP Tools** - Full Model Context Protocol implementation with semantic search
+- **19 Complete MCP Tools** - Full Model Context Protocol implementation with semantic search
 - **Production FastAPI Backend** - SQLite with WAL mode, connection pooling, rate limiting
 - **Cross-Platform Compatibility** - Works with Claude Code, Qwen CLI, Gemini CLI, Grok CLI
 - **Docker Deployment** - Containerized with health monitoring and professional diagnostics
@@ -89,18 +76,23 @@ Manual logging, knowledge entry, and accuracy checks prevent silent drift. User 
 
 This approach ensures the AI works with **user-led intent**, reducing drift across sessions and platforms.
 
----
+## Live Chatbot Demo
 
-<br>
-<div align="center">
-<picture>
-    <img src="https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/media/memory-intelligence.svg"
-         width="900"
-         height="625"
-</picture>
-</div>
-<br>
+### Try MARM Online
 
+Experience MARM instantly at [MARM Chatbot](https://marm-systems-chatbot.onrender.com):
+
+- **No setup required** - Start using MARM immediately
+- **Full protocol support** - All commands work as documented
+- **Modern interface** - Command menu, voice synthesis, file uploads
+- **Session persistence** - Conversations survive browser refreshes
+
+### Quick Demo Steps
+
+1. **Visit the demo** → Type `/start marm` to activate
+2. **Use command menu** → Click ⚡ button for quick access to all commands
+3. **Try key features** → Upload files, use voice synthesis, save sessions
+4. **Experience the difference** → Notice improved memory and context retention
 
 ---
 
