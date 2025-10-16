@@ -30,7 +30,11 @@ Forks may experiment, but official updates will always come from this repo.
 
 ---
 
+## MARM Demo Video: Docker Install + Seeing Persistent AI Memory in Action  
+
 <https://github.com/user-attachments/assets/c7c6a162-5408-4eda-a461-610b7e713dfe>
+
+This demo video walks through a Docker pull of MARM MCP and connecting it to Claude using the claude add mcp transport command and then shows multiple AI agents (Claude, Gemini, Qwen) instantly sharing logs and notebook entries via MARM’s persistent, universal memory proving seamless cross-agent recall and “absolute truth” notebooks in action.
 
 ---
 
