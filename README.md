@@ -124,6 +124,40 @@ marm-mcp-server
 claude mcp add --transport http marm-memory http://localhost:8001/mcp
 ```
 
+**STDIO Transport (Alternative):**
+
+For MCP clients that require STDIO transport (orchestration platforms, CLI tools):
+
+```bash
+# Install STDIO dependencies
+pip install -r marm-mcp-server/requirements_stdio.txt
+
+# Run STDIO server
+python3 marm-mcp-server/server_stdio.py run
+```
+
+Configure in your MCP client with STDIO transport:
+```json
+{
+  "mcpServers": {
+    "marm-memory": {
+      "command": "python3",
+      "args": ["path/to/marm-mcp-server/server_stdio.py", "run"]
+    }
+  }
+}
+```
+
+**Transport Comparison:**
+
+| Feature | HTTP/WebSocket | STDIO |
+|---------|---------------|-------|
+| **Deployment** | Requires HTTP server | Process-based |
+| **Resource Isolation** | Shared server | Per-process |
+| **Platform Support** | Web-based clients | CLI/orchestration tools |
+| **Setup Complexity** | Medium (port management) | Low (direct execution) |
+| **Use Case** | Web apps, remote access | Local tools, automation |
+
 **Key Information:**
 
 - **Server Endpoint**: `http://localhost:8001/mcp`
