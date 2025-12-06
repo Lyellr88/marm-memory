@@ -16,6 +16,7 @@ import sys
 import os
 import asyncio
 from pathlib import Path
+from typing import Optional
 
 # Add the server directory to the path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -211,7 +212,7 @@ async def marm_contextual_log(
     content: str,
     session_name: str = "default",
     context_type: str = "general",
-    metadata: dict = None
+    metadata: Optional[dict] = None
 ) -> dict:
     """
     📝 Log contextual information with automatic categorization
@@ -283,7 +284,7 @@ async def marm_log_session(session_name: str) -> dict:
 async def marm_log_entry(
     content: str,
     session_name: str = "default",
-    metadata: dict = None
+    metadata: Optional[dict] = None
 ) -> dict:
     """
     📝 Log important information to MARM's memory system
@@ -414,7 +415,7 @@ async def marm_log_delete(
 async def marm_notebook_add(
     notebook_name: str,
     content: str,
-    metadata: dict = None
+    metadata: Optional[dict] = None
 ) -> dict:
     """
     📔 Add structured information to MARM notebooks
