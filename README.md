@@ -7,7 +7,7 @@
 </picture>
 <h1 align="center">MARM: The AI That Remembers Your Conversations</h1>
 
-Memory Accurate Response Mode v2.2.6 - The intelligent persistent memory system for AI agents (supports HTTP, STDIO, and WebSocket), stop fighting your memory and control it. Experience long-term recall, session continuity, and reliable conversation history, so your LLMs never lose track of what matters.
+Memory Accurate Response Mode v2.2.6 - The intelligent persistent memory system for AI agents (supports HTTP and STDIO), stop fighting your memory and control it. Experience long-term recall, session continuity, and reliable conversation history, so your LLMs never lose track of what matters.
 
 [![GitHub stars](https://img.shields.io/github/stars/Lyellr88/MARM-Systems?style=flat&color=blue)](https://github.com/Lyellr88/MARM-Systems/stargazers)
 [![GitHub forks](https://img.shields.io/github/forks/Lyellr88/MARM-Systems?style=flat&color=blue)](https://github.com/Lyellr88/MARM-Systems/network)
@@ -96,7 +96,13 @@ Modern LLMs lose context over time, repeat prior ideas, and drift off requiremen
 
 ---
 
-## 🚀 Quick Start for MCP
+# 🛠️ MARM MCP Server Guide
+
+Now that you understand the ecosystem, here's info and how to use the MCP server with your AI agents
+
+---
+
+## 🚀 Quick Start for MCP (HTTP & Stdio)
 
 <br>
 <div align="center">
@@ -108,6 +114,35 @@ Modern LLMs lose context over time, repeat prior ideas, and drift off requiremen
 </div>
 <br>
 
+**Docker Install:**
+
+```bash
+docker pull lyellr88/marm-mcp-server:latest
+docker run -d --name marm-mcp-server -p 8001:8001 -v ~/.marm:/home/marm/.marm lyellr88/marm-mcp-server:latest
+claude mcp add --transport http marm-memory http://localhost:8001/mcp
+```
+
+**Local http Install:**
+
+```bash
+pip install marm-mcp-server==2.2.6
+pip install -r marm-mcp-server/requirements.txt
+python marm-mcp-server
+claude mcp add --transport http marm-memory http://localhost:8001/mcp
+```
+
+**Stdio Install:**
+
+```bash
+pip install marm-mcp-server==2.2.6
+pip install -r marm-mcp-server/requirements_stdio.txt
+<platform> mcp add --transport stdio marm-memory-stdio python "your/file/path/to/marm-mcp-server/server_stdio.py"
+python marm-mcp-server/server_stdio.py
+```
+
+<details>
+<summary><b>📦 Full Installation & Configuration (Click to expand)</b></summary>
+
 **Docker (Fastest - 30 seconds):**
 
 ```bash
@@ -116,31 +151,86 @@ docker run -d --name marm-mcp-server -p 8001:8001 -v ~/.marm:/home/marm/.marm ly
 claude mcp add --transport http marm-memory http://localhost:8001/mcp
 ```
 
-**Quick Local Install:**
+---
+
+**Quick Local http Install:**
 
 ```bash
 pip install marm-mcp-server==2.2.6
-marm-mcp-server
+pip install -r marm-mcp-server/requirements.txt
+python marm-mcp-server
 claude mcp add --transport http marm-memory http://localhost:8001/mcp
 ```
+
+**Https Manual JSON Configuration:**
+
+```json
+{
+  "mcpServers": {
+    "marm-memory": {
+      "httpUrl": "http://localhost:8001/mcp",
+      "authentication": {
+        "type": "oauth",
+        "clientId": "local_client_b6f3a01e",
+        "clientSecret": "local_secret_ad6703cd2b4243ab",
+        "authorizationUrl": "http://localhost:8001/oauth/authorize",
+        "tokenUrl": "http://localhost:8001/oauth/token"
+      }
+    }
+  }
+}
+```
+
+### OAuth Configuration (Local Development)
+
+MARM MCP Server uses a **mock OAuth 2.0** implementation for local development 
+and testing purposes. This is not suitable for production.
+
+The OAuth flow validates specific credentials hardcoded in the server:
+- **Client ID:** `local_client_b6f3a01e`
+- **Client Secret:** `local_secret_ad6703cd2b4243ab`
+
+Users **must use these exact credentials** in their Desktop config. 
+They cannot be changed or auto-generated—the server validates against these 
+hardcoded values only.
+
+**Why:** This allows local development without external OAuth providers 
+(GitHub, Google, etc.) while maintaining the MCP authentication flow.
+
+For production use, replace this with real OAuth 2.1 authentication.
+
+---
 
 ### STDIO Transport Support (NEW 12/07/2025)
 
 The MARM MCP Server supports STDIO transport for MCP clients that require stdin/stdout communication (orchestration platforms, CLI tools, and integrated development environments).
 
-#### Installation
+#### Quick Guide Stdio Install
 
-First, install STDIO-specific dependencies:
+```bash
+pip install marm-mcp-server==2.2.6
+pip install -r marm-mcp-server/requirements_stdio.txt
+<platform> mcp add --transport stdio marm-memory-stdio python "your/file/path/to/marm-mcp-server/server_stdio.py"
+python marm-mcp-server/server_stdio.py
+```
+
+**First Step:**
+
+```bash
+pip install marm-mcp-server==2.2.6
+```
+
+**Second Step: Install STDIO-specific dependencies:**
 
 ```bash
 pip install -r marm-mcp-server/requirements_stdio.txt
 ```
 
-#### Configuration
+**Third Step: Configuration**
 
 Choose one of the two setup methods below:
 
-**Method 1: CLI Configuration (Recommended)**
+**Option 1: CLI Configuration (Recommended)**
 
 Use your platform's MCP command to add MARM as a STDIO server:
 
@@ -155,10 +245,10 @@ Replace `<platform>` with:
 
 Example:
 ```bash
-qwen mcp add --transport stdio marm-memory-stdio python "/home/user/marm-mcp-server/server_stdio.py"
+claude mcp add --transport stdio marm-memory-stdio python "/home/user/marm-mcp-server/server_stdio.py"
 ```
 
-**Method 2: JSON Configuration**
+**Option 2: JSON Configuration**
 
 For IDEs and clients that require manual configuration, add this to your settings file:
 
@@ -188,6 +278,16 @@ For IDEs and clients that require manual configuration, add this to your setting
 }
 ```
 
+**Step 4 (Optional): Running the Server Manually**
+
+To run the server locally:
+
+```bash
+python marm-mcp-server/server_stdio.py
+```
+
+The server will start and listen on stdin/stdout for JSON-RPC 2.0 messages from connected MCP clients.
+
 #### Configuration Notes
 
 - Use `python` (not `python3` on Windows)
@@ -211,21 +311,11 @@ If your platform isn't listed above:
 2. **Use AI assistance** — provide your platform name and MCP documentation to an AI assistant, which can help adapt the command pattern shown above
 3. **Check platform documentation** — refer to your MCP client's documentation for STDIO transport setup
 
-This approach acknowledges the diversity of MCP implementations while providing a clear path forward for any platform.
+---
 
-#### Running the Server Manually
+#### Transport Comparison
 
-If you need to test the STDIO server directly:
-
-```bash
-python marm-mcp-server/server_stdio.py
-```
-
-The server will start and listen on stdin/stdout for JSON-RPC 2.0 messages from connected MCP clients.
-
-**Transport Comparison:**
-
-| Feature | HTTP/WebSocket | STDIO |
+| Feature | HTTP | STDIO |
 |---------|---------------|-------|
 | **Deployment** | Requires HTTP server | Process-based |
 | **Resource Isolation** | Shared server | Per-process |
@@ -255,21 +345,7 @@ The server will start and listen on stdin/stdout for JSON-RPC 2.0 messages from 
 | **Linux** | **[INSTALL-LINUX.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-LINUX.md)** | Native Linux development |
 | **Platforms** | **[INSTALL-PLATFORM.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-PLATFORM.md)** | App & API integration |
 
----
-
-# 🛠️ MARM MCP Server Guide
-
-Now that you understand the ecosystem, here's info and how to use the MCP server with your AI agents
-
----
-
-<div align="center">
-<picture>
-<img src="https://raw.githubusercontent.com/Lyellr88/MARM-Systems/MARM-main/media/feature-showcase.svg"
-   height="550"
-   width="800"
-</picture>
-</div>
+</details>
 
 ---
 
@@ -304,6 +380,15 @@ The AI agent will automatically use the appropriate tools. Manual tool access is
 | **⚙️ System Utilities** | `marm_current_context` | **Background Tool** - Automatically provides current date/time for log entries (AI agents use automatically) |
 | | `marm_system_info` | Comprehensive system information, health status, and loaded docs |
 | | `marm_reload_docs` | Reload documentation into memory system |
+
+<div align="center">
+<picture>
+<img src="https://raw.githubusercontent.com/Lyellr88/MARM-Systems/MARM-main/media/feature-showcase.svg"
+   height="550"
+   width="800"
+</picture>
+</div>
+
 
 ---
 
