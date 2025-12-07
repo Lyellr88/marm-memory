@@ -1,5 +1,5 @@
 # Requirements for STDIO version (no FastAPI/uvicorn needed)
-fastmcp @ git+https://github.com/OI-OS/OI-fastmcp.git
+fastmcp>=2.13.3,<3.0.0
 pydantic>=2.11.9,<3.0.0
 sentence-transformers>=5.1.0,<6.0.0
 numpy>=2.1.2,<3.0.0
