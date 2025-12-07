@@ -726,10 +726,13 @@ async def marm_context_bridge(
 # System Tools
 # ============================================================================
 
-@mcp.tool()
+# Internal helper function - not exposed as MCP tool (background tool)
 async def marm_current_context() -> dict:
     """
     🕐 Get current date/time for accurate log entry timestamps
+    
+    This is a background tool used internally by other tools.
+    It should not appear in the MCP tool list.
     """
     from datetime import datetime, timezone
     
