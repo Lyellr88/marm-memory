@@ -124,7 +124,7 @@ marm-mcp-server
 claude mcp add --transport http marm-memory http://localhost:8001/mcp
 ```
 
-### STDIO Transport Support
+### STDIO Transport Support (NEW)
 
 The MARM MCP Server supports STDIO transport for MCP clients that require stdin/stdout communication (orchestration platforms, CLI tools, and integrated development environments).
 
