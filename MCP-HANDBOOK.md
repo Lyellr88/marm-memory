@@ -404,26 +404,6 @@ The MCP server maintains full compatibility with existing MARM concepts:
 
 ---
 
-## Troubleshooting
-
-### Memory Not Finding Expected Results
-
-**Solution**: Check content classification, use `marm_log_show` to browse manually
-
-### Session Confusion
-
-**Solution**: Use `marm_system_info` to check current session status (current_context works automatically in background)
-
-### Performance Issues
-
-**Solution**: Use log compaction, `marm_system_info` to check statistics
-
-### Lost Context
-
-**Solution**: `marm_refresh` to reset, `marm_smart_recall` to recover
-
----
-
 ## FAQ
 
 ### General Usage
