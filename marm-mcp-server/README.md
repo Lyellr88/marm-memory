@@ -124,29 +124,104 @@ marm-mcp-server
 claude mcp add --transport http marm-memory http://localhost:8001/mcp
 ```
 
-**STDIO Transport (Alternative):**
+### STDIO Transport Support
 
-For MCP clients that require STDIO transport (orchestration platforms, CLI tools):
+The MARM MCP Server supports STDIO transport for MCP clients that require stdin/stdout communication (orchestration platforms, CLI tools, and integrated development environments).
+
+#### Installation
+
+First, install STDIO-specific dependencies:
 
 ```bash
-# Install STDIO dependencies
 pip install -r marm-mcp-server/requirements_stdio.txt
-
-# Run STDIO server
-python marm-mcp-server/server_stdio.py
 ```
 
-Configure in your MCP client with STDIO transport:
+#### Configuration
+
+Choose one of the two setup methods below:
+
+**Method 1: CLI Configuration (Recommended)**
+
+Use your platform's MCP command to add MARM as a STDIO server:
+
+```bash
+<platform> mcp add --transport stdio marm-memory-stdio python "your/file/path/to/marm-mcp-server/server_stdio.py"
+```
+
+Replace `<platform>` with:
+- `qwen` for Qwen CLI
+- `claude` for Claude CLI
+- `gemini` for Gemini CLI
+
+Example:
+```bash
+qwen mcp add --transport stdio marm-memory-stdio python "/home/user/marm-mcp-server/server_stdio.py"
+```
+
+**Method 2: JSON Configuration**
+
+For IDEs and clients that require manual configuration, add this to your settings file:
+
+**macOS/Linux:**
 ```json
 {
   "mcpServers": {
     "marm-memory": {
-      "command": "python3",
-      "args": ["path/to/marm-mcp-server/server_stdio.py", "run"]
+      "command": "python",
+      "args": ["/path/to/marm-mcp-server/server_stdio.py"],
+      "cwd": "/path/to/marm-mcp-server"
     }
   }
 }
 ```
+
+**Windows:**
+```json
+{
+  "mcpServers": {
+    "marm-memory": {
+      "command": "python",
+      "args": ["C:\\Users\\YourUsername\\path\\to\\marm-mcp-server\\server_stdio.py"],
+      "cwd": "C:\\Users\\YourUsername\\path\\to\\marm-mcp-server"
+    }
+  }
+}
+```
+
+#### Configuration Notes
+
+- Use `python` (not `python3` on Windows)
+- The `cwd` parameter is **required** — it allows the server to locate core modules
+- Do NOT include `run` as an argument
+- Replace `/path/to/` with your actual installation path
+
+#### Supported Platforms
+
+Tested and working on:
+- ✅ Qwen CLI (Windows, macOS, Linux)
+- ✅ Claude CLI (Windows, macOS, Linux)
+- ✅ Gemini CLI (Windows, macOS, Linux)
+- ✅ Cursor (Windows, macOS, Linux) — use JSON configuration
+
+#### For Other Platforms
+
+If your platform isn't listed above:
+
+1. **Try the JSON configuration** — most MCP clients support the standard configuration format
+2. **Use AI assistance** — provide your platform name and MCP documentation to an AI assistant, which can help adapt the command pattern shown above
+3. **Check platform documentation** — refer to your MCP client's documentation for STDIO transport setup
+
+This approach acknowledges the diversity of MCP implementations while providing a clear path forward for any platform.
+
+#### Running the Server Manually
+
+If you need to test the STDIO server directly:
+
+```bash
+python marm-mcp-server/server_stdio.py
+```
+
+The server will start and listen on stdin/stdout for JSON-RPC 2.0 messages from connected MCP clients.
 
 **Transport Comparison:**
 
