@@ -8,14 +8,102 @@
 
 ## Table of Contents
 
+- [Installation & Transport Options](#installation--transport-options)
 - [Getting Started](#getting-started)
+- [Example Workflow](#example-workflow-cross-ai-research-project)
 - [Understanding MARM Memory](#understanding-marm-memory)
 - [Complete Tool Reference (18 Tools)](#complete-tool-reference-18-tools)
 - [Cross-App Memory Strategies](#cross-app-memory-strategies)
 - [Pro Tips & Best Practices](#pro-tips--best-practices)
 - [Advanced Workflows](#advanced-workflows)
-- [Troubleshooting](#troubleshooting)
 - [FAQ](#faq)
+- [Troubleshooting Guide](#troubleshooting-guide)
+
+---
+
+## Installation & Transport Options
+
+### HTTP vs STDIO
+
+MARM MCP Server supports two transport modes for different deployment scenarios:
+
+**HTTP Transport** (Default)
+- Traditional server-client architecture
+- Best for: Multiple concurrent AI clients, cloud/remote deployment, shared memory server
+- Setup: Run `marm-mcp-server` and connect via `http://localhost:8001/mcp`
+
+**STDIO Transport** (Process-based)
+- Direct stdin/stdout communication
+- Best for: CLI tools, orchestration platforms, Cursor IDE, single AI client per process
+- Setup: Run `python server_stdio.py` via MCP client configuration
+- Advantage: No port management, process isolation per connection
+
+### Quick Start Guide
+
+**Docker (HTTP - Fastest):**
+
+```bash
+docker pull lyellr88/marm-mcp-server:latest
+docker run -d --name marm-mcp-server -p 8001:8001 -v ~/.marm:/home/marm/.marm lyellr88/marm-mcp-server:latest
+claude mcp add --transport http marm-memory http://localhost:8001/mcp
+```
+
+**Local HTTP:**
+
+```bash
+pip install marm-mcp-server==2.2.6
+pip install -r marm-mcp-server/requirements.txt
+python marm-mcp-server
+claude mcp add --transport http marm-memory http://localhost:8001/mcp
+```
+
+**STDIO:**
+
+```bash
+pip install marm-mcp-server==2.2.6
+pip install -r marm-mcp-server/requirements_stdio.txt
+<platform> mcp add --transport stdio marm-memory-stdio python "your/file/path/to/marm-mcp-server/server_stdio.py"
+python marm-mcp-server/server_stdio.py
+```
+
+Replace `<platform>` with: `qwen`, `claude`, or `gemini` depending on your AI CLI tool.
+
+**For complete installation instructions, platform-specific configurations, JSON setup, troubleshooting, and detailed transport comparison, see the [README.md Quick Start section](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/README.md#-quick-start-for-mcp).**
+
+### System Requirements
+
+- **Python**: 3.10 or higher
+- **SQLite3**: Included with Python (no separate install needed)
+- **Storage**: ~100MB minimum for initial setup, scales with memory database size
+- **RAM**: 512MB minimum (varies by concurrent clients and database size)
+- **OS**: Windows, macOS, Linux
+
+### Data Location & Backup
+
+All MARM data is stored locally in your home directory:
+
+- **Location**: `~/.marm/` (Linux/macOS) or `%USERPROFILE%\.marm\` (Windows)
+- **Contents**: SQLite database with all memories, sessions, and notebooks
+- **Backup**: Copy the entire `~/.marm/` directory to preserve all data
+- **Privacy**: Everything stays on your machine — no cloud sync or external storage
+
+### Verify Installation
+
+After installation, verify MARM is working correctly:
+
+```bash
+# HTTP - Check server is running
+curl http://localhost:8001/mcp/health
+
+# Or use the MARM system info tool (once connected to your AI client)
+# Ask your AI: "Check MARM system status" - it will call marm_system_info
+```
+
+Expected output includes:
+- Server version (2.2.6)
+- Database size in MB
+- Total memories and sessions count
+- Feature availability (semantic search status)
 
 ---
 
@@ -47,6 +135,59 @@ MARM is a **Universal MCP Server** providing intelligent memory that saves acros
 **Memories**: Stored content with semantic embeddings for intelligent search
 **Notebooks**: Reusable instructions and knowledge snippets
 **Logging**: Structured conversation history with timestamps
+
+### Example Workflow: Cross-AI Research Project
+
+Here's a realistic workflow showing MARM in action:
+
+**Scenario:** You're researching authentication patterns for a new project using multiple AI clients.
+
+**Phase 1: Start Session (Claude)**
+```
+You: "Claude, activate MARM and create a session called 'auth-research-2025-01'"
+Claude calls: marm_start("auth-research-2025-01")
+Claude calls: marm_log_session("auth-research-2025-01")
+Result: Session created, MARM active for this conversation
+```
+
+**Phase 2: Capture Research (Claude)**
+```
+You: "Summarize OAuth2 vs JWT for API authentication and save it"
+Claude calls: marm_contextual_log("OAuth2 is token-based with refresh cycles, better for delegated access. JWT is stateless, good for microservices...")
+Result: Memory stored with auto-classification as "code" content
+```
+
+**Phase 3: Add Reusable Reference (Claude)**
+```
+You: "Save a JWT validation code snippet to my notebooks as 'jwt-validation-pattern'"
+Claude calls: marm_notebook_add("jwt-validation-pattern", "def verify_jwt(token):\n  # validation logic...")
+Result: Reusable snippet stored for future projects
+```
+
+**Phase 4: Recall Context (Gemini)**
+```
+You: "Gemini, what authentication approaches did we research? Activate the JWT pattern."
+Gemini calls: marm_smart_recall("authentication patterns", search_all=true)
+Gemini calls: marm_notebook_use("jwt-validation-pattern")
+Result: Gemini sees previous research + has JWT code available as context
+```
+
+**Phase 5: Synthesis & Summary (Qwen)**
+```
+You: "Qwen, pull everything from the auth research and create a summary"
+Qwen calls: marm_smart_recall("authentication", session="auth-research-2025-01", limit=20)
+Qwen calls: marm_summary("auth-research-2025-01")
+Result: Qwen generates implementation guide from all captured research
+```
+
+**Phase 6: End Session (Claude)**
+```
+You: "Log final decision - we're using JWT for APIs and OAuth2 for user auth"
+Claude calls: marm_log_entry("DECISION: JWT for API auth, OAuth2 for user flows. Rationale: stateless APIs + delegated user access", session="auth-research-2025-01")
+Result: Decision logged and searchable by all future AI clients
+```
+
+**Result**: Three different AI clients collaboratively researched a topic, shared insights, and documented decisions—all without re-explaining the project to each new AI.
 
 ---
 
@@ -96,8 +237,8 @@ MARM provides three primary ways to store information:
 
 **`marm_log_entry`** - Structured Chronological Milestones
 
-- Strict `YYYY-MM-DD-topic-summary` format
-- Best for: Daily logs, progress tracking, audit trails
+- Auto-formatted with timestamps (no manual date needed)
+- Best for: Daily logs, progress tracking, milestones, decisions
 
 **`marm_notebook_add`** - Reusable Instructions
 
@@ -339,6 +480,106 @@ A: No - runs as a background service. Multiple clients can connect simultaneousl
 
 **Q: How do I know if MARM is working correctly?**
 A: Use `marm_system_info` to check server status and database statistics.
+
+---
+
+<details>
+<summary><b>🔧 Troubleshooting Guide (Click to expand)</b></summary>
+
+## Troubleshooting Guide
+
+### Server Issues
+
+**Server won't start**
+- Check Python version: `python --version` (must be 3.10+)
+- Verify port 8001 isn't in use: `lsof -i :8001` (macOS/Linux) or `netstat -ano | findstr :8001` (Windows)
+- Check for permission errors in home directory (`~/.marm/` must be readable/writable)
+- See platform-specific troubleshooting: [INSTALL-DOCKER.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-DOCKER.md), [INSTALL-WINDOWS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-WINDOWS.md), [INSTALL-LINUX.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-LINUX.md)
+
+**STDIO connection fails**
+- Ensure `cwd` parameter points to the marm-mcp-server directory
+- Verify `server_stdio.py` file exists and is executable
+- Check AI client documentation for STDIO transport requirements
+- Try direct execution: `python server_stdio.py` to see error messages
+
+### Connection & Integration
+
+**AI client can't connect to MARM**
+- Verify server is running: `curl http://localhost:8001/mcp/health`
+- Check firewall isn't blocking port 8001
+- For STDIO: ensure path to `server_stdio.py` is absolute (not relative)
+- Restart both server and AI client
+
+**Tools not appearing in AI client**
+- Run `marm_system_info` to verify server loaded correctly
+- Check server logs for initialization errors
+- Disconnect and reconnect AI client to refresh tool list
+
+### Memory & Data Issues
+
+**Memories not saving**
+- Verify `~/.marm/` directory exists and has write permissions
+- Check available disk space
+- Test with simple memory: ask AI to save a single line and check with `marm_log_show`
+- Run `marm_system_info` to check database status
+
+**Search returns no results**
+- Verify memories exist: use `marm_log_show` to list entries
+- Use `search_all=true` to search across all sessions
+- Try simpler, more general search queries
+- Wait a few seconds—first semantic search loads the ML model
+
+**Memories appear then disappear**
+- Check if MARM was restarted or crashed (data persists in `~/.marm/`)
+- Verify disk space didn't fill up
+- Check system logs for database errors
+
+### Performance
+
+**Slow search results**
+- First search is slower (model loads from disk)—subsequent searches are faster
+- Large databases (1000+ memories) may take a few seconds
+- Limit searches: use `limit=10` instead of unlimited results
+- Use `marm_summary` to compress old sessions
+
+**Server using too much memory**
+- Notebooks with many entries can accumulate—use `marm_notebook_clear` to prune
+- Close unused AI client connections
+- Use log compaction: `marm_summary` + delete old entries
+
+### Data Recovery
+
+**Lost or corrupted data**
+- Stop the server immediately
+- Check `~/.marm/` directory for backup copies (if you created them)
+- Restore from backup: copy your backup `~/.marm/` back to home directory
+- Restart server
+
+**Database locked error**
+- Close all AI client connections
+- Stop the server: `Ctrl+C`
+- Remove lock file if present: `rm ~/.marm/marm_usage_analytics.db-wal` (Linux/macOS)
+- Restart server
+
+### Common Error Messages
+
+| Error | Cause | Solution |
+|-------|-------|----------|
+| `address already in use` | Port 8001 occupied | Kill process on 8001 or use different port |
+| `permission denied: ~/.marm/` | Database directory not writable | `chmod 755 ~/.marm/` or check ownership |
+| `module not found: core.memory` | Missing dependencies | Reinstall: `pip install -r requirements.txt` or `requirements_stdio.txt` |
+| `database is locked` | Multiple processes accessing DB | Close other connections, restart server |
+| `embedding model not found` | Semantic search model didn't download | First run takes time—be patient, check internet connection |
+
+### When to Check Install Docs
+
+For detailed troubleshooting specific to your platform:
+- **Docker issues**: [INSTALL-DOCKER.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-DOCKER.md)
+- **Windows issues**: [INSTALL-WINDOWS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-WINDOWS.md)
+- **Linux issues**: [INSTALL-LINUX.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-LINUX.md)
+- **Deployment/Platform questions**: [INSTALL-PLATFORMS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-PLATFORMS.md)
+
+</details>
 
 ---
 
