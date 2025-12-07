@@ -162,7 +162,7 @@ python marm-mcp-server
 claude mcp add --transport http marm-memory http://localhost:8001/mcp
 ```
 
-**Https Manual JSON Configuration:**
+**Http Manual JSON Configuration:**
 
 ```json
 {
@@ -181,23 +181,21 @@ claude mcp add --transport http marm-memory http://localhost:8001/mcp
 }
 ```
 
-### OAuth Configuration (Local Development)
+### Local Development Authentication (Development Only)
 
-MARM MCP Server uses a **mock OAuth 2.0** implementation for local development 
-and testing purposes. This is not suitable for production.
+MARM includes **mock OAuth 2.0 credentials for local testing**—not a production authentication system.
 
-The OAuth flow validates specific credentials hardcoded in the server:
+**Why hardcoded credentials?** When developing locally, you don't have external OAuth providers (GitHub, Google, etc.). MARM includes dev credentials so you can test the full MCP authentication flow without external dependencies.
+
+**For local development, use these credentials:**
 - **Client ID:** `local_client_b6f3a01e`
 - **Client Secret:** `local_secret_ad6703cd2b4243ab`
 
-Users **must use these exact credentials** in their Desktop config. 
-They cannot be changed or auto-generated—the server validates against these 
-hardcoded values only.
+The server validates against these hardcoded values only during development.
 
-**Why:** This allows local development without external OAuth providers 
-(GitHub, Google, etc.) while maintaining the MCP authentication flow.
+**For production deployment:** Replace this entire section with real OAuth 2.1 authentication. These hardcoded credentials are for development only and not suitable for production.
 
-For production use, replace this with real OAuth 2.1 authentication.
+**Roadmap:** Multi-user OAuth authentication is planned for a future release to support team deployments and cloud environments.
 
 ---
 
