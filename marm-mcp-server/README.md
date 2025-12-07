@@ -211,8 +211,6 @@ If your platform isn't listed above:
 2. **Use AI assistance** — provide your platform name and MCP documentation to an AI assistant, which can help adapt the command pattern shown above
 3. **Check platform documentation** — refer to your MCP client's documentation for STDIO transport setup
 
-This approach acknowledges the diversity of MCP implementations while providing a clear path forward for any platform.
-
 #### Running the Server Manually
 
 If you need to test the STDIO server directly:
