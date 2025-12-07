@@ -7,7 +7,7 @@
 </picture>
 <h1 align="center">MARM: The AI That Remembers Your Conversations</h1>
 
-Memory Accurate Response Mode v2.2.6 - The intelligent persistent memory system for AI agents, stop fighting your memory and control it. Experience long-term recall, session continuity, and reliable conversation history, so your LLMs never lose track of what matters.
+Memory Accurate Response Mode v2.2.6 - The intelligent persistent memory system for AI agents (supports HTTP, STDIO, and WebSocket), stop fighting your memory and control it. Experience long-term recall, session continuity, and reliable conversation history, so your LLMs never lose track of what matters.
 
 [![GitHub stars](https://img.shields.io/github/stars/Lyellr88/MARM-Systems?style=flat&color=blue)](https://github.com/Lyellr88/MARM-Systems/stargazers)
 [![GitHub forks](https://img.shields.io/github/forks/Lyellr88/MARM-Systems?style=flat&color=blue)](https://github.com/Lyellr88/MARM-Systems/network)
@@ -124,7 +124,7 @@ marm-mcp-server
 claude mcp add --transport http marm-memory http://localhost:8001/mcp
 ```
 
-### STDIO Transport Support (NEW)
+### STDIO Transport Support (NEW 12/07/2025)
 
 The MARM MCP Server supports STDIO transport for MCP clients that require stdin/stdout communication (orchestration platforms, CLI tools, and integrated development environments).
 
