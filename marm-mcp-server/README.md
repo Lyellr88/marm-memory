@@ -133,7 +133,7 @@ For MCP clients that require STDIO transport (orchestration platforms, CLI tools
 pip install -r marm-mcp-server/requirements_stdio.txt
 
 # Run STDIO server
-python3 marm-mcp-server/server_stdio.py run
+python marm-mcp-server/server_stdio.py
 ```
 
 Configure in your MCP client with STDIO transport:
