@@ -311,15 +311,54 @@ If your platform isn't listed above:
 
 ---
 
+### WebSocket Transport Support (Beta - In Testing)
+
+The MARM MCP Server includes **experimental WebSocket support** for real-time MCP communication. This transport has been implemented and tested internally but is not yet actively used in production workflows.
+
+#### Quick Guide WebSocket Install
+
+```bash
+pip install marm-mcp-server==2.2.6
+pip install -r marm-mcp-server/requirements.txt
+python marm-mcp-server/server.py
+```
+
+**Connect via WebSocket (Beta):**
+
+```bash
+# Claude CLI
+claude mcp add marm-memory ws://localhost:8001/mcp/ws
+
+# Grok CLI  
+grok mcp add marm-memory --transport websocket --url "ws://localhost:8001/mcp/ws"
+```
+
+**WebSocket Endpoint:** `ws://localhost:8001/mcp/ws`
+
+#### WebSocket Features
+
+- **Real-time communication** - Full-duplex WebSocket protocol support
+- **JSON-RPC 2.0 compliance** - All 19 MCP methods supported
+- **Same tool coverage** - Access all MARM memory and session tools
+- **Beta status** - Tested but not actively used; feedback welcome
+
+#### Supported Platforms
+
+- ✅ Claude CLI (WebSocket transport)
+- ✅ Grok CLI (WebSocket transport)
+- ✅ Qwen CLI (with manual WebSocket configuration)
+- ✅ Gemini CLI (with manual WebSocket configuration)
+
 #### Transport Comparison
 
-| Feature | HTTP | STDIO |
-|---------|---------------|-------|
-| **Deployment** | Requires HTTP server | Process-based |
-| **Resource Isolation** | Shared server | Per-process |
-| **Platform Support** | Web-based clients | CLI/orchestration tools |
-| **Setup Complexity** | Medium (port management) | Low (direct execution) |
-| **Use Case** | Web apps, remote access | Local tools, automation |
+| Feature | HTTP | STDIO | WebSocket |
+|---------|------|-------|-----------|
+| **Deployment** | Requires HTTP server | Process-based | HTTP server |
+| **Resource Isolation** | Shared server | Per-process | Shared server |
+| **Platform Support** | Web-based clients | CLI/orchestration tools | CLI tools (Beta) |
+| **Setup Complexity** | Medium | Low | Medium |
+| **Use Case** | Web apps, remote access | Local tools, automation | Real-time apps (Beta) |
+| **Status** | Stable | Stable | Beta |
 
 **Key Information:**
 
