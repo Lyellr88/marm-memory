@@ -30,6 +30,21 @@ Forks may experiment, but official updates will always come from this repo.
 
 ---
 
+## 📢 Project Update (January 2025)
+
+I've been focused on developing a new build powered by MARM Systems as its memory layer—a real-world application of the technology I've been creating. This deep dive into production memory systems has given me valuable insights into how MARM performs under real workflows. 
+
+I'm returning focus to MARM-MCP in **Q1 2026** with lessons learned and new improvements. The time spent studying advanced memory architectures and system behavior will directly improve upcoming MARM-MCP updates with better semantic search, optimized recall patterns, and enhanced multi-session handling.
+
+**Expected Q1 2026 improvements:**
+- Advanced memory indexing strategies
+- Improved cross-session recall
+- Performance optimizations based on real production data
+
+Thank you for your patience and support.
+
+---
+
 ## MARM Demo Video: Docker Install + Seeing Persistent AI Memory in Action  
 
 <https://github.com/user-attachments/assets/c7c6a162-5408-4eda-a461-610b7e713dfe>
