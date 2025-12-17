@@ -30,7 +30,7 @@ Forks may experiment, but official updates will always come from this repo.
 
 ---
 
-## 📢 Project Update (January 2025)
+## 📢 Project Update (December 2025)
 
 I've been focused on developing a new build powered by MARM Systems as its memory layer—a real-world application of the technology I've been creating. This deep dive into production memory systems has given me valuable insights into how MARM performs under real workflows. 
 
