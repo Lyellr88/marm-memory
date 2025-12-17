@@ -111,7 +111,7 @@ Modern LLMs lose context over time, repeat prior ideas, and drift off requiremen
 
 ---
 
-# 🛠️ MARM MCP Server Guide
+# MARM MCP Server Guide
 
 Now that you understand the ecosystem, here's info and how to use the MCP server with your AI agents
 
@@ -156,7 +156,7 @@ python marm-mcp-server/server_stdio.py
 ```
 
 <details>
-<summary><b>📦 Full Installation & Configuration (Click to expand)</b></summary>
+<summary><b> Full Installation & Configuration (Click to expand)</b></summary>
 
 **Docker (Fastest - 30 seconds):**
 
@@ -401,7 +401,7 @@ grok mcp add marm-memory --transport websocket --url "ws://localhost:8001/mcp/ws
 
 ---
 
-## 🛠️ Complete MCP Tool Suite (18 Tools)
+## Complete MCP Tool Suite (18 Tools)
 
 **💡 Pro Tip:** You don't need to manually call these tools! Just tell your AI agent what you want in natural language:
 
@@ -413,23 +413,23 @@ The AI agent will automatically use the appropriate tools. Manual tool access is
 
 | **Category** | **Tool** | **Description** |
 |--------------|----------|-----------------|
-| **🧠 Memory Intelligence** | `marm_smart_recall` | AI-powered semantic similarity search across all memories. Supports global search with `search_all=True` flag |
+| **Memory Intelligence** | `marm_smart_recall` | AI-powered semantic similarity search across all memories. Supports global search with `search_all=True` flag |
 | | `marm_contextual_log` | Intelligent auto-classifying memory storage using vector embeddings |
-| **🚀 Session Management** | `marm_start` | Activate MARM intelligent memory and response accuracy layers |
+| **Session Management** | `marm_start` | Activate MARM intelligent memory and response accuracy layers |
 | | `marm_refresh` | Refresh AI agent session state and reaffirm protocol adherence |
-| **📚 Logging System** | `marm_log_session` | Create or switch to named session container |
+| **Logging System** | `marm_log_session` | Create or switch to named session container |
 | | `marm_log_entry` | Add structured log entry with auto-date formatting |
 | | `marm_log_show` | Display all entries and sessions (filterable) |
 | | `marm_log_delete` | Delete specified session or individual entries |
-| **🔄 Reasoning & Workflow** | `marm_summary` | Generate context-aware summaries with intelligent truncation for LLM conversations |
+| **Reasoning & Workflow** | `marm_summary` | Generate context-aware summaries with intelligent truncation for LLM conversations |
 | | `marm_context_bridge` | Smart context bridging for seamless AI agent workflow transitions |
-| **📔 Notebook Management** | `marm_notebook_add` | Add new notebook entry with semantic embeddings |
+| **Notebook Management** | `marm_notebook_add` | Add new notebook entry with semantic embeddings |
 | | `marm_notebook_use` | Activate entries as instructions (comma-separated) |
 | | `marm_notebook_show` | Display all saved keys and summaries |
 | | `marm_notebook_delete` | Delete specific notebook entry |
 | | `marm_notebook_clear` | Clear the active instruction list |
 | | `marm_notebook_status` | Show current active instruction list |
-| **⚙️ System Utilities** | `marm_current_context` | **Background Tool** - Automatically provides current date/time for log entries (AI agents use automatically) |
+| **System Utilities** | `marm_current_context` | **Background Tool** - Automatically provides current date/time for log entries (AI agents use automatically) |
 | | `marm_system_info` | Comprehensive system information, health status, and loaded docs |
 | | `marm_reload_docs` | Reload documentation into memory system |
 
@@ -444,7 +444,7 @@ The AI agent will automatically use the appropriate tools. Manual tool access is
 
 ---
 
-## 🏗️ Architecture Overview
+## Architecture Overview
 
 ### **Core Technology Stack**
 
@@ -521,7 +521,7 @@ CREATE TABLE sessions (
 
 ---
 
-## 📚 Documentation for MCP
+## Documentation for MCP
 
 | Guide Type | Document | Description |
 |------------|----------|-------------|
@@ -533,7 +533,7 @@ CREATE TABLE sessions (
 
 ---
 
-## 🆚 Competitive Advantage
+## Competitive Advantage
 
 ### **vs. Basic MCP Implementations**
 
@@ -549,7 +549,7 @@ CREATE TABLE sessions (
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 **Aren't you sick of explaining every project you're working on to every LLM you work with?**
 
@@ -617,7 +617,7 @@ Derivatives should clearly indicate they are unofficial or experimental.
 
 ---
 
-## 📁 Project Documentation
+## Project Documentation
 
 ### **Usage Guides**
 
