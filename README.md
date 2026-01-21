@@ -72,18 +72,6 @@ Modern LLMs lose context over time, repeat prior ideas, and drift off requiremen
 - Without MARM: lost context, repeated suggestions, drifting scope, "start from scratch."
 - With MARM: session memory, cross-session continuity, concrete recall of decisions, and faster, more accurate delivery.
 
-<br>
-<div align="center">
-<picture>
-  <img src="https://raw.githubusercontent.com/Lyellr88/MARM-Systems/MARM-main/media/google-overview.png"
-       alt="MARM appears in Google AI Overview for AI memory protocol queries"
-       width="900"
-       height="550"
-  />
-</picture>
-</div>
-<p align="center"><i>Appears in Google AI Overview for AI memory protocol queries (as of Aug 2025)</i></p>
-
 ### What MARM MCP Delivers
 
 | **Memory** | **Multi-AI** | **Architecture** |
