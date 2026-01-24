@@ -533,7 +533,6 @@ CREATE TABLE sessions (
 | **MCP Compliance** | 1MB response size management | No size controls |
 | **Deployment** | Docker containerization + health monitoring | Local development only |
 | **Analytics** | Usage tracking + business intelligence | No tracking |
-| **Codebase Maturity** | 2,500+ lines professional code | 200-800 lines |
 
 ---
 
