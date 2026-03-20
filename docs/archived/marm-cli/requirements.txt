@@ -1,0 +1,32 @@
+# MARM CLI v1.0.0 Dependencies
+#
+# NOTE: pyproject.toml is the single source of truth for dependencies.
+# This file exists for convenience with `pip install -r requirements.txt`
+# For production, use: pip install -e .
+
+# CLI Framework
+click>=8.1.7
+typer>=0.9.0
+
+# Terminal UI
+rich>=13.7.0
+prompt-toolkit>=3.0.43
+
+# AI & Embeddings
+sentence-transformers>=2.2.2
+torch>=2.1.0
+numpy>=1.24.0
+
+# Database
+# sqlite3 is built-in to Python (no pip install needed)
+
+# HTTP Client (for Ollama API)
+httpx>=0.25.0
+aiohttp>=3.9.0
+
+# Configuration
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+
+# Utilities
+python-dateutil>=2.8.2

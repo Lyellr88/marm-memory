@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MARM Protocol Flow - Hero</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        'mono': ['JetBrains Mono', 'Monaco', 'Consolas', 'monospace'],
+                    },
+                    animation: {
+                        'float': 'float 3s ease-in-out infinite',
+                        'glow': 'glow 2s ease-in-out infinite alternate',
+                        'slide-up': 'slideUp 0.5s ease-out',
+                        'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                    },
+                    keyframes: {
+                        float: {
+                            '0%, 100%': { transform: 'translateY(0px)' },
+                            '50%': { transform: 'translateY(-10px)' },
+                        },
+                        glow: {
+                            '0%': { boxShadow: '0 0 5px #06b6d4, 0 0 10px #06b6d4, 0 0 15px #06b6d4' },
+                            '100%': { boxShadow: '0 0 10px #06b6d4, 0 0 20px #06b6d4, 0 0 30px #06b6d4' },
+                        },
+                        slideUp: {
+                            '0%': { opacity: '0', transform: 'translateY(30px)' },
+                            '100%': { opacity: '1', transform: 'translateY(0)' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .gradient-text {
+            background: linear-gradient(135deg, #06b6d4, #8b5cf6, #ec4899);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .glass {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .command-glow:hover {
+            box-shadow: 0 0 30px rgba(6, 182, 212, 0.4);
+        }
+        .step-glow {
+            box-shadow: 0 10px 50px rgba(139, 92, 246, 0.3);
+        }
+    </style>
+</head>
+<body class="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white overflow-x-hidden">
+    <!-- Animated Background -->
+    <div class="fixed inset-0 overflow-hidden pointer-events-none">
+        <div class="absolute -top-40 -right-40 w-80 h-80 bg-purple-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse-slow"></div>
+        <div class="absolute -bottom-40 -left-40 w-80 h-80 bg-cyan-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse-slow"></div>
+        <div class="absolute top-40 left-1/2 w-80 h-80 bg-pink-500 rounded-full mix-blend-multiply filter blur-xl opacity-20 animate-pulse-slow"></div>
+    </div>
+    
+    <div class="relative z-10 container mx-auto px-4 py-8">
+        <!-- Hero Header -->
+        <div class="text-center mb-16 animate-slide-up">
+            <h1 class="text-6xl md:text-7xl font-black mb-6 gradient-text tracking-tight">
+                MARM
+            </h1>
+            <p class="text-xl md:text-2xl text-slate-300 font-light">
+                Memory Accurate Response Mode
+            </p>
+            <div class="flex justify-center mt-6">
+                <div class="px-6 py-2 glass rounded-full text-cyan-400 font-mono text-sm">
+                    Powered by Llama 4 Maverick • 400B Parameters
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Flow Container -->
+        <div class="max-w-6xl mx-auto">
+            <!-- Step 1: Activation -->
+            <div class="mb-12 animate-slide-up" style="animation-delay: 0.2s;">
+                <div class="glass rounded-3xl p-8 step-glow">
+                    <div class="flex items-center justify-center mb-8">
+                        <div class="w-16 h-16 bg-gradient-to-r from-emerald-500 to-cyan-500 rounded-2xl flex items-center justify-center text-2xl font-bold animate-float">
+                            1
+                        </div>
+                        <div class="ml-6">
+                            <h3 class="text-3xl font-bold text-emerald-400">🚀 Activate Protocol</h3>
+                            <p class="text-slate-400">Initialize the memory architecture</p>
+                        </div>
+                    </div>
+                    
+                    <div class="flex justify-center">
+                        <div class="glass rounded-2xl p-6 command-glow transition-all duration-500 hover:scale-105 hover:bg-white/10">
+                            <div class="font-mono text-2xl text-cyan-400 mb-2">/start marm</div>
+                            <div class="text-slate-300">Activates session memory kernel</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Flow Arrow -->
+            <div class="flex justify-center mb-12">
+                <div class="text-6xl text-purple-400 animate-bounce">↓</div>
+            </div>
+
+            <!-- Step 2: Command Toolkit -->
+            <div class="mb-12 animate-slide-up" style="animation-delay: 0.4s;">
+                <div class="glass rounded-3xl p-8 step-glow">
+                    <div class="flex items-center justify-center mb-8">
+                        <div class="w-16 h-16 bg-gradient-to-r from-purple-500 to-pink-500 rounded-2xl flex items-center justify-center text-2xl font-bold animate-float" style="animation-delay: 0.5s;">
+                            2
+                        </div>
+                        <div class="ml-6">
+                            <h3 class="text-3xl font-bold text-purple-400">⚡ User Commands</h3>
+                            <p class="text-slate-400">Direct the AI with precision tools</p>
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                        <div class="glass rounded-xl p-4 command-glow transition-all duration-500 hover:scale-105 hover:bg-white/10 group">
+                            <div class="text-4xl mb-3 group-hover:animate-bounce">📝</div>
+                            <div class="font-mono text-lg text-cyan-400 mb-2">/log session:</div>
+                            <div class="text-sm text-slate-300">Create named sessions</div>
+                        </div>
+                        
+                        <div class="glass rounded-xl p-4 command-glow transition-all duration-500 hover:scale-105 hover:bg-white/10 group">
+                            <div class="text-4xl mb-3 group-hover:animate-bounce">📚</div>
+                            <div class="font-mono text-lg text-cyan-400 mb-2">/notebook add:</div>
+                            <div class="text-sm text-slate-300">Store knowledge</div>
+                        </div>
+                        
+                        <div class="glass rounded-xl p-4 command-glow transition-all duration-500 hover:scale-105 hover:bg-white/10 group">
+                            <div class="text-4xl mb-3 group-hover:animate-bounce">🎯</div>
+                            <div class="font-mono text-lg text-cyan-400 mb-2">/deep dive</div>
+                            <div class="text-sm text-slate-300">Enhanced accuracy</div>
+                        </div>
+                        
+                        <div class="glass rounded-xl p-4 command-glow transition-all duration-500 hover:scale-105 hover:bg-white/10 group">
+                            <div class="text-4xl mb-3 group-hover:animate-bounce">🔍</div>
+                            <div class="font-mono text-lg text-cyan-400 mb-2">/show reasoning</div>
+                            <div class="text-sm text-slate-300">Reveal logic</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Flow Arrow -->
+            <div class="flex justify-center mb-12">
+                <div class="text-6xl text-purple-400 animate-bounce" style="animation-delay: 0.5s;">↓</div>
+            </div>
+
+            <!-- Step 3: AI Engine -->
+            <div class="mb-12 animate-slide-up" style="animation-delay: 0.6s;">
+                <div class="glass rounded-3xl p-8 step-glow bg-gradient-to-r from-purple-900/20 to-cyan-900/20">
+                    <div class="flex items-center justify-center mb-8">
+                        <div class="w-16 h-16 bg-gradient-to-r from-cyan-500 to-purple-500 rounded-2xl flex items-center justify-center text-2xl font-bold animate-float animate-glow" style="animation-delay: 1s;">
+                            3
+                        </div>
+                        <div class="ml-6">
+                            <h3 class="text-3xl font-bold text-cyan-400">🧠 Llama 4 Maverick</h3>
+                            <p class="text-slate-400">400B parameter multimodal engine</p>
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-8 items-center">
+                        <div class="glass rounded-2xl p-6 text-center group hover:scale-105 transition-all duration-500">
+                            <div class="text-5xl mb-4 group-hover:animate-pulse">💾</div>
+                            <div class="text-xl font-bold text-purple-400 mb-2">Memory Kernel</div>
+                            <div class="text-slate-300">Session context retention</div>
+                        </div>
+                        
+                        <div class="flex justify-center">
+                            <div class="text-6xl text-cyan-400 animate-pulse">→</div>
+                        </div>
+                        
+                        <div class="glass rounded-2xl p-6 text-center group hover:scale-105 transition-all duration-500">
+                            <div class="text-5xl mb-4 group-hover:animate-spin">⚙️</div>
+                            <div class="text-xl font-bold text-cyan-400 mb-2">Reasoning Engine</div>
+                            <div class="text-slate-300">Enhanced intelligence</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Flow Arrow -->
+            <div class="flex justify-center mb-12">
+                <div class="text-6xl text-purple-400 animate-bounce" style="animation-delay: 1s;">↓</div>
+            </div>
+
+            <!-- Step 4: Session Management -->
+            <div class="mb-12 animate-slide-up" style="animation-delay: 0.8s;">
+                <div class="glass rounded-3xl p-8 step-glow">
+                    <div class="flex items-center justify-center mb-8">
+                        <div class="w-16 h-16 bg-gradient-to-r from-pink-500 to-orange-500 rounded-2xl flex items-center justify-center text-2xl font-bold animate-float" style="animation-delay: 1.5s;">
+                            4
+                        </div>
+                        <div class="ml-6">
+                            <h3 class="text-3xl font-bold text-pink-400">📊 Session Portability</h3>
+                            <p class="text-slate-400">Transfer knowledge anywhere</p>
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div class="glass rounded-xl p-6 text-center command-glow transition-all duration-500 hover:scale-105 hover:bg-white/10 group">
+                            <div class="text-5xl mb-4 group-hover:animate-bounce">📋</div>
+                            <div class="font-mono text-lg text-pink-400 mb-2">/summary:</div>
+                            <div class="text-slate-300">Compile session logs</div>
+                        </div>
+                        
+                        <div class="glass rounded-xl p-6 text-center command-glow transition-all duration-500 hover:scale-105 hover:bg-white/10 group">
+                            <div class="text-5xl mb-4 group-hover:animate-pulse">📦</div>
+                            <div class="text-lg text-orange-400 mb-2 font-semibold">Generate Block</div>
+                            <div class="text-slate-300">Portable context</div>
+                        </div>
+                        
+                        <div class="glass rounded-xl p-6 text-center command-glow transition-all duration-500 hover:scale-105 hover:bg-white/10 group">
+                            <div class="text-5xl mb-4 group-hover:animate-spin">🔄</div>
+                            <div class="text-lg text-cyan-400 mb-2 font-semibold">Universal Transfer</div>
+                            <div class="text-slate-300">Any platform, any AI</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer Stats -->
+            <div class="text-center mt-16 animate-slide-up" style="animation-delay: 1s;">
+                <div class="glass rounded-2xl p-6 inline-block">
+                    <div class="flex items-center space-x-8 text-sm">
+                        <div>
+                            <div class="text-2xl font-bold text-cyan-400">96%</div>
+                            <div class="text-slate-400">Cost Reduction</div>
+                        </div>
+                        <div class="w-px h-8 bg-slate-600"></div>
+                        <div>
+                            <div class="text-2xl font-bold text-purple-400">3-4s</div>
+                            <div class="text-slate-400">Response Time</div>
+                        </div>
+                        <div class="w-px h-8 bg-slate-600"></div>
+                        <div>
+                            <div class="text-2xl font-bold text-pink-400">400B</div>
+                            <div class="text-slate-400">Parameters</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Add entrance animations with stagger
+        document.addEventListener('DOMContentLoaded', function() {
+            const elements = document.querySelectorAll('.animate-slide-up');
+            elements.forEach((el, index) => {
+                el.style.opacity = '0';
+                el.style.transform = 'translateY(30px)';
+                
+                setTimeout(() => {
+                    el.style.transition = 'all 0.6s ease-out';
+                    el.style.opacity = '1';
+                    el.style.transform = 'translateY(0)';
+                }, index * 200);
+            });
+        });
+    </script>
+</body>
+</html>

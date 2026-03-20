@@ -1,0 +1,7 @@
+/* main.css - Main stylesheet that imports all modules */
+
+@import url('./base.css');
+@import url('./components.css');
+@import url('./chat.css');
+@import url('./command-menu.css');
+@import url('./animations.css');

@@ -1,0 +1,19 @@
+{
+  "endpoints": [
+    "logging.py",
+    "memory.py",
+    "notebook.py",
+    "reasoning.py",
+    "session.py",
+    "system.py"
+  ],
+  "core_features": [
+    "events.py",
+    "memory.py",
+    "models.py",
+    "rate_limiter.py",
+    "response_limiter.py"
+  ],
+  "tools": [],
+  "config": {}
+}

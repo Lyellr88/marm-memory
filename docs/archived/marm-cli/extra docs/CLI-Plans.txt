@@ -1,0 +1,365 @@
+# MARM CLI v1.0.0 - Development Progress Log
+
+**Project:** MARM CLI - Offline AI assistant with persistent memory
+**Started:** 2025-01-27
+**Status:** Phase 3b Complete, Phase 4 Pending
+
+---
+
+## ✅ Phase 1: Project Structure and Dependencies (COMPLETE)
+
+**Completed:** 2025-01-27
+
+### What Was Built:
+- Created `marm-cli/` project structure with `src/` layout
+- Initialized Python package with proper directory hierarchy
+- Installed core dependencies:
+  - Rich (terminal UI)
+  - Prompt Toolkit (advanced input)
+  - Click (CLI framework)
+  - sentence-transformers (semantic search)
+  - httpx (async HTTP for Ollama)
+  - pydantic (data validation)
+
+### Files Created:
+```
+marm-cli/
+├── src/
+│   ├── main.py
+│   ├── config/
+│   │   └── settings.py
+│   └── marm/
+│       └── __init__.py
+├── config/
+│   └── settings.json
+├── data/
+│   └── conversations.db
+└── requirements.txt
+```
+
+### Validation:
+- ✅ Settings loading from `config/settings.json`
+- ✅ Database directory auto-created
+- ✅ All dependencies installed and importable
+
+---
+
+## ✅ Phase 2a: Tool Infrastructure (COMPLETE)
+
+**Completed:** 2025-01-27
+
+### What Was Built:
+- **BaseDeclarativeTool** - Abstract base class for all tools
+- **ToolRegistry** - Singleton registry for tool management
+- **ToolError** - Professional error handling with error types
+- **SchemaGenerator** - Automatic JSON schema generation from Pydantic models
+- **Example Tool** - EchoTool for testing tool invocation
+
+### Architecture Decisions:
+- Three-component pattern (Params, Invocation, Tool) from qwen-code
+- Async/await throughout for Ollama compatibility
+- ToolKind enum (read/write) for permission management
+- ToolState tracking for execution lifecycle
+
+### Files Created:
+- `src/marm/tools.py` - Base classes and enums
+- `src/marm/tool_registry.py` - Singleton registry with validation
+- `src/marm/tool_error.py` - Error handling infrastructure
+- `src/marm/tool_schema.py` - JSON schema generation
+- `src/marm/example_tool.py` - EchoTool for testing
+
+### Validation:
+- ✅ Tool registration works (15 tools registered)
+- ✅ Schema generation produces valid JSON schemas
+- ✅ Tool invocation executes async operations
+- ✅ Error handling catches and logs failures
+
+---
+
+## ✅ Phase 2b: Ollama Integration + MARM Protocol (COMPLETE)
+
+**Completed:** 2025-01-27
+
+### What Was Built:
+1. **OllamaClient** - Full async client with automatic tool execution loop
+2. **ProtocolInjector** - Loads MARM v2.2.5 protocol from `docs/PROTOCOL.md`
+3. **Chat Loop** - Interactive Rich terminal with Prompt Toolkit history
+4. **MARMDatabase** - SQLite with WAL mode, embeddings, session validation
+5. **SemanticSearch** - Sentence transformers (all-MiniLM-L6-v2) with caching
+
+### Key Features:
+- **Automatic Tool Calling:** LLM decides which tools to invoke, client executes them
+- **Tool Execution Loop:** Up to 5 rounds of tool calls before final response
+- **Protocol Injection:** Exact copy-paste from PROTOCOL.md (16,614 chars)
+- **Session Management:** Unique session IDs for conversation tracking
+- **Semantic Embeddings:** 384-dimension vectors for similarity search
+
+### Files Created:
+- `src/marm/ollama_client.py` - Async Ollama integration (280+ lines)
+- `src/marm/protocol.py` - Protocol loading with UTF-8 encoding
+- `src/chat.py` - Interactive chat loop with Rich/Prompt Toolkit (200+ lines)
+- `src/marm/database.py` - SQLite schema with 5 tables (280+ lines)
+- `src/marm/semantic.py` - Sentence transformers wrapper
+
+### Critical Fixes:
+- ✅ **UTF-8 Encoding:** Added `encoding='utf-8'` to protocol loading (Windows compatibility)
+- ✅ **Protocol Preservation:** Used EXACT copy from PROTOCOL.md lines 47-133 (no alterations)
+
+### Validation:
+- ✅ Database initialized with WAL mode
+- ✅ Semantic model loads successfully (384-dimension embeddings)
+- ✅ Protocol loaded (16,614 chars)
+- ✅ Ollama client connects successfully
+- ✅ Chat loop ready for user input
+
+---
+
+## ✅ Phase 3a: 14 Manual MARM Tools (COMPLETE)
+
+**Completed:** 2025-01-28
+
+### What Was Built:
+All 14 manual MARM tools following DeclarativeTool pattern:
+
+#### 🧠 Memory Intelligence (1 tool)
+- `marm_smart_recall` - Semantic search across all memories
+
+#### 📚 Logging System (4 tools)
+- `marm_log_session` - Create/switch named session containers
+- `marm_log_entry` - Add structured log entry with auto-date
+- `marm_log_show` - Display all entries/sessions (filterable)
+- `marm_log_delete` - Delete specified session or entries
+
+#### 🔄 Reasoning & Workflow (1 tool)
+- `marm_summary` - Generate context-aware summaries with truncation
+
+#### 📔 Notebook Management (6 tools)
+- `marm_notebook_add` - Add new entry with semantic embeddings
+- `marm_notebook_use` - Activate entries as instructions
+- `marm_notebook_show` - Display all saved keys and summaries
+- `marm_notebook_delete` - Delete specific notebook entry
+- `marm_notebook_clear` - Clear the active instruction list
+- `marm_notebook_status` - Show current active instruction list
+
+#### 🚀 Session Management (1 tool)
+- `marm_start` - Activate MARM memory & accuracy layers
+
+#### ⚙️ System Utilities (1 tool)
+- `marm_system_info` - Comprehensive system info, health status
+
+### Files Created:
+- `src/marm/marm_tools.py` - All 14 tools (907 lines)
+- `src/marm/tool_context.py` - Singleton pattern for shared instances
+
+### Critical Refactor - Singleton Pattern:
+**Problem Found by Gemini:** Every tool invocation was creating new `MARMDatabase()` and `SemanticSearch()` instances, reloading the semantic model every time!
+
+**Solution:**
+- Created `ToolContext` singleton class
+- All tools now use `get_shared_db()` and `get_shared_semantic()`
+- Semantic model loads ONCE at startup instead of per tool call
+
+### Additional Fixes:
+1. **Session Name Validation:** Regex pattern prevents SQL injection (`alphanumeric, underscore, hyphen, 1-50 chars`)
+2. **Error Handling:** Try/except blocks with specific error messages in database methods
+3. **Enhanced Logging:** Tool registration shows detailed info + debug level messages
+
+### Validation:
+- ✅ 15 tools registered (1 echo + 14 MARM)
+- ✅ Singleton pattern prevents repeated model loading
+- ✅ Session validation works (rejects `bad@session`, accepts `valid_session-123`)
+- ✅ All tools invoke successfully
+
+---
+
+## ✅ Phase 3b: 3 Automated MARM Tools (COMPLETE)
+
+**Completed:** 2025-01-28
+
+### What Was Built:
+Three background automation systems that run silently without LLM invocation:
+
+#### 1. ContextualLogger - Phrase Detection Auto-Logging
+**Triggers:** 8 regex patterns detect accomplishments, setups, decisions, solutions
+**Behavior:** Silently logs important moments to database with `auto_detected=True`
+
+**Patterns:**
+- Accomplishments: `fixed|solved|completed|finished|successfully`
+- Setups: `set up|configured|installed|created|built|deployed`
+- Decisions: `decided to|going with|chose|will use|switching to`
+- Solutions: `bug|issue|problem...fixed|resolved|found that|discovered`
+
+#### 2. SmartRefreshTimer - Time/Message Based Protocol Refresh
+**Triggers:**
+- Every 30 minutes of session time
+- Every 50 messages
+- 10+ minutes idle with >10 messages
+
+**Behavior:** Auto-refreshes MARM protocol to maintain accuracy
+
+#### 3. ContextBridgeDetector - Context Shift Detection
+**Explicit Detection:** 3 phrase patterns (`now let's|switching to|different topic`)
+
+**Implicit Detection (4 signals):**
+1. **Topic Embedding Similarity** < 0.3 (cosine similarity threshold)
+2. **File Context Change** - Completely different file set mentioned
+3. **Domain Keyword Shift** - Change between docker/database/frontend/backend/cli/ai
+4. **Intent Type Shift** - Change between learning/debugging/building/reviewing/general
+
+**Behavior:** Creates context bridge markers in database when shifts detected
+
+### Files Created:
+- `src/marm/automation.py` - All 3 automation systems (420+ lines)
+- `AutomationManager` - Coordinates all automation with status reporting
+
+### Integration:
+- Automation integrated into `chat.py` chat loop
+- Runs silently after each AI response
+- Uses debug-level logging (invisible unless verbose mode)
+- Auto-refreshes system prompt when timer triggers
+
+### Critical Fixes:
+
+#### Fix #1: Auto-Logging Content (Gemini Issue)
+**Problem:** Only storing key phrase instead of full conversation context
+**Impact:** Lost semantic richness for future recall
+
+**Before:**
+```python
+content = f"{today}-AUTO-{key_phrase}"  # Only 50 chars
+```
+
+**After:**
+```python
+content = f"{today} - AUTO-DETECTED ({entry_type.upper()})\n\nUser: {user_message}\n\nAI: {ai_response}"
+```
+
+**Result:** Full conversation context stored with embeddings for semantic search
+
+---
+
+#### Fix #2: Session Name Mismatch (Qwen Critical Issue)
+**Problem:** Automation logging to "main" session while chat uses unique session_id
+**Impact:** Auto-logs and context bridges orphaned from actual conversations
+
+**Before:**
+```python
+self.session_id = f"chat-{asyncio.get_event_loop().time()}"  # Unique ID
+self.automation = AutomationManager(session_name="main")     # WRONG!
+```
+
+**After:**
+```python
+self.session_id = f"chat-{asyncio.get_event_loop().time()}"
+self.automation = AutomationManager(session_name=self.session_id)  # FIXED!
+```
+
+**Result:** Automation data properly associated with chat sessions
+
+---
+
+#### Fix #3: File Context Tracking Implementation
+**Enhancement:** Added missing file extraction and tracking for Signal #2
+
+**Added:**
+- `_extract_files()` method - Extracts file paths from messages using regex
+- `self.current_files` tracking - Tracks which files are being discussed
+- File context check in `detect_implicit_shift()` - Detects complete file set changes
+
+**Result:** All 4 implicit detection signals now operational
+
+---
+
+### Validation:
+- ✅ All tests passing (15 tools registered)
+- ✅ Auto-logging stores full conversation context
+- ✅ Session names properly aligned
+- ✅ File context tracking operational
+- ✅ Automation integrated and ready for testing
+
+### Post-Launch Refinements Documented:
+Created `extra docs/POST-LAUNCH-REFINEMENTS.md` to track:
+- Similarity threshold tuning (requires real-world data)
+- Domain/intent keyword expansion
+- File extraction edge cases
+- Comprehensive test suite (pytest structure planned)
+- User acceptance testing scenarios
+
+---
+
+## 🔄 Phase 4: Polish CLI Interface and UX (PENDING)
+
+**Status:** Ready to begin
+
+### What's Already Working:
+- ✅ Chat loop functional (`marm chat` command ready)
+- ✅ Rich terminal output with markdown rendering
+- ✅ Prompt Toolkit input with history
+- ✅ Help command implemented
+- ✅ Automation systems integrated
+
+### What Phase 4 Will Include:
+- Final UI/UX polish
+- Error handling improvements
+- User-facing documentation
+- Additional CLI commands (if needed)
+- End-to-end testing with real conversations
+
+### Next Steps:
+1. Run `marm chat` to test end-to-end functionality
+2. Validate automation behavior in real conversations
+3. Polish any rough edges discovered during testing
+4. Prepare for production use
+
+---
+
+## 📊 Development Statistics
+
+**Total Lines of Code:** ~3,500+ lines
+**Files Created:** 25+ Python files
+**Tools Implemented:** 17 total (14 manual + 3 automated)
+**Database Tables:** 5 (conversations, log_entries, notebook, active_instructions, sessions)
+**Test Coverage:** Basic smoke tests (comprehensive suite planned)
+
+---
+
+## 🎯 Key Architectural Decisions
+
+1. **Singleton Pattern:** Heavy dependencies (database, semantic model) loaded once
+2. **DeclarativeTool Pattern:** Three-component design from qwen-code
+3. **Async/Await Throughout:** Full async compatibility with Ollama
+4. **WAL Mode SQLite:** Concurrent access support with locking
+5. **Protocol Preservation:** Exact copy-paste from PROTOCOL.md (no alterations)
+6. **Session Validation:** Regex prevents SQL injection and filesystem issues
+7. **Silent Automation:** Background systems don't interrupt chat flow
+
+---
+
+## 🐛 Bugs Fixed During Development
+
+1. **UTF-8 Encoding Error** (Phase 2b) - Windows couldn't decode PROTOCOL.md
+2. **Protocol Alteration** (Phase 2b) - User requested exact preservation
+3. **Repeated Dependency Instantiation** (Phase 3a) - Gemini found critical performance issue
+4. **Session Name Validation Missing** (Phase 3a) - Qwen found security gap
+5. **Auto-Logging Content Loss** (Phase 3b) - Gemini found semantic richness loss
+6. **Session Name Mismatch** (Phase 3b) - Qwen found critical orphaned data bug
+7. **File Context Tracking Missing** (Phase 3b) - Comparison with plan revealed gap
+
+---
+
+## 🤝 AI Agent Collaboration
+
+**Primary Developer:** Claude Code (Sonnet 4.5)
+**Validator #1:** Gemini 2.0 Flash Thinking (adversarial review)
+**Validator #2:** Qwen (deep code analysis)
+
+**Working Pattern:**
+1. Claude implements phase
+2. Gemini validates architecture and finds design flaws
+3. Qwen validates implementation and finds bugs
+4. Lyell approves and proceeds to next phase
+
+---
+
+**Last Updated:** 2025-01-28
+**Ready for Phase 4:** Yes - All validation passed, tests green

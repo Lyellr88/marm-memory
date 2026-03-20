@@ -1,0 +1,16 @@
+
+  {
+    "mcpServers": {
+      "marm-memory": {
+        "httpUrl": "http://localhost:8001/mcp",
+        "authentication": {
+          "type": "oauth",
+          "clientId": "local_client_b6f3a01e",
+          "clientSecret": "local_secret_ad6703cd2b4243ab",
+          "authorizationUrl": "http://localhost:8001/oauth/authorize",
+          "tokenUrl": "http://localhost:8001/oauth/token",
+          "scopes": ["read", "write"]
+        }
+      }
+    }
+  }

@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+   <meta charset="UTF-8">
+   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+   <title>MARM Protocol Flow</title>
+   <script src="https://cdn.tailwindcss.com"></script>
+   <style>
+       body {
+           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+       }
+       .arrow-down {
+           width: 40px;
+           height: 40px;
+           margin: 0 auto;
+           display: flex;
+           align-items: center;
+           justify-content: center;
+           color: #374151;
+           font-size: 24px;
+           text-shadow: 0 0 4px rgba(55, 65, 81, 0.3);
+           font-weight: bold;
+       }
+       .command-badge {
+           display: inline-block;
+           padding: 4px 12px;
+           background: rgba(59, 130, 246, 0.1);
+           border: 1px solid rgba(59, 130, 246, 0.4);
+           border-radius: 20px;
+           font-size: 13px;
+           font-family: 'Courier New', monospace;
+           color: #2563EB;
+           font-weight: 500;
+       }
+       .bubble-section {
+           border-radius: 30px;
+           backdrop-filter: blur(10px);
+           transition: all 0.3s ease;
+           box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+       }
+       .bubble-section:hover {
+           transform: translateY(-2px);
+           box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+       }
+       .bubble-card {
+           border-radius: 20px;
+           transition: all 0.2s ease;
+           box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+       }
+       .bubble-card:hover {
+           transform: scale(1.02);
+           box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+       }
+       .icon-circle {
+           border-radius: 50%;
+           backdrop-filter: blur(8px);
+       }
+   </style>
+</head>
+<body class="bg-gray-300 p-8">
+   <div class="max-w-4xl mx-auto">
+       <!-- Title -->
+       <div class="text-center mb-10">
+           <h1 class="text-3xl font-bold text-gray-800 mb-2">MARM Protocol Architecture</h1>
+           <p class="text-gray-600">Memory Accurate Response Mode - Command Flow</p>
+       </div>
+
+       <!-- Main Flow -->
+       <div class="space-y-2 border-2 border-gray-300 p-6 bg-white/50" style="border-radius: 30px;">
+           
+           <!-- Initialize -->
+           <div class="bg-gray-800 border border-gray-300 bubble-section p-6">
+               <div class="flex items-center justify-between">
+                   <div class="flex items-center space-x-4">
+                       <div class="w-12 h-12 bg-green-900/50 icon-circle flex items-center justify-center text-xl">
+                           🚀
+                       </div>
+                       <div>
+                           <h3 class="font-semibold text-gray-100">Initialize Session</h3>
+                           <p class="text-sm text-gray-400 mt-1">Start MARM protocol with memory tracking</p>
+                       </div>
+                   </div>
+                   <span class="command-badge">/start marm</span>
+               </div>
+           </div>
+
+           <div class="arrow-down">↓</div>
+
+           <!-- Core Memory Loop -->
+           <div class="bg-gradient-to-r from-gray-800 to-gray-800/90 border border-blue-900/50 bubble-section p-6">
+               <h3 class="font-semibold text-gray-100 mb-4 text-center">📊 Core Memory Loop</h3>
+               
+               <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                   <!-- Log Session -->
+                   <div class="bg-gray-900/50 bubble-card p-4 border border-gray-700">
+                       <div class="flex items-start space-x-3">
+                           <span class="text-2xl">📝</span>
+                           <div class="flex-1">
+                               <h4 class="font-medium text-gray-200">Log Session Events</h4>
+                               <p class="text-xs text-gray-400 mt-1">Track decisions & progress</p>
+                               <span class="command-badge mt-2 text-xs">/log entry</span>
+                           </div>
+                       </div>
+                   </div>
+
+                   <!-- Notebook -->
+                   <div class="bg-gray-900/50 bubble-card p-4 border border-gray-700">
+                       <div class="flex items-start space-x-3">
+                           <span class="text-2xl">📚</span>
+                           <div class="flex-1">
+                               <h4 class="font-medium text-gray-200">Store Knowledge</h4>
+                               <p class="text-xs text-gray-400 mt-1">Your facts & context</p>
+                               <span class="command-badge mt-2 text-xs">/notebook</span>
+                           </div>
+                       </div>
+                   </div>
+               </div>
+
+               <!-- AI Processing -->
+               <div class="mt-4 bg-gray-900/30 bubble-card p-4 border border-gray-700">
+                   <div class="text-center">
+                       <span class="text-lg">🧠</span>
+                       <p class="text-sm font-medium text-gray-300 mt-1">AI processes with full context</p>
+                       <p class="text-xs text-gray-500">Session memory + Notebook data + Current input</p>
+                   </div>
+               </div>
+           </div>
+
+           <div class="arrow-down">↓</div>
+
+           <!-- Enhanced Accuracy -->
+           <div class="bg-gray-800 border border-gray-300 bubble-section p-6">
+               <h3 class="font-semibold text-gray-100 mb-4">🎯 Enhanced Accuracy Tools</h3>
+               
+               <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                   <div class="flex items-center space-x-3 bg-gray-900/50 bubble-card p-3 border border-gray-700">
+                       <span class="text-xl">🔍</span>
+                       <div class="flex-1">
+                           <span class="command-badge text-xs">/deep dive</span>
+                           <p class="text-xs text-gray-400 mt-1">Context-aware analysis</p>
+                       </div>
+                   </div>
+                   
+                   <div class="flex items-center space-x-3 bg-gray-900/50 bubble-card p-3 border border-gray-700">
+                       <span class="text-xl">💭</span>
+                       <div class="flex-1">
+                           <span class="command-badge text-xs">/show reasoning</span>
+                           <p class="text-xs text-gray-400 mt-1">Reveal logic trail</p>
+                       </div>
+                   </div>
+               </div>
+           </div>
+
+           <div class="arrow-down">↓</div>
+
+           <!-- Session Management -->
+           <div class="bg-gradient-to-r from-gray-800 to-gray-800/90 border border-blue-900/50 bubble-section p-6">
+               <div class="flex items-center justify-between">
+                   <div class="flex items-center space-x-4">
+                       <div class="w-12 h-12 bg-blue-900/50 icon-circle flex items-center justify-center text-xl">
+                           📦
+                       </div>
+                       <div>
+                           <h3 class="font-semibold text-gray-100">Export & Continue</h3>
+                           <p class="text-sm text-gray-400 mt-1">Compile session for transfer or resumption</p>
+                       </div>
+                   </div>
+                   <span class="command-badge">/summary:</span>
+               </div>
+           </div>
+
+       </div>
+
+       <!-- Final Arrows -->
+       <div class="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+           <div class="arrow-down">↓</div>
+           <div class="arrow-down">↓</div>
+           <div class="arrow-down">↓</div>
+       </div>
+
+       <!-- Key Benefits -->
+       <div class="mt-4 border-2 border-gray-300 p-6 bg-white/50" style="border-radius: 30px;">
+           <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+               <div class="text-center p-4 bg-gray-800 bubble-card border border-gray-700">
+                   <div class="text-2xl mb-2">🎯</div>
+                   <h4 class="font-medium text-gray-200 text-sm">No Context Loss</h4>
+                   <p class="text-xs text-gray-400 mt-1">Maintains thread across sessions</p>
+               </div>
+               <div class="text-center p-4 bg-gray-800 bubble-card border border-gray-700">
+                   <div class="text-2xl mb-2">📊</div>
+                   <h4 class="font-medium text-gray-200 text-sm">Transparent Logic</h4>
+                   <p class="text-xs text-gray-400 mt-1">See how AI reaches conclusions</p>
+               </div>
+               <div class="text-center p-4 bg-gray-800 bubble-card border border-gray-700">
+                   <div class="text-2xl mb-2">🔄</div>
+                   <h4 class="font-medium text-gray-200 text-sm">Session Portability</h4>
+                   <p class="text-xs text-gray-400 mt-1">Transfer context between platforms</p>
+               </div>
+           </div>
+       </div>
+
+       <!-- Footer -->
+       <div class="text-center mt-8 text-gray-500 text-xs">
+           MARM Protocol v2.0 • Advanced AI Memory System
+       </div>
+   </div>
+</body>
+</html>

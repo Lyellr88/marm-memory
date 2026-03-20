@@ -1,0 +1,31 @@
+{
+  "ollama": {
+    "base_url": "http://localhost:11434",
+    "model": "codellama:13b",
+    "timeout": 120,
+    "keep_alive": "5m"
+  },
+  "marm": {
+    "database_path": ".marm-cli/conversations.db",
+    "embeddings_cache": ".marm-cli/embeddings",
+    "auto_log_enabled": true,
+    "auto_refresh_enabled": true,
+    "context_bridge_enabled": true,
+    "refresh_interval_minutes": 30,
+    "refresh_message_threshold": 50,
+    "refresh_idle_minutes": 10
+  },
+  "ui": {
+    "theme": "dark",
+    "show_timestamps": true,
+    "markdown_enabled": true,
+    "syntax_highlighting": true
+  },
+  "models": {
+    "available": [
+      "codellama:7b",
+      "codellama:13b",
+      "codellama:34b"
+    ]
+  }
+}

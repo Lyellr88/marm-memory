@@ -1,0 +1,42 @@
+# Environment variables and API keys
+.env
+.env.local
+.env.production
+config.js
+
+# Development files (local only)
+debug.js
+
+# Node modules (if you add any)
+node_modules/
+
+# Build outputs
+dist/
+build/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Development/Testing files (local only)
+debug.js
+
+# Claude Code CLI files
+.claude/

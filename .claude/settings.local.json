@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(powershell.exe:*)",
+      "Read(//c/Users/lyell/Desktop/qwen-code/**)",
+      "Read(//c/Users/lyell/Desktop/qwen-code-main/packages/cli/src/**)",
+      "Read(//c/Users/lyell/Desktop/qwen-code-main/**)",
+      "Read(//c/Users/lyell/Desktop/**)",
+      "Bash(python src/main.py:*)",
+      "Bash(find:*)",
+      "Read(//c/Users/lyell/AppData/Roaming/Python/Python313/site-packages/questionary/**)",
+      "Read(//c/Users/lyell/AppData/Roaming/Python/Python313/site-packages/prompt_toolkit/widgets/**)",
+      "Bash(docker exec:*)",
+      "Bash(cat:*)",
+      "Bash(npm run build:*)",
+      "Bash(node:*)",
+      "Bash(Select-String -Pattern \"error|Successfully\")",
+      "WebSearch",
+      "mcp__marm-memory__marm_smart_recall",
+      "mcp__marm-memory__marm_log_show",
+      "mcp__marm-memory__marm_summary",
+      "mcp__marm-memory__marm_system_info"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

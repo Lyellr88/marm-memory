@@ -1,0 +1,57 @@
+Key Support, Ops, & Product Leaders
+Michelle Ly – Product Operations & Servicing Leader
+Profile
+Direct responsibility for support/service delivery and customer escalations.
+
+Inna P. – Operations Manager & Senior Executive Assistant
+Profile
+Handles operational pain, team workflows, and likely escalation points.
+
+Marissa Petrullo – Executive Operations/Program Manager (Office of CEO)
+Profile
+Cross-team authority—bridges C-suite & daily ops pain.
+
+Stephanie Banrion – Operations Specialist Lead
+Profile
+Hands-on with operational challenges and customer issues.
+
+Sherry Tynan – Production Support Engineer
+Profile
+Works directly with incident escalations and systemic support failures.
+
+Hector Galileo-Perez – Disputes
+Profile
+Handles customer escalations, fraud, and grievances directly.
+
+Data, Engineering, & QA Stakeholders
+Anusha Vedagiri – Senior Data Engineer
+
+Dileep Pasumarthi – Machine Learning Engineer
+
+Michael Chapman, Daniel Burgess, Yunding Li, Michal Bienias – Engineers with support/incident responsibility.
+
+Lee Clark – Quality Assurance
+Critical for surfacing broken promises, systemic failure patterns.
+
+Change, Talent, Compliance & Strategic Allies
+Christina Moser – Talent Operations
+
+Swati Karandikar – Compliance Executive
+
+Vanessa Vasquez, CPA – Technical Accounting/Reporting
+
+Swati Malik – Head of Corporate Development
+Profile
+Can champion pilot/innovation projects at the org level.
+
+Justin Hadley – Deputy CISO
+Security/compliance buy-in often necessary for integrations.
+
+How to Use This List
+Start with 10–15 direct messages: personalize by referencing issues common to their department (“I saw your team deals with escalations around customer promises and callback tracking…”).
+
+Follow with LinkedIn comments/engagement and, if possible, target email based on their linked information.
+
+Prioritize Operations, Disputes, and Engineering for real pain; Executive Ops, Product, and Corporate Development for sponsorship/escalation.
+
+Focus on those likely to “get chewed out in meetings” over call-backs, broken promises, QA misses, or rising support tickets.
