@@ -1,0 +1,57 @@
+services:
+  marm-mcp-server:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    image: lyellr88/marm-mcp-server:latest
+    container_name: marm-mcp-server
+    restart: unless-stopped
+    
+    ports:
+      - "8001:8001"
+    
+    volumes:
+      # Persistent data storage on your computer
+      - ~/.marm:/home/marm/.marm
+    
+    environment:
+      # Server configuration
+      - SERVER_HOST=0.0.0.0
+      - SERVER_PORT=8001
+      - SERVER_VERSION=2.2.6
+      
+      # Database configuration (handled automatically by config)
+      # DB_PATH is set automatically by config/settings.py
+      
+      # Memory optimization
+      - SEMANTIC_MODEL=all-MiniLM-L6-v2
+      
+      # Production settings
+      - ENVIRONMENT=production
+      - LOG_LEVEL=INFO
+    
+    # Resource limits (2GB available)
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: '1.0'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+    
+    # Health check
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+volumes:
+  marm_data:
+    driver: local
+
+networks:
+  default:
+    name: marm-network

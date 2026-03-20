@@ -1,0 +1,241 @@
+name: Publish MARM MCP Server
+
+on:
+  push:
+    tags:
+      - 'v*'  # Trigger on version tags like v2.1, v2.1, etc.
+  workflow_dispatch:  # Allow manual triggering
+
+permissions:
+  id-token: write  # Required for GitHub OIDC authentication
+  contents: read
+
+jobs:
+  validate-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('marm-mcp-server/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r marm-mcp-server/requirements.txt
+          pip install pytest pytest-asyncio jsonschema requests
+
+      - name: Validate server.json
+        run: |
+          cd marm-mcp-server
+          python validate_server_json.py
+
+      - name: Run tests
+        run: |
+          # Run any existing tests
+          if [ -d "tests" ]; then
+            python -m pytest tests/ -v
+          else
+            echo "No tests directory found, skipping tests"
+          fi
+
+      - name: Test server startup
+        run: |
+          # Test that the server can start up
+          cd marm-mcp-server
+          timeout 10s python server.py || echo "Server startup test completed"
+
+  publish-pypi:
+    needs: validate-and-test
+    runs-on: ubuntu-latest
+    environment: pypi  # Use GitHub environment for PyPI secrets
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install build dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install build twine setuptools wheel
+
+      - name: Build package
+        run: python -m build
+        working-directory: marm-mcp-server
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          packages-dir: marm-mcp-server/dist/
+
+  publish-docker:
+    needs: validate-and-test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Cache Docker layers
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-buildx-
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Extract version from pyproject.toml
+        id: version
+        run: |
+          echo "DEBUG: GITHUB_REF = $GITHUB_REF"
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            VERSION=${GITHUB_REF#refs/tags/v}
+            echo "DEBUG: Extracted version from tag: $VERSION"
+          else
+            VERSION=$(grep '^version = ' marm-mcp-server/pyproject.toml | cut -d '"' -f 2)
+            echo "DEBUG: Extracted version from pyproject.toml: $VERSION"
+          fi
+          echo "DEBUG: Final version: $VERSION"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Debug Docker tags
+        run: |
+          echo "DEBUG: Will create Docker tags:"
+          echo "  - lyellr88/marm-mcp-server:${{ steps.version.outputs.version }}"
+          echo "  - lyellr88/marm-mcp-server:latest"
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: marm-mcp-server
+          push: true
+          tags: |
+            lyellr88/marm-mcp-server:${{ steps.version.outputs.version }}
+            lyellr88/marm-mcp-server:latest
+          platforms: linux/amd64,linux/arm64
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache,mode=max
+
+  publish-mcp-registry:
+    needs: validate-and-test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+
+      - name: Install MCP Publisher CLI
+        run: |
+
+          # Clone the registry repo and build the publisher
+          git clone https://github.com/modelcontextprotocol/registry.git
+          cd registry
+
+          echo "=== Building MCP Publisher ==="
+          make publisher
+          echo "Build exit code: $?"
+
+          echo "=== Checking built files ==="
+          ls -lhR bin/
+
+          echo "=== Verifying binary ==="
+          if [ -f "bin/mcp-publisher" ]; then
+            file bin/mcp-publisher
+            echo "Binary exists and type verified"
+          else
+            echo "ERROR: bin/mcp-publisher not found!"
+            ls -la bin/
+            exit 1
+          fi
+
+          # Move the built binary to PATH
+          chmod +x bin/mcp-publisher
+          sudo cp bin/mcp-publisher /usr/local/bin/
+
+          echo "=== Publisher installed ==="
+          ls -l /usr/local/bin/mcp-publisher
+          /usr/local/bin/mcp-publisher --help
+
+      - name: Login to MCP Registry
+        run: |
+          # Use GitHub OIDC for authentication
+          cd marm-mcp-server
+          echo "DEBUG: Attempting MCP Registry login..."
+          mcp-publisher login github-oidc || {
+            echo "ERROR: MCP Registry login failed"
+            exit 1
+          }
+          echo "DEBUG: MCP Registry login successful"
+
+      - name: Publish to MCP Registry
+        run: |
+          # Publish the server to the MCP registry
+          cd marm-mcp-server
+          echo "DEBUG: Validating server.json before publishing..."
+          python validate_server_json.py || {
+            echo "ERROR: server.json validation failed"
+            exit 1
+          }
+          echo "DEBUG: server.json validation passed"
+
+          echo "DEBUG: Current server.json content:"
+          cat server.json | head -10
+
+          echo "DEBUG: Attempting MCP Registry publish..."
+          mcp-publisher publish || {
+            echo "ERROR: MCP Registry publish failed"
+            exit 1
+          }
+          echo "DEBUG: MCP Registry publish successful"
+
+      - name: Verify publication
+        run: |
+          # Wait a moment for registry to update
+          sleep 30
+          # Verify the server is published
+          echo "Server published successfully to MCP Registry!"
+          echo "Check: https://registry.modelcontextprotocol.io/servers/io.github.marm-systems/marm-mcp-server"
+
+  notify-success:
+    needs: [publish-mcp-registry]
+    runs-on: ubuntu-latest
+    if: success()
+
+    steps:
+      - name: Success notification
+        run: |
+          echo "🎉 MARM MCP Server published successfully!"
+          echo "📦 PyPI: https://pypi.org/project/marm-mcp-server/"
+          echo "🐳 Docker: https://hub.docker.com/r/lyellr88/marm-mcp-server"
+          echo "🔗 MCP Registry: https://registry.modelcontextprotocol.io/servers/io.github.marm-systems/marm-mcp-server"

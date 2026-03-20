@@ -1,0 +1,511 @@
+# MARM: The AI That Remembers Your Conversations
+
+Memory Accurate Response Mode v2.2.7 - The intelligent persistent memory system for AI agents (supports HTTP and STDIO), stop fighting your memory and control it. Experience long-term recall, session continuity, and reliable conversation history, so your LLMs never lose track of what matters.
+
+
+## 📢 Project Update (December 2025)
+
+I've been focused on developing a new build powered by MARM Systems as its memory layer—a real-world application of the technology I've been creating. This deep dive into production memory systems has given me valuable insights into how MARM performs under real workflows. 
+
+I'm returning focus to MARM-MCP in **Q1 2026** with lessons learned and new improvements. The time spent studying advanced memory architectures and system behavior will directly improve upcoming MARM-MCP updates with better semantic search, optimized recall patterns, and enhanced multi-session handling.
+
+**Expected Q1 2026 improvements:**
+- Advanced memory indexing strategies
+- Improved cross-session recall
+- Performance optimizations based on real production data
+
+Thank you for your patience and support.
+
+---
+
+## Why MARM MCP: The Problem & Solution
+
+**Your AI forgets everything. MARM MCP doesn't.**
+
+Modern LLMs lose context over time, repeat prior ideas, and drift off requirements. MARM MCP solves this with a unified, **persistent**, MCP‑native memory layer that sits beneath any AI client you use. It blends semantic search, structured session logs, reusable notebooks, and smart summaries so your agents can remember, reference, and build on prior work—consistently, across sessions, and across tools.
+
+> MCP in One Sentence:
+> MARM MCP provides persistent memory and structured session context beneath any AI tool, so your agents learn, remember, and collaborate across all your workflows.
+
+### The Problem → The MARM Solution
+
+- Problem: Conversations reset; decisions get lost; work scatters across multiple AI tools.
+- Solution: A universal, persistent memory layer that captures and classifies the important bits (decisions, configs, code, rationale), then recalls them by meaning—not keywords.
+
+### Before vs After
+
+- Without MARM: lost context, repeated suggestions, drifting scope, "start from scratch."
+- With MARM: session memory, cross-session continuity, concrete recall of decisions, and faster, more accurate delivery.
+
+### What MARM MCP Delivers
+
+| **Memory** | **Multi-AI** | **Architecture** |
+|------------|--------------|------------------|
+| **Semantic Search** - Find by meaning using AI embeddings | **Unified Memory Layer** - Works with Claude, Qwen, Gemini, MCP clients | **18 Complete MCP Tools** - Full Model Context Protocol coverage |
+| **Auto-Classification** - Content categorized (code, project, book, general) | **Cross-Platform Intelligence** - Different AIs learn from shared knowledge | **Database Optimization** - SQLite with WAL mode and connection pooling |
+| **Persistent Cross-Session Memory** - Memories survive across agent conversations | **User-Controlled Memory** - "Bring Your Own History," granular control | **Rate Limiting** - IP-based tiers for stability |
+| **Smart Recall** - Vector similarity search with context-aware fallbacks | | **MCP Compliance** - Response size management for predictable performance |
+| | | **Docker Ready** - Containerized deployment with health/readiness checks |
+
+### Learn More
+
+- Protocol walkthrough, commands, and reseeding patterns: [`MARM-HANDBOOK.md`](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/MARM-HANDBOOK.md)
+
+---
+
+## What Users Are Saying
+
+> “MARM successfully handles our industrial automation workflows in production. We've validated session management, persistent logging, and smart recall across container restarts in our Windows 11 + Docker environment. The system reliably tracks complex technical decisions and maintains data integrity through deployment cycles.”  
+> @Ophy21, GitHub user (Industrial Automation Engineer)
+
+> “MARM proved exceptionally valuable for DevOps and complex Docker projects. It maintained 100% memory accuracy, preserved context on 46 services and network configurations, and enabled standards-compliant Python/Terraform work. Semantic search and automated session logs made solving async and infrastructure issues far easier. **Value Rating:** 9.5/10 - indispensable for enterprise-grade memory, technical standards, and long-session code management.”
+> @joe_nyc, Discord user (DevOps/Infrastructure Engineer)  
+
+---
+
+# MARM MCP Server Guide
+
+Now that you understand the ecosystem, here's info and how to use the MCP server with your AI agents
+
+---
+
+## 🚀 Quick Start for MCP (HTTP & Stdio)
+
+**Docker Install:**
+
+```bash
+docker pull lyellr88/marm-mcp-server:latest
+docker run -d --name marm-mcp-server -p 8001:8001 -v ~/.marm:/home/marm/.marm lyellr88/marm-mcp-server:latest
+claude mcp add --transport http marm-memory http://localhost:8001/mcp
+```
+
+**Local http Install:**
+
+```bash
+pip install marm-mcp-server==2.2.7
+pip install -r marm-mcp-server/requirements.txt
+python -m marm_mcp_server
+claude mcp add --transport http marm-memory http://localhost:8001/mcp
+```
+
+**Stdio Install:**
+
+```bash
+pip install marm-mcp-server==2.2.7
+pip install -r marm-mcp-server/requirements_stdio.txt
+<platform> mcp add --transport stdio marm-memory-stdio python "your/file/path/to/marm-mcp-server/server_stdio.py"
+python -m marm_mcp_server/server_stdio.py
+```
+
+<details>
+<summary><b> Full Installation & Configuration (Click to expand)</b></summary>
+
+**Docker (Fastest - 30 seconds):**
+
+```bash
+docker pull lyellr88/marm-mcp-server:latest
+docker run -d --name marm-mcp-server -p 8001:8001 -v ~/.marm:/home/marm/.marm lyellr88/marm-mcp-server:latest
+claude mcp add --transport http marm-memory http://localhost:8001/mcp
+```
+
+---
+
+**Quick Local http Install:**
+
+```bash
+pip install marm-mcp-server==2.2.7
+pip install -r marm-mcp-server/requirements.txt
+python -m marm_mcp_server
+claude mcp add --transport http marm-memory http://localhost:8001/mcp
+```
+
+**Http Manual JSON Configuration:**
+
+```json
+{
+  "mcpServers": {
+    "marm-memory": {
+      "httpUrl": "http://localhost:8001/mcp",
+      "authentication": {
+        "type": "oauth",
+        "clientId": "local_client_b6f3a01e",
+        "clientSecret": "local_secret_ad6703cd2b4243ab",
+        "authorizationUrl": "http://localhost:8001/oauth/authorize",
+        "tokenUrl": "http://localhost:8001/oauth/token"
+      }
+    }
+  }
+}
+```
+
+### Local Development Authentication (Development Only)
+
+MARM includes **mock OAuth 2.0 credentials for local testing**—not a production authentication system.
+
+**Why hardcoded credentials?** When developing locally, you don't have external OAuth providers (GitHub, Google, etc.). MARM includes dev credentials so you can test the full MCP authentication flow without external dependencies.
+
+**For local development, use these credentials:**
+- **Client ID:** `local_client_b6f3a01e`
+- **Client Secret:** `local_secret_ad6703cd2b4243ab`
+
+The server validates against these hardcoded values only during development.
+
+**For production deployment:** Replace this entire section with real OAuth 2.1 authentication. These hardcoded credentials are for development only and not suitable for production.
+
+**Roadmap:** Multi-user OAuth authentication is planned for a future release to support team deployments and cloud environments.
+
+---
+
+### STDIO Transport Support (NEW 12/07/2025)
+
+The MARM MCP Server supports STDIO transport for MCP clients that require stdin/stdout communication (orchestration platforms, CLI tools, and integrated development environments).
+
+#### Quick Guide Stdio Install
+
+```bash
+pip install marm-mcp-server==2.2.7
+pip install -r marm-mcp-server/requirements_stdio.txt
+<platform> mcp add --transport stdio marm-memory-stdio python "your/file/path/to/marm-mcp-server/server_stdio.py"
+python -m marm_mcp_server/server_stdio.py
+```
+
+**First Step:**
+
+```bash
+pip install marm-mcp-server==2.2.7
+```
+
+**Second Step: Install STDIO-specific dependencies:**
+
+```bash
+pip install -r marm-mcp-server/requirements_stdio.txt
+```
+
+**Third Step: Configuration**
+
+Choose one of the two setup methods below:
+
+**Option 1: CLI Configuration (Recommended)**
+
+Use your platform's MCP command to add MARM as a STDIO server:
+
+```bash
+<platform> mcp add --transport stdio marm-memory-stdio python "your/file/path/to/marm-mcp-server/server_stdio.py"
+```
+
+Replace `<platform>` with:
+- `qwen` for Qwen CLI
+- `claude` for Claude CLI
+- `gemini` for Gemini CLI
+
+Example:
+```bash
+claude mcp add --transport stdio marm-memory-stdio python "/home/user/marm-mcp-server/server_stdio.py"
+```
+
+**Option 2: JSON Configuration**
+
+For IDEs and clients that require manual configuration, add this to your settings file:
+
+**macOS/Linux:**
+```json
+{
+  "mcpServers": {
+    "marm-memory": {
+      "command": "python",
+      "args": ["/path/to/marm-mcp-server/server_stdio.py"],
+      "cwd": "/path/to/marm-mcp-server"
+    }
+  }
+}
+```
+
+**Windows:**
+```json
+{
+  "mcpServers": {
+    "marm-memory": {
+      "command": "python",
+      "args": ["C:\\Users\\YourUsername\\path\\to\\marm-mcp-server\\server_stdio.py"],
+      "cwd": "C:\\Users\\YourUsername\\path\\to\\marm-mcp-server"
+    }
+  }
+}
+```
+
+**Step 4 (Optional): Running the Server Manually**
+
+To run the server locally:
+
+```bash
+python -m marm_mcp_server/server_stdio.py
+```
+
+The server will start and listen on stdin/stdout for JSON-RPC 2.0 messages from connected MCP clients.
+
+#### Configuration Notes
+
+- Use `python` (not `python3` on Windows)
+- The `cwd` parameter is **required** — it allows the server to locate core modules
+- Do NOT include `run` as an argument
+- Replace `/path/to/` with your actual installation path
+
+#### Supported Platforms
+
+Tested and working on:
+- ✅ Qwen CLI (Windows, macOS, Linux)
+- ✅ Claude CLI (Windows, macOS, Linux)
+- ✅ Gemini CLI (Windows, macOS, Linux)
+- ✅ Cursor (Windows, macOS, Linux) — use JSON configuration
+
+#### For Other Platforms
+
+If your platform isn't listed above:
+
+1. **Try the JSON configuration** — most MCP clients support the standard configuration format
+2. **Use AI assistance** — provide your platform name and MCP documentation to an AI assistant, which can help adapt the command pattern shown above
+3. **Check platform documentation** — refer to your MCP client's documentation for STDIO transport setup
+
+---
+
+### WebSocket Transport Support (Beta - In Testing)
+
+The MARM MCP Server includes **experimental WebSocket support** for real-time MCP communication. This transport has been implemented and tested internally but is not yet actively used in production workflows.
+
+#### Quick Guide WebSocket Install
+
+```bash
+pip install marm-mcp-server==2.2.7
+pip install -r marm-mcp-server/requirements.txt
+python -m marm_mcp_server/server.py
+```
+
+**Connect via WebSocket (Beta):**
+
+```bash
+# Claude CLI
+claude mcp add marm-memory ws://localhost:8001/mcp/ws
+
+# Grok CLI  
+grok mcp add marm-memory --transport websocket --url "ws://localhost:8001/mcp/ws"
+```
+
+**WebSocket Endpoint:** `ws://localhost:8001/mcp/ws`
+
+#### WebSocket Features
+
+- **Real-time communication** - Full-duplex WebSocket protocol support
+- **JSON-RPC 2.0 compliance** - All 19 MCP methods supported
+- **Same tool coverage** - Access all MARM memory and session tools
+- **Beta status** - Tested but not actively used; feedback welcome
+
+#### Supported Platforms
+
+- ✅ Claude CLI (WebSocket transport)
+- ✅ Grok CLI (WebSocket transport)
+- ✅ Qwen CLI (with manual WebSocket configuration)
+- ✅ Gemini CLI (with manual WebSocket configuration)
+
+#### Transport Comparison
+
+| Feature | HTTP | STDIO | WebSocket |
+|---------|------|-------|-----------|
+| **Deployment** | Requires HTTP server | Process-based | HTTP server |
+| **Resource Isolation** | Shared server | Per-process | Shared server |
+| **Platform Support** | Web-based clients | CLI/orchestration tools | CLI tools (Beta) |
+| **Setup Complexity** | Medium | Low | Medium |
+| **Use Case** | Web apps, remote access | Local tools, automation | Real-time apps (Beta) |
+| **Status** | Stable | Stable | Beta |
+
+**Key Information:**
+
+- **Server Endpoint**: `http://localhost:8001/mcp`
+- **API Documentation**: `http://localhost:8001/docs`
+- **Supported Clients**: Claude Code, Qwen CLI, Gemini CLI, and any MCP-compatible LLM client or LLM platform
+
+**All Installation Options:**
+
+- **Docker** (Fastest): One command, works everywhere
+- **Automated Setup**: One command with dependency validation  
+- **Manual Installation**: Step-by-step with virtual environment
+- **Quick Test**: Zero-configuration trial run
+
+**Choose your installation method:**
+
+| Installation Type | Guide | Best For |
+|-------------------|-------|----------|
+| **Docker** | **[INSTALL-DOCKER.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-DOCKER.md)** | Cross-platform, production deployment |
+| **Windows** | **[INSTALL-WINDOWS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-WINDOWS.md)** | Native Windows development |
+| **Linux** | **[INSTALL-LINUX.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-LINUX.md)** | Native Linux development |
+| **Platforms** | **[INSTALL-PLATFORM.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-PLATFORM.md)** | App & API integration |
+
+</details>
+
+---
+
+## Complete MCP Tool Suite (18 Tools)
+
+**💡 Pro Tip:** You don't need to manually call these tools! Just tell your AI agent what you want in natural language:
+
+- *"Claude, log this session as 'Project Alpha' and add this conversation as 'database design discussion'"*
+- *"Remember this code snippet in your notebook for later"*
+- *"Search for what we discussed about authentication yesterday"*
+
+The AI agent will automatically use the appropriate tools. Manual tool access is available for power users who want direct control.
+
+| **Category** | **Tool** | **Description** |
+|--------------|----------|-----------------|
+| **Memory Intelligence** | `marm_smart_recall` | AI-powered semantic similarity search across all memories. Supports global search with `search_all=True` flag |
+| | `marm_contextual_log` | Intelligent auto-classifying memory storage using vector embeddings |
+| **Session Management** | `marm_start` | Activate MARM intelligent memory and response accuracy layers |
+| | `marm_refresh` | Refresh AI agent session state and reaffirm protocol adherence |
+| **Logging System** | `marm_log_session` | Create or switch to named session container |
+| | `marm_log_entry` | Add structured log entry with auto-date formatting |
+| | `marm_log_show` | Display all entries and sessions (filterable) |
+| | `marm_log_delete` | Delete specified session or individual entries |
+| **Reasoning & Workflow** | `marm_summary` | Generate context-aware summaries with intelligent truncation for LLM conversations |
+| | `marm_context_bridge` | Smart context bridging for seamless AI agent workflow transitions |
+| **Notebook Management** | `marm_notebook_add` | Add new notebook entry with semantic embeddings |
+| | `marm_notebook_use` | Activate entries as instructions (comma-separated) |
+| | `marm_notebook_show` | Display all saved keys and summaries |
+| | `marm_notebook_delete` | Delete specific notebook entry |
+| | `marm_notebook_clear` | Clear the active instruction list |
+| | `marm_notebook_status` | Show current active instruction list |
+| **System Utilities** | `marm_current_context` | **Background Tool** - Automatically provides current date/time for log entries (AI agents use automatically) |
+| | `marm_system_info` | Comprehensive system information, health status, and loaded docs |
+| | `marm_reload_docs` | Reload documentation into memory system |
+
+---
+
+## Architecture Overview
+
+### **Core Technology Stack**
+
+```txt
+FastAPI (0.115.4) + FastAPI-MCP (0.4.0)
+├── SQLite with WAL Mode + Custom Connection Pooling  
+├── Sentence Transformers (all-MiniLM-L6-v2) + Semantic Search
+├── Structured Logging (structlog) + Memory Monitoring (psutil)
+├── IP-Based Rate Limiting + Usage Analytics
+├── MCP Response Size Compliance (1MB limit)
+├── Event-Driven Automation System
+├── Docker Containerized Deployment + Health Monitoring
+└── Advanced Memory Intelligence + Auto-Classification
+```
+
+### **Database Schema (5 Tables)**
+
+#### `memories` - Core Memory Storage
+
+```sql
+CREATE TABLE memories (
+    id TEXT PRIMARY KEY,
+    session_name TEXT NOT NULL,
+    content TEXT NOT NULL,
+    embedding BLOB,              -- AI vector embeddings for semantic search
+    timestamp TEXT NOT NULL,
+    context_type TEXT DEFAULT 'general',  -- Auto-classified content type
+    metadata TEXT DEFAULT '{}',
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+#### `sessions` - Session Management
+
+```sql
+CREATE TABLE sessions (
+    session_name TEXT PRIMARY KEY,
+    marm_active BOOLEAN DEFAULT FALSE,
+    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+    last_accessed TEXT DEFAULT CURRENT_TIMESTAMP,
+    metadata TEXT DEFAULT '{}'
+);
+```
+
+#### Plus: `log_entries`, `notebook_entries`, `user_settings`
+
+---
+
+## 📈 Performance & Scalability
+
+### **Production Optimizations**
+
+- **Custom SQLite Connection Pool**: Thread-safe with configurable limits (default: 5)
+- **WAL Mode**: Write-Ahead Logging for concurrent access performance
+- **Lazy Loading**: Semantic models loaded only when needed (resource efficient)
+- **Intelligent Caching**: Memory usage optimization with cleanup cycles
+- **Response Size Management**: MCP 1MB compliance with smart truncation
+
+### **Rate Limiting Tiers**
+
+- **Default**: 60 requests/minute, 5min cooldown
+- **Memory Heavy**: 20 requests/minute, 10min cooldown (semantic search)
+- **Search Operations**: 30 requests/minute, 5min cooldown
+
+---
+
+## Documentation for MCP
+
+| Guide Type | Document | Description |
+|------------|----------|-------------|
+| **Docker Setup** | **[INSTALL-DOCKER.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-DOCKER.md)** | Cross-platform, production deployment |
+| **Windows Setup** | **[INSTALL-WINDOWS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-WINDOWS.md)** | Native Windows development |
+| **Linux Setup** | **[INSTALL-LINUX.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-LINUX.md)** | Native Linux development |
+| **Platform Integration** | **[INSTALL-PLATFORM.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-PLATFORM.md)** | App & API integration |
+| **MCP Handbook** | **[MCP-HANDBOOK.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/MCP-HANDBOOK.md)** | Complete usage guide with all 18 MCP tools, cross-app memory strategies, pro tips, and FAQ |
+
+---
+
+## Competitive Advantage
+
+### **vs. Basic MCP Implementations**
+
+| Feature | MARM v2.2.7 | Basic MCP Servers |
+|---------|-------------|-------------------|
+| **Memory Intelligence** | AI-powered semantic search with auto-classification | Basic key-value storage |
+| **Tool Coverage** | 18 complete MCP protocol tools | 3-5 basic wrappers |  
+| **Scalability** | Database optimization + connection pooling | Single connection |
+| **MCP Compliance** | 1MB response size management | No size controls |
+| **Deployment** | Docker containerization + health monitoring | Local development only |
+| **Analytics** | Usage tracking + business intelligence | No tracking |
+| **Codebase Maturity** | 2,500+ lines professional code | 200-800 lines |
+
+---
+
+## Contributing
+
+**Aren't you sick of explaining every project you're working on to every LLM you work with?**
+
+MARM is building the solution to this. Support now to join a growing ecosystem - this is just **Phase 1 of a 3-part roadmap** and our next build will complement MARM like peanut butter and jelly.
+
+**Join the repo that's working to give YOU control over what is remembered and how it's remembered.**
+
+### **Why Contribute Now?**
+
+- **Ground floor opportunity** - Be part of the MCP memory revolution from the beginning
+- **Real impact** - Your contributions directly solve problems you face daily with AI agents
+- **Growing ecosystem** - Help build the infrastructure that will power tomorrow's AI workflows
+- **Phase 1 complete** - Proven foundation ready for the next breakthrough features
+
+### **Development Priorities**
+
+1. **Load Testing**: Validate deployment performance under real AI workloads
+2. **Documentation**: Expand API documentation and LLM integration guides
+3. **Performance**: AI model caching and memory optimization
+4. **Features**: Additional MCP protocol tools and multi-tenant capabilities
+
+---
+
+## Join the MARM Community
+
+**Help build the future of AI memory - no coding required!**
+
+**Connect:** [MARM Discord](https://discord.gg/nhyJWPz2cf) | [GitHub Discussions](https://github.com/Lyellr88/MARM-Systems/discussions)
+
+### Easy Ways to Get Involved
+
+- **Try the MCP server** and share your experience
+- **Star the repo** if MARM solves a problem for you
+- **Share on social** - help others discover memory-enhanced AI
+- **Open [issues](https://github.com/Lyellr88/MARM-Systems/issues)** with bugs, feature requests, or use cases
+- **Join discussions** about AI reliability and memory
