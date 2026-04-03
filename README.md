@@ -36,7 +36,7 @@ I've been focused on developing a new build powered by MARM Systems as its memor
 
 I'm returning focus to MARM-MCP in **Q1-2 2026** with lessons learned and new improvements. The time spent studying advanced memory architectures and system behavior will directly improve upcoming MARM-MCP updates with better semantic search, optimized recall patterns, and enhanced multi-session handling.
 
-**Expected Q1 2026 improvements:**
+**Expected Q1-2 2026 improvements:**
 - Advanced memory indexing strategies
 - Improved cross-session recall
 - Performance optimizations based on real production data
