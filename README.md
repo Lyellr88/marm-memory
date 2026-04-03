@@ -32,6 +32,8 @@ Forks may experiment, but official updates will always come from this repo.
 
 ## 📢 Project Update (December 2025)
 
+[![SafeSkill 30/100](https://img.shields.io/badge/SafeSkill-30%2F100_Blocked-red)](https://safeskill.dev/scan/lyellr88-marm-systems)
+
 I've been focused on developing a new build powered by MARM Systems as its memory layer, a real-world application of the technology I've been creating. This deep dive into production memory systems has given me valuable insights into how MARM performs under real workflows. 
 
 I'm returning focus to MARM-MCP in **Q1-2 2026** with lessons learned and new improvements. The time spent studying advanced memory architectures and system behavior will directly improve upcoming MARM-MCP updates with better semantic search, optimized recall patterns, and enhanced multi-session handling.
