@@ -58,7 +58,7 @@ jobs:
 
   publish-pypi:
     needs: validate-and-test
-    if: false  # temporarily disabled — re-enable for final release run
+    if: false  # disabled — re-enable for final full run
     runs-on: ubuntu-latest
     environment: pypi
 
@@ -89,7 +89,7 @@ jobs:
 
   publish-docker:
     needs: validate-and-test
-    if: false  # temporarily disabled — re-enable for final release run
+    if: false  # disabled — re-enable for final full run
     runs-on: ubuntu-latest
 
     steps:

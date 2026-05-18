@@ -34,6 +34,10 @@ CRITICAL_FILES = [
     SERVER_ROOT / "Dockerfile",
 ]
 
+OCI_IDENTIFIER_FILES = [
+    SERVER_ROOT / "server.json",
+]
+
 DASHBOARD_CRITICAL_FILES = [
     DASHBOARD_ROOT / "marm_dashboard" / "__init__.py",
     DASHBOARD_ROOT / "pyproject.toml",
@@ -47,6 +51,9 @@ VERSION_RE = re.compile(r"(?<![\w.])v?(\d+\.\d+\.\d+)(?![\w.])", re.IGNORECASE)
 CRITICAL_VERSION_RE = re.compile(
     r"((?:__version__|version|Version|VERSION)[\s:=\"-]+)v?(\d+\.\d+\.\d+)",
     re.IGNORECASE,
+)
+OCI_IDENTIFIER_RE = re.compile(
+    r"(\"identifier\"\s*:\s*\"[^\"]+:)(\d+\.\d+\.\d+)(\")"
 )
 DOC_REPLACE_CUES = (
     "marm",
@@ -268,6 +275,12 @@ def replace_versions(path: Path, target_version: str) -> int:
             lambda match: f"{match.group(1)}{target_version}",
             content,
         )
+        if path in OCI_IDENTIFIER_FILES:
+            updated, oci_count = OCI_IDENTIFIER_RE.subn(
+                lambda m: f"{m.group(1)}{target_version}{m.group(3)}",
+                updated,
+            )
+            count += oci_count
     else:
         updated_lines: list[str] = []
         count = 0
@@ -374,6 +387,8 @@ def main() -> int:
             print(f"  {RED}{rel(path)} - NOT FOUND{RESET}")
             continue
         hits = scan_versions(path, CRITICAL_VERSION_RE)
+        if path in OCI_IDENTIFIER_FILES:
+            hits = hits + scan_versions(path, OCI_IDENTIFIER_RE)
         critical_hits[path] = hits
         print_file_hits(path, hits)
 
