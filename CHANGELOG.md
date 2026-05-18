@@ -1087,6 +1087,44 @@ This release introduces a complete UI/UX transformation with the implementation 
 
 ---
 
+<details>
+<summary>May 18th, 2026: CodeQL Security Hardening & Release Cleanup (v2.5.5)</summary>
+
+## **May 18th, 2026: CodeQL Security Hardening & Release Cleanup (v2.5.5)**
+
+**Core achievements: resolved CodeQL security findings, tightened sanitizer behavior across MCP and dashboard, refreshed release media/docs, and aligned top-level project files for the v2.5.5 release push.**
+
+### **Security**
+
+- **CodeQL clear-text key alert handled intentionally**: `--generate-key` still prints the generated key by design because that command exists for one-time setup.
+- **Auto-generated exposed-server key output hardened**: first-start `SERVER_HOST=0.0.0.0` setup now points users to the saved `~/.marm/.env` file instead of printing the raw key in terminal setup text.
+- **Script tag sanitizer moved off regex backtracking paths**: MCP memory sanitization and dashboard DB sanitization now use deterministic string scanning instead of polynomial regex patterns.
+- **Malformed script close handling improved**: odd close variants such as `</script foo>` no longer trigger destructive trailing-content loss; useful text after the block is preserved safely.
+- **Unterminated script fragments handled conservatively**: text before `<script` is preserved and the malformed script fragment is dropped.
+
+### **Testing**
+
+- **MCP sanitizer regression coverage added** for valid script blocks, malformed close tags, broken close text, unterminated script openings, event handlers, JavaScript URLs, and SQL/session-scope security paths.
+- **Dashboard sanitizer regression coverage added** for notebook script handling and malformed script edge cases.
+- **Current validation result**: targeted MCP tests and dashboard DB tests pass after the sanitizer updates.
+
+### **Documentation & Release Alignment**
+
+- **README media references refreshed** from missing SVG references to existing release images in `media/`.
+- **CI/CD and CodeQL badges added** to the package README surface.
+- **Project file layout cleaned up**: `CHANGELOG.md` and `ACKNOWLEDGMENTS.md` now live at the repository root, while `PROTOCOL.md` moved into `docs/`.
+- **Version sync script updated** to read the canonical root `CHANGELOG.md` instead of the old `docs/CHANGELOG.md` path.
+
+### **Impact Summary**
+
+- CodeQL should stay clean without weakening the intended key-generation workflow.
+- MARM preserves more user content during sanitization while still neutralizing script execution paths.
+- Release metadata is aligned for the v2.5.5 Docker, PyPI, and MCP registry push.
+
+</details>
+
+---
+
 ## 📁 Project Documentation
 
 ### **Usage Guides**

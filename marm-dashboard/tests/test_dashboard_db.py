@@ -85,6 +85,33 @@ def test_notebook_upsert_strips_scripts_and_delete_is_exact(monkeypatch, tmp_pat
     assert client.delete("/api/notebook/deploy-note").status_code == 404
 
 
+def test_notebook_preserves_text_after_malformed_script_closers(monkeypatch, tmp_path):
+    server = load_dashboard(monkeypatch, tmp_path)
+    client = local_client(server.app)
+
+    payloads = [
+        ("valid-close", "<script>alert(1)</script>keep this", "keep this", "alert(1)"),
+        ("close-with-attrs", "<script>alert(1)</script foo>keep this", "keep this", "alert(1)"),
+        ("close-with-space", "<script src=x>alert(1)</script x>keep this", "keep this", "alert(1)"),
+        ("broken-close", "<script>alert(1)< /script>keep this", "keep this", None),
+        ("unterminated-open", "keep this <script partial note", "keep this", "partial note"),
+    ]
+
+    for name, data, expected_kept, expected_removed in payloads:
+        saved = client.post("/api/notebook", json={"name": name, "data": data})
+        assert saved.status_code == 201
+
+        item = next(
+            entry for entry in client.get("/api/notebook").json()["items"]
+            if entry["name"] == name
+        )
+
+        assert "<script" not in item["data"].lower()
+        assert expected_kept in item["data"]
+        if expected_removed:
+            assert expected_removed not in item["data"]
+
+
 def test_summary_reports_real_database_counts(monkeypatch, tmp_path):
     server = load_dashboard(monkeypatch, tmp_path)
     client = local_client(server.app)

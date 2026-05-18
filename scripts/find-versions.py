@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Find and optionally sync MARM version references.
 
-The target version is derived from the final entry in docs/CHANGELOG.md.
+The target version is derived from the final entry in CHANGELOG.md.
 Changelog files are never modified because they intentionally contain many
 historical version numbers.
 """
@@ -23,7 +23,7 @@ RESET = "\033[0m"
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SERVER_ROOT = PROJECT_ROOT / "marm-mcp-server"
 DASHBOARD_ROOT = PROJECT_ROOT / "marm-dashboard"
-CHANGELOG = PROJECT_ROOT / "docs" / "CHANGELOG.md"
+CHANGELOG = PROJECT_ROOT / "CHANGELOG.md"
 
 CRITICAL_FILES = [
     SERVER_ROOT / "marm_mcp_server" / "__init__.py",
@@ -133,7 +133,11 @@ def scan_versions(path: Path, pattern: re.Pattern = VERSION_RE) -> list[VersionH
     hits: list[VersionHit] = []
     for line_no, line in enumerate(read_text(path).splitlines(), start=1):
         for match in pattern.finditer(line):
-            version = match.group(match.lastindex or 1)
+            version = next(
+                group
+                for group in match.groups()
+                if group and VERSION_RE.fullmatch(group)
+            )
             hits.append(
                 VersionHit(
                     version=version,

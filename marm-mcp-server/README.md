@@ -5,7 +5,7 @@
      width="700"
      height="350">
 </picture>
-<h1 align="center">MARM: The AI That Remembers Your Conversations V2.5.4</h1>
+<h1 align="center">MARM: The AI That Remembers Your Conversations v2.5.5</h1>
 
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
@@ -14,7 +14,9 @@
 [![PyPI Downloads](https://static.pepy.tech/personalized-badge/marm-mcp-server?period=total&units=NONE&left_color=GREY&right_color=BLUE&left_text=downloads)](https://pepy.tech/projects/marm-mcp-server)
 
 [![pip install](https://img.shields.io/badge/pip%20install-marm--mcp--server-blue)](https://pypi.org/project/marm-mcp-server/)
-[![MCP Registry](https://img.shields.io/badge/MCP%20Registry-LIVE-blue)](https://registry.modelcontextprotocol.io/?q=marm-mcp) 
+[![MCP Registry](https://img.shields.io/badge/MCP%20Registry-LIVE-blue)](https://registry.modelcontextprotocol.io/?q=marm-mcp)
+[![Publish](https://github.com/Lyellr88/MARM-Systems/actions/workflows/publish-mcp.yml/badge.svg?branch=MARM-main)](https://github.com/Lyellr88/MARM-Systems/actions/workflows/publish-mcp.yml)
+[![CodeQL](https://github.com/Lyellr88/MARM-Systems/actions/workflows/github-code-scanning/codeql/badge.svg?branch=MARM-main)](https://github.com/Lyellr88/MARM-Systems/security/code-scanning)
 
 </div>
 
@@ -66,7 +68,7 @@ Watch MARM install through Docker, connect to Claude, and share persistent memor
 <br>
 <div align="center">
 <picture>
-<img src="https://raw.githubusercontent.com/Lyellr88/MARM-Systems/MARM-main/media/installation-flow.svg"
+<img src="https://raw.githubusercontent.com/Lyellr88/MARM-Systems/MARM-main/media/install-options.png"
    width="850"
    height="500"
 </picture>
@@ -161,7 +163,7 @@ Claude Code remains the recommended first setup path, but MARM also works with o
 
 <div align="center">
 <picture>
-<img src="https://raw.githubusercontent.com/Lyellr88/MARM-Systems/MARM-main/media/feature-showcase.svg"
+<img src="https://raw.githubusercontent.com/Lyellr88/MARM-Systems/MARM-main/media/mcp-tools.png"
    height="550"
    width="800"
 </picture>
@@ -302,7 +304,7 @@ MARM defaults to **localhost-only** (`127.0.0.1`). No credentials are required f
 
 <div align="center">
 <picture>
-<img src="https://raw.githubusercontent.com/Lyellr88/MARM-Systems/MARM-main/media/memory-intelligence.svg"
+<img src="https://raw.githubusercontent.com/Lyellr88/MARM-Systems/MARM-main/media/memory-workflow.png"
    width="900"
    height="625"
 </picture>

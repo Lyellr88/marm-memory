@@ -37,21 +37,19 @@ def _strip_script_tags(text: str) -> str:
         if open_end == -1:
             break
         j = open_end + 1
-        close_found = False
+        close_end = -1
         while j < len(text):
             cs = lower.find('</script', j)
             if cs == -1:
                 break
-            k = cs + 8
-            while k < len(text) and text[k] in ' \t\n\r':
-                k += 1
-            if k < len(text) and text[k] == '>':
-                i = k + 1
-                close_found = True
+            close_end = text.find('>', cs)
+            if close_end != -1:
+                i = close_end + 1
                 break
             j = cs + 8
-        if not close_found:
-            i = len(text)
+        if close_end == -1:
+            result.append(text[open_end + 1:])
+            break
     return ''.join(result)
 
 

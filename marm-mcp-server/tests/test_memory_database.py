@@ -8,10 +8,29 @@ def test_sanitize_content_removes_script_tags_and_event_handlers():
 
     sanitized = sanitize_content(payload)
 
-    assert "script" not in sanitized.lower()
+    assert "&lt;script" not in sanitized.lower()
     assert "onclick" not in sanitized.lower()
     assert "safe" in sanitized
+    assert 'alert(&quot;x&quot;)' in sanitized
     assert "<div" not in sanitized
+
+
+def test_sanitize_content_preserves_text_after_malformed_script_closers():
+    payloads = [
+        ("<script>alert(1)</script>ok", "ok", "alert(1)"),
+        ("<script>alert(1)</script foo>ok", "ok", "alert(1)"),
+        ("<script src=x>alert(1)</script x>ok", "ok", "alert(1)"),
+        ("<script>alert(1)< /script>ok", "ok", "alert(1)"),
+        ("keep this <script partial note", "keep this", "partial note"),
+    ]
+
+    for payload, expected_kept, expected_removed in payloads:
+        sanitized = sanitize_content(payload)
+
+        assert "&lt;script" not in sanitized.lower()
+        assert expected_kept in sanitized
+        if expected_removed and "</script" in payload.lower():
+            assert expected_removed not in sanitized
 
 
 def test_sanitize_content_blocks_javascript_urls_and_caps_regex_input():
