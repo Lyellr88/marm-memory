@@ -23,7 +23,8 @@ RUN apt-get update && apt-get install -y \
 
 # Copy requirements and install Python packages
 COPY requirements.txt .
-RUN pip install --no-cache-dir --user -r requirements.txt
+RUN pip install --no-cache-dir --upgrade wheel>=0.46.2 && \
+    pip install --no-cache-dir --user -r requirements.txt
 
 # Stage 2: Runtime environment (smaller, production-ready)
 FROM python:3.11-slim
@@ -61,7 +62,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 # MCP Registry Labels for Docker Hub discovery
 LABEL org.opencontainers.image.title="MARM Universal MCP Server"
 LABEL org.opencontainers.image.description="Production-ready Universal MCP Server with advanced AI memory capabilities, semantic search, and professional-grade architecture"
-LABEL org.opencontainers.image.version="2.5.3"
+LABEL org.opencontainers.image.version="2.5.4"
 LABEL org.opencontainers.image.authors="Ryan Lyell - MARM Systems"
 LABEL org.opencontainers.image.url="https://marmsystems.com"
 LABEL org.opencontainers.image.source="https://github.com/Lyellr88/MARM-Systems"

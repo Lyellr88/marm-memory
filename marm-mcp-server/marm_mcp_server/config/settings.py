@@ -79,7 +79,7 @@ RATE_LIMIT_SEARCH_REQUESTS = 30
 # Server configuration
 SERVER_HOST = os.environ.get('SERVER_HOST', '127.0.0.1')
 SERVER_PORT = int(os.environ.get('SERVER_PORT', 8001))
-SERVER_VERSION = "2.5.3"
+SERVER_VERSION = "2.5.4"
 
 # Auth — set MARM_API_KEY to require a Bearer token on all capability routes.
 # Leave unset for local-only deployments (loopback enforced automatically).
