@@ -58,8 +58,9 @@ jobs:
 
   publish-pypi:
     needs: validate-and-test
+    if: false  # temporarily disabled — re-enable for final release run
     runs-on: ubuntu-latest
-    environment: pypi  # Use GitHub environment for PyPI secrets
+    environment: pypi
 
     steps:
       - name: Checkout code
@@ -84,9 +85,11 @@ jobs:
         with:
           password: ${{ secrets.PYPI_API_TOKEN }}
           packages-dir: marm-mcp-server/dist/
+          skip-existing: true
 
   publish-docker:
     needs: validate-and-test
+    if: false  # temporarily disabled — re-enable for final release run
     runs-on: ubuntu-latest
 
     steps:
@@ -157,7 +160,7 @@ jobs:
           cache-to: type=local,dest=/tmp/.buildx-cache,mode=max
 
   publish-mcp-registry:
-    needs: [validate-and-test, publish-pypi]
+    needs: [validate-and-test]
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -186,7 +189,7 @@ jobs:
           ../mcp-publisher publish
 
   notify-success:
-    needs: [publish-docker, publish-pypi, publish-mcp-registry]
+    needs: [publish-mcp-registry]
     runs-on: ubuntu-latest
     if: success()
 
