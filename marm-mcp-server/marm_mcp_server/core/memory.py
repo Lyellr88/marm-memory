@@ -11,6 +11,23 @@ import numpy as np
 import html
 import re
 
+_SCRIPT_CLOSE_RE = re.compile(r'<\s*/\s*script[^>]*>', re.IGNORECASE)
+_SCRIPT_OPEN_RE = re.compile(r'<\s*script[^>]*>', re.IGNORECASE)
+
+
+def _strip_script_tags(text: str) -> str:
+    parts = _SCRIPT_CLOSE_RE.split(text)
+    if len(parts) == 1:
+        return text
+    out = []
+    for chunk in parts[:-1]:
+        last_open = None
+        for m in _SCRIPT_OPEN_RE.finditer(chunk):
+            last_open = m
+        out.append(chunk[:last_open.start()] if last_open else chunk)
+    out.append(parts[-1])
+    return ''.join(out)
+
 # Import configuration
 from ..config.settings import (
     SEMANTIC_SEARCH_AVAILABLE, 
@@ -107,8 +124,7 @@ def sanitize_content(content: str) -> str:
     # Remove or neutralize common XSS patterns first (before HTML escaping)
     sanitized = content
 
-    # Remove script tags entirely (handles malformed tags with spaces, ReDoS-safe)
-    sanitized = re.sub(r'<\s*script[^>]*>.*?<\s*/\s*script\s*>', '', sanitized, flags=re.IGNORECASE | re.DOTALL)
+    sanitized = _strip_script_tags(sanitized)
 
     # Remove javascript: protocols
     sanitized = re.sub(r'javascript:', 'blocked-protocol:', sanitized, flags=re.IGNORECASE)

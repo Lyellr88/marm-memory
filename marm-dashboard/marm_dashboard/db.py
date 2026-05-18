@@ -18,6 +18,23 @@ _ENCODER_FAILED = False
 _SEMANTIC_MODEL = "all-MiniLM-L6-v2"
 _CONTEXT_TYPES = frozenset({"general", "code", "project", "book"})
 
+_SCRIPT_CLOSE_RE = re.compile(r'<\s*/\s*script[^>]*>', re.IGNORECASE)
+_SCRIPT_OPEN_RE = re.compile(r'<\s*script[^>]*>', re.IGNORECASE)
+
+
+def _strip_script_tags(text: str) -> str:
+    parts = _SCRIPT_CLOSE_RE.split(text)
+    if len(parts) == 1:
+        return text
+    out = []
+    for chunk in parts[:-1]:
+        last_open = None
+        for m in _SCRIPT_OPEN_RE.finditer(chunk):
+            last_open = m
+        out.append(chunk[:last_open.start()] if last_open else chunk)
+    out.append(parts[-1])
+    return ''.join(out)
+
 
 def _parse_metadata(raw: Optional[str]) -> Dict[str, Any]:
     if not raw:
@@ -46,12 +63,7 @@ def _strip_scripts(content: str) -> str:
         return content
     if len(content) > 500_000:
         content = content[:500_000]
-    return re.sub(
-        r"<\s*script[^>]*>.*?<\s*/\s*script\s*>",
-        "",
-        content,
-        flags=re.IGNORECASE | re.DOTALL,
-    )
+    return _strip_script_tags(content)
 
 
 def _sanitize_memory(content: str) -> str:

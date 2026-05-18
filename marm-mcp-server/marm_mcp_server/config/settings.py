@@ -20,6 +20,14 @@ import os
 import sys
 from pathlib import Path
 
+
+def _file_link(path: Path) -> str:
+    try:
+        uri = path.as_uri()
+        return f"\033]8;;{uri}\033\\{path}\033]8;;\033\\"
+    except Exception:
+        return str(path)
+
 from ..utils.security import generate_api_key
 
 # Database configuration - Official .marm system directory (CLI standard)
@@ -124,11 +132,10 @@ if SERVER_HOST == '0.0.0.0' and not MARM_API_KEY and not _is_generate_key_cmd:
 
     print()
     print("MARM: SERVER_HOST=0.0.0.0 detected — API key auto-generated (first start).")
-    print(f"Key:      {MARM_API_KEY}")
-    print(f"Saved to: {_MARM_ENV_PATH}")
+    print(f"Saved to: {_file_link(_MARM_ENV_PATH)}")
     print()
-    print("Add this to your MCP client:")
-    print(f'  claude mcp add --transport http marm-memory http://localhost:8001/mcp --header "Authorization: Bearer {MARM_API_KEY}"')
+    print("Add this to your MCP client (replace YOUR_KEY with the key from the file above):")
+    print(f'  claude mcp add --transport http marm-memory http://localhost:8001/mcp --header "Authorization: Bearer YOUR_KEY"')
     print()
     print("On subsequent starts the key loads silently from the file above.")
     print()
