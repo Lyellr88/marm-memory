@@ -5,7 +5,7 @@
      width="700"
      height="350">
 </picture>
-<h1 align="center">MARM: The AI That Remembers Your Conversations v2.5.2</h1>
+<h1 align="center">MARM: The AI That Remembers Your Conversations v2.5.3</h1>
 
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)

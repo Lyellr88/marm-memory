@@ -159,7 +159,7 @@ jobs:
           cache-to: type=local,dest=/tmp/.buildx-cache,mode=max
 
   publish-mcp-registry:
-    needs: [validate-and-test]
+    needs: [validate-and-test, publish-pypi]
     runs-on: ubuntu-latest
     permissions:
       id-token: write
