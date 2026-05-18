@@ -322,7 +322,7 @@ def main():
 
     if args.generate_key:
         key = generate_api_key()
-        print(key)  # lgtm[py/clear-text-logging-sensitive-data] intentional: --generate-key outputs the key once for user setup
+        print(key)
         print("\nSet this as your MARM_API_KEY environment variable.")
         print("Keep it secret — this is the only time it will be shown.")
         sys.exit(0)

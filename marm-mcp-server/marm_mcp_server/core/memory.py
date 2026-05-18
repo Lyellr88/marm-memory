@@ -11,22 +11,41 @@ import numpy as np
 import html
 import re
 
-_SCRIPT_CLOSE_RE = re.compile(r'<\s*/\s*script[^>]*>', re.IGNORECASE)
-_SCRIPT_OPEN_RE = re.compile(r'<\s*script[^>]*>', re.IGNORECASE)
-
-
 def _strip_script_tags(text: str) -> str:
-    parts = _SCRIPT_CLOSE_RE.split(text)
-    if len(parts) == 1:
-        return text
-    out = []
-    for chunk in parts[:-1]:
-        last_open = None
-        for m in _SCRIPT_OPEN_RE.finditer(chunk):
-            last_open = m
-        out.append(chunk[:last_open.start()] if last_open else chunk)
-    out.append(parts[-1])
-    return ''.join(out)
+    lower = text.lower()
+    result = []
+    i = 0
+    while i < len(text):
+        start = lower.find('<script', i)
+        if start == -1:
+            result.append(text[i:])
+            break
+        after = start + 7
+        if after < len(text) and text[after] not in (' ', '\t', '\n', '\r', '>'):
+            result.append(text[i:after])
+            i = after
+            continue
+        result.append(text[i:start])
+        open_end = text.find('>', start)
+        if open_end == -1:
+            break
+        j = open_end + 1
+        close_found = False
+        while j < len(text):
+            cs = lower.find('</script', j)
+            if cs == -1:
+                break
+            k = cs + 8
+            while k < len(text) and text[k] in ' \t\n\r':
+                k += 1
+            if k < len(text) and text[k] == '>':
+                i = k + 1
+                close_found = True
+                break
+            j = cs + 8
+        if not close_found:
+            i = len(text)
+    return ''.join(result)
 
 # Import configuration
 from ..config.settings import (
