@@ -111,6 +111,10 @@ def discover_docs() -> list[Path]:
     # marm-mcp-server/marm-docs/*.md
     if MARM_DOCS_ROOT.exists():
         paths.extend(sorted(MARM_DOCS_ROOT.glob("*.md"), key=lambda p: str(p).lower()))
+    # marm-mcp-server/README.md
+    server_readme = SERVER_ROOT / "README.md"
+    if server_readme.exists():
+        paths.append(server_readme)
     # marm-dashboard/README.md
     dash_readme = DASHBOARD_ROOT / "README.md"
     if dash_readme.exists():
