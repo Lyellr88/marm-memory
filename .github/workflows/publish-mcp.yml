@@ -157,100 +157,44 @@ jobs:
           cache-to: type=local,dest=/tmp/.buildx-cache,mode=max
 
   publish-mcp-registry:
-    needs: validate-and-test
+    needs: [validate-and-test, publish-pypi]
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.25.x'
-
-      - name: Install MCP Publisher CLI
+      - name: Install mcp-publisher
         run: |
+          curl -L "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_$(uname -s | tr '[:upper:]' '[:lower:]')_$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/').tar.gz" | tar xz mcp-publisher
 
-          # Clone the registry repo and build the publisher
-          git clone https://github.com/modelcontextprotocol/registry.git
-          cd registry
+      - name: Authenticate to MCP Registry
+        run: ./mcp-publisher login github-oidc
 
-          echo "=== Building MCP Publisher ==="
-          make publisher
-          echo "Build exit code: $?"
-
-          echo "=== Checking built files ==="
-          ls -lhR bin/
-
-          echo "=== Verifying binary ==="
-          if [ -f "bin/mcp-publisher" ]; then
-            file bin/mcp-publisher
-            echo "Binary exists and type verified"
-          else
-            echo "ERROR: bin/mcp-publisher not found!"
-            ls -la bin/
-            exit 1
-          fi
-
-          # Move the built binary to PATH
-          chmod +x bin/mcp-publisher
-          sudo cp bin/mcp-publisher /usr/local/bin/
-
-          echo "=== Publisher installed ==="
-          ls -l /usr/local/bin/mcp-publisher
-          /usr/local/bin/mcp-publisher --help
-
-      - name: Login to MCP Registry
+      - name: Set version in server.json
         run: |
-          # Use GitHub OIDC for authentication
           cd marm-mcp-server
-          echo "DEBUG: Attempting MCP Registry login..."
-          mcp-publisher login github-oidc || {
-            echo "ERROR: MCP Registry login failed"
-            exit 1
-          }
-          echo "DEBUG: MCP Registry login successful"
+          VERSION=$(grep '^version = ' pyproject.toml | cut -d '"' -f 2)
+          jq --arg v "$VERSION" '.version = $v' server.json > server.tmp && mv server.tmp server.json
 
-      - name: Publish to MCP Registry
+      - name: Publish server to MCP Registry
         run: |
-          # Publish the server to the MCP registry
           cd marm-mcp-server
-          echo "DEBUG: Validating server.json before publishing..."
-          python validate_server_json.py || {
-            echo "ERROR: server.json validation failed"
-            exit 1
-          }
-          echo "DEBUG: server.json validation passed"
-
-          echo "DEBUG: Current server.json content:"
-          cat server.json | head -10
-
-          echo "DEBUG: Attempting MCP Registry publish..."
-          mcp-publisher publish || {
-            echo "ERROR: MCP Registry publish failed"
-            exit 1
-          }
-          echo "DEBUG: MCP Registry publish successful"
-
-      - name: Verify publication
-        run: |
-          # Wait a moment for registry to update
-          sleep 30
-          # Verify the server is published
-          echo "Server published successfully to MCP Registry!"
-          echo "Check: https://registry.modelcontextprotocol.io/servers/io.github.marm-systems/marm-mcp-server"
+          ../mcp-publisher publish
 
   notify-success:
-    needs: [publish-mcp-registry]
+    needs: [publish-docker, publish-pypi, publish-mcp-registry]
     runs-on: ubuntu-latest
     if: success()
 
     steps:
       - name: Success notification
         run: |
-          echo "🎉 MARM MCP Server published successfully!"
-          echo "📦 PyPI: https://pypi.org/project/marm-mcp-server/"
-          echo "🐳 Docker: https://hub.docker.com/r/lyellr88/marm-mcp-server"
-          echo "📊 Dashboard Docker: https://hub.docker.com/r/lyellr88/marm-dashboard"
-          echo "🔗 MCP Registry: https://registry.modelcontextprotocol.io/servers/io.github.marm-systems/marm-mcp-server"
+          echo "MARM MCP Server published successfully!"
+          echo "PyPI: https://pypi.org/project/marm-mcp-server/"
+          echo "Docker MCP: https://hub.docker.com/r/lyellr88/marm-mcp-server"
+          echo "Docker Dashboard: https://hub.docker.com/r/lyellr88/marm-dashboard"
+          echo "MCP Registry: https://registry.modelcontextprotocol.io/servers/io.github.lyellr88/marm-mcp-server"
