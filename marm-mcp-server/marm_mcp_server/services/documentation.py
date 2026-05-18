@@ -41,135 +41,123 @@ def guess_context_type(filename):
         return "general"
 
 def get_docs_to_load():
-    """Auto-discover essential .md files only to avoid token overload"""
-    # Try local development path first
-    docs_dir = Path(__file__).parent.parent / "marm-docs"
-
-    # If not found, try Docker path
+    """Return two lists: essential docs (memories + notebook) and search-only docs (memories only)."""
+    docs_dir = Path(__file__).parent.parent.parent / "marm-docs"
     if not docs_dir.exists():
         docs_dir = Path("/app/marm-docs")
 
-    # Essential files only - keep startup lean
+    # Loaded at startup into memories + notebook (active context)
     essential_files = {
-        "PROTOCOL.md",    # Core commands - always needed
-        "README.md"      # Tool usage and getting started info
+        "PROTOCOL.md"
     }
 
-    docs_to_load = []
+    essential_docs = []
+    search_only_docs = []
     seen_notebook_names = set()
 
     if docs_dir.exists():
         for md_file in sorted(docs_dir.glob("*.md")):
-            # Skip non-essential files to reduce token dump
-            if md_file.name not in essential_files:
-                continue
-
-            filename = md_file.stem.lower()  # "PROTOCOL.md" → "protocol"
-            notebook_name = f"marm_{filename}"
-
-            # Check for duplicate notebook names (same stem)
-            if notebook_name in seen_notebook_names:
-                print(f"WARNING: Duplicate notebook name detected: {notebook_name} (from {md_file.name})")
-                # Add timestamp to make unique
-                import time
-                timestamp = str(int(time.time()))[-4:]  # last 4 digits
-                notebook_name = f"marm_{filename}_{timestamp}"
-                print(f"         Renamed to: {notebook_name}")
-
-            seen_notebook_names.add(notebook_name)
+            filename = md_file.stem.lower()
             context_type = guess_context_type(filename)
-
-            # Auto-generate config based on filename
-            docs_to_load.append({
+            entry = {
                 "file_path": f"marm-docs/{md_file.name}",
-                "notebook_name": notebook_name,
                 "context_type": context_type,
-                "description": f"Essential: {md_file.name}"
-            })
+            }
 
-        # Print visual QA table of loaded docs
-        if docs_to_load:
-            print(f"\n[DOCS] Loading essential documentation ({len(docs_to_load)} files):")
+            if md_file.name in essential_files:
+                notebook_name = f"marm_{filename}"
+                if notebook_name in seen_notebook_names:
+                    import time
+                    notebook_name = f"marm_{filename}_{str(int(time.time()))[-4:]}"
+                seen_notebook_names.add(notebook_name)
+                entry["notebook_name"] = notebook_name
+                entry["description"] = f"Essential: {md_file.name}"
+                essential_docs.append(entry)
+            else:
+                entry["notebook_name"] = None
+                entry["description"] = f"Search: {md_file.name}"
+                search_only_docs.append(entry)
+
+        if essential_docs:
+            print(f"\n[DOCS] Startup docs ({len(essential_docs)} files — memories + notebook):")
             print("+---------------------------------+--------------+-------------------------+")
             print("| File                            | Type         | Notebook Name           |")
             print("+---------------------------------+--------------+-------------------------+")
-            for doc in docs_to_load:
-                filename = doc["file_path"].split("/")[-1]
-                print(f"| {filename:<31} | {doc['context_type']:<12} | {doc['notebook_name']:<23} |")
+            for doc in essential_docs:
+                fname = doc["file_path"].split("/")[-1]
+                print(f"| {fname:<31} | {doc['context_type']:<12} | {doc['notebook_name']:<23} |")
             print("+---------------------------------+--------------+-------------------------+")
 
-            # Show what's available but not loaded
-            all_files = set(f.name for f in docs_dir.glob("*.md"))
-            skipped_files = all_files - essential_files
-            if skipped_files:
-                print(f"Available via marm_smart_recall: {', '.join(sorted(skipped_files))}")
-        else:
-            print("No essential documentation files found")
+        if search_only_docs:
+            names = ", ".join(d["file_path"].split("/")[-1] for d in search_only_docs)
+            print(f"[DOCS] Indexed for marm_smart_recall only: {names}")
     else:
         print(f"WARNING: Documentation directory not found: {docs_dir}")
 
-    return docs_to_load
+    return essential_docs, search_only_docs
+
+async def _index_doc(doc: Dict, include_notebook: bool) -> None:
+    """Read one doc file and store it in memories (and optionally notebook)."""
+    doc_path = Path(__file__).parent.parent.parent / doc["file_path"]
+    if not doc_path.exists():
+        doc_path = Path("/app") / doc["file_path"]
+    if not doc_path.exists():
+        print(f"WARNING: Documentation file not found: {doc_path}")
+        return
+
+    try:
+        with open(doc_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+
+        await memory.store_memory(
+            content=content,
+            session="marm_system",
+            context_type=doc["context_type"],
+            metadata={
+                "doc_type": "documentation",
+                "source_file": doc["file_path"],
+                "description": doc["description"]
+            }
+        )
+
+        if include_notebook:
+            embedding_bytes = None
+            if memory.encoder:
+                try:
+                    embedding = memory.encoder.encode(content)
+                    embedding_bytes = embedding.tobytes()
+                except Exception as e:
+                    print(f"Failed to generate embedding for {doc['notebook_name']}: {e}")
+
+            with sqlite3.connect(memory.db_path) as conn:
+                conn.execute(
+                    'INSERT OR REPLACE INTO notebook_entries (name, data, embedding, updated_at) VALUES (?, ?, ?, ?)',
+                    (doc["notebook_name"], content, embedding_bytes, datetime.now(timezone.utc).isoformat())
+                )
+                conn.commit()
+            print(f"OK: Loaded {doc['notebook_name']} ({len(content)} chars)")
+        else:
+            print(f"OK: Indexed for search: {doc['file_path'].split('/')[-1]} ({len(content)} chars)")
+
+    except Exception as e:
+        try:
+            print(f"ERROR: Failed to load {doc['file_path']}: {str(e)}")
+        except UnicodeEncodeError:
+            print(f"ERROR: Failed to load {doc['file_path']}: {type(e).__name__}")
+
 
 async def load_marm_documentation():
     """Pre-populate the MCP server with core MARM documentation"""
 
-    # Auto-discover all documentation files
-    docs_to_load = get_docs_to_load()
-    
+    essential_docs, search_only_docs = get_docs_to_load()
+
     print("Loading MARM documentation into memory system...")
-    
-    for doc in docs_to_load:
-        try:
-            # Try to read the documentation file - works in both local and Docker
-            # First try relative to current file location (local development)
-            doc_path = Path(__file__).parent.parent / doc["file_path"]
-            
-            # If not found, try Docker app directory
-            if not doc_path.exists():
-                doc_path = Path("/app") / doc["file_path"]
-            if doc_path.exists():
-                with open(doc_path, 'r', encoding='utf-8') as f:
-                    content = f.read()
-                
-                # Store in memory system for semantic search
-                await memory.store_memory(
-                    content=content,
-                    session="marm_system",
-                    context_type=doc["context_type"], 
-                    metadata={
-                        "doc_type": "documentation",
-                        "source_file": doc["file_path"],
-                        "description": doc["description"]
-                    }
-                )
-                
-                # Also store in notebook for easy reference
-                embedding_bytes = None
-                if memory.encoder:
-                    try:
-                        embedding = memory.encoder.encode(content)
-                        embedding_bytes = embedding.tobytes()
-                    except Exception as e:
-                        print(f"Failed to generate embedding for {doc['notebook_name']}: {e}")
-                
-                with sqlite3.connect(memory.db_path) as conn:
-                    conn.execute('''
-                        INSERT OR REPLACE INTO notebook_entries (name, data, embedding, updated_at)
-                        VALUES (?, ?, ?, ?)
-                    ''', (doc["notebook_name"], content, embedding_bytes, datetime.now(timezone.utc).isoformat()))
-                    conn.commit()
-                
-                print(f"OK: Loaded {doc['notebook_name']} ({len(content)} chars)")
-                
-            else:
-                print(f"WARNING: Documentation file not found: {doc_path}")
-                
-        except Exception as e:
-            # Safe error printing - avoid unicode issues
-            try:
-                print(f"ERROR: Failed to load {doc['notebook_name']}: {str(e)}")
-            except UnicodeEncodeError:
-                print(f"ERROR: Failed to load {doc['notebook_name']}: {type(e).__name__}")
+
+    for doc in essential_docs:
+        await _index_doc(doc, include_notebook=True)
+
+    for doc in search_only_docs:
+        await _index_doc(doc, include_notebook=False)
     
     # Add some core knowledge entries
     core_knowledge = [

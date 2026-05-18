@@ -70,7 +70,7 @@ def format_context_preview(context: str, max_lines: int = 3) -> str:
 async def read_protocol_file():
     """Read the PROTOCOL.md file and return its content"""
     try:
-        protocol_path = Path(__file__).parent.parent / "marm-docs" / "PROTOCOL.md"
+        protocol_path = Path(__file__).parent.parent.parent / "marm-docs" / "PROTOCOL.md"
         if protocol_path.exists():
             with open(protocol_path, 'r', encoding='utf-8') as f:
                 return f.read()

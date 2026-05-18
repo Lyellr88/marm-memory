@@ -128,6 +128,12 @@ async def marm_notebook_delete(
             cursor = conn.execute('DELETE FROM notebook_entries WHERE name = ?', (name,))
             deleted = cursor.rowcount
             conn.commit()
+
+        if deleted > 0:
+            memory.active_notebook_entries = [
+                entry for entry in memory.active_notebook_entries
+                if entry.get("name") != name
+            ]
         
         return {
             "status": "success" if deleted > 0 else "not_found",

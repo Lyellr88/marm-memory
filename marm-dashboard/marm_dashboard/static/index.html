@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>MARM Dashboard</title>
+  <link rel="stylesheet" href="/assets/app.css?v=3" />
+</head>
+<body>
+  <div class="backdrop" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">M</span>
+      <div>
+        <h1>MARM Dashboard</h1>
+        <p class="subtitle">Local memory browser</p>
+      </div>
+    </div>
+    <div id="header-meta" class="topbar-meta">
+      <span class="pill muted">Connecting…</span>
+    </div>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button type="button" class="tab active" data-panel="overview" role="tab">Overview</button>
+    <button type="button" class="tab" data-panel="memories" role="tab">Memories</button>
+    <button type="button" class="tab" data-panel="sessions" role="tab">Sessions</button>
+    <button type="button" class="tab" data-panel="notebook" role="tab">Notebook</button>
+    <button type="button" class="tab" data-panel="logs" role="tab">Protocol logs</button>
+  </nav>
+
+  <main class="main">
+    <section id="panel-overview" class="panel active" role="tabpanel">
+      <div class="stats-grid" id="stats-grid"></div>
+      <article class="card">
+        <h2>Status</h2>
+        <dl class="status-dl" id="status-dl"></dl>
+        <p class="hint">Dashboard (<code>:8002</code>) is a direct SQLite admin UI for the same database used by MCP (<code>:8001</code>). MCP can be off while this page stays live.</p>
+      </article>
+    </section>
+
+    <section id="panel-memories" class="panel" role="tabpanel" hidden>
+      <div class="toolbar">
+        <input type="search" id="memory-search" placeholder="Search content…" />
+        <span id="memory-session-chip" class="session-chip" hidden>
+          <span id="memory-session-chip-label"></span>
+          <button type="button" class="session-chip-clear" id="memory-session-chip-clear" aria-label="Clear session filter">×</button>
+        </span>
+        <button type="button" class="btn primary" id="memory-refresh">Refresh</button>
+        <button type="button" class="btn" id="memory-add-toggle">Add memory</button>
+        <button type="button" class="btn danger" id="memory-delete-all">Delete all</button>
+      </div>
+      <form id="memory-add-form" class="card form-card" hidden>
+        <h3>New memory</h3>
+        <label>Session <input type="text" name="session_name" required placeholder="main" /></label>
+        <label>Context
+          <select name="context_type">
+            <option value="general">general</option>
+            <option value="code">code</option>
+            <option value="project">project</option>
+            <option value="book">book</option>
+          </select>
+        </label>
+        <label>Content <textarea name="content" rows="5" required></textarea></label>
+        <div class="form-actions">
+          <button type="submit" class="btn primary">Save</button>
+          <button type="button" class="btn ghost" id="memory-add-cancel">Cancel</button>
+        </div>
+      </form>
+      <div id="memories-list" class="list"></div>
+      <div class="pager" id="memories-pager"></div>
+    </section>
+
+    <section id="panel-sessions" class="panel" role="tabpanel" hidden>
+      <div class="toolbar">
+        <input type="search" id="sessions-search" placeholder="Search sessions…" />
+        <button type="button" class="btn primary" id="sessions-refresh">Refresh</button>
+        <button type="button" class="btn" id="sessions-add-toggle">Add session</button>
+        <button type="button" class="btn danger" id="sessions-delete-all">Delete all</button>
+      </div>
+      <form id="session-add-form" class="card form-card" hidden>
+        <h3>New session</h3>
+        <label>Session name <input type="text" name="session_name" required placeholder="my-session" /></label>
+        <div class="form-actions">
+          <button type="submit" class="btn primary">Create</button>
+          <button type="button" class="btn ghost" id="sessions-add-cancel">Cancel</button>
+        </div>
+      </form>
+      <div id="sessions-list" class="list"></div>
+    </section>
+
+    <section id="panel-logs" class="panel" role="tabpanel" hidden>
+      <div class="toolbar">
+        <input type="search" id="log-search" placeholder="Search logs…" />
+        <button type="button" class="btn primary" id="logs-refresh">Refresh</button>
+        <button type="button" class="btn danger" id="logs-delete-all">Delete all</button>
+      </div>
+      <div id="logs-list" class="list"></div>
+      <div class="pager" id="logs-pager"></div>
+    </section>
+
+    <section id="panel-notebook" class="panel" role="tabpanel" hidden>
+      <div class="toolbar">
+        <input type="search" id="notebook-search" placeholder="Search notebook…" />
+        <button type="button" class="btn primary" id="notebook-refresh">Refresh</button>
+        <button type="button" class="btn" id="notebook-add-toggle">Add entry</button>
+        <button type="button" class="btn danger" id="notebook-delete-all">Delete all</button>
+      </div>
+      <form id="notebook-form" class="card form-card" hidden>
+        <h3>Notebook entry</h3>
+        <label>Name <input type="text" name="name" required /></label>
+        <label>Data <textarea name="data" rows="8"></textarea></label>
+        <div class="form-actions">
+          <button type="submit" class="btn primary">Save</button>
+          <button type="button" class="btn ghost" id="notebook-cancel">Cancel</button>
+        </div>
+      </form>
+      <div id="notebook-list" class="list"></div>
+    </section>
+  </main>
+
+  <dialog id="detail-dialog">
+    <form method="dialog">
+      <header class="dialog-head">
+        <h3 id="dialog-title">Detail</h3>
+        <button type="submit" class="btn ghost sm" aria-label="Close">Close</button>
+      </header>
+      <pre id="dialog-body" class="dialog-body"></pre>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <dialog id="confirm-dialog">
+    <form method="dialog">
+      <header class="dialog-head">
+        <h3 id="confirm-title">Confirm delete</h3>
+      </header>
+      <div class="confirm-body">
+        <p id="confirm-message" class="hint"></p>
+        <div class="form-actions">
+          <button type="submit" value="cancel" class="btn ghost">Cancel</button>
+          <button type="submit" value="confirm" class="btn danger" id="confirm-ok">Delete all</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="loading-screen" class="loading-screen">
+    <div class="loading-card">
+      <span class="brand-mark loading-mark">M</span>
+      <p class="loading-text">Loading…</p>
+    </div>
+  </div>
+
+  <div id="unlock-screen" class="unlock-screen" hidden>
+    <article class="card unlock-card">
+      <h2>Unlock dashboard</h2>
+      <p class="hint">Use the same <code>MARM_API_KEY</code> as your MCP server (Docker / <code>~/.marm/.env</code>).</p>
+      <form id="unlock-form">
+        <label>API key <input type="password" name="api_key" autocomplete="off" required /></label>
+        <button type="submit" class="btn primary">Unlock</button>
+      </form>
+      <p id="unlock-error" class="unlock-error" hidden></p>
+    </article>
+  </div>
+
+  <script src="/assets/app.js?v=3" type="module"></script>
+</body>
+</html>

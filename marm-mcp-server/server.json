@@ -3,7 +3,7 @@
   "_schema_date": "2025-09-16",
   "name": "io.github.lyellr88/marm-mcp-server",
   "description": "Universal MCP Server with advanced AI memory capabilities and semantic search.",
-  "version": "2.2.6",
+  "version": "2.5.1",
   "author": "Ryan Lyell - MARM Systems",
   "license": "MIT",
   "homepage": "https://marmsystems.com",
@@ -17,13 +17,13 @@
     {
       "registryType": "pypi",
       "identifier": "marm-mcp-server",
-      "version": "2.2.6",
+      "version": "2.5.1",
       "transport": { "type": "stdio" }
     },
     {
       "registryType": "oci",
       "identifier": "lyellr88/marm-mcp-server",
-      "version": "2.2.6",
+      "version": "2.5.1",
       "transport": { "type": "stdio" }
     }
   ],
@@ -136,11 +136,11 @@
         "description": "Logging level (DEBUG, INFO, WARNING, ERROR)",
         "default": "INFO"
       },
-      "MARM_HOST": {
+      "SERVER_HOST": {
         "description": "Host address to bind to",
         "default": "0.0.0.0"
       },
-      "MARM_PORT": {
+      "SERVER_PORT": {
         "description": "Port number to bind to",
         "default": "8001"
       }

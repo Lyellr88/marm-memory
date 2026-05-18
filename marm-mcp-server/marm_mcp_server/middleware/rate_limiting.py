@@ -33,7 +33,7 @@ async def rate_limit_middleware(request: Request, call_next):
     """Rate limiting middleware - prevents abuse while keeping service free"""
     
     # Skip rate limiting for health/status endpoints
-    if request.url.path in ['/health', '/ping', '/', '/docs', '/openapi.json']:
+    if request.url.path in ['/health', '/ping', '/', '/docs', '/openapi.json', '/ready']:
         return await call_next(request)
     
     # Get client IP and endpoint type
@@ -44,18 +44,20 @@ async def rate_limit_middleware(request: Request, call_next):
     allowed, reason = rate_limiter.is_allowed(client_ip, endpoint_type)
     
     if not allowed:
-        # Return rate limit error
+        retry_after = 300
+        if client_ip in rate_limiter.blocked_ips:
+            retry_after = max(1, int(rate_limiter.blocked_ips[client_ip] - time.time()))
         return JSONResponse(
             status_code=429,
             content={
                 "error": "Rate limit exceeded",
                 "message": reason,
-                "retry_after": "See message for details",
+                "retry_after": retry_after,
                 "client_ip": client_ip,
                 "timestamp": time.time()
             },
             headers={
-                "Retry-After": "300",  # Suggest retry after 5 minutes
+                "Retry-After": str(retry_after),
                 "X-RateLimit-Remaining": "0"
             }
         )

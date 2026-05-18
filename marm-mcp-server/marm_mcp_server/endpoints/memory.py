@@ -168,7 +168,7 @@ async def marm_contextual_log(request: ContextualLogRequest):
     """
     try:
         # Sanitize content first
-        from core.memory import sanitize_content
+        from ..core.memory import sanitize_content
         sanitized_content = sanitize_content(request.content)
 
         # Auto-classify and store in memory system (store_memory will also sanitize, but we need sanitized content for response)

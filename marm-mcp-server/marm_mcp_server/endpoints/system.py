@@ -68,7 +68,6 @@ async def readiness_check():
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "endpoints": {
                 "mcp": "http://localhost:8001/mcp",
-                "websocket": "ws://localhost:8001/mcp/ws",
                 "docs": "http://localhost:8001/docs"
             }
         }
@@ -200,4 +199,3 @@ async def marm_system_info():
         return response
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to get system info: {str(e)}")
-

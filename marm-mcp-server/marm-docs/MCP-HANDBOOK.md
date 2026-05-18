@@ -2,7 +2,7 @@
 
 ## Complete Usage Guide for Memory-Augmented AI
 
-**MARM v2.2.7 - Universal MCP Server for AI Memory Intelligence
+**MARM v2.5.1 - Universal MCP Server for AI Memory Intelligence**
 
 ---
 
@@ -13,7 +13,6 @@
 - [Example Workflow](#example-workflow-cross-ai-research-project)
 - [Understanding MARM Memory](#understanding-marm-memory)
 - [Complete Tool Reference (18 Tools)](#complete-tool-reference-18-tools)
-- [Cross-App Memory Strategies](#cross-app-memory-strategies)
 - [Pro Tips & Best Practices](#pro-tips--best-practices)
 - [Advanced Workflows](#advanced-workflows)
 - [FAQ](#faq)
@@ -28,14 +27,16 @@
 MARM MCP Server supports two transport modes for different deployment scenarios:
 
 **HTTP Transport** (Default)
+
 - Traditional server-client architecture
 - Best for: Multiple concurrent AI clients, cloud/remote deployment, shared memory server
 - Setup: Run `marm-mcp-server` and connect via `http://localhost:8001/mcp`
 
 **STDIO Transport** (Process-based)
+
 - Direct stdin/stdout communication
 - Best for: CLI tools, orchestration platforms, Cursor IDE, single AI client per process
-- Setup: Run `python server_stdio.py` via MCP client configuration
+- Setup: Run `marm-mcp-stdio` (installed console script) or `python -m marm_mcp_server.server_stdio`
 - Advantage: No port management, process isolation per connection
 
 ### Quick Start Guide
@@ -44,29 +45,56 @@ MARM MCP Server supports two transport modes for different deployment scenarios:
 
 ```bash
 docker pull lyellr88/marm-mcp-server:latest
-docker run -d --name marm-mcp-server -p 8001:8001 -v ~/.marm:/home/marm/.marm lyellr88/marm-mcp-server:latest
-claude mcp add --transport http marm-memory http://localhost:8001/mcp
+docker run -d --name marm-mcp-server -p 127.0.0.1:8001:8001 -e SERVER_HOST=0.0.0.0 -e MARM_API_KEY=your-generated-key -v ~/.marm:/home/marm/.marm lyellr88/marm-mcp-server:latest
+claude mcp add --transport http marm-memory http://localhost:8001/mcp --header "Authorization: Bearer your-generated-key"
 ```
 
 **Local HTTP:**
 
+Default pip/local startup is zero-config: MARM binds to localhost and does not require a key unless you expose it with `SERVER_HOST=0.0.0.0`.
+
 ```bash
-pip install marm-mcp-server==2.2.7
+pip install marm-mcp-server
 pip install -r marm-mcp-server/requirements.txt
-python marm-mcp-server
+python -m marm_mcp_server
 claude mcp add --transport http marm-memory http://localhost:8001/mcp
+```
+
+**Codex CLI:**
+
+```bash
+# Direct Python install — no key needed
+codex mcp add marm-memory --url http://localhost:8001/mcp
+
+# Docker or exposed server — key required
+export MARM_API_KEY="your-generated-key"
+codex mcp add marm-memory --url http://localhost:8001/mcp --bearer-token-env-var MARM_API_KEY
+```
+
+```toml
+[mcp_servers."marm-memory"]
+url = "http://localhost:8001/mcp"
+enabled = true
+bearer_token_env_var = "MARM_API_KEY"
 ```
 
 **STDIO:**
 
 ```bash
-pip install marm-mcp-server==2.2.7
-pip install -r marm-mcp-server/requirements_stdio.txt
-<platform> mcp add --transport stdio marm-memory-stdio python "your/file/path/to/marm-mcp-server/server_stdio.py"
-python marm-mcp-server/server_stdio.py
+# After pip install, use the console script (no path needed):
+pip install marm-mcp-server
+
+# Claude Code
+claude mcp add --transport stdio marm-memory-stdio marm-mcp-stdio
+
+# Cursor / VS Code (add to mcp.json):
+# { "command": "marm-mcp-stdio", "args": [] }
+
+# Or run directly with Python:
+python -m marm_mcp_server.server_stdio
 ```
 
-Replace `<platform>` with: `qwen`, `claude`, or `gemini` depending on your AI CLI tool.
+Replace `marm-mcp-stdio` with `python -m marm_mcp_server.server_stdio` if using a virtualenv or a path-based setup. Works with Claude Code, Cursor, VS Code, Qwen, and Gemini CLI.
 
 **For complete installation instructions, platform-specific configurations, JSON setup, troubleshooting, and detailed transport comparison, see the [README.md Quick Start section](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/README.md#-quick-start-for-mcp).**
 
@@ -93,14 +121,15 @@ After installation, verify MARM is working correctly:
 
 ```bash
 # HTTP - Check server is running
-curl http://localhost:8001/mcp/health
+curl http://localhost:8001/health
 
 # Or use the MARM system info tool (once connected to your AI client)
 # Ask your AI: "Check MARM system status" - it will call marm_system_info
 ```
 
 Expected output includes:
-- Server version (2.2.7)
+
+- Server version
 - Database size in MB
 - Total memories and sessions count
 - Feature availability (semantic search status)
@@ -142,46 +171,52 @@ Here's a realistic workflow showing MARM in action:
 
 **Scenario:** You're researching authentication patterns for a new project using multiple AI clients.
 
-**Phase 1: Start Session (Claude)**
-```
+### Phase 1: Start Session (Claude)
+
+``` markdown
 You: "Claude, activate MARM and create a session called 'auth-research-2025-01'"
 Claude calls: marm_start("auth-research-2025-01")
 Claude calls: marm_log_session("auth-research-2025-01")
 Result: Session created, MARM active for this conversation
 ```
 
-**Phase 2: Capture Research (Claude)**
-```
+### Phase 2: Capture Research (Claude)
+
+``` markdown
 You: "Summarize OAuth2 vs JWT for API authentication and save it"
 Claude calls: marm_contextual_log("OAuth2 is token-based with refresh cycles, better for delegated access. JWT is stateless, good for microservices...")
 Result: Memory stored with auto-classification as "code" content
 ```
 
-**Phase 3: Add Reusable Reference (Claude)**
-```
+### Phase 3: Add Reusable Reference (Claude)
+
+``` markdown
 You: "Save a JWT validation code snippet to my notebooks as 'jwt-validation-pattern'"
 Claude calls: marm_notebook_add("jwt-validation-pattern", "def verify_jwt(token):\n  # validation logic...")
 Result: Reusable snippet stored for future projects
 ```
 
-**Phase 4: Recall Context (Gemini)**
-```
+### Phase 4: Recall Context (Gemini)
+
+``` markdown
 You: "Gemini, what authentication approaches did we research? Activate the JWT pattern."
 Gemini calls: marm_smart_recall("authentication patterns", search_all=true)
 Gemini calls: marm_notebook_use("jwt-validation-pattern")
 Result: Gemini sees previous research + has JWT code available as context
 ```
 
-**Phase 5: Synthesis & Summary (Qwen)**
-```
+### Phase 5: Synthesis & Summary (Qwen)
+
+``` markdown
 You: "Qwen, pull everything from the auth research and create a summary"
 Qwen calls: marm_smart_recall("authentication", session="auth-research-2025-01", limit=20)
 Qwen calls: marm_summary("auth-research-2025-01")
 Result: Qwen generates implementation guide from all captured research
 ```
 
-**Phase 6: End Session (Claude)**
-```
+### Phase 6: End Session (Claude)
+
+``` markdown
 You: "Log final decision - we're using JWT for APIs and OAuth2 for user auth"
 Claude calls: marm_log_entry("DECISION: JWT for API auth, OAuth2 for user flows. Rationale: stateless APIs + delegated user access", session="auth-research-2025-01")
 Result: Decision logged and searchable by all future AI clients
@@ -218,33 +253,6 @@ MARM automatically categorizes content:
 - **Book** - Literature, learning materials, research
 - **General** - Casual conversations and miscellaneous topics
 
-### Revolutionary Multi-AI Memory System
-
-- **Beyond Single-AI Memory:** Unified memory layer that saves data, accessible by *any* connected LLM that supports MCP
-- **Cross-Platform Intelligence:** Different AIs learn from each other's interactions and contribute to a shared knowledge base
-- **User-Controlled Hybrid Memory:** Granular control over memory sharing and ability to import existing chat logs
-
----
-
-## Adding Content to MARM Memory
-
-MARM provides three primary ways to store information:
-
-**`marm_contextual_log`** - General-Purpose "Smart" Memory
-
-- Auto-classifying memory storage with embeddings
-- Best for: Key decisions, solutions, important insights
-
-**`marm_log_entry`** - Structured Chronological Milestones
-
-- Auto-formatted with timestamps (no manual date needed)
-- Best for: Daily logs, progress tracking, milestones, decisions
-
-**`marm_notebook_add`** - Reusable Instructions
-
-- Store reusable instructions and knowledge
-- Best for: Code snippets, style guides, procedures
-
 ---
 
 ## Complete Tool Reference (18 Tools)
@@ -267,31 +275,8 @@ MARM provides three primary ways to store information:
 | | `marm_notebook_status` | Show current active instruction list | Check which instructions are currently active |
 | **🔄 Workflow** | `marm_summary` | Generate paste-ready context blocks with intelligent truncation | Create summaries for new conversations or context bridging |
 | | `marm_context_bridge` | Intelligent context bridging for workflow transitions | Smoothly transition between different topics or projects |
-| **⚙️ System** | `marm_current_context` | **Background Tool** - Automatically provides current date/time for log entries | AI agents use this automatically - you don't need to call it manually |
-| | `marm_system_info` | Comprehensive system information, health status, and loaded docs | Server version, database statistics, documentation, capabilities |
+| **⚙️ System** | `marm_system_info` | Comprehensive system information, health status, and loaded docs | Server version, database statistics, documentation, capabilities |
 | | `marm_reload_docs` | Reload documentation into memory system | Refresh MARM's knowledge after system updates |
-
----
-
-## Cross-App Memory Strategies
-
-### Multi-LLM Session Organization
-
-**Strategy**: Use LLM-specific session names to track contributions:
-
-```txt
-Sessions:
-- claude-code-review-2025-01
-- qwen-research-analysis-2025-01  
-- gemini-creative-writing-2025-01
-- cross-ai-project-planning-2025-01
-```
-
-### Memory Sharing Workflow
-
-1. **Individual Sessions**: Each AI works in named sessions
-2. **Cross-Pollination**: Use `marm_smart_recall` to find relevant insights
-3. **Synthesis Sessions**: Create shared sessions where AIs build on each other's work
 
 ---
 
@@ -352,72 +337,9 @@ Phase 3: Synthesis
 - Combine insights for comprehensive solutions
 ```
 
-## Migration from MARM Commands
-
-### Transitioning from Text-Based MARM
-
-If you're familiar with the original text-based MARM protocol, the MCP server provides enhanced capabilities while maintaining familiar workflows:
-
-**Command Mapping**:
-
-| Chatbot Command      | MCP Equivalent      | How It Works                                  |
-| -------------------- | ------------------- | --------------------------------------------- |
-| `/start marm`        | `marm_start`        | Claude calls automatically when needed        |
-| `/refresh marm`      | `marm_refresh`      | Claude calls to maintain protocol adherence   |
-| `/log session: name` | `marm_log_session`  | Claude organizes work into sessions           |
-| `/log entry: details`| `marm_log_entry`    | Claude logs milestones and decisions          |
-| `/summary: session`  | `marm_summary`      | Claude generates summaries on request         |
-| `/notebook add: item`| `marm_notebook_add` | Claude stores reference information           |
-| Manual memory search | `marm_smart_recall` | Claude searches semantically                  |
-
-### Key Improvements in MCP Version
-
-**Enhanced Memory System**:
-
-- Semantic search replaces keyword matching
-- Cross-app memory sharing between AI clients
-- Automatic content classification
-- Data storage with SQLite
-
-**Advanced Features**:
-
-- Multi-AI collaboration workflows
-- Global search with `search_all=True`
-- Context bridging between topics
-- System health monitoring
-
-### Migration Tips
-
-1. **Session Organization**: Use descriptive session names instead of manual date tracking
-2. **Memory Management**: Leverage auto-classification instead of manual categorization
-3. **Notebook System**: Convert text-based instructions to structured notebook entries
-4. **Search Strategy**: Use natural language queries instead of exact keywords
-
-### Backward Compatibility
-
-The MCP server maintains full compatibility with existing MARM concepts:
-
-- Same core commands with enhanced capabilities
-- Familiar logging and notebook workflows
-- Consistent memory management principles
-- Enhanced performance and reliability
-
 ---
 
 ## FAQ
-
-### Tools
-
-**Q: What MCP tools does MARM provide?**
-
-| Category | Tools |
-|----------|-------|
-| **Memory Intelligence** | `marm_smart_recall`, `marm_contextual_log` |
-| **Session Management** | `marm_start`, `marm_refresh` |
-| **Logging System** | `marm_log_session`, `marm_log_entry`, `marm_log_show`, `marm_log_delete` |
-| **Notebook Management** | `marm_notebook_add`, `marm_notebook_use`, `marm_notebook_show`, `marm_notebook_clear`, `marm_notebook_status`, `marm_notebook_delete` |
-| **Workflow Tools** | `marm_summary`, `marm_context_bridge` |
-| **System Utilities** | `marm_system_info`, `marm_reload_docs` |
 
 ### General Usage
 
@@ -483,46 +405,53 @@ A: Use `marm_system_info` to check server status and database statistics.
 
 ### Server Issues
 
-**Server won't start**
+#### Server won't start
+
 - Check Python version: `python --version` (must be 3.10+)
 - Verify port 8001 isn't in use: `lsof -i :8001` (macOS/Linux) or `netstat -ano | findstr :8001` (Windows)
 - Check for permission errors in home directory (`~/.marm/` must be readable/writable)
 - See platform-specific troubleshooting: [INSTALL-DOCKER.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-DOCKER.md), [INSTALL-WINDOWS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-WINDOWS.md), [INSTALL-LINUX.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-LINUX.md)
 
-**STDIO connection fails**
-- Ensure `cwd` parameter points to the marm-mcp-server directory
-- Verify `server_stdio.py` file exists and is executable
+#### STDIO connection fails
+
+- Verify `marm-mcp-stdio` is on your PATH after pip install: `marm-mcp-stdio --help`
+- Alternatively use: `python -m marm_mcp_server.server_stdio`
 - Check AI client documentation for STDIO transport requirements
-- Try direct execution: `python server_stdio.py` to see error messages
+- Try direct execution to see error messages: `python -m marm_mcp_server.server_stdio`
 
 ### Connection & Integration
 
-**AI client can't connect to MARM**
-- Verify server is running: `curl http://localhost:8001/mcp/health`
+#### AI client can't connect to MARM
+
+- Verify server is running: `curl http://localhost:8001/health`
 - Check firewall isn't blocking port 8001
-- For STDIO: ensure path to `server_stdio.py` is absolute (not relative)
+- For STDIO: use `marm-mcp-stdio` (console script) or `python -m marm_mcp_server.server_stdio`
 - Restart both server and AI client
 
-**Tools not appearing in AI client**
+#### Tools not appearing in AI client
+
 - Run `marm_system_info` to verify server loaded correctly
 - Check server logs for initialization errors
 - Disconnect and reconnect AI client to refresh tool list
 
 ### Memory & Data Issues
 
-**Memories not saving**
+#### Memories not saving
+
 - Verify `~/.marm/` directory exists and has write permissions
 - Check available disk space
 - Test with simple memory: ask AI to save a single line and check with `marm_log_show`
 - Run `marm_system_info` to check database status
 
-**Search returns no results**
+#### Search returns no results
+
 - Verify memories exist: use `marm_log_show` to list entries
 - Use `search_all=true` to search across all sessions
 - Try simpler, more general search queries
 - Wait a few seconds—first semantic search loads the ML model
 
-**Memories appear then disappear**
+#### Memories appear then disappear
+
 - Check if MARM was restarted or crashed (data persists in `~/.marm/`)
 - Verify disk space didn't fill up
 - Check system logs for database errors
@@ -530,25 +459,29 @@ A: Use `marm_system_info` to check server status and database statistics.
 ### Performance
 
 **Slow search results**
+
 - First search is slower (model loads from disk)—subsequent searches are faster
 - Large databases (1000+ memories) may take a few seconds
 - Limit searches: use `limit=10` instead of unlimited results
 - Use `marm_summary` to compress old sessions
 
-**Server using too much memory**
+#### Server using too much memory
+
 - Notebooks with many entries can accumulate—use `marm_notebook_clear` to prune
 - Close unused AI client connections
 - Use log compaction: `marm_summary` + delete old entries
 
 ### Data Recovery
 
-**Lost or corrupted data**
+#### Lost or corrupted data
+
 - Stop the server immediately
 - Check `~/.marm/` directory for backup copies (if you created them)
 - Restore from backup: copy your backup `~/.marm/` back to home directory
 - Restart server
 
-**Database locked error**
+#### Database locked error
+
 - Close all AI client connections
 - Stop the server: `Ctrl+C`
 - Remove lock file if present: `rm ~/.marm/marm_usage_analytics.db-wal` (Linux/macOS)

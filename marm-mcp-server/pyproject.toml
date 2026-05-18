@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "marm-mcp-server"
-version = "2.2.7"
+version = "2.5.1"
 description = "MARM-Systems is a complete protocol and platform—combining an advanced memory backend, modular semantic search, and agent-to-agent coordination with a scientifically structured, community-vetted methodology for reasoning, session recall, and collaborative AI workflows. More then just a set of tools, it's a complete AI memory ecosystem"
-readme = "MCP-README.md"
-license = {text = "MIT"}
+readme = "README.md"
+license = "MIT"
 authors = [
     {name = "Ryan Lyell", email = "lyell@marmsystems.com"}
 ]
@@ -18,7 +18,6 @@ keywords = ["mcp", "ai", "memory", "claude", "assistant", "protocol"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
@@ -41,6 +40,7 @@ dependencies = [
     "structlog>=24.4.0",
     "httpx>=0.27.0",
     "torch>=1.13.0",
+    "fastmcp>=2.13.3,<3.0.0",
 ]
 
 [project.urls]
@@ -52,6 +52,7 @@ Repository = "https://github.com/Lyellr88/MARM-Systems"
 
 [project.scripts]
 marm-mcp-server = "marm_mcp_server.server:main"
+marm-mcp-stdio = "marm_mcp_server.server_stdio:main"
 
 [project.optional-dependencies]
 dev = [
@@ -87,6 +88,10 @@ python_version = "3.10"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
 
 # MCP Server Configuration
 [project.entry-points."mcp.servers"]

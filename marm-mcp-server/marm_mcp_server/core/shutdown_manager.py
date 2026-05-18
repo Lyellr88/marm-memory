@@ -3,8 +3,6 @@
 import signal
 import asyncio
 import structlog
-from typing import Set
-from .websocket_manager import websocket_manager
 
 logger = structlog.get_logger()
 
@@ -44,19 +42,6 @@ class ShutdownManager:
     async def graceful_shutdown(self):
         """Perform graceful shutdown of all connections and services"""
         logger.info("Initiating graceful shutdown")
-
-        # Close all WebSocket connections
-        connection_count = websocket_manager.get_connection_count()
-        if connection_count > 0:
-            logger.info("Closing WebSocket connections", count=connection_count)
-
-            # Use the WebSocket manager's shutdown method
-            await websocket_manager.shutdown_all_connections()
-
-            # Wait a moment for connections to close cleanly
-            await asyncio.sleep(1)
-
-            logger.info("All WebSocket connections closed")
 
         logger.info("Graceful shutdown complete")
 

@@ -111,7 +111,7 @@ def sanitize_content(content: str) -> str:
     sanitized = re.sub(r'<\s*script[^>]*>.*?<\s*/\s*script\s*>', '', sanitized, flags=re.IGNORECASE | re.DOTALL)
 
     # Remove javascript: protocols
-    sanitized = re.sub(r'javascript:', 'blocked-javascript:', sanitized, flags=re.IGNORECASE)
+    sanitized = re.sub(r'javascript:', 'blocked-protocol:', sanitized, flags=re.IGNORECASE)
 
     # Remove on* event handlers (onclick, onload, etc.)
     sanitized = re.sub(r'\son\w+\s*=\s*["\'][^"\']*["\']', '', sanitized, flags=re.IGNORECASE)

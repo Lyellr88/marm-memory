@@ -68,8 +68,8 @@ async def marm_log_entry(request: LogEntryRequest):
             # Entry has date format - extract components
             entry_date, topic, summary = match.groups()
         else:
-            # Entry has no date - store as-is with null date
-            entry_date = None
+            # Freeform entries still need a DB date; keep the original text intact.
+            entry_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
             topic = "general"
             summary = formatted_entry
         

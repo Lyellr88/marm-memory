@@ -50,7 +50,7 @@ except Exception as e:
 # System validation
 validate_install() {
     echo "🔍 Validating installation..."
-    python3 server.py --check-deps
+    python3 -c "import marm_mcp_server; print('Import OK')"
 }
 
 # Main installation flow
@@ -65,7 +65,7 @@ main() {
     echo ""
     echo "🔧 To start the server:"
     echo "   source marm-env/bin/activate"
-    echo "   python3 server.py"
+    echo "   python3 -m marm_mcp_server"
     echo ""
     echo "🔗 Connect to Claude Desktop:"
     echo "   Add MCP server: http://localhost:8001"

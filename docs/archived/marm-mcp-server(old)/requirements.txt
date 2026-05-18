@@ -1,8 +1,0 @@
-fastapi==0.115.4
-fastapi-mcp==0.3.2
-uvicorn==0.32.0
-pydantic==2.9.2
-sentence-transformers==3.3.1
-numpy==2.1.2
-python-multipart==0.0.12
-apscheduler==3.10.4

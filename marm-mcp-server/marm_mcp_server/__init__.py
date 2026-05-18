@@ -14,13 +14,20 @@ Features:
 - Production-grade performance
 
 Author: Lyell - MARM Systems
-Version: 2.2.6
+Version: 2.5.1
 """
 
-__version__ = "2.2.6"
+__version__ = "2.5.1"
 __author__ = "Lyell"
 __email__ = "lyell@marmsystems.com"
 
-from .server import create_server, main
-
 __all__ = ["create_server", "main", "__version__"]
+
+
+def __getattr__(name):
+    """Lazy-load HTTP server exports without side effects during STDIO imports."""
+    if name in {"create_server", "main"}:
+        from .server import create_server, main
+
+        return {"create_server": create_server, "main": main}[name]
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

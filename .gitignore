@@ -7,9 +7,6 @@
 .env.test.local
 .env.production.local
 
-# Claude Code configuration (contains project secrets/strategy)
-CLAUDE.md
-
 # Node modules across all projects
 node_modules/
 webchat/node_modules/
@@ -65,8 +62,6 @@ tmp/
 temp/
 
 # Editor directories and files
-.vscode/*
-!.vscode/extensions.json
 .idea
 .DS_Store
 *.suo
@@ -82,9 +77,6 @@ Thumbs.db
 # Docker
 .dockerignore
 
-# Extra Files folder 
-Extra Files/
-"Extra Files/"
 
 # API keys and sensitive data
 *.key
@@ -95,3 +87,18 @@ config/secrets/
 # Docs folder
 docs/publishing.md
 docs/main-roadmap.md
+
+# user-specific files
+.claude
+.codex
+.gemini
+.codexignore
+.claudeignore
+.cursor
+.vscode
+dump.md
+docs/archived
+docs/core
+docs/current
+docs/future
+docs/Visuals

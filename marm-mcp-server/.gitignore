@@ -49,3 +49,16 @@ logs/
 *.temp
 cp dump.*
 .aider*
+
+# user-specific files
+.claude
+.codex
+.gemini
+.qwen
+dump.md
+docs\archived
+docs\core
+docs\core\extra
+docs\current
+docs\future
+docs\Visuals

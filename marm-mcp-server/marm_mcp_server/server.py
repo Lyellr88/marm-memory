@@ -5,7 +5,7 @@ This server integrates all modular components of the MARM protocol into a single
 FastAPI application, compliant with the MCP protocol via FastApiMCP.
 
 Author: Lyell - MARM Systems
-Version: 2.2.7
+Version: 2.5.1
 """
 
 import uvicorn
@@ -69,8 +69,9 @@ def track_usage(event_type: str, endpoint: str = None, user_data: dict = None):
         # Don't break MCP if analytics fails
         logger.warning("Analytics tracking failed", error=str(e))
 
-# Import rate limiting middleware
+# Import middleware
 from .middleware.rate_limiting import rate_limit_middleware
+from .middleware.auth import auth_middleware
 
 # Import configuration and services
 from .config.settings import (
@@ -80,8 +81,9 @@ from .config.settings import (
     SERVER_PORT,
     SERVER_VERSION,
     DEFAULT_DB_PATH,
-    ANALYTICS_DB_PATH
+    ANALYTICS_DB_PATH,
 )
+from .utils.security import generate_api_key
 from .services.documentation import load_marm_documentation
 from .services.automation import register_event_handlers
 
@@ -92,9 +94,6 @@ from .endpoints.reasoning import router as reasoning_router
 from .endpoints.notebook import router as notebook_router
 from .endpoints.memory import router as memory_router
 from .endpoints.system import router as system_router
-from .endpoints.websocket import router as websocket_router
-from .endpoints.oauth import router as oauth_router
-
 import httpx
 import asyncio
 from fastapi.testclient import TestClient
@@ -149,10 +148,11 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Add rate limiting middleware (applies to all routes)
+# Starlette LIFO: last registered runs first.
+# Rate limiting runs first (throttles floods before token validation),
+# then auth validates the bearer token.
+app.middleware("http")(auth_middleware)
 app.middleware("http")(rate_limit_middleware)
-
-# OAuth endpoints now handled by oauth_router
 
 def get_memory_usage():
     """Get current memory usage in MB."""
@@ -173,8 +173,6 @@ app.include_router(reasoning_router)
 app.include_router(notebook_router)
 app.include_router(memory_router)
 app.include_router(system_router)
-app.include_router(websocket_router)
-app.include_router(oauth_router)
 
 
 
@@ -318,14 +316,23 @@ def main():
     parser = argparse.ArgumentParser(description='MARM MCP Server')
     parser.add_argument('--check-deps', action='store_true',
                        help='Check system dependencies and exit')
+    parser.add_argument('--generate-key', action='store_true',
+                       help='Generate a strong MARM_API_KEY and print it to stdout')
     args = parser.parse_args()
+
+    if args.generate_key:
+        key = generate_api_key()
+        print(key)
+        print("\nSet this as your MARM_API_KEY environment variable.")
+        print("Keep it secret — this is the only time it will be shown.")
+        sys.exit(0)
 
     if args.check_deps:
         success = check_dependencies()
         sys.exit(0 if success else 1)
 
     logger.info("Starting MARM MCP Server",
-                version="v2.2.7",
+                version=SERVER_VERSION,
                 mcp_endpoint="http://localhost:8001/mcp",
                 docs="http://localhost:8001/docs",
                 database=DEFAULT_DB_PATH)
@@ -344,31 +351,4 @@ def main():
 
 
 if __name__ == "__main__":
-    import argparse
-
-    parser = argparse.ArgumentParser(description='MARM MCP Server')
-    parser.add_argument('--check-deps', action='store_true',
-                       help='Check system dependencies and exit')
-    args = parser.parse_args()
-
-    if args.check_deps:
-        success = check_dependencies()
-        sys.exit(0 if success else 1)
-
-    logger.info("Starting MARM MCP Server",
-                version="v2.2.7",
-                mcp_endpoint="http://localhost:8001/mcp",
-                docs="http://localhost:8001/docs",
-                database=DEFAULT_DB_PATH)
-
-    logger.info("Feature status",
-                semantic_search="ENABLED" if SEMANTIC_SEARCH_AVAILABLE else "DISABLED - install sentence-transformers",
-                scheduler="ENABLED" if SCHEDULER_AVAILABLE else "DISABLED - install apscheduler")
-
-    try:
-        asyncio.run(run_server_with_shutdown())
-    except KeyboardInterrupt:
-        logger.info("Server interrupted by user")
-    except Exception as e:
-        logger.error("Server error", error=str(e))
-        sys.exit(1)
+    main()
