@@ -1,0 +1,182 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 350" width="700" height="350">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0.4" y2="1">
+      <stop offset="0%" stop-color="#F5F5F7"/>
+      <stop offset="100%" stop-color="#E8E8EC"/>
+    </linearGradient>
+    <linearGradient id="barGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#7070A0"/>
+      <stop offset="100%" stop-color="#A0A0C8"/>
+    </linearGradient>
+    <filter id="subtleGlow" x="-8%" y="-30%" width="116%" height="160%">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feColorMatrix type="matrix"
+        values="1 0 0 0 1  0 1 0 0 1  0 0 1 0 1  0 0 0 0.18 0"
+        in="blur" result="whiteHalo"/>
+      <feMerge>
+        <feMergeNode in="whiteHalo"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="700" height="350" fill="url(#bg)" rx="10"/>
+
+  <!-- ── CIRCUIT BOARD ── -->
+
+  <!-- Background grid -->
+  <g stroke="#D4D4D9" stroke-width="0.4" opacity="0.55">
+    <line x1="0" y1="38" x2="700" y2="38"/>
+    <line x1="0" y1="76" x2="700" y2="76"/>
+    <line x1="0" y1="114" x2="700" y2="114"/>
+    <line x1="0" y1="278" x2="700" y2="278"/>
+    <line x1="0" y1="316" x2="700" y2="316"/>
+    <line x1="38"  y1="0" x2="38"  y2="350"/>
+    <line x1="114" y1="0" x2="114" y2="350"/>
+    <line x1="190" y1="0" x2="190" y2="350"/>
+    <line x1="510" y1="0" x2="510" y2="350"/>
+    <line x1="586" y1="0" x2="586" y2="350"/>
+    <line x1="662" y1="0" x2="662" y2="350"/>
+  </g>
+
+  <!-- Featured PCB traces -->
+  <g stroke="#C6C6D0" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Top-left -->
+    <path d="M 0 57 H 65 V 25 H 130 V 76 H 190"/>
+    <path d="M 38 0 V 57 H 114 V 114 H 65"/>
+    <!-- Top-right -->
+    <path d="M 700 48 H 635 V 76 H 586 V 38 H 510"/>
+    <path d="M 662 0 V 76"/>
+    <path d="M 586 0 V 38"/>
+    <!-- Bottom-left -->
+    <path d="M 0 297 H 65 V 316 H 114 V 278 H 190 V 316 H 152"/>
+    <path d="M 38 350 V 297"/>
+    <!-- Bottom-right -->
+    <path d="M 700 306 H 635 V 278 H 586 V 316 H 510 V 278"/>
+    <path d="M 662 350 V 316 H 700"/>
+  </g>
+
+  <!-- Static nodes -->
+  <g fill="#C2C2CC" opacity="0.9">
+    <circle cx="65"  cy="57"  r="2.8"/>
+    <circle cx="130" cy="25"  r="2.8"/>
+    <circle cx="130" cy="76"  r="2.8"/>
+    <circle cx="114" cy="114" r="2.8"/>
+    <circle cx="635" cy="48"  r="2.8"/>
+    <circle cx="635" cy="76"  r="2.8"/>
+    <circle cx="510" cy="38"  r="2.8"/>
+    <circle cx="65"  cy="297" r="2.8"/>
+    <circle cx="65"  cy="316" r="2.8"/>
+    <circle cx="190" cy="316" r="2.8"/>
+    <circle cx="635" cy="306" r="2.8"/>
+    <circle cx="635" cy="278" r="2.8"/>
+    <circle cx="510" cy="278" r="2.8"/>
+  </g>
+
+  <!-- Pulsing nodes -->
+  <circle cx="38" cy="57" r="3.2" fill="#C2C2CC" opacity="0.85">
+    <animate attributeName="r"       values="3.2;6;3.2"     dur="2.6s" repeatCount="indefinite" begin="0.6s"/>
+    <animate attributeName="opacity" values="0.85;0.25;0.85" dur="2.6s" repeatCount="indefinite" begin="0.6s"/>
+  </circle>
+  <circle cx="586" cy="38" r="3.2" fill="#C2C2CC" opacity="0.85">
+    <animate attributeName="r"       values="3.2;6;3.2"     dur="2.9s" repeatCount="indefinite" begin="1.3s"/>
+    <animate attributeName="opacity" values="0.85;0.25;0.85" dur="2.9s" repeatCount="indefinite" begin="1.3s"/>
+  </circle>
+  <circle cx="114" cy="278" r="3.2" fill="#C2C2CC" opacity="0.85">
+    <animate attributeName="r"       values="3.2;6;3.2"     dur="3.1s" repeatCount="indefinite" begin="0.2s"/>
+    <animate attributeName="opacity" values="0.85;0.25;0.85" dur="3.1s" repeatCount="indefinite" begin="0.2s"/>
+  </circle>
+  <circle cx="510" cy="316" r="3.2" fill="#C2C2CC" opacity="0.85">
+    <animate attributeName="r"       values="3.2;6;3.2"     dur="2.4s" repeatCount="indefinite" begin="1.9s"/>
+    <animate attributeName="opacity" values="0.85;0.25;0.85" dur="2.4s" repeatCount="indefinite" begin="1.9s"/>
+  </circle>
+
+  <!-- Travelling pulse — top-left trace -->
+  <circle r="2.5" fill="#9090B8" opacity="0">
+    <animateMotion path="M 0 57 H 65 V 25 H 130 V 76 H 190" dur="2.8s" repeatCount="indefinite" begin="0s"/>
+    <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.06;0.94;1" dur="2.8s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- Travelling pulse — bottom-right trace -->
+  <circle r="2.5" fill="#9090B8" opacity="0">
+    <animateMotion path="M 700 306 H 635 V 278 H 586 V 316 H 510 V 278" dur="3.3s" repeatCount="indefinite" begin="1.6s"/>
+    <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.06;0.94;1" dur="3.3s" repeatCount="indefinite" begin="1.6s"/>
+  </circle>
+
+  <!-- Scan line -->
+  <rect x="-160" y="0" width="160" height="350" fill="white" opacity="0.035" rx="0">
+    <animate attributeName="x" from="-160" to="700" dur="5s" repeatCount="indefinite"/>
+  </rect>
+
+  <!-- ── MAIN CONTENT ── -->
+
+  <!-- Title -->
+  <text x="350" y="165"
+        text-anchor="middle"
+        font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif"
+        font-size="58"
+        font-weight="700"
+        fill="#1C1C1E"
+        letter-spacing="-1"
+        filter="url(#subtleGlow)">
+    MARM-Systems
+  </text>
+
+  <!-- LOADING... label (fades out when done) -->
+  <text x="222" y="212"
+        font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif"
+        font-size="10" fill="#8888A8" letter-spacing="2.5">
+    LOADING...
+    <animate attributeName="opacity" values="1;1;1;0" keyTimes="0;0.84;0.92;1" dur="3.4s" fill="freeze"/>
+  </text>
+
+  <!-- Percentage counter -->
+  <text x="478" y="212" text-anchor="end"
+        font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif"
+        font-size="10" fill="#8888A8" letter-spacing="1">0%
+    <animate attributeName="opacity" to="0" dur="0.05s" fill="freeze" begin="0.55s"/>
+  </text>
+  <text x="478" y="212" text-anchor="end" opacity="0"
+        font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif"
+        font-size="10" fill="#8888A8" letter-spacing="1">25%
+    <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.08;0.92;1" dur="0.75s" fill="freeze" begin="0.55s"/>
+  </text>
+  <text x="478" y="212" text-anchor="end" opacity="0"
+        font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif"
+        font-size="10" fill="#8888A8" letter-spacing="1">50%
+    <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.08;0.92;1" dur="0.75s" fill="freeze" begin="1.3s"/>
+  </text>
+  <text x="478" y="212" text-anchor="end" opacity="0"
+        font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif"
+        font-size="10" fill="#8888A8" letter-spacing="1">75%
+    <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.08;0.92;1" dur="0.75s" fill="freeze" begin="2.05s"/>
+  </text>
+  <text x="478" y="212" text-anchor="end" opacity="0"
+        font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif"
+        font-size="10" fill="#8888A8" letter-spacing="1">100%
+    <animate attributeName="opacity" values="0;1;1;0" keyTimes="0;0.08;0.88;1" dur="0.55s" fill="freeze" begin="2.8s"/>
+  </text>
+
+  <!-- Loading bar track -->
+  <rect x="222" y="220" width="256" height="5" rx="2.5" fill="#E0E0E5"/>
+
+  <!-- Loading bar fill -->
+  <rect x="222" y="220" width="0" height="5" rx="2.5" fill="url(#barGrad)">
+    <animate attributeName="width" from="0" to="256" dur="2.9s" fill="freeze" begin="0.2s"
+             calcMode="spline" keyTimes="0;1" keySplines="0.4 0 0.2 1"/>
+  </rect>
+
+  <!-- MEMORY SYSTEM UNLOCKED -->
+  <text x="350" y="248"
+        text-anchor="middle"
+        font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif"
+        font-size="9.5"
+        fill="#58587A"
+        letter-spacing="3.5"
+        opacity="0">
+    MEMORY SYSTEM UNLOCKED
+    <animate attributeName="opacity" from="0" to="0.9" dur="0.7s" fill="freeze" begin="3.3s"/>
+  </text>
+
+</svg>
