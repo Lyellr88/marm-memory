@@ -12,7 +12,6 @@ permissions:
 
 jobs:
   validate-and-test:
-    if: false  # temporarily disabled
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -161,6 +160,7 @@ jobs:
           cache-to: type=local,dest=/tmp/.buildx-cache,mode=max
 
   publish-mcp-registry:
+    needs: [validate-and-test]
     runs-on: ubuntu-latest
     permissions:
       id-token: write
