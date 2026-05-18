@@ -1,6 +1,6 @@
 <div align="center">
 <picture>
-<img src="https://raw.githubusercontent.com/Lyellr88/MARM-Systems/MARM-main/media/marm-logo.svg"
+<img src="https://raw.githubusercontent.com/Lyellr88/MARM-Systems/MARM-main/media/Logo.png"
      alt="MARM - The AI That Remembers Your Conversations"
      width="700"
      height="350">
@@ -68,7 +68,7 @@ Watch MARM install through Docker, connect to Claude, and share persistent memor
 <br>
 <div align="center">
 <picture>
-<img src="https://raw.githubusercontent.com/Lyellr88/MARM-Systems/MARM-main/media/installation-flow.svg"
+<img src="https://raw.githubusercontent.com/Lyellr88/MARM-Systems/MARM-main/media/install-options.png"
    width="850"
    height="500"
 </picture>
@@ -163,7 +163,7 @@ Claude Code remains the recommended first setup path, but MARM also works with o
 
 <div align="center">
 <picture>
-<img src="https://raw.githubusercontent.com/Lyellr88/MARM-Systems/MARM-main/media/feature-showcase.svg"
+<img src="https://raw.githubusercontent.com/Lyellr88/MARM-Systems/MARM-main/media/mcp-tools.png"
    height="550"
    width="800"
 </picture>
@@ -304,7 +304,7 @@ MARM defaults to **localhost-only** (`127.0.0.1`). No credentials are required f
 
 <div align="center">
 <picture>
-<img src="https://raw.githubusercontent.com/Lyellr88/MARM-Systems/MARM-main/media/memory-intelligence.svg"
+<img src="https://raw.githubusercontent.com/Lyellr88/MARM-Systems/MARM-main/media/memory-workflow.png"
    width="900"
    height="625"
 </picture>
