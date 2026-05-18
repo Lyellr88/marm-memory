@@ -6,6 +6,8 @@ Local web UI for browsing and editing MARM memory. **Separate from `marm-mcp-ser
 
 MCP tools are built for agents (search, log, recall). This dashboard is for **you**: list memories, delete stale entries, inspect sessions and protocol logs, edit notebook keys.
 
+![MARM Dashboard](../media/marm-dashboard.png)
+
 ## Quick start
 
 ```powershell

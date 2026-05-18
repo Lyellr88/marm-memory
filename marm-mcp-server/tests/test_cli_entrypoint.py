@@ -1,7 +1,11 @@
 import os
 import re
+import socket
 import subprocess
 import sys
+import time
+
+import requests
 
 
 def test_generate_key_cli_prints_one_key_and_exits_without_starting_server(tmp_path):
@@ -52,3 +56,72 @@ def test_check_deps_cli_reports_dependency_status_without_starting_server(tmp_pa
     assert "MARM MCP Server - Dependency Check" in result.stdout
     assert "All dependencies satisfied!" in result.stdout
     assert "Uvicorn running" not in result.stdout
+
+
+def test_import_marm_mcp_server_succeeds_with_clean_stdout(tmp_path):
+    env = os.environ.copy()
+    env["MARM_DB_PATH"] = str(tmp_path / "import-memory.db")
+    env["MARM_ANALYTICS_DB_PATH"] = str(tmp_path / "import-analytics.db")
+    env["USERPROFILE"] = str(tmp_path)
+    env["HOME"] = str(tmp_path)
+
+    result = subprocess.run(
+        [sys.executable, "-c", "import marm_mcp_server; assert marm_mcp_server.__name__ == 'marm_mcp_server'"],
+        cwd=os.getcwd(),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == ""
+
+
+def _free_port():
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
+
+
+def _wait_for_health(base_url, timeout=30):
+    deadline = time.time() + timeout
+    last_error = None
+    while time.time() < deadline:
+        try:
+            response = requests.get(f"{base_url}/health", timeout=3)
+            if response.status_code == 200 and response.json()["status"] == "healthy":
+                return
+        except Exception as exc:
+            last_error = exc
+        time.sleep(1)
+    raise AssertionError(f"Server did not become healthy within {timeout}s: {last_error}")
+
+
+def test_server_starts_and_health_returns_healthy(tmp_path):
+    port = _free_port()
+    env = os.environ.copy()
+    env["MARM_DB_PATH"] = str(tmp_path / "server-memory.db")
+    env["MARM_ANALYTICS_DB_PATH"] = str(tmp_path / "server-analytics.db")
+    env["SERVER_HOST"] = "127.0.0.1"
+    env["SERVER_PORT"] = str(port)
+    env["USERPROFILE"] = str(tmp_path)
+    env["HOME"] = str(tmp_path)
+    env.pop("MARM_API_KEY", None)
+
+    proc = subprocess.Popen(
+        [sys.executable, "-m", "marm_mcp_server"],
+        cwd=os.getcwd(),
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+
+    try:
+        _wait_for_health(f"http://127.0.0.1:{port}")
+        response = requests.get(f"http://127.0.0.1:{port}/health", timeout=5)
+        assert response.status_code == 200
+        assert response.json()["status"] == "healthy"
+    finally:
+        proc.terminate()
+        proc.wait(timeout=10)
