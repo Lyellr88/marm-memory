@@ -58,7 +58,6 @@ jobs:
 
   publish-pypi:
     needs: validate-and-test
-    if: false  # disabled — re-enable for final full run
     runs-on: ubuntu-latest
     environment: pypi
 
@@ -89,7 +88,7 @@ jobs:
 
   publish-docker:
     needs: validate-and-test
-    if: false  # disabled — re-enable for final full run
+    if: false  # disabled — already pushed locally
     runs-on: ubuntu-latest
 
     steps:
@@ -189,7 +188,7 @@ jobs:
           ../mcp-publisher publish
 
   notify-success:
-    needs: [publish-mcp-registry]
+    needs: [publish-pypi, publish-mcp-registry]
     runs-on: ubuntu-latest
     if: success()
 
