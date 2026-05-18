@@ -200,4 +200,4 @@ jobs:
           echo "PyPI: https://pypi.org/project/marm-mcp-server/"
           echo "Docker MCP: https://hub.docker.com/r/lyellr88/marm-mcp-server"
           echo "Docker Dashboard: https://hub.docker.com/r/lyellr88/marm-dashboard"
-          echo "MCP Registry: https://registry.modelcontextprotocol.io/servers/io.github.lyellr88/marm-mcp-server"
+          echo "MCP Registry: https://registry.modelcontextprotocol.io/servers/io.github.Lyellr88/marm-mcp-server"
