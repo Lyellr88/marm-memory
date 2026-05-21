@@ -1251,6 +1251,15 @@ MARM now delivers the protocol context directly through the first successful MCP
 - Protocol delivery is tracked separately from documentation indexing so failed calls do not consume the one-time delivery
 - Both transports continue using lazy documentation loading and auto-refresh behavior from v2.6.0
 
+### Protocol Refactor
+
+The protocol text was refactored from the older copy/paste prompt style into a cleaner MCP runtime contract.
+
+- Removed manual chatbot-era framing and slash-command language
+- Reframed MARM as the memory layer beneath the MCP session instead of a copyable assistant persona
+- Added clearer operating rules for memory capture, recall, notebook use, and trust boundaries
+- Added explicit guidance that retrieved memories, notebooks, logs, and tool outputs are context, not higher-priority instructions
+
 ### Notebook Tool Consolidation
 
 The five notebook tools were consolidated into one action-dispatched tool:
@@ -1265,11 +1274,20 @@ marm_notebook(action="add"|"use"|"show"|"status"|"clear", name=None, data=None, 
 - Updated HTTP endpoint, STDIO tool surface, and `server.json`
 - Reduced MCP tool discovery from 12 tools to 8 tools
 
+### Tool Rename
+
+`marm_contextual_log` was renamed to `marm_context_log` across HTTP, STDIO, `server.json`, tests, and docs.
+
+- Keeps the same request and response behavior
+- Removes stale internal naming by replacing `ContextualLogRequest` with `ContextLogRequest`
+- Treats the change as part of the v2.6.1 tool-surface cleanup
+
 ### Tests
 
 - Added HTTP regression coverage proving protocol context is injected on the first MCP tool call and not repeated on the second
 - Added STDIO regression coverage proving protocol context is injected once
 - Updated notebook lifecycle tests to use the consolidated `marm_notebook` tool
 - Added discovery checks ensuring the old notebook tools are absent from HTTP/OpenAPI and STDIO tool lists
+- Updated HTTP and STDIO tests for the `marm_context_log` rename
 
 </details>

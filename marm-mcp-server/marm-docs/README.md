@@ -1,4 +1,4 @@
-# MARM: The AI That Remembers Your Conversations v2.6.0</h1>
+# MARM: The AI That Remembers Your Conversations v2.6.1</h1>
 
 ---
 
