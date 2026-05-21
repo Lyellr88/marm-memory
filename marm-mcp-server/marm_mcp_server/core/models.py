@@ -10,7 +10,7 @@ class SessionRequest(BaseModel):
 
 class LogEntryRequest(BaseModel):
     entry: str = Field(..., description="Log entry in format: YYYY-MM-DD-topic-summary")
-    session_name: str = Field(default="main", description="Session name")
+    session_name: Optional[str] = Field(default=None, description="Session name — omit to use the active session set by marm_log_session")
 
 
 class NotebookAddRequest(BaseModel):

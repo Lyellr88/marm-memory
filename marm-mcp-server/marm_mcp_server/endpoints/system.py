@@ -16,9 +16,7 @@ from ..config.settings import SEMANTIC_SEARCH_AVAILABLE, SCHEDULER_AVAILABLE, SE
 from ..core.response_limiter import MCPResponseLimiter
 from ..core.rate_limiter import rate_limiter
 
-# Import the documentation loader function
-# This will need to be imported from the services module when it's created
-# from services.documentation import load_marm_documentation
+from ..services.documentation import reload_marm_documentation
 
 # Create router for system endpoints
 router = APIRouter(prefix="", tags=["System"])
@@ -111,8 +109,7 @@ async def marm_reload_docs():
     Refreshes all documentation files and core knowledge in the database
     """
     try:
-        # This will be implemented when we create the services module
-        # await load_marm_documentation()
+        await reload_marm_documentation()
         return {
             "status": "success",
             "message": "📚 MARM documentation reloaded successfully",

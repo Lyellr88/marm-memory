@@ -34,9 +34,11 @@ async def marm_log_session(request: SessionRequest):
                 VALUES (?, ?)
             ''', (request.session_name, current_timestamp))
             conn.commit()
-        
+
+        memory.active_log_session = request.session_name
+
         await events.emit('session_created', {'session': request.session_name})
-        
+
         return {
             "status": "success",
             "message": f"📂 Session '{request.session_name}' created/activated",
@@ -59,6 +61,7 @@ async def marm_log_entry(request: LogEntryRequest):
     try:
         # Store user entry exactly as provided - no auto-date formatting
         formatted_entry = request.entry.strip()
+        session = request.session_name or memory.active_log_session
 
         # Parse entry for database storage (optional date extraction)
         entry_pattern = r'^(\d{4}-\d{2}-\d{2})-(.*?)-(.*?)$'
@@ -72,18 +75,18 @@ async def marm_log_entry(request: LogEntryRequest):
             entry_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
             topic = "general"
             summary = formatted_entry
-        
+
         entry_id = str(uuid.uuid4())
         with memory.get_connection() as conn:
             conn.execute('''
                 INSERT INTO log_entries (id, session_name, entry_date, topic, summary, full_entry)
                 VALUES (?, ?, ?, ?, ?, ?)
-            ''', (entry_id, request.session_name, entry_date, topic, summary, formatted_entry))
+            ''', (entry_id, session, entry_date, topic, summary, formatted_entry))
             conn.commit()
         
         await events.emit('log_entry_created', {
             'entry_id': entry_id,
-            'session': request.session_name,
+            'session': session,
             'content': formatted_entry
         })
         

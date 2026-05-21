@@ -21,7 +21,10 @@ builtins.print = lambda *args, **kwargs: _real_print(
     *args, **{**kwargs, "file": sys.stderr}
 )
 
+import functools
+import logging
 import os
+import pathlib
 import re
 import uuid
 from datetime import datetime, timezone
@@ -32,12 +35,84 @@ from typing import Optional
 # prevent HTTP-only API key generation from polluting the MCP stream.
 os.environ["SERVER_HOST"] = "127.0.0.1"
 
+# File logger — stdout is reserved for JSON-RPC so we write diagnostics to disk.
+_log_dir_env = os.environ.get("MARM_STDIO_LOG_DIR")
+_log_dir = pathlib.Path(_log_dir_env) if _log_dir_env else pathlib.Path.home() / ".marm" / "logs"
+_log_level_name = os.environ.get("MARM_STDIO_LOG_LEVEL", "INFO").upper()
+_log_level = getattr(logging, _log_level_name, logging.INFO)
+_debug = _log_level <= logging.DEBUG
+
+_stdio_log = logging.getLogger("marm.stdio")
+_stdio_log.setLevel(_log_level)
+_stdio_log.propagate = False
+
+_fmt = logging.Formatter("%(asctime)s [MARM] %(levelname)s %(message)s")
+
+_sh = logging.StreamHandler(sys.stderr)
+_sh.setFormatter(_fmt)
+_stdio_log.addHandler(_sh)
+
+try:
+    _log_dir.mkdir(parents=True, exist_ok=True)
+    _fh = logging.FileHandler(_log_dir / "marm-stdio.log", encoding="utf-8")
+    _fh.setFormatter(_fmt)
+    _stdio_log.addHandler(_fh)
+except Exception:
+    pass  # log setup failure must not break the server
+
+
+def _log_tool_call(fn):
+    @functools.wraps(fn)
+    async def wrapper(*args, **kwargs):
+        name = fn.__name__
+        if _debug:
+            safe = []
+            for k, v in kwargs.items():
+                if k == "session_name":
+                    safe.append(f"session={v}")
+                elif k == "query":
+                    safe.append(f"query_len={len(v) if v else 0}")
+                elif k in ("limit", "search_all"):
+                    safe.append(f"{k}={v}")
+            _stdio_log.debug("CALL %s %s", name, " ".join(safe))
+        else:
+            _stdio_log.info("CALL %s", name)
+        try:
+            result = await fn(*args, **kwargs)
+        except Exception as e:
+            _stdio_log.error("EXCEPTION %s %s: %s", name, type(e).__name__, e)
+            raise
+        if isinstance(result, dict):
+            status = result.get("status", "ok")
+            if status == "error":
+                _stdio_log.error("FAIL %s: %s", name, result.get("message", ""))
+            elif _debug:
+                count = next(
+                    (result[k] for k in ("results_count", "total_entries", "total_count")
+                     if k in result),
+                    None,
+                )
+                _stdio_log.debug(
+                    "OK %s status=%s%s", name, status,
+                    f" count={count}" if count is not None else "",
+                )
+            else:
+                _stdio_log.info("OK %s", name)
+        return result
+    return wrapper
+
+
 from fastmcp import FastMCP
 
 from marm_mcp_server.core.memory import memory
 from marm_mcp_server.core.events import events
 from marm_mcp_server.core.response_limiter import MCPResponseLimiter
 from marm_mcp_server.utils.helpers import read_protocol_file
+from marm_mcp_server.services.documentation import (
+    load_marm_documentation,
+    reload_marm_documentation,
+    docs_are_loaded,
+)
 from marm_mcp_server.config.settings import (
     SERVER_VERSION,
     DEFAULT_DB_PATH,
@@ -53,6 +128,7 @@ response_limiter = MCPResponseLimiter()
 # ============================================================================
 
 @mcp.tool()
+@_log_tool_call
 async def marm_start(session_name: str) -> dict:
     """
     🚀 Activates MARM memory and accuracy layers
@@ -70,6 +146,9 @@ async def marm_start(session_name: str) -> dict:
             )
             conn.commit()
 
+        if not docs_are_loaded():
+            await load_marm_documentation()
+
         protocol_content = await read_protocol_file()
         await events.emit("marm_started", {"session": session_name})
 
@@ -86,6 +165,7 @@ async def marm_start(session_name: str) -> dict:
 
 
 @mcp.tool()
+@_log_tool_call
 async def marm_refresh(session_name: str) -> dict:
     """
     🔄 Refreshes active session state and reaffirms protocol adherence
@@ -119,6 +199,7 @@ async def marm_refresh(session_name: str) -> dict:
 # ============================================================================
 
 @mcp.tool()
+@_log_tool_call
 async def marm_smart_recall(
     query: str,
     session_name: str = "default",
@@ -199,6 +280,7 @@ async def marm_smart_recall(
 
 
 @mcp.tool()
+@_log_tool_call
 async def marm_contextual_log(
     content: str,
     session_name: str = "default",
@@ -240,6 +322,7 @@ async def marm_contextual_log(
 # ============================================================================
 
 @mcp.tool()
+@_log_tool_call
 async def marm_log_session(session_name: str) -> dict:
     """
     📂 Create or switch to named session container
@@ -252,6 +335,7 @@ async def marm_log_session(session_name: str) -> dict:
             )
             conn.commit()
 
+        memory.active_log_session = session_name
         await events.emit("session_created", {"session": session_name})
 
         return {
@@ -264,17 +348,20 @@ async def marm_log_session(session_name: str) -> dict:
 
 
 @mcp.tool()
+@_log_tool_call
 async def marm_log_entry(
     entry: str,
-    session_name: str = "main",
+    session_name: Optional[str] = None,
 ) -> dict:
     """
     📝 Add structured log entry for milestones or decisions
 
-    Entry format: YYYY-MM-DD-topic-summary (date prefix optional)
+    Entry format: YYYY-MM-DD-topic-summary (date prefix optional).
+    Omit session_name to use the active session set by marm_log_session.
     """
     try:
         formatted_entry = entry.strip()
+        session = session_name or memory.active_log_session
 
         entry_pattern = r"^(\d{4}-\d{2}-\d{2})-(.*?)-(.*?)$"
         match = re.match(entry_pattern, formatted_entry)
@@ -294,13 +381,13 @@ async def marm_log_entry(
                 INSERT INTO log_entries (id, session_name, entry_date, topic, summary, full_entry)
                 VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                (entry_id, session_name, entry_date, topic, summary, formatted_entry),
+                (entry_id, session, entry_date, topic, summary, formatted_entry),
             )
             conn.commit()
 
         await events.emit(
             "log_entry_created",
-            {"entry_id": entry_id, "session": session_name, "content": formatted_entry},
+            {"entry_id": entry_id, "session": session, "content": formatted_entry},
         )
 
         return {
@@ -314,6 +401,7 @@ async def marm_log_entry(
 
 
 @mcp.tool()
+@_log_tool_call
 async def marm_log_show(
     session_name: Optional[str] = None,
 ) -> dict:
@@ -356,6 +444,7 @@ async def marm_log_show(
 
 
 @mcp.tool()
+@_log_tool_call
 async def marm_log_delete(
     target: str,
     session_name: Optional[str] = None,
@@ -397,6 +486,7 @@ async def marm_log_delete(
 # ============================================================================
 
 @mcp.tool()
+@_log_tool_call
 async def marm_notebook_add(
     name: str,
     data: str,
@@ -435,6 +525,7 @@ async def marm_notebook_add(
 
 
 @mcp.tool()
+@_log_tool_call
 async def marm_notebook_use(names: str) -> dict:
     """
     🔧 Activate notebook entries as instructions
@@ -467,6 +558,7 @@ async def marm_notebook_use(names: str) -> dict:
 
 
 @mcp.tool()
+@_log_tool_call
 async def marm_notebook_show() -> dict:
     """
     📚 Display all saved notebook keys and summaries
@@ -501,6 +593,7 @@ async def marm_notebook_show() -> dict:
 
 
 @mcp.tool()
+@_log_tool_call
 async def marm_notebook_status() -> dict:
     """
     📊 Show the current active notebook list
@@ -520,6 +613,7 @@ async def marm_notebook_status() -> dict:
 
 
 @mcp.tool()
+@_log_tool_call
 async def marm_notebook_clear() -> dict:
     """
     🧹 Clear the active notebook list
@@ -536,6 +630,7 @@ async def marm_notebook_clear() -> dict:
 
 
 @mcp.tool()
+@_log_tool_call
 async def marm_notebook_delete(name: str) -> dict:
     """
     🗑️ Delete a specific notebook entry by name
@@ -547,6 +642,12 @@ async def marm_notebook_delete(name: str) -> dict:
             )
             deleted = cursor.rowcount
             conn.commit()
+
+        if deleted > 0:
+            memory.active_notebook_entries = [
+                entry for entry in memory.active_notebook_entries
+                if entry.get("name") != name
+            ]
 
         return {
             "status": "success" if deleted > 0 else "not_found",
@@ -562,6 +663,7 @@ async def marm_notebook_delete(name: str) -> dict:
 # ============================================================================
 
 @mcp.tool()
+@_log_tool_call
 async def marm_summary(
     session_name: str,
     limit: int = 50,
@@ -648,6 +750,7 @@ async def marm_summary(
 
 
 @mcp.tool()
+@_log_tool_call
 async def marm_context_bridge(
     new_topic: str,
     session_name: str = "default",
@@ -811,6 +914,7 @@ async def marm_context_bridge(
 # ============================================================================
 
 @mcp.tool()
+@_log_tool_call
 async def marm_system_info() -> dict:
     """
     ℹ️ Comprehensive system information, health status, and loaded docs
@@ -853,24 +957,16 @@ async def marm_system_info() -> dict:
 
 
 @mcp.tool()
+@_log_tool_call
 async def marm_reload_docs() -> dict:
     """
     🔄 Reload documentation into memory system
     """
     try:
-        protocol_content = await read_protocol_file()
-
-        await memory.store_memory(
-            content=protocol_content,
-            session="marm_system",
-            context_type="documentation",
-            metadata={"source": "protocol_file", "reloaded": True},
-        )
-
+        await reload_marm_documentation()
         return {
             "status": "success",
-            "message": "✅ Documentation reloaded into memory system",
-            "protocol_length": len(protocol_content),
+            "message": "Documentation reloaded into memory system",
         }
 
     except Exception as e:
@@ -882,8 +978,16 @@ async def marm_reload_docs() -> dict:
 # ============================================================================
 
 def main() -> None:
-    mcp.run()
+    _stdio_log.info(
+        "startup version=%s db=%s semantic_search=%s",
+        SERVER_VERSION, DEFAULT_DB_PATH, SEMANTIC_SEARCH_AVAILABLE,
+    )
+    try:
+        mcp.run()
+    finally:
+        _stdio_log.info("shutdown")
 
 
 if __name__ == "__main__":
     main()
+

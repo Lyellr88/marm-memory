@@ -1,3 +1,4 @@
+import asyncio
 import importlib
 from datetime import datetime, timezone
 
@@ -46,6 +47,25 @@ def test_session_log_summary_and_delete_workflow_persists_real_rows(monkeypatch,
     assert deleted.status_code == 200
     assert deleted.json()["deleted_count"] == 1
     assert client.get("/marm_log_show", params={"session_name": "release-notes"}).json()["total_entries"] == 0
+
+
+def test_log_entry_without_session_name_uses_active_session(monkeypatch, tmp_path):
+    server = load_isolated_server(monkeypatch, tmp_path)
+    client = local_client(server.app)
+
+    switch = client.post("/marm_log_session", json={"session_name": "myproject"})
+    assert switch.status_code == 200
+    assert switch.json()["session_name"] == "myproject"
+
+    # No session_name — should land in "myproject", not "main"
+    entry = client.post("/marm_log_entry", json={"entry": "2026-05-20-setup-initial scaffolding done"})
+    assert entry.status_code == 200
+
+    in_project = client.get("/marm_log_show", params={"session_name": "myproject"})
+    assert in_project.json()["total_entries"] == 1
+
+    in_main = client.get("/marm_log_show", params={"session_name": "main"})
+    assert in_main.json().get("total_entries", 0) == 0
 
 
 def test_malformed_log_entry_is_stored_as_general_without_losing_original_text(monkeypatch, tmp_path):
@@ -181,6 +201,86 @@ def test_contextual_log_recall_context_bridge_and_system_info(monkeypatch, tmp_p
     with memory_module.memory.get_connection() as conn:
         count = conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
     assert count == 1
+
+
+def test_cold_startup_leaves_doc_tables_empty(monkeypatch, tmp_path):
+    server = load_isolated_server(monkeypatch, tmp_path)
+
+    memory_module = importlib.import_module("marm_mcp_server.core.memory")
+    with memory_module.memory.get_connection() as conn:
+        nb_count = conn.execute(
+            "SELECT COUNT(*) FROM notebook_entries WHERE name LIKE 'marm_%'"
+        ).fetchone()[0]
+        mem_count = conn.execute(
+            "SELECT COUNT(*) FROM memories WHERE session_name = 'marm_system'"
+        ).fetchone()[0]
+
+    assert nb_count == 0, f"Expected 0 marm_ notebook entries on cold boot, got {nb_count}"
+    assert mem_count == 0, f"Expected 0 marm_system memories on cold boot, got {mem_count}"
+
+
+def test_marm_start_loads_docs_once_not_on_repeated_calls(monkeypatch, tmp_path):
+    server = load_isolated_server(monkeypatch, tmp_path)
+    doc_module = importlib.import_module("marm_mcp_server.services.documentation")
+    client = local_client(server.app)
+
+    assert not doc_module.docs_are_loaded()
+
+    client.post("/marm_start", json={"session_name": "s1"})
+    assert doc_module.docs_are_loaded()
+
+    memory_module = importlib.import_module("marm_mcp_server.core.memory")
+    with memory_module.memory.get_connection() as conn:
+        count_after_first = conn.execute(
+            "SELECT COUNT(*) FROM notebook_entries WHERE name LIKE 'marm_%'"
+        ).fetchone()[0]
+
+    client.post("/marm_start", json={"session_name": "s2"})
+    with memory_module.memory.get_connection() as conn:
+        count_after_second = conn.execute(
+            "SELECT COUNT(*) FROM notebook_entries WHERE name LIKE 'marm_%'"
+        ).fetchone()[0]
+
+    assert count_after_second == count_after_first, (
+        f"marm_start loaded docs a second time: {count_after_first} -> {count_after_second}"
+    )
+
+
+def test_marm_reload_docs_indexes_documentation(monkeypatch, tmp_path):
+    server = load_isolated_server(monkeypatch, tmp_path)
+    doc_module = importlib.import_module("marm_mcp_server.services.documentation")
+    memory_module = importlib.import_module("marm_mcp_server.core.memory")
+    client = local_client(server.app)
+
+    # Force docs loaded flag so reload has something to reset
+    doc_module._docs_loaded = True
+
+    response = client.post("/marm_reload_docs")
+    assert response.status_code == 200
+    assert response.json()["status"] == "success"
+    assert doc_module.docs_are_loaded()
+
+    with memory_module.memory.get_connection() as conn:
+        mem_count = conn.execute(
+            "SELECT COUNT(*) FROM memories WHERE session_name = 'marm_system'"
+        ).fetchone()[0]
+        nb_count = conn.execute(
+            "SELECT COUNT(*) FROM notebook_entries WHERE name LIKE 'marm_%'"
+        ).fetchone()[0]
+
+    assert mem_count > 0, "marm_reload_docs did not index any docs into memories"
+    assert nb_count > 0, "marm_reload_docs did not write any marm_ notebook entries"
+
+
+def test_doc_loader_does_not_mark_loaded_when_essential_docs_missing(monkeypatch, tmp_path):
+    load_isolated_server(monkeypatch, tmp_path)
+    doc_module = importlib.import_module("marm_mcp_server.services.documentation")
+
+    monkeypatch.setattr(doc_module, "get_docs_to_load", lambda: ([], []))
+
+    assert not doc_module.docs_are_loaded()
+    asyncio.run(doc_module.load_marm_documentation())
+    assert not doc_module.docs_are_loaded()
 
 
 def test_endpoint_validation_rejects_wrong_payload_shapes(monkeypatch, tmp_path):

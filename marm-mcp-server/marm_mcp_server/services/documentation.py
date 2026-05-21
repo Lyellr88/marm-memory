@@ -96,14 +96,17 @@ def get_docs_to_load():
 
     return essential_docs, search_only_docs
 
-async def _index_doc(doc: Dict, include_notebook: bool) -> None:
-    """Read one doc file and store it in memories (and optionally notebook)."""
+async def _index_doc(doc: Dict, include_notebook: bool) -> bool:
+    """Read one doc file and store it in memories (and optionally notebook).
+
+    Returns True on success, False if the file is missing or indexing fails.
+    """
     doc_path = Path(__file__).parent.parent.parent / doc["file_path"]
     if not doc_path.exists():
         doc_path = Path("/app") / doc["file_path"]
     if not doc_path.exists():
         print(f"WARNING: Documentation file not found: {doc_path}")
-        return
+        return False
 
     try:
         with open(doc_path, 'r', encoding='utf-8') as f:
@@ -139,22 +142,43 @@ async def _index_doc(doc: Dict, include_notebook: bool) -> None:
         else:
             print(f"OK: Indexed for search: {doc['file_path'].split('/')[-1]} ({len(content)} chars)")
 
+        return True
+
     except Exception as e:
         try:
             print(f"ERROR: Failed to load {doc['file_path']}: {str(e)}")
         except UnicodeEncodeError:
             print(f"ERROR: Failed to load {doc['file_path']}: {type(e).__name__}")
+        return False
+
+
+_docs_loaded: bool = False
+
+
+def docs_are_loaded() -> bool:
+    return _docs_loaded
+
+
+async def reload_marm_documentation():
+    """Force a fresh doc load regardless of prior state."""
+    global _docs_loaded
+    _docs_loaded = False
+    await load_marm_documentation()
 
 
 async def load_marm_documentation():
     """Pre-populate the MCP server with core MARM documentation"""
+    global _docs_loaded
 
     essential_docs, search_only_docs = get_docs_to_load()
 
     print("Loading MARM documentation into memory system...")
 
+    missing_essential_docs = len(essential_docs) == 0
+    essential_failures = 0
     for doc in essential_docs:
-        await _index_doc(doc, include_notebook=True)
+        if not await _index_doc(doc, include_notebook=True):
+            essential_failures += 1
 
     for doc in search_only_docs:
         await _index_doc(doc, include_notebook=False)
@@ -236,4 +260,10 @@ The MCP server uses semantic search with sentence transformers, SQLite storage, 
             except UnicodeEncodeError:
                 print(f"ERROR: Failed to add {knowledge['name']}: {type(e).__name__}")
     
-    print("MARM documentation database ready!")
+    if not missing_essential_docs and essential_failures == 0:
+        print("MARM documentation database ready!")
+        _docs_loaded = True
+    elif missing_essential_docs:
+        print("WARNING: No essential documentation files found — will retry on next marm_start")
+    else:
+        print(f"WARNING: {essential_failures} essential doc(s) failed to index — will retry on next marm_start")

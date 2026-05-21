@@ -21,21 +21,21 @@ class IPRateLimiter:
         self.limits = {
             # Standard endpoints - generous limits for normal use
             'default': {
-                'requests': 60,        # 60 requests
-                'window': 60,          # per minute
-                'block_duration': 300  # 5 minute cooldown
+                'requests': 60,       # 60 requests
+                'window': 60,         # per minute
+                'block_duration': 30  # 30s cooldown
             },
-            # Memory-intensive endpoints - tighter limits
+            # Memory-intensive endpoints — raised to handle AI burst at session start
             'memory_heavy': {
-                'requests': 20,        # 20 requests  
-                'window': 60,          # per minute
-                'block_duration': 600  # 10 minute cooldown
+                'requests': 60,       # 60 requests
+                'window': 60,         # per minute
+                'block_duration': 30  # 30s cooldown (was 600s)
             },
             # Search endpoints - moderate limits
             'search': {
-                'requests': 30,        # 30 requests
-                'window': 60,          # per minute  
-                'block_duration': 300  # 5 minute cooldown
+                'requests': 60,       # 60 requests
+                'window': 60,         # per minute
+                'block_duration': 30  # 30s cooldown
             }
         }
     

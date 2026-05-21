@@ -5,20 +5,25 @@ from fastapi.responses import JSONResponse
 import time
 from ..core.rate_limiter import rate_limiter
 
+_TRUSTED_PROXY_IPS = {"127.0.0.1", "::1"}
+
 def get_client_ip(request: Request) -> str:
-    """Extract client IP from request, handling proxies"""
-    # Check for forwarded headers (nginx, CloudFlare, etc.)
-    forwarded_for = request.headers.get("X-Forwarded-For")
-    if forwarded_for:
-        # Take the first IP in the chain (original client)
-        return forwarded_for.split(",")[0].strip()
-    
-    real_ip = request.headers.get("X-Real-IP")
-    if real_ip:
-        return real_ip.strip()
-    
-    # Fallback to direct connection IP
-    return request.client.host if request.client else "unknown"
+    """Extract client IP from request, handling proxies.
+
+    X-Forwarded-For is only trusted when the direct TCP connection comes from
+    a known local proxy — prevents remote callers from spoofing 127.0.0.1.
+    """
+    direct_ip = request.client.host if request.client else "unknown"
+
+    if direct_ip in _TRUSTED_PROXY_IPS:
+        forwarded_for = request.headers.get("X-Forwarded-For")
+        if forwarded_for:
+            return forwarded_for.split(",")[0].strip()
+        real_ip = request.headers.get("X-Real-IP")
+        if real_ip:
+            return real_ip.strip()
+
+    return direct_ip
 
 def determine_endpoint_type(path: str) -> str:
     """Classify endpoint for rate limiting rules"""
@@ -31,11 +36,11 @@ def determine_endpoint_type(path: str) -> str:
 
 async def rate_limit_middleware(request: Request, call_next):
     """Rate limiting middleware - prevents abuse while keeping service free"""
-    
+
     # Skip rate limiting for health/status endpoints
     if request.url.path in ['/health', '/ping', '/', '/docs', '/openapi.json', '/ready']:
         return await call_next(request)
-    
+
     # Get client IP and endpoint type
     client_ip = get_client_ip(request)
     endpoint_type = determine_endpoint_type(request.url.path)

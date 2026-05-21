@@ -101,4 +101,6 @@ docs/archived
 docs/core
 docs/current
 docs/future
-docs\Visuals
+marm-mcp-server\.pytest_cache
+marm-mcp-server\.pytest_tmp
+marm_usage_analytics.db

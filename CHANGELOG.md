@@ -1088,6 +1088,52 @@ This release introduces a complete UI/UX transformation with the implementation 
 ---
 
 <details>
+<summary>2026: CI/CD Pipeline, Registry Alignment & Security Fixes (v2.5.1–v2.5.4)</summary>
+
+## **CI/CD Pipeline, Registry Alignment & Security Fixes (v2.5.1–v2.5.4)**
+
+**These releases were focused entirely on getting the full publish pipeline — PyPI, Docker Hub, and MCP Registry — stable and passing on GitHub Actions. No user-facing behavior changed.**
+
+### **CI/CD & Publishing**
+
+- Rewrote MCP registry publish job using the official publisher CLI
+- Restored `validate-and-test` job after registry isolation testing
+- Re-enabled Docker and PyPI publishing after pipeline stabilization
+- Fixed registry job dependency ordering to prevent race conditions
+
+### **Registry & Version Alignment**
+
+- Corrected GitHub username case in `server.json` name field
+- Moved OCI version into identifier tag per registry spec
+- Bumped schema URL to `2025-12-11` to match `server.json`
+- Fixed MCP server name annotation case in Dockerfile
+- Aligned all version surfaces (pyproject.toml, Dockerfile, server.json) across v2.5.2, v2.5.3, v2.5.4
+
+### **Security**
+
+- Resolved 7 CodeQL alerts across MCP server and dashboard (carried into v2.5.5)
+- Replaced regex-based script-tag stripper with pure string implementation
+- Patched wheel CVE in dependencies at v2.5.4
+
+### **Media & Docs**
+
+- Added animated PCB logo as pure SVG
+- Moved visuals from `docs/Visuals/` to root `media/` folder
+- Fixed broken SVG refs in README after folder restructure
+- Added CI/CD and CodeQL status badges to README
+
+### **Repo Hygiene**
+
+- Untacked agent config folders (`.claude`, `.codex`, `.gemini`, `.qwen`) — gitignored but were previously committed
+- Untracked `docs/archived`, `docs/current`, `docs/future`
+- Cleaned up dashboard `.pytest_tmp` test artifacts
+
+</details>
+
+
+---
+
+<details>
 <summary>May 18th, 2026: CodeQL Security Hardening & Release Cleanup (v2.5.5)</summary>
 
 ## **May 18th, 2026: CodeQL Security Hardening & Release Cleanup (v2.5.5)**
@@ -1120,6 +1166,77 @@ This release introduces a complete UI/UX transformation with the implementation 
 - CodeQL should stay clean without weakening the intended key-generation workflow.
 - MARM preserves more user content during sanitization while still neutralizing script execution paths.
 - Release metadata is aligned for the v2.5.5 Docker, PyPI, and MCP registry push.
+
+</details>
+
+---
+
+## [v2.6.0] - 2026-05-20
+
+<details>
+<summary><strong>What's New</strong></summary>
+
+### STDIO File Logging
+
+STDIO mode now writes diagnostics to `~/.marm/logs/marm-stdio.log` alongside the FastMCP terminal output. Every tool call, success, failure, startup, and shutdown is logged without exposing memory content, notebook data, or raw payloads.
+
+- `_log_tool_call` decorator applied to all 18 STDIO tools — logs tool name, status, and exception messages only
+- `stderr` stream handler outputs `[MARM]`-tagged lines directly in the server terminal alongside FastMCP
+- `MARM_STDIO_LOG_LEVEL=DEBUG` adds session name, query length, and result counts
+- `MARM_STDIO_LOG_DIR` env var overrides the default log path (used by tests)
+- Log file persists across restarts; file handler failure is silently skipped so the server never breaks on permission errors
+
+**Live log tailing (local pip install):**
+```powershell
+# Watch live
+Get-Content "$env:USERPROFILE\.marm\logs\marm-stdio.log" -Wait -Tail 20
+# View full log
+Get-Content "$env:USERPROFILE\.marm\logs\marm-stdio.log"
+```
+
+### Rate Limiter Tuning
+
+All rate limit tiers raised to 60 req/min and block duration reduced from 5-10 minutes to 30 seconds. Resolves AI clients hitting blocks during burst tool calls at session start.
+
+- `memory_heavy` tier: 20 req/min → 60 req/min, cooldown 600s → 30s
+- `search` tier: 30 req/min → 60 req/min, cooldown 300s → 30s
+- `default` tier: cooldown 300s → 30s
+
+### IP Spoofing Fix
+
+`X-Forwarded-For` and `X-Real-IP` headers are now only trusted when the direct TCP connection originates from a local proxy (`127.0.0.1` / `::1`). Remote callers can no longer spoof a loopback IP to bypass the rate limiter or auth middleware.
+
+### Active Session Routing
+
+`marm_log_session` now sets an `active_log_session` on the memory object. `marm_log_entry` routes to that session automatically when no `session_name` is passed. Matches existing STDIO behavior and removes the need to repeat the session name on every log call.
+
+- `LogEntryRequest.session_name` changed from `"main"` default to `Optional[str] = None`
+- Works across both HTTP and STDIO transports
+
+### Lazy Documentation Loading
+
+MARM protocol docs now load on the first `marm_start` call instead of at server startup. Reduces cold-start time, especially for STDIO where startup latency is visible.
+
+- HTTP server lifespan no longer pre-loads docs
+- Both HTTP `marm_start` and STDIO `marm_start` call `load_marm_documentation()` guarded by `docs_are_loaded()`
+
+### `marm_reload_docs` Endpoint Fixed
+
+The HTTP `marm_reload_docs` endpoint was a stub since v2.0. Now calls `reload_marm_documentation()` correctly.
+
+### Windows Proactor Noise Suppression
+
+Suppresses benign `WinError 10054` / `ConnectionResetError` log spam from `asyncio`'s `ProactorEventLoop` on Windows. Unrelated disconnects no longer pollute server logs.
+
+### Windows-Safe Print in Memory Core
+
+`memory.py` now uses `_safe_print()` for model loading output — falls back to `sys.stderr.buffer` on `UnicodeEncodeError` to prevent charmap crashes on Windows terminals and avoids polluting STDIO stdout.
+
+### Tests
+
+- 4 new STDIO logging regression tests: log file creation, tool call logging, DEBUG session name inclusion, memory content not leaked
+- New `test_server_logging.py` covering HTTP server logging behavior
+- Total test count: 56 passing
 
 </details>
 

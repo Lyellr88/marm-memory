@@ -10,6 +10,7 @@ from ..core.models import SessionRequest
 from ..core.memory import memory
 from ..core.events import events
 from ..utils.helpers import read_protocol_file
+from ..services.documentation import load_marm_documentation, docs_are_loaded
 
 # Create router for session endpoints
 router = APIRouter(prefix="", tags=["MARM Protocol"])
@@ -28,7 +29,10 @@ async def marm_start(request: SessionRequest):
                 VALUES (?, TRUE, ?)
             ''', (request.session_name, datetime.now(timezone.utc).isoformat()))
             conn.commit()
-        
+
+        if not docs_are_loaded():
+            await load_marm_documentation()
+
         # Read the current protocol from file
         protocol_content = await read_protocol_file()
         

@@ -8,6 +8,7 @@ Author: Lyell - MARM Systems
 Version: 2.5.5
 """
 
+import logging
 import uvicorn
 import uuid
 import json
@@ -23,6 +24,30 @@ from typing import Optional, Dict, Any
 from datetime import datetime
 from pathlib import Path
 import sqlite3
+
+
+class _SuppressProactorWindowsNoise(logging.Filter):
+    """Suppress benign WinError 10054 noise from ProactorEventLoop disconnect cleanup.
+
+    The asyncio log record has '_ProactorBasePipeTransport' in the message text
+    and the actual ConnectionResetError in record.exc_info — not in getMessage().
+    """
+    def filter(self, record: logging.LogRecord) -> bool:
+        if "_ProactorBasePipeTransport" not in record.getMessage():
+            return True
+        if not record.exc_info:
+            return True
+
+        exc = record.exc_info[1]
+        if not isinstance(exc, ConnectionResetError):
+            return True
+
+        winerror = getattr(exc, "winerror", None)
+        errno = getattr(exc, "errno", None)
+        return not (winerror == 10054 or errno == 10054)
+
+_proactor_noise_filter = _SuppressProactorWindowsNoise()
+logging.getLogger("asyncio").addFilter(_proactor_noise_filter)
 
 
 # Configure structured logging
@@ -84,7 +109,6 @@ from .config.settings import (
     ANALYTICS_DB_PATH,
 )
 from .utils.security import generate_api_key
-from .services.documentation import load_marm_documentation
 from .services.automation import register_event_handlers
 
 # Import all endpoint routers
@@ -113,9 +137,6 @@ async def lifespan(app: FastAPI):
     logger.info("Database locations",
                 memory_db=DEFAULT_DB_PATH,
                 analytics_db=ANALYTICS_DB_PATH)
-    
-    # Load all MARM documentation into memory
-    await load_marm_documentation()
     
     # Register automation event handlers
     register_event_handlers()

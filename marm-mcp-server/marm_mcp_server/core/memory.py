@@ -2,6 +2,7 @@
 
 import json
 import sqlite3
+import sys
 import threading
 import uuid
 import queue
@@ -10,6 +11,16 @@ from typing import List, Dict, Optional
 import numpy as np
 import html
 import re
+
+
+def _safe_print(msg: str) -> None:
+    """Print with stderr fallback — prevents charmap UnicodeEncodeError on Windows and avoids
+    polluting STDIO stdout which is reserved for JSON-RPC."""
+    try:
+        print(msg)
+    except UnicodeEncodeError:
+        sys.stderr.buffer.write((msg + "\n").encode("utf-8", errors="replace"))
+        sys.stderr.buffer.flush()
 
 def _strip_script_tags(text: str) -> str:
     lower = text.lower()
@@ -174,6 +185,7 @@ class MARMMemory:
         # Active sessions and notebook state
         self.active_sessions = {}
         self.active_notebook_entries = []
+        self.active_log_session: str = "main"
     
     def get_connection(self):
         """Context manager for getting database connections from pool"""
@@ -275,17 +287,16 @@ class MARMMemory:
         
         try:
             self._encoder_loading = True
-            print(f"🔄 Loading semantic search model ({DEFAULT_SEMANTIC_MODEL}) for memory system...")
-            
+            _safe_print(f"Loading semantic search model ({DEFAULT_SEMANTIC_MODEL})...")
+
             from sentence_transformers import SentenceTransformer
             self.encoder = SentenceTransformer(DEFAULT_SEMANTIC_MODEL)
-            
-            print("✅ Semantic search model loaded successfully")
+
+            _safe_print("Semantic search model loaded successfully")
             return True
-            
+
         except Exception as e:
-            print(f"⚠️ Failed to load semantic search model: {e}")
-            print("🔄 Falling back to text-based search")
+            _safe_print(f"Failed to load semantic search model: {e} — falling back to text search")
             self._encoder_failed = True
             return False
         finally:
