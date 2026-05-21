@@ -1,7 +1,7 @@
 """Pydantic models for MARM MCP Server endpoints."""
 
 from pydantic import BaseModel, Field
-from typing import Optional
+from typing import Literal, Optional
 
 
 class SessionRequest(BaseModel):
@@ -22,18 +22,20 @@ class NotebookUseRequest(BaseModel):
     names: str = Field(..., description="Comma-separated list of notebook entry names")
 
 
-class ContextBridgeRequest(BaseModel):
-    new_topic: str = Field(..., description="New topic for context bridging")
-    session_name: str = Field(default="main", description="Session name")
-
-
 class SmartRecallRequest(BaseModel):
     query: str = Field(..., description="Query to search for in memory")
     session_name: str = Field(default="main", description="Session to search in")
     limit: int = Field(default=5, description="Maximum number of results")
     search_all: bool = Field(default=False, description="Search across all sessions if True")
+    include_logs: bool = Field(default=False, description="Also search log_entries for text matches and include in response")
 
 
 class ContextualLogRequest(BaseModel):
     content: str = Field(..., description="Content to log with auto-classification")
     session_name: str = Field(default="main", description="Session to log to")
+
+
+class DeleteRequest(BaseModel):
+    type: Literal["log", "notebook"] = Field(..., description="What to delete: 'log' or 'notebook'")
+    target: str = Field(..., description="Log entry id/topic, log session name, or notebook entry name")
+    session_name: Optional[str] = Field(default=None, description="Log session to scope deletion. Omit to delete an entire session.")

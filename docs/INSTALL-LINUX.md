@@ -2,7 +2,7 @@
 
 ## Universal Memory Intelligence Platform for AI Agents
 
-**MARM v2.5.5* - Memory Accurate Response Mode
+**MARM v2.6.0* - Memory Accurate Response Mode
 *Complete Linux installation guide*
 
 ---
@@ -27,7 +27,7 @@
 
 1. **Install MARM**: Choose ⚡ **Quick Test** (Beginner) or ⭐ **Automated** (Easy) from options below
 2. **Connect Claude**: `claude mcp add --transport http marm-memory http://localhost:8001/mcp`
-3. **Test**: `marm_start` → `marm_system_info`
+3. **Test**: Ask Claude to recall a memory — MARM initializes automatically on the first tool call
 
 **That's it!** You now have AI memory that saves across sessions and platforms.
 
@@ -305,7 +305,7 @@ curl -s http://localhost:8001/health
 {
   "status": "healthy",
   "service": "MARM MCP Server",
-  "version": "2.5.5",
+  "version": "2.6.0",
   "timestamp": "2026-01-01T00:00:00+00:00",
   "database": "connected",
   "semantic_search": "available"
@@ -385,6 +385,25 @@ sudo lsof -i :8001
 
 ---
 
+## STDIO Diagnostics
+
+STDIO logs write to `~/.marm/logs/marm-stdio.log` automatically when using local pip STDIO mode. Docker STDIO does not expose this file on the host.
+
+```bash
+# View full log
+cat ~/.marm/logs/marm-stdio.log
+
+# Live tail (watch tool calls as they happen)
+tail -f ~/.marm/logs/marm-stdio.log
+
+# Last 20 lines
+tail -20 ~/.marm/logs/marm-stdio.log
+```
+
+Set `MARM_STDIO_LOG_LEVEL=DEBUG` for additional detail (session names, query lengths, result counts). Memory content is never written to the log.
+
+---
+
 ## Configuration
 
 ### **Environment Variables**
@@ -413,6 +432,8 @@ source ~/.bashrc
 | `MAX_DB_CONNECTIONS` | `5` | Database connection pool size |
 | `MARM_ANALYTICS_DB_PATH` | `marm_usage_analytics.db` | Override analytics database path |
 | `DEFAULT_SEMANTIC_MODEL` | `all-MiniLM-L6-v2` | AI model for semantic search |
+| `MARM_STDIO_LOG_LEVEL` | `INFO` | STDIO log verbosity. Set to `DEBUG` for session names, query lengths, result counts. |
+| `MARM_STDIO_LOG_DIR` | `~/.marm/logs` | Override STDIO log directory. |
 
 ---
 

@@ -1,4 +1,4 @@
-# MARM v2.5.5 MCP Server - Platform Integration Guide
+# MARM v2.6.0 MCP Server - Platform Integration Guide
 
 ## Table of Contents
 
@@ -162,8 +162,8 @@ from mcp import ClientSession
 async with streamablehttp_client("http://localhost:8001/mcp") as (read, write, _):
     async with ClientSession(read, write) as session:
         await session.initialize()
-        tools = await session.list_tools()  # Discover MARM's 18 tools
-        result = await session.call_tool("marm_system_info", {})
+        tools = await session.list_tools()
+        result = await session.call_tool("marm_smart_recall", {"query": "test"})
 ```
 
 **3. Use with your LLM:**

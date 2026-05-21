@@ -16,7 +16,7 @@ MARM Systems provides **Universal Memory Intelligence** for AI agents through th
 
 | Product | Description | Best For |
 |---------|-------------|----------|
-| **MCP Server** | Production-ready universal memory server with 18 tools | Claude, Gemini, Qwen, and any MCP-compatible AI |
+| **MCP Server** | Production-ready universal memory server with 12 tools | Claude, Gemini, Qwen, and any MCP-compatible AI |
 | **Original Protocol** | Copy/paste instructions for manual memory management | Any AI platform (ChatGPT, Claude, local models) |
 | **Live Chatbot Demo** | Interactive testing environment | Quick testing and feature exploration |
 
@@ -51,20 +51,19 @@ MARM Systems provides **Universal Memory Intelligence** for AI agents through th
 | Method | Commands | Time | Requirements |
 |--------|----------|------|--------------|
 | **Docker (Recommended)** | `docker run --rm lyellr88/marm-mcp-server:latest python -m marm_mcp_server --generate-key`<br>`docker run -d --name marm-mcp-server -p 127.0.0.1:8001:8001 -e SERVER_HOST=0.0.0.0 -e MARM_API_KEY=your-generated-key -v ~/.marm:/home/marm/.marm lyellr88/marm-mcp-server:latest`<br>`claude mcp add --transport http marm-memory http://localhost:8001/mcp --header "Authorization: Bearer your-generated-key"` | 2 minutes | Docker installed |
-| **PyPI Install** | `pip install marm-mcp-server==2.5.5`<br>`python -m marm_mcp_server` | 1 minute | Python 3.10+ |
+| **PyPI Install** | `pip install marm-mcp-server`<br>`python -m marm_mcp_server` | 1 minute | Python 3.10+ |
 
 ### Q: What MCP tools does MARM provide?
 
-**18 Complete MCP Tools organized by category:**
+**12 Complete MCP Tools organized by category:**
 
 | Category | Tools | Description |
 |----------|-------|-------------|
 | **Memory Intelligence** | `marm_smart_recall`, `marm_contextual_log` | AI-powered semantic search and intelligent storage |
-| **Session Management** | `marm_start`, `marm_refresh` | Memory activation and session state management |
-| **Logging System** | `marm_log_session`, `marm_log_entry`, `marm_log_show`, `marm_log_delete` | Structured conversation history |
-| **Notebook Management** | `marm_notebook_add`, `marm_notebook_use`, `marm_notebook_show`, etc. | Reusable instructions and knowledge storage |
-| **Workflow Tools** | `marm_summary`, `marm_context_bridge` | Context summaries and workflow transitions |
-| **System Utilities** | `marm_current_context`, `marm_system_info`, `marm_reload_docs` | System status and information |
+| **Logging System** | `marm_log_session`, `marm_log_entry`, `marm_log_show` | Structured conversation history |
+| **Delete** | `marm_delete` | Delete log sessions, log entries, or notebook entries (`type="log"\|"notebook"`) |
+| **Workflow Tools** | `marm_summary` | Context summaries. Use `marm_smart_recall(include_logs=True)` to also search log entries |
+| **Notebook Management** | `marm_notebook_add`, `marm_notebook_use`, `marm_notebook_show`, `marm_notebook_clear`, `marm_notebook_status` | Reusable instructions and knowledge storage |
 
 ### Q: Which AI platforms work with the MCP server?
 
@@ -72,7 +71,7 @@ MARM Systems provides **Universal Memory Intelligence** for AI agents through th
 
 - ✅ **Claude Code** - Full integration with CLI command
 - ✅ **Qwen CLI** - Complete MCP tool access  
-- ✅ **Gemini CLI** - All 18 tools available
+- ✅ **Gemini CLI** - All 12 tools available
 - ✅ **Any MCP-compatible client** - Universal protocol support
 
 **Coming Soon:**

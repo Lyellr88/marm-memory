@@ -14,10 +14,10 @@ Features:
 - Production-grade performance
 
 Author: Lyell - MARM Systems
-Version: 2.5.5
+Version: 2.6.0
 """
 
-__version__ = "2.5.5"
+__version__ = "2.6.0"
 __author__ = "Lyell"
 __email__ = "lyell@marmsystems.com"
 

@@ -68,13 +68,20 @@ def test_stdio_handles_mcp_initialize_and_exposes_tools(tmp_path):
     assert 2 in responses, "No tools/list response"
     tools = responses[2]["result"]["tools"]
     tool_names = {t["name"] for t in tools}
-    assert "marm_start" in tool_names
+    assert "marm_start" not in tool_names
+    assert "marm_refresh" not in tool_names
+    assert "marm_reload_docs" not in tool_names
+    assert "marm_current_context" not in tool_names
+    assert "marm_system_info" not in tool_names
     assert "marm_smart_recall" in tool_names
     assert "marm_contextual_log" in tool_names
-    assert len(tools) == 18
+    assert "marm_delete" in tool_names
+    assert "marm_log_delete" not in tool_names
+    assert "marm_notebook_delete" not in tool_names
+    assert len(tools) == 12
 
 
-def test_stdio_notebook_delete_removes_entry_from_active_state(tmp_path):
+def test_stdio_delete_notebook_removes_entry_from_active_state(tmp_path):
     env = os.environ.copy()
     env["MARM_DB_PATH"] = str(tmp_path / "stdio-notebook.db")
     env["MARM_ANALYTICS_DB_PATH"] = str(tmp_path / "stdio-notebook-analytics.db")
@@ -98,8 +105,8 @@ def test_stdio_notebook_delete_removes_entry_from_active_state(tmp_path):
             "arguments": {"names": "smoke_test_entry"},
         }})
         + message({"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {
-            "name": "marm_notebook_delete",
-            "arguments": {"name": "smoke_test_entry"},
+            "name": "marm_delete",
+            "arguments": {"type": "notebook", "target": "smoke_test_entry"},
         }})
         + message({"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {
             "name": "marm_notebook_status",
@@ -135,7 +142,7 @@ def test_stdio_notebook_delete_removes_entry_from_active_state(tmp_path):
 
     status_result = json.loads(responses[5]["result"]["content"][0]["text"])
     assert status_result["active_entries"] == [], (
-        f"Deleted entry still active after marm_notebook_delete: {status_result['active_entries']}"
+        f"Deleted entry still active after marm_delete(type='notebook'): {status_result['active_entries']}"
     )
 
 
@@ -257,7 +264,7 @@ def test_stdio_log_records_tool_call_and_ok_status(tmp_path):
     stdin_data = (
         _base_rpc_stdin()
         + message({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {
-            "name": "marm_start",
+            "name": "marm_log_session",
             "arguments": {"session_name": "log-test"},
         }})
     )
@@ -273,8 +280,8 @@ def test_stdio_log_records_tool_call_and_ok_status(tmp_path):
 
     assert result.returncode == 0, result.stderr.decode("utf-8", errors="replace")[:500]
     log_content = (log_dir / "marm-stdio.log").read_text(encoding="utf-8")
-    assert "CALL marm_start" in log_content, f"Expected CALL entry, got: {log_content}"
-    assert "OK marm_start" in log_content, f"Expected OK entry, got: {log_content}"
+    assert "CALL marm_log_session" in log_content, f"Expected CALL entry, got: {log_content}"
+    assert "OK marm_log_session" in log_content, f"Expected OK entry, got: {log_content}"
 
 
 def test_stdio_debug_mode_logs_session_name_not_content(tmp_path):
@@ -291,7 +298,7 @@ def test_stdio_debug_mode_logs_session_name_not_content(tmp_path):
     stdin_data = (
         _base_rpc_stdin()
         + message({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {
-            "name": "marm_start",
+            "name": "marm_log_session",
             "arguments": {"session_name": "debug-session"},
         }})
     )

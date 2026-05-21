@@ -2,7 +2,7 @@
 
 ## Complete Usage Guide for Memory-Augmented AI
 
-**MARM v2.5.5 - Universal MCP Server for AI Memory Intelligence**
+**MARM v2.6.0 - Universal MCP Server for AI Memory Intelligence**
 
 ---
 
@@ -12,7 +12,7 @@
 - [Getting Started](#getting-started)
 - [Example Workflow](#example-workflow-cross-ai-research-project)
 - [Understanding MARM Memory](#understanding-marm-memory)
-- [Complete Tool Reference (18 Tools)](#complete-tool-reference-18-tools)
+- [Complete Tool Reference (12 Tools)](#complete-tool-reference-12-tools)
 - [Pro Tips & Best Practices](#pro-tips--best-practices)
 - [Advanced Workflows](#advanced-workflows)
 - [FAQ](#faq)
@@ -119,20 +119,20 @@ All MARM data is stored locally in your home directory:
 
 After installation, verify MARM is working correctly:
 
-```bash
-# HTTP - Check server is running
-curl http://localhost:8001/health
+Use the MARM Dashboard status panel for the easiest live check. It polls the MCP server health endpoint and shows reachability, version, status, latency, and last checked time.
 
-# Or use the MARM system info tool (once connected to your AI client)
-# Ask your AI: "Check MARM system status" - it will call marm_system_info
+For terminal validation:
+
+```bash
+curl http://localhost:8001/health
 ```
 
 Expected output includes:
 
 - Server version
-- Database size in MB
-- Total memories and sessions count
 - Feature availability (semantic search status)
+- Database connection status
+- Service health status
 
 ---
 
@@ -148,6 +148,8 @@ Expected output includes:
 - *"Add this debugging approach to my notebook"*
 
 Your AI agent will automatically use the appropriate MARM tools. Manual tool access is available for power users, but most users should just **talk naturally** and let the AI handle the tool usage.
+
+MARM also handles lifecycle work internally. Docs and session state initialize on the first real tool call, and docs refresh automatically every 50 tool calls. Packaged docs are indexed into the `marm_system` memory namespace with source-file hash tracking, so unchanged docs are skipped and changed or missing rows are re-indexed.
 
 ### What is MARM?
 
@@ -171,13 +173,12 @@ Here's a realistic workflow showing MARM in action:
 
 **Scenario:** You're researching authentication patterns for a new project using multiple AI clients.
 
-### Phase 1: Start Session (Claude)
+### Phase 1: Create Session (Claude)
 
 ``` markdown
-You: "Claude, activate MARM and create a session called 'auth-research-2025-01'"
-Claude calls: marm_start("auth-research-2025-01")
+You: "Claude, create a MARM session called 'auth-research-2025-01'"
 Claude calls: marm_log_session("auth-research-2025-01")
-Result: Session created, MARM active for this conversation
+Result: Session created. MARM lifecycle/docs initialize automatically.
 ```
 
 ### Phase 2: Capture Research (Claude)
@@ -255,28 +256,24 @@ MARM automatically categorizes content:
 
 ---
 
-## Complete Tool Reference (18 Tools)
+## Complete Tool Reference (12 Tools)
 
 | Category | Tool | Description | Usage Notes |
 |----------|------|-------------|-------------|
-| **🚀 Session** | `marm_start` | Activate MARM memory and accuracy layers | Call at beginning of important conversations |
-| | `marm_refresh` | Refresh session state and reaffirm protocol adherence | Reset MARM behavior if responses become inconsistent |
 | **🧠 Memory** | `marm_smart_recall` | Semantic similarity search across all memories | `query` (required), `limit` (default: 5), `session_name` (optional). Use natural language queries |
 | | `marm_contextual_log` | Auto-classifying memory storage with embeddings | Store important information that should be remembered |
 | **📚 Logging** | `marm_log_session` | Create or switch to named session container | Include LLM name, dates, be descriptive |
 | | `marm_log_entry` | Add structured log entry with auto-date formatting | No need to add dates manually - automatically handled by background tools |
 | | `marm_log_show` | Display all entries and sessions with filtering | `session_name` (optional) |
-| | `marm_log_delete` | Delete specified session or individual entries | Permanent deletion - use carefully |
+| | `marm_delete` | Delete a log session, log entry, or notebook entry | `type="log"` or `type="notebook"`, `target` (required), `session_name` (optional for log entries) |
 | **📔 Notebook** | `marm_notebook_add` | Add new notebook entry with semantic embeddings | Store reusable instructions, code snippets, procedures |
 | | `marm_notebook_use` | Activate entries as instructions (comma-separated) | Example: `marm_notebook_use("coding-standards,git-workflow")` |
 | | `marm_notebook_show` | Display all saved keys and summaries | Browse available notebook entries |
-| | `marm_notebook_delete` | Delete specific notebook entry | Permanent deletion - use carefully |
 | | `marm_notebook_clear` | Clear the active instruction list | Deactivate all notebook instructions |
 | | `marm_notebook_status` | Show current active instruction list | Check which instructions are currently active |
 | **🔄 Workflow** | `marm_summary` | Generate paste-ready context blocks with intelligent truncation | Create summaries for new conversations or context bridging |
-| | `marm_context_bridge` | Intelligent context bridging for workflow transitions | Smoothly transition between different topics or projects |
-| **⚙️ System** | `marm_system_info` | Comprehensive system information, health status, and loaded docs | Server version, database statistics, documentation, capabilities |
-| | `marm_reload_docs` | Reload documentation into memory system | Refresh MARM's knowledge after system updates |
+
+**Internal automation:** lifecycle initialization, documentation refresh, current date context, and system checks are no longer AI-facing tools. Documentation refresh uses `doc_index` hash tracking to avoid duplicate `marm_system` memories across restarts. Use the dashboard health panel for live server status, or `curl http://localhost:8001/health` for terminal checks.
 
 ---
 
@@ -394,7 +391,7 @@ A: Any MCP-compatible client: Claude Code, Qwen CLI, Gemini CLI.
 A: No - runs as a background service. Multiple clients can connect simultaneously.
 
 **Q: How do I know if MARM is working correctly?**
-A: Use `marm_system_info` to check server status and database statistics.
+A: Use the MARM Dashboard status panel for HTTP mode. It polls server health and shows reachability/version/latency. Terminal fallback: `curl http://localhost:8001/health`. For STDIO, confirm your MCP client lists the MARM tools and can call a simple recall/log command.
 
 ---
 
@@ -423,14 +420,14 @@ A: Use `marm_system_info` to check server status and database statistics.
 
 #### AI client can't connect to MARM
 
-- Verify server is running: `curl http://localhost:8001/health`
+- Verify server is running in the dashboard health panel, or with `curl http://localhost:8001/health`
 - Check firewall isn't blocking port 8001
 - For STDIO: use `marm-mcp-stdio` (console script) or `python -m marm_mcp_server.server_stdio`
 - Restart both server and AI client
 
 #### Tools not appearing in AI client
 
-- Run `marm_system_info` to verify server loaded correctly
+- Verify HTTP mode in the dashboard health panel, or with `curl http://localhost:8001/health`
 - Check server logs for initialization errors
 - Disconnect and reconnect AI client to refresh tool list
 
@@ -441,7 +438,7 @@ A: Use `marm_system_info` to check server status and database statistics.
 - Verify `~/.marm/` directory exists and has write permissions
 - Check available disk space
 - Test with simple memory: ask AI to save a single line and check with `marm_log_show`
-- Run `marm_system_info` to check database status
+- For HTTP mode, verify server health in the dashboard health panel, or with `curl http://localhost:8001/health`
 
 #### Search returns no results
 

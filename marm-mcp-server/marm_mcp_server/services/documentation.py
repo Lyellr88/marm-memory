@@ -2,14 +2,15 @@
 
 from pathlib import Path
 from datetime import datetime, timezone
-import sqlite3
-from typing import Dict, List
+import asyncio
+import hashlib
+import threading
+from typing import Dict
 
-# Import core components
 from ..core.memory import memory
 
+
 def guess_context_type(filename):
-    """Smart context classification based on filename"""
     filename_lower = filename.lower()
     if "protocol" in filename_lower:
         return "protocol"
@@ -40,65 +41,36 @@ def guess_context_type(filename):
     else:
         return "general"
 
+
 def get_docs_to_load():
-    """Return two lists: essential docs (memories + notebook) and search-only docs (memories only)."""
+    """Return all docs from marm-docs/ for memory indexing."""
     docs_dir = Path(__file__).parent.parent.parent / "marm-docs"
     if not docs_dir.exists():
         docs_dir = Path("/app/marm-docs")
 
-    # Loaded at startup into memories + notebook (active context)
-    essential_files = {
-        "PROTOCOL.md"
-    }
-
-    essential_docs = []
-    search_only_docs = []
-    seen_notebook_names = set()
-
+    docs = []
     if docs_dir.exists():
         for md_file in sorted(docs_dir.glob("*.md")):
             filename = md_file.stem.lower()
-            context_type = guess_context_type(filename)
-            entry = {
+            docs.append({
                 "file_path": f"marm-docs/{md_file.name}",
-                "context_type": context_type,
-            }
-
-            if md_file.name in essential_files:
-                notebook_name = f"marm_{filename}"
-                if notebook_name in seen_notebook_names:
-                    import time
-                    notebook_name = f"marm_{filename}_{str(int(time.time()))[-4:]}"
-                seen_notebook_names.add(notebook_name)
-                entry["notebook_name"] = notebook_name
-                entry["description"] = f"Essential: {md_file.name}"
-                essential_docs.append(entry)
-            else:
-                entry["notebook_name"] = None
-                entry["description"] = f"Search: {md_file.name}"
-                search_only_docs.append(entry)
-
-        if essential_docs:
-            print(f"\n[DOCS] Startup docs ({len(essential_docs)} files — memories + notebook):")
-            print("+---------------------------------+--------------+-------------------------+")
-            print("| File                            | Type         | Notebook Name           |")
-            print("+---------------------------------+--------------+-------------------------+")
-            for doc in essential_docs:
-                fname = doc["file_path"].split("/")[-1]
-                print(f"| {fname:<31} | {doc['context_type']:<12} | {doc['notebook_name']:<23} |")
-            print("+---------------------------------+--------------+-------------------------+")
-
-        if search_only_docs:
-            names = ", ".join(d["file_path"].split("/")[-1] for d in search_only_docs)
-            print(f"[DOCS] Indexed for marm_smart_recall only: {names}")
+                "context_type": guess_context_type(filename),
+                "description": md_file.name,
+            })
+        if docs:
+            names = ", ".join(d["file_path"].split("/")[-1] for d in docs)
+            print(f"[DOCS] Indexing for marm_smart_recall: {names}")
     else:
         print(f"WARNING: Documentation directory not found: {docs_dir}")
 
-    return essential_docs, search_only_docs
+    return docs
 
-async def _index_doc(doc: Dict, include_notebook: bool) -> bool:
-    """Read one doc file and store it in memories (and optionally notebook).
 
+async def _index_doc(doc: Dict) -> bool:
+    """Read one doc file and store it in memories for search.
+
+    Skips indexing if the file content hash matches doc_index AND the memory row still exists.
+    Re-indexes if content changed or the memory was deleted externally.
     Returns True on success, False if the file is missing or indexing fails.
     """
     doc_path = Path(__file__).parent.parent.parent / doc["file_path"]
@@ -109,39 +81,68 @@ async def _index_doc(doc: Dict, include_notebook: bool) -> bool:
         return False
 
     try:
-        with open(doc_path, 'r', encoding='utf-8') as f:
+        with open(doc_path, "r", encoding="utf-8") as f:
             content = f.read()
 
-        await memory.store_memory(
+        content_hash = hashlib.sha256(content.encode()).hexdigest()
+        source_file = doc["file_path"]
+        fname = source_file.split("/")[-1]
+
+        with memory.get_connection() as conn:
+            row = conn.execute(
+                "SELECT content_hash, memory_id FROM doc_index WHERE source_file = ?",
+                (source_file,),
+            ).fetchone()
+
+        if row and row[0] == content_hash:
+            # Hash matches — verify the memory row still exists before skipping.
+            # If memory_id is NULL (migrated from older doc_index), fall through to
+            # re-index once so the row gets a valid memory_id backfilled.
+            memory_id = row[1]
+            if memory_id:
+                with memory.get_connection() as conn:
+                    exists = conn.execute(
+                        "SELECT 1 FROM memories WHERE id = ?", (memory_id,)
+                    ).fetchone()
+                if exists:
+                    print(f"SKIP: {fname} unchanged")
+                    return True
+                print(f"[DOCS] {fname} memory row missing, re-indexing")
+
+        # Remove the existing memory before re-indexing.
+        # Use memory_id for an exact delete when available; fall back to json_extract.
+        with memory.get_connection() as conn:
+            if row and row[1]:
+                conn.execute("DELETE FROM memories WHERE id = ?", (row[1],))
+            else:
+                conn.execute(
+                    "DELETE FROM memories WHERE session_name = 'marm_system'"
+                    " AND json_extract(metadata, '$.source_file') = ?",
+                    (source_file,),
+                )
+            conn.commit()
+
+        new_memory_id = await memory.store_memory(
             content=content,
             session="marm_system",
             context_type=doc["context_type"],
             metadata={
                 "doc_type": "documentation",
-                "source_file": doc["file_path"],
-                "description": doc["description"]
-            }
+                "source_file": source_file,
+                "description": doc["description"],
+            },
         )
 
-        if include_notebook:
-            embedding_bytes = None
-            if memory.encoder:
-                try:
-                    embedding = memory.encoder.encode(content)
-                    embedding_bytes = embedding.tobytes()
-                except Exception as e:
-                    print(f"Failed to generate embedding for {doc['notebook_name']}: {e}")
+        with memory.get_connection() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO doc_index (source_file, content_hash, memory_id, indexed_at)"
+                " VALUES (?, ?, ?, ?)",
+                (source_file, content_hash, new_memory_id, datetime.now(timezone.utc).isoformat()),
+            )
+            conn.commit()
 
-            with sqlite3.connect(memory.db_path) as conn:
-                conn.execute(
-                    'INSERT OR REPLACE INTO notebook_entries (name, data, embedding, updated_at) VALUES (?, ?, ?, ?)',
-                    (doc["notebook_name"], content, embedding_bytes, datetime.now(timezone.utc).isoformat())
-                )
-                conn.commit()
-            print(f"OK: Loaded {doc['notebook_name']} ({len(content)} chars)")
-        else:
-            print(f"OK: Indexed for search: {doc['file_path'].split('/')[-1]} ({len(content)} chars)")
-
+        action = "Updated" if (row and row[0] != content_hash) else "Indexed"
+        print(f"OK: {action} {fname} ({len(content)} chars)")
         return True
 
     except Exception as e:
@@ -153,10 +154,80 @@ async def _index_doc(doc: Dict, include_notebook: bool) -> bool:
 
 
 _docs_loaded: bool = False
+_docs_load_in_progress: bool = False
+_tool_call_count: int = 0
+_refresh_in_progress: bool = False
+_refresh_state_lock = threading.Lock()
+_docs_load_state_lock = threading.Lock()
+REFRESH_EVERY: int = 50
 
 
 def docs_are_loaded() -> bool:
     return _docs_loaded
+
+
+async def ensure_docs_loaded() -> None:
+    """Load docs once, even when multiple tool calls arrive together."""
+    global _docs_load_in_progress
+
+    if docs_are_loaded():
+        return
+
+    should_load = False
+    with _docs_load_state_lock:
+        if not docs_are_loaded() and not _docs_load_in_progress:
+            _docs_load_in_progress = True
+            should_load = True
+
+    if should_load:
+        try:
+            await load_marm_documentation()
+        finally:
+            with _docs_load_state_lock:
+                _docs_load_in_progress = False
+        return
+
+    while True:
+        with _docs_load_state_lock:
+            if not _docs_load_in_progress:
+                return
+        await asyncio.sleep(0)
+
+
+async def maybe_auto_refresh() -> None:
+    global _tool_call_count, _refresh_in_progress
+    should_refresh = False
+
+    with _refresh_state_lock:
+        _tool_call_count += 1
+        if _tool_call_count >= REFRESH_EVERY and not _refresh_in_progress:
+            _tool_call_count = 0
+            _refresh_in_progress = True
+            should_refresh = True
+
+    if not should_refresh:
+        return
+
+    try:
+        await reload_marm_documentation()
+    finally:
+        with _refresh_state_lock:
+            _refresh_in_progress = False
+
+
+async def ensure_marm_started(session_name: str = "default") -> None:
+    """Load docs if not loaded, then upsert the session row with marm_active."""
+    await ensure_docs_loaded()
+    try:
+        with memory.get_connection() as conn:
+            conn.execute(
+                "INSERT OR REPLACE INTO sessions (session_name, marm_active, last_accessed)"
+                " VALUES (?, TRUE, ?)",
+                (session_name, datetime.now(timezone.utc).isoformat()),
+            )
+            conn.commit()
+    except Exception:
+        pass
 
 
 async def reload_marm_documentation():
@@ -166,104 +237,49 @@ async def reload_marm_documentation():
     await load_marm_documentation()
 
 
+_LEGACY_SYSTEM_NOTEBOOK_NAMES = {
+    "marm_protocol",
+    "marm_commands_summary",
+    "mcp_integration_guide",
+    "marm_readme",
+    "marm_mcp-handbook",
+}
+
+
 async def load_marm_documentation():
-    """Pre-populate the MCP server with core MARM documentation"""
+    """Index all marm-docs/ files into memories for semantic search."""
     global _docs_loaded
 
-    essential_docs, search_only_docs = get_docs_to_load()
+    # One-time cleanup of system-created notebook entries from older MARM versions.
+    # These were never user data — the notebook is now user territory only.
+    with memory.get_connection() as conn:
+        already_cleaned = conn.execute(
+            "SELECT value FROM user_settings WHERE key = 'system_notebook_cleanup_v1'"
+        ).fetchone()
+        if not already_cleaned:
+            for name in _LEGACY_SYSTEM_NOTEBOOK_NAMES:
+                conn.execute("DELETE FROM notebook_entries WHERE name = ?", (name,))
+            conn.execute(
+                "INSERT OR REPLACE INTO user_settings (key, value, updated_at) VALUES (?, ?, ?)",
+                ("system_notebook_cleanup_v1", "done", datetime.now(timezone.utc).isoformat()),
+            )
+            conn.commit()
+            print("[DOCS] Cleaned up legacy system notebook entries")
 
+    docs = get_docs_to_load()
     print("Loading MARM documentation into memory system...")
 
-    missing_essential_docs = len(essential_docs) == 0
-    essential_failures = 0
-    for doc in essential_docs:
-        if not await _index_doc(doc, include_notebook=True):
-            essential_failures += 1
+    if not docs:
+        print("WARNING: No documentation files found — will retry on next tool call")
+        return
 
-    for doc in search_only_docs:
-        await _index_doc(doc, include_notebook=False)
-    
-    # Add some core knowledge entries
-    core_knowledge = [
-        {
-            "name": "marm_commands_summary",
-            "content": """MARM Core Commands Quick Reference:
+    failures = 0
+    for doc in docs:
+        if not await _index_doc(doc):
+            failures += 1
 
-SESSION COMMANDS:
-- /start marm - Activates MARM memory and accuracy layers
-- /refresh marm - Refreshes active session state
-
-LOGGING COMMANDS:
-- /log session: [name] - Create or switch to named session
-- /log entry: [YYYY-MM-DD-topic-summary] - Add structured log entry
-- /log show: [session] - Display all entries and sessions
-- /log delete: [session/entry] - Delete specified session or entry
-
-REASONING COMMANDS:
-- /summary: [session] - Generate paste-ready context block
-- /context_bridge: [new topic] - Intelligent workflow transitions
-
-NOTEBOOK COMMANDS:
-- /notebook add: [name] [data] - Add new entry
-- /notebook use: [name1,name2] - Activate entries as instructions  
-- /notebook show: - Display all saved entries
-- /notebook delete: [name] - Delete specific entry
-- /notebook clear: - Clear active list
-- /notebook status: - Show current active list"""
-        },
-        {
-            "name": "mcp_integration_guide", 
-            "content": """MARM MCP Server Integration Guide:
-
-This MCP server provides all MARM protocol functionality to Claude Desktop through these endpoints:
-
-MEMORY SYSTEM:
-- marm_smart_recall - Semantic search across all memories
-- marm_contextual_log - Auto-classifying memory storage
-
-PROTOCOL COMMANDS:  
-- marm_start / marm_refresh - Session management
-- marm_log_session / marm_log_entry / marm_log_show / marm_log_delete - Logging
-- marm_summary / marm_context_bridge - Reasoning and workflow transitions
-- marm_notebook_* - All 6 notebook management functions
-
-SYSTEM:
-- marm_current_context - Current date/time and system status
-
-The MCP server uses semantic search with sentence transformers, SQLite storage, and event-driven automation for intelligent memory management."""
-        }
-    ]
-    
-    for knowledge in core_knowledge:
-        try:
-            embedding_bytes = None
-            if memory.encoder:
-                try:
-                    embedding = memory.encoder.encode(knowledge["content"])
-                    embedding_bytes = embedding.tobytes()
-                except Exception as e:
-                    print(f"Failed to generate embedding for {knowledge['name']}: {e}")
-            
-            with sqlite3.connect(memory.db_path) as conn:
-                conn.execute('''
-                    INSERT OR REPLACE INTO notebook_entries (name, data, embedding, updated_at)
-                    VALUES (?, ?, ?, ?)
-                ''', (knowledge["name"], knowledge["content"], embedding_bytes, datetime.now(timezone.utc).isoformat()))
-                conn.commit()
-            
-            print(f"OK: Added core knowledge: {knowledge['name']}")
-            
-        except Exception as e:
-            # Safe error printing - avoid unicode issues
-            try:
-                print(f"ERROR: Failed to add {knowledge['name']}: {str(e)}")
-            except UnicodeEncodeError:
-                print(f"ERROR: Failed to add {knowledge['name']}: {type(e).__name__}")
-    
-    if not missing_essential_docs and essential_failures == 0:
+    if failures == 0:
         print("MARM documentation database ready!")
         _docs_loaded = True
-    elif missing_essential_docs:
-        print("WARNING: No essential documentation files found — will retry on next marm_start")
     else:
-        print(f"WARNING: {essential_failures} essential doc(s) failed to index — will retry on next marm_start")
+        print(f"WARNING: {failures} doc(s) failed to index — will retry on next tool call")

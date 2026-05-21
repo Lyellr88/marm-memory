@@ -1,9 +1,7 @@
 """Notebook endpoints for MARM MCP Server."""
 
-from fastapi import HTTPException, APIRouter, Query
-import sqlite3
+from fastapi import HTTPException, APIRouter
 from datetime import datetime, timezone
-from typing import List, Dict, Optional
 
 # Import core components
 from ..core.models import NotebookAddRequest, NotebookUseRequest
@@ -113,35 +111,6 @@ async def marm_notebook_show():
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to show notebook entries: {str(e)}")
-
-@router.delete("/marm_notebook_delete", operation_id="marm_notebook_delete")
-async def marm_notebook_delete(
-    name: str = Query(..., description="The name of the notebook entry to delete.")
-):
-    """
-    🗑️ Delete a specific notebook entry
-    
-    Equivalent to /notebook delete: [name] command
-    """
-    try:
-        with memory.get_connection() as conn:
-            cursor = conn.execute('DELETE FROM notebook_entries WHERE name = ?', (name,))
-            deleted = cursor.rowcount
-            conn.commit()
-
-        if deleted > 0:
-            memory.active_notebook_entries = [
-                entry for entry in memory.active_notebook_entries
-                if entry.get("name") != name
-            ]
-        
-        return {
-            "status": "success" if deleted > 0 else "not_found",
-            "message": f"🗑️ Deleted notebook entry '{name}'" if deleted > 0 else f"Entry '{name}' not found",
-            "deleted": deleted > 0
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to delete notebook entry: {str(e)}")
 
 @router.delete("/marm_notebook_clear", operation_id="marm_notebook_clear")
 async def marm_notebook_clear():

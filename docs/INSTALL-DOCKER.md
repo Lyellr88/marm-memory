@@ -2,7 +2,7 @@
 
 ## Universal Memory Intelligence Platform for AI Agents
 
-**MARM v2.5.5* - Memory Accurate Response Mode
+**MARM v2.6.0* - Memory Accurate Response Mode
 *Docker deployment guide for Windows, Mac, and Linux*
 
 ---
@@ -28,7 +28,7 @@
 1. **Generate a key**: `docker run --rm lyellr88/marm-mcp-server:latest python -m marm_mcp_server --generate-key`
 2. **Pull & Run**: Choose Docker Run or Docker Compose below (include your key as `MARM_API_KEY`)
 3. **Connect Claude**: `claude mcp add --transport http marm-memory http://localhost:8001/mcp --header "Authorization: Bearer your-generated-key"`
-4. **Test**: `marm_start` → `marm_system_info`
+4. **Test**: Ask Claude to recall a memory — MARM initializes automatically on the first tool call
 
 **That's it!** You now have AI memory that saves across sessions and platforms.
 

@@ -5,7 +5,7 @@
      width="700"
      height="350">
 </picture>
-<h1 align="center">MARM: The AI That Remembers Your Conversations v2.5.5</h1>
+<h1 align="center">MARM: The AI That Remembers Your Conversations v2.6.0</h1>
 
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
@@ -37,7 +37,7 @@ Modern LLMs lose context over time, repeat prior ideas, and drift off requiremen
 
 | **Memory** | **Multi-AI** | **Architecture** |
 |------------|--------------|------------------|
-| **Semantic Search** - Find by meaning using AI embeddings | **Unified Memory Layer** - Works with Claude, Qwen, Gemini, MCP clients | **18 Complete MCP Tools** - Full Model Context Protocol coverage |
+| **Semantic Search** - Find by meaning using AI embeddings | **Unified Memory Layer** - Works with Claude, Qwen, Gemini, MCP clients | **Lean MCP Tool Surface** - Focused tools with lifecycle automation |
 | **Auto-Classification** - Content categorized (code, project, book, general) | **Cross-Platform Intelligence** - Different AIs learn from shared knowledge | **Database Optimization** - SQLite with WAL mode and connection pooling |
 | **Persistent Cross-Session Memory** - Memories survive across agent conversations | **User-Controlled Memory** - "Bring Your Own History," granular control | **Rate Limiting** - IP-based tiers for stability |
 | **Smart Recall** - Vector similarity search with context-aware fallbacks | | **MCP Compliance** - Response size management for predictable performance |
@@ -159,7 +159,7 @@ Claude Code remains the recommended first setup path, but MARM also works with o
 
 ---
 
-## Complete MCP Tool Suite (18 Tools)
+## Complete MCP Tool Suite (12 Tools)
 
 <div align="center">
 <picture>
@@ -177,26 +177,24 @@ Claude Code remains the recommended first setup path, but MARM also works with o
 
 The AI agent will automatically use the appropriate tools. Manual tool access is available for power users who want direct control.
 
+MARM now handles lifecycle work internally. Documentation loads on the first real tool call, session state initializes automatically, and documentation refreshes every 50 tool calls. Packaged docs are indexed into searchable memory with hash-based caching, so unchanged docs are skipped across restarts.
+
 | **Category** | **Tool** | **Description** |
 |--------------|----------|-----------------|
 | **Memory Intelligence** | `marm_smart_recall` | AI-powered semantic similarity search across all memories. Supports global search with `search_all=True` flag |
 | | `marm_contextual_log` | Intelligent auto-classifying memory storage using vector embeddings |
-| **Session Management** | `marm_start` | Activate MARM intelligent memory and response accuracy layers |
-| | `marm_refresh` | Refresh AI agent session state and reaffirm protocol adherence |
 | **Logging System** | `marm_log_session` | Create or switch to named session container |
 | | `marm_log_entry` | Add structured log entry with auto-date formatting |
 | | `marm_log_show` | Display all entries and sessions (filterable) |
-| | `marm_log_delete` | Delete specified session or individual entries |
+| | `marm_delete` | Delete a log session, log entry, or notebook entry (`type="log"\|"notebook"`) |
 | **Reasoning & Workflow** | `marm_summary` | Generate context-aware summaries with intelligent truncation for LLM conversations |
-| | `marm_context_bridge` | Smart context bridging for seamless AI agent workflow transitions |
 | **Notebook Management** | `marm_notebook_add` | Add new notebook entry with semantic embeddings |
 | | `marm_notebook_use` | Activate entries as instructions (comma-separated) |
 | | `marm_notebook_show` | Display all saved keys and summaries |
-| | `marm_notebook_delete` | Delete specific notebook entry |
 | | `marm_notebook_clear` | Clear the active instruction list |
 | | `marm_notebook_status` | Show current active instruction list |
-| **System Utilities** | `marm_system_info` | Comprehensive system information, health status, and loaded docs |
-| | `marm_reload_docs` | Reload documentation into memory system |
+
+**Internal automation:** lifecycle initialization, documentation refresh, current date context, and system checks are handled by the server instead of exposed as AI-facing tools. For server status, use the dashboard health panel or `curl http://localhost:8001/health`.
 
 ---
 
@@ -292,7 +290,7 @@ MARM defaults to **localhost-only** (`127.0.0.1`). No credentials are required f
 | Feature | MARM | Basic MCP Servers |
 |---------|-------------|-------------------|
 | **Memory Intelligence** | AI-powered semantic search with auto-classification | Basic key-value storage |
-| **Tool Coverage** | 18 complete MCP protocol tools | 3-5 basic wrappers |  
+| **Tool Coverage** | 12 focused MCP tools + lifecycle automation | 3-5 basic wrappers |  
 | **Scalability** | Database optimization + connection pooling | Single connection |
 | **MCP Compliance** | 1MB response size management | No size controls |
 | **Deployment** | Docker containerization + health monitoring | Local development only |

@@ -75,34 +75,6 @@ def test_error_context_preserves_tail_when_truncated():
     assert truncated["content"].endswith("final traceback line")
 
 
-def test_context_bridge_response_is_limited_below_mcp_limit():
-    related_content = [
-        {
-            "type": "memory",
-            "content": f"related-{index} " + ("y" * 80_000),
-            "session_name": f"session-{index}",
-            "context_type": "project",
-            "similarity": 0.9,
-        }
-        for index in range(20)
-    ]
-    metadata = {
-        "status": "success",
-        "new_topic": "docker transport",
-        "session_name": "release-test",
-    }
-
-    limited, was_truncated = MCPResponseLimiter.limit_context_bridge_response(
-        related_content, metadata
-    )
-    response = metadata | {"related_content": limited}
-
-    assert was_truncated is True
-    assert limited
-    assert MCPResponseLimiter.estimate_response_size(response) <= MCPResponseLimiter.CONTENT_LIMIT
-    assert any(item.get("_truncated") for item in limited)
-
-
 def test_truncation_notice_adds_machine_readable_metadata_and_message():
     response = {"status": "success", "message": "found memories"}
 

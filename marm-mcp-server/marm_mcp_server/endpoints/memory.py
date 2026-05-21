@@ -1,9 +1,7 @@
 """Memory endpoints for MARM MCP Server."""
 
 from fastapi import HTTPException, APIRouter, Request
-import sqlite3
 from datetime import datetime, timezone
-from typing import List, Dict, Optional
 
 # Import core components
 from ..core.models import SmartRecallRequest, ContextualLogRequest
@@ -76,15 +74,47 @@ async def marm_smart_recall(request: SmartRecallRequest, http_request: Request):
     try:
         # Determine which session(s) to search
         search_session = None if request.search_all else request.session_name
-        
+
+        # Run log query up front so it's available in both no_results and success paths.
+        # Scope to session_name unless search_all=True, matching memory search behaviour.
+        log_results = []
+        if request.include_logs:
+            with memory.get_connection() as conn:
+                if request.search_all:
+                    cursor = conn.execute(
+                        """
+                        SELECT session_name, topic, summary, entry_date
+                        FROM log_entries
+                        WHERE topic LIKE ? OR summary LIKE ?
+                        ORDER BY entry_date DESC
+                        LIMIT ?
+                        """,
+                        (f"%{request.query}%", f"%{request.query}%", request.limit),
+                    )
+                else:
+                    cursor = conn.execute(
+                        """
+                        SELECT session_name, topic, summary, entry_date
+                        FROM log_entries
+                        WHERE (topic LIKE ? OR summary LIKE ?) AND session_name = ?
+                        ORDER BY entry_date DESC
+                        LIMIT ?
+                        """,
+                        (f"%{request.query}%", f"%{request.query}%", request.session_name, request.limit),
+                    )
+                log_results = [
+                    {"session_name": r[0], "topic": r[1], "summary": r[2], "entry_date": r[3], "type": "log"}
+                    for r in cursor.fetchall()
+                ]
+
         similar_memories = await memory.recall_similar(request.query, search_session, request.limit)
-        
+
         if not similar_memories:
             # If searching all sessions and still no results, check system session specifically
             if not request.search_all:
                 # Check if there are results in the system session as a helpful suggestion
                 system_memories = await memory.recall_similar(request.query, "marm_system", request.limit)
-                
+
                 response = {
                     "status": "no_results",
                     "query": request.query,
@@ -92,7 +122,7 @@ async def marm_smart_recall(request: SmartRecallRequest, http_request: Request):
                     "search_all": request.search_all,
                     "results": []
                 }
-                
+
                 if system_memories:
                     # Found results in system session - provide helpful guidance
                     response["message"] = (
@@ -114,11 +144,14 @@ async def marm_smart_recall(request: SmartRecallRequest, http_request: Request):
                         f"Try broadening your query, using session_name='marm_system' for system documentation, "
                         f"or search_all=True to search across all sessions."
                     )
-                
+
+                if request.include_logs:
+                    response["log_results"] = log_results
+                    response["log_results_count"] = len(log_results)
                 return response
             else:
                 # Searched all sessions and still no results
-                return {
+                response = {
                     "status": "no_results",
                     "message": f"🤔 No memories found across all sessions for query: '{request.query}'. Try broadening your query.",
                     "query": request.query,
@@ -126,6 +159,10 @@ async def marm_smart_recall(request: SmartRecallRequest, http_request: Request):
                     "search_all": request.search_all,
                     "results": []
                 }
+                if request.include_logs:
+                    response["log_results"] = log_results
+                    response["log_results_count"] = len(log_results)
+                return response
         
         # Prepare base response metadata
         base_response = {
@@ -153,7 +190,11 @@ async def marm_smart_recall(request: SmartRecallRequest, http_request: Request):
         final_response = MCPResponseLimiter.add_truncation_notice(
             base_response, was_truncated, len(similar_memories)
         )
-        
+
+        if request.include_logs:
+            final_response["log_results"] = log_results
+            final_response["log_results_count"] = len(log_results)
+
         return final_response
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Memory recall failed: {str(e)}")

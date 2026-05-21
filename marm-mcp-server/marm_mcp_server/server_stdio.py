@@ -77,6 +77,13 @@ def _log_tool_call(fn):
             _stdio_log.debug("CALL %s %s", name, " ".join(safe))
         else:
             _stdio_log.info("CALL %s", name)
+
+        session_name = kwargs.get("session_name", "default")
+        try:
+            await ensure_marm_started(session_name)
+        except Exception as e:
+            _stdio_log.warning("session init failed: %s", e)
+
         try:
             result = await fn(*args, **kwargs)
         except Exception as e:
@@ -98,6 +105,12 @@ def _log_tool_call(fn):
                 )
             else:
                 _stdio_log.info("OK %s", name)
+
+        try:
+            await maybe_auto_refresh()
+        except Exception as e:
+            _stdio_log.warning("auto-refresh failed: %s", e)
+
         return result
     return wrapper
 
@@ -107,17 +120,14 @@ from fastmcp import FastMCP
 from marm_mcp_server.core.memory import memory
 from marm_mcp_server.core.events import events
 from marm_mcp_server.core.response_limiter import MCPResponseLimiter
-from marm_mcp_server.utils.helpers import read_protocol_file
 from marm_mcp_server.services.documentation import (
-    load_marm_documentation,
-    reload_marm_documentation,
-    docs_are_loaded,
+    ensure_marm_started,
+    maybe_auto_refresh,
 )
 from marm_mcp_server.config.settings import (
     SERVER_VERSION,
     DEFAULT_DB_PATH,
     SEMANTIC_SEARCH_AVAILABLE,
-    SCHEDULER_AVAILABLE,
 )
 
 mcp = FastMCP("MARM MCP Server")
@@ -126,73 +136,6 @@ response_limiter = MCPResponseLimiter()
 # ============================================================================
 # Session Tools
 # ============================================================================
-
-@mcp.tool()
-@_log_tool_call
-async def marm_start(session_name: str) -> dict:
-    """
-    🚀 Activates MARM memory and accuracy layers
-
-    Equivalent to /start marm command
-    """
-    try:
-        with memory.get_connection() as conn:
-            conn.execute(
-                """
-                INSERT OR REPLACE INTO sessions (session_name, marm_active, last_accessed)
-                VALUES (?, TRUE, ?)
-                """,
-                (session_name, datetime.now(timezone.utc).isoformat()),
-            )
-            conn.commit()
-
-        if not docs_are_loaded():
-            await load_marm_documentation()
-
-        protocol_content = await read_protocol_file()
-        await events.emit("marm_started", {"session": session_name})
-
-        return {
-            "status": "success",
-            "message": f"🚀 MARM protocol activated for session '{session_name}'",
-            "session_name": session_name,
-            "marm_active": True,
-            "protocol_content": protocol_content,
-            "instructions": "The complete MARM protocol documentation has been loaded and is available for reference.",
-        }
-    except Exception as e:
-        return {"status": "error", "message": f"Error during MARM start: {str(e)}"}
-
-
-@mcp.tool()
-@_log_tool_call
-async def marm_refresh(session_name: str) -> dict:
-    """
-    🔄 Refreshes active session state and reaffirms protocol adherence
-
-    Equivalent to /refresh marm command
-    """
-    try:
-        with memory.get_connection() as conn:
-            conn.execute(
-                "UPDATE sessions SET last_accessed = ? WHERE session_name = ?",
-                (datetime.now(timezone.utc).isoformat(), session_name),
-            )
-            conn.commit()
-
-        protocol_content = await read_protocol_file()
-        await events.emit("marm_refreshed", {"session": session_name})
-
-        return {
-            "status": "success",
-            "message": f"🔄 MARM session '{session_name}' refreshed - protocol adherence reaffirmed",
-            "session_name": session_name,
-            "protocol_content": protocol_content,
-            "instructions": "Protocol documentation refreshed. Please review the current MARM protocol specifications above.",
-        }
-    except Exception as e:
-        return {"status": "error", "message": f"Error during MARM refresh: {str(e)}"}
-
 
 # ============================================================================
 # Memory Tools
@@ -205,6 +148,7 @@ async def marm_smart_recall(
     session_name: str = "default",
     limit: int = 5,
     search_all: bool = False,
+    include_logs: bool = False,
 ) -> dict:
     """
     🧠 Intelligent memory recall based on semantic similarity
@@ -214,6 +158,39 @@ async def marm_smart_recall(
     """
     try:
         search_session = None if search_all else session_name
+
+        # Run log query up front so it's available in both no_results and success paths.
+        # Scope to session_name unless search_all=True, matching memory search behaviour.
+        log_results = []
+        if include_logs:
+            with memory.get_connection() as conn:
+                if search_all:
+                    log_rows = conn.execute(
+                        """
+                        SELECT session_name, topic, summary, entry_date
+                        FROM log_entries
+                        WHERE topic LIKE ? OR summary LIKE ?
+                        ORDER BY entry_date DESC
+                        LIMIT ?
+                        """,
+                        (f"%{query}%", f"%{query}%", limit),
+                    ).fetchall()
+                else:
+                    log_rows = conn.execute(
+                        """
+                        SELECT session_name, topic, summary, entry_date
+                        FROM log_entries
+                        WHERE (topic LIKE ? OR summary LIKE ?) AND session_name = ?
+                        ORDER BY entry_date DESC
+                        LIMIT ?
+                        """,
+                        (f"%{query}%", f"%{query}%", session_name, limit),
+                    ).fetchall()
+            log_results = [
+                {"session_name": r[0], "topic": r[1], "summary": r[2], "entry_date": r[3], "type": "log"}
+                for r in log_rows
+            ]
+
         similar_memories = await memory.recall_similar(query, session=search_session, limit=limit)
 
         if not similar_memories:
@@ -237,6 +214,9 @@ async def marm_smart_recall(
                     response["system_results"] = system_memories
                 else:
                     response["message"] = f"No memories found for query: '{query}'"
+                if include_logs:
+                    response["log_results"] = log_results
+                    response["log_results_count"] = len(log_results)
                 return response
 
         formatted_results = [
@@ -272,6 +252,10 @@ async def marm_smart_recall(
             response_data = response_limiter.add_truncation_notice(
                 response_data, was_truncated, len(formatted_results)
             )
+
+        if include_logs:
+            response_data["log_results"] = log_results
+            response_data["log_results_count"] = len(log_results)
 
         return response_data
 
@@ -445,37 +429,57 @@ async def marm_log_show(
 
 @mcp.tool()
 @_log_tool_call
-async def marm_log_delete(
+async def marm_delete(
+    type: str,
     target: str,
     session_name: Optional[str] = None,
 ) -> dict:
     """
-    🗑️ Delete a session or specific log entry
+    🗑️ Delete a log session, log entry, or notebook entry
 
-    If session_name is provided, deletes the entry matching target within that session.
-    If session_name is omitted, target is treated as a session name and the whole session is deleted.
+    type="log" + session_name: delete specific entry by id or topic
+    type="log" (no session_name): delete entire session and all its entries
+    type="notebook": delete notebook entry by name
     """
     try:
         with memory.get_connection() as conn:
-            if session_name:
-                cursor = conn.execute(
-                    "DELETE FROM log_entries WHERE session_name = ? AND (id = ? OR topic = ?)",
-                    (session_name, target, target),
-                )
+            if type == "log":
+                if session_name:
+                    cursor = conn.execute(
+                        "DELETE FROM log_entries WHERE session_name = ? AND (id = ? OR topic = ?)",
+                        (session_name, target, target),
+                    )
+                    deleted = cursor.rowcount
+                else:
+                    conn.execute("DELETE FROM sessions WHERE session_name = ?", (target,))
+                    cursor = conn.execute(
+                        "DELETE FROM log_entries WHERE session_name = ?", (target,)
+                    )
+                    deleted = cursor.rowcount
+                    if memory.active_log_session == target:
+                        memory.active_log_session = "main"
+                conn.commit()
+                return {
+                    "status": "success",
+                    "message": f"🗑️ Deleted {deleted} items",
+                    "deleted_count": deleted,
+                }
+            elif type == "notebook":
+                cursor = conn.execute("DELETE FROM notebook_entries WHERE name = ?", (target,))
                 deleted = cursor.rowcount
+                conn.commit()
+                if deleted > 0:
+                    memory.active_notebook_entries = [
+                        entry for entry in memory.active_notebook_entries
+                        if entry.get("name") != target
+                    ]
+                return {
+                    "status": "success" if deleted > 0 else "not_found",
+                    "message": f"🗑️ Deleted notebook entry '{target}'" if deleted > 0 else f"Entry '{target}' not found",
+                    "deleted": deleted > 0,
+                }
             else:
-                conn.execute("DELETE FROM sessions WHERE session_name = ?", (target,))
-                cursor = conn.execute(
-                    "DELETE FROM log_entries WHERE session_name = ?", (target,)
-                )
-                deleted = cursor.rowcount
-            conn.commit()
-
-        return {
-            "status": "success",
-            "message": f"🗑️ Deleted {deleted} items",
-            "deleted_count": deleted,
-        }
+                return {"status": "error", "message": f"Invalid type '{type}'. Must be 'log' or 'notebook'."}
     except Exception as e:
         return {"status": "error", "message": f"Error deleting: {str(e)}"}
 
@@ -629,34 +633,6 @@ async def marm_notebook_clear() -> dict:
         return {"status": "error", "message": f"Error clearing notebook: {str(e)}"}
 
 
-@mcp.tool()
-@_log_tool_call
-async def marm_notebook_delete(name: str) -> dict:
-    """
-    🗑️ Delete a specific notebook entry by name
-    """
-    try:
-        with memory.get_connection() as conn:
-            cursor = conn.execute(
-                "DELETE FROM notebook_entries WHERE name = ?", (name,)
-            )
-            deleted = cursor.rowcount
-            conn.commit()
-
-        if deleted > 0:
-            memory.active_notebook_entries = [
-                entry for entry in memory.active_notebook_entries
-                if entry.get("name") != name
-            ]
-
-        return {
-            "status": "success" if deleted > 0 else "not_found",
-            "message": f"🗑️ Deleted notebook entry '{name}'" if deleted > 0 else f"Entry '{name}' not found",
-            "deleted": deleted > 0,
-        }
-    except Exception as e:
-        return {"status": "error", "message": f"Error deleting notebook entry: {str(e)}"}
-
 
 # ============================================================================
 # Workflow Tools
@@ -747,230 +723,6 @@ async def marm_summary(
 
     except Exception as e:
         return {"status": "error", "message": f"Error generating summary: {str(e)}"}
-
-
-@mcp.tool()
-@_log_tool_call
-async def marm_context_bridge(
-    new_topic: str,
-    session_name: str = "default",
-) -> dict:
-    """
-    🌉 Intelligent context bridging for smooth workflow transitions
-
-    Searches memories and log_entries for content related to new_topic,
-    then returns a formatted bridge_text block. Equivalent to /context_bridge: [new topic]
-    """
-    try:
-        related_content = []
-
-        if memory.encoder:
-            related_memories = await memory.recall_similar(
-                query=new_topic, session=None, limit=8
-            )
-
-            with memory.get_connection() as conn:
-                log_matches = conn.execute(
-                    """
-                    SELECT session_name, topic, summary, full_entry
-                    FROM log_entries
-                    WHERE topic LIKE ? OR summary LIKE ?
-                    ORDER BY entry_date DESC
-                    LIMIT 3
-                    """,
-                    (f"%{new_topic}%", f"%{new_topic}%"),
-                ).fetchall()
-
-            for mem_item in related_memories[:5]:
-                related_content.append({
-                    "type": "memory",
-                    "session": mem_item["session_name"],
-                    "content": mem_item["content"],
-                    "similarity": mem_item["similarity"],
-                    "context_type": mem_item["context_type"],
-                })
-
-            for log_item in log_matches:
-                related_content.append({
-                    "type": "log",
-                    "session": log_item[0],
-                    "topic": log_item[1],
-                    "summary": log_item[2],
-                    "similarity": 0.7,
-                })
-        else:
-            with memory.get_connection() as conn:
-                log_matches = conn.execute(
-                    """
-                    SELECT session_name, topic, summary, full_entry
-                    FROM log_entries
-                    WHERE topic LIKE ? OR summary LIKE ?
-                    ORDER BY entry_date DESC
-                    LIMIT 5
-                    """,
-                    (f"%{new_topic}%", f"%{new_topic}%"),
-                ).fetchall()
-
-            for log_item in log_matches:
-                related_content.append({
-                    "type": "log",
-                    "session": log_item[0],
-                    "topic": log_item[1],
-                    "summary": log_item[2],
-                    "similarity": 0.7,
-                })
-
-        base_response = {
-            "status": "success",
-            "new_topic": new_topic,
-            "session_name": session_name,
-        }
-
-        limited_content, was_truncated = MCPResponseLimiter.limit_context_bridge_response(
-            related_content, base_response
-        )
-
-        bridge_lines = [f"# Context Bridge: {new_topic}", f"Session: {session_name}", ""]
-
-        if limited_content:
-            bridge_lines.append("## Related Context:")
-            sorted_content = sorted(
-                limited_content, key=lambda x: x.get("similarity", 0), reverse=True
-            )
-
-            for item in sorted_content:
-                similarity_pct = int(item.get("similarity", 0.7) * 100)
-                session_badge = f"[{item['session']}]"
-
-                if item.get("type") == "memory":
-                    context_badge = f"[{item['context_type'].upper()}]"
-                    content_preview = (
-                        item["content"][:100] + "..."
-                        if len(item["content"]) > 100
-                        else item["content"]
-                    )
-                    truncated = " [TRUNCATED]" if item.get("_truncated", False) else ""
-                    bridge_lines.append(
-                        f"- {session_badge} {context_badge} ({similarity_pct}%): {content_preview}{truncated}"
-                    )
-                else:
-                    bridge_lines.append(
-                        f"- {session_badge} [LOG] ({similarity_pct}%): {item['topic']} - {item['summary']}"
-                    )
-
-            bridge_lines.append("")
-
-            if was_truncated:
-                bridge_lines.append(
-                    f"*Note: Results limited for size compliance. {len(related_content)} total matches found, "
-                    f"showing {len(limited_content)}.*"
-                )
-                bridge_lines.append("")
-
-        if limited_content:
-            bridge_lines.append("## Recommended Approach:")
-            context_types = [
-                item.get("context_type", "general")
-                for item in limited_content
-                if item.get("type") == "memory"
-            ]
-            if "code" in context_types:
-                bridge_lines.append("- Review related code patterns and implementations above")
-                bridge_lines.append("- Consider lessons learned from similar technical work")
-            elif "project" in context_types:
-                bridge_lines.append("- Build on successful project patterns identified above")
-                bridge_lines.append("- Apply lessons learned from previous project phases")
-            else:
-                bridge_lines.append("- Leverage insights from related work shown above")
-                bridge_lines.append("- Build on established patterns and approaches")
-        else:
-            bridge_lines.append("## Starting Fresh:")
-            bridge_lines.append("- No directly related context found - starting with clean slate")
-            bridge_lines.append("- Consider documenting key decisions as you progress")
-
-        bridge_lines.extend(["", "---", "*Ready to proceed with focused work*"])
-
-        final_response = {
-            "status": "success",
-            "new_topic": new_topic,
-            "session_name": session_name,
-            "bridge_text": "\n".join(bridge_lines),
-            "related_count": len(limited_content),
-            "total_available": len(related_content),
-        }
-
-        if was_truncated:
-            final_response["_mcp_truncated"] = True
-            final_response["_truncation_reason"] = "Content limited to 1MB for MCP compliance"
-
-        return final_response
-
-    except Exception as e:
-        return {"status": "error", "message": f"Error bridging context: {str(e)}"}
-
-
-# ============================================================================
-# System Tools
-# ============================================================================
-
-@mcp.tool()
-@_log_tool_call
-async def marm_system_info() -> dict:
-    """
-    ℹ️ Comprehensive system information, health status, and loaded docs
-    """
-    import psutil
-
-    try:
-        process = psutil.Process(os.getpid())
-        memory_mb = process.memory_info().rss / 1024 / 1024
-
-        db_size = 0.0
-        if os.path.exists(DEFAULT_DB_PATH):
-            db_size = os.path.getsize(DEFAULT_DB_PATH) / 1024 / 1024
-
-        with memory.get_connection() as conn:
-            memory_count = conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
-            session_count = conn.execute("SELECT COUNT(*) FROM sessions").fetchone()[0]
-
-        return {
-            "status": "success",
-            "version": SERVER_VERSION,
-            "transport": "stdio",
-            "system": {
-                "memory_usage_mb": round(memory_mb, 2),
-                "database_size_mb": round(db_size, 2),
-                "database_path": DEFAULT_DB_PATH,
-            },
-            "features": {
-                "semantic_search": SEMANTIC_SEARCH_AVAILABLE,
-                "scheduler": SCHEDULER_AVAILABLE,
-            },
-            "statistics": {
-                "total_memories": memory_count,
-                "total_sessions": session_count,
-            },
-        }
-
-    except Exception as e:
-        return {"status": "error", "message": f"Error getting system info: {str(e)}"}
-
-
-@mcp.tool()
-@_log_tool_call
-async def marm_reload_docs() -> dict:
-    """
-    🔄 Reload documentation into memory system
-    """
-    try:
-        await reload_marm_documentation()
-        return {
-            "status": "success",
-            "message": "Documentation reloaded into memory system",
-        }
-
-    except Exception as e:
-        return {"status": "error", "message": f"Error reloading docs: {str(e)}"}
 
 
 # ============================================================================

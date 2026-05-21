@@ -8,7 +8,7 @@ import pytest
 import requests
 
 
-DOCKER_IMAGE = os.environ.get("MARM_DOCKER_IMAGE", "marm-mcp-server:smoke")
+DOCKER_IMAGE = os.environ.get("MARM_DOCKER_IMAGE", "lyellr88/marm-mcp-server:latest")
 
 
 def _run_docker(args, timeout=60):
@@ -92,14 +92,16 @@ def test_docker_http_requires_key_and_serves_tools(docker_image, tmp_path):
         assert ready.status_code == 200
         assert "websocket" not in ready.text.lower()
 
-        missing_auth = requests.get(f"{base_url}/marm_current_context", timeout=5)
+        missing_auth = requests.get(f"{base_url}/marm_log_show", params={"session_name": "main"}, timeout=5)
         wrong_auth = requests.get(
-            f"{base_url}/marm_current_context",
+            f"{base_url}/marm_log_show",
+            params={"session_name": "main"},
             headers={"Authorization": "Bearer wrong"},
             timeout=5,
         )
         correct_auth = requests.get(
-            f"{base_url}/marm_current_context",
+            f"{base_url}/marm_log_show",
+            params={"session_name": "main"},
             headers={"Authorization": f"Bearer {api_key}"},
             timeout=5,
         )
@@ -107,7 +109,6 @@ def test_docker_http_requires_key_and_serves_tools(docker_image, tmp_path):
         assert missing_auth.status_code == 401
         assert wrong_auth.status_code == 401
         assert correct_auth.status_code == 200
-        assert correct_auth.json()["system_status"] == "operational"
 
         no_websocket = requests.get(
             f"{base_url}/mcp/ws",

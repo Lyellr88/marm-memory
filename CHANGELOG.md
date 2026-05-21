@@ -1171,10 +1171,8 @@ This release introduces a complete UI/UX transformation with the implementation 
 
 ---
 
-## [v2.6.0] - 2026-05-20
-
 <details>
-<summary><strong>What's New</strong></summary>
+<summary><strong>May 20th, 2026: STDIO File Logging & Rate Limiter Tuning (v2.6.0) </strong></summary>
 
 ### STDIO File Logging
 

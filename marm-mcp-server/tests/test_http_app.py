@@ -48,15 +48,34 @@ def test_api_key_mode_rejects_missing_or_wrong_bearer_and_accepts_correct_one(mo
     server = load_isolated_server(monkeypatch, tmp_path, api_key="test-key-123")
     client = local_client(server.app)
 
-    missing = client.get("/marm_current_context")
-    wrong = client.get("/marm_current_context", headers={"Authorization": "Bearer wrong"})
-    correct = client.get("/marm_current_context", headers={"Authorization": "Bearer test-key-123"})
+    missing = client.get("/marm_log_show", params={"session_name": "main"})
+    wrong = client.get("/marm_log_show", params={"session_name": "main"}, headers={"Authorization": "Bearer wrong"})
+    correct = client.get("/marm_log_show", params={"session_name": "main"}, headers={"Authorization": "Bearer test-key-123"})
 
     assert missing.status_code == 401
     assert missing.headers["www-authenticate"] == "Bearer"
     assert wrong.status_code == 401
     assert correct.status_code == 200
-    assert correct.json()["system_status"] == "operational"
+
+
+def test_unauthorized_mcp_tool_call_does_not_lazy_load_docs(monkeypatch, tmp_path):
+    server = load_isolated_server(monkeypatch, tmp_path, api_key="test-key-123")
+    doc_module = importlib.import_module("marm_mcp_server.services.documentation")
+    client = local_client(server.app)
+
+    assert not doc_module.docs_are_loaded()
+
+    response = client.post(
+        "/mcp",
+        content=b'{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{}}',
+        headers={
+            "content-type": "application/json",
+            "Authorization": "Bearer wrong",
+        },
+    )
+
+    assert response.status_code == 401
+    assert not doc_module.docs_are_loaded()
 
 
 def test_no_key_mode_allows_loopback_but_blocks_remote_clients(monkeypatch, tmp_path):
@@ -65,9 +84,9 @@ def test_no_key_mode_allows_loopback_but_blocks_remote_clients(monkeypatch, tmp_
     local = local_client(server.app)
     remote = remote_client(server.app)
 
-    assert local.get("/marm_current_context").status_code == 200
+    assert local.get("/marm_log_show", params={"session_name": "main"}).status_code == 200
 
-    blocked = remote.get("/marm_current_context")
+    blocked = remote.get("/marm_log_show", params={"session_name": "main"})
     assert blocked.status_code == 401
     assert "Set MARM_API_KEY" in blocked.json()["message"]
 

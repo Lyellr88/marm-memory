@@ -5,7 +5,7 @@ This server integrates all modular components of the MARM protocol into a single
 FastAPI application, compliant with the MCP protocol via FastApiMCP.
 
 Author: Lyell - MARM Systems
-Version: 2.5.5
+Version: 2.6.0
 """
 
 import logging
@@ -21,7 +21,7 @@ from fastapi import FastAPI, Request, Form, Body
 from fastapi_mcp import FastApiMCP
 from fastapi.responses import JSONResponse, RedirectResponse
 from typing import Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 import sqlite3
 
@@ -110,6 +110,7 @@ from .config.settings import (
 )
 from .utils.security import generate_api_key
 from .services.automation import register_event_handlers
+from .services.documentation import docs_are_loaded, maybe_auto_refresh, ensure_marm_started
 
 # Import all endpoint routers
 from .endpoints.session import router as session_router
@@ -169,9 +170,37 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+async def _mcp_tool_call_tracker(request: Request, call_next):
+    """Lazy doc-load and auto-refresh for MCP tool calls.
+
+    Registered first so LIFO puts it last — only runs after rate_limit and auth pass.
+    Only acts on tools/call requests; init, discovery, and rejected requests are ignored.
+    Doc loading runs before the handler so the first tool call gets warm docs,
+    matching STDIO transport timing.
+    """
+    is_tool_call = False
+    if request.method == "POST" and request.url.path == "/mcp":
+        try:
+            body = await request.body()
+            is_tool_call = b'"tools/call"' in body
+        except Exception:
+            pass
+
+    if is_tool_call and not docs_are_loaded():
+        await ensure_marm_started("default")
+
+    response = await call_next(request)
+
+    if is_tool_call:
+        asyncio.create_task(maybe_auto_refresh())
+
+    return response
+
+
 # Starlette LIFO: last registered runs first.
-# Rate limiting runs first (throttles floods before token validation),
-# then auth validates the bearer token.
+# Execution order: rate_limit → auth → _mcp_tool_call_tracker → handler.
+# _mcp_tool_call_tracker is registered first so it runs last, after auth passes.
+app.middleware("http")(_mcp_tool_call_tracker)
 app.middleware("http")(auth_middleware)
 app.middleware("http")(rate_limit_middleware)
 

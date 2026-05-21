@@ -62,6 +62,21 @@ RULES = [
         re.compile(r"\b2\.2\.[0-8]\b|\b2\.3\.0\b|\b2\.4\.0\b", re.IGNORECASE),
         "May be stale outside changelog/history sections.",
     ),
+    StaleRule(
+        "marm_context_bridge",
+        re.compile(r"\bmarm_context_bridge\b", re.IGNORECASE),
+        "marm_context_bridge was removed — no longer an active tool.",
+    ),
+    StaleRule(
+        "split delete tools",
+        re.compile(r"\bmarm_log_delete\b|\bmarm_notebook_delete\b", re.IGNORECASE),
+        "Replaced by marm_delete(type='log'|'notebook') in v2.6.0.",
+    ),
+    StaleRule(
+        "removed mcp tools",
+        re.compile(r"\bmarm_start\b|\bmarm_refresh\b|\bmarm_reload_docs\b", re.IGNORECASE),
+        "These are no longer exposed as MCP tools — server automates them internally.",
+    ),
 ]
 
 

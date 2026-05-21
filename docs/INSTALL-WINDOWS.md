@@ -2,7 +2,7 @@
 
 ## Universal Memory Intelligence Platform for AI Agents
 
-**MARM v2.5.5* - Memory Accurate Response Mode
+**MARM v2.6.0* - Memory Accurate Response Mode
 *Complete Windows installation guide*
 
 ---
@@ -28,7 +28,7 @@
 
 1. **Install MARM**: Choose ⭐ **pip install** (Recommended) or ⚡ **virtualenv** (Clean) from options below
 2. **Connect Claude**: `claude mcp add --transport http marm-memory http://localhost:8001/mcp`
-3. **Test**: `marm_start` → `marm_system_info`
+3. **Test**: Ask Claude to recall a memory — MARM initializes automatically on the first tool call
 
 **That's it!** You now have AI memory that saves across sessions and platforms.
 
@@ -278,7 +278,7 @@ Invoke-WebRequest -Uri http://localhost:8001/health
 {
   "status": "healthy",
   "service": "MARM MCP Server",
-  "version": "2.5.5",
+  "version": "2.6.0",
   "timestamp": "2026-01-01T00:00:00+00:00",
   "database": "connected",
   "semantic_search": "available"
@@ -394,6 +394,8 @@ python -m marm_mcp_server
 | `MAX_DB_CONNECTIONS` | `5` | Database connection pool size |
 | `MARM_ANALYTICS_DB_PATH` | `marm_usage_analytics.db` | Override analytics database path |
 | `DEFAULT_SEMANTIC_MODEL` | `all-MiniLM-L6-v2` | AI model for semantic search |
+| `MARM_STDIO_LOG_LEVEL` | `INFO` | STDIO log verbosity. Set to `DEBUG` for session names, query lengths, result counts. |
+| `MARM_STDIO_LOG_DIR` | `%USERPROFILE%\.marm\logs` | Override STDIO log directory. |
 
 ---
 
@@ -408,6 +410,20 @@ Create `start_marm.bat` for easy startup:
 python -m marm_mcp_server
 pause
 ```
+
+### **STDIO Diagnostics**
+
+STDIO logs write to `%USERPROFILE%\.marm\logs\marm-stdio.log` automatically when using local pip STDIO mode. Docker STDIO does not expose this file on the host.
+
+```powershell
+# View full log
+Get-Content "$env:USERPROFILE\.marm\logs\marm-stdio.log"
+
+# Live tail (watch tool calls as they happen)
+Get-Content "$env:USERPROFILE\.marm\logs\marm-stdio.log" -Wait -Tail 20
+```
+
+Set `MARM_STDIO_LOG_LEVEL=DEBUG` for additional detail (session names, query lengths, result counts). Memory content is never written to the log.
 
 ### **WSL Integration**
 

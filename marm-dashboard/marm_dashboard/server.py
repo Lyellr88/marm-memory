@@ -1,6 +1,7 @@
 """FastAPI app for the MARM Dashboard plugin."""
 
 from pathlib import Path
+from time import perf_counter
 from typing import Literal, Optional
 
 from fastapi import FastAPI, HTTPException, Query
@@ -61,14 +62,25 @@ def api_mcp_status():
     import json as _json
     import urllib.error
     import urllib.request
+
+    started = perf_counter()
     try:
         with urllib.request.urlopen(
             "http://127.0.0.1:8001/health", timeout=2.5
         ) as resp:
             body = _json.loads(resp.read())
-            return {"reachable": True, "body": body}
-    except (urllib.error.URLError, Exception):
-        return {"reachable": False}
+            return {
+                "reachable": True,
+                "status_code": getattr(resp, "status", 200),
+                "latency_ms": round((perf_counter() - started) * 1000, 1),
+                "body": body,
+            }
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError) as e:
+        return {
+            "reachable": False,
+            "latency_ms": round((perf_counter() - started) * 1000, 1),
+            "error": e.__class__.__name__,
+        }
 
 
 @app.post("/api/auth/unlock")

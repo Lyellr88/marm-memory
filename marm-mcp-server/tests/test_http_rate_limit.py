@@ -13,10 +13,10 @@ def test_http_rate_limit_blocks_abuse_and_preserves_public_health(monkeypatch, t
     try:
         client = local_client(server.app)
 
-        assert client.get("/marm_current_context").status_code == 200
-        assert client.get("/marm_current_context").status_code == 200
+        assert client.get("/marm_log_show").status_code == 200
+        assert client.get("/marm_log_show").status_code == 200
 
-        blocked = client.get("/marm_current_context")
+        blocked = client.get("/marm_log_show")
         assert blocked.status_code == 429
         assert blocked.json()["error"] == "Rate limit exceeded"
         assert 1 <= int(blocked.headers["Retry-After"]) <= 60

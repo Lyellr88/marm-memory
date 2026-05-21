@@ -27,7 +27,7 @@ def get_client_ip(request: Request) -> str:
 
 def determine_endpoint_type(path: str) -> str:
     """Classify endpoint for rate limiting rules"""
-    if any(endpoint in path for endpoint in ['/marm_smart_recall', '/marm_context_bridge']):
+    if any(endpoint in path for endpoint in ['/marm_smart_recall']):
         return 'memory_heavy'
     elif any(endpoint in path for endpoint in ['/marm_summary', '/search']):
         return 'search'  

@@ -15,7 +15,7 @@ from ..services.documentation import load_marm_documentation, docs_are_loaded
 # Create router for session endpoints
 router = APIRouter(prefix="", tags=["MARM Protocol"])
 
-@router.post("/marm_start", operation_id="marm_start")
+@router.post("/marm_start", operation_id="marm_start", include_in_schema=False)
 async def marm_start(request: SessionRequest):
     """
     🚀 Activates MARM memory and accuracy layers
@@ -53,7 +53,7 @@ async def marm_start(request: SessionRequest):
         print(f"Unexpected error in marm_start: {e}")
         raise HTTPException(status_code=500, detail="Internal server error during MARM start.")
 
-@router.post("/marm_refresh", operation_id="marm_refresh")
+@router.post("/marm_refresh", operation_id="marm_refresh", include_in_schema=False)
 async def marm_refresh(request: SessionRequest):
     """
     🔄 Refreshes active session state and reaffirms protocol adherence

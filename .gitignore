@@ -96,6 +96,8 @@ docs/main-roadmap.md
 .claudeignore
 .cursor
 .vscode
+.pytest_cache
+.pytest_tmp_dashboard
 dump.md
 docs/archived
 docs/core

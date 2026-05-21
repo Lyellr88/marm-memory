@@ -8,10 +8,9 @@ from datetime import datetime, timezone
 from typing import Optional, List, Dict
 
 # Import core components
-from ..core.models import SessionRequest, LogEntryRequest
+from ..core.models import SessionRequest, LogEntryRequest, DeleteRequest
 from ..core.memory import memory
 from ..core.events import events
-from .system import marm_current_context
 
 # Create router for logging endpoints
 router = APIRouter(prefix="", tags=["Logging"])
@@ -24,8 +23,6 @@ async def marm_log_session(request: SessionRequest):
     Equivalent to /log session: [name] command
     """
     try:
-        # Get current context from marm_current_context background tool
-        context_info = await marm_current_context()
         current_timestamp = datetime.now(timezone.utc).isoformat()
 
         with memory.get_connection() as conn:
@@ -145,41 +142,57 @@ async def marm_log_show(
         print(f"Unexpected error in marm_log_show: {e}")
         raise HTTPException(status_code=500, detail="Internal server error while showing logs.")
 
-@router.delete("/marm_log_delete", operation_id="marm_log_delete")
-async def marm_log_delete(
-    target: str = Query(..., description="The ID or topic of the entry to delete, or the session name to delete."),
-    session_name: Optional[str] = Query(None, description="The session to delete from. If omitted, 'target' is assumed to be a session name.")
-):
+@router.post("/marm_delete", operation_id="marm_delete")
+async def marm_delete(request: DeleteRequest):
     """
-    🗑️ Delete specified session or entry
-    
-    Equivalent to /log delete: [session/entry name] command
+    🗑️ Delete a log session, log entry, or notebook entry
+
+    type="log" + session_name: delete specific entry by id or topic
+    type="log" (no session_name): delete entire session and all its entries
+    type="notebook": delete notebook entry by name
     """
     try:
         with memory.get_connection() as conn:
-            if session_name:
-                # Delete specific entry from session
-                cursor = conn.execute('''
-                    DELETE FROM log_entries 
-                    WHERE session_name = ? AND (id = ? OR topic = ?)
-                ''', (session_name, target, target))
+            if request.type == "log":
+                if request.session_name:
+                    cursor = conn.execute(
+                        "DELETE FROM log_entries WHERE session_name = ? AND (id = ? OR topic = ?)",
+                        (request.session_name, request.target, request.target),
+                    )
+                    deleted = cursor.rowcount
+                else:
+                    conn.execute("DELETE FROM sessions WHERE session_name = ?", (request.target,))
+                    cursor = conn.execute("DELETE FROM log_entries WHERE session_name = ?", (request.target,))
+                    deleted = cursor.rowcount
+                    if memory.active_log_session == request.target:
+                        memory.active_log_session = "main"
+                conn.commit()
+                return {
+                    "status": "success",
+                    "message": f"🗑️ Deleted {deleted} items",
+                    "deleted_count": deleted,
+                }
+            elif request.type == "notebook":
+                cursor = conn.execute("DELETE FROM notebook_entries WHERE name = ?", (request.target,))
                 deleted = cursor.rowcount
+                conn.commit()
+                if deleted > 0:
+                    memory.active_notebook_entries = [
+                        entry for entry in memory.active_notebook_entries
+                        if entry.get("name") != request.target
+                    ]
+                return {
+                    "status": "success" if deleted > 0 else "not_found",
+                    "message": f"🗑️ Deleted notebook entry '{request.target}'" if deleted > 0 else f"Entry '{request.target}' not found",
+                    "deleted": deleted > 0,
+                }
             else:
-                # Delete entire session
-                conn.execute('DELETE FROM sessions WHERE session_name = ?', (target,))
-                cursor = conn.execute('DELETE FROM log_entries WHERE session_name = ?', (target,))
-                deleted = cursor.rowcount
-            
-            conn.commit()
-            
-            return {
-                "status": "success",
-                "message": f"🗑️ Deleted {deleted} items",
-                "deleted_count": deleted
-            }
+                raise HTTPException(status_code=422, detail=f"Invalid type '{request.type}'. Must be 'log' or 'notebook'.")
+    except HTTPException:
+        raise
     except sqlite3.Error as e:
-        print(f"Database error in marm_log_delete: {e}")
+        print(f"Database error in marm_delete: {e}")
         raise HTTPException(status_code=500, detail="Database error while deleting.")
     except Exception as e:
-        print(f"Unexpected error in marm_log_delete: {e}")
+        print(f"Unexpected error in marm_delete: {e}")
         raise HTTPException(status_code=500, detail="Internal server error while deleting.")

@@ -270,7 +270,21 @@ class MARMMemory:
                     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
                 )
             ''')
-            
+
+            # Doc index — tracks content hash + memory_id per source file to skip unchanged docs on restart
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS doc_index (
+                    source_file TEXT PRIMARY KEY,
+                    content_hash TEXT NOT NULL,
+                    memory_id TEXT,
+                    indexed_at TEXT NOT NULL
+                )
+            ''')
+            # Idempotent migration: add memory_id column to existing doc_index tables that predate it
+            existing_cols = {row[1] for row in conn.execute("PRAGMA table_info(doc_index)").fetchall()}
+            if "memory_id" not in existing_cols:
+                conn.execute("ALTER TABLE doc_index ADD COLUMN memory_id TEXT")
+
             conn.commit()
     
     def _load_encoder_lazily(self) -> bool:

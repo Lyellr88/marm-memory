@@ -126,52 +126,6 @@ class MCPResponseLimiter:
         return limited_memories, was_truncated
     
     @classmethod
-    def limit_context_bridge_response(cls, related_content: List[Dict[str, Any]], 
-                                    response_metadata: Dict[str, Any]) -> Tuple[List[Dict[str, Any]], bool]:
-        """Limit context bridge response with multiple content types."""
-        if not related_content:
-            return related_content, False
-        
-        # Similar to memory response but handles mixed content types
-        base_response = response_metadata.copy()
-        base_response['related_content'] = []
-        base_size = cls.estimate_response_size(base_response)
-        
-        available_space = cls.CONTENT_LIMIT - base_size
-        if available_space <= 0:
-            return [], True
-        
-        limited_content = []
-        was_truncated = False
-        max_content_per_item = max(150, (available_space // len(related_content)) - 300)
-        
-        for item in related_content:
-            # Truncate content field in context items
-            truncated_item = item.copy()
-            if 'content' in truncated_item:
-                original_length = len(truncated_item['content'])
-                truncated_item['content'] = cls.truncate_content(
-                    truncated_item['content'], max_content_per_item
-                )
-                if original_length > max_content_per_item:
-                    truncated_item['_truncated'] = True
-                    was_truncated = True
-            
-            # Test size
-            test_content = limited_content + [truncated_item]
-            test_response = response_metadata.copy()
-            test_response['related_content'] = test_content
-            test_size = cls.estimate_response_size(test_response)
-            
-            if test_size > cls.CONTENT_LIMIT:
-                was_truncated = True
-                break
-            
-            limited_content.append(truncated_item)
-        
-        return limited_content, was_truncated
-    
-    @classmethod
     def add_truncation_notice(cls, response: Dict[str, Any], was_truncated: bool, 
                             total_available: int = None) -> Dict[str, Any]:
         """Add truncation notice to response if content was limited."""

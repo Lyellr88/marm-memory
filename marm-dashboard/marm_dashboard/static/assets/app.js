@@ -1,4 +1,5 @@
 const API = "";
+const MCP_STATUS_POLL_MS = 15_000;
 let unlockedApiKey = "";
 
 const state = {
@@ -11,6 +12,7 @@ const state = {
   logTotal: 0,
   notebookTotal: 0,
   sessions: [],
+  mcpPollId: null,
 };
 
 function getStoredKey() {
@@ -206,14 +208,24 @@ async function probeMcpHealth() {
     const data = await res.json();
     if (data.reachable) {
       const ver = data.body?.version ? ` v${escapeHtml(data.body.version)}` : "";
-      el.innerHTML = `<span class="pill ok">Reachable${ver}</span>`;
+      const status = data.body?.status ? escapeHtml(data.body.status) : "ok";
+      const latency = Number.isFinite(data.latency_ms) ? `${data.latency_ms}ms` : "—";
+      el.innerHTML = `
+        <span class="pill ok">Reachable${ver}</span>
+        <span class="hint-inline">status: ${status} &middot; ${latency} &middot; ${new Date().toLocaleTimeString()}</span>
+      `;
     } else {
       throw new Error("not reachable");
     }
   } catch {
     el.innerHTML =
-      '<span class="pill muted">Not on :8001</span> <span class="hint-inline">(STDIO or stopped is OK)</span>';
+      `<span class="pill muted">Not on :8001</span> <span class="hint-inline">STDIO or stopped is OK &middot; ${new Date().toLocaleTimeString()}</span>`;
   }
+}
+
+function startMcpHealthPolling() {
+  if (state.mcpPollId) clearInterval(state.mcpPollId);
+  state.mcpPollId = setInterval(probeMcpHealth, MCP_STATUS_POLL_MS);
 }
 
 async function loadSummary() {
@@ -263,6 +275,7 @@ async function loadSummary() {
   );
 
   probeMcpHealth();
+  startMcpHealthPolling();
 }
 
 async function loadSessions() {

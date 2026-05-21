@@ -182,6 +182,32 @@ python -m marm_mcp_server.server_stdio
 
 The server listens on stdin/stdout for JSON-RPC 2.0 messages. No port, no API key required.
 
+### STDIO Diagnostics
+
+STDIO logs write automatically to `~/.marm/logs/marm-stdio.log`. The log file is local pip only — Docker STDIO does not expose it on the host.
+
+**Windows (PowerShell):**
+
+```powershell
+# View full log
+Get-Content "$env:USERPROFILE\.marm\logs\marm-stdio.log"
+
+# Live tail (watch as tool calls come in, add -Tail 20 to limit lines shown)
+Get-Content "$env:USERPROFILE\.marm\logs\marm-stdio.log" -Wait -Tail 20
+```
+
+**Linux/macOS:**
+
+```bash
+# View full log
+cat ~/.marm/logs/marm-stdio.log
+
+# Live tail
+tail -f ~/.marm/logs/marm-stdio.log
+```
+
+Set `MARM_STDIO_LOG_LEVEL=DEBUG` for additional detail (session names, query lengths, result counts). Memory content is never logged.
+
 ---
 
 ## Tested Supported Platforms

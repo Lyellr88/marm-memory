@@ -3,7 +3,7 @@
   "_schema_date": "2025-12-11",
   "name": "io.github.Lyellr88/marm-mcp-server",
   "description": "Universal MCP Server with advanced AI memory capabilities and semantic search.",
-  "version": "2.5.5",
+  "version": "2.6.0",
   "author": "Ryan Lyell - MARM Systems",
   "license": "MIT",
   "homepage": "https://marmsystems.com",
@@ -17,12 +17,12 @@
     {
       "registryType": "pypi",
       "identifier": "marm-mcp-server",
-      "version": "2.5.5",
+      "version": "2.6.0",
       "transport": { "type": "stdio" }
     },
     {
       "registryType": "oci",
-      "identifier": "lyellr88/marm-mcp-server:2.5.5",
+      "identifier": "lyellr88/marm-mcp-server:2.6.0",
       "transport": { "type": "stdio" }
     }
   ],
@@ -68,40 +68,12 @@
       "description": "Display memory log entries"
     },
     {
-      "name": "marm_start",
-      "description": "Activate MARM intelligent memory and response accuracy layers"
-    },
-    {
-      "name": "marm_refresh",
-      "description": "Refresh AI agent session state and reaffirm protocol adherence"
-    },
-    {
       "name": "marm_log_session",
       "description": "Create or switch to named session container"
     },
     {
-      "name": "marm_log_delete",
-      "description": "Delete specified session or individual entries"
-    },
-    {
-      "name": "marm_context_bridge",
-      "description": "Smart context bridging for seamless AI agent workflow transitions"
-    },
-    {
-      "name": "marm_notebook_delete",
-      "description": "Delete specific notebook entry"
-    },
-    {
-      "name": "marm_current_context",
-      "description": "Get current date/time for accurate log entry timestamps"
-    },
-    {
-      "name": "marm_system_info",
-      "description": "Comprehensive system information, health status, and loaded docs"
-    },
-    {
-      "name": "marm_reload_docs",
-      "description": "Reload documentation into memory system"
+      "name": "marm_delete",
+      "description": "Delete a log session, log entry, or notebook entry (type='log'|'notebook')"
     }
   ],
   "capabilities": {
