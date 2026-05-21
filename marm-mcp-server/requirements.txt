@@ -1,6 +1,6 @@
 --extra-index-url https://download.pytorch.org/whl/cpu
 torch
-fastmcp>=2.13.3,<3.0.0
+fastmcp>=3.2.0,<4.0.0
 fastapi>=0.117.1,<0.118.0
 fastapi-mcp>=0.4.0,<0.5.0
 uvicorn>=0.36.0,<0.37.0
