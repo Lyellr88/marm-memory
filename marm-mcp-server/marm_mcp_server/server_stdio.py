@@ -60,6 +60,7 @@ try:
 except Exception:
     pass  # log setup failure must not break the server
 
+_protocol_delivered = False
 
 def _log_tool_call(fn):
     @functools.wraps(fn)
@@ -78,6 +79,7 @@ def _log_tool_call(fn):
         else:
             _stdio_log.info("CALL %s", name)
 
+        global _protocol_delivered
         session_name = kwargs.get("session_name", "default")
         try:
             await ensure_marm_started(session_name)
@@ -106,6 +108,13 @@ def _log_tool_call(fn):
             else:
                 _stdio_log.info("OK %s", name)
 
+            if not _protocol_delivered:
+                try:
+                    result["marm_protocol"] = await read_protocol_file()
+                    _protocol_delivered = True
+                except Exception as e:
+                    _stdio_log.warning("protocol injection failed: %s", e)
+
         try:
             await maybe_auto_refresh()
         except Exception as e:
@@ -124,6 +133,7 @@ from marm_mcp_server.services.documentation import (
     ensure_marm_started,
     maybe_auto_refresh,
 )
+from marm_mcp_server.utils.helpers import read_protocol_file
 from marm_mcp_server.config.settings import (
     SERVER_VERSION,
     DEFAULT_DB_PATH,
@@ -265,14 +275,14 @@ async def marm_smart_recall(
 
 @mcp.tool()
 @_log_tool_call
-async def marm_contextual_log(
+async def marm_context_log(
     content: str,
     session_name: str = "default",
     context_type: str = "general",
     metadata: Optional[dict] = None,
 ) -> dict:
     """
-    📝 Log contextual information with automatic categorization
+    📝 Log durable context with automatic categorization
 
     Saves information to memory with automatic context type detection.
     """
@@ -291,13 +301,13 @@ async def marm_contextual_log(
 
         return {
             "status": "success",
-            "message": f"✅ Contextual information logged to session '{session_name}'",
+            "message": f"✅ Context logged to session '{session_name}'",
             "memory_id": memory_id,
             "session_name": session_name,
             "context_type": context_type,
         }
     except Exception as e:
-        return {"status": "error", "message": f"Error during contextual log: {str(e)}"}
+        return {"status": "error", "message": f"Error during context log: {str(e)}"}
 
 
 # ============================================================================
@@ -491,146 +501,90 @@ async def marm_delete(
 
 @mcp.tool()
 @_log_tool_call
-async def marm_notebook_add(
-    name: str,
-    data: str,
+async def marm_notebook(
+    action: str,
+    name: Optional[str] = None,
+    data: Optional[str] = None,
+    names: Optional[str] = None,
 ) -> dict:
     """
-    📔 Add a new notebook entry
+    📔 Unified notebook — add, use, show, status, or clear
+
+    action="add": save or update an entry (name + data required)
+    action="use": activate entries as instructions (names required, comma-separated)
+    action="show": list all saved entries with previews
+    action="status": show currently active entries
+    action="clear": clear the active entry list
     """
     try:
-        embedding_bytes = None
-        if memory.encoder:
-            try:
-                embedding = memory.encoder.encode(data)
-                embedding_bytes = embedding.tobytes()
-            except Exception:
-                pass
-
-        with memory.get_connection() as conn:
-            conn.execute(
-                """
-                INSERT OR REPLACE INTO notebook_entries (name, data, embedding, updated_at)
-                VALUES (?, ?, ?, ?)
-                """,
-                (name, data, embedding_bytes, datetime.now(timezone.utc).isoformat()),
-            )
-            conn.commit()
-
-        await events.emit("notebook_entry_added", {"name": name, "data": data})
-
-        return {
-            "status": "success",
-            "message": f"📓 Notebook entry '{name}' added",
-            "name": name,
-        }
-    except Exception as e:
-        return {"status": "error", "message": f"Error adding notebook entry: {str(e)}"}
-
-
-@mcp.tool()
-@_log_tool_call
-async def marm_notebook_use(names: str) -> dict:
-    """
-    🔧 Activate notebook entries as instructions
-
-    names: comma-separated list of notebook entry names
-    """
-    try:
-        name_list = [n.strip() for n in names.split(",")]
-        activated_entries = []
-
-        with memory.get_connection() as conn:
-            for name in name_list:
-                cursor = conn.execute(
-                    "SELECT name, data FROM notebook_entries WHERE name = ?", (name,)
+        if action == "add":
+            if name is None or data is None:
+                return {"status": "error", "message": "name and data are required for action='add'"}
+            embedding_bytes = None
+            if memory.encoder:
+                try:
+                    embedding = memory.encoder.encode(data)
+                    embedding_bytes = embedding.tobytes()
+                except Exception:
+                    pass
+            with memory.get_connection() as conn:
+                conn.execute(
+                    "INSERT OR REPLACE INTO notebook_entries (name, data, embedding, updated_at) VALUES (?, ?, ?, ?)",
+                    (name, data, embedding_bytes, datetime.now(timezone.utc).isoformat()),
                 )
-                result = cursor.fetchone()
-                if result:
-                    activated_entries.append({"name": result[0], "data": result[1]})
+                conn.commit()
+            await events.emit("notebook_entry_added", {"name": name, "data": data})
+            return {"status": "success", "message": f"📓 Notebook entry '{name}' added", "name": name}
 
-        memory.active_notebook_entries = activated_entries
+        elif action == "use":
+            if names is None:
+                return {"status": "error", "message": "names is required for action='use'"}
+            name_list = [n.strip() for n in names.split(",")]
+            activated_entries = []
+            with memory.get_connection() as conn:
+                for n in name_list:
+                    cursor = conn.execute("SELECT name, data FROM notebook_entries WHERE name = ?", (n,))
+                    result = cursor.fetchone()
+                    if result:
+                        activated_entries.append({"name": result[0], "data": result[1]})
+            memory.active_notebook_entries = activated_entries
+            return {
+                "status": "success",
+                "message": f"🔧 Activated {len(activated_entries)} notebook entries",
+                "activated_entries": [e["name"] for e in activated_entries],
+                "entries": activated_entries,
+            }
 
-        return {
-            "status": "success",
-            "message": f"🔧 Activated {len(activated_entries)} notebook entries",
-            "activated_entries": [e["name"] for e in activated_entries],
-            "entries": activated_entries,
-        }
+        elif action == "show":
+            with memory.get_connection() as conn:
+                cursor = conn.execute(
+                    "SELECT name, data, created_at, updated_at FROM notebook_entries ORDER BY updated_at DESC"
+                )
+                entries = []
+                for row in cursor.fetchall():
+                    preview = row[1][:100] + "..." if len(row[1]) > 100 else row[1]
+                    entries.append({"name": row[0], "preview": preview, "created_at": row[2], "updated_at": row[3]})
+            return {"status": "success", "message": f"📚 Found {len(entries)} notebook entries", "entries": entries, "total_count": len(entries)}
+
+        elif action == "status":
+            active_names = [entry["name"] for entry in memory.active_notebook_entries]
+            return {
+                "status": "success",
+                "message": f"📊 {len(active_names)} active notebook entries",
+                "active_entries": active_names,
+                "entries": memory.active_notebook_entries,
+                "active_count": len(active_names),
+            }
+
+        elif action == "clear":
+            memory.active_notebook_entries = []
+            return {"status": "success", "message": "🧹 Active notebook entries cleared", "active_count": 0}
+
+        else:
+            return {"status": "error", "message": f"Unknown action '{action}'. Must be: add, use, show, status, clear"}
+
     except Exception as e:
-        return {"status": "error", "message": f"Error activating notebook entries: {str(e)}"}
-
-
-@mcp.tool()
-@_log_tool_call
-async def marm_notebook_show() -> dict:
-    """
-    📚 Display all saved notebook keys and summaries
-    """
-    try:
-        with memory.get_connection() as conn:
-            cursor = conn.execute(
-                """
-                SELECT name, data, created_at, updated_at
-                FROM notebook_entries
-                ORDER BY updated_at DESC
-                """
-            )
-            entries = []
-            for row in cursor.fetchall():
-                preview = row[1][:100] + "..." if len(row[1]) > 100 else row[1]
-                entries.append({
-                    "name": row[0],
-                    "preview": preview,
-                    "created_at": row[2],
-                    "updated_at": row[3],
-                })
-
-        return {
-            "status": "success",
-            "message": f"📚 Found {len(entries)} notebook entries",
-            "entries": entries,
-            "total_count": len(entries),
-        }
-    except Exception as e:
-        return {"status": "error", "message": f"Error showing notebook: {str(e)}"}
-
-
-@mcp.tool()
-@_log_tool_call
-async def marm_notebook_status() -> dict:
-    """
-    📊 Show the current active notebook list
-    """
-    try:
-        active_names = [entry["name"] for entry in memory.active_notebook_entries]
-
-        return {
-            "status": "success",
-            "message": f"📊 {len(active_names)} active notebook entries",
-            "active_entries": active_names,
-            "entries": memory.active_notebook_entries,
-            "active_count": len(active_names),
-        }
-    except Exception as e:
-        return {"status": "error", "message": f"Error checking notebook status: {str(e)}"}
-
-
-@mcp.tool()
-@_log_tool_call
-async def marm_notebook_clear() -> dict:
-    """
-    🧹 Clear the active notebook list
-    """
-    try:
-        memory.active_notebook_entries = []
-        return {
-            "status": "success",
-            "message": "🧹 Active notebook entries cleared",
-            "active_count": 0,
-        }
-    except Exception as e:
-        return {"status": "error", "message": f"Error clearing notebook: {str(e)}"}
+        return {"status": "error", "message": f"Notebook operation failed: {str(e)}"}
 
 
 

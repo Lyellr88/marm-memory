@@ -7,102 +7,96 @@
 .env.test.local
 .env.production.local
 
-# Node modules across all projects
+# Node modules
 node_modules/
 webchat/node_modules/
 marm-new-ui/node_modules/
 
-# Python environments and dependencies  
+# Python artifacts
 venv/
 env/
 __pycache__/
-*.pyc
+*.py[cod]
 *.pyo
 *.pyd
 .Python
 
-# MCP Server database files
+# MCP server database
 marm-mcp-server/*.db
 marm-mcp-server/marm_memory.db
 
-# Logs
-logs
+# Logs and runtime data
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-
-# Runtime data
-pids
+pids/
 *.pid
 *.seed
 *.pid.lock
 
-# Coverage directory used by tools like istanbul
+# Coverage
 coverage/
 *.lcov
 
 # Build outputs
 dist/
 build/
-.next
-.nuxt
+.next/
+.nuxt/
 
-# Cache files
-.cache
-.parcel-cache
-.npm
-.eslintcache
-
-# TypeScript cache
+# Cache
+.cache/
+.parcel-cache/
+.npm/
+.eslintcache/
 *.tsbuildinfo
 
-# Temporary folders
+# Temporary files
 tmp/
 temp/
 
-# Editor directories and files
-.idea
-.DS_Store
+# Editor and IDE files
+.idea/
+.vscode/
 *.suo
 *.ntvs*
 *.njsproj
 *.sln
 *.sw?
-
-# OS generated files
-Thumbs.db
 .DS_Store
+Thumbs.db
 
 # Docker
 .dockerignore
 
-
-# API keys and sensitive data
+# Secrets and sensitive data
 *.key
 *.pem
 config/secrets/
 .aider*
 
-# Docs folder
+# Documentation and local-only content
 docs/publishing.md
 docs/main-roadmap.md
+docs/archived/
+docs/core/
+docs/current/
+docs/future/
 
-# user-specific files
-.claude
-.codex
-.gemini
+# User-specific files
+.claude/
+.codex/
+.gemini/
 .codexignore
 .claudeignore
 .cursor
-.vscode
-.pytest_cache
-.pytest_tmp_dashboard
-dump.md
-docs/archived
-docs/core
-docs/current
-docs/future
-marm-mcp-server\.pytest_cache
-marm-mcp-server\.pytest_tmp
+.pytest_cache/
+.pytest_tmp_dashboard/
+.pytest_tmp_review/
+.pytest_tmp_protocol/
+marm-mcp-server/.pytest_cache/
+marm-mcp-server/.pytest_tmp/
 marm_usage_analytics.db
+dump.md

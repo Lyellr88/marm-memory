@@ -12,7 +12,7 @@
 - [Getting Started](#getting-started)
 - [Example Workflow](#example-workflow-cross-ai-research-project)
 - [Understanding MARM Memory](#understanding-marm-memory)
-- [Complete Tool Reference (12 Tools)](#complete-tool-reference-12-tools)
+- [Complete Tool Reference (8 Tools)](#complete-tool-reference-8-tools)
 - [Pro Tips & Best Practices](#pro-tips--best-practices)
 - [Advanced Workflows](#advanced-workflows)
 - [FAQ](#faq)
@@ -185,7 +185,7 @@ Result: Session created. MARM lifecycle/docs initialize automatically.
 
 ``` markdown
 You: "Summarize OAuth2 vs JWT for API authentication and save it"
-Claude calls: marm_contextual_log("OAuth2 is token-based with refresh cycles, better for delegated access. JWT is stateless, good for microservices...")
+Claude calls: marm_context_log("OAuth2 is token-based with refresh cycles, better for delegated access. JWT is stateless, good for microservices...")
 Result: Memory stored with auto-classification as "code" content
 ```
 
@@ -193,7 +193,7 @@ Result: Memory stored with auto-classification as "code" content
 
 ``` markdown
 You: "Save a JWT validation code snippet to my notebooks as 'jwt-validation-pattern'"
-Claude calls: marm_notebook_add("jwt-validation-pattern", "def verify_jwt(token):\n  # validation logic...")
+Claude calls: marm_notebook(action="add", name="jwt-validation-pattern", data="def verify_jwt(token):\n  # validation logic...")
 Result: Reusable snippet stored for future projects
 ```
 
@@ -202,7 +202,7 @@ Result: Reusable snippet stored for future projects
 ``` markdown
 You: "Gemini, what authentication approaches did we research? Activate the JWT pattern."
 Gemini calls: marm_smart_recall("authentication patterns", search_all=true)
-Gemini calls: marm_notebook_use("jwt-validation-pattern")
+Gemini calls: marm_notebook(action="use", names="jwt-validation-pattern")
 Result: Gemini sees previous research + has JWT code available as context
 ```
 
@@ -240,7 +240,7 @@ MARM Search: Finds related memories about "ML models", "neural networks", "AI tr
 
 ### Memory Types
 
-1. **Contextual Logs** - Auto-classified conversation memories
+1. **Context Logs** - Auto-classified conversation memories
 2. **Manual Entries** - Explicitly saved important information  
 3. **Notebook Entries** - Reusable instructions and knowledge
 4. **Session Summaries** - Compressed conversation history
@@ -256,21 +256,17 @@ MARM automatically categorizes content:
 
 ---
 
-## Complete Tool Reference (12 Tools)
+## Complete Tool Reference (8 Tools)
 
 | Category | Tool | Description | Usage Notes |
 |----------|------|-------------|-------------|
 | **🧠 Memory** | `marm_smart_recall` | Semantic similarity search across all memories | `query` (required), `limit` (default: 5), `session_name` (optional). Use natural language queries |
-| | `marm_contextual_log` | Auto-classifying memory storage with embeddings | Store important information that should be remembered |
+| | `marm_context_log` | Auto-classifying memory storage with embeddings | Store important information that should be remembered |
 | **📚 Logging** | `marm_log_session` | Create or switch to named session container | Include LLM name, dates, be descriptive |
 | | `marm_log_entry` | Add structured log entry with auto-date formatting | No need to add dates manually - automatically handled by background tools |
 | | `marm_log_show` | Display all entries and sessions with filtering | `session_name` (optional) |
 | | `marm_delete` | Delete a log session, log entry, or notebook entry | `type="log"` or `type="notebook"`, `target` (required), `session_name` (optional for log entries) |
-| **📔 Notebook** | `marm_notebook_add` | Add new notebook entry with semantic embeddings | Store reusable instructions, code snippets, procedures |
-| | `marm_notebook_use` | Activate entries as instructions (comma-separated) | Example: `marm_notebook_use("coding-standards,git-workflow")` |
-| | `marm_notebook_show` | Display all saved keys and summaries | Browse available notebook entries |
-| | `marm_notebook_clear` | Clear the active instruction list | Deactivate all notebook instructions |
-| | `marm_notebook_status` | Show current active instruction list | Check which instructions are currently active |
+| **📔 Notebook** | `marm_notebook` | Unified notebook management | `action="add"` saves entries, `action="use"` activates entries, `action="show"` lists saved entries, `action="status"` shows active entries, `action="clear"` clears active entries |
 | **🔄 Workflow** | `marm_summary` | Generate paste-ready context blocks with intelligent truncation | Create summaries for new conversations or context bridging |
 
 **Internal automation:** lifecycle initialization, documentation refresh, current date context, and system checks are no longer AI-facing tools. Documentation refresh uses `doc_index` hash tracking to avoid duplicate `marm_system` memories across restarts. Use the dashboard health panel for live server status, or `curl http://localhost:8001/health` for terminal checks.
@@ -313,10 +309,10 @@ Project Structure:
 
 ### Knowledge Base Development
 
-1. **Capture**: Use `marm_contextual_log` for new learnings
+1. **Capture**: Use `marm_context_log` for new learnings
 2. **Organize**: Create themed sessions for knowledge areas
 3. **Synthesize**: Regular `marm_summary` for knowledge consolidation
-4. **Apply**: Convert summaries to `marm_notebook_add` entries
+4. **Apply**: Convert summaries to `marm_notebook(action="add", ...)` entries
 
 ### Multi-AI Collaboration Pattern
 
@@ -464,7 +460,7 @@ A: Use the MARM Dashboard status panel for HTTP mode. It polls server health and
 
 #### Server using too much memory
 
-- Notebooks with many entries can accumulate—use `marm_notebook_clear` to prune
+- Notebooks with many entries can accumulate—use `marm_notebook(action="clear")` to prune active entries
 - Close unused AI client connections
 - Use log compaction: `marm_summary` + delete old entries
 
@@ -501,7 +497,7 @@ A: Use the MARM Dashboard status panel for HTTP mode. It polls server health and
 ### **Usage Guides**
 
 - **[MCP-HANDBOOK.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/MCP-HANDBOOK.md)** - Complete MCP server usage guide with commands, workflows, and examples
-- **[PROTOCOL.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/PROTOCOL.md)** - Quick start commands and protocol reference
+- **[PROTOCOL.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/PROTOCOL.md)** - MCP operating protocol
 - **[FAQ.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/FAQ.md)** - Answers to common questions about using MARM
 
 ### **MCP Server Installation**
@@ -514,9 +510,8 @@ A: Use the MARM Dashboard status panel for HTTP mode. It polls server health and
 ### **Project Information**
 
 - **[README.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/README.md)** - This file - ecosystem overview and MCP server guide
-- **[CONTRIBUTING.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/CONTRIBUTING.md)** - How to contribute to MARM
-overview
-- **[CHANGELOG.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/CHANGELOG.md)** - Version history and updates
+- **[CONTRIBUTING.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/CONTRIBUTING.md)** - How to contribute to MARM
+- **[CHANGELOG.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/CHANGELOG.md)** - Version history and updates
+- **[ACKNOWLEDGMENTS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/ACKNOWLEDGMENTS.md)** - Contributors and acknowledgments
 - **[ROADMAP.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/ROADMAP.md)** - Planned features and development roadmap
-- **[LICENSE](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/LICENSE)** - MIT license terms
-
+- **[LICENSE](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/LICENSE)** - MIT license terms

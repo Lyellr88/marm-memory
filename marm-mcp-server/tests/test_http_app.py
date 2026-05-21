@@ -18,13 +18,13 @@ def test_readiness_exposes_http_endpoints_without_websocket(monkeypatch, tmp_pat
     assert client.get("/mcp/ws").status_code == 404
 
 
-def test_contextual_log_endpoint_persists_sanitized_memory(monkeypatch, tmp_path):
+def test_context_log_endpoint_persists_sanitized_memory(monkeypatch, tmp_path):
     server = load_isolated_server(monkeypatch, tmp_path)
     client = local_client(server.app)
     content = '<script>alert("x")</script> project milestone preserved'
 
     response = client.post(
-        "/marm_contextual_log",
+        "/marm_context_log",
         json={"session_name": "http-real-db", "content": content},
     )
 

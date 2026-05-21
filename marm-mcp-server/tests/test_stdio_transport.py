@@ -74,11 +74,17 @@ def test_stdio_handles_mcp_initialize_and_exposes_tools(tmp_path):
     assert "marm_current_context" not in tool_names
     assert "marm_system_info" not in tool_names
     assert "marm_smart_recall" in tool_names
-    assert "marm_contextual_log" in tool_names
+    assert "marm_context_log" in tool_names
     assert "marm_delete" in tool_names
+    assert "marm_notebook" in tool_names
     assert "marm_log_delete" not in tool_names
     assert "marm_notebook_delete" not in tool_names
-    assert len(tools) == 12
+    assert "marm_notebook_add" not in tool_names, "old marm_notebook_add must be removed"
+    assert "marm_notebook_use" not in tool_names, "old marm_notebook_use must be removed"
+    assert "marm_notebook_show" not in tool_names, "old marm_notebook_show must be removed"
+    assert "marm_notebook_status" not in tool_names, "old marm_notebook_status must be removed"
+    assert "marm_notebook_clear" not in tool_names, "old marm_notebook_clear must be removed"
+    assert len(tools) == 8
 
 
 def test_stdio_delete_notebook_removes_entry_from_active_state(tmp_path):
@@ -97,20 +103,20 @@ def test_stdio_delete_notebook_removes_entry_from_active_state(tmp_path):
         }})
         + message({"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}})
         + message({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {
-            "name": "marm_notebook_add",
-            "arguments": {"name": "smoke_test_entry", "data": "temporary regression fixture"},
+            "name": "marm_notebook",
+            "arguments": {"action": "add", "name": "smoke_test_entry", "data": "temporary regression fixture"},
         }})
         + message({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {
-            "name": "marm_notebook_use",
-            "arguments": {"names": "smoke_test_entry"},
+            "name": "marm_notebook",
+            "arguments": {"action": "use", "names": "smoke_test_entry"},
         }})
         + message({"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {
             "name": "marm_delete",
             "arguments": {"type": "notebook", "target": "smoke_test_entry"},
         }})
         + message({"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {
-            "name": "marm_notebook_status",
-            "arguments": {},
+            "name": "marm_notebook",
+            "arguments": {"action": "status"},
         }})
     )
 
@@ -332,7 +338,7 @@ def test_stdio_log_does_not_contain_stored_memory_content(tmp_path):
     stdin_data = (
         _base_rpc_stdin()
         + message({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {
-            "name": "marm_contextual_log",
+            "name": "marm_context_log",
             "arguments": {"session_name": "privacy-test", "content": secret_content},
         }})
     )
@@ -351,3 +357,57 @@ def test_stdio_log_does_not_contain_stored_memory_content(tmp_path):
     assert secret_content not in log_content, (
         f"Memory content leaked into log file: {log_content[:500]}"
     )
+
+
+def test_stdio_protocol_injected_on_first_tool_call_not_on_second(tmp_path):
+    env = os.environ.copy()
+    env["MARM_DB_PATH"] = str(tmp_path / "stdio-protocol.db")
+    env["MARM_ANALYTICS_DB_PATH"] = str(tmp_path / "stdio-protocol-analytics.db")
+
+    def message(msg):
+        return (json.dumps(msg) + "\n").encode("utf-8")
+
+    stdin_data = (
+        message({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+            "protocolVersion": "2024-11-05",
+            "capabilities": {},
+            "clientInfo": {"name": "test-client", "version": "0.1"},
+        }})
+        + message({"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}})
+        + message({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {
+            "name": "marm_notebook",
+            "arguments": {"action": "status"},
+        }})
+        + message({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {
+            "name": "marm_notebook",
+            "arguments": {"action": "status"},
+        }})
+    )
+
+    result = subprocess.run(
+        [sys.executable, "-m", "marm_mcp_server.server_stdio"],
+        input=stdin_data,
+        cwd=os.getcwd(),
+        env=env,
+        capture_output=True,
+        timeout=30,
+    )
+
+    assert result.returncode == 0, result.stderr.decode("utf-8", errors="replace")[:500]
+
+    responses = {}
+    for line in result.stdout.splitlines():
+        msg = json.loads(line)
+        if "id" in msg:
+            responses[msg["id"]] = msg
+
+    assert 2 in responses, "No first tool call response"
+    assert 3 in responses, "No second tool call response"
+
+    first_result = json.loads(responses[2]["result"]["content"][0]["text"])
+    assert "marm_protocol" in first_result, \
+        "Protocol not injected in first STDIO tool call result"
+
+    second_result = json.loads(responses[3]["result"]["content"][0]["text"])
+    assert "marm_protocol" not in second_result, \
+        "Protocol must not repeat on second STDIO tool call"

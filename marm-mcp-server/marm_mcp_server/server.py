@@ -111,6 +111,7 @@ from .config.settings import (
 from .utils.security import generate_api_key
 from .services.automation import register_event_handlers
 from .services.documentation import docs_are_loaded, maybe_auto_refresh, ensure_marm_started
+from .utils.helpers import read_protocol_file
 
 # Import all endpoint routers
 from .endpoints.session import router as session_router
@@ -170,6 +171,8 @@ app = FastAPI(
     lifespan=lifespan
 )
 
+_protocol_delivered = False
+
 async def _mcp_tool_call_tracker(request: Request, call_next):
     """Lazy doc-load and auto-refresh for MCP tool calls.
 
@@ -177,7 +180,14 @@ async def _mcp_tool_call_tracker(request: Request, call_next):
     Only acts on tools/call requests; init, discovery, and rejected requests are ignored.
     Doc loading runs before the handler so the first tool call gets warm docs,
     matching STDIO transport timing.
+
+    On the very first successful tool call of a server session, the MARM protocol is
+    injected into the response so the agent receives it exactly once. Uses its own
+    _protocol_delivered flag — independent of docs_are_loaded() — so failed or
+    non-200 responses leave the flag unset and the next call retries injection.
     """
+    global _protocol_delivered
+
     is_tool_call = False
     if request.method == "POST" and request.url.path == "/mcp":
         try:
@@ -193,6 +203,37 @@ async def _mcp_tool_call_tracker(request: Request, call_next):
 
     if is_tool_call:
         asyncio.create_task(maybe_auto_refresh())
+
+    if is_tool_call and not _protocol_delivered and response.status_code == 200:
+        try:
+            body_bytes = b""
+            async for chunk in response.body_iterator:
+                body_bytes += chunk
+            data = json.loads(body_bytes)
+            protocol_content = await read_protocol_file()
+            result = data.get("result", {})
+            content = result.get("content")
+            if isinstance(content, list):
+                content.insert(0, {
+                    "type": "text",
+                    "text": f"[MARM SESSION INIT]\n\n{protocol_content}"
+                })
+                _protocol_delivered = True
+            return JSONResponse(
+                content=data,
+                status_code=response.status_code,
+                headers={k: v for k, v in response.headers.items()
+                         if k.lower() not in ("content-length", "content-type")}
+            )
+        except Exception as e:
+            logger.warning("Protocol injection failed", error=str(e))
+            from starlette.responses import Response as StarletteResponse
+            return StarletteResponse(
+                content=body_bytes,
+                status_code=response.status_code,
+                headers=dict(response.headers),
+                media_type="application/json"
+            )
 
     return response
 

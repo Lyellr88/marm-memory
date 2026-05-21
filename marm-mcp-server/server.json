@@ -32,8 +32,8 @@
       "description": "Log important information to MARM's memory system"
     },
     {
-      "name": "marm_contextual_log",
-      "description": "Log contextual information with automatic categorization"
+      "name": "marm_context_log",
+      "description": "Log durable context with automatic categorization"
     },
     {
       "name": "marm_smart_recall",
@@ -44,24 +44,8 @@
       "description": "Generate intelligent summaries from memory data"
     },
     {
-      "name": "marm_notebook_add",
-      "description": "Add structured information to MARM notebooks"
-    },
-    {
-      "name": "marm_notebook_use",
-      "description": "Retrieve and use notebook information"
-    },
-    {
-      "name": "marm_notebook_show",
-      "description": "Display notebook contents and structure"
-    },
-    {
-      "name": "marm_notebook_status",
-      "description": "Check notebook status and metadata"
-    },
-    {
-      "name": "marm_notebook_clear",
-      "description": "Clear notebook contents"
+      "name": "marm_notebook",
+      "description": "Unified notebook — add, use, show, status, or clear entries (action parameter required)"
     },
     {
       "name": "marm_log_show",

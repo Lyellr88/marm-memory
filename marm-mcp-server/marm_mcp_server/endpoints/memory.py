@@ -4,7 +4,7 @@ from fastapi import HTTPException, APIRouter, Request
 from datetime import datetime, timezone
 
 # Import core components
-from ..core.models import SmartRecallRequest, ContextualLogRequest
+from ..core.models import SmartRecallRequest, ContextLogRequest
 from ..core.memory import memory
 from ..core.events import events
 from ..core.response_limiter import MCPResponseLimiter
@@ -199,8 +199,8 @@ async def marm_smart_recall(request: SmartRecallRequest, http_request: Request):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Memory recall failed: {str(e)}")
 
-@router.post("/marm_contextual_log", operation_id="marm_contextual_log")
-async def marm_contextual_log(request: ContextualLogRequest):
+@router.post("/marm_context_log", operation_id="marm_context_log")
+async def marm_context_log(request: ContextLogRequest):
     """
     📝 Log with automatic context classification
     
@@ -235,4 +235,4 @@ async def marm_contextual_log(request: ContextualLogRequest):
             "context_type": context_type
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Contextual logging failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Context logging failed: {str(e)}")

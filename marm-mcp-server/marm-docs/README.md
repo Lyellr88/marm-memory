@@ -2,6 +2,17 @@
 
 ---
 
+## Table of Contents
+
+- [Why MARM MCP](#why-marm-mcp-the-problem--solution)
+- [Quick Start](#-quick-start-for-mcp-http--stdio)
+- [Connect Your Client Fast](#connect-your-client-fast)
+- [Complete MCP Tool Suite](#complete-mcp-tool-suite-8-tools)
+- [MARM Dashboard](#marm-dashboard)
+- [Architecture Overview](#architecture-overview)
+
+---
+
 ## Why MARM MCP: The Problem & Solution
 
 **Your AI forgets everything. MARM MCP doesn't.**
@@ -37,13 +48,13 @@ Modern LLMs lose context over time, repeat prior ideas, and drift off requiremen
 
 ## 🚀 Quick Start for MCP (HTTP & STDIO)
 
-### Use this quick rule of thumb to choose your setup:
+### Use this quick rule of thumb to choose your setup
 
 - Local HTTP/STDIO = fastest single-machine setup.
 - Docker HTTP = shared/always-on server (key required).
 - Docker STDIO = private containerized local use (no HTTP key).
 
-#### Local pip HTTP (zero config):
+#### Local pip HTTP (zero config)
 
 ```bash
 pip install marm-mcp-server
@@ -55,7 +66,7 @@ codex mcp add marm-memory --url http://localhost:8001/mcp
 # Use a hosted HTTPS MARM endpoint, not localhost. See Docker / hosted setup below.
 ```
 
-#### Local pip STDIO:
+#### Local pip STDIO
 
 ```bash
 pip install marm-mcp-server
@@ -69,7 +80,7 @@ python -m marm_mcp_server.server_stdio
 
 ---
 
-#### Docker HTTP (key required):
+#### Docker HTTP (key required)
 
 ```bash
 # Step 1: generate key (do not add < > around the key)
@@ -89,7 +100,7 @@ docker run -d --name marm-mcp-server \
 codex mcp add marm-memory --url http://localhost:8001/mcp --bearer-token-env-var MARM_API_KEY
 ```
 
-#### Docker STDIO (no HTTP key):
+#### Docker STDIO (no HTTP key)
 
 ```bash
 docker run --rm -i \
@@ -121,7 +132,7 @@ Claude Code remains the recommended first setup path, but MARM also works with o
 
 ---
 
-## Complete MCP Tool Suite (12 Tools)
+## Complete MCP Tool Suite (8 Tools)
 
 **💡 Pro Tip:** You don't need to manually call these tools! Just tell your AI agent what you want in natural language:
 
@@ -133,20 +144,18 @@ The AI agent will automatically use the appropriate tools. Manual tool access is
 
 MARM now handles lifecycle work internally. Documentation loads on the first real tool call, session state initializes automatically, and documentation refreshes every 50 tool calls. Packaged docs are indexed into searchable memory with hash-based caching, so unchanged docs are skipped across restarts.
 
+**Architecture note:** MARM uses targeted polymorphic tooling to keep MCP discovery lean without hiding behavior. Domain-specific tools such as `marm_notebook(action=...)` and `marm_delete(type=...)` group closely related operations behind explicit parameters, while recall, logging, and summaries stay separate so agents still choose the right capability clearly. This design ensures the total MCP schema footprint remains under 10KB while preserving full functionality.
+
 | **Category** | **Tool** | **Description** |
 |--------------|----------|-----------------|
 | **Memory Intelligence** | `marm_smart_recall` | AI-powered semantic similarity search across all memories. Supports global search with `search_all=True` flag |
-| | `marm_contextual_log` | Intelligent auto-classifying memory storage using vector embeddings |
+| | `marm_context_log` | Intelligent auto-classifying memory storage using vector embeddings |
 | **Logging System** | `marm_log_session` | Create or switch to named session container |
 | | `marm_log_entry` | Add structured log entry with auto-date formatting |
 | | `marm_log_show` | Display all entries and sessions (filterable) |
 | | `marm_delete` | Delete a log session, log entry, or notebook entry (`type="log"\|"notebook"`) |
 | **Reasoning & Workflow** | `marm_summary` | Generate context-aware summaries with intelligent truncation for LLM conversations |
-| **Notebook Management** | `marm_notebook_add` | Add new notebook entry with semantic embeddings |
-| | `marm_notebook_use` | Activate entries as instructions (comma-separated) |
-| | `marm_notebook_show` | Display all saved keys and summaries |
-| | `marm_notebook_clear` | Clear the active instruction list |
-| | `marm_notebook_status` | Show current active instruction list |
+| **Notebook Management** | `marm_notebook` | Unified notebook tool: add, use, show, status, or clear entries with `action="add"\|"use"\|"show"\|"status"\|"clear"` |
 
 **Internal automation:** lifecycle initialization, documentation refresh, current date context, and system checks are handled by the server instead of exposed as AI-facing tools. For server status, use the dashboard health panel or `curl http://localhost:8001/health`.
 
@@ -244,7 +253,7 @@ MARM defaults to **localhost-only** (`127.0.0.1`). No credentials are required f
 | Feature | MARM | Basic MCP Servers |
 |---------|-------------|-------------------|
 | **Memory Intelligence** | AI-powered semantic search with auto-classification | Basic key-value storage |
-| **Tool Coverage** | 12 focused MCP tools + lifecycle automation | 3-5 basic wrappers |  
+| **Tool Coverage** | 8 focused MCP tools + lifecycle automation | 3-5 basic wrappers |  
 | **Scalability** | Database optimization + connection pooling | Single connection |
 | **MCP Compliance** | 1MB response size management | No size controls |
 | **Deployment** | Docker containerization + health monitoring | Local development only |

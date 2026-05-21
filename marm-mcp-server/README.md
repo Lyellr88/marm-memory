@@ -159,7 +159,7 @@ Claude Code remains the recommended first setup path, but MARM also works with o
 
 ---
 
-## Complete MCP Tool Suite (12 Tools)
+## Complete MCP Tool Suite (8 Tools)
 
 <div align="center">
 <picture>
@@ -177,20 +177,18 @@ Claude Code remains the recommended first setup path, but MARM also works with o
 
 The AI agent will automatically use the appropriate tools. Manual tool access is available for power users who want direct control.
 
+**Architecture note:** MARM uses targeted polymorphic tooling to keep MCP discovery lean without hiding behavior. Domain-specific tools such as `marm_notebook(action=...)` and `marm_delete(type=...)` group closely related operations behind explicit enum parameters, while recall, logging, and summaries stay separate so agents still choose the right capability clearly.
+
 | **Category** | **Tool** | **Description** |
 |--------------|----------|-----------------|
 | **Memory Intelligence** | `marm_smart_recall` | AI-powered semantic similarity search across all memories. Supports global search with `search_all=True` flag |
-| | `marm_contextual_log` | Intelligent auto-classifying memory storage using vector embeddings |
+| | `marm_context_log` | Intelligent auto-classifying memory storage using vector embeddings |
 | **Logging System** | `marm_log_session` | Create or switch to named session container |
 | | `marm_log_entry` | Add structured log entry with auto-date formatting |
 | | `marm_log_show` | Display all entries and sessions (filterable) |
 | | `marm_delete` | Delete a log session, log entry, or notebook entry (`type="log"\|"notebook"`) |
 | **Reasoning & Workflow** | `marm_summary` | Generate context-aware summaries with intelligent truncation for LLM conversations |
-| **Notebook Management** | `marm_notebook_add` | Add new notebook entry with semantic embeddings |
-| | `marm_notebook_use` | Activate entries as instructions (comma-separated) |
-| | `marm_notebook_show` | Display all saved keys and summaries |
-| | `marm_notebook_clear` | Clear the active instruction list |
-| | `marm_notebook_status` | Show current active instruction list |
+| **Notebook Management** | `marm_notebook` | Unified notebook tool: add, use, show, status, or clear entries with `action="add"\|"use"\|"show"\|"status"\|"clear"` |
 
 ---
 
@@ -318,7 +316,7 @@ Good places to help:
 - Suggest practical memory workflows and tool improvements
 - Submit small, focused pull requests
 
-See [CONTRIBUTING.md](docs/CONTRIBUTING.md) for the full contribution guide.
+See [CONTRIBUTING.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/CONTRIBUTING.md) for the full contribution guide.
 
 ---
 
@@ -369,12 +367,11 @@ Derivatives should clearly indicate they are unofficial or experimental.
 ### **Usage Guides**
 
 - **[MCP-HANDBOOK.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/MCP-HANDBOOK.md)** - Complete MCP server usage guide with commands, workflows, and examples
-- **[PROTOCOL.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/PROTOCOL.md)** - Quick start commands and protocol reference
+- **[PROTOCOL.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/PROTOCOL.md)** - MCP operating protocol
 - **[FAQ.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/FAQ.md)** - Answers to common questions about using MARM
 
 ### **MCP Server Installation**
 
-- **[QUICK-INSTALL.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/QUICK-INSTALL.md)** - Quick start guide for all platforms.
 - **[INSTALL-DOCKER.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-DOCKER.md)** - Docker deployment (recommended)
 - **[INSTALL-WINDOWS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-WINDOWS.md)** - Windows installation guide
 - **[INSTALL-LINUX.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-LINUX.md)** - Linux installation guide
@@ -383,10 +380,10 @@ Derivatives should clearly indicate they are unofficial or experimental.
 ### **Project Information**
 
 - **[README.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/README.md)** - This file - ecosystem overview and MCP server guide
-- **[CONTRIBUTING.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/CONTRIBUTING.md)** - How to contribute to MARM
-- **[CHANGELOG.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/CHANGELOG.md)** - Version history and updates
+- **[CONTRIBUTING.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/CONTRIBUTING.md)** - How to contribute to MARM
+- **[CHANGELOG.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/CHANGELOG.md)** - Version history and updates
 - **[ROADMAP.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/ROADMAP.md)** - Planned features and development roadmap
-- **[LICENSE](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/LICENSE)** - MIT license terms
+- **[LICENSE](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/LICENSE)** - MIT license terms
 
 ---
 

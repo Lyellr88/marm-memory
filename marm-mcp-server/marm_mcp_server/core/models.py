@@ -13,13 +13,11 @@ class LogEntryRequest(BaseModel):
     session_name: Optional[str] = Field(default=None, description="Session name — omit to use the active session set by marm_log_session")
 
 
-class NotebookAddRequest(BaseModel):
-    name: str = Field(..., description="Name of the notebook entry")
-    data: str = Field(..., description="Content of the notebook entry")
-
-
-class NotebookUseRequest(BaseModel):
-    names: str = Field(..., description="Comma-separated list of notebook entry names")
+class NotebookRequest(BaseModel):
+    action: Literal["add", "use", "show", "status", "clear"] = Field(..., description="Action: add, use, show, status, or clear")
+    name: Optional[str] = Field(default=None, description="Entry name (required for action='add')")
+    data: Optional[str] = Field(default=None, description="Entry content (required for action='add')")
+    names: Optional[str] = Field(default=None, description="Comma-separated entry names (required for action='use')")
 
 
 class SmartRecallRequest(BaseModel):
@@ -30,7 +28,7 @@ class SmartRecallRequest(BaseModel):
     include_logs: bool = Field(default=False, description="Also search log_entries for text matches and include in response")
 
 
-class ContextualLogRequest(BaseModel):
+class ContextLogRequest(BaseModel):
     content: str = Field(..., description="Content to log with auto-classification")
     session_name: str = Field(default="main", description="Session to log to")
 

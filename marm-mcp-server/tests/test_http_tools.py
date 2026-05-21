@@ -107,16 +107,16 @@ def test_notebook_use_delete_clear_lifecycle_updates_active_state(monkeypatch, t
     client = local_client(server.app)
 
     add = client.post(
-        "/marm_notebook_add",
-        json={"name": "release_rule", "data": "Always verify Docker HTTP and STDIO."},
+        "/marm_notebook",
+        json={"action": "add", "name": "release_rule", "data": "Always verify Docker HTTP and STDIO."},
     )
     assert add.status_code == 200
 
-    use = client.post("/marm_notebook_use", json={"names": "release_rule"})
+    use = client.post("/marm_notebook", json={"action": "use", "names": "release_rule"})
     assert use.status_code == 200
     assert use.json()["activated_entries"] == ["release_rule"]
 
-    status = client.get("/marm_notebook_status")
+    status = client.post("/marm_notebook", json={"action": "status"})
     assert status.status_code == 200
     assert status.json()["active_entries"] == ["release_rule"]
 
@@ -124,7 +124,7 @@ def test_notebook_use_delete_clear_lifecycle_updates_active_state(monkeypatch, t
     assert deleted.status_code == 200
     assert deleted.json()["deleted"] is True
 
-    after_delete = client.get("/marm_notebook_status")
+    after_delete = client.post("/marm_notebook", json={"action": "status"})
     assert after_delete.json()["active_entries"] == []
     assert after_delete.json()["active_count"] == 0
 
@@ -138,27 +138,27 @@ def test_notebook_show_previews_long_entries_and_clear_resets_active_list(monkey
     client = local_client(server.app)
     long_data = "A" * 150
 
-    assert client.post("/marm_notebook_add", json={"name": "long_note", "data": long_data}).status_code == 200
-    assert client.post("/marm_notebook_use", json={"names": "long_note"}).json()["status"] == "success"
+    assert client.post("/marm_notebook", json={"action": "add", "name": "long_note", "data": long_data}).status_code == 200
+    assert client.post("/marm_notebook", json={"action": "use", "names": "long_note"}).json()["status"] == "success"
 
-    shown = client.get("/marm_notebook_show")
+    shown = client.post("/marm_notebook", json={"action": "show"})
     assert shown.status_code == 200
     entry = shown.json()["entries"][0]
     assert entry["name"] == "long_note"
     assert entry["preview"] == ("A" * 100) + "..."
 
-    cleared = client.delete("/marm_notebook_clear")
+    cleared = client.post("/marm_notebook", json={"action": "clear"})
     assert cleared.status_code == 200
     assert cleared.json()["active_count"] == 0
-    assert client.get("/marm_notebook_status").json()["active_entries"] == []
+    assert client.post("/marm_notebook", json={"action": "status"}).json()["active_entries"] == []
 
 
-def test_contextual_log_recall_include_logs_and_system_info(monkeypatch, tmp_path):
+def test_context_log_recall_include_logs_and_system_info(monkeypatch, tmp_path):
     server = load_isolated_server(monkeypatch, tmp_path)
     client = local_client(server.app)
 
     log = client.post(
-        "/marm_contextual_log",
+        "/marm_context_log",
         json={
             "session_name": "search-session",
             "content": "project decision: qwen uses http transport command",
@@ -397,7 +397,7 @@ def test_endpoint_validation_rejects_wrong_payload_shapes(monkeypatch, tmp_path)
 
     bad_recall = client.post("/marm_smart_recall", json={"session_name": "x"})
     bad_log = client.post("/marm_log_entry", json={"session_name": "x", "content": "old field"})
-    bad_notebook = client.post("/marm_notebook_add", json={"name": "x", "content": "old field"})
+    bad_notebook = client.post("/marm_notebook", json={"name": "x", "data": "no action field"})
     bad_summary = client.get("/marm_summary")
 
     assert bad_recall.status_code == 422
@@ -478,6 +478,12 @@ def test_http_removed_tools_absent_from_openapi_schema(monkeypatch, tmp_path):
 
     assert "/marm_smart_recall" in paths
     assert "/marm_delete" in paths
+    assert "/marm_notebook" in paths
+    assert "/marm_notebook_add" not in paths, "old marm_notebook_add must be removed"
+    assert "/marm_notebook_use" not in paths, "old marm_notebook_use must be removed"
+    assert "/marm_notebook_show" not in paths, "old marm_notebook_show must be removed"
+    assert "/marm_notebook_status" not in paths, "old marm_notebook_status must be removed"
+    assert "/marm_notebook_clear" not in paths, "old marm_notebook_clear must be removed"
 
 
 def test_http_mcp_tools_call_body_triggers_doc_loading(monkeypatch, tmp_path):
@@ -594,6 +600,65 @@ def test_ensure_marm_started_allows_only_one_concurrent_doc_load(monkeypatch, tm
 
     assert len(load_calls) == 1
     assert doc_module.docs_are_loaded()
+
+
+def test_http_protocol_injected_on_first_mcp_tool_call_not_on_second(monkeypatch, tmp_path):
+    import json
+    from unittest.mock import AsyncMock, MagicMock
+
+    server = load_isolated_server(monkeypatch, tmp_path)
+    doc_module = importlib.import_module("marm_mcp_server.services.documentation")
+
+    doc_module._docs_loaded = False
+    server._protocol_delivered = False
+
+    tool_call_body = b'{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"marm_notebook","arguments":{"action":"status"}}}'
+
+    def make_mock_response():
+        body = json.dumps({
+            "jsonrpc": "2.0", "id": 1,
+            "result": {"content": [{"type": "text", "text": '{"status":"ok"}'}]}
+        }).encode()
+
+        async def _iter():
+            yield body
+
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.headers = MagicMock()
+        resp.headers.items.return_value = [("x-request-id", "1")]
+        resp.body_iterator = _iter()
+        # Explicit bytes so json.loads works when middleware returns mock unchanged (second call)
+        resp.body = body
+        return resp
+
+    def make_mock_request():
+        req = MagicMock()
+        req.method = "POST"
+        req.url.path = "/mcp"
+        req.body = AsyncMock(return_value=tool_call_body)
+        return req
+
+    async def run():
+        call_1 = AsyncMock(return_value=make_mock_response())
+        resp_1 = await server._mcp_tool_call_tracker(make_mock_request(), call_1)
+
+        call_2 = AsyncMock(return_value=make_mock_response())
+        resp_2 = await server._mcp_tool_call_tracker(make_mock_request(), call_2)
+
+        return resp_1, resp_2
+
+    resp_1, resp_2 = asyncio.run(run())
+
+    body_1 = json.loads(resp_1.body)
+    content_1 = body_1["result"]["content"]
+    assert any("[MARM SESSION INIT]" in c["text"] for c in content_1), \
+        "Protocol not injected in first MCP tool call response"
+
+    body_2 = json.loads(resp_2.body)
+    content_2 = body_2["result"]["content"]
+    assert not any("[MARM SESSION INIT]" in c["text"] for c in content_2), \
+        "Protocol must not repeat on second MCP tool call"
 
 
 def test_log_entries_are_isolated_by_session(monkeypatch, tmp_path):

@@ -69,7 +69,7 @@ Tested MARM across models and validated its performance in Gemini Pro. Provided 
 
 #### u/MykoJai168  
 
-**Vision Contributor** | Private DM - June 12, 2025 | (Referenced in [README.md](../README.md))
+**Vision Contributor** | Private DM - June 12, 2025 | (Referenced in [README.md](README.md))
 
 Sparked the architectural concept behind MARM's "Session Relay Tools" patch by proposing a layered, context-managed memory model. Offered collaboration, stress-testing interest, and early insight into multi-agent recall, which helped validate MARM's patch direction. Credited for contributing to the prompt-layer vision and user-side continuity design.
 
@@ -151,9 +151,8 @@ Project discussions should stay respectful, direct, and useful.
 
 ## Related Docs
 
-- [README.md](../README.md) - Project overview and quick start
-- [QUICK-INSTALL.md](../QUICK-INSTALL.md) - Fast client setup commands
-- [MCP-HANDBOOK.md](../MCP-HANDBOOK.md) - MCP usage guide
-- [PROTOCOL.md](../PROTOCOL.md) - Core memory protocol
+- [README.md](README.md) - Project overview and quick start
+- [MCP-HANDBOOK.md](MCP-HANDBOOK.md) - MCP usage guide
+- [PROTOCOL.md](docs/PROTOCOL.md) - Core memory protocol
 - [CHANGELOG.md](CHANGELOG.md) - Version history
 - [ROADMAP.md](ROADMAP.md) - Current direction and planned work

@@ -16,7 +16,7 @@ def test_xss_payloads_are_sanitized_before_response_and_storage(monkeypatch, tmp
     stored_ids = []
     for index, payload in enumerate(payloads):
         response = client.post(
-            "/marm_contextual_log",
+            "/marm_context_log",
             json={"session_name": "security-xss", "content": payload},
         )
         assert response.status_code == 200
@@ -50,14 +50,14 @@ def test_sql_injection_queries_do_not_escape_session_scope_or_damage_tables(monk
     client = local_client(server.app)
 
     assert client.post(
-        "/marm_contextual_log",
+        "/marm_context_log",
         json={
             "session_name": "safe-session",
             "content": "ordinary safe content about docker transport",
         },
     ).status_code == 200
     assert client.post(
-        "/marm_contextual_log",
+        "/marm_context_log",
         json={
             "session_name": "other-session",
             "content": "secret token should stay scoped to another session",
@@ -96,11 +96,11 @@ def test_recall_is_session_scoped_unless_search_all_is_requested(monkeypatch, tm
     client = local_client(server.app)
 
     assert client.post(
-        "/marm_contextual_log",
+        "/marm_context_log",
         json={"session_name": "alpha", "content": "alpha-only marker for scoped recall"},
     ).status_code == 200
     assert client.post(
-        "/marm_contextual_log",
+        "/marm_context_log",
         json={"session_name": "beta", "content": "beta-only marker for scoped recall"},
     ).status_code == 200
 

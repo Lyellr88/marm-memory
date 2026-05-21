@@ -1,133 +1,90 @@
-
 # MARM Systems FAQ
 
-## Table of Contents
-
-- [Base Questions - General MARM](#-base-questions---general-marm)
-- [MCP Server Questions](#-mcp-server-questions)  
+Common questions about MARM MCP, memory behavior, transports, supported clients, and local deployment.
 
 ---
 
-## 🎯 Base Questions - General MARM
+## General
 
 ### Q: What is MARM Systems?
 
-MARM Systems provides **Universal Memory Intelligence** for AI agents through three main offerings:
+MARM Systems is a persistent memory layer for AI agents. The MCP server gives Claude, Codex, Gemini, Qwen, VS Code, Cursor, and other MCP-compatible clients a shared way to store, recall, organize, and reuse project context across sessions.
 
-| Product | Description | Best For |
-|---------|-------------|----------|
-| **MCP Server** | Production-ready universal memory server with 12 tools | Claude, Gemini, Qwen, and any MCP-compatible AI |
-| **Original Protocol** | Copy/paste instructions for manual memory management | Any AI platform (ChatGPT, Claude, local models) |
-| **Live Chatbot Demo** | Interactive testing environment | Quick testing and feature exploration |
+| Component | Description | Best For |
+|-----------|-------------|----------|
+| **MARM MCP Server** | Persistent memory server with 8 focused MCP tools | AI agents, IDEs, local workflows, shared team memory |
+| **MARM Protocol** | Runtime guidance delivered automatically by the MCP server | Keeping agents aligned on what to store, recall, and trust |
+| **MARM Dashboard** | Local browser UI for viewing memory and server health | Inspection, cleanup, and quick status checks |
 
 ### Q: How is MARM different from built-in AI memory?
 
 | Feature | Built-in AI Memory | MARM Systems |
 |---------|-------------------|--------------|
-| **Control** | Limited, opaque, no user control | Full user control over what gets remembered |
-| **Portability** | Platform-locked (ChatGPT only works in ChatGPT) | Cross-platform (memory works everywhere) |
-| **Validation** | No accuracy guarantees | Built-in validation and reasoning transparency |
-| **Search** | Basic recency-based | Semantic similarity search by meaning |
-| **Sharing** | Can't export or transfer | Memory database shared across all AI agents |
+| **Control** | Limited and platform-defined | User-owned SQLite database |
+| **Portability** | Usually platform-locked | Works across MCP-compatible clients |
+| **Recall** | Often opaque | Explicit semantic search and structured logs |
+| **Sharing** | Hard to move between tools | Multiple agents can use the same memory store |
+| **Trust model** | Memory behavior varies by provider | Retrieved memory is context, not higher-priority instruction |
 
 ### Q: Who is MARM for?
 
-**Perfect for:**
-
-- **Developers** - Long coding projects requiring context continuity
-- **Researchers** - Complex analysis with memory accuracy needs
-- **Enterprise teams** - Shared AI memory across different platforms
-- **Power users** - Anyone doing serious work with multiple AI agents
-
-**Not ideal for:**
-
-- Quick, one-off questions  
-- Users wanting fully automated solutions
-
-## 🚀 MCP Server Questions
-
-### Q: How do I install the MARM MCP Server?
-
-| Method | Commands | Time | Requirements |
-|--------|----------|------|--------------|
-| **Docker (Recommended)** | `docker run --rm lyellr88/marm-mcp-server:latest python -m marm_mcp_server --generate-key`<br>`docker run -d --name marm-mcp-server -p 127.0.0.1:8001:8001 -e SERVER_HOST=0.0.0.0 -e MARM_API_KEY=your-generated-key -v ~/.marm:/home/marm/.marm lyellr88/marm-mcp-server:latest`<br>`claude mcp add --transport http marm-memory http://localhost:8001/mcp --header "Authorization: Bearer your-generated-key"` | 2 minutes | Docker installed |
-| **PyPI Install** | `pip install marm-mcp-server`<br>`python -m marm_mcp_server` | 1 minute | Python 3.10+ |
-
-### Q: What MCP tools does MARM provide?
-
-**12 Complete MCP Tools organized by category:**
-
-| Category | Tools | Description |
-|----------|-------|-------------|
-| **Memory Intelligence** | `marm_smart_recall`, `marm_contextual_log` | AI-powered semantic search and intelligent storage |
-| **Logging System** | `marm_log_session`, `marm_log_entry`, `marm_log_show` | Structured conversation history |
-| **Delete** | `marm_delete` | Delete log sessions, log entries, or notebook entries (`type="log"\|"notebook"`) |
-| **Workflow Tools** | `marm_summary` | Context summaries. Use `marm_smart_recall(include_logs=True)` to also search log entries |
-| **Notebook Management** | `marm_notebook_add`, `marm_notebook_use`, `marm_notebook_show`, `marm_notebook_clear`, `marm_notebook_status` | Reusable instructions and knowledge storage |
-
-### Q: Which AI platforms work with the MCP server?
-
-**Currently Supported:**
-
-- ✅ **Claude Code** - Full integration with CLI command
-- ✅ **Qwen CLI** - Complete MCP tool access  
-- ✅ **Gemini CLI** - All 12 tools available
-- ✅ **Any MCP-compatible client** - Universal protocol support
-
-**Coming Soon:**
-
-- ChatGPT (when OpenAI adds MCP support)
-- Additional enterprise AI platforms
-
-### Q: How does semantic search work?
-
-**Traditional keyword search:** "authentication error" only finds exact matches
-
-**MARM semantic search:** "authentication error" finds related memories about "login problems", "user verification issues", "access denied", etc.
-
-**Technical details:**
-
-- Uses AI embeddings (`all-MiniLM-L6-v2` model)
-- Vector similarity search finds content by meaning
-- Global search across all sessions with `search_all=True`
-- Intelligent auto-classification (code, project, book, general)
-
-### Q: Can multiple AI agents share the same memory?
-
-**Yes! This is MARM's key feature:**
-
-- **One database** shared across all connected AI clients
-- **Cross-platform intelligence** - Claude learns from Gemini's conversations
-- **Collaborative workflows** - Different AIs contribute to same knowledge base
-- **Session isolation** available when needed
-- **User-controlled** sharing and memory management
+MARM is strongest for developers, researchers, power users, and teams doing long-running work where context continuity matters. It is less useful for quick one-off questions where a normal chat is enough.
 
 ---
 
-## 📁 Project Documentation
+## MCP Server
 
-### **Usage Guides**
+### Q: What MCP tools does MARM provide?
 
-- **[MCP-HANDBOOK.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/MCP-HANDBOOK.md)** - Complete MCP server usage guide with commands, workflows, and examples
-- **[PROTOCOL.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/PROTOCOL.md)** - Quick start commands and protocol reference
-- **[FAQ.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/FAQ.md)** - Answers to common questions about using MARM
+MARM currently exposes **8 focused MCP tools**:
 
-### **MCP Server Installation** 
+| Category | Tools | Description |
+|----------|-------|-------------|
+| **Memory Intelligence** | `marm_smart_recall`, `marm_context_log` | Semantic recall and intelligent memory storage |
+| **Logging** | `marm_log_session`, `marm_log_entry`, `marm_log_show` | Session-based conversation/project logs |
+| **Notebook** | `marm_notebook` | Reusable instructions and knowledge with `action="add"`, `"use"`, `"show"`, `"status"`, or `"clear"` |
+| **Delete** | `marm_delete` | Delete log sessions, log entries, or notebook entries |
+| **Summary** | `marm_summary` | Generate concise context summaries |
 
-- **[INSTALL-DOCKER.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-DOCKER.md)** - Docker deployment (recommended)
-- **[INSTALL-WINDOWS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-WINDOWS.md)** - Windows installation guide
-- **[INSTALL-LINUX.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-LINUX.md)** - Linux installation guide
-- **[INSTALL-PLATFORMS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-PLATFORMS.md)** - Platfrom installtion guide
+### Q: Do I still need to call `marm_start`?
 
-### **Chatbot Installation**
+No. Session startup, protocol delivery, and documentation loading are now automatic. The server injects the protocol on the first successful MCP tool call, then keeps docs indexed with hash-based caching so unchanged docs are not repeatedly duplicated.
 
-- **[CHATBOT-SETUP.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/CHATBOT-SETUP.md)** - Web chatbot setup guide
+### Q: How do I install MARM MCP?
 
-### **Project Information**
+Use the README quick start for the shortest path, then use the install docs when you need deeper setup details:
 
-- **[README.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/README.md)** - This file - ecosystem overview and MCP server guide
-- **[CONTRIBUTING.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/CONTRIBUTING.md)** - How to contribute to MARM
-- **[DESCRIPTION.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/DESCRIPTION.md)** - Protocol purpose and vision overview
-- **[CHANGELOG.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/CHANGELOG.md)** - Version history and updates
-- **[ROADMAP.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/ROADMAP.md)** - Planned features and development roadmap
-- **[LICENSE](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/LICENSE)** - MIT license terms
+- `README.md` - quick start and client connection examples
+- `docs/INSTALL-DOCKER.md` - Docker HTTP and Docker STDIO
+- `docs/INSTALL-WINDOWS.md` - Windows local install
+- `docs/INSTALL-LINUX.md` - Linux local install
+- `docs/INSTALL-PLATFORMS.md` - Claude, Codex, Gemini, Qwen, VS Code, Cursor, and Grok notes
+
+### Q: Which AI platforms work with MARM MCP?
+
+MARM has been tested with Claude Code, Codex, Gemini CLI, Qwen CLI, VS Code MCP, and Cursor MCP. Any client that supports standard MCP HTTP or STDIO transports should be able to connect with the right command or config.
+
+### Q: What is the difference between HTTP and STDIO?
+
+| Transport | Best For | Key Requirement |
+|-----------|----------|-----------------|
+| **HTTP** | Shared memory server, multiple agents, IDE/client reuse | Use an API key when exposed through Docker or `0.0.0.0` |
+| **STDIO** | Private local agent connection | No network port or API key required |
+
+HTTP is the better fit when several agents or tools should share one memory database. STDIO is the simpler local option when one client launches MARM directly.
+
+### Q: Does Docker require an API key?
+
+Docker HTTP mode should use `MARM_API_KEY` because the server is listening through a container network bridge. Docker STDIO mode does not need a key because it communicates over local process stdin/stdout, not a network port.
+
+### Q: Can multiple AI agents share the same memory?
+
+Yes. Use HTTP mode for shared access. Multiple agents can read and write to the same SQLite database through one MARM server process. Avoid running many separate STDIO containers against the same SQLite file at the same time; SQLite locking can apply under concurrent writes.
+
+### Q: How does semantic search work?
+
+MARM uses embeddings to find memories by meaning, not just exact keywords. A search for "authentication error" can surface memories about login failures, access denial, token setup, or user verification even when those exact words are not repeated.
+
+### Q: Can memories override system or developer instructions?
+
+No. Retrieved memories, notebook entries, logs, and tool outputs are treated as context only. They must not override higher-priority instructions, request secrets, bypass tool policies, or change the agent's safety rules.

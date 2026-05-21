@@ -574,7 +574,7 @@ This release introduces a complete UI/UX transformation with the implementation 
 
 **MCP Tools Suite:**
 
-- **Memory Intelligence**: `marm_smart_recall` (global semantic search), `marm_contextual_log` (intelligent storage)
+- **Memory Intelligence**: `marm_smart_recall` (global semantic search), `marm_context_log` (intelligent storage)
 - **Session Management**: `marm_start`, `marm_refresh` with enhanced protocol adherence
 - **Logging System**: `marm_log_session`, `marm_log_entry`, `marm_log_show`, `marm_log_delete`
 - **Notebook Management**: Complete CRUD operations with `marm_notebook_add`, `marm_notebook_use`, etc.
@@ -937,7 +937,6 @@ This release introduces a complete UI/UX transformation with the implementation 
 
 ### **Documentation Consistency Pass**
 
-- **All Docker commands** updated across README, QUICK-INSTALL, INSTALL-DOCKER, INSTALL-WINDOWS, INSTALL-LINUX, MCP-HANDBOOK, and FAQ to include `MARM_API_KEY` and `--header "Authorization: Bearer your-generated-key"` on `claude mcp add`
 - **Docker key generation** standardized to `docker run --rm lyellr88/marm-mcp-server:latest python -m marm_mcp_server --generate-key` — no pip install required for Docker users
 - **README Security & Configuration section** rewritten with clear per-path explanation: pip+localhost (zero config), pip+`0.0.0.0` (auto-generated), Docker (manual `--generate-key`)
 - **INSTALL-WINDOWS and INSTALL-LINUX** env vars tables now include `SERVER_HOST` and `MARM_API_KEY` rows with auto-gen and `--generate-key` descriptions
@@ -1130,7 +1129,6 @@ This release introduces a complete UI/UX transformation with the implementation 
 
 </details>
 
-
 ---
 
 <details>
@@ -1185,6 +1183,7 @@ STDIO mode now writes diagnostics to `~/.marm/logs/marm-stdio.log` alongside the
 - Log file persists across restarts; file handler failure is silently skipped so the server never breaks on permission errors
 
 **Live log tailing (local pip install):**
+
 ```powershell
 # Watch live
 Get-Content "$env:USERPROFILE\.marm\logs\marm-stdio.log" -Wait -Tail 20
@@ -1240,29 +1239,37 @@ Suppresses benign `WinError 10054` / `ConnectionResetError` log spam from `async
 
 ---
 
-## 📁 Project Documentation
+<details>
+<summary><strong>May 21st, 2026: Protocol Delivery & Notebook Tool Consolidation (v2.6.1)</strong></summary>
 
-### **Usage Guides**
+### Protocol Delivery
 
-- **[MARM-HANDBOOK.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/MARM-HANDBOOK.md)** - Original MARM protocol handbook for chatbot usage
-- **[MCP-HANDBOOK.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/MCP-HANDBOOK.md)** - Complete MCP server usage guide with commands, workflows, and examples
-- **[PROTOCOL.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/PROTOCOL.md)** - Quick start commands and protocol reference
+MARM now delivers the protocol context directly through the first successful MCP tool response instead of only indexing it into memory. This fixes the gap where the protocol existed in the database but was never actually read by the connected agent.
 
-### **MCP Server Installation**
+- HTTP MCP middleware injects `[MARM SESSION INIT]` into the first successful `tools/call` response
+- STDIO transport injects `marm_protocol` into the first successful tool result
+- Protocol delivery is tracked separately from documentation indexing so failed calls do not consume the one-time delivery
+- Both transports continue using lazy documentation loading and auto-refresh behavior from v2.6.0
 
-- **[INSTALL-DOCKER.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-DOCKER.md)** - Docker deployment (recommended)
-- **[INSTALL-WINDOWS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-WINDOWS.md)** - Windows installation guide
-- **[INSTALL-LINUX.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-LINUX.md)** - Linux installation guide
-- **[INSTALL-PLATFORMS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-PLATFORMS.md)** - Platfrom installtion guide
+### Notebook Tool Consolidation
 
-### **Chatbot Installation**
+The five notebook tools were consolidated into one action-dispatched tool:
 
-- **[CHATBOT-SETUP.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/CHATBOT-SETUP.md)** - Web chatbot setup guide
+```text
+marm_notebook(action="add"|"use"|"show"|"status"|"clear", name=None, data=None, names=None)
+```
 
-### **Project Information**
+- Replaced `marm_notebook_add`, `marm_notebook_use`, `marm_notebook_show`, `marm_notebook_status`, and `marm_notebook_clear`
+- Preserved existing response fields for add, use, show, status, and clear actions
+- Kept `marm_delete` separate for destructive log/notebook deletes
+- Updated HTTP endpoint, STDIO tool surface, and `server.json`
+- Reduced MCP tool discovery from 12 tools to 8 tools
 
-- **[README.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/README.md)** - This file - ecosystem overview and MCP server guide
-- **[CONTRIBUTING.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/CONTRIBUTING.md)** - How to contribute to MARM
-- **[CHANGELOG.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/CHANGELOG.md)** - Version history and updates
-- **[ROADMAP.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/ROADMAP.md)** - Planned features and development roadmap
-- **[LICENSE](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/LICENSE)** - MIT license terms
+### Tests
+
+- Added HTTP regression coverage proving protocol context is injected on the first MCP tool call and not repeated on the second
+- Added STDIO regression coverage proving protocol context is injected once
+- Updated notebook lifecycle tests to use the consolidated `marm_notebook` tool
+- Added discovery checks ensuring the old notebook tools are absent from HTTP/OpenAPI and STDIO tool lists
+
+</details>
