@@ -3,6 +3,7 @@
 import signal
 import asyncio
 import structlog
+from .memory import memory
 
 logger = structlog.get_logger()
 
@@ -42,6 +43,9 @@ class ShutdownManager:
     async def graceful_shutdown(self):
         """Perform graceful shutdown of all connections and services"""
         logger.info("Initiating graceful shutdown")
+
+        memory.connection_pool.close_all()
+        logger.info("SQLite connection pool closed")
 
         logger.info("Graceful shutdown complete")
 

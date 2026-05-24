@@ -153,6 +153,62 @@ def test_notebook_show_previews_long_entries_and_clear_resets_active_list(monkey
     assert client.post("/marm_notebook", json={"action": "status"}).json()["active_entries"] == []
 
 
+def test_http_notebook_add_persists_entry_and_embedding(monkeypatch, tmp_path):
+    server = load_isolated_server(monkeypatch, tmp_path)
+    client = local_client(server.app)
+    memory_module = importlib.import_module("marm_mcp_server.core.memory")
+
+    class FakeEmbedding:
+        def tobytes(self):
+            return b"fake-embedding-bytes"
+
+    class FakeEncoder:
+        def encode(self, text):
+            assert text == "Notebook entries should keep embeddings when available."
+            return FakeEmbedding()
+
+    monkeypatch.setattr(memory_module.memory, "encoder", FakeEncoder())
+
+    response = client.post(
+        "/marm_notebook",
+        json={
+            "action": "add",
+            "name": "embedded_rule",
+            "data": "Notebook entries should keep embeddings when available.",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "success"
+
+    with memory_module.memory.get_connection() as conn:
+        row = conn.execute(
+            "SELECT name, data, embedding FROM notebook_entries WHERE name = ?",
+            ("embedded_rule",),
+        ).fetchone()
+
+    assert row is not None
+    assert row[0] == "embedded_rule"
+    assert row[1] == "Notebook entries should keep embeddings when available."
+    assert row[2] == b"fake-embedding-bytes"
+
+
+def test_http_notebook_service_errors_return_400(monkeypatch, tmp_path):
+    server = load_isolated_server(monkeypatch, tmp_path)
+    client = local_client(server.app)
+
+    missing_data = client.post(
+        "/marm_notebook",
+        json={"action": "add", "name": "missing_data"},
+    )
+    missing_names = client.post("/marm_notebook", json={"action": "use"})
+
+    assert missing_data.status_code == 400
+    assert "name and data are required" in missing_data.json()["detail"]
+    assert missing_names.status_code == 400
+    assert "names is required" in missing_names.json()["detail"]
+
+
 def test_context_log_recall_include_logs_and_system_info(monkeypatch, tmp_path):
     server = load_isolated_server(monkeypatch, tmp_path)
     client = local_client(server.app)

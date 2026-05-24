@@ -71,17 +71,6 @@ class MARMEvents:
             self.logger.critical(f"Event callback consistently failing ({failure_count} times) for '{event_type}': {error_msg}")
             # Could add auto-disable logic here if needed
     
-    def get_health_status(self) -> Dict[str, Any]:
-        """Get event system health status for monitoring"""
-        total_listeners = sum(len(callbacks) for callbacks in self.listeners.values())
-        failed_callback_count = len(self.failed_callbacks)
-        
-        return {
-            "total_event_types": len(self.listeners),
-            "total_listeners": total_listeners,
-            "failed_callbacks": failed_callback_count,
-            "health_status": "healthy" if failed_callback_count == 0 else "degraded"
-        }
 
 # Global events system
 events = MARMEvents()

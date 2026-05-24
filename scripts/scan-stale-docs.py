@@ -68,14 +68,42 @@ RULES = [
         "marm_context_bridge was removed — no longer an active tool.",
     ),
     StaleRule(
+        "old context log name",
+        re.compile(r"\bmarm_contextual_log\b|\bContextualLogRequest\b|\bcontextual_log\b", re.IGNORECASE),
+        "Renamed to marm_context_log / ContextLogRequest in v2.6.1.",
+    ),
+    StaleRule(
         "split delete tools",
         re.compile(r"\bmarm_log_delete\b|\bmarm_notebook_delete\b", re.IGNORECASE),
         "Replaced by marm_delete(type='log'|'notebook') in v2.6.0.",
     ),
     StaleRule(
-        "removed mcp tools",
+        "split notebook tools",
+        re.compile(
+            r"\bmarm_notebook_(?:add|use|show|status|clear)\b",
+            re.IGNORECASE,
+        ),
+        "Replaced by marm_notebook(action='add'|'use'|'show'|'status'|'clear') in v2.6.1.",
+    ),
+    StaleRule(
+        "hidden lifecycle tools",
         re.compile(r"\bmarm_start\b|\bmarm_refresh\b|\bmarm_reload_docs\b", re.IGNORECASE),
-        "These are no longer exposed as MCP tools — server automates them internally.",
+        "These are hidden/internal lifecycle endpoints now — they should not be documented as active MCP tools.",
+    ),
+    StaleRule(
+        "removed system tools",
+        re.compile(r"\bmarm_current_context\b|\bmarm_system_info\b", re.IGNORECASE),
+        "Removed from the MCP tool surface. Use automatic context/protocol handling or /health/dashboard status.",
+    ),
+    StaleRule(
+        "old tool count",
+        re.compile(r"\b(?:12|18|19)\s+(?:complete\s+)?(?:focused\s+)?(?:mcp\s+)?tools\b", re.IGNORECASE),
+        "Current public MCP tool surface is 8 tools.",
+    ),
+    StaleRule(
+        "old command prompt framing",
+        re.compile(r"\bcopy/paste\b|\bcopy and paste\b|\bslash command\b|\bslash-command\b", re.IGNORECASE),
+        "Protocol/docs should describe MCP runtime behavior, not old chatbot/manual prompt workflows.",
     ),
 ]
 

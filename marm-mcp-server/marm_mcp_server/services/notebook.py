@@ -1,0 +1,96 @@
+"""Shared notebook action dispatcher for MARM MCP Server."""
+
+from datetime import datetime, timezone
+from typing import Optional
+
+from ..core.memory import memory
+from ..core.events import events
+
+
+async def _add(name: Optional[str], data: Optional[str], **_) -> dict:
+    if name is None or data is None:
+        return {"status": "error", "message": "name and data are required for action='add'"}
+    embedding_bytes = None
+    if memory.encoder:
+        try:
+            embedding = memory.encoder.encode(data)
+            embedding_bytes = embedding.tobytes()
+        except Exception:
+            pass
+    with memory.get_connection() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO notebook_entries (name, data, embedding, updated_at) VALUES (?, ?, ?, ?)",
+            (name, data, embedding_bytes, datetime.now(timezone.utc).isoformat()),
+        )
+        conn.commit()
+    await events.emit("notebook_entry_added", {"name": name, "data": data})
+    return {"status": "success", "message": f"📓 Notebook entry '{name}' added", "name": name}
+
+
+async def _use(names: Optional[str], **_) -> dict:
+    if names is None:
+        return {"status": "error", "message": "names is required for action='use'"}
+    name_list = [n.strip() for n in names.split(",")]
+    activated_entries = []
+    with memory.get_connection() as conn:
+        for n in name_list:
+            cursor = conn.execute("SELECT name, data FROM notebook_entries WHERE name = ?", (n,))
+            result = cursor.fetchone()
+            if result:
+                activated_entries.append({"name": result[0], "data": result[1]})
+    memory.active_notebook_entries = activated_entries
+    return {
+        "status": "success",
+        "message": f"🔧 Activated {len(activated_entries)} notebook entries",
+        "activated_entries": [e["name"] for e in activated_entries],
+        "entries": activated_entries,
+    }
+
+
+async def _show(**_) -> dict:
+    with memory.get_connection() as conn:
+        cursor = conn.execute(
+            "SELECT name, data, created_at, updated_at FROM notebook_entries ORDER BY updated_at DESC"
+        )
+        entries = []
+        for row in cursor.fetchall():
+            preview = row[1][:100] + "..." if len(row[1]) > 100 else row[1]
+            entries.append({"name": row[0], "preview": preview, "created_at": row[2], "updated_at": row[3]})
+    return {"status": "success", "message": f"📚 Found {len(entries)} notebook entries", "entries": entries, "total_count": len(entries)}
+
+
+async def _status(**_) -> dict:
+    active_names = [entry["name"] for entry in memory.active_notebook_entries]
+    return {
+        "status": "success",
+        "message": f"📊 {len(active_names)} active notebook entries",
+        "active_entries": active_names,
+        "entries": memory.active_notebook_entries,
+        "active_count": len(active_names),
+    }
+
+
+async def _clear(**_) -> dict:
+    memory.active_notebook_entries = []
+    return {"status": "success", "message": "🧹 Active notebook entries cleared", "active_count": 0}
+
+
+_ACTION_HANDLERS = {
+    "add": _add,
+    "use": _use,
+    "show": _show,
+    "status": _status,
+    "clear": _clear,
+}
+
+
+async def notebook_dispatch(
+    action: str,
+    name: Optional[str] = None,
+    data: Optional[str] = None,
+    names: Optional[str] = None,
+) -> dict:
+    handler = _ACTION_HANDLERS.get(action)
+    if handler is None:
+        return {"status": "error", "message": f"Unknown action '{action}'. Must be: add, use, show, status, clear"}
+    return await handler(name=name, data=data, names=names)

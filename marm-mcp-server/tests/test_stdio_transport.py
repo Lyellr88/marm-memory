@@ -118,6 +118,12 @@ def test_stdio_delete_notebook_removes_entry_from_active_state(tmp_path):
             "name": "marm_notebook",
             "arguments": {"action": "status"},
         }})
+        # Drain call — cross-module dispatch adds latency on first tool call;
+        # extra message keeps stdin open until all responses are written.
+        + message({"jsonrpc": "2.0", "id": 6, "method": "tools/call", "params": {
+            "name": "marm_notebook",
+            "arguments": {"action": "status"},
+        }})
     )
 
     result = subprocess.run(
@@ -273,6 +279,12 @@ def test_stdio_log_records_tool_call_and_ok_status(tmp_path):
             "name": "marm_log_session",
             "arguments": {"session_name": "log-test"},
         }})
+        # Drain call — keeps stdin open until doc loading and the tool response are
+        # both written before EOF. Single-tool-call sessions race with FastMCP shutdown.
+        + message({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {
+            "name": "marm_notebook",
+            "arguments": {"action": "status"},
+        }})
     )
 
     result = subprocess.run(
@@ -307,6 +319,12 @@ def test_stdio_debug_mode_logs_session_name_not_content(tmp_path):
             "name": "marm_log_session",
             "arguments": {"session_name": "debug-session"},
         }})
+        # Drain call — keeps stdin open until doc loading and the tool response are
+        # both written before EOF. Single-tool-call sessions race with FastMCP shutdown.
+        + message({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {
+            "name": "marm_notebook",
+            "arguments": {"action": "status"},
+        }})
     )
 
     result = subprocess.run(
@@ -340,6 +358,12 @@ def test_stdio_log_does_not_contain_stored_memory_content(tmp_path):
         + message({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {
             "name": "marm_context_log",
             "arguments": {"session_name": "privacy-test", "content": secret_content},
+        }})
+        # Drain call — keeps stdin open until doc loading and the tool response are
+        # both written before EOF. Single-tool-call sessions race with FastMCP shutdown.
+        + message({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {
+            "name": "marm_notebook",
+            "arguments": {"action": "status"},
         }})
     )
 

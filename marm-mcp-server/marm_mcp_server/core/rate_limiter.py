@@ -111,20 +111,6 @@ class IPRateLimiter:
             
             self.last_cleanup = current_time
     
-    def get_stats(self) -> Dict:
-        """Get rate limiting statistics for monitoring"""
-        current_time = time.time()
-        
-        active_ips = len([ip for ip, bucket in self.request_buckets.items() if bucket])
-        blocked_ips = len([ip for ip, unblock_time in self.blocked_ips.items() 
-                          if current_time < unblock_time])
-        
-        return {
-            'active_ips': active_ips,
-            'blocked_ips': blocked_ips,
-            'total_tracked_ips': len(self.request_buckets),
-            'memory_usage_estimate': f"{len(self.request_buckets) * 100}B"  # Rough estimate
-        }
 
 # Global rate limiter instance
 rate_limiter = IPRateLimiter()
