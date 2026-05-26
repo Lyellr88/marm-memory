@@ -4,6 +4,18 @@ import pytest
 
 @pytest.fixture
 def notebook_svc(monkeypatch, tmp_path):
+    """
+    Prepare and return the notebook dispatcher and in-memory state for tests.
+    
+    Clears any loaded `marm_mcp_server` modules so imports are reloaded, sets test database environment variables, and initializes `memory` to a test-ready state (forces encoder failure and clears active notebook entries).
+    
+    Parameters:
+        monkeypatch: pytest fixture used to set environment variables for the test.
+        tmp_path: pytest fixture providing a temporary directory path for test database files.
+    
+    Returns:
+        tuple: `(notebook_dispatch, memory)` where `notebook_dispatch` is the service dispatch function and `memory` is the in-memory state object configured for testing.
+    """
     for name in list(sys.modules):
         if name == "marm_mcp_server" or name.startswith("marm_mcp_server."):
             del sys.modules[name]
@@ -96,6 +108,11 @@ async def test_dispatch_use_missing_names_returns_error(notebook_svc):
 
 @pytest.mark.asyncio
 async def test_dispatch_add_blank_name_returns_error(notebook_svc):
+    """
+    Verify that adding a notebook entry with a blank name returns an error mentioning "name".
+    
+    Asserts that the dispatcher response has status "error" and that the error message contains the substring "name".
+    """
     dispatch, _ = notebook_svc
     result = await dispatch(action="add", name="   ", data="some data")
     assert result["status"] == "error"
@@ -120,6 +137,11 @@ async def test_dispatch_unknown_action_returns_error(notebook_svc):
 
 @pytest.mark.asyncio
 async def test_dispatch_use_silently_skips_nonexistent_entries(notebook_svc):
+    """
+    Verifies that invoking the dispatcher with a nonexistent entry name is treated as a no-op and reported as successful.
+    
+    Asserts that the dispatch call with action="use" and a missing name returns a success status, yields an empty `activated_entries` list, and leaves `memory.active_notebook_entries` unchanged (empty).
+    """
     dispatch, memory = notebook_svc
     result = await dispatch(action="use", names="ghost_entry")
     assert result["status"] == "success"

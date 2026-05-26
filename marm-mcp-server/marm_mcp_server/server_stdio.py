@@ -509,13 +509,23 @@ async def marm_notebook(
     names: Optional[str] = None,
 ) -> dict:
     """
-    📔 Unified notebook — add, use, show, status, or clear
-
-    action="add": save or update an entry (name + data required)
-    action="use": activate entries as instructions (names required, comma-separated)
-    action="show": list all saved entries with previews
-    action="status": show currently active entries
-    action="clear": clear the active entry list
+    Unified notebook interface for adding, activating, listing, querying status, or clearing notebook entries.
+    
+    Supported actions:
+    - "add": save or update an entry (requires `name` and `data`).
+    - "use": activate entries as instructions (requires `names`, comma-separated).
+    - "show": list saved entries with previews.
+    - "status": return currently active entries.
+    - "clear": clear the active entry list.
+    
+    Parameters:
+        action (str): The notebook action to perform.
+        name (Optional[str]): Name of the entry (used by "add").
+        data (Optional[str]): Content of the entry (used by "add").
+        names (Optional[str]): Comma-separated names (used by "use").
+    
+    Returns:
+        dict: The result of the notebook operation; success responses vary by action. On failure returns `{"status": "error", "message": ...}`.
     """
     try:
         return await notebook_dispatch(action=action, name=name, data=data, names=names)
@@ -620,11 +630,13 @@ async def marm_summary(
 # ============================================================================
 
 def _is_graceful_teardown(exc: Exception) -> bool:
-    """Return True only if exc is safe to swallow as normal STDIO EOF teardown.
-
-    ExceptionGroup is checked by inspecting every sub-exception. All must be
-    ClosedResourceError — a mixed group (e.g. ClosedResourceError + ValueError)
-    is not swallowed so real bugs are not lost.
+    """
+    Detects whether an exception represents a graceful STDIO EOF teardown.
+    
+    If `exc` is an exception group, returns True only when the group is non-empty and every sub-exception's type name contains "ClosedResourceError". For non-group exceptions, returns True when the exception's type or its representation contains "ClosedResourceError".
+    
+    Returns:
+        bool: True if the exception should be treated as a graceful teardown, False otherwise.
     """
     if hasattr(exc, "exceptions"):
         return bool(exc.exceptions) and all(
@@ -635,6 +647,12 @@ def _is_graceful_teardown(exc: Exception) -> bool:
 
 
 def main() -> None:
+    """
+    Start and run the MCP STDIO server, logging startup and shutdown and handling graceful STDIN teardown.
+    
+    Runs the MCP event loop via mcp.run(). If mcp.run() raises an exception that is recognized as a graceful STDIN/STDIO teardown, the exception is suppressed and a debug message is logged; all other exceptions are re-raised.
+    @raises Exception: re-raises any exception from mcp.run() that is not identified as a graceful teardown.
+    """
     _stdio_log.info(
         "startup version=%s db=%s semantic_search=%s",
         SERVER_VERSION, DEFAULT_DB_PATH, SEMANTIC_SEARCH_AVAILABLE,

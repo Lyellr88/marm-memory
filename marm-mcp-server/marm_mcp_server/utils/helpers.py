@@ -3,7 +3,12 @@
 from pathlib import Path
 
 async def read_protocol_file():
-    """Read the PROTOCOL.md file and return its content"""
+    """
+    Load and return the contents of the project's PROTOCOL.md file.
+    
+    Returns:
+        str: The full text of PROTOCOL.md if found; a warning string "⚠️ PROTOCOL.md file not found. Please ensure documentation is properly loaded." if the file does not exist; or an error string formatted as "❌ Error reading PROTOCOL.md: {error}" if an exception occurs while reading.
+    """
     try:
         protocol_path = Path(__file__).parent.parent.parent / "marm-docs" / "PROTOCOL.md"
         if protocol_path.exists():

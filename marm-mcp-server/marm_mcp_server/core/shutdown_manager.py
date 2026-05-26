@@ -41,7 +41,11 @@ class ShutdownManager:
         await self.shutdown_event.wait()
 
     async def graceful_shutdown(self):
-        """Perform graceful shutdown of all connections and services"""
+        """
+        Initiate and perform a graceful shutdown of application resources.
+        
+        Attempts to close the shared SQLite connection pool (via memory.connection_pool.close_all()); logs success or any error encountered and continues to complete the shutdown sequence.
+        """
         logger.info("Initiating graceful shutdown")
 
         try:

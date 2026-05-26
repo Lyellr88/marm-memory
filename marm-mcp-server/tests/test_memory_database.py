@@ -102,6 +102,11 @@ async def test_auto_classification_covers_primary_context_types(tmp_path):
 def test_close_all_drains_connection_pool(tmp_path):
     # Regression: graceful_shutdown must close pooled SQLite connections so
     # Docker/HTTP restarts and local dev restarts don't leak open file handles.
+    """
+    Verifies that closing the connection pool drains all pooled SQLite connections.
+    
+    Acquires and releases a connection to ensure the pool contains an entry, asserts the pool is non-empty, calls close_all on the pool, and asserts the pool is empty afterward. This prevents pooled SQLite file-handle leaks during restarts.
+    """
     db_path = tmp_path / "memory.db"
     memory = MARMMemory(str(db_path))
 

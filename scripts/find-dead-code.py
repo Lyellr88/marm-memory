@@ -34,14 +34,38 @@ FAIL = "x"
 
 
 def all_py_files() -> list[Path]:
+    """
+    Collects all Python files under the package directory.
+    
+    Returns:
+        files (list[Path]): Sorted list of Path objects for every `.py` file found recursively under PACKAGE.
+    """
     return sorted(PACKAGE.rglob("*.py"))
 
 
 def read(path: Path) -> str:
+    """
+    Read a file as UTF-8 text while ignoring decoding errors.
+    
+    Parameters:
+        path (Path): Path to the file to read.
+    
+    Returns:
+        content (str): The file contents decoded as UTF-8; bytes that cannot be decoded are skipped.
+    """
     return path.read_text(encoding="utf-8", errors="ignore")
 
 
 def display_path(path: Path | str) -> str:
+    """
+    Produce a path string relative to the repository root's parent when possible.
+    
+    Parameters:
+        path (Path | str): File system path to display.
+    
+    Returns:
+        str: Path converted to a string; relative to ROOT.parent if the input can be relativized, otherwise the original absolute/path string.
+    """
     p = Path(path)
     try:
         return str(p.relative_to(ROOT.parent))
@@ -50,13 +74,28 @@ def display_path(path: Path | str) -> str:
 
 
 def explain_static_limits() -> None:
+    """
+    Print a brief notice explaining the limitations of the static text-only scan.
+    
+    Informs the user that the scanner only examines source text and may miss dynamic imports, decorators, console entry points, framework registration, and functions called by name, and that reported items should be treated as review candidates rather than automatic deletion targets.
+    """
     print(f"{GRAY}This script scans source text only. It can miss dynamic imports, decorators,{RESET}")
     print(f"{GRAY}console entry points, framework registration, and functions called by name.{RESET}")
     print(f"{GRAY}Treat findings as review candidates, not automatic delete targets.{RESET}\n")
 
 
 def module_reference_patterns(module_path: str) -> set[str]:
-    """Return import/reference strings that can indicate a module is used."""
+    """
+    Produce a set of common substring patterns that indicate a dotted module path is referenced or imported.
+    
+    Parameters:
+        module_path (str): Dotted module path (e.g., "marm_mcp_server.core.memory").
+    
+    Returns:
+        set[str]: A set of string patterns such as the module path itself, "import <module>",
+        "from <module>", the module stem import forms, and package-relative or relative
+        import variants that are likely to appear in source.
+    """
     parts = module_path.split(".")
     stem = parts[-1]
     package_relative = ".".join(parts[1:]) if parts and parts[0] == "marm_mcp_server" else module_path
@@ -86,6 +125,17 @@ def module_reference_patterns(module_path: str) -> set[str]:
 # Check 1: Orphaned modules — never imported by anything in the package
 # ---------------------------------------------------------------------------
 def check_orphaned_modules() -> int:
+    """
+    Check the package for Python modules that appear unused and report findings.
+    
+    Uses textual heuristics to detect modules under marm_mcp_server/ whose module
+    name does not appear referenced elsewhere in the package, prints a human-
+    readable report to stdout, and suggests manual review steps when candidates
+    are found.
+    
+    Returns:
+        int: The number of modules identified as potentially orphaned.
+    """
     print(f"{YELLOW}1. Checking for orphaned modules...{RESET}")
     print(f"{GRAY}   Meaning: a Python file under marm_mcp_server/ whose module name was not{RESET}")
     print(f"{GRAY}   found in package imports. It may still be used by CLI entry points,{RESET}")
@@ -129,6 +179,14 @@ def check_orphaned_modules() -> int:
 # Check 2: Unregistered routers — endpoint files with a router not in server.py
 # ---------------------------------------------------------------------------
 def check_unregistered_routers() -> int:
+    """
+    Check endpoint modules for FastAPI routers that are not referenced in server.py and report findings.
+    
+    Scans the package's endpoints directory for Python modules that appear to define a router and verifies whether the expected "<module>_router" variable name is referenced in server.py. Prints a human-readable report of any unregistered routers to stdout.
+    
+    Returns:
+        int: The number of endpoint modules whose expected "<name>_router" alias is not found in server.py.
+    """
     print(f"{YELLOW}2. Checking for unregistered routers...{RESET}")
     print(f"{GRAY}   Meaning: endpoint files that appear to define a FastAPI router but whose{RESET}")
     print(f"{GRAY}   expected <name>_router alias is not referenced in server.py.{RESET}")
@@ -170,6 +228,14 @@ def check_unregistered_routers() -> int:
 # Check 3: Unused functions — defined but only appear once across all files
 # ---------------------------------------------------------------------------
 def check_unused_functions() -> int:
+    """
+    Identify function definitions in marm_mcp_server whose names appear only at their definition sites across the package.
+    
+    This heuristic scans all Python files in the package for top-level function definitions (excluding names starting with configured prefixes and names in the skip list) and counts those whose identifier occurs no more times than their definitions. Results are noisy: functions used via decorators, route handlers, callbacks, test discovery, or framework registration may be reported.
+    
+    Returns:
+        count (int): Number of function names considered potentially unused.
+    """
     print(f"{YELLOW}3. Checking for unused functions...{RESET}")
     print(f"{GRAY}   Meaning: a function name appears only at its definition site across{RESET}")
     print(f"{GRAY}   marm_mcp_server/. This is noisy for decorators, route handlers, protocol{RESET}")
@@ -223,6 +289,14 @@ def check_unused_functions() -> int:
 # Summary
 # ---------------------------------------------------------------------------
 def main() -> int:
+    """
+    Run static heuristic scans for dead code in marm_mcp_server and print a colorized summary.
+    
+    This function performs the script's main workflow: it attempts to ensure UTF-8 output, explains static-scan limitations, verifies the marm_mcp_server package exists, runs checks for orphaned modules, unregistered routers, and potentially unused functions, then prints a summary and a tip.
+    
+    Returns:
+        int: 0 on normal completion, 1 if the marm_mcp_server package is not found.
+    """
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     except Exception:

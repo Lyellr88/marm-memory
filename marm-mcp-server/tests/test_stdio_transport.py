@@ -88,6 +88,18 @@ def test_stdio_handles_mcp_initialize_and_exposes_tools(tmp_path):
 
 
 def test_stdio_delete_notebook_removes_entry_from_active_state(tmp_path):
+    """
+    Verify that deleting a notebook removes it from the active entries list.
+    
+    Sends a JSON-RPC sequence to the stdio server that:
+    1. Initializes the server and sends the initialized notification.
+    2. Adds a notebook entry named "smoke_test_entry".
+    3. Activates (uses) that notebook.
+    4. Deletes the notebook via the `marm_delete` tool.
+    5. Queries notebook status (with additional drain calls to avoid shutdown race).
+    
+    Asserts that the add call reports `"status": "success"`, the use call reports the notebook as activated, the delete call reports `"deleted": true`, and the subsequent status call reports `active_entries == []`.
+    """
     env = os.environ.copy()
     env["MARM_DB_PATH"] = str(tmp_path / "stdio-notebook.db")
     env["MARM_ANALYTICS_DB_PATH"] = str(tmp_path / "stdio-notebook-analytics.db")
@@ -272,6 +284,11 @@ def test_stdio_log_file_is_created_and_contains_startup(tmp_path):
 
 
 def test_stdio_log_records_tool_call_and_ok_status(tmp_path):
+    """
+    Verify that the stdio server records a tool invocation and its successful completion in the stdio log.
+    
+    Sets up temporary DB and log directory paths, sends a JSON-RPC sequence that initializes the protocol, calls the `marm_log_session` tool (followed by a drain `marm_notebook` status call to avoid shutdown races), runs the stdio server, and asserts the process exits cleanly and that the logfile contains both a "CALL marm_log_session" entry and an "OK marm_log_session" entry.
+    """
     log_dir = tmp_path / "logs"
     env = os.environ.copy()
     env["MARM_DB_PATH"] = str(tmp_path / "log-tool.db")
@@ -350,6 +367,11 @@ def test_stdio_debug_mode_logs_session_name_not_content(tmp_path):
 
 
 def test_stdio_log_does_not_contain_stored_memory_content(tmp_path):
+    """
+    Integration test that verifies sensitive in-memory content sent via a context logging tool is not persisted to the STDIO log.
+    
+    Sends a JSON-RPC tools call containing a sentinel secret to the stdio server and asserts the resulting marm-stdio.log file does not contain that secret. The test sets temporary database and log directory environment variables and includes an extra "drain" request to avoid shutdown races before checking the log.
+    """
     log_dir = tmp_path / "logs"
     env = os.environ.copy()
     env["MARM_DB_PATH"] = str(tmp_path / "log-privacy.db")
@@ -392,6 +414,11 @@ def test_stdio_log_does_not_contain_stored_memory_content(tmp_path):
 
 
 def test_stdio_protocol_injected_on_first_tool_call_not_on_second(tmp_path):
+    """
+    Verify that the server injects the `marm_protocol` field into the first STDIO tool-call response but does not inject it into subsequent STDIO tool-call responses.
+    
+    Sends an LSP-style initialize sequence followed by two `tools/call` requests for `marm_notebook` with `action: "status"`, runs the stdio server module, and asserts that the JSON result text of the first tool call contains `marm_protocol` while the second does not.
+    """
     env = os.environ.copy()
     env["MARM_DB_PATH"] = str(tmp_path / "stdio-protocol.db")
     env["MARM_ANALYTICS_DB_PATH"] = str(tmp_path / "stdio-protocol-analytics.db")

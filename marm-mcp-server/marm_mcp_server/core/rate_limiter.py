@@ -77,7 +77,18 @@ class IPRateLimiter:
             return False, f"Rate limit exceeded: {config['requests']} requests per {config['window']}s. Blocked for {config['block_duration']}s."
     
     def _cleanup_if_needed(self, current_time: float):
-        """Clean up old data to prevent memory leaks"""
+        """
+        Perform periodic maintenance of rate-limiter state by removing expired temporary blocks and pruning stale per-IP request history.
+        
+        This method is a no-op if a cleanup ran less than 300 seconds ago. When executed, it:
+        - removes IPs from the blocked list whose unblock time is in the past,
+        - removes request timestamps older than one hour from each IP's bucket,
+        - deletes buckets that become empty and are not currently blocked,
+        and updates the last cleanup timestamp.
+        
+        Parameters:
+            current_time (float): Reference epoch time (seconds) used to evaluate expirations and cutoffs.
+        """
         # Only cleanup every 5 minutes
         if current_time - self.last_cleanup < 300:
             return

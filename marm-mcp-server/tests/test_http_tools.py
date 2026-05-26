@@ -160,10 +160,28 @@ def test_http_notebook_add_persists_entry_and_embedding(monkeypatch, tmp_path):
 
     class FakeEmbedding:
         def tobytes(self):
+            """
+            Return the raw byte representation of this fake embedding.
+            
+            Returns:
+                bytes: The embedding serialized as bytes (b"fake-embedding-bytes").
+            """
             return b"fake-embedding-bytes"
 
     class FakeEncoder:
         def encode(self, text):
+            """
+            Validate that `text` matches the expected test string and return a FakeEmbedding.
+            
+            Parameters:
+                text (str): The input text; must equal "Notebook entries should keep embeddings when available."
+            
+            Returns:
+                FakeEmbedding: A test double representing an embedding.
+            
+            Raises:
+                AssertionError: If `text` does not equal the expected string.
+            """
             assert text == "Notebook entries should keep embeddings when available."
             return FakeEmbedding()
 

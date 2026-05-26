@@ -8,6 +8,18 @@ from ..core.events import events
 
 
 async def _add(name: Optional[str], data: Optional[str], **_) -> dict:
+    """
+    Add or replace a notebook entry in the database and emit a "notebook_entry_added" event.
+    
+    If an encoder is available, an embedding is generated and stored alongside the entry.
+    
+    Parameters:
+        name (Optional[str]): The entry name; must be non-empty after trimming.
+        data (Optional[str]): The entry content; must be non-empty after trimming.
+    
+    Returns:
+        dict: On success, a dict with "status": "success", a human-readable "message", and "name" set to the stored entry name. On validation failure, a dict with "status": "error" and a "message" explaining the missing parameters.
+    """
     if not name or not name.strip() or not data or not data.strip():
         return {"status": "error", "message": "name and data are required for action='add'"}
     name = name.strip()
@@ -29,6 +41,15 @@ async def _add(name: Optional[str], data: Optional[str], **_) -> dict:
 
 
 async def _use(names: Optional[str], **_) -> dict:
+    """
+    Activate notebook entries by name and store the selected entries in memory.
+    
+    Parameters:
+        names (Optional[str]): Comma-separated notebook entry names to activate; whitespace around names is ignored.
+    
+    Returns:
+        dict: On success, a dictionary with "status": "success", a human-readable "message", "activated_entries" (list of activated names), and "entries" (list of objects with "name" and "data"). If `names` is missing or contains no valid names, returns {"status": "error", "message": "..."}.
+    """
     if not names or not names.strip():
         return {"status": "error", "message": "names is required for action='use'"}
     name_list = [n.strip() for n in names.split(",") if n.strip()]
@@ -51,6 +72,20 @@ async def _use(names: Optional[str], **_) -> dict:
 
 
 async def _show(**_) -> dict:
+    """
+    List stored notebook entries ordered by most recently updated, each with a truncated preview.
+    
+    Returns:
+        result (dict): Contains:
+            - "status" (str): Operation status, typically "success".
+            - "message" (str): Human-readable summary including the number of found entries.
+            - "entries" (List[dict]): List of entry objects with keys:
+                - "name" (str): Entry name.
+                - "preview" (str): Up to the first 100 characters of the entry's data, followed by "..." if truncated.
+                - "created_at" (str): Creation timestamp.
+                - "updated_at" (str): Last-update timestamp.
+            - "total_count" (int): Number of entries returned.
+    """
     with memory.get_connection() as conn:
         cursor = conn.execute(
             "SELECT name, data, created_at, updated_at FROM notebook_entries ORDER BY updated_at DESC"
@@ -63,6 +98,17 @@ async def _show(**_) -> dict:
 
 
 async def _status(**_) -> dict:
+    """
+    Report currently active notebook entries held in memory.
+    
+    Returns:
+        result (dict): A dictionary with:
+            - status: "success".
+            - message: Human-readable summary of how many entries are active.
+            - active_entries: List of active entry names (strings).
+            - entries: Full active notebook entry objects as stored in memory.
+            - active_count: Integer count of active entries.
+    """
     active_names = [entry["name"] for entry in memory.active_notebook_entries]
     return {
         "status": "success",
@@ -74,6 +120,15 @@ async def _status(**_) -> dict:
 
 
 async def _clear(**_) -> dict:
+    """
+    Clear all active notebook entries stored in memory.
+    
+    Returns:
+        result (dict): Operation result with keys:
+            - "status": "success"
+            - "message": human-readable confirmation
+            - "active_count": 0
+    """
     memory.active_notebook_entries = []
     return {"status": "success", "message": "🧹 Active notebook entries cleared", "active_count": 0}
 
@@ -93,6 +148,18 @@ async def notebook_dispatch(
     data: Optional[str] = None,
     names: Optional[str] = None,
 ) -> dict:
+    """
+    Dispatches a notebook action to the corresponding handler.
+    
+    Parameters:
+        action (str): The action to perform. Valid values are "add", "use", "show", "status", and "clear".
+        name (Optional[str]): Optional single entry name used by handlers that accept `name`.
+        data (Optional[str]): Optional entry data used by handlers that accept `data`.
+        names (Optional[str]): Optional comma-separated names string used by handlers that accept `names`.
+    
+    Returns:
+        dict: The result returned by the invoked handler. If `action` is not one of the valid values, returns an error dict with `"status": "error"` and a descriptive `"message"`.
+    """
     handler = _ACTION_HANDLERS.get(action)
     if handler is None:
         return {"status": "error", "message": f"Unknown action '{action}'. Must be: add, use, show, status, clear"}

@@ -57,7 +57,16 @@ class MARMEvents:
             self.logger.debug(f"Event '{event_type}' completed successfully: {successful_callbacks} callbacks")
     
     def _log_callback_error(self, callback_id: str, error_msg: str, event_type: str):
-        """Log callback errors with failure tracking"""
+        """
+        Record a callback failure and log the error with severity that escalates as failures accumulate.
+        
+        Increments the stored failure count for the given callback and emits a log message for the associated event. The log severity increases with the callback's cumulative failure count.
+        
+        Parameters:
+        	callback_id (str): Unique identifier for the callback whose failure is being recorded.
+        	error_msg (str): Human-readable error message or exception text to include in the log.
+        	event_type (str): The event type under which the callback was registered.
+        """
         # Track failure count
         self.failed_callbacks[callback_id] = self.failed_callbacks.get(callback_id, 0) + 1
         failure_count = self.failed_callbacks[callback_id]
