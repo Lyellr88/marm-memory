@@ -177,10 +177,13 @@ async def test_dispatch_normalizes_session_name(notebook_svc):
 async def test_dispatch_blank_session_name_returns_error(notebook_svc):
     dispatch, _ = notebook_svc
 
-    result = await dispatch(action="status", session_name="   ")
+    result = await dispatch(action="status", session_name="")
+    padded_result = await dispatch(action="status", session_name="   ")
 
     assert result["status"] == "error"
     assert "session_name" in result["message"]
+    assert padded_result["status"] == "error"
+    assert "session_name" in padded_result["message"]
 
 
 @pytest.mark.asyncio

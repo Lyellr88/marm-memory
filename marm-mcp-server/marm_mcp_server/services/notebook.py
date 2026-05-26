@@ -95,7 +95,7 @@ async def notebook_dispatch(
     names: Optional[str] = None,
     session_name: str = "main",
 ) -> dict:
-    session_name = (session_name or "main").strip()
+    session_name = "main" if session_name is None else session_name.strip()
     if not session_name:
         return {"status": "error", "message": "session_name must be a non-empty string"}
 
