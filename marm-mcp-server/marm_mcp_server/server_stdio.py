@@ -30,6 +30,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
+from anyio import BrokenResourceError, ClosedResourceError, EndOfStream
+
 # Docker images default to SERVER_HOST=0.0.0.0 for HTTP mode. STDIO mode never
 # opens a network listener, so force loopback before shared settings import to
 # prevent HTTP-only API key generation from polluting the MCP stream.
@@ -129,6 +131,7 @@ from fastmcp import FastMCP
 from marm_mcp_server.core.memory import memory
 from marm_mcp_server.core.events import events
 from marm_mcp_server.core.response_limiter import MCPResponseLimiter
+from marm_mcp_server.services.notebook import notebook_dispatch
 from marm_mcp_server.services.documentation import (
     ensure_marm_started,
     maybe_auto_refresh,
@@ -479,10 +482,7 @@ async def marm_delete(
                 deleted = cursor.rowcount
                 conn.commit()
                 if deleted > 0:
-                    memory.active_notebook_entries = [
-                        entry for entry in memory.active_notebook_entries
-                        if entry.get("name") != target
-                    ]
+                    memory.remove_active_notebook_entry(target)
                 return {
                     "status": "success" if deleted > 0 else "not_found",
                     "message": f"🗑️ Deleted notebook entry '{target}'" if deleted > 0 else f"Entry '{target}' not found",
@@ -506,6 +506,7 @@ async def marm_notebook(
     name: Optional[str] = None,
     data: Optional[str] = None,
     names: Optional[str] = None,
+    session_name: str = "main",
 ) -> dict:
     """
     📔 Unified notebook — add, use, show, status, or clear
@@ -517,72 +518,13 @@ async def marm_notebook(
     action="clear": clear the active entry list
     """
     try:
-        if action == "add":
-            if name is None or data is None:
-                return {"status": "error", "message": "name and data are required for action='add'"}
-            embedding_bytes = None
-            if memory.encoder:
-                try:
-                    embedding = memory.encoder.encode(data)
-                    embedding_bytes = embedding.tobytes()
-                except Exception:
-                    pass
-            with memory.get_connection() as conn:
-                conn.execute(
-                    "INSERT OR REPLACE INTO notebook_entries (name, data, embedding, updated_at) VALUES (?, ?, ?, ?)",
-                    (name, data, embedding_bytes, datetime.now(timezone.utc).isoformat()),
-                )
-                conn.commit()
-            await events.emit("notebook_entry_added", {"name": name, "data": data})
-            return {"status": "success", "message": f"📓 Notebook entry '{name}' added", "name": name}
-
-        elif action == "use":
-            if names is None:
-                return {"status": "error", "message": "names is required for action='use'"}
-            name_list = [n.strip() for n in names.split(",")]
-            activated_entries = []
-            with memory.get_connection() as conn:
-                for n in name_list:
-                    cursor = conn.execute("SELECT name, data FROM notebook_entries WHERE name = ?", (n,))
-                    result = cursor.fetchone()
-                    if result:
-                        activated_entries.append({"name": result[0], "data": result[1]})
-            memory.active_notebook_entries = activated_entries
-            return {
-                "status": "success",
-                "message": f"🔧 Activated {len(activated_entries)} notebook entries",
-                "activated_entries": [e["name"] for e in activated_entries],
-                "entries": activated_entries,
-            }
-
-        elif action == "show":
-            with memory.get_connection() as conn:
-                cursor = conn.execute(
-                    "SELECT name, data, created_at, updated_at FROM notebook_entries ORDER BY updated_at DESC"
-                )
-                entries = []
-                for row in cursor.fetchall():
-                    preview = row[1][:100] + "..." if len(row[1]) > 100 else row[1]
-                    entries.append({"name": row[0], "preview": preview, "created_at": row[2], "updated_at": row[3]})
-            return {"status": "success", "message": f"📚 Found {len(entries)} notebook entries", "entries": entries, "total_count": len(entries)}
-
-        elif action == "status":
-            active_names = [entry["name"] for entry in memory.active_notebook_entries]
-            return {
-                "status": "success",
-                "message": f"📊 {len(active_names)} active notebook entries",
-                "active_entries": active_names,
-                "entries": memory.active_notebook_entries,
-                "active_count": len(active_names),
-            }
-
-        elif action == "clear":
-            memory.active_notebook_entries = []
-            return {"status": "success", "message": "🧹 Active notebook entries cleared", "active_count": 0}
-
-        else:
-            return {"status": "error", "message": f"Unknown action '{action}'. Must be: add, use, show, status, clear"}
-
+        return await notebook_dispatch(
+            action=action,
+            name=name,
+            data=data,
+            names=names,
+            session_name=session_name,
+        )
     except Exception as e:
         return {"status": "error", "message": f"Notebook operation failed: {str(e)}"}
 
@@ -683,6 +625,28 @@ async def marm_summary(
 # Entrypoint
 # ============================================================================
 
+def _is_graceful_teardown(exc: BaseException) -> bool:
+    """Return True only if exc is safe to swallow as normal STDIO EOF teardown.
+
+    Accepts AnyIO stream-closure exceptions directly. For grouped exceptions,
+    every nested sub-exception must also be graceful teardown; mixed groups are
+    not swallowed so real bugs are not lost.
+    """
+    if isinstance(exc, (ClosedResourceError, EndOfStream, BrokenResourceError)):
+        return True
+
+    grouped = getattr(exc, "exceptions", None)
+    if not grouped:
+        return False
+
+    for sub_exc in grouped:
+        if not isinstance(sub_exc, BaseException):
+            return False
+        if not _is_graceful_teardown(sub_exc):
+            return False
+    return True
+
+
 def main() -> None:
     _stdio_log.info(
         "startup version=%s db=%s semantic_search=%s",
@@ -690,6 +654,11 @@ def main() -> None:
     )
     try:
         mcp.run()
+    except BaseException as exc:
+        if _is_graceful_teardown(exc):
+            _stdio_log.debug("stdin closed during shutdown (normal teardown)")
+            return
+        raise
     finally:
         _stdio_log.info("shutdown")
 

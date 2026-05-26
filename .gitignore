@@ -93,10 +93,12 @@ docs/future/
 .claudeignore
 .cursor
 .pytest_cache/
+.pytest_tmp*/
 .pytest_tmp_dashboard/
 .pytest_tmp_review/
 .pytest_tmp_protocol/
 marm-mcp-server/.pytest_cache/
 marm-mcp-server/.pytest_tmp/
+marm-mcp-server/.pytest_tmp*/
 marm_usage_analytics.db
 dump.md

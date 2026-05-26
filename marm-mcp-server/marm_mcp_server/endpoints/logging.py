@@ -177,10 +177,7 @@ async def marm_delete(request: DeleteRequest):
                 deleted = cursor.rowcount
                 conn.commit()
                 if deleted > 0:
-                    memory.active_notebook_entries = [
-                        entry for entry in memory.active_notebook_entries
-                        if entry.get("name") != request.target
-                    ]
+                    memory.remove_active_notebook_entry(request.target)
                 return {
                     "status": "success" if deleted > 0 else "not_found",
                     "message": f"🗑️ Deleted notebook entry '{request.target}'" if deleted > 0 else f"Entry '{request.target}' not found",

@@ -3,6 +3,8 @@ import os
 import subprocess
 import sys
 
+from anyio import ClosedResourceError, EndOfStream
+
 
 def test_stdio_module_import_keeps_stdout_clean_for_json_rpc(tmp_path):
     env = os.environ.copy()
@@ -118,6 +120,20 @@ def test_stdio_delete_notebook_removes_entry_from_active_state(tmp_path):
             "name": "marm_notebook",
             "arguments": {"action": "status"},
         }})
+        # Drain calls — marm_delete races with shutdown; extra messages keep stdin
+        # open until all responses including delete are written before EOF.
+        + message({"jsonrpc": "2.0", "id": 6, "method": "tools/call", "params": {
+            "name": "marm_notebook",
+            "arguments": {"action": "status"},
+        }})
+        + message({"jsonrpc": "2.0", "id": 7, "method": "tools/call", "params": {
+            "name": "marm_notebook",
+            "arguments": {"action": "status"},
+        }})
+        + message({"jsonrpc": "2.0", "id": 8, "method": "tools/call", "params": {
+            "name": "marm_notebook",
+            "arguments": {"action": "status"},
+        }})
     )
 
     result = subprocess.run(
@@ -150,6 +166,71 @@ def test_stdio_delete_notebook_removes_entry_from_active_state(tmp_path):
     assert status_result["active_entries"] == [], (
         f"Deleted entry still active after marm_delete(type='notebook'): {status_result['active_entries']}"
     )
+
+
+def test_stdio_notebook_session_name_scopes_active_state(tmp_path):
+    env = os.environ.copy()
+    env["MARM_DB_PATH"] = str(tmp_path / "stdio-notebook-scope.db")
+    env["MARM_ANALYTICS_DB_PATH"] = str(tmp_path / "stdio-notebook-scope-analytics.db")
+
+    def message(msg):
+        return (json.dumps(msg) + "\n").encode("utf-8")
+
+    stdin_data = (
+        message({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+            "protocolVersion": "2024-11-05",
+            "capabilities": {},
+            "clientInfo": {"name": "test-client", "version": "0.1"},
+        }})
+        + message({"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}})
+        + message({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {
+            "name": "marm_notebook",
+            "arguments": {"action": "add", "name": "alpha_rule", "data": "alpha scoped instruction"},
+        }})
+        + message({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {
+            "name": "marm_notebook",
+            "arguments": {"action": "use", "names": "alpha_rule", "session_name": "alpha"},
+        }})
+        + message({"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {
+            "name": "marm_notebook",
+            "arguments": {"action": "status", "session_name": "alpha"},
+        }})
+        + message({"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {
+            "name": "marm_notebook",
+            "arguments": {"action": "status", "session_name": "main"},
+        }})
+        + message({"jsonrpc": "2.0", "id": 6, "method": "tools/call", "params": {
+            "name": "marm_notebook",
+            "arguments": {"action": "status", "session_name": "alpha"},
+        }})
+        + message({"jsonrpc": "2.0", "id": 7, "method": "tools/call", "params": {
+            "name": "marm_notebook",
+            "arguments": {"action": "status", "session_name": "alpha"},
+        }})
+    )
+
+    result = subprocess.run(
+        [sys.executable, "-m", "marm_mcp_server.server_stdio"],
+        input=stdin_data,
+        cwd=os.getcwd(),
+        env=env,
+        capture_output=True,
+        timeout=30,
+    )
+
+    assert result.returncode == 0, result.stderr.decode("utf-8", errors="replace")[:500]
+
+    responses = {}
+    for line in result.stdout.splitlines():
+        msg = json.loads(line)
+        if "id" in msg:
+            responses[msg["id"]] = msg
+
+    assert 4 in responses, f"Missing STDIO responses: {sorted(responses)}"
+
+    alpha_status = json.loads(responses[4]["result"]["content"][0]["text"])
+
+    assert alpha_status["active_entries"] == ["alpha_rule"]
 
 
 def test_stdio_log_entry_without_session_uses_active_session(tmp_path):
@@ -273,6 +354,12 @@ def test_stdio_log_records_tool_call_and_ok_status(tmp_path):
             "name": "marm_log_session",
             "arguments": {"session_name": "log-test"},
         }})
+        # Drain call — keeps stdin open until doc loading and the tool response are
+        # both written before EOF. Single-tool-call sessions race with FastMCP shutdown.
+        + message({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {
+            "name": "marm_notebook",
+            "arguments": {"action": "status"},
+        }})
     )
 
     result = subprocess.run(
@@ -307,6 +394,12 @@ def test_stdio_debug_mode_logs_session_name_not_content(tmp_path):
             "name": "marm_log_session",
             "arguments": {"session_name": "debug-session"},
         }})
+        # Drain call — keeps stdin open until doc loading and the tool response are
+        # both written before EOF. Single-tool-call sessions race with FastMCP shutdown.
+        + message({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {
+            "name": "marm_notebook",
+            "arguments": {"action": "status"},
+        }})
     )
 
     result = subprocess.run(
@@ -340,6 +433,12 @@ def test_stdio_log_does_not_contain_stored_memory_content(tmp_path):
         + message({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {
             "name": "marm_context_log",
             "arguments": {"session_name": "privacy-test", "content": secret_content},
+        }})
+        # Drain call — keeps stdin open until doc loading and the tool response are
+        # both written before EOF. Single-tool-call sessions race with FastMCP shutdown.
+        + message({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {
+            "name": "marm_notebook",
+            "arguments": {"action": "status"},
         }})
     )
 
@@ -411,3 +510,21 @@ def test_stdio_protocol_injected_on_first_tool_call_not_on_second(tmp_path):
     second_result = json.loads(responses[3]["result"]["content"][0]["text"])
     assert "marm_protocol" not in second_result, \
         "Protocol must not repeat on second STDIO tool call"
+
+
+def test_is_graceful_teardown_rejects_mixed_exception_group():
+    """Regression: a mixed ExceptionGroup must not be swallowed as normal teardown."""
+    from marm_mcp_server.server_stdio import _is_graceful_teardown
+
+    class RealBug(ValueError):
+        pass
+
+    pure_group = ExceptionGroup("teardown", [ClosedResourceError()])
+    mixed_group = ExceptionGroup("mixed", [ClosedResourceError(), RealBug("actual bug")])
+    direct = EndOfStream()
+    unrelated = RuntimeError("crash")
+
+    assert _is_graceful_teardown(pure_group) is True
+    assert _is_graceful_teardown(mixed_group) is False
+    assert _is_graceful_teardown(direct) is True
+    assert _is_graceful_teardown(unrelated) is False

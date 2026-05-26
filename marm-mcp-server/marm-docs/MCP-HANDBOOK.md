@@ -266,7 +266,7 @@ MARM automatically categorizes content:
 | | `marm_log_entry` | Add structured log entry with auto-date formatting | No need to add dates manually - automatically handled by background tools |
 | | `marm_log_show` | Display all entries and sessions with filtering | `session_name` (optional) |
 | | `marm_delete` | Delete a log session, log entry, or notebook entry | `type="log"` or `type="notebook"`, `target` (required), `session_name` (optional for log entries) |
-| **📔 Notebook** | `marm_notebook` | Unified notebook management | `action="add"` saves entries, `action="use"` activates entries, `action="show"` lists saved entries, `action="status"` shows active entries, `action="clear"` clears active entries |
+| **📔 Notebook** | `marm_notebook` | Unified notebook management | `action="add"` saves entries, `action="use"` activates entries, `action="show"` lists saved entries, `action="status"` shows active entries, `action="clear"` clears active entries. `session_name` scopes active entries when needed |
 | **🔄 Workflow** | `marm_summary` | Generate paste-ready context blocks with intelligent truncation | Create summaries for new conversations or context bridging |
 
 **Internal automation:** lifecycle initialization, documentation refresh, current date context, and system checks are no longer AI-facing tools. Documentation refresh uses `doc_index` hash tracking to avoid duplicate `marm_system` memories across restarts. Use the dashboard health panel for live server status, or `curl http://localhost:8001/health` for terminal checks.

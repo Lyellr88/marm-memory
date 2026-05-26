@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Find potentially dead code in marm_mcp_server/."""
+"""Find potentially dead code in marm_mcp_server/.
+
+This is a static heuristic scanner, not a deletion oracle. It is meant to
+surface files/functions worth reviewing by a human or code-review agent.
+"""
 
 import re
 import sys
@@ -24,6 +28,10 @@ SKIP_FUNC_NAMES = {
     "run_server_with_shutdown",
 }
 
+CHECK = "+"
+WARN = "?"
+FAIL = "x"
+
 
 def all_py_files() -> list[Path]:
     return sorted(PACKAGE.rglob("*.py"))
@@ -33,11 +41,55 @@ def read(path: Path) -> str:
     return path.read_text(encoding="utf-8", errors="ignore")
 
 
+def display_path(path: Path | str) -> str:
+    p = Path(path)
+    try:
+        return str(p.relative_to(ROOT.parent))
+    except ValueError:
+        return str(p)
+
+
+def explain_static_limits() -> None:
+    print(f"{GRAY}This script scans source text only. It can miss dynamic imports, decorators,{RESET}")
+    print(f"{GRAY}console entry points, framework registration, and functions called by name.{RESET}")
+    print(f"{GRAY}Treat findings as review candidates, not automatic delete targets.{RESET}\n")
+
+
+def module_reference_patterns(module_path: str) -> set[str]:
+    """Return import/reference strings that can indicate a module is used."""
+    parts = module_path.split(".")
+    stem = parts[-1]
+    package_relative = ".".join(parts[1:]) if parts and parts[0] == "marm_mcp_server" else module_path
+
+    patterns = {
+        module_path,
+        f"import {module_path}",
+        f"from {module_path}",
+        f"import {stem}",
+        f"from .{stem}",
+        f"from ..{stem}",
+    }
+
+    if package_relative:
+        patterns.update(
+            {
+                f"from .{package_relative}",
+                f"from ..{package_relative}",
+                f"import {package_relative}",
+            }
+        )
+
+    return patterns
+
+
 # ---------------------------------------------------------------------------
 # Check 1: Orphaned modules — never imported by anything in the package
 # ---------------------------------------------------------------------------
 def check_orphaned_modules() -> int:
     print(f"{YELLOW}1. Checking for orphaned modules...{RESET}")
+    print(f"{GRAY}   Meaning: a Python file under marm_mcp_server/ whose module name was not{RESET}")
+    print(f"{GRAY}   found in package imports. It may still be used by CLI entry points,{RESET}")
+    print(f"{GRAY}   decorators, tests, generated packaging, or external users.{RESET}")
 
     files = all_py_files()
     all_source = "\n".join(read(f) for f in files)
@@ -53,21 +105,21 @@ def check_orphaned_modules() -> int:
         module_path = ".".join(rel.with_suffix("").parts)  # e.g. marm_mcp_server.core.memory
         stem = f.stem  # e.g. memory
 
-        imported = (
-            module_path in all_source
-            or f"import {stem}" in all_source
-            or f"from .{stem}" in all_source
-            or f"from ..{stem}" in all_source
-        )
+        imported = any(pattern in all_source for pattern in module_reference_patterns(module_path))
         if not imported:
             orphaned.append(str(f))
 
     if orphaned:
         print(f"{RED}  Found {len(orphaned)} orphaned module(s):{RESET}")
         for path in orphaned:
-            print(f"    {RED}✗{RESET} {path}")
+            print(f"    {RED}{FAIL}{RESET} {display_path(path)}")
+        print(f"    {CYAN}Review checklist:{RESET}")
+        print("      - Search tests/docs for the module name")
+        print("      - Check pyproject console scripts and Docker commands")
+        print("      - Check whether imports are indirect through package __init__.py")
+        print("      - Delete only after import/runtime smoke tests pass")
     else:
-        print(f"{GREEN}  ✓ No orphaned modules found{RESET}")
+        print(f"{GREEN}  {CHECK} No orphaned modules found{RESET}")
 
     print()
     return len(orphaned)
@@ -78,6 +130,8 @@ def check_orphaned_modules() -> int:
 # ---------------------------------------------------------------------------
 def check_unregistered_routers() -> int:
     print(f"{YELLOW}2. Checking for unregistered routers...{RESET}")
+    print(f"{GRAY}   Meaning: endpoint files that appear to define a FastAPI router but whose{RESET}")
+    print(f"{GRAY}   expected <name>_router alias is not referenced in server.py.{RESET}")
 
     endpoints_dir = PACKAGE / "endpoints"
     server_src = read(SERVER_FILE) if SERVER_FILE.exists() else ""
@@ -100,9 +154,13 @@ def check_unregistered_routers() -> int:
     if unregistered:
         print(f"{RED}  Found {len(unregistered)} unregistered router(s):{RESET}")
         for stem, path in unregistered:
-            print(f"    {RED}✗{RESET} {stem}_router not in server.py  ({path})")
+            print(f"    {RED}{FAIL}{RESET} {stem}_router not in server.py  ({display_path(path)})")
+        print(f"    {CYAN}Review checklist:{RESET}")
+        print("      - Confirm whether the endpoint should be public, hidden, or retired")
+        print("      - Hidden endpoints may still be intentionally included with include_in_schema=False")
+        print("      - If retired, remove docs/tests/imports together")
     else:
-        print(f"{GREEN}  ✓ All routers registered in server.py{RESET}")
+        print(f"{GREEN}  {CHECK} All routers registered in server.py{RESET}")
 
     print()
     return len(unregistered)
@@ -113,6 +171,9 @@ def check_unregistered_routers() -> int:
 # ---------------------------------------------------------------------------
 def check_unused_functions() -> int:
     print(f"{YELLOW}3. Checking for unused functions...{RESET}")
+    print(f"{GRAY}   Meaning: a function name appears only at its definition site across{RESET}")
+    print(f"{GRAY}   marm_mcp_server/. This is noisy for decorators, route handlers, protocol{RESET}")
+    print(f"{GRAY}   callbacks, and framework-discovered functions.{RESET}")
 
     files = all_py_files()
     all_source = "\n".join(read(f) for f in files)
@@ -144,12 +205,15 @@ def check_unused_functions() -> int:
         print(f"{YELLOW}  Found {len(unused)} potentially unused function(s):{RESET}")
         for name, defs in display:
             for filepath, lineno in defs:
-                print(f"    {YELLOW}?{RESET} {name}  ({filepath}:{lineno})")
+                print(f"    {YELLOW}{WARN}{RESET} {name}  ({display_path(filepath)}:{lineno})")
         if len(unused) > 15:
             print(f"    {CYAN}... and {len(unused) - 15} more{RESET}")
-        print(f"    {CYAN}Note: decorators and dynamic calls may not be detected{RESET}")
+        print(f"    {CYAN}Review checklist:{RESET}")
+        print("      - Route handlers and @mcp.tool functions may be used by decorators")
+        print("      - Check tests and public API docs before deleting")
+        print("      - Prefer deprecating public behavior before removing it")
     else:
-        print(f"{GREEN}  ✓ No obviously unused functions found{RESET}")
+        print(f"{GREEN}  {CHECK} No obviously unused functions found{RESET}")
 
     print()
     return len(unused)
@@ -159,7 +223,13 @@ def check_unused_functions() -> int:
 # Summary
 # ---------------------------------------------------------------------------
 def main() -> int:
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
     print(f"{CYAN}=== Dead Code Finder — marm_mcp_server/ ==={RESET}\n")
+    explain_static_limits()
 
     if not PACKAGE.exists():
         print(f"{RED}✗ marm_mcp_server/ not found. Run from project root.{RESET}")

@@ -184,8 +184,27 @@ class MARMMemory:
         
         # Active sessions and notebook state
         self.active_sessions = {}
-        self.active_notebook_entries = []
+        self.active_notebook_entries_by_session: dict[str, list[dict]] = {}
         self.active_log_session: str = "main"
+
+    def get_active_notebook_entries(self, session_name: str = "main") -> list[dict]:
+        """Return active notebook entries scoped to a session."""
+        return self.active_notebook_entries_by_session.get(session_name, [])
+
+    def set_active_notebook_entries(self, session_name: str, entries: list[dict]) -> None:
+        """Set active notebook entries for one session."""
+        self.active_notebook_entries_by_session[session_name] = entries
+
+    def clear_active_notebook_entries(self, session_name: str = "main") -> None:
+        """Clear active notebook entries for one session."""
+        self.active_notebook_entries_by_session[session_name] = []
+
+    def remove_active_notebook_entry(self, name: str) -> None:
+        """Remove a deleted notebook entry from every active session scope."""
+        for session_name, entries in list(self.active_notebook_entries_by_session.items()):
+            self.active_notebook_entries_by_session[session_name] = [
+                entry for entry in entries if entry.get("name") != name
+            ]
     
     def get_connection(self):
         """Context manager for getting database connections from pool"""

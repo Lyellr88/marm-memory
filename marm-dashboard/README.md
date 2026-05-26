@@ -34,6 +34,27 @@ cd marm-dashboard
 python -m marm_dashboard --open
 ```
 
+---
+
+## Linux Quick Start
+
+### **Option 1: pip install** ⭐ **(Recommended - Fastest)**
+
+```bash
+cd marm-dashboard
+pip install -e .
+python -m marm_dashboard --open
+```
+
+### **Option 2: pip install in virtualenv** ⚡ **(Clean environment)**
+
+```bash
+python -m venv marm-env
+source marm-env/bin/activate
+pip install -e .
+python -m marm_dashboard
+```
+
 Both can run at once (SQLite WAL). The dashboard is a direct SQLite admin UI: edits made here bypass MCP tool events, but use the same tables and sanitization rules.
 
 The status panel also checks the MCP server on `127.0.0.1:8001` every 15 seconds. When HTTP mode is running, it shows reachability, version, status, latency, and last checked time. If MCP is running through STDIO, the panel may show `Not on :8001`; that is expected because STDIO has no HTTP health endpoint.

@@ -151,6 +151,12 @@ This runs:
 - Python compile check for `marm_mcp_server` and `tests`
 - Pytest suite with a controlled temp directory
 
+For targeted ad hoc pytest runs, use `--basetemp C:\tmp\...` or clean repo-local pytest artifacts afterward:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\clean-pytest-artifacts.ps1
+```
+
 Current expectations:
 
 - `Failed: 0` required before submitting a PR
@@ -195,15 +201,57 @@ python scripts\scan-stale-docs.py
 
 ## Submitting Changes
 
-1. Fork the repo or create a branch.
+MARM uses a PR-first workflow for normal development. Do not push feature, fix, or release-prep work directly to `MARM-main`.
+
+1. Create a focused branch from `MARM-main`.
 2. Keep the change scoped to one feature, fix, or doc cleanup.
 3. Follow existing file patterns before adding new abstractions.
 4. Run `python scripts\run-tests.py`.
 5. Run Docker smoke if the change touches Docker, HTTP/STDIO startup, auth, or transports.
 6. Update docs and changelog when user-facing behavior changes.
-7. Open a PR with a clear summary and test results.
+7. Push the branch and open a PR into `MARM-main`.
+8. Wait for CodeRabbit and GitHub checks, then address review findings before merge.
 
 No formal style guide beyond this: keep code readable, preserve current behavior unless the PR is explicitly changing it, and avoid broad refactors mixed into feature work.
+
+### Branch Naming
+
+Use short, descriptive branch names:
+
+```text
+feature/notebook-polish
+fix/fastmcp-range
+docs/install-cleanup
+release/v2.6.3
+```
+
+### Release Flow
+
+Publishing is tag-driven. Merging a PR into `MARM-main` does not publish PyPI, Docker, or the MCP Registry by itself.
+
+Release sequence:
+
+```text
+branch → PR → CodeRabbit review → merge to MARM-main → tag vX.Y.Z → publish workflow
+```
+
+After the PR is merged and `MARM-main` is clean:
+
+```powershell
+git checkout MARM-main
+git pull
+git tag -a vX.Y.Z -m "Release vX.Y.Z"
+git push origin vX.Y.Z
+```
+
+The `v*` tag triggers the publish workflow for:
+
+- PyPI package publish
+- MCP server Docker image
+- Dashboard Docker image
+- MCP Registry publish
+
+Use normal branch pushes for review. Use tag pushes only for intentional releases.
 
 ## Project Documentation
 

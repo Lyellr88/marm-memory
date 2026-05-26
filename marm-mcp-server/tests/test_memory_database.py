@@ -97,3 +97,20 @@ async def test_auto_classification_covers_primary_context_types(tmp_path):
     assert await memory.auto_classify_content("project milestone sprint deadline") == "project"
     assert await memory.auto_classify_content("chapter plot character arc") == "book"
     assert await memory.auto_classify_content("plain operational note") == "general"
+
+
+def test_close_all_drains_connection_pool(tmp_path):
+    # Regression: graceful_shutdown must close pooled SQLite connections so
+    # Docker/HTTP restarts and local dev restarts don't leak open file handles.
+    db_path = tmp_path / "memory.db"
+    memory = MARMMemory(str(db_path))
+
+    # Acquire then return a connection so the pool has at least one entry
+    with memory.get_connection():
+        pass
+
+    assert not memory.connection_pool.pool.empty()
+
+    memory.connection_pool.close_all()
+
+    assert memory.connection_pool.pool.empty()

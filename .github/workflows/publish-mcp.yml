@@ -18,7 +18,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
@@ -26,15 +26,14 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('marm-mcp-server/requirements.txt') }}
+          key: ${{ runner.os }}-pip-${{ hashFiles('marm-mcp-server/pyproject.toml') }}
           restore-keys: |
             ${{ runner.os }}-pip-
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r marm-mcp-server/requirements.txt
-          pip install pytest pytest-asyncio jsonschema requests
+          pip install -e './marm-mcp-server[dev]'
 
       - name: Validate server.json
         run: |
@@ -42,13 +41,8 @@ jobs:
           python validate_server_json.py
 
       - name: Run tests
-        run: |
-          # Run any existing tests
-          if [ -d "tests" ]; then
-            python -m pytest tests/ -v
-          else
-            echo "No tests directory found, skipping tests"
-          fi
+        working-directory: marm-mcp-server
+        run: python -m pytest tests/ -v
 
       - name: Test server startup
         run: |
@@ -66,7 +60,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 

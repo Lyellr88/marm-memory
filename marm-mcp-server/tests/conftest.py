@@ -23,9 +23,9 @@ def load_isolated_server(monkeypatch, tmp_path, api_key=""):
     server = importlib.import_module("marm_mcp_server.server")
 
     memory_module = importlib.import_module("marm_mcp_server.core.memory")
-    memory_module.memory._encoder_failed = True
-    memory_module.memory.active_notebook_entries = []
-    memory_module.memory.active_log_session = "main"
+    monkeypatch.setattr(memory_module.memory, "_encoder_failed", True)
+    monkeypatch.setattr(memory_module.memory, "active_notebook_entries_by_session", {})
+    monkeypatch.setattr(memory_module.memory, "active_log_session", "main")
 
     rate_limiter_module = importlib.import_module("marm_mcp_server.core.rate_limiter")
     rate_limiter_module.rate_limiter.request_buckets.clear()

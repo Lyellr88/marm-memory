@@ -1,0 +1,50 @@
+name: PR Validation
+
+on:
+  pull_request:
+    branches:
+      - MARM-main
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('marm-mcp-server/pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e './marm-mcp-server[dev]'
+          pip install build
+
+      - name: Validate MCP server metadata
+        working-directory: marm-mcp-server
+        run: python validate_server_json.py
+
+      - name: Run test suite
+        working-directory: marm-mcp-server
+        run: python -m pytest tests/ -v
+
+      - name: Build Python package
+        working-directory: marm-mcp-server
+        run: python -m build
