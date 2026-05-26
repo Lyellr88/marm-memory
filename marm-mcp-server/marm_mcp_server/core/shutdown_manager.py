@@ -44,8 +44,11 @@ class ShutdownManager:
         """Perform graceful shutdown of all connections and services"""
         logger.info("Initiating graceful shutdown")
 
-        memory.connection_pool.close_all()
-        logger.info("SQLite connection pool closed")
+        try:
+            memory.connection_pool.close_all()
+            logger.info("SQLite connection pool closed")
+        except Exception:
+            logger.exception("Failed to close SQLite connection pool")
 
         logger.info("Graceful shutdown complete")
 

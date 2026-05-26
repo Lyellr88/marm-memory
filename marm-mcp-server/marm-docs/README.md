@@ -144,7 +144,7 @@ The AI agent will automatically use the appropriate tools. Manual tool access is
 
 MARM now handles lifecycle work internally. Documentation loads on the first real tool call, session state initializes automatically, and documentation refreshes every 50 tool calls. Packaged docs are indexed into searchable memory with hash-based caching, so unchanged docs are skipped across restarts.
 
-**Architecture note:** MARM uses targeted polymorphic tooling to keep MCP discovery lean without hiding behavior. Domain-specific tools such as `marm_notebook(action=...)` and `marm_delete(type=...)` group closely related operations behind explicit parameters, while recall, logging, and summaries stay separate so agents still choose the right capability clearly. This design ensures the total MCP schema footprint remains under 10KB while preserving full functionality.
+**Architecture note:** MARM uses targeted parameterized dispatching tooling to keep MCP discovery lean without hiding behavior. Domain-specific tools such as `marm_notebook(action=...)` and `marm_delete(type=...)` group closely related operations behind explicit parameters, while recall, logging, and summaries stay separate so agents still choose the right capability clearly. This design ensures the total MCP schema footprint remains under 10KB while preserving full functionality.
 
 | **Category** | **Tool** | **Description** |
 |--------------|----------|-----------------|

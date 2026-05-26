@@ -8,8 +8,9 @@ from ..core.events import events
 
 
 async def _add(name: Optional[str], data: Optional[str], **_) -> dict:
-    if name is None or data is None:
+    if not name or not name.strip() or not data or not data.strip():
         return {"status": "error", "message": "name and data are required for action='add'"}
+    name = name.strip()
     embedding_bytes = None
     if memory.encoder:
         try:
@@ -28,9 +29,11 @@ async def _add(name: Optional[str], data: Optional[str], **_) -> dict:
 
 
 async def _use(names: Optional[str], **_) -> dict:
-    if names is None:
+    if not names or not names.strip():
         return {"status": "error", "message": "names is required for action='use'"}
-    name_list = [n.strip() for n in names.split(",")]
+    name_list = [n.strip() for n in names.split(",") if n.strip()]
+    if not name_list:
+        return {"status": "error", "message": "names is required for action='use'"}
     activated_entries = []
     with memory.get_connection() as conn:
         for n in name_list:

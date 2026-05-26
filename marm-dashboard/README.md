@@ -52,7 +52,7 @@ python -m marm_mcp_server
 python -m venv marm-env
 source marm-env/bin/activate
 pip install -e .
-python -m marm_dashboard ```
+python -m marm_dashboard
 ```
 
 Both can run at once (SQLite WAL). The dashboard is a direct SQLite admin UI: edits made here bypass MCP tool events, but use the same tables and sanitization rules.

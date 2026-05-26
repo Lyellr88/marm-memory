@@ -619,6 +619,21 @@ async def marm_summary(
 # Entrypoint
 # ============================================================================
 
+def _is_graceful_teardown(exc: Exception) -> bool:
+    """Return True only if exc is safe to swallow as normal STDIO EOF teardown.
+
+    ExceptionGroup is checked by inspecting every sub-exception. All must be
+    ClosedResourceError — a mixed group (e.g. ClosedResourceError + ValueError)
+    is not swallowed so real bugs are not lost.
+    """
+    if hasattr(exc, "exceptions"):
+        return bool(exc.exceptions) and all(
+            "ClosedResourceError" in str(type(e)) for e in exc.exceptions
+        )
+    exc_str = str(type(exc))
+    return "ClosedResourceError" in exc_str or "ClosedResourceError" in repr(exc)
+
+
 def main() -> None:
     _stdio_log.info(
         "startup version=%s db=%s semantic_search=%s",
@@ -627,18 +642,9 @@ def main() -> None:
     try:
         mcp.run()
     except Exception as exc:
-        # anyio.ClosedResourceError (and ExceptionGroup wrappers of it) are raised
-        # when stdin reaches EOF while async work is still in flight. This is normal
-        # STDIO session teardown — not a server fault. Exit cleanly.
-        exc_str = str(type(exc))
-        if "ClosedResourceError" in exc_str or "ClosedResourceError" in repr(exc):
+        if _is_graceful_teardown(exc):
             _stdio_log.debug("stdin closed during shutdown (normal teardown)")
             return
-        # ExceptionGroup may wrap ClosedResourceError in Python 3.11+
-        if hasattr(exc, "exceptions"):
-            if any("ClosedResourceError" in str(type(e)) for e in exc.exceptions):
-                _stdio_log.debug("stdin closed during shutdown (normal teardown)")
-                return
         raise
     finally:
         _stdio_log.info("shutdown")

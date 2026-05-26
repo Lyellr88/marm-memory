@@ -118,9 +118,17 @@ def test_stdio_delete_notebook_removes_entry_from_active_state(tmp_path):
             "name": "marm_notebook",
             "arguments": {"action": "status"},
         }})
-        # Drain call — cross-module dispatch adds latency on first tool call;
-        # extra message keeps stdin open until all responses are written.
+        # Drain calls — marm_delete races with shutdown; extra messages keep stdin
+        # open until all responses including delete are written before EOF.
         + message({"jsonrpc": "2.0", "id": 6, "method": "tools/call", "params": {
+            "name": "marm_notebook",
+            "arguments": {"action": "status"},
+        }})
+        + message({"jsonrpc": "2.0", "id": 7, "method": "tools/call", "params": {
+            "name": "marm_notebook",
+            "arguments": {"action": "status"},
+        }})
+        + message({"jsonrpc": "2.0", "id": 8, "method": "tools/call", "params": {
             "name": "marm_notebook",
             "arguments": {"action": "status"},
         }})
@@ -435,3 +443,24 @@ def test_stdio_protocol_injected_on_first_tool_call_not_on_second(tmp_path):
     second_result = json.loads(responses[3]["result"]["content"][0]["text"])
     assert "marm_protocol" not in second_result, \
         "Protocol must not repeat on second STDIO tool call"
+
+
+def test_is_graceful_teardown_rejects_mixed_exception_group():
+    """Regression: a mixed ExceptionGroup must not be swallowed as normal teardown."""
+    from marm_mcp_server.server_stdio import _is_graceful_teardown
+
+    class ClosedResourceError(Exception):
+        pass
+
+    class RealBug(ValueError):
+        pass
+
+    pure_group = ExceptionGroup("teardown", [ClosedResourceError()])
+    mixed_group = ExceptionGroup("mixed", [ClosedResourceError(), RealBug("actual bug")])
+    direct = ClosedResourceError("eof")
+    unrelated = RuntimeError("crash")
+
+    assert _is_graceful_teardown(pure_group) is True
+    assert _is_graceful_teardown(mixed_group) is False
+    assert _is_graceful_teardown(direct) is True
+    assert _is_graceful_teardown(unrelated) is False

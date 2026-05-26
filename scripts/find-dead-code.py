@@ -114,10 +114,10 @@ def check_orphaned_modules() -> int:
         for path in orphaned:
             print(f"    {RED}{FAIL}{RESET} {display_path(path)}")
         print(f"    {CYAN}Review checklist:{RESET}")
-        print(f"      - Search tests/docs for the module name")
-        print(f"      - Check pyproject console scripts and Docker commands")
-        print(f"      - Check whether imports are indirect through package __init__.py")
-        print(f"      - Delete only after import/runtime smoke tests pass")
+        print("      - Search tests/docs for the module name")
+        print("      - Check pyproject console scripts and Docker commands")
+        print("      - Check whether imports are indirect through package __init__.py")
+        print("      - Delete only after import/runtime smoke tests pass")
     else:
         print(f"{GREEN}  {CHECK} No orphaned modules found{RESET}")
 
@@ -156,9 +156,9 @@ def check_unregistered_routers() -> int:
         for stem, path in unregistered:
             print(f"    {RED}{FAIL}{RESET} {stem}_router not in server.py  ({display_path(path)})")
         print(f"    {CYAN}Review checklist:{RESET}")
-        print(f"      - Confirm whether the endpoint should be public, hidden, or retired")
-        print(f"      - Hidden endpoints may still be intentionally included with include_in_schema=False")
-        print(f"      - If retired, remove docs/tests/imports together")
+        print("      - Confirm whether the endpoint should be public, hidden, or retired")
+        print("      - Hidden endpoints may still be intentionally included with include_in_schema=False")
+        print("      - If retired, remove docs/tests/imports together")
     else:
         print(f"{GREEN}  {CHECK} All routers registered in server.py{RESET}")
 
@@ -209,9 +209,9 @@ def check_unused_functions() -> int:
         if len(unused) > 15:
             print(f"    {CYAN}... and {len(unused) - 15} more{RESET}")
         print(f"    {CYAN}Review checklist:{RESET}")
-        print(f"      - Route handlers and @mcp.tool functions may be used by decorators")
-        print(f"      - Check tests and public API docs before deleting")
-        print(f"      - Prefer deprecating public behavior before removing it")
+        print("      - Route handlers and @mcp.tool functions may be used by decorators")
+        print("      - Check tests and public API docs before deleting")
+        print("      - Prefer deprecating public behavior before removing it")
     else:
         print(f"{GREEN}  {CHECK} No obviously unused functions found{RESET}")
 

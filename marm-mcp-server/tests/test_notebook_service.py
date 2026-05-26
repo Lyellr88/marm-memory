@@ -95,6 +95,22 @@ async def test_dispatch_use_missing_names_returns_error(notebook_svc):
 
 
 @pytest.mark.asyncio
+async def test_dispatch_add_blank_name_returns_error(notebook_svc):
+    dispatch, _ = notebook_svc
+    result = await dispatch(action="add", name="   ", data="some data")
+    assert result["status"] == "error"
+    assert "name" in result["message"]
+
+
+@pytest.mark.asyncio
+async def test_dispatch_use_comma_only_names_returns_error(notebook_svc):
+    dispatch, _ = notebook_svc
+    result = await dispatch(action="use", names="  ,  ,  ")
+    assert result["status"] == "error"
+    assert "names" in result["message"]
+
+
+@pytest.mark.asyncio
 async def test_dispatch_unknown_action_returns_error(notebook_svc):
     dispatch, _ = notebook_svc
     result = await dispatch(action="explode")
