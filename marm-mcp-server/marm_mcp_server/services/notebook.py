@@ -95,6 +95,10 @@ async def notebook_dispatch(
     names: Optional[str] = None,
     session_name: str = "main",
 ) -> dict:
+    session_name = (session_name or "main").strip()
+    if not session_name:
+        return {"status": "error", "message": "session_name must be a non-empty string"}
+
     handler = _ACTION_HANDLERS.get(action)
     if handler is None:
         return {"status": "error", "message": f"Unknown action '{action}'. Must be: add, use, show, status, clear"}

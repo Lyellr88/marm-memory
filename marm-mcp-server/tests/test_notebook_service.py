@@ -161,6 +161,29 @@ async def test_dispatch_clear_only_clears_requested_session(notebook_svc):
 
 
 @pytest.mark.asyncio
+async def test_dispatch_normalizes_session_name(notebook_svc):
+    dispatch, memory = notebook_svc
+    await dispatch(action="add", name="alpha_rule", data="alpha instructions")
+
+    await dispatch(action="use", names="alpha_rule", session_name="  alpha  ")
+    result = await dispatch(action="status", session_name="alpha")
+
+    assert result["active_entries"] == ["alpha_rule"]
+    assert memory.get_active_notebook_entries("alpha")[0]["name"] == "alpha_rule"
+    assert "  alpha  " not in memory.active_notebook_entries_by_session
+
+
+@pytest.mark.asyncio
+async def test_dispatch_blank_session_name_returns_error(notebook_svc):
+    dispatch, _ = notebook_svc
+
+    result = await dispatch(action="status", session_name="   ")
+
+    assert result["status"] == "error"
+    assert "session_name" in result["message"]
+
+
+@pytest.mark.asyncio
 async def test_memory_remove_active_notebook_entry_cleans_all_sessions(notebook_svc):
     dispatch, memory = notebook_svc
     await dispatch(action="add", name="shared_rule", data="shared instructions")
