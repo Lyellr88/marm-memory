@@ -14,8 +14,8 @@ def notebook_svc(monkeypatch, tmp_path):
     from marm_mcp_server.services.notebook import notebook_dispatch
     from marm_mcp_server.core.memory import memory
 
-    memory._encoder_failed = True
-    memory.active_notebook_entries = []
+    monkeypatch.setattr(memory, "_encoder_failed", True)
+    monkeypatch.setattr(memory, "active_notebook_entries_by_session", {})
 
     return notebook_dispatch, memory
 
@@ -45,12 +45,12 @@ async def test_dispatch_use_activates_existing_entry(notebook_svc):
     result = await dispatch(action="use", names="rule_c")
     assert result["status"] == "success"
     assert "rule_c" in result["activated_entries"]
-    assert memory.active_notebook_entries[0]["name"] == "rule_c"
+    assert memory.get_active_notebook_entries("main")[0]["name"] == "rule_c"
 
 
 @pytest.mark.asyncio
 async def test_dispatch_status_reflects_active_entries(notebook_svc):
-    dispatch, memory = notebook_svc
+    dispatch, _ = notebook_svc
     await dispatch(action="add", name="rule_d", data="be direct")
     await dispatch(action="use", names="rule_d")
     result = await dispatch(action="status")
@@ -67,7 +67,7 @@ async def test_dispatch_clear_empties_active_entries(notebook_svc):
     result = await dispatch(action="clear")
     assert result["status"] == "success"
     assert result["active_count"] == 0
-    assert memory.active_notebook_entries == []
+    assert memory.get_active_notebook_entries("main") == []
 
 
 @pytest.mark.asyncio
@@ -124,4 +124,50 @@ async def test_dispatch_use_silently_skips_nonexistent_entries(notebook_svc):
     result = await dispatch(action="use", names="ghost_entry")
     assert result["status"] == "success"
     assert result["activated_entries"] == []
-    assert memory.active_notebook_entries == []
+    assert memory.get_active_notebook_entries("main") == []
+
+
+@pytest.mark.asyncio
+async def test_dispatch_scopes_active_entries_by_session(notebook_svc):
+    dispatch, memory = notebook_svc
+    await dispatch(action="add", name="alpha_rule", data="alpha instructions")
+    await dispatch(action="add", name="beta_rule", data="beta instructions")
+
+    await dispatch(action="use", names="alpha_rule", session_name="alpha")
+    await dispatch(action="use", names="beta_rule", session_name="beta")
+
+    alpha = await dispatch(action="status", session_name="alpha")
+    beta = await dispatch(action="status", session_name="beta")
+
+    assert alpha["active_entries"] == ["alpha_rule"]
+    assert beta["active_entries"] == ["beta_rule"]
+    assert memory.get_active_notebook_entries("alpha")[0]["name"] == "alpha_rule"
+    assert memory.get_active_notebook_entries("beta")[0]["name"] == "beta_rule"
+
+
+@pytest.mark.asyncio
+async def test_dispatch_clear_only_clears_requested_session(notebook_svc):
+    dispatch, _ = notebook_svc
+    await dispatch(action="add", name="alpha_rule", data="alpha instructions")
+    await dispatch(action="add", name="beta_rule", data="beta instructions")
+    await dispatch(action="use", names="alpha_rule", session_name="alpha")
+    await dispatch(action="use", names="beta_rule", session_name="beta")
+
+    cleared = await dispatch(action="clear", session_name="alpha")
+    beta = await dispatch(action="status", session_name="beta")
+
+    assert cleared["active_count"] == 0
+    assert beta["active_entries"] == ["beta_rule"]
+
+
+@pytest.mark.asyncio
+async def test_memory_remove_active_notebook_entry_cleans_all_sessions(notebook_svc):
+    dispatch, memory = notebook_svc
+    await dispatch(action="add", name="shared_rule", data="shared instructions")
+    await dispatch(action="use", names="shared_rule", session_name="alpha")
+    await dispatch(action="use", names="shared_rule", session_name="beta")
+
+    memory.remove_active_notebook_entry("shared_rule")
+
+    assert memory.get_active_notebook_entries("alpha") == []
+    assert memory.get_active_notebook_entries("beta") == []

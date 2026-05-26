@@ -30,6 +30,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
+from anyio import BrokenResourceError, ClosedResourceError, EndOfStream
+
 # Docker images default to SERVER_HOST=0.0.0.0 for HTTP mode. STDIO mode never
 # opens a network listener, so force loopback before shared settings import to
 # prevent HTTP-only API key generation from polluting the MCP stream.
@@ -480,10 +482,7 @@ async def marm_delete(
                 deleted = cursor.rowcount
                 conn.commit()
                 if deleted > 0:
-                    memory.active_notebook_entries = [
-                        entry for entry in memory.active_notebook_entries
-                        if entry.get("name") != target
-                    ]
+                    memory.remove_active_notebook_entry(target)
                 return {
                     "status": "success" if deleted > 0 else "not_found",
                     "message": f"🗑️ Deleted notebook entry '{target}'" if deleted > 0 else f"Entry '{target}' not found",
@@ -507,6 +506,7 @@ async def marm_notebook(
     name: Optional[str] = None,
     data: Optional[str] = None,
     names: Optional[str] = None,
+    session_name: str = "main",
 ) -> dict:
     """
     📔 Unified notebook — add, use, show, status, or clear
@@ -518,7 +518,13 @@ async def marm_notebook(
     action="clear": clear the active entry list
     """
     try:
-        return await notebook_dispatch(action=action, name=name, data=data, names=names)
+        return await notebook_dispatch(
+            action=action,
+            name=name,
+            data=data,
+            names=names,
+            session_name=session_name,
+        )
     except Exception as e:
         return {"status": "error", "message": f"Notebook operation failed: {str(e)}"}
 
@@ -619,19 +625,26 @@ async def marm_summary(
 # Entrypoint
 # ============================================================================
 
-def _is_graceful_teardown(exc: Exception) -> bool:
+def _is_graceful_teardown(exc: BaseException) -> bool:
     """Return True only if exc is safe to swallow as normal STDIO EOF teardown.
 
-    ExceptionGroup is checked by inspecting every sub-exception. All must be
-    ClosedResourceError — a mixed group (e.g. ClosedResourceError + ValueError)
-    is not swallowed so real bugs are not lost.
+    Accepts AnyIO stream-closure exceptions directly. For grouped exceptions,
+    every nested sub-exception must also be graceful teardown; mixed groups are
+    not swallowed so real bugs are not lost.
     """
-    if hasattr(exc, "exceptions"):
-        return bool(exc.exceptions) and all(
-            "ClosedResourceError" in str(type(e)) for e in exc.exceptions
-        )
-    exc_str = str(type(exc))
-    return "ClosedResourceError" in exc_str or "ClosedResourceError" in repr(exc)
+    if isinstance(exc, (ClosedResourceError, EndOfStream, BrokenResourceError)):
+        return True
+
+    grouped = getattr(exc, "exceptions", None)
+    if not grouped:
+        return False
+
+    for sub_exc in grouped:
+        if not isinstance(sub_exc, BaseException):
+            return False
+        if not _is_graceful_teardown(sub_exc):
+            return False
+    return True
 
 
 def main() -> None:
@@ -641,7 +654,7 @@ def main() -> None:
     )
     try:
         mcp.run()
-    except Exception as exc:
+    except BaseException as exc:
         if _is_graceful_teardown(exc):
             _stdio_log.debug("stdin closed during shutdown (normal teardown)")
             return

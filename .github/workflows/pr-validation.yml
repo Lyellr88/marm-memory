@@ -27,15 +27,15 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('marm-mcp-server/requirements.txt') }}
+          key: ${{ runner.os }}-pip-${{ hashFiles('marm-mcp-server/pyproject.toml') }}
           restore-keys: |
             ${{ runner.os }}-pip-
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r marm-mcp-server/requirements.txt
-          pip install pytest pytest-asyncio jsonschema requests build
+          pip install -e './marm-mcp-server[dev]'
+          pip install build
 
       - name: Validate MCP server metadata
         working-directory: marm-mcp-server

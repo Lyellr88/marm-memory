@@ -18,6 +18,7 @@ class NotebookRequest(BaseModel):
     name: Optional[str] = Field(default=None, description="Entry name (required for action='add')")
     data: Optional[str] = Field(default=None, description="Entry content (required for action='add')")
     names: Optional[str] = Field(default=None, description="Comma-separated entry names (required for action='use')")
+    session_name: str = Field(default="main", description="Session scope for active notebook entries")
 
 
 class SmartRecallRequest(BaseModel):

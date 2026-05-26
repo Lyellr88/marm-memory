@@ -42,8 +42,8 @@ python -m marm_dashboard --open
 
 ```bash
 cd marm-dashboard
-pip install marm-mcp-server
-python -m marm_mcp_server
+pip install -e .
+python -m marm_dashboard --open
 ```
 
 ### **Option 2: pip install in virtualenv** ⚡ **(Clean environment)**

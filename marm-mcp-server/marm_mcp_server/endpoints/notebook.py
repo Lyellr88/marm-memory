@@ -25,6 +25,7 @@ async def marm_notebook(request: NotebookRequest):
             name=request.name,
             data=request.data,
             names=request.names,
+            session_name=request.session_name,
         )
         if result.get("status") == "error":
             raise HTTPException(status_code=400, detail=result["message"])

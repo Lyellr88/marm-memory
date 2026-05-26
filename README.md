@@ -195,6 +195,7 @@ MARM now handles lifecycle work internally. Documentation loads on the first rea
 
 **Architecture note:** MARM uses targeted parameterized dispatching tooling to keep MCP discovery lean without hiding behavior. Domain-specific tools such as `marm_notebook(action=...)` and `marm_delete(type=...)` group closely related operations behind explicit parameters, while recall, logging, and summaries stay separate so agents still choose the right capability clearly. This design ensures the total MCP schema footprint remains under 10KB while preserving full functionality.
 
+
 | **Category** | **Tool** | **Description** |
 |--------------|----------|-----------------|
 | **Memory Intelligence** | `marm_smart_recall` | AI-powered semantic similarity search across all memories. Supports global search with `search_all=True` flag |

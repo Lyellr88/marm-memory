@@ -177,7 +177,8 @@ Claude Code remains the recommended first setup path, but MARM also works with o
 
 The AI agent will automatically use the appropriate tools. Manual tool access is available for power users who want direct control.
 
-**Architecture note:** MARM uses targeted parameterized dispatching tooling to keep MCP discovery lean without hiding behavior. Domain-specific tools such as `marm_notebook(action=...)` and `marm_delete(type=...)` group closely related operations behind explicit enum parameters, while recall, logging, and summaries stay separate so agents still choose the right capability clearly.
+**Architecture note:** MARM uses targeted parameterized dispatching tooling to keep MCP discovery lean without hiding behavior. Domain-specific tools such as `marm_notebook(action=...)` and `marm_delete(type=...)` group closely related operations behind explicit parameters, while recall, logging, and summaries stay separate so agents still choose the right capability clearly. This design ensures the total MCP schema footprint remains under 10KB while preserving full functionality.
+
 
 | **Category** | **Tool** | **Description** |
 |--------------|----------|-----------------|

@@ -28,7 +28,7 @@ async def _add(name: Optional[str], data: Optional[str], **_) -> dict:
     return {"status": "success", "message": f"📓 Notebook entry '{name}' added", "name": name}
 
 
-async def _use(names: Optional[str], **_) -> dict:
+async def _use(names: Optional[str], session_name: str = "main", **_) -> dict:
     if not names or not names.strip():
         return {"status": "error", "message": "names is required for action='use'"}
     name_list = [n.strip() for n in names.split(",") if n.strip()]
@@ -41,7 +41,7 @@ async def _use(names: Optional[str], **_) -> dict:
             result = cursor.fetchone()
             if result:
                 activated_entries.append({"name": result[0], "data": result[1]})
-    memory.active_notebook_entries = activated_entries
+    memory.set_active_notebook_entries(session_name, activated_entries)
     return {
         "status": "success",
         "message": f"🔧 Activated {len(activated_entries)} notebook entries",
@@ -62,19 +62,20 @@ async def _show(**_) -> dict:
     return {"status": "success", "message": f"📚 Found {len(entries)} notebook entries", "entries": entries, "total_count": len(entries)}
 
 
-async def _status(**_) -> dict:
-    active_names = [entry["name"] for entry in memory.active_notebook_entries]
+async def _status(session_name: str = "main", **_) -> dict:
+    active_entries = memory.get_active_notebook_entries(session_name)
+    active_names = [entry["name"] for entry in active_entries]
     return {
         "status": "success",
         "message": f"📊 {len(active_names)} active notebook entries",
         "active_entries": active_names,
-        "entries": memory.active_notebook_entries,
+        "entries": active_entries,
         "active_count": len(active_names),
     }
 
 
-async def _clear(**_) -> dict:
-    memory.active_notebook_entries = []
+async def _clear(session_name: str = "main", **_) -> dict:
+    memory.clear_active_notebook_entries(session_name)
     return {"status": "success", "message": "🧹 Active notebook entries cleared", "active_count": 0}
 
 
@@ -92,8 +93,9 @@ async def notebook_dispatch(
     name: Optional[str] = None,
     data: Optional[str] = None,
     names: Optional[str] = None,
+    session_name: str = "main",
 ) -> dict:
     handler = _ACTION_HANDLERS.get(action)
     if handler is None:
         return {"status": "error", "message": f"Unknown action '{action}'. Must be: add, use, show, status, clear"}
-    return await handler(name=name, data=data, names=names)
+    return await handler(name=name, data=data, names=names, session_name=session_name)

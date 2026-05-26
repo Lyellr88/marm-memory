@@ -153,6 +153,47 @@ def test_notebook_show_previews_long_entries_and_clear_resets_active_list(monkey
     assert client.post("/marm_notebook", json={"action": "status"}).json()["active_entries"] == []
 
 
+def test_notebook_active_state_is_scoped_by_session(monkeypatch, tmp_path):
+    server = load_isolated_server(monkeypatch, tmp_path)
+    client = local_client(server.app)
+
+    assert client.post(
+        "/marm_notebook",
+        json={"action": "add", "name": "alpha_rule", "data": "alpha instructions"},
+    ).status_code == 200
+    assert client.post(
+        "/marm_notebook",
+        json={"action": "add", "name": "beta_rule", "data": "beta instructions"},
+    ).status_code == 200
+
+    alpha_use = client.post(
+        "/marm_notebook",
+        json={"action": "use", "names": "alpha_rule", "session_name": "alpha"},
+    )
+    beta_use = client.post(
+        "/marm_notebook",
+        json={"action": "use", "names": "beta_rule", "session_name": "beta"},
+    )
+
+    assert alpha_use.status_code == 200
+    assert beta_use.status_code == 200
+
+    alpha_status = client.post("/marm_notebook", json={"action": "status", "session_name": "alpha"})
+    beta_status = client.post("/marm_notebook", json={"action": "status", "session_name": "beta"})
+
+    assert alpha_status.json()["active_entries"] == ["alpha_rule"]
+    assert beta_status.json()["active_entries"] == ["beta_rule"]
+
+    alpha_clear = client.post("/marm_notebook", json={"action": "clear", "session_name": "alpha"})
+    assert alpha_clear.status_code == 200
+
+    alpha_after_clear = client.post("/marm_notebook", json={"action": "status", "session_name": "alpha"})
+    beta_after_clear = client.post("/marm_notebook", json={"action": "status", "session_name": "beta"})
+
+    assert alpha_after_clear.json()["active_entries"] == []
+    assert beta_after_clear.json()["active_entries"] == ["beta_rule"]
+
+
 def test_http_notebook_add_persists_entry_and_embedding(monkeypatch, tmp_path):
     server = load_isolated_server(monkeypatch, tmp_path)
     client = local_client(server.app)

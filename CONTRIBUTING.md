@@ -151,6 +151,12 @@ This runs:
 - Python compile check for `marm_mcp_server` and `tests`
 - Pytest suite with a controlled temp directory
 
+For targeted ad hoc pytest runs, use `--basetemp C:\tmp\...` or clean repo-local pytest artifacts afterward:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\clean-pytest-artifacts.ps1
+```
+
 Current expectations:
 
 - `Failed: 0` required before submitting a PR
