@@ -5,7 +5,7 @@
      width="700"
      height="350">
 </picture>
-<h1 align="center">MARM: The AI That Remembers Your Conversations v2.6.2</h1>
+<h1 align="center">MARM: The AI That Remembers Your Conversations v2.7.0</h1>
 
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
@@ -94,6 +94,8 @@ Watch MARM install through Docker, connect to Claude, and share persistent memor
 - Local HTTP/STDIO = fastest single-machine setup.
 - Docker HTTP = shared/always-on server (key required).
 - Docker STDIO = private containerized local use (no HTTP key).
+
+> **Swarm / multi-agent note:** For shared HTTP deployments, enable the write queue with `WRITE_QUEUE_ENABLED=1`. This works with local HTTP, Docker HTTP, and hosted HTTP. It serializes memory writes inside one MARM server process to reduce SQLite writer contention when multiple agents share the same memory server. STDIO is still best for private single-agent/local use.
 
 #### Local pip HTTP (zero config)
 
@@ -194,7 +196,6 @@ The AI agent will automatically use the appropriate tools. Manual tool access is
 MARM now handles lifecycle work internally. Documentation loads on the first real tool call, session state initializes automatically, and documentation refreshes every 50 tool calls. Packaged docs are indexed into searchable memory with hash-based caching, so unchanged docs are skipped across restarts.
 
 **Architecture note:** MARM uses targeted parameterized dispatching tooling to keep MCP discovery lean without hiding behavior. Domain-specific tools such as `marm_notebook(action=...)` and `marm_delete(type=...)` group closely related operations behind explicit parameters, while recall, logging, and summaries stay separate so agents still choose the right capability clearly. This design ensures the total MCP schema footprint remains under 10KB while preserving full functionality.
-
 
 | **Category** | **Tool** | **Description** |
 |--------------|----------|-----------------|

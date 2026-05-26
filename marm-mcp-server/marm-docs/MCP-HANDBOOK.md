@@ -2,7 +2,7 @@
 
 ## Complete Usage Guide for Memory-Augmented AI
 
-**MARM v2.6.2 - Universal MCP Server for AI Memory Intelligence**
+**MARM v2.7.0 - Universal MCP Server for AI Memory Intelligence**
 
 ---
 
@@ -270,6 +270,8 @@ MARM automatically categorizes content:
 | **🔄 Workflow** | `marm_summary` | Generate paste-ready context blocks with intelligent truncation | Create summaries for new conversations or context bridging |
 
 **Internal automation:** lifecycle initialization, documentation refresh, current date context, and system checks are no longer AI-facing tools. Documentation refresh uses `doc_index` hash tracking to avoid duplicate `marm_system` memories across restarts. Use the dashboard health panel for live server status, or `curl http://localhost:8001/health` for terminal checks.
+
+**Write queue:** High-concurrency HTTP deployments can set `WRITE_QUEUE_ENABLED=1` to serialize memory writes through one internal async queue. This is useful for swarm-style agents sharing one server. It only controls write ordering; it does not merge, summarize, or alter memory content.
 
 ---
 

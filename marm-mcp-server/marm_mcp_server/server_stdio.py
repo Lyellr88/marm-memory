@@ -290,7 +290,7 @@ async def marm_context_log(
     Saves information to memory with automatic context type detection.
     """
     try:
-        memory_id = await memory.store_memory(
+        memory_id = await memory.store_memory_queued(
             content=content,
             session=session_name,
             context_type=context_type,

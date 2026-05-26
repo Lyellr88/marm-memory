@@ -213,7 +213,7 @@ async def marm_context_log(request: ContextLogRequest):
         sanitized_content = sanitize_content(request.content)
 
         # Auto-classify and store in memory system (store_memory will also sanitize, but we need sanitized content for response)
-        memory_id = await memory.store_memory(request.content, request.session_name)
+        memory_id = await memory.store_memory_queued(request.content, request.session_name)
 
         # Get the classification that was applied
         context_type = await memory.auto_classify_content(sanitized_content)

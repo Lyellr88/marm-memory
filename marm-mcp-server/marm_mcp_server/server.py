@@ -5,7 +5,7 @@ This server integrates all modular components of the MARM protocol into a single
 FastAPI application, compliant with the MCP protocol via FastApiMCP.
 
 Author: Lyell - MARM Systems
-Version: 2.6.2
+Version: 2.7.0
 """
 
 import logging
@@ -109,6 +109,7 @@ from .config.settings import (
     ANALYTICS_DB_PATH,
 )
 from .utils.security import generate_api_key
+from .core.memory import memory
 from .services.automation import register_event_handlers
 from .services.documentation import docs_are_loaded, maybe_auto_refresh, ensure_marm_started
 from .utils.helpers import read_protocol_file
@@ -142,6 +143,7 @@ async def lifespan(app: FastAPI):
     
     # Register automation event handlers
     register_event_handlers()
+    await memory.start_write_queue()
     
     # Check memory usage after loading
     memory_after = get_memory_usage()
@@ -161,6 +163,7 @@ async def lifespan(app: FastAPI):
 
     # Shutdown (cleanup if needed)
     logger.info("Shutting down MARM MCP Server")
+    await memory.stop_write_queue()
     track_usage("server_shutdown")
 
 # Create the main FastAPI application with modern lifespan

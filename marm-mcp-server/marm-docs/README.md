@@ -1,4 +1,4 @@
-# MARM: The AI That Remembers Your Conversations v2.6.2</h1>
+# MARM: The AI That Remembers Your Conversations v2.7.0</h1>
 
 ---
 
@@ -53,6 +53,8 @@ Modern LLMs lose context over time, repeat prior ideas, and drift off requiremen
 - Local HTTP/STDIO = fastest single-machine setup.
 - Docker HTTP = shared/always-on server (key required).
 - Docker STDIO = private containerized local use (no HTTP key).
+
+> **Swarm / multi-agent note:** For shared HTTP deployments, enable the write queue with `WRITE_QUEUE_ENABLED=1`. This works with local HTTP, Docker HTTP, and hosted HTTP. It serializes memory writes inside one MARM server process to reduce SQLite writer contention when multiple agents share the same memory server. STDIO is still best for private single-agent/local use.
 
 #### Local pip HTTP (zero config)
 

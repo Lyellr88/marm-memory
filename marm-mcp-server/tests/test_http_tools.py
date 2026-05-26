@@ -306,6 +306,33 @@ def test_context_log_recall_include_logs_and_system_info(monkeypatch, tmp_path):
     assert count == 1
 
 
+def test_context_log_uses_write_queue_when_enabled(monkeypatch, tmp_path):
+    monkeypatch.setenv("WRITE_QUEUE_ENABLED", "1")
+    server = load_isolated_server(monkeypatch, tmp_path)
+    client = local_client(server.app)
+
+    log = client.post(
+        "/marm_context_log",
+        json={
+            "session_name": "queued-http",
+            "content": "queued http memory write for swarm agents",
+        },
+    )
+
+    assert log.status_code == 200
+    assert log.json()["status"] == "success"
+
+    memory_module = importlib.import_module("marm_mcp_server.core.memory")
+    with memory_module.memory.get_connection() as conn:
+        count = conn.execute(
+            "SELECT COUNT(*) FROM memories WHERE session_name = ?",
+            ("queued-http",),
+        ).fetchone()[0]
+
+    assert count == 1
+    assert memory_module.memory._write_queue is not None
+
+
 def test_smart_recall_include_logs_returns_log_matches_without_memory_hits(monkeypatch, tmp_path):
     server = load_isolated_server(monkeypatch, tmp_path)
     client = local_client(server.app)

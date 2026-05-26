@@ -1291,3 +1291,49 @@ marm_notebook(action="add"|"use"|"show"|"status"|"clear", name=None, data=None, 
 - Updated HTTP and STDIO tests for the `marm_context_log` rename
 
 </details>
+
+---
+
+<details>
+<summary><strong>May 26th, 2026: Notebook Session Scoping & CI Hardening (v2.7.0)</strong></summary>
+
+### Notebook Session Scoping
+
+`marm_notebook` now accepts an optional `session_name` parameter (default: `"main"`) that scopes active notebook state per client. Previously, `use` and `clear` from any caller overwrote the single global active list, breaking multi-client HTTP mode, shared Docker deployments, and swarm-style agent workflows.
+
+```text
+marm_notebook(action="use"|"status"|"clear", session_name="my_project")
+```
+
+- Saved notebook entries remain global and reusable across sessions
+- Active instruction lists are now isolated per `session_name`
+- `marm_delete(type="notebook")` removes deleted entries from every active session scope
+- `session_name` is normalized (stripped) and validated at dispatch — whitespace-only values are rejected
+- Existing clients that do not send `session_name` continue to work unchanged via the `"main"` default
+
+### STDIO Teardown Hardening
+
+- Replaced string/repr substring matching in `_is_graceful_teardown()` with concrete AnyIO `isinstance` checks (`ClosedResourceError`, `EndOfStream`, `BrokenResourceError`)
+- Added recursive `ExceptionGroup` unwrapping — every sub-exception must be a known teardown type before the group is swallowed
+- Widened `except Exception` to `except BaseException` so `BaseExceptionGroup` is also handled
+
+### CI Hardening
+
+- Unified dependency install across CI workflows to `pip install -e './marm-mcp-server[dev]'` — single source of truth matching `pyproject.toml` constraints
+- Fixed `publish-mcp.yml` test step: was checking `tests/` at repo root (always missing), now runs from `marm-mcp-server/` working directory
+- Aligned `fastmcp` pin to `>=3.2.0,<3.3.0` across `requirements.txt`, `requirements_stdio.txt`, and `pyproject.toml`
+- Updated pip cache keys to hash `pyproject.toml` instead of `requirements.txt`
+- Bumped `setup-python` to `@v5` consistently across both workflows
+- Added `persist-credentials: false` to checkout step in PR validation
+
+### Tests
+
+- Added service-level isolation test proving session A and session B do not overwrite each other
+- Added service-level clear-scoping test proving `clear` only empties the requested session
+- Added service-level delete-cleanup test proving `remove_active_notebook_entry` clears all sessions
+- Added HTTP regression test with two active sessions confirming full isolation end-to-end
+- Added STDIO subprocess regression test proving explicit `session_name` routes correctly over the JSON-RPC transport
+- Added regression test for mixed `ExceptionGroup` — a group containing non-teardown exceptions is not swallowed
+- Added whitespace validation tests for blank `session_name`, blank `name`, and comma-only `names`
+
+</details>

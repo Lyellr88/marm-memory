@@ -61,8 +61,11 @@ from ..config.settings import (
     SEMANTIC_SEARCH_AVAILABLE, 
     DEFAULT_DB_PATH, 
     MAX_DB_CONNECTIONS,
-    DEFAULT_SEMANTIC_MODEL
+    DEFAULT_SEMANTIC_MODEL,
+    MAX_QUEUE_SIZE,
+    WRITE_QUEUE_ENABLED,
 )
+from .write_queue import WriteQueue
 
 # Try to import sentence transformer if available
 if SEMANTIC_SEARCH_AVAILABLE:
@@ -186,6 +189,22 @@ class MARMMemory:
         self.active_sessions = {}
         self.active_notebook_entries_by_session: dict[str, list[dict]] = {}
         self.active_log_session: str = "main"
+        self._write_queue: WriteQueue | None = None
+
+    async def start_write_queue(self) -> None:
+        """Start the optional serialized write queue."""
+        if not WRITE_QUEUE_ENABLED:
+            return
+        if self._write_queue is None:
+            self._write_queue = WriteQueue(self, max_size=MAX_QUEUE_SIZE)
+        await self._write_queue.start()
+
+    async def stop_write_queue(self) -> None:
+        """Drain and stop the optional serialized write queue."""
+        if self._write_queue is None:
+            return
+        await self._write_queue.stop()
+        self._write_queue = None
 
     def get_active_notebook_entries(self, session_name: str = "main") -> list[dict]:
         """Return active notebook entries scoped to a session."""
@@ -386,6 +405,23 @@ class MARMMemory:
         # We don't import it here to avoid circular dependencies
         
         return memory_id
+
+    async def store_memory_queued(
+        self,
+        content: str,
+        session: str,
+        context_type: str = "general",
+        metadata: Dict = None,
+        queue_enabled: Optional[bool] = None,
+    ) -> str:
+        """Store memory through the write queue when enabled."""
+        if queue_enabled is None:
+            queue_enabled = WRITE_QUEUE_ENABLED
+        if queue_enabled and self._write_queue is None:
+            await self.start_write_queue()
+        if self._write_queue is not None:
+            return await self._write_queue.put(content, session, context_type, metadata)
+        return await self.store_memory(content, session, context_type, metadata)
     
     async def recall_similar(self, query: str, session: str = None, limit: int = 5) -> List[Dict]:
         """Find semantically similar memories"""

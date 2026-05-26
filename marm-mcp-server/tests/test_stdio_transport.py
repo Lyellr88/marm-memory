@@ -458,6 +458,61 @@ def test_stdio_log_does_not_contain_stored_memory_content(tmp_path):
     )
 
 
+def test_stdio_context_log_uses_write_queue_when_enabled(tmp_path):
+    env = os.environ.copy()
+    env["MARM_DB_PATH"] = str(tmp_path / "stdio-queue.db")
+    env["MARM_ANALYTICS_DB_PATH"] = str(tmp_path / "stdio-queue-analytics.db")
+    env["WRITE_QUEUE_ENABLED"] = "1"
+
+    def message(msg):
+        return (json.dumps(msg) + "\n").encode("utf-8")
+
+    stdin_data = (
+        _base_rpc_stdin()
+        + message({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {
+            "name": "marm_context_log",
+            "arguments": {
+                "session_name": "stdio-queue",
+                "content": "queued stdio memory write for swarm agents",
+            },
+        }})
+        + message({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {
+            "name": "marm_smart_recall",
+            "arguments": {"session_name": "stdio-queue", "query": "swarm agents", "limit": 3},
+        }})
+    )
+
+    result = subprocess.run(
+        [sys.executable, "-m", "marm_mcp_server.server_stdio"],
+        input=stdin_data,
+        env=env,
+        cwd=os.getcwd(),
+        capture_output=True,
+        timeout=30,
+    )
+
+    assert result.returncode == 0, result.stderr.decode("utf-8", errors="replace")[:500]
+
+    responses = {}
+    for line in result.stdout.splitlines():
+        msg = json.loads(line)
+        if "id" in msg:
+            responses[msg["id"]] = msg
+
+    assert 2 in responses, f"Missing STDIO responses: {sorted(responses)}"
+    log_result = json.loads(responses[2]["result"]["content"][0]["text"])
+    assert log_result["status"] == "success"
+
+    import sqlite3
+    with sqlite3.connect(env["MARM_DB_PATH"]) as conn:
+        count = conn.execute(
+            "SELECT COUNT(*) FROM memories WHERE session_name = ?",
+            ("stdio-queue",),
+        ).fetchone()[0]
+
+    assert count == 1
+
+
 def test_stdio_protocol_injected_on_first_tool_call_not_on_second(tmp_path):
     env = os.environ.copy()
     env["MARM_DB_PATH"] = str(tmp_path / "stdio-protocol.db")

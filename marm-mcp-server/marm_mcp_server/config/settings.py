@@ -87,7 +87,11 @@ RATE_LIMIT_SEARCH_REQUESTS = 30
 # Server configuration
 SERVER_HOST = os.environ.get('SERVER_HOST', '127.0.0.1')
 SERVER_PORT = int(os.environ.get('SERVER_PORT', 8001))
-SERVER_VERSION = "2.6.2"
+SERVER_VERSION = "2.7.0"
+
+# Optional serialized write queue for high-concurrency agent workflows.
+WRITE_QUEUE_ENABLED = os.environ.get('WRITE_QUEUE_ENABLED', '0') == '1'
+MAX_QUEUE_SIZE = int(os.environ.get('MAX_QUEUE_SIZE', '100'))
 
 # Auth — set MARM_API_KEY to require a Bearer token on all capability routes.
 # Leave unset for local-only deployments (loopback enforced automatically).
