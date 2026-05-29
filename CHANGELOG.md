@@ -937,7 +937,7 @@ This release introduces a complete UI/UX transformation with the implementation 
 
 ### **Documentation Consistency Pass**
 
-- **Docker key generation** standardized to `docker run --rm lyellr88/marm-mcp-server:latest python -m marm_mcp_server --generate-key` — no pip install required for Docker users
+- **Docker key generation** standardized to `docker run --rm lyellr88/marm-mcp-server:latest --generate-key` — no pip install required for Docker users
 - **README Security & Configuration section** rewritten with clear per-path explanation: pip+localhost (zero config), pip+`0.0.0.0` (auto-generated), Docker (manual `--generate-key`)
 - **INSTALL-WINDOWS and INSTALL-LINUX** env vars tables now include `SERVER_HOST` and `MARM_API_KEY` rows with auto-gen and `--generate-key` descriptions
 - **FAQ.md** Docker install row corrected: added `--generate-key` step, `MARM_API_KEY` in run command, `--header` in client command. Also corrected stale pip version `2.2.3` → `2.2.7`
@@ -1229,7 +1229,7 @@ Suppresses benign `WinError 10054` / `ConnectionResetError` log spam from `async
 
 `memory.py` now uses `_safe_print()` for model loading output — falls back to `sys.stderr.buffer` on `UnicodeEncodeError` to prevent charmap crashes on Windows terminals and avoids polluting STDIO stdout.
 
-### Tests
+### v2.6.0 Tests
 
 - 4 new STDIO logging regression tests: log file creation, tool call logging, DEBUG session name inclusion, memory content not leaked
 - New `test_server_logging.py` covering HTTP server logging behavior
@@ -1282,7 +1282,7 @@ marm_notebook(action="add"|"use"|"show"|"status"|"clear", name=None, data=None, 
 - Removes stale internal naming by replacing `ContextualLogRequest` with `ContextLogRequest`
 - Treats the change as part of the v2.6.1 tool-surface cleanup
 
-### Tests
+### v2.6.1 Tests
 
 - Added HTTP regression coverage proving protocol context is injected on the first MCP tool call and not repeated on the second
 - Added STDIO regression coverage proving protocol context is injected once
@@ -1326,7 +1326,7 @@ marm_notebook(action="use"|"status"|"clear", session_name="my_project")
 - Bumped `setup-python` to `@v5` consistently across both workflows
 - Added `persist-credentials: false` to checkout step in PR validation
 
-### Tests
+### v2.7.0 Tests
 
 - Added service-level isolation test proving session A and session B do not overwrite each other
 - Added service-level clear-scoping test proving `clear` only empties the requested session

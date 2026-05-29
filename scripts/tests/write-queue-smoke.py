@@ -192,9 +192,16 @@ def cleanup_sessions(memory: MARMMemory, session_names: list[str]) -> int:
 
 async def async_main() -> int:
     args = parse_args()
-    writes_steps = [int(part.strip()) for part in args.writes.split(",") if part.strip()]
+    try:
+        writes_steps = [int(part.strip()) for part in args.writes.split(",") if part.strip()]
+    except ValueError:
+        print("Invalid --writes. Provide positive integers, e.g. 10,25,50,100.")
+        return 2
     if not writes_steps or any(x <= 0 for x in writes_steps):
         print("Invalid --writes. Provide positive integers, e.g. 10,25,50,100.")
+        return 2
+    if args.queue_size <= 0:
+        print("Invalid --queue-size. Provide a positive integer.")
         return 2
 
     temp_dir: Path | None = None

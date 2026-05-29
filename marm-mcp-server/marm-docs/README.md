@@ -86,7 +86,7 @@ python -m marm_mcp_server.server_stdio
 
 ```bash
 # Step 1: generate key (do not add < > around the key)
-docker run --rm lyellr88/marm-mcp-server:latest python -m marm_mcp_server --generate-key
+docker run --rm lyellr88/marm-mcp-server:latest --generate-key
 
 # Step 2: run server
 docker pull lyellr88/marm-mcp-server:latest
@@ -253,7 +253,7 @@ MARM defaults to **localhost-only** (`127.0.0.1`). No credentials are required f
 
 **Pip + `SERVER_HOST=0.0.0.0`:** MARM auto-generates a key on first start, saves it to `~/.marm/.env`, and prints the client connection command once. Subsequent starts load silently.
 
-**Docker HTTP:** always requires `MARM_API_KEY` — Docker bridge networking means requests never arrive as loopback. Generate with `docker run --rm lyellr88/marm-mcp-server:latest python -m marm_mcp_server --generate-key`, pass as `-e MARM_API_KEY=your-key`. Use HTTP for multi-agent workflows because one MARM process coordinates database access.
+**Docker HTTP:** always requires `MARM_API_KEY` — Docker bridge networking means requests never arrive as loopback. Generate with `docker run --rm lyellr88/marm-mcp-server:latest --generate-key`, pass as `-e MARM_API_KEY=your-key`. Use HTTP for multi-agent workflows because one MARM process coordinates database access.
 
 **Docker STDIO:** no port or API key, best for private single-agent/local use. Multiple STDIO containers can share the same mounted `~/.marm` database, but heavy concurrent writers may hit normal SQLite locking; use Docker HTTP for Hermes-style multi-agent runs.
 
