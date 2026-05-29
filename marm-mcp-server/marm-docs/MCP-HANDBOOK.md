@@ -2,7 +2,7 @@
 
 ## Complete Usage Guide for Memory-Augmented AI
 
-**MARM v2.7.0 - Universal MCP Server for AI Memory Intelligence**
+**MARM v2.8.0 - Universal MCP Server for AI Memory Intelligence**
 
 ---
 
