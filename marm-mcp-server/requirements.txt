@@ -12,3 +12,4 @@ apscheduler>=3.10.4,<4.0.0
 psutil>=6.1.0,<7.0.0
 structlog>=24.4.0,<25.0.0
 httpx>=0.27.0,<1.0.0
+packaging>=24.0,<26.0

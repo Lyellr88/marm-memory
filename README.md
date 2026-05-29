@@ -5,7 +5,7 @@
      width="700"
      height="350">
 </picture>
-<h1 align="center">MARM: The AI That Remembers Your Conversations v2.6.2</h1>
+<h1 align="center">MARM: The AI That Remembers Your Conversations v2.7.0</h1>
 
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
@@ -53,7 +53,7 @@ Modern LLMs lose context over time, repeat prior ideas, and drift off requiremen
 |------------|--------------|------------------|
 | **Semantic Search** - Find by meaning using AI embeddings | **Unified Memory Layer** - Works with Claude, Qwen, Gemini, MCP clients | **Lean MCP Tool Surface** - Focused tools with lifecycle automation |
 | **Auto-Classification** - Content categorized (code, project, book, general) | **Cross-Platform Intelligence** - Different AIs learn from shared knowledge | **Database Optimization** - SQLite with WAL mode and connection pooling |
-| **Persistent Cross-Session Memory** - Memories survive across agent conversations | **User-Controlled Memory** - "Bring Your Own History," granular control | **Rate Limiting** - IP-based tiers for stability |
+| **Persistent Cross-Session Memory** - Memories survive across agent conversations | **User-Controlled Memory** - "Bring Your Own History," granular control | **Rate Limiting** - IP-based protection for stability |
 | **Smart Recall** - Vector similarity search with context-aware fallbacks | | **MCP Compliance** - Response size management for predictable performance |
 | | | **Docker Ready** - Containerized deployment with health/readiness checks |
 
@@ -95,6 +95,8 @@ Watch MARM install through Docker, connect to Claude, and share persistent memor
 - Docker HTTP = shared/always-on server (key required).
 - Docker STDIO = private containerized local use (no HTTP key).
 
+> **Swarm / multi-agent note:** The write queue is enabled by default to serialize memory writes through one worker. For shared HTTP deployments, use `--swarm` (200 RPM) or `--swarm-max` (600 RPM) when starting the server. `--trusted` disables rate limiting entirely for private deployments. STDIO is still best for private single-agent/local use.
+
 #### Local pip HTTP (zero config)
 
 ```bash
@@ -125,7 +127,7 @@ python -m marm_mcp_server.server_stdio
 
 ```bash
 # Step 1: generate key (do not add < > around the key)
-docker run --rm lyellr88/marm-mcp-server:latest python -m marm_mcp_server --generate-key
+docker run --rm lyellr88/marm-mcp-server:latest --generate-key
 
 # Step 2: run server
 docker pull lyellr88/marm-mcp-server:latest
@@ -141,13 +143,26 @@ docker run -d --name marm-mcp-server \
 codex mcp add marm-memory --url http://localhost:8001/mcp --bearer-token-env-var MARM_API_KEY
 ```
 
+#### Docker HTTP swarm mode
+
+```bash
+# --swarm: write queue on, 200 RPM — recommended for multi-agent shared servers
+docker run -d --name marm-mcp-server \
+  -p 127.0.0.1:8001:8001 \
+  -e SERVER_HOST=0.0.0.0 \
+  -e MARM_API_KEY=your-generated-key \
+  -v ~/.marm:/home/marm/.marm \
+  lyellr88/marm-mcp-server:latest --swarm
+```
+
 #### Docker STDIO (no HTTP key)
 
 ```bash
 docker run --rm -i \
   -v ~/.marm:/home/marm/.marm \
+  --entrypoint python \
   lyellr88/marm-mcp-server:latest \
-  python -m marm_mcp_server.server_stdio
+  -m marm_mcp_server.server_stdio
 ```
 
 **Most useful support info:**
@@ -194,7 +209,6 @@ The AI agent will automatically use the appropriate tools. Manual tool access is
 MARM now handles lifecycle work internally. Documentation loads on the first real tool call, session state initializes automatically, and documentation refreshes every 50 tool calls. Packaged docs are indexed into searchable memory with hash-based caching, so unchanged docs are skipped across restarts.
 
 **Architecture note:** MARM uses targeted parameterized dispatching tooling to keep MCP discovery lean without hiding behavior. Domain-specific tools such as `marm_notebook(action=...)` and `marm_delete(type=...)` group closely related operations behind explicit parameters, while recall, logging, and summaries stay separate so agents still choose the right capability clearly. This design ensures the total MCP schema footprint remains under 10KB while preserving full functionality.
-
 
 | **Category** | **Tool** | **Description** |
 |--------------|----------|-----------------|
@@ -288,7 +302,7 @@ MARM defaults to **localhost-only** (`127.0.0.1`). No credentials are required f
 
 **Pip + `SERVER_HOST=0.0.0.0`:** MARM auto-generates a key on first start, saves it to `~/.marm/.env`, and prints the client connection command once. Subsequent starts load silently.
 
-**Docker HTTP:** always requires `MARM_API_KEY` — Docker bridge networking means requests never arrive as loopback. Generate with `docker run --rm lyellr88/marm-mcp-server:latest python -m marm_mcp_server --generate-key`, pass as `-e MARM_API_KEY=your-key`. Use HTTP for multi-agent workflows because one MARM process coordinates database access.
+**Docker HTTP:** always requires `MARM_API_KEY` — Docker bridge networking means requests never arrive as loopback. Generate with `docker run --rm lyellr88/marm-mcp-server:latest --generate-key`, pass as `-e MARM_API_KEY=your-key`. Use HTTP for multi-agent workflows because one MARM process coordinates database access.
 
 **Docker STDIO:** no port or API key, best for private single-agent/local use. Multiple STDIO containers can share the same mounted `~/.marm` database, but heavy concurrent writers may hit normal SQLite locking; use Docker HTTP for Hermes-style multi-agent runs.
 
@@ -401,7 +415,7 @@ Derivatives should clearly indicate they are unofficial or experimental.
 - **[README.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/README.md)** - This file - ecosystem overview and MCP server guide
 - **[CONTRIBUTING.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/CONTRIBUTING.md)** - How to contribute to MARM
 - **[CHANGELOG.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/CHANGELOG.md)** - Version history and updates
-- **[ACKNOWLEDGMENTS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/ACKNOWLEDGMENTS.md)** - Contributors and acknowledgments
+- **[ACKNOWLEDGMENTS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/ACKNOWLEDGMENTS.md)** - Contributors and acknowledgments
 - **[ROADMAP.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/ROADMAP.md)** - Planned features and development roadmap
 - **[LICENSE](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/LICENSE)** - MIT license terms
 

@@ -8,7 +8,7 @@ MARM started as a personal answer to a simple problem: AI tools forget too much 
 
 This file is for recognition and project history. It is not the contribution guide.
 
-For contribution workflow, issues, pull requests, tests, and local development expectations, use the dedicated `CONTRIBUTING.md` guide once it is restored.
+For contribution workflow, issues, pull requests, tests, and local development expectations, use the dedicated `CONTRIBUTING.md` guide.
 
 ## Community Influence
 
@@ -69,7 +69,7 @@ Tested MARM across models and validated its performance in Gemini Pro. Provided 
 
 #### u/MykoJai168  
 
-**Vision Contributor** | Private DM - June 12, 2025 | (Referenced in [README.md](README.md))
+**Vision Contributor** | Private DM - June 12, 2025 | (Referenced in [README.md](../README.md))
 
 Sparked the architectural concept behind MARM's "Session Relay Tools" patch by proposing a layered, context-managed memory model. Offered collaboration, stress-testing interest, and early insight into multi-agent recall, which helped validate MARM's patch direction. Credited for contributing to the prompt-layer vision and user-side continuity design.
 
@@ -151,8 +151,8 @@ Project discussions should stay respectful, direct, and useful.
 
 ## Related Docs
 
-- [README.md](README.md) - Project overview and quick start
-- [MCP-HANDBOOK.md](MCP-HANDBOOK.md) - MCP usage guide
-- [PROTOCOL.md](docs/PROTOCOL.md) - Core memory protocol
-- [CHANGELOG.md](CHANGELOG.md) - Version history
+- [README.md](../README.md) - Project overview and quick start
+- [MCP-HANDBOOK.md](../MCP-HANDBOOK.md) - MCP usage guide
+- [PROTOCOL.md](PROTOCOL.md) - Core memory protocol
+- [CHANGELOG.md](../CHANGELOG.md) - Version history
 - [ROADMAP.md](ROADMAP.md) - Current direction and planned work

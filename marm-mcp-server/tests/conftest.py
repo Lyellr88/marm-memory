@@ -6,7 +6,7 @@ import sys
 from fastapi.testclient import TestClient
 
 
-def load_isolated_server(monkeypatch, tmp_path, api_key=""):
+def load_isolated_server(monkeypatch, tmp_path, api_key="", write_queue_enabled=False):
     """Import the server after pointing global state at a temporary database."""
     for name in list(sys.modules):
         if name == "marm_mcp_server" or name.startswith("marm_mcp_server."):
@@ -15,6 +15,7 @@ def load_isolated_server(monkeypatch, tmp_path, api_key=""):
     monkeypatch.setenv("MARM_DB_PATH", str(tmp_path / "marm_memory.db"))
     monkeypatch.setenv("MARM_ANALYTICS_DB_PATH", str(tmp_path / "analytics.db"))
     monkeypatch.setenv("SERVER_HOST", "127.0.0.1")
+    monkeypatch.setenv("WRITE_QUEUE_ENABLED", "1" if write_queue_enabled else "0")
     if api_key:
         monkeypatch.setenv("MARM_API_KEY", api_key)
     else:

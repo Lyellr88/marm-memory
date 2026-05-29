@@ -35,6 +35,11 @@ pids/
 *.pid
 *.seed
 *.pid.lock
+scripts/out/
+
+# Local install-helper prototype; not public-ready.
+scripts/mcp-client-commands.py
+scripts/tests/test_mcp_client_commands.py
 
 # Coverage
 coverage/

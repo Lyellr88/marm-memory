@@ -78,6 +78,39 @@ def test_import_marm_mcp_server_succeeds_with_clean_stdout(tmp_path):
     assert result.stdout == ""
 
 
+def test_runtime_presets_configure_rate_limit_and_write_queue(monkeypatch, tmp_path):
+    from conftest import load_isolated_server
+
+    server = load_isolated_server(monkeypatch, tmp_path, write_queue_enabled=True)
+    settings = __import__("marm_mcp_server.config.settings", fromlist=["settings"])
+    memory_module = __import__("marm_mcp_server.core.memory", fromlist=["memory"])
+    rate_limiter_module = __import__("marm_mcp_server.core.rate_limiter", fromlist=["rate_limiter"])
+
+    custom_only = server.apply_runtime_preset(rate_limit_rpm=150)
+    assert custom_only == {"mode": "custom", "rate_limit_rpm": 150, "write_queue_enabled": True}
+    assert settings.MARM_RATE_LIMIT_RPM == 150
+    assert memory_module.WRITE_QUEUE_ENABLED is True
+    assert rate_limiter_module.rate_limiter.limits["default"]["requests"] == 150
+
+    swarm = server.apply_runtime_preset(swarm=True)
+    assert swarm == {"mode": "swarm", "rate_limit_rpm": 200, "write_queue_enabled": True}
+    assert settings.MARM_RATE_LIMIT_RPM == 200
+    assert memory_module.WRITE_QUEUE_ENABLED is True
+    assert rate_limiter_module.rate_limiter.limits["default"]["requests"] == 200
+
+    swarm_max = server.apply_runtime_preset(swarm_max=True)
+    assert swarm_max == {"mode": "swarm-max", "rate_limit_rpm": 600, "write_queue_enabled": True}
+    assert rate_limiter_module.rate_limiter.limits["default"]["requests"] == 600
+
+    custom = server.apply_runtime_preset(swarm=True, rate_limit_rpm=150)
+    assert custom == {"mode": "custom", "rate_limit_rpm": 150, "write_queue_enabled": True}
+    assert rate_limiter_module.rate_limiter.limits["default"]["requests"] == 150
+
+    trusted = server.apply_runtime_preset(swarm_max=True, trusted=True, rate_limit_rpm=150)
+    assert trusted == {"mode": "trusted", "rate_limit_rpm": 0, "write_queue_enabled": True}
+    assert rate_limiter_module.rate_limiter.limits["default"]["requests"] == 0
+
+
 def _free_port():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(("127.0.0.1", 0))
@@ -113,8 +146,8 @@ def test_server_starts_and_health_returns_healthy(tmp_path):
         [sys.executable, "-m", "marm_mcp_server"],
         cwd=os.getcwd(),
         env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
     )
 
     try:

@@ -62,7 +62,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 # MCP Registry Labels for Docker Hub discovery
 LABEL org.opencontainers.image.title="MARM Universal MCP Server"
 LABEL org.opencontainers.image.description="Production-ready Universal MCP Server with advanced AI memory capabilities, semantic search, and professional-grade architecture"
-LABEL org.opencontainers.image.version="2.6.2"
+LABEL org.opencontainers.image.version="2.7.0"
 LABEL org.opencontainers.image.authors="Ryan Lyell - MARM Systems"
 LABEL org.opencontainers.image.url="https://marmsystems.com"
 LABEL org.opencontainers.image.source="https://github.com/Lyellr88/MARM-Systems"
@@ -79,8 +79,10 @@ ENV MARM_LOG_LEVEL=INFO
 # External access is controlled by the -p flag on the host side.
 ENV SERVER_HOST=0.0.0.0
 
-# Default: HTTP server mode (long-running, multi-client, API key required)
-CMD ["python", "-m", "marm_mcp_server"]
+# Default: HTTP server mode (long-running, multi-client, API key required).
+# CLI flags such as --swarm append cleanly after the image name.
+ENTRYPOINT ["python", "-m", "marm_mcp_server"]
+CMD []
 
 # ============================================================================
 # Build
@@ -104,6 +106,14 @@ CMD ["python", "-m", "marm_mcp_server"]
 #     -v ~/.marm:/home/marm/.marm \
 #     lyellr88/marm-mcp-server:latest
 #
+# Local swarm mode:
+#   docker run -d \
+#     --name marm-mcp-server \
+#     -p 127.0.0.1:8001:8001 \
+#     -e MARM_API_KEY=your-generated-key \
+#     -v ~/.marm:/home/marm/.marm \
+#     lyellr88/marm-mcp-server:latest --swarm
+#
 # Remote:
 #   docker run -d \
 #     --name marm-mcp-server \
@@ -125,8 +135,9 @@ CMD ["python", "-m", "marm_mcp_server"]
 # Direct run:
 #   docker run -i --rm \
 #     -v ~/.marm:/home/marm/.marm \
+#     --entrypoint python \
 #     lyellr88/marm-mcp-server:latest \
-#     python -m marm_mcp_server.server_stdio
+#     -m marm_mcp_server.server_stdio
 #
 # MCP client config (STDIO / Claude Desktop, Claude Code, Cursor, VS Code):
 #
@@ -141,8 +152,9 @@ CMD ["python", "-m", "marm_mcp_server"]
 #         "args": [
 #           "run", "-i", "--rm",
 #           "-v", "/Users/you/.marm:/home/marm/.marm",
+#           "--entrypoint", "python",
 #           "lyellr88/marm-mcp-server:latest",
-#           "python", "-m", "marm_mcp_server.server_stdio"
+#           "-m", "marm_mcp_server.server_stdio"
 #         ]
 #       }
 #     }
@@ -156,8 +168,9 @@ CMD ["python", "-m", "marm_mcp_server"]
 #         "args": [
 #           "run", "-i", "--rm",
 #           "-v", "C:\\Users\\you\\.marm:/home/marm/.marm",
+#           "--entrypoint", "python",
 #           "lyellr88/marm-mcp-server:latest",
-#           "python", "-m", "marm_mcp_server.server_stdio"
+#           "-m", "marm_mcp_server.server_stdio"
 #         ]
 #       }
 #     }

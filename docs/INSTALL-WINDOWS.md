@@ -2,7 +2,7 @@
 
 ## Universal Memory Intelligence Platform for AI Agents
 
-**MARM v2.6.2* - Memory Accurate Response Mode
+**MARM v2.7.0** - Memory Accurate Response Mode
 *Complete Windows installation guide*
 
 ---
@@ -93,8 +93,19 @@ Then restart your terminal.
 ```powershell
 git clone https://github.com/Lyellr88/MARM-Systems.git
 cd MARM-Systems\marm-mcp-server
-pip install -r requirements.txt
+pip install -e ".[dev]"
 python -m marm_mcp_server
+```
+
+### **Multi-Agent / Swarm Mode**
+
+For shared HTTP servers running multiple AI agents, use a preset flag:
+
+```powershell
+python -m marm_mcp_server --swarm        # 200 RPM, write queue on
+python -m marm_mcp_server --swarm-max    # 600 RPM, write queue on
+python -m marm_mcp_server --trusted      # rate limiting off, write queue on
+python -m marm_mcp_server --rate-limit-rpm 150  # custom RPM
 ```
 
 ### **After Installation:**
@@ -278,7 +289,7 @@ Invoke-WebRequest -Uri http://localhost:8001/health
 {
   "status": "healthy",
   "service": "MARM MCP Server",
-  "version": "2.6.2",
+  "version": "2.7.0",
   "timestamp": "2026-01-01T00:00:00+00:00",
   "database": "connected",
   "semantic_search": "available"
@@ -314,7 +325,7 @@ Invoke-WebRequest -Uri http://localhost:8001/health
 docker pull lyellr88/marm-mcp-server:latest
 docker stop marm-mcp-server
 docker rm marm-mcp-server
-docker run -d --name marm-mcp-server -p 127.0.0.1:8001:8001 -e SERVER_HOST=0.0.0.0 -e MARM_API_KEY=your-generated-key -v ~/.marm:/home/marm/.marm --restart unless-stopped lyellr88/marm-mcp-server:latest
+docker run -d --name marm-mcp-server -p 127.0.0.1:8001:8001 -e SERVER_HOST=0.0.0.0 -e MARM_API_KEY=your-generated-key -v ${HOME}\.marm:/home/marm/.marm --restart unless-stopped lyellr88/marm-mcp-server:latest
 ```
 
 ---
@@ -394,6 +405,9 @@ python -m marm_mcp_server
 | `MAX_DB_CONNECTIONS` | `5` | Database connection pool size |
 | `MARM_ANALYTICS_DB_PATH` | `marm_usage_analytics.db` | Override analytics database path |
 | `DEFAULT_SEMANTIC_MODEL` | `all-MiniLM-L6-v2` | AI model for semantic search |
+| `MARM_RATE_LIMIT_RPM` | `80` | HTTP rate limit (requests per minute per client IP). Set to `0` to disable. Overridden by `--swarm`, `--swarm-max`, `--trusted` presets. |
+| `WRITE_QUEUE_ENABLED` | `1` | Serialized memory write queue. Set to `0` only for debugging/direct-write comparisons. |
+| `MAX_QUEUE_SIZE` | `100` | Write queue capacity when `WRITE_QUEUE_ENABLED=1`. |
 | `MARM_STDIO_LOG_LEVEL` | `INFO` | STDIO log verbosity. Set to `DEBUG` for session names, query lengths, result counts. |
 | `MARM_STDIO_LOG_DIR` | `%USERPROFILE%\.marm\logs` | Override STDIO log directory. |
 

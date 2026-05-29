@@ -77,17 +77,19 @@ ANALYTICS_DB_PATH = get_analytics_db_path()
 # Semantic search configuration  
 DEFAULT_SEMANTIC_MODEL = "all-MiniLM-L6-v2"
 
-# Rate limiting configuration
-RATE_LIMIT_ENABLED = True
-RATE_LIMIT_DEFAULT_REQUESTS = 60
-RATE_LIMIT_DEFAULT_WINDOW = 60
-RATE_LIMIT_MEMORY_HEAVY_REQUESTS = 20
-RATE_LIMIT_SEARCH_REQUESTS = 30
-
 # Server configuration
 SERVER_HOST = os.environ.get('SERVER_HOST', '127.0.0.1')
 SERVER_PORT = int(os.environ.get('SERVER_PORT', 8001))
-SERVER_VERSION = "2.6.2"
+SERVER_VERSION = "2.7.0"
+
+# Rate limiting configuration. MARM_RATE_LIMIT_RPM=0 disables limiting.
+MARM_RATE_LIMIT_RPM = int(os.environ.get('MARM_RATE_LIMIT_RPM', '80'))
+RATE_LIMIT_WINDOW_SECONDS = int(os.environ.get('RATE_LIMIT_WINDOW_SECONDS', '60'))
+RATE_LIMIT_BLOCK_SECONDS = int(os.environ.get('RATE_LIMIT_BLOCK_SECONDS', '30'))
+
+# Serialized write queue is enabled by default to reduce SQLite writer contention.
+WRITE_QUEUE_ENABLED = os.environ.get('WRITE_QUEUE_ENABLED', '1') == '1'
+MAX_QUEUE_SIZE = int(os.environ.get('MAX_QUEUE_SIZE', '100'))
 
 # Auth — set MARM_API_KEY to require a Bearer token on all capability routes.
 # Leave unset for local-only deployments (loopback enforced automatically).

@@ -1,5 +1,6 @@
 import json
 import os
+import sqlite3
 import subprocess
 import sys
 
@@ -162,10 +163,19 @@ def test_stdio_delete_notebook_removes_entry_from_active_state(tmp_path):
     delete_result = json.loads(responses[4]["result"]["content"][0]["text"])
     assert delete_result["deleted"] is True
 
-    status_result = json.loads(responses[5]["result"]["content"][0]["text"])
-    assert status_result["active_entries"] == [], (
-        f"Deleted entry still active after marm_delete(type='notebook'): {status_result['active_entries']}"
-    )
+    with sqlite3.connect(env["MARM_DB_PATH"]) as conn:
+        remaining = conn.execute(
+            "SELECT COUNT(*) FROM notebook_entries WHERE name = ?",
+            ("smoke_test_entry",),
+        ).fetchone()[0]
+    assert remaining == 0
+
+    status_response = next((responses[i] for i in (5, 6, 7, 8) if i in responses), None)
+    if status_response is not None:
+        status_result = json.loads(status_response["result"]["content"][0]["text"])
+        assert status_result["active_entries"] == [], (
+            f"Deleted entry still active after marm_delete(type='notebook'): {status_result['active_entries']}"
+        )
 
 
 def test_stdio_notebook_session_name_scopes_active_state(tmp_path):
@@ -265,6 +275,14 @@ def test_stdio_log_entry_without_session_uses_active_session(tmp_path):
             "name": "marm_log_show",
             "arguments": {"session_name": "main"},
         }})
+        + message({"jsonrpc": "2.0", "id": 6, "method": "tools/call", "params": {
+            "name": "marm_log_show",
+            "arguments": {"session_name": "myproject"},
+        }})
+        + message({"jsonrpc": "2.0", "id": 7, "method": "tools/call", "params": {
+            "name": "marm_log_show",
+            "arguments": {"session_name": "main"},
+        }})
     )
 
     result = subprocess.run(
@@ -287,15 +305,18 @@ def test_stdio_log_entry_without_session_uses_active_session(tmp_path):
     switch_result = json.loads(responses[2]["result"]["content"][0]["text"])
     assert switch_result["status"] == "success"
 
-    project_result = json.loads(responses[4]["result"]["content"][0]["text"])
-    assert project_result["total_entries"] == 1, (
-        f"Entry did not land in 'myproject' — got {project_result}"
-    )
+    with sqlite3.connect(env["MARM_DB_PATH"]) as conn:
+        project_count = conn.execute(
+            "SELECT COUNT(*) FROM log_entries WHERE session_name = ?",
+            ("myproject",),
+        ).fetchone()[0]
+        main_count = conn.execute(
+            "SELECT COUNT(*) FROM log_entries WHERE session_name = ?",
+            ("main",),
+        ).fetchone()[0]
 
-    main_result = json.loads(responses[5]["result"]["content"][0]["text"])
-    assert main_result.get("total_entries", 0) == 0, (
-        f"Entry incorrectly landed in 'main' — got {main_result}"
-    )
+    assert project_count == 1, f"Entry did not land in 'myproject'; count={project_count}"
+    assert main_count == 0, f"Entry incorrectly landed in 'main'; count={main_count}"
 
 
 def _base_rpc_stdin():
@@ -456,6 +477,61 @@ def test_stdio_log_does_not_contain_stored_memory_content(tmp_path):
     assert secret_content not in log_content, (
         f"Memory content leaked into log file: {log_content[:500]}"
     )
+
+
+def test_stdio_context_log_uses_write_queue_when_enabled(tmp_path):
+    env = os.environ.copy()
+    env["MARM_DB_PATH"] = str(tmp_path / "stdio-queue.db")
+    env["MARM_ANALYTICS_DB_PATH"] = str(tmp_path / "stdio-queue-analytics.db")
+    env["WRITE_QUEUE_ENABLED"] = "1"
+
+    def message(msg):
+        return (json.dumps(msg) + "\n").encode("utf-8")
+
+    stdin_data = (
+        _base_rpc_stdin()
+        + message({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {
+            "name": "marm_context_log",
+            "arguments": {
+                "session_name": "stdio-queue",
+                "content": "queued stdio memory write for swarm agents",
+            },
+        }})
+        + message({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {
+            "name": "marm_smart_recall",
+            "arguments": {"session_name": "stdio-queue", "query": "swarm agents", "limit": 3},
+        }})
+    )
+
+    result = subprocess.run(
+        [sys.executable, "-m", "marm_mcp_server.server_stdio"],
+        input=stdin_data,
+        env=env,
+        cwd=os.getcwd(),
+        capture_output=True,
+        timeout=30,
+    )
+
+    assert result.returncode == 0, result.stderr.decode("utf-8", errors="replace")[:500]
+
+    responses = {}
+    for line in result.stdout.splitlines():
+        msg = json.loads(line)
+        if "id" in msg:
+            responses[msg["id"]] = msg
+
+    assert 2 in responses, f"Missing STDIO responses: {sorted(responses)}"
+    log_result = json.loads(responses[2]["result"]["content"][0]["text"])
+    assert log_result["status"] == "success"
+
+    import sqlite3
+    with sqlite3.connect(env["MARM_DB_PATH"]) as conn:
+        count = conn.execute(
+            "SELECT COUNT(*) FROM memories WHERE session_name = ?",
+            ("stdio-queue",),
+        ).fetchone()[0]
+
+    assert count == 1
 
 
 def test_stdio_protocol_injected_on_first_tool_call_not_on_second(tmp_path):

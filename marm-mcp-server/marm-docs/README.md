@@ -1,4 +1,4 @@
-# MARM: The AI That Remembers Your Conversations v2.6.2</h1>
+# MARM: The AI That Remembers Your Conversations v2.7.0
 
 ---
 
@@ -30,7 +30,7 @@ Modern LLMs lose context over time, repeat prior ideas, and drift off requiremen
 |------------|--------------|------------------|
 | **Semantic Search** - Find by meaning using AI embeddings | **Unified Memory Layer** - Works with Claude, Qwen, Gemini, MCP clients | **Lean MCP Tool Surface** - Focused tools with lifecycle automation |
 | **Auto-Classification** - Content categorized (code, project, book, general) | **Cross-Platform Intelligence** - Different AIs learn from shared knowledge | **Database Optimization** - SQLite with WAL mode and connection pooling |
-| **Persistent Cross-Session Memory** - Memories survive across agent conversations | **User-Controlled Memory** - "Bring Your Own History," granular control | **Rate Limiting** - IP-based tiers for stability |
+| **Persistent Cross-Session Memory** - Memories survive across agent conversations | **User-Controlled Memory** - "Bring Your Own History," granular control | **Rate Limiting** - IP-based protection for stability |
 | **Smart Recall** - Vector similarity search with context-aware fallbacks | | **MCP Compliance** - Response size management for predictable performance |
 | | | **Docker Ready** - Containerized deployment with health/readiness checks |
 
@@ -53,6 +53,8 @@ Modern LLMs lose context over time, repeat prior ideas, and drift off requiremen
 - Local HTTP/STDIO = fastest single-machine setup.
 - Docker HTTP = shared/always-on server (key required).
 - Docker STDIO = private containerized local use (no HTTP key).
+
+> **Swarm / multi-agent note:** The write queue is enabled by default to serialize memory writes through one worker. For shared HTTP deployments, use `--swarm` (200 RPM) or `--swarm-max` (600 RPM) when starting the server. `--trusted` disables rate limiting entirely for private deployments. STDIO is still best for private single-agent/local use.
 
 #### Local pip HTTP (zero config)
 
@@ -84,7 +86,7 @@ python -m marm_mcp_server.server_stdio
 
 ```bash
 # Step 1: generate key (do not add < > around the key)
-docker run --rm lyellr88/marm-mcp-server:latest python -m marm_mcp_server --generate-key
+docker run --rm lyellr88/marm-mcp-server:latest --generate-key
 
 # Step 2: run server
 docker pull lyellr88/marm-mcp-server:latest
@@ -100,13 +102,26 @@ docker run -d --name marm-mcp-server \
 codex mcp add marm-memory --url http://localhost:8001/mcp --bearer-token-env-var MARM_API_KEY
 ```
 
+#### Docker HTTP swarm mode
+
+```bash
+# --swarm: write queue on, 200 RPM — recommended for multi-agent shared servers
+docker run -d --name marm-mcp-server \
+  -p 127.0.0.1:8001:8001 \
+  -e SERVER_HOST=0.0.0.0 \
+  -e MARM_API_KEY=your-generated-key \
+  -v ~/.marm:/home/marm/.marm \
+  lyellr88/marm-mcp-server:latest --swarm
+```
+
 #### Docker STDIO (no HTTP key)
 
 ```bash
 docker run --rm -i \
   -v ~/.marm:/home/marm/.marm \
+  --entrypoint python \
   lyellr88/marm-mcp-server:latest \
-  python -m marm_mcp_server.server_stdio
+  -m marm_mcp_server.server_stdio
 ```
 
 **Most useful support info:**
@@ -238,7 +253,7 @@ MARM defaults to **localhost-only** (`127.0.0.1`). No credentials are required f
 
 **Pip + `SERVER_HOST=0.0.0.0`:** MARM auto-generates a key on first start, saves it to `~/.marm/.env`, and prints the client connection command once. Subsequent starts load silently.
 
-**Docker HTTP:** always requires `MARM_API_KEY` — Docker bridge networking means requests never arrive as loopback. Generate with `docker run --rm lyellr88/marm-mcp-server:latest python -m marm_mcp_server --generate-key`, pass as `-e MARM_API_KEY=your-key`. Use HTTP for multi-agent workflows because one MARM process coordinates database access.
+**Docker HTTP:** always requires `MARM_API_KEY` — Docker bridge networking means requests never arrive as loopback. Generate with `docker run --rm lyellr88/marm-mcp-server:latest --generate-key`, pass as `-e MARM_API_KEY=your-key`. Use HTTP for multi-agent workflows because one MARM process coordinates database access.
 
 **Docker STDIO:** no port or API key, best for private single-agent/local use. Multiple STDIO containers can share the same mounted `~/.marm` database, but heavy concurrent writers may hit normal SQLite locking; use Docker HTTP for Hermes-style multi-agent runs.
 

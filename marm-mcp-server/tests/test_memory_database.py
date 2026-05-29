@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 
 from marm_mcp_server.core.memory import MARMMemory, sanitize_content
@@ -71,6 +73,95 @@ async def test_memory_store_writes_sanitized_classified_rows_to_sqlite(tmp_path)
     results = await memory.recall_text_search("sqlite", session="unit-real-db", limit=3)
     assert len(results) == 1
     assert results[0]["id"] == memory_id
+
+
+@pytest.mark.asyncio
+async def test_store_memory_queued_disabled_uses_direct_write(tmp_path):
+    memory = MARMMemory(str(tmp_path / "memory.db"))
+    memory._encoder_failed = True
+
+    memory_id = await memory.store_memory_queued(
+        "direct queued helper write",
+        "queue-disabled",
+        queue_enabled=False,
+    )
+
+    assert memory._write_queue is None
+    with memory.get_connection() as conn:
+        row = conn.execute("SELECT content FROM memories WHERE id = ?", (memory_id,)).fetchone()
+
+    assert row[0] == "direct queued helper write"
+
+
+@pytest.mark.asyncio
+async def test_store_memory_queued_skips_startup_when_queue_already_running(monkeypatch, tmp_path):
+    from marm_mcp_server.core import memory as memory_module
+
+    monkeypatch.setattr(memory_module, "WRITE_QUEUE_ENABLED", True)
+    memory = MARMMemory(str(tmp_path / "memory.db"))
+    memory._encoder_failed = True
+    await memory.start_write_queue()
+
+    async def fail_if_called():
+        raise AssertionError("start_write_queue should not run once queue exists")
+
+    monkeypatch.setattr(memory, "start_write_queue", fail_if_called)
+
+    try:
+        memory_id = await memory.store_memory_queued("already running queue write", "queue-hot-path")
+    finally:
+        await memory.stop_write_queue()
+
+    with memory.get_connection() as conn:
+        row = conn.execute("SELECT session_name FROM memories WHERE id = ?", (memory_id,)).fetchone()
+
+    assert row[0] == "queue-hot-path"
+
+
+@pytest.mark.asyncio
+async def test_write_queue_serializes_concurrent_memory_writes(monkeypatch, tmp_path):
+    from marm_mcp_server.core import memory as memory_module
+
+    monkeypatch.setattr(memory_module, "WRITE_QUEUE_ENABLED", True)
+    monkeypatch.setattr(memory_module, "MAX_QUEUE_SIZE", 20)
+    memory = MARMMemory(str(tmp_path / "memory.db"))
+    memory._encoder_failed = True
+
+    try:
+        memory_ids = await asyncio.gather(*[
+            memory.store_memory_queued(f"queued write {index}", "queue-enabled")
+            for index in range(10)
+        ])
+    finally:
+        await memory.stop_write_queue()
+
+    assert len(set(memory_ids)) == 10
+    with memory.get_connection() as conn:
+        count = conn.execute(
+            "SELECT COUNT(*) FROM memories WHERE session_name = ?",
+            ("queue-enabled",),
+        ).fetchone()[0]
+
+    assert count == 10
+
+
+@pytest.mark.asyncio
+async def test_write_queue_propagates_worker_errors(monkeypatch, tmp_path):
+    from marm_mcp_server.core import memory as memory_module
+
+    monkeypatch.setattr(memory_module, "WRITE_QUEUE_ENABLED", True)
+    memory = MARMMemory(str(tmp_path / "memory.db"))
+
+    async def failing_store(*args, **kwargs):
+        raise RuntimeError("write failed")
+
+    monkeypatch.setattr(memory, "store_memory", failing_store)
+
+    try:
+        with pytest.raises(RuntimeError, match="write failed"):
+            await memory.store_memory_queued("bad write", "queue-errors")
+    finally:
+        await memory.stop_write_queue()
 
 
 @pytest.mark.asyncio

@@ -4,6 +4,11 @@ import time
 import threading
 from typing import Dict, Optional, Tuple
 from collections import defaultdict, deque
+from ..config.settings import (
+    MARM_RATE_LIMIT_RPM,
+    RATE_LIMIT_BLOCK_SECONDS,
+    RATE_LIMIT_WINDOW_SECONDS,
+)
 
 class IPRateLimiter:
     """Simple IP-based rate limiter for preventing abuse without authentication"""
@@ -17,28 +22,27 @@ class IPRateLimiter:
         self.cleanup_lock = threading.Lock()
         self.last_cleanup = time.time()
         
-        # Rate limiting configuration
-        self.limits = {
-            # Standard endpoints - generous limits for normal use
-            'default': {
-                'requests': 60,       # 60 requests
-                'window': 60,         # per minute
-                'block_duration': 30  # 30s cooldown
-            },
-            # Memory-intensive endpoints — raised to handle AI burst at session start
-            'memory_heavy': {
-                'requests': 60,       # 60 requests
-                'window': 60,         # per minute
-                'block_duration': 30  # 30s cooldown (was 600s)
-            },
-            # Search endpoints - moderate limits
-            'search': {
-                'requests': 60,       # 60 requests
-                'window': 60,         # per minute
-                'block_duration': 30  # 30s cooldown
-            }
+        self.configure(
+            requests=MARM_RATE_LIMIT_RPM,
+            window=RATE_LIMIT_WINDOW_SECONDS,
+            block_duration=RATE_LIMIT_BLOCK_SECONDS,
+        )
+
+    def configure(self, requests: int, window: int = 60, block_duration: int = 30) -> None:
+        """Apply one shared HTTP/MCP rate limit to all endpoint buckets."""
+        config = {
+            'requests': requests,
+            'window': window,
+            'block_duration': block_duration,
         }
-    
+        self.limits = {
+            'default': config.copy(),
+            'memory_heavy': config.copy(),
+            'search': config.copy(),
+        }
+        self.request_buckets.clear()
+        self.blocked_ips.clear()
+
     def is_allowed(self, client_ip: str, endpoint_type: str = 'default') -> Tuple[bool, Optional[str]]:
         """Check if request is allowed, return (allowed, reason_if_blocked)"""
         current_time = time.time()
@@ -58,6 +62,8 @@ class IPRateLimiter:
         
         # Get rate limit config for this endpoint type
         config = self.limits.get(endpoint_type, self.limits['default'])
+        if config['requests'] == 0:
+            return True, None
         
         # Get request bucket for this IP
         bucket = self.request_buckets[client_ip]

@@ -937,7 +937,7 @@ This release introduces a complete UI/UX transformation with the implementation 
 
 ### **Documentation Consistency Pass**
 
-- **Docker key generation** standardized to `docker run --rm lyellr88/marm-mcp-server:latest python -m marm_mcp_server --generate-key` — no pip install required for Docker users
+- **Docker key generation** standardized to `docker run --rm lyellr88/marm-mcp-server:latest --generate-key` — no pip install required for Docker users
 - **README Security & Configuration section** rewritten with clear per-path explanation: pip+localhost (zero config), pip+`0.0.0.0` (auto-generated), Docker (manual `--generate-key`)
 - **INSTALL-WINDOWS and INSTALL-LINUX** env vars tables now include `SERVER_HOST` and `MARM_API_KEY` rows with auto-gen and `--generate-key` descriptions
 - **FAQ.md** Docker install row corrected: added `--generate-key` step, `MARM_API_KEY` in run command, `--header` in client command. Also corrected stale pip version `2.2.3` → `2.2.7`
@@ -1229,7 +1229,7 @@ Suppresses benign `WinError 10054` / `ConnectionResetError` log spam from `async
 
 `memory.py` now uses `_safe_print()` for model loading output — falls back to `sys.stderr.buffer` on `UnicodeEncodeError` to prevent charmap crashes on Windows terminals and avoids polluting STDIO stdout.
 
-### Tests
+### v2.6.0 Tests
 
 - 4 new STDIO logging regression tests: log file creation, tool call logging, DEBUG session name inclusion, memory content not leaked
 - New `test_server_logging.py` covering HTTP server logging behavior
@@ -1282,7 +1282,7 @@ marm_notebook(action="add"|"use"|"show"|"status"|"clear", name=None, data=None, 
 - Removes stale internal naming by replacing `ContextualLogRequest` with `ContextLogRequest`
 - Treats the change as part of the v2.6.1 tool-surface cleanup
 
-### Tests
+### v2.6.1 Tests
 
 - Added HTTP regression coverage proving protocol context is injected on the first MCP tool call and not repeated on the second
 - Added STDIO regression coverage proving protocol context is injected once
@@ -1291,3 +1291,81 @@ marm_notebook(action="add"|"use"|"show"|"status"|"clear", name=None, data=None, 
 - Updated HTTP and STDIO tests for the `marm_context_log` rename
 
 </details>
+
+---
+
+<details>
+<summary><strong>May 26th, 2026: Notebook Session Scoping & CI Hardening (v2.7.0)</strong></summary>
+
+### Notebook Session Scoping
+
+`marm_notebook` now accepts an optional `session_name` parameter (default: `"main"`) that scopes active notebook state per client. Previously, `use` and `clear` from any caller overwrote the single global active list, breaking multi-client HTTP mode, shared Docker deployments, and swarm-style agent workflows.
+
+```text
+marm_notebook(action="use"|"status"|"clear", session_name="my_project")
+```
+
+- Saved notebook entries remain global and reusable across sessions
+- Active instruction lists are now isolated per `session_name`
+- `marm_delete(type="notebook")` removes deleted entries from every active session scope
+- `session_name` is normalized (stripped) and validated at dispatch — whitespace-only values are rejected
+- Existing clients that do not send `session_name` continue to work unchanged via the `"main"` default
+
+### STDIO Teardown Hardening
+
+- Replaced string/repr substring matching in `_is_graceful_teardown()` with concrete AnyIO `isinstance` checks (`ClosedResourceError`, `EndOfStream`, `BrokenResourceError`)
+- Added recursive `ExceptionGroup` unwrapping — every sub-exception must be a known teardown type before the group is swallowed
+- Widened `except Exception` to `except BaseException` so `BaseExceptionGroup` is also handled
+
+### CI Hardening
+
+- Unified dependency install across CI workflows to `pip install -e './marm-mcp-server[dev]'` — single source of truth matching `pyproject.toml` constraints
+- Fixed `publish-mcp.yml` test step: was checking `tests/` at repo root (always missing), now runs from `marm-mcp-server/` working directory
+- Aligned `fastmcp` pin to `>=3.2.0,<3.3.0` across `requirements.txt`, `requirements_stdio.txt`, and `pyproject.toml`
+- Updated pip cache keys to hash `pyproject.toml` instead of `requirements.txt`
+- Bumped `setup-python` to `@v5` consistently across both workflows
+- Added `persist-credentials: false` to checkout step in PR validation
+
+### v2.7.0 Tests
+
+- Added service-level isolation test proving session A and session B do not overwrite each other
+- Added service-level clear-scoping test proving `clear` only empties the requested session
+- Added service-level delete-cleanup test proving `remove_active_notebook_entry` clears all sessions
+- Added HTTP regression test with two active sessions confirming full isolation end-to-end
+- Added STDIO subprocess regression test proving explicit `session_name` routes correctly over the JSON-RPC transport
+- Added regression test for mixed `ExceptionGroup` — a group containing non-teardown exceptions is not swallowed
+- Added whitespace validation tests for blank `session_name`, blank `name`, and comma-only `names`
+
+</details>
+
+---
+
+<details>
+<summary><strong>May 29th, 2026: Write Queue & Swarm Rate Presets (v2.8.0)</strong></summary>
+
+### Write Queue & Swarm Runtime Modes
+
+- Added HTTP server runtime presets for multi-agent deployments:
+  - `--swarm`: enables the write queue and sets the shared HTTP rate limit to 200 RPM
+  - `--swarm-max`: enables the write queue and sets the shared HTTP rate limit to 600 RPM
+  - `--trusted`: enables the write queue and disables HTTP rate limiting for private deployments
+  - `--rate-limit-rpm N`: explicit custom RPM override, with `0` disabling rate limiting
+- Raised the default shared HTTP rate-limit bucket to 80 RPM for normal local use and small agent groups.
+- Made rate limiting settings-driven and resettable at runtime, including a `0` RPM disable sentinel.
+- Aligned `/mcp` requests to the shared default bucket so real MCP traffic is measured and limited consistently.
+
+### Smoke Testing & Validation
+
+- Added direct write-queue smoke testing for concurrent SQLite writes with isolated temp DBs.
+- Added HTTP write/RPM smoke testing with spawned isolated servers, compact JSON artifacts, per-step clean rate-limit buckets, custom RPM testing, and preset coverage.
+- Added focused regression tests for runtime preset behavior, disabled rate limiting, Docker STDIO entrypoint behavior, and STDIO transport stability.
+
+### Docker & Dependencies
+
+- Switched Docker startup to an `ENTRYPOINT` shape so flags like `--swarm` append naturally after the image name.
+- Updated Docker STDIO examples to override the entrypoint with `python -m marm_mcp_server.server_stdio`.
+- Added `packaging` as an explicit dependency because FastMCP imports it during STDIO startup inside Docker.
+- Removed the unfinished MCP client command generator prototype from repository tracking and ignored it locally until it is public-ready.
+
+</details>
+

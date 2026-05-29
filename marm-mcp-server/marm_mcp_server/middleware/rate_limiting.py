@@ -4,6 +4,7 @@ from fastapi import Request, HTTPException
 from fastapi.responses import JSONResponse
 import time
 from ..core.rate_limiter import rate_limiter
+from ..config.settings import RATE_LIMIT_BLOCK_SECONDS
 
 _TRUSTED_PROXY_IPS = {"127.0.0.1", "::1"}
 
@@ -27,6 +28,8 @@ def get_client_ip(request: Request) -> str:
 
 def determine_endpoint_type(path: str) -> str:
     """Classify endpoint for rate limiting rules"""
+    if path == '/mcp':
+        return 'default'
     if any(endpoint in path for endpoint in ['/marm_smart_recall']):
         return 'memory_heavy'
     elif any(endpoint in path for endpoint in ['/marm_summary', '/search']):
@@ -49,7 +52,7 @@ async def rate_limit_middleware(request: Request, call_next):
     allowed, reason = rate_limiter.is_allowed(client_ip, endpoint_type)
     
     if not allowed:
-        retry_after = 300
+        retry_after = RATE_LIMIT_BLOCK_SECONDS
         if client_ip in rate_limiter.blocked_ips:
             retry_after = max(1, int(rate_limiter.blocked_ips[client_ip] - time.time()))
         return JSONResponse(
