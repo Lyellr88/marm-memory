@@ -76,14 +76,15 @@ async def test_memory_store_writes_sanitized_classified_rows_to_sqlite(tmp_path)
 
 
 @pytest.mark.asyncio
-async def test_store_memory_queued_disabled_uses_direct_write(monkeypatch, tmp_path):
-    from marm_mcp_server.core import memory as memory_module
-
-    monkeypatch.setattr(memory_module, "WRITE_QUEUE_ENABLED", False)
+async def test_store_memory_queued_disabled_uses_direct_write(tmp_path):
     memory = MARMMemory(str(tmp_path / "memory.db"))
     memory._encoder_failed = True
 
-    memory_id = await memory.store_memory_queued("direct queued helper write", "queue-disabled")
+    memory_id = await memory.store_memory_queued(
+        "direct queued helper write",
+        "queue-disabled",
+        queue_enabled=False,
+    )
 
     assert memory._write_queue is None
     with memory.get_connection() as conn:

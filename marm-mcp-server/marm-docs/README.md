@@ -1,4 +1,4 @@
-# MARM: The AI That Remembers Your Conversations v2.7.0</h1>
+# MARM: The AI That Remembers Your Conversations v2.7.0
 
 ---
 
@@ -30,7 +30,7 @@ Modern LLMs lose context over time, repeat prior ideas, and drift off requiremen
 |------------|--------------|------------------|
 | **Semantic Search** - Find by meaning using AI embeddings | **Unified Memory Layer** - Works with Claude, Qwen, Gemini, MCP clients | **Lean MCP Tool Surface** - Focused tools with lifecycle automation |
 | **Auto-Classification** - Content categorized (code, project, book, general) | **Cross-Platform Intelligence** - Different AIs learn from shared knowledge | **Database Optimization** - SQLite with WAL mode and connection pooling |
-| **Persistent Cross-Session Memory** - Memories survive across agent conversations | **User-Controlled Memory** - "Bring Your Own History," granular control | **Rate Limiting** - IP-based tiers for stability |
+| **Persistent Cross-Session Memory** - Memories survive across agent conversations | **User-Controlled Memory** - "Bring Your Own History," granular control | **Rate Limiting** - IP-based protection for stability |
 | **Smart Recall** - Vector similarity search with context-aware fallbacks | | **MCP Compliance** - Response size management for predictable performance |
 | | | **Docker Ready** - Containerized deployment with health/readiness checks |
 
@@ -54,7 +54,7 @@ Modern LLMs lose context over time, repeat prior ideas, and drift off requiremen
 - Docker HTTP = shared/always-on server (key required).
 - Docker STDIO = private containerized local use (no HTTP key).
 
-> **Swarm / multi-agent note:** For shared HTTP deployments, enable the write queue with `WRITE_QUEUE_ENABLED=1`. This works with local HTTP, Docker HTTP, and hosted HTTP. It serializes memory writes inside one MARM server process to reduce SQLite writer contention when multiple agents share the same memory server. STDIO is still best for private single-agent/local use.
+> **Swarm / multi-agent note:** The write queue is enabled by default to serialize memory writes through one worker. For shared HTTP deployments, use `--swarm` (200 RPM) or `--swarm-max` (600 RPM) when starting the server. `--trusted` disables rate limiting entirely for private deployments. STDIO is still best for private single-agent/local use.
 
 #### Local pip HTTP (zero config)
 
@@ -102,13 +102,26 @@ docker run -d --name marm-mcp-server \
 codex mcp add marm-memory --url http://localhost:8001/mcp --bearer-token-env-var MARM_API_KEY
 ```
 
+#### Docker HTTP swarm mode
+
+```bash
+# --swarm: write queue on, 200 RPM — recommended for multi-agent shared servers
+docker run -d --name marm-mcp-server \
+  -p 127.0.0.1:8001:8001 \
+  -e SERVER_HOST=0.0.0.0 \
+  -e MARM_API_KEY=your-generated-key \
+  -v ~/.marm:/home/marm/.marm \
+  lyellr88/marm-mcp-server:latest --swarm
+```
+
 #### Docker STDIO (no HTTP key)
 
 ```bash
 docker run --rm -i \
   -v ~/.marm:/home/marm/.marm \
+  --entrypoint python \
   lyellr88/marm-mcp-server:latest \
-  python -m marm_mcp_server.server_stdio
+  -m marm_mcp_server.server_stdio
 ```
 
 **Most useful support info:**
