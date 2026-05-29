@@ -81,7 +81,7 @@ def test_import_marm_mcp_server_succeeds_with_clean_stdout(tmp_path):
 def test_runtime_presets_configure_rate_limit_and_write_queue(monkeypatch, tmp_path):
     from conftest import load_isolated_server
 
-    server = load_isolated_server(monkeypatch, tmp_path)
+    server = load_isolated_server(monkeypatch, tmp_path, write_queue_enabled=True)
     settings = __import__("marm_mcp_server.config.settings", fromlist=["settings"])
     memory_module = __import__("marm_mcp_server.core.memory", fromlist=["memory"])
     rate_limiter_module = __import__("marm_mcp_server.core.rate_limiter", fromlist=["rate_limiter"])
