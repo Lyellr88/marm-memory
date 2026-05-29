@@ -2,7 +2,7 @@
 
 ## Universal Memory Intelligence Platform for AI Agents
 
-**MARM v2.7.0** - Memory Accurate Response Mode
+**MARM v2.8.0** - Memory Accurate Response Mode
 *Docker deployment guide for Windows, Mac, and Linux*
 
 ---
