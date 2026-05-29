@@ -91,6 +91,11 @@ RATE_LIMIT_BLOCK_SECONDS = int(os.environ.get('RATE_LIMIT_BLOCK_SECONDS', '30'))
 WRITE_QUEUE_ENABLED = os.environ.get('WRITE_QUEUE_ENABLED', '1') == '1'
 MAX_QUEUE_SIZE = int(os.environ.get('MAX_QUEUE_SIZE', '100'))
 
+# Consolidation — default off. CONSOLIDATION_ENABLED=1 activates hash dedup (Layer 1)
+# and semantic merge (Layer 2). Threshold only applies to semantic merge.
+CONSOLIDATION_ENABLED = os.environ.get('CONSOLIDATION_ENABLED', '0') == '1'
+CONSOLIDATION_THRESHOLD = float(os.environ.get('CONSOLIDATION_THRESHOLD', '0.92'))
+
 # Auth — set MARM_API_KEY to require a Bearer token on all capability routes.
 # Leave unset for local-only deployments (loopback enforced automatically).
 MARM_API_KEY = os.environ.get('MARM_API_KEY', '')

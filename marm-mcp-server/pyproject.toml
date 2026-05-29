@@ -95,6 +95,7 @@ disallow_untyped_defs = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+addopts = "--basetemp=.pytest_tmp"
 
 # MCP Server Configuration
 [project.entry-points."mcp.servers"]

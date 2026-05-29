@@ -58,13 +58,16 @@ def _strip_script_tags(text: str) -> str:
 
 # Import configuration
 from ..config.settings import (
-    SEMANTIC_SEARCH_AVAILABLE, 
-    DEFAULT_DB_PATH, 
+    SEMANTIC_SEARCH_AVAILABLE,
+    DEFAULT_DB_PATH,
     MAX_DB_CONNECTIONS,
     DEFAULT_SEMANTIC_MODEL,
     MAX_QUEUE_SIZE,
     WRITE_QUEUE_ENABLED,
+    CONSOLIDATION_ENABLED,
+    CONSOLIDATION_THRESHOLD,
 )
+from .consolidation import compute_content_hash, find_exact_duplicate, find_semantic_duplicate
 from .write_queue import WriteQueue
 
 # Try to import sentence transformer if available
@@ -323,6 +326,11 @@ class MARMMemory:
             if "memory_id" not in existing_cols:
                 conn.execute("ALTER TABLE doc_index ADD COLUMN memory_id TEXT")
 
+            # Idempotent migration: add content_hash column for consolidation Layer 1
+            mem_cols = {row[1] for row in conn.execute("PRAGMA table_info(memories)").fetchall()}
+            if "content_hash" not in mem_cols:
+                conn.execute("ALTER TABLE memories ADD COLUMN content_hash TEXT")
+
             conn.commit()
     
     def _load_encoder_lazily(self) -> bool:
@@ -367,18 +375,81 @@ class MARMMemory:
         else:
             return 'general'
     
+    async def update_memory(self, memory_id: str, new_content: str) -> None:
+        """Append new_content into an existing memory and record the merge in metadata.
+
+        Recomputes content_hash and embedding so Layer 1 dedup and semantic recall
+        stay accurate after the merge.
+        """
+        with self.get_connection() as conn:
+            row = conn.execute(
+                "SELECT content, metadata FROM memories WHERE id = ?", (memory_id,)
+            ).fetchone()
+            if row is None:
+                return
+            existing_content, metadata_json = row
+            metadata = json.loads(metadata_json) if metadata_json else {}
+            merged_content = f"{existing_content}\n[merged] {new_content}"
+            merged_at = datetime.now(timezone.utc).isoformat()
+            if "merge_history" not in metadata:
+                metadata["merge_history"] = []
+            metadata["merge_history"].append({
+                "merged_at": merged_at,
+                "content_preview": new_content[:100],
+            })
+
+            merged_hash = compute_content_hash(merged_content)
+
+            # Recompute embedding — keep existing if encoder unavailable
+            merged_embedding_bytes = None
+            encoder_ok = merged_content.strip() and self._load_encoder_lazily()
+            if encoder_ok:
+                try:
+                    merged_embedding_bytes = self.encoder.encode(merged_content).tobytes()
+                except Exception as e:
+                    print(f"Failed to regenerate embedding after merge: {e}")
+
+            if merged_embedding_bytes is not None:
+                conn.execute(
+                    "UPDATE memories SET content = ?, metadata = ?, content_hash = ?, embedding = ? WHERE id = ?",
+                    (merged_content, json.dumps(metadata), merged_hash, merged_embedding_bytes, memory_id),
+                )
+            else:
+                conn.execute(
+                    "UPDATE memories SET content = ?, metadata = ?, content_hash = ? WHERE id = ?",
+                    (merged_content, json.dumps(metadata), merged_hash, memory_id),
+                )
+
     async def store_memory(self, content: str, session: str, context_type: str = "general", metadata: Dict = None) -> str:
         """Store content with vector embedding for semantic search"""
-        # Sanitize content to prevent XSS attacks
         sanitized_content = sanitize_content(content)
-        
+
         if context_type == "general":
             context_type = await self.auto_classify_content(sanitized_content)
-            
+
+        content_hash = compute_content_hash(sanitized_content)
+        normalized_content = sanitized_content.lower().strip()
+
+        # Layer 1: exact duplicate check — runs before embedding to avoid wasted model work
+        if CONSOLIDATION_ENABLED:
+            with self.get_connection() as conn:
+                existing_id = find_exact_duplicate(conn, content_hash, session, normalized_content)
+                if existing_id:
+                    return existing_id
+
+        # Layer 2: semantic near-duplicate check — skipped gracefully if encoder unavailable
+        if CONSOLIDATION_ENABLED:
+            existing_id = await find_semantic_duplicate(
+                self, sanitized_content, session, CONSOLIDATION_THRESHOLD
+            )
+            if existing_id:
+                await self.update_memory(existing_id, sanitized_content)
+                return existing_id
+
         memory_id = str(uuid.uuid4())
         timestamp = datetime.now(timezone.utc).isoformat()
         metadata = metadata or {}
-        
+
         # Generate embedding for semantic search (lazy load encoder if needed)
         embedding_bytes = None
         if sanitized_content.strip() and self._load_encoder_lazily():
@@ -387,23 +458,18 @@ class MARMMemory:
                 embedding_bytes = embedding.tobytes()
             except Exception as e:
                 print(f"Failed to generate embedding: {e}")
-        
+
         with self.get_connection() as conn:
-            # Store sanitized memory
             conn.execute('''
-                INSERT INTO memories (id, session_name, content, embedding, timestamp, context_type, metadata)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            ''', (memory_id, session, sanitized_content, embedding_bytes, timestamp, context_type, json.dumps(metadata)))
-            
-            # Update session access time
+                INSERT INTO memories (id, session_name, content, embedding, content_hash, timestamp, context_type, metadata)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (memory_id, session, sanitized_content, embedding_bytes, content_hash, timestamp, context_type, json.dumps(metadata)))
+
             conn.execute('''
                 INSERT OR REPLACE INTO sessions (session_name, last_accessed)
                 VALUES (?, ?)
             ''', (session, timestamp))
-        
-        # Note: events system will be handled by the main application
-        # We don't import it here to avoid circular dependencies
-        
+
         return memory_id
 
     async def store_memory_queued(
