@@ -87,9 +87,9 @@ def test_runtime_presets_configure_rate_limit_and_write_queue(monkeypatch, tmp_p
     rate_limiter_module = __import__("marm_mcp_server.core.rate_limiter", fromlist=["rate_limiter"])
 
     custom_only = server.apply_runtime_preset(rate_limit_rpm=150)
-    assert custom_only == {"mode": "custom", "rate_limit_rpm": 150, "write_queue_enabled": False}
+    assert custom_only == {"mode": "custom", "rate_limit_rpm": 150, "write_queue_enabled": True}
     assert settings.MARM_RATE_LIMIT_RPM == 150
-    assert memory_module.WRITE_QUEUE_ENABLED is False
+    assert memory_module.WRITE_QUEUE_ENABLED is True
     assert rate_limiter_module.rate_limiter.limits["default"]["requests"] == 150
 
     swarm = server.apply_runtime_preset(swarm=True)

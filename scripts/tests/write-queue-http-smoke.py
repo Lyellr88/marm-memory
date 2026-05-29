@@ -64,7 +64,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--spawn-server", action="store_true", help="Start a local server subprocess for the run.")
     parser.add_argument("--spawn-port", type=int, default=18001, help="Port used when --spawn-server is set.")
-    parser.add_argument("--queue-enabled", action="store_true", help="Enable WRITE_QUEUE_ENABLED=1 when spawning server.")
+    parser.add_argument(
+        "--queue-disabled",
+        action="store_true",
+        help="Set WRITE_QUEUE_ENABLED=0 when spawning server. Queue is enabled by default.",
+    )
     parser.add_argument(
         "--server-preset",
         choices=["none", "swarm", "swarm-max", "trusted"],
@@ -273,7 +277,7 @@ def spawn_server(args: argparse.Namespace, port: int | None = None) -> tuple[sub
     env["SERVER_PORT"] = str(resolved_port)
     env["MARM_DB_PATH"] = str(db_path)
     env["MARM_ANALYTICS_DB_PATH"] = str(analytics_path)
-    env["WRITE_QUEUE_ENABLED"] = "1" if args.queue_enabled else "0"
+    env["WRITE_QUEUE_ENABLED"] = "0" if args.queue_disabled else "1"
     env["MAX_QUEUE_SIZE"] = str(args.max_queue_size)
     env.pop("MARM_API_KEY", None)
 
@@ -294,7 +298,7 @@ def spawn_server(args: argparse.Namespace, port: int | None = None) -> tuple[sub
 
 
 def expected_write_queue_enabled(args: argparse.Namespace) -> bool:
-    return args.queue_enabled or args.server_preset in {"swarm", "swarm-max", "trusted"}
+    return not args.queue_disabled or args.server_preset in {"swarm", "swarm-max", "trusted"}
 
 
 def stop_server(proc: subprocess.Popen) -> None:
@@ -311,8 +315,8 @@ def main() -> int:
     if args.total_requests <= 0 or args.concurrency <= 0:
         print("total-requests and concurrency must be positive integers.")
         return 2
-    if args.queue_enabled and not args.spawn_server:
-        print("warning: --queue-enabled has no effect without --spawn-server (cannot change a running server's queue state)")
+    if args.queue_disabled and not args.spawn_server:
+        print("warning: --queue-disabled has no effect without --spawn-server (cannot change a running server's queue state)")
     if args.server_preset != "none" and not args.spawn_server:
         print("warning: --server-preset has no effect without --spawn-server")
     if args.server_rate_limit_rpm is not None and not args.spawn_server:
@@ -416,7 +420,7 @@ def main() -> int:
                 "spawn_server": args.spawn_server,
                 "spawn_server_per_step": args.spawn_server,
                 "spawn_start_port": args.spawn_port,
-                "queue_enabled": args.queue_enabled,
+                "queue_disabled": args.queue_disabled,
                 "expected_write_queue_enabled": expected_write_queue_enabled(args),
                 "server_preset": args.server_preset,
                 "server_rate_limit_rpm": args.server_rate_limit_rpm,

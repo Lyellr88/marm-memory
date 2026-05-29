@@ -32,6 +32,8 @@ Use this to test real HTTP behavior, spawned server presets, rate limiting, and 
 
 With `--spawn-server`, each request step starts a fresh isolated server and temp DB. That prevents one step from burning rate-limit tokens for the next step.
 
+The spawned server uses the production default write queue behavior, so the queue is enabled unless `--queue-disabled` is supplied for direct-write comparison.
+
 ### Custom High-RPM Queue Pressure
 
 This mostly removes rate limiting so queue/write behavior is easier to see.

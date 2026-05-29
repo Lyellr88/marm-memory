@@ -274,7 +274,7 @@ MARM automatically categorizes content:
 
 | Flag | Rate Limit | Write Queue | Use When |
 |------|------------|-------------|----------|
-| *(none)* | 80 RPM | env default | Normal local use and small 3-5 agent setups |
+| *(none)* | 80 RPM | enabled | Normal local use and small 3-5 agent setups |
 | `--swarm` | 200 RPM | enabled | Shared HTTP server, roughly 15-30 agents depending on write style |
 | `--swarm-max` | 600 RPM | enabled | Heavier local/private swarm, roughly 50-100 agents depending on write style |
 | `--trusted` | disabled | enabled | Private/trusted deployments only |
@@ -286,7 +286,7 @@ python -m marm_mcp_server --swarm-max
 python -m marm_mcp_server --trusted
 ```
 
-The write queue serializes memory writes through one internal async queue to reduce SQLite writer contention. Swarm presets enable it automatically. It only controls write ordering; it does not merge, summarize, or alter memory content.
+The write queue is enabled by default and serializes memory writes through one internal async queue to reduce SQLite writer contention. Swarm presets tune the HTTP rate limit on top of that queue behavior. It only controls write ordering; it does not merge, summarize, or alter memory content.
 
 ---
 

@@ -95,7 +95,7 @@ Watch MARM install through Docker, connect to Claude, and share persistent memor
 - Docker HTTP = shared/always-on server (key required).
 - Docker STDIO = private containerized local use (no HTTP key).
 
-> **Swarm / multi-agent note:** For shared HTTP deployments, use `--swarm` (200 RPM, write queue on) or `--swarm-max` (600 RPM) when starting the server. `--trusted` disables rate limiting entirely for private deployments. These presets replace manual `WRITE_QUEUE_ENABLED=1` tuning. STDIO is still best for private single-agent/local use.
+> **Swarm / multi-agent note:** The write queue is enabled by default to serialize memory writes through one worker. For shared HTTP deployments, use `--swarm` (200 RPM) or `--swarm-max` (600 RPM) when starting the server. `--trusted` disables rate limiting entirely for private deployments. STDIO is still best for private single-agent/local use.
 
 #### Local pip HTTP (zero config)
 

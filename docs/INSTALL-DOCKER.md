@@ -532,7 +532,7 @@ services:
 | `MARM_API_KEY` | _(unset)_ | Required for all Docker deployments (local and remote). Docker bridge networking means the server never sees 127.0.0.1 from the host — set this or all MCP calls will 401. Generate with `docker run --rm lyellr88/marm-mcp-server:latest python -m marm_mcp_server --generate-key`. |
 | `MARM_RATE_LIMIT_RPM` | `80` | HTTP rate limit (requests per minute per client IP). Set to `0` to disable. Overridden by `--swarm`, `--swarm-max`, `--trusted` presets. |
 | `MAX_QUEUE_SIZE` | `100` | Write queue size when `WRITE_QUEUE_ENABLED=1`. |
-| `WRITE_QUEUE_ENABLED` | `0` | Enable serialized write queue for higher-concurrency HTTP workflows. Enabled automatically by swarm presets. |
+| `WRITE_QUEUE_ENABLED` | `1` | Serialized memory write queue. Set to `0` only for debugging/direct-write comparisons. |
 | `MARM_ANALYTICS_DB_PATH` | `/app/data/marm_usage_analytics.db` | Override analytics database path. |
 | `MARM_DB_PATH` | `/home/marm/.marm/marm_memory.db` | Override primary memory database path. |
 | `MARM_STDIO_LOG_LEVEL` | `INFO` | STDIO log verbosity (useful when running STDIO mode). |

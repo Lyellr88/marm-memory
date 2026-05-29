@@ -192,7 +192,7 @@ class MARMMemory:
         self._write_queue: WriteQueue | None = None
 
     async def start_write_queue(self) -> None:
-        """Start the optional serialized write queue."""
+        """Start the serialized write queue when enabled."""
         if not WRITE_QUEUE_ENABLED:
             return
         if self._write_queue is None:
@@ -200,7 +200,7 @@ class MARMMemory:
         await self._write_queue.start()
 
     async def stop_write_queue(self) -> None:
-        """Drain and stop the optional serialized write queue."""
+        """Drain and stop the serialized write queue."""
         if self._write_queue is None:
             return
         await self._write_queue.stop()
@@ -414,7 +414,7 @@ class MARMMemory:
         metadata: Dict = None,
         queue_enabled: Optional[bool] = None,
     ) -> str:
-        """Store memory through the write queue when enabled."""
+        """Store memory through the write queue unless explicitly disabled."""
         if queue_enabled is None:
             queue_enabled = WRITE_QUEUE_ENABLED
         if queue_enabled and self._write_queue is None:

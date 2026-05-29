@@ -406,7 +406,7 @@ python -m marm_mcp_server
 | `MARM_ANALYTICS_DB_PATH` | `marm_usage_analytics.db` | Override analytics database path |
 | `DEFAULT_SEMANTIC_MODEL` | `all-MiniLM-L6-v2` | AI model for semantic search |
 | `MARM_RATE_LIMIT_RPM` | `80` | HTTP rate limit (requests per minute per client IP). Set to `0` to disable. Overridden by `--swarm`, `--swarm-max`, `--trusted` presets. |
-| `WRITE_QUEUE_ENABLED` | `0` | Set to `1` to serialize memory writes for multi-agent HTTP use. Enabled automatically by swarm presets. |
+| `WRITE_QUEUE_ENABLED` | `1` | Serialized memory write queue. Set to `0` only for debugging/direct-write comparisons. |
 | `MAX_QUEUE_SIZE` | `100` | Write queue capacity when `WRITE_QUEUE_ENABLED=1`. |
 | `MARM_STDIO_LOG_LEVEL` | `INFO` | STDIO log verbosity. Set to `DEBUG` for session names, query lengths, result counts. |
 | `MARM_STDIO_LOG_DIR` | `%USERPROFILE%\.marm\logs` | Override STDIO log directory. |

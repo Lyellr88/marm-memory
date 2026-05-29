@@ -87,8 +87,8 @@ MARM_RATE_LIMIT_RPM = int(os.environ.get('MARM_RATE_LIMIT_RPM', '80'))
 RATE_LIMIT_WINDOW_SECONDS = int(os.environ.get('RATE_LIMIT_WINDOW_SECONDS', '60'))
 RATE_LIMIT_BLOCK_SECONDS = int(os.environ.get('RATE_LIMIT_BLOCK_SECONDS', '30'))
 
-# Optional serialized write queue for high-concurrency agent workflows.
-WRITE_QUEUE_ENABLED = os.environ.get('WRITE_QUEUE_ENABLED', '0') == '1'
+# Serialized write queue is enabled by default to reduce SQLite writer contention.
+WRITE_QUEUE_ENABLED = os.environ.get('WRITE_QUEUE_ENABLED', '1') == '1'
 MAX_QUEUE_SIZE = int(os.environ.get('MAX_QUEUE_SIZE', '100'))
 
 # Auth — set MARM_API_KEY to require a Bearer token on all capability routes.
