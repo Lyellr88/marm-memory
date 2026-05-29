@@ -1337,3 +1337,35 @@ marm_notebook(action="use"|"status"|"clear", session_name="my_project")
 - Added whitespace validation tests for blank `session_name`, blank `name`, and comma-only `names`
 
 </details>
+
+---
+
+<details>
+<summary><strong>May 29th, 2026: Write Queue & Swarm Rate Presets (v2.8.0)</strong></summary>
+
+### Write Queue & Swarm Runtime Modes
+
+- Added HTTP server runtime presets for multi-agent deployments:
+  - `--swarm`: enables the write queue and sets the shared HTTP rate limit to 200 RPM
+  - `--swarm-max`: enables the write queue and sets the shared HTTP rate limit to 600 RPM
+  - `--trusted`: enables the write queue and disables HTTP rate limiting for private deployments
+  - `--rate-limit-rpm N`: explicit custom RPM override, with `0` disabling rate limiting
+- Raised the default shared HTTP rate-limit bucket to 80 RPM for normal local use and small agent groups.
+- Made rate limiting settings-driven and resettable at runtime, including a `0` RPM disable sentinel.
+- Aligned `/mcp` requests to the shared default bucket so real MCP traffic is measured and limited consistently.
+
+### Smoke Testing & Validation
+
+- Added direct write-queue smoke testing for concurrent SQLite writes with isolated temp DBs.
+- Added HTTP write/RPM smoke testing with spawned isolated servers, compact JSON artifacts, per-step clean rate-limit buckets, custom RPM testing, and preset coverage.
+- Added focused regression tests for runtime preset behavior, disabled rate limiting, Docker STDIO entrypoint behavior, and STDIO transport stability.
+
+### Docker & Dependencies
+
+- Switched Docker startup to an `ENTRYPOINT` shape so flags like `--swarm` append naturally after the image name.
+- Updated Docker STDIO examples to override the entrypoint with `python -m marm_mcp_server.server_stdio`.
+- Added `packaging` as an explicit dependency because FastMCP imports it during STDIO startup inside Docker.
+- Removed the unfinished MCP client command generator prototype from repository tracking and ignored it locally until it is public-ready.
+
+</details>
+
