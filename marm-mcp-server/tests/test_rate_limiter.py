@@ -33,3 +33,13 @@ def test_rate_limiter_isolated_by_ip_and_endpoint_type():
     allowed, reason = limiter.is_allowed("203.0.113.20", "default")
     assert allowed is False
     assert "IP blocked" in reason
+
+
+def test_rate_limiter_can_be_disabled_with_zero_rpm():
+    limiter = IPRateLimiter()
+    limiter.configure(requests=0, window=60, block_duration=30)
+
+    for _ in range(100):
+        assert limiter.is_allowed("203.0.113.30", "default") == (True, None)
+
+    assert limiter.blocked_ips == {}

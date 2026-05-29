@@ -2,7 +2,7 @@
 
 ## Universal Memory Intelligence Platform for AI Agents
 
-**MARM v2.7.0* - Memory Accurate Response Mode
+**MARM v2.7.0** - Memory Accurate Response Mode
 *Complete Linux installation guide*
 
 ---
@@ -91,6 +91,17 @@ chmod +x install.sh
 ./install.sh
 source marm-env/bin/activate
 python3 -m marm_mcp_server
+```
+
+### **Multi-Agent / Swarm Mode**
+
+For shared HTTP servers running multiple AI agents, use a preset flag:
+
+```bash
+python3 -m marm_mcp_server --swarm        # 200 RPM, write queue on
+python3 -m marm_mcp_server --swarm-max    # 600 RPM, write queue on
+python3 -m marm_mcp_server --trusted      # rate limiting off, write queue on
+python3 -m marm_mcp_server --rate-limit-rpm 150  # custom RPM
 ```
 
 ### **After Installation:**
@@ -380,7 +391,7 @@ sudo lsof -i :8001
 
 - **Port 8001 busy**: Kill process: `sudo lsof -ti:8001 | xargs kill -9`
 - **Permission denied**: Use `sudo` or check file permissions: `chmod +x install.sh`
-- **Python not found**: Install Python 3.8+: `sudo apt install python3 python3-pip`
+- **Python not found**: Install Python 3.10+: `sudo apt install python3 python3-pip`
 - **Module import errors**: Reinstall the package: `pip install marm-mcp-server`
 
 ---
@@ -432,6 +443,9 @@ source ~/.bashrc
 | `MAX_DB_CONNECTIONS` | `5` | Database connection pool size |
 | `MARM_ANALYTICS_DB_PATH` | `marm_usage_analytics.db` | Override analytics database path |
 | `DEFAULT_SEMANTIC_MODEL` | `all-MiniLM-L6-v2` | AI model for semantic search |
+| `MARM_RATE_LIMIT_RPM` | `80` | HTTP rate limit (requests per minute per client IP). Set to `0` to disable. Overridden by `--swarm`, `--swarm-max`, `--trusted` presets. |
+| `WRITE_QUEUE_ENABLED` | `0` | Set to `1` to serialize memory writes for multi-agent HTTP use. Enabled automatically by swarm presets. |
+| `MAX_QUEUE_SIZE` | `100` | Write queue capacity when `WRITE_QUEUE_ENABLED=1`. |
 | `MARM_STDIO_LOG_LEVEL` | `INFO` | STDIO log verbosity. Set to `DEBUG` for session names, query lengths, result counts. |
 | `MARM_STDIO_LOG_DIR` | `~/.marm/logs` | Override STDIO log directory. |
 
@@ -442,4 +456,3 @@ source ~/.bashrc
 *For usage instructions, see **[MCP-HANDBOOK.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/MCP-HANDBOOK.md)***
 
 *For Docker deployment, see **[INSTALL-DOCKER.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-DOCKER.md)***
-

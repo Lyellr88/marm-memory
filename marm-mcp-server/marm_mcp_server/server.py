@@ -109,6 +109,9 @@ from .config.settings import (
     ANALYTICS_DB_PATH,
 )
 from .utils.security import generate_api_key
+from .config import settings
+from .core import memory as memory_module
+from .core.rate_limiter import rate_limiter
 from .core.memory import memory
 from .services.automation import register_event_handlers
 from .services.documentation import docs_are_loaded, maybe_auto_refresh, ensure_marm_started
@@ -403,6 +406,53 @@ def create_server():
     return app
 
 
+def apply_runtime_preset(
+    *,
+    swarm: bool = False,
+    swarm_max: bool = False,
+    trusted: bool = False,
+    rate_limit_rpm: Optional[int] = None,
+) -> dict:
+    """Apply CLI rate-limit/write-queue presets to already-imported runtime modules."""
+    if rate_limit_rpm is not None and rate_limit_rpm < 0:
+        raise ValueError("--rate-limit-rpm must be 0 or greater")
+
+    rpm = settings.MARM_RATE_LIMIT_RPM
+    mode = "default"
+    write_queue_enabled = settings.WRITE_QUEUE_ENABLED
+
+    if swarm:
+        rpm = 200
+        mode = "swarm"
+        write_queue_enabled = True
+    if swarm_max:
+        rpm = 600
+        mode = "swarm-max"
+        write_queue_enabled = True
+    if rate_limit_rpm is not None:
+        rpm = rate_limit_rpm
+        mode = "custom"
+    if trusted:
+        rpm = 0
+        mode = "trusted"
+        write_queue_enabled = True
+
+    settings.MARM_RATE_LIMIT_RPM = rpm
+    settings.WRITE_QUEUE_ENABLED = write_queue_enabled
+    memory_module.WRITE_QUEUE_ENABLED = write_queue_enabled
+    rate_limiter.configure(
+        requests=rpm,
+        window=settings.RATE_LIMIT_WINDOW_SECONDS,
+        block_duration=settings.RATE_LIMIT_BLOCK_SECONDS,
+    )
+
+    return {
+        "mode": mode,
+        "rate_limit_rpm": rpm,
+        "write_queue_enabled": write_queue_enabled,
+    }
+
+
 def main():
     """Entry point for pip-installed CLI (marm-mcp-server command)."""
     import argparse
@@ -412,6 +462,14 @@ def main():
                        help='Check system dependencies and exit')
     parser.add_argument('--generate-key', action='store_true',
                        help='Generate a strong MARM_API_KEY and print it to stdout')
+    parser.add_argument('--swarm', action='store_true',
+                       help='Enable shared HTTP swarm mode (write queue on, 200 RPM)')
+    parser.add_argument('--swarm-max', action='store_true',
+                       help='Enable heavier shared HTTP swarm mode (write queue on, 600 RPM)')
+    parser.add_argument('--trusted', action='store_true',
+                       help='Trusted local/private mode (write queue on, rate limiting disabled)')
+    parser.add_argument('--rate-limit-rpm', type=int,
+                       help='Override HTTP rate limit RPM; 0 disables rate limiting')
     args = parser.parse_args()
 
     if args.generate_key:
@@ -425,15 +483,30 @@ def main():
         success = check_dependencies()
         sys.exit(0 if success else 1)
 
+    try:
+        runtime_config = apply_runtime_preset(
+            swarm=args.swarm,
+            swarm_max=args.swarm_max,
+            trusted=args.trusted,
+            rate_limit_rpm=args.rate_limit_rpm,
+        )
+    except ValueError as exc:
+        parser.error(str(exc))
+
     logger.info("Starting MARM MCP Server",
                 version=SERVER_VERSION,
                 mcp_endpoint="http://localhost:8001/mcp",
                 docs="http://localhost:8001/docs",
-                database=DEFAULT_DB_PATH)
+                database=DEFAULT_DB_PATH,
+                rate_limit_mode=runtime_config["mode"],
+                rate_limit_rpm=runtime_config["rate_limit_rpm"],
+                write_queue_enabled=runtime_config["write_queue_enabled"])
 
     logger.info("Feature status",
                 semantic_search="ENABLED" if SEMANTIC_SEARCH_AVAILABLE else "DISABLED - install sentence-transformers",
-                scheduler="ENABLED" if SCHEDULER_AVAILABLE else "DISABLED - install apscheduler")
+                scheduler="ENABLED" if SCHEDULER_AVAILABLE else "DISABLED - install apscheduler",
+                rate_limiting="DISABLED" if runtime_config["rate_limit_rpm"] == 0 else "ENABLED",
+                write_queue="ENABLED" if runtime_config["write_queue_enabled"] else "DISABLED")
 
     try:
         asyncio.run(run_server_with_shutdown())

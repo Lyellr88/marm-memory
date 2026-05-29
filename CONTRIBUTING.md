@@ -2,7 +2,7 @@
 
 Thanks for wanting to contribute. MARM is currently focused on the MCP server, local memory workflows, Docker/STDIO transports, IDE and client integrations, and the dashboard for inspecting local memory data.
 
-This guide covers practical development workflow. For project history and community recognition, see [ACKNOWLEDGMENTS.md](ACKNOWLEDGMENTS.md).
+This guide covers practical development workflow. For project history and community recognition, see [ACKNOWLEDGMENTS.md](docs/ACKNOWLEDGMENTS.md).
 
 ## Getting Started
 
@@ -194,10 +194,10 @@ Useful maintenance scripts:
 
 ```powershell
 python scripts\find-versions.py
-python scripts\scan-stale-docs.py
+python scripts\find-dead-code.py
 ```
 
-`find-versions.py` is interactive and can update active version references. It intentionally avoids changing `CHANGELOG.md` because that file contains historical versions.
+`find-versions.py` is interactive and can update active version references. It intentionally avoids changing `CHANGELOG.md` because that file contains historical versions. `find-dead-code.py` looks for unused functions and classes in the MCP server codebase. Review its findings carefully before removing any code, as some utilities may be used in dynamic ways or reserved for future features.
 
 ## Submitting Changes
 
@@ -258,7 +258,7 @@ Use normal branch pushes for review. Use tag pushes only for intentional release
 ### **Usage Guides**
 
 - **[MCP-HANDBOOK.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/MCP-HANDBOOK.md)** - Complete MCP server usage guide with commands, workflows, and examples
-- **[PROTOCOL.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/PROTOCOL.md)** - Quick start commands and protocol reference
+- **[PROTOCOL.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/PROTOCOL.md)** - Quick start commands and protocol reference
 - **[FAQ.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/FAQ.md)** - Answers to common questions about using MARM
 
 ### **MCP Server Installation**
@@ -271,8 +271,8 @@ Use normal branch pushes for review. Use tag pushes only for intentional release
 ### **Project Information**
 
 - **[README.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/README.md)** - This file - ecosystem overview and MCP server guide
-- **[CONTRIBUTING.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/CONTRIBUTING.md)** - How to contribute to MARM
-- **[CHANGELOG.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/CHANGELOG.md)** - Version history and updates
+- **[CONTRIBUTING.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/CONTRIBUTING.md)** - How to contribute to MARM
+- **[CHANGELOG.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/CHANGELOG.md)** - Version history and updates
 - **[ACKNOWLEDGMENTS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/ACKNOWLEDGMENTS.md)** - Contributors and acknowledgments
 - **[ROADMAP.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/ROADMAP.md)** - Planned features and development roadmap
-- **[LICENSE](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/LICENSE)** - MIT license terms
+- **[LICENSE](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/LICENSE)** - MIT license terms

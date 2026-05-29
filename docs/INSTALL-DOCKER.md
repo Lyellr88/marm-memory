@@ -2,7 +2,7 @@
 
 ## Universal Memory Intelligence Platform for AI Agents
 
-**MARM v2.7.0* - Memory Accurate Response Mode
+**MARM v2.7.0** - Memory Accurate Response Mode
 *Docker deployment guide for Windows, Mac, and Linux*
 
 ---
@@ -106,6 +106,45 @@ docker-compose up -d
 - **Easier management** - stop/start with simple commands
 - **Persistent settings** - your configuration is saved in a file
 - **Organized setup** - clean configuration management
+
+### **Swarm / Multi-Agent Mode**
+
+For shared HTTP servers running multiple AI agents simultaneously, append a preset flag after the image name:
+
+```bash
+# --swarm: write queue on, 200 RPM — recommended starting point
+docker run -d --name marm-mcp-server \
+  -p 127.0.0.1:8001:8001 \
+  -e SERVER_HOST=0.0.0.0 \
+  -e MARM_API_KEY=your-generated-key \
+  -v ~/.marm:/home/marm/.marm \
+  --restart unless-stopped \
+  lyellr88/marm-mcp-server:latest --swarm
+
+# --swarm-max: write queue on, 600 RPM — heavier load
+docker run -d --name marm-mcp-server \
+  -p 127.0.0.1:8001:8001 \
+  -e SERVER_HOST=0.0.0.0 \
+  -e MARM_API_KEY=your-generated-key \
+  -v ~/.marm:/home/marm/.marm \
+  --restart unless-stopped \
+  lyellr88/marm-mcp-server:latest --swarm-max
+
+# --trusted: write queue on, rate limiting disabled — private/trusted only
+docker run -d --name marm-mcp-server \
+  -p 127.0.0.1:8001:8001 \
+  -e SERVER_HOST=0.0.0.0 \
+  -e MARM_API_KEY=your-generated-key \
+  -v ~/.marm:/home/marm/.marm \
+  --restart unless-stopped \
+  lyellr88/marm-mcp-server:latest --trusted
+```
+
+| Preset | Rate Limit | Write Queue | Use When |
+|--------|------------|-------------|----------|
+| `--swarm` | 200 RPM | enabled | Normal multi-agent shared server |
+| `--swarm-max` | 600 RPM | enabled | Heavier private swarm testing |
+| `--trusted` | disabled | enabled | Trusted private deployments only |
 
 ---
 
@@ -491,9 +530,13 @@ services:
 | `SERVER_HOST` | `127.0.0.1` | Bind address. Must be `0.0.0.0` inside Docker for port mapping to work. |
 | `SERVER_PORT` | `8001` | Server port. |
 | `MARM_API_KEY` | _(unset)_ | Required for all Docker deployments (local and remote). Docker bridge networking means the server never sees 127.0.0.1 from the host — set this or all MCP calls will 401. Generate with `docker run --rm lyellr88/marm-mcp-server:latest python -m marm_mcp_server --generate-key`. |
-| `MAX_DB_CONNECTIONS` | `5` | Database connection pool size. |
+| `MARM_RATE_LIMIT_RPM` | `80` | HTTP rate limit (requests per minute per client IP). Set to `0` to disable. Overridden by `--swarm`, `--swarm-max`, `--trusted` presets. |
+| `MAX_QUEUE_SIZE` | `100` | Write queue size when `WRITE_QUEUE_ENABLED=1`. |
+| `WRITE_QUEUE_ENABLED` | `0` | Enable serialized write queue for higher-concurrency HTTP workflows. Enabled automatically by swarm presets. |
 | `MARM_ANALYTICS_DB_PATH` | `/app/data/marm_usage_analytics.db` | Override analytics database path. |
-| `DEFAULT_SEMANTIC_MODEL` | `all-MiniLM-L6-v2` | AI model for semantic search. |
+| `MARM_DB_PATH` | `/home/marm/.marm/marm_memory.db` | Override primary memory database path. |
+| `MARM_STDIO_LOG_LEVEL` | `INFO` | STDIO log verbosity (useful when running STDIO mode). |
+| `MARM_STDIO_LOG_DIR` | `/home/marm/.marm/logs` | Override STDIO log directory. |
 
 ---
 

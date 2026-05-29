@@ -55,7 +55,6 @@ Default pip/local startup is zero-config: MARM binds to localhost and does not r
 
 ```bash
 pip install marm-mcp-server
-pip install -r marm-mcp-server/requirements.txt
 python -m marm_mcp_server
 claude mcp add --transport http marm-memory http://localhost:8001/mcp
 ```
@@ -263,7 +262,7 @@ MARM automatically categorizes content:
 | **🧠 Memory** | `marm_smart_recall` | Semantic similarity search across all memories | `query` (required), `limit` (default: 5), `session_name` (optional). Use natural language queries |
 | | `marm_context_log` | Auto-classifying memory storage with embeddings | Store important information that should be remembered |
 | **📚 Logging** | `marm_log_session` | Create or switch to named session container | Include LLM name, dates, be descriptive |
-| | `marm_log_entry` | Add structured log entry with auto-date formatting | No need to add dates manually - automatically handled by background tools |
+| | `marm_log_entry` | Add structured log entry with auto-date formatting | Use structured entries for best results; date-prefixed formats are parsed automatically when provided |
 | | `marm_log_show` | Display all entries and sessions with filtering | `session_name` (optional) |
 | | `marm_delete` | Delete a log session, log entry, or notebook entry | `type="log"` or `type="notebook"`, `target` (required), `session_name` (optional for log entries) |
 | **📔 Notebook** | `marm_notebook` | Unified notebook management | `action="add"` saves entries, `action="use"` activates entries, `action="show"` lists saved entries, `action="status"` shows active entries, `action="clear"` clears active entries. `session_name` scopes active entries when needed |
@@ -271,7 +270,23 @@ MARM automatically categorizes content:
 
 **Internal automation:** lifecycle initialization, documentation refresh, current date context, and system checks are no longer AI-facing tools. Documentation refresh uses `doc_index` hash tracking to avoid duplicate `marm_system` memories across restarts. Use the dashboard health panel for live server status, or `curl http://localhost:8001/health` for terminal checks.
 
-**Write queue:** High-concurrency HTTP deployments can set `WRITE_QUEUE_ENABLED=1` to serialize memory writes through one internal async queue. This is useful for swarm-style agents sharing one server. It only controls write ordering; it does not merge, summarize, or alter memory content.
+**Swarm / multi-agent modes:** Use CLI presets when starting an HTTP server shared by multiple agents:
+
+| Flag | Rate Limit | Write Queue | Use When |
+|------|------------|-------------|----------|
+| *(none)* | 80 RPM | env default | Normal local use and small 3-5 agent setups |
+| `--swarm` | 200 RPM | enabled | Shared HTTP server, roughly 15-30 agents depending on write style |
+| `--swarm-max` | 600 RPM | enabled | Heavier local/private swarm, roughly 50-100 agents depending on write style |
+| `--trusted` | disabled | enabled | Private/trusted deployments only |
+| `--rate-limit-rpm N` | N RPM | unchanged | Custom override; 0 disables limiting |
+
+```bash
+python -m marm_mcp_server --swarm
+python -m marm_mcp_server --swarm-max
+python -m marm_mcp_server --trusted
+```
+
+The write queue serializes memory writes through one internal async queue to reduce SQLite writer contention. Swarm presets enable it automatically. It only controls write ordering; it does not merge, summarize, or alter memory content.
 
 ---
 
@@ -488,7 +503,7 @@ A: Use the MARM Dashboard status panel for HTTP mode. It polls server health and
 |-------|-------|----------|
 | `address already in use` | Port 8001 occupied | Kill process on 8001 or use different port |
 | `permission denied: ~/.marm/` | Database directory not writable | `chmod 755 ~/.marm/` or check ownership |
-| `module not found: core.memory` | Missing dependencies | Reinstall: `pip install -r requirements.txt` or `requirements_stdio.txt` |
+| `module not found: core.memory` | Missing dependencies | Reinstall from `marm-mcp-server/`: `pip install -e ".[dev]"` |
 | `database is locked` | Multiple processes accessing DB | Close other connections, restart server |
 | `embedding model not found` | Semantic search model didn't download | First run takes time—be patient, check internet connection |
 
@@ -514,6 +529,6 @@ A: Use the MARM Dashboard status panel for HTTP mode. It polls server health and
 - **[README.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/README.md)** - This file - ecosystem overview and MCP server guide
 - **[CONTRIBUTING.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/CONTRIBUTING.md)** - How to contribute to MARM
 - **[CHANGELOG.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/CHANGELOG.md)** - Version history and updates
-- **[ACKNOWLEDGMENTS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/ACKNOWLEDGMENTS.md)** - Contributors and acknowledgments
+- **[ACKNOWLEDGMENTS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/ACKNOWLEDGMENTS.md)** - Contributors and acknowledgments
 - **[ROADMAP.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/ROADMAP.md)** - Planned features and development roadmap
 - **[LICENSE](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/LICENSE)** - MIT license terms
