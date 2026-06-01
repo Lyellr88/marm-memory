@@ -2,7 +2,7 @@
 
 ## Complete Usage Guide for Memory-Augmented AI
 
-**MARM v2.8.0 - Universal MCP Server for AI Memory Intelligence**
+**MARM v2.9.0 - Universal MCP Server for AI Memory Intelligence**
 
 ---
 
@@ -12,7 +12,7 @@
 - [Getting Started](#getting-started)
 - [Example Workflow](#example-workflow-cross-ai-research-project)
 - [Understanding MARM Memory](#understanding-marm-memory)
-- [Complete Tool Reference (8 Tools)](#complete-tool-reference-8-tools)
+- [Complete Tool Reference (9 Tools)](#complete-tool-reference-9-tools)
 - [Pro Tips & Best Practices](#pro-tips--best-practices)
 - [Advanced Workflows](#advanced-workflows)
 - [FAQ](#faq)
@@ -30,7 +30,7 @@ MARM MCP Server supports two transport modes for different deployment scenarios:
 
 - Traditional server-client architecture
 - Best for: Multiple concurrent AI clients, cloud/remote deployment, shared memory server
-- Setup: Run `marm-mcp-server` and connect via `http://localhost:8001/mcp`
+- Setup: Run `python -m marm_mcp_server` and connect via `http://localhost:8001/mcp`
 
 **STDIO Transport** (Process-based)
 
@@ -45,8 +45,13 @@ MARM MCP Server supports two transport modes for different deployment scenarios:
 
 ```bash
 docker pull lyellr88/marm-mcp-server:latest
-docker run -d --name marm-mcp-server -p 127.0.0.1:8001:8001 -e SERVER_HOST=0.0.0.0 -e MARM_API_KEY=your-generated-key -v ~/.marm:/home/marm/.marm lyellr88/marm-mcp-server:latest
-claude mcp add --transport http marm-memory http://localhost:8001/mcp --header "Authorization: Bearer your-generated-key"
+docker run -d --name marm-mcp-server \
+  -p 127.0.0.1:8001:8001 \
+  -e SERVER_HOST=0.0.0.0 \
+  -e MARM_API_KEY=your-generated-key \
+  -v ~/.marm:/home/marm/.marm \
+  lyellr88/marm-mcp-server:latest
+"agent" mcp add --transport http marm-memory http://localhost:8001/mcp --header "Authorization: Bearer your-generated-key"
 ```
 
 **Local HTTP:**
@@ -56,7 +61,7 @@ Default pip/local startup is zero-config: MARM binds to localhost and does not r
 ```bash
 pip install marm-mcp-server
 python -m marm_mcp_server
-claude mcp add --transport http marm-memory http://localhost:8001/mcp
+"agent" mcp add --transport http marm-memory http://localhost:8001/mcp
 ```
 
 **Codex CLI:**
@@ -95,7 +100,7 @@ python -m marm_mcp_server.server_stdio
 
 Replace `marm-mcp-stdio` with `python -m marm_mcp_server.server_stdio` if using a virtualenv or a path-based setup. Works with Claude Code, Cursor, VS Code, Qwen, and Gemini CLI.
 
-**For complete installation instructions, platform-specific configurations, JSON setup, troubleshooting, and detailed transport comparison, see the [README.md Quick Start section](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/README.md#-quick-start-for-mcp).**
+**For complete installation instructions, platform-specific configurations, JSON setup, troubleshooting, and detailed transport comparison, see the [README.md Quick Start section](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/README.md#-quick-start-for-mcp-http--stdio).**
 
 ### System Requirements
 
@@ -172,7 +177,7 @@ Here's a realistic workflow showing MARM in action:
 
 **Scenario:** You're researching authentication patterns for a new project using multiple AI clients.
 
-### Phase 1: Create Session (Claude)
+#### Phase 1: Create Session (Claude)
 
 ``` markdown
 You: "Claude, create a MARM session called 'auth-research-2025-01'"
@@ -180,7 +185,7 @@ Claude calls: marm_log_session("auth-research-2025-01")
 Result: Session created. MARM lifecycle/docs initialize automatically.
 ```
 
-### Phase 2: Capture Research (Claude)
+#### Phase 2: Capture Research (Claude)
 
 ``` markdown
 You: "Summarize OAuth2 vs JWT for API authentication and save it"
@@ -188,7 +193,7 @@ Claude calls: marm_context_log("OAuth2 is token-based with refresh cycles, bette
 Result: Memory stored with auto-classification as "code" content
 ```
 
-### Phase 3: Add Reusable Reference (Claude)
+#### Phase 3: Add Reusable Reference (Claude)
 
 ``` markdown
 You: "Save a JWT validation code snippet to my notebooks as 'jwt-validation-pattern'"
@@ -196,7 +201,7 @@ Claude calls: marm_notebook(action="add", name="jwt-validation-pattern", data="d
 Result: Reusable snippet stored for future projects
 ```
 
-### Phase 4: Recall Context (Gemini)
+#### Phase 4: Recall Context (Gemini)
 
 ``` markdown
 You: "Gemini, what authentication approaches did we research? Activate the JWT pattern."
@@ -205,7 +210,7 @@ Gemini calls: marm_notebook(action="use", names="jwt-validation-pattern")
 Result: Gemini sees previous research + has JWT code available as context
 ```
 
-### Phase 5: Synthesis & Summary (Qwen)
+#### Phase 5: Synthesis & Summary (Qwen)
 
 ``` markdown
 You: "Qwen, pull everything from the auth research and create a summary"
@@ -214,7 +219,7 @@ Qwen calls: marm_summary("auth-research-2025-01")
 Result: Qwen generates implementation guide from all captured research
 ```
 
-### Phase 6: End Session (Claude)
+#### Phase 6: End Session (Claude)
 
 ``` markdown
 You: "Log final decision - we're using JWT for APIs and OAuth2 for user auth"
@@ -255,7 +260,7 @@ MARM automatically categorizes content:
 
 ---
 
-## Complete Tool Reference (8 Tools)
+## Complete Tool Reference (9 Tools)
 
 | Category | Tool | Description | Usage Notes |
 |----------|------|-------------|-------------|
@@ -267,8 +272,9 @@ MARM automatically categorizes content:
 | | `marm_delete` | Delete a log session, log entry, or notebook entry | `type="log"` or `type="notebook"`, `target` (required), `session_name` (optional for log entries) |
 | **📔 Notebook** | `marm_notebook` | Unified notebook management | `action="add"` saves entries, `action="use"` activates entries, `action="show"` lists saved entries, `action="status"` shows active entries, `action="clear"` clears active entries. `session_name` scopes active entries when needed |
 | **🔄 Workflow** | `marm_summary` | Generate paste-ready context blocks with intelligent truncation | Create summaries for new conversations or context bridging |
+| **🧹 Maintenance** | `marm_compaction` | Agent-assisted memory compaction | `action="status"`, `"candidates"`, `"review"`, `"stage"`, `"apply"`, or `"discard"`. Used when MARM detects duplicate memory clusters and asks the agent to summarize them |
 
-**Internal automation:** lifecycle initialization, documentation refresh, current date context, and system checks are no longer AI-facing tools. Documentation refresh uses `doc_index` hash tracking to avoid duplicate `marm_system` memories across restarts. Use the dashboard health panel for live server status, or `curl http://localhost:8001/health` for terminal checks.
+**Internal automation:** lifecycle initialization, documentation refresh, current date context, serialized write queue handling, and system checks are no longer AI-facing tools. Documentation refresh uses `doc_index` hash tracking to avoid duplicate `marm_system` memories across restarts. Use the dashboard health panel for live server status, or `curl http://localhost:8001/health` for terminal checks.
 
 **Swarm / multi-agent modes:** Use CLI presets when starting an HTTP server shared by multiple agents:
 
@@ -286,7 +292,9 @@ python -m marm_mcp_server --swarm-max
 python -m marm_mcp_server --trusted
 ```
 
-The write queue is enabled by default and serializes memory writes through one internal async queue to reduce SQLite writer contention. Swarm presets tune the HTTP rate limit on top of that queue behavior. It only controls write ordering; it does not merge, summarize, or alter memory content.
+The write queue is enabled by default and serializes memory writes through one internal async queue to reduce SQLite writer contention. Swarm presets tune the HTTP rate limit on top of that queue behavior. The queue controls write ordering; consolidation and compaction are separate memory-maintenance layers.
+
+**Consolidation / compaction:** `CONSOLIDATION_ENABLED=1` activates write-time exact duplicate and semantic near-duplicate handling before memories accumulate unnecessary duplicates. `COMPACTION_ENABLED=1` activates background cluster detection after enough writes in a session. When compaction candidates are ready, MARM injects a bounded request asking the connected agent to call `marm_compaction`: get candidates, stage summaries, review staged proposals, then apply or discard them. Source memory IDs are preserved so compacted summaries remain traceable.
 
 ---
 
@@ -294,7 +302,7 @@ The write queue is enabled by default and serializes memory writes through one i
 
 ### Memory Management Tips
 
-**Log Compaction**: Use `marm_summary`, delete entries, replace with summary
+**Memory Compaction**: Let MARM surface compaction candidates, then use `marm_compaction` to stage, review, apply, or discard summaries
 **Session Naming**: Include LLM name for cross-referencing
 **Strategic Logging**: Focus on key decisions, solutions, discoveries, configurations
 
@@ -307,7 +315,7 @@ The write queue is enabled by default and serializes memory writes through one i
 ### Workflow Optimization
 
 **Notebook Stacking**: Combine multiple entries for complex workflows
-**Session Lifecycle**: Start → Work → Reference → End with compaction
+**Session Lifecycle**: Start → Work → Reference → Review staged compaction when MARM asks
 
 ---
 
@@ -347,69 +355,11 @@ Phase 3: Synthesis
 - Combine insights for comprehensive solutions
 ```
 
----
-
 ## FAQ
 
-### General Usage
-
-**Q: How is MARM different from basic AI memory?**
-A: Uses semantic understanding, not keyword matching. Works across multiple AI applications.
-
-**Q: Can I use MARM with multiple AI clients simultaneously?**
-A: Yes! Designed for cross-app memory sharing. Multiple AIs can access same memory store.
-
-**Q: How much memory can MARM store?**
-A: No hard limits - uses efficient SQLite storage with semantic embeddings.
-
-### Memory Management
-
-**Q: When should I create a new session vs. continuing an existing one?**
-A: New sessions for distinct topics/projects. Continue existing for related work.
-
-**Q: How does auto-classification work?**
-A: Analyzes content to determine if it's code, project work, book/research, or general.
-
-**Q: Can I search across all sessions or just one?**
-A: Both! `marm_smart_recall` can search globally or within specific sessions.
-
-### Technical Questions
-
-**Q: What happens if MARM server is offline?**
-A: AI client works normally but without memory features. Memory resumes when MARM reconnects.
-
-**Q: How does semantic search work?**
-A: Converts text to vector embeddings, finds similar content using vector similarity.
-
-**Q: Can I backup my MARM memory?**
-A: Yes - backup the `~/.marm/` directory to preserve all memories.
-
-### Best Practices
-
-**Q: How often should I use log compaction?**
-A: At end of significant sessions or weekly for ongoing projects.
-
-**Q: Should I log everything or be selective?**
-A: Be selective - log decisions, solutions, insights, key information.
-
-**Q: How do I organize memories for team collaboration?**
-A: Use consistent session naming, leverage cross-session search.
-
-### Integration & Setup
-
-**Q: Which AI clients work with MARM?**
-A: Any MCP-compatible client: Claude Code, Qwen CLI, Gemini CLI.
-
-**Q: Do I need to restart MARM when switching between AI clients?**
-A: No - runs as a background service. Multiple clients can connect simultaneously.
-
-**Q: How do I know if MARM is working correctly?**
-A: Use the MARM Dashboard status panel for HTTP mode. It polls server health and shows reachability/version/latency. Terminal fallback: `curl http://localhost:8001/health`. For STDIO, confirm your MCP client lists the MARM tools and can call a simple recall/log command.
+The canonical FAQ lives in [docs/FAQ.md](docs/FAQ.md). Use that file for current answers about memory behavior, transports, supported clients, compaction, backups, and troubleshooting.
 
 ---
-
-<details>
-<summary><b>🔧 Troubleshooting Guide (Click to expand)</b></summary>
 
 ## Troubleshooting Guide
 
@@ -479,7 +429,7 @@ A: Use the MARM Dashboard status panel for HTTP mode. It polls server health and
 
 - Notebooks with many entries can accumulate—use `marm_notebook(action="clear")` to prune active entries
 - Close unused AI client connections
-- Use log compaction: `marm_summary` + delete old entries
+- Use `marm_compaction(action="review")` to inspect staged compaction summaries when compaction is enabled
 
 ### Data Recovery
 
@@ -494,7 +444,7 @@ A: Use the MARM Dashboard status panel for HTTP mode. It polls server health and
 
 - Close all AI client connections
 - Stop the server: `Ctrl+C`
-- Remove lock file if present: `rm ~/.marm/marm_usage_analytics.db-wal` (Linux/macOS)
+- Remove lock file if present: `rm ~/.marm/marm_memory.db-wal` (Linux/macOS)
 - Restart server
 
 ### Common Error Messages

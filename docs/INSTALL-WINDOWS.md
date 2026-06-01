@@ -2,7 +2,7 @@
 
 ## Universal Memory Intelligence Platform for AI Agents
 
-**MARM v2.8.0** - Memory Accurate Response Mode
+**MARM v2.9.0** - Memory Accurate Response Mode
 *Complete Windows installation guide*
 
 ---
@@ -82,8 +82,8 @@ python -m marm_mcp_server
 **If you prefer the `marm-mcp-stdio` CLI script**, add the Python Scripts folder to your PATH first:
 
 ```powershell
-# Run once to add permanently (replace (username) with your Windows username)
-[System.Environment]::SetEnvironmentVariable("PATH", $env:PATH + ";C:\Users\(username)\AppData\Roaming\Python\Python314\Scripts", "User")
+# Run once to add permanently (replace (username) with your Windows username and Python3XX with your Python version, e.g. Python312)
+[System.Environment]::SetEnvironmentVariable("PATH", $env:PATH + ";C:\Users\(username)\AppData\Roaming\Python\Python3XX\Scripts", "User")
 ```
 
 Then restart your terminal.
@@ -289,7 +289,7 @@ Invoke-WebRequest -Uri http://localhost:8001/health
 {
   "status": "healthy",
   "service": "MARM MCP Server",
-  "version": "2.8.0",
+  "version": "2.9.0",
   "timestamp": "2026-01-01T00:00:00+00:00",
   "database": "connected",
   "semantic_search": "available"
@@ -353,7 +353,7 @@ python -m marm_mcp_server
 
 - All memories stored in `%USERPROFILE%\.marm\marm_memory.db`
 - Notebooks stored in same database
-- Analytics data stored in `marm_usage_analytics.db` (working directory)
+- Analytics data stored in `%USERPROFILE%\.marm\marm_usage_analytics.db` (override with `MARM_ANALYTICS_DB_PATH`)
 
 ---
 

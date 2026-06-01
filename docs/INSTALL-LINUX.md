@@ -2,7 +2,7 @@
 
 ## Universal Memory Intelligence Platform for AI Agents
 
-**MARM v2.8.0** - Memory Accurate Response Mode
+**MARM v2.9.0** - Memory Accurate Response Mode
 *Complete Linux installation guide*
 
 ---
@@ -316,7 +316,7 @@ curl -s http://localhost:8001/health
 {
   "status": "healthy",
   "service": "MARM MCP Server",
-  "version": "2.8.0",
+  "version": "2.9.0",
   "timestamp": "2026-01-01T00:00:00+00:00",
   "database": "connected",
   "semantic_search": "available"
@@ -371,7 +371,7 @@ python3 -m marm_mcp_server
 
 - All memories stored in `~/.marm/marm_memory.db`
 - Notebooks stored in same database
-- Analytics data stored in `marm_usage_analytics.db` (working directory)
+- Analytics data stored in `~/.marm/marm_usage_analytics.db` (override with `MARM_ANALYTICS_DB_PATH`)
 
 ---
 

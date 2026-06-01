@@ -1387,11 +1387,8 @@ marm_notebook(action="use"|"status"|"clear", session_name="my_project")
 
 - Added background compaction candidate detection for stale/fragmented memory clusters.
 - Added `compaction_role`, `compacted_into`, and `compaction_staging` schema support with idempotent migrations.
-- Added staged, agent-driven compaction workflow:
-  - `marm_get_compaction_candidates`
-  - `marm_stage_compaction_summaries`
-  - `marm_get_staged_summaries`
-  - `marm_apply_compaction`
+- Added a staged, agent-driven compaction workflow behind one public `marm_compaction` tool; raw compaction helpers remain internal/hidden from MCP discovery.
+- Added bounded compaction nudges so MARM can ask the connected agent to summarize pending candidates without adding more public tools.
 - Added candidate expiry, source snapshot validation, cross-session isolation, already-compacted source checks, and stale candidate marking.
 - Apply now inserts a summary memory row, marks source rows as compacted, and remains idempotent under duplicate apply calls.
 - Existing stored embeddings can now be compacted even when the local encoder is unavailable.
@@ -1410,6 +1407,12 @@ marm_notebook(action="use"|"status"|"clear", session_name="my_project")
 - Added shared-session swarm mode to verify natural compaction triggering from real writes.
 - Added seeded embedding fallback for deterministic compaction smoke testing on machines without reliable local embedding generation.
 - Reworked smoke-test documentation into script-based and base/medium/heavy/special command groups.
+
+### Documentation & Tool Surface
+
+- Updated README, MCP handbook, FAQ, and packaged `marm-docs` mirrors for the 9-tool surface, write queue defaults, swarm presets, consolidation, and agent-assisted compaction.
+- Consolidated duplicated handbook FAQ content into `docs/FAQ.md` and changed the handbook FAQ section to reference the canonical FAQ.
+- Updated contributor guidance for write queue, consolidation, compaction staging, smoke scripts, and parameterized MCP tool design.
 
 ### v2.9.0 Tests
 
