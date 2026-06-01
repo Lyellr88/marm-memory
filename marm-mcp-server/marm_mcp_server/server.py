@@ -8,22 +8,23 @@ Author: Lyell - MARM Systems
 Version: 2.8.0
 """
 
-import logging
-import uvicorn
-import uuid
 import json
+import logging
 import os
+import sqlite3
 import sys
-import psutil
-import structlog
+import uuid
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request, Form, Body
-from fastapi_mcp import FastApiMCP
-from fastapi.responses import JSONResponse, RedirectResponse
-from typing import Optional, Dict, Any
 from datetime import datetime, timezone
 from pathlib import Path
-import sqlite3
+from typing import Any, Dict, Optional
+
+import psutil
+import structlog
+import uvicorn
+from fastapi import Body, FastAPI, Form, Request
+from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi_mcp import FastApiMCP
 
 
 class _SuppressProactorWindowsNoise(logging.Filter):
@@ -32,6 +33,7 @@ class _SuppressProactorWindowsNoise(logging.Filter):
     The asyncio log record has '_ProactorBasePipeTransport' in the message text
     and the actual ConnectionResetError in record.exc_info — not in getMessage().
     """
+
     def filter(self, record: logging.LogRecord) -> bool:
         if "_ProactorBasePipeTransport" not in record.getMessage():
             return True
@@ -46,6 +48,7 @@ class _SuppressProactorWindowsNoise(logging.Filter):
         errno = getattr(exc, "errno", None)
         return not (winerror == 10054 or errno == 10054)
 
+
 _proactor_noise_filter = _SuppressProactorWindowsNoise()
 logging.getLogger("asyncio").addFilter(_proactor_noise_filter)
 
@@ -53,15 +56,16 @@ logging.getLogger("asyncio").addFilter(_proactor_noise_filter)
 # Configure structured logging
 logger = structlog.get_logger()
 
+
 # Simple usage tracking
 def track_usage(event_type: str, endpoint: str = None, user_data: dict = None):
     """Track MCP usage events for launch analytics"""
     try:
         usage_db = ANALYTICS_DB_PATH
-        
+
         # Create analytics table if it doesn't exist
         with sqlite3.connect(usage_db) as conn:
-            conn.execute('''
+            conn.execute("""
                 CREATE TABLE IF NOT EXISTS usage_events (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     timestamp TEXT NOT NULL,
@@ -73,111 +77,157 @@ def track_usage(event_type: str, endpoint: str = None, user_data: dict = None):
                     metadata TEXT,
                     created_at TEXT DEFAULT CURRENT_TIMESTAMP
                 )
-            ''')
-            
+            """)
+
             # Insert usage event
-            conn.execute('''
+            conn.execute(
+                """
                 INSERT INTO usage_events (timestamp, event_type, endpoint, user_agent, ip_address, session_id, metadata)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
-            ''', (
-                datetime.now().isoformat(),
-                event_type,
-                endpoint,
-                user_data.get('user_agent', 'unknown') if user_data else 'unknown',
-                user_data.get('ip_address', 'unknown') if user_data else 'unknown',
-                user_data.get('session_id', 'unknown') if user_data else 'unknown',
-                str(user_data) if user_data else '{}'
-            ))
-            
+            """,
+                (
+                    datetime.now().isoformat(),
+                    event_type,
+                    endpoint,
+                    user_data.get("user_agent", "unknown") if user_data else "unknown",
+                    user_data.get("ip_address", "unknown") if user_data else "unknown",
+                    user_data.get("session_id", "unknown") if user_data else "unknown",
+                    str(user_data) if user_data else "{}",
+                ),
+            )
+
         logger.info("Usage tracked", event_type=event_type, endpoint=endpoint)
     except Exception as e:
         # Don't break MCP if analytics fails
         logger.warning("Analytics tracking failed", error=str(e))
 
-# Import middleware
-from .middleware.rate_limiting import rate_limit_middleware
-from .middleware.auth import auth_middleware
+
+import asyncio
+
+import httpx
+from fastapi.testclient import TestClient
+
+from .config import settings
 
 # Import configuration and services
 from .config.settings import (
-    SEMANTIC_SEARCH_AVAILABLE,
+    ANALYTICS_DB_PATH,
+    COMPACTION_AUTO_APPLY_ENABLED,
+    COMPACTION_AUTO_APPLY_INTERVAL_MINUTES,
+    DEFAULT_DB_PATH,
     SCHEDULER_AVAILABLE,
+    SEMANTIC_SEARCH_AVAILABLE,
     SERVER_HOST,
     SERVER_PORT,
     SERVER_VERSION,
-    DEFAULT_DB_PATH,
-    ANALYTICS_DB_PATH,
 )
-from .utils.security import generate_api_key
-from .config import settings
 from .core import memory as memory_module
-from .core.rate_limiter import rate_limiter
 from .core.memory import memory
-from .services.automation import register_event_handlers
-from .services.documentation import docs_are_loaded, maybe_auto_refresh, ensure_marm_started
-from .utils.helpers import read_protocol_file
+from .core.rate_limiter import rate_limiter
+from .endpoints.compaction import router as compaction_router
+from .endpoints.logging import router as logging_router
+from .endpoints.memory import router as memory_router
+from .endpoints.notebook import router as notebook_router
+from .endpoints.reasoning import router as reasoning_router
 
 # Import all endpoint routers
 from .endpoints.session import router as session_router
-from .endpoints.logging import router as logging_router
-from .endpoints.reasoning import router as reasoning_router
-from .endpoints.notebook import router as notebook_router
-from .endpoints.memory import router as memory_router
 from .endpoints.system import router as system_router
-import httpx
-import asyncio
-from fastapi.testclient import TestClient
+from .middleware.auth import auth_middleware
+
+# Import middleware
+from .middleware.rate_limiting import rate_limit_middleware
+from .services.automation import register_event_handlers
+from .services.documentation import (
+    docs_are_loaded,
+    ensure_marm_started,
+    maybe_auto_refresh,
+)
+from .utils.helpers import read_protocol_file
+from .utils.security import generate_api_key
+
 # ...
+
+
+def _maybe_start_compaction_scheduler():
+    """Start the compaction auto-apply APScheduler job if V4 settings allow it."""
+    if not COMPACTION_AUTO_APPLY_ENABLED or not SCHEDULER_AVAILABLE:
+        return None
+    from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
+    from .endpoints.compaction import auto_apply_staged_summaries
+
+    scheduler = AsyncIOScheduler()
+    scheduler.add_job(
+        auto_apply_staged_summaries,
+        "interval",
+        minutes=COMPACTION_AUTO_APPLY_INTERVAL_MINUTES,
+        id="compaction_auto_apply",
+        max_instances=1,
+    )
+    scheduler.start()
+    logger.info(
+        "Compaction auto-apply scheduler started",
+        interval_minutes=COMPACTION_AUTO_APPLY_INTERVAL_MINUTES,
+    )
+    return scheduler
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Modern FastAPI lifespan management for startup and shutdown"""
     # Startup
     logger.info("Initializing MARM MCP Server", version=SERVER_VERSION)
-    
+
     # Measure memory before loading
     memory_before = get_memory_usage()
     logger.info("Initial memory usage", memory_mb=f"{memory_before:.1f}")
-    
+
     # Show database paths
-    logger.info("Database locations",
-                memory_db=DEFAULT_DB_PATH,
-                analytics_db=ANALYTICS_DB_PATH)
-    
+    logger.info(
+        "Database locations", memory_db=DEFAULT_DB_PATH, analytics_db=ANALYTICS_DB_PATH
+    )
+
     # Register automation event handlers
     register_event_handlers()
     await memory.start_write_queue()
-    
+
+    # V4: start scheduled compaction auto-apply if enabled
+    _compaction_scheduler = _maybe_start_compaction_scheduler()
+
     # Check memory usage after loading
     memory_after = get_memory_usage()
     logger.info("Memory usage after startup", memory_mb=f"{memory_after:.1f}")
-    
+
     # Report memory increase from startup
     memory_increase = memory_after - memory_before
     logger.info("Startup memory increase", increase_mb=f"{memory_increase:.1f}")
-    
+
     logger.info("MARM MCP Server initialization complete")
-    
+
     # Track server startup
     track_usage("server_startup", user_data={"version": SERVER_VERSION})
-
 
     yield
 
     # Shutdown (cleanup if needed)
     logger.info("Shutting down MARM MCP Server")
+    if _compaction_scheduler and _compaction_scheduler.running:
+        _compaction_scheduler.shutdown(wait=False)
     await memory.stop_write_queue()
     track_usage("server_shutdown")
+
 
 # Create the main FastAPI application with modern lifespan
 app = FastAPI(
     title="MARM MCP Server",
     description="Memory Accurate Response Mode - Complete Protocol Implementation",
     version=SERVER_VERSION,
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
 _protocol_delivered = False
+
 
 async def _mcp_tool_call_tracker(request: Request, call_next):
     """Lazy doc-load and auto-refresh for MCP tool calls.
@@ -220,25 +270,32 @@ async def _mcp_tool_call_tracker(request: Request, call_next):
             result = data.get("result", {})
             content = result.get("content")
             if isinstance(content, list):
-                content.insert(0, {
-                    "type": "text",
-                    "text": f"[MARM SESSION INIT]\n\n{protocol_content}"
-                })
+                content.insert(
+                    0,
+                    {
+                        "type": "text",
+                        "text": f"[MARM SESSION INIT]\n\n{protocol_content}",
+                    },
+                )
                 _protocol_delivered = True
             return JSONResponse(
                 content=data,
                 status_code=response.status_code,
-                headers={k: v for k, v in response.headers.items()
-                         if k.lower() not in ("content-length", "content-type")}
+                headers={
+                    k: v
+                    for k, v in response.headers.items()
+                    if k.lower() not in ("content-length", "content-type")
+                },
             )
         except Exception as e:
             logger.warning("Protocol injection failed", error=str(e))
             from starlette.responses import Response as StarletteResponse
+
             return StarletteResponse(
                 content=body_bytes,
                 status_code=response.status_code,
                 headers=dict(response.headers),
-                media_type="application/json"
+                media_type="application/json",
             )
 
     return response
@@ -251,14 +308,11 @@ app.middleware("http")(_mcp_tool_call_tracker)
 app.middleware("http")(auth_middleware)
 app.middleware("http")(rate_limit_middleware)
 
+
 def get_memory_usage():
     """Get current memory usage in MB."""
     process = psutil.Process(os.getpid())
     return process.memory_info().rss / 1024 / 1024  # MB
-
-
-
-
 
 
 # Modern lifespan management implemented above - no deprecated startup events needed
@@ -270,29 +324,32 @@ app.include_router(reasoning_router)
 app.include_router(notebook_router)
 app.include_router(memory_router)
 app.include_router(system_router)
-
+app.include_router(compaction_router)
 
 
 # Create and mount the MCP server wrapper
 mcp = FastApiMCP(app)
 mcp.mount_http()
 
+
 # Main execution block for development
 def check_dependencies():
     """Validate all system dependencies and requirements"""
     print("MARM MCP Server - Dependency Check")
-    print("="*40)
-    
+    print("=" * 40)
+
     issues = []
-    
+
     # Python version check
-    python_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+    python_version = (
+        f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+    )
     print(f"Python version: {python_version}")
     if sys.version_info < (3, 8):
         issues.append("Python 3.8+ required")
     else:
         print("Python version OK")
-    
+
     # Core dependencies check
     required_modules = [
         ("fastapi", "FastAPI web framework"),
@@ -300,9 +357,9 @@ def check_dependencies():
         ("uvicorn", "ASGI web server"),
         ("pydantic", "Data validation"),
         ("sqlite3", "Database (built-in)"),
-        ("structlog", "Structured logging")
+        ("structlog", "Structured logging"),
     ]
-    
+
     for module, description in required_modules:
         try:
             if module == "sqlite3":
@@ -313,19 +370,19 @@ def check_dependencies():
         except ImportError:
             issues.append(f"Missing: {module} ({description})")
             print(f"Missing: {module}")
-    
+
     # Optional features check
     print("\nOptional Features:")
     if SEMANTIC_SEARCH_AVAILABLE:
         print("OK Semantic search (sentence-transformers)")
     else:
         print("Semantic search disabled - install sentence-transformers")
-    
+
     if SCHEDULER_AVAILABLE:
         print("OK Automation scheduler (apscheduler)")
     else:
         print("Scheduler disabled - install apscheduler")
-    
+
     # Database path check
     print(f"\nDatabase location: {DEFAULT_DB_PATH}")
     db_dir = Path(DEFAULT_DB_PATH).parent
@@ -333,9 +390,9 @@ def check_dependencies():
         print("OK Database directory writable")
     else:
         issues.append(f"Cannot write to database directory: {db_dir}")
-    
+
     # Summary
-    print("\n" + "="*40)
+    print("\n" + "=" * 40)
     if issues:
         print("Issues found:")
         for issue in issues:
@@ -347,6 +404,7 @@ def check_dependencies():
         print("Ready to start MARM MCP Server")
         return True
 
+
 async def run_server_with_shutdown():
     """Run server with proper signal handling and graceful shutdown"""
     from .core.shutdown_manager import shutdown_manager
@@ -355,12 +413,7 @@ async def run_server_with_shutdown():
     await shutdown_manager.setup_signal_handlers()
 
     # Configure uvicorn server
-    config = uvicorn.Config(
-        app,
-        host=SERVER_HOST,
-        port=SERVER_PORT,
-        log_level="info"
-    )
+    config = uvicorn.Config(app, host=SERVER_HOST, port=SERVER_PORT, log_level="info")
     server = uvicorn.Server(config)
 
     # Start server in background
@@ -371,8 +424,7 @@ async def run_server_with_shutdown():
 
     # Wait for either server completion or shutdown signal
     done, pending = await asyncio.wait(
-        [server_task, shutdown_task],
-        return_when=asyncio.FIRST_COMPLETED
+        [server_task, shutdown_task], return_when=asyncio.FIRST_COMPLETED
     )
 
     # If shutdown signal received, perform graceful shutdown
@@ -400,6 +452,7 @@ async def run_server_with_shutdown():
             pass
 
         logger.info("Server shutdown complete")
+
 
 def create_server():
     """Return the FastAPI app instance for external use."""
@@ -437,9 +490,13 @@ def apply_runtime_preset(
         mode = "trusted"
         write_queue_enabled = True
 
+    compaction_trigger_count = 5 if mode == "default" else 20
+
     settings.MARM_RATE_LIMIT_RPM = rpm
     settings.WRITE_QUEUE_ENABLED = write_queue_enabled
+    settings.COMPACTION_TRIGGER_COUNT = compaction_trigger_count
     memory_module.WRITE_QUEUE_ENABLED = write_queue_enabled
+    memory_module.COMPACTION_TRIGGER_COUNT = compaction_trigger_count
     rate_limiter.configure(
         requests=rpm,
         window=settings.RATE_LIMIT_WINDOW_SECONDS,
@@ -457,19 +514,35 @@ def main():
     """Entry point for pip-installed CLI (marm-mcp-server command)."""
     import argparse
 
-    parser = argparse.ArgumentParser(description='MARM MCP Server')
-    parser.add_argument('--check-deps', action='store_true',
-                       help='Check system dependencies and exit')
-    parser.add_argument('--generate-key', action='store_true',
-                       help='Generate a strong MARM_API_KEY and print it to stdout')
-    parser.add_argument('--swarm', action='store_true',
-                       help='Enable shared HTTP swarm mode (write queue on, 200 RPM)')
-    parser.add_argument('--swarm-max', action='store_true',
-                       help='Enable heavier shared HTTP swarm mode (write queue on, 600 RPM)')
-    parser.add_argument('--trusted', action='store_true',
-                       help='Trusted local/private mode (write queue on, rate limiting disabled)')
-    parser.add_argument('--rate-limit-rpm', type=int,
-                       help='Override HTTP rate limit RPM; 0 disables rate limiting')
+    parser = argparse.ArgumentParser(description="MARM MCP Server")
+    parser.add_argument(
+        "--check-deps", action="store_true", help="Check system dependencies and exit"
+    )
+    parser.add_argument(
+        "--generate-key",
+        action="store_true",
+        help="Generate a strong MARM_API_KEY and print it to stdout",
+    )
+    parser.add_argument(
+        "--swarm",
+        action="store_true",
+        help="Enable shared HTTP swarm mode (write queue on, 200 RPM)",
+    )
+    parser.add_argument(
+        "--swarm-max",
+        action="store_true",
+        help="Enable heavier shared HTTP swarm mode (write queue on, 600 RPM)",
+    )
+    parser.add_argument(
+        "--trusted",
+        action="store_true",
+        help="Trusted local/private mode (write queue on, rate limiting disabled)",
+    )
+    parser.add_argument(
+        "--rate-limit-rpm",
+        type=int,
+        help="Override HTTP rate limit RPM; 0 disables rate limiting",
+    )
     args = parser.parse_args()
 
     if args.generate_key:
@@ -493,20 +566,32 @@ def main():
     except ValueError as exc:
         parser.error(str(exc))
 
-    logger.info("Starting MARM MCP Server",
-                version=SERVER_VERSION,
-                mcp_endpoint="http://localhost:8001/mcp",
-                docs="http://localhost:8001/docs",
-                database=DEFAULT_DB_PATH,
-                rate_limit_mode=runtime_config["mode"],
-                rate_limit_rpm=runtime_config["rate_limit_rpm"],
-                write_queue_enabled=runtime_config["write_queue_enabled"])
+    logger.info(
+        "Starting MARM MCP Server",
+        version=SERVER_VERSION,
+        mcp_endpoint="http://localhost:8001/mcp",
+        docs="http://localhost:8001/docs",
+        database=DEFAULT_DB_PATH,
+        rate_limit_mode=runtime_config["mode"],
+        rate_limit_rpm=runtime_config["rate_limit_rpm"],
+        write_queue_enabled=runtime_config["write_queue_enabled"],
+    )
 
-    logger.info("Feature status",
-                semantic_search="ENABLED" if SEMANTIC_SEARCH_AVAILABLE else "DISABLED - install sentence-transformers",
-                scheduler="ENABLED" if SCHEDULER_AVAILABLE else "DISABLED - install apscheduler",
-                rate_limiting="DISABLED" if runtime_config["rate_limit_rpm"] == 0 else "ENABLED",
-                write_queue="ENABLED" if runtime_config["write_queue_enabled"] else "DISABLED")
+    logger.info(
+        "Feature status",
+        semantic_search=(
+            "ENABLED"
+            if SEMANTIC_SEARCH_AVAILABLE
+            else "DISABLED - install sentence-transformers"
+        ),
+        scheduler=(
+            "ENABLED" if SCHEDULER_AVAILABLE else "DISABLED - install apscheduler"
+        ),
+        rate_limiting=(
+            "DISABLED" if runtime_config["rate_limit_rpm"] == 0 else "ENABLED"
+        ),
+        write_queue="ENABLED" if runtime_config["write_queue_enabled"] else "DISABLED",
+    )
 
     try:
         asyncio.run(run_server_with_shutdown())

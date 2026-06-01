@@ -2,7 +2,7 @@
 
 import asyncio
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 
 @dataclass
@@ -14,12 +14,22 @@ class MemoryWriteRequest:
     future: asyncio.Future
 
 
+@dataclass
+class CallableWriteRequest:
+    """Generic write request for non-store_memory operations (e.g. compaction apply)."""
+
+    func: Callable
+    args: tuple
+    kwargs: dict
+    future: asyncio.Future
+
+
 class WriteQueue:
     """Serialize memory writes through one async worker."""
 
     def __init__(self, memory, max_size: int = 100):
         self.memory = memory
-        self.queue: asyncio.Queue[MemoryWriteRequest] = asyncio.Queue(maxsize=max_size)
+        self.queue: asyncio.Queue = asyncio.Queue(maxsize=max_size)
         self._worker_task: asyncio.Task | None = None
         self._stopping = False
 
@@ -51,20 +61,34 @@ class WriteQueue:
             raise RuntimeError("write queue is shutting down")
         loop = asyncio.get_running_loop()
         future: asyncio.Future = loop.create_future()
-        await self.queue.put(MemoryWriteRequest(content, session, context_type, metadata, future))
+        await self.queue.put(
+            MemoryWriteRequest(content, session, context_type, metadata, future)
+        )
+        return await future
+
+    async def put_callable(self, func: Callable, *args: Any, **kwargs: Any) -> Any:
+        """Enqueue any async callable to be executed in write-queue order."""
+        if self._stopping:
+            raise RuntimeError("write queue is shutting down")
+        loop = asyncio.get_running_loop()
+        future: asyncio.Future = loop.create_future()
+        await self.queue.put(CallableWriteRequest(func, args, kwargs, future))
         return await future
 
     async def _worker(self) -> None:
         while True:
             request = await self.queue.get()
             try:
-                memory_id = await self.memory.store_memory(
-                    request.content,
-                    request.session,
-                    request.context_type,
-                    request.metadata,
-                )
-                self._resolve(request.future, memory_id)
+                if isinstance(request, MemoryWriteRequest):
+                    result = await self.memory.store_memory(
+                        request.content,
+                        request.session,
+                        request.context_type,
+                        request.metadata,
+                    )
+                else:
+                    result = await request.func(*request.args, **request.kwargs)
+                self._resolve(request.future, result)
             except Exception as exc:
                 self._reject(request.future, exc)
             finally:

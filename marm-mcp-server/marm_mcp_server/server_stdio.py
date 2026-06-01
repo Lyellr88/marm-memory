@@ -622,6 +622,83 @@ async def marm_summary(
 
 
 # ============================================================================
+# Compaction Tools
+# ============================================================================
+
+@mcp.tool()
+@_log_tool_call
+async def marm_get_compaction_candidates() -> dict:
+    """
+    Return pending_summary compaction candidates with an embedded prompt template.
+
+    Poll this tool to discover memory clusters awaiting agent summarization.
+    Each candidate includes its source memory previews and a ready-to-use prompt.
+    Returns empty list when no candidates exist — safe to poll at any cadence.
+    """
+    from marm_mcp_server.endpoints.compaction import marm_get_compaction_candidates as _impl
+    return await _impl()
+
+
+@mcp.tool()
+@_log_tool_call
+async def marm_stage_compaction_summaries(summaries: list) -> dict:
+    """
+    Submit agent-generated summaries for pending compaction candidates.
+
+    Each item must include: candidate_id, source_memory_ids, suggested_summary.
+    Advances each candidate from pending_summary to summary_staged.
+    """
+    try:
+        from marm_mcp_server.endpoints.compaction import marm_stage_compaction_summaries as _impl
+        from marm_mcp_server.core.models import StageCompactionSummariesRequest, StagedSummaryItem
+        if not isinstance(summaries, list):
+            return {"status": "error", "message": "summaries must be a list"}
+        items = []
+        for s in summaries:
+            if not isinstance(s, dict):
+                return {"status": "error", "message": "each summary item must be an object with candidate_id, source_memory_ids, suggested_summary"}
+            missing_keys = [k for k in ("candidate_id", "source_memory_ids", "suggested_summary") if k not in s]
+            if missing_keys:
+                return {"status": "error", "message": f"summary item missing required fields: {missing_keys}"}
+            items.append(StagedSummaryItem(
+                candidate_id=s["candidate_id"],
+                source_memory_ids=s["source_memory_ids"],
+                suggested_summary=s["suggested_summary"],
+            ))
+        return await _impl(StageCompactionSummariesRequest(summaries=items))
+    except Exception as e:
+        return {"status": "error", "message": f"Error staging compaction summaries: {str(e)}"}
+
+
+@mcp.tool()
+@_log_tool_call
+async def marm_get_staged_summaries() -> dict:
+    """
+    Return all summary_staged compaction proposals awaiting main agent review.
+
+    Returns empty list when nothing is staged. Use marm_apply_compaction to
+    act on each proposal with action='apply' or action='discard'.
+    """
+    from marm_mcp_server.endpoints.compaction import marm_get_staged_summaries as _impl
+    return await _impl()
+
+
+@mcp.tool()
+@_log_tool_call
+async def marm_apply_compaction(candidate_id: str, action: str) -> dict:
+    """
+    Apply or discard a staged compaction proposal.
+
+    action='apply': inserts a summary memory row and marks source rows as compacted.
+    action='discard': rejects the proposal with no write to memories.
+    Apply is idempotent — calling again on an already-applied candidate returns success.
+    """
+    from marm_mcp_server.endpoints.compaction import marm_apply_compaction as _impl
+    from marm_mcp_server.core.models import ApplyCompactionRequest
+    return await _impl(ApplyCompactionRequest(candidate_id=candidate_id, action=action))
+
+
+# ============================================================================
 # Entrypoint
 # ============================================================================
 

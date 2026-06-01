@@ -36,6 +36,7 @@ pids/
 *.seed
 *.pid.lock
 scripts/out/
+marm-mcp-server/scripts/out/
 
 # Local install-helper prototype; not public-ready.
 scripts/mcp-client-commands.py

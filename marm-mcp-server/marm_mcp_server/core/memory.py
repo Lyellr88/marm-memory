@@ -66,8 +66,11 @@ from ..config.settings import (
     WRITE_QUEUE_ENABLED,
     CONSOLIDATION_ENABLED,
     CONSOLIDATION_THRESHOLD,
+    COMPACTION_ENABLED,
+    COMPACTION_TRIGGER_COUNT,
 )
 from .consolidation import compute_content_hash, find_exact_duplicate, find_semantic_duplicate
+from .compaction import trigger_compaction
 from .write_queue import WriteQueue
 
 # Try to import sentence transformer if available
@@ -193,6 +196,8 @@ class MARMMemory:
         self.active_notebook_entries_by_session: dict[str, list[dict]] = {}
         self.active_log_session: str = "main"
         self._write_queue: WriteQueue | None = None
+        self._session_write_counts: dict = {}
+        self._pending_compaction_scans: dict = {}
 
     async def start_write_queue(self) -> None:
         """Start the serialized write queue when enabled."""
@@ -208,6 +213,24 @@ class MARMMemory:
             return
         await self._write_queue.stop()
         self._write_queue = None
+
+    def _on_memory_written(self, session: str) -> None:
+        """Increment compaction write counter and fire trigger when threshold is reached.
+
+        Called on every real memory write: new inserts and Layer 2 merges.
+        Layer 1 exact-duplicate skips do not call this — DB was not changed.
+        If a pending scan exists for the session, cancel it (new write resets the grace window).
+        """
+        if not COMPACTION_ENABLED:
+            return
+        pending = self._pending_compaction_scans.get(session)
+        if pending is not None and not pending.done():
+            pending.cancel()
+            self._pending_compaction_scans.pop(session, None)
+            self._session_write_counts[session] = 0
+        self._session_write_counts[session] = self._session_write_counts.get(session, 0) + 1
+        if self._session_write_counts[session] >= COMPACTION_TRIGGER_COUNT:
+            trigger_compaction(self, session)
 
     def get_active_notebook_entries(self, session_name: str = "main") -> list[dict]:
         """Return active notebook entries scoped to a session."""
@@ -331,6 +354,38 @@ class MARMMemory:
             if "content_hash" not in mem_cols:
                 conn.execute("ALTER TABLE memories ADD COLUMN content_hash TEXT")
 
+            # Idempotent migrations: compaction Layer 3 metadata columns
+            if "compaction_role" not in mem_cols:
+                conn.execute("ALTER TABLE memories ADD COLUMN compaction_role TEXT")
+            if "compacted_into" not in mem_cols:
+                conn.execute("ALTER TABLE memories ADD COLUMN compacted_into TEXT")
+
+            # V2: staging table for agent-driven summarization
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS compaction_staging (
+                    id TEXT PRIMARY KEY,
+                    session_name TEXT NOT NULL,
+                    source_memory_ids TEXT NOT NULL,
+                    preview TEXT NOT NULL,
+                    suggested_summary TEXT,
+                    status TEXT NOT NULL DEFAULT 'pending_summary',
+                    candidate_hash TEXT NOT NULL,
+                    source_updated_at_snapshot TEXT NOT NULL,
+                    expires_at TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    reviewed_at TEXT
+                )
+            ''')
+            conn.execute(
+                'CREATE INDEX IF NOT EXISTS idx_compaction_staging_session_status '
+                'ON compaction_staging(session_name, status)'
+            )
+            conn.execute(
+                'CREATE INDEX IF NOT EXISTS idx_compaction_staging_hash '
+                'ON compaction_staging(candidate_hash)'
+            )
+
             conn.commit()
     
     def _load_encoder_lazily(self) -> bool:
@@ -444,6 +499,7 @@ class MARMMemory:
             )
             if existing_id:
                 await self.update_memory(existing_id, sanitized_content)
+                self._on_memory_written(session)
                 return existing_id
 
         memory_id = str(uuid.uuid4())
@@ -470,6 +526,7 @@ class MARMMemory:
                 VALUES (?, ?)
             ''', (session, timestamp))
 
+        self._on_memory_written(session)
         return memory_id
 
     async def store_memory_queued(

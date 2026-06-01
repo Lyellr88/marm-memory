@@ -38,3 +38,18 @@ class DeleteRequest(BaseModel):
     type: Literal["log", "notebook"] = Field(..., description="What to delete: 'log' or 'notebook'")
     target: str = Field(..., description="Log entry id/topic, log session name, or notebook entry name")
     session_name: Optional[str] = Field(default=None, description="Log session to scope deletion. Omit to delete an entire session.")
+
+
+class StagedSummaryItem(BaseModel):
+    candidate_id: str = Field(..., description="Compaction staging candidate ID")
+    source_memory_ids: list[str] = Field(..., description="Source memory IDs — must match staged candidate exactly")
+    suggested_summary: str = Field(..., description="Agent-generated summary of the source memories")
+
+
+class StageCompactionSummariesRequest(BaseModel):
+    summaries: list[StagedSummaryItem] = Field(..., description="One or more candidate summaries to stage")
+
+
+class ApplyCompactionRequest(BaseModel):
+    candidate_id: str = Field(..., description="Compaction staging candidate ID")
+    action: Literal["apply", "discard"] = Field(..., description="apply: commit summary to memories; discard: reject proposal")

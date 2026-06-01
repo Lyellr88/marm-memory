@@ -96,6 +96,17 @@ MAX_QUEUE_SIZE = int(os.environ.get('MAX_QUEUE_SIZE', '100'))
 CONSOLIDATION_ENABLED = os.environ.get('CONSOLIDATION_ENABLED', '0') == '1'
 CONSOLIDATION_THRESHOLD = float(os.environ.get('CONSOLIDATION_THRESHOLD', '0.92'))
 
+# Compaction worker — Layer 3 background cluster detection and dry-run reporting. Off by default.
+COMPACTION_ENABLED = os.environ.get('COMPACTION_ENABLED', '0') == '1'
+COMPACTION_TRIGGER_COUNT = int(os.environ.get('COMPACTION_TRIGGER_COUNT', '5'))
+COMPACTION_SIMILARITY_THRESHOLD = float(os.environ.get('COMPACTION_SIMILARITY_THRESHOLD', '0.88'))
+COMPACTION_MIN_CLUSTER_SIZE = int(os.environ.get('COMPACTION_MIN_CLUSTER_SIZE', '3'))
+COMPACTION_MIN_AGE_HOURS = int(os.environ.get('COMPACTION_MIN_AGE_HOURS', '24'))
+COMPACTION_ACTIVE_SESSION_GRACE_MINUTES = int(os.environ.get('COMPACTION_ACTIVE_SESSION_GRACE_MINUTES', '15'))
+COMPACTION_STAGING_TTL_HOURS = int(os.environ.get('COMPACTION_STAGING_TTL_HOURS', '168'))
+COMPACTION_AUTO_APPLY_ENABLED = os.environ.get('COMPACTION_AUTO_APPLY_ENABLED', '0') == '1'
+COMPACTION_AUTO_APPLY_INTERVAL_MINUTES = int(os.environ.get('COMPACTION_AUTO_APPLY_INTERVAL_MINUTES', '60'))
+
 # Auth — set MARM_API_KEY to require a Bearer token on all capability routes.
 # Leave unset for local-only deployments (loopback enforced automatically).
 MARM_API_KEY = os.environ.get('MARM_API_KEY', '')
