@@ -80,7 +80,7 @@ DEFAULT_SEMANTIC_MODEL = "all-MiniLM-L6-v2"
 # Server configuration
 SERVER_HOST = os.environ.get('SERVER_HOST', '127.0.0.1')
 SERVER_PORT = int(os.environ.get('SERVER_PORT', 8001))
-SERVER_VERSION = "2.8.0"
+SERVER_VERSION = "2.9.0"
 
 # Rate limiting configuration. MARM_RATE_LIMIT_RPM=0 disables limiting.
 MARM_RATE_LIMIT_RPM = int(os.environ.get('MARM_RATE_LIMIT_RPM', '80'))
@@ -106,6 +106,9 @@ COMPACTION_ACTIVE_SESSION_GRACE_MINUTES = int(os.environ.get('COMPACTION_ACTIVE_
 COMPACTION_STAGING_TTL_HOURS = int(os.environ.get('COMPACTION_STAGING_TTL_HOURS', '168'))
 COMPACTION_AUTO_APPLY_ENABLED = os.environ.get('COMPACTION_AUTO_APPLY_ENABLED', '0') == '1'
 COMPACTION_AUTO_APPLY_INTERVAL_MINUTES = int(os.environ.get('COMPACTION_AUTO_APPLY_INTERVAL_MINUTES', '60'))
+COMPACTION_MAX_NUDGES = int(os.environ.get('COMPACTION_MAX_NUDGES', '5'))
+COMPACTION_NUDGE_COOLDOWN_SECONDS = int(os.environ.get('COMPACTION_NUDGE_COOLDOWN_SECONDS', '2'))
+COMPACTION_INJECTION_BYTE_BUDGET = int(os.environ.get('COMPACTION_INJECTION_BYTE_BUDGET', '2048'))
 
 # Auth — set MARM_API_KEY to require a Bearer token on all capability routes.
 # Leave unset for local-only deployments (loopback enforced automatically).

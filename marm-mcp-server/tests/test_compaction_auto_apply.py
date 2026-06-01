@@ -10,12 +10,13 @@ import pytest
 
 from marm_mcp_server.core.compaction import _compute_candidate_hash
 from marm_mcp_server.core.memory import MARMMemory
-from marm_mcp_server.core.models import ApplyCompactionRequest
+from marm_mcp_server.core.models import ApplyCompactionRequest, CompactionRequest
 from marm_mcp_server.core.write_queue import CallableWriteRequest, WriteQueue
 from marm_mcp_server.endpoints.compaction import (
     _apply_compaction_write,
     auto_apply_staged_summaries,
     marm_apply_compaction,
+    marm_compaction,
 )
 
 # --- helpers (mirrored from v2 test file) ---
@@ -242,6 +243,36 @@ async def test_apply_compaction_routes_through_write_queue(mem):
     assert _get_staging_status(mem, candidate_id) == "applied"
 
     # Source rows should be marked compacted
+    for mem_id in source_ids:
+        assert _get_memory_compaction_role(mem, mem_id) == "source"
+
+
+@pytest.mark.asyncio
+async def test_unified_apply_compaction_routes_through_write_queue(mem):
+    """marm_compaction(action='apply') uses the same queued apply path."""
+    session = "unified-queue-route-session"
+    ids_and_hashes = [_insert_memory_row(mem, session, f"memory {i}") for i in range(3)]
+    source_ids = [m[0] for m in ids_and_hashes]
+    snapshot = {m[0]: m[1] for m in ids_and_hashes}
+
+    candidate_id = _insert_staging_row(
+        mem, session, source_ids, status="summary_staged", snapshot=snapshot
+    )
+
+    queue = WriteQueue(mem, max_size=10)
+    await queue.start()
+    mem._write_queue = queue
+
+    result = await marm_compaction(
+        CompactionRequest(action="apply", candidate_id=candidate_id)
+    )
+
+    await queue.stop()
+    mem._write_queue = None
+
+    assert result["status"] == "applied"
+    assert "summary_memory_id" in result
+    assert _get_staging_status(mem, candidate_id) == "applied"
     for mem_id in source_ids:
         assert _get_memory_compaction_role(mem, mem_id) == "source"
 

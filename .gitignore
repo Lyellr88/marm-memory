@@ -97,6 +97,7 @@ docs/future/
 .gemini/
 .codexignore
 .claudeignore
+.bridgespace
 .cursor
 .pytest_cache/
 .pytest_tmp*/

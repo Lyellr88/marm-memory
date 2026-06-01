@@ -53,3 +53,21 @@ class StageCompactionSummariesRequest(BaseModel):
 class ApplyCompactionRequest(BaseModel):
     candidate_id: str = Field(..., description="Compaction staging candidate ID")
     action: Literal["apply", "discard"] = Field(..., description="apply: commit summary to memories; discard: reject proposal")
+
+
+class CompactionRequest(BaseModel):
+    action: Literal["status", "candidates", "review", "stage", "apply", "discard"] = Field(
+        ..., description="Compaction action to run"
+    )
+    limit: int = Field(
+        default=20,
+        ge=1,
+        le=100,
+        description="Maximum staged proposals to return for action='review'",
+    )
+    summaries: Optional[list[StagedSummaryItem]] = Field(
+        default=None, description="Required for action='stage'"
+    )
+    candidate_id: Optional[str] = Field(
+        default=None, description="Required for action='apply' or action='discard'"
+    )

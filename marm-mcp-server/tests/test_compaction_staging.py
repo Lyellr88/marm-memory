@@ -2,6 +2,7 @@
 
 import json
 import uuid
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone, timedelta
 
 import numpy as np
@@ -9,6 +10,8 @@ import pytest
 
 from marm_mcp_server.core.compaction import (
     _compute_candidate_hash,
+    _build_compaction_prompt_block,
+    claim_pending_compaction_prompt,
     mark_stale_candidates,
     persist_candidates_to_staging,
 )
@@ -330,6 +333,108 @@ async def test_get_candidates_returns_pending_with_prompt(monkeypatch, tmp_path)
 
 
 @pytest.mark.asyncio
+async def test_unified_compaction_candidates_action(monkeypatch, tmp_path):
+    import marm_mcp_server.endpoints.compaction as ep
+    from marm_mcp_server.core.models import CompactionRequest
+
+    mem = MARMMemory(str(tmp_path / "memory.db"))
+    monkeypatch.setattr(ep, "memory", mem)
+
+    similar = _make_similar_embeddings(3)
+    ids = [_insert_memory_row(mem, "sess", f"content {i}", similar[i]) for i in range(3)]
+    _insert_staging_row(mem, "sess", ids)
+
+    result = await ep.marm_compaction(CompactionRequest(action="candidates"))
+
+    assert len(result["candidates"]) == 1
+    assert result["candidates"][0]["session_name"] == "sess"
+
+
+@pytest.mark.asyncio
+async def test_unified_compaction_status_action_is_bounded(monkeypatch, tmp_path):
+    import marm_mcp_server.endpoints.compaction as ep
+    from marm_mcp_server.core.models import CompactionRequest
+
+    mem = MARMMemory(str(tmp_path / "memory.db"))
+    monkeypatch.setattr(ep, "memory", mem)
+
+    similar = _make_similar_embeddings(3)
+    ids_a = [_insert_memory_row(mem, "sess", f"a{i}", similar[i]) for i in range(3)]
+    ids_b = [_insert_memory_row(mem, "sess", f"b{i}", similar[i]) for i in range(3)]
+    _insert_staging_row(mem, "sess", ids_a, status="pending_summary")
+    staged_id = _insert_staging_row(
+        mem,
+        "sess",
+        ids_b,
+        status="summary_staged",
+        suggested_summary="B summary.",
+    )
+
+    result = await ep.marm_compaction(CompactionRequest(action="status"))
+
+    assert result["status"] == "ok"
+    assert result["counts"]["pending_summary"] == 1
+    assert result["counts"]["summary_staged"] == 1
+    assert result["staged_candidate_ids"] == [staged_id]
+    assert "candidates" not in result
+    assert "proposals" not in result
+
+
+@pytest.mark.asyncio
+async def test_unified_compaction_review_action_returns_staged_proposals(monkeypatch, tmp_path):
+    import marm_mcp_server.endpoints.compaction as ep
+    from marm_mcp_server.core.models import CompactionRequest
+
+    mem = MARMMemory(str(tmp_path / "memory.db"))
+    monkeypatch.setattr(ep, "memory", mem)
+
+    similar = _make_similar_embeddings(3)
+    ids = [_insert_memory_row(mem, "sess", f"c{i}", similar[i]) for i in range(3)]
+    row_id = _insert_staging_row(
+        mem,
+        "sess",
+        ids,
+        status="summary_staged",
+        suggested_summary="Reviewable staged summary.",
+    )
+
+    result = await ep.marm_compaction(CompactionRequest(action="review"))
+
+    assert len(result["proposals"]) == 1
+    assert result["proposals"][0]["candidate_id"] == row_id
+    assert result["proposals"][0]["suggested_summary"] == "Reviewable staged summary."
+    assert result["limit"] == 20
+
+
+@pytest.mark.asyncio
+async def test_unified_compaction_review_action_is_limited(monkeypatch, tmp_path):
+    import marm_mcp_server.endpoints.compaction as ep
+    from marm_mcp_server.core.models import CompactionRequest
+
+    mem = MARMMemory(str(tmp_path / "memory.db"))
+    monkeypatch.setattr(ep, "memory", mem)
+
+    similar = _make_similar_embeddings(3)
+    for idx in range(3):
+        ids = [
+            _insert_memory_row(mem, "sess", f"review {idx}-{i}", similar[i])
+            for i in range(3)
+        ]
+        _insert_staging_row(
+            mem,
+            "sess",
+            ids,
+            status="summary_staged",
+            suggested_summary=f"Summary {idx}.",
+        )
+
+    result = await ep.marm_compaction(CompactionRequest(action="review", limit=2))
+
+    assert result["limit"] == 2
+    assert len(result["proposals"]) == 2
+
+
+@pytest.mark.asyncio
 async def test_stage_summaries_advances_to_summary_staged(monkeypatch, tmp_path):
     import marm_mcp_server.endpoints.compaction as ep
     from marm_mcp_server.core.models import StageCompactionSummariesRequest, StagedSummaryItem
@@ -349,6 +454,50 @@ async def test_stage_summaries_advances_to_summary_staged(monkeypatch, tmp_path)
     assert result["results"][0]["status"] == "summary_staged"
     assert _get_staging_row(mem, row_id)["status"] == "summary_staged"
     assert _get_staging_row(mem, row_id)["suggested_summary"] == "Summary of cluster."
+
+
+@pytest.mark.asyncio
+async def test_unified_compaction_stage_action(monkeypatch, tmp_path):
+    import marm_mcp_server.endpoints.compaction as ep
+    from marm_mcp_server.core.models import CompactionRequest, StagedSummaryItem
+
+    mem = MARMMemory(str(tmp_path / "memory.db"))
+    monkeypatch.setattr(ep, "memory", mem)
+
+    similar = _make_similar_embeddings(3)
+    ids = [_insert_memory_row(mem, "sess", f"c{i}", similar[i], content_hash=f"ch{i}") for i in range(3)]
+    snap = {ids[i]: f"ch{i}" for i in range(3)}
+    row_id = _insert_staging_row(mem, "sess", ids, snapshot=snap)
+
+    result = await ep.marm_compaction(
+        CompactionRequest(
+            action="stage",
+            summaries=[
+                StagedSummaryItem(
+                    candidate_id=row_id,
+                    source_memory_ids=ids,
+                    suggested_summary="Unified summary.",
+                )
+            ],
+        )
+    )
+
+    assert result["results"][0]["status"] == "summary_staged"
+    assert _get_staging_row(mem, row_id)["suggested_summary"] == "Unified summary."
+
+
+@pytest.mark.asyncio
+async def test_unified_compaction_stage_requires_summaries(monkeypatch, tmp_path):
+    import marm_mcp_server.endpoints.compaction as ep
+    from marm_mcp_server.core.models import CompactionRequest
+
+    mem = MARMMemory(str(tmp_path / "memory.db"))
+    monkeypatch.setattr(ep, "memory", mem)
+
+    result = await ep.marm_compaction(CompactionRequest(action="stage"))
+
+    assert result["status"] == "error"
+    assert "summaries is required" in result["message"]
 
 
 @pytest.mark.asyncio
@@ -491,6 +640,32 @@ async def test_apply_discard_no_write_to_memories(monkeypatch, tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_unified_compaction_discard_action(monkeypatch, tmp_path):
+    import marm_mcp_server.endpoints.compaction as ep
+    from marm_mcp_server.core.models import CompactionRequest
+
+    mem = MARMMemory(str(tmp_path / "memory.db"))
+    monkeypatch.setattr(ep, "memory", mem)
+
+    similar = _make_similar_embeddings(3)
+    ids = [_insert_memory_row(mem, "sess", f"c{i}", similar[i]) for i in range(3)]
+    row_id = _insert_staging_row(
+        mem,
+        "sess",
+        ids,
+        status="summary_staged",
+        suggested_summary="A summary.",
+    )
+
+    result = await ep.marm_compaction(
+        CompactionRequest(action="discard", candidate_id=row_id)
+    )
+
+    assert result["status"] == "discarded"
+    assert _get_staging_row(mem, row_id)["status"] == "discarded"
+
+
+@pytest.mark.asyncio
 async def test_apply_action_inserts_summary_and_marks_sources(monkeypatch, tmp_path):
     import marm_mcp_server.endpoints.compaction as ep
     from marm_mcp_server.core.models import ApplyCompactionRequest
@@ -537,7 +712,50 @@ async def test_apply_action_inserts_summary_and_marks_sources(monkeypatch, tmp_p
         remaining = conn.execute(
             f"SELECT COUNT(*) FROM memories WHERE id IN ({','.join('?' * len(ids))})", ids
         ).fetchone()[0]
-        assert remaining == len(ids)
+    assert remaining == len(ids)
+
+
+@pytest.mark.asyncio
+async def test_unified_compaction_apply_action(monkeypatch, tmp_path):
+    import marm_mcp_server.endpoints.compaction as ep
+    from marm_mcp_server.core.models import CompactionRequest
+
+    mem = MARMMemory(str(tmp_path / "memory.db"))
+    mem._encoder_failed = True
+    monkeypatch.setattr(ep, "memory", mem)
+
+    similar = _make_similar_embeddings(3)
+    ids = [_insert_memory_row(mem, "sess", f"c{i}", similar[i], content_hash=f"ch{i}") for i in range(3)]
+    snap = {ids[i]: f"ch{i}" for i in range(3)}
+    row_id = _insert_staging_row(
+        mem,
+        "sess",
+        ids,
+        status="summary_staged",
+        suggested_summary="Merged cluster.",
+        snapshot=snap,
+    )
+
+    result = await ep.marm_compaction(
+        CompactionRequest(action="apply", candidate_id=row_id)
+    )
+
+    assert result["status"] == "applied"
+    assert _get_staging_row(mem, row_id)["status"] == "applied"
+
+
+@pytest.mark.asyncio
+async def test_unified_compaction_apply_requires_candidate_id(monkeypatch, tmp_path):
+    import marm_mcp_server.endpoints.compaction as ep
+    from marm_mcp_server.core.models import CompactionRequest
+
+    mem = MARMMemory(str(tmp_path / "memory.db"))
+    monkeypatch.setattr(ep, "memory", mem)
+
+    result = await ep.marm_compaction(CompactionRequest(action="apply"))
+
+    assert result["status"] == "error"
+    assert "candidate_id is required" in result["message"]
 
 
 @pytest.mark.asyncio
@@ -740,3 +958,152 @@ async def test_apply_not_found_returns_error(monkeypatch, tmp_path):
     )
     assert result["status"] == "error"
     assert "not found" in result["reason"]
+
+
+# --- compaction nudge claim ---
+
+
+def test_claim_pending_compaction_prompt_increments_nudge_count(monkeypatch, tmp_path):
+    import marm_mcp_server.core.compaction as compaction_module
+
+    mem = MARMMemory(str(tmp_path / "memory.db"))
+    monkeypatch.setattr(compaction_module.settings, "COMPACTION_ENABLED", True)
+    monkeypatch.setattr(compaction_module.settings, "COMPACTION_MAX_NUDGES", 5)
+    monkeypatch.setattr(
+        compaction_module.settings, "COMPACTION_NUDGE_COOLDOWN_SECONDS", 2
+    )
+    monkeypatch.setattr(
+        compaction_module.settings, "COMPACTION_INJECTION_BYTE_BUDGET", 2048
+    )
+
+    similar = _make_similar_embeddings(3)
+    ids = [_insert_memory_row(mem, "sess", f"c{i}", similar[i]) for i in range(3)]
+    row_id = _insert_staging_row(mem, "sess", ids)
+
+    block = claim_pending_compaction_prompt(mem)
+
+    assert block is not None
+    assert block["type"] == "text"
+    assert "[MARM COMPACTION REQUEST]" in block["text"]
+    assert row_id in block["text"]
+    with mem.get_connection() as conn:
+        row = conn.execute(
+            "SELECT nudge_count, last_nudged_at, status FROM compaction_staging WHERE id = ?",
+            (row_id,),
+        ).fetchone()
+    assert row[0] == 1
+    assert row[1] is not None
+    assert row[2] == "pending_summary"
+
+
+def test_compaction_prompt_block_enforces_byte_budget_and_preserves_footer():
+    row = (
+        "candidate-1",
+        "session-1",
+        json.dumps(["m1", "m2", "m3"]),
+        json.dumps(["x" * 1000, "y" * 1000, "z" * 1000]),
+        "2026-06-01T00:00:00+00:00",
+        "2026-06-02T00:00:00+00:00",
+        1,
+    )
+
+    block = _build_compaction_prompt_block(row, 200)
+
+    assert len(block["text"].encode("utf-8")) <= 200
+    assert "Do not invent facts" in block["text"]
+
+
+def test_claim_pending_compaction_prompt_respects_cooldown(monkeypatch, tmp_path):
+    import marm_mcp_server.core.compaction as compaction_module
+
+    mem = MARMMemory(str(tmp_path / "memory.db"))
+    monkeypatch.setattr(compaction_module.settings, "COMPACTION_ENABLED", True)
+    monkeypatch.setattr(compaction_module.settings, "COMPACTION_MAX_NUDGES", 5)
+    monkeypatch.setattr(
+        compaction_module.settings, "COMPACTION_NUDGE_COOLDOWN_SECONDS", 60
+    )
+
+    similar = _make_similar_embeddings(3)
+    ids = [_insert_memory_row(mem, "sess", f"c{i}", similar[i]) for i in range(3)]
+    row_id = _insert_staging_row(mem, "sess", ids)
+
+    assert claim_pending_compaction_prompt(mem) is not None
+    assert claim_pending_compaction_prompt(mem) is None
+    with mem.get_connection() as conn:
+        nudge_count = conn.execute(
+            "SELECT nudge_count FROM compaction_staging WHERE id = ?",
+            (row_id,),
+        ).fetchone()[0]
+    assert nudge_count == 1
+
+
+def test_claim_pending_compaction_prompt_marks_nudge_exhausted(monkeypatch, tmp_path):
+    import marm_mcp_server.core.compaction as compaction_module
+
+    mem = MARMMemory(str(tmp_path / "memory.db"))
+    monkeypatch.setattr(compaction_module.settings, "COMPACTION_ENABLED", True)
+    monkeypatch.setattr(compaction_module.settings, "COMPACTION_MAX_NUDGES", 1)
+    monkeypatch.setattr(
+        compaction_module.settings, "COMPACTION_NUDGE_COOLDOWN_SECONDS", 0
+    )
+
+    similar = _make_similar_embeddings(3)
+    ids = [_insert_memory_row(mem, "sess", f"c{i}", similar[i]) for i in range(3)]
+    row_id = _insert_staging_row(mem, "sess", ids)
+
+    assert claim_pending_compaction_prompt(mem) is not None
+    assert claim_pending_compaction_prompt(mem) is None
+    assert _get_staging_row(mem, row_id)["status"] == "nudge_exhausted"
+
+
+def test_auto_apply_enabled_does_not_suppress_pending_summary_injection(monkeypatch, tmp_path):
+    import marm_mcp_server.core.compaction as compaction_module
+
+    mem = MARMMemory(str(tmp_path / "memory.db"))
+    monkeypatch.setattr(compaction_module.settings, "COMPACTION_ENABLED", True)
+    monkeypatch.setattr(
+        compaction_module.settings, "COMPACTION_AUTO_APPLY_ENABLED", True
+    )
+    monkeypatch.setattr(compaction_module.settings, "COMPACTION_MAX_NUDGES", 5)
+    monkeypatch.setattr(
+        compaction_module.settings, "COMPACTION_NUDGE_COOLDOWN_SECONDS", 2
+    )
+
+    similar = _make_similar_embeddings(3)
+    ids = [_insert_memory_row(mem, "sess", f"c{i}", similar[i]) for i in range(3)]
+    row_id = _insert_staging_row(mem, "sess", ids, status="pending_summary")
+
+    block = claim_pending_compaction_prompt(mem)
+
+    assert block is not None
+    assert row_id in block["text"]
+    assert _get_staging_row(mem, row_id)["status"] == "pending_summary"
+
+
+def test_claim_pending_compaction_prompt_concurrent_claims_one(monkeypatch, tmp_path):
+    import marm_mcp_server.core.compaction as compaction_module
+
+    mem = MARMMemory(str(tmp_path / "memory.db"))
+    monkeypatch.setattr(compaction_module.settings, "COMPACTION_ENABLED", True)
+    monkeypatch.setattr(compaction_module.settings, "COMPACTION_MAX_NUDGES", 5)
+    monkeypatch.setattr(
+        compaction_module.settings, "COMPACTION_NUDGE_COOLDOWN_SECONDS", 60
+    )
+
+    similar = _make_similar_embeddings(3)
+    ids = [_insert_memory_row(mem, "sess", f"c{i}", similar[i]) for i in range(3)]
+    row_id = _insert_staging_row(mem, "sess", ids)
+
+    results = []
+    with ThreadPoolExecutor(max_workers=5) as pool:
+        futures = [pool.submit(claim_pending_compaction_prompt, mem) for _ in range(5)]
+        for future in as_completed(futures):
+            results.append(future.result())
+
+    assert sum(1 for item in results if item is not None) == 1
+    with mem.get_connection() as conn:
+        nudge_count = conn.execute(
+            "SELECT nudge_count FROM compaction_staging WHERE id = ?",
+            (row_id,),
+        ).fetchone()[0]
+    assert nudge_count == 1

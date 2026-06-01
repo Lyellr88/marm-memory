@@ -5,7 +5,7 @@ This server integrates all modular components of the MARM protocol into a single
 FastAPI application, compliant with the MCP protocol via FastApiMCP.
 
 Author: Lyell - MARM Systems
-Version: 2.8.0
+Version: 2.9.0
 """
 
 import json
@@ -122,6 +122,7 @@ from .config.settings import (
     SERVER_VERSION,
 )
 from .core import memory as memory_module
+from .core.compaction import claim_pending_compaction_prompt
 from .core.memory import memory
 from .core.rate_limiter import rate_limiter
 from .endpoints.compaction import router as compaction_router
@@ -260,24 +261,57 @@ async def _mcp_tool_call_tracker(request: Request, call_next):
     if is_tool_call:
         asyncio.create_task(maybe_auto_refresh())
 
-    if is_tool_call and not _protocol_delivered and response.status_code == 200:
+    if is_tool_call and response.status_code == 200:
+        body_bytes = b""
         try:
-            body_bytes = b""
             async for chunk in response.body_iterator:
                 body_bytes += chunk
             data = json.loads(body_bytes)
-            protocol_content = await read_protocol_file()
             result = data.get("result", {})
             content = result.get("content")
-            if isinstance(content, list):
-                content.insert(
-                    0,
+
+            if not isinstance(content, list):
+                from starlette.responses import Response as StarletteResponse
+
+                return StarletteResponse(
+                    content=body_bytes,
+                    status_code=response.status_code,
+                    headers=dict(response.headers),
+                    media_type="application/json",
+                )
+
+            injections = []
+            protocol_injected = False
+            if not _protocol_delivered:
+                protocol_content = await read_protocol_file()
+                injections.append(
                     {
                         "type": "text",
                         "text": f"[MARM SESSION INIT]\n\n{protocol_content}",
-                    },
+                    }
                 )
+                protocol_injected = True
+
+            compaction_block = await asyncio.to_thread(
+                claim_pending_compaction_prompt, memory
+            )
+            if compaction_block:
+                injections.append(compaction_block)
+
+            if not injections:
+                from starlette.responses import Response as StarletteResponse
+
+                return StarletteResponse(
+                    content=body_bytes,
+                    status_code=response.status_code,
+                    headers=dict(response.headers),
+                    media_type="application/json",
+                )
+
+            content[:0] = injections
+            if protocol_injected:
                 _protocol_delivered = True
+
             return JSONResponse(
                 content=data,
                 status_code=response.status_code,

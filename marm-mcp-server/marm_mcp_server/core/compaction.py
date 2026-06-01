@@ -300,6 +300,147 @@ def mark_stale_candidates(memory: "MARMMemory", session_name: str) -> None:
                 )
 
 
+def _truncate_utf8(text: str, byte_budget: int) -> str:
+    encoded = text.encode("utf-8")
+    if len(encoded) <= byte_budget:
+        return text
+    if byte_budget <= 3:
+        return "..."[:byte_budget]
+    return encoded[: byte_budget - 3].decode("utf-8", errors="ignore") + "..."
+
+
+def _build_compaction_prompt_block(row: tuple, byte_budget: int) -> dict:
+    (
+        candidate_id,
+        session_name,
+        source_ids_json,
+        preview_json,
+        created_at,
+        expires_at,
+        nudge_count,
+    ) = row
+    source_ids = json.loads(source_ids_json)
+    preview = json.loads(preview_json)
+
+    header = (
+        "[MARM COMPACTION REQUEST]\n\n"
+        "MARM found related memories that should be compacted. Generate one concise "
+        "summary using only the source previews below, then call:\n\n"
+        "marm_compaction(action=\"stage\", summaries=[{"
+        "\"candidate_id\": \"<candidate_id>\", "
+        "\"source_memory_ids\": [...], "
+        "\"suggested_summary\": \"...\""
+        "}])\n\n"
+        f"candidate_id: {candidate_id}\n"
+        f"session_name: {session_name}\n"
+        f"source_memory_ids: {json.dumps(source_ids)}\n"
+        f"created_at: {created_at}\n"
+        f"expires_at: {expires_at}\n"
+        f"nudge_count: {nudge_count}\n\n"
+        "Source previews:\n"
+    )
+    footer = "\n\nDo not invent facts. Preserve entities, dates, decisions, and traceability."
+    footer_size = len(footer.encode("utf-8"))
+    if byte_budget <= footer_size:
+        return {"type": "text", "text": _truncate_utf8(footer, byte_budget)}
+
+    header_budget = byte_budget - footer_size
+    fitted_header = _truncate_utf8(header, header_budget)
+    remaining = max(byte_budget - len((fitted_header + footer).encode("utf-8")), 0)
+    preview_text = "\n".join(f"- {item}" for item in preview)
+    text = fitted_header + _truncate_utf8(preview_text, remaining) + footer
+    return {"type": "text", "text": text}
+
+
+def claim_pending_compaction_prompt(memory: "MARMMemory") -> dict | None:
+    """Claim one pending compaction candidate for response injection.
+
+    Uses a BEGIN IMMEDIATE transaction plus rowcount checks instead of SQLite
+    RETURNING so older bundled sqlite3 versions remain compatible.
+    """
+    if not settings.COMPACTION_ENABLED:
+        return None
+
+    now_dt = datetime.now(timezone.utc)
+    now = now_dt.isoformat()
+    cutoff = (
+        now_dt - timedelta(seconds=settings.COMPACTION_NUDGE_COOLDOWN_SECONDS)
+    ).isoformat()
+    max_nudges = settings.COMPACTION_MAX_NUDGES
+    byte_budget = settings.COMPACTION_INJECTION_BYTE_BUDGET
+
+    with memory.get_connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            conn.execute(
+                """
+                UPDATE compaction_staging
+                SET status = 'stale', updated_at = ?
+                WHERE status = 'pending_summary' AND expires_at <= ?
+                """,
+                (now, now),
+            )
+            conn.execute(
+                """
+                UPDATE compaction_staging
+                SET status = 'nudge_exhausted', updated_at = ?
+                WHERE status = 'pending_summary' AND nudge_count >= ?
+                """,
+                (now, max_nudges),
+            )
+            row = conn.execute(
+                """
+                SELECT id, session_name, source_memory_ids, preview, created_at,
+                       expires_at, nudge_count
+                FROM compaction_staging
+                WHERE status = 'pending_summary'
+                  AND expires_at > ?
+                  AND nudge_count < ?
+                  AND (last_nudged_at IS NULL OR last_nudged_at < ?)
+                ORDER BY created_at ASC
+                LIMIT 1
+                """,
+                (now, max_nudges, cutoff),
+            ).fetchone()
+            if not row:
+                conn.execute("COMMIT")
+                return None
+
+            candidate_id = row[0]
+            cur = conn.execute(
+                """
+                UPDATE compaction_staging
+                SET nudge_count = nudge_count + 1,
+                    last_nudged_at = ?,
+                    updated_at = ?
+                WHERE id = ?
+                  AND status = 'pending_summary'
+                  AND nudge_count < ?
+                  AND (last_nudged_at IS NULL OR last_nudged_at < ?)
+                """,
+                (now, now, candidate_id, max_nudges, cutoff),
+            )
+            if cur.rowcount == 0:
+                conn.execute("COMMIT")
+                return None
+
+            claimed = conn.execute(
+                """
+                SELECT id, session_name, source_memory_ids, preview, created_at,
+                       expires_at, nudge_count
+                FROM compaction_staging
+                WHERE id = ?
+                """,
+                (candidate_id,),
+            ).fetchone()
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+
+    return _build_compaction_prompt_block(claimed, byte_budget) if claimed else None
+
+
 async def _delayed_scan(memory: "MARMMemory", session_name: str) -> None:
     delay = settings.COMPACTION_ACTIVE_SESSION_GRACE_MINUTES * 60
     await asyncio.sleep(delay)

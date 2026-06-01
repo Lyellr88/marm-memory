@@ -106,7 +106,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--enable-compaction-check",
         action="store_true",
-        help="After writes, poll /marm_get_compaction_candidates for natural candidates.",
+        help="After writes, poll marm_compaction(action='candidates') for natural candidates.",
     )
     parser.add_argument(
         "--compaction-grace-minutes",
@@ -619,9 +619,9 @@ def poll_compaction_candidates(args: argparse.Namespace, base_url: str) -> dict:
     last_body: dict | None = None
     while time.time() <= deadline:
         status, body, error, latency_ms = _json_request(
-            "GET",
-            f"{base_url.rstrip('/')}/marm_get_compaction_candidates",
-            None,
+            "POST",
+            f"{base_url.rstrip('/')}/marm_compaction",
+            {"action": "candidates"},
             args.timeout_s,
             args.auth_key,
         )

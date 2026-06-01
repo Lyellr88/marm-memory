@@ -374,9 +374,22 @@ class MARMMemory:
                     expires_at TEXT NOT NULL,
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
-                    reviewed_at TEXT
+                    reviewed_at TEXT,
+                    nudge_count INTEGER NOT NULL DEFAULT 0,
+                    last_nudged_at TEXT
                 )
             ''')
+            staging_cols = {
+                row[1]
+                for row in conn.execute("PRAGMA table_info(compaction_staging)").fetchall()
+            }
+            if "nudge_count" not in staging_cols:
+                conn.execute(
+                    "ALTER TABLE compaction_staging "
+                    "ADD COLUMN nudge_count INTEGER NOT NULL DEFAULT 0"
+                )
+            if "last_nudged_at" not in staging_cols:
+                conn.execute("ALTER TABLE compaction_staging ADD COLUMN last_nudged_at TEXT")
             conn.execute(
                 'CREATE INDEX IF NOT EXISTS idx_compaction_staging_session_status '
                 'ON compaction_staging(session_name, status)'

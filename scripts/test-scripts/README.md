@@ -4,6 +4,8 @@ Manual smoke/stress harnesses for write queue, RPM presets, Swarm behavior, and 
 
 Use `--spawn-server` for clean runs. It starts an isolated local MARM server with a temp DB, then deletes it after the run.
 
+Compaction smoke paths use the public `marm_compaction(action=...)` endpoint/tool. The older raw compaction routes are internal/debug only and are hidden from MCP discovery.
+
 ## Pick A Script
 
 | Goal | Script | Start Here |
@@ -30,7 +32,7 @@ Use `--spawn-server` for clean runs. It starts an isolated local MARM server wit
 No HTTP server. Fastest queue-only check.
 
 ```powershell
-python scripts\tests\write-queue-smoke.py --writes 10,25,50,100 --queue-size 100
+python scripts\test-scripts\write-queue-smoke.py --writes 10,25,50,100 --queue-size 100
 ```
 
 ### HTTP/RPM
@@ -38,7 +40,7 @@ python scripts\tests\write-queue-smoke.py --writes 10,25,50,100 --queue-size 100
 Basic spawned-server HTTP write check.
 
 ```powershell
-python scripts\tests\write-queue-http-smoke.py --spawn-server --server-preset swarm --request-steps 100,150,200,300 --concurrency 20 --timeout-s 15 --warmup-writes 0
+python scripts\test-scripts\write-queue-http-smoke.py --spawn-server --server-preset swarm --request-steps 100,150,200,300 --concurrency 20 --timeout-s 15 --warmup-writes 0
 ```
 
 ### Compaction Worker
@@ -46,7 +48,7 @@ python scripts\tests\write-queue-http-smoke.py --spawn-server --server-preset sw
 Skips HTTP load and verifies stage/apply/idempotency/stale guards.
 
 ```powershell
-python scripts\tests\compaction-worker-smoke.py --spawn-server --server-preset trusted --skip-http-load --cluster-size 3 --candidate-count 1
+python scripts\test-scripts\compaction-worker-smoke.py --spawn-server --server-preset trusted --skip-http-load --cluster-size 3 --candidate-count 1
 ```
 
 ### Swarm
@@ -54,7 +56,7 @@ python scripts\tests\compaction-worker-smoke.py --spawn-server --server-preset t
 No Ollama needed. Good first swarm/queue sanity check.
 
 ```powershell
-python scripts\tests\swarm-smoke.py --spawn-server --server-preset trusted --mock-model --agents 10 --rounds 20 --write-mode burst --write-concurrency 30
+python scripts\test-scripts\swarm-smoke.py --spawn-server --server-preset trusted --mock-model --agents 10 --rounds 20 --write-mode burst --write-concurrency 30
 ```
 
 ## Medium Runs
@@ -64,7 +66,7 @@ python scripts\tests\swarm-smoke.py --spawn-server --server-preset trusted --moc
 The `800` step should hit rate limiting because `--swarm-max` is 600 RPM. If it does not, investigate the limiter.
 
 ```powershell
-python scripts\tests\write-queue-http-smoke.py --spawn-server --server-preset swarm-max --request-steps 200,400,600,800 --concurrency 20 --timeout-s 15 --warmup-writes 0
+python scripts\test-scripts\write-queue-http-smoke.py --spawn-server --server-preset swarm-max --request-steps 200,400,600,800 --concurrency 20 --timeout-s 15 --warmup-writes 0
 ```
 
 ### Compaction Worker Full Path
@@ -72,7 +74,7 @@ python scripts\tests\write-queue-http-smoke.py --spawn-server --server-preset sw
 Runs HTTP writes first, then compaction stage/apply, stale check, and cross-session isolation check.
 
 ```powershell
-python scripts\tests\compaction-worker-smoke.py --spawn-server --server-preset swarm --server-rate-limit-rpm 1000 --http-writes 100 --concurrency 20 --candidate-count 3
+python scripts\test-scripts\compaction-worker-smoke.py --spawn-server --server-preset swarm --server-rate-limit-rpm 1000 --http-writes 100 --concurrency 20 --candidate-count 3
 ```
 
 ### Swarm + Natural Compaction
@@ -80,7 +82,7 @@ python scripts\tests\compaction-worker-smoke.py --spawn-server --server-preset s
 Uses one shared session so the per-session compaction counter triggers. `--seed-compaction-embeddings` keeps the test reliable when the spawned server cannot generate embeddings.
 
 ```powershell
-python scripts\tests\swarm-smoke.py --spawn-server --server-preset swarm --mock-model --session-mode shared --agents 5 --rounds 4 --write-mode burst --write-concurrency 20 --enable-compaction-check --seed-compaction-embeddings --compaction-wait-s 20
+python scripts\test-scripts\swarm-smoke.py --spawn-server --server-preset swarm --mock-model --session-mode shared --agents 5 --rounds 4 --write-mode burst --write-concurrency 20 --enable-compaction-check --seed-compaction-embeddings --compaction-wait-s 20
 ```
 
 ## Heavy Runs
@@ -90,7 +92,7 @@ python scripts\tests\swarm-smoke.py --spawn-server --server-preset swarm --mock-
 Mostly removes rate limiting so queue/write throughput is easier to see.
 
 ```powershell
-python scripts\tests\write-queue-http-smoke.py --spawn-server --server-preset swarm --server-rate-limit-rpm 1000 --request-steps 300,600,900,1200 --concurrency 30
+python scripts\test-scripts\write-queue-http-smoke.py --spawn-server --server-preset swarm --server-rate-limit-rpm 1000 --request-steps 300,600,900,1200 --concurrency 30
 ```
 
 ### Trusted No-RPM Pressure
@@ -98,7 +100,7 @@ python scripts\tests\write-queue-http-smoke.py --spawn-server --server-preset sw
 Trusted mode disables rate limiting. These should pass unless the queue, DB, or server starts failing under load.
 
 ```powershell
-python scripts\tests\write-queue-http-smoke.py --spawn-server --server-preset trusted --request-steps 200,400,800,1000 --concurrency 20 --timeout-s 15 --warmup-writes 0
+python scripts\test-scripts\write-queue-http-smoke.py --spawn-server --server-preset trusted --request-steps 200,400,800,1000 --concurrency 20 --timeout-s 15 --warmup-writes 0
 ```
 
 ### Compaction Worker Pressure
@@ -106,7 +108,7 @@ python scripts\tests\write-queue-http-smoke.py --spawn-server --server-preset tr
 Heavier write/load profile with multiple compaction candidates.
 
 ```powershell
-python scripts\tests\compaction-worker-smoke.py --spawn-server --server-preset swarm-max --http-writes 200 --concurrency 30 --candidate-count 5 --timeout-s 20
+python scripts\test-scripts\compaction-worker-smoke.py --spawn-server --server-preset swarm-max --http-writes 200 --concurrency 30 --candidate-count 5 --timeout-s 20
 ```
 
 ### Swarm Queue Pressure
@@ -114,7 +116,7 @@ python scripts\tests\compaction-worker-smoke.py --spawn-server --server-preset s
 Mock model, burst writes, no Ollama bottleneck.
 
 ```powershell
-python scripts\tests\swarm-smoke.py --spawn-server --server-preset swarm --server-rate-limit-rpm 1000 --mock-model --agents 50 --rounds 20 --write-mode burst --write-concurrency 50
+python scripts\test-scripts\swarm-smoke.py --spawn-server --server-preset swarm --server-rate-limit-rpm 1000 --mock-model --agents 50 --rounds 20 --write-mode burst --write-concurrency 50
 ```
 
 ## Special Runs
@@ -124,7 +126,7 @@ python scripts\tests\swarm-smoke.py --spawn-server --server-preset swarm --serve
 Use when you want real local model generation. Keep `--model-concurrency 1` on CPU-only systems.
 
 ```powershell
-python scripts\tests\swarm-smoke.py --spawn-server --server-preset swarm --model llama3.2 --agents 3 --rounds 5 --model-concurrency 1 --write-concurrency 6
+python scripts\test-scripts\swarm-smoke.py --spawn-server --server-preset swarm --model llama3.2 --agents 3 --rounds 5 --model-concurrency 1 --write-concurrency 6
 ```
 
 ### Ollama Shared-Session Compaction
@@ -132,7 +134,7 @@ python scripts\tests\swarm-smoke.py --spawn-server --server-preset swarm --model
 Real Ollama generation plus natural compaction trigger. Still seeds embeddings to avoid local encoder issues.
 
 ```powershell
-python scripts\tests\swarm-smoke.py --spawn-server --server-preset swarm --model llama3.2 --session-mode shared --agents 4 --rounds 5 --model-concurrency 1 --write-mode burst --write-concurrency 10 --enable-compaction-check --seed-compaction-embeddings --compaction-wait-s 30
+python scripts\test-scripts\swarm-smoke.py --spawn-server --server-preset swarm --model llama3.2 --session-mode shared --agents 4 --rounds 5 --model-concurrency 1 --write-mode burst --write-concurrency 10 --enable-compaction-check --seed-compaction-embeddings --compaction-wait-s 30
 ```
 
 ### Auto-Apply Scheduler
@@ -140,7 +142,7 @@ python scripts\tests\swarm-smoke.py --spawn-server --server-preset swarm --model
 Slower by design. Enables the V4 scheduler and waits for one interval so the scheduled job can apply a staged candidate through the write queue.
 
 ```powershell
-python scripts\tests\compaction-worker-smoke.py --spawn-server --server-preset trusted --skip-http-load --skip-stale-check --skip-cross-session-check --enable-auto-apply --auto-apply-interval-minutes 1 --auto-apply-wait-s 75
+python scripts\test-scripts\compaction-worker-smoke.py --spawn-server --server-preset trusted --skip-http-load --skip-stale-check --skip-cross-session-check --enable-auto-apply --auto-apply-interval-minutes 1 --auto-apply-wait-s 75
 ```
 
 ## Artifacts
@@ -164,5 +166,5 @@ Use `--no-write-artifacts` when you only want console output.
 - `all_write_attempt_latency_ms`: all write attempts, including `429` and hard errors.
 - `applied_verifications`: compaction source rows and summary row were committed.
 - `final_staging_status=stale`: stale/cross-session negative path was rejected.
-- `compaction_check.status=found`: Swarm writes triggered a staged compaction candidate.
+- `compaction_check.status=found`: Swarm writes triggered a staged compaction candidate visible through `marm_compaction(action="candidates")`.
 - `model_failed`: local model/Ollama failures in Swarm.

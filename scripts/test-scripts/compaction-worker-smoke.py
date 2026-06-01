@@ -335,8 +335,9 @@ def stage_candidate(
 ) -> HttpResult:
     return _json_request(
         "POST",
-        f"{base_url.rstrip('/')}/marm_stage_compaction_summaries",
+        f"{base_url.rstrip('/')}/marm_compaction",
         {
+            "action": "stage",
             "summaries": [
                 {
                     "candidate_id": candidate["candidate_id"],
@@ -353,8 +354,8 @@ def stage_candidate(
 def apply_candidate(args: argparse.Namespace, base_url: str, candidate_id: str) -> HttpResult:
     return _json_request(
         "POST",
-        f"{base_url.rstrip('/')}/marm_apply_compaction",
-        {"candidate_id": candidate_id, "action": "apply"},
+        f"{base_url.rstrip('/')}/marm_compaction",
+        {"action": "apply", "candidate_id": candidate_id},
         args.auth_key,
         args.timeout_s,
     )
@@ -362,19 +363,19 @@ def apply_candidate(args: argparse.Namespace, base_url: str, candidate_id: str) 
 
 def get_candidates(args: argparse.Namespace, base_url: str) -> HttpResult:
     return _json_request(
-        "GET",
-        f"{base_url.rstrip('/')}/marm_get_compaction_candidates",
-        None,
+        "POST",
+        f"{base_url.rstrip('/')}/marm_compaction",
+        {"action": "candidates"},
         args.auth_key,
         args.timeout_s,
     )
 
 
-def get_staged(args: argparse.Namespace, base_url: str) -> HttpResult:
+def get_compaction_status(args: argparse.Namespace, base_url: str) -> HttpResult:
     return _json_request(
-        "GET",
-        f"{base_url.rstrip('/')}/marm_get_staged_summaries",
-        None,
+        "POST",
+        f"{base_url.rstrip('/')}/marm_compaction",
+        {"action": "status"},
         args.auth_key,
         args.timeout_s,
     )
@@ -477,10 +478,8 @@ def run_compaction_flow(args: argparse.Namespace, base_url: str, db_path: Path) 
             )
         )
 
-    staged_resp = get_staged(args, base_url)
-    staged_ids = {
-        p.get("candidate_id") for p in (staged_resp.body or {}).get("proposals", [])
-    }
+    staged_resp = get_compaction_status(args, base_url)
+    staged_ids = set((staged_resp.body or {}).get("staged_candidate_ids", []))
 
     apply_results: list[HttpResult] = []
     if candidates and not args.no_double_apply:

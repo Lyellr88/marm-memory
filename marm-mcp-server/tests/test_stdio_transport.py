@@ -3,6 +3,7 @@ import os
 import sqlite3
 import subprocess
 import sys
+import asyncio
 
 from anyio import ClosedResourceError, EndOfStream
 
@@ -87,7 +88,12 @@ def test_stdio_handles_mcp_initialize_and_exposes_tools(tmp_path):
     assert "marm_notebook_show" not in tool_names, "old marm_notebook_show must be removed"
     assert "marm_notebook_status" not in tool_names, "old marm_notebook_status must be removed"
     assert "marm_notebook_clear" not in tool_names, "old marm_notebook_clear must be removed"
-    assert len(tools) == 8
+    assert "marm_compaction" in tool_names
+    assert "marm_get_compaction_candidates" not in tool_names
+    assert "marm_stage_compaction_summaries" not in tool_names
+    assert "marm_get_staged_summaries" not in tool_names
+    assert "marm_apply_compaction" not in tool_names
+    assert len(tools) == 9
 
 
 def test_stdio_delete_notebook_removes_entry_from_active_state(tmp_path):
@@ -381,6 +387,14 @@ def test_stdio_log_records_tool_call_and_ok_status(tmp_path):
             "name": "marm_notebook",
             "arguments": {"action": "status"},
         }})
+        + message({"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {
+            "name": "marm_notebook",
+            "arguments": {"action": "status"},
+        }})
+        + message({"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {
+            "name": "marm_notebook",
+            "arguments": {"action": "status"},
+        }})
     )
 
     result = subprocess.run(
@@ -418,6 +432,14 @@ def test_stdio_debug_mode_logs_session_name_not_content(tmp_path):
         # Drain call — keeps stdin open until doc loading and the tool response are
         # both written before EOF. Single-tool-call sessions race with FastMCP shutdown.
         + message({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {
+            "name": "marm_notebook",
+            "arguments": {"action": "status"},
+        }})
+        + message({"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {
+            "name": "marm_notebook",
+            "arguments": {"action": "status"},
+        }})
+        + message({"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {
             "name": "marm_notebook",
             "arguments": {"action": "status"},
         }})
@@ -557,6 +579,14 @@ def test_stdio_protocol_injected_on_first_tool_call_not_on_second(tmp_path):
             "name": "marm_notebook",
             "arguments": {"action": "status"},
         }})
+        + message({"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {
+            "name": "marm_notebook",
+            "arguments": {"action": "status"},
+        }})
+        + message({"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {
+            "name": "marm_notebook",
+            "arguments": {"action": "status"},
+        }})
     )
 
     result = subprocess.run(
@@ -577,15 +607,75 @@ def test_stdio_protocol_injected_on_first_tool_call_not_on_second(tmp_path):
             responses[msg["id"]] = msg
 
     assert 2 in responses, "No first tool call response"
-    assert 3 in responses, "No second tool call response"
+    repeat_response = next((responses[i] for i in (3, 4, 5) if i in responses), None)
+    assert repeat_response is not None, "No follow-up tool call response"
 
     first_result = json.loads(responses[2]["result"]["content"][0]["text"])
     assert "marm_protocol" in first_result, \
         "Protocol not injected in first STDIO tool call result"
 
-    second_result = json.loads(responses[3]["result"]["content"][0]["text"])
+    second_result = json.loads(repeat_response["result"]["content"][0]["text"])
     assert "marm_protocol" not in second_result, \
         "Protocol must not repeat on second STDIO tool call"
+
+
+def test_stdio_compaction_injection_wraps_tool_result(monkeypatch, tmp_path):
+    import marm_mcp_server.server_stdio as stdio
+
+    async def _noop(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(stdio, "ensure_marm_started", _noop)
+    monkeypatch.setattr(stdio, "maybe_auto_refresh", _noop)
+    monkeypatch.setattr(
+        stdio,
+        "claim_pending_compaction_prompt",
+        lambda memory: {"type": "text", "text": "[MARM COMPACTION REQUEST]\nabc"},
+    )
+    stdio._protocol_delivered = True
+
+    @stdio._log_tool_call
+    async def fake_tool():
+        return {"status": "success", "value": 1}
+
+    result = asyncio.run(fake_tool())
+
+    assert result["content"][0]["text"].startswith("[MARM COMPACTION REQUEST]")
+    original = json.loads(result["content"][1]["text"])
+    assert original["status"] == "success"
+    assert original["value"] == 1
+
+
+def test_stdio_protocol_call_suppresses_same_call_compaction(monkeypatch, tmp_path):
+    import marm_mcp_server.server_stdio as stdio
+
+    calls = {"claim": 0}
+
+    async def _noop(*args, **kwargs):
+        return None
+
+    async def _protocol():
+        return "protocol text"
+
+    def _claim(memory):
+        calls["claim"] += 1
+        return {"type": "text", "text": "[MARM COMPACTION REQUEST]\nabc"}
+
+    monkeypatch.setattr(stdio, "ensure_marm_started", _noop)
+    monkeypatch.setattr(stdio, "maybe_auto_refresh", _noop)
+    monkeypatch.setattr(stdio, "read_protocol_file", _protocol)
+    monkeypatch.setattr(stdio, "claim_pending_compaction_prompt", _claim)
+    stdio._protocol_delivered = False
+
+    @stdio._log_tool_call
+    async def fake_tool():
+        return {"status": "success"}
+
+    result = asyncio.run(fake_tool())
+
+    assert result["marm_protocol"] == "protocol text"
+    assert "content" not in result
+    assert calls["claim"] == 0
 
 
 def test_is_graceful_teardown_rejects_mixed_exception_group():

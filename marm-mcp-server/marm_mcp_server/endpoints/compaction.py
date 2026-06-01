@@ -9,13 +9,19 @@ from fastapi import APIRouter
 from ..core.compaction import COMPACTION_PROMPT_TEMPLATE
 from ..core.consolidation import compute_content_hash
 from ..core.memory import memory
-from ..core.models import ApplyCompactionRequest, StageCompactionSummariesRequest
+from ..core.models import (
+    ApplyCompactionRequest,
+    CompactionRequest,
+    StageCompactionSummariesRequest,
+)
 
 router = APIRouter(prefix="", tags=["Compaction"])
 
 
 @router.get(
-    "/marm_get_compaction_candidates", operation_id="marm_get_compaction_candidates"
+    "/marm_get_compaction_candidates",
+    operation_id="marm_get_compaction_candidates",
+    include_in_schema=False,
 )
 async def marm_get_compaction_candidates():
     """
@@ -70,7 +76,9 @@ async def marm_get_compaction_candidates():
 
 
 @router.post(
-    "/marm_stage_compaction_summaries", operation_id="marm_stage_compaction_summaries"
+    "/marm_stage_compaction_summaries",
+    operation_id="marm_stage_compaction_summaries",
+    include_in_schema=False,
 )
 async def marm_stage_compaction_summaries(request: StageCompactionSummariesRequest):
     """
@@ -229,14 +237,19 @@ async def marm_stage_compaction_summaries(request: StageCompactionSummariesReque
     return {"results": results}
 
 
-@router.get("/marm_get_staged_summaries", operation_id="marm_get_staged_summaries")
-async def marm_get_staged_summaries():
+@router.get(
+    "/marm_get_staged_summaries",
+    operation_id="marm_get_staged_summaries",
+    include_in_schema=False,
+)
+async def marm_get_staged_summaries(limit: int = 20):
     """
     Return all summary_staged compaction proposals awaiting main agent review.
 
     Returns empty list when nothing is staged. Call marm_apply_compaction with
     action='apply' or action='discard' to act on each proposal.
     """
+    limit = max(1, min(limit, 100))
     now = datetime.now(timezone.utc).isoformat()
     with memory.get_connection() as conn:
         rows = conn.execute(
@@ -247,8 +260,9 @@ async def marm_get_staged_summaries():
             WHERE status = 'summary_staged'
               AND expires_at > ?
             ORDER BY created_at ASC
+            LIMIT ?
             """,
-            (now,),
+            (now, limit),
         ).fetchall()
 
     proposals = []
@@ -273,7 +287,7 @@ async def marm_get_staged_summaries():
             }
         )
 
-    return {"proposals": proposals}
+    return {"proposals": proposals, "limit": limit}
 
 
 async def _apply_compaction_write(candidate_id: str) -> str:
@@ -499,7 +513,11 @@ async def _apply_compaction_write(candidate_id: str) -> str:
     return summary_id
 
 
-@router.post("/marm_apply_compaction", operation_id="marm_apply_compaction")
+@router.post(
+    "/marm_apply_compaction",
+    operation_id="marm_apply_compaction",
+    include_in_schema=False,
+)
 async def marm_apply_compaction(request: ApplyCompactionRequest):
     """
     Apply or discard a staged compaction proposal.
@@ -659,6 +677,81 @@ async def marm_apply_compaction(request: ApplyCompactionRequest):
         "status": "applied",
         "summary_memory_id": summary_id,
     }
+
+
+def _compaction_status() -> dict:
+    with memory.get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT status, COUNT(*)
+            FROM compaction_staging
+            GROUP BY status
+            """
+        ).fetchall()
+        staged_rows = conn.execute(
+            """
+            SELECT id
+            FROM compaction_staging
+            WHERE status = 'summary_staged'
+            ORDER BY created_at ASC
+            """
+        ).fetchall()
+
+    counts = {status: count for status, count in rows}
+    return {
+        "status": "ok",
+        "counts": {
+            "pending_summary": counts.get("pending_summary", 0),
+            "summary_staged": counts.get("summary_staged", 0),
+            "applied": counts.get("applied", 0),
+            "discarded": counts.get("discarded", 0),
+            "stale": counts.get("stale", 0),
+            "nudge_exhausted": counts.get("nudge_exhausted", 0),
+        },
+        "staged_candidate_ids": [row[0] for row in staged_rows],
+    }
+
+
+@router.post("/marm_compaction", operation_id="marm_compaction")
+async def marm_compaction(request: CompactionRequest):
+    """Unified public compaction tool.
+
+    Keeps the MCP surface to one tool while raw route functions remain internal
+    implementation helpers and debug HTTP endpoints.
+    """
+    if request.action == "status":
+        return _compaction_status()
+
+    if request.action == "candidates":
+        return await marm_get_compaction_candidates()
+
+    if request.action == "review":
+        return await marm_get_staged_summaries(limit=request.limit)
+
+    if request.action == "stage":
+        if request.summaries is None:
+            return {
+                "status": "error",
+                "message": "summaries is required for action='stage'",
+            }
+        return await marm_stage_compaction_summaries(
+            StageCompactionSummariesRequest(summaries=request.summaries)
+        )
+
+    if request.action in ("apply", "discard"):
+        if not request.candidate_id:
+            return {
+                "status": "error",
+                "message": f"candidate_id is required for action='{request.action}'",
+            }
+        return await marm_apply_compaction(
+            ApplyCompactionRequest(
+                candidate_id=request.candidate_id,
+                action=request.action,
+            )
+        )
+
+    return {"status": "error", "message": f"unknown action: {request.action}"}
 
 
 async def auto_apply_staged_summaries() -> dict:
