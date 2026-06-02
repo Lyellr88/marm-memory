@@ -352,7 +352,7 @@ def _build_compaction_prompt_block(row: tuple, byte_budget: int) -> dict:
     return {"type": "text", "text": text}
 
 
-def claim_pending_compaction_prompt(memory: "MARMMemory") -> dict | None:
+def claim_pending_compaction_prompt(memory: "MARMMemory", session_name: str | None = None) -> dict | None:
     """Claim one pending compaction candidate for response injection.
 
     Uses a BEGIN IMMEDIATE transaction plus rowcount checks instead of SQLite
@@ -388,8 +388,10 @@ def claim_pending_compaction_prompt(memory: "MARMMemory") -> dict | None:
                 """,
                 (now, max_nudges),
             )
+            _session_filter = " AND session_name = ?" if session_name else ""
+            _row_params = (now, max_nudges, cutoff) if not session_name else (now, max_nudges, cutoff, session_name)
             row = conn.execute(
-                """
+                f"""
                 SELECT id, session_name, source_memory_ids, preview, created_at,
                        expires_at, nudge_count
                 FROM compaction_staging
@@ -397,10 +399,11 @@ def claim_pending_compaction_prompt(memory: "MARMMemory") -> dict | None:
                   AND expires_at > ?
                   AND nudge_count < ?
                   AND (last_nudged_at IS NULL OR last_nudged_at < ?)
+                  {_session_filter}
                 ORDER BY created_at ASC
                 LIMIT 1
                 """,
-                (now, max_nudges, cutoff),
+                _row_params,
             ).fetchone()
             if not row:
                 conn.execute("COMMIT")
@@ -447,7 +450,6 @@ async def _delayed_scan(memory: "MARMMemory", session_name: str) -> None:
     try:
         mark_stale_candidates(memory, session_name)
         candidates = find_compaction_candidates(memory, session_name)
-        _write_report(candidates, session_name)
         persist_candidates_to_staging(memory, candidates)
     except Exception as e:
         print(f"[compaction] scan error for session '{session_name}': {e}")
@@ -463,6 +465,9 @@ def trigger_compaction(memory: "MARMMemory", session_name: str) -> None:
     memory._session_write_counts[session_name] = 0
     try:
         loop = asyncio.get_running_loop()
+        existing = memory._pending_compaction_scans.get(session_name)
+        if existing and not existing.done():
+            existing.cancel()
         task = loop.create_task(_delayed_scan(memory, session_name))
         memory._pending_compaction_scans[session_name] = task
     except RuntimeError:

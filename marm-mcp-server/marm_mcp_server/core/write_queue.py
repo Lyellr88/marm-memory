@@ -1,8 +1,9 @@
 """Serialized write queue for MARM memory writes."""
 
 import asyncio
+import inspect
 from dataclasses import dataclass
-from typing import Any, Callable, Optional
+from typing import Any, Awaitable, Callable, Optional
 
 
 @dataclass
@@ -18,7 +19,7 @@ class MemoryWriteRequest:
 class CallableWriteRequest:
     """Generic write request for non-store_memory operations (e.g. compaction apply)."""
 
-    func: Callable
+    func: Callable[..., Awaitable[Any] | Any]
     args: tuple
     kwargs: dict
     future: asyncio.Future
@@ -66,7 +67,9 @@ class WriteQueue:
         )
         return await future
 
-    async def put_callable(self, func: Callable, *args: Any, **kwargs: Any) -> Any:
+    async def put_callable(
+        self, func: Callable[..., Awaitable[Any] | Any], *args: Any, **kwargs: Any
+    ) -> Any:
         """Enqueue any async callable to be executed in write-queue order."""
         if self._stopping:
             raise RuntimeError("write queue is shutting down")
@@ -86,11 +89,19 @@ class WriteQueue:
                         request.context_type,
                         request.metadata,
                     )
+                elif isinstance(request, CallableWriteRequest):
+                    maybe_result = request.func(*request.args, **request.kwargs)
+                    result = (
+                        await maybe_result
+                        if inspect.isawaitable(maybe_result)
+                        else maybe_result
+                    )
                 else:
-                    result = await request.func(*request.args, **request.kwargs)
+                    raise TypeError(f"Unsupported queue request type: {type(request)!r}")
                 self._resolve(request.future, result)
             except Exception as exc:
-                self._reject(request.future, exc)
+                if hasattr(request, "future"):
+                    self._reject(request.future, exc)
             finally:
                 self.queue.task_done()
 

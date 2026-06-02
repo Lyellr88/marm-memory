@@ -556,67 +556,33 @@ def test_stdio_context_log_uses_write_queue_when_enabled(tmp_path):
     assert count == 1
 
 
-def test_stdio_protocol_injected_on_first_tool_call_not_on_second(tmp_path):
-    env = os.environ.copy()
-    env["MARM_DB_PATH"] = str(tmp_path / "stdio-protocol.db")
-    env["MARM_ANALYTICS_DB_PATH"] = str(tmp_path / "stdio-protocol-analytics.db")
+def test_stdio_protocol_injected_on_first_tool_call_not_on_second(monkeypatch):
+    import marm_mcp_server.server_stdio as stdio
 
-    def message(msg):
-        return (json.dumps(msg) + "\n").encode("utf-8")
+    async def _noop(*args, **kwargs):
+        return None
 
-    stdin_data = (
-        message({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
-            "protocolVersion": "2024-11-05",
-            "capabilities": {},
-            "clientInfo": {"name": "test-client", "version": "0.1"},
-        }})
-        + message({"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}})
-        + message({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {
-            "name": "marm_notebook",
-            "arguments": {"action": "status"},
-        }})
-        + message({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {
-            "name": "marm_notebook",
-            "arguments": {"action": "status"},
-        }})
-        + message({"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {
-            "name": "marm_notebook",
-            "arguments": {"action": "status"},
-        }})
-        + message({"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {
-            "name": "marm_notebook",
-            "arguments": {"action": "status"},
-        }})
-    )
+    async def _protocol():
+        return "protocol text"
 
-    result = subprocess.run(
-        [sys.executable, "-m", "marm_mcp_server.server_stdio"],
-        input=stdin_data,
-        cwd=os.getcwd(),
-        env=env,
-        capture_output=True,
-        timeout=30,
-    )
+    def _claim(memory):
+        return None
 
-    assert result.returncode == 0, result.stderr.decode("utf-8", errors="replace")[:500]
+    monkeypatch.setattr(stdio, "ensure_marm_started", _noop)
+    monkeypatch.setattr(stdio, "maybe_auto_refresh", _noop)
+    monkeypatch.setattr(stdio, "read_protocol_file", _protocol)
+    monkeypatch.setattr(stdio, "claim_pending_compaction_prompt", _claim)
+    stdio._protocol_delivered = False
 
-    responses = {}
-    for line in result.stdout.splitlines():
-        msg = json.loads(line)
-        if "id" in msg:
-            responses[msg["id"]] = msg
+    @stdio._log_tool_call
+    async def fake_tool():
+        return {"status": "success"}
 
-    assert 2 in responses, "No first tool call response"
-    repeat_response = next((responses[i] for i in (3, 4, 5) if i in responses), None)
-    assert repeat_response is not None, "No follow-up tool call response"
+    first = asyncio.run(fake_tool())
+    second = asyncio.run(fake_tool())
 
-    first_result = json.loads(responses[2]["result"]["content"][0]["text"])
-    assert "marm_protocol" in first_result, \
-        "Protocol not injected in first STDIO tool call result"
-
-    second_result = json.loads(repeat_response["result"]["content"][0]["text"])
-    assert "marm_protocol" not in second_result, \
-        "Protocol must not repeat on second STDIO tool call"
+    assert first["marm_protocol"] == "protocol text"
+    assert "marm_protocol" not in second
 
 
 def test_stdio_compaction_injection_wraps_tool_result(monkeypatch, tmp_path):

@@ -69,7 +69,7 @@ from ..config.settings import (
     COMPACTION_ENABLED,
     COMPACTION_TRIGGER_COUNT,
 )
-from .consolidation import compute_content_hash, find_exact_duplicate, find_semantic_duplicate
+from .consolidation import compute_content_hash, find_exact_duplicate, find_semantic_duplicate, normalize_content
 from .compaction import trigger_compaction
 from .write_queue import WriteQueue
 
@@ -398,7 +398,6 @@ class MARMMemory:
                 'CREATE INDEX IF NOT EXISTS idx_compaction_staging_hash '
                 'ON compaction_staging(candidate_hash)'
             )
-
             conn.commit()
     
     def _load_encoder_lazily(self) -> bool:
@@ -450,10 +449,12 @@ class MARMMemory:
         stay accurate after the merge.
         """
         with self.get_connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
             row = conn.execute(
                 "SELECT content, metadata FROM memories WHERE id = ?", (memory_id,)
             ).fetchone()
             if row is None:
+                conn.execute("ROLLBACK")
                 return
             existing_content, metadata_json = row
             metadata = json.loads(metadata_json) if metadata_json else {}
@@ -475,17 +476,30 @@ class MARMMemory:
                 try:
                     merged_embedding_bytes = self.encoder.encode(merged_content).tobytes()
                 except Exception as e:
-                    print(f"Failed to regenerate embedding after merge: {e}")
+                    _safe_print(f"Failed to regenerate embedding after merge: {e}")
 
             if merged_embedding_bytes is not None:
                 conn.execute(
-                    "UPDATE memories SET content = ?, metadata = ?, content_hash = ?, embedding = ? WHERE id = ?",
-                    (merged_content, json.dumps(metadata), merged_hash, merged_embedding_bytes, memory_id),
+                    "UPDATE memories SET content = ?, metadata = ?, content_hash = ?, embedding = ?, timestamp = ? WHERE id = ?",
+                    (
+                        merged_content,
+                        json.dumps(metadata),
+                        merged_hash,
+                        merged_embedding_bytes,
+                        merged_at,
+                        memory_id,
+                    ),
                 )
             else:
                 conn.execute(
-                    "UPDATE memories SET content = ?, metadata = ?, content_hash = ? WHERE id = ?",
-                    (merged_content, json.dumps(metadata), merged_hash, memory_id),
+                    "UPDATE memories SET content = ?, metadata = ?, content_hash = ?, embedding = NULL, timestamp = ? WHERE id = ?",
+                    (
+                        merged_content,
+                        json.dumps(metadata),
+                        merged_hash,
+                        merged_at,
+                        memory_id,
+                    ),
                 )
 
     async def store_memory(self, content: str, session: str, context_type: str = "general", metadata: Dict = None) -> str:
@@ -496,7 +510,7 @@ class MARMMemory:
             context_type = await self.auto_classify_content(sanitized_content)
 
         content_hash = compute_content_hash(sanitized_content)
-        normalized_content = sanitized_content.lower().strip()
+        normalized_content = normalize_content(sanitized_content)
 
         # Layer 1: exact duplicate check — runs before embedding to avoid wasted model work
         if CONSOLIDATION_ENABLED:
@@ -529,6 +543,14 @@ class MARMMemory:
                 print(f"Failed to generate embedding: {e}")
 
         with self.get_connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            # Re-check under write lock to close the check-then-insert race
+            if CONSOLIDATION_ENABLED:
+                under_lock_id = find_exact_duplicate(conn, content_hash, session, normalized_content)
+                if under_lock_id:
+                    conn.execute("ROLLBACK")
+                    return under_lock_id
+
             conn.execute('''
                 INSERT INTO memories (id, session_name, content, embedding, content_hash, timestamp, context_type, metadata)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -574,6 +596,7 @@ class MARMMemory:
                         SELECT id, session_name, content, embedding, timestamp, context_type, metadata
                         FROM memories
                         WHERE embedding IS NOT NULL
+                          AND (compaction_role IS NULL OR compaction_role != 'source')
                         ORDER BY timestamp DESC
                         LIMIT 1000
                     ''')
@@ -582,7 +605,8 @@ class MARMMemory:
                         SELECT id, session_name, content, embedding, timestamp, context_type, metadata
                         FROM memories
                         WHERE embedding IS NOT NULL
-                        AND session_name = ?
+                          AND session_name = ?
+                          AND (compaction_role IS NULL OR compaction_role != 'source')
                         ORDER BY timestamp DESC
                         LIMIT 1000
                     ''', (session,))
@@ -629,6 +653,7 @@ class MARMMemory:
                     SELECT id, session_name, content, timestamp, context_type, metadata
                     FROM memories
                     WHERE content LIKE ?
+                      AND (compaction_role IS NULL OR compaction_role != 'source')
                     ORDER BY timestamp DESC
                     LIMIT ?
                 ''', (f"%{query}%", limit))
@@ -637,7 +662,8 @@ class MARMMemory:
                     SELECT id, session_name, content, timestamp, context_type, metadata
                     FROM memories
                     WHERE content LIKE ?
-                    AND session_name = ?
+                      AND session_name = ?
+                      AND (compaction_role IS NULL OR compaction_role != 'source')
                     ORDER BY timestamp DESC
                     LIMIT ?
                 ''', (f"%{query}%", session, limit))

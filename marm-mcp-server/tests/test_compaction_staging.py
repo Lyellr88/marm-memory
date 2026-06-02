@@ -488,16 +488,11 @@ async def test_unified_compaction_stage_action(monkeypatch, tmp_path):
 
 @pytest.mark.asyncio
 async def test_unified_compaction_stage_requires_summaries(monkeypatch, tmp_path):
-    import marm_mcp_server.endpoints.compaction as ep
+    from pydantic import ValidationError
     from marm_mcp_server.core.models import CompactionRequest
 
-    mem = MARMMemory(str(tmp_path / "memory.db"))
-    monkeypatch.setattr(ep, "memory", mem)
-
-    result = await ep.marm_compaction(CompactionRequest(action="stage"))
-
-    assert result["status"] == "error"
-    assert "summaries is required" in result["message"]
+    with pytest.raises(ValidationError, match="summaries is required"):
+        CompactionRequest(action="stage")
 
 
 @pytest.mark.asyncio
@@ -746,16 +741,11 @@ async def test_unified_compaction_apply_action(monkeypatch, tmp_path):
 
 @pytest.mark.asyncio
 async def test_unified_compaction_apply_requires_candidate_id(monkeypatch, tmp_path):
-    import marm_mcp_server.endpoints.compaction as ep
+    from pydantic import ValidationError
     from marm_mcp_server.core.models import CompactionRequest
 
-    mem = MARMMemory(str(tmp_path / "memory.db"))
-    monkeypatch.setattr(ep, "memory", mem)
-
-    result = await ep.marm_compaction(CompactionRequest(action="apply"))
-
-    assert result["status"] == "error"
-    assert "candidate_id is required" in result["message"]
+    with pytest.raises(ValidationError, match="candidate_id is required"):
+        CompactionRequest(action="apply")
 
 
 @pytest.mark.asyncio

@@ -549,7 +549,7 @@ def db_session_count(db_path: Path, session_prefix: str) -> int:
 
 
 def effective_compaction_trigger_count(args: argparse.Namespace) -> int:
-    if args.server_preset == "none" and args.server_rate_limit_rpm is None:
+    if args.server_preset in ("none", "") and args.server_rate_limit_rpm is None:
         return 5
     return 20
 
@@ -699,6 +699,7 @@ def print_summary(summary: dict) -> int:
     failed = (
         summary["model_failed"] > 0
         or summary["hard_write_errors"] > 0
+        or (summary["model_ok"] > 0 and summary["write_ok"] == 0)
         or summary["db_integrity_ok"] is False
     )
     print(f"\nRESULT: {'FAIL' if failed else 'PASS'}")

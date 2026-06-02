@@ -8,7 +8,7 @@ from fastapi import APIRouter
 
 from ..core.compaction import COMPACTION_PROMPT_TEMPLATE
 from ..core.consolidation import compute_content_hash
-from ..core.memory import memory
+from ..core.memory import memory, sanitize_content
 from ..core.models import (
     ApplyCompactionRequest,
     CompactionRequest,
@@ -444,7 +444,8 @@ async def _apply_compaction_write(candidate_id: str) -> str:
                         f"source memory {mem_id} content changed since candidate was detected"
                     )
 
-            # All validations pass — compute embedding then write
+            # All validations pass — sanitize, then compute embedding and write
+            suggested_summary = sanitize_content(suggested_summary)
             summary_content_hash = compute_content_hash(suggested_summary)
             summary_embedding = None
             if memory._load_encoder_lazily():
@@ -565,7 +566,19 @@ async def marm_apply_compaction(request: ApplyCompactionRequest):
 
         # Idempotent: already applied
         if status == "applied" and action == "apply":
-            return {"candidate_id": candidate_id, "status": "applied"}
+            source_ids = json.loads(source_ids_json)
+            summary_row = None
+            if source_ids:
+                summary_row = conn.execute(
+                    "SELECT compacted_into FROM memories "
+                    "WHERE id = ? AND compacted_into IS NOT NULL",
+                    (source_ids[0],),
+                ).fetchone()
+            return {
+                "candidate_id": candidate_id,
+                "status": "applied",
+                "summary_memory_id": summary_row[0] if summary_row else None,
+            }
 
         if status != "summary_staged":
             return {
@@ -680,21 +693,33 @@ async def marm_apply_compaction(request: ApplyCompactionRequest):
 
 
 def _compaction_status() -> dict:
+    now = datetime.now(timezone.utc).isoformat()
     with memory.get_connection() as conn:
         rows = conn.execute(
             """
-            SELECT status, COUNT(*)
+            SELECT
+                CASE
+                    WHEN status IN ('pending_summary', 'summary_staged')
+                         AND expires_at IS NOT NULL
+                         AND expires_at <= ?
+                    THEN 'stale'
+                    ELSE status
+                END,
+                COUNT(*)
             FROM compaction_staging
-            GROUP BY status
-            """
+            GROUP BY 1
+            """,
+            (now,),
         ).fetchall()
         staged_rows = conn.execute(
             """
             SELECT id
             FROM compaction_staging
             WHERE status = 'summary_staged'
+              AND (expires_at IS NULL OR expires_at > ?)
             ORDER BY created_at ASC
-            """
+            """,
+            (now,),
         ).fetchall()
 
     counts = {status: count for status, count in rows}

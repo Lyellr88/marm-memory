@@ -176,14 +176,13 @@ async def test_write_queue_put_callable_ordering(mem):
         order.append(n)
         return n
 
-    await asyncio.gather(
-        queue.put_callable(record, 1),
-        queue.put_callable(record, 2),
-        queue.put_callable(record, 3),
-    )
-    # All three must complete (order may vary due to gather scheduling, but all must appear)
-    assert sorted(order) == [1, 2, 3]
-    await queue.stop()
+    try:
+        await queue.put_callable(record, 1)
+        await queue.put_callable(record, 2)
+        await queue.put_callable(record, 3)
+        assert order == [1, 2, 3]
+    finally:
+        await queue.stop()
 
 
 @pytest.mark.asyncio
@@ -208,8 +207,11 @@ async def test_write_queue_put_callable_rejected_when_stopping(mem):
     await queue.start()
     queue._stopping = True
 
-    with pytest.raises(RuntimeError, match="shutting down"):
-        await queue.put_callable(lambda: None)
+    try:
+        with pytest.raises(RuntimeError, match="shutting down"):
+            await queue.put_callable(lambda: None)
+    finally:
+        await queue.stop()
 
 
 # --- apply via write queue ---
@@ -519,14 +521,15 @@ async def test_auto_apply_routes_through_write_queue(mem):
 # --- scheduler registration ---
 
 
-def test_auto_apply_disabled_by_default():
+def test_auto_apply_disabled_by_default(monkeypatch):
     """COMPACTION_AUTO_APPLY_ENABLED is False when the env var is not set."""
-    import os
+    import importlib
+    import marm_mcp_server.config.settings as settings_mod
 
-    assert os.environ.get("COMPACTION_AUTO_APPLY_ENABLED", "0") == "0"
-    from marm_mcp_server.config.settings import COMPACTION_AUTO_APPLY_ENABLED
+    monkeypatch.delenv("COMPACTION_AUTO_APPLY_ENABLED", raising=False)
+    settings_mod = importlib.reload(settings_mod)
 
-    assert COMPACTION_AUTO_APPLY_ENABLED is False
+    assert settings_mod.COMPACTION_AUTO_APPLY_ENABLED is False
 
 
 def test_maybe_start_scheduler_returns_none_when_disabled(monkeypatch):

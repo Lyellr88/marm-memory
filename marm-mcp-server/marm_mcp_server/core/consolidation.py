@@ -1,12 +1,20 @@
 """Consolidation worker — hash dedup (Layer 1) and semantic merge (Layer 2)."""
 
 import hashlib
+import logging
 from typing import Optional
+
+
+logger = logging.getLogger(__name__)
+
+
+def normalize_content(content: str) -> str:
+    return content.lower().strip()
 
 
 def compute_content_hash(content: str) -> str:
     """SHA-256 hash of normalized (lowercase, stripped) content."""
-    normalized = content.lower().strip()
+    normalized = normalize_content(content)
     return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
 
@@ -23,7 +31,7 @@ def find_exact_duplicate(
         (content_hash, session_name),
     ).fetchall()
     for row_id, row_content in rows:
-        if row_content.lower().strip() == normalized_content:
+        if normalize_content(row_content) == normalized_content:
             return row_id
     return None
 
@@ -35,12 +43,12 @@ async def find_semantic_duplicate(
 
     Falls back to None if encoder unavailable — never blocks a write.
     """
-    if not memory._load_encoder_lazily():
-        return None
     try:
+        if not memory._load_encoder_lazily():
+            return None
         results = await memory.recall_similar(content, session=session_name, limit=1)
         if results and results[0]["similarity"] >= threshold:
             return results[0]["id"]
-    except Exception as e:
-        print(f"[consolidation] semantic check error: {e}")
+    except Exception:
+        logger.exception("Semantic dedup check failed")
     return None

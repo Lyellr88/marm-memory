@@ -69,7 +69,7 @@ LABEL org.opencontainers.image.source="https://github.com/Lyellr88/MARM-Systems"
 LABEL org.opencontainers.image.licenses="MIT"
 LABEL mcp.server="true"
 LABEL mcp.name="marm-mcp-server"
-LABEL mcp.tools="8"
+LABEL mcp.tools="9"
 LABEL io.modelcontextprotocol.server.name="io.github.Lyellr88/marm-mcp-server"
 
 # Set environment variables

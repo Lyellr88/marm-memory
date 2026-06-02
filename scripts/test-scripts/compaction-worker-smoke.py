@@ -15,6 +15,7 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
+from urllib.parse import urlparse
 import uuid
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -130,6 +131,9 @@ def _json_request(
     headers = {"Content-Type": "application/json"}
     if auth_key:
         headers["Authorization"] = f"Bearer {auth_key}"
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"}:
+        return HttpResult(-1, 0.0, {"error": f"Unsupported URL scheme: {parsed.scheme}"})
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
     start = time.perf_counter()
     try:
@@ -164,7 +168,9 @@ def wait_for_health(base_url: str, timeout_s: float = 35.0) -> None:
     raise RuntimeError(f"Server did not become healthy in time: {url}")
 
 
-def spawn_server(args: argparse.Namespace) -> tuple[subprocess.Popen, str, Path, Path]:
+def spawn_server(
+    args: argparse.Namespace,
+) -> tuple[subprocess.Popen, str, Path, Path, Path, Path]:
     temp_dir = Path(tempfile.mkdtemp(prefix="marm-compaction-smoke-"))
     db_path = temp_dir / "memory.db"
     analytics_path = temp_dir / "analytics.db"
@@ -182,6 +188,8 @@ def spawn_server(args: argparse.Namespace) -> tuple[subprocess.Popen, str, Path,
         args.auto_apply_interval_minutes
     )
     env.pop("MARM_API_KEY", None)
+    stdout_log_path = temp_dir / "server-stdout.log"
+    stderr_log_path = temp_dir / "server-stderr.log"
 
     cmd = [sys.executable, "-m", "marm_mcp_server"]
     if args.server_preset != "none":
@@ -189,14 +197,24 @@ def spawn_server(args: argparse.Namespace) -> tuple[subprocess.Popen, str, Path,
     if args.server_rate_limit_rpm is not None:
         cmd.extend(["--rate-limit-rpm", str(args.server_rate_limit_rpm)])
 
-    proc = subprocess.Popen(
-        cmd,
-        cwd=str(SERVER_ROOT),
-        env=env,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+    with stdout_log_path.open("wb") as stdout_fh, stderr_log_path.open(
+        "wb"
+    ) as stderr_fh:
+        proc = subprocess.Popen(
+            cmd,
+            cwd=str(SERVER_ROOT),
+            env=env,
+            stdout=stdout_fh,
+            stderr=stderr_fh,
+        )
+    return (
+        proc,
+        f"http://127.0.0.1:{args.spawn_port}",
+        temp_dir,
+        db_path,
+        stdout_log_path,
+        stderr_log_path,
     )
-    return proc, f"http://127.0.0.1:{args.spawn_port}", temp_dir, db_path
 
 
 def stop_server(proc: subprocess.Popen) -> None:
@@ -247,8 +265,7 @@ def run_http_load(args: argparse.Namespace, base_url: str, session_name: str) ->
     return results
 
 
-def compute_content_hash(content: str) -> str:
-    return hashlib.sha256(content.lower().strip().encode("utf-8")).hexdigest()
+from marm_mcp_server.core.consolidation import compute_content_hash
 
 
 def compute_candidate_hash(source_memory_ids: list[str]) -> str:
@@ -283,7 +300,8 @@ def seed_candidate(
     source_ids: list[str] = []
     snapshot: dict[str, str] = {}
     preview: list[str] = []
-    with sqlite3.connect(str(db_path)) as conn:
+    with sqlite3.connect(str(db_path), timeout=10.0) as conn:
+        conn.execute("PRAGMA busy_timeout = 10000")
         conn.execute(
             "INSERT OR REPLACE INTO sessions (session_name, last_accessed) VALUES (?, ?)",
             (session_name, now.isoformat()),
@@ -383,7 +401,8 @@ def get_compaction_status(args: argparse.Namespace, base_url: str) -> HttpResult
 
 def verify_applied(db_path: Path, candidate: dict) -> dict:
     source_ids = candidate["source_memory_ids"]
-    with sqlite3.connect(str(db_path)) as conn:
+    with sqlite3.connect(str(db_path), timeout=10.0) as conn:
+        conn.execute("PRAGMA busy_timeout = 10000")
         staging = conn.execute(
             "SELECT status FROM compaction_staging WHERE id = ?",
             (candidate["candidate_id"],),
@@ -414,7 +433,8 @@ def verify_applied(db_path: Path, candidate: dict) -> dict:
 
 
 def verify_stale(db_path: Path, candidate_id: str) -> str | None:
-    with sqlite3.connect(str(db_path)) as conn:
+    with sqlite3.connect(str(db_path), timeout=10.0) as conn:
+        conn.execute("PRAGMA busy_timeout = 10000")
         row = conn.execute(
             "SELECT status FROM compaction_staging WHERE id = ?",
             (candidate_id,),
@@ -423,7 +443,8 @@ def verify_stale(db_path: Path, candidate_id: str) -> str | None:
 
 
 def mutate_source_hash(db_path: Path, source_id: str) -> None:
-    with sqlite3.connect(str(db_path)) as conn:
+    with sqlite3.connect(str(db_path), timeout=10.0) as conn:
+        conn.execute("PRAGMA busy_timeout = 10000")
         conn.execute(
             "UPDATE memories SET content_hash = ? WHERE id = ?",
             (f"changed-{time.time_ns()}", source_id),
@@ -436,7 +457,8 @@ def status_summary(results: list[HttpResult]) -> dict:
 
 
 def count_session_rows(db_path: Path, session_name: str) -> int:
-    with sqlite3.connect(str(db_path)) as conn:
+    with sqlite3.connect(str(db_path), timeout=10.0) as conn:
+        conn.execute("PRAGMA busy_timeout = 10000")
         return conn.execute(
             "SELECT COUNT(*) FROM memories WHERE session_name = ?",
             (session_name,),
@@ -549,7 +571,8 @@ def seed_cross_session_candidate(
     source_ids: list[str] = []
     snapshot: dict[str, str] = {}
     preview: list[str] = []
-    with sqlite3.connect(str(db_path)) as conn:
+    with sqlite3.connect(str(db_path), timeout=10.0) as conn:
+        conn.execute("PRAGMA busy_timeout = 10000")
         for session_name in (primary_session, foreign_session):
             conn.execute(
                 "INSERT OR REPLACE INTO sessions (session_name, last_accessed) "
@@ -638,7 +661,8 @@ def run_auto_apply_flow(args: argparse.Namespace, db_path: Path) -> dict:
     )
     summary = "Scheduler auto-apply smoke summary with source traceability."
     now = datetime.now(timezone.utc).isoformat()
-    with sqlite3.connect(str(db_path)) as conn:
+    with sqlite3.connect(str(db_path), timeout=10.0) as conn:
+        conn.execute("PRAGMA busy_timeout = 10000")
         conn.execute(
             "UPDATE compaction_staging "
             "SET suggested_summary = ?, status = 'summary_staged', updated_at = ? "
@@ -694,6 +718,8 @@ def main() -> int:
 
     proc: Optional[subprocess.Popen] = None
     temp_dir: Optional[Path] = None
+    stdout_log_path: Optional[Path] = None
+    stderr_log_path: Optional[Path] = None
     base_url = args.base_url
     db_path = Path(args.db_path).expanduser().resolve() if args.db_path else None
     exit_code = 0
@@ -701,9 +727,18 @@ def main() -> int:
 
     try:
         if args.spawn_server:
-            proc, base_url, temp_dir, db_path = spawn_server(args)
+            (
+                proc,
+                base_url,
+                temp_dir,
+                db_path,
+                stdout_log_path,
+                stderr_log_path,
+            ) = spawn_server(args)
             print(f"Spawned server at {base_url}")
             print(f"Isolated DB: {db_path}")
+            print(f"Server stdout log: {stdout_log_path}")
+            print(f"Server stderr log: {stderr_log_path}")
         assert db_path is not None
         wait_for_health(base_url)
 
@@ -784,6 +819,8 @@ def main() -> int:
             "started_at": started_at,
             "base_url": base_url,
             "db_path": str(db_path),
+            "server_stdout_log": str(stdout_log_path) if stdout_log_path else None,
+            "server_stderr_log": str(stderr_log_path) if stderr_log_path else None,
             "config": {
                 "spawn_server": args.spawn_server,
                 "server_preset": args.server_preset,

@@ -1,6 +1,6 @@
 """Pydantic models for MARM MCP Server endpoints."""
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from typing import Literal, Optional
 
 
@@ -71,3 +71,11 @@ class CompactionRequest(BaseModel):
     candidate_id: Optional[str] = Field(
         default=None, description="Required for action='apply' or action='discard'"
     )
+
+    @model_validator(mode="after")
+    def validate_action_requirements(self):
+        if self.action == "stage" and not self.summaries:
+            raise ValueError("summaries is required for action='stage'")
+        if self.action in ("apply", "discard") and not self.candidate_id:
+            raise ValueError(f"candidate_id is required for action='{self.action}'")
+        return self

@@ -94,8 +94,11 @@ async def test_case_and_whitespace_variants_deduplicate_within_session(monkeypat
 
 
 @pytest.mark.asyncio
-async def test_content_hash_column_populated_on_all_writes_regardless_of_consolidation_flag(tmp_path):
-    # CONSOLIDATION_ENABLED defaults to False — hash is still stored on every write
+async def test_content_hash_column_populated_on_all_writes_regardless_of_consolidation_flag(monkeypatch, tmp_path):
+    from marm_mcp_server.core import memory as memory_module
+
+    monkeypatch.setattr(memory_module, "CONSOLIDATION_ENABLED", False)
+    # Even with consolidation disabled, hash is still stored on every write.
     mem = MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
 
@@ -139,8 +142,11 @@ async def test_hash_collision_stores_as_new_row_not_false_dedup(monkeypatch, tmp
 
 
 @pytest.mark.asyncio
-async def test_consolidation_disabled_stores_duplicates_normally(tmp_path):
-    # With CONSOLIDATION_ENABLED=False (default), identical writes always insert new rows
+async def test_consolidation_disabled_stores_duplicates_normally(monkeypatch, tmp_path):
+    from marm_mcp_server.core import memory as memory_module
+
+    monkeypatch.setattr(memory_module, "CONSOLIDATION_ENABLED", False)
+    # With consolidation disabled, identical writes always insert new rows.
     mem = MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
 
@@ -155,3 +161,70 @@ async def test_consolidation_disabled_stores_duplicates_normally(tmp_path):
         ).fetchone()[0]
 
     assert count == 2
+
+
+@pytest.mark.asyncio
+async def test_concurrent_identical_writes_produce_one_row(monkeypatch, tmp_path):
+    # Regression: check-then-insert race — two concurrent writes of the same content must
+    # not bypass Layer 1 dedup and insert duplicate rows. BEGIN IMMEDIATE closes the gap.
+    import asyncio
+    from marm_mcp_server.core import memory as memory_module
+
+    monkeypatch.setattr(memory_module, "CONSOLIDATION_ENABLED", True)
+    mem = MARMMemory(str(tmp_path / "memory.db"))
+    mem._encoder_failed = True
+
+    id_a, id_b = await asyncio.gather(
+        mem.store_memory("duplicate content", "session-a"),
+        mem.store_memory("duplicate content", "session-a"),
+    )
+
+    assert id_a == id_b
+
+    with mem.get_connection() as conn:
+        count = conn.execute(
+            "SELECT COUNT(*) FROM memories WHERE session_name = ?", ("session-a",)
+        ).fetchone()[0]
+
+    assert count == 1
+
+
+@pytest.mark.asyncio
+async def test_race_window_sealed_by_begin_immediate(monkeypatch, tmp_path):
+    # Stronger concurrency regression: park both coroutines after the soft preflight
+    # check and before BEGIN IMMEDIATE, then release them together. The under-lock
+    # re-check must still collapse the duplicate write to a single row.
+    import asyncio
+    from marm_mcp_server.core import memory as memory_module
+
+    monkeypatch.setattr(memory_module, "CONSOLIDATION_ENABLED", True)
+    mem = MARMMemory(str(tmp_path / "memory.db"))
+    mem._encoder_failed = True
+
+    original_find_semantic = memory_module.find_semantic_duplicate
+    started = 0
+    release_both = asyncio.Event()
+
+    async def yielding_find_semantic(memory, content, session_name, threshold):
+        nonlocal started
+        started += 1
+        if started == 2:
+            release_both.set()
+        await release_both.wait()
+        return await original_find_semantic(memory, content, session_name, threshold)
+
+    monkeypatch.setattr(memory_module, "find_semantic_duplicate", yielding_find_semantic)
+
+    id_a, id_b = await asyncio.gather(
+        mem.store_memory("duplicate content", "session-a"),
+        mem.store_memory("duplicate content", "session-a"),
+    )
+
+    assert id_a == id_b
+
+    with mem.get_connection() as conn:
+        count = conn.execute(
+            "SELECT COUNT(*) FROM memories WHERE session_name = ?", ("session-a",)
+        ).fetchone()[0]
+
+    assert count == 1

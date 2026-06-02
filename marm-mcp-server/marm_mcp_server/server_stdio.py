@@ -124,15 +124,17 @@ def _log_tool_call(fn):
             if not protocol_injected:
                 try:
                     compaction_block = await asyncio.to_thread(
-                        claim_pending_compaction_prompt, memory
+                        claim_pending_compaction_prompt, memory, session_name
                     )
                     if compaction_block:
+                        serialized_result = json.dumps(result, ensure_ascii=False)
                         result = {
+                            **result,
                             "content": [
                                 compaction_block,
                                 {
                                     "type": "text",
-                                    "text": json.dumps(result, ensure_ascii=False),
+                                    "text": serialized_result,
                                 },
                             ]
                         }

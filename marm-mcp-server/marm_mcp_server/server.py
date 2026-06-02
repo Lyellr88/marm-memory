@@ -228,6 +228,7 @@ app = FastAPI(
 )
 
 _protocol_delivered = False
+_protocol_delivery_lock = asyncio.Lock()
 
 
 async def _mcp_tool_call_tracker(request: Request, call_next):
@@ -282,18 +283,25 @@ async def _mcp_tool_call_tracker(request: Request, call_next):
 
             injections = []
             protocol_injected = False
-            if not _protocol_delivered:
-                protocol_content = await read_protocol_file()
-                injections.append(
-                    {
-                        "type": "text",
-                        "text": f"[MARM SESSION INIT]\n\n{protocol_content}",
-                    }
-                )
-                protocol_injected = True
+            async with _protocol_delivery_lock:
+                if not _protocol_delivered:
+                    protocol_content = await read_protocol_file()
+                    injections.append(
+                        {
+                            "type": "text",
+                            "text": f"[MARM SESSION INIT]\n\n{protocol_content}",
+                        }
+                    )
+                    _protocol_delivered = True
+                    protocol_injected = True
 
+            _req_session = None
+            try:
+                _req_session = json.loads(body).get("params", {}).get("arguments", {}).get("session_name")
+            except Exception:
+                pass
             compaction_block = await asyncio.to_thread(
-                claim_pending_compaction_prompt, memory
+                claim_pending_compaction_prompt, memory, _req_session
             )
             if compaction_block:
                 injections.append(compaction_block)
@@ -309,9 +317,6 @@ async def _mcp_tool_call_tracker(request: Request, call_next):
                 )
 
             content[:0] = injections
-            if protocol_injected:
-                _protocol_delivered = True
-
             return JSONResponse(
                 content=data,
                 status_code=response.status_code,
@@ -600,11 +605,13 @@ def main():
     except ValueError as exc:
         parser.error(str(exc))
 
+    base_url = f"http://{SERVER_HOST}:{SERVER_PORT}"
+
     logger.info(
         "Starting MARM MCP Server",
         version=SERVER_VERSION,
-        mcp_endpoint="http://localhost:8001/mcp",
-        docs="http://localhost:8001/docs",
+        mcp_endpoint=f"{base_url}/mcp",
+        docs=f"{base_url}/docs",
         database=DEFAULT_DB_PATH,
         rate_limit_mode=runtime_config["mode"],
         rate_limit_rpm=runtime_config["rate_limit_rpm"],

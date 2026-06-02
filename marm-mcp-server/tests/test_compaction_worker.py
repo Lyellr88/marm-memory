@@ -502,6 +502,9 @@ async def test_scan_fires_after_grace_period(monkeypatch, tmp_path):
     mem._encoder_failed = True
 
     await mem.store_memory("trigger write", "sess-fire")
-    await asyncio.sleep(0.05)
+
+    deadline = asyncio.get_running_loop().time() + 1.0
+    while "sess-fire" not in scan_called and asyncio.get_running_loop().time() < deadline:
+        await asyncio.sleep(0.01)
 
     assert "sess-fire" in scan_called

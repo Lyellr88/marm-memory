@@ -122,7 +122,7 @@ async def _index_doc(doc: Dict) -> bool:
                 )
             conn.commit()
 
-        new_memory_id = await memory.store_memory(
+        new_memory_id = await memory.store_memory_queued(
             content=content,
             session="marm_system",
             context_type=doc["context_type"],
