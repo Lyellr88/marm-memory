@@ -1,16 +1,5 @@
 # MARM - The AI That Remembers Your Conversations"
 
-## Table of Contents
-
-- [Why MARM MCP](#why-marm-mcp-the-problem--solution)
-- [Quick Start](#-quick-start-for-mcp-http--stdio)
-- [Connect Your Client Fast](#connect-your-client-fast)
-- [Complete MCP Tool Suite](#complete-mcp-tool-suite-9-tools)
-- [MARM Dashboard](#marm-dashboard)
-- [Why MARM Holds Up](#why-marm-holds-up)
-- [Contributing](#contributing)
-- [Project Documentation](#project-documentation)
-
 ## Why MARM MCP: The Problem & Solution
 
 **Your AI forgets everything. MARM MCP doesn't.**
@@ -28,14 +17,21 @@ The point is not "more tools." MARM exposes **9 focused MCP tools** and moves th
 | **Intelligence layer** | Semantic search, auto-classification, write-time consolidation, and compaction candidates | Keeps recall useful as memory grows instead of letting duplicates pile up |
 | **Deployment layer** | Pip, Docker, STDIO, HTTP, `--swarm`, `--swarm-max`, and `--trusted` | Lets you run private local memory or shared multi-agent memory with the same MCP surface |
 
-### Use-Case Paths
+### Start Now (pip)
 
-| If you are... | Use this | Start with |
-|---------------|----------|------------|
-| **Solo developer / researcher** | Local HTTP or STDIO | `python -m marm_mcp_server` or `marm-mcp-stdio` |
-| **Multiple agents sharing memory** | One HTTP server | `python -m marm_mcp_server --swarm` |
-| **Private high-throughput swarm** | HTTP with higher bucket | `python -m marm_mcp_server --swarm-max` |
-| **Trusted private lab/server** | HTTP with no RPM limit | `python -m marm_mcp_server --trusted` |
+Install once:
+
+```bash
+pip install marm-mcp-server
+```
+
+| If you are... | Start the server | Connect your MCP client |
+|---------------|------------------|-------------------------|
+| **Solo developer / researcher** | `python -m marm_mcp_server` | `"agent" mcp add --transport http marm-memory http://localhost:8001/mcp` |
+| **Private local STDIO user** | `marm-mcp-stdio` | `"agent" mcp add --transport stdio marm-memory-stdio marm-mcp-stdio` |
+| **Multiple agents sharing memory** | `python -m marm_mcp_server --swarm` | `"agent" mcp add --transport http marm-memory http://localhost:8001/mcp` |
+| **Private high-throughput swarm** | `python -m marm_mcp_server --swarm-max` | `"agent" mcp add --transport http marm-memory http://localhost:8001/mcp` |
+| **Trusted private lab/server** | `python -m marm_mcp_server --trusted` | `"agent" mcp add --transport http marm-memory http://localhost:8001/mcp` |
 
 ## What Users Are Saying
 
@@ -44,8 +40,6 @@ The point is not "more tools." MARM exposes **9 focused MCP tools** and moves th
 
 > “MARM proved exceptionally valuable for DevOps and complex Docker projects. It maintained 100% memory accuracy, preserved context on 46 services and network configurations, and enabled standards-compliant Python/Terraform work. Semantic search and automated session logs made solving async and infrastructure issues far easier. **Value Rating:** 9.5/10 - indispensable for enterprise-grade memory, technical standards, and long-session code management.”
 > @joe_nyc, Discord user (DevOps/Infrastructure Engineer)  
-
-## 🚀 Quick Start for MCP (HTTP & STDIO)
 
 ### Use this quick rule of thumb to choose your setup
 
@@ -56,6 +50,8 @@ The point is not "more tools." MARM exposes **9 focused MCP tools** and moves th
 **Swarm / multi-agent note:** The write queue is enabled by default to serialize memory writes through one worker. For shared HTTP deployments, use `--swarm` (200 RPM) or `--swarm-max` (600 RPM) when starting the server. `--trusted` disables rate limiting entirely for private deployments. STDIO is still best for private single-agent/local use.
 
 #### Local pip HTTP (zero config)
+
+> "agent" refers to claude, gemini, grok, qwen, or any MCP client. Codex uses -url instead of --transport to add MCP tools.
 
 ```bash
 pip install marm-mcp-server
@@ -71,13 +67,14 @@ python -m marm_mcp_server
 ```bash
 pip install marm-mcp-server
 # most agents use this --transport command
-"agent" mcp add --transport stdio marm-memory-stdio marm-mcp-stdio
-codex mcp add marm-memory-stdio -- marm-mcp-stdio
+"agent" mcp add --transport stdio marm-memory-stdio marm-mcp-stdio"codex mcp add marm-memory-stdio -- marm-mcp-stdio
 # xAI / Grok Remote MCP. Use a hosted HTTPS MARM endpoint, not localhost.
 python -m marm_mcp_server.server_stdio
 ```
 
 #### Docker HTTP (key required)
+
+> Docker HTTP requires an API key because it exposes MARM as a network server; STDIO stays local to the client process and does not need one.
 
 ```bash
 # Step 1: generate key (do not add < > around the key)
@@ -135,32 +132,6 @@ Claude Code remains the recommended first setup path, but MARM also works with o
 
 **Remote/API platforms** - [xAI / Grok Remote MCP](docs/INSTALL-DOCKER.md#xai--grok-remote-mcp) · [Platform integration](docs/INSTALL-PLATFORMS.md)
 
-## Complete MCP Tool Suite (9 Tools)
-
-**💡 Pro Tip:** You don't need to manually call these tools! Just tell your AI agent what you want in natural language:
-
-- *"Claude, log this session as 'Project Alpha' and add this conversation as 'database design discussion'"*
-- *"Remember this code snippet in your notebook for later"*
-- *"Search for what we discussed about authentication yesterday"*
-
-The AI agent will automatically use the appropriate tools. Manual tool access is available for power users who want direct control.
-
-**Architecture note:** MARM groups related operations behind a single dispatching tooling to keep MCP discovery lean without hiding behavior. Domain-specific tools such as `marm_notebook(action=...)`, `marm_delete(type=...)`, and `marm_compaction(action=...)` group closely related operations behind explicit parameters, while recall, logging, and summaries stay separate so agents still choose the right capability clearly. This design keeps the MCP schema compact while preserving full functionality.
-
-| **Category** | **Tool** | **Description** |
-|--------------|----------|-----------------|
-| **Memory Intelligence** | `marm_smart_recall` | AI-powered semantic similarity search across all memories. Supports global search with `search_all=True` flag |
-| | `marm_context_log` | Intelligent auto-classifying memory storage using vector embeddings |
-| **Logging System** | `marm_log_session` | Create or switch to named session container |
-| | `marm_log_entry` | Add structured log entry with auto-date formatting |
-| | `marm_log_show` | Display all entries and sessions (filterable) |
-| | `marm_delete` | Delete a log session, log entry, or notebook entry (`type="log"\|"notebook"`) |
-| **Reasoning & Workflow** | `marm_summary` | Generate context-aware summaries with intelligent truncation for LLM conversations |
-| **Notebook Management** | `marm_notebook` | Unified notebook tool: add, use, show, status, or clear entries with `action="add"\|"use"\|"show"\|"status"\|"clear"` |
-| **Memory Maintenance** | `marm_compaction` | Unified compaction workflow with `action="status"\|"candidates"\|"review"\|"stage"\|"apply"\|"discard"` for agent-assisted memory cleanup |
-
-**Internal automation:** lifecycle initialization, documentation refresh, current date context, serialized write queue handling, and system checks are handled by the server instead of exposed as AI-facing tools. Optional compaction can detect duplicate memory clusters and nudge the connected agent to summarize them through `marm_compaction`. For server status, use the dashboard health panel or `curl http://localhost:8001/health`.
-
 ## MARM Dashboard
 
 A local web UI for browsing and managing your MARM memory — separate from the MCP server, reads and writes the same `~/.marm/marm_memory.db`.
@@ -190,6 +161,33 @@ docker run --rm -p 127.0.0.1:8002:8002 \
 
 See [`marm-dashboard/README.md`](marm-dashboard/README.md) for the full guide.
 
+## Complete MCP Tool Suite (9 Tools)
+
+
+**💡 Pro Tip:** You don't need to manually call these tools! Just tell your AI agent what you want in natural language:
+
+- *"Claude, log this session as 'Project Alpha' and add this conversation as 'database design discussion'"*
+- *"Remember this code snippet in your notebook for later"*
+- *"Search for what we discussed about authentication yesterday"*
+
+The AI agent will automatically use the appropriate tools. Manual tool access is available for power users who want direct control.
+
+**Architecture note:** MARM groups related operations behind a single dispatching tooling to keep MCP discovery lean without hiding behavior. Domain-specific tools such as `marm_notebook(action=...)`, `marm_delete(type=...)`, and `marm_compaction(action=...)` group closely related operations behind explicit parameters, while recall, logging, and summaries stay separate so agents still choose the right capability clearly. This design keeps the MCP schema compact while preserving full functionality.
+
+| **Category** | **Tool** | **Description** |
+|--------------|----------|-----------------|
+| **Memory Intelligence** | `marm_smart_recall` | AI-powered semantic similarity search across all memories. Supports global search with `search_all=True` flag |
+| | `marm_context_log` | Intelligent auto-classifying memory storage using vector embeddings |
+| **Logging System** | `marm_log_session` | Create or switch to named session container |
+| | `marm_log_entry` | Add structured log entry with auto-date formatting |
+| | `marm_log_show` | Display all entries and sessions (filterable) |
+| | `marm_delete` | Delete a log session, log entry, or notebook entry (`type="log"\|"notebook"`) |
+| **Reasoning & Workflow** | `marm_summary` | Generate context-aware summaries with intelligent truncation for LLM conversations |
+| **Notebook Management** | `marm_notebook` | Unified notebook tool: add, use, show, status, or clear entries with `action="add"\|"use"\|"show"\|"status"\|"clear"` |
+| **Memory Maintenance** | `marm_compaction` | Unified compaction workflow with `action="status"\|"candidates"\|"review"\|"stage"\|"apply"\|"discard"` for agent-assisted memory cleanup |
+
+**Internal automation:** lifecycle initialization, documentation refresh, current date context, serialized write queue handling, and system checks are handled by the server instead of exposed as AI-facing tools. Optional compaction can detect duplicate memory clusters and nudge the connected agent to summarize them through `marm_compaction`. For server status, use the dashboard health panel or `curl http://localhost:8001/health`.
+
 ## Why MARM Holds Up
 
 MARM keeps the AI-facing surface small while the server handles the infrastructure work:
@@ -200,4 +198,3 @@ MARM keeps the AI-facing surface small while the server handles the infrastructu
 - **Safe defaults:** local pip binds to `127.0.0.1`; Docker HTTP requires `MARM_API_KEY`; STDIO stays private and keyless.
 
 For deeper architecture, configuration, and workflow guidance, use [MCP-HANDBOOK.md](MCP-HANDBOOK.md) and [FAQ.md](docs/FAQ.md).
-

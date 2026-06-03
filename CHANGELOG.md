@@ -1419,5 +1419,10 @@ marm_notebook(action="use"|"status"|"clear", session_name="my_project")
 - Added focused regression coverage for exact deduplication, write-time semantic consolidation, compaction candidate detection, staging, apply/idempotency, stale safeguards, write-queue callable execution, and auto-apply behavior.
 - Local validation covered direct queue bursts, HTTP RPM boundaries, trusted no-RPM pressure, compaction stage/apply, stale and cross-session negative paths, auto-apply scheduling, mocked swarm writes, and real Ollama swarm writes.
 
+### Hardening & Suite Stability
+
+- Strengthened suite-level isolation around reloaded server modules, patched memory singletons, compaction globals, and async write queue cleanup so tests pass both individually and as a grouped run.
+- Tightened diagnostic and consolidation edge cases found during review, including request-body logging for HTTP compaction injection and stale embedding cleanup after write-time merges.
+
 </details>
 

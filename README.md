@@ -49,14 +49,21 @@ The point is not "more tools." MARM exposes **9 focused MCP tools** and moves th
 | **Intelligence layer** | Semantic search, auto-classification, write-time consolidation, and compaction candidates | Keeps recall useful as memory grows instead of letting duplicates pile up |
 | **Deployment layer** | Pip, Docker, STDIO, HTTP, `--swarm`, `--swarm-max`, and `--trusted` | Lets you run private local memory or shared multi-agent memory with the same MCP surface |
 
-### Use-Case Paths
+### Start Now (pip)
 
-| If you are... | Use this | Start with |
-|---------------|----------|------------|
-| **Solo developer / researcher** | Local HTTP or STDIO | `python -m marm_mcp_server` or `marm-mcp-stdio` |
-| **Multiple agents sharing memory** | One HTTP server | `python -m marm_mcp_server --swarm` |
-| **Private high-throughput swarm** | HTTP with higher bucket | `python -m marm_mcp_server --swarm-max` |
-| **Trusted private lab/server** | HTTP with no RPM limit | `python -m marm_mcp_server --trusted` |
+Install once:
+
+```bash
+pip install marm-mcp-server
+```
+
+| If you are... | Start the server | Connect your MCP client |
+|---------------|------------------|-------------------------|
+| **Solo developer / researcher** | `python -m marm_mcp_server` | `"agent" mcp add --transport http marm-memory http://localhost:8001/mcp` |
+| **Private local STDIO user** | `marm-mcp-stdio` | `"agent" mcp add --transport stdio marm-memory-stdio marm-mcp-stdio` |
+| **Multiple agents sharing memory** | `python -m marm_mcp_server --swarm` | `"agent" mcp add --transport http marm-memory http://localhost:8001/mcp` |
+| **Private high-throughput swarm** | `python -m marm_mcp_server --swarm-max` | `"agent" mcp add --transport http marm-memory http://localhost:8001/mcp` |
+| **Trusted private lab/server** | `python -m marm_mcp_server --trusted` | `"agent" mcp add --transport http marm-memory http://localhost:8001/mcp` |
 
 ## What Users Are Saying
 
@@ -94,6 +101,8 @@ Watch MARM install through Docker, connect to Claude, and share persistent memor
 
 #### Local pip HTTP (zero config)
 
+> "agent" refers to claude, gemini, grok, qwen, or any MCP client. Codex uses -url instead of --transport to add MCP tools.
+
 ```bash
 pip install marm-mcp-server
 # most agents use this --transport command
@@ -108,13 +117,14 @@ python -m marm_mcp_server
 ```bash
 pip install marm-mcp-server
 # most agents use this --transport command
-"agent" mcp add --transport stdio marm-memory-stdio marm-mcp-stdio
-codex mcp add marm-memory-stdio -- marm-mcp-stdio
+"agent" mcp add --transport stdio marm-memory-stdio marm-mcp-stdio"codex mcp add marm-memory-stdio -- marm-mcp-stdio
 # xAI / Grok Remote MCP. Use a hosted HTTPS MARM endpoint, not localhost.
 python -m marm_mcp_server.server_stdio
 ```
 
 #### Docker HTTP (key required)
+
+> Docker HTTP requires an API key because it exposes MARM as a network server; STDIO stays local to the client process and does not need one.
 
 ```bash
 # Step 1: generate key (do not add < > around the key)
