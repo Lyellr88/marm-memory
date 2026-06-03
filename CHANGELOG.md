@@ -2,10 +2,12 @@
 
 ## MARM Protocol – v2.2.9 Change Log
 
+### Version v1 - Prototype to Beta Foundation
+
 <details>
 <summary> June 9th–13th: Initial Protocol Unification (v1.0.0 Launch)</summary>
 
-### Added
+#### Added
 
 - `/compile` command to generate one-line-per-entry summaries  
 - Automatic reseed block generation for restoring context in new threads  
@@ -17,7 +19,7 @@
 - Clarified optional system prompt behavior (not built-in; manual only)  
 - New session management guidance: recap every 8–10 turns using `/compile`  
 
-### Changed
+#### Changed
 
 - Unified session tools into default protocol behavior  
 - README restructured for clarity:
@@ -26,7 +28,7 @@
   - Acknowledgment behavior clarified  
 - Protocol one-liner updated to reflect unified design
 
-### Removed
+#### Removed
 
 - Legacy modular language and optional tool references  
 - Confidence flag/scoring feature from all protocol outputs  
@@ -40,7 +42,7 @@
 <details>
 <summary> June 14th–17th: Documentation Expansion and Restructuring (v1.0.1)</summary>
 
-### Added
+#### Added
 
 - `HANDBOOK.md`: full command reference and usage guide  
 - Collapsible section formatting for all major handbook parts (Beginner, Advanced, Examples, Quick Reference)  
@@ -53,13 +55,13 @@
   - `/show reasoning`  
   - `/compile [SessionName] --summary`  
 
-### Changed
+#### Changed
 
 - README clarified and reorganized to align with handbook  
 - Handbook structured into Beginner / Intermediate / Advanced use tiers  
 - Emphasis on manual workflows and session recap cadence  
 
-### Removed
+#### Removed
 
 - Embedded command list from README  
 - "Back to top" anchors (due to GitHub collapsible quirks)  
@@ -69,9 +71,9 @@
 ---
 
 <details>
-<summary> June 18th–20th: Externalization and Visibility Focus (v1.0.2)/summary>
+<summary> June 18th–20th: Externalization and Visibility Focus (v1.0.2)</summary>
 
-### Added
+#### Added
 
 - AI-narrated walkthrough: 15-minute audio guide embedded in README  
 - User Feedback section (collapsible, with real screenshots)  
@@ -79,7 +81,7 @@
 - `CONTRIBUTING.md` and Recognition Framework  
 - Multi-tier GitHub Discussions and onboarding entry points  
 
-### Changed
+#### Changed
 
 - README focus shifted to narrative onboarding:
   - "What → Why → How → Proof" sequence  
@@ -93,7 +95,7 @@
 <details>
 <summary>June 21st-23rd: Protocol Expansion (v1.0.3)</summary>
 
-### Added
+#### Added
 
 - `/notebook` command to save custom info in a personal library  
   → Guides the AI to use only trusted user-provided data, not external sources  
@@ -104,7 +106,7 @@
 - Inline user guide for `/notebook` under collapsible alert block  
 - New dropdown: "Key Info and Limitations" (moved from protocol body)  
 
-### Changed
+#### Changed
 
 - "What MARM Solves" and "Why It Exists" sections updated to reflect v1.3 behavior  
 - Activation response now includes summary and Quick Start command list  
@@ -117,7 +119,7 @@
 - Simplified Quick Start block  
 - Added audio walkthrough link with summary of included topics
 
-### Removed
+#### Removed
 
 - Key info and limitations from static protocol body (now placed in dropdown)  
 - Redundant phrasing in command definitions and legacy guardrail notes  
@@ -129,13 +131,13 @@
 <details>
 <summary>June 25th-July 10th: Chatbot Integration, Client Work, and Scheduled Pause (v1.1.0)</summary>
 
-### Context
+#### Context
 
 - Focus shifted to finalizing a public chatbot that runs MARM logic directly from the repo. This feature will allow users to interact with MARM in real time and explore its functionality hands-on.
 - Took a scheduled 5-day break for the July 4th holiday.
 - Completed a consulting engagement re-engineering a deliverability protocol for a client, which temporarily paused MARM-specific development.
 
-### Upcoming
+#### Upcoming
 
 - Final chatbot tweaks are in progress; once deployed, it will be featured directly in the GitHub repo.
 - MARM refinements will resume, including minor protocol adjustments and test-driven formatting updates.
@@ -147,7 +149,7 @@
 <details>
 <summary>July 14th: Protocol Refinement and Handbook Restructure (v1.2.0)</summary>
 
-### Added
+#### Added
 
 - `/refresh marm` command to recenter AI mid-session, recommended every 8-10 turns
 - Subcommands for `/notebook`: `key:[name]`, `get:[name]`, and `show:` for enhanced data management
@@ -155,13 +157,13 @@
 - "What's New in v1.4 (Upgrading from v1.3)" section in README for quick reference
 - Star and fork badges at the top of README
 
-### Changed
+#### Changed
 
 - `/log` command split into `/log session:[name]` and `/log entry [Date | User | Intent | Outcome]` for increased precision
 - Clarified manual-only processes; removed ambiguous automation from all protocol sections
 - Restructured HANDBOOK.md into a concise, professional 4-part format to improve readability and depth
 
-### Removed
+#### Removed
 
 - Previous automated workflow references that implied non-manual AI actions
 - Redundant explanations and repetitive content from HANDBOOK.md to streamline user experience
@@ -173,7 +175,7 @@
 <details>
 <summary>July 11th-16th: Full System Refactor - From Prototype to Beta (v1.3.0)</summary>
 
-### Added
+#### Added
 
 - **New UI Features:**
   - A dynamic, collapsible command menu to organize all MARM commands and improve usability.
@@ -186,7 +188,7 @@
   - AI context now includes all `/notebook` entries on every turn, making the bot fully aware of user-defined facts.
   - Keyword-aware document searching to provide more accurate answers for MARM-related queries.
 
-### Changed
+#### Changed
 
 - **Core Interaction Model:**
   - Refactored the command handling system to a "hybrid" model. Most commands now trigger an AI-generated, natural language acknowledgment instead of a static text reply.
@@ -197,7 +199,7 @@
 - **Command Syntax:**
   - Updated all command parsing logic (`/log`, `/notebook`) to match the clearer and more specific v1.4 syntax.
 
-### Removed
+#### Removed
 
 - **Outdated Code & Logic:**
   - Eliminated the old, rigid command logic and all of its hardcoded response strings.
@@ -211,11 +213,11 @@
 <details>
 <summary>July 17th-21st: Major Refactor & Feature Release (v1.4.0)</summary>
 
-### Overview
+#### Overview
 
 This release marks a complete transformation of the codebase from a monolithic structure to a modern, modular, barrel-pattern architecture. The project is now scalable, maintainable, with all logic organized into focused ES modules.
 
-### Added
+#### Added
 
 - **Session Persistence System**
   - Sessions now survive page refresh using dual storage strategy
@@ -246,7 +248,7 @@ This release marks a complete transformation of the codebase from a monolithic s
   - Icon-based navigation buttons
   - Collapsible command menu persists state
 
-### Changed
+#### Changed
 
 - **Architecture: Monolithic → Modular**
   - Split 900+ line `chatbot.js` into 6 focused modules
@@ -273,7 +275,7 @@ This release marks a complete transformation of the codebase from a monolithic s
   - Removed all global functions
   - Added lazy-loading capability for modules
 
-### Fixed
+#### Fixed
 
 - Voice synthesis integration properly scoped
 - Command menu state persistence
@@ -282,7 +284,7 @@ This release marks a complete transformation of the codebase from a monolithic s
 - Dark mode consistency issues
 - Response formatting now applied to all bot messages
 
-### Removed
+#### Removed
 
 - Global `window.*` function pollution (12 functions removed)
 - Circular dependencies between modules
@@ -296,11 +298,11 @@ This release marks a complete transformation of the codebase from a monolithic s
 <details>
 <summary>July 22nd-24th: MARM Chatbot Live Launch & UI Enhancements (v1.5.0 Launch)</summary>
 
-### Overview
+#### Overview
 
 Official launch of the MARM interactive chatbot on Render, featuring custom backgrounds, improved session management architecture, and enhanced error handling across the application.
 
-### Added
+#### Added
 
 - **Background Images System**
   - Light mode now supports custom background image (`images-bg.png`)
@@ -317,7 +319,7 @@ Official launch of the MARM interactive chatbot on Render, featuring custom back
   - Clearer frontend error handling for debugging
   - User-friendly error feedback system
 
-### Changed
+#### Changed
 
 - **Session Management Architecture**
   - Moved all session-related UI logic to new `sessionUI.js` module
@@ -335,7 +337,7 @@ Official launch of the MARM interactive chatbot on Render, featuring custom back
   - Full backend support enabled
   - API proxying capabilities added
 
-### Fixed
+#### Fixed
 
 - Session persistence issues across page refreshes
 - Error handling for missing documentation files
@@ -343,7 +345,7 @@ Official launch of the MARM interactive chatbot on Render, featuring custom back
 - Mobile responsive design issues
 - Background image loading and switching
 
-### Removed
+#### Removed
 
 - Excessive inline comments and code bloat
 - Global function pollution
@@ -357,11 +359,11 @@ Official launch of the MARM interactive chatbot on Render, featuring custom back
 <details>
 <summary>July 28th-30th: FAB System Implementation & UI Modernization (v1.6.0)</summary>
 
-### Overview
+#### Overview
 
 This release introduces a complete UI/UX transformation with the implementation of a modern Floating Action Button (FAB) system, replacing the traditional floating buttons with an expandable, mobile-first design. The update includes comprehensive responsive design improvements, enhanced code block functionality, and significant architectural refinements for better user experience.
 
-### Added
+#### Added
 
 - **Floating Action Button (FAB) System**
   - Expandable circular FAB with smooth animations and staggered delays
@@ -390,7 +392,7 @@ This release introduces a complete UI/UX transformation with the implementation 
   - ActiveControllers tracking to prevent orphaned requests
   - Automatic cleanup on page unload
 
-### Changed
+#### Changed
 
 - **Mobile-First Architecture**
   - Replaced individual floating buttons with unified FAB system
@@ -415,7 +417,7 @@ This release introduces a complete UI/UX transformation with the implementation 
   - Maintained GitHub-specific background styling
   - Ensured consistent functionality across all deployment environments
 
-### Fixed
+#### Fixed
 
 - FAB button functionality on Render deployment
 - Circular button styling with proper border-radius
@@ -423,7 +425,7 @@ This release introduces a complete UI/UX transformation with the implementation 
 - Input field overlap with Send button
 - Visual balance between chat window and action buttons
 
-### Removed
+#### Removed
 
 - Individual floating buttons (token-counter-btn, newChatBtn, chatsBtn, darkModeToggle)
 - Duplicate FAB structure outside form
@@ -438,14 +440,14 @@ This release introduces a complete UI/UX transformation with the implementation 
 <details>
 <summary>July 31st, 2025: Documentation Overhaul & Local Setup Improvements (v1.8.0)</summary>
 
-### Added
+#### Added
 
 - **SETUP.md** – New, in-depth local download and installation guide
 - **config.js** – AI provider configuration file for universal API support
 - **universalAIHelper.js** - Universal AI provider support
 - **New screenshots** – Visuals of the webchat interface added to README
 
-### Changed
+#### Changed
 
 - **README.md** –
   - Updated for v1.5
@@ -453,7 +455,7 @@ This release introduces a complete UI/UX transformation with the implementation 
   - Removed "What's New with MARM" section
   - Added local download quick setup section
 
-### Improved
+#### Improved
 
 - **Consistency** – All documentation now reflects v1.5 and matches the current feature set
 - **User onboarding** – Clearer quick start, setup, and troubleshooting for new users
@@ -465,23 +467,27 @@ This release introduces a complete UI/UX transformation with the implementation 
 <details>
 <summary>August 5th, 2025: Readme Restructure (v1.9.0) </summary>
 
-### Added
+#### Added
 
 - **README-2.md creation** - Complete restructure for professional presentation
 - **Enhanced PROTOCOL.md** - Complete copy-paste prompt with technical specs
 
-### Changed
+#### Changed
 
 - **Documentation hierarchy** - Clear separation of concerns
 - **Professional positioning** - Research/professional focus vs chatbot focus
 
-### Removed
+#### Removed
 
 - **Redundant content** - Eliminated duplication
 - **Overwhelming detail** - Moved to dedicated files
 - **Chatbot-focused language** - Replaced with framework positioning
 
 </details>
+
+---
+
+## Version 2 - MARM Protocol to Universal MCP Server Evolution
 
 ---
 
@@ -492,14 +498,14 @@ This release introduces a complete UI/UX transformation with the implementation 
 
 **Core achievements: 95% cost reduction (Gemini → Llama 4), professional test suite (74 tests), protocol v2.0 evolution, security hardening, and complete UI modernization.**
 
-### **Professional Testing Infrastructure Implementation**
+#### **Professional Testing Infrastructure Implementation**
 
 - **Comprehensive Test Suite**: Added 74 passing tests across 4 modules - Voice (13), UI (16), State/Session (15), Commands (15), Security/Logic (15)
 - **GitHub Actions Integration**: Automated testing on push/PR with Node.js 18.x & 20.x, test status badge added to README
 - **ES Module Testing**: Full Jest configuration supporting modern JavaScript imports, browser API mocking (speechSynthesis, localStorage, DOM)
 - **Quality Assurance**: 42.39% test coverage with detailed reports, error handling validation, edge case testing for all core functionality
 
-### **Complete AI Provider Migration: Gemini → Llama 4 Maverick**
+#### **Complete AI Provider Migration: Gemini → Llama 4 Maverick**
 
 - **Backend Transformation**: Complete migration from Google Gemini API to Replicate Llama 4 Maverick (400B total parameters, 17B active × 128 experts)
 - **Cost Optimization**: Achieved 95% operational cost reduction (.65 per million tokens output vs Claude Sonnet pricing)
@@ -507,7 +513,7 @@ This release introduces a complete UI/UX transformation with the implementation 
 - **API Architecture**: Converted from Gemini's complex message format to Replicate's streamlined prompt-based system
 - **Technical Implementation**: Complete rewrite of `server.js` streaming endpoint, new `replicateHelper.js` replacing `geminiHelper.js`
 
-### **MARM Protocol Evolution: v1.5 → v2.0**
+#### **MARM Protocol Evolution: v1.5 → v2.0**
 
 - **Identity Transformation**: Updated from generic assistant mode to "MARM IS memory incarnate" - core identity evolution
 - **Response Optimization**: Replaced verbose "Response Contract" with concise "💭 Thinking Trail" format for user-friendly output
@@ -517,7 +523,7 @@ This release introduces a complete UI/UX transformation with the implementation 
   - Enhanced notebook commands: `/notebook use:`, `/notebook clear:`, `/notebook status:` (active management)
 - **Memory System Overhaul**: Added conversation import system for mid-session MARM activation with complete context preservation
 
-### **Complete UI/UX Modernization**
+#### **Complete UI/UX Modernization**
 
 - **Visual Transformation**: Complete overhaul from "2010 vibes" to modern design standards with indigo (#6366f1) and amber (#f59e0b) color palette
 - **Glassmorphism Effects**: Enhanced shadows and glass effects throughout interface for premium feel
@@ -525,7 +531,7 @@ This release introduces a complete UI/UX transformation with the implementation 
 - **Command Menu Redesign**: Complete transformation from sidebar to contextual popup button (⚡) positioned next to input field
 - **Complete HTML/JavaScript Separation**: Moved all HTML templates from JavaScript files to HTML templates, clean separation of concerns
 
-### **Security & Architecture Hardening**
+#### **Security & Architecture Hardening**
 
 - **XSS Protection System**: Comprehensive security module (`xssProtection.js`) with multiple sanitization levels
   - `sanitizeText()`: HTML entity escaping for plain text
@@ -534,12 +540,12 @@ This release introduces a complete UI/UX transformation with the implementation 
 - **Storage Architecture**: Created centralized `storage.js` for localStorage operations with multi-tab synchronization
 - **State Management Enhancement**: Private state object only accessible through `getState()`, immutable patterns with defensive copies
 
-### **New Features & Capabilities**
+#### **New Features & Capabilities**
 
 - **File Upload System**: File upload button (📎) with text/code file support for 15+ file types, smart detection, automatic language detection and syntax highlighting
 - **MARM Protocol Toggle**: Toggle button (🧠) in FAB menu for instant protocol switching between structured MARM and free mode with visual feedback
 
-### **Critical Bug Fixes & System Stability**
+#### **Critical Bug Fixes & System Stability**
 
 - **MARM Memory Issues**: Fixed critical memory loss bug where MARM would lose all conversation context when activated mid-conversation
 - **Session Persistence**: Fixed MARM forgetting conversation when toggled off and back on, now preserves existing session IDs
@@ -547,7 +553,7 @@ This release introduces a complete UI/UX transformation with the implementation 
 - **Voice System**: Fixed TTS "interrupted" errors in speech synthesis by adding proper cancellation logic
 - **Browser Compatibility**: Added cache-busting headers to server.js and version strings to prevent stale file serving
 
-### **Impact Summary**
+#### **Impact Summary**
 
 - **95% cost reduction** through AI provider optimization
 - **Zero XSS vulnerabilities** with comprehensive protection
@@ -562,7 +568,7 @@ This release introduces a complete UI/UX transformation with the implementation 
 <details>
 <summary>August 20th – September 12th, 2025: Universal MCP Server Development (v2.2.4 Launch)</summary>
 
-### Added
+#### Added
 
 **Universal MCP Server Architecture:**
 
@@ -598,7 +604,7 @@ This release introduces a complete UI/UX transformation with the implementation 
 - **Universal MCP compatibility** for any Model Context Protocol client
 - **Cross-AI memory sharing** - All connected agents contribute to unified knowledge base
 
-### Changed
+#### Changed
 
 - **Architecture evolution** from chatbot-focused to Universal MCP Server platform
 - **Protocol enhancement** - Original MARM commands now available as MCP tools
@@ -606,7 +612,7 @@ This release introduces a complete UI/UX transformation with the implementation 
 - **Development approach** - Multi-agent collaboration showcasing AI-assisted development
 - **Memory model** - From session-based to persistent, searchable, semantic database
 
-### Technical Achievements
+#### Technical Achievements
 
 - **Docker Hub deployment** - `lyellr88/marm-mcp-server:latest` for production use
 - **Semantic search implementation** - AI embeddings for intelligent memory retrieval
@@ -625,7 +631,7 @@ This release introduces a complete UI/UX transformation with the implementation 
 
 **Core achievements: Multi-platform publishing setup, CI/CD workflow validation, documentation system overhaul, and repository cleanup - all focused on preparing MARM for official listing in the GitHub MCP Registry and enabling seamless pip install deployment.**
 
-### **Multi-Platform Publishing & CI/CD**
+#### **Multi-Platform Publishing & CI/CD**
 
 - **PyPI Integration:**
   - Configured PyPI trusted publishing with proper project name alignment to `[project].name` in `pyproject.toml`
@@ -643,14 +649,14 @@ This release introduces a complete UI/UX transformation with the implementation 
   - Ensured compliance with Model Context Protocol standards for automatic agent discovery
   - Enabled seamless integration with Claude Desktop and other MCP-compatible AI clients
 
-### **CI/CD Workflows**
+#### **CI/CD Workflows**
 
 - **GitHub Actions:**
   - Enhanced, debugged, and validated workflows for PyPI, Docker, and registry deployment
   - Ensured all actions/scripts reference the updated project and documentation structure, removing legacy/obsolete paths
   - Implemented robust error handling and rollback mechanisms for production deployments
 
-### **Documentation System Overhaul**
+#### **Documentation System Overhaul**
 
 - **Auto-Loading/Modularized Docs:**
   - Migrated from hardcoded manual documentation lists to an automated loader for all `.md` files
@@ -661,7 +667,7 @@ This release introduces a complete UI/UX transformation with the implementation 
   - Split large handbooks into six logically-focused, easily-maintainable files (3 for MCP, 3 for the main system), improving structure and modularity
   - Maintained clear and robust logging for missing or misclassified essential docs
 
-### **Refactoring & Repo Cleanup**
+#### **Refactoring & Repo Cleanup**
 
 - **Legacy Removal:**
   - Eliminated outdated or redundant folders (`MARMcp-beta`), consolidating all code and documentation under a single, standardized directory structure
@@ -671,7 +677,7 @@ This release introduces a complete UI/UX transformation with the implementation 
   - Coordinated use of Claude, Qwen, Gemini, and Comet for change verification, diff checking, and QA
   - Used a centralized CP Dump method for capturing and tracking change logs, error traces, and validation outputs during the transition
 
-### **Impact Summary**
+#### **Impact Summary**
 
 - **Production readiness** - Stabilized Universal MCP Server for public release
 - **Registry compliance** - Prepared for official GitHub MCP Registry listing
@@ -688,7 +694,7 @@ This release introduces a complete UI/UX transformation with the implementation 
 
 **Core achievements: Complete GitHub alpha tester feedback resolution (4/4 issues), full WebSocket production implementation with HTTP parity, OAuth authentication restoration, graceful shutdown infrastructure, and modernized dependency management - achieving zero outstanding issues and production-ready WebSocket MCP protocol.**
 
-### **🎉 Complete GitHub Alpha Tester Issue Resolution (4/4)**
+#### **🎉 Complete GitHub Alpha Tester Issue Resolution (4/4)**
 
 - **Issue #1 - WebSocket URL Implementation**:
   - Implemented complete WebSocket MCP protocol at `ws://localhost:8001/mcp/ws`
@@ -712,7 +718,7 @@ This release introduces a complete UI/UX transformation with the implementation 
   - Implemented Docker health checks with curl testing
   - Added comprehensive startup guidance and troubleshooting
 
-### **🚀 WebSocket Production Implementation**
+#### **🚀 WebSocket Production Implementation**
 
 - **Complete MCP Protocol Support**:
   - All 19 MCP methods available via WebSocket protocol
@@ -731,7 +737,7 @@ This release introduces a complete UI/UX transformation with the implementation 
   - Broadcast and personal messaging capabilities
   - Proper WebSocket lifecycle management
 
-### **🔧 Infrastructure & Authentication Improvements**
+#### **🔧 Infrastructure & Authentication Improvements**
 
 - **OAuth 2.0 Authentication Restoration**:
   - Restored complete OAuth implementation that mysteriously disappeared
@@ -751,7 +757,7 @@ This release introduces a complete UI/UX transformation with the implementation 
   - Updated to match actually installed working versions
   - Enabled automatic security patches without breaking changes
 
-### **🏗️ Architecture & Documentation Enhancements**
+#### **🏗️ Architecture & Documentation Enhancements**
 
 - **Date Handling Architecture Fix**:
   - Fixed `marm_log_entry` incorrectly auto-adding date prefixes to user content
@@ -771,7 +777,7 @@ This release introduces a complete UI/UX transformation with the implementation 
   - Clarified background tool automation (marm_current_context)
   - Enhanced troubleshooting sections for connection issues
 
-### **🐛 Technical Debt Resolution**
+#### **🐛 Technical Debt Resolution**
 
 - **WebSocket Implementation Quality**:
   - Eliminated "sloppy" mixed approaches in favor of consistent patterns
@@ -790,7 +796,7 @@ This release introduces a complete UI/UX transformation with the implementation 
   - Maintained surgical precision in version synchronization
   - Updated package metadata and documentation references
 
-### **📊 Testing & Validation Framework**
+#### **📊 Testing & Validation Framework**
 
 - **Comprehensive Test Suite**:
   - Created bulletproof validation testing for all 19 MCP methods
@@ -804,7 +810,7 @@ This release introduces a complete UI/UX transformation with the implementation 
   - Verified security integration and rate limiting functionality
   - Confirmed backward compatibility maintenance
 
-### **Impact Summary**
+#### **Impact Summary**
 
 - **Zero Outstanding Issues**: All 4 GitHub alpha tester issues completely resolved
 - **Production WebSocket Ready**: Full HTTP/WebSocket parity with professional implementation
@@ -813,7 +819,7 @@ This release introduces a complete UI/UX transformation with the implementation 
 - **Beta Production Status**: WebSocket implementation ready for real-world testing and deployment
 - **Developer Experience**: Comprehensive documentation with natural language interface guidance
 
-### **Technical Achievements**
+#### **Technical Achievements**
 
 - **Complete CI/CD Compatibility**: Maintained deployment readiness across PyPI, Docker Hub, and MCP Registry
 - **Professional Architecture**: Modular design with proper separation of concerns and security integration
@@ -830,7 +836,7 @@ This release introduces a complete UI/UX transformation with the implementation 
 <details>
 <summary>September 25th, 2025: Security Hardening - 4 Critical Vulnerabilities Fixed (v2.2.7)</summary>
 
-### Security Fixes
+#### Security Fixes
 
 - **XSS Protection Enhancement**: Fixed malformed script tag bypass vulnerability
   - Updated regex pattern to handle spaces in closing tags: `</script >`, `< /script>`
@@ -856,13 +862,13 @@ This release introduces a complete UI/UX transformation with the implementation 
   - Vulnerability: `py/stack-trace-exposure` in health endpoints and WebSocket handlers
   - Files: `endpoints/system.py`, `endpoints/websocket_handlers_complete.py`
 
-### Changed
+#### Changed
 
 - All error responses now return generic messages to external users
 - Server-side logging enhanced for debugging while maintaining security
 - OAuth flow restricted to development-safe redirect URIs
 
-### Technical Notes
+#### Technical Notes
 
 - All fixes follow "SIMPLE IS BETTER THAN COMPLICATED" principle
 - Surgical changes maintain functionality while eliminating security risks
@@ -880,7 +886,7 @@ This release introduces a complete UI/UX transformation with the implementation 
 
 **Core achievements: Fixed broken pip install, added `python -m marm_mcp_server` support, documented active bugs and planned architecture improvements, cleaned up docs structure.**
 
-### **Pip Install Fix**
+#### **Pip Install Fix**
 
 - **Root Cause**: `marm_mcp_server/server.py` used absolute imports (`from middleware import ...`) — these work when running `python server.py` from root but fail when installed as a package
 - **Fix**: Converted all absolute imports to relative imports across 16 files in `marm_mcp_server/`
@@ -888,21 +894,21 @@ This release introduces a complete UI/UX transformation with the implementation 
 - **Added entry functions**: Added `create_server()` and `main()` to `server.py` — `main()` serves as the pip CLI entry point (`marm-mcp-server` command), `create_server()` exposes the FastAPI app for external use
 - **Windows PATH note**: `marm-mcp-server` CLI requires `C:\Users\{username}\AppData\Roaming\Python\Python3xx\Scripts\` in PATH; `python -m marm_mcp_server` works without any PATH changes and is now the recommended command
 
-### **Documentation Cleanup**
+#### **Documentation Cleanup**
 
 - **New docs structure**: Reorganized into `archived/`, `core/`, `current/`, `future/`, `Visuals/` folders
 - **Removed FAQ.md**: Base MARM questions moved to FAQ section in `MARM-HANDBOOK.md`; MCP tools table moved to `MCP-HANDBOOK.md`; chatbot-specific content deleted (chatbot retired)
 - **Removed DESCRIPTION.md**: Fully redundant with README — deleted
 - **New `current-issues.md`**: Created `docs/current/current-issues.md` to track active bugs and planned improvements with full context on root causes
 
-### **Active Issues Documented**
+#### **Active Issues Documented**
 
 - **`marm_log_session` not switching sessions**: Entries land in `main` instead of named session — session state not persisting before `marm_log_entry` fires
 - **Planned: Token optimization** — lazy loading docs instead of bulk-loading at startup
 - **Planned: Directory-based memory architecture** — per-project SQLite DBs with global cross-reference index
 - **Planned: Remove duplicate root files** — single source of truth cleanup
 
-### **Impact Summary**
+#### **Impact Summary**
 
 - `pip install marm-mcp-server` now installs a working package
 - `python -m marm_mcp_server` is the primary run command going forward
@@ -919,7 +925,7 @@ This release introduces a complete UI/UX transformation with the implementation 
 
 **Core achievements: Closed 5 security vulnerabilities found in peer review, automated API key generation for exposed pip deployments, and completed a full documentation consistency pass across all install guides.**
 
-### **Security Fixes**
+#### **Security Fixes**
 
 - **Dockerfile missing `SERVER_HOST`**: Server was binding to `127.0.0.1` inside the container, making port mapping silently non-functional. Added `ENV SERVER_HOST=0.0.0.0` to Dockerfile so the bind address is correct by default for containerized deployments
 - **Docker bridge false-401 root cause documented**: Loopback-only auth mode is architecturally incompatible with Docker — host requests arrive at the container as `172.x.x.x` (bridge gateway), never as `127.0.0.1`. All Docker deployments now require `MARM_API_KEY`
@@ -927,7 +933,7 @@ This release introduces a complete UI/UX transformation with the implementation 
 - **Middleware order (LIFO)**: Starlette registers middleware in LIFO order — last registered runs first. Rate limiter was registering after auth, meaning auth ran before rate limiting. Swapped registration order so rate limiter always runs first (throttles floods before token validation)
 - **Reverse proxy note**: Added comment to `auth.py` explaining that behind a reverse proxy (nginx, Traefik) or Docker bridge, `client.host` will be the proxy/gateway IP, not loopback — `MARM_API_KEY` must be set in those deployments
 
-### **Auto-Key Generation**
+#### **Auto-Key Generation**
 
 - **`utils/security.py`**: New pure utility module with zero side effects. `generate_api_key()` lives here — importable by both `settings.py` and `server.py` without triggering config-level side effects
 - **Key spec**: 40 characters, ~244 bits of entropy, alphabet of 68 chars (A-Z a-z 0-9 `-_+=.~@#%^&*`). Guarantees at least one uppercase, one lowercase, one digit, one symbol — can never produce an all-hex or weak key. Shell-safe symbols only (no `$`, `!`, backticks, quotes, or backslash)
@@ -936,21 +942,21 @@ This release introduces a complete UI/UX transformation with the implementation 
 - **Localhost stays zero-config**: Auto-gen and file loading are scoped exclusively to `SERVER_HOST=0.0.0.0`. Default pip installs on `127.0.0.1` remain keyless — no friction added to the standard path
 - **`--generate-key` guard in settings**: `_is_generate_key_cmd = '--generate-key' in sys.argv` prevents auto-gen from firing during settings import when the CLI flag is in use — eliminates double-print when `SERVER_HOST=0.0.0.0 python -m marm_mcp_server --generate-key` is run
 
-### **Documentation Consistency Pass**
+#### **Documentation Consistency Pass**
 
 - **Docker key generation** standardized to `docker run --rm lyellr88/marm-mcp-server:latest --generate-key` — no pip install required for Docker users
 - **README Security & Configuration section** rewritten with clear per-path explanation: pip+localhost (zero config), pip+`0.0.0.0` (auto-generated), Docker (manual `--generate-key`)
 - **INSTALL-WINDOWS and INSTALL-LINUX** env vars tables now include `SERVER_HOST` and `MARM_API_KEY` rows with auto-gen and `--generate-key` descriptions
 - **FAQ.md** Docker install row corrected: added `--generate-key` step, `MARM_API_KEY` in run command, `--header` in client command. Also corrected stale pip version `2.2.3` → `2.2.7`
 
-### **From Previous Commit (v2.2.7 — March 20th, 2026)**
+#### **From Previous Commit (v2.2.7 — March 20th, 2026)**
 
 - **Pip install fix**: Converted absolute imports to relative across 16 files — `from middleware import ...` fails when installed as a package; relative imports work correctly
 - **`__main__.py`**: Added `marm_mcp_server/__main__.py` so `python -m marm_mcp_server` is now the primary run command
 - **Entry functions**: Added `create_server()` and `main()` to `server.py` — `main()` is the pip CLI entry point (`marm-mcp-server` command)
 - **Windows PATH note**: `marm-mcp-server` CLI requires Scripts folder in PATH; `python -m marm_mcp_server` works without any PATH changes
 
-### **Impact Summary**
+#### **Impact Summary**
 
 - Docker deployments no longer silently 401 due to missing `SERVER_HOST`
 - Pip users on localhost: zero change, zero friction
@@ -958,7 +964,7 @@ This release introduces a complete UI/UX transformation with the implementation 
 - Docker users: single `docker run --rm` command generates a key — no pip install required on host
 - All install docs, README, and handbook now consistent on auth requirements, commands, and key generation
 
-### Documentation
+#### Documentation
 
 - Updated MCP client setup guidance for current Claude Code, Codex, Gemini CLI, Qwen Code, and xAI/Grok Remote MCP behavior.
 - Removed stale WebSocket/OAuth-style setup guidance from active client install docs where current clients use HTTP headers or bearer token config instead.
@@ -974,13 +980,13 @@ This release introduces a complete UI/UX transformation with the implementation 
 
 **Core achievements: Removed the mock OAuth implementation from the base MCP server, verified current MCP client connection paths, and updated active install docs for CLI and IDE clients.**
 
-### **Removed**
+#### **Removed**
 
 - **Mock OAuth server removed from base release**: Deleted the development-only OAuth endpoint module and removed its production route wiring.
 - **Public `/oauth/` bypass removed**: Auth middleware now only keeps intended public paths/prefixes; `/oauth/*` is no longer mounted or bypassed.
 - **Stale OAuth setup guidance removed**: Active install docs no longer present OAuth-style client setup for Gemini/Qwen-era assumptions.
 
-### **Verified MCP Clients**
+#### **Verified MCP Clients**
 
 - **Claude Code**: Verified HTTP MCP setup with `claude mcp add --transport http`, including bearer header mode for Docker/exposed deployments.
 - **Codex**: Verified HTTP MCP setup through `codex mcp add` and `~/.codex/config.toml` with `bearer_token_env_var`.
@@ -990,14 +996,14 @@ This release introduces a complete UI/UX transformation with the implementation 
 - **Cursor MCP**: Verified MARM works through Cursor's `.cursor/mcp.json` MCP config.
 - **xAI/Grok Remote MCP**: Updated docs from official xAI Remote MCP guidance. Local Grok CLI testing remains unverified because no local Grok CLI/access was available.
 
-### **Documentation**
+#### **Documentation**
 
 - Added direct README client links for Claude Code, VS Code, Cursor, Codex, Gemini CLI, Qwen Code, and xAI/Grok Remote MCP.
 - Added VS Code MCP setup examples using official `.vscode/mcp.json` shape with `"servers"` and secure `${input:marm-api-key}` prompt support.
 - Added Cursor MCP setup examples using official `.cursor/mcp.json` shape with `"mcpServers"` and `${env:MARM_API_KEY}` header support.
 - Updated Pro planning docs to position real OAuth 2.0/2.1 as a hosted/team/cloud feature, while the base server uses local/Docker API-key auth.
 
-### **Impact Summary**
+#### **Impact Summary**
 
 - Base MCP server now has a simpler auth surface: localhost pip remains zero-config; Docker/exposed/remote deployments use bearer API keys.
 - Active docs now match current official client behavior and tested local results.
@@ -1014,7 +1020,7 @@ This release introduces a complete UI/UX transformation with the implementation 
 
 **Core achievements: documented single-image Docker dual transport (HTTP + STDIO), tightened auth guidance, and started formal WebSocket documentation purge across active install paths.**
 
-### **Added**
+#### **Added**
 
 - **Docker dual-transport clarity**: active docs now describe one Docker image with two usage modes:
   - **Docker HTTP** (long-running/shared): requires `MARM_API_KEY`
@@ -1022,7 +1028,7 @@ This release introduces a complete UI/UX transformation with the implementation 
 - **Client auth troubleshooting guidance**: documented common key-mode failures (key formatting, duplicate MCP entries, process/env mismatch, and `401` interpretation).
 - **Qwen quick-install command coverage**: added explicit Qwen HTTP transport commands for both local no-key and Docker/exposed key mode.
 
-### **Changed**
+#### **Changed**
 
 - **README Quick Start** reorganized around practical first-use paths:
   - local pip HTTP
@@ -1031,12 +1037,12 @@ This release introduces a complete UI/UX transformation with the implementation 
   - Docker STDIO
 - **Install docs alignment**: Windows/Linux/Docker install docs now consistently reflect current client behavior (HTTP/SSE/STDIO) and Docker key rules.
 
-### **Removed**
+#### **Removed**
 
 - **WebSocket-first language from active install docs** where it no longer reflects the base deployment path.
 - **Stale WebSocket test callouts** from active verification tables in install guides.
 
-### **Impact Summary**
+#### **Impact Summary**
 
 - New users get a cleaner path: choose HTTP for shared server workflows, STDIO for private local workflows.
 - Docker auth behavior is explicit and consistent across docs.
@@ -1053,7 +1059,7 @@ This release introduces a complete UI/UX transformation with the implementation 
 
 **Core achievements: first full release of the local MARM Dashboard — a direct SQLite admin UI for browsing, editing, and managing all MARM data without touching the MCP server.**
 
-### **Added**
+#### **Added**
 
 - **MARM Dashboard** (`marm-dashboard/`) — standalone FastAPI app on port `:8002` reading the same `~/.marm/marm_memory.db` as the MCP server
 - **Full CRUD** across all four data types: memories, sessions, protocol logs, notebook
@@ -1072,13 +1078,13 @@ This release introduces a complete UI/UX transformation with the implementation 
 - **Docker support**: `Dockerfile` included; safe run pattern maps `127.0.0.1:8002`
 - **24 tests** across `test_dashboard_db.py` and `test_dashboard_mcp_status.py` covering all CRUD paths, search, pagination, sanitization, and auth
 
-### **Architecture notes**
+#### **Architecture notes**
 
 - Dashboard is a direct SQLite admin UI — edits bypass MCP tool events but use the same tables and sanitization rules
 - SQLite WAL mode + `busy_timeout` allow MCP and dashboard to run concurrently without conflicts
 - Static assets served from `marm_dashboard/static/` with cache-busting version strings
 
-### **Impact**
+#### **Impact**
 
 - Agents write; humans browse. Dashboard fills the gap between raw SQLite and the MCP tool surface.
 - No MCP server changes required — completely additive.
@@ -1094,14 +1100,14 @@ This release introduces a complete UI/UX transformation with the implementation 
 
 **These releases were focused entirely on getting the full publish pipeline — PyPI, Docker Hub, and MCP Registry — stable and passing on GitHub Actions. No user-facing behavior changed.**
 
-### **CI/CD & Publishing**
+#### **CI/CD & Publishing**
 
 - Rewrote MCP registry publish job using the official publisher CLI
 - Restored `validate-and-test` job after registry isolation testing
 - Re-enabled Docker and PyPI publishing after pipeline stabilization
 - Fixed registry job dependency ordering to prevent race conditions
 
-### **Registry & Version Alignment**
+#### **Registry & Version Alignment**
 
 - Corrected GitHub username case in `server.json` name field
 - Moved OCI version into identifier tag per registry spec
@@ -1109,20 +1115,20 @@ This release introduces a complete UI/UX transformation with the implementation 
 - Fixed MCP server name annotation case in Dockerfile
 - Aligned all version surfaces (pyproject.toml, Dockerfile, server.json) across v2.5.2, v2.5.3, v2.5.4
 
-### **Security**
+#### **Security**
 
 - Resolved 7 CodeQL alerts across MCP server and dashboard (carried into v2.5.5)
 - Replaced regex-based script-tag stripper with pure string implementation
 - Patched wheel CVE in dependencies at v2.5.4
 
-### **Media & Docs**
+#### **Media & Docs**
 
 - Added animated PCB logo as pure SVG
 - Moved visuals from `docs/Visuals/` to root `media/` folder
 - Fixed broken SVG refs in README after folder restructure
 - Added CI/CD and CodeQL status badges to README
 
-### **Repo Hygiene**
+#### **Repo Hygiene**
 
 - Untacked agent config folders (`.claude`, `.codex`, `.gemini`, `.qwen`) — gitignored but were previously committed
 - Untracked `docs/archived`, `docs/current`, `docs/future`
@@ -1139,7 +1145,7 @@ This release introduces a complete UI/UX transformation with the implementation 
 
 **Core achievements: resolved CodeQL security findings, tightened sanitizer behavior across MCP and dashboard, refreshed release media/docs, and aligned top-level project files for the v2.5.5 release push.**
 
-### **Security**
+#### **Security**
 
 - **CodeQL clear-text key alert handled intentionally**: `--generate-key` still prints the generated key by design because that command exists for one-time setup.
 - **Auto-generated exposed-server key output hardened**: first-start `SERVER_HOST=0.0.0.0` setup now points users to the saved `~/.marm/.env` file instead of printing the raw key in terminal setup text.
@@ -1147,20 +1153,20 @@ This release introduces a complete UI/UX transformation with the implementation 
 - **Malformed script close handling improved**: odd close variants such as `</script foo>` no longer trigger destructive trailing-content loss; useful text after the block is preserved safely.
 - **Unterminated script fragments handled conservatively**: text before `<script` is preserved and the malformed script fragment is dropped.
 
-### **Testing**
+#### **Testing**
 
 - **MCP sanitizer regression coverage added** for valid script blocks, malformed close tags, broken close text, unterminated script openings, event handlers, JavaScript URLs, and SQL/session-scope security paths.
 - **Dashboard sanitizer regression coverage added** for notebook script handling and malformed script edge cases.
 - **Current validation result**: targeted MCP tests and dashboard DB tests pass after the sanitizer updates.
 
-### **Documentation & Release Alignment**
+#### **Documentation & Release Alignment**
 
 - **README media references refreshed** from missing SVG references to existing release images in `media/`.
 - **CI/CD and CodeQL badges added** to the package README surface.
 - **Project file layout cleaned up**: `CHANGELOG.md` and `ACKNOWLEDGMENTS.md` now live at the repository root, while `PROTOCOL.md` moved into `docs/`.
 - **Version sync script updated** to read the canonical root `CHANGELOG.md` instead of the old `docs/CHANGELOG.md` path.
 
-### **Impact Summary**
+#### **Impact Summary**
 
 - CodeQL should stay clean without weakening the intended key-generation workflow.
 - MARM preserves more user content during sanitization while still neutralizing script execution paths.
@@ -1173,7 +1179,7 @@ This release introduces a complete UI/UX transformation with the implementation 
 <details>
 <summary><strong>May 20th, 2026: STDIO File Logging & Rate Limiter Tuning (v2.6.0) </strong></summary>
 
-### STDIO File Logging
+#### STDIO File Logging
 
 STDIO mode now writes diagnostics to `~/.marm/logs/marm-stdio.log` alongside the FastMCP terminal output. Every tool call, success, failure, startup, and shutdown is logged without exposing memory content, notebook data, or raw payloads.
 
@@ -1192,7 +1198,7 @@ Get-Content "$env:USERPROFILE\.marm\logs\marm-stdio.log" -Wait -Tail 20
 Get-Content "$env:USERPROFILE\.marm\logs\marm-stdio.log"
 ```
 
-### Rate Limiter Tuning
+#### Rate Limiter Tuning
 
 All rate limit tiers raised to 60 req/min and block duration reduced from 5-10 minutes to 30 seconds. Resolves AI clients hitting blocks during burst tool calls at session start.
 
@@ -1200,37 +1206,37 @@ All rate limit tiers raised to 60 req/min and block duration reduced from 5-10 m
 - `search` tier: 30 req/min → 60 req/min, cooldown 300s → 30s
 - `default` tier: cooldown 300s → 30s
 
-### IP Spoofing Fix
+#### IP Spoofing Fix
 
 `X-Forwarded-For` and `X-Real-IP` headers are now only trusted when the direct TCP connection originates from a local proxy (`127.0.0.1` / `::1`). Remote callers can no longer spoof a loopback IP to bypass the rate limiter or auth middleware.
 
-### Active Session Routing
+#### Active Session Routing
 
 `marm_log_session` now sets an `active_log_session` on the memory object. `marm_log_entry` routes to that session automatically when no `session_name` is passed. Matches existing STDIO behavior and removes the need to repeat the session name on every log call.
 
 - `LogEntryRequest.session_name` changed from `"main"` default to `Optional[str] = None`
 - Works across both HTTP and STDIO transports
 
-### Lazy Documentation Loading
+#### Lazy Documentation Loading
 
 MARM protocol docs now load on the first `marm_start` call instead of at server startup. Reduces cold-start time, especially for STDIO where startup latency is visible.
 
 - HTTP server lifespan no longer pre-loads docs
 - Both HTTP `marm_start` and STDIO `marm_start` call `load_marm_documentation()` guarded by `docs_are_loaded()`
 
-### `marm_reload_docs` Endpoint Fixed
+#### `marm_reload_docs` Endpoint Fixed
 
 The HTTP `marm_reload_docs` endpoint was a stub since v2.0. Now calls `reload_marm_documentation()` correctly.
 
-### Windows Proactor Noise Suppression
+#### Windows Proactor Noise Suppression
 
 Suppresses benign `WinError 10054` / `ConnectionResetError` log spam from `asyncio`'s `ProactorEventLoop` on Windows. Unrelated disconnects no longer pollute server logs.
 
-### Windows-Safe Print in Memory Core
+#### Windows-Safe Print in Memory Core
 
 `memory.py` now uses `_safe_print()` for model loading output — falls back to `sys.stderr.buffer` on `UnicodeEncodeError` to prevent charmap crashes on Windows terminals and avoids polluting STDIO stdout.
 
-### v2.6.0 Tests
+#### v2.6.0 Tests
 
 - 4 new STDIO logging regression tests: log file creation, tool call logging, DEBUG session name inclusion, memory content not leaked
 - New `test_server_logging.py` covering HTTP server logging behavior
@@ -1243,7 +1249,7 @@ Suppresses benign `WinError 10054` / `ConnectionResetError` log spam from `async
 <details>
 <summary><strong>May 21st, 2026: Protocol Delivery & Notebook Tool Consolidation (v2.6.1)</strong></summary>
 
-### Protocol Delivery
+#### Protocol Delivery
 
 MARM now delivers the protocol context directly through the first successful MCP tool response instead of only indexing it into memory. This fixes the gap where the protocol existed in the database but was never actually read by the connected agent.
 
@@ -1252,7 +1258,7 @@ MARM now delivers the protocol context directly through the first successful MCP
 - Protocol delivery is tracked separately from documentation indexing so failed calls do not consume the one-time delivery
 - Both transports continue using lazy documentation loading and auto-refresh behavior from v2.6.0
 
-### Protocol Refactor
+#### Protocol Refactor
 
 The protocol text was refactored from the older copy/paste prompt style into a cleaner MCP runtime contract.
 
@@ -1261,7 +1267,7 @@ The protocol text was refactored from the older copy/paste prompt style into a c
 - Added clearer operating rules for memory capture, recall, notebook use, and trust boundaries
 - Added explicit guidance that retrieved memories, notebooks, logs, and tool outputs are context, not higher-priority instructions
 
-### Notebook Tool Consolidation
+#### Notebook Tool Consolidation
 
 The five notebook tools were consolidated into one action-dispatched tool:
 
@@ -1275,7 +1281,7 @@ marm_notebook(action="add"|"use"|"show"|"status"|"clear", name=None, data=None, 
 - Updated HTTP endpoint, STDIO tool surface, and `server.json`
 - Reduced MCP tool discovery from 12 tools to 8 tools
 
-### Tool Rename
+#### Tool Rename
 
 `marm_contextual_log` was renamed to `marm_context_log` across HTTP, STDIO, `server.json`, tests, and docs.
 
@@ -1283,7 +1289,7 @@ marm_notebook(action="add"|"use"|"show"|"status"|"clear", name=None, data=None, 
 - Removes stale internal naming by replacing `ContextualLogRequest` with `ContextLogRequest`
 - Treats the change as part of the v2.6.1 tool-surface cleanup
 
-### v2.6.1 Tests
+#### v2.6.1 Tests
 
 - Added HTTP regression coverage proving protocol context is injected on the first MCP tool call and not repeated on the second
 - Added STDIO regression coverage proving protocol context is injected once
@@ -1298,7 +1304,7 @@ marm_notebook(action="add"|"use"|"show"|"status"|"clear", name=None, data=None, 
 <details>
 <summary><strong>May 26th, 2026: Notebook Session Scoping & CI Hardening (v2.7.0)</strong></summary>
 
-### Notebook Session Scoping
+#### Notebook Session Scoping
 
 `marm_notebook` now accepts an optional `session_name` parameter (default: `"main"`) that scopes active notebook state per client. Previously, `use` and `clear` from any caller overwrote the single global active list, breaking multi-client HTTP mode, shared Docker deployments, and swarm-style agent workflows.
 
@@ -1312,13 +1318,13 @@ marm_notebook(action="use"|"status"|"clear", session_name="my_project")
 - `session_name` is normalized (stripped) and validated at dispatch — whitespace-only values are rejected
 - Existing clients that do not send `session_name` continue to work unchanged via the `"main"` default
 
-### STDIO Teardown Hardening
+#### STDIO Teardown Hardening
 
 - Replaced string/repr substring matching in `_is_graceful_teardown()` with concrete AnyIO `isinstance` checks (`ClosedResourceError`, `EndOfStream`, `BrokenResourceError`)
 - Added recursive `ExceptionGroup` unwrapping — every sub-exception must be a known teardown type before the group is swallowed
 - Widened `except Exception` to `except BaseException` so `BaseExceptionGroup` is also handled
 
-### CI Hardening
+#### CI Hardening
 
 - Unified dependency install across CI workflows to `pip install -e './marm-mcp-server[dev]'` — single source of truth matching `pyproject.toml` constraints
 - Fixed `publish-mcp.yml` test step: was checking `tests/` at repo root (always missing), now runs from `marm-mcp-server/` working directory
@@ -1327,7 +1333,7 @@ marm_notebook(action="use"|"status"|"clear", session_name="my_project")
 - Bumped `setup-python` to `@v5` consistently across both workflows
 - Added `persist-credentials: false` to checkout step in PR validation
 
-### v2.7.0 Tests
+#### v2.7.0 Tests
 
 - Added service-level isolation test proving session A and session B do not overwrite each other
 - Added service-level clear-scoping test proving `clear` only empties the requested session
@@ -1344,7 +1350,7 @@ marm_notebook(action="use"|"status"|"clear", session_name="my_project")
 <details>
 <summary><strong>May 29th, 2026: Write Queue & Swarm Rate Presets (v2.8.0)</strong></summary>
 
-### Write Queue & Swarm Runtime Modes
+#### Write Queue & Swarm Runtime Modes
 
 - Added HTTP server runtime presets for multi-agent deployments:
   - `--swarm`: enables the write queue and sets the shared HTTP rate limit to 200 RPM
@@ -1355,13 +1361,13 @@ marm_notebook(action="use"|"status"|"clear", session_name="my_project")
 - Made rate limiting settings-driven and resettable at runtime, including a `0` RPM disable sentinel.
 - Aligned `/mcp` requests to the shared default bucket so real MCP traffic is measured and limited consistently.
 
-### Smoke Testing & Validation
+#### Smoke Testing & Validation
 
 - Added direct write-queue smoke testing for concurrent SQLite writes with isolated temp DBs.
 - Added HTTP write/RPM smoke testing with spawned isolated servers, compact JSON artifacts, per-step clean rate-limit buckets, custom RPM testing, and preset coverage.
 - Added focused regression tests for runtime preset behavior, disabled rate limiting, Docker STDIO entrypoint behavior, and STDIO transport stability.
 
-### Docker & Dependencies
+#### Docker & Dependencies
 
 - Switched Docker startup to an `ENTRYPOINT` shape so flags like `--swarm` append naturally after the image name.
 - Updated Docker STDIO examples to override the entrypoint with `python -m marm_mcp_server.server_stdio`.
@@ -1375,7 +1381,7 @@ marm_notebook(action="use"|"status"|"clear", session_name="my_project")
 <details>
 <summary><strong>June 1st, 2026: Consolidation Worker, Compaction Pipeline & Swarm Smoke Harness (v2.9.0)</strong></summary>
 
-### Memory Consolidation
+#### Memory Consolidation
 
 - Added session-scoped exact duplicate prevention using normalized SHA-256 `content_hash` values before embedding work runs.
 - Added write-time semantic consolidation for near-duplicate memories when `CONSOLIDATION_ENABLED=1`.
@@ -1383,7 +1389,7 @@ marm_notebook(action="use"|"status"|"clear", session_name="my_project")
 - Memory updates now recompute `content_hash` and refresh embeddings when the encoder is available.
 - Added hash-collision safety so matching hashes still require normalized content equality before deduping.
 
-### Compaction Worker
+#### Compaction Worker
 
 - Added background compaction candidate detection for stale/fragmented memory clusters.
 - Added `compaction_role`, `compacted_into`, and `compaction_staging` schema support with idempotent migrations.
@@ -1393,14 +1399,14 @@ marm_notebook(action="use"|"status"|"clear", session_name="my_project")
 - Apply now inserts a summary memory row, marks source rows as compacted, and remains idempotent under duplicate apply calls.
 - Existing stored embeddings can now be compacted even when the local encoder is unavailable.
 
-### Write Queue & Scheduler Integration
+#### Write Queue & Scheduler Integration
 
 - Extended the write queue with `put_callable()` so non-memory-write mutations, including compaction apply, can run through the same serialized queue.
 - Routed compaction apply through the write queue when enabled, preserving ordering with normal memory writes.
 - Added optional compaction auto-apply scheduler support behind `COMPACTION_AUTO_APPLY_ENABLED`.
 - Runtime presets now tune compaction trigger counts for normal versus swarm/trusted/custom deployment modes.
 
-### Swarm & Compaction Smoke Testing
+#### Swarm & Compaction Smoke Testing
 
 - Added `compaction-worker-smoke.py` for isolated HTTP load, staged compaction, apply idempotency, stale guard, cross-session isolation, and optional scheduler testing.
 - Added `swarm-smoke.py` for lightweight local swarm simulation using either mocked model output or Ollama.
@@ -1408,21 +1414,20 @@ marm_notebook(action="use"|"status"|"clear", session_name="my_project")
 - Added seeded embedding fallback for deterministic compaction smoke testing on machines without reliable local embedding generation.
 - Reworked smoke-test documentation into script-based and base/medium/heavy/special command groups.
 
-### Documentation & Tool Surface
+#### Documentation & Tool Surface
 
 - Updated README, MCP handbook, FAQ, and packaged `marm-docs` mirrors for the 9-tool surface, write queue defaults, swarm presets, consolidation, and agent-assisted compaction.
 - Consolidated duplicated handbook FAQ content into `docs/FAQ.md` and changed the handbook FAQ section to reference the canonical FAQ.
 - Updated contributor guidance for write queue, consolidation, compaction staging, smoke scripts, and parameterized MCP tool design.
 
-### v2.9.0 Tests
+#### v2.9.0 Tests
 
 - Added focused regression coverage for exact deduplication, write-time semantic consolidation, compaction candidate detection, staging, apply/idempotency, stale safeguards, write-queue callable execution, and auto-apply behavior.
 - Local validation covered direct queue bursts, HTTP RPM boundaries, trusted no-RPM pressure, compaction stage/apply, stale and cross-session negative paths, auto-apply scheduling, mocked swarm writes, and real Ollama swarm writes.
 
-### Hardening & Suite Stability
+#### Hardening & Suite Stability
 
 - Strengthened suite-level isolation around reloaded server modules, patched memory singletons, compaction globals, and async write queue cleanup so tests pass both individually and as a grouped run.
 - Tightened diagnostic and consolidation edge cases found during review, including request-body logging for HTTP compaction injection and stale embedding cleanup after write-time merges.
 
 </details>
-

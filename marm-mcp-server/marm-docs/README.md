@@ -51,7 +51,7 @@ pip install marm-mcp-server
 
 #### Local pip HTTP (zero config)
 
-> "agent" refers to claude, gemini, grok, qwen, or any MCP client. Codex uses -url instead of --transport to add MCP tools.
+> "agent" refers to claude, gemini, grok, qwen, or any MCP client. Codex uses --url instead of --transport to add MCP tools.
 
 ```bash
 pip install marm-mcp-server
@@ -67,7 +67,8 @@ python -m marm_mcp_server
 ```bash
 pip install marm-mcp-server
 # most agents use this --transport command
-"agent" mcp add --transport stdio marm-memory-stdio marm-mcp-stdio"codex mcp add marm-memory-stdio -- marm-mcp-stdio
+"agent" mcp add --transport stdio marm-memory-stdio marm-mcp-stdio"
+codex mcp add marm-memory-stdio -- marm-mcp-stdio
 # xAI / Grok Remote MCP. Use a hosted HTTPS MARM endpoint, not localhost.
 python -m marm_mcp_server.server_stdio
 ```
