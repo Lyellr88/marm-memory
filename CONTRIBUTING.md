@@ -48,6 +48,9 @@ marm-mcp-server/
     config/settings.py         # Paths, host/port, auth, feature flags
     core/
       memory.py                # SQLite memory and semantic search layer
+      write_queue.py           # Serialized write queue for SQLite writer stability
+      consolidation.py         # Content-hash and semantic write-time consolidation
+      compaction.py            # Background compaction candidate detection and nudges
       events.py                # Internal event hooks
       rate_limiter.py          # Rate limiting primitives
       response_limiter.py      # MCP response size controls
@@ -58,6 +61,7 @@ marm-mcp-server/
       reasoning.py             # Reasoning/deep-dive tools
       notebook.py              # Notebook tools
       memory.py                # Recall/search tools
+      compaction.py            # Unified compaction tool and hidden helper routes
       system.py                # Health/system tools
     middleware/
       auth.py                  # Bearer auth for HTTP mode
@@ -121,9 +125,9 @@ If `SERVER_HOST=0.0.0.0`, MARM requires a key. When no key is provided, the sett
 
 **SQLite schema changes need extra care**
 
-MARM uses a local SQLite database under `~/.marm/` by default. Tool behavior depends on specific tables for sessions, log entries, notebook entries, memories, and analytics.
+MARM uses a local SQLite database under `~/.marm/` by default. Tool behavior depends on specific tables for sessions, log entries, notebook entries, memories, compaction staging, and analytics.
 
-Do not rename fields, move data between tables, or change date/session parsing behavior without updating HTTP tools, STDIO tools, tests, and docs together.
+Do not rename fields, move data between tables, or change date/session parsing behavior without updating HTTP tools, STDIO tools, tests, smoke scripts, and docs together.
 
 **Retired features stay retired unless re-scoped**
 
@@ -134,9 +138,10 @@ Current supported connection paths are HTTP and STDIO. Do not reintroduce retire
 1. Find the current HTTP behavior in `marm_mcp_server/endpoints/`.
 2. Find the matching STDIO behavior in `marm_mcp_server/server_stdio.py`.
 3. Keep request/response field names aligned where possible.
-4. Update or add focused tests in `marm-mcp-server/tests/`.
-5. Update docs if the command shape, transport setup, auth behavior, or user-facing workflow changes.
-6. Run the local test runner before submitting changes.
+4. Prefer parameterized actions for closely related operations, following existing tools such as `marm_notebook(action=...)`, `marm_delete(type=...)`, and `marm_compaction(action=...)`.
+5. Update or add focused tests in `marm-mcp-server/tests/`.
+6. Update docs if the command shape, transport setup, auth behavior, or user-facing workflow changes.
+7. Run the local test runner before submitting changes.
 
 ## Testing
 
@@ -174,7 +179,7 @@ This runs the version scan, stale docs scan, known-good test runner, optional Do
 Run Docker smoke directly when changing Docker, transport setup, auth, or startup behavior:
 
 ```powershell
-python scripts\docker-smoke.py
+python scripts\test-scripts\docker-smoke.py
 ```
 
 ## Documentation

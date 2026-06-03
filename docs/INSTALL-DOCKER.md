@@ -2,7 +2,7 @@
 
 ## Universal Memory Intelligence Platform for AI Agents
 
-**MARM v2.8.0** - Memory Accurate Response Mode
+**MARM v2.9.0** - Memory Accurate Response Mode
 *Docker deployment guide for Windows, Mac, and Linux*
 
 ---
@@ -62,10 +62,22 @@
 docker pull lyellr88/marm-mcp-server:latest
 
 # Local use (host-only access)
-docker run -d --name marm-mcp-server -p 127.0.0.1:8001:8001 -e SERVER_HOST=0.0.0.0 -e MARM_API_KEY=your-generated-key -v ~/.marm:/home/marm/.marm --restart unless-stopped lyellr88/marm-mcp-server:latest
+docker run -d --name marm-mcp-server \
+  -p 127.0.0.1:8001:8001 \
+  -e SERVER_HOST=0.0.0.0 \
+  -e MARM_API_KEY=your-generated-key \
+  -v ~/.marm:/home/marm/.marm \
+  --restart unless-stopped \
+  lyellr88/marm-mcp-server:latest
 
 # Remote/network access
-docker run -d --name marm-mcp-server -p 8001:8001 -e SERVER_HOST=0.0.0.0 -e MARM_API_KEY=your-generated-key -v ~/.marm:/home/marm/.marm --restart unless-stopped lyellr88/marm-mcp-server:latest
+docker run -d --name marm-mcp-server \
+  -p 8001:8001 \
+  -e SERVER_HOST=0.0.0.0 \
+  -e MARM_API_KEY=your-generated-key \
+  -v ~/.marm:/home/marm/.marm \
+  --restart unless-stopped \
+  lyellr88/marm-mcp-server:latest
 ```
 
 **Why choose this:**
@@ -338,7 +350,13 @@ docker run --rm lyellr88/marm-mcp-server:latest --generate-key
 # 2. Recreate the HTTP container with the new key
 docker stop marm-mcp-server
 docker rm marm-mcp-server
-docker run -d --name marm-mcp-server -p 127.0.0.1:8001:8001 -e SERVER_HOST=0.0.0.0 -e MARM_API_KEY=your-new-generated-key -v ~/.marm:/home/marm/.marm --restart unless-stopped lyellr88/marm-mcp-server:latest
+docker run -d --name marm-mcp-server \
+  -p 127.0.0.1:8001:8001 \
+  -e SERVER_HOST=0.0.0.0 \
+  -e MARM_API_KEY=your-new-generated-key \
+  -v ~/.marm:/home/marm/.marm \
+  --restart unless-stopped \
+  lyellr88/marm-mcp-server:latest
 
 # 3. Re-add or update your MCP client with the same new key
 claude mcp add --transport http marm-memory http://localhost:8001/mcp --header "Authorization: Bearer your-new-generated-key"
@@ -393,31 +411,9 @@ docker rmi lyellr88/marm-mcp-server:latest  # Removes image
 
 ## Verification & Testing
 
-### **Built-in Container Tests (Recommended)**
-
-**MARM includes professional diagnostic tests that validate your container deployment built into the docker image:**
-
-| Test Type | Command | What It Validates | Run Time |
-|-----------|---------|-------------------|----------|
-| **Health & Performance** | `docker exec marm-mcp-server python tests/test_docker_performance.py` | Response times, concurrent handling, server stability | ~30 seconds |
-| **MCP Compliance** | `docker exec marm-mcp-server python tests/test_docker_mcp_size_limits.py` | MCP protocol compliance, rate limiting, response sizes | ~45 seconds |
-| **Memory Usage** | `docker exec marm-mcp-server python tests/test_docker_memory_usage.py` | Container memory efficiency, resource optimization | ~20 seconds |
-| **Security Validation** | `docker exec marm-mcp-server python tests/test_security.py` | XSS protection, input validation, error handling | ~15 seconds |
-
-### **When and Why to Use Each Test**
-
-**Health & Performance Test** - Validates container performance, response times, and concurrent request handling. Essential for ensuring your Docker deployment meets professional speed standards.
-
-**MCP Compliance Test** - Ensures responses stay under the 1MB MCP protocol limit and validates rate limiting functionality. Critical for MCP client compatibility.
-
-**Memory Usage Test** - Measures container memory efficiency and resource optimization. Unlike local testing, this shows how MARM performs within Docker constraints.
-
-**Security Validation Test** - Run first to ensure your containerized MARM installation is secure from XSS attacks and handles malicious input properly. Essential for any deployment.
-
-### **Quick Health Check**
+### **Health Check**
 
 ```bash
-# Traditional health check (still useful for quick validation)
 docker logs marm-mcp-server | head -20
 ```
 
@@ -430,6 +426,12 @@ MARM MCP Server initialization complete
 Uvicorn running on http://0.0.0.0:8001  (inside container — normal)
 ```
 
+For a live endpoint check:
+
+```bash
+curl http://localhost:8001/health
+```
+
 ---
 
 ## Updating & Reinstalling
@@ -440,7 +442,13 @@ Uvicorn running on http://0.0.0.0:8001  (inside container — normal)
 docker pull lyellr88/marm-mcp-server:latest
 docker stop marm-mcp-server
 docker rm marm-mcp-server
-docker run -d --name marm-mcp-server -p 127.0.0.1:8001:8001 -e SERVER_HOST=0.0.0.0 -e MARM_API_KEY=your-generated-key -v ~/.marm:/home/marm/.marm --restart unless-stopped lyellr88/marm-mcp-server:latest
+docker run -d --name marm-mcp-server \
+  -p 127.0.0.1:8001:8001 \
+  -e SERVER_HOST=0.0.0.0 \
+  -e MARM_API_KEY=your-generated-key \
+  -v ~/.marm:/home/marm/.marm \
+  --restart unless-stopped \
+  lyellr88/marm-mcp-server:latest
 ```
 
 ---
@@ -487,10 +495,10 @@ docker ps | grep 8001
 
 ### **Still Having Issues?**
 
-Run the diagnostic tests - they provide detailed error information:
+Check container logs for detailed error output:
 
 ```bash
-docker exec marm-mcp-server python tests/test_docker_performance.py
+docker logs marm-mcp-server
 ```
 
 ---
@@ -504,7 +512,14 @@ For custom configuration, add environment variables to your Docker commands:
 **Docker Run:**
 
 ```bash
-docker run -d --name marm-mcp-server -p 127.0.0.1:8001:8001 -e SERVER_HOST=0.0.0.0 -e SERVER_PORT=8001 -e MARM_API_KEY=your-generated-key -v ~/.marm:/home/marm/.marm --restart unless-stopped lyellr88/marm-mcp-server:latest
+docker run -d --name marm-mcp-server \
+  -p 127.0.0.1:8001:8001 \
+  -e SERVER_HOST=0.0.0.0 \
+  -e SERVER_PORT=8001 \
+  -e MARM_API_KEY=your-generated-key \
+  -v ~/.marm:/home/marm/.marm \
+  --restart unless-stopped \
+  lyellr88/marm-mcp-server:latest
 ```
 
 **Docker Compose:**

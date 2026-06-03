@@ -36,6 +36,7 @@ pids/
 *.seed
 *.pid.lock
 scripts/out/
+marm-mcp-server/scripts/out/
 
 # Local install-helper prototype; not public-ready.
 scripts/mcp-client-commands.py
@@ -96,6 +97,7 @@ docs/future/
 .gemini/
 .codexignore
 .claudeignore
+.bridgespace
 .cursor
 .pytest_cache/
 .pytest_tmp*/
@@ -107,3 +109,4 @@ marm-mcp-server/.pytest_tmp/
 marm-mcp-server/.pytest_tmp*/
 marm_usage_analytics.db
 dump.md
+

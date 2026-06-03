@@ -62,14 +62,14 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 # MCP Registry Labels for Docker Hub discovery
 LABEL org.opencontainers.image.title="MARM Universal MCP Server"
 LABEL org.opencontainers.image.description="Production-ready Universal MCP Server with advanced AI memory capabilities, semantic search, and professional-grade architecture"
-LABEL org.opencontainers.image.version="2.8.0"
+LABEL org.opencontainers.image.version="2.9.0"
 LABEL org.opencontainers.image.authors="Ryan Lyell - MARM Systems"
 LABEL org.opencontainers.image.url="https://marmsystems.com"
 LABEL org.opencontainers.image.source="https://github.com/Lyellr88/MARM-Systems"
 LABEL org.opencontainers.image.licenses="MIT"
 LABEL mcp.server="true"
 LABEL mcp.name="marm-mcp-server"
-LABEL mcp.tools="8"
+LABEL mcp.tools="9"
 LABEL io.modelcontextprotocol.server.name="io.github.Lyellr88/marm-mcp-server"
 
 # Set environment variables

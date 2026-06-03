@@ -80,7 +80,7 @@ DEFAULT_SEMANTIC_MODEL = "all-MiniLM-L6-v2"
 # Server configuration
 SERVER_HOST = os.environ.get('SERVER_HOST', '127.0.0.1')
 SERVER_PORT = int(os.environ.get('SERVER_PORT', 8001))
-SERVER_VERSION = "2.8.0"
+SERVER_VERSION = "2.9.0"
 
 # Rate limiting configuration. MARM_RATE_LIMIT_RPM=0 disables limiting.
 MARM_RATE_LIMIT_RPM = int(os.environ.get('MARM_RATE_LIMIT_RPM', '80'))
@@ -90,6 +90,25 @@ RATE_LIMIT_BLOCK_SECONDS = int(os.environ.get('RATE_LIMIT_BLOCK_SECONDS', '30'))
 # Serialized write queue is enabled by default to reduce SQLite writer contention.
 WRITE_QUEUE_ENABLED = os.environ.get('WRITE_QUEUE_ENABLED', '1') == '1'
 MAX_QUEUE_SIZE = int(os.environ.get('MAX_QUEUE_SIZE', '100'))
+
+# Consolidation — default off. CONSOLIDATION_ENABLED=1 activates hash dedup (Layer 1)
+# and semantic merge (Layer 2). Threshold only applies to semantic merge.
+CONSOLIDATION_ENABLED = os.environ.get('CONSOLIDATION_ENABLED', '0') == '1'
+CONSOLIDATION_THRESHOLD = float(os.environ.get('CONSOLIDATION_THRESHOLD', '0.92'))
+
+# Compaction worker — Layer 3 background cluster detection and dry-run reporting. Off by default.
+COMPACTION_ENABLED = os.environ.get('COMPACTION_ENABLED', '0') == '1'
+COMPACTION_TRIGGER_COUNT = int(os.environ.get('COMPACTION_TRIGGER_COUNT', '5'))
+COMPACTION_SIMILARITY_THRESHOLD = float(os.environ.get('COMPACTION_SIMILARITY_THRESHOLD', '0.88'))
+COMPACTION_MIN_CLUSTER_SIZE = int(os.environ.get('COMPACTION_MIN_CLUSTER_SIZE', '3'))
+COMPACTION_MIN_AGE_HOURS = int(os.environ.get('COMPACTION_MIN_AGE_HOURS', '24'))
+COMPACTION_ACTIVE_SESSION_GRACE_MINUTES = int(os.environ.get('COMPACTION_ACTIVE_SESSION_GRACE_MINUTES', '15'))
+COMPACTION_STAGING_TTL_HOURS = int(os.environ.get('COMPACTION_STAGING_TTL_HOURS', '168'))
+COMPACTION_AUTO_APPLY_ENABLED = os.environ.get('COMPACTION_AUTO_APPLY_ENABLED', '0') == '1'
+COMPACTION_AUTO_APPLY_INTERVAL_MINUTES = int(os.environ.get('COMPACTION_AUTO_APPLY_INTERVAL_MINUTES', '60'))
+COMPACTION_MAX_NUDGES = int(os.environ.get('COMPACTION_MAX_NUDGES', '5'))
+COMPACTION_NUDGE_COOLDOWN_SECONDS = int(os.environ.get('COMPACTION_NUDGE_COOLDOWN_SECONDS', '2'))
+COMPACTION_INJECTION_BYTE_BUDGET = int(os.environ.get('COMPACTION_INJECTION_BYTE_BUDGET', '2048'))
 
 # Auth — set MARM_API_KEY to require a Bearer token on all capability routes.
 # Leave unset for local-only deployments (loopback enforced automatically).

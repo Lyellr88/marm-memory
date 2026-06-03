@@ -1,6 +1,6 @@
 """Pydantic models for MARM MCP Server endpoints."""
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from typing import Literal, Optional
 
 
@@ -38,3 +38,44 @@ class DeleteRequest(BaseModel):
     type: Literal["log", "notebook"] = Field(..., description="What to delete: 'log' or 'notebook'")
     target: str = Field(..., description="Log entry id/topic, log session name, or notebook entry name")
     session_name: Optional[str] = Field(default=None, description="Log session to scope deletion. Omit to delete an entire session.")
+
+
+class StagedSummaryItem(BaseModel):
+    candidate_id: str = Field(..., description="Compaction staging candidate ID")
+    source_memory_ids: list[str] = Field(..., description="Source memory IDs — must match staged candidate exactly")
+    suggested_summary: str = Field(..., description="Agent-generated summary of the source memories")
+
+
+class StageCompactionSummariesRequest(BaseModel):
+    summaries: list[StagedSummaryItem] = Field(..., description="One or more candidate summaries to stage")
+
+
+class ApplyCompactionRequest(BaseModel):
+    candidate_id: str = Field(..., description="Compaction staging candidate ID")
+    action: Literal["apply", "discard"] = Field(..., description="apply: commit summary to memories; discard: reject proposal")
+
+
+class CompactionRequest(BaseModel):
+    action: Literal["status", "candidates", "review", "stage", "apply", "discard"] = Field(
+        ..., description="Compaction action to run"
+    )
+    limit: int = Field(
+        default=20,
+        ge=1,
+        le=100,
+        description="Maximum staged proposals to return for action='review'",
+    )
+    summaries: Optional[list[StagedSummaryItem]] = Field(
+        default=None, description="Required for action='stage'"
+    )
+    candidate_id: Optional[str] = Field(
+        default=None, description="Required for action='apply' or action='discard'"
+    )
+
+    @model_validator(mode="after")
+    def validate_action_requirements(self):
+        if self.action == "stage" and not self.summaries:
+            raise ValueError("summaries is required for action='stage'")
+        if self.action in ("apply", "discard") and not self.candidate_id:
+            raise ValueError(f"candidate_id is required for action='{self.action}'")
+        return self

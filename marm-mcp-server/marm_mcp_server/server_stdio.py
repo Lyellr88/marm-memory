@@ -13,7 +13,9 @@ Usage:
 # Redirect print() to stderr before any imports that might trigger model loading.
 # STDIO MCP protocol reserves stdout exclusively for JSON-RPC messages — any
 # stray print() would corrupt the stream and break client parsing.
+import asyncio
 import builtins
+import json
 import sys
 
 _real_print = builtins.print
@@ -110,12 +112,34 @@ def _log_tool_call(fn):
             else:
                 _stdio_log.info("OK %s", name)
 
+            protocol_injected = False
             if not _protocol_delivered:
                 try:
                     result["marm_protocol"] = await read_protocol_file()
                     _protocol_delivered = True
+                    protocol_injected = True
                 except Exception as e:
                     _stdio_log.warning("protocol injection failed: %s", e)
+
+            if not protocol_injected:
+                try:
+                    compaction_block = await asyncio.to_thread(
+                        claim_pending_compaction_prompt, memory, session_name
+                    )
+                    if compaction_block:
+                        serialized_result = json.dumps(result, ensure_ascii=False)
+                        result = {
+                            **result,
+                            "content": [
+                                compaction_block,
+                                {
+                                    "type": "text",
+                                    "text": serialized_result,
+                                },
+                            ]
+                        }
+                except Exception as e:
+                    _stdio_log.warning("compaction injection failed: %s", e)
 
         try:
             await maybe_auto_refresh()
@@ -129,6 +153,7 @@ def _log_tool_call(fn):
 from fastmcp import FastMCP
 
 from marm_mcp_server.core.memory import memory
+from marm_mcp_server.core.compaction import claim_pending_compaction_prompt
 from marm_mcp_server.core.events import events
 from marm_mcp_server.core.response_limiter import MCPResponseLimiter
 from marm_mcp_server.services.notebook import notebook_dispatch
@@ -619,6 +644,74 @@ async def marm_summary(
 
     except Exception as e:
         return {"status": "error", "message": f"Error generating summary: {str(e)}"}
+
+
+# ============================================================================
+# Compaction Tools
+# ============================================================================
+
+@mcp.tool()
+@_log_tool_call
+async def marm_compaction(
+    action: str,
+    summaries: Optional[list] = None,
+    candidate_id: Optional[str] = None,
+) -> dict:
+    """
+    Unified compaction workflow.
+
+    action="status": lightweight counts and staged candidate IDs
+    action="candidates": full pending candidates with source previews and prompt
+    action="review": full staged proposals awaiting apply/discard
+    action="stage": submit agent-generated summaries
+    action="apply": apply a staged summary
+    action="discard": discard a staged summary
+    """
+    try:
+        from marm_mcp_server.core.models import CompactionRequest, StagedSummaryItem
+        from marm_mcp_server.endpoints.compaction import marm_compaction as _impl
+
+        items = []
+        if summaries is not None:
+            if not isinstance(summaries, list):
+                return {"status": "error", "message": "summaries must be a list"}
+            for item in summaries:
+                if not isinstance(item, dict):
+                    return {
+                        "status": "error",
+                        "message": "each summary item must be an object",
+                    }
+                missing = [
+                    key
+                    for key in (
+                        "candidate_id",
+                        "source_memory_ids",
+                        "suggested_summary",
+                    )
+                    if key not in item
+                ]
+                if missing:
+                    return {
+                        "status": "error",
+                        "message": f"summary item missing required fields: {missing}",
+                    }
+                items.append(
+                    StagedSummaryItem(
+                        candidate_id=item["candidate_id"],
+                        source_memory_ids=item["source_memory_ids"],
+                        suggested_summary=item["suggested_summary"],
+                    )
+                )
+
+        return await _impl(
+            CompactionRequest(
+                action=action,
+                summaries=items if summaries is not None else None,
+                candidate_id=candidate_id,
+            )
+        )
+    except Exception as e:
+        return {"status": "error", "message": f"Compaction operation failed: {str(e)}"}
 
 
 # ============================================================================

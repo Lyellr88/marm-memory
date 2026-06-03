@@ -607,6 +607,11 @@ def test_http_removed_tools_absent_from_openapi_schema(monkeypatch, tmp_path):
     assert "/marm_notebook_show" not in paths, "old marm_notebook_show must be removed"
     assert "/marm_notebook_status" not in paths, "old marm_notebook_status must be removed"
     assert "/marm_notebook_clear" not in paths, "old marm_notebook_clear must be removed"
+    assert "/marm_compaction" in paths
+    assert "/marm_get_compaction_candidates" not in paths
+    assert "/marm_stage_compaction_summaries" not in paths
+    assert "/marm_get_staged_summaries" not in paths
+    assert "/marm_apply_compaction" not in paths
 
 
 def test_http_mcp_tools_call_body_triggers_doc_loading(monkeypatch, tmp_path):
@@ -723,6 +728,159 @@ def test_ensure_marm_started_allows_only_one_concurrent_doc_load(monkeypatch, tm
 
     assert len(load_calls) == 1
     assert doc_module.docs_are_loaded()
+
+
+def test_http_mcp_tool_response_injects_compaction_prompt(monkeypatch, tmp_path):
+    import json
+    import uuid
+    from datetime import timedelta
+    from unittest.mock import AsyncMock, MagicMock
+
+    server = load_isolated_server(monkeypatch, tmp_path)
+    compaction_module = importlib.import_module("marm_mcp_server.core.compaction")
+
+    monkeypatch.setattr(compaction_module.settings, "COMPACTION_ENABLED", True)
+    monkeypatch.setattr(compaction_module.settings, "COMPACTION_MAX_NUDGES", 5)
+    monkeypatch.setattr(
+        compaction_module.settings, "COMPACTION_NUDGE_COOLDOWN_SECONDS", 2
+    )
+    monkeypatch.setattr(
+        compaction_module.settings, "COMPACTION_INJECTION_BYTE_BUDGET", 2048
+    )
+    server._protocol_delivered = True
+
+    candidate_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc)
+    with server.memory.get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO compaction_staging
+                (id, session_name, source_memory_ids, preview, suggested_summary,
+                 status, candidate_hash, source_updated_at_snapshot,
+                 expires_at, created_at, updated_at, reviewed_at)
+            VALUES (?, 'sess', ?, ?, NULL, 'pending_summary', 'hash', '{}', ?, ?, ?, NULL)
+            """,
+            (
+                candidate_id,
+                json.dumps(["m1", "m2", "m3"]),
+                json.dumps(["one", "two", "three"]),
+                (now + timedelta(hours=1)).isoformat(),
+                now.isoformat(),
+                now.isoformat(),
+            ),
+        )
+
+    body = json.dumps({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": {"content": [{"type": "text", "text": '{"status":"ok"}'}]},
+    }).encode()
+
+    async def _iter():
+        yield body
+
+    resp = MagicMock()
+    resp.status_code = 200
+    resp.headers = MagicMock()
+    resp.headers.items.return_value = [("x-request-id", "1")]
+    resp.body_iterator = _iter()
+
+    req = MagicMock()
+    req.method = "POST"
+    req.url.path = "/mcp"
+    req.body = AsyncMock(
+        return_value=b'{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{}}'
+    )
+
+    async def run():
+        call = AsyncMock(return_value=resp)
+        return await server._mcp_tool_call_tracker(req, call)
+
+    response = asyncio.run(run())
+    payload = json.loads(response.body)
+    content = payload["result"]["content"]
+
+    assert "[MARM COMPACTION REQUEST]" in content[0]["text"]
+    assert candidate_id in content[0]["text"]
+    with server.memory.get_connection() as conn:
+        nudge_count = conn.execute(
+            "SELECT nudge_count FROM compaction_staging WHERE id = ?",
+            (candidate_id,),
+        ).fetchone()[0]
+    assert nudge_count == 1
+
+
+def test_http_mcp_tool_response_orders_protocol_before_compaction(monkeypatch, tmp_path):
+    import json
+    import uuid
+    from datetime import timedelta
+    from unittest.mock import AsyncMock, MagicMock
+
+    server = load_isolated_server(monkeypatch, tmp_path)
+    compaction_module = importlib.import_module("marm_mcp_server.core.compaction")
+    doc_module = importlib.import_module("marm_mcp_server.services.documentation")
+
+    monkeypatch.setattr(compaction_module.settings, "COMPACTION_ENABLED", True)
+    monkeypatch.setattr(compaction_module.settings, "COMPACTION_MAX_NUDGES", 5)
+    monkeypatch.setattr(
+        compaction_module.settings, "COMPACTION_NUDGE_COOLDOWN_SECONDS", 2
+    )
+    doc_module._docs_loaded = True
+    server._protocol_delivered = False
+
+    candidate_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc)
+    with server.memory.get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO compaction_staging
+                (id, session_name, source_memory_ids, preview, suggested_summary,
+                 status, candidate_hash, source_updated_at_snapshot,
+                 expires_at, created_at, updated_at, reviewed_at)
+            VALUES (?, 'sess', ?, ?, NULL, 'pending_summary', 'hash', '{}', ?, ?, ?, NULL)
+            """,
+            (
+                candidate_id,
+                json.dumps(["m1", "m2", "m3"]),
+                json.dumps(["one", "two", "three"]),
+                (now + timedelta(hours=1)).isoformat(),
+                now.isoformat(),
+                now.isoformat(),
+            ),
+        )
+
+    body = json.dumps({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "result": {"content": [{"type": "text", "text": '{"status":"ok"}'}]},
+    }).encode()
+
+    async def _iter():
+        yield body
+
+    resp = MagicMock()
+    resp.status_code = 200
+    resp.headers = MagicMock()
+    resp.headers.items.return_value = [("x-request-id", "1")]
+    resp.body_iterator = _iter()
+
+    req = MagicMock()
+    req.method = "POST"
+    req.url.path = "/mcp"
+    req.body = AsyncMock(
+        return_value=b'{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{}}'
+    )
+
+    async def run():
+        call = AsyncMock(return_value=resp)
+        return await server._mcp_tool_call_tracker(req, call)
+
+    response = asyncio.run(run())
+    content = json.loads(response.body)["result"]["content"]
+
+    assert content[0]["text"].startswith("[MARM SESSION INIT]")
+    assert content[1]["text"].startswith("[MARM COMPACTION REQUEST]")
+    assert candidate_id in content[1]["text"]
 
 
 def test_http_protocol_injected_on_first_mcp_tool_call_not_on_second(monkeypatch, tmp_path):

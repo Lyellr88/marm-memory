@@ -58,13 +58,19 @@ def _strip_script_tags(text: str) -> str:
 
 # Import configuration
 from ..config.settings import (
-    SEMANTIC_SEARCH_AVAILABLE, 
-    DEFAULT_DB_PATH, 
+    SEMANTIC_SEARCH_AVAILABLE,
+    DEFAULT_DB_PATH,
     MAX_DB_CONNECTIONS,
     DEFAULT_SEMANTIC_MODEL,
     MAX_QUEUE_SIZE,
     WRITE_QUEUE_ENABLED,
+    CONSOLIDATION_ENABLED,
+    CONSOLIDATION_THRESHOLD,
+    COMPACTION_ENABLED,
+    COMPACTION_TRIGGER_COUNT,
 )
+from .consolidation import compute_content_hash, find_exact_duplicate, find_semantic_duplicate, normalize_content
+from .compaction import trigger_compaction
 from .write_queue import WriteQueue
 
 # Try to import sentence transformer if available
@@ -190,6 +196,8 @@ class MARMMemory:
         self.active_notebook_entries_by_session: dict[str, list[dict]] = {}
         self.active_log_session: str = "main"
         self._write_queue: WriteQueue | None = None
+        self._session_write_counts: dict = {}
+        self._pending_compaction_scans: dict = {}
 
     async def start_write_queue(self) -> None:
         """Start the serialized write queue when enabled."""
@@ -205,6 +213,24 @@ class MARMMemory:
             return
         await self._write_queue.stop()
         self._write_queue = None
+
+    def _on_memory_written(self, session: str) -> None:
+        """Increment compaction write counter and fire trigger when threshold is reached.
+
+        Called on every real memory write: new inserts and Layer 2 merges.
+        Layer 1 exact-duplicate skips do not call this — DB was not changed.
+        If a pending scan exists for the session, cancel it (new write resets the grace window).
+        """
+        if not COMPACTION_ENABLED:
+            return
+        pending = self._pending_compaction_scans.get(session)
+        if pending is not None and not pending.done():
+            pending.cancel()
+            self._pending_compaction_scans.pop(session, None)
+            self._session_write_counts[session] = 0
+        self._session_write_counts[session] = self._session_write_counts.get(session, 0) + 1
+        if self._session_write_counts[session] >= COMPACTION_TRIGGER_COUNT:
+            trigger_compaction(self, session)
 
     def get_active_notebook_entries(self, session_name: str = "main") -> list[dict]:
         """Return active notebook entries scoped to a session."""
@@ -323,6 +349,55 @@ class MARMMemory:
             if "memory_id" not in existing_cols:
                 conn.execute("ALTER TABLE doc_index ADD COLUMN memory_id TEXT")
 
+            # Idempotent migration: add content_hash column for consolidation Layer 1
+            mem_cols = {row[1] for row in conn.execute("PRAGMA table_info(memories)").fetchall()}
+            if "content_hash" not in mem_cols:
+                conn.execute("ALTER TABLE memories ADD COLUMN content_hash TEXT")
+
+            # Idempotent migrations: compaction Layer 3 metadata columns
+            if "compaction_role" not in mem_cols:
+                conn.execute("ALTER TABLE memories ADD COLUMN compaction_role TEXT")
+            if "compacted_into" not in mem_cols:
+                conn.execute("ALTER TABLE memories ADD COLUMN compacted_into TEXT")
+
+            # V2: staging table for agent-driven summarization
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS compaction_staging (
+                    id TEXT PRIMARY KEY,
+                    session_name TEXT NOT NULL,
+                    source_memory_ids TEXT NOT NULL,
+                    preview TEXT NOT NULL,
+                    suggested_summary TEXT,
+                    status TEXT NOT NULL DEFAULT 'pending_summary',
+                    candidate_hash TEXT NOT NULL,
+                    source_updated_at_snapshot TEXT NOT NULL,
+                    expires_at TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    reviewed_at TEXT,
+                    nudge_count INTEGER NOT NULL DEFAULT 0,
+                    last_nudged_at TEXT
+                )
+            ''')
+            staging_cols = {
+                row[1]
+                for row in conn.execute("PRAGMA table_info(compaction_staging)").fetchall()
+            }
+            if "nudge_count" not in staging_cols:
+                conn.execute(
+                    "ALTER TABLE compaction_staging "
+                    "ADD COLUMN nudge_count INTEGER NOT NULL DEFAULT 0"
+                )
+            if "last_nudged_at" not in staging_cols:
+                conn.execute("ALTER TABLE compaction_staging ADD COLUMN last_nudged_at TEXT")
+            conn.execute(
+                'CREATE INDEX IF NOT EXISTS idx_compaction_staging_session_status '
+                'ON compaction_staging(session_name, status)'
+            )
+            conn.execute(
+                'CREATE INDEX IF NOT EXISTS idx_compaction_staging_hash '
+                'ON compaction_staging(candidate_hash)'
+            )
             conn.commit()
     
     def _load_encoder_lazily(self) -> bool:
@@ -367,18 +442,97 @@ class MARMMemory:
         else:
             return 'general'
     
+    async def update_memory(self, memory_id: str, new_content: str) -> None:
+        """Append new_content into an existing memory and record the merge in metadata.
+
+        Recomputes content_hash and embedding so Layer 1 dedup and semantic recall
+        stay accurate after the merge.
+        """
+        with self.get_connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                "SELECT content, metadata FROM memories WHERE id = ?", (memory_id,)
+            ).fetchone()
+            if row is None:
+                conn.execute("ROLLBACK")
+                return
+            existing_content, metadata_json = row
+            metadata = json.loads(metadata_json) if metadata_json else {}
+            merged_content = f"{existing_content}\n[merged] {new_content}"
+            merged_at = datetime.now(timezone.utc).isoformat()
+            if "merge_history" not in metadata:
+                metadata["merge_history"] = []
+            metadata["merge_history"].append({
+                "merged_at": merged_at,
+                "content_preview": new_content[:100],
+            })
+
+            merged_hash = compute_content_hash(merged_content)
+
+            # Recompute embedding; if unavailable, clear the stale pre-merge vector.
+            merged_embedding_bytes = None
+            encoder_ok = merged_content.strip() and self._load_encoder_lazily()
+            if encoder_ok:
+                try:
+                    merged_embedding_bytes = self.encoder.encode(merged_content).tobytes()
+                except Exception as e:
+                    _safe_print(f"Failed to regenerate embedding after merge: {e}")
+
+            if merged_embedding_bytes is not None:
+                conn.execute(
+                    "UPDATE memories SET content = ?, metadata = ?, content_hash = ?, embedding = ?, timestamp = ? WHERE id = ?",
+                    (
+                        merged_content,
+                        json.dumps(metadata),
+                        merged_hash,
+                        merged_embedding_bytes,
+                        merged_at,
+                        memory_id,
+                    ),
+                )
+            else:
+                conn.execute(
+                    "UPDATE memories SET content = ?, metadata = ?, content_hash = ?, embedding = NULL, timestamp = ? WHERE id = ?",
+                    (
+                        merged_content,
+                        json.dumps(metadata),
+                        merged_hash,
+                        merged_at,
+                        memory_id,
+                    ),
+                )
+
     async def store_memory(self, content: str, session: str, context_type: str = "general", metadata: Dict = None) -> str:
         """Store content with vector embedding for semantic search"""
-        # Sanitize content to prevent XSS attacks
         sanitized_content = sanitize_content(content)
-        
+
         if context_type == "general":
             context_type = await self.auto_classify_content(sanitized_content)
-            
+
+        content_hash = compute_content_hash(sanitized_content)
+        normalized_content = normalize_content(sanitized_content)
+
+        # Layer 1: exact duplicate check — runs before embedding to avoid wasted model work
+        if CONSOLIDATION_ENABLED:
+            with self.get_connection() as conn:
+                existing_id = find_exact_duplicate(conn, content_hash, session, normalized_content)
+                if existing_id:
+                    return existing_id
+
+        # Layer 2: semantic near-duplicate check — skipped gracefully if encoder unavailable
+        if CONSOLIDATION_ENABLED:
+            existing_id = await find_semantic_duplicate(
+                self, sanitized_content, session, CONSOLIDATION_THRESHOLD
+            )
+            if existing_id:
+                await self.update_memory(existing_id, sanitized_content)
+                self._on_memory_written(session)
+                return existing_id
+
         memory_id = str(uuid.uuid4())
         timestamp = datetime.now(timezone.utc).isoformat()
         metadata = metadata or {}
-        
+
         # Generate embedding for semantic search (lazy load encoder if needed)
         embedding_bytes = None
         if sanitized_content.strip() and self._load_encoder_lazily():
@@ -387,23 +541,27 @@ class MARMMemory:
                 embedding_bytes = embedding.tobytes()
             except Exception as e:
                 print(f"Failed to generate embedding: {e}")
-        
+
         with self.get_connection() as conn:
-            # Store sanitized memory
+            conn.execute("BEGIN IMMEDIATE")
+            # Re-check under write lock to close the check-then-insert race
+            if CONSOLIDATION_ENABLED:
+                under_lock_id = find_exact_duplicate(conn, content_hash, session, normalized_content)
+                if under_lock_id:
+                    conn.execute("ROLLBACK")
+                    return under_lock_id
+
             conn.execute('''
-                INSERT INTO memories (id, session_name, content, embedding, timestamp, context_type, metadata)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            ''', (memory_id, session, sanitized_content, embedding_bytes, timestamp, context_type, json.dumps(metadata)))
-            
-            # Update session access time
+                INSERT INTO memories (id, session_name, content, embedding, content_hash, timestamp, context_type, metadata)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (memory_id, session, sanitized_content, embedding_bytes, content_hash, timestamp, context_type, json.dumps(metadata)))
+
             conn.execute('''
                 INSERT OR REPLACE INTO sessions (session_name, last_accessed)
                 VALUES (?, ?)
             ''', (session, timestamp))
-        
-        # Note: events system will be handled by the main application
-        # We don't import it here to avoid circular dependencies
-        
+
+        self._on_memory_written(session)
         return memory_id
 
     async def store_memory_queued(
@@ -438,6 +596,7 @@ class MARMMemory:
                         SELECT id, session_name, content, embedding, timestamp, context_type, metadata
                         FROM memories
                         WHERE embedding IS NOT NULL
+                          AND (compaction_role IS NULL OR compaction_role != 'source')
                         ORDER BY timestamp DESC
                         LIMIT 1000
                     ''')
@@ -446,7 +605,8 @@ class MARMMemory:
                         SELECT id, session_name, content, embedding, timestamp, context_type, metadata
                         FROM memories
                         WHERE embedding IS NOT NULL
-                        AND session_name = ?
+                          AND session_name = ?
+                          AND (compaction_role IS NULL OR compaction_role != 'source')
                         ORDER BY timestamp DESC
                         LIMIT 1000
                     ''', (session,))
@@ -493,6 +653,7 @@ class MARMMemory:
                     SELECT id, session_name, content, timestamp, context_type, metadata
                     FROM memories
                     WHERE content LIKE ?
+                      AND (compaction_role IS NULL OR compaction_role != 'source')
                     ORDER BY timestamp DESC
                     LIMIT ?
                 ''', (f"%{query}%", limit))
@@ -501,7 +662,8 @@ class MARMMemory:
                     SELECT id, session_name, content, timestamp, context_type, metadata
                     FROM memories
                     WHERE content LIKE ?
-                    AND session_name = ?
+                      AND session_name = ?
+                      AND (compaction_role IS NULL OR compaction_role != 'source')
                     ORDER BY timestamp DESC
                     LIMIT ?
                 ''', (f"%{query}%", session, limit))

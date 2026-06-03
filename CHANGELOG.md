@@ -34,6 +34,7 @@
 
 </details>
 
+
 ---
 
 <details>
@@ -1366,6 +1367,62 @@ marm_notebook(action="use"|"status"|"clear", session_name="my_project")
 - Updated Docker STDIO examples to override the entrypoint with `python -m marm_mcp_server.server_stdio`.
 - Added `packaging` as an explicit dependency because FastMCP imports it during STDIO startup inside Docker.
 - Removed the unfinished MCP client command generator prototype from repository tracking and ignored it locally until it is public-ready.
+
+</details>
+
+---
+
+<details>
+<summary><strong>June 1st, 2026: Consolidation Worker, Compaction Pipeline & Swarm Smoke Harness (v2.9.0)</strong></summary>
+
+### Memory Consolidation
+
+- Added session-scoped exact duplicate prevention using normalized SHA-256 `content_hash` values before embedding work runs.
+- Added write-time semantic consolidation for near-duplicate memories when `CONSOLIDATION_ENABLED=1`.
+- Existing matching memories are updated instead of creating new rows, preserving session boundaries and recording merge history in metadata.
+- Memory updates now recompute `content_hash` and refresh embeddings when the encoder is available.
+- Added hash-collision safety so matching hashes still require normalized content equality before deduping.
+
+### Compaction Worker
+
+- Added background compaction candidate detection for stale/fragmented memory clusters.
+- Added `compaction_role`, `compacted_into`, and `compaction_staging` schema support with idempotent migrations.
+- Added a staged, agent-driven compaction workflow behind one public `marm_compaction` tool; raw compaction helpers remain internal/hidden from MCP discovery.
+- Added bounded compaction nudges so MARM can ask the connected agent to summarize pending candidates without adding more public tools.
+- Added candidate expiry, source snapshot validation, cross-session isolation, already-compacted source checks, and stale candidate marking.
+- Apply now inserts a summary memory row, marks source rows as compacted, and remains idempotent under duplicate apply calls.
+- Existing stored embeddings can now be compacted even when the local encoder is unavailable.
+
+### Write Queue & Scheduler Integration
+
+- Extended the write queue with `put_callable()` so non-memory-write mutations, including compaction apply, can run through the same serialized queue.
+- Routed compaction apply through the write queue when enabled, preserving ordering with normal memory writes.
+- Added optional compaction auto-apply scheduler support behind `COMPACTION_AUTO_APPLY_ENABLED`.
+- Runtime presets now tune compaction trigger counts for normal versus swarm/trusted/custom deployment modes.
+
+### Swarm & Compaction Smoke Testing
+
+- Added `compaction-worker-smoke.py` for isolated HTTP load, staged compaction, apply idempotency, stale guard, cross-session isolation, and optional scheduler testing.
+- Added `swarm-smoke.py` for lightweight local swarm simulation using either mocked model output or Ollama.
+- Added shared-session swarm mode to verify natural compaction triggering from real writes.
+- Added seeded embedding fallback for deterministic compaction smoke testing on machines without reliable local embedding generation.
+- Reworked smoke-test documentation into script-based and base/medium/heavy/special command groups.
+
+### Documentation & Tool Surface
+
+- Updated README, MCP handbook, FAQ, and packaged `marm-docs` mirrors for the 9-tool surface, write queue defaults, swarm presets, consolidation, and agent-assisted compaction.
+- Consolidated duplicated handbook FAQ content into `docs/FAQ.md` and changed the handbook FAQ section to reference the canonical FAQ.
+- Updated contributor guidance for write queue, consolidation, compaction staging, smoke scripts, and parameterized MCP tool design.
+
+### v2.9.0 Tests
+
+- Added focused regression coverage for exact deduplication, write-time semantic consolidation, compaction candidate detection, staging, apply/idempotency, stale safeguards, write-queue callable execution, and auto-apply behavior.
+- Local validation covered direct queue bursts, HTTP RPM boundaries, trusted no-RPM pressure, compaction stage/apply, stale and cross-session negative paths, auto-apply scheduling, mocked swarm writes, and real Ollama swarm writes.
+
+### Hardening & Suite Stability
+
+- Strengthened suite-level isolation around reloaded server modules, patched memory singletons, compaction globals, and async write queue cleanup so tests pass both individually and as a grouped run.
+- Tightened diagnostic and consolidation edge cases found during review, including request-body logging for HTTP compaction injection and stale embedding cleanup after write-time merges.
 
 </details>
 

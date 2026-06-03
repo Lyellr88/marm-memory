@@ -86,7 +86,7 @@ def main() -> int:
             break
 
     if not failed and ask_yes_no("\nRun Docker smoke test now?", default=True):
-        if not run_step("Docker smoke", [sys.executable, "scripts/docker-smoke.py"], required=True):
+        if not run_step("Docker smoke", [sys.executable, "scripts/test-scripts/docker-smoke.py"], required=True):
             failed = True
     elif not failed:
         print(f"{YELLOW}Docker smoke skipped by user.{RESET}")
