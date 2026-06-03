@@ -487,9 +487,7 @@ This release introduces a complete UI/UX transformation with the implementation 
 
 ---
 
-## Version 2 - MARM Protocol to Universal MCP Server Evolution
-
----
+### Version 2 - MARM Protocol to Universal MCP Server Evolution
 
 <details>
 <summary>August 6-18, 2025: MARM v2.0.0 Production Launch </summary>
