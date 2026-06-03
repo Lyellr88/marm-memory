@@ -80,10 +80,10 @@ async def test_update_memory_recomputes_content_hash(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_update_memory_preserves_existing_embedding_when_encoder_unavailable(tmp_path):
+async def test_update_memory_clears_stale_embedding_when_encoder_unavailable(tmp_path):
     mem = MARMMemory(str(tmp_path / "memory.db"))
 
-    # Seed a row with a fake embedding so we can verify it isn't wiped
+    # Seed a row with a fake embedding so we can verify the stale vector is cleared.
     import uuid
     from datetime import datetime, timezone
     memory_id = str(uuid.uuid4())
@@ -102,7 +102,7 @@ async def test_update_memory_preserves_existing_embedding_when_encoder_unavailab
             "SELECT embedding FROM memories WHERE id = ?", (memory_id,)
         ).fetchone()
 
-    assert row[0] == fake_embedding
+    assert row[0] is None
 
 
 # --- find_semantic_duplicate unit tests ---
@@ -173,7 +173,7 @@ async def test_semantic_merge_returns_existing_id_and_skips_new_row(monkeypatch,
     from marm_mcp_server.core import memory as memory_module
 
     monkeypatch.setattr(memory_module, "CONSOLIDATION_ENABLED", True)
-    mem = MARMMemory(str(tmp_path / "memory.db"))
+    mem = memory_module.MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
 
     first_id = await mem.store_memory("fixed the authentication bug in login flow", "session-a")
@@ -200,7 +200,7 @@ async def test_semantic_merge_writes_merged_content_to_existing_row(monkeypatch,
     from marm_mcp_server.core import memory as memory_module
 
     monkeypatch.setattr(memory_module, "CONSOLIDATION_ENABLED", True)
-    mem = MARMMemory(str(tmp_path / "memory.db"))
+    mem = memory_module.MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
 
     first_id = await mem.store_memory("fixed the authentication bug", "session-a")

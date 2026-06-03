@@ -298,8 +298,12 @@ async def _mcp_tool_call_tracker(request: Request, call_next):
             _req_session = None
             try:
                 _req_session = json.loads(body).get("params", {}).get("arguments", {}).get("session_name")
-            except Exception:
-                pass
+            except Exception as e:
+                logger.debug(
+                    "Session extraction failed, using global scope",
+                    error=str(e),
+                    body_preview=body_bytes[:200].decode("utf-8", errors="replace"),
+                )
             compaction_block = await asyncio.to_thread(
                 claim_pending_compaction_prompt, memory, _req_session
             )

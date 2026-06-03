@@ -124,10 +124,14 @@ def mem(tmp_path):
 
 @pytest.fixture(autouse=True)
 def patch_global_memory(mem, monkeypatch):
-    """Replace the module-level memory singleton used by endpoint functions."""
-    import marm_mcp_server.endpoints.compaction as ep
+    """Patch memory in the module dict the collected functions actually reference.
 
-    monkeypatch.setattr(ep, "memory", mem)
+    load_isolated_server in other test files can replace sys.modules entries,
+    so a fresh `import ... as ep` may return a different object than what the
+    top-level `from ... import func` already bound at collection time. Patching
+    via __globals__ targets the real dict these functions use regardless.
+    """
+    monkeypatch.setitem(marm_apply_compaction.__globals__, "memory", mem)
     yield
 
 

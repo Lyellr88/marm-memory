@@ -296,7 +296,7 @@ async def test_write_counter_increments_on_new_insert(monkeypatch, tmp_path):
     monkeypatch.setattr(memory_module, "COMPACTION_ENABLED", True)
     monkeypatch.setattr(memory_module, "COMPACTION_TRIGGER_COUNT", 99)
 
-    mem = MARMMemory(str(tmp_path / "memory.db"))
+    mem = memory_module.MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
 
     await mem.store_memory("first write", "sess-counter")
@@ -333,7 +333,7 @@ async def test_write_counter_increments_on_layer2_merge(monkeypatch, tmp_path):
     monkeypatch.setattr(memory_module, "COMPACTION_ENABLED", True)
     monkeypatch.setattr(memory_module, "COMPACTION_TRIGGER_COUNT", 99)
 
-    mem = MARMMemory(str(tmp_path / "memory.db"))
+    mem = memory_module.MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
 
     first_id = await mem.store_memory("original content about the login fix", "sess-l2")
@@ -419,7 +419,7 @@ async def test_counter_resets_and_scan_scheduled_on_threshold(monkeypatch, tmp_p
     monkeypatch.setattr(memory_module, "COMPACTION_TRIGGER_COUNT", 3)
     monkeypatch.setattr(s, "COMPACTION_ACTIVE_SESSION_GRACE_MINUTES", 60)  # won't fire in test
 
-    mem = MARMMemory(str(tmp_path / "memory.db"))
+    mem = memory_module.MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
 
     await mem.store_memory("write 1", "sess-trigger")
@@ -446,7 +446,7 @@ async def test_new_write_cancels_pending_scan(monkeypatch, tmp_path):
     monkeypatch.setattr(memory_module, "COMPACTION_TRIGGER_COUNT", 2)
     monkeypatch.setattr(s, "COMPACTION_ACTIVE_SESSION_GRACE_MINUTES", 60)
 
-    mem = MARMMemory(str(tmp_path / "memory.db"))
+    mem = memory_module.MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
 
     await mem.store_memory("write 1", "sess-cancel")
@@ -469,7 +469,7 @@ async def test_different_sessions_have_independent_counters(monkeypatch, tmp_pat
     monkeypatch.setattr(memory_module, "COMPACTION_ENABLED", True)
     monkeypatch.setattr(memory_module, "COMPACTION_TRIGGER_COUNT", 99)
 
-    mem = MARMMemory(str(tmp_path / "memory.db"))
+    mem = memory_module.MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
 
     await mem.store_memory("session-a write 1", "session-a")
@@ -498,7 +498,7 @@ async def test_scan_fires_after_grace_period(monkeypatch, tmp_path):
 
     monkeypatch.setattr(compaction_module, "find_compaction_candidates", _fake_find_candidates)
 
-    mem = MARMMemory(str(tmp_path / "memory.db"))
+    mem = memory_module.MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
 
     await mem.store_memory("trigger write", "sess-fire")

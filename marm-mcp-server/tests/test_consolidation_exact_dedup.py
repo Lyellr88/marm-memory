@@ -35,7 +35,7 @@ async def test_exact_duplicate_in_same_session_is_skipped(monkeypatch, tmp_path)
     from marm_mcp_server.core import memory as memory_module
 
     monkeypatch.setattr(memory_module, "CONSOLIDATION_ENABLED", True)
-    mem = MARMMemory(str(tmp_path / "memory.db"))
+    mem = memory_module.MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
 
     first_id = await mem.store_memory("fixed the login bug", "session-a")
@@ -75,7 +75,7 @@ async def test_case_and_whitespace_variants_deduplicate_within_session(monkeypat
     from marm_mcp_server.core import memory as memory_module
 
     monkeypatch.setattr(memory_module, "CONSOLIDATION_ENABLED", True)
-    mem = MARMMemory(str(tmp_path / "memory.db"))
+    mem = memory_module.MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
 
     first_id = await mem.store_memory("Fixed The Login Bug", "session-a")
@@ -171,7 +171,7 @@ async def test_concurrent_identical_writes_produce_one_row(monkeypatch, tmp_path
     from marm_mcp_server.core import memory as memory_module
 
     monkeypatch.setattr(memory_module, "CONSOLIDATION_ENABLED", True)
-    mem = MARMMemory(str(tmp_path / "memory.db"))
+    mem = memory_module.MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
 
     id_a, id_b = await asyncio.gather(
@@ -198,7 +198,7 @@ async def test_race_window_sealed_by_begin_immediate(monkeypatch, tmp_path):
     from marm_mcp_server.core import memory as memory_module
 
     monkeypatch.setattr(memory_module, "CONSOLIDATION_ENABLED", True)
-    mem = MARMMemory(str(tmp_path / "memory.db"))
+    mem = memory_module.MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
 
     original_find_semantic = memory_module.find_semantic_duplicate

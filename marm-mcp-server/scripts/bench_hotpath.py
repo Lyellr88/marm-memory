@@ -34,7 +34,7 @@ from marm_mcp_server.core import consolidation  # noqa: E402
 
 def _pct(values, p):
     s = sorted(values)
-    k = max(0, min(len(s) - 1, int(round((p / 100) * (len(s) - 1)))))
+    k = max(0, min(len(s) - 1, round((p / 100) * (len(s) - 1))))
     return s[k]
 
 

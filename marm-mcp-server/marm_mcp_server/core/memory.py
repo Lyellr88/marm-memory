@@ -469,7 +469,7 @@ class MARMMemory:
 
             merged_hash = compute_content_hash(merged_content)
 
-            # Recompute embedding — keep existing if encoder unavailable
+            # Recompute embedding; if unavailable, clear the stale pre-merge vector.
             merged_embedding_bytes = None
             encoder_ok = merged_content.strip() and self._load_encoder_lazily()
             if encoder_ok:

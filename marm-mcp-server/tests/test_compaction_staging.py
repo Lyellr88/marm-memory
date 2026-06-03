@@ -970,7 +970,7 @@ def test_claim_pending_compaction_prompt_increments_nudge_count(monkeypatch, tmp
     ids = [_insert_memory_row(mem, "sess", f"c{i}", similar[i]) for i in range(3)]
     row_id = _insert_staging_row(mem, "sess", ids)
 
-    block = claim_pending_compaction_prompt(mem)
+    block = compaction_module.claim_pending_compaction_prompt(mem)
 
     assert block is not None
     assert block["type"] == "text"
@@ -1017,8 +1017,8 @@ def test_claim_pending_compaction_prompt_respects_cooldown(monkeypatch, tmp_path
     ids = [_insert_memory_row(mem, "sess", f"c{i}", similar[i]) for i in range(3)]
     row_id = _insert_staging_row(mem, "sess", ids)
 
-    assert claim_pending_compaction_prompt(mem) is not None
-    assert claim_pending_compaction_prompt(mem) is None
+    assert compaction_module.claim_pending_compaction_prompt(mem) is not None
+    assert compaction_module.claim_pending_compaction_prompt(mem) is None
     with mem.get_connection() as conn:
         nudge_count = conn.execute(
             "SELECT nudge_count FROM compaction_staging WHERE id = ?",
@@ -1041,8 +1041,8 @@ def test_claim_pending_compaction_prompt_marks_nudge_exhausted(monkeypatch, tmp_
     ids = [_insert_memory_row(mem, "sess", f"c{i}", similar[i]) for i in range(3)]
     row_id = _insert_staging_row(mem, "sess", ids)
 
-    assert claim_pending_compaction_prompt(mem) is not None
-    assert claim_pending_compaction_prompt(mem) is None
+    assert compaction_module.claim_pending_compaction_prompt(mem) is not None
+    assert compaction_module.claim_pending_compaction_prompt(mem) is None
     assert _get_staging_row(mem, row_id)["status"] == "nudge_exhausted"
 
 
@@ -1063,7 +1063,7 @@ def test_auto_apply_enabled_does_not_suppress_pending_summary_injection(monkeypa
     ids = [_insert_memory_row(mem, "sess", f"c{i}", similar[i]) for i in range(3)]
     row_id = _insert_staging_row(mem, "sess", ids, status="pending_summary")
 
-    block = claim_pending_compaction_prompt(mem)
+    block = compaction_module.claim_pending_compaction_prompt(mem)
 
     assert block is not None
     assert row_id in block["text"]
@@ -1086,7 +1086,7 @@ def test_claim_pending_compaction_prompt_concurrent_claims_one(monkeypatch, tmp_
 
     results = []
     with ThreadPoolExecutor(max_workers=5) as pool:
-        futures = [pool.submit(claim_pending_compaction_prompt, mem) for _ in range(5)]
+        futures = [pool.submit(compaction_module.claim_pending_compaction_prompt, mem) for _ in range(5)]
         for future in as_completed(futures):
             results.append(future.result())
 
