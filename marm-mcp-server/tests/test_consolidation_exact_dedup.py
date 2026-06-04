@@ -205,13 +205,15 @@ async def test_race_window_sealed_by_begin_immediate(monkeypatch, tmp_path):
     started = 0
     release_both = asyncio.Event()
 
-    async def yielding_find_semantic(memory, content, session_name, threshold):
+    async def yielding_find_semantic(memory, content, session_name, threshold, query_vec=None):
         nonlocal started
         started += 1
         if started == 2:
             release_both.set()
         await release_both.wait()
-        return await original_find_semantic(memory, content, session_name, threshold)
+        return await original_find_semantic(
+            memory, content, session_name, threshold, query_vec=query_vec
+        )
 
     monkeypatch.setattr(memory_module, "find_semantic_duplicate", yielding_find_semantic)
 

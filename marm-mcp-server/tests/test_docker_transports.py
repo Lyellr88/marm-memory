@@ -8,6 +8,8 @@ import pytest
 import requests
 
 
+pytestmark = pytest.mark.docker
+
 DOCKER_IMAGE = os.environ.get("MARM_DOCKER_IMAGE", "lyellr88/marm-mcp-server:latest")
 
 

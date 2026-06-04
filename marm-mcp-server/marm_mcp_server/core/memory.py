@@ -1,5 +1,6 @@
 """Advanced memory system with semantic search and MARM protocol support."""
 
+import asyncio
 import json
 import sqlite3
 import sys
@@ -14,13 +15,15 @@ import re
 
 
 def _safe_print(msg: str) -> None:
-    """Print with stderr fallback — prevents charmap UnicodeEncodeError on Windows and avoids
-    polluting STDIO stdout which is reserved for JSON-RPC."""
-    try:
-        print(msg)
-    except UnicodeEncodeError:
-        sys.stderr.buffer.write((msg + "\n").encode("utf-8", errors="replace"))
-        sys.stderr.buffer.flush()
+    """Write diagnostics to stderr so STDIO stdout stays JSON-RPC clean."""
+    stderr_buffer = getattr(sys.stderr, "buffer", None)
+    if stderr_buffer is not None:
+        stderr_buffer.write((msg + "\n").encode("utf-8", errors="replace"))
+        stderr_buffer.flush()
+    else:
+        sys.stderr.write(msg + "\n")
+        sys.stderr.flush()
+
 
 def _strip_script_tags(text: str) -> str:
     lower = text.lower()
@@ -188,6 +191,7 @@ class MARMMemory:
         self.encoder = None
         self._encoder_loading = False
         self._encoder_failed = False
+        self._encoder_lock = threading.Lock()
             
         self.init_database()
         
@@ -400,6 +404,11 @@ class MARMMemory:
             )
             conn.commit()
     
+    def _encode_sync(self, text: str):
+        """Encode text with the shared encoder, serialized to prevent concurrent-use hangs."""
+        with self._encoder_lock:
+            return self.encoder.encode(text)
+
     def _load_encoder_lazily(self) -> bool:
         """Lazy load the semantic search model only when needed"""
         if self.encoder is not None or self._encoder_failed:
@@ -474,7 +483,8 @@ class MARMMemory:
             encoder_ok = merged_content.strip() and self._load_encoder_lazily()
             if encoder_ok:
                 try:
-                    merged_embedding_bytes = self.encoder.encode(merged_content).tobytes()
+                    merged_vec = await asyncio.to_thread(self._encode_sync, merged_content)
+                    merged_embedding_bytes = merged_vec.tobytes()
                 except Exception as e:
                     _safe_print(f"Failed to regenerate embedding after merge: {e}")
 
@@ -519,10 +529,20 @@ class MARMMemory:
                 if existing_id:
                     return existing_id
 
+        # Pre-encode once — reused by Layer 2 dedup and storage to avoid a second encode
+        pre_embedding = None
+        pre_embedding_bytes = None
+        if sanitized_content.strip() and self._load_encoder_lazily():
+            try:
+                pre_embedding = await asyncio.to_thread(self._encode_sync, sanitized_content)
+                pre_embedding_bytes = pre_embedding.tobytes()
+            except Exception as e:
+                _safe_print(f"Failed to generate embedding: {e}")
+
         # Layer 2: semantic near-duplicate check — skipped gracefully if encoder unavailable
         if CONSOLIDATION_ENABLED:
             existing_id = await find_semantic_duplicate(
-                self, sanitized_content, session, CONSOLIDATION_THRESHOLD
+                self, sanitized_content, session, CONSOLIDATION_THRESHOLD, query_vec=pre_embedding
             )
             if existing_id:
                 await self.update_memory(existing_id, sanitized_content)
@@ -533,14 +553,7 @@ class MARMMemory:
         timestamp = datetime.now(timezone.utc).isoformat()
         metadata = metadata or {}
 
-        # Generate embedding for semantic search (lazy load encoder if needed)
-        embedding_bytes = None
-        if sanitized_content.strip() and self._load_encoder_lazily():
-            try:
-                embedding = self.encoder.encode(sanitized_content)
-                embedding_bytes = embedding.tobytes()
-            except Exception as e:
-                print(f"Failed to generate embedding: {e}")
+        embedding_bytes = pre_embedding_bytes
 
         with self.get_connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
@@ -581,13 +594,17 @@ class MARMMemory:
             return await self._write_queue.put(content, session, context_type, metadata)
         return await self.store_memory(content, session, context_type, metadata)
     
-    async def recall_similar(self, query: str, session: str = None, limit: int = 5) -> List[Dict]:
+    async def recall_similar(self, query: str, session: str = None, limit: int = 5, query_vec=None) -> List[Dict]:
         """Find semantically similar memories"""
-        if not self._load_encoder_lazily():
-            return await self.recall_text_search(query, session, limit)
-        
+        if query_vec is None:
+            if not self._load_encoder_lazily():
+                return await self.recall_text_search(query, session, limit)
+
         try:
-            query_embedding = self.encoder.encode(query)
+            if query_vec is not None:
+                query_embedding = query_vec
+            else:
+                query_embedding = await asyncio.to_thread(self._encode_sync, query)
             
             with self.get_connection() as conn:
                 # If session is None, search all sessions
@@ -613,16 +630,24 @@ class MARMMemory:
                 
                 memories = cursor.fetchall()
                 similarities = []
-                
+                expected_dim = len(query_embedding)
+                dim_skipped = 0
+
                 for memory in memories:
                     try:
                         memory_embedding = np.frombuffer(memory[3], dtype=np.float32)
+                        if len(memory_embedding) != expected_dim:
+                            dim_skipped += 1
+                            continue
                         similarity = np.dot(query_embedding, memory_embedding) / (
                             np.linalg.norm(query_embedding) * np.linalg.norm(memory_embedding)
                         )
                         similarities.append((memory, similarity))
                     except Exception:
                         continue
+
+                if dim_skipped:
+                    _safe_print(f"recall_similar: skipped {dim_skipped} memories with wrong embedding dimension (expected {expected_dim})")
                 
                 similarities.sort(key=lambda x: x[1], reverse=True)
                 

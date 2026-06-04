@@ -1,6 +1,6 @@
 # Changelog
 
-## MARM Protocol – v2.2.9 Change Log
+## MARM Protocol Changelog
 
 ### Version v1 - Prototype to Beta Foundation
 
@@ -1427,5 +1427,48 @@ marm_notebook(action="use"|"status"|"clear", session_name="my_project")
 
 - Strengthened suite-level isolation around reloaded server modules, patched memory singletons, compaction globals, and async write queue cleanup so tests pass both individually and as a grouped run.
 - Tightened diagnostic and consolidation edge cases found during review, including request-body logging for HTTP compaction injection and stale embedding cleanup after write-time merges.
+
+</details>
+
+---
+
+<details>
+<summary><strong>June 4th, 2026: Opus Review Hot-Path & Compaction Hardening (v2.9.1)</strong></summary>
+
+#### Hot-Path Performance Hardening
+
+- Offloaded sentence-transformer encoding from async request paths with `asyncio.to_thread()` so CPU-heavy embedding work no longer blocks the event loop directly.
+- Added a serialized encoder helper around the shared encoder to avoid unsafe concurrent encoder use while still moving the blocking work off the main loop.
+- Reused the precomputed write embedding for write-time semantic consolidation, removing the previous double-encode path when Layer 2 consolidation checked for near-duplicates and then stored the same content.
+- Extended `recall_similar()` and `find_semantic_duplicate()` with an optional `query_vec` path so callers that already computed an embedding can avoid repeating that work.
+- Moved notebook embedding generation onto the same offloaded encoder path.
+
+#### Compaction Tool Reliability
+
+- Made `source_memory_ids` optional when staging compaction summaries; the server now uses the staged candidate's source IDs when omitted and only validates them when provided.
+- Removed `source_memory_ids` from the injected compaction nudge example to reduce UUID transcription errors by connected agents.
+- Rewrote the `marm_compaction` HTTP and STDIO tool descriptions as an agent-facing workflow: `status/candidates -> stage -> review -> apply/discard`.
+- Offloaded compaction summary embedding generation during apply so compaction writes follow the same non-blocking encoder pattern.
+
+#### HTTP Injection & Middleware Hardening
+
+- Added an HTTP MCP middleware fast path that skips response buffering/parsing after the one-time protocol has been delivered when compaction injection is disabled.
+- Added a defensive non-JSON response guard so the middleware avoids parsing responses it cannot mutate.
+- Aligned HTTP compaction injection with STDIO behavior so protocol delivery and compaction nudges do not co-inject on the same first tool call.
+- Kept eligible JSON tool responses mutable when protocol or compaction injection can still happen.
+
+#### Embedding Compatibility Guard
+
+- Added a runtime dimension check before cosine scoring stored embeddings.
+- Wrong-dimension vectors are now skipped with a diagnostic signal instead of silently disappearing through a broad exception path or crashing recall after an embedding-model dimension change.
+- Added regression coverage proving correct-dimension memories still recall while wrong-dimension rows are ignored safely.
+
+#### Test Stability & Coverage
+
+- Replaced brittle multi-step STDIO subprocess behavior tests with in-process STDIO tool tests using isolated temp databases.
+- Added in-process FastMCP client coverage for notebook, delete, log-session, and log-entry result wrapping so JSON-RPC-style tool result envelopes remain covered without relying on stdin EOF timing.
+- Kept real subprocess STDIO smoke coverage for import cleanliness, initialize/tools-list, logging, privacy, and write-queue transport behavior.
+- Added pytest markers for Docker and slow STDIO transport tests so local fast runs can skip heavy transport smoke tests while full runs still cover them.
+- Added regression coverage for optional compaction `source_memory_ids`, semantic consolidation query-vector plumbing, and embedding dimension mismatch handling.
 
 </details>

@@ -37,16 +37,17 @@ def find_exact_duplicate(
 
 
 async def find_semantic_duplicate(
-    memory, content: str, session_name: str, threshold: float
+    memory, content: str, session_name: str, threshold: float, query_vec=None
 ) -> Optional[str]:
     """Return memory_id of nearest semantic match at or above threshold in session, or None.
 
     Falls back to None if encoder unavailable — never blocks a write.
+    Accepts a pre-computed query_vec to avoid re-encoding already-embedded content.
     """
     try:
-        if not memory._load_encoder_lazily():
+        if query_vec is None and not memory._load_encoder_lazily():
             return None
-        results = await memory.recall_similar(content, session=session_name, limit=1)
+        results = await memory.recall_similar(content, session=session_name, limit=1, query_vec=query_vec)
         if results and results[0]["similarity"] >= threshold:
             return results[0]["id"]
     except Exception:

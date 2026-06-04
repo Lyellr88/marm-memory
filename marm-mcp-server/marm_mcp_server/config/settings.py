@@ -80,7 +80,7 @@ DEFAULT_SEMANTIC_MODEL = "all-MiniLM-L6-v2"
 # Server configuration
 SERVER_HOST = os.environ.get('SERVER_HOST', '127.0.0.1')
 SERVER_PORT = int(os.environ.get('SERVER_PORT', 8001))
-SERVER_VERSION = "2.9.0"
+SERVER_VERSION = "2.9.1"
 
 # Rate limiting configuration. MARM_RATE_LIMIT_RPM=0 disables limiting.
 MARM_RATE_LIMIT_RPM = int(os.environ.get('MARM_RATE_LIMIT_RPM', '80'))

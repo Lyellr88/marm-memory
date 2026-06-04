@@ -5,7 +5,7 @@ This server integrates all modular components of the MARM protocol into a single
 FastAPI application, compliant with the MCP protocol via FastApiMCP.
 
 Author: Lyell - MARM Systems
-Version: 2.9.0
+Version: 2.9.1
 """
 
 import json
@@ -263,6 +263,20 @@ async def _mcp_tool_call_tracker(request: Request, call_next):
         asyncio.create_task(maybe_auto_refresh())
 
     if is_tool_call and response.status_code == 200:
+        # Fast path: nothing can inject — skip buffer/parse/reserialize entirely.
+        # _protocol_delivered boolean read without lock is safe; worst case is one
+        # redundant injection attempt under extreme first-call concurrency.
+        if _protocol_delivered and not settings.COMPACTION_ENABLED:
+            return response
+
+        # Non-JSON response — nothing to mutate, return raw without parsing.
+        try:
+            content_type = response.headers.get("content-type", "") or ""
+            if isinstance(content_type, str) and content_type and "application/json" not in content_type:
+                return response
+        except Exception:
+            pass
+
         body_bytes = b""
         try:
             async for chunk in response.body_iterator:
@@ -304,11 +318,12 @@ async def _mcp_tool_call_tracker(request: Request, call_next):
                     error=str(e),
                     body_preview=body[:200].decode("utf-8", errors="replace"),
                 )
-            compaction_block = await asyncio.to_thread(
-                claim_pending_compaction_prompt, memory, _req_session
-            )
-            if compaction_block:
-                injections.append(compaction_block)
+            if not protocol_injected:
+                compaction_block = await asyncio.to_thread(
+                    claim_pending_compaction_prompt, memory, _req_session
+                )
+                if compaction_block:
+                    injections.append(compaction_block)
 
             if not injections:
                 from starlette.responses import Response as StarletteResponse

@@ -5,9 +5,32 @@ import subprocess
 import sys
 import asyncio
 
+import pytest
 from anyio import ClosedResourceError, EndOfStream
+from fastmcp import Client
 
 
+def _isolated_stdio(monkeypatch, tmp_path):
+    import marm_mcp_server.server_stdio as stdio
+    import marm_mcp_server.services.notebook as notebook_service
+    from marm_mcp_server.core.memory import MARMMemory
+
+    mem = MARMMemory(str(tmp_path / "stdio-inprocess.db"))
+    mem._encoder_failed = True
+    monkeypatch.setattr(stdio, "memory", mem)
+    monkeypatch.setattr(notebook_service, "memory", mem)
+
+    async def _noop(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(stdio, "ensure_marm_started", _noop)
+    monkeypatch.setattr(stdio, "maybe_auto_refresh", _noop)
+    monkeypatch.setattr(stdio, "claim_pending_compaction_prompt", lambda *args, **kwargs: None)
+    stdio._protocol_delivered = True
+    return stdio
+
+
+@pytest.mark.slow_stdio
 def test_stdio_module_import_keeps_stdout_clean_for_json_rpc(tmp_path):
     env = os.environ.copy()
     env["MARM_DB_PATH"] = str(tmp_path / "stdio-memory.db")
@@ -30,6 +53,7 @@ def test_stdio_module_import_keeps_stdout_clean_for_json_rpc(tmp_path):
     assert result.stdout == ""
 
 
+@pytest.mark.slow_stdio
 def test_stdio_handles_mcp_initialize_and_exposes_tools(tmp_path):
     env = os.environ.copy()
     env["MARM_DB_PATH"] = str(tmp_path / "stdio-rpc.db")
@@ -96,237 +120,73 @@ def test_stdio_handles_mcp_initialize_and_exposes_tools(tmp_path):
     assert len(tools) == 9
 
 
-def test_stdio_delete_notebook_removes_entry_from_active_state(tmp_path):
-    env = os.environ.copy()
-    env["MARM_DB_PATH"] = str(tmp_path / "stdio-notebook.db")
-    env["MARM_ANALYTICS_DB_PATH"] = str(tmp_path / "stdio-notebook-analytics.db")
+def test_stdio_delete_notebook_removes_entry_from_active_state(monkeypatch, tmp_path):
+    stdio = _isolated_stdio(monkeypatch, tmp_path)
 
-    def message(msg):
-        return (json.dumps(msg) + "\n").encode("utf-8")
-
-    stdin_data = (
-        message({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
-            "protocolVersion": "2024-11-05",
-            "capabilities": {},
-            "clientInfo": {"name": "test-client", "version": "0.1"},
-        }})
-        + message({"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}})
-        + message({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {
-            "name": "marm_notebook",
-            "arguments": {"action": "add", "name": "smoke_test_entry", "data": "temporary regression fixture"},
-        }})
-        + message({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {
-            "name": "marm_notebook",
-            "arguments": {"action": "use", "names": "smoke_test_entry"},
-        }})
-        + message({"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {
-            "name": "marm_delete",
-            "arguments": {"type": "notebook", "target": "smoke_test_entry"},
-        }})
-        + message({"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {
-            "name": "marm_notebook",
-            "arguments": {"action": "status"},
-        }})
-        # Drain calls — marm_delete races with shutdown; extra messages keep stdin
-        # open until all responses including delete are written before EOF.
-        + message({"jsonrpc": "2.0", "id": 6, "method": "tools/call", "params": {
-            "name": "marm_notebook",
-            "arguments": {"action": "status"},
-        }})
-        + message({"jsonrpc": "2.0", "id": 7, "method": "tools/call", "params": {
-            "name": "marm_notebook",
-            "arguments": {"action": "status"},
-        }})
-        + message({"jsonrpc": "2.0", "id": 8, "method": "tools/call", "params": {
-            "name": "marm_notebook",
-            "arguments": {"action": "status"},
-        }})
-    )
-
-    result = subprocess.run(
-        [sys.executable, "-m", "marm_mcp_server.server_stdio"],
-        input=stdin_data,
-        cwd=os.getcwd(),
-        env=env,
-        capture_output=True,
-        timeout=30,
-    )
-
-    assert result.returncode == 0, result.stderr.decode("utf-8", errors="replace")[:500]
-
-    responses = {}
-    for line in result.stdout.splitlines():
-        msg = json.loads(line)
-        if "id" in msg:
-            responses[msg["id"]] = msg
-
-    add_result = json.loads(responses[2]["result"]["content"][0]["text"])
+    add_result = asyncio.run(stdio.marm_notebook(
+        action="add",
+        name="smoke_test_entry",
+        data="temporary regression fixture",
+    ))
     assert add_result["status"] == "success"
 
-    use_result = json.loads(responses[3]["result"]["content"][0]["text"])
+    use_result = asyncio.run(stdio.marm_notebook(
+        action="use",
+        names="smoke_test_entry",
+    ))
     assert use_result["activated_entries"] == ["smoke_test_entry"]
 
-    delete_result = json.loads(responses[4]["result"]["content"][0]["text"])
+    delete_result = asyncio.run(stdio.marm_delete(
+        type="notebook",
+        target="smoke_test_entry",
+    ))
     assert delete_result["deleted"] is True
 
-    with sqlite3.connect(env["MARM_DB_PATH"]) as conn:
+    with stdio.memory.get_connection() as conn:
         remaining = conn.execute(
             "SELECT COUNT(*) FROM notebook_entries WHERE name = ?",
             ("smoke_test_entry",),
         ).fetchone()[0]
     assert remaining == 0
 
-    status_response = next((responses[i] for i in (5, 6, 7, 8) if i in responses), None)
-    if status_response is not None:
-        status_result = json.loads(status_response["result"]["content"][0]["text"])
-        assert status_result["active_entries"] == [], (
-            f"Deleted entry still active after marm_delete(type='notebook'): {status_result['active_entries']}"
-        )
-
-
-def test_stdio_notebook_session_name_scopes_active_state(tmp_path):
-    env = os.environ.copy()
-    env["MARM_DB_PATH"] = str(tmp_path / "stdio-notebook-scope.db")
-    env["MARM_ANALYTICS_DB_PATH"] = str(tmp_path / "stdio-notebook-scope-analytics.db")
-
-    def message(msg):
-        return (json.dumps(msg) + "\n").encode("utf-8")
-
-    stdin_data = (
-        message({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
-            "protocolVersion": "2024-11-05",
-            "capabilities": {},
-            "clientInfo": {"name": "test-client", "version": "0.1"},
-        }})
-        + message({"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}})
-        + message({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {
-            "name": "marm_notebook",
-            "arguments": {"action": "add", "name": "alpha_rule", "data": "alpha scoped instruction"},
-        }})
-        + message({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {
-            "name": "marm_notebook",
-            "arguments": {"action": "use", "names": "alpha_rule", "session_name": "alpha"},
-        }})
-        + message({"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {
-            "name": "marm_notebook",
-            "arguments": {"action": "status", "session_name": "alpha"},
-        }})
-        + message({"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {
-            "name": "marm_notebook",
-            "arguments": {"action": "status", "session_name": "main"},
-        }})
-        + message({"jsonrpc": "2.0", "id": 6, "method": "tools/call", "params": {
-            "name": "marm_notebook",
-            "arguments": {"action": "status", "session_name": "alpha"},
-        }})
-        + message({"jsonrpc": "2.0", "id": 7, "method": "tools/call", "params": {
-            "name": "marm_notebook",
-            "arguments": {"action": "status", "session_name": "alpha"},
-        }})
-        # Drain calls — status responses race with shutdown; extra messages keep stdin
-        # open until all earlier responses are flushed before EOF.
-        + message({"jsonrpc": "2.0", "id": 8, "method": "tools/call", "params": {
-            "name": "marm_notebook",
-            "arguments": {"action": "status", "session_name": "alpha"},
-        }})
-        + message({"jsonrpc": "2.0", "id": 9, "method": "tools/call", "params": {
-            "name": "marm_notebook",
-            "arguments": {"action": "status", "session_name": "alpha"},
-        }})
-        + message({"jsonrpc": "2.0", "id": 10, "method": "tools/call", "params": {
-            "name": "marm_notebook",
-            "arguments": {"action": "status", "session_name": "alpha"},
-        }})
+    status_result = asyncio.run(stdio.marm_notebook(action="status"))
+    assert status_result["active_entries"] == [], (
+        f"Deleted entry still active after marm_delete(type='notebook'): {status_result['active_entries']}"
     )
 
-    result = subprocess.run(
-        [sys.executable, "-m", "marm_mcp_server.server_stdio"],
-        input=stdin_data,
-        cwd=os.getcwd(),
-        env=env,
-        capture_output=True,
-        timeout=30,
-    )
 
-    assert result.returncode == 0, result.stderr.decode("utf-8", errors="replace")[:500]
+def test_stdio_notebook_session_name_scopes_active_state(monkeypatch, tmp_path):
+    stdio = _isolated_stdio(monkeypatch, tmp_path)
 
-    responses = {}
-    for line in result.stdout.splitlines():
-        msg = json.loads(line)
-        if "id" in msg:
-            responses[msg["id"]] = msg
+    asyncio.run(stdio.marm_notebook(
+        action="add",
+        name="alpha_rule",
+        data="alpha scoped instruction",
+    ))
+    asyncio.run(stdio.marm_notebook(
+        action="use",
+        names="alpha_rule",
+        session_name="alpha",
+    ))
 
-    # Accept any alpha status response from id=4 onward; drain calls ensure it is flushed.
-    alpha_status_response = next((responses[i] for i in range(4, 11) if i in responses), None)
-    assert alpha_status_response is not None, f"Missing STDIO responses: {sorted(responses)}"
+    alpha_status = asyncio.run(stdio.marm_notebook(action="status", session_name="alpha"))
+    main_status = asyncio.run(stdio.marm_notebook(action="status", session_name="main"))
 
-    alpha_status = json.loads(alpha_status_response["result"]["content"][0]["text"])
     assert alpha_status["active_entries"] == ["alpha_rule"]
+    assert main_status["active_entries"] == []
 
 
-def test_stdio_log_entry_without_session_uses_active_session(tmp_path):
-    env = os.environ.copy()
-    env["MARM_DB_PATH"] = str(tmp_path / "stdio-session.db")
-    env["MARM_ANALYTICS_DB_PATH"] = str(tmp_path / "stdio-session-analytics.db")
+def test_stdio_log_entry_without_session_uses_active_session(monkeypatch, tmp_path):
+    stdio = _isolated_stdio(monkeypatch, tmp_path)
 
-    def message(msg):
-        return (json.dumps(msg) + "\n").encode("utf-8")
-
-    stdin_data = (
-        message({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
-            "protocolVersion": "2024-11-05",
-            "capabilities": {},
-            "clientInfo": {"name": "test-client", "version": "0.1"},
-        }})
-        + message({"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}})
-        + message({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {
-            "name": "marm_log_session",
-            "arguments": {"session_name": "myproject"},
-        }})
-        # No session_name — should route to "myproject" via active_log_session
-        + message({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {
-            "name": "marm_log_entry",
-            "arguments": {"entry": "2026-05-20-setup-initial scaffolding done"},
-        }})
-        + message({"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {
-            "name": "marm_log_show",
-            "arguments": {"session_name": "myproject"},
-        }})
-        + message({"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {
-            "name": "marm_log_show",
-            "arguments": {"session_name": "main"},
-        }})
-        + message({"jsonrpc": "2.0", "id": 6, "method": "tools/call", "params": {
-            "name": "marm_log_show",
-            "arguments": {"session_name": "myproject"},
-        }})
-        + message({"jsonrpc": "2.0", "id": 7, "method": "tools/call", "params": {
-            "name": "marm_log_show",
-            "arguments": {"session_name": "main"},
-        }})
-    )
-
-    result = subprocess.run(
-        [sys.executable, "-m", "marm_mcp_server.server_stdio"],
-        input=stdin_data,
-        cwd=os.getcwd(),
-        env=env,
-        capture_output=True,
-        timeout=30,
-    )
-
-    assert result.returncode == 0, result.stderr.decode("utf-8", errors="replace")[:500]
-
-    responses = {}
-    for line in result.stdout.splitlines():
-        msg = json.loads(line)
-        if "id" in msg:
-            responses[msg["id"]] = msg
-
-    switch_result = json.loads(responses[2]["result"]["content"][0]["text"])
+    switch_result = asyncio.run(stdio.marm_log_session(session_name="myproject"))
     assert switch_result["status"] == "success"
 
-    with sqlite3.connect(env["MARM_DB_PATH"]) as conn:
+    asyncio.run(stdio.marm_log_entry(
+        entry="2026-05-20-setup-initial scaffolding done",
+    ))
+
+    with stdio.memory.get_connection() as conn:
         project_count = conn.execute(
             "SELECT COUNT(*) FROM log_entries WHERE session_name = ?",
             ("myproject",),
@@ -338,6 +198,50 @@ def test_stdio_log_entry_without_session_uses_active_session(tmp_path):
 
     assert project_count == 1, f"Entry did not land in 'myproject'; count={project_count}"
     assert main_count == 0, f"Entry incorrectly landed in 'main'; count={main_count}"
+
+
+def test_stdio_inprocess_client_wraps_notebook_delete_and_log_results(monkeypatch, tmp_path):
+    stdio = _isolated_stdio(monkeypatch, tmp_path)
+
+    async def run():
+        async with Client(stdio.mcp) as client:
+            add_result = await client.call_tool(
+                "marm_notebook",
+                {
+                    "action": "add",
+                    "name": "envelope_entry",
+                    "data": "temporary envelope fixture",
+                },
+            )
+            use_result = await client.call_tool(
+                "marm_notebook",
+                {"action": "use", "names": "envelope_entry"},
+            )
+            delete_result = await client.call_tool(
+                "marm_delete",
+                {"type": "notebook", "target": "envelope_entry"},
+            )
+            session_result = await client.call_tool(
+                "marm_log_session",
+                {"session_name": "envelope-session"},
+            )
+            entry_result = await client.call_tool(
+                "marm_log_entry",
+                {"entry": "2026-06-03-envelope-routing verified"},
+            )
+        return add_result, use_result, delete_result, session_result, entry_result
+
+    add_result, use_result, delete_result, session_result, entry_result = asyncio.run(run())
+
+    for result in (add_result, use_result, delete_result, session_result, entry_result):
+        assert result.content
+        assert result.content[0].type == "text"
+
+    assert json.loads(add_result.content[0].text)["status"] == "success"
+    assert json.loads(use_result.content[0].text)["activated_entries"] == ["envelope_entry"]
+    assert json.loads(delete_result.content[0].text)["deleted"] is True
+    assert json.loads(session_result.content[0].text)["status"] == "success"
+    assert json.loads(entry_result.content[0].text)["status"] == "success"
 
 
 def _base_rpc_stdin():
@@ -355,6 +259,7 @@ def _base_rpc_stdin():
     )
 
 
+@pytest.mark.slow_stdio
 def test_stdio_log_file_is_created_and_contains_startup(tmp_path):
     log_dir = tmp_path / "logs"
     env = os.environ.copy()
@@ -380,6 +285,7 @@ def test_stdio_log_file_is_created_and_contains_startup(tmp_path):
     assert "startup" in content, f"Expected 'startup' in log, got: {content[:500]}"
 
 
+@pytest.mark.slow_stdio
 def test_stdio_log_records_tool_call_and_ok_status(tmp_path):
     log_dir = tmp_path / "logs"
     env = os.environ.copy()
@@ -427,6 +333,7 @@ def test_stdio_log_records_tool_call_and_ok_status(tmp_path):
     assert "OK marm_log_session" in log_content, f"Expected OK entry, got: {log_content}"
 
 
+@pytest.mark.slow_stdio
 def test_stdio_debug_mode_logs_session_name_not_content(tmp_path):
     log_dir = tmp_path / "logs"
     env = os.environ.copy()
@@ -474,6 +381,7 @@ def test_stdio_debug_mode_logs_session_name_not_content(tmp_path):
     assert "session=debug-session" in log_content, f"Expected session name in DEBUG log, got: {log_content}"
 
 
+@pytest.mark.slow_stdio
 def test_stdio_log_does_not_contain_stored_memory_content(tmp_path):
     log_dir = tmp_path / "logs"
     env = os.environ.copy()
@@ -516,6 +424,7 @@ def test_stdio_log_does_not_contain_stored_memory_content(tmp_path):
     )
 
 
+@pytest.mark.slow_stdio
 def test_stdio_context_log_uses_write_queue_when_enabled(tmp_path):
     env = os.environ.copy()
     env["MARM_DB_PATH"] = str(tmp_path / "stdio-queue.db")

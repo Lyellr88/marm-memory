@@ -42,7 +42,7 @@ class DeleteRequest(BaseModel):
 
 class StagedSummaryItem(BaseModel):
     candidate_id: str = Field(..., description="Compaction staging candidate ID")
-    source_memory_ids: list[str] = Field(..., description="Source memory IDs — must match staged candidate exactly")
+    source_memory_ids: Optional[list[str]] = Field(default=None, description="Source memory IDs — omit to use the staged candidate's IDs automatically; if provided, must match exactly")
     suggested_summary: str = Field(..., description="Agent-generated summary of the source memories")
 
 

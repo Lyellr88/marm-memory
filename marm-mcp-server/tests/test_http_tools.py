@@ -872,15 +872,39 @@ def test_http_mcp_tool_response_orders_protocol_before_compaction(monkeypatch, t
     )
 
     async def run():
-        call = AsyncMock(return_value=resp)
-        return await server._mcp_tool_call_tracker(req, call)
+        async def body_iter():
+            yield body
 
-    response = asyncio.run(run())
-    content = json.loads(response.body)["result"]["content"]
+        # Call 1: protocol is injected, compaction is suppressed on this call
+        resp1 = MagicMock()
+        resp1.status_code = 200
+        resp1.headers = MagicMock()
+        resp1.headers.items.return_value = [("x-request-id", "1")]
+        resp1.body_iterator = body_iter()
+        call1 = AsyncMock(return_value=resp1)
+        r1 = await server._mcp_tool_call_tracker(req, call1)
 
-    assert content[0]["text"].startswith("[MARM SESSION INIT]")
-    assert content[1]["text"].startswith("[MARM COMPACTION REQUEST]")
-    assert candidate_id in content[1]["text"]
+        # Call 2: protocol already delivered, compaction fires
+        resp2 = MagicMock()
+        resp2.status_code = 200
+        resp2.headers = MagicMock()
+        resp2.headers.items.return_value = [("x-request-id", "2")]
+        resp2.body_iterator = body_iter()
+        call2 = AsyncMock(return_value=resp2)
+        r2 = await server._mcp_tool_call_tracker(req, call2)
+
+        return r1, r2
+
+    r1, r2 = asyncio.run(run())
+
+    content1 = json.loads(r1.body)["result"]["content"]
+    assert content1[0]["text"].startswith("[MARM SESSION INIT]"), "protocol must inject on first call"
+    assert not any("[MARM COMPACTION REQUEST]" in c["text"] for c in content1), \
+        "compaction must not co-inject with protocol on first call"
+
+    content2 = json.loads(r2.body)["result"]["content"]
+    assert content2[0]["text"].startswith("[MARM COMPACTION REQUEST]"), "compaction must inject on second call"
+    assert candidate_id in content2[0]["text"]
 
 
 def test_http_protocol_injected_on_first_mcp_tool_call_not_on_second(monkeypatch, tmp_path):

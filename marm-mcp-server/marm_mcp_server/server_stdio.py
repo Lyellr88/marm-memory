@@ -658,14 +658,16 @@ async def marm_compaction(
     candidate_id: Optional[str] = None,
 ) -> dict:
     """
-    Unified compaction workflow.
+    Compact related memories into a single summary to reduce context bloat.
 
-    action="status": lightweight counts and staged candidate IDs
-    action="candidates": full pending candidates with source previews and prompt
-    action="review": full staged proposals awaiting apply/discard
-    action="stage": submit agent-generated summaries
-    action="apply": apply a staged summary
-    action="discard": discard a staged summary
+    Workflow: status/candidates → stage → review → apply/discard
+
+    action="status"     — check if compaction candidates exist (run first)
+    action="candidates" — get pending candidates with source previews; each includes a ready-to-use prompt
+    action="stage"      — submit your summary: {candidate_id, suggested_summary}; source_memory_ids optional
+    action="review"     — inspect staged summaries before committing
+    action="apply"      — commit a staged summary; source memories are marked compacted
+    action="discard"    — reject a staged summary without touching source memories
     """
     try:
         from marm_mcp_server.core.models import CompactionRequest, StagedSummaryItem
@@ -685,7 +687,6 @@ async def marm_compaction(
                     key
                     for key in (
                         "candidate_id",
-                        "source_memory_ids",
                         "suggested_summary",
                     )
                     if key not in item
@@ -698,7 +699,7 @@ async def marm_compaction(
                 items.append(
                     StagedSummaryItem(
                         candidate_id=item["candidate_id"],
-                        source_memory_ids=item["source_memory_ids"],
+                        source_memory_ids=item.get("source_memory_ids"),
                         suggested_summary=item["suggested_summary"],
                     )
                 )
