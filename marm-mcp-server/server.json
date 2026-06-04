@@ -58,6 +58,10 @@
     {
       "name": "marm_delete",
       "description": "Delete a log session, log entry, or notebook entry (type='log'|'notebook')"
+    },
+    {
+      "name": "marm_compaction",
+      "description": "Review, stage, apply, or discard agent-assisted memory compaction candidates"
     }
   ],
   "capabilities": {
