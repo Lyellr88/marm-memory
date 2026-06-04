@@ -487,6 +487,36 @@ async def test_unified_compaction_stage_action(monkeypatch, tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_stage_succeeds_without_source_memory_ids(monkeypatch, tmp_path):
+    """source_memory_ids is optional — server uses staged IDs when omitted."""
+    import marm_mcp_server.endpoints.compaction as ep
+    from marm_mcp_server.core.models import CompactionRequest, StagedSummaryItem
+
+    mem = MARMMemory(str(tmp_path / "memory.db"))
+    monkeypatch.setattr(ep, "memory", mem)
+
+    similar = _make_similar_embeddings(3)
+    ids = [_insert_memory_row(mem, "sess", f"c{i}", similar[i], content_hash=f"ch{i}") for i in range(3)]
+    snap = {ids[i]: f"ch{i}" for i in range(3)}
+    row_id = _insert_staging_row(mem, "sess", ids, snapshot=snap)
+
+    result = await ep.marm_compaction(
+        CompactionRequest(
+            action="stage",
+            summaries=[
+                StagedSummaryItem(
+                    candidate_id=row_id,
+                    suggested_summary="Summary without providing source IDs.",
+                )
+            ],
+        )
+    )
+
+    assert result["results"][0]["status"] == "summary_staged"
+    assert _get_staging_row(mem, row_id)["suggested_summary"] == "Summary without providing source IDs."
+
+
+@pytest.mark.asyncio
 async def test_unified_compaction_stage_requires_summaries(monkeypatch, tmp_path):
     from pydantic import ValidationError
     from marm_mcp_server.core.models import CompactionRequest

@@ -113,7 +113,7 @@ async def test_find_semantic_duplicate_returns_id_when_similarity_above_threshol
 
     monkeypatched_recall_called = []
 
-    async def mock_recall(query, session=None, limit=5):
+    async def mock_recall(query, session=None, limit=5, query_vec=None):
         monkeypatched_recall_called.append(query)
         return [{"id": "existing-id", "similarity": 0.95, "content": "similar content"}]
 
@@ -130,7 +130,7 @@ async def test_find_semantic_duplicate_returns_id_when_similarity_above_threshol
 async def test_find_semantic_duplicate_returns_none_when_similarity_below_threshold(tmp_path):
     mem = MARMMemory(str(tmp_path / "memory.db"))
 
-    async def mock_recall(query, session=None, limit=5):
+    async def mock_recall(query, session=None, limit=5, query_vec=None):
         return [{"id": "existing-id", "similarity": 0.85, "content": "similar content"}]
 
     mem._load_encoder_lazily = lambda: True
@@ -145,7 +145,7 @@ async def test_find_semantic_duplicate_returns_none_when_similarity_below_thresh
 async def test_find_semantic_duplicate_returns_none_when_no_results(tmp_path):
     mem = MARMMemory(str(tmp_path / "memory.db"))
 
-    async def mock_recall(query, session=None, limit=5):
+    async def mock_recall(query, session=None, limit=5, query_vec=None):
         return []
 
     mem._load_encoder_lazily = lambda: True
@@ -178,7 +178,7 @@ async def test_semantic_merge_returns_existing_id_and_skips_new_row(monkeypatch,
 
     first_id = await mem.store_memory("fixed the authentication bug in login flow", "session-a")
 
-    async def mock_semantic_dup(memory, content, session_name, threshold):
+    async def mock_semantic_dup(memory, content, session_name, threshold, query_vec=None):
         return first_id
 
     monkeypatch.setattr(memory_module, "find_semantic_duplicate", mock_semantic_dup)
@@ -205,7 +205,7 @@ async def test_semantic_merge_writes_merged_content_to_existing_row(monkeypatch,
 
     first_id = await mem.store_memory("fixed the authentication bug", "session-a")
 
-    async def mock_semantic_dup(memory, content, session_name, threshold):
+    async def mock_semantic_dup(memory, content, session_name, threshold, query_vec=None):
         return first_id
 
     monkeypatch.setattr(memory_module, "find_semantic_duplicate", mock_semantic_dup)
@@ -232,7 +232,7 @@ async def test_dissimilar_content_stores_as_new_row(monkeypatch, tmp_path):
 
     first_id = await mem.store_memory("fixed the authentication bug", "session-a")
 
-    async def mock_no_match(memory, content, session_name, threshold):
+    async def mock_no_match(memory, content, session_name, threshold, query_vec=None):
         return None
 
     monkeypatch.setattr(memory_module, "find_semantic_duplicate", mock_no_match)
@@ -277,7 +277,7 @@ async def test_find_semantic_duplicate_passes_correct_session_to_recall(tmp_path
 
     sessions_seen = []
 
-    async def mock_recall(query, session=None, limit=5):
+    async def mock_recall(query, session=None, limit=5, query_vec=None):
         sessions_seen.append(session)
         return []
 
@@ -300,7 +300,7 @@ async def test_similar_content_in_different_session_stores_as_new_row(monkeypatc
     first_id = await mem.store_memory("fixed the authentication bug", "session-a")
 
     # find_semantic_duplicate is session-scoped; no match exists in session-b
-    async def mock_no_cross_session_match(memory, content, session_name, threshold):
+    async def mock_no_cross_session_match(memory, content, session_name, threshold, query_vec=None):
         assert session_name == "session-b"
         return None
 

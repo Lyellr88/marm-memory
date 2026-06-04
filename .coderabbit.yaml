@@ -1,0 +1,66 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+
+language: en-US
+tone_instructions: >
+  Be concise and pragmatic. Focus review comments on high and medium priority
+  issues only: correctness bugs, security risks, data loss risks, concurrency
+  hazards, performance regressions, broken tests, release metadata drift, and
+  major maintainability problems. Do not comment on style preferences, naming
+  preferences, formatting, doc wording, missing docstrings, minor refactors, or
+  low-value optimizations unless they directly create a real defect.
+
+reviews:
+  profile: chill
+  request_changes_workflow: false
+  review_details: true
+  poem: false
+  sequence_diagrams: false
+  suggested_labels: false
+  suggested_reviewers: false
+
+  path_filters:
+    - "!**/dist/**"
+    - "!**/build/**"
+    - "!**/__pycache__/**"
+    - "!**/.pytest_cache/**"
+    - "!**/scripts/out/**"
+    - "!**/*.egg-info/**"
+
+  pre_merge_checks:
+    docstrings:
+      mode: off
+    title:
+      mode: off
+    description:
+      mode: off
+
+  path_instructions:
+    - path: "**/*.md"
+      instructions: >
+        Only flag documentation issues that are materially wrong, misleading for
+        installation/release behavior, or inconsistent with live MCP behavior.
+        Skip style, phrasing, formatting, and wording preferences.
+    - path: "**/tests/**"
+      instructions: >
+        Focus on tests that are flaky, non-isolated, incorrectly asserting
+        behavior, or missing coverage for a changed high-risk path. Skip minor
+        naming, comments, and layout preferences.
+    - path: "**/*.py"
+      instructions: >
+        Prioritize runtime correctness, async/concurrency safety, SQLite
+        transaction safety, auth/rate-limit behavior, release-breaking packaging
+        issues, and MCP protocol compatibility.
+
+  finishing_touches:
+    docstrings:
+      enabled: false
+    unit_tests:
+      enabled: false
+    simplify:
+      enabled: false
+
+  tools:
+    markdownlint:
+      enabled: false
+    languagetool:
+      enabled: false

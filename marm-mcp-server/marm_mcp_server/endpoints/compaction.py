@@ -1,5 +1,6 @@
 """Compaction MCP endpoint tools — V2 agent-driven summarization, V3 staged apply, V4 write-queue + auto-apply."""
 
+import asyncio
 import json
 import uuid
 from datetime import datetime, timezone
@@ -161,7 +162,7 @@ async def marm_stage_compaction_summaries(request: StageCompactionSummariesReque
 
             staged_source_ids = json.loads(source_ids_json)
 
-            if sorted(source_ids_submitted) != sorted(staged_source_ids):
+            if source_ids_submitted is not None and sorted(source_ids_submitted) != sorted(staged_source_ids):
                 results.append(
                     {
                         "candidate_id": candidate_id,
@@ -450,7 +451,8 @@ async def _apply_compaction_write(candidate_id: str) -> str:
             summary_embedding = None
             if memory._load_encoder_lazily():
                 try:
-                    summary_embedding = memory.encoder.encode(suggested_summary).tobytes()
+                    summary_vec = await asyncio.to_thread(memory._encode_sync, suggested_summary)
+                    summary_embedding = summary_vec.tobytes()
                 except Exception:
                     pass
 
@@ -739,10 +741,16 @@ def _compaction_status() -> dict:
 
 @router.post("/marm_compaction", operation_id="marm_compaction")
 async def marm_compaction(request: CompactionRequest):
-    """Unified public compaction tool.
+    """Compact related memories into a single summary to reduce context bloat.
 
-    Keeps the MCP surface to one tool while raw route functions remain internal
-    implementation helpers and debug HTTP endpoints.
+    Workflow: status/candidates → stage → review → apply/discard
+
+    action="status"     — check if compaction candidates exist (run first)
+    action="candidates" — get pending candidates with source previews; each includes a ready-to-use prompt
+    action="stage"      — submit your summary: {candidate_id, suggested_summary}; source_memory_ids optional
+    action="review"     — inspect staged summaries before committing
+    action="apply"      — commit a staged summary; source memories are marked compacted
+    action="discard"    — reject a staged summary without touching source memories
     """
     if request.action == "status":
         return _compaction_status()

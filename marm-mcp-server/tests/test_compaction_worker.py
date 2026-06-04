@@ -340,7 +340,7 @@ async def test_write_counter_increments_on_layer2_merge(monkeypatch, tmp_path):
     count_after_first = mem._session_write_counts.get("sess-l2", 0)
 
     # Patch the name in memory_module's namespace — that's what store_memory calls
-    async def _fake_semantic_dup(memory, content, session, threshold):
+    async def _fake_semantic_dup(memory, content, session, threshold, query_vec=None):
         return first_id
 
     monkeypatch.setattr(memory_module, "find_semantic_duplicate", _fake_semantic_dup)

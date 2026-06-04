@@ -328,7 +328,6 @@ def _build_compaction_prompt_block(row: tuple, byte_budget: int) -> dict:
         "summary using only the source previews below, then call:\n\n"
         "marm_compaction(action=\"stage\", summaries=[{"
         "\"candidate_id\": \"<candidate_id>\", "
-        "\"source_memory_ids\": [...], "
         "\"suggested_summary\": \"...\""
         "}])\n\n"
         f"candidate_id: {candidate_id}\n"

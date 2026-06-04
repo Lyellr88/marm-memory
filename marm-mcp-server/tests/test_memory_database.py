@@ -205,3 +205,45 @@ def test_close_all_drains_connection_pool(tmp_path):
     memory.connection_pool.close_all()
 
     assert memory.connection_pool.pool.empty()
+
+
+@pytest.mark.asyncio
+async def test_mismatched_embedding_dimension_skipped_with_signal_without_breaking_recall(tmp_path):
+    """Vectors stored by a different model (wrong dimension) must not silently poison recall.
+
+    Regression for: old embeddings surviving a model change cause shape-mismatch errors
+    swallowed by bare `except Exception: continue`, making memories vanish with no signal.
+    """
+    import numpy as np
+    import uuid
+
+    memory = MARMMemory(str(tmp_path / "memory.db"))
+    correct_dim = 384
+    wrong_dim = 768
+
+    correct_vec = np.ones(correct_dim, dtype=np.float32)
+    correct_vec /= np.linalg.norm(correct_vec)
+    wrong_vec = np.ones(wrong_dim, dtype=np.float32)
+    wrong_vec /= np.linalg.norm(wrong_vec)
+
+    good_id = str(uuid.uuid4())
+    bad_id = str(uuid.uuid4())
+
+    with memory.get_connection() as conn:
+        conn.execute(
+            "INSERT INTO memories (id, session_name, content, embedding, content_hash, timestamp, context_type, metadata) VALUES (?, ?, ?, ?, ?, datetime('now'), 'general', '{}')",
+            (good_id, "sess", "correct dimension memory", correct_vec.tobytes(), "hash-good"),
+        )
+        conn.execute(
+            "INSERT INTO memories (id, session_name, content, embedding, content_hash, timestamp, context_type, metadata) VALUES (?, ?, ?, ?, ?, datetime('now'), 'general', '{}')",
+            (bad_id, "sess", "wrong dimension memory", wrong_vec.tobytes(), "hash-bad"),
+        )
+
+    query_vec = np.ones(correct_dim, dtype=np.float32)
+    query_vec /= np.linalg.norm(query_vec)
+
+    results = await memory.recall_similar("test query", session="sess", limit=10, query_vec=query_vec)
+
+    result_ids = {r["id"] for r in results}
+    assert good_id in result_ids, "correct-dimension memory must be returned"
+    assert bad_id not in result_ids, "wrong-dimension memory must be skipped, not crash recall"

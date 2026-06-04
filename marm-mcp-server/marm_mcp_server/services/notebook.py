@@ -1,5 +1,6 @@
 """Shared notebook action dispatcher for MARM MCP Server."""
 
+import asyncio
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -14,7 +15,7 @@ async def _add(name: Optional[str], data: Optional[str], **_) -> dict:
     embedding_bytes = None
     if memory.encoder:
         try:
-            embedding = memory.encoder.encode(data)
+            embedding = await asyncio.to_thread(memory._encode_sync, data)
             embedding_bytes = embedding.tobytes()
         except Exception:
             pass
