@@ -1,6 +1,6 @@
 # Changelog
 
-## MARM Protocol – v2.2.9 Change Log
+## MARM Protocol Changelog
 
 ### Version v1 - Prototype to Beta Foundation
 

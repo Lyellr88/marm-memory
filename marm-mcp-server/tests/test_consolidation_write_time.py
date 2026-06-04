@@ -2,6 +2,7 @@
 
 import json
 
+import numpy as np
 import pytest
 
 from marm_mcp_server.core.consolidation import find_semantic_duplicate
@@ -228,11 +229,17 @@ async def test_dissimilar_content_stores_as_new_row(monkeypatch, tmp_path):
 
     monkeypatch.setattr(memory_module, "CONSOLIDATION_ENABLED", True)
     mem = MARMMemory(str(tmp_path / "memory.db"))
-    mem._encoder_failed = True
+
+    class FakeEncoder:
+        def encode(self, text):
+            return np.ones(3, dtype=np.float32)
+
+    mem.encoder = FakeEncoder()
 
     first_id = await mem.store_memory("fixed the authentication bug", "session-a")
 
     async def mock_no_match(memory, content, session_name, threshold, query_vec=None):
+        assert query_vec is not None
         return None
 
     monkeypatch.setattr(memory_module, "find_semantic_duplicate", mock_no_match)

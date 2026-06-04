@@ -25,8 +25,9 @@ DOCKER_IMAGE = "lyellr88/marm-mcp-server:latest"
 
 def pytest_env() -> dict[str, str]:
     env = os.environ.copy()
-    FAST_TEMP_ROOT.mkdir(parents=True, exist_ok=True)
-    temp_root = str(FAST_TEMP_ROOT)
+    temp_root_path = FAST_TEMP_ROOT / f"run-{os.getpid()}"
+    temp_root_path.mkdir(parents=True, exist_ok=True)
+    temp_root = str(temp_root_path)
     env["PYTEST_DEBUG_TEMPROOT"] = temp_root
     env["TMP"] = temp_root
     env["TEMP"] = temp_root
@@ -82,7 +83,7 @@ def pytest_base_command(args: argparse.Namespace) -> list[str]:
     marker_filters = []
     if not args.docker:
         marker_filters.append("not docker")
-    if args.fast:
+    if not args.slow:
         marker_filters.append("not slow_stdio")
     if marker_filters:
         command.extend(["-m", " and ".join(marker_filters)])
@@ -103,6 +104,11 @@ def parse_args() -> argparse.Namespace:
         "--fast",
         action="store_true",
         help="Run one non-Docker pytest pass with fast local defaults.",
+    )
+    parser.add_argument(
+        "--slow",
+        action="store_true",
+        help="Include slow subprocess STDIO transport tests.",
     )
     parser.add_argument(
         "--full",
@@ -147,6 +153,7 @@ def main() -> int:
     if args.full:
         args.compile = True
         args.clean_temp = True
+        args.slow = True
 
     if not SERVER_ROOT.exists():
         print(f"{RED}MCP server folder not found: {SERVER_ROOT}{RESET}")

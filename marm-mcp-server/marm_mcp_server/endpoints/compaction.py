@@ -301,6 +301,26 @@ async def _apply_compaction_write(candidate_id: str) -> str:
     Uses _committed to prevent the except-block ROLLBACK from firing after an
     explicit COMMIT or ROLLBACK in a validation branch.
     """
+    precomputed_summary_hash = None
+    precomputed_summary_embedding = None
+    try:
+        with memory.get_connection() as conn:
+            row = conn.execute(
+                "SELECT suggested_summary FROM compaction_staging WHERE id = ?",
+                (candidate_id,),
+            ).fetchone()
+        if row and row[0]:
+            precomputed_summary = sanitize_content(row[0])
+            precomputed_summary_hash = compute_content_hash(precomputed_summary)
+            if memory._load_encoder_lazily():
+                summary_vec = await asyncio.to_thread(
+                    memory._encode_sync, precomputed_summary
+                )
+                precomputed_summary_embedding = summary_vec.tobytes()
+    except Exception:
+        precomputed_summary_hash = None
+        precomputed_summary_embedding = None
+
     with memory.get_connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
         _committed = False
@@ -448,13 +468,11 @@ async def _apply_compaction_write(candidate_id: str) -> str:
             # All validations pass — sanitize, then compute embedding and write
             suggested_summary = sanitize_content(suggested_summary)
             summary_content_hash = compute_content_hash(suggested_summary)
-            summary_embedding = None
-            if memory._load_encoder_lazily():
-                try:
-                    summary_vec = await asyncio.to_thread(memory._encode_sync, suggested_summary)
-                    summary_embedding = summary_vec.tobytes()
-                except Exception:
-                    pass
+            summary_embedding = (
+                precomputed_summary_embedding
+                if precomputed_summary_hash == summary_content_hash
+                else None
+            )
 
             summary_id = str(uuid.uuid4())
             compacted_at = now

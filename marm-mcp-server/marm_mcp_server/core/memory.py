@@ -15,13 +15,15 @@ import re
 
 
 def _safe_print(msg: str) -> None:
-    """Print with stderr fallback — prevents charmap UnicodeEncodeError on Windows and avoids
-    polluting STDIO stdout which is reserved for JSON-RPC."""
-    try:
-        print(msg)
-    except UnicodeEncodeError:
-        sys.stderr.buffer.write((msg + "\n").encode("utf-8", errors="replace"))
-        sys.stderr.buffer.flush()
+    """Write diagnostics to stderr so STDIO stdout stays JSON-RPC clean."""
+    stderr_buffer = getattr(sys.stderr, "buffer", None)
+    if stderr_buffer is not None:
+        stderr_buffer.write((msg + "\n").encode("utf-8", errors="replace"))
+        stderr_buffer.flush()
+    else:
+        sys.stderr.write(msg + "\n")
+        sys.stderr.flush()
+
 
 def _strip_script_tags(text: str) -> str:
     lower = text.lower()
@@ -535,7 +537,7 @@ class MARMMemory:
                 pre_embedding = await asyncio.to_thread(self._encode_sync, sanitized_content)
                 pre_embedding_bytes = pre_embedding.tobytes()
             except Exception as e:
-                print(f"Failed to generate embedding: {e}")
+                _safe_print(f"Failed to generate embedding: {e}")
 
         # Layer 2: semantic near-duplicate check — skipped gracefully if encoder unavailable
         if CONSOLIDATION_ENABLED:
