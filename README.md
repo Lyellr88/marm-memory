@@ -1,9 +1,9 @@
 <div align="center">
 <picture>
 <img src="https://raw.githubusercontent.com/Lyellr88/MARM-Systems/MARM-main/media/marm-logo.svg"
-     alt="MARM - The AI That Remembers Your Conversations"
-     width="700"
-     height="350">
+     alt="MARM - The AI That Remembers Your Conversations."
+     width="550"
+     height="250">
 </picture>
 <h1 align="center">MARM: The AI That Remembers Your Conversations v2.9.1</h1>
 
@@ -23,7 +23,6 @@
 ## Table of Contents
 
 - [Why MARM MCP](#why-marm-mcp-the-problem--solution)
-- [Demo Video](#marm-demo-video-docker-install--persistent-ai-memory-in-action)
 - [Quick Start](#-quick-start-for-mcp-http--stdio)
 - [Connect Your Client Fast](#connect-your-client-fast)
 - [Complete MCP Tool Suite](#complete-mcp-tool-suite-9-tools)
@@ -49,6 +48,12 @@ The point is not "more tools." MARM exposes **9 focused MCP tools** and moves th
 | **Intelligence layer** | Semantic search, auto-classification, write-time consolidation, and compaction candidates | Keeps recall useful as memory grows instead of letting duplicates pile up |
 | **Deployment layer** | Pip, Docker, STDIO, HTTP, `--swarm`, `--swarm-max`, and `--trusted` | Lets you run private local memory or shared multi-agent memory with the same MCP surface |
 
+### MARM Demo
+
+<https://github.com/user-attachments/assets/663014e7-6813-4efc-be3c-1044b92ff496>
+
+MARM gives AI agents persistent local memory, shared context, write-queue safety, swarm presets, and compaction so recall stays clean.
+
 ### Start Now (pip)
 
 Install once:
@@ -72,12 +77,6 @@ pip install marm-mcp-server
 
 > “MARM proved exceptionally valuable for DevOps and complex Docker projects. It maintained 100% memory accuracy, preserved context on 46 services and network configurations, and enabled standards-compliant Python/Terraform work. Semantic search and automated session logs made solving async and infrastructure issues far easier. **Value Rating:** 9.5/10 - indispensable for enterprise-grade memory, technical standards, and long-session code management.”
 > @joe_nyc, Discord user (DevOps/Infrastructure Engineer)  
-
-## MARM Demo Video: Docker Install + Persistent AI Memory in Action
-
-<https://github.com/user-attachments/assets/c7c6a162-5408-4eda-a461-610b7e713dfe>
-
-Watch MARM install through Docker, connect to Claude, and share persistent memory across Claude, Gemini, and Qwen.
 
 ## 🚀 Quick Start for MCP (HTTP & STDIO)
 
@@ -213,14 +212,6 @@ docker run --rm -p 127.0.0.1:8002:8002 \
 See [`marm-dashboard/README.md`](marm-dashboard/README.md) for the full guide.
 
 ## Complete MCP Tool Suite (9 Tools)
-
-<div align="center">
-<picture>
-<img src="https://raw.githubusercontent.com/Lyellr88/MARM-Systems/MARM-main/media/mcp-tools.png"
-   height="550"
-   width="800"
-</picture>
-</div>
 
 **💡 Pro Tip:** You don't need to manually call these tools! Just tell your AI agent what you want in natural language:
 
