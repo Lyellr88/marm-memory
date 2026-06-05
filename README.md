@@ -1,6 +1,6 @@
 <div align="center">
 <picture>
-<img src="https://raw.githubusercontent.com/Lyellr88/MARM-Systems/MARM-main/media/marm-logo.svg"
+<img src="https://raw.githubusercontent.com/Lyellr88/MARM-Systems/MARM-main/assets/marm-logo.svg"
      alt="MARM - The AI That Remembers Your Conversations."
      width="550"
      height="250">
@@ -79,16 +79,6 @@ pip install marm-mcp-server
 > @joe_nyc, Discord user (DevOps/Infrastructure Engineer)  
 
 ## 🚀 Quick Start for MCP (HTTP & STDIO)
-
-<br>
-<div align="center">
-<picture>
-<img src="https://raw.githubusercontent.com/Lyellr88/MARM-Systems/MARM-main/media/install-options.png"
-   width="850"
-   height="500"
-</picture>
-</div>
-<br>
 
 ### Use this quick rule of thumb to choose your setup
 
@@ -184,6 +174,14 @@ Claude Code remains the recommended first setup path, but MARM also works with o
 
 ## MARM Dashboard
 
+<div align="center">
+<picture>
+<img src="https://raw.githubusercontent.com/Lyellr88/MARM-Systems/MARM-main/assets/marm-dashboard.png"
+   width="900"
+   height="625"
+</picture>
+</div>
+
 A local web UI for browsing and managing your MARM memory — separate from the MCP server, reads and writes the same `~/.marm/marm_memory.db`.
 
 | What it gives you | How it works |
@@ -213,6 +211,15 @@ See [`marm-dashboard/README.md`](marm-dashboard/README.md) for the full guide.
 
 ## Complete MCP Tool Suite (9 Tools)
 
+<div align="center">
+<picture>
+<img src="https://raw.githubusercontent.com/Lyellr88/MARM-Systems/MARM-main/assets/mcp-tools.png"
+   height="550"
+   width="800"
+</picture>
+</div>
+
+
 **💡 Pro Tip:** You don't need to manually call these tools! Just tell your AI agent what you want in natural language:
 
 - *"Claude, log this session as 'Project Alpha' and add this conversation as 'database design discussion'"*
@@ -238,14 +245,6 @@ The AI agent will automatically use the appropriate tools. Manual tool access is
 **Internal automation:** lifecycle initialization, documentation refresh, current date context, serialized write queue handling, and system checks are handled by the server instead of exposed as AI-facing tools. Optional compaction can detect duplicate memory clusters and nudge the connected agent to summarize them through `marm_compaction`. For server status, use the dashboard health panel or `curl http://localhost:8001/health`.
 
 ## Why MARM Holds Up
-
-<div align="center">
-<picture>
-<img src="https://raw.githubusercontent.com/Lyellr88/MARM-Systems/MARM-main/media/memory-workflow.png"
-   width="900"
-   height="625"
-</picture>
-</div>
 
 MARM keeps the AI-facing surface small while the server handles the infrastructure work:
 

@@ -1,9 +1,9 @@
 <div align="center">
 <picture>
-<img src="https://raw.githubusercontent.com/Lyellr88/MARM-Systems/MARM-main/media/marm-logo.svg"
-     alt="MARM - The AI That Remembers Your Conversations"
-     width="700"
-     height="350">
+<img src="https://raw.githubusercontent.com/Lyellr88/MARM-Systems/MARM-main/assets/marm-logo.svg"
+     alt="MARM - The AI That Remembers Your Conversations."
+     width="550"
+     height="250">
 </picture>
 <h1 align="center">MARM: The AI That Remembers Your Conversations v2.9.1</h1>
 
@@ -23,7 +23,6 @@
 ## Table of Contents
 
 - [Why MARM MCP](#why-marm-mcp-the-problem--solution)
-- [Demo Video](#marm-demo-video-docker-install--persistent-ai-memory-in-action)
 - [Quick Start](#-quick-start-for-mcp-http--stdio)
 - [Connect Your Client Fast](#connect-your-client-fast)
 - [Complete MCP Tool Suite](#complete-mcp-tool-suite-9-tools)
@@ -49,6 +48,12 @@ The point is not "more tools." MARM exposes **9 focused MCP tools** and moves th
 | **Intelligence layer** | Semantic search, auto-classification, write-time consolidation, and compaction candidates | Keeps recall useful as memory grows instead of letting duplicates pile up |
 | **Deployment layer** | Pip, Docker, STDIO, HTTP, `--swarm`, `--swarm-max`, and `--trusted` | Lets you run private local memory or shared multi-agent memory with the same MCP surface |
 
+### MARM Demo
+
+<https://github.com/user-attachments/assets/663014e7-6813-4efc-be3c-1044b92ff496>
+
+MARM gives AI agents persistent local memory, shared context, write-queue safety, swarm presets, and compaction so recall stays clean.
+
 ### Start Now (pip)
 
 Install once:
@@ -73,23 +78,7 @@ pip install marm-mcp-server
 > “MARM proved exceptionally valuable for DevOps and complex Docker projects. It maintained 100% memory accuracy, preserved context on 46 services and network configurations, and enabled standards-compliant Python/Terraform work. Semantic search and automated session logs made solving async and infrastructure issues far easier. **Value Rating:** 9.5/10 - indispensable for enterprise-grade memory, technical standards, and long-session code management.”
 > @joe_nyc, Discord user (DevOps/Infrastructure Engineer)  
 
-## MARM Demo Video: Docker Install + Persistent AI Memory in Action
-
-<https://github.com/user-attachments/assets/c7c6a162-5408-4eda-a461-610b7e713dfe>
-
-Watch MARM install through Docker, connect to Claude, and share persistent memory across Claude, Gemini, and Qwen.
-
 ## 🚀 Quick Start for MCP (HTTP & STDIO)
-
-<br>
-<div align="center">
-<picture>
-<img src="https://raw.githubusercontent.com/Lyellr88/MARM-Systems/MARM-main/media/install-options.png"
-   width="850"
-   height="500"
-</picture>
-</div>
-<br>
 
 ### Use this quick rule of thumb to choose your setup
 
@@ -185,6 +174,14 @@ Claude Code remains the recommended first setup path, but MARM also works with o
 
 ## MARM Dashboard
 
+<div align="center">
+<picture>
+<img src="https://raw.githubusercontent.com/Lyellr88/MARM-Systems/MARM-main/assets/marm-dashboard.png"
+   width="900"
+   height="625"
+</picture>
+</div>
+
 A local web UI for browsing and managing your MARM memory — separate from the MCP server, reads and writes the same `~/.marm/marm_memory.db`.
 
 | What it gives you | How it works |
@@ -216,7 +213,7 @@ See [`marm-dashboard/README.md`](marm-dashboard/README.md) for the full guide.
 
 <div align="center">
 <picture>
-<img src="https://raw.githubusercontent.com/Lyellr88/MARM-Systems/MARM-main/media/mcp-tools.png"
+<img src="https://raw.githubusercontent.com/Lyellr88/MARM-Systems/MARM-main/assets/mcp-tools.png"
    height="550"
    width="800"
 </picture>
@@ -247,14 +244,6 @@ The AI agent will automatically use the appropriate tools. Manual tool access is
 **Internal automation:** lifecycle initialization, documentation refresh, current date context, serialized write queue handling, and system checks are handled by the server instead of exposed as AI-facing tools. Optional compaction can detect duplicate memory clusters and nudge the connected agent to summarize them through `marm_compaction`. For server status, use the dashboard health panel or `curl http://localhost:8001/health`.
 
 ## Why MARM Holds Up
-
-<div align="center">
-<picture>
-<img src="https://raw.githubusercontent.com/Lyellr88/MARM-Systems/MARM-main/media/memory-workflow.png"
-   width="900"
-   height="625"
-</picture>
-</div>
 
 MARM keeps the AI-facing surface small while the server handles the infrastructure work:
 

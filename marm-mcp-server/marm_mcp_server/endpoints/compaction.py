@@ -309,17 +309,17 @@ async def _apply_compaction_write(candidate_id: str) -> str:
                 "SELECT suggested_summary FROM compaction_staging WHERE id = ?",
                 (candidate_id,),
             ).fetchone()
-        if row and row[0]:
-            precomputed_summary = sanitize_content(row[0])
-            precomputed_summary_hash = compute_content_hash(precomputed_summary)
-            if memory._load_encoder_lazily():
-                summary_vec = await asyncio.to_thread(
-                    memory._encode_sync, precomputed_summary
-                )
-                precomputed_summary_embedding = summary_vec.tobytes()
     except Exception:
-        precomputed_summary_hash = None
-        precomputed_summary_embedding = None
+        row = None
+
+    if row and row[0]:
+        precomputed_summary = sanitize_content(row[0])
+        precomputed_summary_hash = compute_content_hash(precomputed_summary)
+        if memory._load_encoder_lazily():
+            summary_vec = await asyncio.to_thread(
+                memory._encode_sync, precomputed_summary
+            )
+            precomputed_summary_embedding = summary_vec.tobytes()
 
     with memory.get_connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
@@ -473,6 +473,10 @@ async def _apply_compaction_write(candidate_id: str) -> str:
                 if precomputed_summary_hash == summary_content_hash
                 else None
             )
+            if summary_embedding is None and memory._load_encoder_lazily():
+                # Rare fallback: staged summary changed after precompute or DB lookup failed.
+                # Run synchronously so we do not yield while holding BEGIN IMMEDIATE.
+                summary_embedding = memory._encode_sync(suggested_summary).tobytes()
 
             summary_id = str(uuid.uuid4())
             compacted_at = now

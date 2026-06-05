@@ -1,4 +1,15 @@
-# MARM - The AI That Remembers Your Conversations"
+# MARM - The AI That Remembers Your Conversations.
+
+## Table of Contents
+
+- [Why MARM MCP](#why-marm-mcp-the-problem--solution)
+- [Quick Start](#-quick-start-for-mcp-http--stdio)
+- [Connect Your Client Fast](#connect-your-client-fast)
+- [Complete MCP Tool Suite](#complete-mcp-tool-suite-9-tools)
+- [MARM Dashboard](#marm-dashboard)
+- [Why MARM Holds Up](#why-marm-holds-up)
+- [Contributing](#contributing)
+- [Project Documentation](#project-documentation)
 
 ## Why MARM MCP: The Problem & Solution
 
@@ -40,6 +51,8 @@ pip install marm-mcp-server
 
 > “MARM proved exceptionally valuable for DevOps and complex Docker projects. It maintained 100% memory accuracy, preserved context on 46 services and network configurations, and enabled standards-compliant Python/Terraform work. Semantic search and automated session logs made solving async and infrastructure issues far easier. **Value Rating:** 9.5/10 - indispensable for enterprise-grade memory, technical standards, and long-session code management.”
 > @joe_nyc, Discord user (DevOps/Infrastructure Engineer)  
+
+## 🚀 Quick Start for MCP (HTTP & STDIO)
 
 ### Use this quick rule of thumb to choose your setup
 
