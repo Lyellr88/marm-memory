@@ -99,28 +99,28 @@
         
         <!-- Standard Traces (With 45-degree bends) -->
         <!-- Top Rail & Power Bus -->
-        <path d="M -50 40 L 200 40 L 220 60 L 350 60 L 370 40 L 850 40" stroke-width="1.8" />
+        <path d="M 0 40 L 200 40 L 220 60 L 350 60 L 370 40 L 800 40" stroke-width="1.8" />
         
         <!-- Bottom Rail -->
-        <path d="M -50 360 L 230 360 L 250 380 L 550 380 L 570 360 L 850 360" stroke-width="1.8" />
+        <path d="M 0 360 L 230 360 L 250 380 L 550 380 L 570 360 L 800 360" stroke-width="1.8" />
         
         <!-- Central Clean Routes -->
-        <path d="M 120 -50 L 120 120 L 140 140 L 280 140" stroke-width="1.2" />
-        <path d="M 380 -50 L 380 70 L 410 100 L 490 100" stroke-width="1.2" />
-        <path d="M 150 40 L 150 100 L 110 140 L -50 140" stroke-width="1.2" />
+        <path d="M 120 0 L 120 120 L 140 140 L 280 140" stroke-width="1.2" />
+        <path d="M 380 0 L 380 70 L 410 100 L 490 100" stroke-width="1.2" />
+        <path d="M 150 40 L 150 100 L 110 140 L 0 140" stroke-width="1.2" />
         
         <!-- Parallel buses to reduce clutter -->
         <g stroke-width="1">
-            <path d="M 230 180 L 180 180 L 150 210 L 80 210 L 50 240 L -50 240" />
-            <path d="M 230 188 L 182 188 L 152 218 L 82 218 L 52 248 L -50 248" opacity="0.5" />
+            <path d="M 230 180 L 180 180 L 150 210 L 80 210 L 50 240 L 0 240" />
+            <path d="M 230 188 L 182 188 L 152 218 L 82 218 L 52 248 L 0 248" opacity="0.5" />
         </g>
 
-        <path d="M 680 110 L 680 260 L 710 290 L 710 450" stroke-width="1.2" />
-        <path d="M 520 70 L 600 70 L 640 110 L 850 110" stroke-width="1.2" />
+        <path d="M 680 110 L 680 260 L 710 290 L 710 400" stroke-width="1.2" />
+        <path d="M 520 70 L 600 70 L 640 110 L 800 110" stroke-width="1.2" />
 
         <!-- Lower Section Extensions -->
-        <path d="M 150 210 L 150 280 L 110 320 L -50 320" stroke-width="1.2" />
-        <path d="M 640 110 L 640 280 L 680 320 L 850 320" stroke-width="1.2" />
+        <path d="M 150 210 L 150 280 L 110 320 L 0 320" stroke-width="1.2" />
+        <path d="M 640 110 L 640 280 L 680 320 L 800 320" stroke-width="1.2" />
         <g stroke-width="1">
             <path d="M 250 320 L 300 320 L 320 340 L 480 340 L 500 320 L 550 320" />
             <path d="M 250 328 L 296 328 L 316 348 L 484 348 L 504 328 L 550 328" opacity="0.5" />
@@ -130,13 +130,13 @@
 
     <!-- Muted Kinetic Pulses (Flowing Energy Highlights - Slow &amp; Subtle) -->
     <g fill="none" stroke="url(#glow-grad)" opacity="0.22" stroke-linecap="round" stroke-linejoin="round">
-        <path class="pulse-trace" d="M -50 40 L 200 40 L 220 60 L 350 60 L 370 40 L 850 40" stroke-width="2.0" />
-        <path class="pulse-trace-fast" d="M 120 -50 L 120 120 L 140 140 L 280 140" stroke-width="1.5" />
-        <path class="pulse-trace" d="M 230 188 L 182 188 L 152 218 L 82 218 L 52 248 L -50 248" stroke-width="1.5" />
+        <path class="pulse-trace" d="M 0 40 L 200 40 L 220 60 L 350 60 L 370 40 L 800 40" stroke-width="2.0" />
+        <path class="pulse-trace-fast" d="M 120 0 L 120 120 L 140 140 L 280 140" stroke-width="1.5" />
+        <path class="pulse-trace" d="M 230 188 L 182 188 L 152 218 L 82 218 L 52 248 L 0 248" stroke-width="1.5" />
         
         <!-- Lower Section Kinetic Pulses -->
-        <path class="pulse-trace-fast" d="M 150 210 L 150 280 L 110 320 L -50 320" stroke-width="1.5" />
-        <path class="pulse-trace" d="M 640 110 L 640 280 L 680 320 L 850 320" stroke-width="1.5" />
+        <path class="pulse-trace-fast" d="M 150 210 L 150 280 L 110 320 L 0 320" stroke-width="1.5" />
+        <path class="pulse-trace" d="M 640 110 L 640 280 L 680 320 L 800 320" stroke-width="1.5" />
         <path class="pulse-trace-fast" d="M 250 320 L 300 320 L 320 340 L 480 340 L 500 320 L 550 320" stroke-width="1.5" />
     </g>
 
