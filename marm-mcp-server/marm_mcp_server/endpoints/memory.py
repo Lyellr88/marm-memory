@@ -210,7 +210,8 @@ async def marm_smart_recall(request: SmartRecallRequest, http_request: Request):
 
         return final_response
     except Exception as e:
-        return {"status": "error", "message": f"Memory recall failed: {str(e)}"}
+        print(f"Unexpected error in marm_smart_recall: {e}")
+        return {"status": "error", "message": "Memory recall failed."}
 
 
 @router.post("/marm_context_log", operation_id="marm_context_log")
@@ -251,4 +252,5 @@ async def marm_context_log(request: ContextLogRequest):
             "context_type": context_type,
         }
     except Exception as e:
-        return {"status": "error", "message": f"Context logging failed: {str(e)}"}
+        print(f"Unexpected error in marm_context_log: {e}")
+        return {"status": "error", "message": "Context logging failed."}

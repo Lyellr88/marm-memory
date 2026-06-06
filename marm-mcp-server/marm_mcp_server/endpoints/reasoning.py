@@ -115,4 +115,5 @@ async def marm_summary(
         return final_response
 
     except Exception as e:
-        return {"status": "error", "message": f"Failed to generate summary: {str(e)}"}
+        print(f"Unexpected error in marm_summary: {e}")
+        return {"status": "error", "message": "Failed to generate summary."}

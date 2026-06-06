@@ -129,4 +129,5 @@ async def smart_recall(
         return response_data
 
     except Exception as e:
-        return {"status": "error", "message": f"Error during smart recall: {str(e)}"}
+        print(f"Unexpected error in smart_recall_response: {e}")
+        return {"status": "error", "message": "Error during smart recall."}

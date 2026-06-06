@@ -28,4 +28,5 @@ async def marm_notebook(request: NotebookRequest):
             session_name=request.session_name,
         )
     except Exception as e:
-        return {"status": "error", "message": f"Notebook operation failed: {str(e)}"}
+        print(f"Unexpected error in marm_notebook: {e}")
+        return {"status": "error", "message": "Notebook operation failed."}

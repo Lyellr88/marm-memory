@@ -90,4 +90,5 @@ async def generate_session_summary(session_name: str, limit: int = 50) -> dict:
         return final_response
 
     except Exception as e:
-        return {"status": "error", "message": f"Error generating summary: {str(e)}"}
+        print(f"Unexpected error in build_summary_response: {e}")
+        return {"status": "error", "message": "Error generating summary."}
