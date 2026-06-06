@@ -498,7 +498,10 @@ def apply_runtime_preset(
         mode = "trusted"
         write_queue_enabled = True
 
-    compaction_trigger_count = 5 if mode == "default" else 20
+    if "COMPACTION_TRIGGER_COUNT" in os.environ:
+        compaction_trigger_count = settings.COMPACTION_TRIGGER_COUNT
+    else:
+        compaction_trigger_count = 5 if mode == "default" else 20
 
     settings.MARM_RATE_LIMIT_RPM = rpm
     settings.WRITE_QUEUE_ENABLED = write_queue_enabled

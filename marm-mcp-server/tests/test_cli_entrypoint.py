@@ -162,6 +162,21 @@ def test_default_runtime_preset_uses_low_compaction_trigger(monkeypatch, tmp_pat
     assert memory_module.COMPACTION_TRIGGER_COUNT == 5
 
 
+def test_runtime_preset_preserves_compaction_env_override(monkeypatch, tmp_path):
+    from conftest import load_isolated_server
+
+    monkeypatch.setenv("COMPACTION_TRIGGER_COUNT", "50")
+    server = load_isolated_server(monkeypatch, tmp_path)
+    settings = importlib.import_module("marm_mcp_server.config.settings")
+    memory_module = importlib.import_module("marm_mcp_server.core.memory")
+
+    result = server.apply_runtime_preset(swarm=True)
+
+    assert result["mode"] == "swarm"
+    assert settings.COMPACTION_TRIGGER_COUNT == 50
+    assert memory_module.COMPACTION_TRIGGER_COUNT == 50
+
+
 def _free_port():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.bind(("127.0.0.1", 0))
