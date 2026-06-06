@@ -10,9 +10,6 @@ Usage:
   docker run -i --rm -v ~/.marm:/home/marm/.marm lyellr88/marm-mcp-server:latest python -m marm_mcp_server.server_stdio
 """
 
-# Redirect print() to stderr before any imports that might trigger model loading.
-# STDIO MCP protocol reserves stdout exclusively for JSON-RPC messages — any
-# stray print() would corrupt the stream and break client parsing.
 import asyncio
 import builtins
 import json
@@ -23,25 +20,25 @@ builtins.print = lambda *args, **kwargs: _real_print(
     *args, **{**kwargs, "file": sys.stderr}
 )
 
-import functools
-import logging
-import os
-import pathlib
-import re
-import uuid
-from datetime import datetime, timezone
-from typing import Optional
+import functools  # noqa: E402
+import logging  # noqa: E402
+import os  # noqa: E402
+import pathlib  # noqa: E402
+import re  # noqa: E402
+import uuid  # noqa: E402
+from datetime import datetime, timezone  # noqa: E402
+from typing import Optional  # noqa: E402
 
-from anyio import BrokenResourceError, ClosedResourceError, EndOfStream
+from anyio import BrokenResourceError, ClosedResourceError, EndOfStream  # noqa: E402
 
-# Docker images default to SERVER_HOST=0.0.0.0 for HTTP mode. STDIO mode never
-# opens a network listener, so force loopback before shared settings import to
-# prevent HTTP-only API key generation from polluting the MCP stream.
 os.environ["SERVER_HOST"] = "127.0.0.1"
 
-# File logger — stdout is reserved for JSON-RPC so we write diagnostics to disk.
 _log_dir_env = os.environ.get("MARM_STDIO_LOG_DIR")
-_log_dir = pathlib.Path(_log_dir_env) if _log_dir_env else pathlib.Path.home() / ".marm" / "logs"
+_log_dir = (
+    pathlib.Path(_log_dir_env)
+    if _log_dir_env
+    else pathlib.Path.home() / ".marm" / "logs"
+)
 _log_level_name = os.environ.get("MARM_STDIO_LOG_LEVEL", "INFO").upper()
 _log_level = getattr(logging, _log_level_name, logging.INFO)
 _debug = _log_level <= logging.DEBUG
@@ -62,9 +59,10 @@ try:
     _fh.setFormatter(_fmt)
     _stdio_log.addHandler(_fh)
 except Exception:
-    pass  # log setup failure must not break the server
+    pass
 
 _protocol_delivered = False
+
 
 def _log_tool_call(fn):
     @functools.wraps(fn)
@@ -101,12 +99,17 @@ def _log_tool_call(fn):
                 _stdio_log.error("FAIL %s: %s", name, result.get("message", ""))
             elif _debug:
                 count = next(
-                    (result[k] for k in ("results_count", "total_entries", "total_count")
-                     if k in result),
+                    (
+                        result[k]
+                        for k in ("results_count", "total_entries", "total_count")
+                        if k in result
+                    ),
                     None,
                 )
                 _stdio_log.debug(
-                    "OK %s status=%s%s", name, status,
+                    "OK %s status=%s%s",
+                    name,
+                    status,
                     f" count={count}" if count is not None else "",
                 )
             else:
@@ -136,7 +139,7 @@ def _log_tool_call(fn):
                                     "type": "text",
                                     "text": serialized_result,
                                 },
-                            ]
+                            ],
                         }
                 except Exception as e:
                     _stdio_log.warning("compaction injection failed: %s", e)
@@ -147,22 +150,23 @@ def _log_tool_call(fn):
             _stdio_log.warning("auto-refresh failed: %s", e)
 
         return result
+
     return wrapper
 
 
-from fastmcp import FastMCP
+from fastmcp import FastMCP  # noqa: E402
 
-from marm_mcp_server.core.memory import memory
-from marm_mcp_server.core.compaction import claim_pending_compaction_prompt
-from marm_mcp_server.core.events import events
-from marm_mcp_server.core.response_limiter import MCPResponseLimiter
-from marm_mcp_server.services.notebook import notebook_dispatch
-from marm_mcp_server.services.documentation import (
+from marm_mcp_server.core.memory import memory  # noqa: E402
+from marm_mcp_server.core.compaction import claim_pending_compaction_prompt  # noqa: E402
+from marm_mcp_server.core.events import events  # noqa: E402
+from marm_mcp_server.core.response_limiter import MCPResponseLimiter  # noqa: E402
+from marm_mcp_server.services.notebook import notebook_dispatch  # noqa: E402
+from marm_mcp_server.services.documentation import (  # noqa: E402
     ensure_marm_started,
     maybe_auto_refresh,
 )
-from marm_mcp_server.utils.helpers import read_protocol_file
-from marm_mcp_server.config.settings import (
+from marm_mcp_server.utils.helpers import read_protocol_file  # noqa: E402
+from marm_mcp_server.config.settings import (  # noqa: E402
     SERVER_VERSION,
     DEFAULT_DB_PATH,
     SEMANTIC_SEARCH_AVAILABLE,
@@ -171,13 +175,6 @@ from marm_mcp_server.config.settings import (
 mcp = FastMCP("MARM MCP Server")
 response_limiter = MCPResponseLimiter()
 
-# ============================================================================
-# Session Tools
-# ============================================================================
-
-# ============================================================================
-# Memory Tools
-# ============================================================================
 
 @mcp.tool()
 @_log_tool_call
@@ -197,8 +194,6 @@ async def marm_smart_recall(
     try:
         search_session = None if search_all else session_name
 
-        # Run log query up front so it's available in both no_results and success paths.
-        # Scope to session_name unless search_all=True, matching memory search behaviour.
         log_results = []
         if include_logs:
             with memory.get_connection() as conn:
@@ -225,11 +220,19 @@ async def marm_smart_recall(
                         (f"%{query}%", f"%{query}%", session_name, limit),
                     ).fetchall()
             log_results = [
-                {"session_name": r[0], "topic": r[1], "summary": r[2], "entry_date": r[3], "type": "log"}
+                {
+                    "session_name": r[0],
+                    "topic": r[1],
+                    "summary": r[2],
+                    "entry_date": r[3],
+                    "type": "log",
+                }
                 for r in log_rows
             ]
 
-        similar_memories = await memory.recall_similar(query, session=search_session, limit=limit)
+        similar_memories = await memory.recall_similar(
+            query, session=search_session, limit=limit
+        )
 
         if not similar_memories:
             if not search_all:
@@ -324,7 +327,11 @@ async def marm_context_log(
 
         await events.emit(
             "memory_logged",
-            {"session": session_name, "memory_id": memory_id, "context_type": context_type},
+            {
+                "session": session_name,
+                "memory_id": memory_id,
+                "context_type": context_type,
+            },
         )
 
         return {
@@ -337,11 +344,6 @@ async def marm_context_log(
     except Exception as e:
         return {"status": "error", "message": f"Error during context log: {str(e)}"}
 
-
-# ============================================================================
-# Logging Tools
-# Uses log_entries table — same schema as HTTP endpoints.
-# ============================================================================
 
 @mcp.tool()
 @_log_tool_call
@@ -442,7 +444,13 @@ async def marm_log_show(
                     (session_name,),
                 )
                 entries = [
-                    {"id": r[0], "entry_date": r[1], "topic": r[2], "summary": r[3], "full_entry": r[4]}
+                    {
+                        "id": r[0],
+                        "entry_date": r[1],
+                        "topic": r[2],
+                        "summary": r[3],
+                        "full_entry": r[4],
+                    }
                     for r in cursor.fetchall()
                 ]
                 return {
@@ -455,7 +463,10 @@ async def marm_log_show(
                 cursor = conn.execute(
                     "SELECT session_name, COUNT(*) FROM log_entries GROUP BY session_name"
                 )
-                sessions = [{"session_name": r[0], "entry_count": r[1]} for r in cursor.fetchall()]
+                sessions = [
+                    {"session_name": r[0], "entry_count": r[1]}
+                    for r in cursor.fetchall()
+                ]
                 return {
                     "status": "success",
                     "sessions": sessions,
@@ -489,7 +500,9 @@ async def marm_delete(
                     )
                     deleted = cursor.rowcount
                 else:
-                    conn.execute("DELETE FROM sessions WHERE session_name = ?", (target,))
+                    conn.execute(
+                        "DELETE FROM sessions WHERE session_name = ?", (target,)
+                    )
                     cursor = conn.execute(
                         "DELETE FROM log_entries WHERE session_name = ?", (target,)
                     )
@@ -503,26 +516,28 @@ async def marm_delete(
                     "deleted_count": deleted,
                 }
             elif type == "notebook":
-                cursor = conn.execute("DELETE FROM notebook_entries WHERE name = ?", (target,))
+                cursor = conn.execute(
+                    "DELETE FROM notebook_entries WHERE name = ?", (target,)
+                )
                 deleted = cursor.rowcount
                 conn.commit()
                 if deleted > 0:
                     memory.remove_active_notebook_entry(target)
                 return {
                     "status": "success" if deleted > 0 else "not_found",
-                    "message": f"🗑️ Deleted notebook entry '{target}'" if deleted > 0 else f"Entry '{target}' not found",
+                    "message": f"🗑️ Deleted notebook entry '{target}'"
+                    if deleted > 0
+                    else f"Entry '{target}' not found",
                     "deleted": deleted > 0,
                 }
             else:
-                return {"status": "error", "message": f"Invalid type '{type}'. Must be 'log' or 'notebook'."}
+                return {
+                    "status": "error",
+                    "message": f"Invalid type '{type}'. Must be 'log' or 'notebook'.",
+                }
     except Exception as e:
         return {"status": "error", "message": f"Error deleting: {str(e)}"}
 
-
-# ============================================================================
-# Notebook Tools
-# Uses notebook_entries table — same schema as HTTP endpoints.
-# ============================================================================
 
 @mcp.tool()
 @_log_tool_call
@@ -554,11 +569,6 @@ async def marm_notebook(
         return {"status": "error", "message": f"Notebook operation failed: {str(e)}"}
 
 
-
-# ============================================================================
-# Workflow Tools
-# ============================================================================
-
 @mcp.tool()
 @_log_tool_call
 async def marm_summary(
@@ -574,7 +584,8 @@ async def marm_summary(
     try:
         with memory.get_connection() as conn:
             total_entries = conn.execute(
-                "SELECT COUNT(*) FROM log_entries WHERE session_name = ?", (session_name,)
+                "SELECT COUNT(*) FROM log_entries WHERE session_name = ?",
+                (session_name,),
             ).fetchone()[0]
 
             entries = conn.execute(
@@ -588,7 +599,10 @@ async def marm_summary(
             ).fetchall()
 
         if not entries:
-            return {"status": "empty", "message": f"No entries found in session '{session_name}'"}
+            return {
+                "status": "empty",
+                "message": f"No entries found in session '{session_name}'",
+            }
 
         base_response = {
             "status": "success",
@@ -598,7 +612,9 @@ async def marm_summary(
         }
 
         summary_lines = [f"# MARM Session Summary: {session_name}"]
-        summary_lines.append(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M UTC')}")
+        summary_lines.append(
+            f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M UTC')}"
+        )
         summary_lines.append("")
 
         if total_entries > len(entries):
@@ -620,7 +636,10 @@ async def marm_summary(
             test_response = base_response.copy()
             test_response["summary"] = "\n".join(test_lines)
 
-            if MCPResponseLimiter.estimate_response_size(test_response) > MCPResponseLimiter.CONTENT_LIMIT:
+            if (
+                MCPResponseLimiter.estimate_response_size(test_response)
+                > MCPResponseLimiter.CONTENT_LIMIT
+            ):
                 break
 
             current_lines.append(entry_line)
@@ -636,7 +655,9 @@ async def marm_summary(
 
         if len(included_entries) < len(entries):
             final_response["_mcp_truncated"] = True
-            final_response["_truncation_reason"] = "Summary limited to 1MB for MCP compliance"
+            final_response["_truncation_reason"] = (
+                "Summary limited to 1MB for MCP compliance"
+            )
             final_response["_entries_shown"] = len(included_entries)
             final_response["_entries_available"] = len(entries)
 
@@ -645,10 +666,6 @@ async def marm_summary(
     except Exception as e:
         return {"status": "error", "message": f"Error generating summary: {str(e)}"}
 
-
-# ============================================================================
-# Compaction Tools
-# ============================================================================
 
 @mcp.tool()
 @_log_tool_call
@@ -715,10 +732,6 @@ async def marm_compaction(
         return {"status": "error", "message": f"Compaction operation failed: {str(e)}"}
 
 
-# ============================================================================
-# Entrypoint
-# ============================================================================
-
 def _is_graceful_teardown(exc: BaseException) -> bool:
     """Return True only if exc is safe to swallow as normal STDIO EOF teardown.
 
@@ -744,7 +757,9 @@ def _is_graceful_teardown(exc: BaseException) -> bool:
 def main() -> None:
     _stdio_log.info(
         "startup version=%s db=%s semantic_search=%s",
-        SERVER_VERSION, DEFAULT_DB_PATH, SEMANTIC_SEARCH_AVAILABLE,
+        SERVER_VERSION,
+        DEFAULT_DB_PATH,
+        SEMANTIC_SEARCH_AVAILABLE,
     )
     try:
         mcp.run()
@@ -759,4 +774,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

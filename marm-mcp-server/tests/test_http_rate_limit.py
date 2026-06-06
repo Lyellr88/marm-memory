@@ -3,7 +3,9 @@ import importlib
 from conftest import load_isolated_server, local_client
 
 
-def test_http_rate_limit_blocks_abuse_and_preserves_public_health(monkeypatch, tmp_path):
+def test_http_rate_limit_blocks_abuse_and_preserves_public_health(
+    monkeypatch, tmp_path
+):
     server = load_isolated_server(monkeypatch, tmp_path)
     rate_limiter_module = importlib.import_module("marm_mcp_server.core.rate_limiter")
     limiter = rate_limiter_module.rate_limiter
@@ -30,12 +32,18 @@ def test_http_rate_limit_blocks_abuse_and_preserves_public_health(monkeypatch, t
         limiter.blocked_ips.clear()
 
 
-def test_memory_heavy_endpoints_use_tighter_rate_limit_than_default(monkeypatch, tmp_path):
+def test_memory_heavy_endpoints_use_tighter_rate_limit_than_default(
+    monkeypatch, tmp_path
+):
     server = load_isolated_server(monkeypatch, tmp_path)
     rate_limiter_module = importlib.import_module("marm_mcp_server.core.rate_limiter")
     limiter = rate_limiter_module.rate_limiter
     original_limits = {name: config.copy() for name, config in limiter.limits.items()}
-    limiter.limits["memory_heavy"] = {"requests": 1, "window": 60, "block_duration": 120}
+    limiter.limits["memory_heavy"] = {
+        "requests": 1,
+        "window": 60,
+        "block_duration": 120,
+    }
 
     try:
         client = local_client(server.app)

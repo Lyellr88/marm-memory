@@ -33,4 +33,6 @@ async def marm_notebook(request: NotebookRequest):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Notebook operation failed: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Notebook operation failed: {str(e)}"
+        )

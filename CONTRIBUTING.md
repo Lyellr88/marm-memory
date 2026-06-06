@@ -4,6 +4,10 @@ Thanks for wanting to contribute. MARM is currently focused on the MCP server, l
 
 This guide covers practical development workflow. For project history and community recognition, see [ACKNOWLEDGMENTS.md](docs/ACKNOWLEDGMENTS.md).
 
+## Questions or Ideas
+
+Drop a message in [MARM Discord](https://discord.gg/nhyJWPz2cf) or reach out directly at ryanlyell@marmsystems.com.
+
 ## Getting Started
 
 ```powershell

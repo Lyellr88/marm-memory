@@ -5,26 +5,60 @@ This server integrates all modular components of the MARM protocol into a single
 FastAPI application, compliant with the MCP protocol via FastApiMCP.
 
 Author: Lyell - MARM Systems
-Version: 2.9.1
+Version: 2.9.2
 """
 
+import asyncio
 import json
 import logging
 import os
 import sqlite3
 import sys
-import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Optional
 
 import psutil
 import structlog
 import uvicorn
-from fastapi import Body, FastAPI, Form, Request
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi_mcp import FastApiMCP
+
+from .config import settings
+from .config.settings import (
+    ANALYTICS_DB_PATH,
+    COMPACTION_AUTO_APPLY_ENABLED,
+    COMPACTION_AUTO_APPLY_INTERVAL_MINUTES,
+    DEFAULT_DB_PATH,
+    SCHEDULER_AVAILABLE,
+    SEMANTIC_SEARCH_AVAILABLE,
+    SERVER_HOST,
+    SERVER_PORT,
+    SERVER_VERSION,
+)
+from .core import memory as memory_module
+from .core.compaction import claim_pending_compaction_prompt
+from .core.memory import memory
+from .core.rate_limiter import rate_limiter
+from .endpoints.compaction import router as compaction_router
+from .endpoints.logging import router as logging_router
+from .endpoints.memory import router as memory_router
+from .endpoints.notebook import router as notebook_router
+from .endpoints.reasoning import router as reasoning_router
+from .endpoints.session import router as session_router
+from .endpoints.system import router as system_router
+from .middleware.auth import auth_middleware
+from .middleware.rate_limiting import rate_limit_middleware
+from .services.automation import register_event_handlers
+from .services.documentation import (
+    docs_are_loaded,
+    ensure_marm_started,
+    maybe_auto_refresh,
+)
+from .utils.helpers import read_protocol_file
+from .utils.security import generate_api_key
 
 
 class _SuppressProactorWindowsNoise(logging.Filter):
@@ -53,17 +87,14 @@ _proactor_noise_filter = _SuppressProactorWindowsNoise()
 logging.getLogger("asyncio").addFilter(_proactor_noise_filter)
 
 
-# Configure structured logging
 logger = structlog.get_logger()
 
 
-# Simple usage tracking
 def track_usage(event_type: str, endpoint: str = None, user_data: dict = None):
     """Track MCP usage events for launch analytics"""
     try:
         usage_db = ANALYTICS_DB_PATH
 
-        # Create analytics table if it doesn't exist
         with sqlite3.connect(usage_db) as conn:
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS usage_events (
@@ -79,7 +110,6 @@ def track_usage(event_type: str, endpoint: str = None, user_data: dict = None):
                 )
             """)
 
-            # Insert usage event
             conn.execute(
                 """
                 INSERT INTO usage_events (timestamp, event_type, endpoint, user_agent, ip_address, session_id, metadata)
@@ -98,56 +128,7 @@ def track_usage(event_type: str, endpoint: str = None, user_data: dict = None):
 
         logger.info("Usage tracked", event_type=event_type, endpoint=endpoint)
     except Exception as e:
-        # Don't break MCP if analytics fails
         logger.warning("Analytics tracking failed", error=str(e))
-
-
-import asyncio
-
-import httpx
-from fastapi.testclient import TestClient
-
-from .config import settings
-
-# Import configuration and services
-from .config.settings import (
-    ANALYTICS_DB_PATH,
-    COMPACTION_AUTO_APPLY_ENABLED,
-    COMPACTION_AUTO_APPLY_INTERVAL_MINUTES,
-    DEFAULT_DB_PATH,
-    SCHEDULER_AVAILABLE,
-    SEMANTIC_SEARCH_AVAILABLE,
-    SERVER_HOST,
-    SERVER_PORT,
-    SERVER_VERSION,
-)
-from .core import memory as memory_module
-from .core.compaction import claim_pending_compaction_prompt
-from .core.memory import memory
-from .core.rate_limiter import rate_limiter
-from .endpoints.compaction import router as compaction_router
-from .endpoints.logging import router as logging_router
-from .endpoints.memory import router as memory_router
-from .endpoints.notebook import router as notebook_router
-from .endpoints.reasoning import router as reasoning_router
-
-# Import all endpoint routers
-from .endpoints.session import router as session_router
-from .endpoints.system import router as system_router
-from .middleware.auth import auth_middleware
-
-# Import middleware
-from .middleware.rate_limiting import rate_limit_middleware
-from .services.automation import register_event_handlers
-from .services.documentation import (
-    docs_are_loaded,
-    ensure_marm_started,
-    maybe_auto_refresh,
-)
-from .utils.helpers import read_protocol_file
-from .utils.security import generate_api_key
-
-# ...
 
 
 def _maybe_start_compaction_scheduler():
@@ -177,41 +158,32 @@ def _maybe_start_compaction_scheduler():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Modern FastAPI lifespan management for startup and shutdown"""
-    # Startup
     logger.info("Initializing MARM MCP Server", version=SERVER_VERSION)
 
-    # Measure memory before loading
     memory_before = get_memory_usage()
     logger.info("Initial memory usage", memory_mb=f"{memory_before:.1f}")
 
-    # Show database paths
     logger.info(
         "Database locations", memory_db=DEFAULT_DB_PATH, analytics_db=ANALYTICS_DB_PATH
     )
 
-    # Register automation event handlers
     register_event_handlers()
     await memory.start_write_queue()
 
-    # V4: start scheduled compaction auto-apply if enabled
     _compaction_scheduler = _maybe_start_compaction_scheduler()
 
-    # Check memory usage after loading
     memory_after = get_memory_usage()
     logger.info("Memory usage after startup", memory_mb=f"{memory_after:.1f}")
 
-    # Report memory increase from startup
     memory_increase = memory_after - memory_before
     logger.info("Startup memory increase", increase_mb=f"{memory_increase:.1f}")
 
     logger.info("MARM MCP Server initialization complete")
 
-    # Track server startup
     track_usage("server_startup", user_data={"version": SERVER_VERSION})
 
     yield
 
-    # Shutdown (cleanup if needed)
     logger.info("Shutting down MARM MCP Server")
     if _compaction_scheduler and _compaction_scheduler.running:
         _compaction_scheduler.shutdown(wait=False)
@@ -219,7 +191,6 @@ async def lifespan(app: FastAPI):
     track_usage("server_shutdown")
 
 
-# Create the main FastAPI application with modern lifespan
 app = FastAPI(
     title="MARM MCP Server",
     description="Memory Accurate Response Mode - Complete Protocol Implementation",
@@ -263,16 +234,16 @@ async def _mcp_tool_call_tracker(request: Request, call_next):
         asyncio.create_task(maybe_auto_refresh())
 
     if is_tool_call and response.status_code == 200:
-        # Fast path: nothing can inject — skip buffer/parse/reserialize entirely.
-        # _protocol_delivered boolean read without lock is safe; worst case is one
-        # redundant injection attempt under extreme first-call concurrency.
         if _protocol_delivered and not settings.COMPACTION_ENABLED:
             return response
 
-        # Non-JSON response — nothing to mutate, return raw without parsing.
         try:
             content_type = response.headers.get("content-type", "") or ""
-            if isinstance(content_type, str) and content_type and "application/json" not in content_type:
+            if (
+                isinstance(content_type, str)
+                and content_type
+                and "application/json" not in content_type
+            ):
                 return response
         except Exception:
             pass
@@ -311,7 +282,12 @@ async def _mcp_tool_call_tracker(request: Request, call_next):
 
             _req_session = None
             try:
-                _req_session = json.loads(body).get("params", {}).get("arguments", {}).get("session_name")
+                _req_session = (
+                    json.loads(body)
+                    .get("params", {})
+                    .get("arguments", {})
+                    .get("session_name")
+                )
             except Exception as e:
                 logger.debug(
                     "Session extraction failed, using global scope",
@@ -359,9 +335,6 @@ async def _mcp_tool_call_tracker(request: Request, call_next):
     return response
 
 
-# Starlette LIFO: last registered runs first.
-# Execution order: rate_limit → auth → _mcp_tool_call_tracker → handler.
-# _mcp_tool_call_tracker is registered first so it runs last, after auth passes.
 app.middleware("http")(_mcp_tool_call_tracker)
 app.middleware("http")(auth_middleware)
 app.middleware("http")(rate_limit_middleware)
@@ -370,12 +343,9 @@ app.middleware("http")(rate_limit_middleware)
 def get_memory_usage():
     """Get current memory usage in MB."""
     process = psutil.Process(os.getpid())
-    return process.memory_info().rss / 1024 / 1024  # MB
+    return process.memory_info().rss / 1024 / 1024
 
 
-# Modern lifespan management implemented above - no deprecated startup events needed
-
-# Include all the modular routers
 app.include_router(session_router)
 app.include_router(logging_router)
 app.include_router(reasoning_router)
@@ -385,12 +355,10 @@ app.include_router(system_router)
 app.include_router(compaction_router)
 
 
-# Create and mount the MCP server wrapper
 mcp = FastApiMCP(app)
 mcp.mount_http()
 
 
-# Main execution block for development
 def check_dependencies():
     """Validate all system dependencies and requirements"""
     print("MARM MCP Server - Dependency Check")
@@ -398,7 +366,6 @@ def check_dependencies():
 
     issues = []
 
-    # Python version check
     python_version = (
         f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
     )
@@ -408,7 +375,6 @@ def check_dependencies():
     else:
         print("Python version OK")
 
-    # Core dependencies check
     required_modules = [
         ("fastapi", "FastAPI web framework"),
         ("fastapi_mcp", "MCP protocol implementation"),
@@ -420,16 +386,12 @@ def check_dependencies():
 
     for module, description in required_modules:
         try:
-            if module == "sqlite3":
-                import sqlite3
-            else:
-                __import__(module)
+            __import__(module)
             print(f"OK {description}")
         except ImportError:
             issues.append(f"Missing: {module} ({description})")
             print(f"Missing: {module}")
 
-    # Optional features check
     print("\nOptional Features:")
     if SEMANTIC_SEARCH_AVAILABLE:
         print("OK Semantic search (sentence-transformers)")
@@ -441,7 +403,6 @@ def check_dependencies():
     else:
         print("Scheduler disabled - install apscheduler")
 
-    # Database path check
     print(f"\nDatabase location: {DEFAULT_DB_PATH}")
     db_dir = Path(DEFAULT_DB_PATH).parent
     if db_dir.exists() and os.access(db_dir, os.W_OK):
@@ -449,7 +410,6 @@ def check_dependencies():
     else:
         issues.append(f"Cannot write to database directory: {db_dir}")
 
-    # Summary
     print("\n" + "=" * 40)
     if issues:
         print("Issues found:")
@@ -467,35 +427,26 @@ async def run_server_with_shutdown():
     """Run server with proper signal handling and graceful shutdown"""
     from .core.shutdown_manager import shutdown_manager
 
-    # Setup signal handlers
     await shutdown_manager.setup_signal_handlers()
 
-    # Configure uvicorn server
     config = uvicorn.Config(app, host=SERVER_HOST, port=SERVER_PORT, log_level="info")
     server = uvicorn.Server(config)
 
-    # Start server in background
     server_task = asyncio.create_task(server.serve())
 
-    # Wait for shutdown signal
     shutdown_task = asyncio.create_task(shutdown_manager.wait_for_shutdown())
 
-    # Wait for either server completion or shutdown signal
     done, pending = await asyncio.wait(
         [server_task, shutdown_task], return_when=asyncio.FIRST_COMPLETED
     )
 
-    # If shutdown signal received, perform graceful shutdown
     if shutdown_task in done:
         logger.info("Shutdown signal received, closing server")
 
-        # Perform graceful shutdown
         await shutdown_manager.graceful_shutdown()
 
-        # Stop the server
         server.should_exit = True
 
-        # Cancel pending tasks
         for task in pending:
             task.cancel()
             try:
@@ -503,7 +454,6 @@ async def run_server_with_shutdown():
             except asyncio.CancelledError:
                 pass
 
-        # Wait for server to finish
         try:
             await server_task
         except asyncio.CancelledError:

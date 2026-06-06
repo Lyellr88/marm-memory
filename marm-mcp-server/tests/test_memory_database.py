@@ -13,7 +13,7 @@ def test_sanitize_content_removes_script_tags_and_event_handlers():
     assert "&lt;script" not in sanitized.lower()
     assert "onclick" not in sanitized.lower()
     assert "safe" in sanitized
-    assert 'alert(&quot;x&quot;)' in sanitized
+    assert "alert(&quot;x&quot;)" in sanitized
     assert "<div" not in sanitized
 
 
@@ -88,13 +88,17 @@ async def test_store_memory_queued_disabled_uses_direct_write(tmp_path):
 
     assert memory._write_queue is None
     with memory.get_connection() as conn:
-        row = conn.execute("SELECT content FROM memories WHERE id = ?", (memory_id,)).fetchone()
+        row = conn.execute(
+            "SELECT content FROM memories WHERE id = ?", (memory_id,)
+        ).fetchone()
 
     assert row[0] == "direct queued helper write"
 
 
 @pytest.mark.asyncio
-async def test_store_memory_queued_skips_startup_when_queue_already_running(monkeypatch, tmp_path):
+async def test_store_memory_queued_skips_startup_when_queue_already_running(
+    monkeypatch, tmp_path
+):
     from marm_mcp_server.core import memory as memory_module
 
     monkeypatch.setattr(memory_module, "WRITE_QUEUE_ENABLED", True)
@@ -108,12 +112,16 @@ async def test_store_memory_queued_skips_startup_when_queue_already_running(monk
     monkeypatch.setattr(memory, "start_write_queue", fail_if_called)
 
     try:
-        memory_id = await memory.store_memory_queued("already running queue write", "queue-hot-path")
+        memory_id = await memory.store_memory_queued(
+            "already running queue write", "queue-hot-path"
+        )
     finally:
         await memory.stop_write_queue()
 
     with memory.get_connection() as conn:
-        row = conn.execute("SELECT session_name FROM memories WHERE id = ?", (memory_id,)).fetchone()
+        row = conn.execute(
+            "SELECT session_name FROM memories WHERE id = ?", (memory_id,)
+        ).fetchone()
 
     assert row[0] == "queue-hot-path"
 
@@ -128,10 +136,12 @@ async def test_write_queue_serializes_concurrent_memory_writes(monkeypatch, tmp_
     memory._encoder_failed = True
 
     try:
-        memory_ids = await asyncio.gather(*[
-            memory.store_memory_queued(f"queued write {index}", "queue-enabled")
-            for index in range(10)
-        ])
+        memory_ids = await asyncio.gather(
+            *[
+                memory.store_memory_queued(f"queued write {index}", "queue-enabled")
+                for index in range(10)
+            ]
+        )
     finally:
         await memory.stop_write_queue()
 
@@ -170,10 +180,16 @@ async def test_memory_recall_respects_session_scope_and_search_all(tmp_path):
     memory = MARMMemory(str(db_path))
     memory._encoder_failed = True
 
-    alpha_id = await memory.store_memory("alpha deployment decision uses docker http", "alpha")
-    beta_id = await memory.store_memory("beta deployment decision uses stdio transport", "beta")
+    alpha_id = await memory.store_memory(
+        "alpha deployment decision uses docker http", "alpha"
+    )
+    beta_id = await memory.store_memory(
+        "beta deployment decision uses stdio transport", "beta"
+    )
 
-    alpha_results = await memory.recall_text_search("deployment", session="alpha", limit=10)
+    alpha_results = await memory.recall_text_search(
+        "deployment", session="alpha", limit=10
+    )
     all_results = await memory.recall_text_search("deployment", session=None, limit=10)
 
     assert [result["id"] for result in alpha_results] == [alpha_id]
@@ -184,8 +200,13 @@ async def test_memory_recall_respects_session_scope_and_search_all(tmp_path):
 async def test_auto_classification_covers_primary_context_types(tmp_path):
     memory = MARMMemory(str(tmp_path / "memory.db"))
 
-    assert await memory.auto_classify_content("fix bug in class implementation") == "code"
-    assert await memory.auto_classify_content("project milestone sprint deadline") == "project"
+    assert (
+        await memory.auto_classify_content("fix bug in class implementation") == "code"
+    )
+    assert (
+        await memory.auto_classify_content("project milestone sprint deadline")
+        == "project"
+    )
     assert await memory.auto_classify_content("chapter plot character arc") == "book"
     assert await memory.auto_classify_content("plain operational note") == "general"
 
@@ -208,7 +229,9 @@ def test_close_all_drains_connection_pool(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_mismatched_embedding_dimension_skipped_with_signal_without_breaking_recall(tmp_path):
+async def test_mismatched_embedding_dimension_skipped_with_signal_without_breaking_recall(
+    tmp_path,
+):
     """Vectors stored by a different model (wrong dimension) must not silently poison recall.
 
     Regression for: old embeddings surviving a model change cause shape-mismatch errors
@@ -232,7 +255,13 @@ async def test_mismatched_embedding_dimension_skipped_with_signal_without_breaki
     with memory.get_connection() as conn:
         conn.execute(
             "INSERT INTO memories (id, session_name, content, embedding, content_hash, timestamp, context_type, metadata) VALUES (?, ?, ?, ?, ?, datetime('now'), 'general', '{}')",
-            (good_id, "sess", "correct dimension memory", correct_vec.tobytes(), "hash-good"),
+            (
+                good_id,
+                "sess",
+                "correct dimension memory",
+                correct_vec.tobytes(),
+                "hash-good",
+            ),
         )
         conn.execute(
             "INSERT INTO memories (id, session_name, content, embedding, content_hash, timestamp, context_type, metadata) VALUES (?, ?, ?, ?, ?, datetime('now'), 'general', '{}')",
@@ -242,8 +271,12 @@ async def test_mismatched_embedding_dimension_skipped_with_signal_without_breaki
     query_vec = np.ones(correct_dim, dtype=np.float32)
     query_vec /= np.linalg.norm(query_vec)
 
-    results = await memory.recall_similar("test query", session="sess", limit=10, query_vec=query_vec)
+    results = await memory.recall_similar(
+        "test query", session="sess", limit=10, query_vec=query_vec
+    )
 
     result_ids = {r["id"] for r in results}
     assert good_id in result_ids, "correct-dimension memory must be returned"
-    assert bad_id not in result_ids, "wrong-dimension memory must be skipped, not crash recall"
+    assert bad_id not in result_ids, (
+        "wrong-dimension memory must be skipped, not crash recall"
+    )

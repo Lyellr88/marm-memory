@@ -6,15 +6,15 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
-CYAN   = "\033[36m"
+CYAN = "\033[36m"
 YELLOW = "\033[33m"
-GREEN  = "\033[32m"
-RED    = "\033[31m"
-GRAY   = "\033[90m"
-RESET  = "\033[0m"
+GREEN = "\033[32m"
+RED = "\033[31m"
+GRAY = "\033[90m"
+RESET = "\033[0m"
 
-ROOT       = Path(__file__).parent.parent / "marm-mcp-server"
-SCAN_DIRS  = ["marm_mcp_server"]
+ROOT = Path(__file__).parent.parent / "marm-mcp-server"
+SCAN_DIRS = ["marm_mcp_server"]
 EXTENSIONS = {".py", ".toml", ".md", ".txt", ".json"}
 
 
@@ -27,10 +27,19 @@ def line_count(path: Path) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Check file line lengths.")
-    parser.add_argument("--threshold", "-t", type=int, default=400,
-                        help="Minimum line count to report (default: 400)")
-    parser.add_argument("--versions", "-v", action="store_true",
-                        help="Also run find-versions after the check")
+    parser.add_argument(
+        "--threshold",
+        "-t",
+        type=int,
+        default=400,
+        help="Minimum line count to report (default: 400)",
+    )
+    parser.add_argument(
+        "--versions",
+        "-v",
+        action="store_true",
+        help="Also run find-versions after the check",
+    )
     args = parser.parse_args()
 
     threshold = args.threshold
@@ -69,7 +78,10 @@ def main() -> int:
     if args.versions:
         print(f"{CYAN}{'=' * 40}{RESET}\n")
         import subprocess
-        subprocess.run([sys.executable, str(Path(__file__).parent / "find-versions.py")])
+
+        subprocess.run(
+            [sys.executable, str(Path(__file__).parent / "find-versions.py")]
+        )
 
     return 0
 

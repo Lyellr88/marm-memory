@@ -86,7 +86,11 @@ def main() -> int:
             break
 
     if not failed and ask_yes_no("\nRun Docker smoke test now?", default=True):
-        if not run_step("Docker smoke", [sys.executable, "scripts/test-scripts/docker-smoke.py"], required=True):
+        if not run_step(
+            "Docker smoke",
+            [sys.executable, "scripts/test-scripts/docker-smoke.py"],
+            required=True,
+        ):
             failed = True
     elif not failed:
         print(f"{YELLOW}Docker smoke skipped by user.{RESET}")
@@ -94,10 +98,14 @@ def main() -> int:
     git_status()
 
     if failed:
-        print(f"\n{RED}Release preflight failed. Fix the failing step before push.{RESET}")
+        print(
+            f"\n{RED}Release preflight failed. Fix the failing step before push.{RESET}"
+        )
         return 1
 
-    print(f"\n{GREEN}Release preflight completed. Review warnings/git status before push.{RESET}")
+    print(
+        f"\n{GREEN}Release preflight completed. Review warnings/git status before push.{RESET}"
+    )
     return 0
 
 

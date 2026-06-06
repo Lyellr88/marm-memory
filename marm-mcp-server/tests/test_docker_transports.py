@@ -94,7 +94,9 @@ def test_docker_http_requires_key_and_serves_tools(docker_image, tmp_path):
         assert ready.status_code == 200
         assert "websocket" not in ready.text.lower()
 
-        missing_auth = requests.get(f"{base_url}/marm_log_show", params={"session_name": "main"}, timeout=5)
+        missing_auth = requests.get(
+            f"{base_url}/marm_log_show", params={"session_name": "main"}, timeout=5
+        )
         wrong_auth = requests.get(
             f"{base_url}/marm_log_show",
             params={"session_name": "main"},

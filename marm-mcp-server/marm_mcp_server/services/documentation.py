@@ -52,11 +52,13 @@ def get_docs_to_load():
     if docs_dir.exists():
         for md_file in sorted(docs_dir.glob("*.md")):
             filename = md_file.stem.lower()
-            docs.append({
-                "file_path": f"marm-docs/{md_file.name}",
-                "context_type": guess_context_type(filename),
-                "description": md_file.name,
-            })
+            docs.append(
+                {
+                    "file_path": f"marm-docs/{md_file.name}",
+                    "context_type": guess_context_type(filename),
+                    "description": md_file.name,
+                }
+            )
         if docs:
             names = ", ".join(d["file_path"].split("/")[-1] for d in docs)
             print(f"[DOCS] Indexing for marm_smart_recall: {names}")
@@ -95,9 +97,6 @@ async def _index_doc(doc: Dict) -> bool:
             ).fetchone()
 
         if row and row[0] == content_hash:
-            # Hash matches — verify the memory row still exists before skipping.
-            # If memory_id is NULL (migrated from older doc_index), fall through to
-            # re-index once so the row gets a valid memory_id backfilled.
             memory_id = row[1]
             if memory_id:
                 with memory.get_connection() as conn:
@@ -109,8 +108,6 @@ async def _index_doc(doc: Dict) -> bool:
                     return True
                 print(f"[DOCS] {fname} memory row missing, re-indexing")
 
-        # Remove the existing memory before re-indexing.
-        # Use memory_id for an exact delete when available; fall back to json_extract.
         with memory.get_connection() as conn:
             if row and row[1]:
                 conn.execute("DELETE FROM memories WHERE id = ?", (row[1],))
@@ -137,7 +134,12 @@ async def _index_doc(doc: Dict) -> bool:
             conn.execute(
                 "INSERT OR REPLACE INTO doc_index (source_file, content_hash, memory_id, indexed_at)"
                 " VALUES (?, ?, ?, ?)",
-                (source_file, content_hash, new_memory_id, datetime.now(timezone.utc).isoformat()),
+                (
+                    source_file,
+                    content_hash,
+                    new_memory_id,
+                    datetime.now(timezone.utc).isoformat(),
+                ),
             )
             conn.commit()
 
@@ -250,8 +252,6 @@ async def load_marm_documentation():
     """Index all marm-docs/ files into memories for semantic search."""
     global _docs_loaded
 
-    # One-time cleanup of system-created notebook entries from older MARM versions.
-    # These were never user data — the notebook is now user territory only.
     with memory.get_connection() as conn:
         already_cleaned = conn.execute(
             "SELECT value FROM user_settings WHERE key = 'system_notebook_cleanup_v1'"
@@ -261,7 +261,11 @@ async def load_marm_documentation():
                 conn.execute("DELETE FROM notebook_entries WHERE name = ?", (name,))
             conn.execute(
                 "INSERT OR REPLACE INTO user_settings (key, value, updated_at) VALUES (?, ?, ?)",
-                ("system_notebook_cleanup_v1", "done", datetime.now(timezone.utc).isoformat()),
+                (
+                    "system_notebook_cleanup_v1",
+                    "done",
+                    datetime.now(timezone.utc).isoformat(),
+                ),
             )
             conn.commit()
             print("[DOCS] Cleaned up legacy system notebook entries")
@@ -282,4 +286,6 @@ async def load_marm_documentation():
         print("MARM documentation database ready!")
         _docs_loaded = True
     else:
-        print(f"WARNING: {failures} doc(s) failed to index — will retry on next tool call")
+        print(
+            f"WARNING: {failures} doc(s) failed to index — will retry on next tool call"
+        )

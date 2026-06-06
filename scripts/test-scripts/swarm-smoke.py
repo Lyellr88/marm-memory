@@ -284,7 +284,9 @@ def session_name_for(args: argparse.Namespace, run_id: str, agent_id: int) -> st
     return f"{args.session_prefix}-{run_id}-agent-{agent_id}"
 
 
-def generate_note(args: argparse.Namespace, agent_id: int, round_index: int) -> tuple[bool, str, str, float]:
+def generate_note(
+    args: argparse.Namespace, agent_id: int, round_index: int
+) -> tuple[bool, str, str, float]:
     if args.mock_model:
         content = (
             f"Mock agent {agent_id} round {round_index}: observed queue pressure "
@@ -363,10 +365,7 @@ def run_agent_round_stream(
             model_error=model_error,
         )
 
-    content = (
-        f"[swarm agent={agent_id} round={round_index} run={run_id}] "
-        f"{note}"
-    )
+    content = f"[swarm agent={agent_id} round={round_index} run={run_id}] {note}"
     with write_sem:
         write_status, write_error, write_latency_ms = write_note(
             args,
@@ -388,10 +387,14 @@ def run_agent_round_stream(
     )
 
 
-def run_stream(args: argparse.Namespace, base_url: str, run_id: str) -> list[AgentResult]:
+def run_stream(
+    args: argparse.Namespace, base_url: str, run_id: str
+) -> list[AgentResult]:
     model_sem = threading.Semaphore(args.model_concurrency)
     write_sem = threading.Semaphore(args.write_concurrency)
-    max_workers = min(args.agents * args.rounds, max(args.agents, args.write_concurrency))
+    max_workers = min(
+        args.agents * args.rounds, max(args.agents, args.write_concurrency)
+    )
     results: list[AgentResult] = []
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
         futures = [
@@ -413,7 +416,9 @@ def run_stream(args: argparse.Namespace, base_url: str, run_id: str) -> list[Age
     return results
 
 
-def run_burst(args: argparse.Namespace, base_url: str, run_id: str) -> list[AgentResult]:
+def run_burst(
+    args: argparse.Namespace, base_url: str, run_id: str
+) -> list[AgentResult]:
     model_sem = threading.Semaphore(args.model_concurrency)
     generated: list[AgentResult] = []
 
@@ -426,8 +431,7 @@ def run_burst(args: argparse.Namespace, base_url: str, run_id: str) -> list[Agen
         content = ""
         if ok:
             content = (
-                f"[swarm agent={agent_id} round={round_index} run={run_id}] "
-                f"{note}"
+                f"[swarm agent={agent_id} round={round_index} run={run_id}] {note}"
             )
         return AgentResult(
             agent_id,
@@ -442,7 +446,9 @@ def run_burst(args: argparse.Namespace, base_url: str, run_id: str) -> list[Agen
             model_error=error,
         )
 
-    max_model_workers = min(args.agents * args.rounds, max(args.agents, args.model_concurrency))
+    max_model_workers = min(
+        args.agents * args.rounds, max(args.agents, args.model_concurrency)
+    )
     with ThreadPoolExecutor(max_workers=max_model_workers) as pool:
         futures = [
             pool.submit(generate_only, agent_id, round_index)
@@ -482,7 +488,9 @@ def percentile(values: list[float], pct: float) -> float:
     return values[idx]
 
 
-def summarize(results: list[AgentResult], elapsed_s: float, db_count: int | None) -> dict:
+def summarize(
+    results: list[AgentResult], elapsed_s: float, db_count: int | None
+) -> dict:
     write_counts = Counter(r.write_status for r in results if r.model_ok)
     model_errors = Counter(r.model_error for r in results if r.model_error)
     write_errors = Counter(r.write_error for r in results if r.write_error)

@@ -29,7 +29,6 @@ def _load_key_from_file() -> str:
     return ""
 
 
-# Same env var as MCP. Env wins; then ~/.marm/.env so host dashboard matches Docker key file.
 MARM_API_KEY = os.environ.get("MARM_API_KEY", "").strip()
 if not MARM_API_KEY:
     MARM_API_KEY = _load_key_from_file()

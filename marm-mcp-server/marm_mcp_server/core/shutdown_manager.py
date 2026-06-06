@@ -7,6 +7,7 @@ from .memory import memory
 
 logger = structlog.get_logger()
 
+
 class ShutdownManager:
     def __init__(self):
         self.shutdown_event = asyncio.Event()
@@ -15,7 +16,6 @@ class ShutdownManager:
     async def setup_signal_handlers(self):
         """Setup signal handlers for graceful shutdown"""
         try:
-            # Setup signal handlers for Unix systems
             loop = asyncio.get_event_loop()
 
             for sig in [signal.SIGTERM, signal.SIGINT]:
@@ -24,7 +24,6 @@ class ShutdownManager:
             logger.info("Signal handlers configured for graceful shutdown")
 
         except NotImplementedError:
-            # Windows doesn't support add_signal_handler
             logger.info("Signal handlers not available on this platform")
             pass
 
@@ -52,5 +51,5 @@ class ShutdownManager:
 
         logger.info("Graceful shutdown complete")
 
-# Global shutdown manager instance
+
 shutdown_manager = ShutdownManager()

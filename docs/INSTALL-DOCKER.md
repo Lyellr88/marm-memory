@@ -2,7 +2,7 @@
 
 ## Universal Memory Intelligence Platform for AI Agents
 
-**MARM v2.9.1** - Memory Accurate Response Mode
+**MARM v2.9.2** - Memory Accurate Response Mode
 *Docker deployment guide for Windows, Mac, and Linux*
 
 ---
@@ -280,6 +280,67 @@ Because xAI connects to the MCP server from its own infrastructure, `localhost` 
   "authorization": "Bearer your-generated-key"
 }
 ```
+
+### **Docker STDIO**
+
+The MCP client launches Docker as the server command. No port binding or API key needed. Use `-i` (interactive stdin) — never `-d` (detached).
+
+```bash
+docker run -i --rm \
+  -v ~/.marm:/home/marm/.marm \
+  --entrypoint python \
+  lyellr88/marm-mcp-server:latest \
+  -m marm_mcp_server.server_stdio
+```
+
+<details>
+<summary>JSON config for Claude Desktop, Claude Code, Cursor, VS Code</summary>
+
+> JSON `args` arrays are not processed by a shell, so `~` is not expanded. Use an absolute path for the volume mount.
+
+**macOS / Linux** — replace `/Users/you` with your actual home directory:
+
+```json
+{
+  "mcpServers": {
+    "marm-memory": {
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm",
+        "-v", "/Users/you/.marm:/home/marm/.marm",
+        "--entrypoint", "python",
+        "lyellr88/marm-mcp-server:latest",
+        "-m", "marm_mcp_server.server_stdio"
+      ]
+    }
+  }
+}
+```
+
+**Windows** — replace `C:\Users\you` with your actual home directory:
+
+```json
+{
+  "mcpServers": {
+    "marm-memory": {
+      "command": "docker",
+      "args": [
+        "run", "-i", "--rm",
+        "-v", "C:\\Users\\you\\.marm:/home/marm/.marm",
+        "--entrypoint", "python",
+        "lyellr88/marm-mcp-server:latest",
+        "-m", "marm_mcp_server.server_stdio"
+      ]
+    }
+  }
+}
+```
+
+STDIO mode has no HTTP healthcheck. The image healthcheck applies to HTTP mode only and is irrelevant for client-launched STDIO containers.
+
+</details>
+
+---
 
 ### **Gemini CLI**
 

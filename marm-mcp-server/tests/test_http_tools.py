@@ -5,7 +5,9 @@ from datetime import datetime, timezone
 from conftest import load_isolated_server, local_client
 
 
-def test_session_log_summary_and_delete_workflow_persists_real_rows(monkeypatch, tmp_path):
+def test_session_log_summary_and_delete_workflow_persists_real_rows(
+    monkeypatch, tmp_path
+):
     server = load_isolated_server(monkeypatch, tmp_path)
     client = local_client(server.app)
 
@@ -13,7 +15,9 @@ def test_session_log_summary_and_delete_workflow_persists_real_rows(monkeypatch,
     assert start.status_code == 200
     assert start.json()["marm_active"] is True
 
-    log_session = client.post("/marm_log_session", json={"session_name": "release-notes"})
+    log_session = client.post(
+        "/marm_log_session", json={"session_name": "release-notes"}
+    )
     assert log_session.status_code == 200
 
     entry = "2026-05-17-docker-stdio transport validated"
@@ -46,7 +50,12 @@ def test_session_log_summary_and_delete_workflow_persists_real_rows(monkeypatch,
     )
     assert deleted.status_code == 200
     assert deleted.json()["deleted_count"] == 1
-    assert client.get("/marm_log_show", params={"session_name": "release-notes"}).json()["total_entries"] == 0
+    assert (
+        client.get("/marm_log_show", params={"session_name": "release-notes"}).json()[
+            "total_entries"
+        ]
+        == 0
+    )
 
 
 def test_log_entry_without_session_name_uses_active_session(monkeypatch, tmp_path):
@@ -58,7 +67,9 @@ def test_log_entry_without_session_name_uses_active_session(monkeypatch, tmp_pat
     assert switch.json()["session_name"] == "myproject"
 
     # No session_name — should land in "myproject", not "main"
-    entry = client.post("/marm_log_entry", json={"entry": "2026-05-20-setup-initial scaffolding done"})
+    entry = client.post(
+        "/marm_log_entry", json={"entry": "2026-05-20-setup-initial scaffolding done"}
+    )
     assert entry.status_code == 200
 
     in_project = client.get("/marm_log_show", params={"session_name": "myproject"})
@@ -68,7 +79,9 @@ def test_log_entry_without_session_name_uses_active_session(monkeypatch, tmp_pat
     assert in_main.json().get("total_entries", 0) == 0
 
 
-def test_malformed_log_entry_is_stored_as_general_without_losing_original_text(monkeypatch, tmp_path):
+def test_malformed_log_entry_is_stored_as_general_without_losing_original_text(
+    monkeypatch, tmp_path
+):
     server = load_isolated_server(monkeypatch, tmp_path)
     client = local_client(server.app)
     raw_entry = "decision without structured date still matters"
@@ -102,13 +115,19 @@ def test_empty_summary_returns_empty_status_for_missing_session(monkeypatch, tmp
     }
 
 
-def test_notebook_use_delete_clear_lifecycle_updates_active_state(monkeypatch, tmp_path):
+def test_notebook_use_delete_clear_lifecycle_updates_active_state(
+    monkeypatch, tmp_path
+):
     server = load_isolated_server(monkeypatch, tmp_path)
     client = local_client(server.app)
 
     add = client.post(
         "/marm_notebook",
-        json={"action": "add", "name": "release_rule", "data": "Always verify Docker HTTP and STDIO."},
+        json={
+            "action": "add",
+            "name": "release_rule",
+            "data": "Always verify Docker HTTP and STDIO.",
+        },
     )
     assert add.status_code == 200
 
@@ -120,7 +139,9 @@ def test_notebook_use_delete_clear_lifecycle_updates_active_state(monkeypatch, t
     assert status.status_code == 200
     assert status.json()["active_entries"] == ["release_rule"]
 
-    deleted = client.post("/marm_delete", json={"type": "notebook", "target": "release_rule"})
+    deleted = client.post(
+        "/marm_delete", json={"type": "notebook", "target": "release_rule"}
+    )
     assert deleted.status_code == 200
     assert deleted.json()["deleted"] is True
 
@@ -128,18 +149,33 @@ def test_notebook_use_delete_clear_lifecycle_updates_active_state(monkeypatch, t
     assert after_delete.json()["active_entries"] == []
     assert after_delete.json()["active_count"] == 0
 
-    missing = client.post("/marm_delete", json={"type": "notebook", "target": "release_rule"})
+    missing = client.post(
+        "/marm_delete", json={"type": "notebook", "target": "release_rule"}
+    )
     assert missing.status_code == 200
     assert missing.json()["status"] == "not_found"
 
 
-def test_notebook_show_previews_long_entries_and_clear_resets_active_list(monkeypatch, tmp_path):
+def test_notebook_show_previews_long_entries_and_clear_resets_active_list(
+    monkeypatch, tmp_path
+):
     server = load_isolated_server(monkeypatch, tmp_path)
     client = local_client(server.app)
     long_data = "A" * 150
 
-    assert client.post("/marm_notebook", json={"action": "add", "name": "long_note", "data": long_data}).status_code == 200
-    assert client.post("/marm_notebook", json={"action": "use", "names": "long_note"}).json()["status"] == "success"
+    assert (
+        client.post(
+            "/marm_notebook",
+            json={"action": "add", "name": "long_note", "data": long_data},
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            "/marm_notebook", json={"action": "use", "names": "long_note"}
+        ).json()["status"]
+        == "success"
+    )
 
     shown = client.post("/marm_notebook", json={"action": "show"})
     assert shown.status_code == 200
@@ -150,21 +186,32 @@ def test_notebook_show_previews_long_entries_and_clear_resets_active_list(monkey
     cleared = client.post("/marm_notebook", json={"action": "clear"})
     assert cleared.status_code == 200
     assert cleared.json()["active_count"] == 0
-    assert client.post("/marm_notebook", json={"action": "status"}).json()["active_entries"] == []
+    assert (
+        client.post("/marm_notebook", json={"action": "status"}).json()[
+            "active_entries"
+        ]
+        == []
+    )
 
 
 def test_notebook_active_state_is_scoped_by_session(monkeypatch, tmp_path):
     server = load_isolated_server(monkeypatch, tmp_path)
     client = local_client(server.app)
 
-    assert client.post(
-        "/marm_notebook",
-        json={"action": "add", "name": "alpha_rule", "data": "alpha instructions"},
-    ).status_code == 200
-    assert client.post(
-        "/marm_notebook",
-        json={"action": "add", "name": "beta_rule", "data": "beta instructions"},
-    ).status_code == 200
+    assert (
+        client.post(
+            "/marm_notebook",
+            json={"action": "add", "name": "alpha_rule", "data": "alpha instructions"},
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            "/marm_notebook",
+            json={"action": "add", "name": "beta_rule", "data": "beta instructions"},
+        ).status_code
+        == 200
+    )
 
     alpha_use = client.post(
         "/marm_notebook",
@@ -178,17 +225,27 @@ def test_notebook_active_state_is_scoped_by_session(monkeypatch, tmp_path):
     assert alpha_use.status_code == 200
     assert beta_use.status_code == 200
 
-    alpha_status = client.post("/marm_notebook", json={"action": "status", "session_name": "alpha"})
-    beta_status = client.post("/marm_notebook", json={"action": "status", "session_name": "beta"})
+    alpha_status = client.post(
+        "/marm_notebook", json={"action": "status", "session_name": "alpha"}
+    )
+    beta_status = client.post(
+        "/marm_notebook", json={"action": "status", "session_name": "beta"}
+    )
 
     assert alpha_status.json()["active_entries"] == ["alpha_rule"]
     assert beta_status.json()["active_entries"] == ["beta_rule"]
 
-    alpha_clear = client.post("/marm_notebook", json={"action": "clear", "session_name": "alpha"})
+    alpha_clear = client.post(
+        "/marm_notebook", json={"action": "clear", "session_name": "alpha"}
+    )
     assert alpha_clear.status_code == 200
 
-    alpha_after_clear = client.post("/marm_notebook", json={"action": "status", "session_name": "alpha"})
-    beta_after_clear = client.post("/marm_notebook", json={"action": "status", "session_name": "beta"})
+    alpha_after_clear = client.post(
+        "/marm_notebook", json={"action": "status", "session_name": "alpha"}
+    )
+    beta_after_clear = client.post(
+        "/marm_notebook", json={"action": "status", "session_name": "beta"}
+    )
 
     assert alpha_after_clear.json()["active_entries"] == []
     assert beta_after_clear.json()["active_entries"] == ["beta_rule"]
@@ -270,11 +327,18 @@ def test_context_log_recall_include_logs_and_system_info(monkeypatch, tmp_path):
     )
     assert recall.status_code == 200
     assert recall.json()["status"] == "success"
-    assert recall.json()["results"][0]["content"] == "project decision: qwen uses http transport command"
+    assert (
+        recall.json()["results"][0]["content"]
+        == "project decision: qwen uses http transport command"
+    )
 
     no_results = client.post(
         "/marm_smart_recall",
-        json={"session_name": "search-session", "query": "nothing-matches-this", "limit": 3},
+        json={
+            "session_name": "search-session",
+            "query": "nothing-matches-this",
+            "limit": 3,
+        },
     )
     assert no_results.status_code == 200
     assert no_results.json()["status"] == "no_results"
@@ -283,13 +347,21 @@ def test_context_log_recall_include_logs_and_system_info(monkeypatch, tmp_path):
     client.post("/marm_log_session", json={"session_name": "search-session"})
     client.post(
         "/marm_log_entry",
-        json={"session_name": "search-session", "entry": "2026-05-20-qwen-qwen transport decision noted"},
+        json={
+            "session_name": "search-session",
+            "entry": "2026-05-20-qwen-qwen transport decision noted",
+        },
     )
 
     # include_logs=True must return the log entry we just wrote
     recall_with_logs = client.post(
         "/marm_smart_recall",
-        json={"session_name": "search-session", "query": "qwen", "limit": 3, "include_logs": True},
+        json={
+            "session_name": "search-session",
+            "query": "qwen",
+            "limit": 3,
+            "include_logs": True,
+        },
     )
     assert recall_with_logs.status_code == 200
     assert "log_results" in recall_with_logs.json()
@@ -298,7 +370,9 @@ def test_context_log_recall_include_logs_and_system_info(monkeypatch, tmp_path):
         f"include_logs=True returned no log entries: {recall_with_logs.json()}"
     )
     log_topics = [r["topic"] for r in recall_with_logs.json()["log_results"]]
-    assert any("qwen" in t for t in log_topics), f"Expected qwen in log topics, got: {log_topics}"
+    assert any("qwen" in t for t in log_topics), (
+        f"Expected qwen in log topics, got: {log_topics}"
+    )
 
     memory_module = importlib.import_module("marm_mcp_server.core.memory")
     with memory_module.memory.get_connection() as conn:
@@ -332,7 +406,9 @@ def test_context_log_uses_write_queue_when_enabled(monkeypatch, tmp_path):
     assert count == 1
 
 
-def test_smart_recall_include_logs_returns_log_matches_without_memory_hits(monkeypatch, tmp_path):
+def test_smart_recall_include_logs_returns_log_matches_without_memory_hits(
+    monkeypatch, tmp_path
+):
     server = load_isolated_server(monkeypatch, tmp_path)
     client = local_client(server.app)
 
@@ -366,7 +442,7 @@ def test_smart_recall_include_logs_returns_log_matches_without_memory_hits(monke
 
 
 def test_cold_startup_leaves_doc_tables_empty(monkeypatch, tmp_path):
-    server = load_isolated_server(monkeypatch, tmp_path)
+    load_isolated_server(monkeypatch, tmp_path)
 
     memory_module = importlib.import_module("marm_mcp_server.core.memory")
     with memory_module.memory.get_connection() as conn:
@@ -377,8 +453,12 @@ def test_cold_startup_leaves_doc_tables_empty(monkeypatch, tmp_path):
             "SELECT COUNT(*) FROM memories WHERE session_name = 'marm_system'"
         ).fetchone()[0]
 
-    assert nb_count == 0, f"Expected 0 marm_ notebook entries on cold boot, got {nb_count}"
-    assert mem_count == 0, f"Expected 0 marm_system memories on cold boot, got {mem_count}"
+    assert nb_count == 0, (
+        f"Expected 0 marm_ notebook entries on cold boot, got {nb_count}"
+    )
+    assert mem_count == 0, (
+        f"Expected 0 marm_system memories on cold boot, got {mem_count}"
+    )
 
 
 def test_marm_start_loads_docs_once_not_on_repeated_calls(monkeypatch, tmp_path):
@@ -422,11 +502,11 @@ def test_doc_loader_reindexes_when_memory_row_deleted(monkeypatch, tmp_path):
     assert doc_module.docs_are_loaded()
 
     with memory_module.memory.get_connection() as conn:
-        memory_id = conn.execute(
-            "SELECT memory_id FROM doc_index LIMIT 1"
-        ).fetchone()
+        memory_id = conn.execute("SELECT memory_id FROM doc_index LIMIT 1").fetchone()
 
-    assert memory_id and memory_id[0], "doc_index should have a memory_id after first load"
+    assert memory_id and memory_id[0], (
+        "doc_index should have a memory_id after first load"
+    )
 
     # Delete the memory row externally (simulates dashboard/manual cleanup)
     with memory_module.memory.get_connection() as conn:
@@ -445,18 +525,26 @@ def test_doc_loader_reindexes_when_memory_row_deleted(monkeypatch, tmp_path):
             "SELECT COUNT(*) FROM memories WHERE session_name = 'marm_system'"
         ).fetchone()[0]
 
-    assert marm_count > 0, "Re-index after missing memory row should restore marm_system memories"
-    assert new_memory_id and new_memory_id[0], "doc_index should have a memory_id after re-index"
-    assert new_memory_id[0] != memory_id[0], "doc_index memory_id should be updated to the new row after re-index"
+    assert marm_count > 0, (
+        "Re-index after missing memory row should restore marm_system memories"
+    )
+    assert new_memory_id and new_memory_id[0], (
+        "doc_index should have a memory_id after re-index"
+    )
+    assert new_memory_id[0] != memory_id[0], (
+        "doc_index memory_id should be updated to the new row after re-index"
+    )
     with memory_module.memory.get_connection() as conn:
         new_row_exists = conn.execute(
             "SELECT 1 FROM memories WHERE id = ?", (new_memory_id[0],)
         ).fetchone()
-    assert new_row_exists, "new doc_index memory_id must point to an existing memories row"
+    assert new_row_exists, (
+        "new doc_index memory_id must point to an existing memories row"
+    )
 
 
 def test_legacy_system_notebook_entries_cleaned_on_load(monkeypatch, tmp_path):
-    server = load_isolated_server(monkeypatch, tmp_path)
+    load_isolated_server(monkeypatch, tmp_path)
     doc_module = importlib.import_module("marm_mcp_server.services.documentation")
     memory_module = importlib.import_module("marm_mcp_server.core.memory")
 
@@ -478,7 +566,9 @@ def test_legacy_system_notebook_entries_cleaned_on_load(monkeypatch, tmp_path):
             tuple(legacy_names),
         ).fetchall()
 
-    assert remaining == [], f"Legacy system notebook entries should be removed: {remaining}"
+    assert remaining == [], (
+        f"Legacy system notebook entries should be removed: {remaining}"
+    )
 
 
 def test_marm_reload_docs_indexes_documentation(monkeypatch, tmp_path):
@@ -519,8 +609,12 @@ def test_endpoint_validation_rejects_wrong_payload_shapes(monkeypatch, tmp_path)
     client = local_client(server.app)
 
     bad_recall = client.post("/marm_smart_recall", json={"session_name": "x"})
-    bad_log = client.post("/marm_log_entry", json={"session_name": "x", "content": "old field"})
-    bad_notebook = client.post("/marm_notebook", json={"name": "x", "data": "no action field"})
+    bad_log = client.post(
+        "/marm_log_entry", json={"session_name": "x", "content": "old field"}
+    )
+    bad_notebook = client.post(
+        "/marm_notebook", json={"name": "x", "data": "no action field"}
+    )
     bad_summary = client.get("/marm_summary")
 
     assert bad_recall.status_code == 422
@@ -569,7 +663,10 @@ def test_marm_delete_session_resets_active_log_session(monkeypatch, tmp_path):
     client = local_client(server.app)
 
     client.post("/marm_log_session", json={"session_name": "project-a"})
-    client.post("/marm_log_entry", json={"session_name": "project-a", "entry": "2026-05-20-init-setup complete"})
+    client.post(
+        "/marm_log_entry",
+        json={"session_name": "project-a", "entry": "2026-05-20-init-setup complete"},
+    )
 
     deleted = client.post("/marm_delete", json={"type": "log", "target": "project-a"})
     assert deleted.status_code == 200
@@ -580,7 +677,10 @@ def test_marm_delete_session_resets_active_log_session(monkeypatch, tmp_path):
     assert shown.json().get("total_entries", 0) == 0
 
     # Next log entry without session_name must NOT re-land in project-a
-    client.post("/marm_log_entry", json={"entry": "2026-05-20-follow-up-should not go to project-a"})
+    client.post(
+        "/marm_log_entry",
+        json={"entry": "2026-05-20-follow-up-should not go to project-a"},
+    )
     still_gone = client.get("/marm_log_show", params={"session_name": "project-a"})
     assert still_gone.json().get("total_entries", 0) == 0
 
@@ -593,10 +693,14 @@ def test_http_removed_tools_absent_from_openapi_schema(monkeypatch, tmp_path):
     assert response.status_code == 200
     paths = response.json().get("paths", {})
 
-    assert "/marm_start" not in paths, "marm_start must be hidden from MCP (include_in_schema=False)"
+    assert "/marm_start" not in paths, (
+        "marm_start must be hidden from MCP (include_in_schema=False)"
+    )
     assert "/marm_refresh" not in paths, "marm_refresh must be hidden from MCP"
     assert "/marm_reload_docs" not in paths, "marm_reload_docs must be hidden from MCP"
-    assert "/marm_current_context" not in paths, "marm_current_context must be hidden from MCP"
+    assert "/marm_current_context" not in paths, (
+        "marm_current_context must be hidden from MCP"
+    )
     assert "/marm_system_info" not in paths, "marm_system_info must be hidden from MCP"
 
     assert "/marm_smart_recall" in paths
@@ -605,8 +709,12 @@ def test_http_removed_tools_absent_from_openapi_schema(monkeypatch, tmp_path):
     assert "/marm_notebook_add" not in paths, "old marm_notebook_add must be removed"
     assert "/marm_notebook_use" not in paths, "old marm_notebook_use must be removed"
     assert "/marm_notebook_show" not in paths, "old marm_notebook_show must be removed"
-    assert "/marm_notebook_status" not in paths, "old marm_notebook_status must be removed"
-    assert "/marm_notebook_clear" not in paths, "old marm_notebook_clear must be removed"
+    assert "/marm_notebook_status" not in paths, (
+        "old marm_notebook_status must be removed"
+    )
+    assert "/marm_notebook_clear" not in paths, (
+        "old marm_notebook_clear must be removed"
+    )
     assert "/marm_compaction" in paths
     assert "/marm_get_compaction_candidates" not in paths
     assert "/marm_stage_compaction_summaries" not in paths
@@ -656,7 +764,9 @@ def test_auto_refresh_triggers_reload_after_threshold(monkeypatch, tmp_path):
     assert len(reload_calls) == 0, "Reload fired before threshold"
 
     asyncio.run(run_n(1))
-    assert len(reload_calls) == 1, f"Expected 1 reload at threshold, got {len(reload_calls)}"
+    assert len(reload_calls) == 1, (
+        f"Expected 1 reload at threshold, got {len(reload_calls)}"
+    )
     assert doc_module._tool_call_count == 0, "Counter should reset after reload"
 
 
@@ -770,11 +880,13 @@ def test_http_mcp_tool_response_injects_compaction_prompt(monkeypatch, tmp_path)
             ),
         )
 
-    body = json.dumps({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "result": {"content": [{"type": "text", "text": '{"status":"ok"}'}]},
-    }).encode()
+    body = json.dumps(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {"content": [{"type": "text", "text": '{"status":"ok"}'}]},
+        }
+    ).encode()
 
     async def _iter():
         yield body
@@ -810,7 +922,9 @@ def test_http_mcp_tool_response_injects_compaction_prompt(monkeypatch, tmp_path)
     assert nudge_count == 1
 
 
-def test_http_mcp_tool_response_orders_protocol_before_compaction(monkeypatch, tmp_path):
+def test_http_mcp_tool_response_orders_protocol_before_compaction(
+    monkeypatch, tmp_path
+):
     import json
     import uuid
     from datetime import timedelta
@@ -849,11 +963,13 @@ def test_http_mcp_tool_response_orders_protocol_before_compaction(monkeypatch, t
             ),
         )
 
-    body = json.dumps({
-        "jsonrpc": "2.0",
-        "id": 1,
-        "result": {"content": [{"type": "text", "text": '{"status":"ok"}'}]},
-    }).encode()
+    body = json.dumps(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {"content": [{"type": "text", "text": '{"status":"ok"}'}]},
+        }
+    ).encode()
 
     async def _iter():
         yield body
@@ -898,16 +1014,23 @@ def test_http_mcp_tool_response_orders_protocol_before_compaction(monkeypatch, t
     r1, r2 = asyncio.run(run())
 
     content1 = json.loads(r1.body)["result"]["content"]
-    assert content1[0]["text"].startswith("[MARM SESSION INIT]"), "protocol must inject on first call"
-    assert not any("[MARM COMPACTION REQUEST]" in c["text"] for c in content1), \
+    assert content1[0]["text"].startswith("[MARM SESSION INIT]"), (
+        "protocol must inject on first call"
+    )
+    assert not any("[MARM COMPACTION REQUEST]" in c["text"] for c in content1), (
         "compaction must not co-inject with protocol on first call"
+    )
 
     content2 = json.loads(r2.body)["result"]["content"]
-    assert content2[0]["text"].startswith("[MARM COMPACTION REQUEST]"), "compaction must inject on second call"
+    assert content2[0]["text"].startswith("[MARM COMPACTION REQUEST]"), (
+        "compaction must inject on second call"
+    )
     assert candidate_id in content2[0]["text"]
 
 
-def test_http_protocol_injected_on_first_mcp_tool_call_not_on_second(monkeypatch, tmp_path):
+def test_http_protocol_injected_on_first_mcp_tool_call_not_on_second(
+    monkeypatch, tmp_path
+):
     import json
     from unittest.mock import AsyncMock, MagicMock
 
@@ -920,10 +1043,13 @@ def test_http_protocol_injected_on_first_mcp_tool_call_not_on_second(monkeypatch
     tool_call_body = b'{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"marm_notebook","arguments":{"action":"status"}}}'
 
     def make_mock_response():
-        body = json.dumps({
-            "jsonrpc": "2.0", "id": 1,
-            "result": {"content": [{"type": "text", "text": '{"status":"ok"}'}]}
-        }).encode()
+        body = json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "result": {"content": [{"type": "text", "text": '{"status":"ok"}'}]},
+            }
+        ).encode()
 
         async def _iter():
             yield body
@@ -957,21 +1083,29 @@ def test_http_protocol_injected_on_first_mcp_tool_call_not_on_second(monkeypatch
 
     body_1 = json.loads(resp_1.body)
     content_1 = body_1["result"]["content"]
-    assert any("[MARM SESSION INIT]" in c["text"] for c in content_1), \
+    assert any("[MARM SESSION INIT]" in c["text"] for c in content_1), (
         "Protocol not injected in first MCP tool call response"
+    )
 
     body_2 = json.loads(resp_2.body)
     content_2 = body_2["result"]["content"]
-    assert not any("[MARM SESSION INIT]" in c["text"] for c in content_2), \
+    assert not any("[MARM SESSION INIT]" in c["text"] for c in content_2), (
         "Protocol must not repeat on second MCP tool call"
+    )
 
 
 def test_log_entries_are_isolated_by_session(monkeypatch, tmp_path):
     server = load_isolated_server(monkeypatch, tmp_path)
     client = local_client(server.app)
 
-    client.post("/marm_log_entry", json={"session_name": "alpha", "entry": "2026-01-01-alpha-decision recorded"})
-    client.post("/marm_log_entry", json={"session_name": "beta", "entry": "2026-01-02-beta-decision recorded"})
+    client.post(
+        "/marm_log_entry",
+        json={"session_name": "alpha", "entry": "2026-01-01-alpha-decision recorded"},
+    )
+    client.post(
+        "/marm_log_entry",
+        json={"session_name": "beta", "entry": "2026-01-02-beta-decision recorded"},
+    )
 
     alpha = client.get("/marm_log_show", params={"session_name": "alpha"})
     beta = client.get("/marm_log_show", params={"session_name": "beta"})

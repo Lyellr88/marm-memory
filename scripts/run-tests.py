@@ -35,7 +35,9 @@ def pytest_env() -> dict[str, str]:
     return env
 
 
-def run_step(name: str, command: list[str], cwd: Path, env: dict[str, str] | None = None) -> bool:
+def run_step(
+    name: str, command: list[str], cwd: Path, env: dict[str, str] | None = None
+) -> bool:
     print(f"\n{CYAN}==> {name}{RESET}")
     print(" ".join(command))
     result = subprocess.run(command, cwd=cwd, env=env)
@@ -167,7 +169,9 @@ def main() -> int:
             )
             args.docker = False
     else:
-        print(f"{YELLOW}Docker tests skipped by default. Use --docker to include them.{RESET}")
+        print(
+            f"{YELLOW}Docker tests skipped by default. Use --docker to include them.{RESET}"
+        )
 
     if args.compile and not run_step(
         "Python compile check",

@@ -11,7 +11,9 @@ def test_mcp_status_unreachable_when_probe_fails(monkeypatch, tmp_path):
     monkeypatch.setattr(
         urllib.request,
         "urlopen",
-        lambda *a, **kw: (_ for _ in ()).throw(urllib.error.URLError("connection refused")),
+        lambda *a, **kw: (_ for _ in ()).throw(
+            urllib.error.URLError("connection refused")
+        ),
     )
 
     client = local_client(server.app)
@@ -23,7 +25,11 @@ def test_mcp_status_unreachable_when_probe_fails(monkeypatch, tmp_path):
 def test_mcp_status_reachable_when_mcp_responds(monkeypatch, tmp_path):
     server = load_dashboard(monkeypatch, tmp_path)
 
-    health_body = {"status": "healthy", "service": "MARM MCP Server", "version": "2.2.7"}
+    health_body = {
+        "status": "healthy",
+        "service": "MARM MCP Server",
+        "version": "2.2.7",
+    }
 
     class _FakeResp:
         def read(self):
@@ -53,7 +59,9 @@ def test_mcp_status_handles_non_200_response_gracefully(monkeypatch, tmp_path):
     monkeypatch.setattr(
         urllib.request,
         "urlopen",
-        lambda *a, **kw: (_ for _ in ()).throw(urllib.error.URLError("connection refused")),
+        lambda *a, **kw: (_ for _ in ()).throw(
+            urllib.error.URLError("connection refused")
+        ),
     )
 
     client = local_client(server.app)

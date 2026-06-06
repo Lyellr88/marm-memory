@@ -5,7 +5,6 @@ import os
 import sys
 import tempfile
 
-# Windows consoles default to cp1252 and choke on emoji in tool descriptions.
 try:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 except Exception:
@@ -21,32 +20,47 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from fastapi.testclient import TestClient  # noqa: E402
 from marm_mcp_server.server import app  # noqa: E402
 
-headers = {"Accept": "application/json, text/event-stream",
-           "Content-Type": "application/json"}
+headers = {
+    "Accept": "application/json, text/event-stream",
+    "Content-Type": "application/json",
+}
 
 with TestClient(app, client=("127.0.0.1", 50000)) as client:
-    init = client.post("/mcp", headers=headers, json={
-        "jsonrpc": "2.0", "id": 1, "method": "initialize",
-        "params": {"protocolVersion": "2024-11-05", "capabilities": {},
-                   "clientInfo": {"name": "schema-dump", "version": "0"}},
-    })
+    init = client.post(
+        "/mcp",
+        headers=headers,
+        json={
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {"name": "schema-dump", "version": "0"},
+            },
+        },
+    )
     sid = init.headers.get("mcp-session-id")
     if sid:
         headers["mcp-session-id"] = sid
 
-    # MCP requires the initialized notification before normal requests
-    client.post("/mcp", headers=headers, json={
-        "jsonrpc": "2.0", "method": "notifications/initialized", "params": {}})
+    client.post(
+        "/mcp",
+        headers=headers,
+        json={"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}},
+    )
 
-    resp = client.post("/mcp", headers=headers, json={
-        "jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}})
+    resp = client.post(
+        "/mcp",
+        headers=headers,
+        json={"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
+    )
 
 raw = resp.text
 if os.environ.get("DEBUG_RAW"):
     print("INIT STATUS:", init.status_code, "SID:", sid)
     print("LIST STATUS:", resp.status_code)
     print("RAW LIST:\n", raw[:3000], "\n---")
-# mount_http streams SSE; pull the JSON payload out of the data: line if present
 payload = None
 for line in raw.splitlines():
     line = line.strip()

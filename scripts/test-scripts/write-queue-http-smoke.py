@@ -38,32 +38,64 @@ def parse_args() -> argparse.Namespace:
             "Hammer /marm_context_log over HTTP to measure queue throughput and rate-limit impact."
         )
     )
-    parser.add_argument("--base-url", default="http://127.0.0.1:8001", help="Server URL base.")
-    parser.add_argument("--total-requests", type=int, default=120, help="Total HTTP writes to send.")
+    parser.add_argument(
+        "--base-url", default="http://127.0.0.1:8001", help="Server URL base."
+    )
+    parser.add_argument(
+        "--total-requests", type=int, default=120, help="Total HTTP writes to send."
+    )
     parser.add_argument(
         "--request-steps",
         default="",
         help="Comma-separated stepped totals (e.g. 60,120,240). Overrides --total-requests.",
     )
-    parser.add_argument("--concurrency", type=int, default=20, help="Parallel in-flight requests.")
-    parser.add_argument("--session-prefix", default="smoke-http-queue", help="Session prefix for test writes.")
+    parser.add_argument(
+        "--concurrency", type=int, default=20, help="Parallel in-flight requests."
+    )
+    parser.add_argument(
+        "--session-prefix",
+        default="smoke-http-queue",
+        help="Session prefix for test writes.",
+    )
     parser.add_argument("--auth-key", default="", help="Optional Bearer token.")
-    parser.add_argument("--timeout-s", type=float, default=10.0, help="Per-request timeout seconds.")
-    parser.add_argument("--warmup-writes", type=int, default=0, help="Sequential warmup writes before load.")
+    parser.add_argument(
+        "--timeout-s", type=float, default=10.0, help="Per-request timeout seconds."
+    )
+    parser.add_argument(
+        "--warmup-writes",
+        type=int,
+        default=0,
+        help="Sequential warmup writes before load.",
+    )
     parser.add_argument(
         "--out-dir",
         default=str(ROOT / "scripts" / "out" / "write-queue-http"),
         help="Directory for JSON artifacts.",
     )
-    parser.add_argument("--out-prefix", default="write-queue-http", help="Artifact file prefix.")
-    parser.add_argument("--no-write-artifacts", action="store_true", help="Skip writing JSON/CSV artifacts.")
+    parser.add_argument(
+        "--out-prefix", default="write-queue-http", help="Artifact file prefix."
+    )
+    parser.add_argument(
+        "--no-write-artifacts",
+        action="store_true",
+        help="Skip writing JSON/CSV artifacts.",
+    )
     parser.add_argument(
         "--include-raw-results",
         action="store_true",
         help="Include full per-request results in JSON artifacts (can be very large).",
     )
-    parser.add_argument("--spawn-server", action="store_true", help="Start a local server subprocess for the run.")
-    parser.add_argument("--spawn-port", type=int, default=18001, help="Port used when --spawn-server is set.")
+    parser.add_argument(
+        "--spawn-server",
+        action="store_true",
+        help="Start a local server subprocess for the run.",
+    )
+    parser.add_argument(
+        "--spawn-port",
+        type=int,
+        default=18001,
+        help="Port used when --spawn-server is set.",
+    )
     parser.add_argument(
         "--queue-disabled",
         action="store_true",
@@ -81,7 +113,12 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Pass --rate-limit-rpm N to a spawned server. 0 disables rate limiting.",
     )
-    parser.add_argument("--max-queue-size", type=int, default=100, help="MAX_QUEUE_SIZE when spawning server.")
+    parser.add_argument(
+        "--max-queue-size",
+        type=int,
+        default=100,
+        help="MAX_QUEUE_SIZE when spawning server.",
+    )
     parser.add_argument(
         "--stop-on-fail",
         action="store_true",
@@ -132,10 +169,14 @@ def post_context_log(
     try:
         with urllib.request.urlopen(req, timeout=timeout_s) as resp:
             latency_ms = (time.perf_counter() - start) * 1000
-            return RequestResult(resp.status, latency_ms, resp.headers.get("Retry-After"))
+            return RequestResult(
+                resp.status, latency_ms, resp.headers.get("Retry-After")
+            )
     except urllib.error.HTTPError as exc:
         latency_ms = (time.perf_counter() - start) * 1000
-        return RequestResult(exc.code, latency_ms, exc.headers.get("Retry-After"), str(exc))
+        return RequestResult(
+            exc.code, latency_ms, exc.headers.get("Retry-After"), str(exc)
+        )
     except Exception as exc:
         latency_ms = (time.perf_counter() - start) * 1000
         return RequestResult(-1, latency_ms, None, str(exc))
@@ -149,11 +190,15 @@ def percentile(values: list[float], pct: float) -> float:
     return values[idx]
 
 
-def run_load(args: argparse.Namespace, base_url: str, total_requests: int) -> tuple[list[RequestResult], float, str]:
+def run_load(
+    args: argparse.Namespace, base_url: str, total_requests: int
+) -> tuple[list[RequestResult], float, str]:
     session_name = f"{args.session_prefix}-{time.time_ns()}"
     results: list[RequestResult] = []
     if args.warmup_writes > 5:
-        print(f"note: {args.warmup_writes} warmup writes will consume rate-limit tokens before the measured run")
+        print(
+            f"note: {args.warmup_writes} warmup writes will consume rate-limit tokens before the measured run"
+        )
     warmup_session = f"{session_name}-warmup"
     for i in range(args.warmup_writes):
         warmup_result = post_context_log(
@@ -186,7 +231,9 @@ def run_load(args: argparse.Namespace, base_url: str, total_requests: int) -> tu
     return results, elapsed_s, session_name
 
 
-def print_summary(results: list[RequestResult], elapsed_s: float, db_integrity_ok: bool | None = None) -> int:
+def print_summary(
+    results: list[RequestResult], elapsed_s: float, db_integrity_ok: bool | None = None
+) -> int:
     """Print run summary. Returns non-zero if hard errors (not 429s) were present."""
     counts = Counter(r.status_code for r in results)
     error_counts = Counter(r.error for r in results if r.error)
@@ -266,7 +313,9 @@ def write_artifacts(args: argparse.Namespace, payload: dict) -> Path:
     return json_path
 
 
-def spawn_server(args: argparse.Namespace, port: int | None = None) -> tuple[subprocess.Popen, str, Path]:
+def spawn_server(
+    args: argparse.Namespace, port: int | None = None
+) -> tuple[subprocess.Popen, str, Path]:
     temp_dir = Path(tempfile.mkdtemp(prefix="marm-http-smoke-"))
     db_path = temp_dir / "memory.db"
     analytics_path = temp_dir / "analytics.db"
@@ -298,7 +347,11 @@ def spawn_server(args: argparse.Namespace, port: int | None = None) -> tuple[sub
 
 
 def expected_write_queue_enabled(args: argparse.Namespace) -> bool:
-    return not args.queue_disabled or args.server_preset in {"swarm", "swarm-max", "trusted"}
+    return not args.queue_disabled or args.server_preset in {
+        "swarm",
+        "swarm-max",
+        "trusted",
+    }
 
 
 def stop_server(proc: subprocess.Popen) -> None:
@@ -316,7 +369,9 @@ def main() -> int:
         print("total-requests and concurrency must be positive integers.")
         return 2
     if args.queue_disabled and not args.spawn_server:
-        print("warning: --queue-disabled has no effect without --spawn-server (cannot change a running server's queue state)")
+        print(
+            "warning: --queue-disabled has no effect without --spawn-server (cannot change a running server's queue state)"
+        )
     if args.server_preset != "none" and not args.spawn_server:
         print("warning: --server-preset has no effect without --spawn-server")
     if args.server_rate_limit_rpm is not None and not args.spawn_server:
@@ -330,7 +385,11 @@ def main() -> int:
     steps: list[int] = []
     if args.request_steps.strip():
         try:
-            steps = [int(part.strip()) for part in args.request_steps.split(",") if part.strip()]
+            steps = [
+                int(part.strip())
+                for part in args.request_steps.split(",")
+                if part.strip()
+            ]
         except ValueError:
             print("Invalid --request-steps. Example: 60,120,240")
             return 2
