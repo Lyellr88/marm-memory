@@ -2,7 +2,7 @@
 
 ## Universal Memory Intelligence Platform for AI Agents
 
-**MARM v2.9.2** - Memory Accurate Response Mode
+**MARM v2.10.0** - Memory Accurate Response Mode
 *Docker deployment guide for Windows, Mac, and Linux*
 
 ---
@@ -607,6 +607,7 @@ services:
 | `SERVER_PORT` | `8001` | Server port. |
 | `MARM_API_KEY` | _(unset)_ | Required for all Docker deployments (local and remote). Docker bridge networking means the server never sees 127.0.0.1 from the host — set this or all MCP calls will 401. Generate with `docker run --rm lyellr88/marm-mcp-server:latest --generate-key`. |
 | `MARM_RATE_LIMIT_RPM` | `80` | HTTP rate limit (requests per minute per client IP). Set to `0` to disable. Overridden by `--swarm`, `--swarm-max`, `--trusted` presets. |
+| `RECALL_SCAN_LIMIT` | `1000` | Maximum embedded memories semantic recall scans per query before surfacing `recall_scan_truncated=true`. |
 | `MAX_QUEUE_SIZE` | `100` | Write queue size when `WRITE_QUEUE_ENABLED=1`. |
 | `WRITE_QUEUE_ENABLED` | `1` | Serialized memory write queue. Set to `0` only for debugging/direct-write comparisons. |
 | `MARM_ANALYTICS_DB_PATH` | `/app/data/marm_usage_analytics.db` | Override analytics database path. |

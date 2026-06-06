@@ -2,7 +2,7 @@
 
 ## Complete Usage Guide for Memory-Augmented AI
 
-**MARM v2.9.2 - Universal MCP Server for AI Memory Intelligence**
+**MARM v2.10.0 - Universal MCP Server for AI Memory Intelligence**
 
 ---
 
@@ -306,6 +306,7 @@ The write queue is enabled by default and serializes memory writes through one i
 **Global Search**: Use `search_all=True` to search across all sessions
 **Natural Language Search**: "authentication problems with JWT tokens" vs "auth error"
 **Temporal Search**: Include timeframes in queries
+**Bounded Recall Signal**: If `marm_smart_recall` returns `recall_scan_truncated=true`, the semantic scan hit `RECALL_SCAN_LIMIT`; narrow the session/query or raise the env var for larger stores.
 
 ### Workflow Optimization
 

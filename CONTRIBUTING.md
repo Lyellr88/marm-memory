@@ -73,6 +73,10 @@ marm-mcp-server/
     services/
       documentation.py         # Startup documentation loading
       automation.py            # Event handler registration
+      notebook.py              # Notebook dispatch service
+      recall.py                # Shared smart-recall response logic
+      summary.py               # Shared session summary formatting
+      compaction_apply.py      # Atomic compaction apply transaction
     utils/
       helpers.py               # Shared helpers
       security.py              # API key generation

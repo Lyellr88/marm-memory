@@ -7,7 +7,6 @@ from pathlib import Path
 
 from ..utils.security import generate_api_key
 
-# Advanced memory system availability flags
 SEMANTIC_SEARCH_AVAILABLE = (
     importlib.util.find_spec("sentence_transformers") is not None
 )
@@ -16,7 +15,6 @@ if not SEMANTIC_SEARCH_AVAILABLE:
         "WARNING: Semantic search not available. Install: pip install sentence-transformers"
     )
 
-# Automation scheduler availability
 SCHEDULER_AVAILABLE = importlib.util.find_spec("apscheduler") is not None
 if not SCHEDULER_AVAILABLE:
     print("WARNING: Scheduler not available. Install: pip install apscheduler")
@@ -30,21 +28,16 @@ def _file_link(path: Path) -> str:
         return str(path)
 
 
-# Database configuration - Official .marm system directory (CLI standard)
 def get_marm_db_path():
     """Get the official MARM database path, respecting environment variable if set"""
-    # Check if MARM_DB_PATH environment variable is set (for Docker)
     env_db_path = os.environ.get("MARM_DB_PATH")
     if env_db_path:
-        # Ensure the directory exists
         db_dir = Path(env_db_path).parent
         db_dir.mkdir(parents=True, exist_ok=True)
         return env_db_path
 
-    # Follow professional CLI standard: ~/.marm/ (like ~/.git, ~/.docker, ~/.claude)
     marm_dir = Path.home() / ".marm"
 
-    # Create .marm directory if it doesn't exist
     marm_dir.mkdir(exist_ok=True)
 
     return str(marm_dir / "marm_memory.db")
@@ -75,7 +68,7 @@ DEFAULT_SEMANTIC_MODEL = "all-MiniLM-L6-v2"
 
 SERVER_HOST = os.environ.get("SERVER_HOST", "127.0.0.1")
 SERVER_PORT = int(os.environ.get("SERVER_PORT", 8001))
-SERVER_VERSION = "2.9.2"
+SERVER_VERSION = "2.10.0"
 
 MARM_RATE_LIMIT_RPM = int(os.environ.get("MARM_RATE_LIMIT_RPM", "80"))
 RATE_LIMIT_WINDOW_SECONDS = int(os.environ.get("RATE_LIMIT_WINDOW_SECONDS", "60"))
@@ -83,6 +76,7 @@ RATE_LIMIT_BLOCK_SECONDS = int(os.environ.get("RATE_LIMIT_BLOCK_SECONDS", "30"))
 
 WRITE_QUEUE_ENABLED = os.environ.get("WRITE_QUEUE_ENABLED", "1") == "1"
 MAX_QUEUE_SIZE = int(os.environ.get("MAX_QUEUE_SIZE", "100"))
+RECALL_SCAN_LIMIT = int(os.environ.get("RECALL_SCAN_LIMIT", "1000"))
 
 CONSOLIDATION_ENABLED = os.environ.get("CONSOLIDATION_ENABLED", "0") == "1"
 CONSOLIDATION_THRESHOLD = float(os.environ.get("CONSOLIDATION_THRESHOLD", "0.92"))
@@ -160,10 +154,18 @@ if SERVER_HOST == "0.0.0.0" and not MARM_API_KEY and not _is_generate_key_cmd:
             try:
                 import subprocess
                 import getpass
+
                 user = getpass.getuser()
                 subprocess.run(
-                    ["icacls", str(_MARM_ENV_PATH), "/inheritance:r", "/grant:r", f"{user}:(F)"],
-                    check=False, capture_output=True,
+                    [
+                        "icacls",
+                        str(_MARM_ENV_PATH),
+                        "/inheritance:r",
+                        "/grant:r",
+                        f"{user}:(F)",
+                    ],
+                    check=False,
+                    capture_output=True,
                 )
             except Exception:
                 pass

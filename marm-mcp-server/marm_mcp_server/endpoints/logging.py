@@ -45,14 +45,10 @@ async def marm_log_session(request: SessionRequest):
         }
     except sqlite3.Error as e:
         print(f"Database error in marm_log_session: {e}")
-        raise HTTPException(
-            status_code=500, detail="Database error during session creation."
-        )
+        return {"status": "error", "message": f"Database error during session creation: {str(e)}"}
     except Exception as e:
         print(f"Unexpected error in marm_log_session: {e}")
-        raise HTTPException(
-            status_code=500, detail="Internal server error during session creation."
-        )
+        return {"status": "error", "message": f"Session creation failed: {str(e)}"}
 
 
 @router.post("/marm_log_entry", operation_id="marm_log_entry")
@@ -100,14 +96,10 @@ async def marm_log_entry(request: LogEntryRequest):
         }
     except sqlite3.Error as e:
         print(f"Database error in marm_log_entry: {e}")
-        raise HTTPException(
-            status_code=500, detail="Database error while creating log entry."
-        )
+        return {"status": "error", "message": f"Database error while creating log entry: {str(e)}"}
     except Exception as e:
         print(f"Unexpected error in marm_log_entry: {e}")
-        raise HTTPException(
-            status_code=500, detail="Internal server error while creating log entry."
-        )
+        return {"status": "error", "message": f"Log entry creation failed: {str(e)}"}
 
 
 @router.get("/marm_log_show", operation_id="marm_log_show")
@@ -165,14 +157,10 @@ async def marm_log_show(
                 }
     except sqlite3.Error as e:
         print(f"Database error in marm_log_show: {e}")
-        raise HTTPException(
-            status_code=500, detail="Database error while showing logs."
-        )
+        return {"status": "error", "message": f"Database error while showing logs: {str(e)}"}
     except Exception as e:
         print(f"Unexpected error in marm_log_show: {e}")
-        raise HTTPException(
-            status_code=500, detail="Internal server error while showing logs."
-        )
+        return {"status": "error", "message": f"Log show failed: {str(e)}"}
 
 
 @router.post("/marm_delete", operation_id="marm_delete")
@@ -234,9 +222,7 @@ async def marm_delete(request: DeleteRequest):
         raise
     except sqlite3.Error as e:
         print(f"Database error in marm_delete: {e}")
-        raise HTTPException(status_code=500, detail="Database error while deleting.")
+        return {"status": "error", "message": f"Database error while deleting: {str(e)}"}
     except Exception as e:
         print(f"Unexpected error in marm_delete: {e}")
-        raise HTTPException(
-            status_code=500, detail="Internal server error while deleting."
-        )
+        return {"status": "error", "message": f"Delete failed: {str(e)}"}

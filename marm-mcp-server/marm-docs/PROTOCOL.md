@@ -1,6 +1,6 @@
 # MARM MCP Protocol
 
-This protocol defines how MARM MCP should orient connected AI agents when persistent memory, session logs, notebook context, and semantic recall are available. It is delivered automatically by the MCP server on the first successful tool call and should be treated as operating guidance for the current MARM-backed session.
+This protocol defines how MARM MCP should orient connected AI agents when persistent memory, session logs, notebook context, and semantic recall are available. It is delivered automatically by the MCP server on the first successful tool call for each session scope and should be treated as operating guidance for the current MARM-backed session.
 
 ```txt
 MARM MCP - Memory Accurate Response Mode

@@ -1,6 +1,6 @@
 """Memory endpoints for MARM MCP Server."""
 
-from fastapi import HTTPException, APIRouter, Request
+from fastapi import APIRouter, Request
 from datetime import datetime
 
 from ..core.models import SmartRecallRequest, ContextLogRequest
@@ -67,7 +67,6 @@ async def marm_smart_recall(request: SmartRecallRequest, http_request: Request):
     Finds relevant memories using semantic similarity or text search.
     Returns the most relevant memories with similarity scores.
     """
-    # Track usage
     track_endpoint_usage(
         "marm_smart_recall",
         http_request,
@@ -123,8 +122,8 @@ async def marm_smart_recall(request: SmartRecallRequest, http_request: Request):
                     for r in cursor.fetchall()
                 ]
 
-        similar_memories = await memory.recall_similar(
-            request.query, search_session, request.limit
+        similar_memories, scan_meta = await memory.recall_similar(
+            request.query, search_session, request.limit, include_scan_metadata=True
         )
 
         if not similar_memories:
@@ -139,6 +138,7 @@ async def marm_smart_recall(request: SmartRecallRequest, http_request: Request):
                     "session_name": request.session_name,
                     "search_all": request.search_all,
                     "results": [],
+                    **scan_meta,
                 }
 
                 if system_memories:
@@ -173,6 +173,7 @@ async def marm_smart_recall(request: SmartRecallRequest, http_request: Request):
                     "session_name": request.session_name,
                     "search_all": request.search_all,
                     "results": [],
+                    **scan_meta,
                 }
                 if request.include_logs:
                     response["log_results"] = log_results
@@ -185,6 +186,7 @@ async def marm_smart_recall(request: SmartRecallRequest, http_request: Request):
             "query": request.query,
             "session_name": request.session_name,
             "search_all": request.search_all,
+            **scan_meta,
         }
 
         limited_memories, was_truncated = MCPResponseLimiter.limit_memory_response(
@@ -208,7 +210,7 @@ async def marm_smart_recall(request: SmartRecallRequest, http_request: Request):
 
         return final_response
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Memory recall failed: {str(e)}")
+        return {"status": "error", "message": f"Memory recall failed: {str(e)}"}
 
 
 @router.post("/marm_context_log", operation_id="marm_context_log")
@@ -249,4 +251,4 @@ async def marm_context_log(request: ContextLogRequest):
             "context_type": context_type,
         }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Context logging failed: {str(e)}")
+        return {"status": "error", "message": f"Context logging failed: {str(e)}"}

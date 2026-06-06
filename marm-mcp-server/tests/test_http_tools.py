@@ -291,7 +291,9 @@ def test_http_notebook_add_persists_entry_and_embedding(monkeypatch, tmp_path):
     assert row[2] == b"fake-embedding-bytes"
 
 
-def test_http_notebook_service_errors_return_400(monkeypatch, tmp_path):
+def test_http_notebook_service_errors_return_structured_error(monkeypatch, tmp_path):
+    """S5: notebook service errors return HTTP 200 with {"status":"error","message":...}
+    so the model can read and recover, instead of an opaque HTTPException."""
     server = load_isolated_server(monkeypatch, tmp_path)
     client = local_client(server.app)
 
@@ -301,10 +303,12 @@ def test_http_notebook_service_errors_return_400(monkeypatch, tmp_path):
     )
     missing_names = client.post("/marm_notebook", json={"action": "use"})
 
-    assert missing_data.status_code == 400
-    assert "name and data are required" in missing_data.json()["detail"]
-    assert missing_names.status_code == 400
-    assert "names is required" in missing_names.json()["detail"]
+    assert missing_data.status_code == 200
+    assert missing_data.json()["status"] == "error"
+    assert "name and data are required" in missing_data.json()["message"]
+    assert missing_names.status_code == 200
+    assert missing_names.json()["status"] == "error"
+    assert "names is required" in missing_names.json()["message"]
 
 
 def test_context_log_recall_include_logs_and_system_info(monkeypatch, tmp_path):
@@ -857,7 +861,7 @@ def test_http_mcp_tool_response_injects_compaction_prompt(monkeypatch, tmp_path)
     monkeypatch.setattr(
         compaction_module.settings, "COMPACTION_INJECTION_BYTE_BUDGET", 2048
     )
-    server._protocol_delivered = True
+    server._protocol_delivered_sessions = {"__default__"}
 
     candidate_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
@@ -868,7 +872,7 @@ def test_http_mcp_tool_response_injects_compaction_prompt(monkeypatch, tmp_path)
                 (id, session_name, source_memory_ids, preview, suggested_summary,
                  status, candidate_hash, source_updated_at_snapshot,
                  expires_at, created_at, updated_at, reviewed_at)
-            VALUES (?, 'sess', ?, ?, NULL, 'pending_summary', 'hash', '{}', ?, ?, ?, NULL)
+            VALUES (?, '__default__', ?, ?, NULL, 'pending_summary', 'hash', '{}', ?, ?, ?, NULL)
             """,
             (
                 candidate_id,
@@ -940,7 +944,7 @@ def test_http_mcp_tool_response_orders_protocol_before_compaction(
         compaction_module.settings, "COMPACTION_NUDGE_COOLDOWN_SECONDS", 2
     )
     doc_module._docs_loaded = True
-    server._protocol_delivered = False
+    server._protocol_delivered_sessions = set()
 
     candidate_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
@@ -951,7 +955,7 @@ def test_http_mcp_tool_response_orders_protocol_before_compaction(
                 (id, session_name, source_memory_ids, preview, suggested_summary,
                  status, candidate_hash, source_updated_at_snapshot,
                  expires_at, created_at, updated_at, reviewed_at)
-            VALUES (?, 'sess', ?, ?, NULL, 'pending_summary', 'hash', '{}', ?, ?, ?, NULL)
+            VALUES (?, '__default__', ?, ?, NULL, 'pending_summary', 'hash', '{}', ?, ?, ?, NULL)
             """,
             (
                 candidate_id,
@@ -1038,7 +1042,7 @@ def test_http_protocol_injected_on_first_mcp_tool_call_not_on_second(
     doc_module = importlib.import_module("marm_mcp_server.services.documentation")
 
     doc_module._docs_loaded = False
-    server._protocol_delivered = False
+    server._protocol_delivered_sessions = set()
 
     tool_call_body = b'{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"marm_notebook","arguments":{"action":"status"}}}'
 
@@ -1091,6 +1095,88 @@ def test_http_protocol_injected_on_first_mcp_tool_call_not_on_second(
     content_2 = body_2["result"]["content"]
     assert not any("[MARM SESSION INIT]" in c["text"] for c in content_2), (
         "Protocol must not repeat on second MCP tool call"
+    )
+
+
+def test_http_protocol_injected_independently_per_session(monkeypatch, tmp_path):
+    """Regression: each session must receive the protocol once, independently.
+
+    Before the fix, _protocol_delivered was a server-global bool — the first client
+    to call any tool consumed the injection for all clients. In swarm mode this meant
+    every agent after the first ran without the MARM protocol.
+    """
+    import json
+    from unittest.mock import AsyncMock, MagicMock
+
+    server = load_isolated_server(monkeypatch, tmp_path)
+    doc_module = importlib.import_module("marm_mcp_server.services.documentation")
+    doc_module._docs_loaded = False
+    server._protocol_delivered_sessions = set()
+
+    def make_request(session_name):
+        body = json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "tools/call",
+                "params": {
+                    "name": "marm_context_log",
+                    "arguments": {"session_name": session_name, "content": "x"},
+                },
+            }
+        ).encode()
+        req = MagicMock()
+        req.method = "POST"
+        req.url.path = "/mcp"
+        req.body = AsyncMock(return_value=body)
+        return req
+
+    def make_response():
+        body = json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "result": {"content": [{"type": "text", "text": '{"status":"ok"}'}]},
+            }
+        ).encode()
+
+        async def _iter():
+            yield body
+
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.headers = MagicMock()
+        resp.headers.items.return_value = []
+        resp.body_iterator = _iter()
+        resp.body = body
+        return resp
+
+    async def run():
+        r_alpha = await server._mcp_tool_call_tracker(
+            make_request("alpha"), AsyncMock(return_value=make_response())
+        )
+        r_beta = await server._mcp_tool_call_tracker(
+            make_request("beta"), AsyncMock(return_value=make_response())
+        )
+        r_alpha_2 = await server._mcp_tool_call_tracker(
+            make_request("alpha"), AsyncMock(return_value=make_response())
+        )
+        return r_alpha, r_beta, r_alpha_2
+
+    r_alpha, r_beta, r_alpha_2 = asyncio.run(run())
+
+    alpha_content = json.loads(r_alpha.body)["result"]["content"]
+    beta_content = json.loads(r_beta.body)["result"]["content"]
+    alpha_2_content = json.loads(r_alpha_2.body)["result"]["content"]
+
+    assert any("[MARM SESSION INIT]" in c["text"] for c in alpha_content), (
+        "alpha session must receive protocol on first call"
+    )
+    assert any("[MARM SESSION INIT]" in c["text"] for c in beta_content), (
+        "beta session must receive protocol independently — not blocked by alpha delivery"
+    )
+    assert not any("[MARM SESSION INIT]" in c["text"] for c in alpha_2_content), (
+        "alpha session must not receive protocol twice"
     )
 
 

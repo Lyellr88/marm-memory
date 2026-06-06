@@ -1,50 +1,28 @@
-"""Reasoning endpoints for MARM MCP Server."""
+"""Session summary generation for MARM MCP Server."""
 
-from fastapi import APIRouter, Query
 from datetime import datetime
 
 from ..core.memory import memory
 from ..core.response_limiter import MCPResponseLimiter
 
-router = APIRouter(prefix="", tags=["Reasoning"])
 
-
-@router.get("/marm_summary", operation_id="marm_summary")
-async def marm_summary(
-    session_name: str = Query(..., description="The name of the session to summarize."),
-    limit: int = Query(
-        50,
-        description="Maximum number of entries to include (default: 50)",
-        ge=1,
-        le=200,
-    ),
-):
-    """
-    📊 Generate paste-ready context block for new chats
-
-    Equivalent to /summary: [session name] command
-    Uses intelligent truncation to stay within MCP 1MB limits.
-    """
+async def generate_session_summary(session_name: str, limit: int = 50) -> dict:
     try:
         with memory.get_connection() as conn:
-            cursor = conn.execute(
-                """
-                SELECT COUNT(*) FROM log_entries WHERE session_name = ?
-            """,
+            total_entries = conn.execute(
+                "SELECT COUNT(*) FROM log_entries WHERE session_name = ?",
                 (session_name,),
-            )
-            total_entries = cursor.fetchone()[0]
+            ).fetchone()[0]
 
-            cursor = conn.execute(
+            entries = conn.execute(
                 """
                 SELECT entry_date, topic, summary, full_entry
                 FROM log_entries WHERE session_name = ?
                 ORDER BY entry_date DESC
                 LIMIT ?
-            """,
+                """,
                 (session_name, limit),
-            )
-            entries = cursor.fetchall()
+            ).fetchall()
 
         if not entries:
             return {
@@ -55,7 +33,7 @@ async def marm_summary(
         base_response = {
             "status": "success",
             "session_name": session_name,
-            "entry_count": len(entries),
+            "entry_count": 0,
             "total_entries": total_entries,
         }
 
@@ -72,7 +50,7 @@ async def marm_summary(
             summary_lines.append("")
 
         included_entries = []
-        current_summary_lines = summary_lines.copy()
+        current_lines = summary_lines.copy()
 
         for entry in entries:
             entry_summary = entry[2]
@@ -80,26 +58,23 @@ async def marm_summary(
                 entry_summary = entry_summary[:197] + "..."
 
             entry_line = f"**{entry[0]}** [{entry[1]}]: {entry_summary}"
-            test_lines = current_summary_lines + [entry_line]
-
-            test_summary = "\n".join(test_lines)
+            test_lines = current_lines + [entry_line]
             test_response = base_response.copy()
-            test_response["summary"] = test_summary
+            test_response["summary"] = "\n".join(test_lines)
 
-            response_size = MCPResponseLimiter.estimate_response_size(test_response)
-
-            if response_size > MCPResponseLimiter.CONTENT_LIMIT:
+            if (
+                MCPResponseLimiter.estimate_response_size(test_response)
+                > MCPResponseLimiter.CONTENT_LIMIT
+            ):
                 break
 
-            current_summary_lines.append(entry_line)
+            current_lines.append(entry_line)
             included_entries.append(entry)
-
-        summary_text = "\n".join(current_summary_lines)
 
         final_response = {
             "status": "success",
             "session_name": session_name,
-            "summary": summary_text,
+            "summary": "\n".join(current_lines),
             "entry_count": len(included_entries),
             "total_entries": total_entries,
         }
@@ -115,4 +90,4 @@ async def marm_summary(
         return final_response
 
     except Exception as e:
-        return {"status": "error", "message": f"Failed to generate summary: {str(e)}"}
+        return {"status": "error", "message": f"Error generating summary: {str(e)}"}

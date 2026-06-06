@@ -92,7 +92,7 @@ MARM currently exposes **9 focused MCP tools**:
 
 #### Q: Do I still need to call `marm_start`?
 
-No. Session startup, protocol delivery, and documentation loading are now automatic. The server injects the protocol on the first successful MCP tool call, then keeps docs indexed with hash-based caching so unchanged docs are not repeatedly duplicated.
+No. Session startup, protocol delivery, and documentation loading are now automatic. The server injects the protocol on the first successful MCP tool call for each session scope, then keeps docs indexed with hash-based caching so unchanged docs are not repeatedly duplicated.
 
 ---
 
@@ -129,6 +129,8 @@ When you store memory through `marm_context_log`, MARM classifies content into b
 #### Q: Can I search across all sessions or just one?
 
 Both. `marm_smart_recall` searches one session by default and can search across all sessions with `search_all=True`.
+
+When semantic recall reaches its configured scan cap, responses include `recall_scan_truncated=true` and `recall_scan_limit` so agents know the search was bounded.
 
 #### Q: When should I create a new session vs. continuing an existing one?
 
