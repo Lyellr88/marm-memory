@@ -2,8 +2,8 @@
 <picture>
 <img src="https://raw.githubusercontent.com/Lyellr88/MARM-Systems/MARM-main/assets/marm-logo.svg"
      alt="MARM - The AI That Remembers Your Conversations."
-     width="550"
-     height="250">
+     width="700"
+     height="400">
 </picture>
 <h1 align="center">MARM: The AI That Remembers Your Conversations v2.9.1</h1>
 
@@ -177,8 +177,8 @@ Claude Code remains the recommended first setup path, but MARM also works with o
 <div align="center">
 <picture>
 <img src="https://raw.githubusercontent.com/Lyellr88/MARM-Systems/MARM-main/assets/marm-dashboard.png"
-   width="900"
-   height="625"
+   width="700"
+   height="400"
 </picture>
 </div>
 
@@ -214,8 +214,8 @@ See [`marm-dashboard/README.md`](marm-dashboard/README.md) for the full guide.
 <div align="center">
 <picture>
 <img src="https://raw.githubusercontent.com/Lyellr88/MARM-Systems/MARM-main/assets/mcp-tools.png"
-   height="550"
-   width="800"
+   width="700"
+   height="400"
 </picture>
 </div>
 
@@ -289,7 +289,7 @@ If MARM helps with your AI memory needs, please star the repository to support d
 
 <div align="center">
 
-  [![Star History Chart](https://api.star-history.com/svg?repos=Lyellr88/MARM-Systems&type=Date)](https://star-history.com/#Lyellr88/MARM-Systems&Date)
+[![Star History Chart](https://api.star-history.com/svg?repos=Lyellr88/MARM-Systems&type=Date)](https://star-history.com/#Lyellr88/MARM-Systems&Date)
 </div>
 
 ## License & Usage Notice
