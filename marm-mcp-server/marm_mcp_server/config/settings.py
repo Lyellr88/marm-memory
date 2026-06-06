@@ -127,9 +127,11 @@ def _load_key_from_file() -> str:
             if not line or line.startswith("#"):
                 continue
             if line.startswith("MARM_API_KEY="):
-                value = line.split("=", 1)[1].split("#", 1)[0].strip()
+                value = line.split("=", 1)[1].strip()
                 if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
                     value = value[1:-1]
+                else:
+                    value = value.split("#", 1)[0].strip()
                 return value
     except Exception:
         pass
