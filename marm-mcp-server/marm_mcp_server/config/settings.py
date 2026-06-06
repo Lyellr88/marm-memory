@@ -122,10 +122,15 @@ _MARM_ENV_PATH = Path.home() / ".marm" / ".env"
 def _load_key_from_file() -> str:
     """Read MARM_API_KEY from ~/.marm/.env if present."""
     try:
-        for line in _MARM_ENV_PATH.read_text().splitlines():
-            line = line.strip()
-            if line.startswith("MARM_API_KEY=") and not line.startswith("#"):
-                return line.split("=", 1)[1].strip()
+        for raw_line in _MARM_ENV_PATH.read_text().splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            if line.startswith("MARM_API_KEY="):
+                value = line.split("=", 1)[1].split("#", 1)[0].strip()
+                if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+                    value = value[1:-1]
+                return value
     except Exception:
         pass
     return ""
@@ -145,6 +150,21 @@ if SERVER_HOST == "0.0.0.0" and not MARM_API_KEY and not _is_generate_key_cmd:
         _marm_dir = Path.home() / ".marm"
         _marm_dir.mkdir(exist_ok=True)
         _MARM_ENV_PATH.write_text(f"MARM_API_KEY={MARM_API_KEY}\n")
+        try:
+            _MARM_ENV_PATH.chmod(0o600)
+        except OSError:
+            pass
+        if sys.platform == "win32":
+            try:
+                import subprocess
+                import getpass
+                user = getpass.getuser()
+                subprocess.run(
+                    ["icacls", str(_MARM_ENV_PATH), "/inheritance:r", "/grant:r", f"{user}:(F)"],
+                    check=False, capture_output=True,
+                )
+            except Exception:
+                pass
     except Exception as _e:
         print(f"WARNING: Could not save API key to {_MARM_ENV_PATH}: {_e}")
 

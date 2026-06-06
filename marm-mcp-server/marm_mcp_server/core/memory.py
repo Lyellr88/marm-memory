@@ -101,7 +101,7 @@ class SQLiteConnectionPool:
 
     def _create_initial_connections(self):
         """Create initial pool of connections"""
-        for _ in range(2):
+        for _ in range(min(2, self.max_connections)):
             self._create_connection()
 
     def _create_connection(self):
@@ -770,7 +770,7 @@ class MARMMemory:
                         "timestamp": row[3],
                         "context_type": row[4],
                         "metadata": json.loads(row[5]) if row[5] else {},
-                        "similarity": 0.8,  # Default similarity for text matches
+                        "similarity": 0.8, 
                     }
                 )
 
