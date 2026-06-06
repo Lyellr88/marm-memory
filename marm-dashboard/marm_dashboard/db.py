@@ -18,39 +18,40 @@ _ENCODER_FAILED = False
 _SEMANTIC_MODEL = "all-MiniLM-L6-v2"
 _CONTEXT_TYPES = frozenset({"general", "code", "project", "book"})
 
+
 def _strip_script_tags(text: str) -> str:
     lower = text.lower()
     result = []
     i = 0
     while i < len(text):
-        start = lower.find('<script', i)
+        start = lower.find("<script", i)
         if start == -1:
             result.append(text[i:])
             break
         after = start + 7
-        if after < len(text) and text[after] not in (' ', '\t', '\n', '\r', '>'):
+        if after < len(text) and text[after] not in (" ", "\t", "\n", "\r", ">"):
             result.append(text[i:after])
             i = after
             continue
         result.append(text[i:start])
-        open_end = text.find('>', start)
+        open_end = text.find(">", start)
         if open_end == -1:
             break
         j = open_end + 1
         close_end = -1
         while j < len(text):
-            cs = lower.find('</script', j)
+            cs = lower.find("</script", j)
             if cs == -1:
                 break
-            close_end = text.find('>', cs)
+            close_end = text.find(">", cs)
             if close_end != -1:
                 i = close_end + 1
                 break
             j = cs + 8
         if close_end == -1:
-            result.append(text[open_end + 1:])
+            result.append(text[open_end + 1 :])
             break
-    return ''.join(result)
+    return "".join(result)
 
 
 def _parse_metadata(raw: Optional[str]) -> Dict[str, Any]:
@@ -90,7 +91,9 @@ def _sanitize_memory(content: str) -> str:
     if len(content) > 10_000:
         content = content[:10_000]
     sanitized = _strip_scripts(content)
-    sanitized = re.sub(r"javascript:", "blocked-protocol:", sanitized, flags=re.IGNORECASE)
+    sanitized = re.sub(
+        r"javascript:", "blocked-protocol:", sanitized, flags=re.IGNORECASE
+    )
     return html.escape(sanitized)
 
 
@@ -263,7 +266,9 @@ def list_memories(
 
 def add_memory(content: str, session_name: str, context_type: str = "general") -> str:
     if context_type not in _CONTEXT_TYPES:
-        raise ValueError(f"context_type must be one of: {', '.join(sorted(_CONTEXT_TYPES))}")
+        raise ValueError(
+            f"context_type must be one of: {', '.join(sorted(_CONTEXT_TYPES))}"
+        )
 
     sanitized = _sanitize_memory(content.strip())
     if not sanitized:
@@ -298,7 +303,9 @@ def add_memory(content: str, session_name: str, context_type: str = "general") -
 
 def update_memory(memory_id: str, content: str, context_type: str) -> bool:
     if context_type not in _CONTEXT_TYPES:
-        raise ValueError(f"context_type must be one of: {', '.join(sorted(_CONTEXT_TYPES))}")
+        raise ValueError(
+            f"context_type must be one of: {', '.join(sorted(_CONTEXT_TYPES))}"
+        )
     sanitized = _sanitize_memory(content.strip())
     if not sanitized:
         raise ValueError("Content cannot be empty")
@@ -322,7 +329,9 @@ def delete_memory(memory_id: str) -> bool:
 def delete_all_memories(session: Optional[str] = None) -> int:
     with _connect() as conn:
         if session:
-            cur = conn.execute("DELETE FROM memories WHERE session_name = ?", (session,))
+            cur = conn.execute(
+                "DELETE FROM memories WHERE session_name = ?", (session,)
+            )
         else:
             cur = conn.execute("DELETE FROM memories")
         conn.commit()
@@ -412,7 +421,9 @@ def add_session(session_name: str) -> None:
 
 def delete_session(session_name: str) -> bool:
     with _connect() as conn:
-        cur = conn.execute("DELETE FROM sessions WHERE session_name = ?", (session_name,))
+        cur = conn.execute(
+            "DELETE FROM sessions WHERE session_name = ?", (session_name,)
+        )
         conn.commit()
         return cur.rowcount > 0
 

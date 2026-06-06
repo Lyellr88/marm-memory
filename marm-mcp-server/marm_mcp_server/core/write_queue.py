@@ -97,7 +97,9 @@ class WriteQueue:
                         else maybe_result
                     )
                 else:
-                    raise TypeError(f"Unsupported queue request type: {type(request)!r}")
+                    raise TypeError(
+                        f"Unsupported queue request type: {type(request)!r}"
+                    )
                 self._resolve(request.future, result)
             except Exception as exc:
                 if hasattr(request, "future"):

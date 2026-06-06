@@ -7,7 +7,6 @@ from fastapi.responses import JSONResponse
 
 from .config import MARM_API_KEY
 
-# Unlock check + health only; static assets and HTML shell load without a token.
 PUBLIC_PATHS = {"/health", "/api/auth/unlock"}
 PUBLIC_PREFIXES = ("/assets/",)
 
@@ -59,7 +58,6 @@ async def auth_middleware(request: Request, call_next):
         response.headers.update(SECURITY_HEADERS)
         return response
 
-    # GET / serves the UI shell (unlock form is client-side).
     if path == "/" and request.method == "GET":
         response = await call_next(request)
         response.headers.update(SECURITY_HEADERS)

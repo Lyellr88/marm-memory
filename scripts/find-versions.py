@@ -52,9 +52,7 @@ CRITICAL_VERSION_RE = re.compile(
     r"((?:__version__|version|Version|VERSION)[\s:=\"-]+)v?(\d+\.\d+\.\d+)",
     re.IGNORECASE,
 )
-OCI_IDENTIFIER_RE = re.compile(
-    r"(\"identifier\"\s*:\s*\"[^\"]+:)(\d+\.\d+\.\d+)(\")"
-)
+OCI_IDENTIFIER_RE = re.compile(r"(\"identifier\"\s*:\s*\"[^\"]+:)(\d+\.\d+\.\d+)(\")")
 DOC_REPLACE_CUES = (
     "marm",
     "mcp server",
@@ -168,11 +166,10 @@ def scan_doc_versions(path: Path) -> list[VersionHit]:
 def should_scan_doc_line(lines: list[str], line_no: int) -> bool:
     line = lines[line_no - 1]
     line_lower = line.lower()
-    nearby = "\n".join(lines[max(0, line_no - 4): min(len(lines), line_no + 3)]).lower()
-    is_marm_health_version = (
-        '"version"' in line_lower
-        and "marm mcp server" in nearby
-    )
+    nearby = "\n".join(
+        lines[max(0, line_no - 4) : min(len(lines), line_no + 3)]
+    ).lower()
+    is_marm_health_version = '"version"' in line_lower and "marm mcp server" in nearby
     if not DOC_VERSION_LINE_RE.match(line) and not is_marm_health_version:
         return False
     return not any(cue in line_lower for cue in DOC_SKIP_CUES)
@@ -187,8 +184,7 @@ def latest_changelog_entry() -> str:
     summary_lines = [
         line
         for line in main_content.splitlines()
-        if VERSION_RE.search(line)
-        and line.lstrip().startswith("<summary>")
+        if VERSION_RE.search(line) and line.lstrip().startswith("<summary>")
     ]
     if summary_lines:
         return summary_lines[-1]
@@ -251,7 +247,9 @@ def print_file_hits(path: Path, hits: list[VersionHit]) -> None:
         print(f"  {rel(path)} - no versions")
         return
 
-    print(f"  {CYAN}{rel(path)}{RESET} ({len(hits)} occurrence{'s' if len(hits) != 1 else ''})")
+    print(
+        f"  {CYAN}{rel(path)}{RESET} ({len(hits)} occurrence{'s' if len(hits) != 1 else ''})"
+    )
     for hit in hits:
         print(f"    L{hit.line}: {YELLOW}{hit.version}{RESET} :: {hit.text}")
 
@@ -322,18 +320,20 @@ def confirm(target_version: str, files: list[Path], assume_yes: bool) -> bool:
         if hits and any(hit.version != target_version for hit in hits):
             print(f"  - {rel(path)}")
 
-    answer = input(
-        f"\nType {target_version} to confirm, or 'y' to accept: "
-    ).strip()
+    answer = input(f"\nType {target_version} to confirm, or 'y' to accept: ").strip()
     return answer.lower() == "y" or answer == target_version
 
 
 def prompt_target_version(changelog_version: str) -> str | None:
     while True:
         try:
-            answer = input(
-                f"\nUpdate versions to changelog version {changelog_version}? [y/N/c custom]: "
-            ).strip().lower()
+            answer = (
+                input(
+                    f"\nUpdate versions to changelog version {changelog_version}? [y/N/c custom]: "
+                )
+                .strip()
+                .lower()
+            )
         except EOFError:
             print(f"\n{YELLOW}No input received. No changes made.{RESET}")
             return None
@@ -349,7 +349,9 @@ def prompt_target_version(changelog_version: str) -> str | None:
             custom = input("Enter custom version (example 2.5.1): ").strip()
             if VERSION_RE.fullmatch(custom):
                 return custom
-            print(f"{RED}Invalid version. Use semantic version format like 2.5.1.{RESET}")
+            print(
+                f"{RED}Invalid version. Use semantic version format like 2.5.1.{RESET}"
+            )
             continue
 
         print(f"{RED}Choose y, n, or c.{RESET}")
@@ -403,7 +405,11 @@ def main() -> int:
     print(f"\n{YELLOW}Documentation files:{RESET}")
     doc_list = discover_dashboard_docs() if dashboard else discover_docs()
     for path in doc_list:
-        hits = scan_latest_changelog_versions() if is_changelog(path) else scan_doc_versions(path)
+        hits = (
+            scan_latest_changelog_versions()
+            if is_changelog(path)
+            else scan_doc_versions(path)
+        )
         print_file_hits(path, hits)
 
     files = replacement_files(dashboard=dashboard)
@@ -422,9 +428,13 @@ def main() -> int:
         count = replace_versions(path, chosen_version)
         if count:
             total += count
-            print(f"{GREEN}updated {rel(path)} ({count} replacement{'s' if count != 1 else ''}){RESET}")
+            print(
+                f"{GREEN}updated {rel(path)} ({count} replacement{'s' if count != 1 else ''}){RESET}"
+            )
 
-    print(f"\n{GREEN}Version sync complete: {total} replacements. Changelog untouched.{RESET}")
+    print(
+        f"\n{GREEN}Version sync complete: {total} replacements. Changelog untouched.{RESET}"
+    )
     return 0
 
 

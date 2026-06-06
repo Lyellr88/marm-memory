@@ -51,12 +51,17 @@ def test_large_memory_response_is_truncated_below_mcp_limit():
         "search_all": False,
     }
 
-    limited, was_truncated = MCPResponseLimiter.limit_memory_response(memories, metadata)
+    limited, was_truncated = MCPResponseLimiter.limit_memory_response(
+        memories, metadata
+    )
     response = metadata | {"results": limited}
 
     assert was_truncated is True
     assert limited
-    assert MCPResponseLimiter.estimate_response_size(response) <= MCPResponseLimiter.CONTENT_LIMIT
+    assert (
+        MCPResponseLimiter.estimate_response_size(response)
+        <= MCPResponseLimiter.CONTENT_LIMIT
+    )
     assert any(memory.get("_truncated") for memory in limited)
 
 
@@ -94,11 +99,16 @@ def test_empty_and_boundary_memory_responses_stay_valid():
     assert empty_truncated is False
 
     base_response = {"status": "success", "message": "boundary"}
-    available = MCPResponseLimiter.CONTENT_LIMIT - MCPResponseLimiter.estimate_response_size(
-        base_response | {"results": []}
+    available = (
+        MCPResponseLimiter.CONTENT_LIMIT
+        - MCPResponseLimiter.estimate_response_size(base_response | {"results": []})
     )
     memories = [
-        {"id": f"boundary-{index}", "content": "b" * (available // 4), "similarity": 0.8}
+        {
+            "id": f"boundary-{index}",
+            "content": "b" * (available // 4),
+            "similarity": 0.8,
+        }
         for index in range(3)
     ]
 
@@ -106,4 +116,7 @@ def test_empty_and_boundary_memory_responses_stay_valid():
     response = base_response | {"results": limited}
 
     assert limited
-    assert MCPResponseLimiter.estimate_response_size(response) <= MCPResponseLimiter.CONTENT_LIMIT
+    assert (
+        MCPResponseLimiter.estimate_response_size(response)
+        <= MCPResponseLimiter.CONTENT_LIMIT
+    )

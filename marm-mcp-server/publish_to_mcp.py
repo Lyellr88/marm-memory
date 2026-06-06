@@ -6,23 +6,20 @@ This script helps with the manual publishing process when GitHub Actions
 is not available or for testing purposes.
 """
 
-import os
 import subprocess
 import sys
-import json
 import platform
 from pathlib import Path
+
 
 def check_requirements():
     """Check if all requirements are met for publishing"""
     print("[INFO] Checking publishing requirements...")
 
-    # Check if server.json exists
     if not Path("server.json").exists():
         print("[ERROR] server.json not found. Please create it first.")
         return False
 
-    # Validate server.json
     try:
         subprocess.run([sys.executable, "validate_server_json.py"], check=True)
         print("[OK] server.json validation passed")
@@ -33,6 +30,7 @@ def check_requirements():
     print("[OK] All requirements met")
     return True
 
+
 def install_mcp_publisher():
     """Install the MCP publisher CLI"""
     print("[INFO] Installing MCP Publisher CLI...")
@@ -40,7 +38,6 @@ def install_mcp_publisher():
     system = platform.system().lower()
     arch = platform.machine().lower()
 
-    # Map Python platform names to publisher release names
     if system == "windows":
         binary_name = "mcp-publisher-windows-amd64.exe"
     elif system == "darwin":
@@ -54,20 +51,22 @@ def install_mcp_publisher():
         print(f"[ERROR] Unsupported platform: {system}")
         return False
 
-    # Download URL
     download_url = f"https://github.com/modelcontextprotocol/publisher/releases/latest/download/{binary_name}"
 
     print(f"[INFO] Downloading from: {download_url}")
-    print(f"[INFO] Please manually download and install the MCP publisher:")
+    print("[INFO] Please manually download and install the MCP publisher:")
     print(f"       1. Download: {download_url}")
-    print(f"       2. Make it executable and add to PATH")
+    print("       2. Make it executable and add to PATH")
 
     if system == "windows":
-        print(f"       3. Rename to 'mcp-publisher.exe' and place in PATH")
+        print("       3. Rename to 'mcp-publisher.exe' and place in PATH")
     else:
-        print(f"       3. chmod +x mcp-publisher && sudo mv mcp-publisher /usr/local/bin/")
+        print(
+            "       3. chmod +x mcp-publisher && sudo mv mcp-publisher /usr/local/bin/"
+        )
 
     return True
+
 
 def setup_authentication():
     """Setup authentication for MCP registry"""
@@ -103,19 +102,20 @@ def setup_authentication():
 
     return True
 
+
 def build_and_test():
     """Build and test the package before publishing"""
     print("\n[INFO] Building and testing package...")
 
-    # Test Python package build
     try:
         print("[INFO] Testing Python package build...")
         subprocess.run([sys.executable, "-m", "build", "--dry-run"], check=True)
         print("[OK] Python package build test passed")
     except subprocess.CalledProcessError:
-        print("[WARN] Python package build test failed (pip install build may be needed)")
+        print(
+            "[WARN] Python package build test failed (pip install build may be needed)"
+        )
 
-    # Test Docker build
     try:
         print("[INFO] Testing Docker build...")
         result = subprocess.run(["docker", "--version"], capture_output=True, text=True)
@@ -129,11 +129,12 @@ def build_and_test():
 
     return True
 
+
 def publish_instructions():
     """Provide publishing instructions"""
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("[INSTRUCTIONS] MARM MCP Server Publishing Instructions")
-    print("="*60)
+    print("=" * 60)
 
     print("\n1. Initialize MCP Registry (first time only):")
     print("   mcp-publisher init")
@@ -153,32 +154,31 @@ def publish_instructions():
     print("   mcp-publisher publish")
 
     print("\n6. Verify publication:")
-    print("   Check: https://registry.modelcontextprotocol.io/servers/io.github.marm-systems/marm-mcp-server")
+    print(
+        "   Check: https://registry.modelcontextprotocol.io/servers/io.github.marm-systems/marm-mcp-server"
+    )
 
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("[OK] Ready to publish! Follow the steps above.")
-    print("="*60)
+    print("=" * 60)
+
 
 def main():
     """Main publishing workflow"""
     print("[SETUP] MARM MCP Server Publishing Setup")
     print("=" * 40)
 
-    # Check requirements
     if not check_requirements():
         sys.exit(1)
 
-    # Install publisher
     install_mcp_publisher()
 
-    # Setup authentication
     setup_authentication()
 
-    # Build and test
     build_and_test()
 
-    # Provide instructions
     publish_instructions()
+
 
 if __name__ == "__main__":
     main()

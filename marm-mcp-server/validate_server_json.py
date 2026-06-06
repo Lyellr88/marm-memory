@@ -2,28 +2,32 @@
 """
 Validate server.json against MCP schema
 """
+
 import json
 import sys
 import requests
 import jsonschema
 from pathlib import Path
 
+
 def validate_server_json():
     """Validate the server.json file against the MCP schema"""
 
-    # Load the server.json file
     server_json_path = Path(__file__).parent / "server.json"
     if not server_json_path.exists():
         print("❌ server.json not found")
         return False
 
-    with open(server_json_path, 'r', encoding='utf-8') as f:
+    with open(server_json_path, "r", encoding="utf-8") as f:
         server_config = json.load(f)
 
-    print(f"[OK] Loaded server.json: {server_config['name']} v{server_config['version']}")
+    print(
+        f"[OK] Loaded server.json: {server_config['name']} v{server_config['version']}"
+    )
 
-    # Fetch the schema
-    schema_url = "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json"
+    schema_url = (
+        "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json"
+    )
     print(f"[INFO] Fetching schema from {schema_url}")
 
     try:
@@ -36,13 +40,11 @@ def validate_server_json():
         print("[WARN] Performing basic validation only")
         return validate_basic_structure(server_config)
 
-    # Validate against schema
     try:
         jsonschema.validate(server_config, schema)
         print("[OK] server.json is valid according to MCP schema!")
 
-        # Print summary
-        print(f"\n[SUMMARY] Server Configuration Summary:")
+        print("\n[SUMMARY] Server Configuration Summary:")
         print(f"   Name: {server_config['name']}")
         print(f"   Version: {server_config['version']}")
         print(f"   Tools: {len(server_config.get('tools', []))}")
@@ -59,9 +61,10 @@ def validate_server_json():
         print(f"[ERROR] Validation failed: {e}")
         return False
 
+
 def validate_basic_structure(config):
     """Basic validation when schema is not available"""
-    required_fields = ['name', 'description', 'version']
+    required_fields = ["name", "description", "version"]
 
     for field in required_fields:
         if field not in config:
@@ -70,6 +73,7 @@ def validate_basic_structure(config):
 
     print("[OK] Basic structure validation passed")
     return True
+
 
 if __name__ == "__main__":
     success = validate_server_json()

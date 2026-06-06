@@ -1,10 +1,9 @@
 #!/bin/bash
-set -e  # Exit on any error
+set -e  
 
 echo "🚀 MARM MCP Server Installation"
 echo "==============================================="
 
-# Python version validation
 check_python() {
     if ! command -v python3 &> /dev/null; then
         echo "❌ Python 3 not found. Please install Python 3.8+ first."
@@ -20,7 +19,6 @@ check_python() {
     fi
 }
 
-# Virtual environment setup
 setup_venv() {
     echo "📦 Creating isolated environment..."
     python3 -m venv marm-env
@@ -28,7 +26,6 @@ setup_venv() {
     python3 -m pip install --upgrade pip
 }
 
-# Dependencies installation with progress
 install_deps() {
     echo "⬇️  Installing MARM dependencies..."
     pip install -r requirements.txt
@@ -47,13 +44,11 @@ except Exception as e:
 "
 }
 
-# System validation
 validate_install() {
     echo "🔍 Validating installation..."
     python3 -c "import marm_mcp_server; print('Import OK')"
 }
 
-# Main installation flow
 main() {
     check_python
     setup_venv

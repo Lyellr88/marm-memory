@@ -10,9 +10,15 @@ from .config import DASHBOARD_HOST, DASHBOARD_PORT, MARM_API_KEY, get_db_path
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="MARM Dashboard — local memory browser")
-    parser.add_argument("--host", default=DASHBOARD_HOST, help="Bind host (default 127.0.0.1)")
-    parser.add_argument("--port", type=int, default=DASHBOARD_PORT, help="Bind port (default 8002)")
+    parser = argparse.ArgumentParser(
+        description="MARM Dashboard — local memory browser"
+    )
+    parser.add_argument(
+        "--host", default=DASHBOARD_HOST, help="Bind host (default 127.0.0.1)"
+    )
+    parser.add_argument(
+        "--port", type=int, default=DASHBOARD_PORT, help="Bind port (default 8002)"
+    )
     parser.add_argument(
         "--open",
         action="store_true",
@@ -26,7 +32,9 @@ def main() -> None:
     print(f"  URL:      {url}")
     print("  (MCP server can stay on :8001; this plugin reads the same SQLite file.)")
     if MARM_API_KEY:
-        print("  Auth:     MARM_API_KEY set — unlock in browser with the same Bearer key as MCP.")
+        print(
+            "  Auth:     MARM_API_KEY set — unlock in browser with the same Bearer key as MCP."
+        )
     else:
         print("  Auth:     loopback only (set MARM_API_KEY to match Docker/MCP).")
 

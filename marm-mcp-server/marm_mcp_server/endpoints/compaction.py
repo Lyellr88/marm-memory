@@ -93,7 +93,6 @@ async def marm_stage_compaction_summaries(request: StageCompactionSummariesReque
     now = datetime.now(timezone.utc).isoformat()
     results = []
 
-    # Validate empty summaries up front — no DB work needed
     items_to_process = []
     for item in request.summaries:
         suggested_summary = (
@@ -115,7 +114,6 @@ async def marm_stage_compaction_summaries(request: StageCompactionSummariesReque
     if not items_to_process:
         return {"results": results}
 
-    # Process all valid items in a single connection
     with memory.get_connection() as conn:
         for candidate_id, source_ids_submitted, suggested_summary in items_to_process:
             row = conn.execute(
@@ -162,7 +160,9 @@ async def marm_stage_compaction_summaries(request: StageCompactionSummariesReque
 
             staged_source_ids = json.loads(source_ids_json)
 
-            if source_ids_submitted is not None and sorted(source_ids_submitted) != sorted(staged_source_ids):
+            if source_ids_submitted is not None and sorted(
+                source_ids_submitted
+            ) != sorted(staged_source_ids):
                 results.append(
                     {
                         "candidate_id": candidate_id,
@@ -326,8 +326,6 @@ async def _apply_compaction_write(candidate_id: str) -> str:
         _committed = False
         now = datetime.now(timezone.utc).isoformat()
         try:
-            # Fetch candidate fresh — guards against discard/expire/delete racing
-            # with a queued apply between outer validation and here.
             row = conn.execute(
                 "SELECT session_name, source_memory_ids, suggested_summary, status, "
                 "source_updated_at_snapshot, expires_at "
@@ -349,7 +347,6 @@ async def _apply_compaction_write(candidate_id: str) -> str:
                 expires_at,
             ) = row
 
-            # Idempotent: already applied — release lock and return existing summary_id
             if status == "applied":
                 conn.execute("ROLLBACK")
                 _committed = True
@@ -361,13 +358,10 @@ async def _apply_compaction_write(candidate_id: str) -> str:
                 ).fetchone()
                 return idempotent_row[0] if idempotent_row else candidate_id
 
-            # Deliberately discarded by human review — don't overwrite status, just skip
             if status == "discarded":
                 conn.execute("ROLLBACK")
                 _committed = True
-                raise RuntimeError(
-                    f"compaction candidate {candidate_id} was discarded"
-                )
+                raise RuntimeError(f"compaction candidate {candidate_id} was discarded")
 
             if status != "summary_staged":
                 conn.execute(
@@ -439,7 +433,9 @@ async def _apply_compaction_write(candidate_id: str) -> str:
                     f"source memories belong to different session: {wrong_session}"
                 )
 
-            already_compacted = [r[0] for r in current_rows if r[3] in ("source", "summary")]
+            already_compacted = [
+                r[0] for r in current_rows if r[3] in ("source", "summary")
+            ]
             if already_compacted:
                 conn.execute(
                     "UPDATE compaction_staging SET status = 'stale', updated_at = ? "
@@ -465,7 +461,6 @@ async def _apply_compaction_write(candidate_id: str) -> str:
                         f"source memory {mem_id} content changed since candidate was detected"
                     )
 
-            # All validations pass — sanitize, then compute embedding and write
             suggested_summary = sanitize_content(suggested_summary)
             summary_content_hash = compute_content_hash(suggested_summary)
             summary_embedding = (
@@ -474,8 +469,6 @@ async def _apply_compaction_write(candidate_id: str) -> str:
                 else None
             )
             if summary_embedding is None and memory._load_encoder_lazily():
-                # Rare fallback: staged summary changed after precompute or DB lookup failed.
-                # Run synchronously so we do not yield while holding BEGIN IMMEDIATE.
                 summary_embedding = memory._encode_sync(suggested_summary).tobytes()
 
             summary_id = str(uuid.uuid4())
@@ -588,7 +581,6 @@ async def marm_apply_compaction(request: ApplyCompactionRequest):
             expires_at,
         ) = row
 
-        # Idempotent: already applied
         if status == "applied" and action == "apply":
             source_ids = json.loads(source_ids_json)
             summary_row = None
@@ -620,7 +612,6 @@ async def marm_apply_compaction(request: ApplyCompactionRequest):
             )
             return {"candidate_id": candidate_id, "status": "discarded"}
 
-        # action == "apply" — validate before writing
         if expires_at and now > expires_at:
             conn.execute(
                 "UPDATE compaction_staging SET status = 'stale', updated_at = ? WHERE id = ?",
@@ -700,7 +691,6 @@ async def marm_apply_compaction(request: ApplyCompactionRequest):
                 "reason": "staged summary is empty — candidate may be corrupted",
             }
 
-    # All validations pass — route write through queue if available, else direct
     if memory._write_queue is not None:
         summary_id = await memory._write_queue.put_callable(
             _apply_compaction_write,

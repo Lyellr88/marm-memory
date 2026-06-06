@@ -11,12 +11,12 @@ import pytest
 from marm_mcp_server.core.compaction import (
     find_compaction_candidates,
     run_compaction_dry_run,
-    trigger_compaction,
 )
 from marm_mcp_server.core.memory import MARMMemory
 
 
 # --- Embedding helpers ---
+
 
 def _make_embedding(direction: int, dim: int = 384) -> bytes:
     """Unit vector pointing mostly in `direction` axis — easy to control similarity."""
@@ -28,7 +28,9 @@ def _make_embedding(direction: int, dim: int = 384) -> bytes:
     return v.tobytes()
 
 
-def _make_similar_embeddings(count: int = 3, base_axis: int = 0, dim: int = 384) -> list:
+def _make_similar_embeddings(
+    count: int = 3, base_axis: int = 0, dim: int = 384
+) -> list:
     """Return `count` embeddings with high mutual cosine similarity (all near base_axis).
 
     Noise scale 0.005 keeps pairwise similarity well above 0.88 threshold.
@@ -60,18 +62,30 @@ def _insert_memory_row(
             "INSERT INTO memories "
             "(id, session_name, content, embedding, timestamp, context_type, metadata, content_hash, compaction_role) "
             "VALUES (?, ?, ?, ?, ?, 'general', '{}', ?, ?)",
-            (mem_id, session, content, embedding, ts, f"hash-{mem_id}", compaction_role),
+            (
+                mem_id,
+                session,
+                content,
+                embedding,
+                ts,
+                f"hash-{mem_id}",
+                compaction_role,
+            ),
         )
     return mem_id
 
 
 # --- find_compaction_candidates ---
 
-def test_existing_embeddings_can_compact_when_encoder_unavailable(monkeypatch, tmp_path):
+
+def test_existing_embeddings_can_compact_when_encoder_unavailable(
+    monkeypatch, tmp_path
+):
     mem = MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
 
     import marm_mcp_server.config.settings as s
+
     monkeypatch.setattr(s, "COMPACTION_MIN_CLUSTER_SIZE", 3)
     monkeypatch.setattr(s, "COMPACTION_SIMILARITY_THRESHOLD", 0.88)
     monkeypatch.setattr(s, "COMPACTION_MIN_AGE_HOURS", 0)
@@ -90,6 +104,7 @@ def test_cluster_below_min_size_not_reported(monkeypatch, tmp_path):
     mem._encoder_failed = False
 
     import marm_mcp_server.config.settings as s
+
     monkeypatch.setattr(s, "COMPACTION_MIN_CLUSTER_SIZE", 3)
     monkeypatch.setattr(s, "COMPACTION_SIMILARITY_THRESHOLD", 0.88)
     monkeypatch.setattr(s, "COMPACTION_MIN_AGE_HOURS", 0)
@@ -107,13 +122,16 @@ def test_young_memories_excluded_from_candidates(monkeypatch, tmp_path):
     mem._encoder_failed = False
 
     import marm_mcp_server.config.settings as s
+
     monkeypatch.setattr(s, "COMPACTION_MIN_CLUSTER_SIZE", 3)
     monkeypatch.setattr(s, "COMPACTION_SIMILARITY_THRESHOLD", 0.88)
     monkeypatch.setattr(s, "COMPACTION_MIN_AGE_HOURS", 24)
 
     similar = _make_similar_embeddings(3)
     for i, emb in enumerate(similar):
-        _insert_memory_row(mem, "sess", f"content {i}", emb, age_hours=12)  # only 12h old
+        _insert_memory_row(
+            mem, "sess", f"content {i}", emb, age_hours=12
+        )  # only 12h old
 
     result = find_compaction_candidates(mem, "sess")
     assert result == []
@@ -124,6 +142,7 @@ def test_already_compacted_source_rows_excluded(monkeypatch, tmp_path):
     mem._encoder_failed = False
 
     import marm_mcp_server.config.settings as s
+
     monkeypatch.setattr(s, "COMPACTION_MIN_CLUSTER_SIZE", 3)
     monkeypatch.setattr(s, "COMPACTION_SIMILARITY_THRESHOLD", 0.88)
     monkeypatch.setattr(s, "COMPACTION_MIN_AGE_HOURS", 0)
@@ -141,6 +160,7 @@ def test_already_compacted_summary_rows_excluded(monkeypatch, tmp_path):
     mem._encoder_failed = False
 
     import marm_mcp_server.config.settings as s
+
     monkeypatch.setattr(s, "COMPACTION_MIN_CLUSTER_SIZE", 3)
     monkeypatch.setattr(s, "COMPACTION_SIMILARITY_THRESHOLD", 0.88)
     monkeypatch.setattr(s, "COMPACTION_MIN_AGE_HOURS", 0)
@@ -158,6 +178,7 @@ def test_cross_session_memories_never_grouped(monkeypatch, tmp_path):
     mem._encoder_failed = False
 
     import marm_mcp_server.config.settings as s
+
     monkeypatch.setattr(s, "COMPACTION_MIN_CLUSTER_SIZE", 3)
     monkeypatch.setattr(s, "COMPACTION_SIMILARITY_THRESHOLD", 0.88)
     monkeypatch.setattr(s, "COMPACTION_MIN_AGE_HOURS", 0)
@@ -184,6 +205,7 @@ def test_qualifying_cluster_reported_with_correct_shape(monkeypatch, tmp_path):
     mem._encoder_failed = False
 
     import marm_mcp_server.config.settings as s
+
     monkeypatch.setattr(s, "COMPACTION_MIN_CLUSTER_SIZE", 3)
     monkeypatch.setattr(s, "COMPACTION_SIMILARITY_THRESHOLD", 0.88)
     monkeypatch.setattr(s, "COMPACTION_MIN_AGE_HOURS", 0)
@@ -206,6 +228,7 @@ def test_qualifying_cluster_reported_with_correct_shape(monkeypatch, tmp_path):
 
 # --- run_compaction_dry_run ---
 
+
 def test_dry_run_does_not_mutate_db(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
 
@@ -213,6 +236,7 @@ def test_dry_run_does_not_mutate_db(monkeypatch, tmp_path):
     mem._encoder_failed = False
 
     import marm_mcp_server.config.settings as s
+
     monkeypatch.setattr(s, "COMPACTION_MIN_CLUSTER_SIZE", 3)
     monkeypatch.setattr(s, "COMPACTION_SIMILARITY_THRESHOLD", 0.88)
     monkeypatch.setattr(s, "COMPACTION_MIN_AGE_HOURS", 0)
@@ -244,6 +268,7 @@ def test_dry_run_writes_report_file(monkeypatch, tmp_path):
     mem._encoder_failed = False
 
     import marm_mcp_server.config.settings as s
+
     monkeypatch.setattr(s, "COMPACTION_MIN_CLUSTER_SIZE", 3)
     monkeypatch.setattr(s, "COMPACTION_SIMILARITY_THRESHOLD", 0.88)
     monkeypatch.setattr(s, "COMPACTION_MIN_AGE_HOURS", 0)
@@ -288,6 +313,7 @@ def test_dry_run_no_file_written_when_no_candidates(monkeypatch, tmp_path):
 
 
 # --- Write counter ---
+
 
 @pytest.mark.asyncio
 async def test_write_counter_increments_on_new_insert(monkeypatch, tmp_path):
@@ -352,9 +378,9 @@ async def test_write_counter_increments_on_layer2_merge(monkeypatch, tmp_path):
 
 # --- Trigger threshold ---
 
+
 @pytest.mark.asyncio
 async def test_counter_threshold_default_mode_is_5(monkeypatch, tmp_path):
-    from marm_mcp_server.core import memory as memory_module
     import marm_mcp_server.config.settings as s
 
     assert s.COMPACTION_TRIGGER_COUNT == 5
@@ -368,7 +394,7 @@ async def test_counter_threshold_set_to_20_for_swarm_preset():
 
     original = s.COMPACTION_TRIGGER_COUNT
     try:
-        result = apply_runtime_preset(swarm=True)
+        apply_runtime_preset(swarm=True)
         assert s.COMPACTION_TRIGGER_COUNT == 20
         assert memory_module.COMPACTION_TRIGGER_COUNT == 20
     finally:
@@ -410,6 +436,7 @@ async def test_counter_threshold_set_to_20_for_custom_preset():
 
 # --- Trigger scheduling ---
 
+
 @pytest.mark.asyncio
 async def test_counter_resets_and_scan_scheduled_on_threshold(monkeypatch, tmp_path):
     from marm_mcp_server.core import memory as memory_module
@@ -417,7 +444,9 @@ async def test_counter_resets_and_scan_scheduled_on_threshold(monkeypatch, tmp_p
 
     monkeypatch.setattr(memory_module, "COMPACTION_ENABLED", True)
     monkeypatch.setattr(memory_module, "COMPACTION_TRIGGER_COUNT", 3)
-    monkeypatch.setattr(s, "COMPACTION_ACTIVE_SESSION_GRACE_MINUTES", 60)  # won't fire in test
+    monkeypatch.setattr(
+        s, "COMPACTION_ACTIVE_SESSION_GRACE_MINUTES", 60
+    )  # won't fire in test
 
     mem = memory_module.MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
@@ -496,7 +525,9 @@ async def test_scan_fires_after_grace_period(monkeypatch, tmp_path):
         scan_called.append(session_name)
         return []
 
-    monkeypatch.setattr(compaction_module, "find_compaction_candidates", _fake_find_candidates)
+    monkeypatch.setattr(
+        compaction_module, "find_compaction_candidates", _fake_find_candidates
+    )
 
     mem = memory_module.MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
@@ -504,7 +535,9 @@ async def test_scan_fires_after_grace_period(monkeypatch, tmp_path):
     await mem.store_memory("trigger write", "sess-fire")
 
     deadline = asyncio.get_running_loop().time() + 1.0
-    while "sess-fire" not in scan_called and asyncio.get_running_loop().time() < deadline:
+    while (
+        "sess-fire" not in scan_called and asyncio.get_running_loop().time() < deadline
+    ):
         await asyncio.sleep(0.01)
 
     assert "sess-fire" in scan_called

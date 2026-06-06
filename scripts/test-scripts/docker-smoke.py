@@ -6,7 +6,6 @@ from __future__ import annotations
 import json
 import socket
 import subprocess
-import sys
 import time
 import urllib.error
 import urllib.request
@@ -25,7 +24,9 @@ IMAGE = "marm-mcp-server:smoke"
 API_KEY = "MarmDockerSmokeKey_12345"
 
 
-def run(command: list[str], cwd: Path = ROOT, timeout: int = 120) -> subprocess.CompletedProcess[str]:
+def run(
+    command: list[str], cwd: Path = ROOT, timeout: int = 120
+) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         command,
         cwd=cwd,
@@ -79,7 +80,9 @@ def free_port() -> int:
         return sock.getsockname()[1]
 
 
-def request_json(url: str, headers: dict[str, str] | None = None, timeout: int = 5) -> tuple[int, dict]:
+def request_json(
+    url: str, headers: dict[str, str] | None = None, timeout: int = 5
+) -> tuple[int, dict]:
     request = urllib.request.Request(url, headers=headers or {})
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
@@ -158,7 +161,8 @@ def smoke_http() -> bool:
             ("wrong bearer returns 401", wrong_status == 401, str(wrong_status)),
             (
                 "correct bearer reaches MCP API",
-                correct_status == 200 and correct_body.get("system_status") == "operational",
+                correct_status == 200
+                and correct_body.get("system_status") == "operational",
                 f"{correct_status} {correct_body}",
             ),
         ]

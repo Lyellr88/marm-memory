@@ -25,7 +25,9 @@ def _isolated_stdio(monkeypatch, tmp_path):
 
     monkeypatch.setattr(stdio, "ensure_marm_started", _noop)
     monkeypatch.setattr(stdio, "maybe_auto_refresh", _noop)
-    monkeypatch.setattr(stdio, "claim_pending_compaction_prompt", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        stdio, "claim_pending_compaction_prompt", lambda *args, **kwargs: None
+    )
     stdio._protocol_delivered = True
     return stdio
 
@@ -63,12 +65,21 @@ def test_stdio_handles_mcp_initialize_and_exposes_tools(tmp_path):
         return (json.dumps(msg) + "\n").encode("utf-8")
 
     stdin_data = (
-        message({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
-            "protocolVersion": "2024-11-05",
-            "capabilities": {},
-            "clientInfo": {"name": "test-client", "version": "0.1"},
-        }})
-        + message({"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}})
+        message(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {},
+                    "clientInfo": {"name": "test-client", "version": "0.1"},
+                },
+            }
+        )
+        + message(
+            {"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}}
+        )
         + message({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
     )
 
@@ -89,7 +100,9 @@ def test_stdio_handles_mcp_initialize_and_exposes_tools(tmp_path):
         if "id" in msg:
             responses[msg["id"]] = msg
 
-    assert 1 in responses, f"No initialize response; stderr: {result.stderr.decode('utf-8', errors='replace')[:500]}"
+    assert 1 in responses, (
+        f"No initialize response; stderr: {result.stderr.decode('utf-8', errors='replace')[:500]}"
+    )
     assert "result" in responses[1]
     assert "serverInfo" in responses[1]["result"]
 
@@ -107,11 +120,21 @@ def test_stdio_handles_mcp_initialize_and_exposes_tools(tmp_path):
     assert "marm_notebook" in tool_names
     assert "marm_log_delete" not in tool_names
     assert "marm_notebook_delete" not in tool_names
-    assert "marm_notebook_add" not in tool_names, "old marm_notebook_add must be removed"
-    assert "marm_notebook_use" not in tool_names, "old marm_notebook_use must be removed"
-    assert "marm_notebook_show" not in tool_names, "old marm_notebook_show must be removed"
-    assert "marm_notebook_status" not in tool_names, "old marm_notebook_status must be removed"
-    assert "marm_notebook_clear" not in tool_names, "old marm_notebook_clear must be removed"
+    assert "marm_notebook_add" not in tool_names, (
+        "old marm_notebook_add must be removed"
+    )
+    assert "marm_notebook_use" not in tool_names, (
+        "old marm_notebook_use must be removed"
+    )
+    assert "marm_notebook_show" not in tool_names, (
+        "old marm_notebook_show must be removed"
+    )
+    assert "marm_notebook_status" not in tool_names, (
+        "old marm_notebook_status must be removed"
+    )
+    assert "marm_notebook_clear" not in tool_names, (
+        "old marm_notebook_clear must be removed"
+    )
     assert "marm_compaction" in tool_names
     assert "marm_get_compaction_candidates" not in tool_names
     assert "marm_stage_compaction_summaries" not in tool_names
@@ -123,23 +146,29 @@ def test_stdio_handles_mcp_initialize_and_exposes_tools(tmp_path):
 def test_stdio_delete_notebook_removes_entry_from_active_state(monkeypatch, tmp_path):
     stdio = _isolated_stdio(monkeypatch, tmp_path)
 
-    add_result = asyncio.run(stdio.marm_notebook(
-        action="add",
-        name="smoke_test_entry",
-        data="temporary regression fixture",
-    ))
+    add_result = asyncio.run(
+        stdio.marm_notebook(
+            action="add",
+            name="smoke_test_entry",
+            data="temporary regression fixture",
+        )
+    )
     assert add_result["status"] == "success"
 
-    use_result = asyncio.run(stdio.marm_notebook(
-        action="use",
-        names="smoke_test_entry",
-    ))
+    use_result = asyncio.run(
+        stdio.marm_notebook(
+            action="use",
+            names="smoke_test_entry",
+        )
+    )
     assert use_result["activated_entries"] == ["smoke_test_entry"]
 
-    delete_result = asyncio.run(stdio.marm_delete(
-        type="notebook",
-        target="smoke_test_entry",
-    ))
+    delete_result = asyncio.run(
+        stdio.marm_delete(
+            type="notebook",
+            target="smoke_test_entry",
+        )
+    )
     assert delete_result["deleted"] is True
 
     with stdio.memory.get_connection() as conn:
@@ -158,18 +187,24 @@ def test_stdio_delete_notebook_removes_entry_from_active_state(monkeypatch, tmp_
 def test_stdio_notebook_session_name_scopes_active_state(monkeypatch, tmp_path):
     stdio = _isolated_stdio(monkeypatch, tmp_path)
 
-    asyncio.run(stdio.marm_notebook(
-        action="add",
-        name="alpha_rule",
-        data="alpha scoped instruction",
-    ))
-    asyncio.run(stdio.marm_notebook(
-        action="use",
-        names="alpha_rule",
-        session_name="alpha",
-    ))
+    asyncio.run(
+        stdio.marm_notebook(
+            action="add",
+            name="alpha_rule",
+            data="alpha scoped instruction",
+        )
+    )
+    asyncio.run(
+        stdio.marm_notebook(
+            action="use",
+            names="alpha_rule",
+            session_name="alpha",
+        )
+    )
 
-    alpha_status = asyncio.run(stdio.marm_notebook(action="status", session_name="alpha"))
+    alpha_status = asyncio.run(
+        stdio.marm_notebook(action="status", session_name="alpha")
+    )
     main_status = asyncio.run(stdio.marm_notebook(action="status", session_name="main"))
 
     assert alpha_status["active_entries"] == ["alpha_rule"]
@@ -182,9 +217,11 @@ def test_stdio_log_entry_without_session_uses_active_session(monkeypatch, tmp_pa
     switch_result = asyncio.run(stdio.marm_log_session(session_name="myproject"))
     assert switch_result["status"] == "success"
 
-    asyncio.run(stdio.marm_log_entry(
-        entry="2026-05-20-setup-initial scaffolding done",
-    ))
+    asyncio.run(
+        stdio.marm_log_entry(
+            entry="2026-05-20-setup-initial scaffolding done",
+        )
+    )
 
     with stdio.memory.get_connection() as conn:
         project_count = conn.execute(
@@ -196,11 +233,15 @@ def test_stdio_log_entry_without_session_uses_active_session(monkeypatch, tmp_pa
             ("main",),
         ).fetchone()[0]
 
-    assert project_count == 1, f"Entry did not land in 'myproject'; count={project_count}"
+    assert project_count == 1, (
+        f"Entry did not land in 'myproject'; count={project_count}"
+    )
     assert main_count == 0, f"Entry incorrectly landed in 'main'; count={main_count}"
 
 
-def test_stdio_inprocess_client_wraps_notebook_delete_and_log_results(monkeypatch, tmp_path):
+def test_stdio_inprocess_client_wraps_notebook_delete_and_log_results(
+    monkeypatch, tmp_path
+):
     stdio = _isolated_stdio(monkeypatch, tmp_path)
 
     async def run():
@@ -231,14 +272,18 @@ def test_stdio_inprocess_client_wraps_notebook_delete_and_log_results(monkeypatc
             )
         return add_result, use_result, delete_result, session_result, entry_result
 
-    add_result, use_result, delete_result, session_result, entry_result = asyncio.run(run())
+    add_result, use_result, delete_result, session_result, entry_result = asyncio.run(
+        run()
+    )
 
     for result in (add_result, use_result, delete_result, session_result, entry_result):
         assert result.content
         assert result.content[0].type == "text"
 
     assert json.loads(add_result.content[0].text)["status"] == "success"
-    assert json.loads(use_result.content[0].text)["activated_entries"] == ["envelope_entry"]
+    assert json.loads(use_result.content[0].text)["activated_entries"] == [
+        "envelope_entry"
+    ]
     assert json.loads(delete_result.content[0].text)["deleted"] is True
     assert json.loads(session_result.content[0].text)["status"] == "success"
     assert json.loads(entry_result.content[0].text)["status"] == "success"
@@ -246,17 +291,22 @@ def test_stdio_inprocess_client_wraps_notebook_delete_and_log_results(monkeypatc
 
 def _base_rpc_stdin():
     """Minimal JSON-RPC handshake bytes used by logging tests."""
+
     def message(msg):
         return (json.dumps(msg) + "\n").encode("utf-8")
 
-    return (
-        message({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
-            "protocolVersion": "2024-11-05",
-            "capabilities": {},
-            "clientInfo": {"name": "test-client", "version": "0.1"},
-        }})
-        + message({"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}})
-    )
+    return message(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {"name": "test-client", "version": "0.1"},
+            },
+        }
+    ) + message({"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}})
 
 
 @pytest.mark.slow_stdio
@@ -298,24 +348,52 @@ def test_stdio_log_records_tool_call_and_ok_status(tmp_path):
 
     stdin_data = (
         _base_rpc_stdin()
-        + message({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {
-            "name": "marm_log_session",
-            "arguments": {"session_name": "log-test"},
-        }})
+        + message(
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {
+                    "name": "marm_log_session",
+                    "arguments": {"session_name": "log-test"},
+                },
+            }
+        )
         # Drain call — keeps stdin open until doc loading and the tool response are
         # both written before EOF. Single-tool-call sessions race with FastMCP shutdown.
-        + message({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {
-            "name": "marm_notebook",
-            "arguments": {"action": "status"},
-        }})
-        + message({"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {
-            "name": "marm_notebook",
-            "arguments": {"action": "status"},
-        }})
-        + message({"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {
-            "name": "marm_notebook",
-            "arguments": {"action": "status"},
-        }})
+        + message(
+            {
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "tools/call",
+                "params": {
+                    "name": "marm_notebook",
+                    "arguments": {"action": "status"},
+                },
+            }
+        )
+        + message(
+            {
+                "jsonrpc": "2.0",
+                "id": 4,
+                "method": "tools/call",
+                "params": {
+                    "name": "marm_notebook",
+                    "arguments": {"action": "status"},
+                },
+            }
+        )
+        + message(
+            {
+                "jsonrpc": "2.0",
+                "id": 5,
+                "method": "tools/call",
+                "params": {
+                    "name": "marm_notebook",
+                    "arguments": {"action": "status"},
+                },
+            }
+        )
     )
 
     result = subprocess.run(
@@ -329,8 +407,12 @@ def test_stdio_log_records_tool_call_and_ok_status(tmp_path):
 
     assert result.returncode == 0, result.stderr.decode("utf-8", errors="replace")[:500]
     log_content = (log_dir / "marm-stdio.log").read_text(encoding="utf-8")
-    assert "CALL marm_log_session" in log_content, f"Expected CALL entry, got: {log_content}"
-    assert "OK marm_log_session" in log_content, f"Expected OK entry, got: {log_content}"
+    assert "CALL marm_log_session" in log_content, (
+        f"Expected CALL entry, got: {log_content}"
+    )
+    assert "OK marm_log_session" in log_content, (
+        f"Expected OK entry, got: {log_content}"
+    )
 
 
 @pytest.mark.slow_stdio
@@ -347,24 +429,52 @@ def test_stdio_debug_mode_logs_session_name_not_content(tmp_path):
 
     stdin_data = (
         _base_rpc_stdin()
-        + message({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {
-            "name": "marm_log_session",
-            "arguments": {"session_name": "debug-session"},
-        }})
+        + message(
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {
+                    "name": "marm_log_session",
+                    "arguments": {"session_name": "debug-session"},
+                },
+            }
+        )
         # Drain call — keeps stdin open until doc loading and the tool response are
         # both written before EOF. Single-tool-call sessions race with FastMCP shutdown.
-        + message({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {
-            "name": "marm_notebook",
-            "arguments": {"action": "status"},
-        }})
-        + message({"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {
-            "name": "marm_notebook",
-            "arguments": {"action": "status"},
-        }})
-        + message({"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {
-            "name": "marm_notebook",
-            "arguments": {"action": "status"},
-        }})
+        + message(
+            {
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "tools/call",
+                "params": {
+                    "name": "marm_notebook",
+                    "arguments": {"action": "status"},
+                },
+            }
+        )
+        + message(
+            {
+                "jsonrpc": "2.0",
+                "id": 4,
+                "method": "tools/call",
+                "params": {
+                    "name": "marm_notebook",
+                    "arguments": {"action": "status"},
+                },
+            }
+        )
+        + message(
+            {
+                "jsonrpc": "2.0",
+                "id": 5,
+                "method": "tools/call",
+                "params": {
+                    "name": "marm_notebook",
+                    "arguments": {"action": "status"},
+                },
+            }
+        )
     )
 
     result = subprocess.run(
@@ -378,7 +488,9 @@ def test_stdio_debug_mode_logs_session_name_not_content(tmp_path):
 
     assert result.returncode == 0, result.stderr.decode("utf-8", errors="replace")[:500]
     log_content = (log_dir / "marm-stdio.log").read_text(encoding="utf-8")
-    assert "session=debug-session" in log_content, f"Expected session name in DEBUG log, got: {log_content}"
+    assert "session=debug-session" in log_content, (
+        f"Expected session name in DEBUG log, got: {log_content}"
+    )
 
 
 @pytest.mark.slow_stdio
@@ -396,16 +508,33 @@ def test_stdio_log_does_not_contain_stored_memory_content(tmp_path):
 
     stdin_data = (
         _base_rpc_stdin()
-        + message({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {
-            "name": "marm_context_log",
-            "arguments": {"session_name": "privacy-test", "content": secret_content},
-        }})
+        + message(
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {
+                    "name": "marm_context_log",
+                    "arguments": {
+                        "session_name": "privacy-test",
+                        "content": secret_content,
+                    },
+                },
+            }
+        )
         # Drain call — keeps stdin open until doc loading and the tool response are
         # both written before EOF. Single-tool-call sessions race with FastMCP shutdown.
-        + message({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {
-            "name": "marm_notebook",
-            "arguments": {"action": "status"},
-        }})
+        + message(
+            {
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "tools/call",
+                "params": {
+                    "name": "marm_notebook",
+                    "arguments": {"action": "status"},
+                },
+            }
+        )
     )
 
     result = subprocess.run(
@@ -436,33 +565,95 @@ def test_stdio_context_log_uses_write_queue_when_enabled(tmp_path):
 
     stdin_data = (
         _base_rpc_stdin()
-        + message({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {
-            "name": "marm_context_log",
-            "arguments": {
-                "session_name": "stdio-queue",
-                "content": "queued stdio memory write for swarm agents",
-            },
-        }})
-        + message({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {
-            "name": "marm_smart_recall",
-            "arguments": {"session_name": "stdio-queue", "query": "swarm agents", "limit": 3},
-        }})
-        + message({"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {
-            "name": "marm_smart_recall",
-            "arguments": {"session_name": "stdio-queue", "query": "swarm agents", "limit": 3},
-        }})
-        + message({"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {
-            "name": "marm_smart_recall",
-            "arguments": {"session_name": "stdio-queue", "query": "swarm agents", "limit": 3},
-        }})
-        + message({"jsonrpc": "2.0", "id": 6, "method": "tools/call", "params": {
-            "name": "marm_smart_recall",
-            "arguments": {"session_name": "stdio-queue", "query": "swarm agents", "limit": 3},
-        }})
-        + message({"jsonrpc": "2.0", "id": 7, "method": "tools/call", "params": {
-            "name": "marm_smart_recall",
-            "arguments": {"session_name": "stdio-queue", "query": "swarm agents", "limit": 3},
-        }})
+        + message(
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {
+                    "name": "marm_context_log",
+                    "arguments": {
+                        "session_name": "stdio-queue",
+                        "content": "queued stdio memory write for swarm agents",
+                    },
+                },
+            }
+        )
+        + message(
+            {
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "tools/call",
+                "params": {
+                    "name": "marm_smart_recall",
+                    "arguments": {
+                        "session_name": "stdio-queue",
+                        "query": "swarm agents",
+                        "limit": 3,
+                    },
+                },
+            }
+        )
+        + message(
+            {
+                "jsonrpc": "2.0",
+                "id": 4,
+                "method": "tools/call",
+                "params": {
+                    "name": "marm_smart_recall",
+                    "arguments": {
+                        "session_name": "stdio-queue",
+                        "query": "swarm agents",
+                        "limit": 3,
+                    },
+                },
+            }
+        )
+        + message(
+            {
+                "jsonrpc": "2.0",
+                "id": 5,
+                "method": "tools/call",
+                "params": {
+                    "name": "marm_smart_recall",
+                    "arguments": {
+                        "session_name": "stdio-queue",
+                        "query": "swarm agents",
+                        "limit": 3,
+                    },
+                },
+            }
+        )
+        + message(
+            {
+                "jsonrpc": "2.0",
+                "id": 6,
+                "method": "tools/call",
+                "params": {
+                    "name": "marm_smart_recall",
+                    "arguments": {
+                        "session_name": "stdio-queue",
+                        "query": "swarm agents",
+                        "limit": 3,
+                    },
+                },
+            }
+        )
+        + message(
+            {
+                "jsonrpc": "2.0",
+                "id": 7,
+                "method": "tools/call",
+                "params": {
+                    "name": "marm_smart_recall",
+                    "arguments": {
+                        "session_name": "stdio-queue",
+                        "query": "swarm agents",
+                        "limit": 3,
+                    },
+                },
+            }
+        )
     )
 
     result = subprocess.run(
@@ -488,14 +679,15 @@ def test_stdio_context_log_uses_write_queue_when_enabled(tmp_path):
         log_result = json.loads(responses[2]["result"]["content"][0]["text"])
         assert log_result["status"] == "success"
 
-    import sqlite3
     with sqlite3.connect(env["MARM_DB_PATH"]) as conn:
         count = conn.execute(
             "SELECT COUNT(*) FROM memories WHERE session_name = ?",
             ("stdio-queue",),
         ).fetchone()[0]
 
-    assert count == 1, f"Write queue did not persist memory; STDIO responses: {sorted(responses)}"
+    assert count == 1, (
+        f"Write queue did not persist memory; STDIO responses: {sorted(responses)}"
+    )
 
 
 def test_stdio_protocol_injected_on_first_tool_call_not_on_second(monkeypatch):
@@ -538,7 +730,10 @@ def test_stdio_compaction_injection_wraps_tool_result(monkeypatch, tmp_path):
     monkeypatch.setattr(
         stdio,
         "claim_pending_compaction_prompt",
-        lambda memory, session_name: {"type": "text", "text": "[MARM COMPACTION REQUEST]\nabc"},
+        lambda memory, session_name: {
+            "type": "text",
+            "text": "[MARM COMPACTION REQUEST]\nabc",
+        },
     )
     stdio._protocol_delivered = True
 
@@ -586,6 +781,9 @@ def test_stdio_protocol_call_suppresses_same_call_compaction(monkeypatch, tmp_pa
     assert calls["claim"] == 0
 
 
+@pytest.mark.skipif(
+    sys.version_info < (3, 11), reason="ExceptionGroup is a Python 3.11+ builtin"
+)
 def test_is_graceful_teardown_rejects_mixed_exception_group():
     """Regression: a mixed ExceptionGroup must not be swallowed as normal teardown."""
     from marm_mcp_server.server_stdio import _is_graceful_teardown
@@ -593,8 +791,10 @@ def test_is_graceful_teardown_rejects_mixed_exception_group():
     class RealBug(ValueError):
         pass
 
-    pure_group = ExceptionGroup("teardown", [ClosedResourceError()])
-    mixed_group = ExceptionGroup("mixed", [ClosedResourceError(), RealBug("actual bug")])
+    pure_group = ExceptionGroup("teardown", [ClosedResourceError()])  # noqa: F821
+    mixed_group = ExceptionGroup(  # noqa: F821
+        "mixed", [ClosedResourceError(), RealBug("actual bug")]
+    )
     direct = EndOfStream()
     unrelated = RuntimeError("crash")
 

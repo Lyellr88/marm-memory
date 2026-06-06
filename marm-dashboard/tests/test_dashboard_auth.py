@@ -27,7 +27,9 @@ def test_key_mode_requires_bearer_token_and_unlock_validates_key(monkeypatch, tm
 
     missing = client.get("/api/summary")
     wrong = client.get("/api/summary", headers={"Authorization": "Bearer wrong"})
-    correct = client.get("/api/summary", headers={"Authorization": "Bearer dash-key-123"})
+    correct = client.get(
+        "/api/summary", headers={"Authorization": "Bearer dash-key-123"}
+    )
 
     assert missing.status_code == 401
     assert missing.headers["www-authenticate"] == "Bearer"

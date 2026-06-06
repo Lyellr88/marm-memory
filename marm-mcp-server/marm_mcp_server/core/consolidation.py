@@ -47,7 +47,9 @@ async def find_semantic_duplicate(
     try:
         if query_vec is None and not memory._load_encoder_lazily():
             return None
-        results = await memory.recall_similar(content, session=session_name, limit=1, query_vec=query_vec)
+        results = await memory.recall_similar(
+            content, session=session_name, limit=1, query_vec=query_vec
+        )
         if results and results[0]["similarity"] >= threshold:
             return results[0]["id"]
     except Exception:

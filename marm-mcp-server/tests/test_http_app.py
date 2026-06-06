@@ -44,13 +44,23 @@ def test_context_log_endpoint_persists_sanitized_memory(monkeypatch, tmp_path):
     assert row == ("http-real-db", " project milestone preserved", "project")
 
 
-def test_api_key_mode_rejects_missing_or_wrong_bearer_and_accepts_correct_one(monkeypatch, tmp_path):
+def test_api_key_mode_rejects_missing_or_wrong_bearer_and_accepts_correct_one(
+    monkeypatch, tmp_path
+):
     server = load_isolated_server(monkeypatch, tmp_path, api_key="test-key-123")
     client = local_client(server.app)
 
     missing = client.get("/marm_log_show", params={"session_name": "main"})
-    wrong = client.get("/marm_log_show", params={"session_name": "main"}, headers={"Authorization": "Bearer wrong"})
-    correct = client.get("/marm_log_show", params={"session_name": "main"}, headers={"Authorization": "Bearer test-key-123"})
+    wrong = client.get(
+        "/marm_log_show",
+        params={"session_name": "main"},
+        headers={"Authorization": "Bearer wrong"},
+    )
+    correct = client.get(
+        "/marm_log_show",
+        params={"session_name": "main"},
+        headers={"Authorization": "Bearer test-key-123"},
+    )
 
     assert missing.status_code == 401
     assert missing.headers["www-authenticate"] == "Bearer"
@@ -84,14 +94,18 @@ def test_no_key_mode_allows_loopback_but_blocks_remote_clients(monkeypatch, tmp_
     local = local_client(server.app)
     remote = remote_client(server.app)
 
-    assert local.get("/marm_log_show", params={"session_name": "main"}).status_code == 200
+    assert (
+        local.get("/marm_log_show", params={"session_name": "main"}).status_code == 200
+    )
 
     blocked = remote.get("/marm_log_show", params={"session_name": "main"})
     assert blocked.status_code == 401
     assert "Set MARM_API_KEY" in blocked.json()["message"]
 
 
-def test_public_health_docs_and_openapi_do_not_require_bearer_token(monkeypatch, tmp_path):
+def test_public_health_docs_and_openapi_do_not_require_bearer_token(
+    monkeypatch, tmp_path
+):
     server = load_isolated_server(monkeypatch, tmp_path, api_key="test-key-123")
     client = remote_client(server.app)
 

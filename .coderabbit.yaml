@@ -2,12 +2,10 @@
 
 language: en-US
 tone_instructions: >
-  Be concise and pragmatic. Focus review comments on high and medium priority
-  issues only: correctness bugs, security risks, data loss risks, concurrency
-  hazards, performance regressions, broken tests, release metadata drift, and
-  major maintainability problems. Do not comment on style preferences, naming
-  preferences, formatting, doc wording, missing docstrings, minor refactors, or
-  low-value optimizations unless they directly create a real defect.
+  Be concise. Flag only high/medium issues: correctness bugs, security risks,
+  data loss, concurrency hazards, broken tests, and release metadata drift.
+  Skip style, naming, formatting, doc wording, missing docstrings, and minor
+  refactors unless they cause a real defect.
 
 reviews:
   profile: chill

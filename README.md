@@ -5,7 +5,7 @@
      width="700"
      height="400">
 </picture>
-<h1 align="center">MARM: The AI That Remembers Your Conversations v2.9.1</h1>
+<h1 align="center">MARM: The AI That Remembers Your Conversations v2.9.2</h1>
 
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
@@ -19,6 +19,8 @@
 [![CodeQL](https://github.com/Lyellr88/MARM-Systems/actions/workflows/github-code-scanning/codeql/badge.svg?branch=MARM-main)](https://github.com/Lyellr88/MARM-Systems/security/code-scanning)
 
 </div>
+
+Contributions are welcome! Check out our [open issues](https://github.com/Lyellr88/MARM-Systems/issues) to get started. Join the conversation on [MARM Discord](https://discord.gg/nhyJWPz2cf).
 
 ## Table of Contents
 

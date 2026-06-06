@@ -24,6 +24,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
+from marm_mcp_server.core.consolidation import compute_content_hash
+
 ROOT = Path(__file__).resolve().parents[2]
 SERVER_ROOT = ROOT / "marm-mcp-server"
 
@@ -133,7 +135,9 @@ def _json_request(
         headers["Authorization"] = f"Bearer {auth_key}"
     parsed = urlparse(url)
     if parsed.scheme not in {"http", "https"}:
-        return HttpResult(-1, 0.0, {"error": f"Unsupported URL scheme: {parsed.scheme}"})
+        return HttpResult(
+            -1, 0.0, {"error": f"Unsupported URL scheme: {parsed.scheme}"}
+        )
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
     start = time.perf_counter()
     try:
@@ -197,9 +201,10 @@ def spawn_server(
     if args.server_rate_limit_rpm is not None:
         cmd.extend(["--rate-limit-rpm", str(args.server_rate_limit_rpm)])
 
-    with stdout_log_path.open("wb") as stdout_fh, stderr_log_path.open(
-        "wb"
-    ) as stderr_fh:
+    with (
+        stdout_log_path.open("wb") as stdout_fh,
+        stderr_log_path.open("wb") as stderr_fh,
+    ):
         proc = subprocess.Popen(
             cmd,
             cwd=str(SERVER_ROOT),
@@ -246,7 +251,9 @@ def post_context_log(
     )
 
 
-def run_http_load(args: argparse.Namespace, base_url: str, session_name: str) -> list[HttpResult]:
+def run_http_load(
+    args: argparse.Namespace, base_url: str, session_name: str
+) -> list[HttpResult]:
     results: list[HttpResult] = []
     with ThreadPoolExecutor(max_workers=args.concurrency) as pool:
         futures = [
@@ -265,15 +272,14 @@ def run_http_load(args: argparse.Namespace, base_url: str, session_name: str) ->
     return results
 
 
-from marm_mcp_server.core.consolidation import compute_content_hash
-
-
 def compute_candidate_hash(source_memory_ids: list[str]) -> str:
     payload = json.dumps(sorted(source_memory_ids), separators=(",", ":"))
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
-def insert_memory(conn: sqlite3.Connection, session_name: str, content: str) -> tuple[str, str]:
+def insert_memory(
+    conn: sqlite3.Connection, session_name: str, content: str
+) -> tuple[str, str]:
     mem_id = str(uuid.uuid4())
     content_hash = compute_content_hash(content)
     timestamp = (datetime.now(timezone.utc) - timedelta(hours=48)).isoformat()
@@ -362,14 +368,16 @@ def stage_candidate(
                     "source_memory_ids": candidate["source_memory_ids"],
                     "suggested_summary": summary,
                 }
-            ]
+            ],
         },
         args.auth_key,
         args.timeout_s,
     )
 
 
-def apply_candidate(args: argparse.Namespace, base_url: str, candidate_id: str) -> HttpResult:
+def apply_candidate(
+    args: argparse.Namespace, base_url: str, candidate_id: str
+) -> HttpResult:
     return _json_request(
         "POST",
         f"{base_url.rstrip('/')}/marm_compaction",
@@ -425,7 +433,9 @@ def verify_applied(db_path: Path, candidate: dict) -> dict:
     return {
         "staging_status": staging[0] if staging else None,
         "source_count": len(source_rows),
-        "sources_marked": sum(1 for row in source_rows if row[1] == "source" and row[2]),
+        "sources_marked": sum(
+            1 for row in source_rows if row[1] == "source" and row[2]
+        ),
         "summary_ids": summary_ids,
         "summary_count": len(summary_rows),
         "summary_roles": [row[1] for row in summary_rows],
@@ -619,7 +629,9 @@ def seed_cross_session_candidate(
     }
 
 
-def run_cross_session_flow(args: argparse.Namespace, base_url: str, db_path: Path) -> dict:
+def run_cross_session_flow(
+    args: argparse.Namespace, base_url: str, db_path: Path
+) -> dict:
     primary_session = f"{args.session_prefix}-cross-a-{time.time_ns()}"
     foreign_session = f"{args.session_prefix}-cross-b-{time.time_ns()}"
     candidate = seed_cross_session_candidate(
@@ -751,9 +763,7 @@ def main() -> int:
             elapsed_s = time.perf_counter() - start
             ok_count = sum(1 for r in load_results if r.status_code == 200)
             row_count = count_session_rows(db_path, load_session)
-            hard_errors = [
-                r for r in load_results if r.status_code not in (200, 429)
-            ]
+            hard_errors = [r for r in load_results if r.status_code not in (200, 429)]
             load_report = {
                 "session_name": load_session,
                 "elapsed_s": elapsed_s,
@@ -782,11 +792,19 @@ def main() -> int:
         print(json.dumps(compaction_report, indent=2))
         if not compaction_report["candidates_visible"]:
             exit_code = 1
-        if any(v["staging_status"] != "applied" for v in compaction_report["applied_verifications"]):
+        if any(
+            v["staging_status"] != "applied"
+            for v in compaction_report["applied_verifications"]
+        ):
             exit_code = 1
-        if any(v["summary_count"] != 1 for v in compaction_report["applied_verifications"]):
+        if any(
+            v["summary_count"] != 1 for v in compaction_report["applied_verifications"]
+        ):
             exit_code = 1
-        if any(v["sources_marked"] != args.cluster_size for v in compaction_report["applied_verifications"]):
+        if any(
+            v["sources_marked"] != args.cluster_size
+            for v in compaction_report["applied_verifications"]
+        ):
             exit_code = 1
 
         stale_report = None

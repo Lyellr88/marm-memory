@@ -67,7 +67,11 @@ def test_import_marm_mcp_server_succeeds_with_clean_stdout(tmp_path):
     env["HOME"] = str(tmp_path)
 
     result = subprocess.run(
-        [sys.executable, "-c", "import marm_mcp_server; assert marm_mcp_server.__name__ == 'marm_mcp_server'"],
+        [
+            sys.executable,
+            "-c",
+            "import marm_mcp_server; assert marm_mcp_server.__name__ == 'marm_mcp_server'",
+        ],
         cwd=os.getcwd(),
         env=env,
         capture_output=True,
@@ -88,7 +92,11 @@ def test_runtime_presets_configure_rate_limit_and_write_queue(monkeypatch, tmp_p
     rate_limiter_module = importlib.import_module("marm_mcp_server.core.rate_limiter")
 
     custom_only = server.apply_runtime_preset(rate_limit_rpm=150)
-    assert custom_only == {"mode": "custom", "rate_limit_rpm": 150, "write_queue_enabled": True}
+    assert custom_only == {
+        "mode": "custom",
+        "rate_limit_rpm": 150,
+        "write_queue_enabled": True,
+    }
     assert settings.MARM_RATE_LIMIT_RPM == 150
     assert settings.COMPACTION_TRIGGER_COUNT == 20
     assert memory_module.COMPACTION_TRIGGER_COUNT == 20
@@ -96,7 +104,11 @@ def test_runtime_presets_configure_rate_limit_and_write_queue(monkeypatch, tmp_p
     assert rate_limiter_module.rate_limiter.limits["default"]["requests"] == 150
 
     swarm = server.apply_runtime_preset(swarm=True)
-    assert swarm == {"mode": "swarm", "rate_limit_rpm": 200, "write_queue_enabled": True}
+    assert swarm == {
+        "mode": "swarm",
+        "rate_limit_rpm": 200,
+        "write_queue_enabled": True,
+    }
     assert settings.MARM_RATE_LIMIT_RPM == 200
     assert settings.COMPACTION_TRIGGER_COUNT == 20
     assert memory_module.COMPACTION_TRIGGER_COUNT == 20
@@ -104,19 +116,33 @@ def test_runtime_presets_configure_rate_limit_and_write_queue(monkeypatch, tmp_p
     assert rate_limiter_module.rate_limiter.limits["default"]["requests"] == 200
 
     swarm_max = server.apply_runtime_preset(swarm_max=True)
-    assert swarm_max == {"mode": "swarm-max", "rate_limit_rpm": 600, "write_queue_enabled": True}
+    assert swarm_max == {
+        "mode": "swarm-max",
+        "rate_limit_rpm": 600,
+        "write_queue_enabled": True,
+    }
     assert settings.COMPACTION_TRIGGER_COUNT == 20
     assert memory_module.COMPACTION_TRIGGER_COUNT == 20
     assert rate_limiter_module.rate_limiter.limits["default"]["requests"] == 600
 
     custom = server.apply_runtime_preset(swarm=True, rate_limit_rpm=150)
-    assert custom == {"mode": "custom", "rate_limit_rpm": 150, "write_queue_enabled": True}
+    assert custom == {
+        "mode": "custom",
+        "rate_limit_rpm": 150,
+        "write_queue_enabled": True,
+    }
     assert settings.COMPACTION_TRIGGER_COUNT == 20
     assert memory_module.COMPACTION_TRIGGER_COUNT == 20
     assert rate_limiter_module.rate_limiter.limits["default"]["requests"] == 150
 
-    trusted = server.apply_runtime_preset(swarm_max=True, trusted=True, rate_limit_rpm=150)
-    assert trusted == {"mode": "trusted", "rate_limit_rpm": 0, "write_queue_enabled": True}
+    trusted = server.apply_runtime_preset(
+        swarm_max=True, trusted=True, rate_limit_rpm=150
+    )
+    assert trusted == {
+        "mode": "trusted",
+        "rate_limit_rpm": 0,
+        "write_queue_enabled": True,
+    }
     assert settings.COMPACTION_TRIGGER_COUNT == 20
     assert memory_module.COMPACTION_TRIGGER_COUNT == 20
     assert rate_limiter_module.rate_limiter.limits["default"]["requests"] == 0
@@ -153,7 +179,9 @@ def _wait_for_health(base_url, timeout=30):
         except Exception as exc:
             last_error = exc
         time.sleep(1)
-    raise AssertionError(f"Server did not become healthy within {timeout}s: {last_error}")
+    raise AssertionError(
+        f"Server did not become healthy within {timeout}s: {last_error}"
+    )
 
 
 def test_server_starts_and_health_returns_healthy(tmp_path):

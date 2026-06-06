@@ -1472,3 +1472,28 @@ marm_notebook(action="use"|"status"|"clear", session_name="my_project")
 - Added regression coverage for optional compaction `source_memory_ids`, semantic consolidation query-vector plumbing, and embedding dimension mismatch handling.
 
 </details>
+
+<details>
+<summary><strong>June 6th, 2026: Comment Cleanup, Ruff Lint Pass & Doc Updates (v2.9.2)</strong></summary>
+
+#### Comment Cleanup
+
+- Removed roughly 500 lines of low-value inline comments across the `marm_mcp_server` package, keeping only comments that explain non-obvious constraints or workarounds.
+- Removed a large Dockerfile comment block (lines 60-163) that duplicated content already covered in install docs.
+- Removed shebang lines (`#!/usr/bin/env python3`) from `.py` files where they have no effect on Windows.
+
+#### Ruff Lint Fixes
+
+- Resolved all E402 import ordering violations. Two deliberate deferrals in `server_stdio.py` (print redirect before imports, env var before settings import) are marked `# noqa: E402`.
+- Replaced bare `try/except` availability probes in `settings.py` with `importlib.util.find_spec()`, eliminating F401 unused import warnings.
+- Removed unused variable assignments flagged by F841 in `response_limiter.py`, `tests/`, and `scripts/`.
+- Changed bare `except:` to `except Exception:` in `endpoints/memory.py` (E722).
+- Added `@pytest.mark.skipif(sys.version_info < (3, 11), ...)` guard and `# noqa: F821` on `ExceptionGroup` usages in the STDIO transport test since `ExceptionGroup` is Python 3.11+ and the project targets 3.10.
+
+#### Documentation
+
+- Added Docker STDIO JSON client config as a collapsible section to `INSTALL-DOCKER.md`, covering macOS/Linux and Windows path variants with a note on tilde expansion.
+- Added Discord link and contributions callout near the top of `README.md`.
+- Added contact section (Discord and email) to `CONTRIBUTING.md`.
+
+</details>

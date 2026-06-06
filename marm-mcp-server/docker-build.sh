@@ -1,21 +1,17 @@
 #!/bin/bash
 
 # MARM MCP Server - Docker Build Script
-# Production-ready container build with optimization
 
 set -e
 
 echo "🐳 Building MARM Universal MCP Server Docker Container..."
 
-# Build configuration
 IMAGE_NAME="marm-systems/marm-mcp-server"
 TAG="latest"
 VERSION="2.2.3"
 
-# Create data directory for volume mounting
 mkdir -p ./data
 
-# Build the Docker image
 echo "📦 Building Docker image..."
 docker build \
     --build-arg VERSION=$VERSION \
@@ -23,7 +19,6 @@ docker build \
     --tag $IMAGE_NAME:$VERSION \
     .
 
-# Show image info
 echo "✅ Build complete!"
 docker images | grep marm-systems
 

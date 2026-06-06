@@ -28,6 +28,7 @@ COMPACTION_PROMPT_TEMPLATE = (
 
 def _cosine_similarity(a: bytes, b: bytes) -> float:
     import numpy as np
+
     va = np.frombuffer(a, dtype=np.float32)
     vb = np.frombuffer(b, dtype=np.float32)
     norm_a = float(np.linalg.norm(va))
@@ -90,12 +91,14 @@ def find_compaction_candidates(memory: "MARMMemory", session_name: str) -> list:
         effective_role = col_role or metadata.get("compaction_role")
         if effective_role in ("source", "summary"):
             continue
-        candidates.append({
-            "id": row_id,
-            "content": content,
-            "embedding": embedding,
-            "timestamp": timestamp,
-        })
+        candidates.append(
+            {
+                "id": row_id,
+                "content": content,
+                "embedding": embedding,
+                "timestamp": timestamp,
+            }
+        )
 
     if len(candidates) < settings.COMPACTION_MIN_CLUSTER_SIZE:
         return []
@@ -104,7 +107,12 @@ def find_compaction_candidates(memory: "MARMMemory", session_name: str) -> list:
     edges = []
     for i in range(len(candidates)):
         for j in range(i + 1, len(candidates)):
-            if _cosine_similarity(candidates[i]["embedding"], candidates[j]["embedding"]) >= threshold:
+            if (
+                _cosine_similarity(
+                    candidates[i]["embedding"], candidates[j]["embedding"]
+                )
+                >= threshold
+            ):
                 edges.append((i, j))
 
     components = _connected_components(len(candidates), edges)
@@ -124,16 +132,18 @@ def find_compaction_candidates(memory: "MARMMemory", session_name: str) -> list:
         ]
         avg_sim = sum(pair_sims) / len(pair_sims) if pair_sims else 0.0
 
-        result.append({
-            "session_name": session_name,
-            "source_memory_ids": [r["id"] for r in cluster],
-            "reason": "semantic_cluster",
-            "avg_similarity": round(avg_sim, 4),
-            "oldest_timestamp": min(timestamps),
-            "newest_timestamp": max(timestamps),
-            "preview": [r["content"][:120] for r in cluster],
-            "suggested_summary": None,
-        })
+        result.append(
+            {
+                "session_name": session_name,
+                "source_memory_ids": [r["id"] for r in cluster],
+                "reason": "semantic_cluster",
+                "avg_similarity": round(avg_sim, 4),
+                "oldest_timestamp": min(timestamps),
+                "newest_timestamp": max(timestamps),
+                "preview": [r["content"][:120] for r in cluster],
+                "suggested_summary": None,
+            }
+        )
 
     return result
 
@@ -149,8 +159,7 @@ def _write_report(candidates: list, session_name: str) -> "Path | None":
     report_path = report_dir / f"compaction-report-{safe_session}-{timestamp_str}.json"
     serializable = {
         "candidates": [
-            {k: v for k, v in c.items() if k != "embedding"}
-            for c in candidates
+            {k: v for k, v in c.items() if k != "embedding"} for c in candidates
         ]
     }
     try:
@@ -167,8 +176,6 @@ def run_compaction_dry_run(memory: "MARMMemory", session_name: str) -> dict:
     _write_report(candidates, session_name)
     return {"candidates": candidates}
 
-
-# --- V2: staging helpers ---
 
 def _compute_candidate_hash(source_memory_ids: list) -> str:
     """SHA-256 of sorted source memory IDs — used to detect duplicate staging on re-scan."""
@@ -196,7 +203,9 @@ def persist_candidates_to_staging(memory: "MARMMemory", candidates: list) -> Non
         return
 
     now = datetime.now(timezone.utc)
-    expires_at = (now + timedelta(hours=settings.COMPACTION_STAGING_TTL_HOURS)).isoformat()
+    expires_at = (
+        now + timedelta(hours=settings.COMPACTION_STAGING_TTL_HOURS)
+    ).isoformat()
     now_iso = now.isoformat()
 
     with memory.get_connection() as conn:
@@ -326,9 +335,9 @@ def _build_compaction_prompt_block(row: tuple, byte_budget: int) -> dict:
         "[MARM COMPACTION REQUEST]\n\n"
         "MARM found related memories that should be compacted. Generate one concise "
         "summary using only the source previews below, then call:\n\n"
-        "marm_compaction(action=\"stage\", summaries=[{"
-        "\"candidate_id\": \"<candidate_id>\", "
-        "\"suggested_summary\": \"...\""
+        'marm_compaction(action="stage", summaries=[{'
+        '"candidate_id": "<candidate_id>", '
+        '"suggested_summary": "..."'
         "}])\n\n"
         f"candidate_id: {candidate_id}\n"
         f"session_name: {session_name}\n"
@@ -351,7 +360,9 @@ def _build_compaction_prompt_block(row: tuple, byte_budget: int) -> dict:
     return {"type": "text", "text": text}
 
 
-def claim_pending_compaction_prompt(memory: "MARMMemory", session_name: str | None = None) -> dict | None:
+def claim_pending_compaction_prompt(
+    memory: "MARMMemory", session_name: str | None = None
+) -> dict | None:
     """Claim one pending compaction candidate for response injection.
 
     Uses a BEGIN IMMEDIATE transaction plus rowcount checks instead of SQLite
@@ -388,7 +399,11 @@ def claim_pending_compaction_prompt(memory: "MARMMemory", session_name: str | No
                 (now, max_nudges),
             )
             _session_filter = " AND session_name = ?" if session_name else ""
-            _row_params = (now, max_nudges, cutoff) if not session_name else (now, max_nudges, cutoff, session_name)
+            _row_params = (
+                (now, max_nudges, cutoff)
+                if not session_name
+                else (now, max_nudges, cutoff, session_name)
+            )
             row = conn.execute(
                 f"""
                 SELECT id, session_name, source_memory_ids, preview, created_at,

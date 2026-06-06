@@ -82,9 +82,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-async def run_burst(
-    memory: MARMMemory, writes: int, session_name: str
-) -> RunResult:
+async def run_burst(memory: MARMMemory, writes: int, session_name: str) -> RunResult:
     latencies_ms: list[float] = []
 
     async def _write(index: int) -> tuple[bool, float, str]:
@@ -97,7 +95,11 @@ async def run_burst(
             )
             return True, (time.perf_counter() - start) * 1000, ""
         except Exception as exc:
-            return False, (time.perf_counter() - start) * 1000, f"{type(exc).__name__}: {exc}"
+            return (
+                False,
+                (time.perf_counter() - start) * 1000,
+                f"{type(exc).__name__}: {exc}",
+            )
 
     burst_start = time.perf_counter()
     outcomes = await asyncio.gather(*[_write(i) for i in range(writes)])
@@ -193,7 +195,9 @@ def cleanup_sessions(memory: MARMMemory, session_names: list[str]) -> int:
 async def async_main() -> int:
     args = parse_args()
     try:
-        writes_steps = [int(part.strip()) for part in args.writes.split(",") if part.strip()]
+        writes_steps = [
+            int(part.strip()) for part in args.writes.split(",") if part.strip()
+        ]
     except ValueError:
         print("Invalid --writes. Provide positive integers, e.g. 10,25,50,100.")
         return 2
@@ -243,7 +247,9 @@ async def async_main() -> int:
         # Overflow burst: exercises queue backpressure when more callers than queue slots
         if not args.no_overflow and max(writes_steps) <= args.queue_size:
             overflow_writes = args.queue_size * 2
-            print(f"\n--- overflow burst: {overflow_writes} writes against queue size {args.queue_size} ---")
+            print(
+                f"\n--- overflow burst: {overflow_writes} writes against queue size {args.queue_size} ---"
+            )
             session_name = f"{args.session_prefix}-overflow-{time.time_ns()}"
             session_names.append(session_name)
             result = await run_burst(memory, overflow_writes, session_name)
@@ -257,7 +263,9 @@ async def async_main() -> int:
 
     if args.cleanup:
         deleted = cleanup_sessions(memory, session_names)
-        print(f"Cleanup: deleted {deleted} memory rows across {len(session_names)} sessions.")
+        print(
+            f"Cleanup: deleted {deleted} memory rows across {len(session_names)} sessions."
+        )
 
     if isolated and temp_dir is not None:
         shutil.rmtree(temp_dir, ignore_errors=True)
@@ -267,7 +275,9 @@ async def async_main() -> int:
     write_failures = [r for r in results if r.failed > 0]
 
     if integrity_failures:
-        print(f"RESULT: FAIL — {len(integrity_failures)} burst(s) had SQLite count != succeeded (data integrity)")
+        print(
+            f"RESULT: FAIL — {len(integrity_failures)} burst(s) had SQLite count != succeeded (data integrity)"
+        )
         return 1
     if write_failures:
         print(f"RESULT: FAIL — {len(write_failures)} burst(s) had failed writes")

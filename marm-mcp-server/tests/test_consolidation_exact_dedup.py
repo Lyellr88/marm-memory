@@ -2,24 +2,33 @@
 
 import pytest
 
-from marm_mcp_server.core.consolidation import compute_content_hash, find_exact_duplicate
+from marm_mcp_server.core.consolidation import compute_content_hash
 from marm_mcp_server.core.memory import MARMMemory
 
 
 # --- compute_content_hash unit tests ---
 
+
 def test_compute_content_hash_normalizes_case():
-    assert compute_content_hash("Fixed Login Bug") == compute_content_hash("fixed login bug")
+    assert compute_content_hash("Fixed Login Bug") == compute_content_hash(
+        "fixed login bug"
+    )
     assert compute_content_hash("HELLO WORLD") == compute_content_hash("hello world")
 
 
 def test_compute_content_hash_normalizes_leading_trailing_whitespace():
-    assert compute_content_hash("  fixed login bug  ") == compute_content_hash("fixed login bug")
-    assert compute_content_hash("fixed login bug\n") == compute_content_hash("fixed login bug")
+    assert compute_content_hash("  fixed login bug  ") == compute_content_hash(
+        "fixed login bug"
+    )
+    assert compute_content_hash("fixed login bug\n") == compute_content_hash(
+        "fixed login bug"
+    )
 
 
 def test_compute_content_hash_different_content_produces_different_hashes():
-    assert compute_content_hash("fixed login bug") != compute_content_hash("deployed new feature")
+    assert compute_content_hash("fixed login bug") != compute_content_hash(
+        "deployed new feature"
+    )
 
 
 def test_compute_content_hash_returns_sha256_hex_string():
@@ -29,6 +38,7 @@ def test_compute_content_hash_returns_sha256_hex_string():
 
 
 # --- Layer 1 integration tests against real SQLite ---
+
 
 @pytest.mark.asyncio
 async def test_exact_duplicate_in_same_session_is_skipped(monkeypatch, tmp_path):
@@ -52,7 +62,9 @@ async def test_exact_duplicate_in_same_session_is_skipped(monkeypatch, tmp_path)
 
 
 @pytest.mark.asyncio
-async def test_exact_duplicate_in_different_session_stores_as_new_row(monkeypatch, tmp_path):
+async def test_exact_duplicate_in_different_session_stores_as_new_row(
+    monkeypatch, tmp_path
+):
     from marm_mcp_server.core import memory as memory_module
 
     monkeypatch.setattr(memory_module, "CONSOLIDATION_ENABLED", True)
@@ -71,7 +83,9 @@ async def test_exact_duplicate_in_different_session_stores_as_new_row(monkeypatc
 
 
 @pytest.mark.asyncio
-async def test_case_and_whitespace_variants_deduplicate_within_session(monkeypatch, tmp_path):
+async def test_case_and_whitespace_variants_deduplicate_within_session(
+    monkeypatch, tmp_path
+):
     from marm_mcp_server.core import memory as memory_module
 
     monkeypatch.setattr(memory_module, "CONSOLIDATION_ENABLED", True)
@@ -94,7 +108,9 @@ async def test_case_and_whitespace_variants_deduplicate_within_session(monkeypat
 
 
 @pytest.mark.asyncio
-async def test_content_hash_column_populated_on_all_writes_regardless_of_consolidation_flag(monkeypatch, tmp_path):
+async def test_content_hash_column_populated_on_all_writes_regardless_of_consolidation_flag(
+    monkeypatch, tmp_path
+):
     from marm_mcp_server.core import memory as memory_module
 
     monkeypatch.setattr(memory_module, "CONSOLIDATION_ENABLED", False)
@@ -123,7 +139,9 @@ async def test_hash_collision_stores_as_new_row_not_false_dedup(monkeypatch, tmp
 
     monkeypatch.setattr(memory_module, "CONSOLIDATION_ENABLED", True)
     # Must patch on memory_module — store_memory() calls the name bound in that namespace.
-    monkeypatch.setattr(memory_module, "compute_content_hash", lambda _: "collision_hash")
+    monkeypatch.setattr(
+        memory_module, "compute_content_hash", lambda _: "collision_hash"
+    )
 
     mem = MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
@@ -205,7 +223,9 @@ async def test_race_window_sealed_by_begin_immediate(monkeypatch, tmp_path):
     started = 0
     release_both = asyncio.Event()
 
-    async def yielding_find_semantic(memory, content, session_name, threshold, query_vec=None):
+    async def yielding_find_semantic(
+        memory, content, session_name, threshold, query_vec=None
+    ):
         nonlocal started
         started += 1
         if started == 2:
@@ -215,7 +235,9 @@ async def test_race_window_sealed_by_begin_immediate(monkeypatch, tmp_path):
             memory, content, session_name, threshold, query_vec=query_vec
         )
 
-    monkeypatch.setattr(memory_module, "find_semantic_duplicate", yielding_find_semantic)
+    monkeypatch.setattr(
+        memory_module, "find_semantic_duplicate", yielding_find_semantic
+    )
 
     id_a, id_b = await asyncio.gather(
         mem.store_memory("duplicate content", "session-a"),
