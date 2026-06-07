@@ -13,11 +13,11 @@ from marm_mcp_server.core.memory import MARMMemory
 from marm_mcp_server.core.models import ApplyCompactionRequest, CompactionRequest
 from marm_mcp_server.core.write_queue import CallableWriteRequest, WriteQueue
 from marm_mcp_server.endpoints.compaction import (
-    _apply_compaction_write,
     auto_apply_staged_summaries,
     marm_apply_compaction,
     marm_compaction,
 )
+from marm_mcp_server.services.compaction_apply import apply_compaction_write
 
 # --- helpers (mirrored from v2 test file) ---
 
@@ -306,12 +306,12 @@ async def test_apply_compaction_direct_when_no_queue(mem):
     assert _get_staging_status(mem, candidate_id) == "applied"
 
 
-# --- _apply_compaction_write unit ---
+# --- apply_compaction_write unit ---
 
 
 @pytest.mark.asyncio
 async def test_apply_compaction_write_inserts_summary_and_marks_sources(mem):
-    """_apply_compaction_write correctly inserts summary row and updates source rows."""
+    """apply_compaction_write correctly inserts summary row and updates source rows."""
     session = "write-unit-session"
     ids_and_hashes = [_insert_memory_row(mem, session, f"fact {i}") for i in range(3)]
     source_ids = [m[0] for m in ids_and_hashes]
@@ -339,7 +339,7 @@ async def test_apply_compaction_write_inserts_summary_and_marks_sources(mem):
             ),
         )
 
-    summary_id = await _apply_compaction_write(candidate_id)
+    summary_id = await apply_compaction_write(mem, candidate_id)
 
     # Summary row exists with correct role
     with mem.get_connection() as conn:

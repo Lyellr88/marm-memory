@@ -72,6 +72,7 @@ from ..config.settings import (  # noqa: E402
     CONSOLIDATION_THRESHOLD,
     COMPACTION_ENABLED,
     COMPACTION_TRIGGER_COUNT,
+    RECALL_SCAN_LIMIT,
 )
 from .consolidation import (  # noqa: E402
     compute_content_hash,
@@ -488,7 +489,14 @@ class MARMMemory:
                 return
             existing_content, metadata_json = row
             metadata = json.loads(metadata_json) if metadata_json else {}
-            merged_content = f"{existing_content}\n[merged] {new_content}"
+            _MAX = 10000
+            _MARKER = "\n[merged] "
+            _new_budget = _MAX - len(_MARKER)
+            if len(new_content) > _new_budget:
+                new_content = new_content[:_new_budget]
+            _existing_budget = _MAX - len(_MARKER) - len(new_content)
+            existing_content = existing_content[: max(0, _existing_budget)]
+            merged_content = f"{existing_content}{_MARKER}{new_content}"
             merged_at = datetime.now(timezone.utc).isoformat()
             if "merge_history" not in metadata:
                 metadata["merge_history"] = []
@@ -646,12 +654,34 @@ class MARMMemory:
         return await self.store_memory(content, session, context_type, metadata)
 
     async def recall_similar(
-        self, query: str, session: str = None, limit: int = 5, query_vec=None
-    ) -> List[Dict]:
-        """Find semantically similar memories"""
+        self,
+        query: str,
+        session: str = None,
+        limit: int = 5,
+        query_vec=None,
+        include_scan_metadata: bool = False,
+    ):
+        """Find semantically similar memories.
+
+        When include_scan_metadata=True, returns (List[Dict], dict) where the second
+        element contains recall_scan_truncated and recall_scan_limit. All other callers
+        receive List[Dict] as before.
+        """
+        scan_limit = RECALL_SCAN_LIMIT
+
+        def _wrap(results, truncated):
+            if include_scan_metadata:
+                return results, {
+                    "recall_scan_truncated": truncated,
+                    "recall_scan_limit": scan_limit,
+                }
+            return results
+
         if query_vec is None:
             if not self._load_encoder_lazily():
-                return await self.recall_text_search(query, session, limit)
+                return _wrap(
+                    await self.recall_text_search(query, session, limit), False
+                )
 
         try:
             if query_vec is not None:
@@ -661,14 +691,17 @@ class MARMMemory:
 
             with self.get_connection() as conn:
                 if session is None:
-                    cursor = conn.execute("""
+                    cursor = conn.execute(
+                        """
                         SELECT id, session_name, content, embedding, timestamp, context_type, metadata
                         FROM memories
                         WHERE embedding IS NOT NULL
                           AND (compaction_role IS NULL OR compaction_role != 'source')
                         ORDER BY timestamp DESC
-                        LIMIT 1000
-                    """)
+                        LIMIT ?
+                    """,
+                        (scan_limit + 1,),
+                    )
                 else:
                     cursor = conn.execute(
                         """
@@ -678,12 +711,15 @@ class MARMMemory:
                           AND session_name = ?
                           AND (compaction_role IS NULL OR compaction_role != 'source')
                         ORDER BY timestamp DESC
-                        LIMIT 1000
+                        LIMIT ?
                     """,
-                        (session,),
+                        (session, scan_limit + 1),
                     )
 
                 memories = cursor.fetchall()
+                scan_truncated = len(memories) > scan_limit
+                memories = memories[:scan_limit]
+
                 similarities = []
                 expected_dim = len(query_embedding)
                 dim_skipped = 0
@@ -723,11 +759,11 @@ class MARMMemory:
                         }
                     )
 
-                return results
+                return _wrap(results, scan_truncated)
 
         except Exception as e:
-            print(f"Semantic search failed: {e}")
-            return await self.recall_text_search(query, session, limit)
+            _safe_print(f"Semantic search failed: {e}")
+            return _wrap(await self.recall_text_search(query, session, limit), False)
 
     async def recall_text_search(
         self, query: str, session: str = None, limit: int = 5
@@ -770,7 +806,7 @@ class MARMMemory:
                         "timestamp": row[3],
                         "context_type": row[4],
                         "metadata": json.loads(row[5]) if row[5] else {},
-                        "similarity": 0.8, 
+                        "similarity": 0.8,
                     }
                 )
 

@@ -5,7 +5,7 @@ This server integrates all modular components of the MARM protocol into a single
 FastAPI application, compliant with the MCP protocol via FastApiMCP.
 
 Author: Lyell - MARM Systems
-Version: 2.9.2
+Version: 2.10.0
 """
 
 import asyncio
@@ -198,7 +198,7 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-_protocol_delivered = False
+_protocol_delivered_sessions: set = set()
 _protocol_delivery_lock = asyncio.Lock()
 
 
@@ -210,14 +210,16 @@ async def _mcp_tool_call_tracker(request: Request, call_next):
     Doc loading runs before the handler so the first tool call gets warm docs,
     matching STDIO transport timing.
 
-    On the very first successful tool call of a server session, the MARM protocol is
-    injected into the response so the agent receives it exactly once. Uses its own
-    _protocol_delivered flag — independent of docs_are_loaded() — so failed or
-    non-200 responses leave the flag unset and the next call retries injection.
+    On the first successful tool call for each session, the MARM protocol is injected
+    into the response so each agent receives it exactly once. Tracked per session_name
+    in _protocol_delivered_sessions. Tools that omit session_name share a "__default__"
+    scope — agents should use distinct session names for independent delivery.
+    Note: the session is marked delivered when read_protocol_file() succeeds; a later
+    failure during response mutation marks the session delivered even if the client
+    did not receive the injection.
     """
-    global _protocol_delivered
-
     is_tool_call = False
+    body = b""
     if request.method == "POST" and request.url.path == "/mcp":
         try:
             body = await request.body()
@@ -234,7 +236,29 @@ async def _mcp_tool_call_tracker(request: Request, call_next):
         asyncio.create_task(maybe_auto_refresh())
 
     if is_tool_call and response.status_code == 200:
-        if _protocol_delivered and not settings.COMPACTION_ENABLED:
+        _explicit_session = None
+        _tool_name = None
+        try:
+            _parsed_body = json.loads(body)
+            _explicit_session = (
+                _parsed_body.get("params", {}).get("arguments", {}).get("session_name")
+            ) or None
+            _tool_name = _parsed_body.get("params", {}).get("name")
+        except Exception:
+            pass
+
+        _protocol_session = _explicit_session or "__default__"
+        if _explicit_session:
+            _compaction_session = _explicit_session
+        elif _tool_name == "marm_log_entry":
+            _compaction_session = memory.active_log_session
+        else:
+            _compaction_session = "main"
+
+        if (
+            _protocol_session in _protocol_delivered_sessions
+            and not settings.COMPACTION_ENABLED
+        ):
             return response
 
         try:
@@ -269,7 +293,7 @@ async def _mcp_tool_call_tracker(request: Request, call_next):
             injections = []
             protocol_injected = False
             async with _protocol_delivery_lock:
-                if not _protocol_delivered:
+                if _protocol_session not in _protocol_delivered_sessions:
                     protocol_content = await read_protocol_file()
                     injections.append(
                         {
@@ -277,26 +301,12 @@ async def _mcp_tool_call_tracker(request: Request, call_next):
                             "text": f"[MARM SESSION INIT]\n\n{protocol_content}",
                         }
                     )
-                    _protocol_delivered = True
+                    _protocol_delivered_sessions.add(_protocol_session)
                     protocol_injected = True
 
-            _req_session = None
-            try:
-                _req_session = (
-                    json.loads(body)
-                    .get("params", {})
-                    .get("arguments", {})
-                    .get("session_name")
-                )
-            except Exception as e:
-                logger.debug(
-                    "Session extraction failed, using global scope",
-                    error=str(e),
-                    body_preview=body[:200].decode("utf-8", errors="replace"),
-                )
             if not protocol_injected:
                 compaction_block = await asyncio.to_thread(
-                    claim_pending_compaction_prompt, memory, _req_session
+                    claim_pending_compaction_prompt, memory, _compaction_session
                 )
                 if compaction_block:
                     injections.append(compaction_block)

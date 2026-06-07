@@ -1497,3 +1497,33 @@ marm_notebook(action="use"|"status"|"clear", session_name="my_project")
 - Added contact section (Discord and email) to `CONTRIBUTING.md`.
 
 </details>
+
+<details>
+<summary><strong>June 6th, 2026: Recall Visibility, Protocol Scope & Service Refactor (v2.10.0)</strong></summary>
+
+#### Recall & Search Reliability
+
+- Added `RECALL_SCAN_LIMIT` so semantic recall's bounded DB scan is configurable instead of hardcoded to 1,000 rows.
+- `recall_similar()` now scans `limit + 1` rows internally to detect when recall was bounded and returns scan metadata only for callers that request it.
+- HTTP and STDIO `marm_smart_recall` responses now surface `recall_scan_truncated` and `recall_scan_limit` on both success and no-result paths, making bounded recall visible to agents.
+- Standardized model-facing MCP tool failures to return structured `{"status":"error"}` payloads instead of opaque HTTP 500 exceptions across recall, context logging, session logs, notebook, delete, and summary flows.
+
+#### Protocol & Agent Session Handling
+
+- Changed HTTP protocol injection from one server-global delivery flag to per-session tracking so multiple agents/sessions can each receive the MARM protocol once.
+- Preserved the first-call protocol ordering behavior while keeping compaction nudges from co-injecting with protocol initialization.
+- Added regression coverage for independent protocol delivery across separate sessions.
+
+#### Consolidation Safety
+
+- Capped write-time merge growth at 10,000 characters so hot near-duplicate memories cannot grow into unbounded blobs.
+- Preserved the newest merged content while trimming older content when a merge would exceed the cap.
+- Added regression coverage for the merge-size cap and recall scan truncation metadata.
+
+#### Service Refactor
+
+- Extracted STDIO smart recall logic into `services/recall.py` so HTTP and STDIO recall behavior can stay aligned.
+- Extracted STDIO session summary formatting into `services/summary.py` while keeping the public `marm_summary` tool as a thin wrapper.
+- Moved atomic compaction apply DB logic into `services/compaction_apply.py`, reducing endpoint size while preserving the existing write-queue apply path.
+
+</details>

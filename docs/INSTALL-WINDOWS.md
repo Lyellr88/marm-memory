@@ -2,7 +2,7 @@
 
 ## Universal Memory Intelligence Platform for AI Agents
 
-**MARM v2.9.2** - Memory Accurate Response Mode
+**MARM v2.10.0** - Memory Accurate Response Mode
 *Complete Windows installation guide*
 
 ---
@@ -289,7 +289,7 @@ Invoke-WebRequest -Uri http://localhost:8001/health
 {
   "status": "healthy",
   "service": "MARM MCP Server",
-  "version": "2.9.2",
+  "version": "2.10.0",
   "timestamp": "2026-01-01T00:00:00+00:00",
   "database": "connected",
   "semantic_search": "available"
@@ -405,6 +405,7 @@ python -m marm_mcp_server
 | `MAX_DB_CONNECTIONS` | `5` | Database connection pool size |
 | `MARM_ANALYTICS_DB_PATH` | `marm_usage_analytics.db` | Override analytics database path |
 | `DEFAULT_SEMANTIC_MODEL` | `all-MiniLM-L6-v2` | AI model for semantic search |
+| `RECALL_SCAN_LIMIT` | `1000` | Maximum embedded memories semantic recall scans per query before surfacing `recall_scan_truncated=true`. |
 | `MARM_RATE_LIMIT_RPM` | `80` | HTTP rate limit (requests per minute per client IP). Set to `0` to disable. Overridden by `--swarm`, `--swarm-max`, `--trusted` presets. |
 | `WRITE_QUEUE_ENABLED` | `1` | Serialized memory write queue. Set to `0` only for debugging/direct-write comparisons. |
 | `MAX_QUEUE_SIZE` | `100` | Write queue capacity when `WRITE_QUEUE_ENABLED=1`. |

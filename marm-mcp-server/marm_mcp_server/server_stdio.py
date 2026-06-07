@@ -159,13 +159,14 @@ from fastmcp import FastMCP  # noqa: E402
 from marm_mcp_server.core.memory import memory  # noqa: E402
 from marm_mcp_server.core.compaction import claim_pending_compaction_prompt  # noqa: E402
 from marm_mcp_server.core.events import events  # noqa: E402
-from marm_mcp_server.core.response_limiter import MCPResponseLimiter  # noqa: E402
 from marm_mcp_server.services.notebook import notebook_dispatch  # noqa: E402
 from marm_mcp_server.services.documentation import (  # noqa: E402
     ensure_marm_started,
     maybe_auto_refresh,
 )
 from marm_mcp_server.utils.helpers import read_protocol_file  # noqa: E402
+from marm_mcp_server.services.summary import generate_session_summary  # noqa: E402
+from marm_mcp_server.services.recall import smart_recall  # noqa: E402
 from marm_mcp_server.config.settings import (  # noqa: E402
     SERVER_VERSION,
     DEFAULT_DB_PATH,
@@ -173,7 +174,6 @@ from marm_mcp_server.config.settings import (  # noqa: E402
 )
 
 mcp = FastMCP("MARM MCP Server")
-response_limiter = MCPResponseLimiter()
 
 
 @mcp.tool()
@@ -191,117 +191,7 @@ async def marm_smart_recall(
     Finds relevant memories using semantic similarity or text search.
     Returns the most relevant memories with similarity scores.
     """
-    try:
-        search_session = None if search_all else session_name
-
-        log_results = []
-        if include_logs:
-            with memory.get_connection() as conn:
-                if search_all:
-                    log_rows = conn.execute(
-                        """
-                        SELECT session_name, topic, summary, entry_date
-                        FROM log_entries
-                        WHERE topic LIKE ? OR summary LIKE ?
-                        ORDER BY entry_date DESC
-                        LIMIT ?
-                        """,
-                        (f"%{query}%", f"%{query}%", limit),
-                    ).fetchall()
-                else:
-                    log_rows = conn.execute(
-                        """
-                        SELECT session_name, topic, summary, entry_date
-                        FROM log_entries
-                        WHERE (topic LIKE ? OR summary LIKE ?) AND session_name = ?
-                        ORDER BY entry_date DESC
-                        LIMIT ?
-                        """,
-                        (f"%{query}%", f"%{query}%", session_name, limit),
-                    ).fetchall()
-            log_results = [
-                {
-                    "session_name": r[0],
-                    "topic": r[1],
-                    "summary": r[2],
-                    "entry_date": r[3],
-                    "type": "log",
-                }
-                for r in log_rows
-            ]
-
-        similar_memories = await memory.recall_similar(
-            query, session=search_session, limit=limit
-        )
-
-        if not similar_memories:
-            if not search_all:
-                system_memories = await memory.recall_similar(
-                    query, session="marm_system", limit=limit
-                )
-                response: dict = {
-                    "status": "no_results",
-                    "query": query,
-                    "session_name": session_name,
-                    "search_all": search_all,
-                    "results": [],
-                }
-                if system_memories:
-                    response["message"] = (
-                        f"🤔 No memories found in session '{session_name}' for query: '{query}'. "
-                        f"However, {len(system_memories)} relevant results were found in the system documentation. "
-                        f"Consider using search_all=true to search across all sessions."
-                    )
-                    response["system_results"] = system_memories
-                else:
-                    response["message"] = f"No memories found for query: '{query}'"
-                if include_logs:
-                    response["log_results"] = log_results
-                    response["log_results_count"] = len(log_results)
-                return response
-
-        formatted_results = [
-            {
-                "id": mem.get("id"),
-                "content": mem.get("content"),
-                "session_name": mem.get("session_name"),
-                "similarity": mem.get("similarity", 0.0),
-                "timestamp": mem.get("timestamp"),
-                "context_type": mem.get("context_type", "general"),
-            }
-            for mem in similar_memories
-        ]
-
-        response_metadata = {
-            "status": "success",
-            "query": query,
-            "session_name": session_name,
-            "search_all": search_all,
-        }
-
-        limited_results, was_truncated = response_limiter.limit_memory_response(
-            formatted_results, response_metadata
-        )
-
-        response_data = {
-            **response_metadata,
-            "results_count": len(limited_results),
-            "results": limited_results,
-        }
-
-        if was_truncated:
-            response_data = response_limiter.add_truncation_notice(
-                response_data, was_truncated, len(formatted_results)
-            )
-
-        if include_logs:
-            response_data["log_results"] = log_results
-            response_data["log_results_count"] = len(log_results)
-
-        return response_data
-
-    except Exception as e:
-        return {"status": "error", "message": f"Error during smart recall: {str(e)}"}
+    return await smart_recall(query, session_name, limit, search_all, include_logs)
 
 
 @mcp.tool()
@@ -581,90 +471,7 @@ async def marm_summary(
     Reads log_entries for the session and returns a formatted markdown summary.
     Equivalent to /summary: [session name] command
     """
-    try:
-        with memory.get_connection() as conn:
-            total_entries = conn.execute(
-                "SELECT COUNT(*) FROM log_entries WHERE session_name = ?",
-                (session_name,),
-            ).fetchone()[0]
-
-            entries = conn.execute(
-                """
-                SELECT entry_date, topic, summary, full_entry
-                FROM log_entries WHERE session_name = ?
-                ORDER BY entry_date DESC
-                LIMIT ?
-                """,
-                (session_name, limit),
-            ).fetchall()
-
-        if not entries:
-            return {
-                "status": "empty",
-                "message": f"No entries found in session '{session_name}'",
-            }
-
-        base_response = {
-            "status": "success",
-            "session_name": session_name,
-            "entry_count": 0,
-            "total_entries": total_entries,
-        }
-
-        summary_lines = [f"# MARM Session Summary: {session_name}"]
-        summary_lines.append(
-            f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M UTC')}"
-        )
-        summary_lines.append("")
-
-        if total_entries > len(entries):
-            summary_lines.append(
-                f"*Showing {len(entries)} most recent entries out of {total_entries} total*"
-            )
-            summary_lines.append("")
-
-        included_entries = []
-        current_lines = summary_lines.copy()
-
-        for entry in entries:
-            entry_summary = entry[2]
-            if len(entry_summary) > 200:
-                entry_summary = entry_summary[:197] + "..."
-
-            entry_line = f"**{entry[0]}** [{entry[1]}]: {entry_summary}"
-            test_lines = current_lines + [entry_line]
-            test_response = base_response.copy()
-            test_response["summary"] = "\n".join(test_lines)
-
-            if (
-                MCPResponseLimiter.estimate_response_size(test_response)
-                > MCPResponseLimiter.CONTENT_LIMIT
-            ):
-                break
-
-            current_lines.append(entry_line)
-            included_entries.append(entry)
-
-        final_response = {
-            "status": "success",
-            "session_name": session_name,
-            "summary": "\n".join(current_lines),
-            "entry_count": len(included_entries),
-            "total_entries": total_entries,
-        }
-
-        if len(included_entries) < len(entries):
-            final_response["_mcp_truncated"] = True
-            final_response["_truncation_reason"] = (
-                "Summary limited to 1MB for MCP compliance"
-            )
-            final_response["_entries_shown"] = len(included_entries)
-            final_response["_entries_available"] = len(entries)
-
-        return final_response
-
-    except Exception as e:
-        return {"status": "error", "message": f"Error generating summary: {str(e)}"}
+    return await generate_session_summary(session_name, limit)
 
 
 @mcp.tool()

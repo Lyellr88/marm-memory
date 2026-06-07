@@ -280,3 +280,132 @@ async def test_mismatched_embedding_dimension_skipped_with_signal_without_breaki
     assert bad_id not in result_ids, (
         "wrong-dimension memory must be skipped, not crash recall"
     )
+
+
+@pytest.mark.asyncio
+async def test_recall_similar_scan_truncated_fires_when_scan_limit_exceeded(
+    monkeypatch, tmp_path
+):
+    """Regression: recall_similar must report recall_scan_truncated=True when the DB
+    holds more rows than RECALL_SCAN_LIMIT so callers know recall was bounded.
+
+    Uses direct DB inserts + query_vec to bypass the encoder path, which would
+    short-circuit to text search before the scan query runs.
+    """
+    import numpy as np
+    import uuid as uuid_module
+
+    from marm_mcp_server.core import memory as memory_module
+
+    monkeypatch.setattr(memory_module, "RECALL_SCAN_LIMIT", 5)
+    mem = memory_module.MARMMemory(str(tmp_path / "memory.db"))
+
+    dim = 384
+    vec = np.ones(dim, dtype=np.float32)
+    vec /= np.linalg.norm(vec)
+
+    with mem.get_connection() as conn:
+        for i in range(7):
+            conn.execute(
+                "INSERT INTO memories (id, session_name, content, embedding, content_hash, timestamp, context_type, metadata)"
+                " VALUES (?, ?, ?, ?, ?, datetime('now'), 'general', '{}')",
+                (
+                    str(uuid_module.uuid4()),
+                    "trunc-test",
+                    f"test entry {i}",
+                    vec.tobytes(),
+                    f"hash-trunc-{i}",
+                ),
+            )
+
+    query_vec = np.ones(dim, dtype=np.float32)
+    query_vec /= np.linalg.norm(query_vec)
+
+    results, meta = await mem.recall_similar(
+        "test entry",
+        session="trunc-test",
+        limit=3,
+        query_vec=query_vec,
+        include_scan_metadata=True,
+    )
+
+    assert meta["recall_scan_truncated"] is True
+    assert meta["recall_scan_limit"] == 5
+    assert len(results) <= 3
+
+
+@pytest.mark.asyncio
+async def test_recall_similar_scan_not_truncated_when_under_limit(
+    monkeypatch, tmp_path
+):
+    """recall_scan_truncated must be False when total rows are within RECALL_SCAN_LIMIT."""
+    import numpy as np
+    import uuid as uuid_module
+
+    from marm_mcp_server.core import memory as memory_module
+
+    monkeypatch.setattr(memory_module, "RECALL_SCAN_LIMIT", 10)
+    mem = memory_module.MARMMemory(str(tmp_path / "memory.db"))
+
+    dim = 384
+    vec = np.ones(dim, dtype=np.float32)
+    vec /= np.linalg.norm(vec)
+
+    with mem.get_connection() as conn:
+        for i in range(4):
+            conn.execute(
+                "INSERT INTO memories (id, session_name, content, embedding, content_hash, timestamp, context_type, metadata)"
+                " VALUES (?, ?, ?, ?, ?, datetime('now'), 'general', '{}')",
+                (
+                    str(uuid_module.uuid4()),
+                    "no-trunc-test",
+                    f"entry {i}",
+                    vec.tobytes(),
+                    f"hash-notrunc-{i}",
+                ),
+            )
+
+    query_vec = np.ones(dim, dtype=np.float32)
+    query_vec /= np.linalg.norm(query_vec)
+
+    _results, meta = await mem.recall_similar(
+        "entry",
+        session="no-trunc-test",
+        limit=3,
+        query_vec=query_vec,
+        include_scan_metadata=True,
+    )
+
+    assert meta["recall_scan_truncated"] is False
+
+
+@pytest.mark.asyncio
+async def test_update_memory_merge_cap_never_exceeds_10000_chars(tmp_path):
+    """Regression: merging two 10,000-char contents must not produce a blob > 10,000 chars."""
+    memory = MARMMemory(str(tmp_path / "memory.db"))
+    memory._encoder_failed = True
+
+    memory_id = await memory.store_memory("seed", session="cap-test")
+
+    big_existing = "A" * 10000
+    with memory.get_connection() as conn:
+        conn.execute(
+            "UPDATE memories SET content = ? WHERE id = ?",
+            (big_existing, memory_id),
+        )
+
+    big_new = "B" * 10000
+    await memory.update_memory(memory_id, big_new)
+
+    with memory.get_connection() as conn:
+        row = conn.execute(
+            "SELECT content FROM memories WHERE id = ?", (memory_id,)
+        ).fetchone()
+
+    stored = row[0]
+    merge_marker = "\n[merged] "
+    expected_new_len = 10000 - len(merge_marker)
+    assert len(stored) == 10000
+    assert stored.startswith(merge_marker)
+    assert stored.endswith("B" * expected_new_len)
+    assert "A" not in stored
