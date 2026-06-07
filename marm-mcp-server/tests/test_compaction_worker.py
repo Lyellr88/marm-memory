@@ -510,6 +510,24 @@ async def test_different_sessions_have_independent_counters(monkeypatch, tmp_pat
 
 
 @pytest.mark.asyncio
+async def test_write_counter_persists_across_memory_instances(monkeypatch, tmp_path):
+    from marm_mcp_server.core import memory as memory_module
+
+    monkeypatch.setattr(memory_module, "COMPACTION_ENABLED", True)
+    monkeypatch.setattr(memory_module, "COMPACTION_TRIGGER_COUNT", 99)
+
+    db_path = str(tmp_path / "memory.db")
+    mem_a = memory_module.MARMMemory(db_path)
+    mem_a._encoder_failed = True
+
+    await mem_a.store_memory("persistent counter write", "persisted-session")
+
+    mem_b = memory_module.MARMMemory(db_path)
+
+    assert mem_b._get_compaction_write_count("persisted-session") == 1
+
+
+@pytest.mark.asyncio
 async def test_scan_fires_after_grace_period(monkeypatch, tmp_path):
     from marm_mcp_server.core import memory as memory_module
     import marm_mcp_server.config.settings as s

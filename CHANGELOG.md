@@ -1527,3 +1527,39 @@ marm_notebook(action="use"|"status"|"clear", session_name="my_project")
 - Moved atomic compaction apply DB logic into `services/compaction_apply.py`, reducing endpoint size while preserving the existing write-queue apply path.
 
 </details>
+
+<details>
+<summary><strong>June 7th, 2026: Deterministic Compaction Fallback & Vectorized Recall (v2.11.0)</strong></summary>
+
+#### Compaction Reliability
+
+- Added server-side extractive compaction summarization for `nudge_exhausted` candidates so compaction no longer depends only on a connected agent obeying prompt nudges.
+- New centroid-based summarizer ranks source memories by embedding centrality, skips near-duplicate selections, and falls back to source text when embeddings are unavailable.
+- The compaction maintenance scheduler now starts whenever `COMPACTION_ENABLED=1`; auto-apply remains optional on top via `COMPACTION_AUTO_APPLY_ENABLED=1`.
+- Nudge-exhausted candidates with missing or partially missing source memories are marked `stale` instead of remaining stuck forever.
+- Removed the last in-lock compaction summary embedding encode path; rare sanitize/hash drift now stores the summary without an embedding instead of doing CPU work inside `BEGIN IMMEDIATE`.
+
+#### Recall Hot-Path Completion
+
+- Replaced per-row Python cosine scoring in `recall_similar()` with batched NumPy matrix scoring.
+- Moved both SQLite embedding BLOB fetches and vector scoring into a worker thread so large semantic recall scans no longer block the event loop.
+- Raised default `RECALL_SCAN_LIMIT` from `1000` to `10000`, removing the practical old 1000-memory semantic recall cliff for normal local use.
+- Kept bounded-recall metadata (`recall_scan_truncated`, `recall_scan_limit`) so agents can still tell when recall was capped.
+- Preserved wrong-dimension embedding safeguards while using the new vectorized scoring path.
+
+#### Swarm & Runtime Guardrails
+
+- Persisted compaction write counters in SQLite so trigger progress survives process restarts instead of living only in RAM.
+- Updated compaction trigger reset logic to use the persisted counter path.
+- Added startup detection for common unsupported multi-worker HTTP deployments (`WEB_CONCURRENCY`, `UVICORN_WORKERS`, `GUNICORN_CMD_ARGS`) with a clear warning to run one MARM process per SQLite database.
+- Clarified in README, FAQ, and install docs that `--swarm` / `--swarm-max` scale concurrency inside one process; Uvicorn/Gunicorn multi-worker mode remains future work.
+
+#### Tests & Validation
+
+- Added regression coverage for persisted compaction counters across `MARMMemory` instances.
+- Added full server-side compaction summarizer coverage for centroid selection, deduplication, missing embeddings, wrong dimensions, stale source handling, multi-candidate promotion, and suite-order isolation.
+- Added semantic recall tests proving vectorized ranking order and recall of matches beyond the old 1000-row window.
+- Updated scheduler tests for the new `COMPACTION_ENABLED` maintenance gate.
+- Fast local suite validation: `242 passed, 9 deselected, 1 warning`.
+
+</details>

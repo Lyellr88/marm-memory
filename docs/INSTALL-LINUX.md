@@ -2,7 +2,7 @@
 
 ## Universal Memory Intelligence Platform for AI Agents
 
-**MARM v2.10.0** - Memory Accurate Response Mode
+**MARM v2.11.0** - Memory Accurate Response Mode
 *Complete Linux installation guide*
 
 ---
@@ -103,6 +103,10 @@ python3 -m marm_mcp_server --swarm-max    # 600 RPM, write queue on
 python3 -m marm_mcp_server --trusted      # rate limiting off, write queue on
 python3 -m marm_mcp_server --rate-limit-rpm 150  # custom RPM
 ```
+
+Use one MARM HTTP process per SQLite database. Multi-process Uvicorn/Gunicorn
+workers (`--workers N`) are not supported yet because MARM's write queue,
+scheduler, and protocol/session coordination are process-local.
 
 ### **After Installation:**
 
@@ -316,7 +320,7 @@ curl -s http://localhost:8001/health
 {
   "status": "healthy",
   "service": "MARM MCP Server",
-  "version": "2.10.0",
+  "version": "2.11.0",
   "timestamp": "2026-01-01T00:00:00+00:00",
   "database": "connected",
   "semantic_search": "available"
@@ -443,7 +447,7 @@ source ~/.bashrc
 | `MAX_DB_CONNECTIONS` | `5` | Database connection pool size |
 | `MARM_ANALYTICS_DB_PATH` | `marm_usage_analytics.db` | Override analytics database path |
 | `DEFAULT_SEMANTIC_MODEL` | `all-MiniLM-L6-v2` | AI model for semantic search |
-| `RECALL_SCAN_LIMIT` | `1000` | Maximum embedded memories semantic recall scans per query before surfacing `recall_scan_truncated=true`. |
+| `RECALL_SCAN_LIMIT` | `10000` | Maximum embedded memories semantic recall scans per query before surfacing `recall_scan_truncated=true`. |
 | `MARM_RATE_LIMIT_RPM` | `80` | HTTP rate limit (requests per minute per client IP). Set to `0` to disable. Overridden by `--swarm`, `--swarm-max`, `--trusted` presets. |
 | `WRITE_QUEUE_ENABLED` | `1` | Serialized memory write queue. Set to `0` only for debugging/direct-write comparisons. |
 | `MAX_QUEUE_SIZE` | `100` | Write queue capacity when `WRITE_QUEUE_ENABLED=1`. |

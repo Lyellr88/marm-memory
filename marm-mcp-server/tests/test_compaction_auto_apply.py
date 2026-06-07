@@ -560,6 +560,7 @@ async def test_maybe_start_scheduler_registers_job_when_enabled(monkeypatch):
     """_maybe_start_compaction_scheduler registers compaction_auto_apply job when both flags are True."""
     import marm_mcp_server.server as server_mod
 
+    monkeypatch.setattr(server_mod, "COMPACTION_ENABLED", True)
     monkeypatch.setattr(server_mod, "COMPACTION_AUTO_APPLY_ENABLED", True)
     monkeypatch.setattr(server_mod, "SCHEDULER_AVAILABLE", True)
     monkeypatch.setattr(server_mod, "COMPACTION_AUTO_APPLY_INTERVAL_MINUTES", 60)

@@ -102,6 +102,8 @@ No. Session startup, protocol delivery, and documentation loading are now automa
 
 Use HTTP mode so one MARM server coordinates shared database access. The write queue is enabled by default. Start shared servers with `--swarm` for 200 RPM, `--swarm-max` for 600 RPM, or `--trusted` to disable rate limiting on a private trusted deployment.
 
+Run one MARM HTTP process per SQLite database. Multi-process Uvicorn/Gunicorn workers are not supported yet because the write queue, scheduler, protocol delivery, and some active session state are process-local. Swarm presets increase safe concurrency inside one process; true multi-worker HTTP scaling is future work.
+
 #### Q: Can multiple AI agents share the same memory?
 
 Yes. Use HTTP mode for shared access. Multiple agents can read and write to the same SQLite database through one MARM server process. Avoid running many separate STDIO containers against the same SQLite file at the same time; SQLite locking can apply under concurrent writes.

@@ -87,7 +87,6 @@ def find_compaction_candidates(memory: "MARMMemory", session_name: str) -> list:
     candidates = []
     for row_id, content, embedding, timestamp, metadata_json, col_role in rows:
         metadata = json.loads(metadata_json) if metadata_json else {}
-        # col_role is authoritative (V3 writes here); fall back to metadata JSON for legacy rows
         effective_role = col_role or metadata.get("compaction_role")
         if effective_role in ("source", "summary"):
             continue
@@ -285,7 +284,6 @@ def mark_stale_candidates(memory: "MARMMemory", session_name: str) -> None:
                 source_ids,
             ).fetchall()
 
-            # Any missing source row = stale
             if len(current_rows) != len(source_ids):
                 conn.execute(
                     "UPDATE compaction_staging SET status = 'stale', updated_at = ? WHERE id = ?",
@@ -468,15 +466,13 @@ async def _delayed_scan(memory: "MARMMemory", session_name: str) -> None:
     except Exception as e:
         print(f"[compaction] scan error for session '{session_name}': {e}")
     finally:
-        # Only remove if this task is still the current one — a newer scan may
-        # have been scheduled between cancellation and this finally running.
         if memory._pending_compaction_scans.get(session_name) is asyncio.current_task():
             memory._pending_compaction_scans.pop(session_name, None)
 
 
 def trigger_compaction(memory: "MARMMemory", session_name: str) -> None:
     """Reset write counter and schedule a delayed dry-run scan for this session."""
-    memory._session_write_counts[session_name] = 0
+    memory._set_compaction_write_count(session_name, 0)
     try:
         loop = asyncio.get_running_loop()
         existing = memory._pending_compaction_scans.get(session_name)
