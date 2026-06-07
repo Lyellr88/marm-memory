@@ -380,6 +380,99 @@ async def test_recall_similar_scan_not_truncated_when_under_limit(
 
 
 @pytest.mark.asyncio
+async def test_recall_similar_vectorized_scores_preserve_ranking(tmp_path):
+    """Vectorized scoring must preserve cosine ranking order."""
+    import numpy as np
+    import uuid as uuid_module
+
+    mem = MARMMemory(str(tmp_path / "memory.db"))
+    dim = 384
+
+    def unit(first: float, second: float = 0.0):
+        vec = np.zeros(dim, dtype=np.float32)
+        vec[0] = first
+        vec[1] = second
+        vec /= np.linalg.norm(vec)
+        return vec
+
+    rows = [
+        ("best", unit(1.0, 0.0), "2026-01-01T00:00:01Z"),
+        ("middle", unit(0.75, 0.25), "2026-01-01T00:00:02Z"),
+        ("worst", unit(0.0, 1.0), "2026-01-01T00:00:03Z"),
+    ]
+    with mem.get_connection() as conn:
+        for label, vec, timestamp in rows:
+            conn.execute(
+                "INSERT INTO memories (id, session_name, content, embedding, content_hash, timestamp, context_type, metadata)"
+                " VALUES (?, ?, ?, ?, ?, ?, 'general', '{}')",
+                (
+                    str(uuid_module.uuid4()),
+                    "rank-test",
+                    label,
+                    vec.tobytes(),
+                    f"hash-rank-{label}",
+                    timestamp,
+                ),
+            )
+
+    results = await mem.recall_similar(
+        "rank", session="rank-test", limit=3, query_vec=unit(1.0, 0.0)
+    )
+
+    assert [result["content"] for result in results] == ["best", "middle", "worst"]
+
+
+@pytest.mark.asyncio
+async def test_recall_similar_finds_match_past_old_1000_row_cliff(
+    monkeypatch, tmp_path
+):
+    """Regression: a best match older than the old 1000-row window remains reachable."""
+    import numpy as np
+    import uuid as uuid_module
+
+    from marm_mcp_server.core import memory as memory_module
+
+    monkeypatch.setattr(memory_module, "RECALL_SCAN_LIMIT", 1500)
+    mem = memory_module.MARMMemory(str(tmp_path / "memory.db"))
+    dim = 384
+
+    query_vec = np.zeros(dim, dtype=np.float32)
+    query_vec[0] = 1.0
+    filler_vec = np.zeros(dim, dtype=np.float32)
+    filler_vec[1] = 1.0
+
+    with mem.get_connection() as conn:
+        for i in range(1205):
+            is_old_best = i == 100
+            content = "old best semantic match" if is_old_best else f"filler {i}"
+            vec = query_vec if is_old_best else filler_vec
+            conn.execute(
+                "INSERT INTO memories (id, session_name, content, embedding, content_hash, timestamp, context_type, metadata)"
+                " VALUES (?, ?, ?, ?, ?, ?, 'general', '{}')",
+                (
+                    str(uuid_module.uuid4()),
+                    "old-cliff-test",
+                    content,
+                    vec.tobytes(),
+                    f"hash-old-cliff-{i}",
+                    f"2026-01-01T00:00:{i:04d}Z",
+                ),
+            )
+
+    results, meta = await mem.recall_similar(
+        "old match",
+        session="old-cliff-test",
+        limit=1,
+        query_vec=query_vec,
+        include_scan_metadata=True,
+    )
+
+    assert meta["recall_scan_truncated"] is False
+    assert meta["recall_scan_limit"] == 1500
+    assert results[0]["content"] == "old best semantic match"
+
+
+@pytest.mark.asyncio
 async def test_update_memory_merge_cap_never_exceeds_10000_chars(tmp_path):
     """Regression: merging two 10,000-char contents must not produce a blob > 10,000 chars."""
     memory = MARMMemory(str(tmp_path / "memory.db"))

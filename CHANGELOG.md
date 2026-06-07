@@ -36,9 +36,6 @@
 
 </details>
 
-
----
-
 <details>
 <summary> June 14th–17th: Documentation Expansion and Restructuring (v1.0.1)</summary>
 
@@ -68,8 +65,6 @@
 
 </details>
 
----
-
 <details>
 <summary> June 18th–20th: Externalization and Visibility Focus (v1.0.2)</summary>
 
@@ -89,8 +84,6 @@
   - Light marketing layer added (clear, not exaggerated)  
 
 </details>
-
----
 
 <details>
 <summary>June 21st-23rd: Protocol Expansion (v1.0.3)</summary>
@@ -125,8 +118,6 @@
 - Redundant phrasing in command definitions and legacy guardrail notes  
 
 </details>
-
----
 
 <details>
 <summary>June 25th-July 10th: Chatbot Integration, Client Work, and Scheduled Pause (v1.1.0)</summary>
@@ -170,8 +161,6 @@
 
 </details>
 
----
-
 <details>
 <summary>July 11th-16th: Full System Refactor - From Prototype to Beta (v1.3.0)</summary>
 
@@ -207,8 +196,6 @@
   - Made the legacy `config.js` file completely obsolete, as its contents were integrated or replaced.
 
 </details>
-
----
 
 <details>
 <summary>July 17th-21st: Major Refactor & Feature Release (v1.4.0)</summary>
@@ -293,8 +280,6 @@ This release marks a complete transformation of the codebase from a monolithic s
 
 </details>
 
----
-
 <details>
 <summary>July 22nd-24th: MARM Chatbot Live Launch & UI Enhancements (v1.5.0 Launch)</summary>
 
@@ -353,8 +338,6 @@ Official launch of the MARM interactive chatbot on Render, featuring custom back
 - Unused deployment configurations
 
 </details>
-
----
 
 <details>
 <summary>July 28th-30th: FAB System Implementation & UI Modernization (v1.6.0)</summary>
@@ -435,8 +418,6 @@ This release introduces a complete UI/UX transformation with the implementation 
 
 </details>
 
----
-
 <details>
 <summary>July 31st, 2025: Documentation Overhaul & Local Setup Improvements (v1.8.0)</summary>
 
@@ -485,12 +466,10 @@ This release introduces a complete UI/UX transformation with the implementation 
 
 </details>
 
----
-
 ### Version 2 - MARM Protocol to Universal MCP Server Evolution
 
 <details>
-<summary>August 6-18, 2025: MARM v2.0.0 Production Launch </summary>
+<summary>August 6-18, 2025: MARM Protocol Evolution to MCP Server (v2.0.0 MCP Launch) </summary>
 
 ## **August 6-18, 2025: MARM v2.0.0 Production Launch**
 
@@ -560,8 +539,6 @@ This release introduces a complete UI/UX transformation with the implementation 
 - **3 major new features**, 15+ critical issues resolved
 
 </details>
-
----
 
 <details>
 <summary>August 20th – September 12th, 2025: Universal MCP Server Development (v2.2.4 Launch)</summary>
@@ -684,8 +661,6 @@ This release introduces a complete UI/UX transformation with the implementation 
 - **Codebase cleanliness** - Eliminated legacy artifacts and standardized structure
 
 </details>
-
----
 
 <details>
 <summary>September 19th-23rd, 2025: WebSocket Production Launch & Alpha Tester Resolution (v2.2.6 Launch)</summary>
@@ -829,8 +804,6 @@ This release introduces a complete UI/UX transformation with the implementation 
 
 </details>
 
----
-
 <details>
 <summary>September 25th, 2025: Security Hardening - 4 Critical Vulnerabilities Fixed (v2.2.7)</summary>
 
@@ -969,8 +942,6 @@ This release introduces a complete UI/UX transformation with the implementation 
 
 </details>
 
----
-
 <details>
 <summary>May 16th, 2026: MCP Client Compatibility & Mock OAuth Removal (v2.3.0)</summary>
 
@@ -1009,8 +980,6 @@ This release introduces a complete UI/UX transformation with the implementation 
 
 </details>
 
----
-
 <details>
 <summary>May 17th, 2026: Docker Dual-Transport Alignment & WebSocket Purge Start (v2.4.0)</summary>
 
@@ -1047,8 +1016,6 @@ This release introduces a complete UI/UX transformation with the implementation 
 - Active docs now better match real-world tested client setups (Claude, Codex, Gemini, Qwen, VS Code, Cursor, Grok Remote MCP).
 
 </details>
-
----
 
 <details>
 <summary>May 17th, 2026: MARM Dashboard Launch v2.5.0</summary>
@@ -1089,10 +1056,8 @@ This release introduces a complete UI/UX transformation with the implementation 
 
 </details>
 
----
-
 <details>
-<summary>2026: CI/CD Pipeline, Registry Alignment & Security Fixes (v2.5.1–v2.5.4)</summary>
+<summary>May 18th, 2026: CI/CD Pipeline, Registry Alignment & Security Fixes (v2.5.1–v2.5.4)</summary>
 
 ## **CI/CD Pipeline, Registry Alignment & Security Fixes (v2.5.1–v2.5.4)**
 
@@ -1134,8 +1099,6 @@ This release introduces a complete UI/UX transformation with the implementation 
 
 </details>
 
----
-
 <details>
 <summary>May 18th, 2026: CodeQL Security Hardening & Release Cleanup (v2.5.5)</summary>
 
@@ -1171,8 +1134,6 @@ This release introduces a complete UI/UX transformation with the implementation 
 - Release metadata is aligned for the v2.5.5 Docker, PyPI, and MCP registry push.
 
 </details>
-
----
 
 <details>
 <summary><strong>May 20th, 2026: STDIO File Logging & Rate Limiter Tuning (v2.6.0) </strong></summary>
@@ -1242,8 +1203,6 @@ Suppresses benign `WinError 10054` / `ConnectionResetError` log spam from `async
 
 </details>
 
----
-
 <details>
 <summary><strong>May 21st, 2026: Protocol Delivery & Notebook Tool Consolidation (v2.6.1)</strong></summary>
 
@@ -1297,8 +1256,6 @@ marm_notebook(action="add"|"use"|"show"|"status"|"clear", name=None, data=None, 
 
 </details>
 
----
-
 <details>
 <summary><strong>May 26th, 2026: Notebook Session Scoping & CI Hardening (v2.7.0)</strong></summary>
 
@@ -1342,8 +1299,6 @@ marm_notebook(action="use"|"status"|"clear", session_name="my_project")
 - Added whitespace validation tests for blank `session_name`, blank `name`, and comma-only `names`
 
 </details>
-
----
 
 <details>
 <summary><strong>May 29th, 2026: Write Queue & Swarm Rate Presets (v2.8.0)</strong></summary>
@@ -1429,8 +1384,6 @@ marm_notebook(action="use"|"status"|"clear", session_name="my_project")
 - Tightened diagnostic and consolidation edge cases found during review, including request-body logging for HTTP compaction injection and stale embedding cleanup after write-time merges.
 
 </details>
-
----
 
 <details>
 <summary><strong>June 4th, 2026: Opus Review Hot-Path & Compaction Hardening (v2.9.1)</strong></summary>
@@ -1525,5 +1478,41 @@ marm_notebook(action="use"|"status"|"clear", session_name="my_project")
 - Extracted STDIO smart recall logic into `services/recall.py` so HTTP and STDIO recall behavior can stay aligned.
 - Extracted STDIO session summary formatting into `services/summary.py` while keeping the public `marm_summary` tool as a thin wrapper.
 - Moved atomic compaction apply DB logic into `services/compaction_apply.py`, reducing endpoint size while preserving the existing write-queue apply path.
+
+</details>
+
+<details>
+<summary><strong>June 7th, 2026: Deterministic Compaction Fallback & Vectorized Recall (v2.11.0)</strong></summary>
+
+#### Compaction Reliability
+
+- Added server-side extractive compaction summarization for `nudge_exhausted` candidates so compaction no longer depends only on a connected agent obeying prompt nudges.
+- New centroid-based summarizer ranks source memories by embedding centrality, skips near-duplicate selections, and falls back to source text when embeddings are unavailable.
+- The compaction maintenance scheduler now starts whenever `COMPACTION_ENABLED=1`; auto-apply remains optional on top via `COMPACTION_AUTO_APPLY_ENABLED=1`.
+- Nudge-exhausted candidates with missing or partially missing source memories are marked `stale` instead of remaining stuck forever.
+- Removed the last in-lock compaction summary embedding encode path; rare sanitize/hash drift now stores the summary without an embedding instead of doing CPU work inside `BEGIN IMMEDIATE`.
+
+#### Recall Hot-Path Completion
+
+- Replaced per-row Python cosine scoring in `recall_similar()` with batched NumPy matrix scoring.
+- Moved both SQLite embedding BLOB fetches and vector scoring into a worker thread so large semantic recall scans no longer block the event loop.
+- Raised default `RECALL_SCAN_LIMIT` from `1000` to `10000`, removing the practical old 1000-memory semantic recall cliff for normal local use.
+- Kept bounded-recall metadata (`recall_scan_truncated`, `recall_scan_limit`) so agents can still tell when recall was capped.
+- Preserved wrong-dimension embedding safeguards while using the new vectorized scoring path.
+
+#### Swarm & Runtime Guardrails
+
+- Persisted compaction write counters in SQLite so trigger progress survives process restarts instead of living only in RAM.
+- Updated compaction trigger reset logic to use the persisted counter path.
+- Added startup detection for common unsupported multi-worker HTTP deployments (`WEB_CONCURRENCY`, `UVICORN_WORKERS`, `GUNICORN_CMD_ARGS`) with a clear warning to run one MARM process per SQLite database.
+- Clarified in README, FAQ, and install docs that `--swarm` / `--swarm-max` scale concurrency inside one process; Uvicorn/Gunicorn multi-worker mode remains future work.
+
+#### Tests & Validation
+
+- Added regression coverage for persisted compaction counters across `MARMMemory` instances.
+- Added full server-side compaction summarizer coverage for centroid selection, deduplication, missing embeddings, wrong dimensions, stale source handling, multi-candidate promotion, and suite-order isolation.
+- Added semantic recall tests proving vectorized ranking order and recall of matches beyond the old 1000-row window.
+- Updated scheduler tests for the new `COMPACTION_ENABLED` maintenance gate.
+- Fast local suite validation: `242 passed, 9 deselected, 1 warning`.
 
 </details>

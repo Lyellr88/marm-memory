@@ -5,7 +5,7 @@
      width="700"
      height="400">
 </picture>
-<h1 align="center">MARM: The AI That Remembers Your Conversations v2.10.0</h1>
+<h1 align="center">MARM: The AI That Remembers Your Conversations v2.11.0</h1>
 
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
@@ -88,7 +88,7 @@ pip install marm-mcp-server
 - Docker HTTP = shared/always-on server (key required).
 - Docker STDIO = private containerized local use (no HTTP key).
 
-**Swarm / multi-agent note:** The write queue is enabled by default to serialize memory writes through one worker. For shared HTTP deployments, use `--swarm` (200 RPM) or `--swarm-max` (600 RPM) when starting the server. `--trusted` disables rate limiting entirely for private deployments. STDIO is still best for private single-agent/local use.
+**Swarm / multi-agent note:** The write queue is enabled by default to serialize memory writes through one worker. For shared HTTP deployments, use `--swarm` (200 RPM) or `--swarm-max` (600 RPM) when starting the server. `--trusted` disables rate limiting entirely for private deployments. STDIO is still best for private single-agent/local use. Run one MARM HTTP process per SQLite database; `uvicorn --workers N` / multi-process workers are not supported yet because queue, scheduler, and protocol coordination are process-local.
 
 #### Local pip HTTP (zero config)
 

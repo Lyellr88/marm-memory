@@ -2,10 +2,7 @@
 
 language: en-US
 tone_instructions: >
-  Be concise. Flag only high/medium issues: correctness bugs, security risks,
-  data loss, concurrency hazards, broken tests, and release metadata drift.
-  Skip style, naming, formatting, doc wording, missing docstrings, and minor
-  refactors unless they cause a real defect.
+  Be concise. Flag only high- and medium-severity issues: correctness bugs, security risks, data loss, concurrency hazards, broken tests, and release metadata drift. Skip style, naming, formatting, and minor refactors unless they cause real defects.
 
 reviews:
   profile: chill

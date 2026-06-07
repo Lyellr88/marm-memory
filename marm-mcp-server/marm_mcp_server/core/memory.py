@@ -61,6 +61,98 @@ def _strip_script_tags(text: str) -> str:
     return "".join(result)
 
 
+def _score_embedding_rows(rows, query_embedding, limit: int):
+    """Score embedding rows in one NumPy batch instead of a Python cosine loop."""
+    if limit <= 0:
+        return [], 0
+
+    query_vec = np.asarray(query_embedding, dtype=np.float32)
+    expected_dim = query_vec.shape[0]
+    query_norm = np.linalg.norm(query_vec)
+    if query_norm == 0:
+        return [], 0
+    normalized_query = query_vec / query_norm
+
+    vectors = []
+    kept_rows = []
+    dim_skipped = 0
+
+    for row in rows:
+        try:
+            vector = np.frombuffer(row[3], dtype=np.float32)
+        except Exception:
+            continue
+        if vector.shape[0] != expected_dim:
+            dim_skipped += 1
+            continue
+        vectors.append(vector)
+        kept_rows.append(row)
+
+    if not vectors:
+        return [], dim_skipped
+
+    matrix = np.vstack(vectors).astype(np.float32, copy=False)
+    norms = np.linalg.norm(matrix, axis=1, keepdims=True)
+    matrix = matrix / (norms + 1e-12)
+    scores = matrix @ normalized_query
+
+    top_count = min(limit, scores.shape[0])
+    if top_count == 0:
+        return [], dim_skipped
+
+    top_indices = np.argpartition(scores, -top_count)[-top_count:]
+    top_indices = top_indices[np.argsort(scores[top_indices])[::-1]]
+    return [
+        (kept_rows[index], float(scores[index])) for index in top_indices
+    ], dim_skipped
+
+
+def _fetch_and_score_embedding_rows(
+    db_path: str,
+    session: str | None,
+    scan_limit: int,
+    query_embedding,
+    limit: int,
+):
+    conn = sqlite3.connect(db_path, timeout=30.0)
+    try:
+        conn.row_factory = sqlite3.Row
+        if session is None:
+            cursor = conn.execute(
+                """
+                SELECT id, session_name, content, embedding, timestamp, context_type, metadata
+                FROM memories
+                WHERE embedding IS NOT NULL
+                  AND (compaction_role IS NULL OR compaction_role != 'source')
+                ORDER BY timestamp DESC
+                LIMIT ?
+            """,
+                (scan_limit + 1,),
+            )
+        else:
+            cursor = conn.execute(
+                """
+                SELECT id, session_name, content, embedding, timestamp, context_type, metadata
+                FROM memories
+                WHERE embedding IS NOT NULL
+                  AND session_name = ?
+                  AND (compaction_role IS NULL OR compaction_role != 'source')
+                ORDER BY timestamp DESC
+                LIMIT ?
+            """,
+                (session, scan_limit + 1),
+            )
+
+        memories = cursor.fetchall()
+    finally:
+        conn.close()
+
+    scan_truncated = len(memories) > scan_limit
+    memories = memories[:scan_limit]
+    similarities, dim_skipped = _score_embedding_rows(memories, query_embedding, limit)
+    return similarities, dim_skipped, scan_truncated
+
+
 from ..config.settings import (  # noqa: E402
     SEMANTIC_SEARCH_AVAILABLE,
     DEFAULT_DB_PATH,
@@ -228,12 +320,59 @@ class MARMMemory:
         if pending is not None and not pending.done():
             pending.cancel()
             self._pending_compaction_scans.pop(session, None)
-            self._session_write_counts[session] = 0
-        self._session_write_counts[session] = (
-            self._session_write_counts.get(session, 0) + 1
-        )
-        if self._session_write_counts[session] >= COMPACTION_TRIGGER_COUNT:
+            self._set_compaction_write_count(session, 0)
+        count = self._increment_compaction_write_count(session)
+        if count >= COMPACTION_TRIGGER_COUNT:
             trigger_compaction(self, session)
+
+    def _get_compaction_write_count(self, session: str) -> int:
+        with self.get_connection() as conn:
+            row = conn.execute(
+                "SELECT write_count FROM compaction_session_state WHERE session_name = ?",
+                (session,),
+            ).fetchone()
+        count = int(row[0]) if row else 0
+        self._session_write_counts[session] = count
+        return count
+
+    def _set_compaction_write_count(self, session: str, count: int) -> None:
+        now = datetime.now(timezone.utc).isoformat()
+        with self.get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO compaction_session_state
+                    (session_name, write_count, updated_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(session_name)
+                DO UPDATE SET write_count = excluded.write_count,
+                              updated_at = excluded.updated_at
+                """,
+                (session, count, now),
+            )
+        self._session_write_counts[session] = count
+
+    def _increment_compaction_write_count(self, session: str) -> int:
+        now = datetime.now(timezone.utc).isoformat()
+        with self.get_connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            conn.execute(
+                """
+                INSERT INTO compaction_session_state
+                    (session_name, write_count, updated_at)
+                VALUES (?, 1, ?)
+                ON CONFLICT(session_name)
+                DO UPDATE SET write_count = write_count + 1,
+                              updated_at = excluded.updated_at
+                """,
+                (session, now),
+            )
+            row = conn.execute(
+                "SELECT write_count FROM compaction_session_state WHERE session_name = ?",
+                (session,),
+            ).fetchone()
+        count = int(row[0]) if row else 0
+        self._session_write_counts[session] = count
+        return count
 
     def get_active_notebook_entries(self, session_name: str = "main") -> list[dict]:
         """Return active notebook entries scoped to a session."""
@@ -378,6 +517,13 @@ class MARMMemory:
                     reviewed_at TEXT,
                     nudge_count INTEGER NOT NULL DEFAULT 0,
                     last_nudged_at TEXT
+                )
+            """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS compaction_session_state (
+                    session_name TEXT PRIMARY KEY,
+                    write_count INTEGER NOT NULL DEFAULT 0,
+                    updated_at TEXT NOT NULL
                 )
             """)
             staging_cols = {
@@ -689,77 +835,35 @@ class MARMMemory:
             else:
                 query_embedding = await asyncio.to_thread(self._encode_sync, query)
 
-            with self.get_connection() as conn:
-                if session is None:
-                    cursor = conn.execute(
-                        """
-                        SELECT id, session_name, content, embedding, timestamp, context_type, metadata
-                        FROM memories
-                        WHERE embedding IS NOT NULL
-                          AND (compaction_role IS NULL OR compaction_role != 'source')
-                        ORDER BY timestamp DESC
-                        LIMIT ?
-                    """,
-                        (scan_limit + 1,),
-                    )
-                else:
-                    cursor = conn.execute(
-                        """
-                        SELECT id, session_name, content, embedding, timestamp, context_type, metadata
-                        FROM memories
-                        WHERE embedding IS NOT NULL
-                          AND session_name = ?
-                          AND (compaction_role IS NULL OR compaction_role != 'source')
-                        ORDER BY timestamp DESC
-                        LIMIT ?
-                    """,
-                        (session, scan_limit + 1),
-                    )
+            similarities, dim_skipped, scan_truncated = await asyncio.to_thread(
+                _fetch_and_score_embedding_rows,
+                self.db_path,
+                session,
+                scan_limit,
+                query_embedding,
+                limit,
+            )
 
-                memories = cursor.fetchall()
-                scan_truncated = len(memories) > scan_limit
-                memories = memories[:scan_limit]
+            if dim_skipped:
+                _safe_print(
+                    f"recall_similar: skipped {dim_skipped} memories with wrong embedding dimension (expected {len(query_embedding)})"
+                )
 
-                similarities = []
-                expected_dim = len(query_embedding)
-                dim_skipped = 0
+            results = []
+            for memory, similarity in similarities:
+                results.append(
+                    {
+                        "id": memory[0],
+                        "session_name": memory[1],
+                        "content": memory[2],
+                        "timestamp": memory[4],
+                        "context_type": memory[5],
+                        "metadata": json.loads(memory[6]) if memory[6] else {},
+                        "similarity": float(similarity),
+                    }
+                )
 
-                for memory in memories:
-                    try:
-                        memory_embedding = np.frombuffer(memory[3], dtype=np.float32)
-                        if len(memory_embedding) != expected_dim:
-                            dim_skipped += 1
-                            continue
-                        similarity = np.dot(query_embedding, memory_embedding) / (
-                            np.linalg.norm(query_embedding)
-                            * np.linalg.norm(memory_embedding)
-                        )
-                        similarities.append((memory, similarity))
-                    except Exception:
-                        continue
-
-                if dim_skipped:
-                    _safe_print(
-                        f"recall_similar: skipped {dim_skipped} memories with wrong embedding dimension (expected {expected_dim})"
-                    )
-
-                similarities.sort(key=lambda x: x[1], reverse=True)
-
-                results = []
-                for memory, similarity in similarities[:limit]:
-                    results.append(
-                        {
-                            "id": memory[0],
-                            "session_name": memory[1],
-                            "content": memory[2],
-                            "timestamp": memory[4],
-                            "context_type": memory[5],
-                            "metadata": json.loads(memory[6]) if memory[6] else {},
-                            "similarity": float(similarity),
-                        }
-                    )
-
-                return _wrap(results, scan_truncated)
+            return _wrap(results, scan_truncated)
 
         except Exception as e:
             _safe_print(f"Semantic search failed: {e}")

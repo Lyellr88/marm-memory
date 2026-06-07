@@ -5,7 +5,7 @@ This server integrates all modular components of the MARM protocol into a single
 FastAPI application, compliant with the MCP protocol via FastApiMCP.
 
 Author: Lyell - MARM Systems
-Version: 2.10.0
+Version: 2.11.0
 """
 
 import asyncio
@@ -33,6 +33,7 @@ from .config.settings import (
     ANALYTICS_DB_PATH,
     COMPACTION_AUTO_APPLY_ENABLED,
     COMPACTION_AUTO_APPLY_INTERVAL_MINUTES,
+    COMPACTION_ENABLED,
     DEFAULT_DB_PATH,
     SCHEDULER_AVAILABLE,
     SEMANTIC_SEARCH_AVAILABLE,
@@ -92,6 +93,45 @@ logging.getLogger("asyncio").addFilter(_proactor_noise_filter)
 logger = structlog.get_logger()
 
 
+def _detect_requested_worker_count() -> int | None:
+    """Best-effort detection for unsupported multi-process HTTP launches."""
+    for key in ("WEB_CONCURRENCY", "UVICORN_WORKERS"):
+        value = os.environ.get(key)
+        if value and value.isdigit():
+            return int(value)
+
+    gunicorn_args = os.environ.get("GUNICORN_CMD_ARGS", "")
+    parts = gunicorn_args.split()
+    for index, part in enumerate(parts):
+        if part in ("--workers", "-w") and index + 1 < len(parts):
+            value = parts[index + 1]
+            if value.isdigit():
+                return int(value)
+        if part.startswith("--workers="):
+            value = part.split("=", 1)[1]
+            if value.isdigit():
+                return int(value)
+    return None
+
+
+def _warn_if_multi_process_requested() -> None:
+    workers = _detect_requested_worker_count()
+    if workers and workers > 1:
+        logger.warning(
+            "Unsupported multi-process HTTP deployment requested",
+            workers=workers,
+            supported_workers=1,
+            reason=(
+                "MARM coordinates write queue, compaction counters, scheduler, "
+                "and protocol delivery in process-local state"
+            ),
+            recommendation=(
+                "Run one MARM process per SQLite database. Use --swarm/--swarm-max "
+                "inside a single process for shared HTTP agent load."
+            ),
+        )
+
+
 def track_usage(event_type: str, endpoint: str = None, user_data: dict = None):
     """Track MCP usage events for launch analytics"""
     try:
@@ -134,16 +174,31 @@ def track_usage(event_type: str, endpoint: str = None, user_data: dict = None):
 
 
 def _maybe_start_compaction_scheduler():
-    """Start the compaction auto-apply APScheduler job if V4 settings allow it."""
-    if not COMPACTION_AUTO_APPLY_ENABLED or not SCHEDULER_AVAILABLE:
+    """Start the compaction maintenance APScheduler job.
+
+    Runs whenever COMPACTION_ENABLED is true — auto-apply is optional on top.
+    nudge_exhausted processing always runs so candidates are never permanently dead-ended.
+    """
+    if not SCHEDULER_AVAILABLE or not COMPACTION_ENABLED:
         return None
     from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-    from .endpoints.compaction import auto_apply_staged_summaries
+    from .services.compaction_summarize import process_nudge_exhausted_candidates
+
+    if COMPACTION_AUTO_APPLY_ENABLED:
+        from .endpoints.compaction import auto_apply_staged_summaries
+
+        async def _job():
+            await process_nudge_exhausted_candidates(memory)
+            await auto_apply_staged_summaries()
+    else:
+
+        async def _job():
+            await process_nudge_exhausted_candidates(memory)
 
     scheduler = AsyncIOScheduler()
     scheduler.add_job(
-        auto_apply_staged_summaries,
+        _job,
         "interval",
         minutes=COMPACTION_AUTO_APPLY_INTERVAL_MINUTES,
         id="compaction_auto_apply",
@@ -151,8 +206,9 @@ def _maybe_start_compaction_scheduler():
     )
     scheduler.start()
     logger.info(
-        "Compaction auto-apply scheduler started",
+        "Compaction scheduler started",
         interval_minutes=COMPACTION_AUTO_APPLY_INTERVAL_MINUTES,
+        auto_apply=COMPACTION_AUTO_APPLY_ENABLED,
     )
     return scheduler
 
@@ -161,6 +217,7 @@ def _maybe_start_compaction_scheduler():
 async def lifespan(app: FastAPI):
     """Modern FastAPI lifespan management for startup and shutdown"""
     logger.info("Initializing MARM MCP Server", version=SERVER_VERSION)
+    _warn_if_multi_process_requested()
 
     memory_before = get_memory_usage()
     logger.info("Initial memory usage", memory_mb=f"{memory_before:.1f}")

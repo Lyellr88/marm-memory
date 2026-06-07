@@ -191,15 +191,10 @@ async def apply_compaction_write(memory_store, candidate_id: str) -> str:
                 if precomputed_summary_hash == summary_content_hash
                 else None
             )
-            if summary_embedding is None and memory_store._load_encoder_lazily():
-                try:
-                    summary_embedding = memory_store._encode_sync(
-                        suggested_summary
-                    ).tobytes()
-                except Exception as e:
-                    _safe_print(
-                        f"Embedding encode failed inside write path for {candidate_id}, storing without embedding: {e}"
-                    )
+            if summary_embedding is None:
+                _safe_print(
+                    f"Compaction {candidate_id}: summary hash drifted after in-lock sanitize, storing without embedding"
+                )
 
             summary_id = str(uuid.uuid4())
             compacted_at = now
