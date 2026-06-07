@@ -7,6 +7,7 @@ from ..core.models import SmartRecallRequest, ContextLogRequest
 from ..core.memory import memory
 from ..core.events import events
 from ..core.response_limiter import MCPResponseLimiter
+from ..services.recall import _apply_detail_level
 
 
 def track_endpoint_usage(endpoint: str, request: Request, extra_data: dict = None):
@@ -155,6 +156,7 @@ async def marm_smart_recall(request: SmartRecallRequest, http_request: Request):
                     "query": request.query,
                     "session_name": request.session_name,
                     "search_all": request.search_all,
+                    "detail_level": request.detail,
                     "results": [],
                     **scan_meta,
                 }
@@ -172,6 +174,15 @@ async def marm_smart_recall(request: SmartRecallRequest, http_request: Request):
                         "reason": "System documentation found",
                         "results_count": len(system_memories),
                     }
+                    response["system_results"] = [
+                        {
+                            **m,
+                            "content": _apply_detail_level(
+                                m["content"], request.detail
+                            ),
+                        }
+                        for m in system_memories
+                    ]
                 else:
                     response["message"] = (
                         f"🤔 No memories found for query: '{request.query}'. "
@@ -189,6 +200,7 @@ async def marm_smart_recall(request: SmartRecallRequest, http_request: Request):
                     "query": request.query,
                     "session_name": request.session_name,
                     "search_all": request.search_all,
+                    "detail_level": request.detail,
                     "results": [],
                     **scan_meta,
                 }
@@ -202,11 +214,20 @@ async def marm_smart_recall(request: SmartRecallRequest, http_request: Request):
             "query": request.query,
             "session_name": request.session_name,
             "search_all": request.search_all,
+            "detail_level": request.detail,
             **scan_meta,
         }
 
+        memories_to_limit = (
+            [
+                {**m, "content": _apply_detail_level(m["content"], request.detail)}
+                for m in similar_memories
+            ]
+            if request.detail < 3
+            else similar_memories
+        )
         limited_memories, was_truncated = MCPResponseLimiter.limit_memory_response(
-            similar_memories, base_response
+            memories_to_limit, base_response
         )
 
         context_lines = []

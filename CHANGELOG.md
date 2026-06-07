@@ -1516,3 +1516,30 @@ marm_notebook(action="use"|"status"|"clear", session_name="my_project")
 - Fast local suite validation: `242 passed, 9 deselected, 1 warning`.
 
 </details>
+
+<details>
+<summary><strong>June 7th, 2026: Hybrid Recall with FTS5 (v2.12.0)</strong></summary>
+
+#### Recall & Search
+
+- Added SQLite FTS5 indexing for memory content with automatic insert, update, and delete triggers so exact-term recall stays in sync with the main `memories` table.
+- `marm_smart_recall` now merges semantic similarity with FTS BM25 keyword scoring through `HYBRID_SEARCH_TEXT_WEIGHT`, improving recall for commands, config keys, filenames, and error strings without giving up semantic matches.
+- Added conservative temporal weighting on top of hybrid recall through `TEMPORAL_WEIGHT` and `TEMPORAL_HALF_LIFE_DAYS`, so newer memories get a modest recency boost when matches are otherwise close without burying clearly better older context.
+- Added FTS backfill on database init so existing memory stores populate the text index automatically.
+- Kept LIKE fallback behavior for unsanitizable text queries and explicit fallback paths when FTS lookup fails, so recall degrades safely instead of hard-failing.
+- Added 3-layer retrieval depth control to `marm_smart_recall` with `detail=1/2/3`, so recall can return short summaries by default and only expand to full memory bodies when explicitly requested.
+- Layer defaults are now read-time truncation instead of new schema fields: Layer 1 returns about 200 characters, Layer 2 about 500 characters, and Layer 3 returns full content.
+- Added `detail_level` to recall responses so callers can tell which retrieval depth was returned.
+
+#### Tests & Smoke Coverage
+
+- Added focused hybrid search regression coverage for FTS trigger creation, backfill, single-hit BM25 normalization, FTS-only promotion, session filtering, and FTS failure fallback.
+- Added a dedicated hybrid search smoke harness that prints vector, FTS, and combined scores for tuning and now exits non-zero if the exact config-key recall check regresses.
+- Added focused regression coverage for detail-level validation, truncation behavior, default depth, and service-layer layered recall responses.
+- Added temporal-weighting regression coverage for half-life decay behavior, future/bad timestamp handling, and zero-weight ranking passthrough.
+
+#### Documentation
+
+- Updated README, handbook, FAQ, and contributor docs to describe MARM recall as hybrid semantic + FTS retrieval with layered depth and conservative recency bias.
+
+</details>

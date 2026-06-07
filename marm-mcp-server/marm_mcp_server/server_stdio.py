@@ -184,14 +184,18 @@ async def marm_smart_recall(
     limit: int = 5,
     search_all: bool = False,
     include_logs: bool = False,
+    detail: int = 1,
 ) -> dict:
     """
     🧠 Intelligent memory recall based on semantic similarity
 
     Finds relevant memories using semantic similarity or text search.
     Returns the most relevant memories with similarity scores.
+    detail: 1=summary (~200 chars), 2=context (~500 chars), 3=full content
     """
-    return await smart_recall(query, session_name, limit, search_all, include_logs)
+    return await smart_recall(
+        query, session_name, limit, search_all, include_logs, detail
+    )
 
 
 @mcp.tool()

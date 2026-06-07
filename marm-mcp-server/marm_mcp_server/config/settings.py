@@ -68,7 +68,7 @@ DEFAULT_SEMANTIC_MODEL = "all-MiniLM-L6-v2"
 
 SERVER_HOST = os.environ.get("SERVER_HOST", "127.0.0.1")
 SERVER_PORT = int(os.environ.get("SERVER_PORT", 8001))
-SERVER_VERSION = "2.11.0"
+SERVER_VERSION = "2.12.0"
 
 MARM_RATE_LIMIT_RPM = int(os.environ.get("MARM_RATE_LIMIT_RPM", "80"))
 RATE_LIMIT_WINDOW_SECONDS = int(os.environ.get("RATE_LIMIT_WINDOW_SECONDS", "60"))
@@ -77,6 +77,27 @@ RATE_LIMIT_BLOCK_SECONDS = int(os.environ.get("RATE_LIMIT_BLOCK_SECONDS", "30"))
 WRITE_QUEUE_ENABLED = os.environ.get("WRITE_QUEUE_ENABLED", "1") == "1"
 MAX_QUEUE_SIZE = int(os.environ.get("MAX_QUEUE_SIZE", "100"))
 RECALL_SCAN_LIMIT = int(os.environ.get("RECALL_SCAN_LIMIT", "10000"))
+_raw_hsw = float(os.environ.get("HYBRID_SEARCH_TEXT_WEIGHT", "0.35"))
+_raw_tw = float(os.environ.get("TEMPORAL_WEIGHT", "0.1"))
+_raw_hld = float(os.environ.get("TEMPORAL_HALF_LIFE_DAYS", "30"))
+HYBRID_SEARCH_TEXT_WEIGHT = max(0.0, min(1.0, _raw_hsw))
+TEMPORAL_WEIGHT = max(0.0, min(1.0, _raw_tw))
+TEMPORAL_HALF_LIFE_DAYS = max(1.0, _raw_hld)
+if not (0.0 <= _raw_hsw <= 1.0):
+    print(
+        f"WARNING: HYBRID_SEARCH_TEXT_WEIGHT={_raw_hsw} out of [0, 1], clamped to {HYBRID_SEARCH_TEXT_WEIGHT}",
+        file=sys.stderr,
+    )
+if not (0.0 <= _raw_tw <= 1.0):
+    print(
+        f"WARNING: TEMPORAL_WEIGHT={_raw_tw} out of [0, 1], clamped to {TEMPORAL_WEIGHT}",
+        file=sys.stderr,
+    )
+if _raw_hld < 1.0:
+    print(
+        f"WARNING: TEMPORAL_HALF_LIFE_DAYS={_raw_hld} below minimum 1.0, clamped to {TEMPORAL_HALF_LIFE_DAYS}",
+        file=sys.stderr,
+    )
 
 CONSOLIDATION_ENABLED = os.environ.get("CONSOLIDATION_ENABLED", "0") == "1"
 CONSOLIDATION_THRESHOLD = float(os.environ.get("CONSOLIDATION_THRESHOLD", "0.92"))

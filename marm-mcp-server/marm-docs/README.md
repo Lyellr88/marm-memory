@@ -1,4 +1,6 @@
-# MARM - The AI That Remembers Your Conversations.
+# MARM: The AI That Remembers Your Conversations v2.12.0
+
+Contributions are welcome! Check out our [open issues](https://github.com/Lyellr88/MARM-Systems/issues) to get started. Join the conversation on [MARM Discord](https://discord.gg/nhyJWPz2cf).
 
 ## Table of Contents
 
@@ -8,8 +10,6 @@
 - [Complete MCP Tool Suite](#complete-mcp-tool-suite-9-tools)
 - [MARM Dashboard](#marm-dashboard)
 - [Why MARM Holds Up](#why-marm-holds-up)
-- [Contributing](#contributing)
-- [Project Documentation](#project-documentation)
 
 ## Why MARM MCP: The Problem & Solution
 
@@ -17,7 +17,7 @@
 
 MARM MCP is a local memory infrastructure layer for AI agents. It gives Claude, Codex, Gemini, Qwen, IDE agents, and other MCP clients one persistent place to store decisions, retrieve context, reuse notebooks, and keep long-running work from drifting.
 
-The point is not "more tools." MARM exposes **9 focused MCP tools** and moves the heavy work behind the server: session routing, protocol delivery, semantic recall, serialized writes, rate-limit presets, write-time consolidation, and agent-assisted compaction.
+The point is not "more tools." MARM exposes **9 focused MCP tools** and moves the heavy work behind the server: session routing, protocol delivery, hybrid recall, serialized writes, rate-limit presets, write-time consolidation, and agent-assisted compaction.
 
 ### What MARM Is Now
 
@@ -25,7 +25,7 @@ The point is not "more tools." MARM exposes **9 focused MCP tools** and moves th
 |-------|--------------|----------------|
 | **Memory model** | Sessions, structured logs, notebooks, summaries, and semantic memories | Keeps project history searchable instead of trapped in one chat |
 | **Scale layer** | SQLite WAL mode, connection pooling, serialized write queue, and HTTP rate-limit presets | Lets one server support solo use, multi-agent work, and swarm-style bursts |
-| **Intelligence layer** | Semantic search, auto-classification, write-time consolidation, and compaction candidates | Keeps recall useful as memory grows instead of letting duplicates pile up |
+| **Intelligence layer** | Hybrid semantic + FTS recall, auto-classification, write-time consolidation, and compaction candidates | Keeps recall useful as memory grows instead of letting duplicates pile up |
 | **Deployment layer** | Pip, Docker, STDIO, HTTP, `--swarm`, `--swarm-max`, and `--trusted` | Lets you run private local memory or shared multi-agent memory with the same MCP surface |
 
 ### Start Now (pip)
@@ -60,7 +60,7 @@ pip install marm-mcp-server
 - Docker HTTP = shared/always-on server (key required).
 - Docker STDIO = private containerized local use (no HTTP key).
 
-**Swarm / multi-agent note:** The write queue is enabled by default to serialize memory writes through one worker. For shared HTTP deployments, use `--swarm` (200 RPM) or `--swarm-max` (600 RPM) when starting the server. `--trusted` disables rate limiting entirely for private deployments. STDIO is still best for private single-agent/local use.
+**Swarm / multi-agent note:** The write queue is enabled by default to serialize memory writes through one worker. For shared HTTP deployments, use `--swarm` (200 RPM) or `--swarm-max` (600 RPM) when starting the server. `--trusted` disables rate limiting entirely for private deployments. STDIO is still best for private single-agent/local use. Run one MARM HTTP process per SQLite database; `uvicorn --workers N` / multi-process workers are not supported yet because queue, scheduler, and protocol coordination are process-local.
 
 #### Local pip HTTP (zero config)
 
@@ -80,7 +80,7 @@ python -m marm_mcp_server
 ```bash
 pip install marm-mcp-server
 # most agents use this --transport command
-"agent" mcp add --transport stdio marm-memory-stdio marm-mcp-stdio"
+"agent" mcp add --transport stdio marm-memory-stdio marm-mcp-stdio
 codex mcp add marm-memory-stdio -- marm-mcp-stdio
 # xAI / Grok Remote MCP. Use a hosted HTTPS MARM endpoint, not localhost.
 python -m marm_mcp_server.server_stdio
@@ -177,7 +177,6 @@ See [`marm-dashboard/README.md`](marm-dashboard/README.md) for the full guide.
 
 ## Complete MCP Tool Suite (9 Tools)
 
-
 **💡 Pro Tip:** You don't need to manually call these tools! Just tell your AI agent what you want in natural language:
 
 - *"Claude, log this session as 'Project Alpha' and add this conversation as 'database design discussion'"*
@@ -190,7 +189,7 @@ The AI agent will automatically use the appropriate tools. Manual tool access is
 
 | **Category** | **Tool** | **Description** |
 |--------------|----------|-----------------|
-| **Memory Intelligence** | `marm_smart_recall` | AI-powered semantic similarity search across all memories. Supports global search with `search_all=True` flag |
+| **Memory Intelligence** | `marm_smart_recall` | AI-powered hybrid recall across all memories. Combines semantic embeddings with FTS keyword/BM25 matching, applies a conservative recency bias when scores are close, supports global search with `search_all=True`, and can return summary/context/full memory depth with `detail=1/2/3` |
 | | `marm_context_log` | Intelligent auto-classifying memory storage using vector embeddings |
 | **Logging System** | `marm_log_session` | Create or switch to named session container |
 | | `marm_log_entry` | Add structured log entry with auto-date formatting |
@@ -208,7 +207,8 @@ MARM keeps the AI-facing surface small while the server handles the infrastructu
 
 - **Write stability:** SQLite WAL mode, connection pooling, and a serialized write queue are enabled for normal use.
 - **Swarm control:** HTTP presets tune shared access: default `80 RPM`, `--swarm` `200 RPM`, `--swarm-max` `600 RPM`, and `--trusted` disables rate limiting for private deployments.
-- **Cleaner recall:** semantic search, write-time consolidation, and optional compaction reduce duplicate/noisy memories over time.
+- **Cleaner recall:** hybrid semantic + FTS recall, conservative temporal weighting, write-time consolidation, and optional compaction reduce duplicate/noisy memories over time.
+- **Lower token burn:** `marm_smart_recall` can return summary, context, or full-memory depth so agents do not pull full bodies unless they need them.
 - **Safe defaults:** local pip binds to `127.0.0.1`; Docker HTTP requires `MARM_API_KEY`; STDIO stays private and keyless.
 
 For deeper architecture, configuration, and workflow guidance, use [MCP-HANDBOOK.md](MCP-HANDBOOK.md) and [FAQ.md](docs/FAQ.md).

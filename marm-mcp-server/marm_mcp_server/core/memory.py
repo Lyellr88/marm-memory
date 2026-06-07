@@ -3,6 +3,7 @@
 import asyncio
 import importlib.util
 import json
+import math
 import sqlite3
 import sys
 import threading
@@ -59,6 +60,25 @@ def _strip_script_tags(text: str) -> str:
             result.append(text[open_end + 1 :])
             break
     return "".join(result)
+
+
+def _temporal_score(timestamp: str, half_life_days: float) -> float:
+    """Return a recency score in [0, 1]: 1.0 for brand-new, 0.5 at half_life_days."""
+    try:
+        ts = datetime.fromisoformat(timestamp)
+        if ts.tzinfo is None:
+            ts = ts.replace(tzinfo=timezone.utc)
+        age_days = (datetime.now(timezone.utc) - ts).total_seconds() / 86400
+        return min(1.0, math.exp(-age_days * math.log(2) / half_life_days))
+    except Exception:
+        return 0.5
+
+
+def _safe_fts_query(query: str) -> str | None:
+    tokens = re.findall(r"\w+", query)
+    if not tokens:
+        return None
+    return " ".join(f'"{t}"' for t in tokens)
 
 
 def _score_embedding_rows(rows, query_embedding, limit: int):
@@ -153,6 +173,47 @@ def _fetch_and_score_embedding_rows(
     return similarities, dim_skipped, scan_truncated
 
 
+def _fetch_and_score_fts_rows(
+    db_path: str,
+    session: str | None,
+    fts_query: str,
+    limit: int,
+) -> list[tuple]:
+    conn = sqlite3.connect(db_path, timeout=30.0)
+    try:
+        conn.row_factory = sqlite3.Row
+        base = """
+            SELECT m.id, m.session_name, m.content, m.timestamp,
+                   m.context_type, m.metadata,
+                   bm25(memories_fts) AS score
+            FROM memories_fts
+            JOIN memories m ON memories_fts.rowid = m.rowid
+            WHERE memories_fts MATCH ?
+              AND (m.compaction_role IS NULL OR m.compaction_role != 'source')
+        """
+        params: list = [fts_query]
+        if session is not None:
+            base += " AND m.session_name = ?"
+            params.append(session)
+        base += " ORDER BY score LIMIT ?"
+        params.append(limit)
+        rows = conn.execute(base, params).fetchall()
+    finally:
+        conn.close()
+
+    if not rows:
+        return []
+
+    raw_scores = [row["score"] for row in rows]
+    min_s, max_s = min(raw_scores), max(raw_scores)
+    if max_s == min_s:
+        normalized = [1.0 for _ in raw_scores]
+    else:
+        span = max_s - min_s
+        normalized = [(max_s - s) / span for s in raw_scores]
+    return list(zip(rows, normalized))
+
+
 from ..config.settings import (  # noqa: E402
     SEMANTIC_SEARCH_AVAILABLE,
     DEFAULT_DB_PATH,
@@ -165,6 +226,9 @@ from ..config.settings import (  # noqa: E402
     COMPACTION_ENABLED,
     COMPACTION_TRIGGER_COUNT,
     RECALL_SCAN_LIMIT,
+    HYBRID_SEARCH_TEXT_WEIGHT,
+    TEMPORAL_WEIGHT,
+    TEMPORAL_HALF_LIFE_DAYS,
 )
 from .consolidation import (  # noqa: E402
     compute_content_hash,
@@ -549,6 +613,45 @@ class MARMMemory:
                 "CREATE INDEX IF NOT EXISTS idx_compaction_staging_hash "
                 "ON compaction_staging(candidate_hash)"
             )
+
+            conn.execute(
+                """
+                CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts
+                    USING fts5(content, content='memories', content_rowid='rowid',
+                               tokenize='porter ascii')
+                """
+            )
+            conn.execute(
+                """
+                CREATE TRIGGER IF NOT EXISTS memories_ai
+                    AFTER INSERT ON memories BEGIN
+                    INSERT INTO memories_fts(rowid, content) VALUES (new.rowid, new.content);
+                END
+                """
+            )
+            conn.execute(
+                """
+                CREATE TRIGGER IF NOT EXISTS memories_au
+                    AFTER UPDATE OF content ON memories BEGIN
+                    INSERT INTO memories_fts(memories_fts, rowid, content)
+                        VALUES ('delete', old.rowid, old.content);
+                    INSERT INTO memories_fts(rowid, content) VALUES (new.rowid, new.content);
+                END
+                """
+            )
+            conn.execute(
+                """
+                CREATE TRIGGER IF NOT EXISTS memories_ad
+                    AFTER DELETE ON memories BEGIN
+                    INSERT INTO memories_fts(memories_fts, rowid, content)
+                        VALUES ('delete', old.rowid, old.content);
+                END
+                """
+            )
+            conn.execute(
+                "INSERT OR IGNORE INTO memories_fts(rowid, content) "
+                "SELECT rowid, content FROM memories"
+            )
             conn.commit()
 
     def _encode_sync(self, text: str):
@@ -849,16 +952,59 @@ class MARMMemory:
                     f"recall_similar: skipped {dim_skipped} memories with wrong embedding dimension (expected {len(query_embedding)})"
                 )
 
+            fts_query = _safe_fts_query(query)
+            fts_hits: dict[str, tuple] = {}
+            if fts_query:
+                try:
+                    for row, fts_norm in await asyncio.to_thread(
+                        _fetch_and_score_fts_rows,
+                        self.db_path,
+                        session,
+                        fts_query,
+                        limit * 2,
+                    ):
+                        fts_hits[row["id"]] = (row, fts_norm)
+                except Exception as e:
+                    _safe_print(f"FTS5 hybrid pass failed, using vector-only: {e}")
+
+            combined: dict[str, tuple] = {}
+            for mem, vec_norm in similarities:
+                mem_id = mem["id"]
+                fts_norm = fts_hits[mem_id][1] if mem_id in fts_hits else 0.0
+                hybrid = (
+                    1 - HYBRID_SEARCH_TEXT_WEIGHT
+                ) * vec_norm + HYBRID_SEARCH_TEXT_WEIGHT * fts_norm
+                t_score = _temporal_score(mem["timestamp"], TEMPORAL_HALF_LIFE_DAYS)
+                combined[mem_id] = (
+                    mem,
+                    (1 - TEMPORAL_WEIGHT) * hybrid + TEMPORAL_WEIGHT * t_score,
+                )
+            for mem_id, (fts_row, fts_norm) in fts_hits.items():
+                if mem_id not in combined:
+                    hybrid = HYBRID_SEARCH_TEXT_WEIGHT * fts_norm
+                    t_score = _temporal_score(
+                        fts_row["timestamp"], TEMPORAL_HALF_LIFE_DAYS
+                    )
+                    combined[mem_id] = (
+                        fts_row,
+                        (1 - TEMPORAL_WEIGHT) * hybrid + TEMPORAL_WEIGHT * t_score,
+                    )
+            similarities = sorted(combined.values(), key=lambda x: x[1], reverse=True)[
+                :limit
+            ]
+
             results = []
             for memory, similarity in similarities:
                 results.append(
                     {
-                        "id": memory[0],
-                        "session_name": memory[1],
-                        "content": memory[2],
-                        "timestamp": memory[4],
-                        "context_type": memory[5],
-                        "metadata": json.loads(memory[6]) if memory[6] else {},
+                        "id": memory["id"],
+                        "session_name": memory["session_name"],
+                        "content": memory["content"],
+                        "timestamp": memory["timestamp"],
+                        "context_type": memory["context_type"],
+                        "metadata": json.loads(memory["metadata"])
+                        if memory["metadata"]
+                        else {},
                         "similarity": float(similarity),
                     }
                 )
@@ -872,7 +1018,31 @@ class MARMMemory:
     async def recall_text_search(
         self, query: str, session: str = None, limit: int = 5
     ) -> List[Dict]:
-        """Fallback text-based search"""
+        """Text search via FTS5 BM25 ranking, with LIKE fallback for unsanitizable queries."""
+        fts_query = _safe_fts_query(query)
+        if fts_query is not None:
+            try:
+                fts_rows = await asyncio.to_thread(
+                    _fetch_and_score_fts_rows, self.db_path, session, fts_query, limit
+                )
+                if fts_rows:
+                    return [
+                        {
+                            "id": row["id"],
+                            "session_name": row["session_name"],
+                            "content": row["content"],
+                            "timestamp": row["timestamp"],
+                            "context_type": row["context_type"],
+                            "metadata": json.loads(row["metadata"])
+                            if row["metadata"]
+                            else {},
+                            "similarity": float(score),
+                        }
+                        for row, score in fts_rows
+                    ]
+            except Exception as e:
+                _safe_print(f"FTS5 search failed, falling back to LIKE: {e}")
+
         with self.get_connection() as conn:
             if session is None:
                 cursor = conn.execute(
