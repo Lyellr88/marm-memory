@@ -218,15 +218,17 @@ async def marm_smart_recall(request: SmartRecallRequest, http_request: Request):
             **scan_meta,
         }
 
-        limited_memories, was_truncated = MCPResponseLimiter.limit_memory_response(
-            similar_memories, base_response
-        )
-
-        if request.detail < 3:
-            limited_memories = [
+        memories_to_limit = (
+            [
                 {**m, "content": _apply_detail_level(m["content"], request.detail)}
-                for m in limited_memories
+                for m in similar_memories
             ]
+            if request.detail < 3
+            else similar_memories
+        )
+        limited_memories, was_truncated = MCPResponseLimiter.limit_memory_response(
+            memories_to_limit, base_response
+        )
 
         context_lines = []
         for mem in limited_memories:

@@ -28,7 +28,8 @@ sys.path.insert(0, str(SERVER_ROOT))
 
 _BOOT_FD, _BOOT_DB_PATH = tempfile.mkstemp(suffix=".db", prefix="smoke_hybrid_boot_")
 os.close(_BOOT_FD)
-os.environ.setdefault("MARM_DB_PATH", _BOOT_DB_PATH)
+_ORIG_DB_PATH = os.environ.get("MARM_DB_PATH")
+os.environ["MARM_DB_PATH"] = _BOOT_DB_PATH
 
 from marm_mcp_server.config.settings import RECALL_SCAN_LIMIT, SEMANTIC_SEARCH_AVAILABLE  # noqa: E402
 from marm_mcp_server.core import memory as memory_module  # noqa: E402
@@ -49,6 +50,10 @@ def _cleanup_boot_db() -> None:
         os.unlink(_BOOT_DB_PATH)
     except Exception:
         pass
+    if _ORIG_DB_PATH is not None:
+        os.environ["MARM_DB_PATH"] = _ORIG_DB_PATH
+    else:
+        os.environ.pop("MARM_DB_PATH", None)
 
 
 atexit.register(_cleanup_boot_db)

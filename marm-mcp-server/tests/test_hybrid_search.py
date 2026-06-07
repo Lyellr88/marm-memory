@@ -212,6 +212,7 @@ async def test_recall_text_search_session_filter_excludes_other_sessions(tmp_pat
 
     results = await memory.recall_text_search("keyword", session="alpha", limit=5)
 
+    assert results
     assert all(r["session_name"] == "alpha" for r in results)
 
 
@@ -231,17 +232,17 @@ async def test_recall_similar_response_shape_unchanged_with_hybrid_path(tmp_path
     )
 
     assert isinstance(results, list)
-    if results:
-        required = {
-            "id",
-            "session_name",
-            "content",
-            "timestamp",
-            "context_type",
-            "metadata",
-            "similarity",
-        }
-        assert required.issubset(results[0].keys())
+    assert results
+    required = {
+        "id",
+        "session_name",
+        "content",
+        "timestamp",
+        "context_type",
+        "metadata",
+        "similarity",
+    }
+    assert required.issubset(results[0].keys())
 
 
 @pytest.mark.asyncio

@@ -108,7 +108,7 @@ python -m marm_mcp_server
 ```bash
 pip install marm-mcp-server
 # most agents use this --transport command
-"agent" mcp add --transport stdio marm-memory-stdio marm-mcp-stdio"
+"agent" mcp add --transport stdio marm-memory-stdio marm-mcp-stdio
 codex mcp add marm-memory-stdio -- marm-mcp-stdio
 # xAI / Grok Remote MCP. Use a hosted HTTPS MARM endpoint, not localhost.
 python -m marm_mcp_server.server_stdio

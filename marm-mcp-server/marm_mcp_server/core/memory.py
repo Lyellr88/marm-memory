@@ -1025,20 +1025,21 @@ class MARMMemory:
                 fts_rows = await asyncio.to_thread(
                     _fetch_and_score_fts_rows, self.db_path, session, fts_query, limit
                 )
-                return [
-                    {
-                        "id": row["id"],
-                        "session_name": row["session_name"],
-                        "content": row["content"],
-                        "timestamp": row["timestamp"],
-                        "context_type": row["context_type"],
-                        "metadata": json.loads(row["metadata"])
-                        if row["metadata"]
-                        else {},
-                        "similarity": float(score),
-                    }
-                    for row, score in fts_rows
-                ]
+                if fts_rows:
+                    return [
+                        {
+                            "id": row["id"],
+                            "session_name": row["session_name"],
+                            "content": row["content"],
+                            "timestamp": row["timestamp"],
+                            "context_type": row["context_type"],
+                            "metadata": json.loads(row["metadata"])
+                            if row["metadata"]
+                            else {},
+                            "similarity": float(score),
+                        }
+                        for row, score in fts_rows
+                    ]
             except Exception as e:
                 _safe_print(f"FTS5 search failed, falling back to LIKE: {e}")
 

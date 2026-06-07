@@ -1,4 +1,6 @@
-# MARM - The AI That Remembers Your Conversations.
+# MARM: The AI That Remembers Your Conversations v2.12.0
+
+Contributions are welcome! Check out our [open issues](https://github.com/Lyellr88/MARM-Systems/issues) to get started. Join the conversation on [MARM Discord](https://discord.gg/nhyJWPz2cf).
 
 ## Table of Contents
 
@@ -8,8 +10,6 @@
 - [Complete MCP Tool Suite](#complete-mcp-tool-suite-9-tools)
 - [MARM Dashboard](#marm-dashboard)
 - [Why MARM Holds Up](#why-marm-holds-up)
-- [Contributing](#contributing)
-- [Project Documentation](#project-documentation)
 
 ## Why MARM MCP: The Problem & Solution
 
@@ -60,7 +60,7 @@ pip install marm-mcp-server
 - Docker HTTP = shared/always-on server (key required).
 - Docker STDIO = private containerized local use (no HTTP key).
 
-**Swarm / multi-agent note:** The write queue is enabled by default to serialize memory writes through one worker. For shared HTTP deployments, use `--swarm` (200 RPM) or `--swarm-max` (600 RPM) when starting the server. `--trusted` disables rate limiting entirely for private deployments. STDIO is still best for private single-agent/local use.
+**Swarm / multi-agent note:** The write queue is enabled by default to serialize memory writes through one worker. For shared HTTP deployments, use `--swarm` (200 RPM) or `--swarm-max` (600 RPM) when starting the server. `--trusted` disables rate limiting entirely for private deployments. STDIO is still best for private single-agent/local use. Run one MARM HTTP process per SQLite database; `uvicorn --workers N` / multi-process workers are not supported yet because queue, scheduler, and protocol coordination are process-local.
 
 #### Local pip HTTP (zero config)
 
@@ -80,7 +80,7 @@ python -m marm_mcp_server
 ```bash
 pip install marm-mcp-server
 # most agents use this --transport command
-"agent" mcp add --transport stdio marm-memory-stdio marm-mcp-stdio"
+"agent" mcp add --transport stdio marm-memory-stdio marm-mcp-stdio
 codex mcp add marm-memory-stdio -- marm-mcp-stdio
 # xAI / Grok Remote MCP. Use a hosted HTTPS MARM endpoint, not localhost.
 python -m marm_mcp_server.server_stdio
@@ -176,7 +176,6 @@ docker run --rm -p 127.0.0.1:8002:8002 \
 See [`marm-dashboard/README.md`](marm-dashboard/README.md) for the full guide.
 
 ## Complete MCP Tool Suite (9 Tools)
-
 
 **💡 Pro Tip:** You don't need to manually call these tools! Just tell your AI agent what you want in natural language:
 

@@ -30,7 +30,7 @@ MARM MCP Server supports two transport modes for different deployment scenarios:
 
 - Traditional server-client architecture
 - Best for: Multiple concurrent AI clients, cloud/remote deployment, shared memory server
-- Setup: Run `marm-mcp-server` and connect via `http://localhost:8001/mcp`
+- Setup: Run `python -m marm_mcp_server` and connect via `http://localhost:8001/mcp`
 
 **STDIO Transport** (Process-based)
 
@@ -45,8 +45,13 @@ MARM MCP Server supports two transport modes for different deployment scenarios:
 
 ```bash
 docker pull lyellr88/marm-mcp-server:latest
-docker run -d --name marm-mcp-server -p 127.0.0.1:8001:8001 -e SERVER_HOST=0.0.0.0 -e MARM_API_KEY=your-generated-key -v ~/.marm:/home/marm/.marm lyellr88/marm-mcp-server:latest
-claude mcp add --transport http marm-memory http://localhost:8001/mcp --header "Authorization: Bearer your-generated-key"
+docker run -d --name marm-mcp-server \
+  -p 127.0.0.1:8001:8001 \
+  -e SERVER_HOST=0.0.0.0 \
+  -e MARM_API_KEY=your-generated-key \
+  -v ~/.marm:/home/marm/.marm \
+  lyellr88/marm-mcp-server:latest
+"agent" mcp add --transport http marm-memory http://localhost:8001/mcp --header "Authorization: Bearer your-generated-key"
 ```
 
 **Local HTTP:**
@@ -56,7 +61,7 @@ Default pip/local startup is zero-config: MARM binds to localhost and does not r
 ```bash
 pip install marm-mcp-server
 python -m marm_mcp_server
-claude mcp add --transport http marm-memory http://localhost:8001/mcp
+"agent" mcp add --transport http marm-memory http://localhost:8001/mcp
 ```
 
 **Codex CLI:**
@@ -95,7 +100,7 @@ python -m marm_mcp_server.server_stdio
 
 Replace `marm-mcp-stdio` with `python -m marm_mcp_server.server_stdio` if using a virtualenv or a path-based setup. Works with Claude Code, Cursor, VS Code, Qwen, and Gemini CLI.
 
-**For complete installation instructions, platform-specific configurations, JSON setup, troubleshooting, and detailed transport comparison, see the [README.md Quick Start section](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/README.md#-quick-start-for-mcp).**
+**For complete installation instructions, platform-specific configurations, JSON setup, troubleshooting, and detailed transport comparison, see the [README.md Quick Start section](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/README.md#-quick-start-for-mcp-http--stdio).**
 
 ### System Requirements
 
@@ -172,7 +177,7 @@ Here's a realistic workflow showing MARM in action:
 
 **Scenario:** You're researching authentication patterns for a new project using multiple AI clients.
 
-### Phase 1: Create Session (Claude)
+#### Phase 1: Create Session (Claude)
 
 ``` markdown
 You: "Claude, create a MARM session called 'auth-research-2025-01'"
@@ -180,7 +185,7 @@ Claude calls: marm_log_session("auth-research-2025-01")
 Result: Session created. MARM lifecycle/docs initialize automatically.
 ```
 
-### Phase 2: Capture Research (Claude)
+#### Phase 2: Capture Research (Claude)
 
 ``` markdown
 You: "Summarize OAuth2 vs JWT for API authentication and save it"
@@ -188,7 +193,7 @@ Claude calls: marm_context_log("OAuth2 is token-based with refresh cycles, bette
 Result: Memory stored with auto-classification as "code" content
 ```
 
-### Phase 3: Add Reusable Reference (Claude)
+#### Phase 3: Add Reusable Reference (Claude)
 
 ``` markdown
 You: "Save a JWT validation code snippet to my notebooks as 'jwt-validation-pattern'"
@@ -196,7 +201,7 @@ Claude calls: marm_notebook(action="add", name="jwt-validation-pattern", data="d
 Result: Reusable snippet stored for future projects
 ```
 
-### Phase 4: Recall Context (Gemini)
+#### Phase 4: Recall Context (Gemini)
 
 ``` markdown
 You: "Gemini, what authentication approaches did we research? Activate the JWT pattern."
@@ -205,7 +210,7 @@ Gemini calls: marm_notebook(action="use", names="jwt-validation-pattern")
 Result: Gemini sees previous research + has JWT code available as context
 ```
 
-### Phase 5: Synthesis & Summary (Qwen)
+#### Phase 5: Synthesis & Summary (Qwen)
 
 ``` markdown
 You: "Qwen, pull everything from the auth research and create a summary"
@@ -214,7 +219,7 @@ Qwen calls: marm_summary("auth-research-2025-01")
 Result: Qwen generates implementation guide from all captured research
 ```
 
-### Phase 6: End Session (Claude)
+#### Phase 6: End Session (Claude)
 
 ``` markdown
 You: "Log final decision - we're using JWT for APIs and OAuth2 for user auth"
@@ -356,16 +361,11 @@ Phase 3: Synthesis
 - Combine insights for comprehensive solutions
 ```
 
----
-
 ## FAQ
 
 The canonical FAQ lives in [docs/FAQ.md](docs/FAQ.md). Use that file for current answers about memory behavior, transports, supported clients, compaction, backups, and troubleshooting.
 
 ---
-
-<details>
-<summary><b>🔧 Troubleshooting Guide (Click to expand)</b></summary>
 
 ## Troubleshooting Guide
 
@@ -450,7 +450,7 @@ The canonical FAQ lives in [docs/FAQ.md](docs/FAQ.md). Use that file for current
 
 - Close all AI client connections
 - Stop the server: `Ctrl+C`
-- Remove lock file if present: `rm ~/.marm/marm_usage_analytics.db-wal` (Linux/macOS)
+- Remove lock file if present: `rm ~/.marm/marm_memory.db-wal` (Linux/macOS)
 - Restart server
 
 ### Common Error Messages
