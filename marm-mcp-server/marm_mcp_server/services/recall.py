@@ -83,8 +83,21 @@ async def smart_recall(
                     f"No memories found across all sessions for query: '{query}'"
                 )
             if include_logs:
-                response["log_results"] = log_results
-                response["log_results_count"] = len(log_results)
+                test = {
+                    **response,
+                    "log_results": log_results,
+                    "log_results_count": len(log_results),
+                }
+                if (
+                    MCPResponseLimiter.estimate_response_size(test)
+                    <= MCPResponseLimiter.CONTENT_LIMIT
+                ):
+                    response["log_results"] = log_results
+                    response["log_results_count"] = len(log_results)
+                else:
+                    response["log_results"] = []
+                    response["log_results_count"] = 0
+                    response["_log_results_truncated"] = True
             return response
 
         formatted_results = [
@@ -123,8 +136,21 @@ async def smart_recall(
             )
 
         if include_logs:
-            response_data["log_results"] = log_results
-            response_data["log_results_count"] = len(log_results)
+            test = {
+                **response_data,
+                "log_results": log_results,
+                "log_results_count": len(log_results),
+            }
+            if (
+                MCPResponseLimiter.estimate_response_size(test)
+                <= MCPResponseLimiter.CONTENT_LIMIT
+            ):
+                response_data["log_results"] = log_results
+                response_data["log_results_count"] = len(log_results)
+            else:
+                response_data["log_results"] = []
+                response_data["log_results_count"] = 0
+                response_data["_log_results_truncated"] = True
 
         return response_data
 

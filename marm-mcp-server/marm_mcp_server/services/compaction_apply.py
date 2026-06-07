@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, timezone
 
 from ..core.consolidation import compute_content_hash
-from ..core.memory import sanitize_content
+from ..core.memory import sanitize_content, _safe_print
 
 
 async def apply_compaction_write(memory_store, candidate_id: str) -> str:
@@ -34,10 +34,15 @@ async def apply_compaction_write(memory_store, candidate_id: str) -> str:
         precomputed_summary = sanitize_content(row[0])
         precomputed_summary_hash = compute_content_hash(precomputed_summary)
         if memory_store._load_encoder_lazily():
-            summary_vec = await asyncio.to_thread(
-                memory_store._encode_sync, precomputed_summary
-            )
-            precomputed_summary_embedding = summary_vec.tobytes()
+            try:
+                summary_vec = await asyncio.to_thread(
+                    memory_store._encode_sync, precomputed_summary
+                )
+                precomputed_summary_embedding = summary_vec.tobytes()
+            except Exception as e:
+                _safe_print(
+                    f"Embedding pre-compute failed for compaction {candidate_id}, continuing without: {e}"
+                )
 
     with memory_store.get_connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
@@ -187,9 +192,14 @@ async def apply_compaction_write(memory_store, candidate_id: str) -> str:
                 else None
             )
             if summary_embedding is None and memory_store._load_encoder_lazily():
-                summary_embedding = memory_store._encode_sync(
-                    suggested_summary
-                ).tobytes()
+                try:
+                    summary_embedding = memory_store._encode_sync(
+                        suggested_summary
+                    ).tobytes()
+                except Exception as e:
+                    _safe_print(
+                        f"Embedding encode failed inside write path for {candidate_id}, storing without embedding: {e}"
+                    )
 
             summary_id = str(uuid.uuid4())
             compacted_at = now

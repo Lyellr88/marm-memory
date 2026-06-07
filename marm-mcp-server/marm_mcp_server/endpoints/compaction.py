@@ -449,14 +449,22 @@ async def marm_apply_compaction(request: ApplyCompactionRequest):
                 "reason": "staged summary is empty — candidate may be corrupted",
             }
 
-    if memory._write_queue is not None:
-        summary_id = await memory._write_queue.put_callable(
-            apply_compaction_write,
-            memory,
-            candidate_id,
-        )
-    else:
-        summary_id = await apply_compaction_write(memory, candidate_id)
+    try:
+        if memory._write_queue is not None:
+            summary_id = await memory._write_queue.put_callable(
+                apply_compaction_write,
+                memory,
+                candidate_id,
+            )
+        else:
+            summary_id = await apply_compaction_write(memory, candidate_id)
+    except Exception as e:
+        print(f"Compaction apply failed for {candidate_id}: {e}")
+        return {
+            "candidate_id": candidate_id,
+            "status": "error",
+            "reason": "compaction apply failed",
+        }
 
     return {
         "candidate_id": candidate_id,

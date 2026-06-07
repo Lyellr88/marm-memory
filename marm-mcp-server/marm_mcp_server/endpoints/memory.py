@@ -59,6 +59,24 @@ def track_endpoint_usage(endpoint: str, request: Request, extra_data: dict = Non
 router = APIRouter(prefix="", tags=["Memory"])
 
 
+def _inject_log_results(response: dict, log_results: list) -> None:
+    test = {
+        **response,
+        "log_results": log_results,
+        "log_results_count": len(log_results),
+    }
+    if (
+        MCPResponseLimiter.estimate_response_size(test)
+        <= MCPResponseLimiter.CONTENT_LIMIT
+    ):
+        response["log_results"] = log_results
+        response["log_results_count"] = len(log_results)
+    else:
+        response["log_results"] = []
+        response["log_results_count"] = 0
+        response["_log_results_truncated"] = True
+
+
 @router.post("/marm_smart_recall", operation_id="marm_smart_recall")
 async def marm_smart_recall(request: SmartRecallRequest, http_request: Request):
     """
@@ -162,8 +180,7 @@ async def marm_smart_recall(request: SmartRecallRequest, http_request: Request):
                     )
 
                 if request.include_logs:
-                    response["log_results"] = log_results
-                    response["log_results_count"] = len(log_results)
+                    _inject_log_results(response, log_results)
                 return response
             else:
                 response = {
@@ -176,8 +193,7 @@ async def marm_smart_recall(request: SmartRecallRequest, http_request: Request):
                     **scan_meta,
                 }
                 if request.include_logs:
-                    response["log_results"] = log_results
-                    response["log_results_count"] = len(log_results)
+                    _inject_log_results(response, log_results)
                 return response
 
         base_response = {
@@ -205,8 +221,7 @@ async def marm_smart_recall(request: SmartRecallRequest, http_request: Request):
         )
 
         if request.include_logs:
-            final_response["log_results"] = log_results
-            final_response["log_results_count"] = len(log_results)
+            _inject_log_results(final_response, log_results)
 
         return final_response
     except Exception as e:

@@ -1,6 +1,6 @@
 """Session summary generation for MARM MCP Server."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from ..core.memory import memory
 from ..core.response_limiter import MCPResponseLimiter
@@ -39,7 +39,7 @@ async def generate_session_summary(session_name: str, limit: int = 50) -> dict:
 
         summary_lines = [f"# MARM Session Summary: {session_name}"]
         summary_lines.append(
-            f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M UTC')}"
+            f"Generated: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}"
         )
         summary_lines.append("")
 

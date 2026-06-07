@@ -96,7 +96,10 @@ async def marm_log_entry(request: LogEntryRequest):
         }
     except sqlite3.Error as e:
         print(f"Database error in marm_log_entry: {e}")
-        return {"status": "error", "message": "Database error while creating log entry."}
+        return {
+            "status": "error",
+            "message": "Database error while creating log entry.",
+        }
     except Exception as e:
         print(f"Unexpected error in marm_log_entry: {e}")
         return {"status": "error", "message": "Log entry creation failed."}

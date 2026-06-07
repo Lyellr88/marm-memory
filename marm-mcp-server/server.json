@@ -102,6 +102,10 @@
       "SERVER_PORT": {
         "description": "Port number to bind to",
         "default": "8001"
+      },
+      "RECALL_SCAN_LIMIT": {
+        "description": "Maximum embedded memories semantic recall scans per query before reporting recall_scan_truncated=true",
+        "default": "1000"
       }
     }
   },

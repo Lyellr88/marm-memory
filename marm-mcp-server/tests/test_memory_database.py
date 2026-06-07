@@ -368,7 +368,7 @@ async def test_recall_similar_scan_not_truncated_when_under_limit(
     query_vec = np.ones(dim, dtype=np.float32)
     query_vec /= np.linalg.norm(query_vec)
 
-    results, meta = await mem.recall_similar(
+    _results, meta = await mem.recall_similar(
         "entry",
         session="no-trunc-test",
         limit=3,

@@ -236,20 +236,27 @@ async def _mcp_tool_call_tracker(request: Request, call_next):
         asyncio.create_task(maybe_auto_refresh())
 
     if is_tool_call and response.status_code == 200:
-        _req_session = "__default__"
+        _explicit_session = None
+        _tool_name = None
         try:
-            _req_session = (
-                json.loads(body)
-                .get("params", {})
-                .get("arguments", {})
-                .get("session_name")
-                or "__default__"
-            )
+            _parsed_body = json.loads(body)
+            _explicit_session = (
+                _parsed_body.get("params", {}).get("arguments", {}).get("session_name")
+            ) or None
+            _tool_name = _parsed_body.get("params", {}).get("name")
         except Exception:
             pass
 
+        _protocol_session = _explicit_session or "__default__"
+        if _explicit_session:
+            _compaction_session = _explicit_session
+        elif _tool_name == "marm_log_entry":
+            _compaction_session = memory.active_log_session
+        else:
+            _compaction_session = "main"
+
         if (
-            _req_session in _protocol_delivered_sessions
+            _protocol_session in _protocol_delivered_sessions
             and not settings.COMPACTION_ENABLED
         ):
             return response
@@ -286,7 +293,7 @@ async def _mcp_tool_call_tracker(request: Request, call_next):
             injections = []
             protocol_injected = False
             async with _protocol_delivery_lock:
-                if _req_session not in _protocol_delivered_sessions:
+                if _protocol_session not in _protocol_delivered_sessions:
                     protocol_content = await read_protocol_file()
                     injections.append(
                         {
@@ -294,12 +301,12 @@ async def _mcp_tool_call_tracker(request: Request, call_next):
                             "text": f"[MARM SESSION INIT]\n\n{protocol_content}",
                         }
                     )
-                    _protocol_delivered_sessions.add(_req_session)
+                    _protocol_delivered_sessions.add(_protocol_session)
                     protocol_injected = True
 
             if not protocol_injected:
                 compaction_block = await asyncio.to_thread(
-                    claim_pending_compaction_prompt, memory, _req_session
+                    claim_pending_compaction_prompt, memory, _compaction_session
                 )
                 if compaction_block:
                     injections.append(compaction_block)

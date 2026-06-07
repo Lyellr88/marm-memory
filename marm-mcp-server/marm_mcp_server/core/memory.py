@@ -762,7 +762,7 @@ class MARMMemory:
                 return _wrap(results, scan_truncated)
 
         except Exception as e:
-            print(f"Semantic search failed: {e}")
+            _safe_print(f"Semantic search failed: {e}")
             return _wrap(await self.recall_text_search(query, session, limit), False)
 
     async def recall_text_search(
