@@ -46,6 +46,12 @@ class SmartRecallRequest(BaseModel):
         default=False,
         description="Also search log_entries for text matches and include in response",
     )
+    detail: int = Field(
+        default=1,
+        ge=1,
+        le=3,
+        description="Retrieval depth: 1=summary (~200 chars), 2=context (~500 chars), 3=full content",
+    )
 
 
 class ContextLogRequest(BaseModel):

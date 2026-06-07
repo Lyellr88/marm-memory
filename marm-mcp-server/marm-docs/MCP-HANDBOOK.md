@@ -2,7 +2,7 @@
 
 ## Complete Usage Guide for Memory-Augmented AI
 
-**MARM v2.11.0 - Universal MCP Server for AI Memory Intelligence**
+**MARM v2.12.0 - Universal MCP Server for AI Memory Intelligence**
 
 ---
 
@@ -154,7 +154,7 @@ MARM also handles lifecycle work internally. Docs and session state initialize o
 
 MARM is a **Universal MCP Server** providing intelligent memory that saves across sessions for AI conversations with:
 
-- **Semantic Search** - Find memories by meaning, not keywords
+- **Hybrid Recall** - Find memories by meaning and exact terms like commands, config keys, and error text
 - **Cross-App Memory** - Share memories between AI clients (Claude, Qwen, Gemini)
 - **Auto-Classification** - Content automatically categorized for intelligent recall
 - **Session Management** - Organize conversations with structured logging
@@ -162,7 +162,7 @@ MARM is a **Universal MCP Server** providing intelligent memory that saves acros
 ### Core Concepts
 
 **Sessions**: Named containers for organizing memories
-**Memories**: Stored content with semantic embeddings for intelligent search
+**Memories**: Stored content with semantic embeddings plus an FTS index for hybrid recall
 **Notebooks**: Reusable instructions and knowledge snippets
 **Logging**: Structured conversation history with timestamps
 
@@ -230,11 +230,14 @@ Result: Decision logged and searchable by all future AI clients
 
 ### How Memory Works
 
-MARM uses **semantic embeddings** to understand content meaning, not exact word matches:
+MARM uses **hybrid recall**. Semantic embeddings cover meaning, FTS5 BM25 covers exact terms like config keys, commands, filenames, and error strings, and a conservative temporal weighting step gives fresher memories a modest boost when matches are otherwise close:
 
 ```txt
 User: "I discussed machine learning algorithms yesterday"
 MARM Search: Finds related memories about "ML models", "neural networks", "AI training"
+
+User: "What was the COMPACTION_TRIGGER_COUNT setting?"
+MARM Search: Finds the exact config memory even if the rest of the text differs
 ```
 
 ### Memory Types
@@ -259,7 +262,7 @@ MARM automatically categorizes content:
 
 | Category | Tool | Description | Usage Notes |
 |----------|------|-------------|-------------|
-| **🧠 Memory** | `marm_smart_recall` | Semantic similarity search across all memories | `query` (required), `limit` (default: 5), `session_name` (optional). Use natural language queries |
+| **🧠 Memory** | `marm_smart_recall` | Hybrid recall across all memories using semantic embeddings plus FTS keyword/BM25 matching, with a conservative recency bias in final ranking | `query` (required), `limit` (default: 5), `session_name` (optional), `detail` (default: `1`). Use natural language queries or exact keys/commands |
 | | `marm_context_log` | Auto-classifying memory storage with embeddings | Store important information that should be remembered |
 | **📚 Logging** | `marm_log_session` | Create or switch to named session container | Include LLM name, dates, be descriptive |
 | | `marm_log_entry` | Add structured log entry with auto-date formatting | Use structured entries for best results; date-prefixed formats are parsed automatically when provided |
@@ -305,8 +308,10 @@ The write queue is enabled by default and serializes memory writes through one i
 
 **Global Search**: Use `search_all=True` to search across all sessions
 **Natural Language Search**: "authentication problems with JWT tokens" vs "auth error"
+**Layered Recall Depth**: `detail=1` returns a short summary view (~200 chars), `detail=2` returns a larger context view (~500 chars), and `detail=3` returns full memory content.
+**Recency Bias**: MARM blends a small temporal score into final ranking so newer operational context wins tie-like matches more often without hiding clearly stronger older memories.
 **Temporal Search**: Include timeframes in queries
-**Bounded Recall Signal**: If `marm_smart_recall` returns `recall_scan_truncated=true`, the semantic scan hit `RECALL_SCAN_LIMIT`; narrow the session/query or raise the env var for larger stores.
+**Bounded Recall Signal**: If `marm_smart_recall` returns `recall_scan_truncated=true`, the semantic embedding scan hit `RECALL_SCAN_LIMIT`; narrow the session/query or raise the env var for larger stores. FTS recall still runs alongside it.
 
 ### Workflow Optimization
 

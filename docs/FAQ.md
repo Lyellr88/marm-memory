@@ -22,11 +22,11 @@ MARM Systems is a persistent memory layer for AI agents. The MCP server gives Cl
 |---------|-------------------|--------------|
 | **Control** | Limited and platform-defined | User-owned SQLite database |
 | **Portability** | Usually platform-locked | Works across MCP-compatible clients |
-| **Recall** | Often opaque | Explicit semantic search and structured logs |
+| **Recall** | Often opaque | Explicit hybrid recall and structured logs |
 | **Sharing** | Hard to move between tools | Multiple agents can use the same memory store |
 | **Trust model** | Memory behavior varies by provider | Retrieved memory is context, not higher-priority instruction |
 
-MARM also uses semantic search rather than simple keyword matching, so it can find related memories even when the exact words differ.
+MARM uses hybrid recall rather than simple keyword matching alone. Semantic embeddings find related memories when the wording differs, and FTS keyword/BM25 search improves exact recall for commands, config keys, filenames, and error text.
 
 ### Q: Who is MARM for?
 
@@ -34,7 +34,7 @@ MARM is strongest for developers, researchers, power users, and teams doing long
 
 ### Q: How much memory can MARM store?
 
-MARM does not enforce a small fixed memory limit. It stores data in a local SQLite database under `~/.marm/`, with semantic embeddings for recall. Practical limits depend on disk space, database size, and how much old context you keep searchable.
+MARM does not enforce a small fixed memory limit. It stores data in a local SQLite database under `~/.marm/`, with semantic embeddings and an FTS index for recall. Practical limits depend on disk space, database size, and how much old context you keep searchable.
 
 ---
 
@@ -83,7 +83,7 @@ MARM currently exposes **9 focused MCP tools**:
 
 | Category | Tools | Description |
 |----------|-------|-------------|
-| **Memory Intelligence** | `marm_smart_recall`, `marm_context_log` | Semantic recall and intelligent memory storage |
+| **Memory Intelligence** | `marm_smart_recall`, `marm_context_log` | Hybrid recall and intelligent memory storage |
 | **Logging** | `marm_log_session`, `marm_log_entry`, `marm_log_show` | Session-based conversation/project logs |
 | **Notebook** | `marm_notebook` | Reusable instructions and knowledge with `action="add"`, `"use"`, `"show"`, `"status"`, or `"clear"` |
 | **Delete** | `marm_delete` | Delete log sessions, log entries, or notebook entries |
@@ -120,9 +120,9 @@ Your AI client can still run, but MARM memory tools will be unavailable until th
 
 ### Memory, Search & Maintenance
 
-#### Q: How does semantic search work?
+#### Q: How does recall work?
 
-MARM uses embeddings to find memories by meaning, not just exact keywords. A search for "authentication error" can surface memories about login failures, access denial, token setup, or user verification even when those exact words are not repeated.
+MARM uses hybrid recall. Embeddings find memories by meaning, FTS keyword/BM25 search handles exact terms, and a conservative temporal weighting step gives newer memories a modest boost when scores are otherwise close. A search for "authentication error" can surface memories about login failures, access denial, token setup, or user verification even when those exact words are not repeated, while a search for something like `COMPACTION_TRIGGER_COUNT` or a Docker command can hit the exact stored text reliably.
 
 #### Q: How does auto-classification work?
 
@@ -132,7 +132,9 @@ When you store memory through `marm_context_log`, MARM classifies content into b
 
 Both. `marm_smart_recall` searches one session by default and can search across all sessions with `search_all=True`.
 
-When semantic recall reaches its configured scan cap, responses include `recall_scan_truncated=true` and `recall_scan_limit` so agents know the search was bounded.
+When the semantic embedding lane reaches its configured scan cap, responses include `recall_scan_truncated=true` and `recall_scan_limit` so agents know that part of recall was bounded. Exact-term FTS recall still runs alongside it.
+
+If you need less context back from each hit, `marm_smart_recall` also supports `detail=1/2/3` so agents can default to short previews and only request full memory bodies when needed.
 
 #### Q: When should I create a new session vs. continuing an existing one?
 

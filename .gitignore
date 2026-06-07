@@ -94,7 +94,7 @@ docs/future/
 # User-specific files
 .claude/
 .codex/
-.gemini/
+.kiro/
 .codexignore
 .claudeignore
 .bridgespace

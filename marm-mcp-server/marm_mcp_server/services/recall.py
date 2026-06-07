@@ -5,6 +5,15 @@ from ..core.response_limiter import MCPResponseLimiter
 
 _limiter = MCPResponseLimiter()
 
+_DETAIL_LIMITS: dict[int, int] = {1: 200, 2: 500}
+
+
+def _apply_detail_level(content: str, detail: int) -> str:
+    limit = _DETAIL_LIMITS.get(detail)
+    if limit is None or len(content) <= limit:
+        return content
+    return content[:limit] + "…"
+
 
 async def smart_recall(
     query: str,
@@ -12,6 +21,7 @@ async def smart_recall(
     limit: int = 5,
     search_all: bool = False,
     include_logs: bool = False,
+    detail: int = 1,
 ) -> dict:
     try:
         search_session = None if search_all else session_name
@@ -62,6 +72,7 @@ async def smart_recall(
                 "query": query,
                 "session_name": session_name,
                 "search_all": search_all,
+                "detail_level": detail,
                 "results": [],
                 **scan_meta,
             }
@@ -75,7 +86,10 @@ async def smart_recall(
                         f"However, {len(system_memories)} relevant results were found in the system documentation. "
                         f"Consider using search_all=true to search across all sessions."
                     )
-                    response["system_results"] = system_memories
+                    response["system_results"] = [
+                        {**m, "content": _apply_detail_level(m["content"], detail)}
+                        for m in system_memories
+                    ]
                 else:
                     response["message"] = f"No memories found for query: '{query}'"
             else:
@@ -103,7 +117,7 @@ async def smart_recall(
         formatted_results = [
             {
                 "id": mem.get("id"),
-                "content": mem.get("content"),
+                "content": _apply_detail_level(mem.get("content", ""), detail),
                 "session_name": mem.get("session_name"),
                 "similarity": mem.get("similarity", 0.0),
                 "timestamp": mem.get("timestamp"),
@@ -117,6 +131,7 @@ async def smart_recall(
             "query": query,
             "session_name": session_name,
             "search_all": search_all,
+            "detail_level": detail,
             **scan_meta,
         }
 
