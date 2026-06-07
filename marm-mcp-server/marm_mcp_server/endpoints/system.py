@@ -31,7 +31,7 @@ async def health_check():
             else "text_only",
         }
     except Exception as e:
-        logger.error(f"Health check failed: {str(e)}", exc_info=True)
+        logger.error(f"Health check failed: {e!s}", exc_info=True)
 
         return {
             "status": "unhealthy",
@@ -61,7 +61,7 @@ async def readiness_check():
             },
         }
     except Exception as e:
-        logger.error(f"Readiness check failed: {str(e)}", exc_info=True)
+        logger.error(f"Readiness check failed: {e!s}", exc_info=True)
 
         return {
             "status": "not_ready",
@@ -90,5 +90,5 @@ async def marm_reload_docs():
         }
     except Exception as e:
         raise HTTPException(
-            status_code=500, detail=f"Failed to reload documentation: {str(e)}"
-        )
+            status_code=500, detail=f"Failed to reload documentation: {e!s}"
+        ) from e

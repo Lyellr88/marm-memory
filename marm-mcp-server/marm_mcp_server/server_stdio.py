@@ -232,7 +232,7 @@ async def marm_context_log(
             "context_type": context_type,
         }
     except Exception as e:
-        return {"status": "error", "message": f"Error during context log: {str(e)}"}
+        return {"status": "error", "message": f"Error during context log: {e!s}"}
 
 
 @mcp.tool()
@@ -258,7 +258,7 @@ async def marm_log_session(session_name: str) -> dict:
             "session_name": session_name,
         }
     except Exception as e:
-        return {"status": "error", "message": f"Error creating session: {str(e)}"}
+        return {"status": "error", "message": f"Error creating session: {e!s}"}
 
 
 @mcp.tool()
@@ -311,7 +311,7 @@ async def marm_log_entry(
             "formatted_entry": formatted_entry,
         }
     except Exception as e:
-        return {"status": "error", "message": f"Error creating log entry: {str(e)}"}
+        return {"status": "error", "message": f"Error creating log entry: {e!s}"}
 
 
 @mcp.tool()
@@ -363,7 +363,7 @@ async def marm_log_show(
                     "total_sessions": len(sessions),
                 }
     except Exception as e:
-        return {"status": "error", "message": f"Error retrieving log entries: {str(e)}"}
+        return {"status": "error", "message": f"Error retrieving log entries: {e!s}"}
 
 
 @mcp.tool()
@@ -426,7 +426,7 @@ async def marm_delete(
                     "message": f"Invalid type '{type}'. Must be 'log' or 'notebook'.",
                 }
     except Exception as e:
-        return {"status": "error", "message": f"Error deleting: {str(e)}"}
+        return {"status": "error", "message": f"Error deleting: {e!s}"}
 
 
 @mcp.tool()
@@ -456,7 +456,7 @@ async def marm_notebook(
             session_name=session_name,
         )
     except Exception as e:
-        return {"status": "error", "message": f"Notebook operation failed: {str(e)}"}
+        return {"status": "error", "message": f"Notebook operation failed: {e!s}"}
 
 
 @mcp.tool()
@@ -536,7 +536,7 @@ async def marm_compaction(
             )
         )
     except Exception as e:
-        return {"status": "error", "message": f"Compaction operation failed: {str(e)}"}
+        return {"status": "error", "message": f"Compaction operation failed: {e!s}"}
 
 
 def _is_graceful_teardown(exc: BaseException) -> bool:

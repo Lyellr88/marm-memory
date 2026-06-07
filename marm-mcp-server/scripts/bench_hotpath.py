@@ -71,7 +71,7 @@ def seed(mem: MARMMemory, n: int):
     ts = datetime.now(timezone.utc).isoformat()
     with mem.get_connection() as conn:
         conn.execute("DELETE FROM memories")
-        for i, (t, e) in enumerate(zip(texts, embs)):
+        for _i, (t, e) in enumerate(zip(texts, embs)):
             conn.execute(
                 "INSERT INTO memories (id, session_name, content, embedding, "
                 "content_hash, timestamp, context_type, metadata) "

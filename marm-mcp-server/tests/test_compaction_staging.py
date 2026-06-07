@@ -683,7 +683,7 @@ async def test_stage_summaries_rejects_mismatched_source_ids(monkeypatch, tmp_pa
     ids = [_insert_memory_row(mem, "sess", f"c{i}", similar[i]) for i in range(3)]
     row_id = _insert_staging_row(mem, "sess", ids)
 
-    wrong_ids = ids[:2] + [str(uuid.uuid4())]
+    wrong_ids = [*ids[:2], str(uuid.uuid4())]
     req = StageCompactionSummariesRequest(
         summaries=[
             StagedSummaryItem(

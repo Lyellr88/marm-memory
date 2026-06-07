@@ -58,7 +58,7 @@ async def generate_session_summary(session_name: str, limit: int = 50) -> dict:
                 entry_summary = entry_summary[:197] + "..."
 
             entry_line = f"**{entry[0]}** [{entry[1]}]: {entry_summary}"
-            test_lines = current_lines + [entry_line]
+            test_lines = [*current_lines, entry_line]
             test_response = base_response.copy()
             test_response["summary"] = "\n".join(test_lines)
 

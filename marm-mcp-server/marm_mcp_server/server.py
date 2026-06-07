@@ -14,6 +14,8 @@ import logging
 import os
 import sqlite3
 import sys
+import time
+from collections import OrderedDict
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
@@ -198,8 +200,43 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-_protocol_delivered_sessions: set = set()
+_PROTOCOL_DELIVERY_MAX_SESSIONS = 4096
+_PROTOCOL_DELIVERY_TTL_SECONDS = 24 * 60 * 60
+_protocol_delivered_sessions: OrderedDict[str, float] = OrderedDict()
 _protocol_delivery_lock = asyncio.Lock()
+
+
+def _protocol_session_delivered(session_name: str, now: float | None = None) -> bool:
+    if not isinstance(_protocol_delivered_sessions, OrderedDict):
+        return session_name in _protocol_delivered_sessions
+    now = now or time.monotonic()
+    _prune_protocol_delivered_sessions(now)
+    return session_name in _protocol_delivered_sessions
+
+
+def _mark_protocol_session_delivered(
+    session_name: str, now: float | None = None
+) -> None:
+    if not isinstance(_protocol_delivered_sessions, OrderedDict):
+        _protocol_delivered_sessions.add(session_name)
+        return
+    now = now or time.monotonic()
+    _protocol_delivered_sessions[session_name] = now
+    _protocol_delivered_sessions.move_to_end(session_name)
+    _prune_protocol_delivered_sessions(now)
+
+
+def _prune_protocol_delivered_sessions(now: float | None = None) -> None:
+    if not isinstance(_protocol_delivered_sessions, OrderedDict):
+        return
+    now = now or time.monotonic()
+    while _protocol_delivered_sessions:
+        _, delivered_at = next(iter(_protocol_delivered_sessions.items()))
+        if now - delivered_at <= _PROTOCOL_DELIVERY_TTL_SECONDS:
+            break
+        _protocol_delivered_sessions.popitem(last=False)
+    while len(_protocol_delivered_sessions) > _PROTOCOL_DELIVERY_MAX_SESSIONS:
+        _protocol_delivered_sessions.popitem(last=False)
 
 
 async def _mcp_tool_call_tracker(request: Request, call_next):
@@ -224,8 +261,13 @@ async def _mcp_tool_call_tracker(request: Request, call_next):
         try:
             body = await request.body()
             is_tool_call = b'"tools/call"' in body
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.debug(
+                "Failed to parse MCP tool call body for session routing",
+                error=str(exc),
+                body_preview=body[:200].decode("utf-8", errors="replace"),
+                exc_info=True,
+            )
 
     if is_tool_call and not docs_are_loaded():
         await ensure_marm_started("default")
@@ -233,7 +275,7 @@ async def _mcp_tool_call_tracker(request: Request, call_next):
     response = await call_next(request)
 
     if is_tool_call:
-        asyncio.create_task(maybe_auto_refresh())
+        asyncio.create_task(maybe_auto_refresh())  # noqa: RUF006
 
     if is_tool_call and response.status_code == 200:
         _explicit_session = None
@@ -252,11 +294,13 @@ async def _mcp_tool_call_tracker(request: Request, call_next):
             _compaction_session = _explicit_session
         elif _tool_name == "marm_log_entry":
             _compaction_session = memory.active_log_session
-        else:
+        elif _tool_name in ("marm_context_log", "marm_notebook", "marm_smart_recall"):
             _compaction_session = "main"
+        else:
+            _compaction_session = None
 
         if (
-            _protocol_session in _protocol_delivered_sessions
+            _protocol_session_delivered(_protocol_session)
             and not settings.COMPACTION_ENABLED
         ):
             return response
@@ -293,7 +337,7 @@ async def _mcp_tool_call_tracker(request: Request, call_next):
             injections = []
             protocol_injected = False
             async with _protocol_delivery_lock:
-                if _protocol_session not in _protocol_delivered_sessions:
+                if not _protocol_session_delivered(_protocol_session):
                     protocol_content = await read_protocol_file()
                     injections.append(
                         {
@@ -301,7 +345,7 @@ async def _mcp_tool_call_tracker(request: Request, call_next):
                             "text": f"[MARM SESSION INIT]\n\n{protocol_content}",
                         }
                     )
-                    _protocol_delivered_sessions.add(_protocol_session)
+                    _mark_protocol_session_delivered(_protocol_session)
                     protocol_injected = True
 
             if not protocol_injected:

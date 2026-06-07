@@ -66,6 +66,7 @@ dev = [
     "isort>=5.10.0",
     "flake8>=5.0.0",
     "mypy>=1.0.0",
+    "ruff>=0.4.0",
 ]
 
 [tool.setuptools.packages.find]
@@ -100,6 +101,22 @@ markers = [
     "docker: Docker transport tests skipped by scripts/run-tests.py unless --docker is used",
     "slow_stdio: subprocess-based STDIO transport tests skipped by scripts/run-tests.py --fast",
 ]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "B", "RUF"]
+ignore = [
+    "E501",    # line too long — ruff format handles what it can
+    "RUF013",  # implicit Optional — existing signatures, defer to type refactor pass
+    "B905",    # zip() without strict= — pre-existing bench/test pattern
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
 
 # MCP Server Configuration
 [project.entry-points."mcp.servers"]

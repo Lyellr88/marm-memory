@@ -1,0 +1,31 @@
+name: Ruff CI
+
+on:
+  push:
+    branches: [ MARM-main ]
+  pull_request:
+    branches: [ MARM-main ]
+
+jobs:
+  ruff:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: marm-mcp-server
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Ruff
+        run: pip install ruff
+
+      - name: Run Ruff Check
+        run: ruff check --output-format=github
+
+      - name: Run Ruff Format Check
+        run: ruff format --check

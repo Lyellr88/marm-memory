@@ -48,12 +48,14 @@ async def marm_start(request: SessionRequest):
         }
     except sqlite3.Error as e:
         print(f"Database error in marm_start: {e}")
-        raise HTTPException(status_code=500, detail="Database error during MARM start.")
+        raise HTTPException(
+            status_code=500, detail="Database error during MARM start."
+        ) from e
     except Exception as e:
         print(f"Unexpected error in marm_start: {e}")
         raise HTTPException(
             status_code=500, detail="Internal server error during MARM start."
-        )
+        ) from e
 
 
 @router.post("/marm_refresh", operation_id="marm_refresh", include_in_schema=False)
@@ -88,9 +90,9 @@ async def marm_refresh(request: SessionRequest):
         print(f"Database error in marm_refresh: {e}")
         raise HTTPException(
             status_code=500, detail="Database error during MARM refresh."
-        )
+        ) from e
     except Exception as e:
         print(f"Unexpected error in marm_refresh: {e}")
         raise HTTPException(
             status_code=500, detail="Internal server error during MARM refresh."
-        )
+        ) from e

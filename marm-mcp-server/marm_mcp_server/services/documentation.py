@@ -149,7 +149,7 @@ async def _index_doc(doc: Dict) -> bool:
 
     except Exception as e:
         try:
-            print(f"ERROR: Failed to load {doc['file_path']}: {str(e)}")
+            print(f"ERROR: Failed to load {doc['file_path']}: {e!s}")
         except UnicodeEncodeError:
             print(f"ERROR: Failed to load {doc['file_path']}: {type(e).__name__}")
         return False

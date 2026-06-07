@@ -96,7 +96,7 @@ class MCPResponseLimiter:
                 memory, max_content_per_memory, preserve_start
             )
 
-            test_memories = limited_memories + [truncated_memory]
+            test_memories = [*limited_memories, truncated_memory]
             test_response = response_metadata.copy()
             test_response["results"] = test_memories
             test_size = cls.estimate_response_size(test_response)

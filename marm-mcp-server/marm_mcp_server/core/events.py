@@ -28,7 +28,7 @@ class MARMEvents:
         successful_callbacks = 0
         failed_callbacks = 0
 
-        for i, callback in enumerate(callbacks):
+        for _i, callback in enumerate(callbacks):
             callback_id = f"{event_type}_{id(callback)}"
 
             try:

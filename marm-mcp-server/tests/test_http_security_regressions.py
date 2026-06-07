@@ -14,7 +14,7 @@ def test_xss_payloads_are_sanitized_before_response_and_storage(monkeypatch, tmp
     ]
 
     stored_ids = []
-    for index, payload in enumerate(payloads):
+    for _index, payload in enumerate(payloads):
         response = client.post(
             "/marm_context_log",
             json={"session_name": "security-xss", "content": payload},

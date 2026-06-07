@@ -80,7 +80,7 @@ async def marm_summary(
                 entry_summary = entry_summary[:197] + "..."
 
             entry_line = f"**{entry[0]}** [{entry[1]}]: {entry_summary}"
-            test_lines = current_summary_lines + [entry_line]
+            test_lines = [*current_summary_lines, entry_line]
 
             test_summary = "\n".join(test_lines)
             test_response = base_response.copy()

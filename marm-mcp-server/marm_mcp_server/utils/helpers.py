@@ -15,4 +15,4 @@ async def read_protocol_file():
         else:
             return "⚠️ PROTOCOL.md file not found. Please ensure documentation is properly loaded."
     except Exception as e:
-        return f"❌ Error reading PROTOCOL.md: {str(e)}"
+        return f"❌ Error reading PROTOCOL.md: {e!s}"

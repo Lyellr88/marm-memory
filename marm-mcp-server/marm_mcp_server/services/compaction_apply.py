@@ -71,14 +71,14 @@ async def apply_compaction_write(memory_store, candidate_id: str) -> str:
             ) = row
 
             if status == "applied":
-                conn.execute("ROLLBACK")
-                _committed = True
                 source_ids = json.loads(source_ids_json)
                 idempotent_row = conn.execute(
                     "SELECT compacted_into FROM memories "
                     "WHERE id = ? AND compacted_into IS NOT NULL",
                     (source_ids[0],),
                 ).fetchone()
+                conn.execute("ROLLBACK")
+                _committed = True
                 return idempotent_row[0] if idempotent_row else candidate_id
 
             if status == "discarded":

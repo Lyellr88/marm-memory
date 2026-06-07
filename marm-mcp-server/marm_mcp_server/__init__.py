@@ -21,7 +21,7 @@ __version__ = "2.10.0"
 __author__ = "Lyell"
 __email__ = "lyell@marmsystems.com"
 
-__all__ = ["create_server", "main", "__version__"]
+__all__ = ["__version__", "create_server", "main"]
 
 
 def __getattr__(name):
