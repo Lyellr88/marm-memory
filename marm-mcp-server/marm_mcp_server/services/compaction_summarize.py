@@ -2,6 +2,8 @@
 
 import asyncio
 import json
+import sqlite3
+import uuid
 import numpy as np
 from datetime import datetime, timezone
 
@@ -73,6 +75,29 @@ def centroid_extract_summary(
     return "\n\n".join(selected_content)
 
 
+def _mark_candidate_stale(memory_store, candidate_id: str) -> None:
+    now = datetime.now(timezone.utc).isoformat()
+    with memory_store.get_connection() as conn:
+        conn.execute(
+            "UPDATE compaction_staging SET status = 'stale', updated_at = ? "
+            "WHERE id = ? AND status = 'nudge_exhausted'",
+            (now, candidate_id),
+        )
+
+
+def _parse_source_ids(source_ids_json: str) -> list[str]:
+    source_ids = json.loads(source_ids_json)
+    if not isinstance(source_ids, list) or not source_ids:
+        raise ValueError("source_memory_ids must be a non-empty list")
+
+    parsed = []
+    for source_id in source_ids:
+        if not isinstance(source_id, str):
+            raise TypeError("source_memory_ids entries must be strings")
+        parsed.append(str(uuid.UUID(source_id)))
+    return parsed
+
+
 async def process_nudge_exhausted_candidates(memory_store) -> int:
     """Promote nudge_exhausted compaction candidates to summary_staged using
     server-side centroid extraction. Returns count of candidates processed.
@@ -87,7 +112,7 @@ async def process_nudge_exhausted_candidates(memory_store) -> int:
 
     with memory_store.get_connection() as conn:
         rows = conn.execute(
-            "SELECT id, source_memory_ids FROM compaction_staging "
+            "SELECT id, session_name, source_memory_ids FROM compaction_staging "
             "WHERE status = 'nudge_exhausted' AND expires_at > ?",
             (now,),
         ).fetchall()
@@ -96,28 +121,32 @@ async def process_nudge_exhausted_candidates(memory_store) -> int:
         return 0
 
     processed = 0
-    for candidate_id, source_ids_json in rows:
+    for candidate_id, session_name, source_ids_json in rows:
         try:
-            source_ids = json.loads(source_ids_json)
+            source_ids = _parse_source_ids(source_ids_json)
             placeholders = ",".join("?" * len(source_ids))
 
             with memory_store.get_connection() as conn:
                 memory_rows = conn.execute(
-                    f"SELECT content, embedding FROM memories WHERE id IN ({placeholders})",
-                    source_ids,
+                    "SELECT content, embedding FROM memories "
+                    f"WHERE session_name = ? AND id IN ({placeholders})",
+                    [session_name, *source_ids],
                 ).fetchall()
+        except (
+            json.JSONDecodeError,
+            TypeError,
+            ValueError,
+            sqlite3.DatabaseError,
+        ) as e:
+            _safe_print(f"[compaction] invalid source IDs for {candidate_id}: {e}")
+            _mark_candidate_stale(memory_store, candidate_id)
+            continue
 
-            if not memory_rows or len(memory_rows) != len(source_ids):
-                now_stale = datetime.now(timezone.utc).isoformat()
-                with memory_store.get_connection() as conn:
-                    conn.execute(
-                        "UPDATE compaction_staging SET status = 'stale', updated_at = ? "
-                        "WHERE id = ? AND status = 'nudge_exhausted'",
-                        (now_stale, candidate_id),
-                    )
-                    conn.commit()
-                continue
+        if len(memory_rows) != len(source_ids):
+            _mark_candidate_stale(memory_store, candidate_id)
+            continue
 
+        try:
             summary = await asyncio.to_thread(
                 centroid_extract_summary,
                 [(row[0], row[1]) for row in memory_rows],
@@ -131,12 +160,13 @@ async def process_nudge_exhausted_candidates(memory_store) -> int:
                     "WHERE id = ? AND status = 'nudge_exhausted'",
                     (summary, now_inner, candidate_id),
                 )
-                conn.commit()
-            if cur.rowcount > 0:
-                processed += 1
         except Exception as e:
             _safe_print(
                 f"[compaction] server-side summarization failed for {candidate_id}: {e}"
             )
+            continue
+
+        if cur.rowcount > 0:
+            processed += 1
 
     return processed

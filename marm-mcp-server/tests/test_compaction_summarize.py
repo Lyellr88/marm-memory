@@ -211,9 +211,7 @@ def mem(tmp_path):
 @pytest.mark.asyncio
 async def test_promotes_nudge_exhausted_to_summary_staged(mem, monkeypatch):
     """Candidates in nudge_exhausted state are promoted to summary_staged with a generated summary."""
-    monkeypatch.setattr(
-        compaction_summarize, "COMPACTION_ENABLED", True
-    )
+    monkeypatch.setattr(compaction_summarize, "COMPACTION_ENABLED", True)
     session = "test-session"
     ids = [
         _insert_memory(mem, session, f"memory content {i}", _make_vec(seed=i))
@@ -232,9 +230,7 @@ async def test_promotes_nudge_exhausted_to_summary_staged(mem, monkeypatch):
 @pytest.mark.asyncio
 async def test_generated_summary_contains_source_content(mem, monkeypatch):
     """The promoted summary contains actual content from the source memories."""
-    monkeypatch.setattr(
-        compaction_summarize, "COMPACTION_ENABLED", True
-    )
+    monkeypatch.setattr(compaction_summarize, "COMPACTION_ENABLED", True)
     session = "test-session"
     ids = [
         _insert_memory(mem, session, f"unique content {i}", _make_vec(seed=i))
@@ -251,9 +247,7 @@ async def test_generated_summary_contains_source_content(mem, monkeypatch):
 @pytest.mark.asyncio
 async def test_skips_expired_candidates(mem, monkeypatch):
     """Candidates past their expiry are not processed and remain nudge_exhausted."""
-    monkeypatch.setattr(
-        compaction_summarize, "COMPACTION_ENABLED", True
-    )
+    monkeypatch.setattr(compaction_summarize, "COMPACTION_ENABLED", True)
     session = "test-session"
     ids = [
         _insert_memory(mem, session, f"mem {i}", _make_vec(seed=i)) for i in range(2)
@@ -269,9 +263,7 @@ async def test_skips_expired_candidates(mem, monkeypatch):
 @pytest.mark.asyncio
 async def test_returns_zero_when_compaction_disabled(mem, monkeypatch):
     """Returns 0 immediately when COMPACTION_ENABLED is False."""
-    monkeypatch.setattr(
-        compaction_summarize, "COMPACTION_ENABLED", False
-    )
+    monkeypatch.setattr(compaction_summarize, "COMPACTION_ENABLED", False)
     session = "test-session"
     ids = [
         _insert_memory(mem, session, f"mem {i}", _make_vec(seed=i)) for i in range(2)
@@ -286,9 +278,7 @@ async def test_returns_zero_when_compaction_disabled(mem, monkeypatch):
 @pytest.mark.asyncio
 async def test_marks_stale_when_all_source_memories_missing(mem, monkeypatch):
     """Candidates whose source memories no longer exist are marked stale."""
-    monkeypatch.setattr(
-        compaction_summarize, "COMPACTION_ENABLED", True
-    )
+    monkeypatch.setattr(compaction_summarize, "COMPACTION_ENABLED", True)
     ghost_ids = [str(uuid.uuid4()) for _ in range(3)]
     candidate_id = _insert_nudge_exhausted(mem, "test-session", ghost_ids)
 
@@ -301,9 +291,7 @@ async def test_marks_stale_when_all_source_memories_missing(mem, monkeypatch):
 @pytest.mark.asyncio
 async def test_marks_stale_when_partial_source_memories_missing(mem, monkeypatch):
     """Candidates with only some source memories present are marked stale, not partially summarized."""
-    monkeypatch.setattr(
-        compaction_summarize, "COMPACTION_ENABLED", True
-    )
+    monkeypatch.setattr(compaction_summarize, "COMPACTION_ENABLED", True)
     session = "test-session"
     real_id = _insert_memory(mem, session, "real memory", _make_vec(seed=0))
     ghost_id = str(uuid.uuid4())
@@ -316,11 +304,36 @@ async def test_marks_stale_when_partial_source_memories_missing(mem, monkeypatch
 
 
 @pytest.mark.asyncio
+async def test_marks_stale_when_source_ids_empty(mem, monkeypatch):
+    """Malformed staging rows are terminally marked stale instead of retried forever."""
+    monkeypatch.setattr(compaction_summarize, "COMPACTION_ENABLED", True)
+    candidate_id = _insert_nudge_exhausted(mem, "test-session", [])
+
+    count = await process_nudge_exhausted_candidates(mem)
+
+    assert count == 0
+    assert _get_staging_row(mem, candidate_id)[0] == "stale"
+
+
+@pytest.mark.asyncio
+async def test_source_memories_must_match_staging_session(mem, monkeypatch):
+    """Server-side summaries must not pull source rows from another session."""
+    monkeypatch.setattr(compaction_summarize, "COMPACTION_ENABLED", True)
+    source_id = _insert_memory(
+        mem, "source-session", "cross-session memory", _make_vec(seed=0)
+    )
+    candidate_id = _insert_nudge_exhausted(mem, "staging-session", [source_id])
+
+    count = await process_nudge_exhausted_candidates(mem)
+
+    assert count == 0
+    assert _get_staging_row(mem, candidate_id)[0] == "stale"
+
+
+@pytest.mark.asyncio
 async def test_processes_multiple_candidates(mem, monkeypatch):
     """All eligible nudge_exhausted candidates in one pass are promoted."""
-    monkeypatch.setattr(
-        compaction_summarize, "COMPACTION_ENABLED", True
-    )
+    monkeypatch.setattr(compaction_summarize, "COMPACTION_ENABLED", True)
     session = "test-session"
     candidate_ids = []
     for batch in range(3):
@@ -348,9 +361,7 @@ async def test_processes_multiple_candidates(mem, monkeypatch):
 @pytest.mark.asyncio
 async def test_does_not_touch_other_statuses(mem, monkeypatch):
     """Only nudge_exhausted candidates are affected — pending_summary and stale are left alone."""
-    monkeypatch.setattr(
-        compaction_summarize, "COMPACTION_ENABLED", True
-    )
+    monkeypatch.setattr(compaction_summarize, "COMPACTION_ENABLED", True)
     session = "test-session"
     ids = [
         _insert_memory(mem, session, f"mem {i}", _make_vec(seed=i)) for i in range(2)

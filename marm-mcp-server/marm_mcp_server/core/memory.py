@@ -63,6 +63,9 @@ def _strip_script_tags(text: str) -> str:
 
 def _score_embedding_rows(rows, query_embedding, limit: int):
     """Score embedding rows in one NumPy batch instead of a Python cosine loop."""
+    if limit <= 0:
+        return [], 0
+
     query_vec = np.asarray(query_embedding, dtype=np.float32)
     expected_dim = query_vec.shape[0]
     query_norm = np.linalg.norm(query_vec)
