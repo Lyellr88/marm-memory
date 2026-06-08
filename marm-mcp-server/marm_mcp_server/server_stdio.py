@@ -62,6 +62,8 @@ except Exception:
     pass
 
 _protocol_delivered = False
+_protocol_call_count = 0
+_STDIO_LITE_INTERVAL = 30
 
 
 def _log_tool_call(fn):
@@ -81,12 +83,15 @@ def _log_tool_call(fn):
         else:
             _stdio_log.info("CALL %s", name)
 
-        global _protocol_delivered
+        global _protocol_delivered, _protocol_call_count
         session_name = kwargs.get("session_name", "default")
         try:
             await ensure_marm_started(session_name)
         except Exception as e:
             _stdio_log.warning("session init failed: %s", e)
+
+        _protocol_call_count += 1
+        call_count = _protocol_call_count
 
         try:
             result = await fn(*args, **kwargs)
@@ -123,6 +128,14 @@ def _log_tool_call(fn):
                     protocol_injected = True
                 except Exception as e:
                     _stdio_log.warning("protocol injection failed: %s", e)
+            elif call_count % _STDIO_LITE_INTERVAL == 0:
+                try:
+                    lite_content = await read_protocol_lite_file()
+                    if lite_content:
+                        result["marm_protocol_lite"] = lite_content
+                        protocol_injected = True
+                except Exception as e:
+                    _stdio_log.warning("lite protocol injection failed: %s", e)
 
             if not protocol_injected:
                 try:
@@ -164,7 +177,7 @@ from marm_mcp_server.services.documentation import (  # noqa: E402
     ensure_marm_started,
     maybe_auto_refresh,
 )
-from marm_mcp_server.utils.helpers import read_protocol_file  # noqa: E402
+from marm_mcp_server.utils.helpers import read_protocol_file, read_protocol_lite_file  # noqa: E402
 from marm_mcp_server.services.summary import generate_session_summary  # noqa: E402
 from marm_mcp_server.services.recall import smart_recall  # noqa: E402
 from marm_mcp_server.config.settings import (  # noqa: E402
