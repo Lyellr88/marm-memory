@@ -53,6 +53,9 @@ jobs:
     needs: validate-and-test
     runs-on: ubuntu-latest
     environment: pypi
+    permissions:
+      id-token: write
+      contents: read
 
     steps:
       - name: Checkout code
