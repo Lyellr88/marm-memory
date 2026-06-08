@@ -380,22 +380,23 @@ async def _mcp_tool_call_tracker(request: Request, call_next):
         else:
             _compaction_session = None
 
-        # Track per-session call count for lite protocol reinjection
-        _protocol_call_counts[_protocol_session] = (
-            _protocol_call_counts.get(_protocol_session, 0) + 1
-        )
-        call_count = _protocol_call_counts[_protocol_session]
-        _prune_call_counts()
+        # Move counter and pruning under lock to prevent races
+        async with _protocol_delivery_lock:
+            _protocol_call_counts[_protocol_session] = (
+                _protocol_call_counts.get(_protocol_session, 0) + 1
+            )
+            call_count = _protocol_call_counts[_protocol_session]
+            _prune_call_counts()
 
-        # Skip body mutation if protocol already delivered, compaction off,
-        # and we're not at the lite reinjection interval.
-        if (
-            _protocol_session_delivered(_protocol_session)
-            and not settings.COMPACTION_ENABLED
-        ):
-            if call_count % _PROTOCOL_LITE_INTERVAL != 0:
-                return response
-            # Fall through to inject lite protocol below.
+            # Skip body mutation if protocol already delivered, compaction off,
+            # and we're not at the lite reinjection interval.
+            if (
+                _protocol_session_delivered(_protocol_session)
+                and not settings.COMPACTION_ENABLED
+            ):
+                if call_count % _PROTOCOL_LITE_INTERVAL != 0:
+                    return response
+                # Fall through to inject lite protocol below.
 
         try:
             content_type = response.headers.get("content-type", "") or ""

@@ -16,7 +16,7 @@ You are under the MARM operating contract. The full protocol was delivered at se
 - Deletes require explicit user intent
 
 ## Tools
-`smart_recall` | `context_log` | `log_session` | `log_entry` | `log_show`
-`notebook` | `summary` | `delete`
+`marm_smart_recall` | `marm_context_log` | `marm_log_session` | `marm_log_entry` | `marm_log_show`
+`marm_notebook` | `marm_summary` | `marm_delete`
 
 Retrieve full protocol or any doc via `marm_smart_recall`.

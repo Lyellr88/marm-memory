@@ -133,7 +133,7 @@ def _log_tool_call(fn):
                     lite_content = await read_protocol_lite_file()
                     if lite_content:
                         result["marm_protocol_lite"] = lite_content
-                        protocol_injected = True
+                        # Lite does not block compaction — protocol_injected stays False
                 except Exception as e:
                     _stdio_log.warning("lite protocol injection failed: %s", e)
 
