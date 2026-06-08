@@ -97,6 +97,7 @@ docs/future/
 .kiro/
 .codexignore
 .claudeignore
+.kiroignore
 .bridgespace
 .cursor
 .pytest_cache/
