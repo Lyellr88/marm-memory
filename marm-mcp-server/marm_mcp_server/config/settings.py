@@ -67,16 +67,22 @@ ANALYTICS_DB_PATH = get_analytics_db_path()
 DEFAULT_SEMANTIC_MODEL = "all-MiniLM-L6-v2"
 
 SERVER_HOST = os.environ.get("SERVER_HOST", "127.0.0.1")
-SERVER_PORT = int(os.environ.get("SERVER_PORT", 8001))
+_raw_port = int(os.environ.get("SERVER_PORT", 8001))
+SERVER_PORT = max(1, min(65535, _raw_port))
+if not (1 <= _raw_port <= 65535):
+    print(
+        f"WARNING: SERVER_PORT={_raw_port} out of [1, 65535], clamped to {SERVER_PORT}",
+        file=sys.stderr,
+    )
 SERVER_VERSION = "2.12.2"
 
-MARM_RATE_LIMIT_RPM = int(os.environ.get("MARM_RATE_LIMIT_RPM", "80"))
-RATE_LIMIT_WINDOW_SECONDS = int(os.environ.get("RATE_LIMIT_WINDOW_SECONDS", "60"))
-RATE_LIMIT_BLOCK_SECONDS = int(os.environ.get("RATE_LIMIT_BLOCK_SECONDS", "30"))
+MARM_RATE_LIMIT_RPM = max(1, int(os.environ.get("MARM_RATE_LIMIT_RPM", "80")))
+RATE_LIMIT_WINDOW_SECONDS = max(1, int(os.environ.get("RATE_LIMIT_WINDOW_SECONDS", "60")))
+RATE_LIMIT_BLOCK_SECONDS = max(0, int(os.environ.get("RATE_LIMIT_BLOCK_SECONDS", "30")))
 
 WRITE_QUEUE_ENABLED = os.environ.get("WRITE_QUEUE_ENABLED", "1") == "1"
-MAX_QUEUE_SIZE = int(os.environ.get("MAX_QUEUE_SIZE", "100"))
-RECALL_SCAN_LIMIT = int(os.environ.get("RECALL_SCAN_LIMIT", "10000"))
+MAX_QUEUE_SIZE = max(1, int(os.environ.get("MAX_QUEUE_SIZE", "100")))
+RECALL_SCAN_LIMIT = max(1, int(os.environ.get("RECALL_SCAN_LIMIT", "10000")))
 _raw_hsw = float(os.environ.get("HYBRID_SEARCH_TEXT_WEIGHT", "0.35"))
 _raw_tw = float(os.environ.get("TEMPORAL_WEIGHT", "0.1"))
 _raw_hld = float(os.environ.get("TEMPORAL_HALF_LIFE_DAYS", "30"))
@@ -100,33 +106,44 @@ if _raw_hld < 1.0:
     )
 
 CONSOLIDATION_ENABLED = os.environ.get("CONSOLIDATION_ENABLED", "0") == "1"
-CONSOLIDATION_THRESHOLD = float(os.environ.get("CONSOLIDATION_THRESHOLD", "0.92"))
+_raw_ct = float(os.environ.get("CONSOLIDATION_THRESHOLD", "0.92"))
+CONSOLIDATION_THRESHOLD = max(0.0, min(1.0, _raw_ct))
+if not (0.0 <= _raw_ct <= 1.0):
+    print(
+        f"WARNING: CONSOLIDATION_THRESHOLD={_raw_ct} out of [0, 1], clamped to {CONSOLIDATION_THRESHOLD}",
+        file=sys.stderr,
+    )
 
 COMPACTION_ENABLED = os.environ.get("COMPACTION_ENABLED", "0") == "1"
-COMPACTION_TRIGGER_COUNT = int(os.environ.get("COMPACTION_TRIGGER_COUNT", "5"))
-COMPACTION_SIMILARITY_THRESHOLD = float(
-    os.environ.get("COMPACTION_SIMILARITY_THRESHOLD", "0.88")
+_raw_cst = float(os.environ.get("COMPACTION_SIMILARITY_THRESHOLD", "0.88"))
+COMPACTION_SIMILARITY_THRESHOLD = max(0.0, min(1.0, _raw_cst))
+if not (0.0 <= _raw_cst <= 1.0):
+    print(
+        f"WARNING: COMPACTION_SIMILARITY_THRESHOLD={_raw_cst} out of [0, 1], clamped to {COMPACTION_SIMILARITY_THRESHOLD}",
+        file=sys.stderr,
+    )
+
+COMPACTION_TRIGGER_COUNT = max(1, int(os.environ.get("COMPACTION_TRIGGER_COUNT", "5")))
+COMPACTION_MIN_CLUSTER_SIZE = max(1, int(os.environ.get("COMPACTION_MIN_CLUSTER_SIZE", "3")))
+COMPACTION_MIN_AGE_HOURS = max(0, int(os.environ.get("COMPACTION_MIN_AGE_HOURS", "24")))
+COMPACTION_ACTIVE_SESSION_GRACE_MINUTES = max(
+    0, int(os.environ.get("COMPACTION_ACTIVE_SESSION_GRACE_MINUTES", "15"))
 )
-COMPACTION_MIN_CLUSTER_SIZE = int(os.environ.get("COMPACTION_MIN_CLUSTER_SIZE", "3"))
-COMPACTION_MIN_AGE_HOURS = int(os.environ.get("COMPACTION_MIN_AGE_HOURS", "24"))
-COMPACTION_ACTIVE_SESSION_GRACE_MINUTES = int(
-    os.environ.get("COMPACTION_ACTIVE_SESSION_GRACE_MINUTES", "15")
-)
-COMPACTION_STAGING_TTL_HOURS = int(
-    os.environ.get("COMPACTION_STAGING_TTL_HOURS", "168")
+COMPACTION_STAGING_TTL_HOURS = max(
+    1, int(os.environ.get("COMPACTION_STAGING_TTL_HOURS", "168"))
 )
 COMPACTION_AUTO_APPLY_ENABLED = (
     os.environ.get("COMPACTION_AUTO_APPLY_ENABLED", "0") == "1"
 )
-COMPACTION_AUTO_APPLY_INTERVAL_MINUTES = int(
-    os.environ.get("COMPACTION_AUTO_APPLY_INTERVAL_MINUTES", "60")
+COMPACTION_AUTO_APPLY_INTERVAL_MINUTES = max(
+    1, int(os.environ.get("COMPACTION_AUTO_APPLY_INTERVAL_MINUTES", "60"))
 )
-COMPACTION_MAX_NUDGES = int(os.environ.get("COMPACTION_MAX_NUDGES", "5"))
-COMPACTION_NUDGE_COOLDOWN_SECONDS = int(
-    os.environ.get("COMPACTION_NUDGE_COOLDOWN_SECONDS", "2")
+COMPACTION_MAX_NUDGES = max(1, int(os.environ.get("COMPACTION_MAX_NUDGES", "5")))
+COMPACTION_NUDGE_COOLDOWN_SECONDS = max(
+    0, int(os.environ.get("COMPACTION_NUDGE_COOLDOWN_SECONDS", "2"))
 )
-COMPACTION_INJECTION_BYTE_BUDGET = int(
-    os.environ.get("COMPACTION_INJECTION_BYTE_BUDGET", "2048")
+COMPACTION_INJECTION_BYTE_BUDGET = max(
+    0, int(os.environ.get("COMPACTION_INJECTION_BYTE_BUDGET", "2048"))
 )
 
 MARM_API_KEY = os.environ.get("MARM_API_KEY", "")

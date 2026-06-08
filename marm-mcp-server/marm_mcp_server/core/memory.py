@@ -4,6 +4,7 @@ import asyncio
 import importlib.util
 import json
 import math
+import os
 import sqlite3
 import sys
 import threading
@@ -25,6 +26,19 @@ def _safe_print(msg: str) -> None:
     else:
         sys.stderr.write(msg + "\n")
         sys.stderr.flush()
+
+
+_RECALL_DEBUG = os.environ.get("MARM_RECALL_DEBUG", "0") == "1"
+
+
+def _recall_debug(msg: str) -> None:
+    """Lightweight debug logging for recall-path observability.
+
+    Only emits when MARM_RECALL_DEBUG=1. Writes to stderr to keep
+    STDIO stdout JSON-RPC clean.
+    """
+    if _RECALL_DEBUG:
+        _safe_print(f"[recall-debug] {msg}")
 
 
 def _strip_script_tags(text: str) -> str:
@@ -928,6 +942,7 @@ class MARMMemory:
 
         if query_vec is None:
             if not self._load_encoder_lazily():
+                _recall_debug("semantic model unavailable → text-search fallback")
                 return _wrap(
                     await self.recall_text_search(query, session, limit), False
                 )
@@ -952,6 +967,10 @@ class MARMMemory:
                     f"recall_similar: skipped {dim_skipped} memories with wrong embedding dimension (expected {len(query_embedding)})"
                 )
 
+            _recall_debug(
+                f"vector lane returned {len(similarities)} candidates, scan_truncated={scan_truncated}"
+            )
+
             fts_query = _safe_fts_query(query)
             fts_hits: dict[str, tuple] = {}
             if fts_query:
@@ -964,8 +983,10 @@ class MARMMemory:
                         limit * 2,
                     ):
                         fts_hits[row["id"]] = (row, fts_norm)
+                    _recall_debug(f"FTS hybrid pass: {len(fts_hits)} hits for query '{fts_query}'")
                 except Exception as e:
                     _safe_print(f"FTS5 hybrid pass failed, using vector-only: {e}")
+                    _recall_debug("FTS hybrid pass failed → vector-only results")
 
             combined: dict[str, tuple] = {}
             for mem, vec_norm in similarities:
@@ -993,6 +1014,15 @@ class MARMMemory:
                 :limit
             ]
 
+            # Observability: count results by source lane
+            vec_ids = {m["id"] for m, _ in similarities}
+            both = sum(1 for m, _ in similarities if m["id"] in fts_hits)
+            _recall_debug(
+                f"final: {len(similarities)} results | "
+                f"vec+fts={both}, vec-only={len(vec_ids) - both}, "
+                f"fts-only={len(combined) - len(vec_ids) - (len(fts_hits) - both)}"
+            )
+
             results = []
             for memory, similarity in similarities:
                 results.append(
@@ -1013,12 +1043,14 @@ class MARMMemory:
 
         except Exception as e:
             _safe_print(f"Semantic search failed: {e}")
+            _recall_debug(f"semantic search exception → text-search fallback: {e}")
             return _wrap(await self.recall_text_search(query, session, limit), False)
 
     async def recall_text_search(
         self, query: str, session: str = None, limit: int = 5
     ) -> List[Dict]:
         """Text search via FTS5 BM25 ranking, with LIKE fallback for unsanitizable queries."""
+        _recall_debug(f"text-search path: query='{query[:50]}', session={session}")
         fts_query = _safe_fts_query(query)
         if fts_query is not None:
             try:
@@ -1026,6 +1058,7 @@ class MARMMemory:
                     _fetch_and_score_fts_rows, self.db_path, session, fts_query, limit
                 )
                 if fts_rows:
+                    _recall_debug(f"FTS5 returned {len(fts_rows)} results")
                     return [
                         {
                             "id": row["id"],
@@ -1042,6 +1075,9 @@ class MARMMemory:
                     ]
             except Exception as e:
                 _safe_print(f"FTS5 search failed, falling back to LIKE: {e}")
+                _recall_debug("FTS5 failed → LIKE fallback")
+
+        _recall_debug("FTS5 returned 0 or query unsanitizable → LIKE fallback")
 
         with self.get_connection() as conn:
             if session is None:
