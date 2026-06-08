@@ -29,8 +29,6 @@ Want to discuss an idea first? Join the [MARM Discord](https://discord.gg/nhyJWP
 
 </div>
 
-Contributions are welcome! Check out our [open issues](https://github.com/Lyellr88/MARM-Systems/issues) to get started. Join the conversation on [MARM Discord](https://discord.gg/nhyJWPz2cf).
-
 ## Table of Contents
 
 - [Why MARM MCP](#why-marm-mcp-the-problem--solution)
