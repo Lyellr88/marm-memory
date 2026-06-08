@@ -60,7 +60,7 @@ from .services.documentation import (
     ensure_marm_started,
     maybe_auto_refresh,
 )
-from .utils.helpers import read_protocol_file
+from .utils.helpers import read_protocol_file, read_protocol_lite_file
 from .utils.security import generate_api_key
 
 
@@ -261,6 +261,30 @@ _PROTOCOL_DELIVERY_MAX_SESSIONS = 4096
 _PROTOCOL_DELIVERY_TTL_SECONDS = 24 * 60 * 60
 _protocol_delivered_sessions: OrderedDict[str, float] = OrderedDict()
 _protocol_delivery_lock = asyncio.Lock()
+_PROTOCOL_LITE_INTERVAL = 30
+_protocol_call_counts: dict[str, int] = {}
+_PROTOCOL_CALL_COUNTS_MAX_SESSIONS = 4096
+
+
+def _prune_call_counts() -> None:
+    """Prune call counts to match delivered sessions.
+    
+    Removes entries for sessions that are no longer in
+    _protocol_delivered_sessions (aged out by TTL or max-sessions cap).
+    Also enforces hard cap when count grows too large.
+    """
+    # Prune sessions not in delivered set
+    delivered = set(_protocol_delivered_sessions.keys())
+    stale = [
+        k for k in _protocol_call_counts if k not in delivered
+    ]
+    for k in stale:
+        _protocol_call_counts.pop(k, None)
+    # Hard cap as safety net
+    if len(_protocol_call_counts) > _PROTOCOL_CALL_COUNTS_MAX_SESSIONS:
+        excess = list(_protocol_call_counts.keys())[:-_PROTOCOL_CALL_COUNTS_MAX_SESSIONS]
+        for k in excess:
+            _protocol_call_counts.pop(k, None)
 
 
 def _protocol_session_delivered(session_name: str, now: float | None = None) -> bool:
@@ -356,11 +380,23 @@ async def _mcp_tool_call_tracker(request: Request, call_next):
         else:
             _compaction_session = None
 
-        if (
-            _protocol_session_delivered(_protocol_session)
-            and not settings.COMPACTION_ENABLED
-        ):
-            return response
+        # Move counter and pruning under lock to prevent races
+        async with _protocol_delivery_lock:
+            _protocol_call_counts[_protocol_session] = (
+                _protocol_call_counts.get(_protocol_session, 0) + 1
+            )
+            call_count = _protocol_call_counts[_protocol_session]
+            _prune_call_counts()
+
+            # Skip body mutation if protocol already delivered, compaction off,
+            # and we're not at the lite reinjection interval.
+            if (
+                _protocol_session_delivered(_protocol_session)
+                and not settings.COMPACTION_ENABLED
+            ):
+                if call_count % _PROTOCOL_LITE_INTERVAL != 0:
+                    return response
+                # Fall through to inject lite protocol below.
 
         try:
             content_type = response.headers.get("content-type", "") or ""
@@ -404,6 +440,17 @@ async def _mcp_tool_call_tracker(request: Request, call_next):
                     )
                     _mark_protocol_session_delivered(_protocol_session)
                     protocol_injected = True
+                elif call_count % _PROTOCOL_LITE_INTERVAL == 0:
+                    lite_content = await read_protocol_lite_file()
+                    if lite_content:
+                        injections.append(
+                            {
+                                "type": "text",
+                                "text": f"[MARM PROTOCOL REFRESH]\n\n{lite_content}",
+                            }
+                        )
+                        # Lite does not set protocol_injected=True — allows
+                        # compaction to coexist on the same call.
 
             if not protocol_injected:
                 compaction_block = await asyncio.to_thread(
