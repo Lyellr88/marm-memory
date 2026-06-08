@@ -255,3 +255,47 @@ def test_stdio_lite_injected_on_interval(monkeypatch, tmp_path):
     r30 = asyncio.run(wrapped(session_name="main"))
     assert "marm_protocol_lite" in r30
     assert "MARM Protocol — Quick Reference" in r30["marm_protocol_lite"]
+
+
+def test_stdio_lite_and_compaction_coexist(monkeypatch, tmp_path):
+    """STDIO: on call 30, lite AND compaction both appear in result."""
+    import marm_mcp_server.server_stdio as stdio
+    import marm_mcp_server.services.notebook as notebook_service
+    from marm_mcp_server.core.memory import MARMMemory
+
+    mem = MARMMemory(str(tmp_path / "stdio-coexist.db"))
+    mem._encoder_failed = True
+    monkeypatch.setattr(stdio, "memory", mem)
+    monkeypatch.setattr(notebook_service, "memory", mem)
+
+    stdio._protocol_delivered = False
+    stdio._protocol_call_count = 0
+
+    async def dummy_tool(*args, **kwargs):
+        return {"status": "success"}
+
+    async def noop(*args, **kwargs):
+        return None
+    monkeypatch.setattr(stdio, "ensure_marm_started", noop)
+    monkeypatch.setattr(stdio, "maybe_auto_refresh", noop)
+
+    # Return a known compaction string instead of None
+    monkeypatch.setattr(
+        stdio, "claim_pending_compaction_prompt",
+        lambda *a, **kw: {"type": "text", "text": "COMPACTION_NUDGE_CONTENT"},
+    )
+
+    wrapped = stdio._log_tool_call(dummy_tool)
+
+    # 29 warm calls (lite should NOT fire, compaction on non-lite calls fires)
+    for _ in range(29):
+        r = asyncio.run(wrapped(session_name="main"))
+        # Compaction may fire on calls 2-29; lite must not
+        assert "marm_protocol_lite" not in r
+
+    # Call 30: both lite and compaction
+    r30 = asyncio.run(wrapped(session_name="main"))
+    assert "marm_protocol_lite" in r30
+    assert "COMPACTION_NUDGE_CONTENT" in str(r30), (
+        "compaction blocked by lite — result keys: %s" % list(r30.keys())
+    )
