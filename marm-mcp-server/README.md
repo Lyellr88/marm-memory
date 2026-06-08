@@ -5,7 +5,7 @@
      width="700"
      height="400">
 </picture>
-<h1 align="center">MARM: The AI That Remembers Your Conversations v2.12.1</h1>
+<h1 align="center">MARM: The AI That Remembers Your Conversations v2.12.2</h1>
 
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
@@ -322,3 +322,5 @@ This project is licensed under the MIT License. Forks and derivative works are p
 - **[ACKNOWLEDGMENTS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/ACKNOWLEDGMENTS.md)** - Contributors and acknowledgments
 - **[ROADMAP.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/ROADMAP.md)** - Planned features and development roadmap
 - **[LICENSE](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/LICENSE)** - MIT license terms
+
+mcp-name: io.github.Lyellr88/marm-mcp-server
