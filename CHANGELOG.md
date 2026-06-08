@@ -5,428 +5,222 @@
 ### Version 2 - MARM Protocol to Universal MCP Server Evolution
 
 <details>
-<summary>August 6-18, 2025: MARM Protocol Evolution to MCP Server (v2.0.0 MCP Launch) </summary>
+<summary><strong>June 1st, 2026: Consolidation Worker, Compaction Pipeline & Swarm Smoke Harness (v2.9.0)</strong></summary>
 
-## **August 6-18, 2025: MARM v2.0.0 Production Launch**
+#### Memory Consolidation
 
-**Core achievements: 95% cost reduction (Gemini → Llama 4), professional test suite (74 tests), protocol v2.0 evolution, security hardening, and complete UI modernization.**
+- Added session-scoped exact duplicate prevention using normalized SHA-256 `content_hash` values before embedding work runs.
+- Added write-time semantic consolidation for near-duplicate memories when `CONSOLIDATION_ENABLED=1`.
+- Existing matching memories are updated instead of creating new rows, preserving session boundaries and recording merge history in metadata.
+- Memory updates now recompute `content_hash` and refresh embeddings when the encoder is available.
+- Added hash-collision safety so matching hashes still require normalized content equality before deduping.
 
-#### **Professional Testing Infrastructure Implementation**
+#### Compaction Worker
 
-- **Comprehensive Test Suite**: Added 74 passing tests across 4 modules - Voice (13), UI (16), State/Session (15), Commands (15), Security/Logic (15)
-- **GitHub Actions Integration**: Automated testing on push/PR with Node.js 18.x & 20.x, test status badge added to README
-- **ES Module Testing**: Full Jest configuration supporting modern JavaScript imports, browser API mocking (speechSynthesis, localStorage, DOM)
-- **Quality Assurance**: 42.39% test coverage with detailed reports, error handling validation, edge case testing for all core functionality
+- Added background compaction candidate detection for stale/fragmented memory clusters.
+- Added `compaction_role`, `compacted_into`, and `compaction_staging` schema support with idempotent migrations.
+- Added a staged, agent-driven compaction workflow behind one public `marm_compaction` tool; raw compaction helpers remain internal/hidden from MCP discovery.
+- Added bounded compaction nudges so MARM can ask the connected agent to summarize pending candidates without adding more public tools.
+- Added candidate expiry, source snapshot validation, cross-session isolation, already-compacted source checks, and stale candidate marking.
+- Apply now inserts a summary memory row, marks source rows as compacted, and remains idempotent under duplicate apply calls.
+- Existing stored embeddings can now be compacted even when the local encoder is unavailable.
 
-#### **Complete AI Provider Migration: Gemini → Llama 4 Maverick**
+#### Write Queue & Scheduler Integration
 
-- **Backend Transformation**: Complete migration from Google Gemini API to Replicate Llama 4 Maverick (400B total parameters, 17B active × 128 experts)
-- **Cost Optimization**: Achieved 95% operational cost reduction (.65 per million tokens output vs Claude Sonnet pricing)
-- **Performance Upgrade**: Access to 10M token context limit with significantly improved response times
-- **API Architecture**: Converted from Gemini's complex message format to Replicate's streamlined prompt-based system
-- **Technical Implementation**: Complete rewrite of `server.js` streaming endpoint, new `replicateHelper.js` replacing `geminiHelper.js`
+- Extended the write queue with `put_callable()` so non-memory-write mutations, including compaction apply, can run through the same serialized queue.
+- Routed compaction apply through the write queue when enabled, preserving ordering with normal memory writes.
+- Added optional compaction auto-apply scheduler support behind `COMPACTION_AUTO_APPLY_ENABLED`.
+- Runtime presets now tune compaction trigger counts for normal versus swarm/trusted/custom deployment modes.
 
-#### **MARM Protocol Evolution: v1.5 → v2.0**
+#### Swarm & Compaction Smoke Testing
 
-- **Identity Transformation**: Updated from generic assistant mode to "MARM IS memory incarnate" - core identity evolution
-- **Response Optimization**: Replaced verbose "Response Contract" with concise "💭 Thinking Trail" format for user-friendly output
-- **Command Modernization**:
-  - `/contextual reply` → `/deep dive` (clearer functionality naming)
-  - `/compile [SessionName] --summary` → `/summary: [session name] --summary` (better syntax)
-  - Enhanced notebook commands: `/notebook use:`, `/notebook clear:`, `/notebook status:` (active management)
-- **Memory System Overhaul**: Added conversation import system for mid-session MARM activation with complete context preservation
+- Added `compaction-worker-smoke.py` for isolated HTTP load, staged compaction, apply idempotency, stale guard, cross-session isolation, and optional scheduler testing.
+- Added `swarm-smoke.py` for lightweight local swarm simulation using either mocked model output or Ollama.
+- Added shared-session swarm mode to verify natural compaction triggering from real writes.
+- Added seeded embedding fallback for deterministic compaction smoke testing on machines without reliable local embedding generation.
+- Reworked smoke-test documentation into script-based and base/medium/heavy/special command groups.
 
-#### **Complete UI/UX Modernization**
+#### Documentation & Tool Surface
 
-- **Visual Transformation**: Complete overhaul from "2010 vibes" to modern design standards with indigo (#6366f1) and amber (#f59e0b) color palette
-- **Glassmorphism Effects**: Enhanced shadows and glass effects throughout interface for premium feel
-- **Chat Message Cards**: Implemented card-style messages with glass effects, proper shadows, and user/bot visual distinction
-- **Command Menu Redesign**: Complete transformation from sidebar to contextual popup button (⚡) positioned next to input field
-- **Complete HTML/JavaScript Separation**: Moved all HTML templates from JavaScript files to HTML templates, clean separation of concerns
+- Updated README, MCP handbook, FAQ, and packaged `marm-docs` mirrors for the 9-tool surface, write queue defaults, swarm presets, consolidation, and agent-assisted compaction.
+- Consolidated duplicated handbook FAQ content into `docs/FAQ.md` and changed the handbook FAQ section to reference the canonical FAQ.
+- Updated contributor guidance for write queue, consolidation, compaction staging, smoke scripts, and parameterized MCP tool design.
 
-#### **Security & Architecture Hardening**
+#### v2.9.0 Tests
 
-- **XSS Protection System**: Comprehensive security module (`xssProtection.js`) with multiple sanitization levels
-  - `sanitizeText()`: HTML entity escaping for plain text
-  - `sanitizeHTML()`: Advanced sanitization with script/iframe blocking
-  - `sanitizeHTMLStrict()`: Ultra-strict sanitization for user input
-- **Storage Architecture**: Created centralized `storage.js` for localStorage operations with multi-tab synchronization
-- **State Management Enhancement**: Private state object only accessible through `getState()`, immutable patterns with defensive copies
+- Added focused regression coverage for exact deduplication, write-time semantic consolidation, compaction candidate detection, staging, apply/idempotency, stale safeguards, write-queue callable execution, and auto-apply behavior.
+- Local validation covered direct queue bursts, HTTP RPM boundaries, trusted no-RPM pressure, compaction stage/apply, stale and cross-session negative paths, auto-apply scheduling, mocked swarm writes, and real Ollama swarm writes.
 
-#### **New Features & Capabilities**
+#### Hardening & Suite Stability
 
-- **File Upload System**: File upload button (📎) with text/code file support for 15+ file types, smart detection, automatic language detection and syntax highlighting
-- **MARM Protocol Toggle**: Toggle button (🧠) in FAB menu for instant protocol switching between structured MARM and free mode with visual feedback
-
-#### **Critical Bug Fixes & System Stability**
-
-- **MARM Memory Issues**: Fixed critical memory loss bug where MARM would lose all conversation context when activated mid-conversation
-- **Session Persistence**: Fixed MARM forgetting conversation when toggled off and back on, now preserves existing session IDs
-- **Performance Optimization**: Eliminated 60+ lines of duplicate code, replaced expensive JSON.stringify operations, request timeout optimization (15s → 45s)
-- **Voice System**: Fixed TTS "interrupted" errors in speech synthesis by adding proper cancellation logic
-- **Browser Compatibility**: Added cache-busting headers to server.js and version strings to prevent stale file serving
-
-#### **Impact Summary**
-
-- **95% cost reduction** through AI provider optimization
-- **Zero XSS vulnerabilities** with comprehensive protection
-- **Production-ready architecture** with modern web standards
-- **50+ files modified**, 1000+ lines changed
-- **3 major new features**, 15+ critical issues resolved
+- Strengthened suite-level isolation around reloaded server modules, patched memory singletons, compaction globals, and async write queue cleanup so tests pass both individually and as a grouped run.
+- Tightened diagnostic and consolidation edge cases found during review, including request-body logging for HTTP compaction injection and stale embedding cleanup after write-time merges.
 
 </details>
 
 <details>
-<summary>August 20th – September 12th, 2025: Universal MCP Server Development (v2.2.4 Launch)</summary>
+<summary><strong>June 4th, 2026: Opus Review Hot-Path & Compaction Hardening (v2.9.1)</strong></summary>
 
-#### Added
+#### Hot-Path Performance Hardening
 
-**Universal MCP Server Architecture:**
+- Offloaded sentence-transformer encoding from async request paths with `asyncio.to_thread()` so CPU-heavy embedding work no longer blocks the event loop directly.
+- Added a serialized encoder helper around the shared encoder to avoid unsafe concurrent encoder use while still moving the blocking work off the main loop.
+- Reused the precomputed write embedding for write-time semantic consolidation, removing the previous double-encode path when Layer 2 consolidation checked for near-duplicates and then stored the same content.
+- Extended `recall_similar()` and `find_semantic_duplicate()` with an optional `query_vec` path so callers that already computed an embedding can avoid repeating that work.
+- Moved notebook embedding generation onto the same offloaded encoder path.
 
-- **Production-ready FastAPI server** with Model Context Protocol implementation
-- **19 complete MCP tools** for AI memory intelligence across all platforms
-- **Docker containerization** with multi-stage builds and health monitoring
-- **Semantic search engine** using sentence-transformers (all-MiniLM-L6-v2) with vector embeddings
-- **Cross-platform memory database** - SQLite with WAL mode optimization and connection pooling
-- **Multi-agent development workflow** - Claude (architecture), Gemini (validation), Qwen (research), ChatGPT (testing)
+#### Compaction Tool Reliability
 
-**MCP Tools Suite:**
+- Made `source_memory_ids` optional when staging compaction summaries; the server now uses the staged candidate's source IDs when omitted and only validates them when provided.
+- Removed `source_memory_ids` from the injected compaction nudge example to reduce UUID transcription errors by connected agents.
+- Rewrote the `marm_compaction` HTTP and STDIO tool descriptions as an agent-facing workflow: `status/candidates -> stage -> review -> apply/discard`.
+- Offloaded compaction summary embedding generation during apply so compaction writes follow the same non-blocking encoder pattern.
 
-- **Memory Intelligence**: `marm_smart_recall` (global semantic search), `marm_context_log` (intelligent storage)
-- **Session Management**: `marm_start`, `marm_refresh` with enhanced protocol adherence
-- **Logging System**: `marm_log_session`, `marm_log_entry`, `marm_log_show`, `marm_log_delete`
-- **Notebook Management**: Complete CRUD operations with `marm_notebook_add`, `marm_notebook_use`, etc.
-- **Workflow Tools**: `marm_summary`, `marm_context_bridge` for seamless transitions
-- **System Utilities**: `marm_current_context`, `marm_system_info`, `marm_reload_docs`
+#### HTTP Injection & Middleware Hardening
 
-**Production Features:**
+- Added an HTTP MCP middleware fast path that skips response buffering/parsing after the one-time protocol has been delivered when compaction injection is disabled.
+- Added a defensive non-JSON response guard so the middleware avoids parsing responses it cannot mutate.
+- Aligned HTTP compaction injection with STDIO behavior so protocol delivery and compaction nudges do not co-inject on the same first tool call.
+- Kept eligible JSON tool responses mutable when protocol or compaction injection can still happen.
 
-- **Production-ready architecture** - FastAPI backend with rate limiting, IP-based protection, graceful degradation
-- **Professional test suite** - 5 comprehensive diagnostic tests (security, performance, integration, memory usage, MCP compliance)
-- **Health monitoring** - Comprehensive system status and performance tracking
-- **Database optimization** - SQLite with connection pooling, WAL mode, efficient storage
-- **Security hardening** - Input validation, error isolation, production-ready deployment
-- **Analytics system** - Privacy-conscious usage tracking for platform optimization
+#### Embedding Compatibility Guard
 
-**Multi-Platform Integration:**
+- Added a runtime dimension check before cosine scoring stored embeddings.
+- Wrong-dimension vectors are now skipped with a diagnostic signal instead of silently disappearing through a broad exception path or crashing recall after an embedding-model dimension change.
+- Added regression coverage proving correct-dimension memories still recall while wrong-dimension rows are ignored safely.
 
-- **Claude Code** integration with CLI commands (`claude mcp add marm-memory`)
-- **Qwen CLI** and **Gemini CLI** full MCP tool access
-- **Universal MCP compatibility** for any Model Context Protocol client
-- **Cross-AI memory sharing** - All connected agents contribute to unified knowledge base
+#### Test Stability & Coverage
 
-#### Changed
-
-- **Architecture evolution** from chatbot-focused to Universal MCP Server platform
-- **Protocol enhancement** - Original MARM commands now available as MCP tools
-- **Documentation restructure** - MCP server as primary product, chatbot as secondary demo
-- **Development approach** - Multi-agent collaboration showcasing AI-assisted development
-- **Memory model** - From session-based to persistent, searchable, semantic database
-
-#### Technical Achievements
-
-- **Docker Hub deployment** - `lyellr88/marm-mcp-server:latest` for production use
-- **Semantic search implementation** - AI embeddings for intelligent memory retrieval
-- **Universal MCP Server implementation** - Platform-agnostic memory intelligence
-- **Multi-AI workflows** - Demonstrated collaborative development between AI agents
-- **Production deployment** - Production-ready with monitoring, health checks, and scaling
-
-</details>
-
----
-
-<details>
-<summary>September 15th – September 18th, 2025: Production Stabilization & Registry Preparation (v2.2.5)</summary>
-
-## **September 15th – September 18th, 2025: Production Stabilization & Registry Preparation**
-
-**Core achievements: Multi-platform publishing setup, CI/CD workflow validation, documentation system overhaul, and repository cleanup - all focused on preparing MARM for official listing in the GitHub MCP Registry and enabling seamless pip install deployment.**
-
-#### **Multi-Platform Publishing & CI/CD**
-
-- **PyPI Integration:**
-  - Configured PyPI trusted publishing with proper project name alignment to `[project].name` in `pyproject.toml`
-  - Resolved repository, workflow, and naming inconsistencies to ensure smooth, automated PyPI package releases
-  - Enabled `pip install marm-mcp-server` for easy Python package installation
-
-- **Docker Hub Support:**
-  - Standardized source and build directories for clean Docker image creation
-  - Refactored documentation and codebase to support fast, reliable Docker builds and pushes
-  - Updated workflow scripts to match new folder structures after refactor
-  - Enabled `docker pull lyellr88/marm-mcp-server:latest` for containerized deployment
-
-- **MCP Registry Listing:**
-  - Prepared the MCP server for listing and integration with the official MARM MCP service/agent registry
-  - Ensured compliance with Model Context Protocol standards for automatic agent discovery
-  - Enabled seamless integration with Claude Desktop and other MCP-compatible AI clients
-
-#### **CI/CD Workflows**
-
-- **GitHub Actions:**
-  - Enhanced, debugged, and validated workflows for PyPI, Docker, and registry deployment
-  - Ensured all actions/scripts reference the updated project and documentation structure, removing legacy/obsolete paths
-  - Implemented robust error handling and rollback mechanisms for production deployments
-
-#### **Documentation System Overhaul**
-
-- **Auto-Loading/Modularized Docs:**
-  - Migrated from hardcoded manual documentation lists to an automated loader for all `.md` files
-  - Developed a context-type classifier and logging function for each loaded doc
-  - Implemented essential-only doc loading (now only `PROTOCOL.md` and `README.md` loaded by default, with others available via recall), drastically reducing token/context bloat
-
-- **Handbook and Docs Refactor:**
-  - Split large handbooks into six logically-focused, easily-maintainable files (3 for MCP, 3 for the main system), improving structure and modularity
-  - Maintained clear and robust logging for missing or misclassified essential docs
-
-#### **Refactoring & Repo Cleanup**
-
-- **Legacy Removal:**
-  - Eliminated outdated or redundant folders (`MARMcp-beta`), consolidating all code and documentation under a single, standardized directory structure
-  - Validated and updated all file paths, scripts, and configuration files to ensure project integrity post-refactor
-
-- **Multi-AI Validation:**
-  - Coordinated use of Claude, Qwen, Gemini, and Comet for change verification, diff checking, and QA
-  - Used a centralized CP Dump method for capturing and tracking change logs, error traces, and validation outputs during the transition
-
-#### **Impact Summary**
-
-- **Production readiness** - Stabilized Universal MCP Server for public release
-- **Registry compliance** - Prepared for official GitHub MCP Registry listing
-- **Multi-platform deployment** - Enabled pip install, Docker pull, and MCP registry integration
-- **Documentation excellence** - Modular, auto-loading system with reduced token overhead
-- **Codebase cleanliness** - Eliminated legacy artifacts and standardized structure
+- Replaced brittle multi-step STDIO subprocess behavior tests with in-process STDIO tool tests using isolated temp databases.
+- Added in-process FastMCP client coverage for notebook, delete, log-session, and log-entry result wrapping so JSON-RPC-style tool result envelopes remain covered without relying on stdin EOF timing.
+- Kept real subprocess STDIO smoke coverage for import cleanliness, initialize/tools-list, logging, privacy, and write-queue transport behavior.
+- Added pytest markers for Docker and slow STDIO transport tests so local fast runs can skip heavy transport smoke tests while full runs still cover them.
+- Added regression coverage for optional compaction `source_memory_ids`, semantic consolidation query-vector plumbing, and embedding dimension mismatch handling.
 
 </details>
 
 <details>
-<summary>September 19th-23rd, 2025: WebSocket Production Launch & Alpha Tester Resolution (v2.2.6 Launch)</summary>
+<summary><strong>June 6th, 2026: Comment Cleanup, Ruff Lint Pass & Doc Updates (v2.9.2)</strong></summary>
 
-**Core achievements: Complete GitHub alpha tester feedback resolution (4/4 issues), full WebSocket production implementation with HTTP parity, OAuth authentication restoration, graceful shutdown infrastructure, and modernized dependency management - achieving zero outstanding issues and production-ready WebSocket MCP protocol.**
+#### Comment Cleanup
 
-#### **🎉 Complete GitHub Alpha Tester Issue Resolution (4/4)**
+- Removed roughly 500 lines of low-value inline comments across the `marm_mcp_server` package, keeping only comments that explain non-obvious constraints or workarounds.
+- Removed a large Dockerfile comment block (lines 60-163) that duplicated content already covered in install docs.
+- Removed shebang lines (`#!/usr/bin/env python3`) from `.py` files where they have no effect on Windows.
 
-- **Issue #1 - WebSocket URL Implementation**:
-  - Implemented complete WebSocket MCP protocol at `ws://localhost:8001/mcp/ws`
-  - Achieved full HTTP/WebSocket parity with all 19 MCP methods
-  - Added JSON-RPC 2.0 compliance with proper error handling
-  - Integrated thread-safe connection management with rate limiting
+#### Ruff Lint Fixes
 
-- **Issue #2 - Parameter Consistency**:
-  - Standardized parameter naming across all endpoints
-  - Updated `marm_notebook_use` from `names` to `name` for consistency
-  - Modified core models and endpoint handlers for unified API
+- Resolved all E402 import ordering violations. Two deliberate deferrals in `server_stdio.py` (print redirect before imports, env var before settings import) are marked `# noqa: E402`.
+- Replaced bare `try/except` availability probes in `settings.py` with `importlib.util.find_spec()`, eliminating F401 unused import warnings.
+- Removed unused variable assignments flagged by F841 in `response_limiter.py`, `tests/`, and `scripts/`.
+- Changed bare `except:` to `except Exception:` in `endpoints/memory.py` (E722).
+- Added `@pytest.mark.skipif(sys.version_info < (3, 11), ...)` guard and `# noqa: F821` on `ExceptionGroup` usages in the STDIO transport test since `ExceptionGroup` is Python 3.11+ and the project targets 3.10.
 
-- **Issue #3 - Docker Persistence**:
-  - Updated all documentation with volume mount requirements
-  - Standardized Docker commands with `-v marm_data:/app/data`
-  - Ensured data persistence across container restarts
+#### Documentation
 
-- **Issue #4 - Health/Readiness Monitoring**:
-  - Enhanced `/health` endpoint with database connectivity testing
-  - Added `/ready` endpoint with full functionality validation
-  - Implemented Docker health checks with curl testing
-  - Added comprehensive startup guidance and troubleshooting
-
-#### **🚀 WebSocket Production Implementation**
-
-- **Complete MCP Protocol Support**:
-  - All 19 MCP methods available via WebSocket protocol
-  - Full HTTP/WebSocket feature parity achieved
-  - Professional JSON-RPC 2.0 implementation with error handling
-
-- **Production Architecture**:
-  - Thread-safe WebSocket connection manager (`core/websocket_manager.py`)
-  - Modular endpoint architecture (`endpoints/websocket.py`)
-  - Clean import/export handler system for maintainability
-  - Integration with existing security and rate limiting middleware
-
-- **Connection Management**:
-  - Connection pooling with configurable limits
-  - Graceful connection cleanup and client session tracking
-  - Broadcast and personal messaging capabilities
-  - Proper WebSocket lifecycle management
-
-#### **🔧 Infrastructure & Authentication Improvements**
-
-- **OAuth 2.0 Authentication Restoration**:
-  - Restored complete OAuth implementation that mysteriously disappeared
-  - Full authorization code flow with client credentials validation
-  - Added `endpoints/oauth.py` with authorize, token, userinfo, revoke, debug endpoints
-  - Excluded OAuth from MCP tool discovery with `include_in_schema=False`
-
-- **Graceful Server Shutdown**:
-  - Implemented signal handlers for SIGTERM/SIGINT (Unix systems)
-  - Added WebSocket connection closure during shutdown
-  - Created `core/shutdown_manager.py` for clean server termination
-  - Fixed issue where MCP clients prevented server shutdown
-
-- **Smart Dependency Management**:
-  - Modernized `requirements.txt` from exact pins (==) to smart version ranges
-  - Implemented `>=X.Y.Z,<X+1.0.0` pattern for automatic security updates
-  - Updated to match actually installed working versions
-  - Enabled automatic security patches without breaking changes
-
-#### **🏗️ Architecture & Documentation Enhancements**
-
-- **Date Handling Architecture Fix**:
-  - Fixed `marm_log_entry` incorrectly auto-adding date prefixes to user content
-  - Connected `marm_log_session` to `marm_current_context` background tool
-  - Sessions now get automatic dates while entries preserve exact user input
-  - Proper separation of automated vs. user-controlled content
-
-- **Package Structure Synchronization**:
-  - Synchronized root-level development code with `marm_mcp_server/` package folder
-  - Ensured PyPI package structure matches working development environment
-  - Updated all new files: oauth.py, shutdown_manager.py, websocket_manager.py
-  - Maintained proper Python package naming conventions
-
-- **Comprehensive Documentation Updates**:
-  - Updated all installation guides with WebSocket connection examples
-  - Added natural language interface emphasis in MCP-HANDBOOK.md
-  - Clarified background tool automation (marm_current_context)
-  - Enhanced troubleshooting sections for connection issues
-
-#### **🐛 Technical Debt Resolution**
-
-- **WebSocket Implementation Quality**:
-  - Eliminated "sloppy" mixed approaches in favor of consistent patterns
-  - Replaced inline handler architecture with clean import/export system
-  - Fixed rate limiting middleware bug preventing WebSocket connections
-  - Removed all stub implementations and placeholder code
-
-- **Background File Analysis**:
-  - Analyzed and confirmed safe removal of websocket_backup.py (374-line old architecture)
-  - Validated setup.py.backup as outdated installer script
-  - Confirmed cp dump.md contained only OAuth implementation (no other missing features)
-  - Completed comprehensive backup file cleanup
-
-- **Version Management**:
-  - Coordinated v2.2.5 updates across all deployment files
-  - Maintained surgical precision in version synchronization
-  - Updated package metadata and documentation references
-
-#### **📊 Testing & Validation Framework**
-
-- **Comprehensive Test Suite**:
-  - Created bulletproof validation testing for all 19 MCP methods
-  - Implemented sabotage-resistant error detection
-  - Built systematic GitHub issue validation framework
-  - Achieved 100% success rate on all production readiness criteria
-
-- **WebSocket Protocol Validation**:
-  - Tested JSON-RPC 2.0 compliance with malformed request handling
-  - Validated connection management under load
-  - Verified security integration and rate limiting functionality
-  - Confirmed backward compatibility maintenance
-
-#### **Impact Summary**
-
-- **Zero Outstanding Issues**: All 4 GitHub alpha tester issues completely resolved
-- **Production WebSocket Ready**: Full HTTP/WebSocket parity with professional implementation
-- **Enhanced Security**: OAuth restoration, graceful shutdown, and rate limiting integration
-- **Modernized Infrastructure**: Smart dependency management and automated security updates
-- **Beta Production Status**: WebSocket implementation ready for real-world testing and deployment
-- **Developer Experience**: Comprehensive documentation with natural language interface guidance
-
-#### **Technical Achievements**
-
-- **Complete CI/CD Compatibility**: Maintained deployment readiness across PyPI, Docker Hub, and MCP Registry
-- **Professional Architecture**: Modular design with proper separation of concerns and security integration
-- **Performance Optimization**: Lazy loading, connection pooling, and intelligent caching maintained
-- **Cross-Platform Support**: Windows signal handling compatibility with Unix systems
-- **Memory Management**: Efficient SQLite operations with WAL mode and connection pooling
-
-**Next Phase**: Public launch announcement → Developer community building → Pro version development
+- Added Docker STDIO JSON client config as a collapsible section to `INSTALL-DOCKER.md`, covering macOS/Linux and Windows path variants with a note on tilde expansion.
+- Added Discord link and contributions callout near the top of `README.md`.
+- Added contact section (Discord and email) to `CONTRIBUTING.md`.
 
 </details>
 
 <details>
-<summary>September 25th, 2025: Security Hardening - 4 Critical Vulnerabilities Fixed (v2.2.7)</summary>
+<summary><strong>June 6th, 2026: Recall Visibility, Protocol Scope & Service Refactor (v2.10.0)</strong></summary>
 
-#### Security Fixes
+#### Recall & Search Reliability
 
-- **XSS Protection Enhancement**: Fixed malformed script tag bypass vulnerability
-  - Updated regex pattern to handle spaces in closing tags: `</script >`, `< /script>`
-  - Improved sanitization now blocks all script tag variations
-  - Files: `core/memory.py` (both copies)
+- Added `RECALL_SCAN_LIMIT` so semantic recall's bounded DB scan is configurable instead of hardcoded to 1,000 rows.
+- `recall_similar()` now scans `limit + 1` rows internally to detect when recall was bounded and returns scan metadata only for callers that request it.
+- HTTP and STDIO `marm_smart_recall` responses now surface `recall_scan_truncated` and `recall_scan_limit` on both success and no-result paths, making bounded recall visible to agents.
+- Standardized model-facing MCP tool failures to return structured `{"status":"error"}` payloads instead of opaque HTTP 500 exceptions across recall, context logging, session logs, notebook, delete, and summary flows.
 
-- **ReDoS Attack Mitigation**: Prevented regex backtracking DoS attacks
-  - Added 10KB input length limit to prevent exponential regex processing
-  - Large attack payloads now processed safely in <0.03s
-  - Vulnerability: `py/polynomial-redos` in script tag regex patterns
+#### Protocol & Agent Session Handling
 
-- **Open Redirect Prevention**: Blocked phishing attempts via OAuth redirects
-  - Added URL validation to restrict `redirect_uri` to localhost/relative paths only
-  - Prevents external domain redirects that enable phishing attacks
-  - Vulnerability: `CWE-601` in `marm_mcp_server/endpoints/oauth.py:98`
-  - File: `marm_mcp_server/endpoints/oauth.py`
+- Changed HTTP protocol injection from one server-global delivery flag to per-session tracking so multiple agents/sessions can each receive the MARM protocol once.
+- Preserved the first-call protocol ordering behavior while keeping compaction nudges from co-injecting with protocol initialization.
+- Added regression coverage for independent protocol delivery across separate sessions.
 
-- **Stack Trace Exposure Protection**: Hidden internal error details from external users
-  - Replaced `str(e)` exposures with generic error messages for health checks
-  - Fixed 19+ WebSocket error handlers exposing internal implementation details
-  - Added server-side logging while keeping client responses secure
-  - Prevents disclosure of file paths, database strings, internal architecture
-  - Vulnerability: `py/stack-trace-exposure` in health endpoints and WebSocket handlers
-  - Files: `endpoints/system.py`, `endpoints/websocket_handlers_complete.py`
+#### Consolidation Safety
 
-#### Changed
+- Capped write-time merge growth at 10,000 characters so hot near-duplicate memories cannot grow into unbounded blobs.
+- Preserved the newest merged content while trimming older content when a merge would exceed the cap.
+- Added regression coverage for the merge-size cap and recall scan truncation metadata.
 
-- All error responses now return generic messages to external users
-- Server-side logging enhanced for debugging while maintaining security
-- OAuth flow restricted to development-safe redirect URIs
+#### Service Refactor
 
-#### Technical Notes
+- Extracted STDIO smart recall logic into `services/recall.py` so HTTP and STDIO recall behavior can stay aligned.
+- Extracted STDIO session summary formatting into `services/summary.py` while keeping the public `marm_summary` tool as a thin wrapper.
+- Moved atomic compaction apply DB logic into `services/compaction_apply.py`, reducing endpoint size while preserving the existing write-queue apply path.
 
-- All fixes follow "SIMPLE IS BETTER THAN COMPLICATED" principle
-- Surgical changes maintain functionality while eliminating security risks
-- Total files modified: 5 across 4 vulnerability categories
-- All GitHub CodeQL security alerts resolved
+</details>
+
+<details>
+<summary><strong>June 7th, 2026: Deterministic Compaction Fallback & Vectorized Recall (v2.11.0)</strong></summary>
+
+#### Compaction Reliability
+
+- Added server-side extractive compaction summarization for `nudge_exhausted` candidates so compaction no longer depends only on a connected agent obeying prompt nudges.
+- New centroid-based summarizer ranks source memories by embedding centrality, skips near-duplicate selections, and falls back to source text when embeddings are unavailable.
+- The compaction maintenance scheduler now starts whenever `COMPACTION_ENABLED=1`; auto-apply remains optional on top via `COMPACTION_AUTO_APPLY_ENABLED=1`.
+- Nudge-exhausted candidates with missing or partially missing source memories are marked `stale` instead of remaining stuck forever.
+- Removed the last in-lock compaction summary embedding encode path; rare sanitize/hash drift now stores the summary without an embedding instead of doing CPU work inside `BEGIN IMMEDIATE`.
+
+#### Recall Hot-Path Completion
+
+- Replaced per-row Python cosine scoring in `recall_similar()` with batched NumPy matrix scoring.
+- Moved both SQLite embedding BLOB fetches and vector scoring into a worker thread so large semantic recall scans no longer block the event loop.
+- Raised default `RECALL_SCAN_LIMIT` from `1000` to `10000`, removing the practical old 1000-memory semantic recall cliff for normal local use.
+- Kept bounded-recall metadata (`recall_scan_truncated`, `recall_scan_limit`) so agents can still tell when recall was capped.
+- Preserved wrong-dimension embedding safeguards while using the new vectorized scoring path.
+
+#### Swarm & Runtime Guardrails
+
+- Persisted compaction write counters in SQLite so trigger progress survives process restarts instead of living only in RAM.
+- Updated compaction trigger reset logic to use the persisted counter path.
+- Added startup detection for common unsupported multi-worker HTTP deployments (`WEB_CONCURRENCY`, `UVICORN_WORKERS`, `GUNICORN_CMD_ARGS`) with a clear warning to run one MARM process per SQLite database.
+- Clarified in README, FAQ, and install docs that `--swarm` / `--swarm-max` scale concurrency inside one process; Uvicorn/Gunicorn multi-worker mode remains future work.
+
+#### Tests & Validation
+
+- Added regression coverage for persisted compaction counters across `MARMMemory` instances.
+- Added full server-side compaction summarizer coverage for centroid selection, deduplication, missing embeddings, wrong dimensions, stale source handling, multi-candidate promotion, and suite-order isolation.
+- Added semantic recall tests proving vectorized ranking order and recall of matches beyond the old 1000-row window.
+- Updated scheduler tests for the new `COMPACTION_ENABLED` maintenance gate.
+- Fast local suite validation: `242 passed, 9 deselected, 1 warning`.
+
+</details>
+
+<details>
+<summary><strong>June 7th, 2026: Hybrid Recall with FTS5 (v2.12.0)</strong></summary>
+
+#### Recall & Search
+
+- Added SQLite FTS5 indexing for memory content with automatic insert, update, and delete triggers so exact-term recall stays in sync with the main `memories` table.
+- `marm_smart_recall` now merges semantic similarity with FTS BM25 keyword scoring through `HYBRID_SEARCH_TEXT_WEIGHT`, improving recall for commands, config keys, filenames, and error strings without giving up semantic matches.
+- Added conservative temporal weighting on top of hybrid recall through `TEMPORAL_WEIGHT` and `TEMPORAL_HALF_LIFE_DAYS`, so newer memories get a modest recency boost when matches are otherwise close without burying clearly better older context.
+- Added FTS backfill on database init so existing memory stores populate the text index automatically.
+- Kept LIKE fallback behavior for unsanitizable text queries and explicit fallback paths when FTS lookup fails, so recall degrades safely instead of hard-failing.
+- Added 3-layer retrieval depth control to `marm_smart_recall` with `detail=1/2/3`, so recall can return short summaries by default and only expand to full memory bodies when explicitly requested.
+- Layer defaults are now read-time truncation instead of new schema fields: Layer 1 returns about 200 characters, Layer 2 about 500 characters, and Layer 3 returns full content.
+- Added `detail_level` to recall responses so callers can tell which retrieval depth was returned.
+
+#### Tests & Smoke Coverage
+
+- Added focused hybrid search regression coverage for FTS trigger creation, backfill, single-hit BM25 normalization, FTS-only promotion, session filtering, and FTS failure fallback.
+- Added a dedicated hybrid search smoke harness that prints vector, FTS, and combined scores for tuning and now exits non-zero if the exact config-key recall check regresses.
+- Added focused regression coverage for detail-level validation, truncation behavior, default depth, and service-layer layered recall responses.
+- Added temporal-weighting regression coverage for half-life decay behavior, future/bad timestamp handling, and zero-weight ranking passthrough.
+
+#### Documentation
+
+- Updated README, handbook, FAQ, and contributor docs to describe MARM recall as hybrid semantic + FTS retrieval with layered depth and conservative recency bias.
 
 </details>
 
 ---
 
 <details>
-<summary>March 20th, 2026: Pip Install Fix & Docs Cleanup (v2.2.8)</summary>
-
-## **March 20th, 2026: Pip Install Fix & Docs Cleanup (v2.2.8)**
-
-**Core achievements: Fixed broken pip install, added `python -m marm_mcp_server` support, documented active bugs and planned architecture improvements, cleaned up docs structure.**
-
-#### **Pip Install Fix**
-
-- **Root Cause**: `marm_mcp_server/server.py` used absolute imports (`from middleware import ...`) — these work when running `python server.py` from root but fail when installed as a package
-- **Fix**: Converted all absolute imports to relative imports across 16 files in `marm_mcp_server/`
-- **Added `__main__.py`**: Created `marm_mcp_server/__main__.py` so `python -m marm_mcp_server` now works
-- **Added entry functions**: Added `create_server()` and `main()` to `server.py` — `main()` serves as the pip CLI entry point (`marm-mcp-server` command), `create_server()` exposes the FastAPI app for external use
-- **Windows PATH note**: `marm-mcp-server` CLI requires `C:\Users\{username}\AppData\Roaming\Python\Python3xx\Scripts\` in PATH; `python -m marm_mcp_server` works without any PATH changes and is now the recommended command
-
-#### **Documentation Cleanup**
-
-- **New docs structure**: Reorganized into `archived/`, `core/`, `current/`, `future/`, `Visuals/` folders
-- **Removed FAQ.md**: Base MARM questions moved to FAQ section in `MARM-HANDBOOK.md`; MCP tools table moved to `MCP-HANDBOOK.md`; chatbot-specific content deleted (chatbot retired)
-- **Removed DESCRIPTION.md**: Fully redundant with README — deleted
-- **New `current-issues.md`**: Created `docs/current/current-issues.md` to track active bugs and planned improvements with full context on root causes
-
-#### **Active Issues Documented**
-
-- **`marm_log_session` not switching sessions**: Entries land in `main` instead of named session — session state not persisting before `marm_log_entry` fires
-- **Planned: Token optimization** — lazy loading docs instead of bulk-loading at startup
-- **Planned: Directory-based memory architecture** — per-project SQLite DBs with global cross-reference index
-- **Planned: Remove duplicate root files** — single source of truth cleanup
-
-#### **Impact Summary**
-
-- `pip install marm-mcp-server` now installs a working package
-- `python -m marm_mcp_server` is the primary run command going forward
-- Active bugs and architecture plans captured in dedicated tracking doc
-
-</details>
-
----
-
-<details>
-<summary>May 15th, 2026: Security Hardening, Auto-Key Generation & Doc Consistency Pass (v2.2.9)</summary>
+<summary><strong>May 15th, 2026: Security Hardening, Auto-Key Generation & Doc Consistency Pass (v2.2.9)</strong></summary>
 
 ## **May 15th, 2026: Security Hardening, Auto-Key Generation & Doc Consistency Pass (v2.2.9)**
 
@@ -479,7 +273,7 @@
 </details>
 
 <details>
-<summary>May 16th, 2026: MCP Client Compatibility & Mock OAuth Removal (v2.3.0)</summary>
+<summary><strong>May 16th, 2026: MCP Client Compatibility & Mock OAuth Removal (v2.3.0)</strong></summary>
 
 ## **May 16th, 2026: MCP Client Compatibility & Mock OAuth Removal (v2.3.0)**
 
@@ -517,7 +311,7 @@
 </details>
 
 <details>
-<summary>May 17th, 2026: Docker Dual-Transport Alignment & WebSocket Purge Start (v2.4.0)</summary>
+<summary><strong>May 17th, 2026: Docker Dual-Transport Alignment & WebSocket Purge Start (v2.4.0)</strong></summary>
 
 ## **May 17th, 2026: Docker Dual-Transport Alignment & WebSocket Purge Start (v2.4.0)**
 
@@ -554,7 +348,7 @@
 </details>
 
 <details>
-<summary>May 17th, 2026: MARM Dashboard Launch v2.5.0</summary>
+<summary><strong>May 17th, 2026: MARM Dashboard Launch v2.5.0</strong></summary>
 
 ## **May 17th, 2026: MARM Dashboard Launch (dashboard v1.0.0)**
 
@@ -593,7 +387,7 @@
 </details>
 
 <details>
-<summary>May 18th, 2026: CI/CD Pipeline, Registry Alignment & Security Fixes (v2.5.1–v2.5.4)</summary>
+<summary><strong>May 18th, 2026: CI/CD Pipeline, Registry Alignment & Security Fixes (v2.5.1–v2.5.4)</strong></summary>
 
 ## **CI/CD Pipeline, Registry Alignment & Security Fixes (v2.5.1–v2.5.4)**
 
@@ -636,7 +430,7 @@
 </details>
 
 <details>
-<summary>May 18th, 2026: CodeQL Security Hardening & Release Cleanup (v2.5.5)</summary>
+<summary><strong>May 18th, 2026: CodeQL Security Hardening & Release Cleanup (v2.5.5)</strong></summary>
 
 ## **May 18th, 2026: CodeQL Security Hardening & Release Cleanup (v2.5.5)**
 
@@ -868,215 +662,421 @@ marm_notebook(action="use"|"status"|"clear", session_name="my_project")
 ---
 
 <details>
-<summary><strong>June 1st, 2026: Consolidation Worker, Compaction Pipeline & Swarm Smoke Harness (v2.9.0)</strong></summary>
+<summary><strong>March 20th, 2026: Pip Install Fix & Docs Cleanup (v2.2.8)</strong></summary>
 
-#### Memory Consolidation
+## **March 20th, 2026: Pip Install Fix & Docs Cleanup (v2.2.8)**
 
-- Added session-scoped exact duplicate prevention using normalized SHA-256 `content_hash` values before embedding work runs.
-- Added write-time semantic consolidation for near-duplicate memories when `CONSOLIDATION_ENABLED=1`.
-- Existing matching memories are updated instead of creating new rows, preserving session boundaries and recording merge history in metadata.
-- Memory updates now recompute `content_hash` and refresh embeddings when the encoder is available.
-- Added hash-collision safety so matching hashes still require normalized content equality before deduping.
+**Core achievements: Fixed broken pip install, added `python -m marm_mcp_server` support, documented active bugs and planned architecture improvements, cleaned up docs structure.**
 
-#### Compaction Worker
+#### **Pip Install Fix**
 
-- Added background compaction candidate detection for stale/fragmented memory clusters.
-- Added `compaction_role`, `compacted_into`, and `compaction_staging` schema support with idempotent migrations.
-- Added a staged, agent-driven compaction workflow behind one public `marm_compaction` tool; raw compaction helpers remain internal/hidden from MCP discovery.
-- Added bounded compaction nudges so MARM can ask the connected agent to summarize pending candidates without adding more public tools.
-- Added candidate expiry, source snapshot validation, cross-session isolation, already-compacted source checks, and stale candidate marking.
-- Apply now inserts a summary memory row, marks source rows as compacted, and remains idempotent under duplicate apply calls.
-- Existing stored embeddings can now be compacted even when the local encoder is unavailable.
+- **Root Cause**: `marm_mcp_server/server.py` used absolute imports (`from middleware import ...`) — these work when running `python server.py` from root but fail when installed as a package
+- **Fix**: Converted all absolute imports to relative imports across 16 files in `marm_mcp_server/`
+- **Added `__main__.py`**: Created `marm_mcp_server/__main__.py` so `python -m marm_mcp_server` now works
+- **Added entry functions**: Added `create_server()` and `main()` to `server.py` — `main()` serves as the pip CLI entry point (`marm-mcp-server` command), `create_server()` exposes the FastAPI app for external use
+- **Windows PATH note**: `marm-mcp-server` CLI requires `C:\Users\{username}\AppData\Roaming\Python\Python3xx\Scripts\` in PATH; `python -m marm_mcp_server` works without any PATH changes and is now the recommended command
 
-#### Write Queue & Scheduler Integration
+#### **Documentation Cleanup**
 
-- Extended the write queue with `put_callable()` so non-memory-write mutations, including compaction apply, can run through the same serialized queue.
-- Routed compaction apply through the write queue when enabled, preserving ordering with normal memory writes.
-- Added optional compaction auto-apply scheduler support behind `COMPACTION_AUTO_APPLY_ENABLED`.
-- Runtime presets now tune compaction trigger counts for normal versus swarm/trusted/custom deployment modes.
+- **New docs structure**: Reorganized into `archived/`, `core/`, `current/`, `future/`, `Visuals/` folders
+- **Removed FAQ.md**: Base MARM questions moved to FAQ section in `MARM-HANDBOOK.md`; MCP tools table moved to `MCP-HANDBOOK.md`; chatbot-specific content deleted (chatbot retired)
+- **Removed DESCRIPTION.md**: Fully redundant with README — deleted
+- **New `current-issues.md`**: Created `docs/current/current-issues.md` to track active bugs and planned improvements with full context on root causes
 
-#### Swarm & Compaction Smoke Testing
+#### **Active Issues Documented**
 
-- Added `compaction-worker-smoke.py` for isolated HTTP load, staged compaction, apply idempotency, stale guard, cross-session isolation, and optional scheduler testing.
-- Added `swarm-smoke.py` for lightweight local swarm simulation using either mocked model output or Ollama.
-- Added shared-session swarm mode to verify natural compaction triggering from real writes.
-- Added seeded embedding fallback for deterministic compaction smoke testing on machines without reliable local embedding generation.
-- Reworked smoke-test documentation into script-based and base/medium/heavy/special command groups.
+- **`marm_log_session` not switching sessions**: Entries land in `main` instead of named session — session state not persisting before `marm_log_entry` fires
+- **Planned: Token optimization** — lazy loading docs instead of bulk-loading at startup
+- **Planned: Directory-based memory architecture** — per-project SQLite DBs with global cross-reference index
+- **Planned: Remove duplicate root files** — single source of truth cleanup
 
-#### Documentation & Tool Surface
+#### **Impact Summary**
 
-- Updated README, MCP handbook, FAQ, and packaged `marm-docs` mirrors for the 9-tool surface, write queue defaults, swarm presets, consolidation, and agent-assisted compaction.
-- Consolidated duplicated handbook FAQ content into `docs/FAQ.md` and changed the handbook FAQ section to reference the canonical FAQ.
-- Updated contributor guidance for write queue, consolidation, compaction staging, smoke scripts, and parameterized MCP tool design.
+- `pip install marm-mcp-server` now installs a working package
+- `python -m marm_mcp_server` is the primary run command going forward
+- Active bugs and architecture plans captured in dedicated tracking doc
 
-#### v2.9.0 Tests
+</details>
 
-- Added focused regression coverage for exact deduplication, write-time semantic consolidation, compaction candidate detection, staging, apply/idempotency, stale safeguards, write-queue callable execution, and auto-apply behavior.
-- Local validation covered direct queue bursts, HTTP RPM boundaries, trusted no-RPM pressure, compaction stage/apply, stale and cross-session negative paths, auto-apply scheduling, mocked swarm writes, and real Ollama swarm writes.
+---
 
-#### Hardening & Suite Stability
+<details>
+<summary><strong>September 15th – September 18th, 2025: Production Stabilization & Registry Preparation (v2.2.5)</strong></summary>
 
-- Strengthened suite-level isolation around reloaded server modules, patched memory singletons, compaction globals, and async write queue cleanup so tests pass both individually and as a grouped run.
-- Tightened diagnostic and consolidation edge cases found during review, including request-body logging for HTTP compaction injection and stale embedding cleanup after write-time merges.
+## **September 15th – September 18th, 2025: Production Stabilization & Registry Preparation**
+
+**Core achievements: Multi-platform publishing setup, CI/CD workflow validation, documentation system overhaul, and repository cleanup - all focused on preparing MARM for official listing in the GitHub MCP Registry and enabling seamless pip install deployment.**
+
+#### **Multi-Platform Publishing & CI/CD**
+
+- **PyPI Integration:**
+  - Configured PyPI trusted publishing with proper project name alignment to `[project].name` in `pyproject.toml`
+  - Resolved repository, workflow, and naming inconsistencies to ensure smooth, automated PyPI package releases
+  - Enabled `pip install marm-mcp-server` for easy Python package installation
+
+- **Docker Hub Support:**
+  - Standardized source and build directories for clean Docker image creation
+  - Refactored documentation and codebase to support fast, reliable Docker builds and pushes
+  - Updated workflow scripts to match new folder structures after refactor
+  - Enabled `docker pull lyellr88/marm-mcp-server:latest` for containerized deployment
+
+- **MCP Registry Listing:**
+  - Prepared the MCP server for listing and integration with the official MARM MCP service/agent registry
+  - Ensured compliance with Model Context Protocol standards for automatic agent discovery
+  - Enabled seamless integration with Claude Desktop and other MCP-compatible AI clients
+
+#### **CI/CD Workflows**
+
+- **GitHub Actions:**
+  - Enhanced, debugged, and validated workflows for PyPI, Docker, and registry deployment
+  - Ensured all actions/scripts reference the updated project and documentation structure, removing legacy/obsolete paths
+  - Implemented robust error handling and rollback mechanisms for production deployments
+
+#### **Documentation System Overhaul**
+
+- **Auto-Loading/Modularized Docs:**
+  - Migrated from hardcoded manual documentation lists to an automated loader for all `.md` files
+  - Developed a context-type classifier and logging function for each loaded doc
+  - Implemented essential-only doc loading (now only `PROTOCOL.md` and `README.md` loaded by default, with others available via recall), drastically reducing token/context bloat
+
+- **Handbook and Docs Refactor:**
+  - Split large handbooks into six logically-focused, easily-maintainable files (3 for MCP, 3 for the main system), improving structure and modularity
+  - Maintained clear and robust logging for missing or misclassified essential docs
+
+#### **Refactoring & Repo Cleanup**
+
+- **Legacy Removal:**
+  - Eliminated outdated or redundant folders (`MARMcp-beta`), consolidating all code and documentation under a single, standardized directory structure
+  - Validated and updated all file paths, scripts, and configuration files to ensure project integrity post-refactor
+
+- **Multi-AI Validation:**
+  - Coordinated use of Claude, Qwen, Gemini, and Comet for change verification, diff checking, and QA
+  - Used a centralized CP Dump method for capturing and tracking change logs, error traces, and validation outputs during the transition
+
+#### **Impact Summary**
+
+- **Production readiness** - Stabilized Universal MCP Server for public release
+- **Registry compliance** - Prepared for official GitHub MCP Registry listing
+- **Multi-platform deployment** - Enabled pip install, Docker pull, and MCP registry integration
+- **Documentation excellence** - Modular, auto-loading system with reduced token overhead
+- **Codebase cleanliness** - Eliminated legacy artifacts and standardized structure
 
 </details>
 
 <details>
-<summary><strong>June 4th, 2026: Opus Review Hot-Path & Compaction Hardening (v2.9.1)</strong></summary>
+<summary><strong>September 19th-23rd, 2025: WebSocket Production Launch & Alpha Tester Resolution (v2.2.6 Launch)</strong></summary>
 
-#### Hot-Path Performance Hardening
+**Core achievements: Complete GitHub alpha tester feedback resolution (4/4 issues), full WebSocket production implementation with HTTP parity, OAuth authentication restoration, graceful shutdown infrastructure, and modernized dependency management - achieving zero outstanding issues and production-ready WebSocket MCP protocol.**
 
-- Offloaded sentence-transformer encoding from async request paths with `asyncio.to_thread()` so CPU-heavy embedding work no longer blocks the event loop directly.
-- Added a serialized encoder helper around the shared encoder to avoid unsafe concurrent encoder use while still moving the blocking work off the main loop.
-- Reused the precomputed write embedding for write-time semantic consolidation, removing the previous double-encode path when Layer 2 consolidation checked for near-duplicates and then stored the same content.
-- Extended `recall_similar()` and `find_semantic_duplicate()` with an optional `query_vec` path so callers that already computed an embedding can avoid repeating that work.
-- Moved notebook embedding generation onto the same offloaded encoder path.
+#### **🎉 Complete GitHub Alpha Tester Issue Resolution (4/4)**
 
-#### Compaction Tool Reliability
+- **Issue #1 - WebSocket URL Implementation**:
+  - Implemented complete WebSocket MCP protocol at `ws://localhost:8001/mcp/ws`
+  - Achieved full HTTP/WebSocket parity with all 19 MCP methods
+  - Added JSON-RPC 2.0 compliance with proper error handling
+  - Integrated thread-safe connection management with rate limiting
 
-- Made `source_memory_ids` optional when staging compaction summaries; the server now uses the staged candidate's source IDs when omitted and only validates them when provided.
-- Removed `source_memory_ids` from the injected compaction nudge example to reduce UUID transcription errors by connected agents.
-- Rewrote the `marm_compaction` HTTP and STDIO tool descriptions as an agent-facing workflow: `status/candidates -> stage -> review -> apply/discard`.
-- Offloaded compaction summary embedding generation during apply so compaction writes follow the same non-blocking encoder pattern.
+- **Issue #2 - Parameter Consistency**:
+  - Standardized parameter naming across all endpoints
+  - Updated `marm_notebook_use` from `names` to `name` for consistency
+  - Modified core models and endpoint handlers for unified API
 
-#### HTTP Injection & Middleware Hardening
+- **Issue #3 - Docker Persistence**:
+  - Updated all documentation with volume mount requirements
+  - Standardized Docker commands with `-v marm_data:/app/data`
+  - Ensured data persistence across container restarts
 
-- Added an HTTP MCP middleware fast path that skips response buffering/parsing after the one-time protocol has been delivered when compaction injection is disabled.
-- Added a defensive non-JSON response guard so the middleware avoids parsing responses it cannot mutate.
-- Aligned HTTP compaction injection with STDIO behavior so protocol delivery and compaction nudges do not co-inject on the same first tool call.
-- Kept eligible JSON tool responses mutable when protocol or compaction injection can still happen.
+- **Issue #4 - Health/Readiness Monitoring**:
+  - Enhanced `/health` endpoint with database connectivity testing
+  - Added `/ready` endpoint with full functionality validation
+  - Implemented Docker health checks with curl testing
+  - Added comprehensive startup guidance and troubleshooting
 
-#### Embedding Compatibility Guard
+#### **🚀 WebSocket Production Implementation**
 
-- Added a runtime dimension check before cosine scoring stored embeddings.
-- Wrong-dimension vectors are now skipped with a diagnostic signal instead of silently disappearing through a broad exception path or crashing recall after an embedding-model dimension change.
-- Added regression coverage proving correct-dimension memories still recall while wrong-dimension rows are ignored safely.
+- **Complete MCP Protocol Support**:
+  - All 19 MCP methods available via WebSocket protocol
+  - Full HTTP/WebSocket feature parity achieved
+  - Professional JSON-RPC 2.0 implementation with error handling
 
-#### Test Stability & Coverage
+- **Production Architecture**:
+  - Thread-safe WebSocket connection manager (`core/websocket_manager.py`)
+  - Modular endpoint architecture (`endpoints/websocket.py`)
+  - Clean import/export handler system for maintainability
+  - Integration with existing security and rate limiting middleware
 
-- Replaced brittle multi-step STDIO subprocess behavior tests with in-process STDIO tool tests using isolated temp databases.
-- Added in-process FastMCP client coverage for notebook, delete, log-session, and log-entry result wrapping so JSON-RPC-style tool result envelopes remain covered without relying on stdin EOF timing.
-- Kept real subprocess STDIO smoke coverage for import cleanliness, initialize/tools-list, logging, privacy, and write-queue transport behavior.
-- Added pytest markers for Docker and slow STDIO transport tests so local fast runs can skip heavy transport smoke tests while full runs still cover them.
-- Added regression coverage for optional compaction `source_memory_ids`, semantic consolidation query-vector plumbing, and embedding dimension mismatch handling.
+- **Connection Management**:
+  - Connection pooling with configurable limits
+  - Graceful connection cleanup and client session tracking
+  - Broadcast and personal messaging capabilities
+  - Proper WebSocket lifecycle management
+
+#### **🔧 Infrastructure & Authentication Improvements**
+
+- **OAuth 2.0 Authentication Restoration**:
+  - Restored complete OAuth implementation that mysteriously disappeared
+  - Full authorization code flow with client credentials validation
+  - Added `endpoints/oauth.py` with authorize, token, userinfo, revoke, debug endpoints
+  - Excluded OAuth from MCP tool discovery with `include_in_schema=False`
+
+- **Graceful Server Shutdown**:
+  - Implemented signal handlers for SIGTERM/SIGINT (Unix systems)
+  - Added WebSocket connection closure during shutdown
+  - Created `core/shutdown_manager.py` for clean server termination
+  - Fixed issue where MCP clients prevented server shutdown
+
+- **Smart Dependency Management**:
+  - Modernized `requirements.txt` from exact pins (==) to smart version ranges
+  - Implemented `>=X.Y.Z,<X+1.0.0` pattern for automatic security updates
+  - Updated to match actually installed working versions
+  - Enabled automatic security patches without breaking changes
+
+#### **🏗️ Architecture & Documentation Enhancements**
+
+- **Date Handling Architecture Fix**:
+  - Fixed `marm_log_entry` incorrectly auto-adding date prefixes to user content
+  - Connected `marm_log_session` to `marm_current_context` background tool
+  - Sessions now get automatic dates while entries preserve exact user input
+  - Proper separation of automated vs. user-controlled content
+
+- **Package Structure Synchronization**:
+  - Synchronized root-level development code with `marm_mcp_server/` package folder
+  - Ensured PyPI package structure matches working development environment
+  - Updated all new files: oauth.py, shutdown_manager.py, websocket_manager.py
+  - Maintained proper Python package naming conventions
+
+- **Comprehensive Documentation Updates**:
+  - Updated all installation guides with WebSocket connection examples
+  - Added natural language interface emphasis in MCP-HANDBOOK.md
+  - Clarified background tool automation (marm_current_context)
+  - Enhanced troubleshooting sections for connection issues
+
+#### **🐛 Technical Debt Resolution**
+
+- **WebSocket Implementation Quality**:
+  - Eliminated "sloppy" mixed approaches in favor of consistent patterns
+  - Replaced inline handler architecture with clean import/export system
+  - Fixed rate limiting middleware bug preventing WebSocket connections
+  - Removed all stub implementations and placeholder code
+
+- **Background File Analysis**:
+  - Analyzed and confirmed safe removal of websocket_backup.py (374-line old architecture)
+  - Validated setup.py.backup as outdated installer script
+  - Confirmed cp dump.md contained only OAuth implementation (no other missing features)
+  - Completed comprehensive backup file cleanup
+
+- **Version Management**:
+  - Coordinated v2.2.5 updates across all deployment files
+  - Maintained surgical precision in version synchronization
+  - Updated package metadata and documentation references
+
+#### **📊 Testing & Validation Framework**
+
+- **Comprehensive Test Suite**:
+  - Created bulletproof validation testing for all 19 MCP methods
+  - Implemented sabotage-resistant error detection
+  - Built systematic GitHub issue validation framework
+  - Achieved 100% success rate on all production readiness criteria
+
+- **WebSocket Protocol Validation**:
+  - Tested JSON-RPC 2.0 compliance with malformed request handling
+  - Validated connection management under load
+  - Verified security integration and rate limiting functionality
+  - Confirmed backward compatibility maintenance
+
+#### **Impact Summary**
+
+- **Zero Outstanding Issues**: All 4 GitHub alpha tester issues completely resolved
+- **Production WebSocket Ready**: Full HTTP/WebSocket parity with professional implementation
+- **Enhanced Security**: OAuth restoration, graceful shutdown, and rate limiting integration
+- **Modernized Infrastructure**: Smart dependency management and automated security updates
+- **Beta Production Status**: WebSocket implementation ready for real-world testing and deployment
+- **Developer Experience**: Comprehensive documentation with natural language interface guidance
+
+#### **Technical Achievements**
+
+- **Complete CI/CD Compatibility**: Maintained deployment readiness across PyPI, Docker Hub, and MCP Registry
+- **Professional Architecture**: Modular design with proper separation of concerns and security integration
+- **Performance Optimization**: Lazy loading, connection pooling, and intelligent caching maintained
+- **Cross-Platform Support**: Windows signal handling compatibility with Unix systems
+- **Memory Management**: Efficient SQLite operations with WAL mode and connection pooling
+
+**Next Phase**: Public launch announcement → Developer community building → Pro version development
 
 </details>
 
 <details>
-<summary><strong>June 6th, 2026: Comment Cleanup, Ruff Lint Pass & Doc Updates (v2.9.2)</strong></summary>
+<summary><strong>September 25th, 2025: Security Hardening - 4 Critical Vulnerabilities Fixed (v2.2.7)</strong></summary>
 
-#### Comment Cleanup
+#### Security Fixes
 
-- Removed roughly 500 lines of low-value inline comments across the `marm_mcp_server` package, keeping only comments that explain non-obvious constraints or workarounds.
-- Removed a large Dockerfile comment block (lines 60-163) that duplicated content already covered in install docs.
-- Removed shebang lines (`#!/usr/bin/env python3`) from `.py` files where they have no effect on Windows.
+- **XSS Protection Enhancement**: Fixed malformed script tag bypass vulnerability
+  - Updated regex pattern to handle spaces in closing tags: `</script >`, `< /script>`
+  - Improved sanitization now blocks all script tag variations
+  - Files: `core/memory.py` (both copies)
 
-#### Ruff Lint Fixes
+- **ReDoS Attack Mitigation**: Prevented regex backtracking DoS attacks
+  - Added 10KB input length limit to prevent exponential regex processing
+  - Large attack payloads now processed safely in <0.03s
+  - Vulnerability: `py/polynomial-redos` in script tag regex patterns
 
-- Resolved all E402 import ordering violations. Two deliberate deferrals in `server_stdio.py` (print redirect before imports, env var before settings import) are marked `# noqa: E402`.
-- Replaced bare `try/except` availability probes in `settings.py` with `importlib.util.find_spec()`, eliminating F401 unused import warnings.
-- Removed unused variable assignments flagged by F841 in `response_limiter.py`, `tests/`, and `scripts/`.
-- Changed bare `except:` to `except Exception:` in `endpoints/memory.py` (E722).
-- Added `@pytest.mark.skipif(sys.version_info < (3, 11), ...)` guard and `# noqa: F821` on `ExceptionGroup` usages in the STDIO transport test since `ExceptionGroup` is Python 3.11+ and the project targets 3.10.
+- **Open Redirect Prevention**: Blocked phishing attempts via OAuth redirects
+  - Added URL validation to restrict `redirect_uri` to localhost/relative paths only
+  - Prevents external domain redirects that enable phishing attacks
+  - Vulnerability: `CWE-601` in `marm_mcp_server/endpoints/oauth.py:98`
+  - File: `marm_mcp_server/endpoints/oauth.py`
 
-#### Documentation
+- **Stack Trace Exposure Protection**: Hidden internal error details from external users
+  - Replaced `str(e)` exposures with generic error messages for health checks
+  - Fixed 19+ WebSocket error handlers exposing internal implementation details
+  - Added server-side logging while keeping client responses secure
+  - Prevents disclosure of file paths, database strings, internal architecture
+  - Vulnerability: `py/stack-trace-exposure` in health endpoints and WebSocket handlers
+  - Files: `endpoints/system.py`, `endpoints/websocket_handlers_complete.py`
 
-- Added Docker STDIO JSON client config as a collapsible section to `INSTALL-DOCKER.md`, covering macOS/Linux and Windows path variants with a note on tilde expansion.
-- Added Discord link and contributions callout near the top of `README.md`.
-- Added contact section (Discord and email) to `CONTRIBUTING.md`.
+#### Changed
+
+- All error responses now return generic messages to external users
+- Server-side logging enhanced for debugging while maintaining security
+- OAuth flow restricted to development-safe redirect URIs
+
+#### Technical Notes
+
+- All fixes follow "SIMPLE IS BETTER THAN COMPLICATED" principle
+- Surgical changes maintain functionality while eliminating security risks
+- Total files modified: 5 across 4 vulnerability categories
+- All GitHub CodeQL security alerts resolved
+
+</details>
+
+---
+
+<details>
+<summary><strong>August 6-18, 2025: MARM Protocol Evolution to MCP Server (v2.0.0 MCP Launch) </strong></summary>
+
+## **August 6-18, 2025: MARM v2.0.0 Production Launch**
+
+**Core achievements: 95% cost reduction (Gemini → Llama 4), professional test suite (74 tests), protocol v2.0 evolution, security hardening, and complete UI modernization.**
+
+#### **Professional Testing Infrastructure Implementation**
+
+- **Comprehensive Test Suite**: Added 74 passing tests across 4 modules - Voice (13), UI (16), State/Session (15), Commands (15), Security/Logic (15)
+- **GitHub Actions Integration**: Automated testing on push/PR with Node.js 18.x & 20.x, test status badge added to README
+- **ES Module Testing**: Full Jest configuration supporting modern JavaScript imports, browser API mocking (speechSynthesis, localStorage, DOM)
+- **Quality Assurance**: 42.39% test coverage with detailed reports, error handling validation, edge case testing for all core functionality
+
+#### **Complete AI Provider Migration: Gemini → Llama 4 Maverick**
+
+- **Backend Transformation**: Complete migration from Google Gemini API to Replicate Llama 4 Maverick (400B total parameters, 17B active × 128 experts)
+- **Cost Optimization**: Achieved 95% operational cost reduction (.65 per million tokens output vs Claude Sonnet pricing)
+- **Performance Upgrade**: Access to 10M token context limit with significantly improved response times
+- **API Architecture**: Converted from Gemini's complex message format to Replicate's streamlined prompt-based system
+- **Technical Implementation**: Complete rewrite of `server.js` streaming endpoint, new `replicateHelper.js` replacing `geminiHelper.js`
+
+#### **MARM Protocol Evolution: v1.5 → v2.0**
+
+- **Identity Transformation**: Updated from generic assistant mode to "MARM IS memory incarnate" - core identity evolution
+- **Response Optimization**: Replaced verbose "Response Contract" with concise "💭 Thinking Trail" format for user-friendly output
+- **Command Modernization**:
+  - `/contextual reply` → `/deep dive` (clearer functionality naming)
+  - `/compile [SessionName] --summary` → `/summary: [session name] --summary` (better syntax)
+  - Enhanced notebook commands: `/notebook use:`, `/notebook clear:`, `/notebook status:` (active management)
+- **Memory System Overhaul**: Added conversation import system for mid-session MARM activation with complete context preservation
+
+#### **Complete UI/UX Modernization**
+
+- **Visual Transformation**: Complete overhaul from "2010 vibes" to modern design standards with indigo (#6366f1) and amber (#f59e0b) color palette
+- **Glassmorphism Effects**: Enhanced shadows and glass effects throughout interface for premium feel
+- **Chat Message Cards**: Implemented card-style messages with glass effects, proper shadows, and user/bot visual distinction
+- **Command Menu Redesign**: Complete transformation from sidebar to contextual popup button (⚡) positioned next to input field
+- **Complete HTML/JavaScript Separation**: Moved all HTML templates from JavaScript files to HTML templates, clean separation of concerns
+
+#### **Security & Architecture Hardening**
+
+- **XSS Protection System**: Comprehensive security module (`xssProtection.js`) with multiple sanitization levels
+  - `sanitizeText()`: HTML entity escaping for plain text
+  - `sanitizeHTML()`: Advanced sanitization with script/iframe blocking
+  - `sanitizeHTMLStrict()`: Ultra-strict sanitization for user input
+- **Storage Architecture**: Created centralized `storage.js` for localStorage operations with multi-tab synchronization
+- **State Management Enhancement**: Private state object only accessible through `getState()`, immutable patterns with defensive copies
+
+#### **New Features & Capabilities**
+
+- **File Upload System**: File upload button (📎) with text/code file support for 15+ file types, smart detection, automatic language detection and syntax highlighting
+- **MARM Protocol Toggle**: Toggle button (🧠) in FAB menu for instant protocol switching between structured MARM and free mode with visual feedback
+
+#### **Critical Bug Fixes & System Stability**
+
+- **MARM Memory Issues**: Fixed critical memory loss bug where MARM would lose all conversation context when activated mid-conversation
+- **Session Persistence**: Fixed MARM forgetting conversation when toggled off and back on, now preserves existing session IDs
+- **Performance Optimization**: Eliminated 60+ lines of duplicate code, replaced expensive JSON.stringify operations, request timeout optimization (15s → 45s)
+- **Voice System**: Fixed TTS "interrupted" errors in speech synthesis by adding proper cancellation logic
+- **Browser Compatibility**: Added cache-busting headers to server.js and version strings to prevent stale file serving
+
+#### **Impact Summary**
+
+- **95% cost reduction** through AI provider optimization
+- **Zero XSS vulnerabilities** with comprehensive protection
+- **Production-ready architecture** with modern web standards
+- **50+ files modified**, 1000+ lines changed
+- **3 major new features**, 15+ critical issues resolved
 
 </details>
 
 <details>
-<summary><strong>June 6th, 2026: Recall Visibility, Protocol Scope & Service Refactor (v2.10.0)</strong></summary>
+<summary><strong>August 20th – September 12th, 2025: Universal MCP Server Development (v2.2.4 Launch)</strong></summary>
 
-#### Recall & Search Reliability
+#### Added
 
-- Added `RECALL_SCAN_LIMIT` so semantic recall's bounded DB scan is configurable instead of hardcoded to 1,000 rows.
-- `recall_similar()` now scans `limit + 1` rows internally to detect when recall was bounded and returns scan metadata only for callers that request it.
-- HTTP and STDIO `marm_smart_recall` responses now surface `recall_scan_truncated` and `recall_scan_limit` on both success and no-result paths, making bounded recall visible to agents.
-- Standardized model-facing MCP tool failures to return structured `{"status":"error"}` payloads instead of opaque HTTP 500 exceptions across recall, context logging, session logs, notebook, delete, and summary flows.
+**Universal MCP Server Architecture:**
 
-#### Protocol & Agent Session Handling
+- **Production-ready FastAPI server** with Model Context Protocol implementation
+- **19 complete MCP tools** for AI memory intelligence across all platforms
+- **Docker containerization** with multi-stage builds and health monitoring
+- **Semantic search engine** using sentence-transformers (all-MiniLM-L6-v2) with vector embeddings
+- **Cross-platform memory database** - SQLite with WAL mode optimization and connection pooling
+- **Multi-agent development workflow** - Claude (architecture), Gemini (validation), Qwen (research), ChatGPT (testing)
 
-- Changed HTTP protocol injection from one server-global delivery flag to per-session tracking so multiple agents/sessions can each receive the MARM protocol once.
-- Preserved the first-call protocol ordering behavior while keeping compaction nudges from co-injecting with protocol initialization.
-- Added regression coverage for independent protocol delivery across separate sessions.
+**MCP Tools Suite:**
 
-#### Consolidation Safety
+- **Memory Intelligence**: `marm_smart_recall` (global semantic search), `marm_context_log` (intelligent storage)
+- **Session Management**: `marm_start`, `marm_refresh` with enhanced protocol adherence
+- **Logging System**: `marm_log_session`, `marm_log_entry`, `marm_log_show`, `marm_log_delete`
+- **Notebook Management**: Complete CRUD operations with `marm_notebook_add`, `marm_notebook_use`, etc.
+- **Workflow Tools**: `marm_summary`, `marm_context_bridge` for seamless transitions
+- **System Utilities**: `marm_current_context`, `marm_system_info`, `marm_reload_docs`
 
-- Capped write-time merge growth at 10,000 characters so hot near-duplicate memories cannot grow into unbounded blobs.
-- Preserved the newest merged content while trimming older content when a merge would exceed the cap.
-- Added regression coverage for the merge-size cap and recall scan truncation metadata.
+**Production Features:**
 
-#### Service Refactor
+- **Production-ready architecture** - FastAPI backend with rate limiting, IP-based protection, graceful degradation
+- **Professional test suite** - 5 comprehensive diagnostic tests (security, performance, integration, memory usage, MCP compliance)
+- **Health monitoring** - Comprehensive system status and performance tracking
+- **Database optimization** - SQLite with connection pooling, WAL mode, efficient storage
+- **Security hardening** - Input validation, error isolation, production-ready deployment
+- **Analytics system** - Privacy-conscious usage tracking for platform optimization
 
-- Extracted STDIO smart recall logic into `services/recall.py` so HTTP and STDIO recall behavior can stay aligned.
-- Extracted STDIO session summary formatting into `services/summary.py` while keeping the public `marm_summary` tool as a thin wrapper.
-- Moved atomic compaction apply DB logic into `services/compaction_apply.py`, reducing endpoint size while preserving the existing write-queue apply path.
+**Multi-Platform Integration:**
 
-</details>
+- **Claude Code** integration with CLI commands (`claude mcp add marm-memory`)
+- **Qwen CLI** and **Gemini CLI** full MCP tool access
+- **Universal MCP compatibility** for any Model Context Protocol client
+- **Cross-AI memory sharing** - All connected agents contribute to unified knowledge base
 
-<details>
-<summary><strong>June 7th, 2026: Deterministic Compaction Fallback & Vectorized Recall (v2.11.0)</strong></summary>
+#### Changed
 
-#### Compaction Reliability
+- **Architecture evolution** from chatbot-focused to Universal MCP Server platform
+- **Protocol enhancement** - Original MARM commands now available as MCP tools
+- **Documentation restructure** - MCP server as primary product, chatbot as secondary demo
+- **Development approach** - Multi-agent collaboration showcasing AI-assisted development
+- **Memory model** - From session-based to persistent, searchable, semantic database
 
-- Added server-side extractive compaction summarization for `nudge_exhausted` candidates so compaction no longer depends only on a connected agent obeying prompt nudges.
-- New centroid-based summarizer ranks source memories by embedding centrality, skips near-duplicate selections, and falls back to source text when embeddings are unavailable.
-- The compaction maintenance scheduler now starts whenever `COMPACTION_ENABLED=1`; auto-apply remains optional on top via `COMPACTION_AUTO_APPLY_ENABLED=1`.
-- Nudge-exhausted candidates with missing or partially missing source memories are marked `stale` instead of remaining stuck forever.
-- Removed the last in-lock compaction summary embedding encode path; rare sanitize/hash drift now stores the summary without an embedding instead of doing CPU work inside `BEGIN IMMEDIATE`.
+#### Technical Achievements
 
-#### Recall Hot-Path Completion
-
-- Replaced per-row Python cosine scoring in `recall_similar()` with batched NumPy matrix scoring.
-- Moved both SQLite embedding BLOB fetches and vector scoring into a worker thread so large semantic recall scans no longer block the event loop.
-- Raised default `RECALL_SCAN_LIMIT` from `1000` to `10000`, removing the practical old 1000-memory semantic recall cliff for normal local use.
-- Kept bounded-recall metadata (`recall_scan_truncated`, `recall_scan_limit`) so agents can still tell when recall was capped.
-- Preserved wrong-dimension embedding safeguards while using the new vectorized scoring path.
-
-#### Swarm & Runtime Guardrails
-
-- Persisted compaction write counters in SQLite so trigger progress survives process restarts instead of living only in RAM.
-- Updated compaction trigger reset logic to use the persisted counter path.
-- Added startup detection for common unsupported multi-worker HTTP deployments (`WEB_CONCURRENCY`, `UVICORN_WORKERS`, `GUNICORN_CMD_ARGS`) with a clear warning to run one MARM process per SQLite database.
-- Clarified in README, FAQ, and install docs that `--swarm` / `--swarm-max` scale concurrency inside one process; Uvicorn/Gunicorn multi-worker mode remains future work.
-
-#### Tests & Validation
-
-- Added regression coverage for persisted compaction counters across `MARMMemory` instances.
-- Added full server-side compaction summarizer coverage for centroid selection, deduplication, missing embeddings, wrong dimensions, stale source handling, multi-candidate promotion, and suite-order isolation.
-- Added semantic recall tests proving vectorized ranking order and recall of matches beyond the old 1000-row window.
-- Updated scheduler tests for the new `COMPACTION_ENABLED` maintenance gate.
-- Fast local suite validation: `242 passed, 9 deselected, 1 warning`.
-
-</details>
-
-<details>
-<summary><strong>June 7th, 2026: Hybrid Recall with FTS5 (v2.12.0)</strong></summary>
-
-#### Recall & Search
-
-- Added SQLite FTS5 indexing for memory content with automatic insert, update, and delete triggers so exact-term recall stays in sync with the main `memories` table.
-- `marm_smart_recall` now merges semantic similarity with FTS BM25 keyword scoring through `HYBRID_SEARCH_TEXT_WEIGHT`, improving recall for commands, config keys, filenames, and error strings without giving up semantic matches.
-- Added conservative temporal weighting on top of hybrid recall through `TEMPORAL_WEIGHT` and `TEMPORAL_HALF_LIFE_DAYS`, so newer memories get a modest recency boost when matches are otherwise close without burying clearly better older context.
-- Added FTS backfill on database init so existing memory stores populate the text index automatically.
-- Kept LIKE fallback behavior for unsanitizable text queries and explicit fallback paths when FTS lookup fails, so recall degrades safely instead of hard-failing.
-- Added 3-layer retrieval depth control to `marm_smart_recall` with `detail=1/2/3`, so recall can return short summaries by default and only expand to full memory bodies when explicitly requested.
-- Layer defaults are now read-time truncation instead of new schema fields: Layer 1 returns about 200 characters, Layer 2 about 500 characters, and Layer 3 returns full content.
-- Added `detail_level` to recall responses so callers can tell which retrieval depth was returned.
-
-#### Tests & Smoke Coverage
-
-- Added focused hybrid search regression coverage for FTS trigger creation, backfill, single-hit BM25 normalization, FTS-only promotion, session filtering, and FTS failure fallback.
-- Added a dedicated hybrid search smoke harness that prints vector, FTS, and combined scores for tuning and now exits non-zero if the exact config-key recall check regresses.
-- Added focused regression coverage for detail-level validation, truncation behavior, default depth, and service-layer layered recall responses.
-- Added temporal-weighting regression coverage for half-life decay behavior, future/bad timestamp handling, and zero-weight ranking passthrough.
-
-#### Documentation
-
-- Updated README, handbook, FAQ, and contributor docs to describe MARM recall as hybrid semantic + FTS retrieval with layered depth and conservative recency bias.
+- **Docker Hub deployment** - `lyellr88/marm-mcp-server:latest` for production use
+- **Semantic search implementation** - AI embeddings for intelligent memory retrieval
+- **Universal MCP Server implementation** - Platform-agnostic memory intelligence
+- **Multi-AI workflows** - Demonstrated collaborative development between AI agents
+- **Production deployment** - Production-ready with monitoring, health checks, and scaling
 
 </details>
 
