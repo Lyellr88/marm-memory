@@ -18,6 +18,15 @@
 [![Publish](https://github.com/Lyellr88/MARM-Systems/actions/workflows/publish-mcp.yml/badge.svg?branch=MARM-main)](https://github.com/Lyellr88/MARM-Systems/actions/workflows/publish-mcp.yml)
 [![CodeQL](https://github.com/Lyellr88/MARM-Systems/actions/workflows/github-code-scanning/codeql/badge.svg?branch=MARM-main)](https://github.com/Lyellr88/MARM-Systems/security/code-scanning)
 
+Contributions are welcome! Pick a track that fits your background or browse all [open issues](https://github.com/Lyellr88/MARM-Systems/issues):
+| Task | Type | Area |
+| --- | --- | --- |
+| 🛠️ [Build `marm-init` CLI Tool](https://www.google.com/search?q=%5Bhttps://github.com/Lyellr88/MARM-Systems/issues/34%5D(https://github.com/Lyellr88/MARM-Systems/issues/34)) | Zero Friction | Core CLI |
+| 🔑 [Implement OS Keychain Security](https://www.google.com/search?q=https://github.com/Lyellr88/MARM-Systems/issues/37) | Security Infrastructure | Security/Config |
+| 📓 [Design: Notebook Scratchpad Flow](https://www.google.com/search?q=https://github.com/Lyellr88/MARM-Systems/issues/36) | Open Design Choice | Architecture |
+
+Want to discuss an idea first? Join the [MARM Discord](https://discord.gg/nhyJWPz2cf).
+
 </div>
 
 Contributions are welcome! Check out our [open issues](https://github.com/Lyellr88/MARM-Systems/issues) to get started. Join the conversation on [MARM Discord](https://discord.gg/nhyJWPz2cf).
