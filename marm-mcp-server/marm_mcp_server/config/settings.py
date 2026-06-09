@@ -108,10 +108,11 @@ if not (1 <= _raw_port <= 65535):
 SERVER_VERSION = "2.12.2"
 
 _raw_rpm = _safe_int("MARM_RATE_LIMIT_RPM", 80)
-MARM_RATE_LIMIT_RPM = max(1, _raw_rpm)
-if _raw_rpm < 1:
+# 0 = disable rate limiting; negative values clamped to 0
+MARM_RATE_LIMIT_RPM = max(0, _raw_rpm)
+if _raw_rpm < 0:
     print(
-        f"WARNING: MARM_RATE_LIMIT_RPM={_raw_rpm} below minimum 1, clamped to {MARM_RATE_LIMIT_RPM}",
+        f"WARNING: MARM_RATE_LIMIT_RPM={_raw_rpm} below minimum 0, clamped to {MARM_RATE_LIMIT_RPM}",
         file=sys.stderr,
     )
 

@@ -1012,18 +1012,24 @@ class MARMMemory:
                         fts_row,
                         (1 - TEMPORAL_WEIGHT) * hybrid + TEMPORAL_WEIGHT * t_score,
                     )
+
+            # Observability: count results by source lane (before slicing)
+            vec_set = {m["id"] for m, _ in similarities}
+            fts_only_count = sum(
+                1 for mid in combined if mid not in vec_set and mid in fts_hits
+            )
+            both_count = sum(
+                1 for mid in combined if mid in vec_set and mid in fts_hits
+            )
+            _recall_debug(
+                f"candidates: {len(combined)} total | "
+                f"vec+fts={both_count}, vec-only={len(vec_set) - both_count}, "
+                f"fts-only={fts_only_count}"
+            )
+
             similarities = sorted(combined.values(), key=lambda x: x[1], reverse=True)[
                 :limit
             ]
-
-            # Observability: count results by source lane
-            vec_ids = {m["id"] for m, _ in similarities}
-            both = sum(1 for m, _ in similarities if m["id"] in fts_hits)
-            _recall_debug(
-                f"final: {len(similarities)} results | "
-                f"vec+fts={both}, vec-only={len(vec_ids) - both}, "
-                f"fts-only={len(combined) - len(vec_ids) - (len(fts_hits) - both)}"
-            )
 
             results = []
             for memory, similarity in similarities:
