@@ -7,6 +7,37 @@ from pathlib import Path
 
 from ..utils.security import generate_api_key
 
+
+def _safe_int(env_key: str, default: int) -> int:
+    """Parse an env var as int, falling back to default on malformed input."""
+    raw = os.environ.get(env_key)
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        print(
+            f"WARNING: {env_key}={raw!r} is not a valid integer, using default {default}",
+            file=sys.stderr,
+        )
+        return default
+
+
+def _safe_float(env_key: str, default: float) -> float:
+    """Parse an env var as float, falling back to default on malformed input."""
+    raw = os.environ.get(env_key)
+    if raw is None:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        print(
+            f"WARNING: {env_key}={raw!r} is not a valid number, using default {default}",
+            file=sys.stderr,
+        )
+        return default
+
+
 SEMANTIC_SEARCH_AVAILABLE = (
     importlib.util.find_spec("sentence_transformers") is not None
 )
@@ -67,19 +98,61 @@ ANALYTICS_DB_PATH = get_analytics_db_path()
 DEFAULT_SEMANTIC_MODEL = "all-MiniLM-L6-v2"
 
 SERVER_HOST = os.environ.get("SERVER_HOST", "127.0.0.1")
-SERVER_PORT = int(os.environ.get("SERVER_PORT", 8001))
+_raw_port = _safe_int("SERVER_PORT", 8001)
+SERVER_PORT = max(1, min(65535, _raw_port))
+if not (1 <= _raw_port <= 65535):
+    print(
+        f"WARNING: SERVER_PORT={_raw_port} out of [1, 65535], clamped to {SERVER_PORT}",
+        file=sys.stderr,
+    )
 SERVER_VERSION = "2.12.2"
 
-MARM_RATE_LIMIT_RPM = int(os.environ.get("MARM_RATE_LIMIT_RPM", "80"))
-RATE_LIMIT_WINDOW_SECONDS = int(os.environ.get("RATE_LIMIT_WINDOW_SECONDS", "60"))
-RATE_LIMIT_BLOCK_SECONDS = int(os.environ.get("RATE_LIMIT_BLOCK_SECONDS", "30"))
+_raw_rpm = _safe_int("MARM_RATE_LIMIT_RPM", 80)
+# 0 = disable rate limiting; negative values clamped to 0
+MARM_RATE_LIMIT_RPM = max(0, _raw_rpm)
+if _raw_rpm < 0:
+    print(
+        f"WARNING: MARM_RATE_LIMIT_RPM={_raw_rpm} below minimum 0, clamped to {MARM_RATE_LIMIT_RPM}",
+        file=sys.stderr,
+    )
+
+_raw_rls = _safe_int("RATE_LIMIT_WINDOW_SECONDS", 60)
+RATE_LIMIT_WINDOW_SECONDS = max(1, _raw_rls)
+if _raw_rls < 1:
+    print(
+        f"WARNING: RATE_LIMIT_WINDOW_SECONDS={_raw_rls} below minimum 1, clamped to {RATE_LIMIT_WINDOW_SECONDS}",
+        file=sys.stderr,
+    )
+
+_raw_rbs = _safe_int("RATE_LIMIT_BLOCK_SECONDS", 30)
+RATE_LIMIT_BLOCK_SECONDS = max(0, _raw_rbs)
+if _raw_rbs < 0:
+    print(
+        f"WARNING: RATE_LIMIT_BLOCK_SECONDS={_raw_rbs} below minimum 0, clamped to {RATE_LIMIT_BLOCK_SECONDS}",
+        file=sys.stderr,
+    )
 
 WRITE_QUEUE_ENABLED = os.environ.get("WRITE_QUEUE_ENABLED", "1") == "1"
-MAX_QUEUE_SIZE = int(os.environ.get("MAX_QUEUE_SIZE", "100"))
-RECALL_SCAN_LIMIT = int(os.environ.get("RECALL_SCAN_LIMIT", "10000"))
-_raw_hsw = float(os.environ.get("HYBRID_SEARCH_TEXT_WEIGHT", "0.35"))
-_raw_tw = float(os.environ.get("TEMPORAL_WEIGHT", "0.1"))
-_raw_hld = float(os.environ.get("TEMPORAL_HALF_LIFE_DAYS", "30"))
+
+_raw_mqs = _safe_int("MAX_QUEUE_SIZE", 100)
+MAX_QUEUE_SIZE = max(1, _raw_mqs)
+if _raw_mqs < 1:
+    print(
+        f"WARNING: MAX_QUEUE_SIZE={_raw_mqs} below minimum 1, clamped to {MAX_QUEUE_SIZE}",
+        file=sys.stderr,
+    )
+
+_raw_rsl = _safe_int("RECALL_SCAN_LIMIT", 10000)
+RECALL_SCAN_LIMIT = max(1, _raw_rsl)
+if _raw_rsl < 1:
+    print(
+        f"WARNING: RECALL_SCAN_LIMIT={_raw_rsl} below minimum 1, clamped to {RECALL_SCAN_LIMIT}",
+        file=sys.stderr,
+    )
+
+_raw_hsw = _safe_float("HYBRID_SEARCH_TEXT_WEIGHT", 0.35)
+_raw_tw = _safe_float("TEMPORAL_WEIGHT", 0.1)
+_raw_hld = _safe_float("TEMPORAL_HALF_LIFE_DAYS", 30)
 HYBRID_SEARCH_TEXT_WEIGHT = max(0.0, min(1.0, _raw_hsw))
 TEMPORAL_WEIGHT = max(0.0, min(1.0, _raw_tw))
 TEMPORAL_HALF_LIFE_DAYS = max(1.0, _raw_hld)
@@ -100,34 +173,98 @@ if _raw_hld < 1.0:
     )
 
 CONSOLIDATION_ENABLED = os.environ.get("CONSOLIDATION_ENABLED", "0") == "1"
-CONSOLIDATION_THRESHOLD = float(os.environ.get("CONSOLIDATION_THRESHOLD", "0.92"))
+_raw_ct = _safe_float("CONSOLIDATION_THRESHOLD", 0.92)
+CONSOLIDATION_THRESHOLD = max(0.0, min(1.0, _raw_ct))
+if not (0.0 <= _raw_ct <= 1.0):
+    print(
+        f"WARNING: CONSOLIDATION_THRESHOLD={_raw_ct} out of [0, 1], clamped to {CONSOLIDATION_THRESHOLD}",
+        file=sys.stderr,
+    )
 
 COMPACTION_ENABLED = os.environ.get("COMPACTION_ENABLED", "0") == "1"
-COMPACTION_TRIGGER_COUNT = int(os.environ.get("COMPACTION_TRIGGER_COUNT", "5"))
-COMPACTION_SIMILARITY_THRESHOLD = float(
-    os.environ.get("COMPACTION_SIMILARITY_THRESHOLD", "0.88")
-)
-COMPACTION_MIN_CLUSTER_SIZE = int(os.environ.get("COMPACTION_MIN_CLUSTER_SIZE", "3"))
-COMPACTION_MIN_AGE_HOURS = int(os.environ.get("COMPACTION_MIN_AGE_HOURS", "24"))
-COMPACTION_ACTIVE_SESSION_GRACE_MINUTES = int(
-    os.environ.get("COMPACTION_ACTIVE_SESSION_GRACE_MINUTES", "15")
-)
-COMPACTION_STAGING_TTL_HOURS = int(
-    os.environ.get("COMPACTION_STAGING_TTL_HOURS", "168")
-)
+_raw_cst = _safe_float("COMPACTION_SIMILARITY_THRESHOLD", 0.88)
+COMPACTION_SIMILARITY_THRESHOLD = max(0.0, min(1.0, _raw_cst))
+if not (0.0 <= _raw_cst <= 1.0):
+    print(
+        f"WARNING: COMPACTION_SIMILARITY_THRESHOLD={_raw_cst} out of [0, 1], clamped to {COMPACTION_SIMILARITY_THRESHOLD}",
+        file=sys.stderr,
+    )
+
+_raw_ctc = _safe_int("COMPACTION_TRIGGER_COUNT", 5)
+COMPACTION_TRIGGER_COUNT = max(1, _raw_ctc)
+if _raw_ctc < 1:
+    print(
+        f"WARNING: COMPACTION_TRIGGER_COUNT={_raw_ctc} below minimum 1, clamped to {COMPACTION_TRIGGER_COUNT}",
+        file=sys.stderr,
+    )
+
+_raw_cmcs = _safe_int("COMPACTION_MIN_CLUSTER_SIZE", 3)
+COMPACTION_MIN_CLUSTER_SIZE = max(1, _raw_cmcs)
+if _raw_cmcs < 1:
+    print(
+        f"WARNING: COMPACTION_MIN_CLUSTER_SIZE={_raw_cmcs} below minimum 1, clamped to {COMPACTION_MIN_CLUSTER_SIZE}",
+        file=sys.stderr,
+    )
+
+_raw_cmah = _safe_int("COMPACTION_MIN_AGE_HOURS", 24)
+COMPACTION_MIN_AGE_HOURS = max(0, _raw_cmah)
+if _raw_cmah < 0:
+    print(
+        f"WARNING: COMPACTION_MIN_AGE_HOURS={_raw_cmah} below minimum 0, clamped to {COMPACTION_MIN_AGE_HOURS}",
+        file=sys.stderr,
+    )
+
+_raw_casm = _safe_int("COMPACTION_ACTIVE_SESSION_GRACE_MINUTES", 15)
+COMPACTION_ACTIVE_SESSION_GRACE_MINUTES = max(0, _raw_casm)
+if _raw_casm < 0:
+    print(
+        f"WARNING: COMPACTION_ACTIVE_SESSION_GRACE_MINUTES={_raw_casm} below minimum 0, clamped to {COMPACTION_ACTIVE_SESSION_GRACE_MINUTES}",
+        file=sys.stderr,
+    )
+
+_raw_csttl = _safe_int("COMPACTION_STAGING_TTL_HOURS", 168)
+COMPACTION_STAGING_TTL_HOURS = max(1, _raw_csttl)
+if _raw_csttl < 1:
+    print(
+        f"WARNING: COMPACTION_STAGING_TTL_HOURS={_raw_csttl} below minimum 1, clamped to {COMPACTION_STAGING_TTL_HOURS}",
+        file=sys.stderr,
+    )
+
 COMPACTION_AUTO_APPLY_ENABLED = (
     os.environ.get("COMPACTION_AUTO_APPLY_ENABLED", "0") == "1"
 )
-COMPACTION_AUTO_APPLY_INTERVAL_MINUTES = int(
-    os.environ.get("COMPACTION_AUTO_APPLY_INTERVAL_MINUTES", "60")
-)
-COMPACTION_MAX_NUDGES = int(os.environ.get("COMPACTION_MAX_NUDGES", "5"))
-COMPACTION_NUDGE_COOLDOWN_SECONDS = int(
-    os.environ.get("COMPACTION_NUDGE_COOLDOWN_SECONDS", "2")
-)
-COMPACTION_INJECTION_BYTE_BUDGET = int(
-    os.environ.get("COMPACTION_INJECTION_BYTE_BUDGET", "2048")
-)
+
+_raw_caai = _safe_int("COMPACTION_AUTO_APPLY_INTERVAL_MINUTES", 60)
+COMPACTION_AUTO_APPLY_INTERVAL_MINUTES = max(1, _raw_caai)
+if _raw_caai < 1:
+    print(
+        f"WARNING: COMPACTION_AUTO_APPLY_INTERVAL_MINUTES={_raw_caai} below minimum 1, clamped to {COMPACTION_AUTO_APPLY_INTERVAL_MINUTES}",
+        file=sys.stderr,
+    )
+
+_raw_cmn = _safe_int("COMPACTION_MAX_NUDGES", 5)
+COMPACTION_MAX_NUDGES = max(1, _raw_cmn)
+if _raw_cmn < 1:
+    print(
+        f"WARNING: COMPACTION_MAX_NUDGES={_raw_cmn} below minimum 1, clamped to {COMPACTION_MAX_NUDGES}",
+        file=sys.stderr,
+    )
+
+_raw_cncs = _safe_int("COMPACTION_NUDGE_COOLDOWN_SECONDS", 2)
+COMPACTION_NUDGE_COOLDOWN_SECONDS = max(0, _raw_cncs)
+if _raw_cncs < 0:
+    print(
+        f"WARNING: COMPACTION_NUDGE_COOLDOWN_SECONDS={_raw_cncs} below minimum 0, clamped to {COMPACTION_NUDGE_COOLDOWN_SECONDS}",
+        file=sys.stderr,
+    )
+
+_raw_cibb = _safe_int("COMPACTION_INJECTION_BYTE_BUDGET", 2048)
+COMPACTION_INJECTION_BYTE_BUDGET = max(0, _raw_cibb)
+if _raw_cibb < 0:
+    print(
+        f"WARNING: COMPACTION_INJECTION_BYTE_BUDGET={_raw_cibb} below minimum 0, clamped to {COMPACTION_INJECTION_BYTE_BUDGET}",
+        file=sys.stderr,
+    )
 
 MARM_API_KEY = os.environ.get("MARM_API_KEY", "")
 
