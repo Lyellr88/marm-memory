@@ -306,3 +306,96 @@ async def test_recall_similar_fts_failure_degrades_gracefully_to_vector_only(
     )
 
     assert isinstance(results, list)
+
+
+@pytest.mark.asyncio
+async def test_recall_similar_debug_logs_source_lane_breakdown(monkeypatch, tmp_path):
+    from marm_mcp_server.core import memory as memory_module
+
+    memory = MARMMemory(str(tmp_path / "memory.db"))
+    memory._encoder_failed = False
+
+    vec_only_id = "vec-only"
+    both_id = "both"
+    fts_only_id = "fts-only"
+
+    query_vec = np.zeros(384, dtype=np.float32)
+    query_vec[0] = 1.0
+
+    vector_rows = [
+        (
+            {
+                "id": vec_only_id,
+                "session_name": "debug-lanes",
+                "content": "vector only memory",
+                "timestamp": "2026-01-01T00:00:01Z",
+                "context_type": "general",
+                "metadata": "{}",
+            },
+            0.9,
+        ),
+        (
+            {
+                "id": both_id,
+                "session_name": "debug-lanes",
+                "content": "shared keyword memory",
+                "timestamp": "2026-01-01T00:00:02Z",
+                "context_type": "general",
+                "metadata": "{}",
+            },
+            0.8,
+        ),
+    ]
+
+    fts_rows = [
+        (
+            {
+                "id": both_id,
+                "session_name": "debug-lanes",
+                "content": "shared keyword memory",
+                "timestamp": "2026-01-01T00:00:02Z",
+                "context_type": "general",
+                "metadata": "{}",
+            },
+            0.9,
+        ),
+        (
+            {
+                "id": fts_only_id,
+                "session_name": "debug-lanes",
+                "content": "shared keyword no embedding",
+                "timestamp": "2026-01-01T00:00:03Z",
+                "context_type": "general",
+                "metadata": "{}",
+            },
+            0.7,
+        ),
+    ]
+
+    monkeypatch.setattr(memory_module, "_RECALL_DEBUG", True)
+    monkeypatch.setitem(
+        memory.recall_similar.__func__.__globals__,
+        "_fetch_and_score_embedding_rows",
+        lambda *_: (vector_rows, 0, False),
+    )
+    monkeypatch.setitem(
+        memory.recall_similar.__func__.__globals__,
+        "_fetch_and_score_fts_rows",
+        lambda *_: fts_rows,
+    )
+
+    debug_lines: list[str] = []
+    monkeypatch.setattr(memory_module, "_safe_print", debug_lines.append)
+
+    results = await memory.recall_similar(
+        "shared keyword",
+        session="debug-lanes",
+        limit=5,
+        query_vec=query_vec,
+    )
+
+    assert {r["id"] for r in results} == {vec_only_id, both_id, fts_only_id}
+    assert any(
+        "candidates: 3 total | vec+fts=1, vec-only=1, fts-only=1" in line
+        for line in debug_lines
+    )
