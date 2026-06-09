@@ -983,7 +983,9 @@ class MARMMemory:
                         limit * 2,
                     ):
                         fts_hits[row["id"]] = (row, fts_norm)
-                    _recall_debug(f"FTS hybrid pass: {len(fts_hits)} hits for query '{fts_query}'")
+                    _recall_debug(
+                        f"FTS hybrid pass: {len(fts_hits)} hits for query '{fts_query}'"
+                    )
                 except Exception as e:
                     _safe_print(f"FTS5 hybrid pass failed, using vector-only: {e}")
                     _recall_debug("FTS hybrid pass failed → vector-only results")
