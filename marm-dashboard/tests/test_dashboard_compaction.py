@@ -243,13 +243,18 @@ def test_compaction_apply_creates_summary_and_marks_sources(monkeypatch, tmp_pat
             assert row[1] == "source"
             assert row[2] == summary_id
 
-        # Verify staging record was created
+        # Verify staging record was created with actual source memory IDs
         staging_row = conn.execute(
-            "SELECT status FROM compaction_staging WHERE source_memory_ids LIKE ?",
-            (f'%"{summary_id}"%',),
+            "SELECT status, source_memory_ids FROM compaction_staging WHERE session_name = ?",
+            ("apply-test",),
         ).fetchone()
-        # Note: staging record includes summary_id in source_memory_ids for applied manual compactions
         assert staging_row is not None
+        assert staging_row[0] == "applied"
+        
+        # Verify source_memory_ids contains the actual source IDs, not summary_id
+        import json as test_json
+        source_ids = test_json.loads(staging_row[1])
+        assert set(source_ids) == {"a1", "a2"}
 
 
 def test_compaction_apply_rejects_cross_session_memories(monkeypatch, tmp_path):

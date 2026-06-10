@@ -674,29 +674,9 @@ def apply_manual_compaction(
     if not session_name.strip():
         raise ValueError("Session name is required")
 
-    # Verify all memories belong to the same session
-    with _connect() as conn:
-        placeholders = ",".join("?" * len(memory_ids))
-        sessions = conn.execute(
-            f"""
-            SELECT DISTINCT session_name
-            FROM memories
-            WHERE id IN ({placeholders})
-            """,
-            memory_ids,
-        ).fetchall()
-
-        if len(sessions) == 0:
-            raise ValueError("No memories found for the provided IDs")
-        if len(sessions) > 1:
-            raise ValueError(
-                "Cannot compact memories from different sessions. All memories must belong to the same session."
-            )
-        if sessions[0][0] != session_name.strip():
-            raise ValueError(
-                f"Memories belong to session '{sessions[0][0]}', not '{session_name}'"
-            )
-
+    # Deduplicate memory IDs
+    unique_memory_ids = list(set(memory_ids))
+    
     # Create summary memory
     summary_id = str(uuid.uuid4())
     timestamp = datetime.now(timezone.utc).isoformat()
@@ -704,6 +684,48 @@ def apply_manual_compaction(
     embedding = _maybe_embedding(sanitized_summary)
 
     with _connect() as conn:
+        # Verify all memories belong to the same session INSIDE the transaction
+        placeholders = ",".join("?" * len(unique_memory_ids))
+        
+        # Re-check that memories exist and belong to same session
+        rows = conn.execute(
+            f"""
+            SELECT COUNT(DISTINCT id) as count, COUNT(DISTINCT session_name) as session_count
+            FROM memories
+            WHERE id IN ({placeholders})
+            """,
+            unique_memory_ids,
+        ).fetchone()
+        
+        found_count = rows[0]
+        session_count = rows[1]
+        
+        if found_count != len(unique_memory_ids):
+            raise ValueError(
+                f"Some memory IDs not found. Expected {len(unique_memory_ids)}, found {found_count}. "
+                "Memories may have been deleted since the request started."
+            )
+        
+        if session_count != 1:
+            raise ValueError(
+                "Cannot compact memories from different sessions. All memories must belong to the same session."
+            )
+        
+        # Get the actual session name
+        actual_session = conn.execute(
+            f"""
+            SELECT DISTINCT session_name
+            FROM memories
+            WHERE id IN ({placeholders})
+            """,
+            unique_memory_ids,
+        ).fetchone()[0]
+        
+        if actual_session != session_name.strip():
+            raise ValueError(
+                f"Memories belong to session '{actual_session}', not '{session_name}'"
+            )
+        
         # Insert summary memory
         conn.execute(
             """
@@ -730,7 +752,7 @@ def apply_manual_compaction(
                 compacted_into = ?
             WHERE id IN ({placeholders})
             """,
-            [summary_id, *memory_ids],
+            [summary_id, *unique_memory_ids],
         )
 
         # Create staging record for tracking (manual compaction goes straight to 'applied')
@@ -748,7 +770,7 @@ def apply_manual_compaction(
             (
                 staging_id,
                 session_name.strip(),
-                json.dumps([summary_id]),  # Store summary_id for manual compactions
+                json.dumps(unique_memory_ids),  # FIX: Store actual source memory IDs, not summary_id
                 "Manual compaction",
                 sanitized_summary,
                 "applied",

@@ -106,6 +106,14 @@ def run_pytest_all(args: argparse.Namespace) -> bool:
     return run_step("Pytest suite", command, SERVER_ROOT, env=pytest_env())
 
 
+def run_compile_check(cwd: Path, *targets: str) -> bool:
+    return run_step(
+        "Python compile check",
+        [sys.executable, "-m", "compileall", "-q", *targets],
+        cwd,
+    )
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Run MARM MCP tests with Docker and slow checks opt-in."
@@ -119,11 +127,6 @@ def parse_args() -> argparse.Namespace:
         "--slow",
         action="store_true",
         help="Include slow subprocess STDIO transport tests.",
-    )
-    parser.add_argument(
-        "--full",
-        action="store_true",
-        help="Run compile check and clean pytest temp directory.",
     )
     parser.add_argument(
         "--compile",
@@ -165,10 +168,6 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    if args.full:
-        args.compile = True
-        args.clean_temp = True
-        args.slow = True
 
     if args.db:
         if not DASHBOARD_ROOT.exists():
@@ -176,6 +175,11 @@ def main() -> int:
             return 1
         if not DASHBOARD_TESTS_ROOT.exists():
             print(f"{RED}Dashboard tests folder not found: {DASHBOARD_TESTS_ROOT}{RESET}")
+            return 1
+        if args.compile and not run_compile_check(
+            DASHBOARD_ROOT, "marm_dashboard", "tests"
+        ):
+            print(f"\n{RED}Test runner failed.{RESET}")
             return 1
         ok = run_pytest_dashboard(args)
         if not ok:
@@ -200,11 +204,7 @@ def main() -> int:
             f"{YELLOW}Docker tests skipped by default. Use --docker to include them.{RESET}"
         )
 
-    if args.compile and not run_step(
-        "Python compile check",
-        [sys.executable, "-m", "compileall", "-q", "marm_mcp_server", "tests"],
-        SERVER_ROOT,
-    ):
+    if args.compile and not run_compile_check(SERVER_ROOT, "marm_mcp_server", "tests"):
         print(f"\n{RED}Test runner failed.{RESET}")
         return 1
 
