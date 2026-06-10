@@ -6,12 +6,25 @@ on:
   issues:
     types: [opened, labeled]
 
+permissions: {}
+
 jobs:
   post-get-involved:
     runs-on: ubuntu-latest
-    if: ${{ secrets.DISCORD_GET_INVOLVED_WEBHOOK_URL != '' }}
     steps:
+      - name: Check webhook configuration
+        id: webhook
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_GET_INVOLVED_WEBHOOK_URL }}
+        run: |
+          if [ -z "$DISCORD_WEBHOOK_URL" ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Post contributor activity to Discord
+        if: ${{ steps.webhook.outputs.enabled == 'true' }}
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_GET_INVOLVED_WEBHOOK_URL }}
           EVENT_NAME: ${{ github.event_name }}

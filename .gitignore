@@ -10,8 +10,6 @@
 
 # Local Discord tooling
 marm-bot-discord/
-package.json
-package-lock.json
 
 # Local dashboard test artifacts
 marm-dashboard/tests/.test_data/

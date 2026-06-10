@@ -4,12 +4,25 @@ on:
   release:
     types: [published]
 
+permissions: {}
+
 jobs:
   announce-release:
     runs-on: ubuntu-latest
-    if: ${{ secrets.DISCORD_ANNOUNCEMENTS_WEBHOOK_URL != '' }}
     steps:
+      - name: Check webhook configuration
+        id: webhook
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_ANNOUNCEMENTS_WEBHOOK_URL }}
+        run: |
+          if [ -z "$DISCORD_WEBHOOK_URL" ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Post release announcement to Discord
+        if: ${{ steps.webhook.outputs.enabled == 'true' }}
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_ANNOUNCEMENTS_WEBHOOK_URL }}
           RELEASE_NAME: ${{ github.event.release.name }}

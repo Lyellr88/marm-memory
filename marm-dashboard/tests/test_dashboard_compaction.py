@@ -1,6 +1,13 @@
 import sqlite3
+from datetime import datetime, timedelta, timezone
 
 from conftest import load_dashboard, local_client
+
+
+def _future_iso(days=30):
+    return (datetime.now(timezone.utc) + timedelta(days=days)).isoformat().replace(
+        "+00:00", "Z"
+    )
 
 
 def test_compaction_memories_list_excludes_compacted_sources(monkeypatch, tmp_path):
@@ -134,7 +141,12 @@ def test_compaction_preview_rejects_invalid_uuids(monkeypatch, tmp_path):
     # Invalid UUID formats should return 400
     response = client.post(
         "/api/compaction/preview",
-        json={"memory_ids": ["valid-uuid-format-here", "'; DROP TABLE memories; --"]},
+        json={
+            "memory_ids": [
+                "123e4567-e89b-12d3-a456-426614174000",
+                "'; DROP TABLE memories; --",
+            ]
+        },
     )
 
     assert response.status_code == 400
@@ -215,11 +227,12 @@ def test_compaction_apply_creates_summary_and_marks_sources(monkeypatch, tmp_pat
     with sqlite3.connect(db_path) as conn:
         # Verify summary was created
         summary = conn.execute(
-            "SELECT * FROM memories WHERE id = ?", (summary_id,)
+            "SELECT id, session_name, content, compaction_role FROM memories WHERE id = ?",
+            (summary_id,),
         ).fetchone()
         assert summary is not None
         assert summary[2] == "Combined summary of both memories"  # content
-        assert summary[5] == "summary"  # compaction_role
+        assert summary[3] == "summary"  # compaction_role
 
         # Verify sources were marked
         sources = conn.execute(
@@ -331,6 +344,7 @@ def test_maintenance_compaction_summary_counts_by_status(monkeypatch, tmp_path):
     server = load_dashboard(monkeypatch, tmp_path)
     client = local_client(server.app)
     db_path = tmp_path / "marm_memory.db"
+    future_expires_at = _future_iso()
 
     with sqlite3.connect(db_path) as conn:
         conn.execute(
@@ -364,7 +378,7 @@ def test_maintenance_compaction_summary_counts_by_status(monkeypatch, tmp_path):
                     "pending_summary",
                     "hash1",
                     "{}",
-                    "2026-01-02T00:00:00Z",
+                    future_expires_at,
                     "2026-01-01T10:00:00Z",
                     "2026-01-01T10:00:00Z",
                 ),
@@ -376,7 +390,7 @@ def test_maintenance_compaction_summary_counts_by_status(monkeypatch, tmp_path):
                     "summary_staged",
                     "hash2",
                     "{}",
-                    "2026-01-02T00:00:00Z",
+                    future_expires_at,
                     "2026-01-01T11:00:00Z",
                     "2026-01-01T11:00:00Z",
                 ),
@@ -388,7 +402,7 @@ def test_maintenance_compaction_summary_counts_by_status(monkeypatch, tmp_path):
                     "applied",
                     "hash3",
                     "{}",
-                    "2026-01-02T00:00:00Z",
+                    future_expires_at,
                     "2026-01-01T12:00:00Z",
                     "2026-01-01T12:00:00Z",
                 ),
@@ -422,6 +436,7 @@ def test_maintenance_candidates_filters_by_session(monkeypatch, tmp_path):
     server = load_dashboard(monkeypatch, tmp_path)
     client = local_client(server.app)
     db_path = tmp_path / "marm_memory.db"
+    future_expires_at = _future_iso()
 
     with sqlite3.connect(db_path) as conn:
         conn.execute(
@@ -455,7 +470,7 @@ def test_maintenance_candidates_filters_by_session(monkeypatch, tmp_path):
                     "pending_summary",
                     "h1",
                     "{}",
-                    "2026-01-02T00:00:00Z",
+                    future_expires_at,
                     "2026-01-01T10:00:00Z",
                     "2026-01-01T10:00:00Z",
                 ),
@@ -467,7 +482,7 @@ def test_maintenance_candidates_filters_by_session(monkeypatch, tmp_path):
                     "pending_summary",
                     "h2",
                     "{}",
-                    "2026-01-02T00:00:00Z",
+                    future_expires_at,
                     "2026-01-01T11:00:00Z",
                     "2026-01-01T11:00:00Z",
                 ),
@@ -490,6 +505,7 @@ def test_maintenance_candidates_filters_by_status(monkeypatch, tmp_path):
     server = load_dashboard(monkeypatch, tmp_path)
     client = local_client(server.app)
     db_path = tmp_path / "marm_memory.db"
+    future_expires_at = _future_iso()
 
     with sqlite3.connect(db_path) as conn:
         conn.execute(
@@ -523,7 +539,7 @@ def test_maintenance_candidates_filters_by_status(monkeypatch, tmp_path):
                     "pending_summary",
                     "h1",
                     "{}",
-                    "2026-01-02T00:00:00Z",
+                    future_expires_at,
                     "2026-01-01T10:00:00Z",
                     "2026-01-01T10:00:00Z",
                 ),
@@ -535,7 +551,7 @@ def test_maintenance_candidates_filters_by_status(monkeypatch, tmp_path):
                     "applied",
                     "h2",
                     "{}",
-                    "2026-01-02T00:00:00Z",
+                    future_expires_at,
                     "2026-01-01T11:00:00Z",
                     "2026-01-01T11:00:00Z",
                 ),
@@ -561,6 +577,7 @@ def test_maintenance_discard_candidate_marks_as_discarded(monkeypatch, tmp_path)
     server = load_dashboard(monkeypatch, tmp_path)
     client = local_client(server.app)
     db_path = tmp_path / "marm_memory.db"
+    future_expires_at = _future_iso()
 
     with sqlite3.connect(db_path) as conn:
         conn.execute(
@@ -593,7 +610,7 @@ def test_maintenance_discard_candidate_marks_as_discarded(monkeypatch, tmp_path)
                 "pending_summary",
                 "h1",
                 "{}",
-                "2026-01-02T00:00:00Z",
+                future_expires_at,
                 "2026-01-01T10:00:00Z",
                 "2026-01-01T10:00:00Z",
             ),
@@ -651,6 +668,7 @@ def test_maintenance_candidates_parses_source_memory_ids_json(monkeypatch, tmp_p
     server = load_dashboard(monkeypatch, tmp_path)
     client = local_client(server.app)
     db_path = tmp_path / "marm_memory.db"
+    future_expires_at = _future_iso()
 
     with sqlite3.connect(db_path) as conn:
         conn.execute(
@@ -684,7 +702,7 @@ def test_maintenance_candidates_parses_source_memory_ids_json(monkeypatch, tmp_p
                     "pending_summary",
                     "h1",
                     "{}",
-                    "2026-01-02T00:00:00Z",
+                    future_expires_at,
                     "2026-01-01T10:00:00Z",
                     "2026-01-01T10:00:00Z",
                 ),
@@ -696,7 +714,7 @@ def test_maintenance_candidates_parses_source_memory_ids_json(monkeypatch, tmp_p
                     "pending_summary",
                     "h2",
                     "{}",
-                    "2026-01-02T00:00:00Z",
+                    future_expires_at,
                     "2026-01-01T11:00:00Z",
                     "2026-01-01T11:00:00Z",
                 ),
