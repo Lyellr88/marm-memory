@@ -1,4 +1,4 @@
-# MARM: The AI That Remembers Your Conversations v2.12.2
+# MARM: The AI That Remembers Your Conversations v2.12.1
 
 Contributions are welcome! Check out our [open issues](https://github.com/Lyellr88/MARM-Systems/issues) to get started. Join the conversation on [MARM Discord](https://discord.gg/nhyJWPz2cf).
 

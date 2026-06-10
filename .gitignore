@@ -2,10 +2,17 @@
 
 # Environment files
 .env
+.env.*
 .env.local
 .env.development.local
 .env.test.local
 .env.production.local
+
+# Local Discord tooling
+marm-bot-discord/
+
+# Local dashboard test artifacts
+marm-dashboard/tests/.test_data/
 
 # Node modules
 node_modules/
@@ -112,3 +119,4 @@ marm_usage_analytics.db
 dump.md
 marm-demo/
 .ruff_cache
+marm-bot-discord

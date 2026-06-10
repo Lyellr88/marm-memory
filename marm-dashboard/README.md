@@ -59,7 +59,7 @@ Both can run at once (SQLite WAL). The dashboard is a direct SQLite admin UI: ed
 
 The status panel also checks the MCP server on `127.0.0.1:8001` every 15 seconds. When HTTP mode is running, it shows reachability, version, status, latency, and last checked time. If MCP is running through STDIO, the panel may show `Not on :8001`; that is expected because STDIO has no HTTP health endpoint.
 
-## Authentication (same rule as MCP)
+## Authentiction (same rule as MCP)
 
 | Situation | Dashboard behavior |
 |-----------|-------------------|
@@ -137,6 +137,21 @@ pip install -e ".[embeddings]"
 HTTP auth (`MARM_API_KEY`) protects the dashboard API. Anyone with direct read/write access to `marm_memory.db` (volume mount, backup, copy) can still open the database outside this app. Treat the DB file like a secret in Docker.
 
 The UI has no external CDN/font dependency, sends security headers, and keeps the unlock key in browser memory only. Refreshing the page requires unlocking again.
+
+## Development
+
+Run tests:
+```bash
+cd marm-dashboard
+python -m pytest tests/ -q
+```
+
+The pytest configuration in `pyproject.toml` automatically uses a local `.pytest_tmp` directory to avoid Windows permission issues with the default temp directory.
+
+Run specific test file:
+```bash
+python -m pytest tests/test_dashboard_compaction.py -v
+```
 
 ## License
 

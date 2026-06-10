@@ -1,0 +1,75 @@
+name: Discord Announcements
+
+on:
+  release:
+    types: [published]
+
+permissions: {}
+
+jobs:
+  announce-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check webhook configuration
+        id: webhook
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_ANNOUNCEMENTS_WEBHOOK_URL }}
+        run: |
+          if [ -z "$DISCORD_WEBHOOK_URL" ]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Post release announcement to Discord
+        if: ${{ steps.webhook.outputs.enabled == 'true' }}
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_ANNOUNCEMENTS_WEBHOOK_URL }}
+          RELEASE_NAME: ${{ github.event.release.name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_URL: ${{ github.event.release.html_url }}
+          RELEASE_BODY: ${{ github.event.release.body }}
+          REPO: ${{ github.repository }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import urllib.request
+
+          body = (os.environ.get("RELEASE_BODY") or "").strip()
+          if body:
+              body = body[:1500]
+          else:
+              body = "New release published."
+
+          payload = {
+              "username": "MARM Releases",
+              "embeds": [
+                  {
+                      "title": f"{os.environ.get('RELEASE_NAME') or os.environ['RELEASE_TAG']} released",
+                      "url": os.environ["RELEASE_URL"],
+                      "description": body,
+                      "color": 5814783,
+                      "fields": [
+                          {
+                              "name": "Repository",
+                              "value": os.environ["REPO"],
+                              "inline": True,
+                          },
+                          {
+                              "name": "Tag",
+                              "value": os.environ["RELEASE_TAG"],
+                              "inline": True,
+                          },
+                      ],
+                  }
+              ],
+          }
+
+          req = urllib.request.Request(
+              os.environ["DISCORD_WEBHOOK_URL"],
+              data=json.dumps(payload).encode("utf-8"),
+              headers={"Content-Type": "application/json"},
+          )
+          urllib.request.urlopen(req).read()
+          PY

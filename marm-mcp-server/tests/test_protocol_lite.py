@@ -16,22 +16,29 @@ _NOW = time.monotonic()  # snapshot for consistent test priming
 
 # ── Helpers ─────────────────────────────────────────────────────────
 
+
 def _tool_call_body(session_name="default"):
-    return json.dumps({
-        "jsonrpc": "2.0", "id": 1,
-        "method": "tools/call",
-        "params": {
-            "name": "marm_context_log",
-            "arguments": {"session_name": session_name, "content": "test"},
-        },
-    }).encode()
+    return json.dumps(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "marm_context_log",
+                "arguments": {"session_name": session_name, "content": "test"},
+            },
+        }
+    ).encode()
 
 
 def _mock_response():
-    body = json.dumps({
-        "jsonrpc": "2.0", "id": 1,
-        "result": {"content": [{"type": "text", "text": '{"status":"ok"}'}]},
-    }).encode()
+    body = json.dumps(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {"content": [{"type": "text", "text": '{"status":"ok"}'}]},
+        }
+    ).encode()
     resp = MagicMock()
     resp.status_code = 200
     resp.headers = MagicMock()
@@ -40,6 +47,7 @@ def _mock_response():
 
     async def _iter():
         yield body
+
     resp.body_iterator = _iter()
     resp.body = body
     return resp
@@ -71,6 +79,7 @@ async def _one_call(server, session="default"):
 
 
 # ── First Injection ──────────────────────────────────────────────────
+
 
 def test_first_call_injects_full_protocol(monkeypatch, tmp_path):
     """First tool call injects PROTOCOL.md with MARM SESSION INIT prefix."""
@@ -104,6 +113,7 @@ def test_calls_after_first_do_not_inject_full(monkeypatch, tmp_path):
 
 
 # ── Lite Reinjection ──────────────────────────────────────────────────
+
 
 def test_lite_injects_at_interval(monkeypatch, tmp_path):
     """Lite protocol appears when counter reaches the interval (30)."""
@@ -158,6 +168,7 @@ def test_lite_leaves_protocol_injected_false(monkeypatch, tmp_path):
 
 # ── Per-Session Counters ──────────────────────────────────────────────
 
+
 def test_different_sessions_independent_counters(monkeypatch, tmp_path):
     """Session A at 29 gets lite at 30; session B at 0 gets full protocol."""
     server = load_isolated_server(monkeypatch, tmp_path)
@@ -180,6 +191,7 @@ def test_different_sessions_independent_counters(monkeypatch, tmp_path):
 
 
 # ── Eviction ──────────────────────────────────────────────────────────
+
 
 def test_prune_removes_stale_sessions(monkeypatch, tmp_path):
     """Sessions not in delivered_sessions get evicted from call counts."""
@@ -213,6 +225,7 @@ def test_hard_cap_limits_call_counts(monkeypatch, tmp_path):
 
 # ── STDIO Transport ──────────────────────────────────────────────────
 
+
 def test_stdio_lite_injected_on_interval(monkeypatch, tmp_path):
     """STDIO transport injects lite every 30 calls."""
     import marm_mcp_server.server_stdio as stdio
@@ -232,11 +245,10 @@ def test_stdio_lite_injected_on_interval(monkeypatch, tmp_path):
 
     async def noop(*args, **kwargs):
         return None
+
     monkeypatch.setattr(stdio, "ensure_marm_started", noop)
     monkeypatch.setattr(stdio, "maybe_auto_refresh", noop)
-    monkeypatch.setattr(
-        stdio, "claim_pending_compaction_prompt", lambda *a, **kw: None
-    )
+    monkeypatch.setattr(stdio, "claim_pending_compaction_prompt", lambda *a, **kw: None)
 
     wrapped = stdio._log_tool_call(dummy_tool)
 
@@ -276,12 +288,14 @@ def test_stdio_lite_and_compaction_coexist(monkeypatch, tmp_path):
 
     async def noop(*args, **kwargs):
         return None
+
     monkeypatch.setattr(stdio, "ensure_marm_started", noop)
     monkeypatch.setattr(stdio, "maybe_auto_refresh", noop)
 
     # Return a known compaction string instead of None
     monkeypatch.setattr(
-        stdio, "claim_pending_compaction_prompt",
+        stdio,
+        "claim_pending_compaction_prompt",
         lambda *a, **kw: {"type": "text", "text": "COMPACTION_NUDGE_CONTENT"},
     )
 

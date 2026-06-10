@@ -49,6 +49,16 @@ class UnlockRequest(BaseModel):
     api_key: str = Field(..., min_length=1)
 
 
+class CompactionPreviewRequest(BaseModel):
+    memory_ids: list[str] = Field(..., min_length=1)
+
+
+class CompactionApplyRequest(BaseModel):
+    memory_ids: list[str] = Field(..., min_length=1)
+    summary_content: str = Field(..., min_length=1)
+    session_name: str = Field(..., min_length=1)
+
+
 @app.get("/health")
 def health():
     return {
@@ -270,6 +280,98 @@ def api_delete_notebook(name: str):
         return {"status": "deleted", "name": name}
     except FileNotFoundError as e:
         raise HTTPException(status_code=503, detail=str(e)) from e
+
+
+# ==================== Compaction (Phase 1) ====================
+
+
+@app.get("/api/compaction/memories")
+def api_compaction_memories(
+    session: Optional[str] = None,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+):
+    """List memories eligible for compaction."""
+    try:
+        return db.list_memories_for_compaction(
+            session=session, limit=limit, offset=offset
+        )
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+
+
+@app.post("/api/compaction/preview")
+def api_compaction_preview(body: CompactionPreviewRequest):
+    """Generate preview of compacting selected memories."""
+    try:
+        preview = db.generate_compaction_preview(body.memory_ids)
+        return preview
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.post("/api/compaction/apply", status_code=201)
+def api_compaction_apply(body: CompactionApplyRequest):
+    """Apply manual compaction: create summary + mark sources."""
+    try:
+        summary_id = db.apply_manual_compaction(
+            body.memory_ids,
+            body.summary_content,
+            body.session_name,
+        )
+        return {
+            "status": "applied",
+            "summary_id": summary_id,
+            "source_count": len(body.memory_ids),
+        }
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+# ==================== Maintenance (Phase 2) ====================
+
+
+@app.get("/api/maintenance/compaction-summary")
+def api_maintenance_compaction_summary():
+    """Get compaction pipeline status counts."""
+    try:
+        return db.get_compaction_summary()
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+
+
+@app.get("/api/maintenance/candidates")
+def api_maintenance_candidates(
+    session: Optional[str] = None,
+    status: Optional[str] = None,
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
+):
+    """List compaction candidates with filters."""
+    try:
+        return db.list_compaction_candidates(
+            session=session, status=status, limit=limit, offset=offset
+        )
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+
+
+@app.post("/api/maintenance/candidates/{candidate_id}/discard")
+def api_discard_candidate(candidate_id: str):
+    """Mark a candidate as discarded."""
+    try:
+        success = db.discard_compaction_candidate(candidate_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="Candidate not found")
+        return {"status": "discarded", "id": candidate_id}
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=503, detail=str(e)) from e
+    except HTTPException:
+        raise
 
 
 @app.get("/")

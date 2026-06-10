@@ -32,3 +32,7 @@ marm_dashboard = ["static/**/*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+# Use local temp directory to avoid Windows permission issues with pytest-asyncio
+tmp_path_retention_policy = "all"
+# Optional: specify custom base temp directory
+addopts = "--basetemp=.pytest_tmp"
