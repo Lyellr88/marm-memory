@@ -217,6 +217,34 @@
 
 </details>
 
+<details>
+<summary><strong>June 9th, 2026: Discord Community Ops, Webhook Automation & v2.12.1 Alignment</strong></summary>
+
+#### Version & Release Alignment
+
+- Aligned the current release metadata and packaged docs to `v2.12.1` across server version constants, packaged manifests, install docs, and mirrored handbook/readme copies.
+- Updated root documentation references so the visible release surface matches the `v2.12.1` branch and packaged server metadata.
+
+#### Discord Community Operations
+
+- Added a dedicated `marm-bot-discord/` operations workspace for Discord server management without requiring a hosted welcome bot.
+- Split Discord automation into focused scripts for bootstrap, forum migration, permission sync, message sync, and webhook sync instead of one monolithic setup file.
+- Added managed server layout definitions for `Information`, `Community`, `MARM Support`, and `Technical` categories, including forum-channel support for support workflows.
+- Locked the read-only information channels and moved native welcome behavior back to Discord so onboarding and join prompts stay platform-native.
+
+#### GitHub -> Discord Automation
+
+- Added a release-only Discord announcements workflow so GitHub releases can post high-signal notices into `#announcements`.
+- Added a separate contributor-activity workflow for `#get-involved`, covering PR opened, PR merged, issue opened, and issue labeled events.
+- Added webhook management helpers so Discord channel webhooks can be provisioned and refreshed from the repo tooling.
+
+#### Protocol Lite & Dashboard Test Coverage
+
+- Tightened protocol-lite regression coverage and formatting around HTTP/STDIO reinjection behavior, per-session counters, pruning, and coexistence with compaction nudges.
+- Added dashboard compaction regression coverage for maintenance summaries, candidate filtering, discard flows, pagination, preview/apply behavior, and source exclusion rules.
+
+</details>
+
 ---
 
 <details>

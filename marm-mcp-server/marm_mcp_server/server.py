@@ -5,7 +5,7 @@ This server integrates all modular components of the MARM protocol into a single
 FastAPI application, compliant with the MCP protocol via FastApiMCP.
 
 Author: Lyell - MARM Systems
-Version: 2.12.2
+Version: 2.12.1
 """
 
 import asyncio
@@ -268,21 +268,21 @@ _PROTOCOL_CALL_COUNTS_MAX_SESSIONS = 4096
 
 def _prune_call_counts() -> None:
     """Prune call counts to match delivered sessions.
-    
+
     Removes entries for sessions that are no longer in
     _protocol_delivered_sessions (aged out by TTL or max-sessions cap).
     Also enforces hard cap when count grows too large.
     """
     # Prune sessions not in delivered set
     delivered = set(_protocol_delivered_sessions.keys())
-    stale = [
-        k for k in _protocol_call_counts if k not in delivered
-    ]
+    stale = [k for k in _protocol_call_counts if k not in delivered]
     for k in stale:
         _protocol_call_counts.pop(k, None)
     # Hard cap as safety net
     if len(_protocol_call_counts) > _PROTOCOL_CALL_COUNTS_MAX_SESSIONS:
-        excess = list(_protocol_call_counts.keys())[:-_PROTOCOL_CALL_COUNTS_MAX_SESSIONS]
+        excess = list(_protocol_call_counts.keys())[
+            :-_PROTOCOL_CALL_COUNTS_MAX_SESSIONS
+        ]
         for k in excess:
             _protocol_call_counts.pop(k, None)
 

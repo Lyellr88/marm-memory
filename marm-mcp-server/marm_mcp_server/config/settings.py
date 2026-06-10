@@ -105,7 +105,7 @@ if not (1 <= _raw_port <= 65535):
         f"WARNING: SERVER_PORT={_raw_port} out of [1, 65535], clamped to {SERVER_PORT}",
         file=sys.stderr,
     )
-SERVER_VERSION = "2.12.2"
+SERVER_VERSION = "2.12.1"
 
 _raw_rpm = _safe_int("MARM_RATE_LIMIT_RPM", 80)
 # 0 = disable rate limiting; negative values clamped to 0

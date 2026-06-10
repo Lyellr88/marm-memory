@@ -1,0 +1,122 @@
+name: Discord Get Involved
+
+on:
+  pull_request:
+    types: [opened, closed]
+  issues:
+    types: [opened, labeled]
+
+jobs:
+  post-get-involved:
+    runs-on: ubuntu-latest
+    if: ${{ secrets.DISCORD_GET_INVOLVED_WEBHOOK_URL != '' }}
+    steps:
+      - name: Post contributor activity to Discord
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_GET_INVOLVED_WEBHOOK_URL }}
+          EVENT_NAME: ${{ github.event_name }}
+          ACTION_NAME: ${{ github.event.action }}
+          REPO: ${{ github.repository }}
+          ACTOR: ${{ github.actor }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_MERGED: ${{ github.event.pull_request.merged }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_URL: ${{ github.event.issue.html_url }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          LABEL_NAME: ${{ github.event.label.name }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import sys
+          import urllib.request
+
+          event_name = os.environ["EVENT_NAME"]
+          action_name = os.environ["ACTION_NAME"]
+
+          payload = None
+
+          if event_name == "pull_request" and action_name == "opened":
+              payload = {
+                  "username": "MARM Get Involved",
+                  "embeds": [
+                      {
+                          "title": f"PR #{os.environ['PR_NUMBER']} opened",
+                          "url": os.environ["PR_URL"],
+                          "description": os.environ["PR_TITLE"],
+                          "color": 3447003,
+                          "fields": [
+                              {"name": "Repository", "value": os.environ["REPO"], "inline": True},
+                              {"name": "Author", "value": os.environ["ACTOR"], "inline": True},
+                          ],
+                      }
+                  ],
+              }
+
+          elif (
+              event_name == "pull_request"
+              and action_name == "closed"
+              and os.environ.get("PR_MERGED", "").lower() == "true"
+          ):
+              payload = {
+                  "username": "MARM Get Involved",
+                  "embeds": [
+                      {
+                          "title": f"PR #{os.environ['PR_NUMBER']} merged",
+                          "url": os.environ["PR_URL"],
+                          "description": os.environ["PR_TITLE"],
+                          "color": 5763719,
+                          "fields": [
+                              {"name": "Repository", "value": os.environ["REPO"], "inline": True},
+                              {"name": "Merged by", "value": os.environ["ACTOR"], "inline": True},
+                          ],
+                      }
+                  ],
+              }
+
+          elif event_name == "issues" and action_name == "opened":
+              payload = {
+                  "username": "MARM Get Involved",
+                  "embeds": [
+                      {
+                          "title": f"Issue #{os.environ['ISSUE_NUMBER']} opened",
+                          "url": os.environ["ISSUE_URL"],
+                          "description": os.environ["ISSUE_TITLE"],
+                          "color": 15844367,
+                          "fields": [
+                              {"name": "Repository", "value": os.environ["REPO"], "inline": True},
+                              {"name": "Author", "value": os.environ["ACTOR"], "inline": True},
+                          ],
+                      }
+                  ],
+              }
+
+          elif event_name == "issues" and action_name == "labeled":
+              payload = {
+                  "username": "MARM Get Involved",
+                  "embeds": [
+                      {
+                          "title": f"Issue #{os.environ['ISSUE_NUMBER']} labeled",
+                          "url": os.environ["ISSUE_URL"],
+                          "description": os.environ["ISSUE_TITLE"],
+                          "color": 10181046,
+                          "fields": [
+                              {"name": "Label", "value": os.environ["LABEL_NAME"] or "unknown", "inline": True},
+                              {"name": "Updated by", "value": os.environ["ACTOR"], "inline": True},
+                          ],
+                      }
+                  ],
+              }
+
+          if payload is None:
+              sys.exit(0)
+
+          req = urllib.request.Request(
+              os.environ["DISCORD_WEBHOOK_URL"],
+              data=json.dumps(payload).encode("utf-8"),
+              headers={"Content-Type": "application/json"},
+          )
+          urllib.request.urlopen(req).read()
+          PY
