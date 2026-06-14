@@ -1,0 +1,69 @@
+name: Bluesky Announcements
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions: {}
+
+jobs:
+  announce-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post release announcement to Bluesky
+        env:
+          BLUESKY_IDENTIFIER: ${{ secrets.BLUESKY_IDENTIFIER }}
+          BLUESKY_APP_PASSWORD: ${{ secrets.BLUESKY_APP_PASSWORD }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_URL: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ github.ref_name }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import urllib.request
+          from datetime import datetime, timezone
+
+          identifier = os.environ["BLUESKY_IDENTIFIER"]
+          password = os.environ["BLUESKY_APP_PASSWORD"]
+          tag = os.environ["RELEASE_TAG"]
+          url = os.environ["RELEASE_URL"]
+
+          # Authenticate
+          auth_req = urllib.request.Request(
+              "https://bsky.social/xrpc/com.atproto.server.createSession",
+              data=json.dumps({"identifier": identifier, "password": password}).encode(),
+              headers={"Content-Type": "application/json"},
+          )
+          auth_resp = json.loads(urllib.request.urlopen(auth_req).read())
+          token = auth_resp["accessJwt"]
+          did = auth_resp["did"]
+
+          text = f"MARM MCP Server {tag} is live!\n\nNew release now available on PyPI, Docker Hub, and the MCP Registry.\n\n{url}"
+
+          # Bluesky requires the link to be a facet for it to render as a clickable URL
+          url_start = text.index(url)
+          url_end = url_start + len(url)
+
+          record = {
+              "text": text,
+              "createdAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+              "facets": [
+                  {
+                      "index": {"byteStart": url_start, "byteEnd": url_end},
+                      "features": [{"$type": "app.bsky.richtext.facet#link", "uri": url}],
+                  }
+              ],
+          }
+
+          post_req = urllib.request.Request(
+              "https://bsky.social/xrpc/com.atproto.repo.createRecord",
+              data=json.dumps({"repo": did, "collection": "app.bsky.feed.post", "record": record}).encode(),
+              headers={
+                  "Content-Type": "application/json",
+                  "Authorization": f"Bearer {token}",
+              },
+          )
+          urllib.request.urlopen(post_req).read()
+          print(f"Posted to Bluesky: MARM {tag}")
+          PY
