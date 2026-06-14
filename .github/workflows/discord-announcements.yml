@@ -1,8 +1,9 @@
 name: Discord Announcements
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - "v*"
 
 permissions: {}
 
@@ -25,10 +26,8 @@ jobs:
         if: ${{ steps.webhook.outputs.enabled == 'true' }}
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_ANNOUNCEMENTS_WEBHOOK_URL }}
-          RELEASE_NAME: ${{ github.event.release.name }}
-          RELEASE_TAG: ${{ github.event.release.tag_name }}
-          RELEASE_URL: ${{ github.event.release.html_url }}
-          RELEASE_BODY: ${{ github.event.release.body }}
+          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_URL: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ github.ref_name }}
           REPO: ${{ github.repository }}
         run: |
           python - <<'PY'
@@ -36,19 +35,13 @@ jobs:
           import os
           import urllib.request
 
-          body = (os.environ.get("RELEASE_BODY") or "").strip()
-          if body:
-              body = body[:1500]
-          else:
-              body = "New release published."
-
           payload = {
               "username": "MARM Releases",
               "embeds": [
                   {
-                      "title": f"{os.environ.get('RELEASE_NAME') or os.environ['RELEASE_TAG']} released",
+                      "title": f"{os.environ['RELEASE_TAG']} tagged",
                       "url": os.environ["RELEASE_URL"],
-                      "description": body,
+                      "description": "New version tag pushed for MARM.",
                       "color": 5814783,
                       "fields": [
                           {

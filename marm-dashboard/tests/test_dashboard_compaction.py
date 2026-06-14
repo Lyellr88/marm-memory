@@ -5,8 +5,10 @@ from conftest import load_dashboard, local_client
 
 
 def _future_iso(days=30):
-    return (datetime.now(timezone.utc) + timedelta(days=days)).isoformat().replace(
-        "+00:00", "Z"
+    return (
+        (datetime.now(timezone.utc) + timedelta(days=days))
+        .isoformat()
+        .replace("+00:00", "Z")
     )
 
 
@@ -250,9 +252,10 @@ def test_compaction_apply_creates_summary_and_marks_sources(monkeypatch, tmp_pat
         ).fetchone()
         assert staging_row is not None
         assert staging_row[0] == "applied"
-        
+
         # Verify source_memory_ids contains the actual source IDs, not summary_id
         import json as test_json
+
         source_ids = test_json.loads(staging_row[1])
         assert set(source_ids) == {"a1", "a2"}
 

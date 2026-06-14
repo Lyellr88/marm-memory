@@ -223,7 +223,7 @@ def list_memories(
     with _connect() as conn:
         columns = conn.execute("PRAGMA table_info(memories)").fetchall()
         has_compaction = any(col[1] == "compaction_role" for col in columns)
-    
+
     if has_compaction:
         clauses.append("(compaction_role IS NULL OR compaction_role != 'source')")
 
@@ -586,7 +586,7 @@ def _validate_memory_ids(memory_ids: List[str]) -> None:
         if not mid or not isinstance(mid, str):
             raise ValueError(f"Invalid memory ID format: {mid}")
         # Allow alphanumeric, hyphens, and underscores (covers UUIDs and test IDs)
-        if not re.match(r'^[a-zA-Z0-9_-]+$', mid):
+        if not re.match(r"^[a-zA-Z0-9_-]+$", mid):
             raise ValueError(f"Invalid memory ID format: {mid}")
 
 
@@ -676,7 +676,7 @@ def apply_manual_compaction(
 
     # Deduplicate memory IDs
     unique_memory_ids = list(set(memory_ids))
-    
+
     # Create summary memory
     summary_id = str(uuid.uuid4())
     timestamp = datetime.now(timezone.utc).isoformat()
@@ -686,7 +686,7 @@ def apply_manual_compaction(
     with _connect() as conn:
         # Verify all memories belong to the same session INSIDE the transaction
         placeholders = ",".join("?" * len(unique_memory_ids))
-        
+
         # Re-check that memories exist and belong to same session
         rows = conn.execute(
             f"""
@@ -696,21 +696,21 @@ def apply_manual_compaction(
             """,
             unique_memory_ids,
         ).fetchone()
-        
+
         found_count = rows[0]
         session_count = rows[1]
-        
+
         if found_count != len(unique_memory_ids):
             raise ValueError(
                 f"Some memory IDs not found. Expected {len(unique_memory_ids)}, found {found_count}. "
                 "Memories may have been deleted since the request started."
             )
-        
+
         if session_count != 1:
             raise ValueError(
                 "Cannot compact memories from different sessions. All memories must belong to the same session."
             )
-        
+
         # Get the actual session name
         actual_session = conn.execute(
             f"""
@@ -720,12 +720,12 @@ def apply_manual_compaction(
             """,
             unique_memory_ids,
         ).fetchone()[0]
-        
+
         if actual_session != session_name.strip():
             raise ValueError(
                 f"Memories belong to session '{actual_session}', not '{session_name}'"
             )
-        
+
         # Insert summary memory
         conn.execute(
             """
@@ -770,7 +770,9 @@ def apply_manual_compaction(
             (
                 staging_id,
                 session_name.strip(),
-                json.dumps(unique_memory_ids),  # FIX: Store actual source memory IDs, not summary_id
+                json.dumps(
+                    unique_memory_ids
+                ),  # FIX: Store actual source memory IDs, not summary_id
                 "Manual compaction",
                 sanitized_summary,
                 "applied",

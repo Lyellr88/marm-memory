@@ -174,7 +174,9 @@ def main() -> int:
             print(f"{RED}Dashboard folder not found: {DASHBOARD_ROOT}{RESET}")
             return 1
         if not DASHBOARD_TESTS_ROOT.exists():
-            print(f"{RED}Dashboard tests folder not found: {DASHBOARD_TESTS_ROOT}{RESET}")
+            print(
+                f"{RED}Dashboard tests folder not found: {DASHBOARD_TESTS_ROOT}{RESET}"
+            )
             return 1
         if args.compile and not run_compile_check(
             DASHBOARD_ROOT, "marm_dashboard", "tests"
