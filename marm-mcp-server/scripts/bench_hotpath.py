@@ -2,7 +2,7 @@
 
 Measures, against the REAL MARMMemory + real all-MiniLM-L6-v2 encoder:
   1. encode() wall time (the per-call CPU cost)
-  2. recall_similar latency vs session size N (O(N) brute force + 1000 cliff)
+  2. recall_similar latency vs session size N (FTS filter + bounded embedding rerank)
   3. event-loop blocking: concurrent recalls via asyncio.gather vs serial sum
   4. write latency with consolidation OFF vs ON (double-encode + scan-per-write)
 
@@ -104,7 +104,8 @@ async def bench_recall_vs_n(mem, sizes, iters=15):
         samples = []
         for k in range(iters):
             t0 = time.perf_counter()
-            await mem.recall_similar(f"latency embedding {k}", session="bench", limit=5)
+            q = f"{VOCAB[k % len(VOCAB)]} {VOCAB[(k + 1) % len(VOCAB)]}"
+            await mem.recall_similar(q, session="bench", limit=5)
             samples.append((time.perf_counter() - t0) * 1000)
         results[n] = samples
     return results

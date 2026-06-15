@@ -11,9 +11,16 @@
 - Added `FTS_CANDIDATE_LIMIT` (default `50`) as the new cap controlling how many FTS candidates are fetched before semantic reranking; bounded semantic fallback remains in place for abstract queries, malformed/weak FTS coverage, and unscoreable candidate sets.
 - Preserved temporal weighting, response shape, and bounded-recall metadata while changing `recall_scan_truncated` semantics so it only reflects the semantic fallback lane rather than the primary filter→rerank path.
 
+### Long-Memory Embedding Coverage
+
+- Added chunked embeddings for long memories through a `memory_chunks` sidecar table so content beyond the base encoder window is still searchable instead of being truncated to one parent embedding.
+- Kept short memories on the existing single-vector `memories.embedding` path while long memories are split into overlapping chunks, scored chunk-aware in both rerank and fallback recall lanes, and collapsed back to one parent result using the best chunk similarity.
+- Moved long-memory chunk writes off the agent-visible return path with background scheduling, enabled SQLite foreign-key enforcement for cascade cleanup, and added dedicated chunking coverage plus a smoke script for end-to-end validation.
+
 ### Test Coverage
 
 - Reworked hybrid recall tests around the new architecture: filter→rerank success, semantic fallback on empty FTS, fallback on missing/unscoreable candidates, wrong-dimension candidate handling, candidate-cap enforcement, and scan-metadata behavior.
+- Added chunking tests covering boundary splitting, parent-level dedup by best chunk score, schema creation, cascade delete, stale-chunk cleanup on merge, and parent-content recall behavior for long memories.
 
 </details>
 

@@ -189,7 +189,7 @@ The AI agent will automatically use the appropriate tools. Manual tool access is
 
 | **Category** | **Tool** | **Description** |
 |--------------|----------|-----------------|
-| **Memory Intelligence** | `marm_smart_recall` | AI-powered recall across all memories. Uses FTS5 BM25 to filter exact-term candidates first, semantically re-ranks that bounded set by embedding similarity, falls back to bounded semantic scanning when FTS coverage is weak, supports global search with `search_all=True`, and can return summary/context/full memory depth with `detail=1/2/3` |
+| **Memory Intelligence** | `marm_smart_recall` | AI-powered recall across all memories. Uses FTS5 BM25 to filter exact-term candidates first, semantically re-ranks that bounded set by embedding similarity, falls back to bounded semantic scanning when FTS coverage is weak, and scores long memories through chunked embeddings while still returning one parent memory result. Supports global search with `search_all=True` and can return summary/context/full memory depth with `detail=1/2/3` |
 | | `marm_context_log` | Intelligent auto-classifying memory storage using vector embeddings |
 | **Logging System** | `marm_log_session` | Create or switch to named session container |
 | | `marm_log_entry` | Add structured log entry with auto-date formatting |
@@ -207,8 +207,9 @@ MARM keeps the AI-facing surface small while the server handles the infrastructu
 
 - **Write stability:** SQLite WAL mode, connection pooling, and a serialized write queue are enabled for normal use.
 - **Swarm control:** HTTP presets tune shared access: default `80 RPM`, `--swarm` `200 RPM`, `--swarm-max` `600 RPM`, and `--trusted` disables rate limiting for private deployments.
-- **Cleaner recall:** FTS filter→semantic re-rank, bounded semantic fallback, conservative temporal weighting, write-time consolidation, and optional compaction reduce duplicate/noisy memories over time.
+- **Cleaner recall:** FTS filter→semantic re-rank, bounded semantic fallback, chunked long-memory embeddings, conservative temporal weighting, write-time consolidation, and optional compaction reduce duplicate/noisy memories over time.
 - **Lower token burn:** `marm_smart_recall` can return summary, context, or full-memory depth so agents do not pull full bodies unless they need them.
+- **Long-memory coverage:** memories that exceed the base embedding window are chunked internally and scored by best-matching chunk, so late-body details stay recallable without flooding results with duplicate chunk hits.
 - **Safe defaults:** local pip binds to `127.0.0.1`; Docker HTTP requires `MARM_API_KEY`; STDIO stays private and keyless.
 
-For deeper architecture, configuration, and workflow guidance, use [MCP-HANDBOOK.md](MCP-HANDBOOK.md) and [FAQ.md](docs/FAQ.md).
+For deeper architecture, configuration, and workflow guidance, use [MCP-HANDBOOK.md](MCP-HANDBOOK.md) and [FAQ.md](FAQ.md).

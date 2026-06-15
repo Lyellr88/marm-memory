@@ -272,7 +272,7 @@ Use normal branch pushes for review. Use tag pushes only for intentional release
 
 - **[MCP-HANDBOOK.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/MCP-HANDBOOK.md)** - Complete MCP server usage guide with commands, workflows, and examples
 - **[PROTOCOL.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/PROTOCOL.md)** - Quick start commands and protocol reference
-- **[FAQ.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/FAQ.md)** - Answers to common questions about using MARM
+- **[FAQ.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/marm-mcp-server/marm-docs/FAQ.md)** - Answers to common questions about using MARM
 
 ### **MCP Server Installation**
 

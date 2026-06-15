@@ -95,6 +95,64 @@ def _safe_fts_query(query: str) -> str | None:
     return " ".join(f'"{t}"' for t in tokens)
 
 
+CHUNK_TOKEN_LIMIT = 150
+CHUNK_OVERLAP_TOKENS = 50
+CHUNK_THRESHOLD_WORDS = 180
+
+
+def _chunk_text(text: str) -> list[str]:
+    words = text.split()
+    if len(words) <= CHUNK_THRESHOLD_WORDS:
+        return []
+    step = CHUNK_TOKEN_LIMIT - CHUNK_OVERLAP_TOKENS
+    chunks = []
+    i = 0
+    while i < len(words):
+        chunks.append(" ".join(words[i : i + CHUNK_TOKEN_LIMIT]))
+        i += step
+    return chunks
+
+
+async def _write_chunks(
+    mem_instance,
+    db_path: str,
+    memory_id: str,
+    chunks: list[str],
+    expected_content_hash: str,
+) -> None:
+    embeddings = []
+    for chunk in chunks:
+        try:
+            vec = await asyncio.to_thread(mem_instance._encode_sync, chunk)
+            embeddings.append(vec.tobytes())
+        except Exception as e:
+            _safe_print(f"Chunk encoding failed for memory {memory_id}: {e}")
+            return
+    conn = sqlite3.connect(db_path, timeout=30.0)
+    try:
+        current_hash = conn.execute(
+            "SELECT content_hash FROM memories WHERE id = ?", (memory_id,)
+        ).fetchone()
+        if current_hash is None or current_hash[0] != expected_content_hash:
+            _safe_print(
+                f"Chunk write aborted for memory {memory_id}: content changed before insert"
+            )
+            return
+        conn.executemany(
+            "INSERT INTO memory_chunks (memory_id, chunk_index, chunk_text, embedding)"
+            " VALUES (?, ?, ?, ?)",
+            [
+                (memory_id, i, chunk, emb)
+                for i, (chunk, emb) in enumerate(zip(chunks, embeddings))
+            ],
+        )
+        conn.commit()
+    except Exception as e:
+        _safe_print(f"Chunk DB write failed for memory {memory_id}: {e}")
+    finally:
+        conn.close()
+
+
 def _score_embedding_rows(rows, query_embedding, limit: int):
     """Score embedding rows in one NumPy batch instead of a Python cosine loop."""
     if limit <= 0:
@@ -141,6 +199,67 @@ def _score_embedding_rows(rows, query_embedding, limit: int):
     ], dim_skipped
 
 
+def _score_chunk_aware(
+    memories,
+    chunks_by_id: dict,
+    query_embedding,
+) -> tuple[list[tuple], int]:
+    """Score memories using chunk embeddings where available, parent embedding otherwise.
+
+    Deduplicates to one (memory_row, best_score) per memory_id before returning.
+    """
+    query_vec = np.asarray(query_embedding, dtype=np.float32)
+    expected_dim = query_vec.shape[0]
+    query_norm = np.linalg.norm(query_vec)
+    if query_norm == 0:
+        return [], 0
+    normalized_query = query_vec / query_norm
+
+    dim_skipped = 0
+    results = []
+
+    for mem in memories:
+        mem_id = mem["id"]
+        chunk_embs = chunks_by_id.get(mem_id)
+
+        if chunk_embs:
+            best_score = None
+            for emb_bytes in chunk_embs:
+                try:
+                    vec = np.frombuffer(emb_bytes, dtype=np.float32)
+                except Exception:
+                    continue
+                if vec.shape[0] != expected_dim:
+                    dim_skipped += 1
+                    continue
+                norm = np.linalg.norm(vec)
+                if norm == 0:
+                    continue
+                score = float(np.dot(vec / norm, normalized_query))
+                if best_score is None or score > best_score:
+                    best_score = score
+            if best_score is not None:
+                results.append((mem, best_score))
+        else:
+            emb_bytes = mem["embedding"]
+            if emb_bytes is None:
+                continue
+            try:
+                vec = np.frombuffer(emb_bytes, dtype=np.float32)
+            except Exception:
+                continue
+            if vec.shape[0] != expected_dim:
+                dim_skipped += 1
+                continue
+            norm = np.linalg.norm(vec)
+            if norm == 0:
+                continue
+            results.append((mem, float(np.dot(vec / norm, normalized_query))))
+
+    results.sort(key=lambda x: x[1], reverse=True)
+    return results, dim_skipped
+
+
 def _fetch_and_score_embedding_rows(
     db_path: str,
     session: str | None,
@@ -152,7 +271,7 @@ def _fetch_and_score_embedding_rows(
     try:
         conn.row_factory = sqlite3.Row
         if session is None:
-            cursor = conn.execute(
+            memories = conn.execute(
                 """
                 SELECT id, session_name, content, embedding, timestamp, context_type, metadata
                 FROM memories
@@ -160,11 +279,11 @@ def _fetch_and_score_embedding_rows(
                   AND (compaction_role IS NULL OR compaction_role != 'source')
                 ORDER BY timestamp DESC
                 LIMIT ?
-            """,
+                """,
                 (scan_limit + 1,),
-            )
+            ).fetchall()
         else:
-            cursor = conn.execute(
+            memories = conn.execute(
                 """
                 SELECT id, session_name, content, embedding, timestamp, context_type, metadata
                 FROM memories
@@ -173,18 +292,29 @@ def _fetch_and_score_embedding_rows(
                   AND (compaction_role IS NULL OR compaction_role != 'source')
                 ORDER BY timestamp DESC
                 LIMIT ?
-            """,
+                """,
                 (session, scan_limit + 1),
-            )
+            ).fetchall()
 
-        memories = cursor.fetchall()
+        scan_truncated = len(memories) > scan_limit
+        memories = memories[:scan_limit]
+
+        chunks_by_id: dict[str, list] = {}
+        if memories:
+            ids = [m["id"] for m in memories]
+            placeholders = ",".join("?" * len(ids))
+            for row in conn.execute(
+                f"SELECT memory_id, embedding FROM memory_chunks WHERE memory_id IN ({placeholders})",
+                ids,
+            ).fetchall():
+                chunks_by_id.setdefault(row[0], []).append(row[1])
     finally:
         conn.close()
 
-    scan_truncated = len(memories) > scan_limit
-    memories = memories[:scan_limit]
-    similarities, dim_skipped = _score_embedding_rows(memories, query_embedding, limit)
-    return similarities, dim_skipped, scan_truncated
+    similarities, dim_skipped = _score_chunk_aware(
+        memories, chunks_by_id, query_embedding
+    )
+    return similarities[:limit], dim_skipped, scan_truncated
 
 
 def _fetch_and_score_fts_rows(
@@ -277,17 +407,21 @@ def _fetch_and_score_by_ids(
             SELECT id, session_name, content, embedding, timestamp, context_type, metadata
             FROM memories
             WHERE id IN ({placeholders})
-              AND embedding IS NOT NULL
               AND (compaction_role IS NULL OR compaction_role != 'source')
             """,
             memory_ids,
         ).fetchall()
+
+        chunks_by_id: dict[str, list] = {}
+        for row in conn.execute(
+            f"SELECT memory_id, embedding FROM memory_chunks WHERE memory_id IN ({placeholders})",
+            memory_ids,
+        ).fetchall():
+            chunks_by_id.setdefault(row[0], []).append(row[1])
     finally:
         conn.close()
-    similarities, dim_skipped = _score_embedding_rows(
-        memories, query_embedding, len(memory_ids)
-    )
-    return similarities, dim_skipped
+
+    return _score_chunk_aware(memories, chunks_by_id, query_embedding)
 
 
 from ..config.settings import (  # noqa: E402
@@ -349,6 +483,7 @@ class SQLiteConnectionPool:
         conn.execute("PRAGMA synchronous=NORMAL")
         conn.execute("PRAGMA cache_size=10000")
         conn.execute("PRAGMA temp_store=MEMORY")
+        conn.execute("PRAGMA foreign_keys=ON")
 
         self.pool.put(conn)
         self.created_connections += 1
@@ -728,6 +863,22 @@ class MARMMemory:
                 "INSERT OR IGNORE INTO memories_fts(rowid, content) "
                 "SELECT rowid, content FROM memories"
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS memory_chunks (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    memory_id TEXT NOT NULL,
+                    chunk_index INTEGER NOT NULL,
+                    chunk_text TEXT NOT NULL,
+                    embedding BLOB NOT NULL,
+                    FOREIGN KEY (memory_id) REFERENCES memories(id) ON DELETE CASCADE
+                )
+                """
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_memory_chunks_memory_id"
+                " ON memory_chunks(memory_id)"
+            )
             conn.commit()
 
     def _encode_sync(self, text: str):
@@ -869,6 +1020,15 @@ class MARMMemory:
                     ),
                 )
 
+        with self.get_connection() as conn:
+            conn.execute("DELETE FROM memory_chunks WHERE memory_id = ?", (memory_id,))
+
+        chunks = _chunk_text(merged_content)
+        if chunks and self._load_encoder_lazily():
+            _chunk_task = asyncio.create_task(  # noqa: RUF006
+                _write_chunks(self, self.db_path, memory_id, chunks, merged_hash)
+            )
+
     async def store_memory(
         self,
         content: str,
@@ -959,6 +1119,13 @@ class MARMMemory:
             )
 
         self._on_memory_written(session)
+
+        chunks = _chunk_text(sanitized_content)
+        if chunks and self._load_encoder_lazily():
+            _chunk_task = asyncio.create_task(  # noqa: RUF006
+                _write_chunks(self, self.db_path, memory_id, chunks, content_hash)
+            )
+
         return memory_id
 
     async def store_memory_queued(
