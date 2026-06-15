@@ -1,5 +1,6 @@
 """Documentation loading service for MARM MCP Server."""
 
+import os
 from pathlib import Path
 from datetime import datetime, timezone
 import asyncio
@@ -170,6 +171,9 @@ def docs_are_loaded() -> bool:
 
 async def ensure_docs_loaded() -> None:
     """Load docs once, even when multiple tool calls arrive together."""
+    if os.environ.get("MARM_SKIP_DOC_LOAD") == "1":
+        return
+
     global _docs_load_in_progress
 
     if docs_are_loaded():

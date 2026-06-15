@@ -60,6 +60,7 @@ def test_stdio_handles_mcp_initialize_and_exposes_tools(tmp_path):
     env = os.environ.copy()
     env["MARM_DB_PATH"] = str(tmp_path / "stdio-rpc.db")
     env["MARM_ANALYTICS_DB_PATH"] = str(tmp_path / "stdio-rpc-analytics.db")
+    env["MARM_SKIP_DOC_LOAD"] = "1"
 
     def message(msg):
         return (json.dumps(msg) + "\n").encode("utf-8")
@@ -316,6 +317,7 @@ def test_stdio_log_file_is_created_and_contains_startup(tmp_path):
     env["MARM_DB_PATH"] = str(tmp_path / "log-test.db")
     env["MARM_ANALYTICS_DB_PATH"] = str(tmp_path / "log-test-analytics.db")
     env["MARM_STDIO_LOG_DIR"] = str(log_dir)
+    env["MARM_SKIP_DOC_LOAD"] = "1"
 
     stdin_data = _base_rpc_stdin()
     result = subprocess.run(
@@ -342,6 +344,7 @@ def test_stdio_log_records_tool_call_and_ok_status(tmp_path):
     env["MARM_DB_PATH"] = str(tmp_path / "log-tool.db")
     env["MARM_ANALYTICS_DB_PATH"] = str(tmp_path / "log-tool-analytics.db")
     env["MARM_STDIO_LOG_DIR"] = str(log_dir)
+    env["MARM_SKIP_DOC_LOAD"] = "1"
 
     def message(msg):
         return (json.dumps(msg) + "\n").encode("utf-8")
@@ -423,6 +426,7 @@ def test_stdio_debug_mode_logs_session_name_not_content(tmp_path):
     env["MARM_ANALYTICS_DB_PATH"] = str(tmp_path / "log-debug-analytics.db")
     env["MARM_STDIO_LOG_DIR"] = str(log_dir)
     env["MARM_STDIO_LOG_LEVEL"] = "DEBUG"
+    env["MARM_SKIP_DOC_LOAD"] = "1"
 
     def message(msg):
         return (json.dumps(msg) + "\n").encode("utf-8")
@@ -500,6 +504,7 @@ def test_stdio_log_does_not_contain_stored_memory_content(tmp_path):
     env["MARM_DB_PATH"] = str(tmp_path / "log-privacy.db")
     env["MARM_ANALYTICS_DB_PATH"] = str(tmp_path / "log-privacy-analytics.db")
     env["MARM_STDIO_LOG_DIR"] = str(log_dir)
+    env["MARM_SKIP_DOC_LOAD"] = "1"
 
     secret_content = "PRIVATE_SENTINEL_XQ9Z3_SHOULD_NOT_APPEAR_IN_LOG"
 
@@ -559,6 +564,7 @@ def test_stdio_context_log_uses_write_queue_when_enabled(tmp_path):
     env["MARM_DB_PATH"] = str(tmp_path / "stdio-queue.db")
     env["MARM_ANALYTICS_DB_PATH"] = str(tmp_path / "stdio-queue-analytics.db")
     env["WRITE_QUEUE_ENABLED"] = "1"
+    env["MARM_SKIP_DOC_LOAD"] = "1"
 
     def message(msg):
         return (json.dumps(msg) + "\n").encode("utf-8")
