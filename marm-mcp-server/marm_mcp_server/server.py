@@ -274,7 +274,7 @@ def _prune_call_counts() -> None:
     Also enforces hard cap when count grows too large.
     """
     # Prune sessions not in delivered set
-    delivered = set(_protocol_delivered_sessions.keys())
+    delivered = set(_protocol_delivered_sessions)
     stale = [k for k in _protocol_call_counts if k not in delivered]
     for k in stale:
         _protocol_call_counts.pop(k, None)

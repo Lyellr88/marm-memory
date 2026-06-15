@@ -56,17 +56,21 @@ async def test_newer_memory_ranks_above_equally_similar_older_one(tmp_path):
     old_ts = (datetime.now(timezone.utc) - timedelta(days=120)).isoformat()
     new_ts = datetime.now(timezone.utc).isoformat()
 
-    # Insert two identical-content memories with different timestamps
     import sqlite3 as _sqlite3
     import uuid
+
+    unit_vec = np.ones(384, dtype=np.float32)
+    unit_vec /= np.linalg.norm(unit_vec)
+
+    _ = mem  # triggers init_database via __init__
 
     def _insert(ts):
         mid = str(uuid.uuid4())
         with _sqlite3.connect(str(tmp_path / "memory.db")) as conn:
             conn.execute(
-                "INSERT INTO memories (id, session_name, content, timestamp, context_type, metadata) "
-                "VALUES (?, 'rank-test', 'temporal ranking keyword content', ?, 'general', '{}')",
-                (mid, ts),
+                "INSERT INTO memories (id, session_name, content, timestamp, context_type, metadata, embedding) "
+                "VALUES (?, 'rank-test', 'temporal ranking keyword content', ?, 'general', '{}', ?)",
+                (mid, ts, unit_vec.tobytes()),
             )
             conn.execute(
                 "INSERT INTO memories_fts(rowid, content) "
@@ -75,14 +79,11 @@ async def test_newer_memory_ranks_above_equally_similar_older_one(tmp_path):
             )
         return mid
 
-    # Initialise DB first
-    _ = mem  # triggers init_database via __init__
     old_id = _insert(old_ts)
     new_id = _insert(new_ts)
 
-    query_vec = np.zeros(384, dtype=np.float32)
     results = await mem.recall_similar(
-        "temporal ranking keyword", session="rank-test", limit=5, query_vec=query_vec
+        "temporal ranking keyword", session="rank-test", limit=5, query_vec=unit_vec.copy()
     )
 
     ids = [r["id"] for r in results]
@@ -105,13 +106,18 @@ async def test_temporal_weight_zero_means_fts_winner_ranks_first_despite_age(
 
     base = datetime.now(timezone.utc)
 
+    unit_vec = np.ones(384, dtype=np.float32)
+    unit_vec /= np.linalg.norm(unit_vec)
+
+    _ = mem  # triggers init_database via __init__
+
     def _insert(ts, content):
         mid = str(uuid.uuid4())
         with _sqlite3.connect(str(tmp_path / "memory.db")) as conn:
             conn.execute(
-                "INSERT INTO memories (id, session_name, content, timestamp, context_type, metadata) "
-                "VALUES (?, 'zero-weight', ?, ?, 'general', '{}')",
-                (mid, content, ts),
+                "INSERT INTO memories (id, session_name, content, timestamp, context_type, metadata, embedding) "
+                "VALUES (?, 'zero-weight', ?, ?, 'general', '{}', ?)",
+                (mid, content, ts, unit_vec.tobytes()),
             )
             conn.execute(
                 "INSERT INTO memories_fts(rowid, content) "
@@ -120,25 +126,24 @@ async def test_temporal_weight_zero_means_fts_winner_ranks_first_despite_age(
             )
         return mid
 
-    _ = mem
-    # Old memory has the exact query keyword — FTS should rank it #1 at weight=0
+    # Old memory has the exact query keyword — FTS filter will include it
     old_id = _insert(
         (base - timedelta(days=90)).isoformat(),
         "zephyr unique keyword only here",
     )
-    # New memory has no match for the query — zero FTS score
+    # New memory has no match for the query — FTS filter will exclude it
     new_id = _insert(
         base.isoformat(), "unrelated content about something else entirely"
     )
 
-    query_vec = np.zeros(384, dtype=np.float32)
     results = await mem.recall_similar(
-        "zephyr unique keyword", session="zero-weight", limit=5, query_vec=query_vec
+        "zephyr unique keyword", session="zero-weight", limit=5, query_vec=unit_vec.copy()
     )
 
     ids = [r["id"] for r in results]
     assert old_id in ids, "FTS-matching old memory must appear in results"
-    # With TEMPORAL_WEIGHT=0, the old FTS winner must outrank the new non-matching memory
+    # With TEMPORAL_WEIGHT=0, only vec_score determines rank. If new_id also surfaced
+    # (e.g. via semantic fallback), old_id must still rank first.
     if new_id in ids:
         assert ids.index(old_id) < ids.index(new_id), (
             "At TEMPORAL_WEIGHT=0 the FTS-dominant old memory should rank above the new non-matching one"

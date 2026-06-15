@@ -253,7 +253,15 @@ async def test_recall_similar_response_shape_unchanged_with_filter_rerank(tmp_pa
 
     assert isinstance(results, list)
     assert results
-    required = {"id", "session_name", "content", "timestamp", "context_type", "metadata", "similarity"}
+    required = {
+        "id",
+        "session_name",
+        "content",
+        "timestamp",
+        "context_type",
+        "metadata",
+        "similarity",
+    }
     assert required.issubset(results[0].keys())
 
 
@@ -268,7 +276,9 @@ async def test_recall_similar_filter_rerank_surfaces_keyword_matching_memory(tmp
     vec /= np.linalg.norm(vec)
 
     with memory.get_connection() as conn:
-        target_id = _insert_with_embedding(conn, "fts-rerank", "docker deployment config", vec)
+        target_id = _insert_with_embedding(
+            conn, "fts-rerank", "docker deployment config", vec
+        )
         _insert_with_embedding(conn, "fts-rerank", "unrelated content here", vec)
 
     results = await memory.recall_similar(
@@ -290,7 +300,10 @@ async def test_recall_similar_memory_without_embedding_excluded_from_results(tmp
 
     query_vec = np.zeros(384, dtype=np.float32)
     results = await memory.recall_similar(
-        "COMPACTION_TRIGGER_COUNT", session="no-embed-test", limit=5, query_vec=query_vec
+        "COMPACTION_TRIGGER_COUNT",
+        session="no-embed-test",
+        limit=5,
+        query_vec=query_vec,
     )
 
     assert no_embed_id not in {r["id"] for r in results}
@@ -332,7 +345,9 @@ async def test_recall_similar_falls_back_to_semantic_scan_when_fts_returns_no_ca
     vec /= np.linalg.norm(vec)
 
     with memory.get_connection() as conn:
-        embed_id = _insert_with_embedding(conn, "fallback-test", "semantic fallback content", vec)
+        embed_id = _insert_with_embedding(
+            conn, "fallback-test", "semantic fallback content", vec
+        )
 
     monkeypatch.setattr(memory_module, "_fetch_fts_candidate_ids", lambda *_: [])
 
@@ -358,10 +373,14 @@ async def test_recall_similar_falls_back_when_fts_candidates_have_no_embeddings(
     vec /= np.linalg.norm(vec)
 
     with memory.get_connection() as conn:
-        embed_id = _insert_with_embedding(conn, "embed-fallback", "semantic content here", vec)
+        embed_id = _insert_with_embedding(
+            conn, "embed-fallback", "semantic content here", vec
+        )
 
     # Return a non-existent ID so ID-bounded fetch finds nothing scoreable
-    monkeypatch.setattr(memory_module, "_fetch_fts_candidate_ids", lambda *_: ["non-existent-id"])
+    monkeypatch.setattr(
+        memory_module, "_fetch_fts_candidate_ids", lambda *_: ["non-existent-id"]
+    )
 
     results = await memory.recall_similar(
         "semantic content", session="embed-fallback", limit=5, query_vec=vec.copy()
@@ -391,12 +410,18 @@ async def test_recall_similar_falls_back_when_fts_candidates_are_all_wrong_dimen
 
     with mem.get_connection() as conn:
         # Wrong-dim row: FTS will be forced to return this ID
-        wrong_id = _insert_with_embedding(conn, "dim-fallback", "dimension mismatch content", wrong_vec)
+        wrong_id = _insert_with_embedding(
+            conn, "dim-fallback", "dimension mismatch content", wrong_vec
+        )
         # Correct-dim row: semantic fallback should find this
-        correct_id = _insert_with_embedding(conn, "dim-fallback", "dimension correct content", correct_vec)
+        correct_id = _insert_with_embedding(
+            conn, "dim-fallback", "dimension correct content", correct_vec
+        )
 
     # Force FTS to return only the wrong-dimension ID
-    monkeypatch.setattr(memory_module, "_fetch_fts_candidate_ids", lambda *_: [wrong_id])
+    monkeypatch.setattr(
+        memory_module, "_fetch_fts_candidate_ids", lambda *_: [wrong_id]
+    )
 
     query_vec = correct_vec.copy()
     results = await mem.recall_similar(
@@ -405,15 +430,18 @@ async def test_recall_similar_falls_back_when_fts_candidates_are_all_wrong_dimen
 
     result_ids = {r["id"] for r in results}
     assert wrong_id not in result_ids, "wrong-dimension FTS candidate must be skipped"
-    assert correct_id in result_ids, "semantic fallback must surface the correct-dimension memory"
+    assert correct_id in result_ids, (
+        "semantic fallback must surface the correct-dimension memory"
+    )
 
 
 @pytest.mark.asyncio
 async def test_recall_similar_respects_fts_candidate_limit(monkeypatch, tmp_path):
-    """Scorer must receive no more than FTS_CANDIDATE_LIMIT IDs even when FTS matches more."""
+    """Scorer receives no more than max(limit, FTS_CANDIDATE_LIMIT) IDs."""
     from marm_mcp_server.core import memory as memory_module
 
     cap = 3
+    recall_limit = 5
     mem = MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
 
@@ -421,12 +449,10 @@ async def test_recall_similar_respects_fts_candidate_limit(monkeypatch, tmp_path
     vec = np.ones(dim, dtype=np.float32)
     vec /= np.linalg.norm(vec)
 
-    # Insert more memories than the cap, all matching keyword "canary"
     with mem.get_connection() as conn:
         for i in range(10):
             _insert_with_embedding(conn, "cap-test", f"canary memory entry {i}", vec)
 
-    # Capture the IDs passed to the scorer
     scored_ids: list[str] = []
     original_scorer = memory_module._fetch_and_score_by_ids
 
@@ -434,13 +460,22 @@ async def test_recall_similar_respects_fts_candidate_limit(monkeypatch, tmp_path
         scored_ids.extend(memory_ids)
         return original_scorer(db_path, memory_ids, query_embedding)
 
-    monkeypatch.setitem(mem.recall_similar.__func__.__globals__, "FTS_CANDIDATE_LIMIT", cap)
-    monkeypatch.setitem(mem.recall_similar.__func__.__globals__, "_fetch_and_score_by_ids", capturing_scorer)
+    monkeypatch.setitem(
+        mem.recall_similar.__func__.__globals__, "FTS_CANDIDATE_LIMIT", cap
+    )
+    monkeypatch.setitem(
+        mem.recall_similar.__func__.__globals__,
+        "_fetch_and_score_by_ids",
+        capturing_scorer,
+    )
 
-    await mem.recall_similar("canary", session="cap-test", limit=5, query_vec=vec.copy())
+    await mem.recall_similar(
+        "canary", session="cap-test", limit=recall_limit, query_vec=vec.copy()
+    )
 
-    assert len(scored_ids) <= cap, (
-        f"scorer received {len(scored_ids)} IDs but FTS_CANDIDATE_LIMIT={cap}"
+    expected_ceiling = max(recall_limit, cap)
+    assert len(scored_ids) <= expected_ceiling, (
+        f"scorer received {len(scored_ids)} IDs but ceiling is max({recall_limit}, {cap})={expected_ceiling}"
     )
 
 
@@ -459,7 +494,9 @@ async def test_recall_similar_fts_filter_failure_falls_back_to_semantic_scan(
     vec /= np.linalg.norm(vec)
 
     with memory.get_connection() as conn:
-        embed_id = _insert_with_embedding(conn, "fts-fail", "content for fts failure test", vec)
+        embed_id = _insert_with_embedding(
+            conn, "fts-fail", "content for fts failure test", vec
+        )
 
     def raise_fts_error(*args, **kwargs):
         raise sqlite3.OperationalError("no such table: memories_fts")
@@ -488,7 +525,10 @@ async def test_recall_similar_scan_metadata_false_on_filter_rerank_path(tmp_path
         _insert_with_embedding(conn, "meta-rerank", "docker deployment content", vec)
 
     _results, meta = await memory.recall_similar(
-        "docker", session="meta-rerank", limit=5, query_vec=vec.copy(),
+        "docker",
+        session="meta-rerank",
+        limit=5,
+        query_vec=vec.copy(),
         include_scan_metadata=True,
     )
 
@@ -498,8 +538,6 @@ async def test_recall_similar_scan_metadata_false_on_filter_rerank_path(tmp_path
 @pytest.mark.asyncio
 async def test_recall_similar_debug_logs_filter_rerank_path(monkeypatch, tmp_path):
     """Debug output must identify the filter->rerank path when FTS finds scoreable candidates."""
-    from marm_mcp_server.core import memory as memory_module
-
     mem = MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
 
@@ -508,12 +546,20 @@ async def test_recall_similar_debug_logs_filter_rerank_path(monkeypatch, tmp_pat
     vec /= np.linalg.norm(vec)
 
     with mem.get_connection() as conn:
-        embed_id = _insert_with_embedding(conn, "debug-rerank", "docker deployment debug", vec)
+        embed_id = _insert_with_embedding(
+            conn, "debug-rerank", "docker deployment debug", vec
+        )
 
     debug_calls: list[str] = []
     # setitem on __globals__ is the reliable way to patch names a method resolves at call time
-    monkeypatch.setitem(mem.recall_similar.__func__.__globals__, "_recall_debug", debug_calls.append)
-    monkeypatch.setitem(mem.recall_similar.__func__.__globals__, "_fetch_fts_candidate_ids", lambda *_: [embed_id])
+    monkeypatch.setitem(
+        mem.recall_similar.__func__.__globals__, "_recall_debug", debug_calls.append
+    )
+    monkeypatch.setitem(
+        mem.recall_similar.__func__.__globals__,
+        "_fetch_fts_candidate_ids",
+        lambda *_: [embed_id],
+    )
 
     await mem.recall_similar(
         "docker", session="debug-rerank", limit=5, query_vec=vec.copy()
@@ -533,11 +579,19 @@ async def test_recall_similar_debug_logs_semantic_fallback_path(monkeypatch, tmp
     vec /= np.linalg.norm(vec)
 
     with mem.get_connection() as conn:
-        _insert_with_embedding(conn, "debug-fallback", "semantic fallback debug content", vec)
+        _insert_with_embedding(
+            conn, "debug-fallback", "semantic fallback debug content", vec
+        )
 
     debug_calls: list[str] = []
-    monkeypatch.setitem(mem.recall_similar.__func__.__globals__, "_recall_debug", debug_calls.append)
-    monkeypatch.setitem(mem.recall_similar.__func__.__globals__, "_fetch_fts_candidate_ids", lambda *_: [])
+    monkeypatch.setitem(
+        mem.recall_similar.__func__.__globals__, "_recall_debug", debug_calls.append
+    )
+    monkeypatch.setitem(
+        mem.recall_similar.__func__.__globals__,
+        "_fetch_fts_candidate_ids",
+        lambda *_: [],
+    )
 
     await mem.recall_similar(
         "fallback debug", session="debug-fallback", limit=5, query_vec=vec.copy()

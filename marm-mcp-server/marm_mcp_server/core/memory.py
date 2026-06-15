@@ -284,7 +284,9 @@ def _fetch_and_score_by_ids(
         ).fetchall()
     finally:
         conn.close()
-    similarities, dim_skipped = _score_embedding_rows(memories, query_embedding, len(memory_ids))
+    similarities, dim_skipped = _score_embedding_rows(
+        memories, query_embedding, len(memory_ids)
+    )
     return similarities, dim_skipped
 
 
@@ -300,7 +302,6 @@ from ..config.settings import (  # noqa: E402
     COMPACTION_ENABLED,
     COMPACTION_TRIGGER_COUNT,
     RECALL_SCAN_LIMIT,
-    HYBRID_SEARCH_TEXT_WEIGHT,
     TEMPORAL_WEIGHT,
     TEMPORAL_HALF_LIFE_DAYS,
     FTS_CANDIDATE_LIMIT,
@@ -1023,11 +1024,15 @@ class MARMMemory:
                         self.db_path,
                         session,
                         fts_query,
-                        FTS_CANDIDATE_LIMIT,
+                        max(limit, FTS_CANDIDATE_LIMIT),
                     )
-                    _recall_debug(f"FTS filter: {len(candidate_ids)} candidates for '{fts_query}'")
+                    _recall_debug(
+                        f"FTS filter: {len(candidate_ids)} candidates for '{fts_query}'"
+                    )
                 except Exception as e:
-                    _safe_print(f"FTS5 filter failed, falling back to bounded semantic recall: {e}")
+                    _safe_print(
+                        f"FTS5 filter failed, falling back to bounded semantic recall: {e}"
+                    )
                     _recall_debug("FTS filter failed → semantic fallback")
 
             use_semantic_fallback = True
@@ -1041,9 +1046,13 @@ class MARMMemory:
                 if similarities:
                     scan_truncated = False
                     use_semantic_fallback = False
-                    _recall_debug(f"filter->rerank: scored {len(similarities)} candidates")
+                    _recall_debug(
+                        f"filter->rerank: scored {len(similarities)} candidates"
+                    )
                 else:
-                    _recall_debug("filter->rerank: no scoreable embeddings in FTS candidates, falling back to semantic scan")
+                    _recall_debug(
+                        "filter->rerank: no scoreable embeddings in FTS candidates, falling back to semantic scan"
+                    )
 
             if use_semantic_fallback:
                 similarities, dim_skipped, scan_truncated = await asyncio.to_thread(
