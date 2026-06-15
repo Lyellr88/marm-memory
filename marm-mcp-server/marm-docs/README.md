@@ -1,4 +1,4 @@
-# MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.13.1
+# MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.13.2
 
 > Contributions welcome! Browse [open issues](https://github.com/Lyellr88/MARM-Systems/issues) and find an issue open a PR. Join the [MARM Discord](https://discord.gg/nhyJWPz2cf) for exclusive content, support and be apart of the community.
 

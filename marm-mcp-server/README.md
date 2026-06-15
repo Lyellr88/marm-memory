@@ -1,4 +1,4 @@
-io.github.Lyellr88/marm-mcp-server
+mcp-name: io.github.Lyellr88/marm-mcp-server
 
 <div align="center">
 <picture>
@@ -6,7 +6,7 @@ io.github.Lyellr88/marm-mcp-server
      width="700"
      height="400">
 </picture>
-<h1 align="center">MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.13.1</h1>
+<h1 align="center">MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.13.2</h1>
 
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
