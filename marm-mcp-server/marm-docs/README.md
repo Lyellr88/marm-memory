@@ -1,6 +1,4 @@
-# MARM: The AI That Remembers Your Conversations v2.12.1
-
-Contributions are welcome! Check out our [open issues](https://github.com/Lyellr88/MARM-Systems/issues) to get started. Join the conversation on [MARM Discord](https://discord.gg/nhyJWPz2cf).
+# MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.13.0
 
 ## Table of Contents
 
@@ -10,6 +8,8 @@ Contributions are welcome! Check out our [open issues](https://github.com/Lyellr
 - [Complete MCP Tool Suite](#complete-mcp-tool-suite-9-tools)
 - [MARM Dashboard](#marm-dashboard)
 - [Why MARM Holds Up](#why-marm-holds-up)
+- [Contributing](#contributing)
+- [Project Documentation](#project-documentation)
 
 ## Why MARM MCP: The Problem & Solution
 
@@ -25,7 +25,7 @@ The point is not "more tools." MARM exposes **9 focused MCP tools** and moves th
 |-------|--------------|----------------|
 | **Memory model** | Sessions, structured logs, notebooks, summaries, and semantic memories | Keeps project history searchable instead of trapped in one chat |
 | **Scale layer** | SQLite WAL mode, connection pooling, serialized write queue, and HTTP rate-limit presets | Lets one server support solo use, multi-agent work, and swarm-style bursts |
-| **Intelligence layer** | FTS filter→semantic rerank, bounded semantic fallback, auto-classification, write-time consolidation, and compaction candidates | Keeps recall useful as memory grows instead of letting duplicates pile up |
+| **Intelligence layer** | FTS filter, semantic re-rank, bounded semantic fallback, auto-classification, write-time consolidation, and compaction candidates | Keeps recall useful as memory grows instead of letting duplicates pile up |
 | **Deployment layer** | Pip, Docker, STDIO, HTTP, `--swarm`, `--swarm-max`, and `--trusted` | Lets you run private local memory or shared multi-agent memory with the same MCP surface |
 
 ### Start Now (pip)
@@ -189,7 +189,7 @@ The AI agent will automatically use the appropriate tools. Manual tool access is
 
 | **Category** | **Tool** | **Description** |
 |--------------|----------|-----------------|
-| **Memory Intelligence** | `marm_smart_recall` | AI-powered recall across all memories. Uses FTS5 BM25 to filter exact-term candidates first, semantically reranks that bounded set by embedding similarity, falls back to bounded semantic scanning when FTS coverage is weak, supports global search with `search_all=True`, and can return summary/context/full memory depth with `detail=1/2/3` |
+| **Memory Intelligence** | `marm_smart_recall` | AI-powered recall across all memories. Uses FTS5 BM25 to filter exact-term candidates first, semantically re-ranks that bounded set by embedding similarity, falls back to bounded semantic scanning when FTS coverage is weak, supports global search with `search_all=True`, and can return summary/context/full memory depth with `detail=1/2/3` |
 | | `marm_context_log` | Intelligent auto-classifying memory storage using vector embeddings |
 | **Logging System** | `marm_log_session` | Create or switch to named session container |
 | | `marm_log_entry` | Add structured log entry with auto-date formatting |
@@ -207,7 +207,7 @@ MARM keeps the AI-facing surface small while the server handles the infrastructu
 
 - **Write stability:** SQLite WAL mode, connection pooling, and a serialized write queue are enabled for normal use.
 - **Swarm control:** HTTP presets tune shared access: default `80 RPM`, `--swarm` `200 RPM`, `--swarm-max` `600 RPM`, and `--trusted` disables rate limiting for private deployments.
-- **Cleaner recall:** FTS filter→semantic rerank, bounded semantic fallback, conservative temporal weighting, write-time consolidation, and optional compaction reduce duplicate/noisy memories over time.
+- **Cleaner recall:** FTS filter→semantic re-rank, bounded semantic fallback, conservative temporal weighting, write-time consolidation, and optional compaction reduce duplicate/noisy memories over time.
 - **Lower token burn:** `marm_smart_recall` can return summary, context, or full-memory depth so agents do not pull full bodies unless they need them.
 - **Safe defaults:** local pip binds to `127.0.0.1`; Docker HTTP requires `MARM_API_KEY`; STDIO stays private and keyless.
 

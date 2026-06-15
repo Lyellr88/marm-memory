@@ -1,4 +1,4 @@
-# MARM v2.12.1 MCP Server - Platform Integration Guide
+# MARM v2.13.0 MCP Server - Platform Integration Guide
 
 ## Table of Contents
 
@@ -125,7 +125,7 @@ This guide provides platform-specific instructions for integrating the MARM MCP 
 
 **Supported:** ❌ Not compatible with standard MARM deployment
 
-Grok's MCP connector support requires a **public HTTPS URL**. MARM runs on `localhost:8001` by default and Docker binds to `127.0.0.1` — xAI's servers cannot reach either. You would need to host MARM on a public server with a domain and TLS certificate for this to work.
+Grok's MCP connector support requires a **public HTTPS URL**. MARM runs on `localhost:8001` by default and Docker binds to `127.0.0.1`, xAI's servers cannot reach either. You would need to host MARM on a public server with a domain and TLS certificate for this to work.
 
 #### **Grok Developer Platform**
 
@@ -135,7 +135,7 @@ Grok's MCP connector support requires a **public HTTPS URL**. MARM runs on `loca
 **Current Status:**
 
 - Remote MCP Tools support Streaming HTTP and SSE transports
-- `localhost` does not work — xAI connects from its own infrastructure
+- `localhost` does not work - xAI connects from its own infrastructure
 - Requires a publicly resolvable HTTPS MARM endpoint
 - Authenticate by passing `authorization: "Bearer <MARM_API_KEY>"` in the tool config header
 

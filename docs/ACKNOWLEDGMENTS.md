@@ -93,7 +93,7 @@ This user helped before MARM by actively testing and giving feedback on the prot
 
 **Lightweight Memory Architect** | [GitHub: NeurosynLabs](https://github.com/NeurosynLabs)
 
-Created **MARMalade V-1.0** — A lightweight memory kernel for ChatGPT, built on MARM principles with structured persistence, sovereign reasoning, and token-efficient context retention. Their implementation demonstrates how MARM concepts can be adapted into focused, efficient memory solutions for specific AI platforms.
+Created **MARMalade V-1.0** - A lightweight memory kernel for ChatGPT, built on MARM principles with structured persistence, sovereign reasoning, and token-efficient context retention. Their implementation demonstrates how MARM concepts can be adapted into focused, efficient memory solutions for specific AI platforms.
 
 **Impact:** Showed how MARM principles can be implemented as lightweight, specialized memory kernels
 
