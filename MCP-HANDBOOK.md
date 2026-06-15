@@ -235,7 +235,7 @@ Result: Decision logged and searchable by all future AI clients
 
 ### How Memory Works
 
-MARM uses **filter→rerank hybrid recall**. FTS5 BM25 handles exact terms like config keys, commands, filenames, and error strings first, semantic embeddings rerank that bounded candidate set by meaning, and a conservative temporal weighting step gives fresher memories a modest boost when matches are otherwise close. When FTS coverage is weak or unusable, MARM falls back to the existing bounded semantic scan:
+MARM uses **filter→rerank hybrid recall**. FTS5 BM25 handles exact terms like config keys, commands, filenames, and error strings first, semantic embeddings rerank that bounded candidate set by meaning, and a conservative temporal weighting step gives fresher memories a modest boost when matches are otherwise close. Long memories are embedded through overlapping chunk rows internally, but recall still collapses those chunk scores back to one parent memory result using the best matching chunk. When FTS coverage is weak or unusable, MARM falls back to the existing bounded semantic scan, and that fallback path is chunk-aware too:
 
 ```txt
 User: "I discussed machine learning algorithms yesterday"
@@ -267,7 +267,7 @@ MARM automatically categorizes content:
 
 | Category | Tool | Description | Usage Notes |
 |----------|------|-------------|-------------|
-| **🧠 Memory** | `marm_smart_recall` | FTS-first filter→semantic rerank across all memories, with bounded semantic fallback and a conservative recency bias in final ranking | `query` (required), `limit` (default: 5), `session_name` (optional), `detail` (default: `1`). Use natural language queries or exact keys/commands |
+| **🧠 Memory** | `marm_smart_recall` | FTS-first filter→semantic rerank across all memories, with bounded semantic fallback, chunk-aware long-memory scoring, and a conservative recency bias in final ranking | `query` (required), `limit` (default: 5), `session_name` (optional), `detail` (default: `1`). Use natural language queries or exact keys/commands |
 | | `marm_context_log` | Auto-classifying memory storage with embeddings | Store important information that should be remembered |
 | **📚 Logging** | `marm_log_session` | Create or switch to named session container | Include LLM name, dates, be descriptive |
 | | `marm_log_entry` | Add structured log entry with auto-date formatting | Use structured entries for best results; date-prefixed formats are parsed automatically when provided |
@@ -315,6 +315,7 @@ The write queue is enabled by default and serializes memory writes through one i
 **Natural Language Search**: "authentication problems with JWT tokens" vs "auth error"
 **Layered Recall Depth**: `detail=1` returns a short summary view (~200 chars), `detail=2` returns a larger context view (~500 chars), and `detail=3` returns full memory content.
 **Recency Bias**: MARM blends a small temporal score into final ranking so newer operational context wins tie-like matches more often without hiding clearly stronger older memories.
+**Long Entries**: if a memory exceeds the base encoder window, MARM chunks it internally for embedding and scores those chunks behind the scenes while still returning the parent memory body once.
 **Temporal Search**: Include timeframes in queries
 **Bounded Recall Signal**: If `marm_smart_recall` returns `recall_scan_truncated=true`, the semantic fallback lane hit `RECALL_SCAN_LIMIT`; narrow the session/query or raise the env var for larger stores. The primary filter→rerank lane does not set truncation because it scores a bounded FTS candidate set instead of scanning the full embedding pool.
 **FTS Candidate Cap**: `FTS_CANDIDATE_LIMIT` (default `50`) controls how many BM25 candidates are fetched before semantic reranking. Raise it if your store has weak keyword overlap and you want a wider rerank pool.
@@ -364,7 +365,7 @@ Phase 3: Synthesis
 
 ## FAQ
 
-The canonical FAQ lives in [docs/FAQ.md](docs/FAQ.md). Use that file for current answers about memory behavior, transports, supported clients, compaction, backups, and troubleshooting.
+The canonical FAQ lives in [marm-mcp-server/marm-docs/FAQ.md](marm-mcp-server/marm-docs/FAQ.md). Use that file for current answers about memory behavior, transports, supported clients, compaction, backups, and troubleshooting.
 
 ---
 
@@ -472,7 +473,7 @@ The canonical FAQ lives in [docs/FAQ.md](docs/FAQ.md). Use that file for current
 
 - **[MCP-HANDBOOK.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/MCP-HANDBOOK.md)** - Complete MCP server usage guide with commands, workflows, and examples
 - **[PROTOCOL.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/PROTOCOL.md)** - MCP operating protocol
-- **[FAQ.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/FAQ.md)** - Answers to common questions about using MARM
+- **[FAQ.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/marm-mcp-server/marm-docs/FAQ.md)** - Answers to common questions about using MARM
 
 ### **MCP Server Installation**
 

@@ -13,7 +13,7 @@ Features:
 - Docker deployment ready
 - Production-grade performance
 
-Author: Lyell - MARM Systems
+Author: Ryan Lyell - MARM Systems
 Version: 2.13.0
 """
 

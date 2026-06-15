@@ -122,7 +122,7 @@ Your AI client can still run, but MARM memory tools will be unavailable until th
 
 #### Q: How does recall work?
 
-MARM uses filter→rerank hybrid recall. FTS keyword/BM25 search handles exact terms first, semantic embeddings rerank those candidates by meaning, and a conservative temporal weighting step gives newer memories a modest boost when scores are otherwise close. If FTS returns no useful candidate path, MARM falls back to the existing bounded semantic recall lane. A search for "authentication error" can surface memories about login failures, access denial, token setup, or user verification even when those exact words are not repeated, while a search for something like `COMPACTION_TRIGGER_COUNT` or a Docker command can hit the exact stored text reliably.
+MARM uses filter→rerank hybrid recall. FTS keyword/BM25 search handles exact terms first, semantic embeddings rerank those candidates by meaning, and a conservative temporal weighting step gives newer memories a modest boost when scores are otherwise close. Long memories are embedded through overlapping chunks internally so details past the base encoder window are still searchable, but recall still returns one parent memory result rather than many chunk fragments. If FTS returns no useful candidate path, MARM falls back to the existing bounded semantic recall lane, and that fallback path is chunk-aware too. A search for "authentication error" can surface memories about login failures, access denial, token setup, or user verification even when those exact words are not repeated, while a search for something like `COMPACTION_TRIGGER_COUNT` or a Docker command can hit the exact stored text reliably.
 
 #### Q: How does auto-classification work?
 
@@ -137,6 +137,8 @@ When the semantic fallback lane reaches its configured scan cap, responses inclu
 `FTS_CANDIDATE_LIMIT` (default `50`) controls how many FTS candidates are fetched before semantic reranking. Most users should leave it alone unless their memory store has weak keyword overlap and they want a wider rerank pool.
 
 If you need less context back from each hit, `marm_smart_recall` also supports `detail=1/2/3` so agents can default to short previews and only request full memory bodies when needed.
+
+For long entries, chunking is internal only: agents still read the parent memory content once, not separate chunk records.
 
 #### Q: When should I create a new session vs. continuing an existing one?
 
