@@ -3,6 +3,21 @@
 ## Version 2 - MARM Protocol to Universal MCP Server Evolution
 
 <details>
+<summary><strong>June 15th, 2026: Filter→Re-rank Recall Refactor (v2.13.0)</strong></summary>
+
+### Recall Performance & Search Strategy
+
+- Replaced weighted-fusion hybrid recall with an FTS-first filter→semantic re-rank path in `recall_similar()`: FTS5 BM25 now narrows recall to a bounded candidate set first, then semantic cosine scoring reranks only those candidates instead of scanning the full embedding lane on every keyword-rich query.
+- Added `FTS_CANDIDATE_LIMIT` (default `50`) as the new cap controlling how many FTS candidates are fetched before semantic reranking; bounded semantic fallback remains in place for abstract queries, malformed/weak FTS coverage, and unscoreable candidate sets.
+- Preserved temporal weighting, response shape, and bounded-recall metadata while changing `recall_scan_truncated` semantics so it only reflects the semantic fallback lane rather than the primary filter→rerank path.
+
+### Test Coverage
+
+- Reworked hybrid recall tests around the new architecture: filter→rerank success, semantic fallback on empty FTS, fallback on missing/unscoreable candidates, wrong-dimension candidate handling, candidate-cap enforcement, and scan-metadata behavior.
+
+</details>
+
+<details>
 <summary><strong>June 9th, 2026: Discord Community Ops & Webhook Automation (v2.12.1)</strong></summary>
 
 ### Discord Community Operations

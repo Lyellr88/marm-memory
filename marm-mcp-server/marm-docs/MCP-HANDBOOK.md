@@ -235,7 +235,7 @@ Result: Decision logged and searchable by all future AI clients
 
 ### How Memory Works
 
-MARM uses **hybrid recall**. Semantic embeddings cover meaning, FTS5 BM25 covers exact terms like config keys, commands, filenames, and error strings, and a conservative temporal weighting step gives fresher memories a modest boost when matches are otherwise close:
+MARM uses **filter→rerank hybrid recall**. FTS5 BM25 handles exact terms like config keys, commands, filenames, and error strings first, semantic embeddings rerank that bounded candidate set by meaning, and a conservative temporal weighting step gives fresher memories a modest boost when matches are otherwise close. When FTS coverage is weak or unusable, MARM falls back to the existing bounded semantic scan:
 
 ```txt
 User: "I discussed machine learning algorithms yesterday"
@@ -267,7 +267,7 @@ MARM automatically categorizes content:
 
 | Category | Tool | Description | Usage Notes |
 |----------|------|-------------|-------------|
-| **🧠 Memory** | `marm_smart_recall` | Hybrid recall across all memories using semantic embeddings plus FTS keyword/BM25 matching, with a conservative recency bias in final ranking | `query` (required), `limit` (default: 5), `session_name` (optional), `detail` (default: `1`). Use natural language queries or exact keys/commands |
+| **🧠 Memory** | `marm_smart_recall` | FTS-first filter→semantic rerank across all memories, with bounded semantic fallback and a conservative recency bias in final ranking | `query` (required), `limit` (default: 5), `session_name` (optional), `detail` (default: `1`). Use natural language queries or exact keys/commands |
 | | `marm_context_log` | Auto-classifying memory storage with embeddings | Store important information that should be remembered |
 | **📚 Logging** | `marm_log_session` | Create or switch to named session container | Include LLM name, dates, be descriptive |
 | | `marm_log_entry` | Add structured log entry with auto-date formatting | Use structured entries for best results; date-prefixed formats are parsed automatically when provided |
@@ -316,7 +316,8 @@ The write queue is enabled by default and serializes memory writes through one i
 **Layered Recall Depth**: `detail=1` returns a short summary view (~200 chars), `detail=2` returns a larger context view (~500 chars), and `detail=3` returns full memory content.
 **Recency Bias**: MARM blends a small temporal score into final ranking so newer operational context wins tie-like matches more often without hiding clearly stronger older memories.
 **Temporal Search**: Include timeframes in queries
-**Bounded Recall Signal**: If `marm_smart_recall` returns `recall_scan_truncated=true`, the semantic embedding scan hit `RECALL_SCAN_LIMIT`; narrow the session/query or raise the env var for larger stores. FTS recall still runs alongside it.
+**Bounded Recall Signal**: If `marm_smart_recall` returns `recall_scan_truncated=true`, the semantic fallback lane hit `RECALL_SCAN_LIMIT`; narrow the session/query or raise the env var for larger stores. The primary filter→rerank lane does not set truncation because it scores a bounded FTS candidate set instead of scanning the full embedding pool.
+**FTS Candidate Cap**: `FTS_CANDIDATE_LIMIT` (default `50`) controls how many BM25 candidates are fetched before semantic reranking. Raise it if your store has weak keyword overlap and you want a wider rerank pool.
 
 ### Workflow Optimization
 

@@ -33,7 +33,9 @@ jobs:
           python - <<'PY'
           import json
           import os
+          import sys
           import urllib.request
+          import urllib.error
 
           payload = {
               "username": "MARM Releases",
@@ -64,5 +66,12 @@ jobs:
               data=json.dumps(payload).encode("utf-8"),
               headers={"Content-Type": "application/json"},
           )
-          urllib.request.urlopen(req).read()
+          try:
+              urllib.request.urlopen(req).read()
+          except urllib.error.HTTPError as exc:
+              print(f"Discord webhook post failed: HTTP {exc.code} {exc.reason}", file=sys.stderr)
+              sys.exit(0)
+          except urllib.error.URLError as exc:
+              print(f"Discord webhook post failed: {exc}", file=sys.stderr)
+              sys.exit(0)
           PY

@@ -172,6 +172,8 @@ if _raw_hld < 1.0:
         file=sys.stderr,
     )
 
+FTS_CANDIDATE_LIMIT = _safe_int("FTS_CANDIDATE_LIMIT", 50)
+
 CONSOLIDATION_ENABLED = os.environ.get("CONSOLIDATION_ENABLED", "0") == "1"
 _raw_ct = _safe_float("CONSOLIDATION_THRESHOLD", 0.92)
 CONSOLIDATION_THRESHOLD = max(0.0, min(1.0, _raw_ct))

@@ -228,6 +228,66 @@ def _fetch_and_score_fts_rows(
     return list(zip(rows, normalized))
 
 
+def _fetch_fts_candidate_ids(
+    db_path: str,
+    session: str | None,
+    fts_query: str,
+    limit: int,
+) -> list[str]:
+    """Return top N memory IDs from FTS5 by BM25 rank. No scoring needed."""
+    conn = sqlite3.connect(db_path, timeout=30.0)
+    try:
+        base = """
+            SELECT m.id
+            FROM memories_fts
+            JOIN memories m ON memories_fts.rowid = m.rowid
+            WHERE memories_fts MATCH ?
+              AND (m.compaction_role IS NULL OR m.compaction_role != 'source')
+        """
+        params: list = [fts_query]
+        if session is not None:
+            base += " AND m.session_name = ?"
+            params.append(session)
+        base += " ORDER BY bm25(memories_fts) LIMIT ?"
+        params.append(limit)
+        rows = conn.execute(base, params).fetchall()
+        return [row[0] for row in rows]
+    finally:
+        conn.close()
+
+
+def _fetch_and_score_by_ids(
+    db_path: str,
+    memory_ids: list[str],
+    query_embedding,
+) -> tuple[list[tuple], int]:
+    """Fetch specific memories by ID and score their embeddings.
+
+    Returns (similarities, dim_skipped). No scan_truncated -- ID-bounded
+    fetch has no truncation concept.
+    """
+    if not memory_ids:
+        return [], 0
+    conn = sqlite3.connect(db_path, timeout=30.0)
+    try:
+        conn.row_factory = sqlite3.Row
+        placeholders = ",".join("?" * len(memory_ids))
+        memories = conn.execute(
+            f"""
+            SELECT id, session_name, content, embedding, timestamp, context_type, metadata
+            FROM memories
+            WHERE id IN ({placeholders})
+              AND embedding IS NOT NULL
+              AND (compaction_role IS NULL OR compaction_role != 'source')
+            """,
+            memory_ids,
+        ).fetchall()
+    finally:
+        conn.close()
+    similarities, dim_skipped = _score_embedding_rows(memories, query_embedding, len(memory_ids))
+    return similarities, dim_skipped
+
+
 from ..config.settings import (  # noqa: E402
     SEMANTIC_SEARCH_AVAILABLE,
     DEFAULT_DB_PATH,
@@ -243,6 +303,7 @@ from ..config.settings import (  # noqa: E402
     HYBRID_SEARCH_TEXT_WEIGHT,
     TEMPORAL_WEIGHT,
     TEMPORAL_HALF_LIFE_DAYS,
+    FTS_CANDIDATE_LIMIT,
 )
 from .consolidation import (  # noqa: E402
     compute_content_hash,
@@ -953,86 +1014,67 @@ class MARMMemory:
             else:
                 query_embedding = await asyncio.to_thread(self._encode_sync, query)
 
-            similarities, dim_skipped, scan_truncated = await asyncio.to_thread(
-                _fetch_and_score_embedding_rows,
-                self.db_path,
-                session,
-                scan_limit,
-                query_embedding,
-                limit,
-            )
+            fts_query = _safe_fts_query(query)
+            candidate_ids: list[str] = []
+            if fts_query:
+                try:
+                    candidate_ids = await asyncio.to_thread(
+                        _fetch_fts_candidate_ids,
+                        self.db_path,
+                        session,
+                        fts_query,
+                        FTS_CANDIDATE_LIMIT,
+                    )
+                    _recall_debug(f"FTS filter: {len(candidate_ids)} candidates for '{fts_query}'")
+                except Exception as e:
+                    _safe_print(f"FTS5 filter failed, falling back to bounded semantic recall: {e}")
+                    _recall_debug("FTS filter failed → semantic fallback")
+
+            use_semantic_fallback = True
+            if candidate_ids:
+                similarities, dim_skipped = await asyncio.to_thread(
+                    _fetch_and_score_by_ids,
+                    self.db_path,
+                    candidate_ids,
+                    query_embedding,
+                )
+                if similarities:
+                    scan_truncated = False
+                    use_semantic_fallback = False
+                    _recall_debug(f"filter->rerank: scored {len(similarities)} candidates")
+                else:
+                    _recall_debug("filter->rerank: no scoreable embeddings in FTS candidates, falling back to semantic scan")
+
+            if use_semantic_fallback:
+                similarities, dim_skipped, scan_truncated = await asyncio.to_thread(
+                    _fetch_and_score_embedding_rows,
+                    self.db_path,
+                    session,
+                    scan_limit,
+                    query_embedding,
+                    limit,
+                )
+                _recall_debug(
+                    f"semantic fallback: {len(similarities)} candidates, scan_truncated={scan_truncated}"
+                )
 
             if dim_skipped:
                 _safe_print(
                     f"recall_similar: skipped {dim_skipped} memories with wrong embedding dimension (expected {len(query_embedding)})"
                 )
 
-            _recall_debug(
-                f"vector lane returned {len(similarities)} candidates, scan_truncated={scan_truncated}"
-            )
-
-            fts_query = _safe_fts_query(query)
-            fts_hits: dict[str, tuple] = {}
-            if fts_query:
-                try:
-                    for row, fts_norm in await asyncio.to_thread(
-                        _fetch_and_score_fts_rows,
-                        self.db_path,
-                        session,
-                        fts_query,
-                        limit * 2,
-                    ):
-                        fts_hits[row["id"]] = (row, fts_norm)
-                    _recall_debug(
-                        f"FTS hybrid pass: {len(fts_hits)} hits for query '{fts_query}'"
-                    )
-                except Exception as e:
-                    _safe_print(f"FTS5 hybrid pass failed, using vector-only: {e}")
-                    _recall_debug("FTS hybrid pass failed → vector-only results")
-
             combined: dict[str, tuple] = {}
-            for mem, vec_norm in similarities:
-                mem_id = mem["id"]
-                fts_norm = fts_hits[mem_id][1] if mem_id in fts_hits else 0.0
-                hybrid = (
-                    1 - HYBRID_SEARCH_TEXT_WEIGHT
-                ) * vec_norm + HYBRID_SEARCH_TEXT_WEIGHT * fts_norm
+            for mem, vec_score in similarities:
                 t_score = _temporal_score(mem["timestamp"], TEMPORAL_HALF_LIFE_DAYS)
-                combined[mem_id] = (
+                combined[mem["id"]] = (
                     mem,
-                    (1 - TEMPORAL_WEIGHT) * hybrid + TEMPORAL_WEIGHT * t_score,
+                    (1 - TEMPORAL_WEIGHT) * vec_score + TEMPORAL_WEIGHT * t_score,
                 )
-            for mem_id, (fts_row, fts_norm) in fts_hits.items():
-                if mem_id not in combined:
-                    hybrid = HYBRID_SEARCH_TEXT_WEIGHT * fts_norm
-                    t_score = _temporal_score(
-                        fts_row["timestamp"], TEMPORAL_HALF_LIFE_DAYS
-                    )
-                    combined[mem_id] = (
-                        fts_row,
-                        (1 - TEMPORAL_WEIGHT) * hybrid + TEMPORAL_WEIGHT * t_score,
-                    )
 
-            # Observability: count results by source lane (before slicing)
-            vec_set = {m["id"] for m, _ in similarities}
-            fts_only_count = sum(
-                1 for mid in combined if mid not in vec_set and mid in fts_hits
-            )
-            both_count = sum(
-                1 for mid in combined if mid in vec_set and mid in fts_hits
-            )
-            _recall_debug(
-                f"candidates: {len(combined)} total | "
-                f"vec+fts={both_count}, vec-only={len(vec_set) - both_count}, "
-                f"fts-only={fts_only_count}"
-            )
-
-            similarities = sorted(combined.values(), key=lambda x: x[1], reverse=True)[
-                :limit
-            ]
+            ranked = sorted(combined.values(), key=lambda x: x[1], reverse=True)[:limit]
 
             results = []
-            for memory, similarity in similarities:
+            for memory, similarity in ranked:
                 results.append(
                     {
                         "id": memory["id"],

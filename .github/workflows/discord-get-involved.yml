@@ -31,10 +31,12 @@ jobs:
           ACTION_NAME: ${{ github.event.action }}
           REPO: ${{ github.repository }}
           ACTOR: ${{ github.actor }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_URL: ${{ github.event.pull_request.html_url }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_MERGED: ${{ github.event.pull_request.merged }}
+          ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
           ISSUE_TITLE: ${{ github.event.issue.title }}
           ISSUE_URL: ${{ github.event.issue.html_url }}
           ISSUE_NUMBER: ${{ github.event.issue.number }}
@@ -45,9 +47,20 @@ jobs:
           import os
           import sys
           import urllib.request
+          import urllib.error
 
           event_name = os.environ["EVENT_NAME"]
           action_name = os.environ["ACTION_NAME"]
+          pr_author = os.environ.get("PR_AUTHOR", "")
+          issue_author = os.environ.get("ISSUE_AUTHOR", "")
+
+          # Dependabot version-update PRs are useful to merge, but not useful to broadcast.
+          if event_name == "pull_request" and pr_author == "dependabot[bot]":
+              sys.exit(0)
+
+          # Future-proofing in case other issue-producing bots get wired into this feed.
+          if event_name == "issues" and issue_author.endswith("[bot]"):
+              sys.exit(0)
 
           payload = None
 
@@ -131,5 +144,13 @@ jobs:
               data=json.dumps(payload).encode("utf-8"),
               headers={"Content-Type": "application/json"},
           )
-          urllib.request.urlopen(req).read()
+          try:
+              urllib.request.urlopen(req).read()
+          except urllib.error.HTTPError as exc:
+              # Discord posting is informational only; don't fail the GitHub event workflow.
+              print(f"Discord webhook post failed: HTTP {exc.code} {exc.reason}", file=sys.stderr)
+              sys.exit(0)
+          except urllib.error.URLError as exc:
+              print(f"Discord webhook post failed: {exc}", file=sys.stderr)
+              sys.exit(0)
           PY
