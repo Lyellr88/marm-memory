@@ -18,7 +18,7 @@ Version: 2.13.0
 """
 
 __version__ = "2.13.0"
-__author__ = "Lyell"
+__author__ = "Ryan Lyell"
 __email__ = "lyell@marmsystems.com"
 
 __all__ = ["__version__", "create_server", "main"]

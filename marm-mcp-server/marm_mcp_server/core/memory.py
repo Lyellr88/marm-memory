@@ -114,7 +114,11 @@ def _chunk_text(text: str) -> list[str]:
 
 
 async def _write_chunks(
-    mem_instance, db_path: str, memory_id: str, chunks: list[str]
+    mem_instance,
+    db_path: str,
+    memory_id: str,
+    chunks: list[str],
+    expected_content_hash: str,
 ) -> None:
     embeddings = []
     for chunk in chunks:
@@ -126,6 +130,14 @@ async def _write_chunks(
             return
     conn = sqlite3.connect(db_path, timeout=30.0)
     try:
+        current_hash = conn.execute(
+            "SELECT content_hash FROM memories WHERE id = ?", (memory_id,)
+        ).fetchone()
+        if current_hash is None or current_hash[0] != expected_content_hash:
+            _safe_print(
+                f"Chunk write aborted for memory {memory_id}: content changed before insert"
+            )
+            return
         conn.executemany(
             "INSERT INTO memory_chunks (memory_id, chunk_index, chunk_text, embedding)"
             " VALUES (?, ?, ?, ?)",
@@ -135,6 +147,8 @@ async def _write_chunks(
             ],
         )
         conn.commit()
+    except Exception as e:
+        _safe_print(f"Chunk DB write failed for memory {memory_id}: {e}")
     finally:
         conn.close()
 
@@ -1011,7 +1025,9 @@ class MARMMemory:
 
         chunks = _chunk_text(merged_content)
         if chunks and self._load_encoder_lazily():
-            _chunk_task = asyncio.create_task(_write_chunks(self, self.db_path, memory_id, chunks))  # noqa: RUF006
+            _chunk_task = asyncio.create_task(  # noqa: RUF006
+                _write_chunks(self, self.db_path, memory_id, chunks, merged_hash)
+            )
 
     async def store_memory(
         self,
@@ -1106,7 +1122,9 @@ class MARMMemory:
 
         chunks = _chunk_text(sanitized_content)
         if chunks and self._load_encoder_lazily():
-            _chunk_task = asyncio.create_task(_write_chunks(self, self.db_path, memory_id, chunks))  # noqa: RUF006
+            _chunk_task = asyncio.create_task(  # noqa: RUF006
+                _write_chunks(self, self.db_path, memory_id, chunks, content_hash)
+            )
 
         return memory_id
 
