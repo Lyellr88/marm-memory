@@ -2,7 +2,7 @@
 
 ## Universal Memory Intelligence Platform for AI Agents
 
-**MARM v2.12.1** - Memory Accurate Response Mode
+**MARM v2.13.0** - Memory Accurate Response Mode
 *Docker deployment guide for Windows, Mac, and Linux*
 
 ---
@@ -28,7 +28,7 @@
 1. **Generate a key**: `docker run --rm lyellr88/marm-mcp-server:latest --generate-key`
 2. **Pull & Run**: Choose Docker Run or Docker Compose below (include your key as `MARM_API_KEY`)
 3. **Connect Claude**: `claude mcp add --transport http marm-memory http://localhost:8001/mcp --header "Authorization: Bearer your-generated-key"`
-4. **Test**: Ask Claude to recall a memory — MARM initializes automatically on the first tool call
+4. **Test**: Ask Claude to recall a memory - MARM initializes automatically on the first tool call
 
 **That's it!** You now have AI memory that saves across sessions and platforms.
 
@@ -52,7 +52,8 @@
 
 **Best for:** First-time users, quick testing, simple setup
 
-> **Docker always requires an API key.** Docker's bridge network means the server sees requests from a gateway IP (172.x.x.x), not 127.0.0.1 — even when you're on the same machine. Generate a key using the container itself — no pip install needed:
+> **Docker always requires an API key.** Docker's bridge network means the server sees requests from a gateway IP (172.x.x.x), not 127.0.0.1 - even when you're on the same machine. Generate a key using the container itself - no pip install needed:
+
 > ```bash
 > docker run --rm lyellr88/marm-mcp-server:latest --generate-key
 > ```
@@ -105,7 +106,7 @@ services:
       - ~/.marm:/home/marm/.marm
     environment:
       - SERVER_HOST=0.0.0.0
-      - MARM_API_KEY=your-generated-key   # Required — see note above
+      - MARM_API_KEY=your-generated-key   # Required - see note above
 ```
 
 ```bash
@@ -124,7 +125,7 @@ docker-compose up -d
 For shared HTTP servers running multiple AI agents simultaneously, append a preset flag after the image name:
 
 ```bash
-# --swarm: write queue on, 200 RPM — recommended starting point
+# --swarm: write queue on, 200 RPM - recommended starting point
 docker run -d --name marm-mcp-server \
   -p 127.0.0.1:8001:8001 \
   -e SERVER_HOST=0.0.0.0 \
@@ -133,7 +134,7 @@ docker run -d --name marm-mcp-server \
   --restart unless-stopped \
   lyellr88/marm-mcp-server:latest --swarm
 
-# --swarm-max: write queue on, 600 RPM — heavier load
+# --swarm-max: write queue on, 600 RPM - heavier load
 docker run -d --name marm-mcp-server \
   -p 127.0.0.1:8001:8001 \
   -e SERVER_HOST=0.0.0.0 \
@@ -142,7 +143,7 @@ docker run -d --name marm-mcp-server \
   --restart unless-stopped \
   lyellr88/marm-mcp-server:latest --swarm-max
 
-# --trusted: write queue on, rate limiting disabled — private/trusted only
+# --trusted: write queue on, rate limiting disabled - private/trusted only
 docker run -d --name marm-mcp-server \
   -p 127.0.0.1:8001:8001 \
   -e SERVER_HOST=0.0.0.0 \
@@ -287,7 +288,7 @@ Because xAI connects to the MCP server from its own infrastructure, `localhost` 
 
 ### **Docker STDIO**
 
-The MCP client launches Docker as the server command. No port binding or API key needed. Use `-i` (interactive stdin) — never `-d` (detached).
+The MCP client launches Docker as the server command. No port binding or API key needed. Use `-i` (interactive stdin) - never `-d` (detached).
 
 ```bash
 docker run -i --rm \
@@ -302,7 +303,7 @@ docker run -i --rm \
 
 > JSON `args` arrays are not processed by a shell, so `~` is not expanded. Use an absolute path for the volume mount.
 
-**macOS / Linux** — replace `/Users/you` with your actual home directory:
+**macOS / Linux** - replace `/Users/you` with your actual home directory:
 
 ```json
 {
@@ -321,7 +322,7 @@ docker run -i --rm \
 }
 ```
 
-**Windows** — replace `C:\Users\you` with your actual home directory:
+**Windows** - replace `C:\Users\you` with your actual home directory:
 
 ```json
 {
@@ -374,10 +375,10 @@ Equivalent `~/.gemini/settings.json` or project `.gemini/settings.json`:
 Qwen Code supports STDIO, SSE, and streamable HTTP MCP transports. Use HTTP for MARM. Project scope writes to `.qwen/settings.json`; user scope writes to `~/.qwen/settings.json`.
 
 ```bash
-# Direct Python install — no key needed
+# Direct Python install - no key needed
 qwen mcp add --transport http marm-memory http://localhost:8001/mcp
 
-# Docker or SERVER_HOST=0.0.0.0 — key required
+# Docker or SERVER_HOST=0.0.0.0 - key required
 qwen mcp add --transport http marm-memory http://localhost:8001/mcp --header "Authorization: Bearer your-generated-key"
 ```
 
@@ -488,7 +489,7 @@ docker logs marm-mcp-server | head -20
 Semantic search model loaded successfully
 MARM documentation database ready!
 MARM MCP Server initialization complete
-Uvicorn running on http://0.0.0.0:8001  (inside container — normal)
+Uvicorn running on http://0.0.0.0:8001  (inside container - normal)
 ```
 
 For a live endpoint check:
@@ -609,7 +610,7 @@ services:
 |----------|---------|-------------|
 | `SERVER_HOST` | `127.0.0.1` | Bind address. Must be `0.0.0.0` inside Docker for port mapping to work. |
 | `SERVER_PORT` | `8001` | Server port. |
-| `MARM_API_KEY` | _(unset)_ | Required for all Docker deployments (local and remote). Docker bridge networking means the server never sees 127.0.0.1 from the host — set this or all MCP calls will 401. Generate with `docker run --rm lyellr88/marm-mcp-server:latest --generate-key`. |
+| `MARM_API_KEY` | _(unset)_ | Required for all Docker deployments (local and remote). Docker bridge networking means the server never sees 127.0.0.1 from the host, set this or all MCP calls will 401. Generate with `docker run --rm lyellr88/marm-mcp-server:latest --generate-key`. |
 | `MARM_RATE_LIMIT_RPM` | `80` | HTTP rate limit (requests per minute per client IP). Set to `0` to disable. Overridden by `--swarm`, `--swarm-max`, `--trusted` presets. |
 | `RECALL_SCAN_LIMIT` | `10000` | Maximum embedded memories semantic recall scans per query before surfacing `recall_scan_truncated=true`. |
 | `MAX_QUEUE_SIZE` | `100` | Write queue size when `WRITE_QUEUE_ENABLED=1`. |

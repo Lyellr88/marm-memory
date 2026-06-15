@@ -83,7 +83,10 @@ async def test_newer_memory_ranks_above_equally_similar_older_one(tmp_path):
     new_id = _insert(new_ts)
 
     results = await mem.recall_similar(
-        "temporal ranking keyword", session="rank-test", limit=5, query_vec=unit_vec.copy()
+        "temporal ranking keyword",
+        session="rank-test",
+        limit=5,
+        query_vec=unit_vec.copy(),
     )
 
     ids = [r["id"] for r in results]
@@ -137,7 +140,10 @@ async def test_temporal_weight_zero_means_fts_winner_ranks_first_despite_age(
     )
 
     results = await mem.recall_similar(
-        "zephyr unique keyword", session="zero-weight", limit=5, query_vec=unit_vec.copy()
+        "zephyr unique keyword",
+        session="zero-weight",
+        limit=5,
+        query_vec=unit_vec.copy(),
     )
 
     ids = [r["id"] for r in results]

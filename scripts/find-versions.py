@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Find and optionally sync MARM version references.
 
-The target version is derived from the final entry in CHANGELOG.md.
+The target version is derived from the first entry in CHANGELOG.md.
 Changelog files are never modified because they intentionally contain many
 historical version numbers.
 """
@@ -187,7 +187,7 @@ def latest_changelog_entry() -> str:
         if VERSION_RE.search(line) and line.lstrip().startswith("<summary>")
     ]
     if summary_lines:
-        return summary_lines[-1]
+        return summary_lines[0]
 
     heading_lines = [
         line
@@ -196,7 +196,7 @@ def latest_changelog_entry() -> str:
     ]
     if not heading_lines:
         raise ValueError("No versioned changelog entries found.")
-    return heading_lines[-1]
+    return heading_lines[0]
 
 
 def current_version_from_changelog() -> str:
@@ -380,7 +380,7 @@ def main() -> int:
             version_source = "marm-dashboard __init__.py"
         else:
             target_version = current_version_from_changelog()
-            version_source = "final changelog entry"
+            version_source = "first changelog entry"
     except Exception as exc:
         print(f"{RED}Could not determine current version: {exc}{RESET}")
         return 1

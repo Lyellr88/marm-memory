@@ -2,7 +2,7 @@
 
 ## Universal Memory Intelligence Platform for AI Agents
 
-**MARM v2.12.1** - Memory Accurate Response Mode
+**MARM v2.13.0** - Memory Accurate Response Mode
 *Complete Windows installation guide*
 
 ---
@@ -28,7 +28,7 @@
 
 1. **Install MARM**: Choose ⭐ **pip install** (Recommended) or ⚡ **virtualenv** (Clean) from options below
 2. **Connect Claude**: `claude mcp add --transport http marm-memory http://localhost:8001/mcp`
-3. **Test**: Ask Claude to recall a memory — MARM initializes automatically on the first tool call
+3. **Test**: Ask Claude to recall a memory,  MARM initializes automatically on the first tool call
 
 **That's it!** You now have AI memory that saves across sessions and platforms.
 
@@ -208,10 +208,10 @@ Because xAI connects to the MCP server from its own infrastructure, `localhost` 
 Codex uses `codex mcp add` or TOML config at `%USERPROFILE%\.codex\config.toml`, not `settings.json`.
 
 ```powershell
-# Direct Python install — no key needed
+# Direct Python install - no key needed
 codex mcp add marm-memory --url http://localhost:8001/mcp
 
-# Docker or SERVER_HOST=0.0.0.0 — key required
+# Docker or SERVER_HOST=0.0.0.0 - key required
 $env:MARM_API_KEY="your-generated-key"
 codex mcp add marm-memory --url http://localhost:8001/mcp --bearer-token-env-var MARM_API_KEY
 ```
@@ -228,10 +228,10 @@ bearer_token_env_var = "MARM_API_KEY"
 Gemini CLI supports STDIO, SSE, and streamable HTTP MCP transports. Use HTTP for MARM.
 
 ```powershell
-# Direct Python install — no key needed
+# Direct Python install - no key needed
 gemini mcp add --transport http marm-memory http://localhost:8001/mcp
 
-# Docker or SERVER_HOST=0.0.0.0 — key required
+# Docker or SERVER_HOST=0.0.0.0 - key required
 gemini mcp add --transport http marm-memory http://localhost:8001/mcp --header "Authorization: Bearer your-generated-key"
 ```
 
@@ -255,10 +255,10 @@ Equivalent `%USERPROFILE%\.gemini\settings.json` or project `.gemini\settings.js
 Qwen Code supports STDIO, SSE, and streamable HTTP MCP transports. Use HTTP for MARM. Project scope writes to `.qwen\settings.json`; user scope writes to `%USERPROFILE%\.qwen\settings.json`.
 
 ```powershell
-# Direct Python install — no key needed
+# Direct Python install - no key needed
 qwen mcp add --transport http marm-memory http://localhost:8001/mcp
 
-# Docker or SERVER_HOST=0.0.0.0 — key required
+# Docker or SERVER_HOST=0.0.0.0 - key required
 qwen mcp add --transport http marm-memory http://localhost:8001/mcp --header "Authorization: Bearer your-generated-key"
 ```
 
@@ -293,7 +293,7 @@ Invoke-WebRequest -Uri http://localhost:8001/health
 {
   "status": "healthy",
   "service": "MARM MCP Server",
-  "version": "2.12.1",
+  "version": "2.13.0",
   "timestamp": "2026-01-01T00:00:00+00:00",
   "database": "connected",
   "semantic_search": "available"
@@ -403,7 +403,7 @@ python -m marm_mcp_server
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `SERVER_HOST` | `127.0.0.1` | Bind address. Default is localhost-only. Set `0.0.0.0` for network/Docker access — key auto-generated on first start. |
+| `SERVER_HOST` | `127.0.0.1` | Bind address. Default is localhost-only. Set `0.0.0.0` for network/Docker access - key auto-generated on first start. |
 | `SERVER_PORT` | `8001` | Server port |
 | `MARM_API_KEY` | *(unset)* | Bearer token for all capability endpoints. Auto-generated when `SERVER_HOST=0.0.0.0` and not set. Required for Docker. Generate manually: `python -m marm_mcp_server --generate-key` |
 | `MAX_DB_CONNECTIONS` | `5` | Database connection pool size |

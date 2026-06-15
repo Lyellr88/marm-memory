@@ -1,31 +1,23 @@
 <div align="center">
 <picture>
 <img src="https://raw.githubusercontent.com/Lyellr88/MARM-Systems/MARM-main/assets/marm-logo.svg"
-     alt="MARM - The AI That Remembers Your Conversations."
      width="700"
      height="400">
 </picture>
-<h1 align="center">MARM: The AI That Remembers Your Conversations v2.12.1</h1>
+<h1 align="center">MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.13.0</h1>
 
 [![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115.4-blue)](https://fastapi.tiangolo.com/)
 [![Docker Pulls](https://img.shields.io/docker/pulls/lyellr88/marm-mcp-server)](https://hub.docker.com/r/lyellr88/marm-mcp-server)
-[![PyPI Downloads](https://static.pepy.tech/personalized-badge/marm-mcp-server?period=total&units=NONE&left_color=GREY&right_color=BLUE&left_text=downloads)](https://pepy.tech/projects/marm-mcp-server)
+[![PyPI Downloads](https://static.pepy.tech/personalized-badge/marm-mcp-server?period=total&units=NONE&left_color=GREY&right_color=BLUE&left_text=pip-downloads)](https://pepy.tech/projects/marm-mcp-server)
 
 [![pip install](https://img.shields.io/badge/pip%20install-marm--mcp--server-blue)](https://pypi.org/project/marm-mcp-server/)
 [![MCP Registry](https://img.shields.io/badge/MCP%20Registry-LIVE-blue)](https://registry.modelcontextprotocol.io/?q=marm-mcp)
 [![Publish](https://github.com/Lyellr88/MARM-Systems/actions/workflows/publish-mcp.yml/badge.svg?branch=MARM-main)](https://github.com/Lyellr88/MARM-Systems/actions/workflows/publish-mcp.yml)
 [![CodeQL](https://github.com/Lyellr88/MARM-Systems/actions/workflows/github-code-scanning/codeql/badge.svg?branch=MARM-main)](https://github.com/Lyellr88/MARM-Systems/security/code-scanning)
 
-Contributions are welcome! Pick a track that fits your background or browse all [open issues](https://github.com/Lyellr88/MARM-Systems/issues):
-| Task | Type | Area |
-| --- | --- | --- |
-| 🛠️ [Build `marm-init` CLI Tool](https://www.google.com/search?q=%5Bhttps://github.com/Lyellr88/MARM-Systems/issues/34%5D(https://github.com/Lyellr88/MARM-Systems/issues/34)) | Zero Friction | Core CLI |
-| 🔑 [Implement OS Keychain Security](https://www.google.com/search?q=https://github.com/Lyellr88/MARM-Systems/issues/37) | Security Infrastructure | Security/Config |
-| 📓 [Design: Notebook Scratchpad Flow](https://www.google.com/search?q=https://github.com/Lyellr88/MARM-Systems/issues/36) | Open Design Choice | Architecture |
-
-Want to discuss an idea first? Join the [MARM Discord](https://discord.gg/nhyJWPz2cf).
+> Contributions welcome! Browse [open issues](https://github.com/Lyellr88/MARM-Systems/issues) and find an issue open a PR. Join the [MARM Discord](https://discord.gg/nhyJWPz2cf) for exclusive content, support and be apart of the community.
 
 </div>
 
@@ -54,7 +46,7 @@ The point is not "more tools." MARM exposes **9 focused MCP tools** and moves th
 |-------|--------------|----------------|
 | **Memory model** | Sessions, structured logs, notebooks, summaries, and semantic memories | Keeps project history searchable instead of trapped in one chat |
 | **Scale layer** | SQLite WAL mode, connection pooling, serialized write queue, and HTTP rate-limit presets | Lets one server support solo use, multi-agent work, and swarm-style bursts |
-| **Intelligence layer** | FTS filter→semantic rerank, bounded semantic fallback, auto-classification, write-time consolidation, and compaction candidates | Keeps recall useful as memory grows instead of letting duplicates pile up |
+| **Intelligence layer** | FTS filter, semantic re-rank, bounded semantic fallback, auto-classification, write-time consolidation, and compaction candidates | Keeps recall useful as memory grows instead of letting duplicates pile up |
 | **Deployment layer** | Pip, Docker, STDIO, HTTP, `--swarm`, `--swarm-max`, and `--trusted` | Lets you run private local memory or shared multi-agent memory with the same MCP surface |
 
 ### MARM Demo
@@ -146,7 +138,7 @@ codex mcp add marm-memory --url http://localhost:8001/mcp --bearer-token-env-var
 #### Docker HTTP swarm mode
 
 ```bash
-# --swarm: write queue on, 200 RPM — recommended for multi-agent shared servers
+# --swarm: write queue on, 200 RPM - recommended for multi-agent shared servers
 docker run -d --name marm-mcp-server \
   -p 127.0.0.1:8001:8001 \
   -e SERVER_HOST=0.0.0.0 \
@@ -191,11 +183,11 @@ Claude Code remains the recommended first setup path, but MARM also works with o
 </picture>
 </div>
 
-A local web UI for browsing and managing your MARM memory — separate from the MCP server, reads and writes the same `~/.marm/marm_memory.db`.
+A local web UI for browsing and managing your MARM memory; separate from the MCP server, reads and writes the same `~/.marm/marm_memory.db`.
 
 | What it gives you | How it works |
 |-------------------|-------------|
-| Browse/search/edit all memories | Direct SQLite — no MCP required |
+| Browse/search/edit all memories | Direct SQLite - no MCP required |
 | Manage sessions and protocol logs | Runs on port `:8002` alongside MCP on `:8001` |
 | Notebook CRUD with inline editor | Same auth model (`MARM_API_KEY`) as the MCP server |
 | Delete-all with count confirmation | Docker image included; WAL mode handles concurrent access |
@@ -241,7 +233,7 @@ The AI agent will automatically use the appropriate tools. Manual tool access is
 
 | **Category** | **Tool** | **Description** |
 |--------------|----------|-----------------|
-| **Memory Intelligence** | `marm_smart_recall` | AI-powered recall across all memories. Uses FTS5 BM25 to filter exact-term candidates first, semantically reranks that bounded set by embedding similarity, falls back to bounded semantic scanning when FTS coverage is weak, supports global search with `search_all=True`, and can return summary/context/full memory depth with `detail=1/2/3` |
+| **Memory Intelligence** | `marm_smart_recall` | AI-powered recall across all memories. Uses FTS5 BM25 to filter exact-term candidates first, semantically re-ranks that bounded set by embedding similarity, falls back to bounded semantic scanning when FTS coverage is weak, supports global search with `search_all=True`, and can return summary/context/full memory depth with `detail=1/2/3` |
 | | `marm_context_log` | Intelligent auto-classifying memory storage using vector embeddings |
 | **Logging System** | `marm_log_session` | Create or switch to named session container |
 | | `marm_log_entry` | Add structured log entry with auto-date formatting |
@@ -259,7 +251,7 @@ MARM keeps the AI-facing surface small while the server handles the infrastructu
 
 - **Write stability:** SQLite WAL mode, connection pooling, and a serialized write queue are enabled for normal use.
 - **Swarm control:** HTTP presets tune shared access: default `80 RPM`, `--swarm` `200 RPM`, `--swarm-max` `600 RPM`, and `--trusted` disables rate limiting for private deployments.
-- **Cleaner recall:** FTS filter→semantic rerank, bounded semantic fallback, conservative temporal weighting, write-time consolidation, and optional compaction reduce duplicate/noisy memories over time.
+- **Cleaner recall:** FTS filter→semantic re-rank, bounded semantic fallback, conservative temporal weighting, write-time consolidation, and optional compaction reduce duplicate/noisy memories over time.
 - **Lower token burn:** `marm_smart_recall` can return summary, context, or full-memory depth so agents do not pull full bodies unless they need them.
 - **Safe defaults:** local pip binds to `127.0.0.1`; Docker HTTP requires `MARM_API_KEY`; STDIO stays private and keyless.
 

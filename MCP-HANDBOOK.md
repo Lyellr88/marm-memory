@@ -2,7 +2,7 @@
 
 ## Complete Usage Guide for Memory-Augmented AI
 
-**MARM v2.12.1 - Universal MCP Server for AI Memory Intelligence**
+**MARM v2.13.0 - Universal MCP Server for AI Memory Intelligence**
 
 ---
 
@@ -67,10 +67,10 @@ python -m marm_mcp_server
 **Codex CLI:**
 
 ```bash
-# Direct Python install — no key needed
+# Direct Python install - no key needed
 codex mcp add marm-memory --url http://localhost:8001/mcp
 
-# Docker or exposed server — key required
+# Docker or exposed server - key required
 export MARM_API_KEY="your-generated-key"
 codex mcp add marm-memory --url http://localhost:8001/mcp --bearer-token-env-var MARM_API_KEY
 ```
@@ -117,7 +117,7 @@ All MARM data is stored locally in your home directory:
 - **Location**: `~/.marm/` (Linux/macOS) or `%USERPROFILE%\.marm\` (Windows)
 - **Contents**: SQLite database with all memories, sessions, and notebooks
 - **Backup**: Copy the entire `~/.marm/` directory to preserve all data
-- **Privacy**: Everything stays on your machine — no cloud sync or external storage
+- **Privacy**: Everything stays on your machine, no cloud sync or external storage
 
 ### Verify Installation
 
@@ -227,7 +227,7 @@ Claude calls: marm_log_entry("DECISION: JWT for API auth, OAuth2 for user flows.
 Result: Decision logged and searchable by all future AI clients
 ```
 
-**Result**: Three different AI clients collaboratively researched a topic, shared insights, and documented decisions—all without re-explaining the project to each new AI.
+**Result**: Three different AI clients collaboratively researched a topic, shared insights, and documented decisions. All without re-explaining the project to each new AI.
 
 ---
 
@@ -415,7 +415,7 @@ The canonical FAQ lives in [docs/FAQ.md](docs/FAQ.md). Use that file for current
 - Verify memories exist: use `marm_log_show` to list entries
 - Use `search_all=true` to search across all sessions
 - Try simpler, more general search queries
-- Wait a few seconds—first semantic search loads the ML model
+- Wait a few seconds; first semantic search loads the ML model
 
 #### Memories appear then disappear
 
@@ -427,14 +427,14 @@ The canonical FAQ lives in [docs/FAQ.md](docs/FAQ.md). Use that file for current
 
 **Slow search results**
 
-- First search is slower (model loads from disk)—subsequent searches are faster
+- First search is slower (model loads from disk) subsequent searches are faster
 - Large databases (1000+ memories) may take a few seconds
 - Limit searches: use `limit=10` instead of unlimited results
 - Use `marm_summary` to compress old sessions
 
 #### Server using too much memory
 
-- Notebooks with many entries can accumulate—use `marm_notebook(action="clear")` to prune active entries
+- Notebooks with many entries can accumulate; use `marm_notebook(action="clear")` to prune active entries
 - Close unused AI client connections
 - Use `marm_compaction(action="review")` to inspect staged compaction summaries when compaction is enabled
 
@@ -462,7 +462,7 @@ The canonical FAQ lives in [docs/FAQ.md](docs/FAQ.md). Use that file for current
 | `permission denied: ~/.marm/` | Database directory not writable | `chmod 755 ~/.marm/` or check ownership |
 | `module not found: core.memory` | Missing dependencies | Reinstall from `marm-mcp-server/`: `pip install -e ".[dev]"` |
 | `database is locked` | Multiple processes accessing DB | Close other connections, restart server |
-| `embedding model not found` | Semantic search model didn't download | First run takes time—be patient, check internet connection |
+| `embedding model not found` | Semantic search model didn't download | First run takes time; be patient, check internet connection |
 
 ---
 
