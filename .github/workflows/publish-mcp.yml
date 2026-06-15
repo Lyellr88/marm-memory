@@ -82,7 +82,7 @@ jobs:
           packages-dir: marm-mcp-server/dist/
           skip-existing: true
 
-  publish-docker:
+  publish-docker-server:
     needs: validate-and-test
     runs-on: ubuntu-latest
 
@@ -99,27 +99,14 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Extract version from pyproject.toml
+      - name: Extract version
         id: version
         run: |
-          echo "DEBUG: GITHUB_REF = $GITHUB_REF"
           if [[ $GITHUB_REF == refs/tags/* ]]; then
-            VERSION=${GITHUB_REF#refs/tags/v}
-            echo "DEBUG: Extracted version from tag: $VERSION"
+            echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
           else
-            VERSION=$(grep '^version = ' marm-mcp-server/pyproject.toml | cut -d '"' -f 2)
-            echo "DEBUG: Extracted version from pyproject.toml: $VERSION"
+            echo "version=$(grep '^version = ' marm-mcp-server/pyproject.toml | cut -d '"' -f 2)" >> $GITHUB_OUTPUT
           fi
-          echo "DEBUG: Final version: $VERSION"
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-      - name: Debug Docker tags
-        run: |
-          echo "DEBUG: Will create Docker tags:"
-          echo "  - lyellr88/marm-mcp-server:${{ steps.version.outputs.version }}"
-          echo "  - lyellr88/marm-mcp-server:latest"
-          echo "  - lyellr88/marm-dashboard:${{ steps.version.outputs.version }}"
-          echo "  - lyellr88/marm-dashboard:latest"
 
       - name: Build and push MCP server Docker image
         uses: docker/build-push-action@v5
@@ -129,9 +116,35 @@ jobs:
           tags: |
             lyellr88/marm-mcp-server:${{ steps.version.outputs.version }}
             lyellr88/marm-mcp-server:latest
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           cache-from: type=gha,scope=marm-mcp-server
           cache-to: type=gha,scope=marm-mcp-server,mode=max
+
+  publish-docker-dashboard:
+    needs: validate-and-test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Extract version
+        id: version
+        run: |
+          if [[ $GITHUB_REF == refs/tags/* ]]; then
+            echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+          else
+            echo "version=$(grep '^version = ' marm-mcp-server/pyproject.toml | cut -d '"' -f 2)" >> $GITHUB_OUTPUT
+          fi
 
       - name: Build and push Dashboard Docker image
         uses: docker/build-push-action@v5
@@ -141,12 +154,12 @@ jobs:
           tags: |
             lyellr88/marm-dashboard:${{ steps.version.outputs.version }}
             lyellr88/marm-dashboard:latest
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           cache-from: type=gha,scope=marm-dashboard
           cache-to: type=gha,scope=marm-dashboard,mode=max
 
   publish-mcp-registry:
-    needs: [validate-and-test, publish-pypi, publish-docker]
+    needs: [validate-and-test, publish-pypi, publish-docker-server, publish-docker-dashboard]
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -175,7 +188,7 @@ jobs:
           ../mcp-publisher publish
 
   notify-success:
-    needs: [publish-docker, publish-pypi, publish-mcp-registry]
+    needs: [publish-docker-server, publish-docker-dashboard, publish-pypi, publish-mcp-registry]
     runs-on: ubuntu-latest
     if: success()
 
