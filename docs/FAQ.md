@@ -26,7 +26,7 @@ MARM Systems is a persistent memory layer for AI agents. The MCP server gives Cl
 | **Sharing** | Hard to move between tools | Multiple agents can use the same memory store |
 | **Trust model** | Memory behavior varies by provider | Retrieved memory is context, not higher-priority instruction |
 
-MARM uses hybrid recall rather than simple keyword matching alone. Semantic embeddings find related memories when the wording differs, and FTS keyword/BM25 search improves exact recall for commands, config keys, filenames, and error text.
+MARM uses filter→rerank hybrid recall rather than simple keyword matching alone. FTS keyword/BM25 search narrows exact-term candidates first, semantic embeddings rerank that bounded set by meaning, and a bounded semantic fallback keeps abstract queries working when keyword coverage is weak.
 
 ### Q: Who is MARM for?
 
@@ -122,7 +122,7 @@ Your AI client can still run, but MARM memory tools will be unavailable until th
 
 #### Q: How does recall work?
 
-MARM uses hybrid recall. Embeddings find memories by meaning, FTS keyword/BM25 search handles exact terms, and a conservative temporal weighting step gives newer memories a modest boost when scores are otherwise close. A search for "authentication error" can surface memories about login failures, access denial, token setup, or user verification even when those exact words are not repeated, while a search for something like `COMPACTION_TRIGGER_COUNT` or a Docker command can hit the exact stored text reliably.
+MARM uses filter→rerank hybrid recall. FTS keyword/BM25 search handles exact terms first, semantic embeddings rerank those candidates by meaning, and a conservative temporal weighting step gives newer memories a modest boost when scores are otherwise close. If FTS returns no useful candidate path, MARM falls back to the existing bounded semantic recall lane. A search for "authentication error" can surface memories about login failures, access denial, token setup, or user verification even when those exact words are not repeated, while a search for something like `COMPACTION_TRIGGER_COUNT` or a Docker command can hit the exact stored text reliably.
 
 #### Q: How does auto-classification work?
 
@@ -132,7 +132,9 @@ When you store memory through `marm_context_log`, MARM classifies content into b
 
 Both. `marm_smart_recall` searches one session by default and can search across all sessions with `search_all=True`.
 
-When the semantic embedding lane reaches its configured scan cap, responses include `recall_scan_truncated=true` and `recall_scan_limit` so agents know that part of recall was bounded. Exact-term FTS recall still runs alongside it.
+When the semantic fallback lane reaches its configured scan cap, responses include `recall_scan_truncated=true` and `recall_scan_limit` so agents know that part of recall was bounded. The primary filter→rerank lane does not set truncation because it works over a fixed FTS candidate set instead of a broad embedding scan.
+
+`FTS_CANDIDATE_LIMIT` (default `50`) controls how many FTS candidates are fetched before semantic reranking. Most users should leave it alone unless their memory store has weak keyword overlap and they want a wider rerank pool.
 
 If you need less context back from each hit, `marm_smart_recall` also supports `detail=1/2/3` so agents can default to short previews and only request full memory bodies when needed.
 

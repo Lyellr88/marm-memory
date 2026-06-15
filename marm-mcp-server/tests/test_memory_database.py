@@ -289,8 +289,9 @@ async def test_recall_similar_scan_truncated_fires_when_scan_limit_exceeded(
     """Regression: recall_similar must report recall_scan_truncated=True when the DB
     holds more rows than RECALL_SCAN_LIMIT so callers know recall was bounded.
 
-    Uses direct DB inserts + query_vec to bypass the encoder path, which would
-    short-circuit to text search before the scan query runs.
+    Forces FTS to return no candidates so the semantic scan path (and its truncation
+    logic) runs. Filter->rerank bypasses RECALL_SCAN_LIMIT entirely since it scores
+    a fixed candidate set — truncation only applies to the semantic fallback lane.
     """
     import numpy as np
     import uuid as uuid_module
@@ -298,6 +299,7 @@ async def test_recall_similar_scan_truncated_fires_when_scan_limit_exceeded(
     from marm_mcp_server.core import memory as memory_module
 
     monkeypatch.setattr(memory_module, "RECALL_SCAN_LIMIT", 5)
+    monkeypatch.setattr(memory_module, "_fetch_fts_candidate_ids", lambda *_: [])
     mem = memory_module.MARMMemory(str(tmp_path / "memory.db"))
 
     dim = 384
