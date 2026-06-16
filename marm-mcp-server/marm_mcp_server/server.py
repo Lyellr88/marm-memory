@@ -228,6 +228,7 @@ async def lifespan(app: FastAPI):
 
     register_event_handlers()
     await memory.start_write_queue()
+    memory.restore_active_session()
 
     _compaction_scheduler = _maybe_start_compaction_scheduler()
 
@@ -375,7 +376,7 @@ async def _mcp_tool_call_tracker(request: Request, call_next):
             _compaction_session = _explicit_session
         elif _tool_name == "marm_log_entry":
             _compaction_session = memory.active_log_session
-        elif _tool_name in ("marm_context_log", "marm_notebook", "marm_smart_recall"):
+        elif _tool_name in ("marm_notebook", "marm_smart_recall"):
             _compaction_session = "main"
         else:
             _compaction_session = None

@@ -32,10 +32,6 @@
       "description": "Log important information to MARM's memory system"
     },
     {
-      "name": "marm_context_log",
-      "description": "Log durable context with automatic categorization"
-    },
-    {
       "name": "marm_smart_recall",
       "description": "Intelligent memory recall using semantic search"
     },
@@ -50,10 +46,6 @@
     {
       "name": "marm_log_show",
       "description": "Display memory log entries"
-    },
-    {
-      "name": "marm_log_session",
-      "description": "Create or switch to named session container"
     },
     {
       "name": "marm_delete",

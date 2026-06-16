@@ -18,31 +18,6 @@ def test_readiness_exposes_http_endpoints_without_websocket(monkeypatch, tmp_pat
     assert client.get("/mcp/ws").status_code == 404
 
 
-def test_context_log_endpoint_persists_sanitized_memory(monkeypatch, tmp_path):
-    server = load_isolated_server(monkeypatch, tmp_path)
-    client = local_client(server.app)
-    content = '<script>alert("x")</script> project milestone preserved'
-
-    response = client.post(
-        "/marm_context_log",
-        json={"session_name": "http-real-db", "content": content},
-    )
-
-    assert response.status_code == 200
-    body = response.json()
-    assert body["status"] == "success"
-    assert "script" not in body["content"].lower()
-    assert body["context_type"] == "project"
-
-    memory_module = importlib.import_module("marm_mcp_server.core.memory")
-    with memory_module.memory.get_connection() as conn:
-        row = conn.execute(
-            "SELECT session_name, content, context_type FROM memories WHERE id = ?",
-            (body["memory_id"],),
-        ).fetchone()
-
-    assert row == ("http-real-db", " project milestone preserved", "project")
-
 
 def test_api_key_mode_rejects_missing_or_wrong_bearer_and_accepts_correct_one(
     monkeypatch, tmp_path

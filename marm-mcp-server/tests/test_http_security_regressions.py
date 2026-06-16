@@ -3,74 +3,22 @@ import importlib
 from conftest import load_isolated_server, local_client
 
 
-def test_xss_payloads_are_sanitized_before_response_and_storage(monkeypatch, tmp_path):
-    server = load_isolated_server(monkeypatch, tmp_path)
-    client = local_client(server.app)
-    payloads = [
-        "<script>alert('xss')</script>project milestone",
-        '<img src="x" onerror="alert(1)"> image note',
-        "javascript:alert('xss') protocol note",
-        "<iframe src='javascript:alert(1)'></iframe> frame note",
-    ]
-
-    stored_ids = []
-    for _index, payload in enumerate(payloads):
-        response = client.post(
-            "/marm_context_log",
-            json={"session_name": "security-xss", "content": payload},
-        )
-        assert response.status_code == 200
-        body = response.json()
-        stored_ids.append(body["memory_id"])
-
-        sanitized = body["content"].lower()
-        assert "<script" not in sanitized
-        assert "onerror" not in sanitized
-        assert "javascript:" not in sanitized
-
-    memory_module = importlib.import_module("marm_mcp_server.core.memory")
-    with memory_module.memory.get_connection() as conn:
-        rows = conn.execute(
-            "SELECT content FROM memories WHERE id IN ({})".format(
-                ",".join("?" for _ in stored_ids)
-            ),
-            stored_ids,
-        ).fetchall()
-
-    assert len(rows) == len(payloads)
-    for row in rows:
-        content = row[0].lower()
-        assert "<script" not in content
-        assert "onerror" not in content
-        assert "javascript:" not in content
-
 
 def test_sql_injection_queries_do_not_escape_session_scope_or_damage_tables(
     monkeypatch, tmp_path
 ):
+    import asyncio
+
     server = load_isolated_server(monkeypatch, tmp_path)
     client = local_client(server.app)
+    memory_module = importlib.import_module("marm_mcp_server.core.memory")
 
-    assert (
-        client.post(
-            "/marm_context_log",
-            json={
-                "session_name": "safe-session",
-                "content": "ordinary safe content about docker transport",
-            },
-        ).status_code
-        == 200
-    )
-    assert (
-        client.post(
-            "/marm_context_log",
-            json={
-                "session_name": "other-session",
-                "content": "secret token should stay scoped to another session",
-            },
-        ).status_code
-        == 200
-    )
+    asyncio.run(memory_module.memory.store_memory_queued(
+        "ordinary safe content about docker transport", "safe-session"
+    ))
+    asyncio.run(memory_module.memory.store_memory_queued(
+        "secret token should stay scoped to another session", "other-session"
+    ))
 
     injection_queries = [
         "' OR '1'='1",
@@ -100,29 +48,18 @@ def test_sql_injection_queries_do_not_escape_session_scope_or_damage_tables(
 
 
 def test_recall_is_session_scoped_unless_search_all_is_requested(monkeypatch, tmp_path):
+    import asyncio
+
     server = load_isolated_server(monkeypatch, tmp_path)
     client = local_client(server.app)
+    memory_module = importlib.import_module("marm_mcp_server.core.memory")
 
-    assert (
-        client.post(
-            "/marm_context_log",
-            json={
-                "session_name": "alpha",
-                "content": "alpha-only marker for scoped recall",
-            },
-        ).status_code
-        == 200
-    )
-    assert (
-        client.post(
-            "/marm_context_log",
-            json={
-                "session_name": "beta",
-                "content": "beta-only marker for scoped recall",
-            },
-        ).status_code
-        == 200
-    )
+    asyncio.run(memory_module.memory.store_memory_queued(
+        "alpha-only marker for scoped recall", "alpha"
+    ))
+    asyncio.run(memory_module.memory.store_memory_queued(
+        "beta-only marker for scoped recall", "beta"
+    ))
 
     scoped = client.post(
         "/marm_smart_recall",

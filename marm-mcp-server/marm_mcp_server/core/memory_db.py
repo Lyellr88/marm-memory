@@ -275,6 +275,33 @@ def init_database(db_path: str) -> None:
             "CREATE INDEX IF NOT EXISTS idx_memory_chunks_memory_id"
             " ON memory_chunks(memory_id)"
         )
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS session_summary_chunks (
+                id TEXT PRIMARY KEY,
+                session_name TEXT NOT NULL,
+                chunk_index INTEGER NOT NULL,
+                chunk_start TEXT NOT NULL,
+                chunk_end TEXT NOT NULL,
+                entry_count INTEGER NOT NULL DEFAULT 0,
+                raw_digest TEXT NOT NULL,
+                summary_text TEXT NOT NULL,
+                dirty BOOLEAN DEFAULT FALSE,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(session_name, chunk_index)
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_summary_chunks_session"
+            " ON session_summary_chunks(session_name, chunk_index)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_summary_chunks_dirty"
+            " ON session_summary_chunks(session_name, dirty)"
+        )
         conn.commit()
 
 

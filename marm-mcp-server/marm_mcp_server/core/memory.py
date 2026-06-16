@@ -75,6 +75,18 @@ class MARMMemory:
         self._session_write_counts: dict = {}
         self._pending_compaction_scans: dict = {}
 
+    def restore_active_session(self) -> None:
+        """Restore the active log session from DB on server startup."""
+        try:
+            with self.get_connection() as conn:
+                row = conn.execute(
+                    "SELECT session_name FROM sessions WHERE marm_active = TRUE ORDER BY last_accessed DESC LIMIT 1"
+                ).fetchone()
+            if row:
+                self.active_log_session = row[0]
+        except Exception:
+            pass
+
     async def start_write_queue(self) -> None:
         """Start the serialized write queue when enabled."""
         if not WRITE_QUEUE_ENABLED:

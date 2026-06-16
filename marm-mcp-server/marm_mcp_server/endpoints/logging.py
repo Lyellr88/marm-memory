@@ -7,48 +7,14 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from ..core.models import SessionRequest, LogEntryRequest, DeleteRequest
+from ..core.models import LogEntryRequest, DeleteRequest
 from ..core.memory import memory
 from ..core.events import events
 
 router = APIRouter(prefix="", tags=["Logging"])
 
-
-@router.post("/marm_log_session", operation_id="marm_log_session")
-async def marm_log_session(request: SessionRequest):
-    """
-    📂 Create or switch to named session container
-
-    Equivalent to /log session: [name] command
-    """
-    try:
-        current_timestamp = datetime.now(timezone.utc).isoformat()
-
-        with memory.get_connection() as conn:
-            conn.execute(
-                """
-                INSERT OR REPLACE INTO sessions (session_name, last_accessed)
-                VALUES (?, ?)
-            """,
-                (request.session_name, current_timestamp),
-            )
-            conn.commit()
-
-        memory.active_log_session = request.session_name
-
-        await events.emit("session_created", {"session": request.session_name})
-
-        return {
-            "status": "success",
-            "message": f"📂 Session '{request.session_name}' created/activated",
-            "session_name": request.session_name,
-        }
-    except sqlite3.Error as e:
-        print(f"Database error in marm_log_session: {e}")
-        return {"status": "error", "message": "Database error during session creation."}
-    except Exception as e:
-        print(f"Unexpected error in marm_log_session: {e}")
-        return {"status": "error", "message": "Session creation failed."}
+SESSION_PREFIXES = ("Session: ", "Topic: ")
+CHUNK_INACTIVITY_SECONDS = 3600
 
 
 @router.post("/marm_log_entry", operation_id="marm_log_entry")
@@ -56,11 +22,108 @@ async def marm_log_entry(request: LogEntryRequest):
     """
     📝 Add structured log entry for milestones or decisions
 
+    Start with "Session: [name]" or "Topic: [name]" to switch active session.
+    The backend auto-tags the date. All subsequent entries route to that session.
     Equivalent to /log entry: [YYYY-MM-DD-topic-summary] command
     """
     try:
         formatted_entry = request.entry.strip()
-        session = request.session_name or memory.active_log_session
+
+        # Session-switch detection
+        for prefix in SESSION_PREFIXES:
+            if formatted_entry.startswith(prefix):
+                base_name = formatted_entry[len(prefix) :].strip()
+                if not base_name:
+                    return {
+                        "status": "error",
+                        "message": "Session name cannot be empty.",
+                    }
+                date_tag = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+                new_session = f"{base_name}-{date_tag}"
+                marker_id = str(uuid.uuid4())
+                with memory.get_connection() as conn:
+                    conn.execute("UPDATE sessions SET marm_active = FALSE")
+                    conn.execute(
+                        """
+                        INSERT INTO sessions (session_name, last_accessed, marm_active)
+                        VALUES (?, ?, TRUE)
+                        ON CONFLICT(session_name) DO UPDATE SET
+                            last_accessed = excluded.last_accessed,
+                            marm_active = TRUE
+                        """,
+                        (new_session, datetime.now(timezone.utc).isoformat()),
+                    )
+                    conn.execute(
+                        """
+                        INSERT INTO log_entries
+                            (id, session_name, entry_date, topic, summary, full_entry)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            marker_id,
+                            new_session,
+                            date_tag,
+                            "session_start",
+                            base_name,
+                            formatted_entry,
+                        ),
+                    )
+                    try:
+                        conn.execute(
+                            "UPDATE session_summary_chunks SET dirty = TRUE, updated_at = ? WHERE session_name = ?",
+                            (datetime.now(timezone.utc).isoformat(), new_session),
+                        )
+                    except Exception:
+                        pass
+                    conn.commit()
+                memory.active_log_session = new_session
+                await events.emit("session_created", {"session": new_session})
+                return {
+                    "status": "session_switched",
+                    "message": f"📂 Session switched to '{new_session}'",
+                    "session_name": new_session,
+                }
+
+        # Resolve session — explicit > active > dated fallback
+        if request.session_name:
+            session = request.session_name
+        elif memory.active_log_session != "main":
+            session = memory.active_log_session
+        else:
+            date_tag = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            session = f"session-{date_tag}"
+            with memory.get_connection() as conn:
+                conn.execute("UPDATE sessions SET marm_active = FALSE")
+                conn.execute(
+                    """
+                    INSERT INTO sessions (session_name, last_accessed, marm_active)
+                    VALUES (?, ?, TRUE)
+                    ON CONFLICT(session_name) DO UPDATE SET
+                        last_accessed = excluded.last_accessed,
+                        marm_active = TRUE
+                    """,
+                    (session, datetime.now(timezone.utc).isoformat()),
+                )
+                conn.commit()
+            memory.active_log_session = session
+
+        # Chunk boundary check
+        with memory.get_connection() as conn:
+            row = conn.execute(
+                "SELECT last_accessed FROM sessions WHERE session_name = ?", (session,)
+            ).fetchone()
+        if row and row[0]:
+            try:
+                last_dt = datetime.fromisoformat(row[0])
+                if last_dt.tzinfo is None:
+                    last_dt = last_dt.replace(tzinfo=timezone.utc)
+                gap = (datetime.now(timezone.utc) - last_dt).total_seconds()
+                if gap > CHUNK_INACTIVITY_SECONDS:
+                    print(
+                        f"[MARM] Chunk boundary detected for '{session}' — {gap:.0f}s since last write"
+                    )
+            except Exception:
+                pass
 
         entry_pattern = r"^(\d{4}-\d{2}-\d{2})-(.*?)-(.*?)$"
         match = re.match(entry_pattern, formatted_entry)
@@ -73,14 +136,30 @@ async def marm_log_entry(request: LogEntryRequest):
             summary = formatted_entry
 
         entry_id = str(uuid.uuid4())
+        now_iso = datetime.now(timezone.utc).isoformat()
         with memory.get_connection() as conn:
             conn.execute(
                 """
                 INSERT INTO log_entries (id, session_name, entry_date, topic, summary, full_entry)
                 VALUES (?, ?, ?, ?, ?, ?)
-            """,
+                """,
                 (entry_id, session, entry_date, topic, summary, formatted_entry),
             )
+            conn.execute(
+                """
+                INSERT INTO sessions (session_name, last_accessed)
+                VALUES (?, ?)
+                ON CONFLICT(session_name) DO UPDATE SET last_accessed = excluded.last_accessed
+                """,
+                (session, now_iso),
+            )
+            try:
+                conn.execute(
+                    "UPDATE session_summary_chunks SET dirty = TRUE, updated_at = ? WHERE session_name = ?",
+                    (now_iso, session),
+                )
+            except Exception:
+                pass
             conn.commit()
 
         await events.emit(
@@ -184,6 +263,14 @@ async def marm_delete(request: DeleteRequest):
                         (request.session_name, request.target, request.target),
                     )
                     deleted = cursor.rowcount
+                    if deleted:
+                        try:
+                            conn.execute(
+                                "UPDATE session_summary_chunks SET dirty = TRUE, updated_at = ? WHERE session_name = ?",
+                                (datetime.now(timezone.utc).isoformat(), request.session_name),
+                            )
+                        except Exception:
+                            pass
                 else:
                     conn.execute(
                         "DELETE FROM sessions WHERE session_name = ?", (request.target,)
@@ -193,6 +280,10 @@ async def marm_delete(request: DeleteRequest):
                         (request.target,),
                     )
                     deleted = cursor.rowcount
+                    conn.execute(
+                        "DELETE FROM session_summary_chunks WHERE session_name = ?",
+                        (request.target,),
+                    )
                     if memory.active_log_session == request.target:
                         memory.active_log_session = "main"
                 conn.commit()
