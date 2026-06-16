@@ -118,7 +118,6 @@ def _get_memory_compaction_role(mem: MARMMemory, mem_id: str) -> str | None:
 @pytest.fixture
 def mem(tmp_path):
     m = MARMMemory(db_path=str(tmp_path / "test.db"))
-    m.init_database()
     return m
 
 

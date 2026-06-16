@@ -3,6 +3,22 @@
 ## Version 2 - MARM Protocol to Universal MCP Server Evolution
 
 <details>
+<summary><strong>June 16th, 2026: Memory Core Modularization (v2.14.0)</strong></summary>
+
+### Memory Core Refactor
+
+- Split the growing memory core into focused modules while preserving the public `MARMMemory` facade and existing MCP tool behavior.
+- Moved shared helpers, SQLite schema/connection routines, chunk-aware scoring, and high-level memory operations into dedicated files so future recall, compaction, and write-path changes can be reviewed in smaller units.
+- Added parity validation against the pre-refactor memory implementation to guard method signatures, database behavior, recall behavior, stale chunk handling, and core operational contracts during the extraction.
+
+### Maintainer Notes
+
+- This release line is primarily an internal maintainability refactor. User-facing MCP tool names, transport setup, auth behavior, and response shapes are intended to remain unchanged.
+- Additional refactor work may land under this version before release.
+
+</details>
+
+<details>
 <summary><strong>June 15th, 2026: Filter→Re-rank Recall Refactor (v2.13.0)</strong></summary>
 
 ### Recall Performance & Search Strategy

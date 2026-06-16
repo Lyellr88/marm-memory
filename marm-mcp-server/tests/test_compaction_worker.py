@@ -335,8 +335,9 @@ async def test_write_counter_increments_on_new_insert(monkeypatch, tmp_path):
 @pytest.mark.asyncio
 async def test_write_counter_does_not_increment_on_layer1_skip(monkeypatch, tmp_path):
     from marm_mcp_server.core import memory as memory_module
+    from marm_mcp_server.core import memory_ops as memory_ops_module
 
-    monkeypatch.setattr(memory_module, "CONSOLIDATION_ENABLED", True)
+    monkeypatch.setattr(memory_ops_module, "CONSOLIDATION_ENABLED", True)
     monkeypatch.setattr(memory_module, "COMPACTION_ENABLED", True)
     monkeypatch.setattr(memory_module, "COMPACTION_TRIGGER_COUNT", 99)
 
@@ -354,8 +355,9 @@ async def test_write_counter_does_not_increment_on_layer1_skip(monkeypatch, tmp_
 @pytest.mark.asyncio
 async def test_write_counter_increments_on_layer2_merge(monkeypatch, tmp_path):
     from marm_mcp_server.core import memory as memory_module
+    from marm_mcp_server.core import memory_ops as memory_ops_module
 
-    monkeypatch.setattr(memory_module, "CONSOLIDATION_ENABLED", True)
+    monkeypatch.setattr(memory_ops_module, "CONSOLIDATION_ENABLED", True)
     monkeypatch.setattr(memory_module, "COMPACTION_ENABLED", True)
     monkeypatch.setattr(memory_module, "COMPACTION_TRIGGER_COUNT", 99)
 
@@ -365,11 +367,10 @@ async def test_write_counter_increments_on_layer2_merge(monkeypatch, tmp_path):
     first_id = await mem.store_memory("original content about the login fix", "sess-l2")
     count_after_first = mem._session_write_counts.get("sess-l2", 0)
 
-    # Patch the name in memory_module's namespace — that's what store_memory calls
     async def _fake_semantic_dup(memory, content, session, threshold, query_vec=None):
         return first_id
 
-    monkeypatch.setattr(memory_module, "find_semantic_duplicate", _fake_semantic_dup)
+    monkeypatch.setattr(memory_ops_module, "find_semantic_duplicate", _fake_semantic_dup)
 
     await mem.store_memory("similar content about the auth fix", "sess-l2")
 
