@@ -370,7 +370,9 @@ async def test_write_counter_increments_on_layer2_merge(monkeypatch, tmp_path):
     async def _fake_semantic_dup(memory, content, session, threshold, query_vec=None):
         return first_id
 
-    monkeypatch.setattr(memory_ops_module, "find_semantic_duplicate", _fake_semantic_dup)
+    monkeypatch.setattr(
+        memory_ops_module, "find_semantic_duplicate", _fake_semantic_dup
+    )
 
     await mem.store_memory("similar content about the auth fix", "sess-l2")
 

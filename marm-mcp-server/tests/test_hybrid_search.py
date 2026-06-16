@@ -179,6 +179,7 @@ async def test_recall_text_search_falls_back_to_like_when_fts5_raises(
     monkeypatch, tmp_path
 ):
     from marm_mcp_server.core.memory import MARMMemory
+
     memory = MARMMemory(str(tmp_path / "memory.db"))
     memory._encoder_failed = True
 
@@ -191,7 +192,9 @@ async def test_recall_text_search_falls_back_to_like_when_fts5_raises(
 
     from marm_mcp_server.core import memory_ops as memory_ops_module
 
-    monkeypatch.setattr(memory_ops_module, "_fetch_and_score_fts_rows", raise_operational_error)
+    monkeypatch.setattr(
+        memory_ops_module, "_fetch_and_score_fts_rows", raise_operational_error
+    )
 
     results = await memory.recall_text_search(
         "fts error fallback", session="fts-err", limit=5
@@ -532,6 +535,7 @@ async def test_recall_similar_scan_metadata_false_on_filter_rerank_path(tmp_path
 async def test_recall_similar_debug_logs_filter_rerank_path(monkeypatch, tmp_path):
     """Debug output must identify the filter->rerank path when FTS finds scoreable candidates."""
     from marm_mcp_server.core.memory import MARMMemory
+
     mem = MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
 
@@ -548,7 +552,9 @@ async def test_recall_similar_debug_logs_filter_rerank_path(monkeypatch, tmp_pat
 
     debug_calls: list[str] = []
     monkeypatch.setattr(memory_ops_module, "_recall_debug", debug_calls.append)
-    monkeypatch.setattr(memory_ops_module, "_fetch_fts_candidate_ids", lambda *_: [embed_id])
+    monkeypatch.setattr(
+        memory_ops_module, "_fetch_fts_candidate_ids", lambda *_: [embed_id]
+    )
 
     await mem.recall_similar(
         "docker", session="debug-rerank", limit=5, query_vec=vec.copy()
@@ -561,6 +567,7 @@ async def test_recall_similar_debug_logs_filter_rerank_path(monkeypatch, tmp_pat
 async def test_recall_similar_debug_logs_semantic_fallback_path(monkeypatch, tmp_path):
     """Debug output must identify the semantic fallback path when FTS finds no candidates."""
     from marm_mcp_server.core.memory import MARMMemory
+
     mem = MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
 

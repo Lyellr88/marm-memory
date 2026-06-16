@@ -123,6 +123,7 @@ async def _write_chunks(
             return
     conn = sqlite3.connect(db_path, timeout=30.0)
     try:
+        conn.execute("BEGIN IMMEDIATE")
         current_hash = conn.execute(
             "SELECT content_hash FROM memories WHERE id = ?", (memory_id,)
         ).fetchone()

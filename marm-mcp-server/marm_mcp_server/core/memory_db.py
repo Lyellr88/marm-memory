@@ -21,10 +21,10 @@ class SQLiteConnectionPool:
     def _create_initial_connections(self):
         """Create initial pool of connections"""
         for _ in range(min(2, self.max_connections)):
-            self._create_connection()
+            self.pool.put(self._create_connection())
 
     def _create_connection(self):
-        """Create a new SQLite connection with optimal settings"""
+        """Create and return a new SQLite connection with optimal settings."""
         conn = sqlite3.connect(
             self.db_path,
             check_same_thread=False,
@@ -36,9 +36,8 @@ class SQLiteConnectionPool:
         conn.execute("PRAGMA cache_size=10000")
         conn.execute("PRAGMA temp_store=MEMORY")
         conn.execute("PRAGMA foreign_keys=ON")
-
-        self.pool.put(conn)
         self.created_connections += 1
+        return conn
 
     def get_connection(self):
         """Get a connection from the pool"""
@@ -47,8 +46,9 @@ class SQLiteConnectionPool:
         except queue.Empty:
             with self.lock:
                 if self.created_connections < self.max_connections:
-                    self._create_connection()
-                    return self.pool.get(block=False)
+                    # Return directly — never touch the queue so no other
+                    # thread waiting on pool.get() can steal this connection.
+                    return self._create_connection()
 
             return self.pool.get(block=True, timeout=10)
 
