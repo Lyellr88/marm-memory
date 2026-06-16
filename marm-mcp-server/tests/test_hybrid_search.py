@@ -178,6 +178,8 @@ async def test_recall_text_search_falls_back_to_like_for_punctuation_only_query(
 async def test_recall_text_search_falls_back_to_like_when_fts5_raises(
     monkeypatch, tmp_path
 ):
+    from marm_mcp_server.core.memory import MARMMemory
+
     memory = MARMMemory(str(tmp_path / "memory.db"))
     memory._encoder_failed = True
 
@@ -188,10 +190,10 @@ async def test_recall_text_search_falls_back_to_like_when_fts5_raises(
         helper_called["value"] = True
         raise sqlite3.OperationalError("no such table: memories_fts")
 
-    monkeypatch.setitem(
-        memory.recall_text_search.__func__.__globals__,
-        "_fetch_and_score_fts_rows",
-        raise_operational_error,
+    from marm_mcp_server.core import memory_ops as memory_ops_module
+
+    monkeypatch.setattr(
+        memory_ops_module, "_fetch_and_score_fts_rows", raise_operational_error
     )
 
     results = await memory.recall_text_search(
@@ -335,7 +337,7 @@ async def test_recall_similar_falls_back_to_semantic_scan_when_fts_returns_no_ca
     monkeypatch, tmp_path
 ):
     """Semantic fallback must return results when FTS finds no candidates."""
-    from marm_mcp_server.core import memory as memory_module
+    from marm_mcp_server.core import memory_ops as memory_ops_module
 
     memory = MARMMemory(str(tmp_path / "memory.db"))
     memory._encoder_failed = True
@@ -349,7 +351,7 @@ async def test_recall_similar_falls_back_to_semantic_scan_when_fts_returns_no_ca
             conn, "fallback-test", "semantic fallback content", vec
         )
 
-    monkeypatch.setattr(memory_module, "_fetch_fts_candidate_ids", lambda *_: [])
+    monkeypatch.setattr(memory_ops_module, "_fetch_fts_candidate_ids", lambda *_: [])
 
     results = await memory.recall_similar(
         "fallback content", session="fallback-test", limit=5, query_vec=vec.copy()
@@ -363,7 +365,7 @@ async def test_recall_similar_falls_back_when_fts_candidates_have_no_embeddings(
     monkeypatch, tmp_path
 ):
     """When FTS candidates exist but none are scoreable, semantic fallback must run."""
-    from marm_mcp_server.core import memory as memory_module
+    from marm_mcp_server.core import memory_ops as memory_ops_module
 
     memory = MARMMemory(str(tmp_path / "memory.db"))
     memory._encoder_failed = True
@@ -379,7 +381,7 @@ async def test_recall_similar_falls_back_when_fts_candidates_have_no_embeddings(
 
     # Return a non-existent ID so ID-bounded fetch finds nothing scoreable
     monkeypatch.setattr(
-        memory_module, "_fetch_fts_candidate_ids", lambda *_: ["non-existent-id"]
+        memory_ops_module, "_fetch_fts_candidate_ids", lambda *_: ["non-existent-id"]
     )
 
     results = await memory.recall_similar(
@@ -395,7 +397,7 @@ async def test_recall_similar_falls_back_when_fts_candidates_are_all_wrong_dimen
 ):
     """When FTS returns a real ID whose embedding has the wrong dimension, all candidates
     are dimension-skipped, similarities is empty, and semantic fallback must run."""
-    from marm_mcp_server.core import memory as memory_module
+    from marm_mcp_server.core import memory_ops as memory_ops_module
 
     mem = MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
@@ -420,7 +422,7 @@ async def test_recall_similar_falls_back_when_fts_candidates_are_all_wrong_dimen
 
     # Force FTS to return only the wrong-dimension ID
     monkeypatch.setattr(
-        memory_module, "_fetch_fts_candidate_ids", lambda *_: [wrong_id]
+        memory_ops_module, "_fetch_fts_candidate_ids", lambda *_: [wrong_id]
     )
 
     query_vec = correct_vec.copy()
@@ -438,7 +440,7 @@ async def test_recall_similar_falls_back_when_fts_candidates_are_all_wrong_dimen
 @pytest.mark.asyncio
 async def test_recall_similar_respects_fts_candidate_limit(monkeypatch, tmp_path):
     """Scorer receives no more than max(limit, FTS_CANDIDATE_LIMIT) IDs."""
-    from marm_mcp_server.core import memory as memory_module
+    from marm_mcp_server.core import memory_ops as memory_ops_module
 
     cap = 3
     recall_limit = 5
@@ -454,20 +456,14 @@ async def test_recall_similar_respects_fts_candidate_limit(monkeypatch, tmp_path
             _insert_with_embedding(conn, "cap-test", f"canary memory entry {i}", vec)
 
     scored_ids: list[str] = []
-    original_scorer = memory_module._fetch_and_score_by_ids
+    original_scorer = memory_ops_module._fetch_and_score_by_ids
 
     def capturing_scorer(db_path, memory_ids, query_embedding):
         scored_ids.extend(memory_ids)
         return original_scorer(db_path, memory_ids, query_embedding)
 
-    monkeypatch.setitem(
-        mem.recall_similar.__func__.__globals__, "FTS_CANDIDATE_LIMIT", cap
-    )
-    monkeypatch.setitem(
-        mem.recall_similar.__func__.__globals__,
-        "_fetch_and_score_by_ids",
-        capturing_scorer,
-    )
+    monkeypatch.setattr(memory_ops_module, "FTS_CANDIDATE_LIMIT", cap)
+    monkeypatch.setattr(memory_ops_module, "_fetch_and_score_by_ids", capturing_scorer)
 
     await mem.recall_similar(
         "canary", session="cap-test", limit=recall_limit, query_vec=vec.copy()
@@ -484,7 +480,7 @@ async def test_recall_similar_fts_filter_failure_falls_back_to_semantic_scan(
     monkeypatch, tmp_path
 ):
     """An exception from _fetch_fts_candidate_ids must not crash recall."""
-    from marm_mcp_server.core import memory as memory_module
+    from marm_mcp_server.core import memory_ops as memory_ops_module
 
     memory = MARMMemory(str(tmp_path / "memory.db"))
     memory._encoder_failed = True
@@ -501,7 +497,7 @@ async def test_recall_similar_fts_filter_failure_falls_back_to_semantic_scan(
     def raise_fts_error(*args, **kwargs):
         raise sqlite3.OperationalError("no such table: memories_fts")
 
-    monkeypatch.setattr(memory_module, "_fetch_fts_candidate_ids", raise_fts_error)
+    monkeypatch.setattr(memory_ops_module, "_fetch_fts_candidate_ids", raise_fts_error)
 
     results = await memory.recall_similar(
         "content", session="fts-fail", limit=5, query_vec=vec.copy()
@@ -538,6 +534,8 @@ async def test_recall_similar_scan_metadata_false_on_filter_rerank_path(tmp_path
 @pytest.mark.asyncio
 async def test_recall_similar_debug_logs_filter_rerank_path(monkeypatch, tmp_path):
     """Debug output must identify the filter->rerank path when FTS finds scoreable candidates."""
+    from marm_mcp_server.core.memory import MARMMemory
+
     mem = MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
 
@@ -550,15 +548,12 @@ async def test_recall_similar_debug_logs_filter_rerank_path(monkeypatch, tmp_pat
             conn, "debug-rerank", "docker deployment debug", vec
         )
 
+    from marm_mcp_server.core import memory_ops as memory_ops_module
+
     debug_calls: list[str] = []
-    # setitem on __globals__ is the reliable way to patch names a method resolves at call time
-    monkeypatch.setitem(
-        mem.recall_similar.__func__.__globals__, "_recall_debug", debug_calls.append
-    )
-    monkeypatch.setitem(
-        mem.recall_similar.__func__.__globals__,
-        "_fetch_fts_candidate_ids",
-        lambda *_: [embed_id],
+    monkeypatch.setattr(memory_ops_module, "_recall_debug", debug_calls.append)
+    monkeypatch.setattr(
+        memory_ops_module, "_fetch_fts_candidate_ids", lambda *_: [embed_id]
     )
 
     await mem.recall_similar(
@@ -571,6 +566,8 @@ async def test_recall_similar_debug_logs_filter_rerank_path(monkeypatch, tmp_pat
 @pytest.mark.asyncio
 async def test_recall_similar_debug_logs_semantic_fallback_path(monkeypatch, tmp_path):
     """Debug output must identify the semantic fallback path when FTS finds no candidates."""
+    from marm_mcp_server.core.memory import MARMMemory
+
     mem = MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
 
@@ -583,15 +580,11 @@ async def test_recall_similar_debug_logs_semantic_fallback_path(monkeypatch, tmp
             conn, "debug-fallback", "semantic fallback debug content", vec
         )
 
+    from marm_mcp_server.core import memory_ops as memory_ops_module
+
     debug_calls: list[str] = []
-    monkeypatch.setitem(
-        mem.recall_similar.__func__.__globals__, "_recall_debug", debug_calls.append
-    )
-    monkeypatch.setitem(
-        mem.recall_similar.__func__.__globals__,
-        "_fetch_fts_candidate_ids",
-        lambda *_: [],
-    )
+    monkeypatch.setattr(memory_ops_module, "_recall_debug", debug_calls.append)
+    monkeypatch.setattr(memory_ops_module, "_fetch_fts_candidate_ids", lambda *_: [])
 
     await mem.recall_similar(
         "fallback debug", session="debug-fallback", limit=5, query_vec=vec.copy()

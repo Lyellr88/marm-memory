@@ -51,7 +51,11 @@ marm-mcp-server/
     server_stdio.py            # FastMCP STDIO transport
     config/settings.py         # Paths, host/port, auth, feature flags
     core/
-      memory.py                # SQLite memory and hybrid recall layer (semantic + FTS5)
+      memory.py                # MARMMemory facade and public memory object wiring
+      memory_utils.py          # Shared memory helpers, chunking, and encoding utilities
+      memory_db.py             # SQLite schema, connection pool, and DB maintenance routines
+      memory_scoring.py        # Semantic, FTS, temporal, and chunk-aware recall scoring
+      memory_ops.py            # Store/update/recall/delete/list memory operations
       write_queue.py           # Serialized write queue for SQLite writer stability
       consolidation.py         # Content-hash and semantic write-time consolidation
       compaction.py            # Background compaction candidate detection and nudges

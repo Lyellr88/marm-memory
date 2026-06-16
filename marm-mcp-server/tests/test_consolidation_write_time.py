@@ -193,8 +193,9 @@ async def test_semantic_merge_returns_existing_id_and_skips_new_row(
     monkeypatch, tmp_path
 ):
     from marm_mcp_server.core import memory as memory_module
+    from marm_mcp_server.core import memory_ops as memory_ops_module
 
-    monkeypatch.setattr(memory_module, "CONSOLIDATION_ENABLED", True)
+    monkeypatch.setattr(memory_ops_module, "CONSOLIDATION_ENABLED", True)
     mem = memory_module.MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
 
@@ -207,7 +208,7 @@ async def test_semantic_merge_returns_existing_id_and_skips_new_row(
     ):
         return first_id
 
-    monkeypatch.setattr(memory_module, "find_semantic_duplicate", mock_semantic_dup)
+    monkeypatch.setattr(memory_ops_module, "find_semantic_duplicate", mock_semantic_dup)
 
     second_id = await mem.store_memory("auth error resolved in login flow", "session-a")
 
@@ -226,8 +227,9 @@ async def test_semantic_merge_writes_merged_content_to_existing_row(
     monkeypatch, tmp_path
 ):
     from marm_mcp_server.core import memory as memory_module
+    from marm_mcp_server.core import memory_ops as memory_ops_module
 
-    monkeypatch.setattr(memory_module, "CONSOLIDATION_ENABLED", True)
+    monkeypatch.setattr(memory_ops_module, "CONSOLIDATION_ENABLED", True)
     mem = memory_module.MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
 
@@ -238,7 +240,7 @@ async def test_semantic_merge_writes_merged_content_to_existing_row(
     ):
         return first_id
 
-    monkeypatch.setattr(memory_module, "find_semantic_duplicate", mock_semantic_dup)
+    monkeypatch.setattr(memory_ops_module, "find_semantic_duplicate", mock_semantic_dup)
 
     await mem.store_memory("auth error resolved", "session-a")
 
@@ -254,9 +256,9 @@ async def test_semantic_merge_writes_merged_content_to_existing_row(
 
 @pytest.mark.asyncio
 async def test_dissimilar_content_stores_as_new_row(monkeypatch, tmp_path):
-    from marm_mcp_server.core import memory as memory_module
+    from marm_mcp_server.core import memory_ops as memory_ops_module
 
-    monkeypatch.setattr(memory_module, "CONSOLIDATION_ENABLED", True)
+    monkeypatch.setattr(memory_ops_module, "CONSOLIDATION_ENABLED", True)
     mem = MARMMemory(str(tmp_path / "memory.db"))
 
     class FakeEncoder:
@@ -271,7 +273,7 @@ async def test_dissimilar_content_stores_as_new_row(monkeypatch, tmp_path):
         assert query_vec is not None
         return None
 
-    monkeypatch.setattr(memory_module, "find_semantic_duplicate", mock_no_match)
+    monkeypatch.setattr(memory_ops_module, "find_semantic_duplicate", mock_no_match)
 
     second_id = await mem.store_memory("deployed kubernetes cluster", "session-a")
 
@@ -287,9 +289,9 @@ async def test_dissimilar_content_stores_as_new_row(monkeypatch, tmp_path):
 
 @pytest.mark.asyncio
 async def test_encoder_failure_skips_layer2_and_stores_normally(monkeypatch, tmp_path):
-    from marm_mcp_server.core import memory as memory_module
+    from marm_mcp_server.core import memory_ops as memory_ops_module
 
-    monkeypatch.setattr(memory_module, "CONSOLIDATION_ENABLED", True)
+    monkeypatch.setattr(memory_ops_module, "CONSOLIDATION_ENABLED", True)
     mem = MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True  # encoder unavailable — Layer 2 must not block write
 
@@ -329,9 +331,9 @@ async def test_find_semantic_duplicate_passes_correct_session_to_recall(tmp_path
 async def test_similar_content_in_different_session_stores_as_new_row(
     monkeypatch, tmp_path
 ):
-    from marm_mcp_server.core import memory as memory_module
+    from marm_mcp_server.core import memory_ops as memory_ops_module
 
-    monkeypatch.setattr(memory_module, "CONSOLIDATION_ENABLED", True)
+    monkeypatch.setattr(memory_ops_module, "CONSOLIDATION_ENABLED", True)
     mem = MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
 
@@ -345,7 +347,7 @@ async def test_similar_content_in_different_session_stores_as_new_row(
         return None
 
     monkeypatch.setattr(
-        memory_module, "find_semantic_duplicate", mock_no_cross_session_match
+        memory_ops_module, "find_semantic_duplicate", mock_no_cross_session_match
     )
 
     second_id = await mem.store_memory("auth error resolved in login", "session-b")

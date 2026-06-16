@@ -297,9 +297,10 @@ async def test_recall_similar_scan_truncated_fires_when_scan_limit_exceeded(
     import uuid as uuid_module
 
     from marm_mcp_server.core import memory as memory_module
+    from marm_mcp_server.core import memory_ops as memory_ops_module
 
-    monkeypatch.setattr(memory_module, "RECALL_SCAN_LIMIT", 5)
-    monkeypatch.setattr(memory_module, "_fetch_fts_candidate_ids", lambda *_: [])
+    monkeypatch.setattr(memory_ops_module, "RECALL_SCAN_LIMIT", 5)
+    monkeypatch.setattr(memory_ops_module, "_fetch_fts_candidate_ids", lambda *_: [])
     mem = memory_module.MARMMemory(str(tmp_path / "memory.db"))
 
     dim = 384
@@ -345,8 +346,9 @@ async def test_recall_similar_scan_not_truncated_when_under_limit(
     import uuid as uuid_module
 
     from marm_mcp_server.core import memory as memory_module
+    from marm_mcp_server.core import memory_ops as memory_ops_module
 
-    monkeypatch.setattr(memory_module, "RECALL_SCAN_LIMIT", 10)
+    monkeypatch.setattr(memory_ops_module, "RECALL_SCAN_LIMIT", 10)
     mem = memory_module.MARMMemory(str(tmp_path / "memory.db"))
 
     dim = 384
@@ -433,8 +435,9 @@ async def test_recall_similar_finds_match_past_old_1000_row_cliff(
     import uuid as uuid_module
 
     from marm_mcp_server.core import memory as memory_module
+    from marm_mcp_server.core import memory_ops as memory_ops_module
 
-    monkeypatch.setattr(memory_module, "RECALL_SCAN_LIMIT", 1500)
+    monkeypatch.setattr(memory_ops_module, "RECALL_SCAN_LIMIT", 1500)
     mem = memory_module.MARMMemory(str(tmp_path / "memory.db"))
     dim = 384
 

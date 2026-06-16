@@ -43,8 +43,9 @@ def test_compute_content_hash_returns_sha256_hex_string():
 @pytest.mark.asyncio
 async def test_exact_duplicate_in_same_session_is_skipped(monkeypatch, tmp_path):
     from marm_mcp_server.core import memory as memory_module
+    from marm_mcp_server.core import memory_ops as memory_ops_module
 
-    monkeypatch.setattr(memory_module, "CONSOLIDATION_ENABLED", True)
+    monkeypatch.setattr(memory_ops_module, "CONSOLIDATION_ENABLED", True)
     mem = memory_module.MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
 
@@ -65,9 +66,9 @@ async def test_exact_duplicate_in_same_session_is_skipped(monkeypatch, tmp_path)
 async def test_exact_duplicate_in_different_session_stores_as_new_row(
     monkeypatch, tmp_path
 ):
-    from marm_mcp_server.core import memory as memory_module
+    from marm_mcp_server.core import memory_ops as memory_ops_module
 
-    monkeypatch.setattr(memory_module, "CONSOLIDATION_ENABLED", True)
+    monkeypatch.setattr(memory_ops_module, "CONSOLIDATION_ENABLED", True)
     mem = MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
 
@@ -87,8 +88,9 @@ async def test_case_and_whitespace_variants_deduplicate_within_session(
     monkeypatch, tmp_path
 ):
     from marm_mcp_server.core import memory as memory_module
+    from marm_mcp_server.core import memory_ops as memory_ops_module
 
-    monkeypatch.setattr(memory_module, "CONSOLIDATION_ENABLED", True)
+    monkeypatch.setattr(memory_ops_module, "CONSOLIDATION_ENABLED", True)
     mem = memory_module.MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
 
@@ -111,9 +113,9 @@ async def test_case_and_whitespace_variants_deduplicate_within_session(
 async def test_content_hash_column_populated_on_all_writes_regardless_of_consolidation_flag(
     monkeypatch, tmp_path
 ):
-    from marm_mcp_server.core import memory as memory_module
+    from marm_mcp_server.core import memory_ops as memory_ops_module
 
-    monkeypatch.setattr(memory_module, "CONSOLIDATION_ENABLED", False)
+    monkeypatch.setattr(memory_ops_module, "CONSOLIDATION_ENABLED", False)
     # Even with consolidation disabled, hash is still stored on every write.
     mem = MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
@@ -135,12 +137,11 @@ async def test_hash_collision_stores_as_new_row_not_false_dedup(monkeypatch, tmp
     # Simulate a SHA-256 collision: two different contents producing the same hash.
     # Both should store as separate rows because find_exact_duplicate compares
     # normalized content after the hash match — different content means no dedup.
-    from marm_mcp_server.core import memory as memory_module
+    from marm_mcp_server.core import memory_ops as memory_ops_module
 
-    monkeypatch.setattr(memory_module, "CONSOLIDATION_ENABLED", True)
-    # Must patch on memory_module — store_memory() calls the name bound in that namespace.
+    monkeypatch.setattr(memory_ops_module, "CONSOLIDATION_ENABLED", True)
     monkeypatch.setattr(
-        memory_module, "compute_content_hash", lambda _: "collision_hash"
+        memory_ops_module, "compute_content_hash", lambda _: "collision_hash"
     )
 
     mem = MARMMemory(str(tmp_path / "memory.db"))
@@ -161,9 +162,9 @@ async def test_hash_collision_stores_as_new_row_not_false_dedup(monkeypatch, tmp
 
 @pytest.mark.asyncio
 async def test_consolidation_disabled_stores_duplicates_normally(monkeypatch, tmp_path):
-    from marm_mcp_server.core import memory as memory_module
+    from marm_mcp_server.core import memory_ops as memory_ops_module
 
-    monkeypatch.setattr(memory_module, "CONSOLIDATION_ENABLED", False)
+    monkeypatch.setattr(memory_ops_module, "CONSOLIDATION_ENABLED", False)
     # With consolidation disabled, identical writes always insert new rows.
     mem = MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
@@ -187,8 +188,9 @@ async def test_concurrent_identical_writes_produce_one_row(monkeypatch, tmp_path
     # not bypass Layer 1 dedup and insert duplicate rows. BEGIN IMMEDIATE closes the gap.
     import asyncio
     from marm_mcp_server.core import memory as memory_module
+    from marm_mcp_server.core import memory_ops as memory_ops_module
 
-    monkeypatch.setattr(memory_module, "CONSOLIDATION_ENABLED", True)
+    monkeypatch.setattr(memory_ops_module, "CONSOLIDATION_ENABLED", True)
     mem = memory_module.MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
 
@@ -214,12 +216,13 @@ async def test_race_window_sealed_by_begin_immediate(monkeypatch, tmp_path):
     # re-check must still collapse the duplicate write to a single row.
     import asyncio
     from marm_mcp_server.core import memory as memory_module
+    from marm_mcp_server.core import memory_ops as memory_ops_module
 
-    monkeypatch.setattr(memory_module, "CONSOLIDATION_ENABLED", True)
+    monkeypatch.setattr(memory_ops_module, "CONSOLIDATION_ENABLED", True)
     mem = memory_module.MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
 
-    original_find_semantic = memory_module.find_semantic_duplicate
+    original_find_semantic = memory_ops_module.find_semantic_duplicate
     started = 0
     release_both = asyncio.Event()
 
@@ -236,7 +239,7 @@ async def test_race_window_sealed_by_begin_immediate(monkeypatch, tmp_path):
         )
 
     monkeypatch.setattr(
-        memory_module, "find_semantic_duplicate", yielding_find_semantic
+        memory_ops_module, "find_semantic_duplicate", yielding_find_semantic
     )
 
     id_a, id_b = await asyncio.gather(
