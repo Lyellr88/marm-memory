@@ -1,3 +1,4 @@
+import importlib
 import pytest
 from pydantic import ValidationError
 
@@ -233,12 +234,11 @@ def test_http_no_result_system_fallback_respects_detail_cap(monkeypatch, tmp_pat
     client = local_client(server.app)
 
     # Seed a long memory into marm_system so the HTTP fallback has something to return
+    import asyncio
+
     long_content = "http system fallback word " * 25  # ~650 chars
-    store = client.post(
-        "/marm_context_log",
-        json={"content": long_content, "session_name": "marm_system"},
-    )
-    assert store.status_code == 200
+    memory_module = importlib.import_module("marm_mcp_server.core.memory")
+    asyncio.run(memory_module.memory.store_memory_queued(long_content, "marm_system"))
 
     # Query a session with no memories — triggers the no-result marm_system fallback
     resp = client.post(

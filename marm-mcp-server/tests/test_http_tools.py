@@ -1,5 +1,7 @@
 import asyncio
 import importlib
+import sqlite3
+import uuid
 from datetime import datetime, timezone
 
 from conftest import load_isolated_server, local_client
@@ -14,11 +16,6 @@ def test_session_log_summary_and_delete_workflow_persists_real_rows(
     start = client.post("/marm_start", json={"session_name": "release-notes"})
     assert start.status_code == 200
     assert start.json()["marm_active"] is True
-
-    log_session = client.post(
-        "/marm_log_session", json={"session_name": "release-notes"}
-    )
-    assert log_session.status_code == 200
 
     entry = "2026-05-17-docker-stdio transport validated"
     created = client.post(
@@ -62,18 +59,22 @@ def test_log_entry_without_session_name_uses_active_session(monkeypatch, tmp_pat
     server = load_isolated_server(monkeypatch, tmp_path)
     client = local_client(server.app)
 
-    switch = client.post("/marm_log_session", json={"session_name": "myproject"})
-    assert switch.status_code == 200
-    assert switch.json()["session_name"] == "myproject"
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    expected_session = f"myproject-{today}"
 
-    # No session_name — should land in "myproject", not "main"
+    switch = client.post("/marm_log_entry", json={"entry": "Session: myproject"})
+    assert switch.status_code == 200
+    assert switch.json()["session_name"] == expected_session
+
+    # No session_name — should land in the active dated session, not "main"
     entry = client.post(
         "/marm_log_entry", json={"entry": "2026-05-20-setup-initial scaffolding done"}
     )
     assert entry.status_code == 200
 
-    in_project = client.get("/marm_log_show", params={"session_name": "myproject"})
-    assert in_project.json()["total_entries"] == 1
+    in_project = client.get("/marm_log_show", params={"session_name": expected_session})
+    # 2 entries: session_start marker + the actual log entry
+    assert in_project.json()["total_entries"] == 2
 
     in_main = client.get("/marm_log_show", params={"session_name": "main"})
     assert in_main.json().get("total_entries", 0) == 0
@@ -311,19 +312,22 @@ def test_http_notebook_service_errors_return_structured_error(monkeypatch, tmp_p
     assert "names is required" in missing_names.json()["message"]
 
 
-def test_context_log_recall_include_logs_and_system_info(monkeypatch, tmp_path):
+def test_smart_recall_with_include_logs_and_system_info(monkeypatch, tmp_path):
     server = load_isolated_server(monkeypatch, tmp_path)
     client = local_client(server.app)
 
-    log = client.post(
-        "/marm_context_log",
-        json={
-            "session_name": "search-session",
-            "content": "project decision: qwen uses http transport command",
-        },
-    )
-    assert log.status_code == 200
-    assert log.json()["context_type"] == "project"
+    db_path = str(tmp_path / "marm_memory.db")
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            "INSERT INTO memories (id, session_name, content, timestamp, context_type) VALUES (?, ?, ?, ?, ?)",
+            (
+                str(uuid.uuid4()),
+                "search-session",
+                "project decision: qwen uses http transport command",
+                datetime.now(timezone.utc).isoformat(),
+                "general",
+            ),
+        )
 
     recall = client.post(
         "/marm_smart_recall",
@@ -348,7 +352,6 @@ def test_context_log_recall_include_logs_and_system_info(monkeypatch, tmp_path):
     assert no_results.json()["status"] == "no_results"
 
     # Write a log entry so include_logs=True has something real to return
-    client.post("/marm_log_session", json={"session_name": "search-session"})
     client.post(
         "/marm_log_entry",
         json={
@@ -384,22 +387,19 @@ def test_context_log_recall_include_logs_and_system_info(monkeypatch, tmp_path):
     assert count == 1
 
 
-def test_context_log_uses_write_queue_when_enabled(monkeypatch, tmp_path):
-    server = load_isolated_server(monkeypatch, tmp_path, write_queue_enabled=True)
+def test_memory_write_queue_is_used_when_enabled(monkeypatch, tmp_path):
+    load_isolated_server(monkeypatch, tmp_path, write_queue_enabled=True)
+    memory_module = importlib.import_module("marm_mcp_server.core.memory")
 
-    with local_client(server.app) as client:
-        log = client.post(
-            "/marm_context_log",
-            json={
-                "session_name": "queued-http",
-                "content": "queued http memory write for swarm agents",
-            },
+    assert memory_module.WRITE_QUEUE_ENABLED is True
+
+    asyncio.run(
+        memory_module.memory.store_memory_queued(
+            "queued http memory write for swarm agents",
+            "queued-http",
+            "general",
         )
-        memory_module = importlib.import_module("marm_mcp_server.core.memory")
-        assert memory_module.memory._write_queue is not None
-
-    assert log.status_code == 200
-    assert log.json()["status"] == "success"
+    )
 
     with memory_module.memory.get_connection() as conn:
         count = conn.execute(
@@ -416,7 +416,6 @@ def test_smart_recall_include_logs_returns_log_matches_without_memory_hits(
     server = load_isolated_server(monkeypatch, tmp_path)
     client = local_client(server.app)
 
-    client.post("/marm_log_session", json={"session_name": "log-only-session"})
     created = client.post(
         "/marm_log_entry",
         json={
@@ -666,7 +665,6 @@ def test_marm_delete_session_resets_active_log_session(monkeypatch, tmp_path):
     server = load_isolated_server(monkeypatch, tmp_path)
     client = local_client(server.app)
 
-    client.post("/marm_log_session", json={"session_name": "project-a"})
     client.post(
         "/marm_log_entry",
         json={"session_name": "project-a", "entry": "2026-05-20-init-setup complete"},
@@ -742,6 +740,27 @@ def test_http_mcp_tools_call_body_triggers_doc_loading(monkeypatch, tmp_path):
     )
 
     assert doc_module.docs_are_loaded()
+
+
+def test_ensure_marm_started_does_not_override_active_log_session(monkeypatch, tmp_path):
+    load_isolated_server(monkeypatch, tmp_path)
+    doc_module = importlib.import_module("marm_mcp_server.services.documentation")
+    memory_module = importlib.import_module("marm_mcp_server.core.memory")
+
+    with memory_module.memory.get_connection() as conn:
+        conn.execute(
+            "INSERT INTO sessions (session_name, marm_active) VALUES (?, TRUE)",
+            ("log-session",),
+        )
+
+    asyncio.run(doc_module.ensure_marm_started("recall-session"))
+
+    with memory_module.memory.get_connection() as conn:
+        active = conn.execute(
+            "SELECT session_name FROM sessions WHERE marm_active = TRUE"
+        ).fetchall()
+
+    assert active == [("log-session",)]
 
 
 def test_auto_refresh_triggers_reload_after_threshold(monkeypatch, tmp_path):
@@ -1120,8 +1139,8 @@ def test_http_protocol_injected_independently_per_session(monkeypatch, tmp_path)
                 "id": 1,
                 "method": "tools/call",
                 "params": {
-                    "name": "marm_context_log",
-                    "arguments": {"session_name": session_name, "content": "x"},
+                    "name": "marm_smart_recall",
+                    "arguments": {"session_name": session_name, "query": "x"},
                 },
             }
         ).encode()

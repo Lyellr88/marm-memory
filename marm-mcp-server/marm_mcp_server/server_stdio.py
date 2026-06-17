@@ -211,71 +211,8 @@ async def marm_smart_recall(
     )
 
 
-@mcp.tool()
-@_log_tool_call
-async def marm_context_log(
-    content: str,
-    session_name: str = "default",
-    context_type: str = "general",
-    metadata: Optional[dict] = None,
-) -> dict:
-    """
-    📝 Log durable context with automatic categorization
-
-    Saves information to memory with automatic context type detection.
-    """
-    try:
-        memory_id = await memory.store_memory_queued(
-            content=content,
-            session=session_name,
-            context_type=context_type,
-            metadata=metadata or {},
-        )
-
-        await events.emit(
-            "memory_logged",
-            {
-                "session": session_name,
-                "memory_id": memory_id,
-                "context_type": context_type,
-            },
-        )
-
-        return {
-            "status": "success",
-            "message": f"✅ Context logged to session '{session_name}'",
-            "memory_id": memory_id,
-            "session_name": session_name,
-            "context_type": context_type,
-        }
-    except Exception as e:
-        return {"status": "error", "message": f"Error during context log: {e!s}"}
-
-
-@mcp.tool()
-@_log_tool_call
-async def marm_log_session(session_name: str) -> dict:
-    """
-    📂 Create or switch to named session container
-    """
-    try:
-        with memory.get_connection() as conn:
-            conn.execute(
-                "INSERT OR REPLACE INTO sessions (session_name, last_accessed) VALUES (?, ?)",
-                (session_name, datetime.now(timezone.utc).isoformat()),
-            )
-            conn.commit()
-
-        memory.active_log_session = session_name
-        await events.emit("session_created", {"session": session_name})
-
-        return {
-            "status": "success",
-            "message": f"📂 Session '{session_name}' created/activated",
-            "session_name": session_name,
-        }
-    except Exception as e:
-        return {"status": "error", "message": f"Error creating session: {e!s}"}
+_SESSION_PREFIXES = ("Session: ", "Topic: ")
+_SESSION_INACTIVITY_NOTICE_SECONDS = 3600
 
 
 @mcp.tool()
@@ -287,12 +224,108 @@ async def marm_log_entry(
     """
     📝 Add structured log entry for milestones or decisions
 
+    Start with "Session: [name]" or "Topic: [name]" to switch active session.
+    The backend auto-tags the date. All subsequent entries route to that session.
     Entry format: YYYY-MM-DD-topic-summary (date prefix optional).
-    Omit session_name to use the active session set by marm_log_session.
     """
     try:
         formatted_entry = entry.strip()
-        session = session_name or memory.active_log_session
+
+        # Session-switch detection
+        for prefix in _SESSION_PREFIXES:
+            if formatted_entry.startswith(prefix):
+                base_name = formatted_entry[len(prefix) :].strip()
+                if not base_name:
+                    return {
+                        "status": "error",
+                        "message": "Session name cannot be empty.",
+                    }
+                date_tag = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+                new_session = f"{base_name}-{date_tag}"
+                marker_id = str(uuid.uuid4())
+                with memory.get_connection() as conn:
+                    conn.execute("UPDATE sessions SET marm_active = FALSE")
+                    conn.execute(
+                        """
+                        INSERT INTO sessions (session_name, last_accessed, marm_active)
+                        VALUES (?, ?, TRUE)
+                        ON CONFLICT(session_name) DO UPDATE SET
+                            last_accessed = excluded.last_accessed,
+                            marm_active = TRUE
+                        """,
+                        (new_session, datetime.now(timezone.utc).isoformat()),
+                    )
+                    conn.execute(
+                        """
+                        INSERT INTO log_entries
+                            (id, session_name, entry_date, topic, summary, full_entry)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                        """,
+                        (
+                            marker_id,
+                            new_session,
+                            date_tag,
+                            "session_start",
+                            base_name,
+                            formatted_entry,
+                        ),
+                    )
+                    try:
+                        conn.execute(
+                            "UPDATE session_summary_cache SET dirty = TRUE, updated_at = ? WHERE session_name = ?",
+                            (datetime.now(timezone.utc).isoformat(), new_session),
+                        )
+                    except Exception:
+                        pass
+                    conn.commit()
+                memory.active_log_session = new_session
+                await events.emit("session_created", {"session": new_session})
+                return {
+                    "status": "session_switched",
+                    "message": f"📂 Session switched to '{new_session}'",
+                    "session_name": new_session,
+                }
+
+        # Resolve session — explicit > active > dated fallback
+        if session_name:
+            session = session_name
+        elif memory.active_log_session != "main":
+            session = memory.active_log_session
+        else:
+            date_tag = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            session = f"session-{date_tag}"
+            with memory.get_connection() as conn:
+                conn.execute("UPDATE sessions SET marm_active = FALSE")
+                conn.execute(
+                    """
+                    INSERT INTO sessions (session_name, last_accessed, marm_active)
+                    VALUES (?, ?, TRUE)
+                    ON CONFLICT(session_name) DO UPDATE SET
+                        last_accessed = excluded.last_accessed,
+                        marm_active = TRUE
+                    """,
+                    (session, datetime.now(timezone.utc).isoformat()),
+                )
+                conn.commit()
+            memory.active_log_session = session
+
+        # Chunk boundary check
+        with memory.get_connection() as conn:
+            row = conn.execute(
+                "SELECT last_accessed FROM sessions WHERE session_name = ?", (session,)
+            ).fetchone()
+        if row and row[0]:
+            try:
+                last_dt = datetime.fromisoformat(row[0])
+                if last_dt.tzinfo is None:
+                    last_dt = last_dt.replace(tzinfo=timezone.utc)
+                gap = (datetime.now(timezone.utc) - last_dt).total_seconds()
+                if gap > _SESSION_INACTIVITY_NOTICE_SECONDS:
+                    print(
+                        f"[MARM] Chunk boundary detected for '{session}' — {gap:.0f}s since last write"
+                    )
+            except Exception:
+                pass
 
         entry_pattern = r"^(\d{4}-\d{2}-\d{2})-(.*?)-(.*?)$"
         match = re.match(entry_pattern, formatted_entry)
@@ -300,12 +333,12 @@ async def marm_log_entry(
         if match:
             entry_date, topic, summary = match.groups()
         else:
-            entry_date = None
+            entry_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
             topic = "general"
             summary = formatted_entry
 
         entry_id = str(uuid.uuid4())
-
+        now_iso = datetime.now(timezone.utc).isoformat()
         with memory.get_connection() as conn:
             conn.execute(
                 """
@@ -314,6 +347,21 @@ async def marm_log_entry(
                 """,
                 (entry_id, session, entry_date, topic, summary, formatted_entry),
             )
+            conn.execute(
+                """
+                INSERT INTO sessions (session_name, last_accessed)
+                VALUES (?, ?)
+                ON CONFLICT(session_name) DO UPDATE SET last_accessed = excluded.last_accessed
+                """,
+                (session, now_iso),
+            )
+            try:
+                conn.execute(
+                    "UPDATE session_summary_cache SET dirty = TRUE, updated_at = ? WHERE session_name = ?",
+                    (now_iso, session),
+                )
+            except Exception:
+                pass
             conn.commit()
 
         await events.emit(
@@ -406,6 +454,14 @@ async def marm_delete(
                         (session_name, target, target),
                     )
                     deleted = cursor.rowcount
+                    if deleted:
+                        try:
+                            conn.execute(
+                                "UPDATE session_summary_cache SET dirty = TRUE, updated_at = ? WHERE session_name = ?",
+                                (datetime.now(timezone.utc).isoformat(), session_name),
+                            )
+                        except Exception:
+                            pass
                 else:
                     conn.execute(
                         "DELETE FROM sessions WHERE session_name = ?", (target,)
@@ -414,6 +470,13 @@ async def marm_delete(
                         "DELETE FROM log_entries WHERE session_name = ?", (target,)
                     )
                     deleted = cursor.rowcount
+                    try:
+                        conn.execute(
+                            "DELETE FROM session_summary_cache WHERE session_name = ?",
+                            (target,),
+                        )
+                    except Exception:
+                        pass
                     if memory.active_log_session == target:
                         memory.active_log_session = "main"
                 conn.commit()
@@ -480,7 +543,6 @@ async def marm_notebook(
 @_log_tool_call
 async def marm_summary(
     session_name: str,
-    limit: int = 50,
 ) -> dict:
     """
     📊 Generate paste-ready context block for new chats
@@ -488,7 +550,7 @@ async def marm_summary(
     Reads log_entries for the session and returns a formatted markdown summary.
     Equivalent to /summary: [session name] command
     """
-    return await generate_session_summary(session_name, limit)
+    return await generate_session_summary(session_name)
 
 
 @mcp.tool()
@@ -585,6 +647,7 @@ def main() -> None:
         DEFAULT_DB_PATH,
         SEMANTIC_SEARCH_AVAILABLE,
     )
+    memory.restore_active_session()
     try:
         mcp.run()
     except BaseException as exc:

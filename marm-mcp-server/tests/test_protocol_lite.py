@@ -24,8 +24,8 @@ def _tool_call_body(session_name="default"):
             "id": 1,
             "method": "tools/call",
             "params": {
-                "name": "marm_context_log",
-                "arguments": {"session_name": session_name, "content": "test"},
+                "name": "marm_smart_recall",
+                "arguments": {"session_name": session_name, "query": "test"},
             },
         }
     ).encode()
@@ -129,7 +129,7 @@ def test_lite_injects_at_interval(monkeypatch, tmp_path):
     text = _injected_text(resp)
 
     assert "[MARM PROTOCOL REFRESH]" in text
-    assert "MARM Protocol — Quick Reference" in text
+    assert "MARM Protocol - Quick Reference" in text
     assert "smart_recall" in text
 
 
@@ -266,7 +266,7 @@ def test_stdio_lite_injected_on_interval(monkeypatch, tmp_path):
     # Call 30: lite injection
     r30 = asyncio.run(wrapped(session_name="main"))
     assert "marm_protocol_lite" in r30
-    assert "MARM Protocol — Quick Reference" in r30["marm_protocol_lite"]
+    assert "MARM Protocol - Quick Reference" in r30["marm_protocol_lite"]
 
 
 def test_stdio_lite_and_compaction_coexist(monkeypatch, tmp_path):

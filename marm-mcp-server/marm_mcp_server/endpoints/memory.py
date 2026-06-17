@@ -3,9 +3,8 @@
 from fastapi import APIRouter, Request
 from datetime import datetime
 
-from ..core.models import SmartRecallRequest, ContextLogRequest
+from ..core.models import SmartRecallRequest
 from ..core.memory import memory
-from ..core.events import events
 from ..core.response_limiter import MCPResponseLimiter
 from ..services.recall import _apply_detail_level
 
@@ -248,45 +247,3 @@ async def marm_smart_recall(request: SmartRecallRequest, http_request: Request):
     except Exception as e:
         print(f"Unexpected error in marm_smart_recall: {e}")
         return {"status": "error", "message": "Memory recall failed."}
-
-
-@router.post("/marm_context_log", operation_id="marm_context_log")
-async def marm_context_log(request: ContextLogRequest):
-    """
-    📝 Log with automatic context classification
-
-    Automatically classifies content type and stores with proper context.
-    Uses semantic embeddings for intelligent recall.
-    """
-    try:
-        from ..core.memory import sanitize_content
-
-        sanitized_content = sanitize_content(request.content)
-
-        memory_id = await memory.store_memory_queued(
-            request.content, request.session_name
-        )
-
-        context_type = await memory.auto_classify_content(sanitized_content)
-
-        await events.emit(
-            "memory_stored",
-            {
-                "memory_id": memory_id,
-                "session": request.session_name,
-                "content": sanitized_content,
-                "context_type": context_type,
-            },
-        )
-
-        return {
-            "status": "success",
-            "message": f"📝 Logged and indexed as '{context_type}' context",
-            "memory_id": memory_id,
-            "content": sanitized_content,
-            "session_name": request.session_name,
-            "context_type": context_type,
-        }
-    except Exception as e:
-        print(f"Unexpected error in marm_context_log: {e}")
-        return {"status": "error", "message": "Context logging failed."}

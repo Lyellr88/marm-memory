@@ -116,7 +116,7 @@ def test_stdio_handles_mcp_initialize_and_exposes_tools(tmp_path):
     assert "marm_current_context" not in tool_names
     assert "marm_system_info" not in tool_names
     assert "marm_smart_recall" in tool_names
-    assert "marm_context_log" in tool_names
+    assert "marm_context_log" not in tool_names
     assert "marm_delete" in tool_names
     assert "marm_notebook" in tool_names
     assert "marm_log_delete" not in tool_names
@@ -137,11 +137,12 @@ def test_stdio_handles_mcp_initialize_and_exposes_tools(tmp_path):
         "old marm_notebook_clear must be removed"
     )
     assert "marm_compaction" in tool_names
+    assert "marm_log_session" not in tool_names
     assert "marm_get_compaction_candidates" not in tool_names
     assert "marm_stage_compaction_summaries" not in tool_names
     assert "marm_get_staged_summaries" not in tool_names
     assert "marm_apply_compaction" not in tool_names
-    assert len(tools) == 9
+    assert len(tools) == 7
 
 
 def test_stdio_delete_notebook_removes_entry_from_active_state(monkeypatch, tmp_path):
@@ -213,10 +214,16 @@ def test_stdio_notebook_session_name_scopes_active_state(monkeypatch, tmp_path):
 
 
 def test_stdio_log_entry_without_session_uses_active_session(monkeypatch, tmp_path):
+    from datetime import datetime, timezone
+
     stdio = _isolated_stdio(monkeypatch, tmp_path)
 
-    switch_result = asyncio.run(stdio.marm_log_session(session_name="myproject"))
-    assert switch_result["status"] == "success"
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    expected_session = f"myproject-{today}"
+
+    switch_result = asyncio.run(stdio.marm_log_entry(entry="Session: myproject"))
+    assert switch_result["status"] == "session_switched"
+    assert switch_result["session_name"] == expected_session
 
     asyncio.run(
         stdio.marm_log_entry(
@@ -227,15 +234,16 @@ def test_stdio_log_entry_without_session_uses_active_session(monkeypatch, tmp_pa
     with stdio.memory.get_connection() as conn:
         project_count = conn.execute(
             "SELECT COUNT(*) FROM log_entries WHERE session_name = ?",
-            ("myproject",),
+            (expected_session,),
         ).fetchone()[0]
         main_count = conn.execute(
             "SELECT COUNT(*) FROM log_entries WHERE session_name = ?",
             ("main",),
         ).fetchone()[0]
 
-    assert project_count == 1, (
-        f"Entry did not land in 'myproject'; count={project_count}"
+    # 2 entries: session_start marker + the actual log entry
+    assert project_count == 2, (
+        f"Expected 2 entries in '{expected_session}'; got {project_count}"
     )
     assert main_count == 0, f"Entry incorrectly landed in 'main'; count={main_count}"
 
@@ -264,8 +272,8 @@ def test_stdio_inprocess_client_wraps_notebook_delete_and_log_results(
                 {"type": "notebook", "target": "envelope_entry"},
             )
             session_result = await client.call_tool(
-                "marm_log_session",
-                {"session_name": "envelope-session"},
+                "marm_log_entry",
+                {"entry": "Session: envelope-session"},
             )
             entry_result = await client.call_tool(
                 "marm_log_entry",
@@ -286,7 +294,7 @@ def test_stdio_inprocess_client_wraps_notebook_delete_and_log_results(
         "envelope_entry"
     ]
     assert json.loads(delete_result.content[0].text)["deleted"] is True
-    assert json.loads(session_result.content[0].text)["status"] == "success"
+    assert json.loads(session_result.content[0].text)["status"] == "session_switched"
     assert json.loads(entry_result.content[0].text)["status"] == "success"
 
 
@@ -357,8 +365,8 @@ def test_stdio_log_records_tool_call_and_ok_status(tmp_path):
                 "id": 2,
                 "method": "tools/call",
                 "params": {
-                    "name": "marm_log_session",
-                    "arguments": {"session_name": "log-test"},
+                    "name": "marm_log_entry",
+                    "arguments": {"entry": "Session: log-test"},
                 },
             }
         )
@@ -410,12 +418,10 @@ def test_stdio_log_records_tool_call_and_ok_status(tmp_path):
 
     assert result.returncode == 0, result.stderr.decode("utf-8", errors="replace")[:500]
     log_content = (log_dir / "marm-stdio.log").read_text(encoding="utf-8")
-    assert "CALL marm_log_session" in log_content, (
+    assert "CALL marm_log_entry" in log_content, (
         f"Expected CALL entry, got: {log_content}"
     )
-    assert "OK marm_log_session" in log_content, (
-        f"Expected OK entry, got: {log_content}"
-    )
+    assert "OK marm_log_entry" in log_content, f"Expected OK entry, got: {log_content}"
 
 
 @pytest.mark.slow_stdio
@@ -439,8 +445,11 @@ def test_stdio_debug_mode_logs_session_name_not_content(tmp_path):
                 "id": 2,
                 "method": "tools/call",
                 "params": {
-                    "name": "marm_log_session",
-                    "arguments": {"session_name": "debug-session"},
+                    "name": "marm_log_entry",
+                    "arguments": {
+                        "entry": "2026-06-16-debug-session routing test",
+                        "session_name": "debug-session",
+                    },
                 },
             }
         )
@@ -519,10 +528,10 @@ def test_stdio_log_does_not_contain_stored_memory_content(tmp_path):
                 "id": 2,
                 "method": "tools/call",
                 "params": {
-                    "name": "marm_context_log",
+                    "name": "marm_smart_recall",
                     "arguments": {
                         "session_name": "privacy-test",
-                        "content": secret_content,
+                        "query": secret_content,
                     },
                 },
             }
@@ -559,11 +568,10 @@ def test_stdio_log_does_not_contain_stored_memory_content(tmp_path):
 
 
 @pytest.mark.slow_stdio
-def test_stdio_context_log_uses_write_queue_when_enabled(tmp_path):
+def test_stdio_log_entry_persists(tmp_path):
     env = os.environ.copy()
     env["MARM_DB_PATH"] = str(tmp_path / "stdio-queue.db")
     env["MARM_ANALYTICS_DB_PATH"] = str(tmp_path / "stdio-queue-analytics.db")
-    env["WRITE_QUEUE_ENABLED"] = "1"
     env["MARM_SKIP_DOC_LOAD"] = "1"
 
     def message(msg):
@@ -577,10 +585,9 @@ def test_stdio_context_log_uses_write_queue_when_enabled(tmp_path):
                 "id": 2,
                 "method": "tools/call",
                 "params": {
-                    "name": "marm_context_log",
+                    "name": "marm_log_entry",
                     "arguments": {
-                        "session_name": "stdio-queue",
-                        "content": "queued stdio memory write for swarm agents",
+                        "entry": "2026-01-01-queued-stdio write queue test entry",
                     },
                 },
             }
@@ -679,21 +686,18 @@ def test_stdio_context_log_uses_write_queue_when_enabled(tmp_path):
         if "id" in msg:
             responses[msg["id"]] = msg
 
-    # context_log (id=2) can arrive after drain calls due to write-queue latency.
-    # Check the response if it flushed; always verify via DB.
+    # log_entry (id=2) may arrive after drain calls; always verify via DB.
     if 2 in responses:
         log_result = json.loads(responses[2]["result"]["content"][0]["text"])
         assert log_result["status"] == "success"
 
     with sqlite3.connect(env["MARM_DB_PATH"]) as conn:
         count = conn.execute(
-            "SELECT COUNT(*) FROM memories WHERE session_name = ?",
-            ("stdio-queue",),
+            "SELECT COUNT(*) FROM log_entries WHERE session_name LIKE ?",
+            ("session-%",),
         ).fetchone()[0]
 
-    assert count == 1, (
-        f"Write queue did not persist memory; STDIO responses: {sorted(responses)}"
-    )
+    assert count >= 1, f"Log entry not persisted; STDIO responses: {sorted(responses)}"
 
 
 def test_stdio_protocol_injected_on_first_tool_call_not_on_second(monkeypatch):

@@ -12,7 +12,7 @@ class LogEntryRequest(BaseModel):
     entry: str = Field(..., description="Log entry in format: YYYY-MM-DD-topic-summary")
     session_name: Optional[str] = Field(
         default=None,
-        description="Session name — omit to use the active session set by marm_log_session",
+        description="Session name — omit to use the active session (auto-restored on startup)",
     )
 
 
@@ -52,11 +52,6 @@ class SmartRecallRequest(BaseModel):
         le=3,
         description="Retrieval depth: 1=summary (~200 chars), 2=context (~500 chars), 3=full content",
     )
-
-
-class ContextLogRequest(BaseModel):
-    content: str = Field(..., description="Content to log with auto-classification")
-    session_name: str = Field(default="main", description="Session to log to")
 
 
 class DeleteRequest(BaseModel):

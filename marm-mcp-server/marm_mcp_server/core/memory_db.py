@@ -275,6 +275,22 @@ def init_database(db_path: str) -> None:
             "CREATE INDEX IF NOT EXISTS idx_memory_chunks_memory_id"
             " ON memory_chunks(memory_id)"
         )
+
+        conn.execute("DROP TABLE IF EXISTS session_summary_chunks")
+
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS session_summary_cache (
+                session_name TEXT PRIMARY KEY,
+                raw_digest TEXT NOT NULL DEFAULT '',
+                summary_text TEXT NOT NULL DEFAULT '',
+                entry_count INTEGER NOT NULL DEFAULT 0,
+                dirty BOOLEAN DEFAULT FALSE,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
         conn.commit()
 
 

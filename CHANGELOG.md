@@ -11,9 +11,18 @@
 - Moved shared helpers, SQLite schema/connection routines, chunk-aware scoring, and high-level memory operations into dedicated files so future recall, compaction, and write-path changes can be reviewed in smaller units.
 - Added parity validation against the pre-refactor memory implementation to guard method signatures, database behavior, recall behavior, stale chunk handling, and core operational contracts during the extraction.
 
+### Logging, Protocol & Summary Flow
+
+- Removed `marm_context_log` and the old explicit session-log tool from the public MCP surface; session routing now goes through structured `marm_log_entry` entries such as `Session: ...` and `Topic: ...`.
+- Reworked session summaries around a server-managed `session_summary_cache` table so `marm_summary` rebuilds only when logs change, validates cached entry counts before reuse, prunes cache rows on session deletion, and trims oversized responses to stay within MCP limits.
+- Consolidated HTTP and STDIO summary generation through a shared summary service so both transports use the same cache, truncation, and empty-session behavior.
+- Expanded the protocol docs with domain-specific "when to act" guidance for coding, research, game development, writing/journalism, and everyday workflows while keeping the public tool set lean.
+- Documented the planned `marm-init` skill path for future full-protocol bootstrap, while current runtime protocol delivery continues to use first-tool full protocol injection plus periodic `PROTOCOL-LITE` refresh.
+
 ### Maintainer Notes
 
-- This release line is primarily an internal maintainability refactor. User-facing MCP tool names, transport setup, auth behavior, and response shapes are intended to remain unchanged.
+- This release line started as an internal maintainability refactor, then expanded to remove legacy logging/context tools from the user-facing MCP surface while preserving the underlying logging and summary workflows.
+- The public MCP surface is now 7 tools after removing legacy user-facing context/session helpers; behavior moved behind `marm_log_entry`, `marm_summary`, and server-managed automation instead of being exposed as separate tools.
 - Additional refactor work may land under this version before release.
 
 </details>
