@@ -160,7 +160,7 @@ Current supported connection paths are HTTP and STDIO. Do not reintroduce retire
 Run the known-good local test checks from the repo root:
 
 ```powershell
-python scripts\run-tests.py
+python scripts/run-tests.py
 ```
 
 This runs:
@@ -183,7 +183,7 @@ Current expectations:
 Run release preflight before a push or release:
 
 ```powershell
-python scripts\release-preflight.py
+python scripts/release-preflight.py
 ```
 
 This runs the version scan, stale docs scan, known-good test runner, optional Docker smoke test, and a git status summary.
@@ -191,7 +191,7 @@ This runs the version scan, stale docs scan, known-good test runner, optional Do
 Run Docker smoke directly when changing Docker, transport setup, auth, or startup behavior:
 
 ```powershell
-python scripts\test-scripts\docker-smoke.py
+python scripts/test-scripts/docker-smoke.py
 ```
 
 ## Documentation
@@ -210,8 +210,8 @@ Update docs when changing:
 Useful maintenance scripts:
 
 ```powershell
-python scripts\find-versions.py
-python scripts\find-dead-code.py
+python scripts/find-versions.py
+python scripts/find-dead-code.py
 ```
 
 `find-versions.py` is interactive and can update active version references. It intentionally avoids changing `CHANGELOG.md` because that file contains historical versions. `find-dead-code.py` looks for unused functions and classes in the MCP server codebase. Review its findings carefully before removing any code, as some utilities may be used in dynamic ways or reserved for future features.
@@ -223,7 +223,7 @@ MARM uses a PR-first workflow for normal development. Do not push feature, fix, 
 1. Create a focused branch from `MARM-main`.
 2. Keep the change scoped to one feature, fix, or doc cleanup.
 3. Follow existing file patterns before adding new abstractions.
-4. Run `python scripts\run-tests.py`.
+4. Run `python scripts/run-tests.py`.
 5. Run Docker smoke if the change touches Docker, HTTP/STDIO startup, auth, or transports.
 6. Update docs and changelog when user-facing behavior changes.
 7. Push the branch and open a PR into `MARM-main`.
