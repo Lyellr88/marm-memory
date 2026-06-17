@@ -6,7 +6,7 @@ mcp-name: io.github.Lyellr88/marm-mcp-server
      width="700"
      height="400">
 </picture>
-<h1 align="center">MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.14.0</h1>
+<h1 align="center">MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.14.1</h1>
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
@@ -328,7 +328,7 @@ Good places to help:
 - Suggest practical memory workflows and tool improvements
 - Submit small, focused pull requests
 
-> 💡 Want to get your name on this list? Check out our [CONTRIBUTING.md](https://www.google.com/search?q=CONTRIBUTING.md) guide to get started!
+> 💡 Want to get your name on this list? Check out our [CONTRIBUTING.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/CONTRIBUTING.md) guide to get started!
 
 ## Join the MARM Community
 
