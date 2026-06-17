@@ -1,8 +1,6 @@
 # MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.14.0
 
-> Contributions welcome! Browse [open issues](https://github.com/Lyellr88/MARM-Systems/issues) and find an issue open a PR. Join the [MARM Discord](https://discord.gg/nhyJWPz2cf) for exclusive content, support and be apart of the community.
-
-</div>
+> Contributions welcome! Browse [open issues](https://github.com/Lyellr88/MARM-Systems/issues) to contribute, or join the [MARM Discord](https://discord.gg/nhyJWPz2cf) to share workflows, get setup help, and connect with other builders.
 
 ## Table of Contents
 
@@ -22,15 +20,16 @@
 
 MARM MCP is a local memory infrastructure layer for AI agents. It gives Claude, Codex, Gemini, Qwen, IDE agents, and other MCP clients one persistent place to store decisions, retrieve context, reuse notebooks, and keep long-running work from drifting.
 
-The point is not "more tools." MARM exposes **7 focused MCP tools** and moves the heavy work behind the server: session routing, protocol delivery, hybrid recall, serialized writes, rate-limit presets, write-time consolidation, and agent-assisted compaction.
+The point is not "more tools." MARM exposes **7 focused MCP tools** and moves the heavy work behind the server: session routing, protocol delivery, hybrid recall, serialized writes, rate-limit presets, write-time consolidation, and agent-assisted compaction. Because the tool surface stays small, re-ranking filters results before they reach the model, and consolidation catches duplicates at write time, token spend stays low and predictable as workloads grow.
 
-### What MARM Is Now
+### How It Works
 
 | Layer | What it does | Why it matters |
 |-------|--------------|----------------|
 | **Memory model** | Sessions, structured logs, notebooks, summaries, and semantic memories | Keeps project history searchable instead of trapped in one chat |
 | **Scale layer** | SQLite WAL mode, connection pooling, serialized write queue, and HTTP rate-limit presets | Lets one server support solo use, multi-agent work, and swarm-style bursts |
 | **Intelligence layer** | FTS filter, semantic re-rank, bounded semantic fallback, auto-classification, write-time consolidation, and compaction candidates | Keeps recall useful as memory grows instead of letting duplicates pile up |
+| **Token layer** | Lightweight 7-tool surface, semantic re-rank before retrieval, and write-time deduplication | Reduces tokens sent to the model on every recall and cost stays predictable as memory scales |
 | **Deployment layer** | Pip, Docker, STDIO, HTTP, `--swarm`, `--swarm-max`, and `--trusted` | Lets you run private local memory or shared multi-agent memory with the same MCP surface |
 
 See [Performance & Scaling Benchmarks](#performance--scaling-benchmarks) for retrieval latency, concurrency, and write-cost numbers.
@@ -75,6 +74,7 @@ pip install marm-mcp-server
 
 ```bash
 pip install marm-mcp-server
+# Stuck on client setup? Open a Q&A thread: https://github.com/Lyellr88/MARM-Systems/discussions
 # most agents use this --transport command
 "agent" mcp add --transport http marm-memory http://localhost:8001/mcp
 codex mcp add marm-memory --url http://localhost:8001/mcp
@@ -152,6 +152,8 @@ Claude Code remains the recommended first setup path, but MARM also works with o
 **IDE agents** - [VS Code / Copilot Agent](docs/INSTALL-WINDOWS.md#vs-code-mcp--github-copilot-agent) · [Cursor](docs/INSTALL-WINDOWS.md#cursor) · [Docker/key IDE setup](docs/INSTALL-DOCKER.md#vs-code-mcp--github-copilot-agent)
 
 **Remote/API platforms** - [xAI / Grok Remote MCP](docs/INSTALL-DOCKER.md#xai--grok-remote-mcp) · [Platform integration](docs/INSTALL-PLATFORMS.md)
+
+> Using a client that isn't listed? [Open an issue](https://github.com/Lyellr88/MARM-Systems/issues/new/choose) and let us know; client adapters are a first-class feature request.
 
 ## MARM Dashboard
 
@@ -234,7 +236,7 @@ Measured across varying session history sizes ($N = \text{number of stored memor
 | **N = 1,000** | 15.9 ms | 23.3 ms | 25.1 ms |
 | **N = 4,000** | 23.1 ms | 30.4 ms | 31.3 ms |
 
-*Takeaway: The FTS5 filter $\rightarrow$ semantic re-rank pipeline delivers near-constant retrieval time regardless of memory store size — 17ms at N=100, 30ms at N=4,000.*
+*Takeaway: The FTS5 filter $\rightarrow$ semantic re-rank pipeline delivers near-constant retrieval time regardless of memory store size, 17ms at N=100, 30ms at N=4,000.*
 
 ### 2. Multi-Agent Concurrency (10x Concurrent Recalls)
 

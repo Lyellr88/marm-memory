@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Ask a Question / Get Setup Help
+    url: https://github.com/Lyellr88/MARM-Systems/discussions
+    about: Not sure if it's a bug? Ask in Discussions first.
+  - name: MARM Discord
+    url: https://discord.gg/nhyJWPz2cf
+    about: Connect with other builders, share workflows, and get real-time help.
+  - name: FAQ
+    url: https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/marm-mcp-server/marm-docs/FAQ.md
+    about: Common setup and usage questions answered.

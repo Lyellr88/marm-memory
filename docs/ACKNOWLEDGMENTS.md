@@ -1,8 +1,10 @@
-# Acknowledgments
+# Acknowledgements (Historical Record)
+
+> **Note:** This file recognizes the early contributors who helped shape the foundations of this project.
 
 MARM has been shaped by early users, testers, reviewers, and open-source contributors who gave feedback when the project was still rough. This page recognizes that help and keeps a record of the community influence behind the project.
 
-MARM started as a personal answer to a simple problem: AI tools forget too much between sessions. The project is now focused on the MARM MCP server, local memory workflows, Docker and STDIO transports, IDE/client integrations, and the dashboard for inspecting local memory data.
+This project started as a personal answer to a simple problem: AI tools forget too much between sessions. The project is now focused on the MARM MCP server, local memory workflows, Docker and STDIO transports, IDE/client integrations, and the dashboard for inspecting local memory data.
 
 ## What This Page Is For
 
@@ -118,36 +120,6 @@ His feedback pushed several important conversations forward: distributed vs. clo
 Provided deep technical analysis of LLM memory limitations and validation of MARM's core architecture. Key contributions include identifying the distinction between real memory vs. simulated memory in current AI systems, strategic feedback on memory types (short-term, long-term, permanent), and advanced ChatGPT integration techniques. Their industry perspective helped validate MARM's market positioning and technical approach to solving enterprise-grade AI memory challenges.
 
 **Impact:** Strategic validation of MARM's memory architecture and identification of key market opportunities for AI memory intelligence
-
-## Forks and Derivative Work
-
-Forks, experiments, and unofficial adaptations are welcome. If you build on MARM, please make the relationship clear so users can distinguish official releases from community experiments.
-
-- Use a unique project name for derivative work.
-- Clearly state when a fork is unofficial or experimental.
-- Avoid using official MARM version numbers for independent releases.
-- Link back to the original repository when practical.
-
-This keeps the ecosystem open while making it easy for users to find the official source of truth.
-
-## Project Values
-
-MARM is built around practical, transparent development:
-
-- Solve real workflow problems before adding complexity.
-- Be clear about limitations and tradeoffs.
-- Prefer focused improvements over broad rewrites.
-- Keep the project usable for local-first and open-source workflows.
-- Treat feedback as part of the design process.
-
-## Code of Conduct
-
-Project discussions should stay respectful, direct, and useful.
-
-- Be welcoming to new users and contributors.
-- Disagree constructively and explain the technical reason.
-- Keep issue threads focused on reproducible problems or clear proposals.
-- Assume good intent, but keep standards high.
 
 ## Related Docs
 

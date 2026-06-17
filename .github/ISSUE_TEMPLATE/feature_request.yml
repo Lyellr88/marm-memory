@@ -1,0 +1,42 @@
+name: "Integration or Feature Request"
+description: Request a new LLM client adapter, transport method, or core memory feature.
+title: "[Feature]: "
+labels: ["enhancement", "community-request"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to suggest a feature! MARM evolves based on real-world developer workflows.
+  - type: dropdown
+    id: client-type
+    attributes:
+      label: What LLM Client or IDE Agent are you using?
+      description: Select the environment where you want better MARM memory support.
+      options:
+        - "Claude Desktop / Claude Code"
+        - "Cursor / Windsurf / VS Code Copilot"
+        - "Grok / xAI Remote API"
+        - "Custom / In-house Agent Swarm"
+        - "Other (Specify below)"
+    validations:
+      required: true
+  - type: markdown
+    attributes:
+      value: |
+        Selected "Other"? Client adapters are a first-class feature request, describe your setup below and we will look into adding support.
+  - type: textarea
+    id: description
+    attributes:
+      label: What capability or integration is missing?
+      placeholder: "e.g., I want an optimized STDIO transport wrapper specifically for Cursor..."
+    validations:
+      required: true
+  - type: checkboxes
+    id: participation
+    attributes:
+      label: Contribution Willingness
+      options:
+        - label: "I am willing to test experimental branches for this feature."
+          required: false
+        - label: "I can contribute code and submit a PR if guided."
+          required: false

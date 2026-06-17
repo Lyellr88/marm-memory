@@ -1,8 +1,8 @@
 # Contributing to MARM Systems
 
-Thanks for wanting to contribute. MARM is currently focused on the MCP server, local memory workflows, Docker/STDIO transports, IDE and client integrations, and the dashboard for inspecting local memory data.
+You do not need to write code to contribute. Testing MARM with your client setup, reporting what broke, sharing your workflow in [Discussions](https://github.com/Lyellr88/MARM-Systems/discussions), or jumping into [Discord](https://discord.gg/nhyJWPz2cf) to help someone get unstuck are all real contributions.
 
-This guide covers practical development workflow. For project history and community recognition, see [ACKNOWLEDGMENTS.md](docs/ACKNOWLEDGMENTS.md).
+If you do want to go deeper, MARM is focused on the MCP server, local memory workflows, Docker/STDIO transports, IDE and client integrations, and the dashboard for inspecting local memory data. This guide covers that practical development workflow. For project history and community recognition, see [ACKNOWLEDGMENTS.md](docs/ACKNOWLEDGMENTS.md).
 
 ## Questions or Ideas
 

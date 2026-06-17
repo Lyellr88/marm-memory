@@ -765,6 +765,10 @@ def main():
         write_queue="ENABLED" if runtime_config["write_queue_enabled"] else "DISABLED",
     )
 
+    print(
+        "  Community: discord.gg/nhyJWPz2cf  |  github.com/Lyellr88/MARM-Systems/discussions"
+    )
+
     try:
         asyncio.run(run_server_with_shutdown())
     except KeyboardInterrupt:

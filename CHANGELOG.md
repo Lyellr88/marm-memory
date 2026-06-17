@@ -3,6 +3,34 @@
 ## Version 2 - MARM Protocol to Universal MCP Server Evolution
 
 <details>
+<summary><strong>June 17th, 2026: Docs, Assets & Community (v2.14.1)</strong></summary>
+
+### Documentation & README
+
+- Renamed "What MARM Is Now" section to "How It Works" for clearer first-impression framing.
+- Added token layer row to the architecture table covering the lightweight 7-tool surface, semantic re-rank before retrieval, and write-time deduplication.
+- Expanded the intro paragraph to surface token cost efficiency alongside the tool surface and consolidation story.
+- Rewrote the contribution blurb to lead with non-code paths: testing, reporting, Discussions, and Discord.
+- Added unsupported-client CTA after the Connect Your Client Fast section directing users to open an issue for new client adapters.
+- Replaced static pip install badge with a live PyPI version badge.
+- Added Discord community badge to the badge row.
+- Added inline Discussions comment to the Local pip HTTP Quick Start install block.
+
+### Community & GitHub
+
+- Added YAML issue form templates: `bug_report.yml`, `feature_request.yml`, and `config.yml` with blank issue filing disabled and contact links to Discussions, Discord, and FAQ.
+- Added `CONTRIBUTORS.md` listing all merged PR contributors with profile links and PR references.
+- Added community startup print line to server on launch pointing to Discord and Discussions.
+
+### Assets & Demo
+
+- Updated `mcp-tools.png` asset.
+- Added `marm-bench.png` benchmark asset.
+- Updated demo video to v2.14.0 reflecting the current 7-tool surface, chunked embeddings, write-time consolidation, and token cost scene; extended runtime from 30s to 35s.
+
+</details>
+
+<details>
 <summary><strong>June 16th, 2026: Memory Core Modularization (v2.14.0)</strong></summary>
 
 ### Memory Core Refactor

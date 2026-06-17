@@ -1,0 +1,84 @@
+name: "Bug Report"
+description: Report a broken behavior, connection failure, or unexpected server response.
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing, check the [FAQ](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/marm-mcp-server/marm-docs/FAQ.md) and [open issues](https://github.com/Lyellr88/MARM-Systems/issues). For setup questions, use [Discussions](https://github.com/Lyellr88/MARM-Systems/discussions) instead.
+  - type: dropdown
+    id: client
+    attributes:
+      label: Which MCP client are you using?
+      options:
+        - "Claude Desktop / Claude Code"
+        - "Codex CLI"
+        - "Cursor"
+        - "VS Code / GitHub Copilot Agent"
+        - "Gemini CLI"
+        - "Qwen"
+        - "xAI / Grok"
+        - "Custom / In-house Agent"
+        - "Other (Specify below)"
+    validations:
+      required: true
+  - type: dropdown
+    id: transport
+    attributes:
+      label: How are you running MARM?
+      options:
+        - "pip HTTP (python -m marm_mcp_server)"
+        - "pip STDIO (marm-mcp-stdio)"
+        - "Docker HTTP"
+        - "Docker STDIO"
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - "Windows"
+        - "macOS"
+        - "Linux"
+        - "Other"
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: MARM version
+      placeholder: "e.g. 2.14.0 — run: pip show marm-mcp-server"
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Start the server with ...
+        2. Run command ...
+        3. See error ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      placeholder: What should have happened?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      placeholder: What happened instead? Include any error messages.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Server logs or error output
+      description: Paste any relevant terminal output or logs here.
+      render: shell
