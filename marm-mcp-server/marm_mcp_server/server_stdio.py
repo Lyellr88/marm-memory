@@ -647,6 +647,7 @@ def main() -> None:
         DEFAULT_DB_PATH,
         SEMANTIC_SEARCH_AVAILABLE,
     )
+    memory.restore_active_session()
     try:
         mcp.run()
     except BaseException as exc:

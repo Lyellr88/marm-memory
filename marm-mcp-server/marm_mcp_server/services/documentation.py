@@ -222,13 +222,15 @@ async def maybe_auto_refresh() -> None:
 
 
 async def ensure_marm_started(session_name: str = "default") -> None:
-    """Load docs if not loaded, then upsert the session row with marm_active."""
+    """Load docs if not loaded, then upsert session recency without log routing."""
     await ensure_docs_loaded()
     try:
         with memory.get_connection() as conn:
             conn.execute(
-                "INSERT OR REPLACE INTO sessions (session_name, marm_active, last_accessed)"
-                " VALUES (?, TRUE, ?)",
+                "INSERT INTO sessions (session_name, last_accessed)"
+                " VALUES (?, ?)"
+                " ON CONFLICT(session_name) DO UPDATE SET"
+                " last_accessed = excluded.last_accessed",
                 (session_name, datetime.now(timezone.utc).isoformat()),
             )
             conn.commit()

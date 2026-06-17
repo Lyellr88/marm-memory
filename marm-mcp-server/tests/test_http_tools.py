@@ -393,18 +393,13 @@ def test_memory_write_queue_is_used_when_enabled(monkeypatch, tmp_path):
 
     assert memory_module.WRITE_QUEUE_ENABLED is True
 
-    db_path = str(tmp_path / "marm_memory.db")
-    with sqlite3.connect(db_path) as conn:
-        conn.execute(
-            "INSERT INTO memories (id, session_name, content, timestamp, context_type) VALUES (?, ?, ?, ?, ?)",
-            (
-                str(uuid.uuid4()),
-                "queued-http",
-                "queued http memory write for swarm agents",
-                datetime.now(timezone.utc).isoformat(),
-                "general",
-            ),
+    asyncio.run(
+        memory_module.memory.store_memory_queued(
+            "queued http memory write for swarm agents",
+            "queued-http",
+            "general",
         )
+    )
 
     with memory_module.memory.get_connection() as conn:
         count = conn.execute(
@@ -745,6 +740,27 @@ def test_http_mcp_tools_call_body_triggers_doc_loading(monkeypatch, tmp_path):
     )
 
     assert doc_module.docs_are_loaded()
+
+
+def test_ensure_marm_started_does_not_override_active_log_session(monkeypatch, tmp_path):
+    load_isolated_server(monkeypatch, tmp_path)
+    doc_module = importlib.import_module("marm_mcp_server.services.documentation")
+    memory_module = importlib.import_module("marm_mcp_server.core.memory")
+
+    with memory_module.memory.get_connection() as conn:
+        conn.execute(
+            "INSERT INTO sessions (session_name, marm_active) VALUES (?, TRUE)",
+            ("log-session",),
+        )
+
+    asyncio.run(doc_module.ensure_marm_started("recall-session"))
+
+    with memory_module.memory.get_connection() as conn:
+        active = conn.execute(
+            "SELECT session_name FROM sessions WHERE marm_active = TRUE"
+        ).fetchall()
+
+    assert active == [("log-session",)]
 
 
 def test_auto_refresh_triggers_reload_after_threshold(monkeypatch, tmp_path):

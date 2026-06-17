@@ -96,14 +96,30 @@ async def generate_session_summary(session_name: str) -> dict:
             result["_mcp_truncated"] = True
             result["_truncation_reason"] = "Summary limited to 1MB for MCP compliance"
             lines = full_text.split("\n")
-            while len(lines) > 1:
+            while (
+                len(lines) > 1
+                and MCPResponseLimiter.estimate_response_size(result)
+                > MCPResponseLimiter.CONTENT_LIMIT
+            ):
                 lines.pop()
                 result["summary"] = "\n".join(lines)
-                if (
-                    MCPResponseLimiter.estimate_response_size(result)
-                    <= MCPResponseLimiter.CONTENT_LIMIT
-                ):
-                    break
+            if (
+                MCPResponseLimiter.estimate_response_size(result)
+                > MCPResponseLimiter.CONTENT_LIMIT
+            ):
+                summary = result["summary"]
+                low, high = 0, len(summary)
+                while low < high:
+                    mid = (low + high + 1) // 2
+                    result["summary"] = summary[:mid]
+                    if (
+                        MCPResponseLimiter.estimate_response_size(result)
+                        <= MCPResponseLimiter.CONTENT_LIMIT
+                    ):
+                        low = mid
+                    else:
+                        high = mid - 1
+                result["summary"] = summary[:low]
 
         if os.environ.get("MARM_SUMMARY_CACHE_DISPOSABLE", "0") == "1":
             try:

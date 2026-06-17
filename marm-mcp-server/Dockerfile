@@ -42,10 +42,10 @@ LABEL org.opencontainers.image.version="2.14.0"
 LABEL org.opencontainers.image.authors="Ryan Lyell - MARM Systems"
 LABEL org.opencontainers.image.url="https://marmsystems.com"
 LABEL org.opencontainers.image.source="https://github.com/Lyellr88/MARM-Systems"
-LABEL org.opencontainers.image.licenses="MIT"
+LABEL org.opencontainers.image.licenses="Apache-2.0"
 LABEL mcp.server="true"
 LABEL mcp.name="marm-mcp-server"
-LABEL mcp.tools="9"
+LABEL mcp.tools="7"
 LABEL io.modelcontextprotocol.server.name="io.github.Lyellr88/marm-mcp-server"
 
 ENV PYTHONPATH=/app

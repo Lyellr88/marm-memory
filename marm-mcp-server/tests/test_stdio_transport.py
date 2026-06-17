@@ -568,11 +568,10 @@ def test_stdio_log_does_not_contain_stored_memory_content(tmp_path):
 
 
 @pytest.mark.slow_stdio
-def test_stdio_log_entry_persists_when_write_queue_enabled(tmp_path):
+def test_stdio_log_entry_persists(tmp_path):
     env = os.environ.copy()
     env["MARM_DB_PATH"] = str(tmp_path / "stdio-queue.db")
     env["MARM_ANALYTICS_DB_PATH"] = str(tmp_path / "stdio-queue-analytics.db")
-    env["WRITE_QUEUE_ENABLED"] = "1"
     env["MARM_SKIP_DOC_LOAD"] = "1"
 
     def message(msg):

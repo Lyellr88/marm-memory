@@ -22,6 +22,7 @@ async def marm_start(request: SessionRequest):
     """
     try:
         with memory.get_connection() as conn:
+            conn.execute("UPDATE sessions SET marm_active = FALSE")
             conn.execute(
                 """
                 INSERT OR REPLACE INTO sessions (session_name, marm_active, last_accessed)
