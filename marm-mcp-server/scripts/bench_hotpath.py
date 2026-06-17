@@ -29,6 +29,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from marm_mcp_server.core.memory import MARMMemory  # noqa: E402
 from marm_mcp_server.core import consolidation  # noqa: E402
+from marm_mcp_server.core import memory_ops  # noqa: E402
 
 
 def _pct(values, p):
@@ -131,11 +132,9 @@ async def bench_concurrency(mem, n=1000, concurrency=10):
 
 async def bench_write(mem, n=800, iters=15):
     """Compare store_memory cost with consolidation OFF vs ON at session size n."""
-    import marm_mcp_server.core.memory as mm
-
     out = {}
     for flag in (False, True):
-        mm.CONSOLIDATION_ENABLED = flag
+        memory_ops.CONSOLIDATION_ENABLED = flag
         seed(mem, n)
         samples = []
         for k in range(iters):
@@ -144,7 +143,7 @@ async def bench_write(mem, n=800, iters=15):
             await mem.store_memory(txt, "bench")
             samples.append((time.perf_counter() - t0) * 1000)
         out["ON" if flag else "OFF"] = samples
-    mm.CONSOLIDATION_ENABLED = False
+    memory_ops.CONSOLIDATION_ENABLED = False
     return out
 
 

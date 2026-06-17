@@ -742,7 +742,9 @@ def test_http_mcp_tools_call_body_triggers_doc_loading(monkeypatch, tmp_path):
     assert doc_module.docs_are_loaded()
 
 
-def test_ensure_marm_started_does_not_override_active_log_session(monkeypatch, tmp_path):
+def test_ensure_marm_started_does_not_override_active_log_session(
+    monkeypatch, tmp_path
+):
     load_isolated_server(monkeypatch, tmp_path)
     doc_module = importlib.import_module("marm_mcp_server.services.documentation")
     memory_module = importlib.import_module("marm_mcp_server.core.memory")

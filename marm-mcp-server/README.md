@@ -8,18 +8,18 @@ mcp-name: io.github.Lyellr88/marm-mcp-server
 </picture>
 <h1 align="center">MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.14.0</h1>
 
-[![License](https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square)](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/LICENSE)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115.4-blue)](https://fastapi.tiangolo.com/)
 [![Docker Pulls](https://img.shields.io/docker/pulls/lyellr88/marm-mcp-server)](https://hub.docker.com/r/lyellr88/marm-mcp-server)
 [![PyPI Downloads](https://static.pepy.tech/personalized-badge/marm-mcp-server?period=total&units=NONE&left_color=GREY&right_color=BLUE&left_text=pip-downloads)](https://pepy.tech/projects/marm-mcp-server)
-
-[![pip install](https://img.shields.io/badge/pip%20install-marm--mcp--server-blue)](https://pypi.org/project/marm-mcp-server/)
+[![PyPI Version](https://img.shields.io/pypi/v/marm-mcp-server)](https://pypi.org/project/marm-mcp-server/)
 [![MCP Registry](https://img.shields.io/badge/MCP%20Registry-LIVE-blue)](https://registry.modelcontextprotocol.io/?q=marm-mcp)
+[![Discord](https://img.shields.io/badge/Discord-Join%20Community-5865F2?logo=discord&logoColor=white)](https://discord.gg/nhyJWPz2cf)
 [![Publish](https://github.com/Lyellr88/MARM-Systems/actions/workflows/publish-mcp.yml/badge.svg?branch=MARM-main)](https://github.com/Lyellr88/MARM-Systems/actions/workflows/publish-mcp.yml)
 [![CodeQL](https://github.com/Lyellr88/MARM-Systems/actions/workflows/github-code-scanning/codeql/badge.svg?branch=MARM-main)](https://github.com/Lyellr88/MARM-Systems/security/code-scanning)
 
-> Contributions welcome! Browse [open issues](https://github.com/Lyellr88/MARM-Systems/issues) and find an issue open a PR. Join the [MARM Discord](https://discord.gg/nhyJWPz2cf) for exclusive content, support and be apart of the community.
+> Contributions welcome! Browse [open issues](https://github.com/Lyellr88/MARM-Systems/issues) to contribute, or join the [MARM Discord](https://discord.gg/nhyJWPz2cf) to share workflows, get setup help, and connect with other builders.
 
 </div>
 
@@ -41,15 +41,16 @@ mcp-name: io.github.Lyellr88/marm-mcp-server
 
 MARM MCP is a local memory infrastructure layer for AI agents. It gives Claude, Codex, Gemini, Qwen, IDE agents, and other MCP clients one persistent place to store decisions, retrieve context, reuse notebooks, and keep long-running work from drifting.
 
-The point is not "more tools." MARM exposes **7 focused MCP tools** and moves the heavy work behind the server: session routing, protocol delivery, hybrid recall, serialized writes, rate-limit presets, write-time consolidation, and agent-assisted compaction.
+The point is not "more tools." MARM exposes **7 focused MCP tools** and moves the heavy work behind the server: session routing, protocol delivery, hybrid recall, serialized writes, rate-limit presets, write-time consolidation, and agent-assisted compaction. Because the tool surface stays small, re-ranking filters results before they reach the model, and consolidation catches duplicates at write time, token spend stays low and predictable as workloads grow.
 
-### What MARM Is Now
+### How It Works
 
 | Layer | What it does | Why it matters |
 |-------|--------------|----------------|
 | **Memory model** | Sessions, structured logs, notebooks, summaries, and semantic memories | Keeps project history searchable instead of trapped in one chat |
 | **Scale layer** | SQLite WAL mode, connection pooling, serialized write queue, and HTTP rate-limit presets | Lets one server support solo use, multi-agent work, and swarm-style bursts |
 | **Intelligence layer** | FTS filter, semantic re-rank, bounded semantic fallback, auto-classification, write-time consolidation, and compaction candidates | Keeps recall useful as memory grows instead of letting duplicates pile up |
+| **Token layer** | Lightweight 7-tool surface, semantic re-rank before retrieval, and write-time deduplication | Reduces tokens sent to the model on every recall and cost stays predictable as memory scales |
 | **Deployment layer** | Pip, Docker, STDIO, HTTP, `--swarm`, `--swarm-max`, and `--trusted` | Lets you run private local memory or shared multi-agent memory with the same MCP surface |
 
 See [Performance & Scaling Benchmarks](#performance--scaling-benchmarks) for retrieval latency, concurrency, and write-cost numbers.
@@ -100,6 +101,7 @@ pip install marm-mcp-server
 
 ```bash
 pip install marm-mcp-server
+# Stuck on client setup? Open a Q&A thread: https://github.com/Lyellr88/MARM-Systems/discussions
 # most agents use this --transport command
 "agent" mcp add --transport http marm-memory http://localhost:8001/mcp
 codex mcp add marm-memory --url http://localhost:8001/mcp
@@ -177,6 +179,8 @@ Claude Code remains the recommended first setup path, but MARM also works with o
 **IDE agents** - [VS Code / Copilot Agent](docs/INSTALL-WINDOWS.md#vs-code-mcp--github-copilot-agent) · [Cursor](docs/INSTALL-WINDOWS.md#cursor) · [Docker/key IDE setup](docs/INSTALL-DOCKER.md#vs-code-mcp--github-copilot-agent)
 
 **Remote/API platforms** - [xAI / Grok Remote MCP](docs/INSTALL-DOCKER.md#xai--grok-remote-mcp) · [Platform integration](docs/INSTALL-PLATFORMS.md)
+
+> Using a client that isn't listed? [Open an issue](https://github.com/Lyellr88/MARM-Systems/issues/new/choose) and let us know; client adapters are a first-class feature request.
 
 ## MARM Dashboard
 
@@ -262,6 +266,14 @@ For deeper architecture, configuration, and workflow guidance, use [MCP-HANDBOOK
 
 ## Performance & Scaling Benchmarks
 
+<div align="center">
+<picture>
+<img src="https://raw.githubusercontent.com/Lyellr88/MARM-Systems/MARM-main/assets/marm-bench.png"
+   width="700"
+   height="400"
+</picture>
+</div>
+
 MARM is optimized for low-latency retrieval and multi-agent concurrency. The following benchmarks were executed locally to test database scaling, event-loop blocking, and write-time compaction penalties.
 
 ### 1. Retrieval Latency Scaling
@@ -275,7 +287,7 @@ Measured across varying session history sizes ($N = \text{number of stored memor
 | **N = 1,000** | 15.9 ms | 23.3 ms | 25.1 ms |
 | **N = 4,000** | 23.1 ms | 30.4 ms | 31.3 ms |
 
-*Takeaway: The FTS5 filter $\rightarrow$ semantic re-rank pipeline delivers near-constant retrieval time regardless of memory store size — 17ms at N=100, 30ms at N=4,000.*
+*Takeaway: The FTS5 filter $\rightarrow$ semantic re-rank pipeline delivers near-constant retrieval time regardless of memory store size, 17ms at N=100, 30ms at N=4,000.*
 
 ### 2. Multi-Agent Concurrency (10x Concurrent Recalls)
 
@@ -295,6 +307,15 @@ Evaluates the performance impact of turning on intelligent memory consolidation 
 
 Benchmarks were run against a real SQLite database with the live `all-MiniLM-L6-v2` encoder on local hardware. Reproduce them yourself: [`marm-mcp-server/scripts/bench_hotpath.py`](marm-mcp-server/scripts/bench_hotpath.py)
 
+## ⭐ Star the Project
+
+If MARM helps with your AI memory needs, please star the repository to support development!
+
+<div align="center">
+
+[![Star History Chart](https://api.star-history.com/svg?repos=Lyellr88/MARM-Systems&type=Date)](https://star-history.com/#Lyellr88/MARM-Systems&Date)
+</div>
+
 ## Contributing
 
 MARM is open to useful contributions: bug reports, install feedback, documentation fixes, client connection notes, performance testing, and focused pull requests.
@@ -307,7 +328,7 @@ Good places to help:
 - Suggest practical memory workflows and tool improvements
 - Submit small, focused pull requests
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the full contribution guide.
+> 💡 Want to get your name on this list? Check out our [CONTRIBUTING.md](https://www.google.com/search?q=CONTRIBUTING.md) guide to get started!
 
 ## Join the MARM Community
 
@@ -322,15 +343,6 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the full contribution guide.
 - **Share on social** - help others discover memory-enhanced AI
 - **Open [issues](https://github.com/Lyellr88/MARM-Systems/issues)** with bugs, feature requests, or use cases
 - **Join discussions** about AI reliability and memory
-
-## ⭐ Star the Project
-
-If MARM helps with your AI memory needs, please star the repository to support development!
-
-<div align="center">
-
-[![Star History Chart](https://api.star-history.com/svg?repos=Lyellr88/MARM-Systems&type=Date)](https://star-history.com/#Lyellr88/MARM-Systems&Date)
-</div>
 
 ## License & Usage Notice
 
