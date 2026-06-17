@@ -14,7 +14,7 @@ from ..core.events import events
 router = APIRouter(prefix="", tags=["Logging"])
 
 SESSION_PREFIXES = ("Session: ", "Topic: ")
-CHUNK_INACTIVITY_SECONDS = 3600
+SESSION_INACTIVITY_NOTICE_SECONDS = 3600
 
 
 @router.post("/marm_log_entry", operation_id="marm_log_entry")
@@ -70,7 +70,7 @@ async def marm_log_entry(request: LogEntryRequest):
                     )
                     try:
                         conn.execute(
-                            "UPDATE session_summary_chunks SET dirty = TRUE, updated_at = ? WHERE session_name = ?",
+                            "UPDATE session_summary_cache SET dirty = TRUE, updated_at = ? WHERE session_name = ?",
                             (datetime.now(timezone.utc).isoformat(), new_session),
                         )
                     except Exception:
@@ -118,7 +118,7 @@ async def marm_log_entry(request: LogEntryRequest):
                 if last_dt.tzinfo is None:
                     last_dt = last_dt.replace(tzinfo=timezone.utc)
                 gap = (datetime.now(timezone.utc) - last_dt).total_seconds()
-                if gap > CHUNK_INACTIVITY_SECONDS:
+                if gap > SESSION_INACTIVITY_NOTICE_SECONDS:
                     print(
                         f"[MARM] Chunk boundary detected for '{session}' — {gap:.0f}s since last write"
                     )
@@ -155,7 +155,7 @@ async def marm_log_entry(request: LogEntryRequest):
             )
             try:
                 conn.execute(
-                    "UPDATE session_summary_chunks SET dirty = TRUE, updated_at = ? WHERE session_name = ?",
+                    "UPDATE session_summary_cache SET dirty = TRUE, updated_at = ? WHERE session_name = ?",
                     (now_iso, session),
                 )
             except Exception:
@@ -266,8 +266,11 @@ async def marm_delete(request: DeleteRequest):
                     if deleted:
                         try:
                             conn.execute(
-                                "UPDATE session_summary_chunks SET dirty = TRUE, updated_at = ? WHERE session_name = ?",
-                                (datetime.now(timezone.utc).isoformat(), request.session_name),
+                                "UPDATE session_summary_cache SET dirty = TRUE, updated_at = ? WHERE session_name = ?",
+                                (
+                                    datetime.now(timezone.utc).isoformat(),
+                                    request.session_name,
+                                ),
                             )
                         except Exception:
                             pass
@@ -281,7 +284,7 @@ async def marm_delete(request: DeleteRequest):
                     )
                     deleted = cursor.rowcount
                     conn.execute(
-                        "DELETE FROM session_summary_chunks WHERE session_name = ?",
+                        "DELETE FROM session_summary_cache WHERE session_name = ?",
                         (request.target,),
                     )
                     if memory.active_log_session == request.target:

@@ -1,4 +1,4 @@
-# MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.13.2
+# MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.14.0
 
 > Contributions welcome! Browse [open issues](https://github.com/Lyellr88/MARM-Systems/issues) and find an issue open a PR. Join the [MARM Discord](https://discord.gg/nhyJWPz2cf) for exclusive content, support and be apart of the community.
 
@@ -9,7 +9,7 @@
 - [Why MARM MCP](#why-marm-mcp-the-problem--solution)
 - [Quick Start](#-quick-start-for-mcp-http--stdio)
 - [Connect Your Client Fast](#connect-your-client-fast)
-- [Complete MCP Tool Suite](#complete-mcp-tool-suite-9-tools)
+- [Complete MCP Tool Suite](#complete-mcp-tool-suite-7-tools)
 - [MARM Dashboard](#marm-dashboard)
 - [Why MARM Holds Up](#why-marm-holds-up)
 - [Performance & Scaling Benchmarks](#performance--scaling-benchmarks)
@@ -22,7 +22,7 @@
 
 MARM MCP is a local memory infrastructure layer for AI agents. It gives Claude, Codex, Gemini, Qwen, IDE agents, and other MCP clients one persistent place to store decisions, retrieve context, reuse notebooks, and keep long-running work from drifting.
 
-The point is not "more tools." MARM exposes **9 focused MCP tools** and moves the heavy work behind the server: session routing, protocol delivery, hybrid recall, serialized writes, rate-limit presets, write-time consolidation, and agent-assisted compaction.
+The point is not "more tools." MARM exposes **7 focused MCP tools** and moves the heavy work behind the server: session routing, protocol delivery, hybrid recall, serialized writes, rate-limit presets, write-time consolidation, and agent-assisted compaction.
 
 ### What MARM Is Now
 
@@ -182,7 +182,7 @@ docker run --rm -p 127.0.0.1:8002:8002 \
 
 See [`marm-dashboard/README.md`](marm-dashboard/README.md) for the full guide.
 
-## Complete MCP Tool Suite (9 Tools)
+## Complete MCP Tool Suite (7 Tools)
 
 **💡 Pro Tip:** You don't need to manually call these tools! Just tell your AI agent what you want in natural language:
 
@@ -197,16 +197,14 @@ The AI agent will automatically use the appropriate tools. Manual tool access is
 | **Category** | **Tool** | **Description** |
 |--------------|----------|-----------------|
 | **Memory Intelligence** | `marm_smart_recall` | AI-powered recall across all memories. Uses FTS5 BM25 to filter exact-term candidates first, semantically re-ranks that bounded set by embedding similarity, falls back to bounded semantic scanning when FTS coverage is weak, and scores long memories through chunked embeddings while still returning one parent memory result. Supports global search with `search_all=True` and can return summary/context/full memory depth with `detail=1/2/3` |
-| | `marm_context_log` | Intelligent auto-classifying memory storage using vector embeddings |
-| **Logging System** | `marm_log_session` | Create or switch to named session container |
-| | `marm_log_entry` | Add structured log entry with auto-date formatting |
+| **Logging System** | `marm_log_entry` | Add structured session log entries. Session/topic routing, summary-cache invalidation, and context summary preparation are handled by the server |
 | | `marm_log_show` | Display all entries and sessions (filterable) |
 | | `marm_delete` | Delete a log session, log entry, or notebook entry (`type="log"\|"notebook"`) |
-| **Reasoning & Workflow** | `marm_summary` | Generate context-aware summaries with intelligent truncation for LLM conversations |
+| **Reasoning & Workflow** | `marm_summary` | Generate cached session summaries with intelligent truncation for LLM conversations |
 | **Notebook Management** | `marm_notebook` | Unified notebook tool: add, use, show, status, or clear entries with `action="add"\|"use"\|"show"\|"status"\|"clear"` |
 | **Memory Maintenance** | `marm_compaction` | Unified compaction workflow with `action="status"\|"candidates"\|"review"\|"stage"\|"apply"\|"discard"` for agent-assisted memory cleanup |
 
-**Internal automation:** lifecycle initialization, documentation refresh, current date context, serialized write queue handling, and system checks are handled by the server instead of exposed as AI-facing tools. Optional compaction can detect duplicate memory clusters and nudge the connected agent to summarize them through `marm_compaction`. For server status, use the dashboard health panel or `curl http://localhost:8001/health`.
+**Internal automation:** lifecycle initialization, protocol delivery with periodic protocol-lite refresh, documentation refresh, current date context, summary-cache maintenance, serialized write queue handling, and system checks are handled by the server instead of exposed as AI-facing tools. Optional compaction can detect duplicate memory clusters and nudge the connected agent to summarize them through `marm_compaction`. For server status, use the dashboard health panel or `curl http://localhost:8001/health`.
 
 ## Why MARM Holds Up
 

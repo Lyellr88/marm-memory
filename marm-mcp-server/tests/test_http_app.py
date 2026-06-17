@@ -18,7 +18,6 @@ def test_readiness_exposes_http_endpoints_without_websocket(monkeypatch, tmp_pat
     assert client.get("/mcp/ws").status_code == 404
 
 
-
 def test_api_key_mode_rejects_missing_or_wrong_bearer_and_accepts_correct_one(
     monkeypatch, tmp_path
 ):

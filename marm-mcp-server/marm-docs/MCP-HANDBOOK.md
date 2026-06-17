@@ -2,7 +2,7 @@
 
 ## Complete Usage Guide for Memory-Augmented AI
 
-**MARM v2.13.2 - Universal MCP Server for AI Memory Intelligence**
+**MARM v2.14.0 - Universal MCP Server for AI Memory Intelligence**
 
 ---
 
@@ -12,7 +12,7 @@
 - [Getting Started](#getting-started)
 - [Example Workflow](#example-workflow-cross-ai-research-project)
 - [Understanding MARM Memory](#understanding-marm-memory)
-- [Complete Tool Reference (9 Tools)](#complete-tool-reference-9-tools)
+- [Complete Tool Reference (7 Tools)](#complete-tool-reference-7-tools)
 - [Pro Tips & Best Practices](#pro-tips--best-practices)
 - [Advanced Workflows](#advanced-workflows)
 - [FAQ](#faq)
@@ -67,10 +67,10 @@ python -m marm_mcp_server
 **Codex CLI:**
 
 ```bash
-# Direct Python install — no key needed
+# Direct Python install - no key needed
 codex mcp add marm-memory --url http://localhost:8001/mcp
 
-# Docker or exposed server — key required
+# Docker or exposed server - key required
 export MARM_API_KEY="your-generated-key"
 codex mcp add marm-memory --url http://localhost:8001/mcp --bearer-token-env-var MARM_API_KEY
 ```
@@ -117,7 +117,7 @@ All MARM data is stored locally in your home directory:
 - **Location**: `~/.marm/` (Linux/macOS) or `%USERPROFILE%\.marm\` (Windows)
 - **Contents**: SQLite database with all memories, sessions, and notebooks
 - **Backup**: Copy the entire `~/.marm/` directory to preserve all data
-- **Privacy**: Everything stays on your machine — no cloud sync or external storage
+- **Privacy**: Everything stays on your machine, no cloud sync or external storage
 
 ### Verify Installation
 
@@ -177,20 +177,20 @@ Here's a realistic workflow showing MARM in action:
 
 **Scenario:** You're researching authentication patterns for a new project using multiple AI clients.
 
-#### Phase 1: Create Session (Claude)
+#### Phase 1: Route Session (Claude)
 
 ``` markdown
 You: "Claude, create a MARM session called 'auth-research-2025-01'"
-Claude calls: marm_log_session("auth-research-2025-01")
-Result: Session created. MARM lifecycle/docs initialize automatically.
+Claude calls: marm_log_entry(entry="Session: auth-research")
+Result: Session routed to auth-research-[today]. MARM lifecycle/docs initialize automatically.
 ```
 
 #### Phase 2: Capture Research (Claude)
 
 ``` markdown
 You: "Summarize OAuth2 vs JWT for API authentication and save it"
-Claude calls: marm_context_log("OAuth2 is token-based with refresh cycles, better for delegated access. JWT is stateless, good for microservices...")
-Result: Memory stored with auto-classification as "code" content
+Claude calls: marm_log_entry(entry="Research: OAuth2 is token-based with refresh cycles, better for delegated access. JWT is stateless, good for microservices...", session="auth-research-2025-01")
+Result: Research captured in the active session log and marked for summary-cache refresh
 ```
 
 #### Phase 3: Add Reusable Reference (Claude)
@@ -227,7 +227,7 @@ Claude calls: marm_log_entry("DECISION: JWT for API auth, OAuth2 for user flows.
 Result: Decision logged and searchable by all future AI clients
 ```
 
-**Result**: Three different AI clients collaboratively researched a topic, shared insights, and documented decisions—all without re-explaining the project to each new AI.
+**Result**: Three different AI clients collaboratively researched a topic, shared insights, and documented decisions. All without re-explaining the project to each new AI.
 
 ---
 
@@ -263,21 +263,19 @@ MARM automatically categorizes content:
 
 ---
 
-## Complete Tool Reference (9 Tools)
+## Complete Tool Reference (7 Tools)
 
 | Category | Tool | Description | Usage Notes |
 |----------|------|-------------|-------------|
 | **🧠 Memory** | `marm_smart_recall` | FTS-first filter→semantic rerank across all memories, with bounded semantic fallback, chunk-aware long-memory scoring, and a conservative recency bias in final ranking | `query` (required), `limit` (default: 5), `session_name` (optional), `detail` (default: `1`). Use natural language queries or exact keys/commands |
-| | `marm_context_log` | Auto-classifying memory storage with embeddings | Store important information that should be remembered |
-| **📚 Logging** | `marm_log_session` | Create or switch to named session container | Include LLM name, dates, be descriptive |
-| | `marm_log_entry` | Add structured log entry with auto-date formatting | Use structured entries for best results; date-prefixed formats are parsed automatically when provided |
+| **📚 Logging** | `marm_log_entry` | Add structured session log entries | Use structured entries for best results. Session/topic routing, context-summary preparation, and summary-cache invalidation are handled by the server |
 | | `marm_log_show` | Display all entries and sessions with filtering | `session_name` (optional) |
 | | `marm_delete` | Delete a log session, log entry, or notebook entry | `type="log"` or `type="notebook"`, `target` (required), `session_name` (optional for log entries) |
 | **📔 Notebook** | `marm_notebook` | Unified notebook management | `action="add"` saves entries, `action="use"` activates entries, `action="show"` lists saved entries, `action="status"` shows active entries, `action="clear"` clears active entries. `session_name` scopes active entries when needed |
-| **🔄 Workflow** | `marm_summary` | Generate paste-ready context blocks with intelligent truncation | Create summaries for new conversations or context bridging |
+| **🔄 Workflow** | `marm_summary` | Generate cached, paste-ready session summaries with intelligent truncation | Create summaries for new conversations or context bridging |
 | **🧹 Maintenance** | `marm_compaction` | Agent-assisted memory compaction | `action="status"`, `"candidates"`, `"review"`, `"stage"`, `"apply"`, or `"discard"`. Used when MARM detects duplicate memory clusters and asks the agent to summarize them |
 
-**Internal automation:** lifecycle initialization, documentation refresh, current date context, serialized write queue handling, and system checks are no longer AI-facing tools. Documentation refresh uses `doc_index` hash tracking to avoid duplicate `marm_system` memories across restarts. Use the dashboard health panel for live server status, or `curl http://localhost:8001/health` for terminal checks.
+**Internal automation:** lifecycle initialization, protocol delivery with periodic protocol-lite refresh, documentation refresh, current date context, summary-cache maintenance, serialized write queue handling, and system checks are no longer AI-facing tools. Documentation refresh uses `doc_index` hash tracking to avoid duplicate `marm_system` memories across restarts. Use the dashboard health panel for live server status, or `curl http://localhost:8001/health` for terminal checks.
 
 **Swarm / multi-agent modes:** Use CLI presets when starting an HTTP server shared by multiple agents:
 
@@ -342,7 +340,7 @@ Project Structure:
 
 ### Knowledge Base Development
 
-1. **Capture**: Use `marm_context_log` for new learnings
+1. **Capture**: Use `marm_log_entry` for structured session learnings
 2. **Organize**: Create themed sessions for knowledge areas
 3. **Synthesize**: Regular `marm_summary` for knowledge consolidation
 4. **Apply**: Convert summaries to `marm_notebook(action="add", ...)` entries
@@ -365,7 +363,7 @@ Phase 3: Synthesis
 
 ## FAQ
 
-The canonical FAQ lives in [FAQ.md](FAQ.md). Use that file for current answers about memory behavior, transports, supported clients, compaction, backups, and troubleshooting.
+The canonical FAQ lives in [marm-mcp-server/marm-docs/FAQ.md](marm-mcp-server/marm-docs/FAQ.md). Use that file for current answers about memory behavior, transports, supported clients, compaction, backups, and troubleshooting.
 
 ---
 
@@ -416,7 +414,7 @@ The canonical FAQ lives in [FAQ.md](FAQ.md). Use that file for current answers a
 - Verify memories exist: use `marm_log_show` to list entries
 - Use `search_all=true` to search across all sessions
 - Try simpler, more general search queries
-- Wait a few seconds—first semantic search loads the ML model
+- Wait a few seconds; first semantic search loads the ML model
 
 #### Memories appear then disappear
 
@@ -428,14 +426,14 @@ The canonical FAQ lives in [FAQ.md](FAQ.md). Use that file for current answers a
 
 **Slow search results**
 
-- First search is slower (model loads from disk)—subsequent searches are faster
+- First search is slower (model loads from disk) subsequent searches are faster
 - Large databases (1000+ memories) may take a few seconds
 - Limit searches: use `limit=10` instead of unlimited results
 - Use `marm_summary` to compress old sessions
 
 #### Server using too much memory
 
-- Notebooks with many entries can accumulate—use `marm_notebook(action="clear")` to prune active entries
+- Notebooks with many entries can accumulate; use `marm_notebook(action="clear")` to prune active entries
 - Close unused AI client connections
 - Use `marm_compaction(action="review")` to inspect staged compaction summaries when compaction is enabled
 
@@ -463,4 +461,4 @@ The canonical FAQ lives in [FAQ.md](FAQ.md). Use that file for current answers a
 | `permission denied: ~/.marm/` | Database directory not writable | `chmod 755 ~/.marm/` or check ownership |
 | `module not found: core.memory` | Missing dependencies | Reinstall from `marm-mcp-server/`: `pip install -e ".[dev]"` |
 | `database is locked` | Multiple processes accessing DB | Close other connections, restart server |
-| `embedding model not found` | Semantic search model didn't download | First run takes time—be patient, check internet connection |
+| `embedding model not found` | Semantic search model didn't download | First run takes time; be patient, check internet connection |

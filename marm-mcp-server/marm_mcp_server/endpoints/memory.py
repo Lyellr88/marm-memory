@@ -5,7 +5,6 @@ from datetime import datetime
 
 from ..core.models import SmartRecallRequest
 from ..core.memory import memory
-from ..core.events import events
 from ..core.response_limiter import MCPResponseLimiter
 from ..services.recall import _apply_detail_level
 
@@ -248,5 +247,3 @@ async def marm_smart_recall(request: SmartRecallRequest, http_request: Request):
     except Exception as e:
         print(f"Unexpected error in marm_smart_recall: {e}")
         return {"status": "error", "message": "Memory recall failed."}
-
-

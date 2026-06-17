@@ -3,7 +3,6 @@ import importlib
 from conftest import load_isolated_server, local_client
 
 
-
 def test_sql_injection_queries_do_not_escape_session_scope_or_damage_tables(
     monkeypatch, tmp_path
 ):
@@ -13,12 +12,16 @@ def test_sql_injection_queries_do_not_escape_session_scope_or_damage_tables(
     client = local_client(server.app)
     memory_module = importlib.import_module("marm_mcp_server.core.memory")
 
-    asyncio.run(memory_module.memory.store_memory_queued(
-        "ordinary safe content about docker transport", "safe-session"
-    ))
-    asyncio.run(memory_module.memory.store_memory_queued(
-        "secret token should stay scoped to another session", "other-session"
-    ))
+    asyncio.run(
+        memory_module.memory.store_memory_queued(
+            "ordinary safe content about docker transport", "safe-session"
+        )
+    )
+    asyncio.run(
+        memory_module.memory.store_memory_queued(
+            "secret token should stay scoped to another session", "other-session"
+        )
+    )
 
     injection_queries = [
         "' OR '1'='1",
@@ -54,12 +57,16 @@ def test_recall_is_session_scoped_unless_search_all_is_requested(monkeypatch, tm
     client = local_client(server.app)
     memory_module = importlib.import_module("marm_mcp_server.core.memory")
 
-    asyncio.run(memory_module.memory.store_memory_queued(
-        "alpha-only marker for scoped recall", "alpha"
-    ))
-    asyncio.run(memory_module.memory.store_memory_queued(
-        "beta-only marker for scoped recall", "beta"
-    ))
+    asyncio.run(
+        memory_module.memory.store_memory_queued(
+            "alpha-only marker for scoped recall", "alpha"
+        )
+    )
+    asyncio.run(
+        memory_module.memory.store_memory_queued(
+            "beta-only marker for scoped recall", "beta"
+        )
+    )
 
     scoped = client.post(
         "/marm_smart_recall",

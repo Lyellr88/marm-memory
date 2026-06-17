@@ -142,7 +142,7 @@ def test_stdio_handles_mcp_initialize_and_exposes_tools(tmp_path):
     assert "marm_stage_compaction_summaries" not in tool_names
     assert "marm_get_staged_summaries" not in tool_names
     assert "marm_apply_compaction" not in tool_names
-    assert len(tools) == 8
+    assert len(tools) == 7
 
 
 def test_stdio_delete_notebook_removes_entry_from_active_state(monkeypatch, tmp_path):
@@ -698,9 +698,7 @@ def test_stdio_log_entry_persists_when_write_queue_enabled(tmp_path):
             ("session-%",),
         ).fetchone()[0]
 
-    assert count >= 1, (
-        f"Log entry not persisted; STDIO responses: {sorted(responses)}"
-    )
+    assert count >= 1, f"Log entry not persisted; STDIO responses: {sorted(responses)}"
 
 
 def test_stdio_protocol_injected_on_first_tool_call_not_on_second(monkeypatch):

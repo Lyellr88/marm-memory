@@ -211,9 +211,8 @@ async def marm_smart_recall(
     )
 
 
-
 _SESSION_PREFIXES = ("Session: ", "Topic: ")
-_CHUNK_INACTIVITY_SECONDS = 3600
+_SESSION_INACTIVITY_NOTICE_SECONDS = 3600
 
 
 @mcp.tool()
@@ -273,7 +272,7 @@ async def marm_log_entry(
                     )
                     try:
                         conn.execute(
-                            "UPDATE session_summary_chunks SET dirty = TRUE, updated_at = ? WHERE session_name = ?",
+                            "UPDATE session_summary_cache SET dirty = TRUE, updated_at = ? WHERE session_name = ?",
                             (datetime.now(timezone.utc).isoformat(), new_session),
                         )
                     except Exception:
@@ -321,7 +320,7 @@ async def marm_log_entry(
                 if last_dt.tzinfo is None:
                     last_dt = last_dt.replace(tzinfo=timezone.utc)
                 gap = (datetime.now(timezone.utc) - last_dt).total_seconds()
-                if gap > _CHUNK_INACTIVITY_SECONDS:
+                if gap > _SESSION_INACTIVITY_NOTICE_SECONDS:
                     print(
                         f"[MARM] Chunk boundary detected for '{session}' — {gap:.0f}s since last write"
                     )
@@ -358,7 +357,7 @@ async def marm_log_entry(
             )
             try:
                 conn.execute(
-                    "UPDATE session_summary_chunks SET dirty = TRUE, updated_at = ? WHERE session_name = ?",
+                    "UPDATE session_summary_cache SET dirty = TRUE, updated_at = ? WHERE session_name = ?",
                     (now_iso, session),
                 )
             except Exception:
@@ -458,7 +457,7 @@ async def marm_delete(
                     if deleted:
                         try:
                             conn.execute(
-                                "UPDATE session_summary_chunks SET dirty = TRUE, updated_at = ? WHERE session_name = ?",
+                                "UPDATE session_summary_cache SET dirty = TRUE, updated_at = ? WHERE session_name = ?",
                                 (datetime.now(timezone.utc).isoformat(), session_name),
                             )
                         except Exception:
@@ -473,7 +472,7 @@ async def marm_delete(
                     deleted = cursor.rowcount
                     try:
                         conn.execute(
-                            "DELETE FROM session_summary_chunks WHERE session_name = ?",
+                            "DELETE FROM session_summary_cache WHERE session_name = ?",
                             (target,),
                         )
                     except Exception:
@@ -544,7 +543,6 @@ async def marm_notebook(
 @_log_tool_call
 async def marm_summary(
     session_name: str,
-    limit: int = 50,
 ) -> dict:
     """
     📊 Generate paste-ready context block for new chats
@@ -552,7 +550,7 @@ async def marm_summary(
     Reads log_entries for the session and returns a formatted markdown summary.
     Equivalent to /summary: [session name] command
     """
-    return await generate_session_summary(session_name, limit)
+    return await generate_session_summary(session_name)
 
 
 @mcp.tool()
