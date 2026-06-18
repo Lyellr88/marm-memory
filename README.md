@@ -55,7 +55,7 @@ See [Performance & Scaling Benchmarks](#performance--scaling-benchmarks) for ret
 
 ### MARM Demo
 
-<https://github.com/user-attachments/assets/4b8b5387-0df6-451c-81a6-440559d32cae>
+<https://github.com/user-attachments/assets/dabfe44f-689d-404f-a2c7-dcf8fa4ef0c1>
 
 MARM gives AI agents persistent local memory, shared context, write-queue safety, swarm presets, and hybrid recall so commands, config keys, and project meaning all stay reachable.
 
