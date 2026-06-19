@@ -22,6 +22,7 @@ async def smart_recall(
     search_all: bool = False,
     include_logs: bool = False,
     detail: int = 1,
+    exact_mode: str = "auto",
 ) -> dict:
     try:
         search_session = None if search_all else session_name
@@ -63,7 +64,8 @@ async def smart_recall(
             ]
 
         similar_memories, scan_meta = await memory.recall_similar(
-            query, session=search_session, limit=limit, include_scan_metadata=True
+            query, session=search_session, limit=limit, include_scan_metadata=True,
+            exact_mode=exact_mode,
         )
 
         if not similar_memories:

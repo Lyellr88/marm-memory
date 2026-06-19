@@ -22,6 +22,7 @@ from .memory_utils import (
     sanitize_content,
     _temporal_score,
     _safe_fts_query,
+    _is_exact_query,
 )
 from .memory_scoring import (
     _fetch_fts_candidate_ids,
@@ -214,6 +215,23 @@ async def _store_memory(
     return memory_id
 
 
+async def _recall_exact(
+    mem,
+    query: str,
+    session: str = None,
+    limit: int = 5,
+) -> List[Dict]:
+    """Deterministic exact/lexical recall via FTS5 BM25, with LIKE fallback.
+
+    Unlike _recall_similar, this path never re-ranks by semantic similarity.
+    Exact lexical hits are always returned in BM25 order, making it safe for
+    config keys, API names, command strings, file paths, and short code snippets
+    where a semantically-close-but-wrong result would be worse than no result.
+    """
+    _recall_debug(f"exact path: query='{query[:60]}', session={session}")
+    return await _recall_text_search(mem, query, session, limit)
+
+
 async def _recall_similar(
     mem,
     query: str,
@@ -221,8 +239,18 @@ async def _recall_similar(
     limit: int = 5,
     query_vec=None,
     include_scan_metadata: bool = False,
+    exact_mode: str = "auto",
 ):
     """Find semantically similar memories.
+
+    exact_mode controls which retrieval lane is used:
+      - "auto"     (default): automatically switches to the exact/lexical lane
+                   when the query looks syntax-heavy (config keys, file paths,
+                   CLI commands, API names, code snippets). Falls back to
+                   semantic for natural-language queries.
+      - "exact"    : always use the deterministic FTS/lexical lane. Exact or
+                   lexical hits are never re-ranked by semantic similarity.
+      - "semantic" : always use the semantic lane regardless of query shape.
 
     When include_scan_metadata=True, returns (List[Dict], dict) where the second
     element contains recall_scan_truncated and recall_scan_limit. All other callers
@@ -237,6 +265,17 @@ async def _recall_similar(
                 "recall_scan_limit": scan_limit,
             }
         return results
+
+    # --- Exact lane ---
+    use_exact = (exact_mode == "exact") or (
+        exact_mode == "auto" and _is_exact_query(query)
+    )
+    if use_exact:
+        _recall_debug(
+            f"exact lane selected (mode={exact_mode!r}, query='{query[:60]}')"
+        )
+        results = await _recall_exact(mem, query, session, limit)
+        return _wrap(results, False)
 
     if query_vec is None:
         if not mem._load_encoder_lazily():

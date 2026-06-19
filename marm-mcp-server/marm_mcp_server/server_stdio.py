@@ -198,6 +198,7 @@ async def marm_smart_recall(
     search_all: bool = False,
     include_logs: bool = False,
     detail: int = 1,
+    exact_mode: str = "auto",
 ) -> dict:
     """
     🧠 Intelligent memory recall based on semantic similarity
@@ -205,12 +206,15 @@ async def marm_smart_recall(
     Finds relevant memories using semantic similarity or text search.
     Returns the most relevant memories with similarity scores.
     detail: 1=summary (~200 chars), 2=context (~500 chars), 3=full content
+    - exact_mode: retrieval lane to use
+        'auto'     = automatically switch to exact/lexical for syntax-heavy queries
+                     (config keys, file paths, CLI commands, API names, code snippets)
+        'exact'    = always use deterministic FTS/BM25, no semantic re-ranking
+        'semantic' = always use vector similarity regardless of query shape
     """
     return await smart_recall(
-        query, session_name, limit, search_all, include_logs, detail
+        query, session_name, limit, search_all, include_logs, detail, exact_mode
     )
-
-
 _SESSION_PREFIXES = ("Session: ", "Topic: ")
 _SESSION_INACTIVITY_NOTICE_SECONDS = 3600
 

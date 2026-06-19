@@ -170,3 +170,37 @@ def sanitize_content(content: str) -> str:
     sanitized = html.escape(sanitized)
 
     return sanitized
+
+
+# ---------------------------------------------------------------------------
+# Exact-query detection
+# ---------------------------------------------------------------------------
+
+# Patterns that strongly suggest a syntax-heavy, exact-lookup query.
+_EXACT_PATTERNS = [
+    re.compile(r"[A-Z][A-Z0-9_]{2,}"),          # UPPER_SNAKE_CASE constants / env vars
+    re.compile(r"[\w./\-]+\.(py|js|ts|json|yaml|yml|toml|cfg|ini|sh|md|env|conf)\b"),  # file paths
+    re.compile(r"--[\w\-]+=?"),                  # CLI flags  --flag or --flag=value
+    re.compile(r"/[\w./\-]{3,}"),                # Unix paths  /home/user/...
+    re.compile(r"[A-Za-z_]\w*\("),              # function calls  my_func(
+    re.compile(r"\b\w+\.\w+\.\w+\b"),           # dotted namespaces  a.b.c
+    re.compile(r"[A-Za-z_]\w*:[A-Za-z_/\d]"),  # key:value or namespace:item
+    re.compile(r"\b(?:GET|POST|PUT|PATCH|DELETE|HEAD)\s+/"),  # HTTP verbs + path
+    re.compile(r"https?://\S+"),                 # URLs
+    re.compile(r'["`][^"`]{1,80}["`]'),          # backtick or double-quoted strings
+    re.compile(r"\b\w+_[A-Z][A-Z0-9_]*\b"),     # mixed_CASE config keys  e.g. server_HOST
+]
+
+
+def _is_exact_query(query: str) -> bool:
+    """Return True when the query looks syntax-heavy and warrants exact/lexical retrieval.
+
+    Heuristic: a query is considered exact when it is short (≤ 12 words) AND
+    matches at least one syntax pattern (CLI flags, file paths, UPPER_SNAKE constants,
+    function calls, API names, dotted namespaces, HTTP verbs, URLs, quoted strings).
+    """
+    word_count = len(query.split())
+    if word_count > 12:
+        # Long natural-language sentences are almost never exact lookups.
+        return False
+    return any(pat.search(query) for pat in _EXACT_PATTERNS)

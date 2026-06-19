@@ -141,7 +141,8 @@ async def marm_smart_recall(request: SmartRecallRequest, http_request: Request):
                 ]
 
         similar_memories, scan_meta = await memory.recall_similar(
-            request.query, search_session, request.limit, include_scan_metadata=True
+            request.query, search_session, request.limit, include_scan_metadata=True,
+            exact_mode=request.exact_mode,
         )
 
         if not similar_memories:

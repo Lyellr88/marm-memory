@@ -13,6 +13,7 @@ from .memory_utils import (
     CHUNK_TOKEN_LIMIT,  # noqa: F401
     CHUNK_OVERLAP_TOKENS,  # noqa: F401
     CHUNK_THRESHOLD_WORDS,  # noqa: F401
+    _is_exact_query,  # noqa: F401
 )
 from .memory_db import (
     SQLiteConnectionPool,
@@ -259,9 +260,10 @@ class MARMMemory:
         limit: int = 5,
         query_vec=None,
         include_scan_metadata: bool = False,
+        exact_mode: str = "auto",
     ):
         return await _recall_similar(
-            self, query, session, limit, query_vec, include_scan_metadata
+            self, query, session, limit, query_vec, include_scan_metadata, exact_mode
         )
 
     async def recall_text_search(
