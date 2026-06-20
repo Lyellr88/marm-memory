@@ -108,6 +108,26 @@ def _stage_compaction_candidate(conn, session: str, source_ids: list[str]) -> st
     return candidate_id
 
 
+def _patch_memory_write_scope(monkeypatch, project, platform) -> None:
+    """Patch scope constants on the exact write/consolidation functions under test.
+
+    Some HTTP tests reload marm_mcp_server modules mid-suite. This test module's
+    top-level MARMMemory import can then point at a different function graph than
+    a fresh import by module name.
+    """
+    store_globals = MARMMemory.store_memory.__globals__["_store_memory"].__globals__
+    monkeypatch.setitem(store_globals, "MARM_PROJECT", project)
+    monkeypatch.setitem(store_globals, "MARM_PLATFORM", platform)
+
+    exact_globals = store_globals["find_exact_duplicate"].__globals__
+    monkeypatch.setitem(exact_globals, "MARM_PROJECT", project)
+    monkeypatch.setitem(exact_globals, "MARM_PLATFORM", platform)
+
+    semantic_globals = store_globals["find_semantic_duplicate"].__globals__
+    monkeypatch.setitem(semantic_globals, "MARM_PROJECT", project)
+    monkeypatch.setitem(semantic_globals, "MARM_PLATFORM", platform)
+
+
 # ---------------------------------------------------------------------------
 # 1. Write tagging — memory
 # ---------------------------------------------------------------------------
@@ -115,10 +135,7 @@ def _stage_compaction_candidate(conn, session: str, source_ids: list[str]) -> st
 
 @pytest.mark.asyncio
 async def test_memory_insert_tags_project_and_platform(monkeypatch, tmp_path):
-    from marm_mcp_server.core import memory_ops as ops
-
-    monkeypatch.setattr(ops, "MARM_PROJECT", "test-project")
-    monkeypatch.setattr(ops, "MARM_PLATFORM", "claude-code")
+    _patch_memory_write_scope(monkeypatch, "test-project", "claude-code")
 
     mem = MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
@@ -138,10 +155,7 @@ async def test_memory_insert_tags_project_and_platform(monkeypatch, tmp_path):
 async def test_memory_insert_null_tags_when_no_project_or_platform(
     monkeypatch, tmp_path
 ):
-    from marm_mcp_server.core import memory_ops as ops
-
-    monkeypatch.setattr(ops, "MARM_PROJECT", "")
-    monkeypatch.setattr(ops, "MARM_PLATFORM", "")
+    _patch_memory_write_scope(monkeypatch, "", "")
 
     mem = MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
@@ -251,23 +265,15 @@ async def test_recall_project_and_platform_combined_filter(monkeypatch, tmp_path
 
 @pytest.mark.asyncio
 async def test_exact_dedup_does_not_cross_project_boundary(monkeypatch, tmp_path):
-    from marm_mcp_server.core import memory_ops as ops
-    from marm_mcp_server.core import consolidation as cons
-
-    monkeypatch.setattr(ops, "CONSOLIDATION_ENABLED", True)
+    store_globals = MARMMemory.store_memory.__globals__["_store_memory"].__globals__
+    monkeypatch.setitem(store_globals, "CONSOLIDATION_ENABLED", True)
     mem = MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
 
-    monkeypatch.setattr(ops, "MARM_PROJECT", "project-a")
-    monkeypatch.setattr(ops, "MARM_PLATFORM", "claude-code")
-    monkeypatch.setattr(cons, "MARM_PROJECT", "project-a")
-    monkeypatch.setattr(cons, "MARM_PLATFORM", "claude-code")
+    _patch_memory_write_scope(monkeypatch, "project-a", "claude-code")
     id_a = await mem.store_memory("identical content", "session-x")
 
-    monkeypatch.setattr(ops, "MARM_PROJECT", "project-b")
-    monkeypatch.setattr(ops, "MARM_PLATFORM", "claude-code")
-    monkeypatch.setattr(cons, "MARM_PROJECT", "project-b")
-    monkeypatch.setattr(cons, "MARM_PLATFORM", "claude-code")
+    _patch_memory_write_scope(monkeypatch, "project-b", "claude-code")
     id_b = await mem.store_memory("identical content", "session-x")
 
     # Different projects — must not deduplicate
@@ -281,23 +287,15 @@ async def test_exact_dedup_does_not_cross_project_boundary(monkeypatch, tmp_path
 
 @pytest.mark.asyncio
 async def test_exact_dedup_does_not_cross_platform_boundary(monkeypatch, tmp_path):
-    from marm_mcp_server.core import memory_ops as ops
-    from marm_mcp_server.core import consolidation as cons
-
-    monkeypatch.setattr(ops, "CONSOLIDATION_ENABLED", True)
+    store_globals = MARMMemory.store_memory.__globals__["_store_memory"].__globals__
+    monkeypatch.setitem(store_globals, "CONSOLIDATION_ENABLED", True)
     mem = MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
 
-    monkeypatch.setattr(ops, "MARM_PROJECT", "proj-x")
-    monkeypatch.setattr(ops, "MARM_PLATFORM", "claude-code")
-    monkeypatch.setattr(cons, "MARM_PROJECT", "proj-x")
-    monkeypatch.setattr(cons, "MARM_PLATFORM", "claude-code")
+    _patch_memory_write_scope(monkeypatch, "proj-x", "claude-code")
     id_a = await mem.store_memory("shared content", "session-x")
 
-    monkeypatch.setattr(ops, "MARM_PROJECT", "proj-x")
-    monkeypatch.setattr(ops, "MARM_PLATFORM", "cursor")
-    monkeypatch.setattr(cons, "MARM_PROJECT", "proj-x")
-    monkeypatch.setattr(cons, "MARM_PLATFORM", "cursor")
+    _patch_memory_write_scope(monkeypatch, "proj-x", "cursor")
     id_b = await mem.store_memory("shared content", "session-x")
 
     # Same project but different platform — must not deduplicate
@@ -313,16 +311,12 @@ async def test_exact_dedup_does_not_cross_platform_boundary(monkeypatch, tmp_pat
 async def test_exact_dedup_still_works_within_same_project_and_platform(
     monkeypatch, tmp_path
 ):
-    from marm_mcp_server.core import memory_ops as ops
-    from marm_mcp_server.core import consolidation as cons
-
-    monkeypatch.setattr(ops, "CONSOLIDATION_ENABLED", True)
+    store_globals = MARMMemory.store_memory.__globals__["_store_memory"].__globals__
+    monkeypatch.setitem(store_globals, "CONSOLIDATION_ENABLED", True)
     mem = MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
 
-    for module in (ops, cons):
-        monkeypatch.setattr(module, "MARM_PROJECT", "proj-x")
-        monkeypatch.setattr(module, "MARM_PLATFORM", "claude-code")
+    _patch_memory_write_scope(monkeypatch, "proj-x", "claude-code")
 
     id_a = await mem.store_memory("deduplicated content", "session-x")
     id_b = await mem.store_memory("deduplicated content", "session-x")
@@ -911,6 +905,4 @@ async def test_notebook_use_prefers_current_project_scope(monkeypatch, tmp_path)
     )
 
     assert result["status"] == "success"
-    assert result["entries"] == [
-        {"name": "shared-rule", "data": "project b rule"}
-    ]
+    assert result["entries"] == [{"name": "shared-rule", "data": "project b rule"}]
