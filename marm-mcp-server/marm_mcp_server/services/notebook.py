@@ -6,6 +6,7 @@ from typing import Optional
 
 from ..core.memory import memory
 from ..core.events import events
+from ..config.settings import MARM_PROJECT, MARM_PLATFORM
 
 
 async def _add(name: Optional[str], data: Optional[str], **_) -> dict:
@@ -24,8 +25,15 @@ async def _add(name: Optional[str], data: Optional[str], **_) -> dict:
             pass
     with memory.get_connection() as conn:
         conn.execute(
-            "INSERT OR REPLACE INTO notebook_entries (name, data, embedding, updated_at) VALUES (?, ?, ?, ?)",
-            (name, data, embedding_bytes, datetime.now(timezone.utc).isoformat()),
+            "INSERT OR REPLACE INTO notebook_entries (name, data, embedding, updated_at, project, platform) VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                name,
+                data,
+                embedding_bytes,
+                datetime.now(timezone.utc).isoformat(),
+                MARM_PROJECT or None,
+                MARM_PLATFORM or None,
+            ),
         )
         conn.commit()
     await events.emit("notebook_entry_added", {"name": name, "data": data})

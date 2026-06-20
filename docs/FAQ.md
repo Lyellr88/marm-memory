@@ -132,6 +132,8 @@ MARM uses filter→rerank hybrid recall. FTS keyword/BM25 search handles exact t
 
 Both. `marm_smart_recall` searches one session by default and can search across all sessions with `search_all=True`.
 
+It can also filter by `project` and `platform` when those metadata fields are available. New memories, logs, and notebook entries are tagged from detected settings or explicit `MARM_PROJECT` / `MARM_PLATFORM` environment variables. Leaving those filters unset keeps the current broad search behavior.
+
 When the semantic fallback lane reaches its configured scan cap, responses include `recall_scan_truncated=true` and `recall_scan_limit` so agents know that part of recall was bounded. The primary filter→rerank lane does not set truncation because it works over a fixed FTS candidate set instead of a broad embedding scan.
 
 `FTS_CANDIDATE_LIMIT` (default `50`) controls how many FTS candidates are fetched before semantic reranking. Most users should leave it alone unless their memory store has weak keyword overlap and they want a wider rerank pool.
@@ -150,7 +152,7 @@ Be selective. Log decisions, solutions, insights, requirements, constraints, and
 
 #### Q: How do I organize memories for team collaboration?
 
-Use consistent session names, include project or workstream names, and rely on cross-session search for broad recall. For shared agent workflows, prefer HTTP mode so one server coordinates writes.
+Use consistent session names, include project or workstream names, and rely on cross-session search for broad recall. MARM also records nullable `project` and `platform` metadata on new memories, logs, and notebook entries, so agents can scope recall to a project or client when needed. For shared agent workflows, prefer HTTP mode so one server coordinates writes.
 
 #### Q: Does MARM clean up duplicate memories automatically?
 

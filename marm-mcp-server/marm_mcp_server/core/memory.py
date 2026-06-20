@@ -259,15 +259,31 @@ class MARMMemory:
         limit: int = 5,
         query_vec=None,
         include_scan_metadata: bool = False,
+        project: str = None,
+        platform: str = None,
     ):
         return await _recall_similar(
-            self, query, session, limit, query_vec, include_scan_metadata
+            self,
+            query,
+            session,
+            limit,
+            query_vec,
+            include_scan_metadata,
+            project,
+            platform,
         )
 
     async def recall_text_search(
-        self, query: str, session: str = None, limit: int = 5
+        self,
+        query: str,
+        session: str = None,
+        limit: int = 5,
+        project: str = None,
+        platform: str = None,
     ) -> List[Dict]:
-        return await _recall_text_search(self, query, session, limit)
+        return await _recall_text_search(
+            self, query, session, limit, project=project, platform=platform
+        )
 
 
 memory = MARMMemory()

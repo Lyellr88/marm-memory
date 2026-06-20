@@ -3,6 +3,28 @@
 ## Version 2 - MARM Protocol to Universal MCP Server Evolution
 
 <details>
+<summary><strong>June 20th, 2026: Project & Platform Attribution (v2.14.2)</strong></summary>
+
+### Project & Platform Metadata
+
+- Added nullable `project` and `platform` attribution columns to memories, log entries, and notebook entries so MARM can distinguish work from different repositories, clients, and agent surfaces without splitting the local SQLite database.
+- Added `MARM_PROJECT` and `MARM_PLATFORM` settings with safe auto-detection plus explicit environment overrides for Docker, servers, and custom client setups.
+- Tagged new memory, log, and notebook writes with detected attribution metadata while preserving existing untagged rows as global/unscoped history.
+
+### Scoped Recall & Consolidation Safety
+
+- Extended `marm_smart_recall` with optional `project` and `platform` filters across HTTP and STDIO, including memory recall and `include_logs=True` log search.
+- Applied attribution filters through FTS candidate fetches, FTS scoring, semantic fallback scoring, and LIKE fallback so scoped recall stays consistent across retrieval lanes.
+- Scoped exact duplicate detection and semantic write-time merge checks to the current project/platform pair to prevent accidental cross-project or cross-client consolidation.
+
+### Tests & Docs
+
+- Added focused coverage for project/platform schema migrations, write tagging, scoped recall, HTTP request handling, log filtering, notebook attribution, scoring filters, and consolidation isolation.
+- Updated README, MCP handbook, FAQ, contributing guidance, packaged docs, and project architecture references with the new attribution behavior.
+
+</details>
+
+<details>
 <summary><strong>June 17th, 2026: Docs, Assets & Community (v2.14.1)</strong></summary>
 
 ### Documentation & README

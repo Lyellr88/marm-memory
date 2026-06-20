@@ -173,6 +173,33 @@ def init_database(db_path: str) -> None:
             conn.execute("ALTER TABLE memories ADD COLUMN compaction_role TEXT")
         if "compacted_into" not in mem_cols:
             conn.execute("ALTER TABLE memories ADD COLUMN compacted_into TEXT")
+        if "project" not in mem_cols:
+            conn.execute("ALTER TABLE memories ADD COLUMN project TEXT DEFAULT NULL")
+        if "platform" not in mem_cols:
+            conn.execute("ALTER TABLE memories ADD COLUMN platform TEXT DEFAULT NULL")
+
+        log_cols = {
+            row[1] for row in conn.execute("PRAGMA table_info(log_entries)").fetchall()
+        }
+        if "project" not in log_cols:
+            conn.execute("ALTER TABLE log_entries ADD COLUMN project TEXT DEFAULT NULL")
+        if "platform" not in log_cols:
+            conn.execute(
+                "ALTER TABLE log_entries ADD COLUMN platform TEXT DEFAULT NULL"
+            )
+
+        nb_cols = {
+            row[1]
+            for row in conn.execute("PRAGMA table_info(notebook_entries)").fetchall()
+        }
+        if "project" not in nb_cols:
+            conn.execute(
+                "ALTER TABLE notebook_entries ADD COLUMN project TEXT DEFAULT NULL"
+            )
+        if "platform" not in nb_cols:
+            conn.execute(
+                "ALTER TABLE notebook_entries ADD COLUMN platform TEXT DEFAULT NULL"
+            )
 
         conn.execute("""
             CREATE TABLE IF NOT EXISTS compaction_staging (

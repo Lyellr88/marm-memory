@@ -105,7 +105,42 @@ if not (1 <= _raw_port <= 65535):
         f"WARNING: SERVER_PORT={_raw_port} out of [1, 65535], clamped to {SERVER_PORT}",
         file=sys.stderr,
     )
-SERVER_VERSION = "2.14.1"
+SERVER_VERSION = "2.14.2"
+
+
+def _detect_project() -> str:
+    explicit = os.environ.get("MARM_PROJECT", "")
+    if explicit:
+        return explicit.lower().replace(" ", "-")
+    cwd = Path.cwd()
+    unsafe = {Path.home(), Path.home().parent, Path("/")}
+    if sys.platform == "win32":
+        unsafe.add(Path("C:\\"))
+    if cwd in unsafe:
+        return ""
+    return cwd.name.lower().replace(" ", "-")
+
+
+MARM_PROJECT = _detect_project()
+
+
+def _detect_platform() -> str:
+    explicit = os.environ.get("MARM_PLATFORM", "")
+    if explicit:
+        return explicit.lower()
+    if os.environ.get("CLAUDE_CODE_ENTRYPOINT"):
+        return "claude-code"
+    term = os.environ.get("TERM_PROGRAM", "").lower()
+    if term in ("vscode", "cursor", "windsurf"):
+        return term
+    if os.environ.get("VSCODE_PID"):
+        return "vscode"
+    if os.environ.get("CURSOR_TRACE_ID"):
+        return "cursor"
+    return ""
+
+
+MARM_PLATFORM = _detect_platform()
 
 _raw_rpm = _safe_int("MARM_RATE_LIMIT_RPM", 80)
 # 0 = disable rate limiting; negative values clamped to 0
