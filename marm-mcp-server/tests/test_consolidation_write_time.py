@@ -128,7 +128,7 @@ async def test_find_semantic_duplicate_returns_id_when_similarity_above_threshol
 
     monkeypatched_recall_called = []
 
-    async def mock_recall(query, session=None, limit=5, query_vec=None):
+    async def mock_recall(query, session=None, limit=5, query_vec=None, **kwargs):
         monkeypatched_recall_called.append(query)
         return [{"id": "existing-id", "similarity": 0.95, "content": "similar content"}]
 
@@ -149,7 +149,7 @@ async def test_find_semantic_duplicate_returns_none_when_similarity_below_thresh
 ):
     mem = MARMMemory(str(tmp_path / "memory.db"))
 
-    async def mock_recall(query, session=None, limit=5, query_vec=None):
+    async def mock_recall(query, session=None, limit=5, query_vec=None, **kwargs):
         return [{"id": "existing-id", "similarity": 0.85, "content": "similar content"}]
 
     mem._load_encoder_lazily = lambda: True
@@ -164,7 +164,7 @@ async def test_find_semantic_duplicate_returns_none_when_similarity_below_thresh
 async def test_find_semantic_duplicate_returns_none_when_no_results(tmp_path):
     mem = MARMMemory(str(tmp_path / "memory.db"))
 
-    async def mock_recall(query, session=None, limit=5, query_vec=None):
+    async def mock_recall(query, session=None, limit=5, query_vec=None, **kwargs):
         return []
 
     mem._load_encoder_lazily = lambda: True
@@ -315,7 +315,7 @@ async def test_find_semantic_duplicate_passes_correct_session_to_recall(tmp_path
 
     sessions_seen = []
 
-    async def mock_recall(query, session=None, limit=5, query_vec=None):
+    async def mock_recall(query, session=None, limit=5, query_vec=None, **kwargs):
         sessions_seen.append(session)
         return []
 
