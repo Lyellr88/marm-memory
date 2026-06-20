@@ -8,8 +8,11 @@ Covers:
 - Log entry write tagging and include_logs filtering
 """
 
+import json
 import pytest
 import sqlite3
+import uuid
+from datetime import datetime, timedelta, timezone
 
 from marm_mcp_server.core.memory import MARMMemory
 
@@ -25,8 +28,7 @@ def _direct_insert_memory(
     conn, session: str, content: str, project=None, platform=None
 ):
     """Insert a memory row directly with explicit project/platform values."""
-    import uuid
-    from datetime import datetime, timezone
+    memory_id = str(uuid.uuid4())
 
     conn.execute(
         """
@@ -36,7 +38,7 @@ def _direct_insert_memory(
         VALUES (?, ?, ?, NULL, ?, ?, 'general', '{}', ?, ?)
         """,
         (
-            str(uuid.uuid4()),
+            memory_id,
             session,
             content,
             content,
@@ -46,12 +48,11 @@ def _direct_insert_memory(
         ),
     )
     conn.commit()
+    return memory_id
 
 
 def _direct_insert_log(conn, session: str, topic: str, project=None, platform=None):
     """Insert a log_entry row directly with explicit project/platform values."""
-    import uuid
-    from datetime import datetime, timezone
 
     conn.execute(
         """
@@ -71,6 +72,40 @@ def _direct_insert_log(conn, session: str, topic: str, project=None, platform=No
         ),
     )
     conn.commit()
+
+
+def _stage_compaction_candidate(conn, session: str, source_ids: list[str]) -> str:
+    """Create a ready-to-apply compaction candidate for source memories."""
+    candidate_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc)
+    rows = conn.execute(
+        f"SELECT id, content_hash FROM memories WHERE id IN ({','.join('?' * len(source_ids))})",
+        source_ids,
+    ).fetchall()
+    snapshot = {row[0]: row[1] for row in rows}
+    conn.execute(
+        """
+        INSERT INTO compaction_staging
+            (id, session_name, source_memory_ids, preview, suggested_summary,
+             status, candidate_hash, source_updated_at_snapshot, expires_at,
+             created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, 'summary_staged', ?, ?, ?, ?, ?)
+        """,
+        (
+            candidate_id,
+            session,
+            json.dumps(source_ids),
+            "preview",
+            "compacted project summary",
+            "candidate-hash",
+            json.dumps(snapshot),
+            (now + timedelta(hours=1)).isoformat(),
+            now.isoformat(),
+            now.isoformat(),
+        ),
+    )
+    conn.commit()
+    return candidate_id
 
 
 # ---------------------------------------------------------------------------
@@ -403,6 +438,35 @@ def test_http_smart_recall_results_include_project_and_platform_fields(
     assert r["platform"] == "vscode"
 
 
+@pytest.mark.asyncio
+async def test_scoped_smart_recall_filters_system_fallback(monkeypatch, tmp_path):
+    from marm_mcp_server.services import recall as recall_module
+
+    mem = MARMMemory(str(tmp_path / "memory.db"))
+    mem._encoder_failed = True
+    monkeypatch.setattr(recall_module, "memory", mem)
+
+    with mem.get_connection() as conn:
+        _direct_insert_memory(
+            conn,
+            "marm_system",
+            "fallback system canary",
+            project=None,
+            platform=None,
+        )
+
+    result = await recall_module.smart_recall(
+        "canary",
+        session_name="empty-session",
+        project="proj-a",
+        platform="claude-code",
+        detail=3,
+    )
+
+    assert result["status"] == "no_results"
+    assert "system_results" not in result
+
+
 # ---------------------------------------------------------------------------
 # 5. Log entry tagging and include_logs filtering
 # ---------------------------------------------------------------------------
@@ -673,7 +737,62 @@ async def test_semantic_dedup_does_not_match_across_project_boundary(
 
 
 # ---------------------------------------------------------------------------
-# 8. Notebook tagging
+# 8. Compaction scope preservation
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_compaction_summary_inherits_source_project_and_platform(tmp_path):
+    from marm_mcp_server.services.compaction_apply import apply_compaction_write
+
+    mem = MARMMemory(str(tmp_path / "memory.db"))
+    mem._encoder_failed = True
+
+    with mem.get_connection() as conn:
+        source_a = _direct_insert_memory(
+            conn, "session-a", "source one", project="proj-a", platform="claude-code"
+        )
+        source_b = _direct_insert_memory(
+            conn, "session-a", "source two", project="proj-a", platform="claude-code"
+        )
+        candidate_id = _stage_compaction_candidate(
+            conn, "session-a", [source_a, source_b]
+        )
+
+    summary_id = await apply_compaction_write(mem, candidate_id)
+
+    with mem.get_connection() as conn:
+        row = conn.execute(
+            "SELECT project, platform FROM memories WHERE id = ?", (summary_id,)
+        ).fetchone()
+
+    assert row == ("proj-a", "claude-code")
+
+
+@pytest.mark.asyncio
+async def test_compaction_rejects_mixed_project_or_platform_sources(tmp_path):
+    from marm_mcp_server.services.compaction_apply import apply_compaction_write
+
+    mem = MARMMemory(str(tmp_path / "memory.db"))
+    mem._encoder_failed = True
+
+    with mem.get_connection() as conn:
+        source_a = _direct_insert_memory(
+            conn, "session-a", "source one", project="proj-a", platform="claude-code"
+        )
+        source_b = _direct_insert_memory(
+            conn, "session-a", "source two", project="proj-b", platform="claude-code"
+        )
+        candidate_id = _stage_compaction_candidate(
+            conn, "session-a", [source_a, source_b]
+        )
+
+    with pytest.raises(RuntimeError, match="multiple project/platform scopes"):
+        await apply_compaction_write(mem, candidate_id)
+
+
+# ---------------------------------------------------------------------------
+# 9. Notebook tagging
 # ---------------------------------------------------------------------------
 
 
@@ -729,3 +848,69 @@ async def test_notebook_add_null_tags_when_detection_empty(monkeypatch, tmp_path
     assert row is not None
     assert row[0] is None
     assert row[1] is None
+
+
+@pytest.mark.asyncio
+async def test_notebook_same_name_can_exist_in_different_scopes(monkeypatch, tmp_path):
+    from marm_mcp_server.services import notebook as nb_module
+
+    mem = MARMMemory(str(tmp_path / "nb-test.db"))
+    mem._encoder_failed = True
+    monkeypatch.setattr(nb_module, "memory", mem)
+
+    monkeypatch.setattr(nb_module, "MARM_PROJECT", "proj-a")
+    monkeypatch.setattr(nb_module, "MARM_PLATFORM", "claude-code")
+    await nb_module.notebook_dispatch(
+        action="add", name="shared-rule", data="project a rule"
+    )
+
+    monkeypatch.setattr(nb_module, "MARM_PROJECT", "proj-b")
+    monkeypatch.setattr(nb_module, "MARM_PLATFORM", "claude-code")
+    await nb_module.notebook_dispatch(
+        action="add", name="shared-rule", data="project b rule"
+    )
+
+    with sqlite3.connect(str(tmp_path / "nb-test.db")) as conn:
+        rows = conn.execute(
+            """
+            SELECT data, project, platform
+            FROM notebook_entries
+            WHERE name = 'shared-rule'
+            ORDER BY project
+            """
+        ).fetchall()
+
+    assert rows == [
+        ("project a rule", "proj-a", "claude-code"),
+        ("project b rule", "proj-b", "claude-code"),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_notebook_use_prefers_current_project_scope(monkeypatch, tmp_path):
+    from marm_mcp_server.services import notebook as nb_module
+
+    mem = MARMMemory(str(tmp_path / "nb-test.db"))
+    mem._encoder_failed = True
+    monkeypatch.setattr(nb_module, "memory", mem)
+
+    monkeypatch.setattr(nb_module, "MARM_PROJECT", "proj-a")
+    monkeypatch.setattr(nb_module, "MARM_PLATFORM", "claude-code")
+    await nb_module.notebook_dispatch(
+        action="add", name="shared-rule", data="project a rule"
+    )
+
+    monkeypatch.setattr(nb_module, "MARM_PROJECT", "proj-b")
+    monkeypatch.setattr(nb_module, "MARM_PLATFORM", "claude-code")
+    await nb_module.notebook_dispatch(
+        action="add", name="shared-rule", data="project b rule"
+    )
+
+    result = await nb_module.notebook_dispatch(
+        action="use", names="shared-rule", session_name="main"
+    )
+
+    assert result["status"] == "success"
+    assert result["entries"] == [
+        {"name": "shared-rule", "data": "project b rule"}
+    ]

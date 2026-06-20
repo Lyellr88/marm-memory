@@ -83,7 +83,11 @@ async def smart_recall(
             }
             if not search_all:
                 system_memories = await memory.recall_similar(
-                    query, session="marm_system", limit=limit
+                    query,
+                    session="marm_system",
+                    limit=limit,
+                    project=project,
+                    platform=platform,
                 )
                 if system_memories:
                     response["message"] = (
