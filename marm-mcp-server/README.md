@@ -6,7 +6,7 @@ mcp-name: io.github.Lyellr88/marm-mcp-server
      width="700"
      height="400">
 </picture>
-<h1 align="center">MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.14.1</h1>
+<h1 align="center">MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.14.2</h1>
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
@@ -15,9 +15,11 @@ mcp-name: io.github.Lyellr88/marm-mcp-server
 [![PyPI Downloads](https://static.pepy.tech/personalized-badge/marm-mcp-server?period=total&units=NONE&left_color=GREY&right_color=BLUE&left_text=pip-downloads)](https://pepy.tech/projects/marm-mcp-server)
 [![PyPI Version](https://img.shields.io/pypi/v/marm-mcp-server)](https://pypi.org/project/marm-mcp-server/)
 [![MCP Registry](https://img.shields.io/badge/MCP%20Registry-LIVE-blue)](https://registry.modelcontextprotocol.io/?q=marm-mcp)
+
 [![Discord](https://img.shields.io/badge/Discord-Join%20Community-5865F2?logo=discord&logoColor=white)](https://discord.gg/nhyJWPz2cf)
 [![Publish](https://github.com/Lyellr88/MARM-Systems/actions/workflows/publish-mcp.yml/badge.svg?branch=MARM-main)](https://github.com/Lyellr88/MARM-Systems/actions/workflows/publish-mcp.yml)
 [![CodeQL](https://github.com/Lyellr88/MARM-Systems/actions/workflows/github-code-scanning/codeql/badge.svg?branch=MARM-main)](https://github.com/Lyellr88/MARM-Systems/security/code-scanning)
+[![MARM-Systems MCP server](https://glama.ai/mcp/servers/Lyellr88/MARM-Systems/badges/score.svg)](https://glama.ai/mcp/servers/Lyellr88/MARM-Systems)
 
 > Contributions welcome! Browse [open issues](https://github.com/Lyellr88/MARM-Systems/issues) to contribute, or join the [MARM Discord](https://discord.gg/nhyJWPz2cf) to share workflows, get setup help, and connect with other builders.
 
@@ -239,9 +241,11 @@ The AI agent will automatically use the appropriate tools. Manual tool access is
 
 **Architecture note:** MARM groups related operations behind a single dispatching tooling to keep MCP discovery lean without hiding behavior. Domain-specific tools such as `marm_notebook(action=...)`, `marm_delete(type=...)`, and `marm_compaction(action=...)` group closely related operations behind explicit parameters, while recall, logging, and summaries stay separate so agents still choose the right capability clearly. This design keeps the MCP schema compact while preserving full functionality.
 
+**Project/platform attribution:** new memories, logs, and notebook entries are tagged with nullable `project` and `platform` metadata when MARM can detect them. `MARM_PROJECT` can override the detected working-directory project, and `MARM_PLATFORM` can override the detected client/platform. `marm_smart_recall` accepts optional `project` and `platform` filters, including when `include_logs=True`, so agents can ask for context from a specific project or client without losing normal cross-project search.
+
 | **Category** | **Tool** | **Description** |
 |--------------|----------|-----------------|
-| **Memory Intelligence** | `marm_smart_recall` | AI-powered recall across all memories. Uses FTS5 BM25 to filter exact-term candidates first, semantically re-ranks that bounded set by embedding similarity, falls back to bounded semantic scanning when FTS coverage is weak, and scores long memories through chunked embeddings while still returning one parent memory result. Supports global search with `search_all=True` and can return summary/context/full memory depth with `detail=1/2/3` |
+| **Memory Intelligence** | `marm_smart_recall` | AI-powered recall across all memories. Uses FTS5 BM25 to filter exact-term candidates first, semantically re-ranks that bounded set by embedding similarity, falls back to bounded semantic scanning when FTS coverage is weak, and scores long memories through chunked embeddings while still returning one parent memory result. Supports global search with `search_all=True`, attribution filters with `project`/`platform`, and summary/context/full memory depth with `detail=1/2/3` |
 | **Logging System** | `marm_log_entry` | Add structured session log entries. Session/topic routing, summary-cache invalidation, and context summary preparation are handled by the server |
 | | `marm_log_show` | Display all entries and sessions (filterable) |
 | | `marm_delete` | Delete a log session, log entry, or notebook entry (`type="log"\|"notebook"`) |

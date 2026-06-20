@@ -6,6 +6,7 @@ from typing import Optional
 
 from ..core.memory import memory
 from ..core.events import events
+from ..config.settings import MARM_PROJECT, MARM_PLATFORM
 
 
 async def _add(name: Optional[str], data: Optional[str], **_) -> dict:
@@ -22,11 +23,27 @@ async def _add(name: Optional[str], data: Optional[str], **_) -> dict:
             embedding_bytes = embedding.tobytes()
         except Exception:
             pass
+    project = MARM_PROJECT or None
+    platform = MARM_PLATFORM or None
+    now = datetime.now(timezone.utc).isoformat()
     with memory.get_connection() as conn:
-        conn.execute(
-            "INSERT OR REPLACE INTO notebook_entries (name, data, embedding, updated_at) VALUES (?, ?, ?, ?)",
-            (name, data, embedding_bytes, datetime.now(timezone.utc).isoformat()),
+        cursor = conn.execute(
+            """
+            UPDATE notebook_entries
+            SET data = ?, embedding = ?, updated_at = ?
+            WHERE name = ? AND project IS ? AND platform IS ?
+            """,
+            (data, embedding_bytes, now, name, project, platform),
         )
+        if cursor.rowcount == 0:
+            conn.execute(
+                """
+                INSERT INTO notebook_entries
+                    (name, data, embedding, updated_at, project, platform)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (name, data, embedding_bytes, now, project, platform),
+            )
         conn.commit()
     await events.emit("notebook_entry_added", {"name": name, "data": data})
     return {
@@ -42,13 +59,27 @@ async def _use(names: Optional[str], session_name: str = "main", **_) -> dict:
     name_list = [n.strip() for n in names.split(",") if n.strip()]
     if not name_list:
         return {"status": "error", "message": "names is required for action='use'"}
+    project = MARM_PROJECT or None
+    platform = MARM_PLATFORM or None
     activated_entries = []
     with memory.get_connection() as conn:
         for n in name_list:
             cursor = conn.execute(
-                "SELECT name, data FROM notebook_entries WHERE name = ?", (n,)
+                """
+                SELECT name, data FROM notebook_entries
+                WHERE name = ? AND project IS ? AND platform IS ?
+                """,
+                (n, project, platform),
             )
             result = cursor.fetchone()
+            if result is None and (project is not None or platform is not None):
+                result = conn.execute(
+                    """
+                    SELECT name, data FROM notebook_entries
+                    WHERE name = ? AND project IS NULL AND platform IS NULL
+                    """,
+                    (n,),
+                ).fetchone()
             if result:
                 activated_entries.append({"name": result[0], "data": result[1]})
     memory.set_active_notebook_entries(session_name, activated_entries)

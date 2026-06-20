@@ -2,7 +2,7 @@
 
 ## Complete Usage Guide for Memory-Augmented AI
 
-**MARM v2.14.1 - Universal MCP Server for AI Memory Intelligence**
+**MARM v2.14.2 - Universal MCP Server for AI Memory Intelligence**
 
 ---
 
@@ -267,7 +267,7 @@ MARM automatically categorizes content:
 
 | Category | Tool | Description | Usage Notes |
 |----------|------|-------------|-------------|
-| **🧠 Memory** | `marm_smart_recall` | FTS-first filter→semantic rerank across all memories, with bounded semantic fallback, chunk-aware long-memory scoring, and a conservative recency bias in final ranking | `query` (required), `limit` (default: 5), `session_name` (optional), `detail` (default: `1`). Use natural language queries or exact keys/commands |
+| **🧠 Memory** | `marm_smart_recall` | FTS-first filter→semantic rerank across all memories, with bounded semantic fallback, chunk-aware long-memory scoring, project/platform attribution filters, and a conservative recency bias in final ranking | `query` (required), `limit` (default: 5), `session_name` (optional), `detail` (default: `1`), `project` (optional), `platform` (optional). Use natural language queries or exact keys/commands |
 | **📚 Logging** | `marm_log_entry` | Add structured session log entries | Use structured entries for best results. Session/topic routing, context-summary preparation, and summary-cache invalidation are handled by the server |
 | | `marm_log_show` | Display all entries and sessions with filtering | `session_name` (optional) |
 | | `marm_delete` | Delete a log session, log entry, or notebook entry | `type="log"` or `type="notebook"`, `target` (required), `session_name` (optional for log entries) |
@@ -276,6 +276,8 @@ MARM automatically categorizes content:
 | **🧹 Maintenance** | `marm_compaction` | Agent-assisted memory compaction | `action="status"`, `"candidates"`, `"review"`, `"stage"`, `"apply"`, or `"discard"`. Used when MARM detects duplicate memory clusters and asks the agent to summarize them |
 
 **Internal automation:** lifecycle initialization, protocol delivery with periodic protocol-lite refresh, documentation refresh, current date context, summary-cache maintenance, serialized write queue handling, and system checks are no longer AI-facing tools. Documentation refresh uses `doc_index` hash tracking to avoid duplicate `marm_system` memories across restarts. Use the dashboard health panel for live server status, or `curl http://localhost:8001/health` for terminal checks.
+
+**Project/platform attribution:** MARM stores nullable `project` and `platform` columns on memories, log entries, and notebook entries. `MARM_PROJECT` overrides the detected working-directory project, while `MARM_PLATFORM` overrides client/platform detection. `marm_smart_recall(project=..., platform=...)` scopes memory recall and `include_logs=True` log search without changing the default unfiltered behavior.
 
 **Swarm / multi-agent modes:** Use CLI presets when starting an HTTP server shared by multiple agents:
 

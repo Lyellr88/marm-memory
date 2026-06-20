@@ -22,6 +22,8 @@ async def smart_recall(
     search_all: bool = False,
     include_logs: bool = False,
     detail: int = 1,
+    project: str = None,
+    platform: str = None,
 ) -> dict:
     try:
         search_session = None if search_all else session_name
@@ -29,41 +31,44 @@ async def smart_recall(
         log_results = []
         if include_logs:
             with memory.get_connection() as conn:
-                if search_all:
-                    log_rows = conn.execute(
-                        """
-                        SELECT session_name, topic, summary, entry_date
-                        FROM log_entries
-                        WHERE topic LIKE ? OR summary LIKE ?
-                        ORDER BY entry_date DESC
-                        LIMIT ?
-                        """,
-                        (f"%{query}%", f"%{query}%", limit),
-                    ).fetchall()
-                else:
-                    log_rows = conn.execute(
-                        """
-                        SELECT session_name, topic, summary, entry_date
-                        FROM log_entries
-                        WHERE (topic LIKE ? OR summary LIKE ?) AND session_name = ?
-                        ORDER BY entry_date DESC
-                        LIMIT ?
-                        """,
-                        (f"%{query}%", f"%{query}%", session_name, limit),
-                    ).fetchall()
+                log_base = """
+                    SELECT session_name, topic, summary, entry_date, project, platform
+                    FROM log_entries
+                    WHERE (topic LIKE ? OR summary LIKE ?)
+                """
+                log_params: list = [f"%{query}%", f"%{query}%"]
+                if not search_all:
+                    log_base += " AND session_name = ?"
+                    log_params.append(session_name)
+                if project is not None:
+                    log_base += " AND project = ?"
+                    log_params.append(project)
+                if platform is not None:
+                    log_base += " AND platform = ?"
+                    log_params.append(platform)
+                log_base += " ORDER BY entry_date DESC LIMIT ?"
+                log_params.append(limit)
+                log_rows = conn.execute(log_base, log_params).fetchall()
             log_results = [
                 {
                     "session_name": r[0],
                     "topic": r[1],
                     "summary": r[2],
                     "entry_date": r[3],
+                    "project": r[4],
+                    "platform": r[5],
                     "type": "log",
                 }
                 for r in log_rows
             ]
 
         similar_memories, scan_meta = await memory.recall_similar(
-            query, session=search_session, limit=limit, include_scan_metadata=True
+            query,
+            session=search_session,
+            limit=limit,
+            include_scan_metadata=True,
+            project=project,
+            platform=platform,
         )
 
         if not similar_memories:
@@ -78,7 +83,11 @@ async def smart_recall(
             }
             if not search_all:
                 system_memories = await memory.recall_similar(
-                    query, session="marm_system", limit=limit
+                    query,
+                    session="marm_system",
+                    limit=limit,
+                    project=project,
+                    platform=platform,
                 )
                 if system_memories:
                     response["message"] = (
@@ -122,6 +131,8 @@ async def smart_recall(
                 "similarity": mem.get("similarity", 0.0),
                 "timestamp": mem.get("timestamp"),
                 "context_type": mem.get("context_type", "general"),
+                "project": mem.get("project"),
+                "platform": mem.get("platform"),
             }
             for mem in similar_memories
         ]

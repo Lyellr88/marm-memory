@@ -10,6 +10,7 @@ from typing import Optional
 from ..core.models import LogEntryRequest, DeleteRequest
 from ..core.memory import memory
 from ..core.events import events
+from ..config.settings import MARM_PROJECT, MARM_PLATFORM
 
 router = APIRouter(prefix="", tags=["Logging"])
 
@@ -56,8 +57,8 @@ async def marm_log_entry(request: LogEntryRequest):
                     conn.execute(
                         """
                         INSERT INTO log_entries
-                            (id, session_name, entry_date, topic, summary, full_entry)
-                        VALUES (?, ?, ?, ?, ?, ?)
+                            (id, session_name, entry_date, topic, summary, full_entry, project, platform)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                         (
                             marker_id,
@@ -66,6 +67,8 @@ async def marm_log_entry(request: LogEntryRequest):
                             "session_start",
                             base_name,
                             formatted_entry,
+                            MARM_PROJECT or None,
+                            MARM_PLATFORM or None,
                         ),
                     )
                     try:
@@ -140,10 +143,19 @@ async def marm_log_entry(request: LogEntryRequest):
         with memory.get_connection() as conn:
             conn.execute(
                 """
-                INSERT INTO log_entries (id, session_name, entry_date, topic, summary, full_entry)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO log_entries (id, session_name, entry_date, topic, summary, full_entry, project, platform)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (entry_id, session, entry_date, topic, summary, formatted_entry),
+                (
+                    entry_id,
+                    session,
+                    entry_date,
+                    topic,
+                    summary,
+                    formatted_entry,
+                    MARM_PROJECT or None,
+                    MARM_PLATFORM or None,
+                ),
             )
             conn.execute(
                 """

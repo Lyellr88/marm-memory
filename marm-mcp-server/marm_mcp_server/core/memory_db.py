@@ -133,9 +133,11 @@ def init_database(db_path: str) -> None:
 
         conn.execute("""
             CREATE TABLE IF NOT EXISTS notebook_entries (
-                name TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
                 data TEXT NOT NULL,
                 embedding BLOB,
+                project TEXT DEFAULT NULL,
+                platform TEXT DEFAULT NULL,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
@@ -173,6 +175,64 @@ def init_database(db_path: str) -> None:
             conn.execute("ALTER TABLE memories ADD COLUMN compaction_role TEXT")
         if "compacted_into" not in mem_cols:
             conn.execute("ALTER TABLE memories ADD COLUMN compacted_into TEXT")
+        if "project" not in mem_cols:
+            conn.execute("ALTER TABLE memories ADD COLUMN project TEXT DEFAULT NULL")
+        if "platform" not in mem_cols:
+            conn.execute("ALTER TABLE memories ADD COLUMN platform TEXT DEFAULT NULL")
+
+        log_cols = {
+            row[1] for row in conn.execute("PRAGMA table_info(log_entries)").fetchall()
+        }
+        if "project" not in log_cols:
+            conn.execute("ALTER TABLE log_entries ADD COLUMN project TEXT DEFAULT NULL")
+        if "platform" not in log_cols:
+            conn.execute(
+                "ALTER TABLE log_entries ADD COLUMN platform TEXT DEFAULT NULL"
+            )
+
+        nb_info = conn.execute("PRAGMA table_info(notebook_entries)").fetchall()
+        nb_cols = {row[1] for row in nb_info}
+        if "project" not in nb_cols:
+            conn.execute(
+                "ALTER TABLE notebook_entries ADD COLUMN project TEXT DEFAULT NULL"
+            )
+        if "platform" not in nb_cols:
+            conn.execute(
+                "ALTER TABLE notebook_entries ADD COLUMN platform TEXT DEFAULT NULL"
+            )
+        if any(row[1] == "name" and row[5] for row in nb_info):
+            conn.execute("ALTER TABLE notebook_entries RENAME TO notebook_entries_old")
+            conn.execute("""
+                CREATE TABLE notebook_entries (
+                    name TEXT NOT NULL,
+                    data TEXT NOT NULL,
+                    embedding BLOB,
+                    project TEXT DEFAULT NULL,
+                    platform TEXT DEFAULT NULL,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            old_cols = {
+                row[1]
+                for row in conn.execute(
+                    "PRAGMA table_info(notebook_entries_old)"
+                ).fetchall()
+            }
+            project_expr = "project" if "project" in old_cols else "NULL"
+            platform_expr = "platform" if "platform" in old_cols else "NULL"
+            conn.execute(f"""
+                INSERT INTO notebook_entries
+                    (name, data, embedding, project, platform, created_at, updated_at)
+                SELECT name, data, embedding, {project_expr}, {platform_expr},
+                       created_at, updated_at
+                FROM notebook_entries_old
+            """)
+            conn.execute("DROP TABLE notebook_entries_old")
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_notebook_entries_scope_unique "
+            "ON notebook_entries(name, COALESCE(project, ''), COALESCE(platform, ''))"
+        )
 
         conn.execute("""
             CREATE TABLE IF NOT EXISTS compaction_staging (

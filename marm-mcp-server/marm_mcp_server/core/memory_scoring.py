@@ -117,35 +117,31 @@ def _fetch_and_score_embedding_rows(
     scan_limit: int,
     query_embedding,
     limit: int,
+    project: str | None = None,
+    platform: str | None = None,
 ):
     conn = sqlite3.connect(db_path, timeout=30.0)
     try:
         conn.row_factory = sqlite3.Row
-        if session is None:
-            memories = conn.execute(
-                """
-                SELECT id, session_name, content, embedding, timestamp, context_type, metadata
-                FROM memories
-                WHERE embedding IS NOT NULL
-                  AND (compaction_role IS NULL OR compaction_role != 'source')
-                ORDER BY timestamp DESC
-                LIMIT ?
-                """,
-                (scan_limit + 1,),
-            ).fetchall()
-        else:
-            memories = conn.execute(
-                """
-                SELECT id, session_name, content, embedding, timestamp, context_type, metadata
-                FROM memories
-                WHERE embedding IS NOT NULL
-                  AND session_name = ?
-                  AND (compaction_role IS NULL OR compaction_role != 'source')
-                ORDER BY timestamp DESC
-                LIMIT ?
-                """,
-                (session, scan_limit + 1),
-            ).fetchall()
+        base = """
+            SELECT id, session_name, content, embedding, timestamp, context_type, metadata, project, platform
+            FROM memories
+            WHERE embedding IS NOT NULL
+              AND (compaction_role IS NULL OR compaction_role != 'source')
+        """
+        params: list = []
+        if session is not None:
+            base += " AND session_name = ?"
+            params.append(session)
+        if project is not None:
+            base += " AND project = ?"
+            params.append(project)
+        if platform is not None:
+            base += " AND platform = ?"
+            params.append(platform)
+        base += " ORDER BY timestamp DESC LIMIT ?"
+        params.append(scan_limit + 1)
+        memories = conn.execute(base, params).fetchall()
 
         scan_truncated = len(memories) > scan_limit
         memories = memories[:scan_limit]
@@ -173,13 +169,15 @@ def _fetch_and_score_fts_rows(
     session: str | None,
     fts_query: str,
     limit: int,
+    project: str | None = None,
+    platform: str | None = None,
 ) -> list[tuple]:
     conn = sqlite3.connect(db_path, timeout=30.0)
     try:
         conn.row_factory = sqlite3.Row
         base = """
             SELECT m.id, m.session_name, m.content, m.timestamp,
-                   m.context_type, m.metadata,
+                   m.context_type, m.metadata, m.project, m.platform,
                    bm25(memories_fts) AS score
             FROM memories_fts
             JOIN memories m ON memories_fts.rowid = m.rowid
@@ -190,6 +188,12 @@ def _fetch_and_score_fts_rows(
         if session is not None:
             base += " AND m.session_name = ?"
             params.append(session)
+        if project is not None:
+            base += " AND m.project = ?"
+            params.append(project)
+        if platform is not None:
+            base += " AND m.platform = ?"
+            params.append(platform)
         base += " ORDER BY score LIMIT ?"
         params.append(limit)
         rows = conn.execute(base, params).fetchall()
@@ -214,6 +218,8 @@ def _fetch_fts_candidate_ids(
     session: str | None,
     fts_query: str,
     limit: int,
+    project: str | None = None,
+    platform: str | None = None,
 ) -> list[str]:
     """Return top N memory IDs from FTS5 by BM25 rank. No scoring needed."""
     conn = sqlite3.connect(db_path, timeout=30.0)
@@ -229,6 +235,12 @@ def _fetch_fts_candidate_ids(
         if session is not None:
             base += " AND m.session_name = ?"
             params.append(session)
+        if project is not None:
+            base += " AND m.project = ?"
+            params.append(project)
+        if platform is not None:
+            base += " AND m.platform = ?"
+            params.append(platform)
         base += " ORDER BY bm25(memories_fts) LIMIT ?"
         params.append(limit)
         rows = conn.execute(base, params).fetchall()
@@ -255,7 +267,7 @@ def _fetch_and_score_by_ids(
         placeholders = ",".join("?" * len(memory_ids))
         memories = conn.execute(
             f"""
-            SELECT id, session_name, content, embedding, timestamp, context_type, metadata
+            SELECT id, session_name, content, embedding, timestamp, context_type, metadata, project, platform
             FROM memories
             WHERE id IN ({placeholders})
               AND (compaction_role IS NULL OR compaction_role != 'source')

@@ -52,6 +52,14 @@ class SmartRecallRequest(BaseModel):
         le=3,
         description="Retrieval depth: 1=summary (~200 chars), 2=context (~500 chars), 3=full content",
     )
+    project: Optional[str] = Field(
+        default=None,
+        description="Filter to a specific project name (e.g. 'marm-systems'); omit to search all",
+    )
+    platform: Optional[str] = Field(
+        default=None,
+        description="Filter to a specific platform (e.g. 'claude-code', 'cursor'); omit to search all",
+    )
 
 
 class DeleteRequest(BaseModel):

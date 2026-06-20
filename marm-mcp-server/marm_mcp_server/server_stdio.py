@@ -184,6 +184,8 @@ from marm_mcp_server.config.settings import (  # noqa: E402
     SERVER_VERSION,
     DEFAULT_DB_PATH,
     SEMANTIC_SEARCH_AVAILABLE,
+    MARM_PROJECT,
+    MARM_PLATFORM,
 )
 
 mcp = FastMCP("MARM MCP Server")
@@ -198,6 +200,8 @@ async def marm_smart_recall(
     search_all: bool = False,
     include_logs: bool = False,
     detail: int = 1,
+    project: Optional[str] = None,
+    platform: Optional[str] = None,
 ) -> dict:
     """
     🧠 Recall memories by semantic similarity or keyword match.
@@ -215,11 +219,20 @@ async def marm_smart_recall(
         1 = summary only (~200 chars)
         2 = extended context (~500 chars)
         3 = full content
+    - project: filter results to a specific project (e.g. "marm-systems"); omit to search all
+    - platform: filter results to a specific platform (e.g. "claude-code", "cursor"); omit to search all
 
-    Returns: status, results list with id/content/score, results_count
+    Returns: status, results list with id/content/score/project/platform, results_count
     """
     return await smart_recall(
-        query, session_name, limit, search_all, include_logs, detail
+        query,
+        session_name,
+        limit,
+        search_all,
+        include_logs,
+        detail,
+        project=project,
+        platform=platform,
     )
 
 
@@ -278,8 +291,8 @@ async def marm_log_entry(
                     conn.execute(
                         """
                         INSERT INTO log_entries
-                            (id, session_name, entry_date, topic, summary, full_entry)
-                        VALUES (?, ?, ?, ?, ?, ?)
+                            (id, session_name, entry_date, topic, summary, full_entry, project, platform)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                         (
                             marker_id,
@@ -288,6 +301,8 @@ async def marm_log_entry(
                             "session_start",
                             base_name,
                             formatted_entry,
+                            MARM_PROJECT or None,
+                            MARM_PLATFORM or None,
                         ),
                     )
                     try:
@@ -362,10 +377,19 @@ async def marm_log_entry(
         with memory.get_connection() as conn:
             conn.execute(
                 """
-                INSERT INTO log_entries (id, session_name, entry_date, topic, summary, full_entry)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO log_entries (id, session_name, entry_date, topic, summary, full_entry, project, platform)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (entry_id, session, entry_date, topic, summary, formatted_entry),
+                (
+                    entry_id,
+                    session,
+                    entry_date,
+                    topic,
+                    summary,
+                    formatted_entry,
+                    MARM_PROJECT or None,
+                    MARM_PLATFORM or None,
+                ),
             )
             conn.execute(
                 """

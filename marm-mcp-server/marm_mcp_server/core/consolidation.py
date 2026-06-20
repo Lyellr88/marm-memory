@@ -4,6 +4,7 @@ import hashlib
 import logging
 from typing import Optional
 
+from ..config.settings import MARM_PROJECT, MARM_PLATFORM
 
 logger = logging.getLogger(__name__)
 
@@ -27,8 +28,8 @@ def find_exact_duplicate(
     as a new row rather than silently deduplicating different content.
     """
     rows = conn.execute(
-        "SELECT id, content FROM memories WHERE content_hash = ? AND session_name = ?",
-        (content_hash, session_name),
+        "SELECT id, content FROM memories WHERE content_hash = ? AND session_name = ? AND project IS ? AND platform IS ?",
+        (content_hash, session_name, MARM_PROJECT or None, MARM_PLATFORM or None),
     ).fetchall()
     for row_id, row_content in rows:
         if normalize_content(row_content) == normalized_content:
@@ -48,7 +49,12 @@ async def find_semantic_duplicate(
         if query_vec is None and not memory._load_encoder_lazily():
             return None
         results = await memory.recall_similar(
-            content, session=session_name, limit=1, query_vec=query_vec
+            content,
+            session=session_name,
+            limit=1,
+            query_vec=query_vec,
+            project=MARM_PROJECT or None,
+            platform=MARM_PLATFORM or None,
         )
         if results and results[0]["similarity"] >= threshold:
             return results[0]["id"]

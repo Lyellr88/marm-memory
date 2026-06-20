@@ -126,7 +126,8 @@ async def apply_compaction_write(memory_store, candidate_id: str) -> str:
             snapshot = json.loads(snapshot_json)
             placeholders = ",".join("?" * len(source_ids))
             current_rows = conn.execute(
-                f"SELECT id, session_name, content_hash, compaction_role, metadata "
+                f"SELECT id, session_name, content_hash, compaction_role, "
+                f"metadata, project, platform "
                 f"FROM memories WHERE id IN ({placeholders})",
                 source_ids,
             ).fetchall()
@@ -171,7 +172,21 @@ async def apply_compaction_write(memory_store, candidate_id: str) -> str:
                     f"source memories already compacted: {already_compacted}"
                 )
 
-            for mem_id, _, content_hash, _, _ in current_rows:
+            source_scopes = {(r[5], r[6]) for r in current_rows}
+            if len(source_scopes) != 1:
+                conn.execute(
+                    "UPDATE compaction_staging SET status = 'stale', updated_at = ? "
+                    "WHERE id = ?",
+                    (now, candidate_id),
+                )
+                conn.execute("COMMIT")
+                _committed = True
+                raise RuntimeError(
+                    f"source memories span multiple project/platform scopes: {source_scopes}"
+                )
+            summary_project, summary_platform = next(iter(source_scopes))
+
+            for mem_id, _, content_hash, _, _, _, _ in current_rows:
                 if snapshot.get(mem_id) != content_hash:
                     conn.execute(
                         "UPDATE compaction_staging SET status = 'stale', updated_at = ? "
@@ -204,14 +219,16 @@ async def apply_compaction_write(memory_store, candidate_id: str) -> str:
                 "source_count": len(source_ids),
                 "compacted_at": compacted_at,
                 "strategy": "semantic_cluster_summary",
+                "project": summary_project,
+                "platform": summary_platform,
             }
 
             conn.execute(
                 """
                 INSERT INTO memories
                     (id, session_name, content, embedding, content_hash, timestamp,
-                     context_type, metadata, compaction_role)
-                VALUES (?, ?, ?, ?, ?, ?, 'general', ?, 'summary')
+                     context_type, metadata, compaction_role, project, platform)
+                VALUES (?, ?, ?, ?, ?, ?, 'general', ?, 'summary', ?, ?)
                 """,
                 (
                     summary_id,
@@ -221,10 +238,12 @@ async def apply_compaction_write(memory_store, candidate_id: str) -> str:
                     summary_content_hash,
                     compacted_at,
                     json.dumps(summary_metadata),
+                    summary_project,
+                    summary_platform,
                 ),
             )
 
-            for mem_id, _, _, _, metadata_json in current_rows:
+            for mem_id, _, _, _, metadata_json, _, _ in current_rows:
                 existing_meta = json.loads(metadata_json) if metadata_json else {}
                 existing_meta.update(
                     {
