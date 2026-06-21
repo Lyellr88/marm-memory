@@ -328,7 +328,7 @@ Good places to help:
 - Improve install docs and platform-specific setup notes
 - Report bugs with clear reproduction steps
 - Suggest practical memory workflows and tool improvements
-- Submit small, focused pull requests
+- Check out open [issues](https://github.com/Lyellr88/MARM-Systems/issues)
 
 > 💡 Want to get your name on this list? Check out our [CONTRIBUTING.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/CONTRIBUTING.md) guide to get started!
 
