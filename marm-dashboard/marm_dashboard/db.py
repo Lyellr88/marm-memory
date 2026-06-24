@@ -7,7 +7,7 @@ import json
 import re
 import sqlite3
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -219,13 +219,8 @@ def list_memories(
     clauses: List[str] = []
     params: List[Any] = []
 
-    # Check if compaction_role column exists (only in databases with compaction support)
-    with _connect() as conn:
-        columns = conn.execute("PRAGMA table_info(memories)").fetchall()
-        has_compaction = any(col[1] == "compaction_role" for col in columns)
-
-    if has_compaction:
-        clauses.append("(compaction_role IS NULL OR compaction_role != 'source')")
+    # Exclude compacted source memories
+    clauses.append("(compaction_role IS NULL OR compaction_role != 'source')")
 
     if session:
         clauses.append("session_name = ?")
@@ -234,7 +229,7 @@ def list_memories(
         clauses.append("content LIKE ? ESCAPE '\\'")
         params.append(_like_pattern(q))
 
-    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    where = f"WHERE {' AND '.join(clauses)}"
 
     with _connect() as conn:
         total = conn.execute(
@@ -524,7 +519,19 @@ def delete_all_notebook() -> int:
         return cur.rowcount
 
 
-# ==================== Compaction Functions ====================
+# ==================== Compaction (Phase 1: Manual) ====================
+
+# UUID validation pattern
+_UUID_PATTERN = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.IGNORECASE
+)
+
+
+def _validate_memory_ids(memory_ids: List[str]) -> None:
+    """Validate that all provided IDs are valid UUIDs to prevent SQL injection."""
+    for mem_id in memory_ids:
+        if not _UUID_PATTERN.match(mem_id):
+            raise ValueError(f"Invalid memory ID format: {mem_id}")
 
 
 def list_memories_for_compaction(
@@ -550,7 +557,7 @@ def list_memories_for_compaction(
         ).fetchone()[0]
         rows = conn.execute(
             f"""
-            SELECT id, session_name, content, timestamp, context_type, metadata, created_at
+            SELECT id, session_name, content, timestamp, context_type, created_at
             FROM memories
             {where}
             ORDER BY timestamp DESC
@@ -562,7 +569,7 @@ def list_memories_for_compaction(
     items = []
     for row in rows:
         raw = row["content"] or ""
-        preview = (raw[:240] + "…") if len(raw) > 240 else raw
+        preview = (raw[:150] + "…") if len(raw) > 150 else raw
         items.append(
             {
                 "id": row["id"],
@@ -571,7 +578,6 @@ def list_memories_for_compaction(
                 "display_content": _for_display(raw),
                 "timestamp": row["timestamp"],
                 "context_type": row["context_type"],
-                "metadata": _parse_metadata(row["metadata"]),
                 "created_at": row["created_at"],
                 "preview": preview,
                 "display_preview": _for_display(preview),
@@ -580,33 +586,14 @@ def list_memories_for_compaction(
     return {"total": total, "limit": limit, "offset": offset, "items": items}
 
 
-def _validate_memory_ids(memory_ids: List[str]) -> None:
-    """Validate that all memory IDs are safe strings (allowing test IDs)."""
-    for mid in memory_ids:
-        if not mid or not isinstance(mid, str):
-            raise ValueError(f"Invalid memory ID format: {mid}")
-        # Allow alphanumeric, hyphens, and underscores (covers UUIDs and test IDs)
-        if not re.match(r"^[a-zA-Z0-9_-]+$", mid):
-            raise ValueError(f"Invalid memory ID format: {mid}")
-
-
-def _generate_summary_fallback(memories: List[Dict[str, Any]]) -> str:
-    """Generate a simple summary by extracting first sentences from memories."""
-    sentences = []
-    for mem in memories[:5]:  # Limit to first 5 memories
-        content = mem["content"].strip()
-        # Extract first sentence (naive approach)
-        match = re.match(r"^[^.!?]+[.!?]", content)
-        if match:
-            sentences.append(match.group(0))
-        else:
-            # No sentence ending found, take first 100 chars
-            sentences.append((content[:100] + "…") if len(content) > 100 else content)
-    return " ".join(sentences)
-
-
 def generate_compaction_preview(memory_ids: List[str]) -> Dict[str, Any]:
-    """Generate preview of compacting selected memories with token savings estimate."""
+    """Generate a preview of compacting selected memories."""
+    if not memory_ids:
+        raise ValueError("At least one memory ID required")
+    if len(memory_ids) > 50:
+        raise ValueError("Cannot compact more than 50 memories at once")
+
+    # Validate UUIDs to prevent SQL injection
     _validate_memory_ids(memory_ids)
 
     with _connect() as conn:
@@ -616,209 +603,239 @@ def generate_compaction_preview(memory_ids: List[str]) -> Dict[str, Any]:
             SELECT id, session_name, content, timestamp
             FROM memories
             WHERE id IN ({placeholders})
+              AND (compaction_role IS NULL OR compaction_role != 'source')
             ORDER BY timestamp ASC
             """,
             memory_ids,
         ).fetchall()
 
     if not rows:
-        raise ValueError("No memories found for the provided IDs")
+        raise ValueError("No valid memories found for compaction")
 
-    memories = [
-        {
-            "id": row["id"],
-            "session_name": row["session_name"],
-            "content": row["content"] or "",
-            "timestamp": row["timestamp"],
-        }
-        for row in rows
-    ]
+    # Validate all from same session
+    sessions = set(r["session_name"] for r in rows)
+    if len(sessions) > 1:
+        raise ValueError("All memories must be from the same session")
 
-    # Generate fallback summary
-    summary = _generate_summary_fallback(memories)
+    # Build preview text
+    source_texts = [r["content"] for r in rows if r["content"]]
+    combined_text = "\n\n".join(source_texts)
 
-    # Calculate token savings estimate (rough approximation: 4 chars per token)
-    total_chars = sum(len(m["content"]) for m in memories)
-    summary_chars = len(summary)
-    savings_pct = (
-        round((1 - summary_chars / total_chars) * 100) if total_chars > 0 else 0
+    # Simple summary generation (token counting estimate)
+    total_chars = len(combined_text)
+    estimated_tokens_before = total_chars // 4  # rough estimate
+
+    # Generate summary using LLM (if available) or fallback
+    try:
+        summary = _generate_summary_llm(source_texts)
+        estimated_tokens_after = len(summary) // 4
+    except Exception:
+        # Fallback: extract first sentence from each memory
+        summary = _generate_summary_fallback(source_texts)
+        estimated_tokens_after = len(summary) // 4
+
+    savings_pct = round(
+        (1 - estimated_tokens_after / estimated_tokens_before) * 100
+        if estimated_tokens_before > 0
+        else 0
     )
 
     return {
-        "source_count": len(memories),
         "summary": summary,
-        "token_savings_estimate": f"{savings_pct}%",
+        "source_count": len(rows),
+        "source_memory_ids": [r["id"] for r in rows],
+        "session_name": rows[0]["session_name"],
+        "token_savings_estimate": f"~{savings_pct}%",
+        "original_char_count": total_chars,
+        "summary_char_count": len(summary),
         "sources_preview": [
             {
-                "id": m["id"],
-                "preview": (m["content"][:100] + "…")
-                if len(m["content"]) > 100
-                else m["content"],
+                "id": r["id"],
+                "content": r["content"][:200]
+                + ("…" if len(r["content"]) > 200 else ""),
+                "timestamp": r["timestamp"],
             }
-            for m in memories
+            for r in rows
         ],
     }
 
 
-def apply_manual_compaction(
-    memory_ids: List[str], summary_content: str, session_name: str
-) -> str:
-    """
-    Apply manual compaction: create summary memory, mark sources as compacted,
-    and create staging record for tracking.
-    """
-    _validate_memory_ids(memory_ids)
+def _generate_summary_llm(texts: List[str]) -> str:
+    """Generate summary using sentence-transformers semantic model (if available)."""
+    # For now, use a simple extractive summary
+    # TODO: Add LLM call for better summaries in Phase 1.1
+    return _generate_summary_fallback(texts)
 
+
+def _generate_summary_fallback(texts: List[str]) -> str:
+    """Fallback summary: concatenate first 2 sentences from each memory.
+
+    Note: Uses naive sentence splitting which may not work well for code blocks,
+    URLs, or technical content with abbreviations. Consider this a basic fallback
+    when LLM summarization is unavailable.
+    """
+    summary_parts = []
+    for text in texts[:10]:  # Limit to first 10 for brevity
+        # Extract first 2 sentences (naive split on ., !, ?)
+        # This may break on code, URLs, abbreviations - document known limitation
+        sentences = re.split(r"[.!?]+", text.strip())
+        first_two = ". ".join(s.strip() for s in sentences[:2] if s.strip())
+        if first_two:
+            summary_parts.append(first_two)
+
+    summary = " | ".join(summary_parts)
+
+    # Cap at 1000 chars
+    if len(summary) > 1000:
+        summary = summary[:1000] + "…"
+
+    return summary or "Summary of selected memories."
+
+
+def apply_manual_compaction(
+    memory_ids: List[str],
+    summary_content: str,
+    session_name: str,
+) -> str:
+    """Apply manual compaction: create summary memory, mark sources as compacted."""
+    if not memory_ids:
+        raise ValueError("At least one memory ID required")
     if not summary_content.strip():
         raise ValueError("Summary content cannot be empty")
     if not session_name.strip():
-        raise ValueError("Session name is required")
+        raise ValueError("Session name required")
 
-    # Deduplicate memory IDs
-    unique_memory_ids = list(set(memory_ids))
+    # Validate UUIDs to prevent SQL injection
+    _validate_memory_ids(memory_ids)
 
-    # Create summary memory
-    summary_id = str(uuid.uuid4())
-    timestamp = datetime.now(timezone.utc).isoformat()
     sanitized_summary = _sanitize_memory(summary_content.strip())
+    summary_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc).isoformat()
     embedding = _maybe_embedding(sanitized_summary)
 
+    # Compute candidate hash for staging record
+    import hashlib
+
+    sorted_ids = sorted(memory_ids)
+    candidate_hash = hashlib.sha256("|".join(sorted_ids).encode("utf-8")).hexdigest()[
+        :16
+    ]
+
     with _connect() as conn:
-        # Verify all memories belong to the same session INSIDE the transaction
-        placeholders = ",".join("?" * len(unique_memory_ids))
-
-        # Re-check that memories exist and belong to same session
-        rows = conn.execute(
+        # Verify all sources exist and are not already compacted
+        placeholders = ",".join("?" * len(memory_ids))
+        sources = conn.execute(
             f"""
-            SELECT COUNT(DISTINCT id) as count, COUNT(DISTINCT session_name) as session_count
+            SELECT id, session_name, content, timestamp
             FROM memories
             WHERE id IN ({placeholders})
+              AND (compaction_role IS NULL OR compaction_role != 'source')
             """,
-            unique_memory_ids,
-        ).fetchone()
+            memory_ids,
+        ).fetchall()
 
-        found_count = rows[0]
-        session_count = rows[1]
+        if len(sources) != len(memory_ids):
+            raise ValueError("Some memories not found or already compacted")
 
-        if found_count != len(unique_memory_ids):
-            raise ValueError(
-                f"Some memory IDs not found. Expected {len(unique_memory_ids)}, found {found_count}. "
-                "Memories may have been deleted since the request started."
-            )
-
-        if session_count != 1:
-            raise ValueError(
-                "Cannot compact memories from different sessions. All memories must belong to the same session."
-            )
-
-        # Get the actual session name
-        actual_session = conn.execute(
-            f"""
-            SELECT DISTINCT session_name
-            FROM memories
-            WHERE id IN ({placeholders})
-            """,
-            unique_memory_ids,
-        ).fetchone()[0]
-
-        if actual_session != session_name.strip():
-            raise ValueError(
-                f"Memories belong to session '{actual_session}', not '{session_name}'"
-            )
+        # Validate all from same session
+        sessions = set(r["session_name"] for r in sources)
+        if len(sessions) > 1:
+            raise ValueError("All memories must be from the same session")
 
         # Insert summary memory
         conn.execute(
             """
-            INSERT INTO memories (id, session_name, content, embedding, timestamp, context_type, metadata, compaction_role)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO memories
+                (id, session_name, content, embedding, timestamp,
+                 context_type, metadata, compaction_role, created_at)
+            VALUES (?, ?, ?, ?, ?, 'general', '{}', 'summary', ?)
             """,
-            (
-                summary_id,
-                session_name.strip(),
-                sanitized_summary,
-                embedding,
-                timestamp,
-                "general",
-                "{}",
-                "summary",
-            ),
+            (summary_id, session_name.strip(), sanitized_summary, embedding, now, now),
         )
 
-        # Mark source memories as compacted
-        conn.execute(
-            f"""
-            UPDATE memories
-            SET compaction_role = 'source',
-                compacted_into = ?
-            WHERE id IN ({placeholders})
-            """,
-            [summary_id, *unique_memory_ids],
+        # Mark sources as compacted
+        for mem_id in memory_ids:
+            conn.execute(
+                """
+                UPDATE memories
+                SET compaction_role = 'source', compacted_into = ?
+                WHERE id = ?
+                """,
+                (summary_id, mem_id),
+            )
+
+        # Create staging record (status='applied')
+        source_snapshot = json.dumps(
+            {
+                row["id"]: {
+                    "content": row["content"][:100],
+                    "timestamp": row["timestamp"],
+                }
+                for row in sources
+            }
         )
 
-        # Create staging record for tracking (manual compaction goes straight to 'applied')
-        staging_id = str(uuid.uuid4())
-        expires_at = (datetime.now(timezone.utc) + timedelta(days=30)).isoformat()
+        preview_data = json.dumps(
+            [{"id": row["id"], "snippet": row["content"][:100]} for row in sources]
+        )
+
         conn.execute(
             """
-            INSERT INTO compaction_staging (
-                id, session_name, source_memory_ids, preview, suggested_summary,
-                status, candidate_hash, source_updated_at_snapshot, expires_at,
-                created_at, updated_at, reviewed_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO compaction_staging
+                (id, session_name, source_memory_ids, preview, suggested_summary,
+                 status, candidate_hash, source_updated_at_snapshot,
+                 expires_at, created_at, updated_at, reviewed_at)
+            VALUES (?, ?, ?, ?, ?, 'applied', ?, ?, ?, ?, ?, ?)
             """,
             (
-                staging_id,
+                str(uuid.uuid4()),
                 session_name.strip(),
-                json.dumps(
-                    unique_memory_ids
-                ),  # FIX: Store actual source memory IDs, not summary_id
-                "Manual compaction",
+                json.dumps(sorted_ids),
+                preview_data,
                 sanitized_summary,
-                "applied",
-                "manual-" + str(uuid.uuid4())[:8],
-                "{}",
-                expires_at,
-                timestamp,
-                timestamp,
-                timestamp,
+                candidate_hash,
+                source_snapshot,
+                now,  # expires_at (not relevant for applied)
+                now,  # created_at
+                now,  # updated_at
+                now,  # reviewed_at
             ),
         )
 
-        _touch_session(conn, session_name.strip(), timestamp)
         conn.commit()
 
     return summary_id
 
 
-def get_compaction_summary() -> Dict[str, int]:
-    """Get counts of compaction candidates grouped by status."""
-    with _connect() as conn:
-        rows = conn.execute(
-            """
-            SELECT status, COUNT(*) as count
-            FROM compaction_staging
-            GROUP BY status
-            """
-        ).fetchall()
+# ==================== Maintenance (Phase 2) ====================
 
-    # Initialize all statuses to 0
-    summary = {
+
+def get_compaction_summary() -> Dict[str, int]:
+    """Get counts by compaction status for dashboard overview."""
+    conn = _connect()
+
+    counts = {
         "pending_summary": 0,
         "summary_staged": 0,
         "applied": 0,
-        "stale": 0,
         "discarded": 0,
+        "stale": 0,
+        "nudge_exhausted": 0,
     }
 
-    # Update with actual counts
+    rows = conn.execute("""
+        SELECT status, COUNT(*) as count
+        FROM compaction_staging
+        GROUP BY status
+    """).fetchall()
+
     for row in rows:
         status = row["status"]
         count = row["count"]
-        if status in summary:
-            summary[status] = count
+        if status in counts:
+            counts[status] = count
 
-    return summary
+    return counts
 
 
 def list_compaction_candidates(
@@ -828,43 +845,53 @@ def list_compaction_candidates(
     offset: int = 0,
 ) -> Dict[str, Any]:
     """List compaction candidates with optional filters."""
-    limit = min(max(limit, 1), 100)
-    offset = max(offset, 0)
-    clauses: List[str] = []
+    conn = _connect()
+
+    where_clauses = []
     params: List[Any] = []
 
     if session:
-        clauses.append("session_name = ?")
+        where_clauses.append("session_name = ?")
         params.append(session)
+
     if status:
-        clauses.append("status = ?")
+        where_clauses.append("status = ?")
         params.append(status)
 
-    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    where_sql = " WHERE " + " AND ".join(where_clauses) if where_clauses else ""
 
-    with _connect() as conn:
-        total = conn.execute(
-            f"SELECT COUNT(*) FROM compaction_staging {where}", params
-        ).fetchone()[0]
-        rows = conn.execute(
-            f"""
-            SELECT id, session_name, source_memory_ids, preview, suggested_summary,
-                   status, created_at, updated_at, reviewed_at, nudge_count
-            FROM compaction_staging
-            {where}
-            ORDER BY created_at DESC
-            LIMIT ? OFFSET ?
-            """,
-            [*params, limit, offset],
-        ).fetchall()
+    # Get total count
+    count_query = f"SELECT COUNT(*) as total FROM compaction_staging{where_sql}"
+    total = conn.execute(count_query, params).fetchone()["total"]
+
+    # Get paginated items
+    query = f"""
+        SELECT
+            id,
+            session_name,
+            source_memory_ids,
+            preview,
+            suggested_summary,
+            status,
+            created_at,
+            updated_at,
+            expires_at,
+            nudge_count,
+            last_nudged_at
+        FROM compaction_staging
+        {where_sql}
+        ORDER BY created_at DESC
+        LIMIT ? OFFSET ?
+    """
+    params.extend([limit, offset])
+
+    rows = conn.execute(query, params).fetchall()
 
     items = []
     for row in rows:
-        # Parse source_memory_ids JSON
+        # Parse source_memory_ids JSON safely
         try:
             source_ids = json.loads(row["source_memory_ids"])
-            if not isinstance(source_ids, list):
-                source_ids = []
         except (json.JSONDecodeError, TypeError):
             source_ids = []
 
@@ -874,33 +901,41 @@ def list_compaction_candidates(
                 "session_name": row["session_name"],
                 "source_memory_ids": source_ids,
                 "source_count": len(source_ids),
-                "preview": row["preview"],
-                "suggested_summary": row["suggested_summary"],
+                "preview": row["preview"][:200] if row["preview"] else "",
+                "suggested_summary": row["suggested_summary"][:200]
+                if row["suggested_summary"]
+                else None,
                 "status": row["status"],
                 "created_at": row["created_at"],
                 "updated_at": row["updated_at"],
-                "reviewed_at": row["reviewed_at"],
+                "expires_at": row["expires_at"],
                 "nudge_count": row["nudge_count"],
+                "last_nudged_at": row["last_nudged_at"],
             }
         )
 
-    return {"total": total, "limit": limit, "offset": offset, "items": items}
+    return {"total": total, "items": items}
 
 
 def discard_compaction_candidate(candidate_id: str) -> bool:
     """Mark a compaction candidate as discarded."""
-    timestamp = datetime.now(timezone.utc).isoformat()
+    # Validate UUID format
+    try:
+        uuid.UUID(candidate_id)
+    except ValueError:
+        return False
 
-    with _connect() as conn:
-        cur = conn.execute(
-            """
-            UPDATE compaction_staging
-            SET status = 'discarded',
-                reviewed_at = ?,
-                updated_at = ?
-            WHERE id = ?
-            """,
-            (timestamp, timestamp, candidate_id),
-        )
-        conn.commit()
-        return cur.rowcount > 0
+    conn = _connect()
+    now = datetime.now(timezone.utc).isoformat()
+
+    cursor = conn.execute(
+        """
+        UPDATE compaction_staging
+        SET status = 'discarded', reviewed_at = ?, updated_at = ?
+        WHERE id = ?
+        """,
+        (now, now, candidate_id),
+    )
+
+    conn.commit()
+    return cursor.rowcount > 0
