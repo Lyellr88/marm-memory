@@ -13,6 +13,17 @@ const state = {
   notebookTotal: 0,
   sessions: [],
   mcpPollId: null,
+  compactionOffset: 0,
+  compactionLimit: 30,
+  compactionTotal: 0,
+  compactionSession: "",
+  compactionSelected: new Set(),
+  compactionPreviewData: null,
+  maintenanceOffset: 0,
+  maintenanceLimit: 20,
+  maintenanceTotal: 0,
+  maintenanceSession: "",
+  maintenanceStatus: "",
 };
 
 function getStoredKey() {
@@ -169,6 +180,8 @@ function setupTabs() {
       });
       if (panel === "memories") loadMemories();
       if (panel === "sessions") loadSessions();
+      if (panel === "compaction") loadCompaction();
+      if (panel === "maintenance") loadMaintenance();
       if (panel === "logs") loadLogs();
       if (panel === "notebook") loadNotebook();
     });
@@ -582,6 +595,394 @@ async function loadNotebook() {
   });
 }
 
+// ==================== Compaction (Phase 1: Manual) ====================
+
+async function loadCompaction(reset = true) {
+  if (reset) state.compactionOffset = 0;
+  const session = state.compactionSession || "";
+  const params = new URLSearchParams({
+    limit: state.compactionLimit,
+    offset: state.compactionOffset,
+  });
+  if (session) params.set("session", session);
+
+  try {
+    const data = await api(`/api/compaction/memories?${params}`);
+    state.compactionTotal = data.total;
+    renderCompactionList(data.items);
+    renderCompactionPager();
+  } catch (e) {
+    toast(e.message, true);
+  }
+}
+
+function renderCompactionList(items) {
+  const list = $("#compaction-list");
+  if (!items.length) {
+    list.innerHTML = '<p class="hint">No memories available for compaction.</p>';
+    return;
+  }
+  list.innerHTML = items.map((m) => `
+    <div class="compaction-item">
+      <label class="compaction-checkbox">
+        <input type="checkbox" data-memory-id="${m.id}" ${state.compactionSelected.has(m.id) ? 'checked' : ''}>
+        <div class="compaction-content">
+          <div class="compaction-meta">
+            <span class="pill">${escapeHtml(m.session_name)}</span>
+            <span class="hint">${formatDate(m.timestamp)}</span>
+          </div>
+          <div class="compaction-preview">${escapeHtml(m.display_preview)}</div>
+        </div>
+      </label>
+    </div>
+  `).join('');
+
+  // Wire up checkbox handlers
+  list.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
+    cb.addEventListener('change', (e) => {
+      const id = e.target.dataset.memoryId;
+      if (e.target.checked) {
+        state.compactionSelected.add(id);
+      } else {
+        state.compactionSelected.delete(id);
+      }
+      updateCompactionButton();
+    });
+  });
+}
+
+function updateCompactionButton() {
+  const btn = $("#compaction-compact-btn");
+  const count = $("#compaction-count");
+  const size = state.compactionSelected.size;
+  count.textContent = size;
+  btn.disabled = size === 0;
+}
+
+function renderCompactionPager() {
+  const pager = $("#compaction-pager");
+  const hasPrev = state.compactionOffset > 0;
+  const hasNext = state.compactionOffset + state.compactionLimit < state.compactionTotal;
+  const start = state.compactionTotal ? state.compactionOffset + 1 : 0;
+  const end = Math.min(state.compactionOffset + state.compactionLimit, state.compactionTotal);
+  
+  pager.innerHTML = `
+    <button type="button" class="btn ghost sm" id="compact-prev" ${!hasPrev ? 'disabled' : ''}>Prev</button>
+    <span class="hint">${start}–${end} of ${state.compactionTotal}</span>
+    <button type="button" class="btn ghost sm" id="compact-next" ${!hasNext ? 'disabled' : ''}>Next</button>
+  `;
+
+  $("#compact-prev")?.addEventListener("click", () => {
+    state.compactionOffset = Math.max(0, state.compactionOffset - state.compactionLimit);
+    loadCompaction(false);
+  });
+  $("#compact-next")?.addEventListener("click", () => {
+    state.compactionOffset += state.compactionLimit;
+    loadCompaction(false);
+  });
+}
+
+async function showCompactionPreview() {
+  if (state.compactionSelected.size === 0) return;
+  
+  try {
+    const memoryIds = Array.from(state.compactionSelected);
+    const preview = await api("/api/compaction/preview", {
+      method: "POST",
+      body: JSON.stringify({ memory_ids: memoryIds }),
+    });
+    
+    state.compactionPreviewData = preview;
+    renderCompactionPreview(preview);
+    $("#compaction-preview-dialog").showModal();
+  } catch (e) {
+    toast(e.message, true);
+  }
+}
+
+function renderCompactionPreview(preview) {
+  // Defensive check for malformed response
+  if (!preview?.sources_preview) {
+    toast("Invalid preview data received", true);
+    $("#compaction-preview-dialog").close();
+    return;
+  }
+  
+  $("#preview-sources").innerHTML = preview.sources_preview.map((s) => `
+    <div class="preview-source-item">
+      <small class="hint">${formatDate(s.timestamp)}</small>
+      <div>${escapeHtml(s.content)}</div>
+    </div>
+  `).join('');
+  
+  $("#preview-summary").innerHTML = `<div class="preview-summary-text">${escapeHtml(preview.summary)}</div>`;
+  $("#preview-source-count").textContent = preview.source_count;
+  $("#preview-savings").textContent = preview.token_savings_estimate;
+}
+
+async function applyCompaction() {
+  const preview = state.compactionPreviewData;
+  if (!preview) return;
+  
+  try {
+    const result = await api("/api/compaction/apply", {
+      method: "POST",
+      body: JSON.stringify({
+        memory_ids: preview.source_memory_ids,
+        summary_content: preview.summary,
+        session_name: preview.session_name,
+      }),
+    });
+    
+    toast(`✓ Compacted ${result.source_count} memories into 1 summary`);
+    $("#compaction-preview-dialog").close();
+    
+    // Reset selection and reload
+    state.compactionSelected.clear();
+    state.compactionPreviewData = null;
+    loadCompaction(true);
+    loadSummary();
+  } catch (e) {
+    toast(e.message, true);
+  }
+}
+
+function populateCompactionSessionFilter() {
+  const filter = $("#compaction-session-filter");
+  if (!filter) return;
+  
+  const options = state.sessions.map(s => 
+    `<option value="${escapeHtml(s.session_name)}">${escapeHtml(s.session_name)}</option>`
+  ).join('');
+  
+  filter.innerHTML = '<option value="">All sessions</option>' + options;
+}
+
+// ==================== Maintenance (Phase 2) ====================
+
+async function loadMaintenance() {
+  await loadMaintenanceSummary();
+  await loadMaintenanceCandidates(true);
+  setupMaintenanceSubtabs();
+}
+
+async function loadMaintenanceSummary() {
+  try {
+    const data = await api("/api/maintenance/compaction-summary");
+    renderMaintenanceStats(data);
+  } catch (e) {
+    toast(e.message, true);
+  }
+}
+
+function renderMaintenanceStats(counts) {
+  const stats = $("#maintenance-stats");
+  stats.innerHTML = `
+    <div class="stat">
+      <strong>${counts.pending_summary || 0}</strong>
+      <span>Pending</span>
+    </div>
+    <div class="stat">
+      <strong>${counts.summary_staged || 0}</strong>
+      <span>Staged</span>
+    </div>
+    <div class="stat">
+      <strong>${counts.applied || 0}</strong>
+      <span>Applied</span>
+    </div>
+    <div class="stat">
+      <strong>${counts.stale || 0}</strong>
+      <span>Stale</span>
+    </div>
+  `;
+}
+
+async function loadMaintenanceCandidates(reset = true) {
+  if (reset) state.maintenanceOffset = 0;
+  const params = new URLSearchParams({
+    limit: state.maintenanceLimit,
+    offset: state.maintenanceOffset,
+  });
+  if (state.maintenanceSession) params.set("session", state.maintenanceSession);
+  if (state.maintenanceStatus) params.set("status", state.maintenanceStatus);
+
+  try {
+    const data = await api(`/api/maintenance/candidates?${params}`);
+    state.maintenanceTotal = data.total;
+    renderMaintenanceCandidates(data.items);
+    renderMaintenancePager();
+  } catch (e) {
+    toast(e.message, true);
+  }
+}
+
+function renderMaintenanceCandidates(items) {
+  const list = $("#maintenance-candidates-list");
+  if (!items.length) {
+    list.innerHTML = '<p class="empty">No compaction candidates.</p>';
+    return;
+  }
+
+  list.innerHTML = items.map((c, i) => {
+    const statusLabel = getStatusLabel(c.status);
+    const statusClass = getStatusClass(c.status);
+    return `
+      <article class="item candidate-item" style="animation-delay:${i * 0.02}s">
+        <div class="item-head">
+          <span class="tag ${statusClass}">${statusLabel}</span>
+          <span class="tag session">${escapeHtml(c.session_name)}</span>
+          <span class="hint">${c.source_count} memories</span>
+        </div>
+        <p class="candidate-preview">${escapeHtml(c.preview)}</p>
+        <div class="item-meta">
+          Created ${formatDate(c.created_at)} • Updated ${formatDate(c.updated_at)}
+          ${c.nudge_count > 0 ? ` • ${c.nudge_count} nudges` : ''}
+        </div>
+        <div class="item-actions">
+          <button type="button" class="btn sm" data-view-candidate="${c.id}">Details</button>
+          ${c.status !== 'discarded' && c.status !== 'applied' ? 
+            `<button type="button" class="btn sm danger" data-discard-candidate="${c.id}">Discard</button>` : ''}
+        </div>
+      </article>
+    `;
+  }).join('');
+
+  list.querySelectorAll('[data-view-candidate]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.viewCandidate;
+      const candidate = items.find(c => c.id === id);
+      if (candidate) showCandidateDetail(candidate);
+    });
+  });
+
+  list.querySelectorAll('[data-discard-candidate]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.discardCandidate;
+      if (confirm('Discard this compaction candidate?')) {
+        try {
+          await api(`/api/maintenance/candidates/${id}/discard`, { method: 'POST' });
+          toast('✓ Candidate discarded');
+          loadMaintenanceSummary();
+          loadMaintenanceCandidates(false);
+        } catch (e) {
+          toast(e.message, true);
+        }
+      }
+    });
+  });
+}
+
+function getStatusLabel(status) {
+  const labels = {
+    'pending_summary': 'Pending',
+    'summary_staged': 'Staged',
+    'applied': 'Applied',
+    'discarded': 'Discarded',
+    'stale': 'Stale',
+    'nudge_exhausted': 'Exhausted',
+  };
+  return labels[status] || status;
+}
+
+function getStatusClass(status) {
+  if (status === 'applied') return 'ok';
+  if (status === 'stale' || status === 'nudge_exhausted') return 'error';
+  if (status === 'summary_staged') return 'session';
+  return '';
+}
+
+function renderMaintenancePager() {
+  const pager = $("#maintenance-pager");
+  const hasPrev = state.maintenanceOffset > 0;
+  const hasNext = state.maintenanceOffset + state.maintenanceLimit < state.maintenanceTotal;
+  const start = state.maintenanceTotal ? state.maintenanceOffset + 1 : 0;
+  const end = Math.min(state.maintenanceOffset + state.maintenanceLimit, state.maintenanceTotal);
+  
+  pager.innerHTML = `
+    <button type="button" class="btn ghost sm" id="maintenance-prev" ${!hasPrev ? 'disabled' : ''}>Prev</button>
+    <span class="hint">${start}–${end} of ${state.maintenanceTotal}</span>
+    <button type="button" class="btn ghost sm" id="maintenance-next" ${!hasNext ? 'disabled' : ''}>Next</button>
+  `;
+
+  $("#maintenance-prev")?.addEventListener("click", () => {
+    state.maintenanceOffset = Math.max(0, state.maintenanceOffset - state.maintenanceLimit);
+    loadMaintenanceCandidates(false);
+  });
+  $("#maintenance-next")?.addEventListener("click", () => {
+    state.maintenanceOffset += state.maintenanceLimit;
+    loadMaintenanceCandidates(false);
+  });
+}
+
+function showCandidateDetail(candidate) {
+  const body = $("#maintenance-detail-body");
+  body.innerHTML = `
+    <div class="detail-section">
+      <h4>Status</h4>
+      <p><span class="tag ${getStatusClass(candidate.status)}">${getStatusLabel(candidate.status)}</span></p>
+    </div>
+    <div class="detail-section">
+      <h4>Session</h4>
+      <p>${escapeHtml(candidate.session_name)}</p>
+    </div>
+    <div class="detail-section">
+      <h4>Source Memories</h4>
+      <p>${candidate.source_count} memories selected for compaction</p>
+      <pre class="detail-preview">${escapeHtml(candidate.preview)}</pre>
+    </div>
+    ${candidate.suggested_summary ? `
+    <div class="detail-section">
+      <h4>Suggested Summary</h4>
+      <pre class="detail-preview">${escapeHtml(candidate.suggested_summary)}</pre>
+    </div>
+    ` : ''}
+    <div class="detail-section">
+      <h4>Timeline</h4>
+      <p>Created: ${formatDate(candidate.created_at)}</p>
+      <p>Updated: ${formatDate(candidate.updated_at)}</p>
+      ${candidate.last_nudged_at ? `<p>Last Nudged: ${formatDate(candidate.last_nudged_at)}</p>` : ''}
+      <p>Nudge Count: ${candidate.nudge_count}</p>
+    </div>
+  `;
+  $("#maintenance-detail-dialog").showModal();
+}
+
+function populateMaintenanceSessionFilter() {
+  const filter = $("#maintenance-session-filter");
+  if (!filter) return;
+  
+  const options = state.sessions.map(s => 
+    `<option value="${escapeHtml(s.session_name)}">${escapeHtml(s.session_name)}</option>`
+  ).join('');
+  
+  filter.innerHTML = '<option value="">All sessions</option>' + options;
+}
+
+function setupMaintenanceSubtabs() {
+  document.querySelectorAll(".maintenance-tab").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const section = btn.dataset.section;
+      
+      // Update tab active state
+      document.querySelectorAll(".maintenance-tab").forEach((t) => 
+        t.classList.toggle("active", t === btn)
+      );
+      
+      // Show/hide sections
+      document.querySelectorAll(".maintenance-section").forEach((s) => {
+        s.hidden = !s.id.includes(section);
+      });
+      
+      // Load data for the selected section
+      if (section === "candidates") {
+        loadMaintenanceCandidates(true);
+      } else if (section === "logs") {
+        loadLogs(true);
+      }
+    });
+  });
+}
+
 function setupForms() {
   function resetMemoryForm() {
     const form = $("#memory-add-form");
@@ -775,6 +1176,39 @@ function setupForms() {
   });
   $("#notebook-refresh").addEventListener("click", loadNotebook);
 
+  // Compaction handlers
+  $("#compaction-refresh").addEventListener("click", () => loadCompaction(true));
+  
+  $("#compaction-session-filter").addEventListener("change", (e) => {
+    state.compactionSession = e.target.value;
+    loadCompaction(true);
+  });
+  
+  $("#compaction-compact-btn").addEventListener("click", showCompactionPreview);
+  
+  $("#compaction-preview-dialog").addEventListener("close", (e) => {
+    const returnValue = e.target.returnValue;
+    if (returnValue === "proceed") {
+      applyCompaction();
+    }
+  });
+
+  // Maintenance handlers
+  $("#maintenance-refresh").addEventListener("click", () => {
+    loadMaintenanceSummary();
+    loadMaintenanceCandidates(true);
+  });
+
+  $("#maintenance-session-filter").addEventListener("change", (e) => {
+    state.maintenanceSession = e.target.value;
+    loadMaintenanceCandidates(true);
+  });
+
+  $("#maintenance-status-filter").addEventListener("change", (e) => {
+    state.maintenanceStatus = e.target.value;
+    loadMaintenanceCandidates(true);
+  });
+
   $("#notebook-form").addEventListener("submit", async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
@@ -806,6 +1240,9 @@ async function initDashboard() {
   }
   try {
     await loadSessions();
+    // Populate compaction session filter
+    populateCompactionSessionFilter();
+    populateMaintenanceSessionFilter();
   } catch (e) {
     toast(`Could not load sessions: ${e.message}`, true);
   }

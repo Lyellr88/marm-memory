@@ -26,8 +26,9 @@
     <button type="button" class="tab active" data-panel="overview" role="tab">Overview</button>
     <button type="button" class="tab" data-panel="memories" role="tab">Memories</button>
     <button type="button" class="tab" data-panel="sessions" role="tab">Sessions</button>
+    <button type="button" class="tab" data-panel="compaction" role="tab">Compaction</button>
     <button type="button" class="tab" data-panel="notebook" role="tab">Notebook</button>
-    <button type="button" class="tab" data-panel="logs" role="tab">Protocol logs</button>
+    <button type="button" class="tab" data-panel="maintenance" role="tab">Maintenance</button>
   </nav>
 
   <main class="main">
@@ -90,14 +91,16 @@
       <div id="sessions-list" class="list"></div>
     </section>
 
-    <section id="panel-logs" class="panel" role="tabpanel" hidden>
+    <section id="panel-compaction" class="panel" role="tabpanel" hidden>
       <div class="toolbar">
-        <input type="search" id="log-search" placeholder="Search logs…" />
-        <button type="button" class="btn primary" id="logs-refresh">Refresh</button>
-        <button type="button" class="btn danger" id="logs-delete-all">Delete all</button>
+        <select id="compaction-session-filter">
+          <option value="">All sessions</option>
+        </select>
+        <button type="button" class="btn primary" id="compaction-refresh">Refresh</button>
+        <button type="button" class="btn accent" id="compaction-compact-btn" disabled>Compact Selected (<span id="compaction-count">0</span>)</button>
       </div>
-      <div id="logs-list" class="list"></div>
-      <div class="pager" id="logs-pager"></div>
+      <div id="compaction-list" class="list"></div>
+      <div class="pager" id="compaction-pager"></div>
     </section>
 
     <section id="panel-notebook" class="panel" role="tabpanel" hidden>
@@ -118,6 +121,46 @@
       </form>
       <div id="notebook-list" class="list"></div>
     </section>
+
+    <section id="panel-maintenance" class="panel" role="tabpanel" hidden>
+      <h2 class="section-title">Compaction Pipeline</h2>
+      <div class="stats-grid maintenance-stats" id="maintenance-stats"></div>
+      
+      <div class="maintenance-tabs">
+        <button type="button" class="maintenance-tab active" data-section="candidates">Candidates</button>
+        <button type="button" class="maintenance-tab" data-section="logs">Protocol Logs</button>
+      </div>
+
+      <div id="maintenance-candidates-section" class="maintenance-section">
+        <div class="toolbar">
+          <select id="maintenance-session-filter">
+            <option value="">All sessions</option>
+          </select>
+          <select id="maintenance-status-filter">
+            <option value="">All statuses</option>
+            <option value="pending_summary">Pending</option>
+            <option value="summary_staged">Staged</option>
+            <option value="applied">Applied</option>
+            <option value="discarded">Discarded</option>
+            <option value="stale">Stale</option>
+            <option value="nudge_exhausted">Nudge Exhausted</option>
+          </select>
+          <button type="button" class="btn primary" id="maintenance-refresh">Refresh</button>
+        </div>
+        <div id="maintenance-candidates-list" class="list"></div>
+        <div class="pager" id="maintenance-pager"></div>
+      </div>
+
+      <div id="maintenance-logs-section" class="maintenance-section" hidden>
+        <div class="toolbar">
+          <input type="search" id="log-search" placeholder="Search logs…" />
+          <button type="button" class="btn primary" id="logs-refresh">Refresh</button>
+          <button type="button" class="btn danger" id="logs-delete-all">Delete all</button>
+        </div>
+        <div id="logs-list" class="list"></div>
+        <div class="pager" id="logs-pager"></div>
+      </div>
+    </section>
   </main>
 
   <dialog id="detail-dialog">
@@ -127,6 +170,16 @@
         <button type="submit" class="btn ghost sm" aria-label="Close">Close</button>
       </header>
       <pre id="dialog-body" class="dialog-body"></pre>
+    </form>
+  </dialog>
+
+  <dialog id="maintenance-detail-dialog">
+    <form method="dialog">
+      <header class="dialog-head">
+        <h3>Candidate Details</h3>
+        <button type="submit" class="btn ghost sm" aria-label="Close">Close</button>
+      </header>
+      <div class="maintenance-detail-body" id="maintenance-detail-body"></div>
     </form>
   </dialog>
 
@@ -142,6 +195,33 @@
         <div class="form-actions">
           <button type="submit" value="cancel" class="btn ghost">Cancel</button>
           <button type="submit" value="confirm" class="btn danger" id="confirm-ok">Delete all</button>
+        </div>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="compaction-preview-dialog">
+    <form method="dialog">
+      <header class="dialog-head">
+        <h3>Compaction Preview</h3>
+        <button type="submit" value="cancel" class="btn ghost sm" aria-label="Close">Cancel</button>
+      </header>
+      <div class="compaction-preview-body">
+        <div class="preview-section">
+          <h4>Before (Source Memories)</h4>
+          <div id="preview-sources" class="preview-sources"></div>
+        </div>
+        <div class="preview-section">
+          <h4>After (Summary)</h4>
+          <div id="preview-summary" class="preview-summary"></div>
+        </div>
+        <div class="preview-stats">
+          <span class="stat-pill">📝 <span id="preview-source-count"></span> memories</span>
+          <span class="stat-pill">💾 <span id="preview-savings"></span> savings</span>
+        </div>
+        <div class="form-actions">
+          <button type="submit" value="cancel" class="btn ghost">Cancel</button>
+          <button type="submit" value="proceed" class="btn primary" id="compaction-proceed">Proceed</button>
         </div>
       </div>
     </form>

@@ -282,7 +282,7 @@ def api_delete_notebook(name: str):
         raise HTTPException(status_code=503, detail=str(e)) from e
 
 
-# ==================== Compaction (Phase 1) ====================
+# ==================== Compaction (Phase 1: Manual) ====================
 
 
 @app.get("/api/compaction/memories")
