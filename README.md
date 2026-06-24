@@ -66,7 +66,7 @@ MARM gives AI agents persistent local memory, shared context, write-queue safety
 The easiest way to install MARM is to let your agent do the setup with you. `marm-init` turns the usual MCP setup mess into one guided conversation: Python or Docker, HTTP or STDIO, local or remote server, API keys, config paths, dashboard startup, and multi-agent linking for Claude, Codex, Gemini, Qwen, Cursor, VS Code, and other MCP clients. No hunting through install docs, no guessing which config file your client uses, and no rewriting the same connection by hand for every agent.
 
 ```bash
-npx degit Lyellr88/MARM-Systems/skills/marm-init
+npx degit Lyellr88/MARM-Systems/skills
 ```
 
 Then tell your agent: **"Use the marm-init skill to set up MARM."**
