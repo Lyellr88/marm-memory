@@ -4,7 +4,7 @@
      width="700"
      height="400">
 </picture>
-<h1 align="center">MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.14.2</h1>
+<h1 align="center">MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.15.0</h1>
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
@@ -27,10 +27,8 @@
 
 - [Why MARM MCP](#why-marm-mcp-the-problem--solution)
 - [Quick Start](#-quick-start-for-mcp-http--stdio)
-- [Connect Your Client Fast](#connect-your-client-fast)
 - [Complete MCP Tool Suite](#complete-mcp-tool-suite-7-tools)
 - [MARM Dashboard](#marm-dashboard)
-- [Why MARM Holds Up](#why-marm-holds-up)
 - [Performance & Scaling Benchmarks](#performance--scaling-benchmarks)
 - [Contributing](#contributing)
 - [Project Documentation](#project-documentation)
@@ -61,9 +59,19 @@ See [Performance & Scaling Benchmarks](#performance--scaling-benchmarks) for ret
 
 MARM gives AI agents persistent local memory, shared context, write-queue safety, swarm presets, and hybrid recall so commands, config keys, and project meaning all stay reachable.
 
-### Start Now (pip)
+### Start Now
 
-Install once:
+**Recommended: guided setup with `marm-init`**
+
+The easiest way to install MARM is to let your agent do the setup with you. `marm-init` turns the usual MCP setup mess into one guided conversation: Python or Docker, HTTP or STDIO, local or remote server, API keys, config paths, dashboard startup, and multi-agent linking for Claude, Codex, Gemini, Qwen, Cursor, VS Code, and other MCP clients. No hunting through install docs, no guessing which config file your client uses, and no rewriting the same connection by hand for every agent.
+
+```bash
+npx degit Lyellr88/MARM-Systems/skills/marm-init
+```
+
+Then tell your agent: **"Use the marm-init skill to set up MARM."**
+
+**Manual pip install**
 
 ```bash
 pip install marm-mcp-server
@@ -77,14 +85,6 @@ pip install marm-mcp-server
 | **Private high-throughput swarm** | `python -m marm_mcp_server --swarm-max` | `"agent" mcp add --transport http marm-memory http://localhost:8001/mcp` |
 | **Trusted private lab/server** | `python -m marm_mcp_server --trusted` | `"agent" mcp add --transport http marm-memory http://localhost:8001/mcp` |
 
-## What Users Are Saying
-
-> “MARM successfully handles our industrial automation workflows in production. We've validated session management, persistent logging, and smart recall across container restarts in our Windows 11 + Docker environment. The system reliably tracks complex technical decisions and maintains data integrity through deployment cycles.”  
-> @Ophy21, GitHub user (Industrial Automation Engineer)
-
-> “MARM proved exceptionally valuable for DevOps and complex Docker projects. It maintained 100% memory accuracy, preserved context on 46 services and network configurations, and enabled standards-compliant Python/Terraform work. Semantic search and automated session logs made solving async and infrastructure issues far easier. **Value Rating:** 9.5/10 - indispensable for enterprise-grade memory, technical standards, and long-session code management.”
-> @joe_nyc, Discord user (DevOps/Infrastructure Engineer)  
-
 ## 🚀 Quick Start for MCP (HTTP & STDIO)
 
 ### Use this quick rule of thumb to choose your setup
@@ -93,7 +93,10 @@ pip install marm-mcp-server
 - Docker HTTP = shared/always-on server (key required).
 - Docker STDIO = private containerized local use (no HTTP key).
 
-**Swarm / multi-agent note:** The write queue is enabled by default to serialize memory writes through one worker. For shared HTTP deployments, use `--swarm` (200 RPM) or `--swarm-max` (600 RPM) when starting the server. `--trusted` disables rate limiting entirely for private deployments. STDIO is still best for private single-agent/local use. Run one MARM HTTP process per SQLite database; `uvicorn --workers N` / multi-process workers are not supported yet because queue, scheduler, and protocol coordination are process-local.
+**Swarm / multi-agent note:** The write queue is enabled by default to serialize memory writes through one worker. For shared HTTP deployments, use `--swarm` (200 RPM) or `--swarm-max` (600 RPM) when starting the server. `--trusted` disables rate limiting entirely for private deployments. STDIO is still best for private single-agent/local use. See [MCP-HANDBOOK.md](MCP-HANDBOOK.md) for more info.
+
+<details>
+<summary><strong>Local pip HTTP (zero config)</strong></summary>
 
 #### Local pip HTTP (zero config)
 
@@ -101,24 +104,56 @@ pip install marm-mcp-server
 
 ```bash
 pip install marm-mcp-server
+python -m marm_mcp_server
 # Stuck on client setup? Open a Q&A thread: https://github.com/Lyellr88/MARM-Systems/discussions
 # most agents use this --transport command
 "agent" mcp add --transport http marm-memory http://localhost:8001/mcp
 codex mcp add marm-memory --url http://localhost:8001/mcp
-# xAI / Grok Remote MCP. Use a hosted HTTPS MARM endpoint, not localhost.
-python -m marm_mcp_server
-```
+
+</details>
+
+<details>
+<summary><strong>Local pip STDIO</strong></summary>
 
 #### Local pip STDIO
 
 ```bash
 pip install marm-mcp-server
+python -m marm_mcp_server.server_stdio
 # most agents use this --transport command
 "agent" mcp add --transport stdio marm-memory-stdio marm-mcp-stdio
 codex mcp add marm-memory-stdio -- marm-mcp-stdio
-# xAI / Grok Remote MCP. Use a hosted HTTPS MARM endpoint, not localhost.
-python -m marm_mcp_server.server_stdio
 ```
+
+</details>
+
+<details>
+<summary><strong>Local Python swarm modes (HTTP & STDIO)</strong></summary>
+
+#### Local Python swarm modes (HTTP & STDIO)
+
+Use HTTP when multiple agents need to share one live MARM server. STDIO is still best for private single-agent use because each client owns its own local process.
+
+```bash
+# HTTP shared server, normal multi-agent use
+python -m marm_mcp_server --swarm
+
+# HTTP shared server, heavier private swarm
+python -m marm_mcp_server --swarm-max
+
+# HTTP trusted private lab/server, rate limiting disabled
+python -m marm_mcp_server --trusted
+
+# STDIO remains keyless/private and does not use swarm flags
+marm-mcp-stdio
+```
+
+</details>
+
+---
+
+<details>
+<summary><strong>Docker HTTP (key required)</strong></summary>
 
 #### Docker HTTP (key required)
 
@@ -142,6 +177,11 @@ docker run -d --name marm-mcp-server \
 codex mcp add marm-memory --url http://localhost:8001/mcp --bearer-token-env-var MARM_API_KEY
 ```
 
+</details>
+
+<details>
+<summary><strong>Docker HTTP swarm mode</strong></summary>
+
 #### Docker HTTP swarm mode
 
 ```bash
@@ -154,6 +194,11 @@ docker run -d --name marm-mcp-server \
   lyellr88/marm-mcp-server:latest --swarm
 ```
 
+</details>
+
+<details>
+<summary><strong>Docker STDIO (no HTTP key)</strong></summary>
+
 #### Docker STDIO (no HTTP key)
 
 ```bash
@@ -164,11 +209,23 @@ docker run --rm -i \
   -m marm_mcp_server.server_stdio
 ```
 
+</details>
+
+---
+
+<details>
+<summary><strong>Support notes</strong></summary>
+
 **Most useful support info:**
 
 - Docker HTTP requires a key; Docker STDIO does not.
 - If you get `401`, verify key match and client restart after env var changes.
 - For full key setup, rotation, and troubleshooting: [INSTALL-DOCKER.md](docs/INSTALL-DOCKER.md)
+
+</details>
+
+<details>
+<summary><strong>Connect your client fast</strong></summary>
 
 ### Connect Your Client Fast
 
@@ -181,6 +238,8 @@ Claude Code remains the recommended first setup path, but MARM also works with o
 **Remote/API platforms** - [xAI / Grok Remote MCP](docs/INSTALL-DOCKER.md#xai--grok-remote-mcp) · [Platform integration](docs/INSTALL-PLATFORMS.md)
 
 > Using a client that isn't listed? [Open an issue](https://github.com/Lyellr88/MARM-Systems/issues/new/choose) and let us know; client adapters are a first-class feature request.
+
+</details>
 
 ## MARM Dashboard
 
@@ -196,10 +255,11 @@ A local web UI for browsing and managing your MARM memory; separate from the MCP
 
 | What it gives you | How it works |
 |-------------------|-------------|
-| Browse/search/edit all memories | Direct SQLite - no MCP required |
+| Browse/search/edit all memories | Direct SQLite, no MCP required |
 | Manage sessions and protocol logs | Runs on port `:8002` alongside MCP on `:8001` |
 | Notebook CRUD with inline editor | Same auth model (`MARM_API_KEY`) as the MCP server |
 | Delete-all with count confirmation | Docker image included; WAL mode handles concurrent access |
+| View the write queue in real time | Pulls live data from the write queue |
 
 ```bash
 # Quick start (pip)
@@ -237,13 +297,9 @@ See [`marm-dashboard/README.md`](marm-dashboard/README.md) for the full guide.
 
 The AI agent will automatically use the appropriate tools. Manual tool access is available for power users who want direct control.
 
-**Architecture note:** MARM groups related operations behind a single dispatching tooling to keep MCP discovery lean without hiding behavior. Domain-specific tools such as `marm_notebook(action=...)`, `marm_delete(type=...)`, and `marm_compaction(action=...)` group closely related operations behind explicit parameters, while recall, logging, and summaries stay separate so agents still choose the right capability clearly. This design keeps the MCP schema compact while preserving full functionality.
-
-**Project/platform attribution:** new memories, logs, and notebook entries are tagged with nullable `project` and `platform` metadata when MARM can detect them. `MARM_PROJECT` can override the detected working-directory project, and `MARM_PLATFORM` can override the detected client/platform. `marm_smart_recall` accepts optional `project` and `platform` filters, including when `include_logs=True`, so agents can ask for context from a specific project or client without losing normal cross-project search.
-
 | **Category** | **Tool** | **Description** |
 |--------------|----------|-----------------|
-| **Memory Intelligence** | `marm_smart_recall` | AI-powered recall across all memories. Uses FTS5 BM25 to filter exact-term candidates first, semantically re-ranks that bounded set by embedding similarity, falls back to bounded semantic scanning when FTS coverage is weak, and scores long memories through chunked embeddings while still returning one parent memory result. Supports global search with `search_all=True`, attribution filters with `project`/`platform`, and summary/context/full memory depth with `detail=1/2/3` |
+| **Memory Intelligence** | `marm_smart_recall` | Hybrid recall with FTS5 filtering, semantic reranking, bounded fallback search, and chunk-aware scoring for long memories. Supports `search_all=True`, `project`/`platform` filters, and `detail=1/2/3` depth controls |
 | **Logging System** | `marm_log_entry` | Add structured session log entries. Session/topic routing, summary-cache invalidation, and context summary preparation are handled by the server |
 | | `marm_log_show` | Display all entries and sessions (filterable) |
 | | `marm_delete` | Delete a log session, log entry, or notebook entry (`type="log"\|"notebook"`) |
@@ -251,20 +307,13 @@ The AI agent will automatically use the appropriate tools. Manual tool access is
 | **Notebook Management** | `marm_notebook` | Unified notebook tool: add, use, show, status, or clear entries with `action="add"\|"use"\|"show"\|"status"\|"clear"` |
 | **Memory Maintenance** | `marm_compaction` | Unified compaction workflow with `action="status"\|"candidates"\|"review"\|"stage"\|"apply"\|"discard"` for agent-assisted memory cleanup |
 
-**Internal automation:** lifecycle initialization, protocol delivery with periodic protocol-lite refresh, documentation refresh, current date context, summary-cache maintenance, serialized write queue handling, and system checks are handled by the server instead of exposed as AI-facing tools. Optional compaction can detect duplicate memory clusters and nudge the connected agent to summarize them through `marm_compaction`. For server status, use the dashboard health panel or `curl http://localhost:8001/health`.
+### A Deeper Look
 
-## Why MARM Holds Up
+MARM keeps MCP discovery lean with 7 tools by grouping domain operations behind explicit parameters like `marm_notebook(action=...)`, `marm_delete(type=...)`, and `marm_compaction(action=...)`. Behind those tools, the server handles lifecycle setup, protocol refresh, docs indexing, date context, summary-cache maintenance, write queue handling, project/platform attribution, and health checks.
 
-MARM keeps the AI-facing surface small while the server handles the infrastructure work:
+Under the hood, MARM uses SQLite WAL mode, connection pooling, serialized writes, HTTP swarm presets, safe local defaults, FTS→semantic reranking, bounded fallback search, chunk-aware long-memory recall, and summary/context/full recall depths to keep memory fast, stable, and token-efficient as projects grow.
 
-- **Write stability:** SQLite WAL mode, connection pooling, and a serialized write queue are enabled for normal use.
-- **Swarm control:** HTTP presets tune shared access: default `80 RPM`, `--swarm` `200 RPM`, `--swarm-max` `600 RPM`, and `--trusted` disables rate limiting for private deployments.
-- **Cleaner recall:** FTS filter→semantic re-rank, bounded semantic fallback, chunked long-memory embeddings, conservative temporal weighting, write-time consolidation, and optional compaction reduce duplicate/noisy memories over time.
-- **Lower token burn:** `marm_smart_recall` can return summary, context, or full-memory depth so agents do not pull full bodies unless they need them.
-- **Long-memory coverage:** memories that exceed the base embedding window are chunked internally and scored by best-matching chunk, so late-body details stay recallable without flooding results with duplicate chunk hits.
-- **Safe defaults:** local pip binds to `127.0.0.1`; Docker HTTP requires `MARM_API_KEY`; STDIO stays private and keyless.
-
-For deeper architecture, configuration, and workflow guidance, use [MCP-HANDBOOK.md](MCP-HANDBOOK.md) and [FAQ.md](marm-mcp-server/marm-docs/FAQ.md).
+For a deeper look into the MCP behavior, tool parameters, automation, and workflows, see [MCP-HANDBOOK.md](MCP-HANDBOOK.md) and [FAQ.md](marm-mcp-server/marm-docs/FAQ.md).
 
 ## Performance & Scaling Benchmarks
 
@@ -276,11 +325,9 @@ For deeper architecture, configuration, and workflow guidance, use [MCP-HANDBOOK
 </picture>
 </div>
 
-MARM is optimized for low-latency retrieval and multi-agent concurrency. The following benchmarks were executed locally to test database scaling, event-loop blocking, and write-time compaction penalties.
+MARM is tuned for fast recall first, even as memory grows and multiple agents hit the same server.
 
 ### 1. Retrieval Latency Scaling
-
-Measured across varying session history sizes ($N = \text{number of stored memories}$).
 
 | Session Size ($N$) | Min Latency | Median Latency | p95 Latency |
 | :--- | :--- | :--- | :--- |
@@ -289,25 +336,15 @@ Measured across varying session history sizes ($N = \text{number of stored memor
 | **N = 1,000** | 15.9 ms | 23.3 ms | 25.1 ms |
 | **N = 4,000** | 23.1 ms | 30.4 ms | 31.3 ms |
 
-*Takeaway: The FTS5 filter $\rightarrow$ semantic re-rank pipeline delivers near-constant retrieval time regardless of memory store size, 17ms at N=100, 30ms at N=4,000.*
+### 2. Multi-Agent Concurrency
 
-### 2. Multi-Agent Concurrency (10x Concurrent Recalls)
-
-Evaluates event-loop blocking when 10 independent agent requests hit the server simultaneously ($N=1000$).
-
-- **Serial Execution (Sequential):** 647.0 ms
-- **Async Gather (Concurrent):** 316.3 ms
-- **Efficiency Ratio:** `0.49` ($51\%$ execution time reduction under parallel load)
+- **Parallel recall wins:** 10 concurrent recalls completed in `316.3ms` vs `647.0ms` serial, a `51%` time reduction.
 
 ### 3. Write-Time Ingestion Cost
 
-Evaluates the performance impact of turning on intelligent memory consolidation during `store_memory` operations ($N=800$).
+- **Write-time tradeoff:** consolidation raises median ingest from `20.3ms` to `85.2ms` (`4.2x`) so dedupe/clustering cost stays off the hot recall path.
 
-- **Consolidation OFF:** 20.3 ms (Median)
-- **Consolidation ON:** 85.2 ms (Median)
-- **Architectural Trade-off:** `4.2x` ingestion penalty. MARM intentionally shifts clustering and deduplication overhead to write-time, ensuring retrieval paths stay aggressively optimized.
-
-Benchmarks were run against a real SQLite database with the live `all-MiniLM-L6-v2` encoder on local hardware. Reproduce them yourself: [`marm-mcp-server/scripts/bench_hotpath.py`](marm-mcp-server/scripts/bench_hotpath.py)
+Benchmarks used a real SQLite database and the live `all-MiniLM-L6-v2` encoder on local hardware. Reproduce them: [`marm-mcp-server/scripts/bench_hotpath.py`](marm-mcp-server/scripts/bench_hotpath.py)
 
 ## ⭐ Star the Project
 
@@ -315,19 +352,24 @@ If MARM helps with your AI memory needs, please star the repository to support d
 
 <div align="center">
 
-[![Star History Chart](https://api.star-history.com/svg?repos=Lyellr88/MARM-Systems&type=Date)](https://star-history.com/#Lyellr88/MARM-Systems&Date)
+<a href="https://star-history.com/#Lyellr88/MARM-Systems&Date">
+  <img src="https://api.star-history.com/svg?repos=Lyellr88/MARM-Systems&type=Date"
+       width="700"
+       height="400"
+       alt="MARM Systems star history chart">
+</a>
 </div>
 
 ## Contributing
 
-MARM is open to useful contributions: bug reports, install feedback, documentation fixes, client connection notes, performance testing, and focused pull requests.
+MARM welcomes contributors at every level. Code helps, but so do docs, setup notes, client testing, bug reports, benchmarks, and real workflow feedback from people using AI tools every day.
 
 Good places to help:
 
-- Test MARM with more MCP clients and IDE agents
-- Improve install docs and platform-specific setup notes
-- Report bugs with clear reproduction steps
-- Suggest practical memory workflows and tool improvements
+- Test MARM with more MCP clients, IDE agents, and operating systems
+- Improve docs, screenshots, examples, and platform-specific setup notes
+- Report bugs or confusing install steps with clear reproduction details
+- Share memory workflows, agent habits, and tool ideas from real use
 - Check out open [issues](https://github.com/Lyellr88/MARM-Systems/issues)
 
 > 💡 Want to get your name on this list? Check out our [CONTRIBUTING.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/CONTRIBUTING.md) guide to get started!
@@ -338,17 +380,9 @@ Good places to help:
 
 **Connect:** [MARM Discord](https://discord.gg/nhyJWPz2cf) | [GitHub Discussions](https://github.com/Lyellr88/MARM-Systems/discussions)
 
-### Easy Ways to Get Involved
-
-- **Try the MCP server** and share your experience
-- **Star the repo** if MARM solves a problem for you
-- **Share on social** - help others discover memory-enhanced AI
-- **Open [issues](https://github.com/Lyellr88/MARM-Systems/issues)** with bugs, feature requests, or use cases
-- **Join discussions** about AI reliability and memory
-
 ## License & Usage Notice
 
-This project is licensed under the Apache 2.0 License. Forks and derivative works are permitted. However, use of the **MARM name** and **version numbering** is reserved for releases from the [official MARM repository](https://github.com/Lyellr88/MARM-Systems). Derivatives should clearly indicate they are unofficial or experimental.
+MARM is released under the Apache 2.0 License, and forks, experiments, and integrations are welcome. If you build on it, please make unofficial versions easy to distinguish from releases published by the [official MARM repository](https://github.com/Lyellr88/MARM-Systems) so users know what they are installing.
 
 ## Project Documentation
 

@@ -3,6 +3,30 @@
 ## Version 2 - MARM Protocol to Universal MCP Server Evolution
 
 <details>
+<summary><strong>June 24th, 2026: Guided Setup & Email Signup Prompt (v2.15.0)</strong></summary>
+
+### marm-init Guided Setup
+
+- Added the `marm-init` skill as the recommended setup path so agents can guide users through MARM installation instead of leaving them to manually piece together MCP config files.
+- The skill detects or installs the MARM engine, loads the current protocol, chooses between Python/Docker and HTTP/STDIO, handles local or remote server setup, wires client connection commands, and can link multiple agents to the same memory server.
+- Added dashboard startup guidance and handoff behavior so setup ends with a live MARM connection and clear next steps.
+
+### Email Signup Prompt
+
+- Added a one-time server-side email signup prompt that can be injected after meaningful MARM usage, using explicit two-step consent before suggesting any email action.
+- Stored `signup_prompted` in `user_settings` so the server-side prompt does not repeat across sessions, restarts, or upgrades.
+- Added env-backed controls for enabling/disabling the prompt, tuning the memory threshold, and changing the target signup email.
+- Scoped the activation threshold to user-facing memories only, excluding `marm_system` documentation rows and compaction source rows so setup/indexing does not trigger the ask.
+- Guarded signup prompt injection against the MCP 1MB response limit and kept the `no_results` path free of prompt side effects.
+
+### Tests & Docs
+
+- Added focused tests for threshold behavior, excluded memory rows, one-time persistence, successful recall injection, no-results safety, response-size skipping, disabled prompt behavior, and restart persistence.
+- Updated README setup flow to feature `marm-init` first, collapse manual install paths into targeted dropdowns, and make contribution/license language more welcoming.
+
+</details>
+
+<details>
 <summary><strong>June 20th, 2026: Project & Platform Attribution (v2.14.2)</strong></summary>
 
 ### Project & Platform Metadata
