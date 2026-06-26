@@ -231,9 +231,66 @@ async def _recall_exact(
     Exact lexical hits are always returned in BM25 order, making it safe for
     config keys, API names, command strings, file paths, and short code snippets
     where a semantically-close-but-wrong result would be worse than no result.
+
+    Fallback chain:
+      1. FTS5 BM25 — fast, ranked, handles tokenisable queries.
+      2. LIKE scan  — used when FTS5 returns no results or the query cannot
+                      be sanitised into valid FTS tokens (e.g. bare operators).
+      3. Empty list — returned when both paths yield nothing; callers must
+                      never receive a semantic result on the exact lane.
+
+    Each result carries ``retrieval_mode`` set to ``"exact_fts"`` or
+    ``"exact_like"`` so callers and tests can confirm which path was taken.
     """
     _recall_debug(f"exact path: query='{query[:60]}', session={session}")
-    return await _recall_text_search(mem, query, session, limit)
+
+    # --- attempt FTS5 first ---
+    fts_results = await _recall_text_search(mem, query, session, limit)
+
+    if fts_results:
+        for r in fts_results:
+            r.setdefault("retrieval_mode", "exact_fts")
+        _recall_debug(f"exact_fts: {len(fts_results)} results")
+        return fts_results
+
+    # --- FTS returned nothing: fall back to LIKE scan ---
+    _recall_debug("exact_fts returned 0 results → LIKE fallback")
+    try:
+        with mem.get_connection() as conn:
+            pattern = f"%{query}%"
+            if session:
+                rows = conn.execute(
+                    "SELECT id, session_name, content, timestamp, context_type, metadata"
+                    " FROM memories WHERE session_name = ? AND content LIKE ?"
+                    " ORDER BY timestamp DESC LIMIT ?",
+                    (session, pattern, limit),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT id, session_name, content, timestamp, context_type, metadata"
+                    " FROM memories WHERE content LIKE ?"
+                    " ORDER BY timestamp DESC LIMIT ?",
+                    (pattern, limit),
+                ).fetchall()
+
+        like_results = [
+            {
+                "id": row[0],
+                "session_name": row[1],
+                "content": row[2],
+                "timestamp": row[3],
+                "context_type": row[4],
+                "metadata": row[5],
+                "similarity": 0.0,
+                "retrieval_mode": "exact_like",
+            }
+            for row in rows
+        ]
+        _recall_debug(f"exact_like: {len(like_results)} results")
+        return like_results
+    except Exception as e:
+        _recall_debug(f"exact_like fallback failed: {e}")
+        return []
 
 
 async def _recall_similar(
@@ -243,12 +300,9 @@ async def _recall_similar(
     limit: int = 5,
     query_vec=None,
     include_scan_metadata: bool = False,
-<<<<<<< HEAD
     exact_mode: str = "auto",
-=======
     project: str = None,
     platform: str = None,
->>>>>>> upstream/MARM-main
 ):
     """Find semantically similar memories.
 

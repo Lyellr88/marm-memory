@@ -200,29 +200,13 @@ async def marm_smart_recall(
     search_all: bool = False,
     include_logs: bool = False,
     detail: int = 1,
-<<<<<<< HEAD
     exact_mode: str = "auto",
-=======
     project: Optional[str] = None,
     platform: Optional[str] = None,
->>>>>>> upstream/MARM-main
 ) -> dict:
     """
     🧠 Recall memories by semantic similarity or keyword match.
 
-<<<<<<< HEAD
-    Finds relevant memories using semantic similarity or text search.
-    Returns the most relevant memories with similarity scores.
-    detail: 1=summary (~200 chars), 2=context (~500 chars), 3=full content
-    - exact_mode: retrieval lane to use
-        'auto'     = automatically switch to exact/lexical for syntax-heavy queries
-                     (config keys, file paths, CLI commands, API names, code snippets)
-        'exact'    = always use deterministic FTS/BM25, no semantic re-ranking
-        'semantic' = always use vector similarity regardless of query shape
-    """
-    return await smart_recall(
-        query, session_name, limit, search_all, include_logs, detail, exact_mode
-=======
     Searches stored memories for the most relevant matches to `query`.
     Returns a ranked list of results with similarity scores.
 
@@ -236,6 +220,11 @@ async def marm_smart_recall(
         1 = summary only (~200 chars)
         2 = extended context (~500 chars)
         3 = full content
+    - exact_mode: retrieval lane to use
+        'auto'     = automatically switch to exact/lexical for syntax-heavy queries
+                     (config keys, file paths, CLI commands, API names, code snippets)
+        'exact'    = always use deterministic FTS/BM25, no semantic re-ranking
+        'semantic' = always use vector similarity regardless of query shape
     - project: filter results to a specific project (e.g. "marm-systems"); omit to search all
     - platform: filter results to a specific platform (e.g. "claude-code", "cursor"); omit to search all
 
@@ -248,9 +237,9 @@ async def marm_smart_recall(
         search_all,
         include_logs,
         detail,
+        exact_mode,
         project=project,
         platform=platform,
->>>>>>> upstream/MARM-main
     )
 _SESSION_PREFIXES = ("Session: ", "Topic: ")
 _SESSION_INACTIVITY_NOTICE_SECONDS = 3600

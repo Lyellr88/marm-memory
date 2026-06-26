@@ -263,12 +263,7 @@ class MARMMemory:
         limit: int = 5,
         query_vec=None,
         include_scan_metadata: bool = False,
-<<<<<<< HEAD
         exact_mode: str = "auto",
-    ):
-        return await _recall_similar(
-            self, query, session, limit, query_vec, include_scan_metadata, exact_mode
-=======
         project: str = None,
         platform: str = None,
     ):
@@ -279,9 +274,9 @@ class MARMMemory:
             limit,
             query_vec,
             include_scan_metadata,
+            exact_mode,
             project,
             platform,
->>>>>>> upstream/MARM-main
         )
 
     async def recall_text_search(

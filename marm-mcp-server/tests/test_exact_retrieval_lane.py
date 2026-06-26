@@ -439,3 +439,158 @@ async def test_default_exact_mode_is_auto(tmp_path):
     )
 
     assert any(r["id"] == mem_id for r in results)
+
+
+# ---------------------------------------------------------------------------
+# Fallback path: FTS returns zero → LIKE scan
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_exact_lane_falls_back_to_like_when_fts_returns_nothing(
+    monkeypatch, tmp_path
+):
+    """When FTS5 returns zero results, _recall_exact must fall back to LIKE scan."""
+    from marm_mcp_server.core import memory_ops as ops
+
+    mem = MARMMemory(str(tmp_path / "memory.db"))
+    mem._encoder_failed = True
+
+    # Store a memory whose content will be found by LIKE but not FTS
+    mem_id = await mem.store_memory(
+        "special::config_key=some_value", session="fallback"
+    )
+
+    # Force _recall_text_search to always return empty so LIKE fallback triggers
+    async def empty_fts(*args, **kwargs):
+        return []
+
+    monkeypatch.setattr(ops, "_recall_text_search", empty_fts)
+
+    results = await mem.recall_similar(
+        "config_key", session="fallback", limit=5, exact_mode="exact"
+    )
+
+    assert results, "LIKE fallback must return results when FTS returns nothing"
+    assert any(r["id"] == mem_id for r in results)
+
+
+@pytest.mark.asyncio
+async def test_exact_lane_like_fallback_sets_retrieval_mode(monkeypatch, tmp_path):
+    """Results from the LIKE fallback must have retrieval_mode='exact_like'."""
+    from marm_mcp_server.core import memory_ops as ops
+
+    mem = MARMMemory(str(tmp_path / "memory.db"))
+    mem._encoder_failed = True
+
+    await mem.store_memory("fallback_KEY=123", session="mode-check")
+
+    async def empty_fts(*args, **kwargs):
+        return []
+
+    monkeypatch.setattr(ops, "_recall_text_search", empty_fts)
+
+    results = await mem.recall_similar(
+        "fallback_KEY", session="mode-check", limit=5, exact_mode="exact"
+    )
+
+    assert results
+    assert all(r.get("retrieval_mode") == "exact_like" for r in results)
+
+
+@pytest.mark.asyncio
+async def test_exact_lane_fts_hit_sets_retrieval_mode_exact_fts(tmp_path):
+    """Results from FTS5 on the exact lane must have retrieval_mode='exact_fts'."""
+    mem = MARMMemory(str(tmp_path / "memory.db"))
+    mem._encoder_failed = True
+
+    await mem.store_memory("MAX_RETRIES default is 3", session="fts-mode")
+
+    results = await mem.recall_similar(
+        "MAX_RETRIES", session="fts-mode", limit=5, exact_mode="exact"
+    )
+
+    assert results
+    assert all(r.get("retrieval_mode") == "exact_fts" for r in results)
+
+
+@pytest.mark.asyncio
+async def test_exact_lane_returns_empty_when_both_fts_and_like_miss(
+    monkeypatch, tmp_path
+):
+    """When neither FTS nor LIKE finds anything, return [] — never a semantic result."""
+    from marm_mcp_server.core import memory_ops as ops
+
+    mem = MARMMemory(str(tmp_path / "memory.db"))
+    mem._encoder_failed = True
+
+    # Store something completely unrelated
+    await mem.store_memory("totally unrelated content xyz", session="empty")
+
+    async def empty_fts(*args, **kwargs):
+        return []
+
+    monkeypatch.setattr(ops, "_recall_text_search", empty_fts)
+
+    results = await mem.recall_similar(
+        "NONEXISTENT_CONFIG_KEY_ZZZZ", session="empty", limit=5, exact_mode="exact"
+    )
+
+    assert results == [], "exact lane must return [] rather than semantic results when nothing matches"
+
+
+# ---------------------------------------------------------------------------
+# HTTP endpoint passes exact_mode through
+# ---------------------------------------------------------------------------
+
+
+def test_http_endpoint_accepts_exact_mode_exact(tmp_path):
+    """The HTTP endpoint must accept exact_mode='exact' without error."""
+    from fastapi.testclient import TestClient
+    from marm_mcp_server.endpoints.memory import router
+    from fastapi import FastAPI
+
+    app = FastAPI()
+    app.include_router(router)
+    client = TestClient(app)
+
+    resp = client.post(
+        "/marm_smart_recall",
+        json={"query": "SOME_CONFIG_KEY", "session_name": "test", "exact_mode": "exact"},
+    )
+    # Should not return 422 (validation error)
+    assert resp.status_code != 422
+
+
+def test_http_endpoint_accepts_exact_mode_semantic(tmp_path):
+    """The HTTP endpoint must accept exact_mode='semantic' without error."""
+    from fastapi.testclient import TestClient
+    from marm_mcp_server.endpoints.memory import router
+    from fastapi import FastAPI
+
+    app = FastAPI()
+    app.include_router(router)
+    client = TestClient(app)
+
+    resp = client.post(
+        "/marm_smart_recall",
+        json={"query": "what was the sprint goal", "session_name": "test", "exact_mode": "semantic"},
+    )
+    assert resp.status_code != 422
+
+
+def test_http_endpoint_rejects_invalid_exact_mode():
+    """The HTTP endpoint must reject unknown exact_mode values with 422."""
+    from fastapi.testclient import TestClient
+    from marm_mcp_server.endpoints.memory import router
+    from fastapi import FastAPI
+
+    app = FastAPI()
+    app.include_router(router)
+    client = TestClient(app)
+
+    resp = client.post(
+        "/marm_smart_recall",
+        json={"query": "anything", "session_name": "test", "exact_mode": "invalid_mode"},
+    )
+    assert resp.status_code == 422

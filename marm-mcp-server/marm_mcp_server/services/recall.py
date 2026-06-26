@@ -41,12 +41,9 @@ async def smart_recall(
     search_all: bool = False,
     include_logs: bool = False,
     detail: int = 1,
-<<<<<<< HEAD
     exact_mode: str = "auto",
-=======
     project: str = None,
     platform: str = None,
->>>>>>> upstream/MARM-main
 ) -> dict:
     try:
         search_session = None if search_all else session_name
@@ -86,17 +83,13 @@ async def smart_recall(
             ]
 
         similar_memories, scan_meta = await memory.recall_similar(
-<<<<<<< HEAD
-            query, session=search_session, limit=limit, include_scan_metadata=True,
-            exact_mode=exact_mode,
-=======
             query,
             session=search_session,
             limit=limit,
             include_scan_metadata=True,
+            exact_mode=exact_mode,
             project=project,
             platform=platform,
->>>>>>> upstream/MARM-main
         )
 
         if not similar_memories:
