@@ -3,6 +3,52 @@
 ## Version 2 - MARM Protocol to Universal MCP Server Evolution
 
 <details>
+<summary><strong>June 24th, 2026: Guided Setup & Email Signup Prompt (v2.15.0)</strong></summary>
+
+### marm-init Guided Setup
+
+- Added the `marm-init` skill as the recommended setup path so agents can guide users through MARM installation instead of leaving them to manually piece together MCP config files.
+- The skill detects or installs the MARM engine, loads the current protocol, chooses between Python/Docker and HTTP/STDIO, handles local or remote server setup, wires client connection commands, and can link multiple agents to the same memory server.
+- Added dashboard startup guidance and handoff behavior so setup ends with a live MARM connection and clear next steps.
+
+### Email Signup Prompt
+
+- Added a one-time server-side email signup prompt that can be injected after meaningful MARM usage, using explicit two-step consent before suggesting any email action.
+- Stored `signup_prompted` in `user_settings` so the server-side prompt does not repeat across sessions, restarts, or upgrades.
+- Added env-backed controls for enabling/disabling the prompt, tuning the memory threshold, and changing the target signup email.
+- Scoped the activation threshold to user-facing memories only, excluding `marm_system` documentation rows and compaction source rows so setup/indexing does not trigger the ask.
+- Guarded signup prompt injection against the MCP 1MB response limit and kept the `no_results` path free of prompt side effects.
+
+### Tests & Docs
+
+- Added focused tests for threshold behavior, excluded memory rows, one-time persistence, successful recall injection, no-results safety, response-size skipping, disabled prompt behavior, and restart persistence.
+- Updated README setup flow to feature `marm-init` first, collapse manual install paths into targeted dropdowns, and make contribution/license language more welcoming.
+
+</details>
+
+<details>
+<summary><strong>June 20th, 2026: Project & Platform Attribution (v2.14.2)</strong></summary>
+
+### Project & Platform Metadata
+
+- Added nullable `project` and `platform` attribution columns to memories, log entries, and notebook entries so MARM can distinguish work from different repositories, clients, and agent surfaces without splitting the local SQLite database.
+- Added `MARM_PROJECT` and `MARM_PLATFORM` settings with safe auto-detection plus explicit environment overrides for Docker, servers, and custom client setups.
+- Tagged new memory, log, and notebook writes with detected attribution metadata while preserving existing untagged rows as global/unscoped history.
+
+### Scoped Recall & Consolidation Safety
+
+- Extended `marm_smart_recall` with optional `project` and `platform` filters across HTTP and STDIO, including memory recall and `include_logs=True` log search.
+- Applied attribution filters through FTS candidate fetches, FTS scoring, semantic fallback scoring, and LIKE fallback so scoped recall stays consistent across retrieval lanes.
+- Scoped exact duplicate detection and semantic write-time merge checks to the current project/platform pair to prevent accidental cross-project or cross-client consolidation.
+
+### Tests & Docs
+
+- Added focused coverage for project/platform schema migrations, write tagging, scoped recall, HTTP request handling, log filtering, notebook attribution, scoring filters, and consolidation isolation.
+- Updated README, MCP handbook, FAQ, contributing guidance, packaged docs, and project architecture references with the new attribution behavior.
+
+</details>
+
+<details>
 <summary><strong>June 17th, 2026: Docs, Assets & Community (v2.14.1)</strong></summary>
 
 ### Documentation & README

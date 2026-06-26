@@ -1,15 +1,12 @@
---extra-index-url https://download.pytorch.org/whl/cpu
-torch
 fastmcp>=3.2.0,<3.5.0
-fastapi>=0.117.1,<0.138.0
+fastapi>=0.117.1,<0.118.0
 fastapi-mcp>=0.4.0,<0.5.0
 uvicorn>=0.36.0,<0.37.0
 pydantic>=2.11.9,<3.0.0
-sentence-transformers>=5.1.0,<6.0.0
 numpy>=2.1.2,<3.0.0
 python-multipart>=0.0.12,<0.1.0
 apscheduler>=3.10.4,<4.0.0
-psutil>=6.1.0,<8.0.0
+psutil>=6.1.0,<7.0.0
 structlog>=24.4.0,<27.0.0
 httpx>=0.27.0,<1.0.0
-packaging>=24.0,<27.0
+packaging>=24.0,<26.0

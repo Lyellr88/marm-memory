@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "marm-mcp-server"
-version = "2.14.1"
+version = "2.15.0"
 description = "MARM-Systems is a complete protocol and platform—combining an advanced memory backend, modular semantic search, and agent-to-agent coordination with a scientifically structured, community-vetted methodology for reasoning, session recall, and collaborative AI workflows. More then just a set of tools, it's a complete AI memory ecosystem"
 readme = "README.md"
 authors = [
@@ -38,7 +38,7 @@ dependencies = [
     "psutil>=6.1.0",
     "structlog>=24.4.0",
     "httpx>=0.27.0",
-    "packaging>=24.0,<26.0",
+    "packaging>=24.0,<27.0",
     "torch>=1.13.0",
     "fastmcp>=3.2.0,<3.5.0",
 ]

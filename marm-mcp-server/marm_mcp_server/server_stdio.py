@@ -184,6 +184,8 @@ from marm_mcp_server.config.settings import (  # noqa: E402
     SERVER_VERSION,
     DEFAULT_DB_PATH,
     SEMANTIC_SEARCH_AVAILABLE,
+    MARM_PROJECT,
+    MARM_PLATFORM,
 )
 
 mcp = FastMCP("MARM MCP Server")
@@ -198,11 +200,17 @@ async def marm_smart_recall(
     search_all: bool = False,
     include_logs: bool = False,
     detail: int = 1,
+<<<<<<< HEAD
     exact_mode: str = "auto",
+=======
+    project: Optional[str] = None,
+    platform: Optional[str] = None,
+>>>>>>> upstream/MARM-main
 ) -> dict:
     """
-    🧠 Intelligent memory recall based on semantic similarity
+    🧠 Recall memories by semantic similarity or keyword match.
 
+<<<<<<< HEAD
     Finds relevant memories using semantic similarity or text search.
     Returns the most relevant memories with similarity scores.
     detail: 1=summary (~200 chars), 2=context (~500 chars), 3=full content
@@ -214,6 +222,35 @@ async def marm_smart_recall(
     """
     return await smart_recall(
         query, session_name, limit, search_all, include_logs, detail, exact_mode
+=======
+    Searches stored memories for the most relevant matches to `query`.
+    Returns a ranked list of results with similarity scores.
+
+    Parameters:
+    - query: natural language search term or phrase
+    - session_name: limit search to a specific session (default searches active session)
+    - limit: maximum number of results to return (default 5)
+    - search_all: if True, search across all sessions instead of just the active one
+    - include_logs: if True, include log entries alongside memory results
+    - detail: controls how much content is returned per result
+        1 = summary only (~200 chars)
+        2 = extended context (~500 chars)
+        3 = full content
+    - project: filter results to a specific project (e.g. "marm-systems"); omit to search all
+    - platform: filter results to a specific platform (e.g. "claude-code", "cursor"); omit to search all
+
+    Returns: status, results list with id/content/score/project/platform, results_count
+    """
+    return await smart_recall(
+        query,
+        session_name,
+        limit,
+        search_all,
+        include_logs,
+        detail,
+        project=project,
+        platform=platform,
+>>>>>>> upstream/MARM-main
     )
 _SESSION_PREFIXES = ("Session: ", "Topic: ")
 _SESSION_INACTIVITY_NOTICE_SECONDS = 3600
@@ -226,11 +263,19 @@ async def marm_log_entry(
     session_name: Optional[str] = None,
 ) -> dict:
     """
-    📝 Add structured log entry for milestones or decisions
+    📝 Write a log entry to the active session.
 
-    Start with "Session: [name]" or "Topic: [name]" to switch active session.
-    The backend auto-tags the date. All subsequent entries route to that session.
-    Entry format: YYYY-MM-DD-topic-summary (date prefix optional).
+    Entries are stored with a date, topic, and summary. If `entry` begins with
+    "Session: [name]" or "Topic: [name]", the active session switches to that name
+    and all subsequent entries route there automatically.
+
+    Entry format: YYYY-MM-DD-topic-summary (date prefix is optional; auto-tagged if omitted)
+
+    Parameters:
+    - entry: the text to log; plain text or prefixed with "Session:" / "Topic:" to switch sessions
+    - session_name: override the target session explicitly (optional; active session used if omitted)
+
+    Returns: status, message confirming the entry or session switch, entry_id
     """
     try:
         formatted_entry = entry.strip()
@@ -262,8 +307,8 @@ async def marm_log_entry(
                     conn.execute(
                         """
                         INSERT INTO log_entries
-                            (id, session_name, entry_date, topic, summary, full_entry)
-                        VALUES (?, ?, ?, ?, ?, ?)
+                            (id, session_name, entry_date, topic, summary, full_entry, project, platform)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                         (
                             marker_id,
@@ -272,6 +317,8 @@ async def marm_log_entry(
                             "session_start",
                             base_name,
                             formatted_entry,
+                            MARM_PROJECT or None,
+                            MARM_PLATFORM or None,
                         ),
                     )
                     try:
@@ -346,10 +393,19 @@ async def marm_log_entry(
         with memory.get_connection() as conn:
             conn.execute(
                 """
-                INSERT INTO log_entries (id, session_name, entry_date, topic, summary, full_entry)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO log_entries (id, session_name, entry_date, topic, summary, full_entry, project, platform)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (entry_id, session, entry_date, topic, summary, formatted_entry),
+                (
+                    entry_id,
+                    session,
+                    entry_date,
+                    topic,
+                    summary,
+                    formatted_entry,
+                    MARM_PROJECT or None,
+                    MARM_PLATFORM or None,
+                ),
             )
             conn.execute(
                 """
@@ -389,7 +445,17 @@ async def marm_log_show(
     session_name: Optional[str] = None,
 ) -> dict:
     """
-    📋 Display all entries and sessions logged
+    📋 List log sessions or show entries for a specific session.
+
+    Two modes depending on whether `session_name` is provided:
+    - No session_name: returns a summary of all sessions with entry counts
+    - With session_name: returns all entries for that session, ordered by date descending
+
+    Parameters:
+    - session_name: name of the session to inspect (omit to list all sessions)
+
+    Returns (no session_name): status, sessions list with session_name/entry_count, total_sessions
+    Returns (with session_name): status, session_name, entries list with id/entry_date/topic/summary/full_entry, total_entries
     """
     try:
         with memory.get_connection() as conn:

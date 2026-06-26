@@ -611,3 +611,334 @@ body.locked .main {
     align-items: flex-start;
   }
 }
+
+/* Compaction UI Styles */
+
+.compaction-item {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem 1.1rem;
+  animation: fadeUp 0.35s ease both;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.compaction-item:hover {
+  border-color: var(--muted);
+}
+
+.compaction-checkbox {
+  display: flex;
+  gap: 0.85rem;
+  cursor: pointer;
+  align-items: flex-start;
+}
+
+.compaction-checkbox input[type="checkbox"] {
+  margin-top: 0.25rem;
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--accent);
+}
+
+.compaction-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.compaction-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.compaction-preview {
+  margin: 0.5rem 0 0;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 4.5em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+.btn.accent {
+  background: var(--accent);
+  border-color: var(--accent-dim);
+  color: #1a1408;
+  font-weight: 600;
+}
+
+.btn.accent:hover {
+  filter: brightness(1.05);
+}
+
+.btn.accent:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  filter: none;
+}
+
+#compaction-preview-dialog {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  padding: 0;
+  box-shadow: var(--shadow);
+  max-width: min(800px, 92vw);
+  max-height: 85vh;
+}
+
+#compaction-preview-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.65);
+}
+
+.compaction-preview-body {
+  padding: 1.25rem;
+  max-height: calc(85vh - 120px);
+  overflow-y: auto;
+}
+
+.preview-section {
+  margin-bottom: 1.5rem;
+}
+
+.preview-section:last-child {
+  margin-bottom: 0;
+}
+
+.preview-section h4 {
+  margin: 0 0 0.75rem;
+  font-size: 0.9rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.preview-sources {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.preview-source-item {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 8em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 5;
+  -webkit-box-orient: vertical;
+}
+
+.preview-summary {
+  background: var(--surface-2);
+  border: 1px solid rgba(232, 168, 56, 0.35);
+  border-radius: 8px;
+  padding: 1rem;
+}
+
+.preview-summary-text {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.preview-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.stat-pill {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.75rem;
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--muted);
+}
+
+.stat-pill strong {
+  color: var(--accent);
+  font-weight: 600;
+  margin-right: 0.25rem;
+}
+
+.stat-pill.savings {
+  border-color: rgba(93, 206, 142, 0.35);
+}
+
+.stat-pill.savings strong {
+  color: var(--ok);
+}
+
+
+/* Maintenance UI Styles (Phase 2) */
+
+.section-title {
+  margin: 0 0 1rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.section-subtitle {
+  margin: 1.5rem 0 1rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.maintenance-stats {
+  margin-bottom: 1.5rem;
+}
+
+.maintenance-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 2px solid var(--border);
+  padding-bottom: 0;
+}
+
+.maintenance-tab {
+  font: inherit;
+  font-size: 0.88rem;
+  padding: 0.65rem 1rem;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  margin-bottom: -2px;
+}
+
+.maintenance-tab:hover {
+  color: var(--text);
+}
+
+.maintenance-tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.maintenance-section {
+  animation: fadeUp 0.3s ease;
+}
+
+.maintenance-section[hidden] {
+  display: none;
+}
+
+.candidate-item {
+  position: relative;
+}
+
+.candidate-preview {
+  margin: 0.5rem 0 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 4.5em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+}
+
+.tag.ok {
+  border-color: rgba(93, 206, 142, 0.35);
+  color: var(--ok);
+}
+
+.tag.error {
+  border-color: rgba(232, 93, 93, 0.45);
+  color: var(--danger);
+}
+
+#maintenance-detail-dialog {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  padding: 0;
+  box-shadow: var(--shadow);
+  max-width: min(700px, 92vw);
+  max-height: 85vh;
+}
+
+#maintenance-detail-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.65);
+}
+
+.maintenance-detail-body {
+  padding: 1.25rem;
+  max-height: calc(85vh - 80px);
+  overflow-y: auto;
+}
+
+.detail-section {
+  margin-bottom: 1.25rem;
+}
+
+.detail-section:last-child {
+  margin-bottom: 0;
+}
+
+.detail-section h4 {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.detail-section p {
+  margin: 0.25rem 0;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.detail-preview {
+  margin: 0.5rem 0 0;
+  padding: 0.75rem;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 12em;
+  overflow-y: auto;
+}

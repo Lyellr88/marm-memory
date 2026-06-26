@@ -1,0 +1,5 @@
+{
+  "$schema": "https://glama.ai/mcp/schemas/server.json",
+  "maintainers": ["Lyellr88"],
+  "dockerImage": "lyellr88/marm-mcp-server:glama-latest"
+}

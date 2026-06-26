@@ -139,6 +139,8 @@ If `SERVER_HOST=0.0.0.0`, MARM requires a key. When no key is provided, the sett
 
 MARM uses a local SQLite database under `~/.marm/` by default. Tool behavior depends on specific tables for sessions, log entries, notebook entries, memories, compaction staging, and analytics.
 
+Memory, log, and notebook rows can carry nullable `project` and `platform` attribution columns. When changing write paths, recall filters, consolidation, or schema migrations, keep these fields aligned across HTTP, STDIO, tests, and docs.
+
 Do not rename fields, move data between tables, or change date/session parsing behavior without updating HTTP tools, STDIO tools, tests, smoke scripts, and docs together.
 
 **Retired features stay retired unless re-scoped**

@@ -102,47 +102,48 @@ async def marm_smart_recall(request: SmartRecallRequest, http_request: Request):
         log_results = []
         if request.include_logs:
             with memory.get_connection() as conn:
-                if request.search_all:
-                    cursor = conn.execute(
-                        """
-                        SELECT session_name, topic, summary, entry_date
-                        FROM log_entries
-                        WHERE topic LIKE ? OR summary LIKE ?
-                        ORDER BY entry_date DESC
-                        LIMIT ?
-                        """,
-                        (f"%{request.query}%", f"%{request.query}%", request.limit),
-                    )
-                else:
-                    cursor = conn.execute(
-                        """
-                        SELECT session_name, topic, summary, entry_date
-                        FROM log_entries
-                        WHERE (topic LIKE ? OR summary LIKE ?) AND session_name = ?
-                        ORDER BY entry_date DESC
-                        LIMIT ?
-                        """,
-                        (
-                            f"%{request.query}%",
-                            f"%{request.query}%",
-                            request.session_name,
-                            request.limit,
-                        ),
-                    )
+                log_base = """
+                    SELECT session_name, topic, summary, entry_date, project, platform
+                    FROM log_entries
+                    WHERE (topic LIKE ? OR summary LIKE ?)
+                """
+                log_params: list = [f"%{request.query}%", f"%{request.query}%"]
+                if not request.search_all:
+                    log_base += " AND session_name = ?"
+                    log_params.append(request.session_name)
+                if request.project is not None:
+                    log_base += " AND project = ?"
+                    log_params.append(request.project)
+                if request.platform is not None:
+                    log_base += " AND platform = ?"
+                    log_params.append(request.platform)
+                log_base += " ORDER BY entry_date DESC LIMIT ?"
+                log_params.append(request.limit)
                 log_results = [
                     {
                         "session_name": r[0],
                         "topic": r[1],
                         "summary": r[2],
                         "entry_date": r[3],
+                        "project": r[4],
+                        "platform": r[5],
                         "type": "log",
                     }
-                    for r in cursor.fetchall()
+                    for r in conn.execute(log_base, log_params).fetchall()
                 ]
 
         similar_memories, scan_meta = await memory.recall_similar(
+<<<<<<< HEAD
             request.query, search_session, request.limit, include_scan_metadata=True,
             exact_mode=request.exact_mode,
+=======
+            request.query,
+            search_session,
+            request.limit,
+            include_scan_metadata=True,
+            project=request.project,
+            platform=request.platform,
+>>>>>>> upstream/MARM-main
         )
 
         if not similar_memories:

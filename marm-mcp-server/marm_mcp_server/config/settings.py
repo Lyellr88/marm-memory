@@ -105,7 +105,42 @@ if not (1 <= _raw_port <= 65535):
         f"WARNING: SERVER_PORT={_raw_port} out of [1, 65535], clamped to {SERVER_PORT}",
         file=sys.stderr,
     )
-SERVER_VERSION = "2.14.1"
+SERVER_VERSION = "2.15.0"
+
+
+def _detect_project() -> str:
+    explicit = os.environ.get("MARM_PROJECT", "")
+    if explicit:
+        return explicit.lower().replace(" ", "-")
+    cwd = Path.cwd()
+    unsafe = {Path.home(), Path.home().parent, Path("/")}
+    if sys.platform == "win32":
+        unsafe.add(Path("C:\\"))
+    if cwd in unsafe:
+        return ""
+    return cwd.name.lower().replace(" ", "-")
+
+
+MARM_PROJECT = _detect_project()
+
+
+def _detect_platform() -> str:
+    explicit = os.environ.get("MARM_PLATFORM", "")
+    if explicit:
+        return explicit.lower()
+    if os.environ.get("CLAUDE_CODE_ENTRYPOINT"):
+        return "claude-code"
+    term = os.environ.get("TERM_PROGRAM", "").lower()
+    if term in ("vscode", "cursor", "windsurf"):
+        return term
+    if os.environ.get("VSCODE_PID"):
+        return "vscode"
+    if os.environ.get("CURSOR_TRACE_ID"):
+        return "cursor"
+    return ""
+
+
+MARM_PLATFORM = _detect_platform()
 
 _raw_rpm = _safe_int("MARM_RATE_LIMIT_RPM", 80)
 # 0 = disable rate limiting; negative values clamped to 0
@@ -351,3 +386,15 @@ if SERVER_HOST == "0.0.0.0" and not MARM_API_KEY and not _is_generate_key_cmd:
     print()
     print("On subsequent starts the key loads silently from the file above.")
     print()
+
+SIGNUP_PROMPT_ENABLED = os.environ.get("MARM_SIGNUP_PROMPT_ENABLED", "1") == "1"
+
+_raw_spt = _safe_int("MARM_SIGNUP_PROMPT_THRESHOLD", 25)
+SIGNUP_PROMPT_THRESHOLD = max(1, _raw_spt)
+if _raw_spt < 1:
+    print(
+        f"WARNING: MARM_SIGNUP_PROMPT_THRESHOLD={_raw_spt} below minimum 1, clamped to {SIGNUP_PROMPT_THRESHOLD}",
+        file=sys.stderr,
+    )
+
+SIGNUP_PROMPT_EMAIL = os.environ.get("MARM_SIGNUP_PROMPT_EMAIL", "info@marmsystems.com")

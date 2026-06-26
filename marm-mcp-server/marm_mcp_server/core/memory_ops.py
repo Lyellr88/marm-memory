@@ -13,6 +13,8 @@ from ..config.settings import (
     TEMPORAL_WEIGHT,
     TEMPORAL_HALF_LIFE_DAYS,
     FTS_CANDIDATE_LIMIT,
+    MARM_PROJECT,
+    MARM_PLATFORM,
 )
 from .memory_utils import (
     _safe_print,
@@ -181,8 +183,8 @@ async def _store_memory(
 
         conn.execute(
             """
-            INSERT INTO memories (id, session_name, content, embedding, content_hash, timestamp, context_type, metadata)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO memories (id, session_name, content, embedding, content_hash, timestamp, context_type, metadata, project, platform)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
             (
                 memory_id,
@@ -193,6 +195,8 @@ async def _store_memory(
                 timestamp,
                 context_type,
                 json.dumps(metadata),
+                MARM_PROJECT or None,
+                MARM_PLATFORM or None,
             ),
         )
 
@@ -239,7 +243,12 @@ async def _recall_similar(
     limit: int = 5,
     query_vec=None,
     include_scan_metadata: bool = False,
+<<<<<<< HEAD
     exact_mode: str = "auto",
+=======
+    project: str = None,
+    platform: str = None,
+>>>>>>> upstream/MARM-main
 ):
     """Find semantically similar memories.
 
@@ -280,7 +289,12 @@ async def _recall_similar(
     if query_vec is None:
         if not mem._load_encoder_lazily():
             _recall_debug("semantic model unavailable → text-search fallback")
-            return _wrap(await _recall_text_search(mem, query, session, limit), False)
+            return _wrap(
+                await _recall_text_search(
+                    mem, query, session, limit, project=project, platform=platform
+                ),
+                False,
+            )
 
     try:
         if query_vec is not None:
@@ -298,6 +312,8 @@ async def _recall_similar(
                     session,
                     fts_query,
                     max(limit, FTS_CANDIDATE_LIMIT),
+                    project,
+                    platform,
                 )
                 _recall_debug(
                     f"FTS filter: {len(candidate_ids)} candidates for '{fts_query}'"
@@ -333,6 +349,8 @@ async def _recall_similar(
                 scan_limit,
                 query_embedding,
                 limit,
+                project,
+                platform,
             )
             _recall_debug(
                 f"semantic fallback: {len(similarities)} candidates, scan_truncated={scan_truncated}"
@@ -366,6 +384,8 @@ async def _recall_similar(
                     if memory["metadata"]
                     else {},
                     "similarity": float(similarity),
+                    "project": memory["project"],
+                    "platform": memory["platform"],
                 }
             )
 
@@ -374,11 +394,21 @@ async def _recall_similar(
     except Exception as e:
         _safe_print(f"Semantic search failed: {e}")
         _recall_debug(f"semantic search exception → text-search fallback: {e}")
-        return _wrap(await _recall_text_search(mem, query, session, limit), False)
+        return _wrap(
+            await _recall_text_search(
+                mem, query, session, limit, project=project, platform=platform
+            ),
+            False,
+        )
 
 
 async def _recall_text_search(
-    mem, query: str, session: str = None, limit: int = 5
+    mem,
+    query: str,
+    session: str = None,
+    limit: int = 5,
+    project: str = None,
+    platform: str = None,
 ) -> List[Dict]:
     """Text search via FTS5 BM25 ranking, with LIKE fallback for unsanitizable queries."""
     _recall_debug(f"text-search path: query='{query[:50]}', session={session}")
@@ -386,7 +416,13 @@ async def _recall_text_search(
     if fts_query is not None:
         try:
             fts_rows = await asyncio.to_thread(
-                _fetch_and_score_fts_rows, mem.db_path, session, fts_query, limit
+                _fetch_and_score_fts_rows,
+                mem.db_path,
+                session,
+                fts_query,
+                limit,
+                project,
+                platform,
             )
             if fts_rows:
                 _recall_debug(f"FTS5 returned {len(fts_rows)} results")
@@ -401,6 +437,8 @@ async def _recall_text_search(
                         if row["metadata"]
                         else {},
                         "similarity": float(score),
+                        "project": row["project"],
+                        "platform": row["platform"],
                     }
                     for row, score in fts_rows
                 ]
@@ -411,31 +449,25 @@ async def _recall_text_search(
     _recall_debug("FTS5 returned 0 or query unsanitizable → LIKE fallback")
 
     with mem.get_connection() as conn:
-        if session is None:
-            cursor = conn.execute(
-                """
-                SELECT id, session_name, content, timestamp, context_type, metadata
-                FROM memories
-                WHERE content LIKE ?
-                  AND (compaction_role IS NULL OR compaction_role != 'source')
-                ORDER BY timestamp DESC
-                LIMIT ?
-            """,
-                (f"%{query}%", limit),
-            )
-        else:
-            cursor = conn.execute(
-                """
-                SELECT id, session_name, content, timestamp, context_type, metadata
-                FROM memories
-                WHERE content LIKE ?
-                  AND session_name = ?
-                  AND (compaction_role IS NULL OR compaction_role != 'source')
-                ORDER BY timestamp DESC
-                LIMIT ?
-            """,
-                (f"%{query}%", session, limit),
-            )
+        base = """
+            SELECT id, session_name, content, timestamp, context_type, metadata, project, platform
+            FROM memories
+            WHERE content LIKE ?
+              AND (compaction_role IS NULL OR compaction_role != 'source')
+        """
+        params: list = [f"%{query}%"]
+        if session is not None:
+            base += " AND session_name = ?"
+            params.append(session)
+        if project is not None:
+            base += " AND project = ?"
+            params.append(project)
+        if platform is not None:
+            base += " AND platform = ?"
+            params.append(platform)
+        base += " ORDER BY timestamp DESC LIMIT ?"
+        params.append(limit)
+        cursor = conn.execute(base, params)
 
         results = []
         for row in cursor.fetchall():
@@ -448,6 +480,8 @@ async def _recall_text_search(
                     "context_type": row[4],
                     "metadata": json.loads(row[5]) if row[5] else {},
                     "similarity": 0.8,
+                    "project": row[6],
+                    "platform": row[7],
                 }
             )
 
