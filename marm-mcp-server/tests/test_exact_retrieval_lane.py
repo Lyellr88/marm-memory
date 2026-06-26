@@ -594,3 +594,40 @@ def test_http_endpoint_rejects_invalid_exact_mode():
         json={"query": "anything", "session_name": "test", "exact_mode": "invalid_mode"},
     )
     assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_marm_system_fallback_preserves_exact_mode(monkeypatch, tmp_path):
+    """When a session returns no results, the marm_system fallback recall must
+    preserve the caller's exact_mode — not silently drop it back to 'auto'.
+    """
+    from marm_mcp_server.services.recall import smart_recall
+
+    mem_module = pytest.importorskip("marm_mcp_server.core.memory")
+    real_mem = mem_module.memory
+
+    recorded: list[dict] = []
+    original_recall = real_mem.recall_similar
+
+    async def spy_recall(query, session=None, limit=5, **kwargs):
+        recorded.append({"session": session, "exact_mode": kwargs.get("exact_mode", "auto")})
+        if session != "marm_system":
+            return [], {"recall_scan_truncated": False, "recall_scan_limit": 10000}
+        return []
+
+    monkeypatch.setattr(real_mem, "recall_similar", spy_recall)
+
+    await smart_recall(
+        query="EXACT_CONFIG_KEY",
+        session_name="empty_session",
+        limit=3,
+        exact_mode="exact",
+    )
+
+    monkeypatch.setattr(real_mem, "recall_similar", original_recall)
+
+    fallback_calls = [r for r in recorded if r["session"] == "marm_system"]
+    assert fallback_calls, "marm_system fallback was never called"
+    assert all(r["exact_mode"] == "exact" for r in fallback_calls), (
+        f"exact_mode was dropped in marm_system fallback: {fallback_calls}"
+    )    

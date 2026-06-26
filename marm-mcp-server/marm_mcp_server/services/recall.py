@@ -109,6 +109,7 @@ async def smart_recall(
                     limit=limit,
                     project=project,
                     platform=platform,
+                    exact_mode=exact_mode,
                 )
                 if system_memories:
                     response["message"] = (
