@@ -221,9 +221,11 @@ async def _store_memory(
 
 async def _recall_exact(
     mem,
-    query: str,
-    session: str = None,
-    limit: int = 5,
+    query,
+    session=None,
+    limit=5,
+    project=None,
+    platform=None,
 ) -> List[Dict]:
     """Deterministic exact/lexical recall via FTS5 BM25, with LIKE fallback.
 
@@ -245,7 +247,14 @@ async def _recall_exact(
     _recall_debug(f"exact path: query='{query[:60]}', session={session}")
 
     # --- attempt FTS5 first ---
-    fts_results = await _recall_text_search(mem, query, session, limit)
+    fts_results = await _recall_text_search(
+            mem,
+            query,
+            session,
+            limit,
+            project=project,
+            platform=platform,
+    )
 
     if fts_results:
         for r in fts_results:
@@ -257,32 +266,53 @@ async def _recall_exact(
     _recall_debug("exact_fts returned 0 results → LIKE fallback")
     try:
         with mem.get_connection() as conn:
-            pattern = f"%{query}%"
-            if session:
-                rows = conn.execute(
-                    "SELECT id, session_name, content, timestamp, context_type, metadata"
-                    " FROM memories WHERE session_name = ? AND content LIKE ?"
-                    " ORDER BY timestamp DESC LIMIT ?",
-                    (session, pattern, limit),
-                ).fetchall()
-            else:
-                rows = conn.execute(
-                    "SELECT id, session_name, content, timestamp, context_type, metadata"
-                    " FROM memories WHERE content LIKE ?"
-                    " ORDER BY timestamp DESC LIMIT ?",
-                    (pattern, limit),
-                ).fetchall()
+            base = """
+                SELECT
+                    id,
+                    session_name,
+                    content,
+                    timestamp,
+                    context_type,
+                    metadata,
+                    project,
+                    platform
+                FROM memories
+                WHERE content LIKE ?
+            """
+
+            params = [f"%{query}%"]
+
+            if session is not None:
+                base += " AND session_name = ?"
+                params.append(session)
+
+            if project is not None:
+                base += " AND project = ?"
+                params.append(project)
+
+            if platform is not None:
+                base += " AND platform = ?"
+                params.append(platform)
+
+            base += " ORDER BY timestamp DESC LIMIT ?"
+            params.append(limit)
+
+            rows = conn.execute(base, params).fetchall()
 
         like_results = [
             {
+
                 "id": row[0],
                 "session_name": row[1],
                 "content": row[2],
                 "timestamp": row[3],
                 "context_type": row[4],
-                "metadata": row[5],
+                "metadata": json.loads(row[5]) if row[5] else {},
                 "similarity": 0.0,
                 "retrieval_mode": "exact_like",
+                "project": row[6],
+                "platform": row[7],
+
             }
             for row in rows
         ]
@@ -337,7 +367,14 @@ async def _recall_similar(
         _recall_debug(
             f"exact lane selected (mode={exact_mode!r}, query='{query[:60]}')"
         )
-        results = await _recall_exact(mem, query, session, limit)
+        results = await _recall_exact(
+            mem,
+            query,
+            session,
+            limit,
+            project=project,
+            platform=platform,
+        )
         return _wrap(results, False)
 
     if query_vec is None:

@@ -145,8 +145,13 @@ async def marm_smart_recall(request: SmartRecallRequest, http_request: Request):
         if not similar_memories:
             if not request.search_all:
                 system_memories = await memory.recall_similar(
-                    request.query, "marm_system", request.limit
-                )
+                        request.query,
+                        "marm_system",
+                        request.limit,
+                        exact_mode=request.exact_mode,
+                        project=request.project,
+                        platform=request.platform,
+                    )
 
                 response = {
                     "status": "no_results",
