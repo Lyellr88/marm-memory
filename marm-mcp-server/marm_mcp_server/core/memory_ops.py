@@ -278,6 +278,7 @@ async def _recall_exact(
                     platform
                 FROM memories
                 WHERE content LIKE ?
+                  AND (compaction_role IS NULL OR compaction_role != 'source')
             """
 
             params = [f"%{query}%"]
