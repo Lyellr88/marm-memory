@@ -3,6 +3,17 @@
 ## Version 2 - MARM Protocol to Universal MCP Server Evolution
 
 <details>
+<summary><strong>July 2nd, 2026: Docker & CI Dependency Fixes (v2.15.2)</strong></summary>
+
+### Docker & CI
+
+- Forced CI validation installs through `requirements.txt` before installing the editable package with `--no-deps`, preventing unconstrained `pyproject.toml` resolution from pulling the CUDA Torch stack into GitHub Actions.
+- Pinned Docker/runtime installs to the CPU Torch wheel path so image builds avoid `nvidia-*`, `cuda-toolkit`, and `triton` dependency bloat.
+- Simplified Docker ignore patterns for BuildKit compatibility and kept local pytest/cache/temp folders out of MCP server image build contexts.
+
+</details>
+
+<details>
 <summary><strong>July 2nd, 2026: Exact Retrieval Lane (v2.15.1)</strong></summary>
 
 ### Exact Recall for Code, Config & Commands

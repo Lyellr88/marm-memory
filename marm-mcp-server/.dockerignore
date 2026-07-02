@@ -8,7 +8,7 @@ env/
 
 # Python cache and bytecode
 __pycache__/
-**/__pycache__/
+__pycache__
 *.py[cod]
 *$py.class
 *.so
@@ -16,8 +16,6 @@ __pycache__/
 .pytest_cache/
 .pytest_cache
 .pytest_cache/**
-**/.pytest_cache/
-**/.pytest_cache/**
 .cache
 .cache/
 .cache/**
@@ -28,7 +26,7 @@ htmlcov/
 # Development and testing files (keep tests/ for user validation)
 .pytestcache
 .pytest_tmp*/
-.pytest_tmp*/**
+.pytest_tmp*
 tmp
 tmp/
 tmp/**
@@ -36,8 +34,6 @@ tests/tmp
 tests/tmp/
 tests/tmp/**
 pytest-of-lyell
-**/pytest-of-lyell
-**/pytest-of-lyell/**
 
 # IDE and editor files
 .vscode/
@@ -106,12 +102,12 @@ setup.py
 .gemini
 .qwen
 dump.md
-docs\archived
-docs\core
-docs\core\extra
-docs\current
-docs\future
-docs\Visuals
+docs/archived
+docs/core
+docs/core/extra
+docs/current
+docs/future
+docs/Visuals
 
 # Keep these essential files:
 # - README.md (users need setup instructions)
