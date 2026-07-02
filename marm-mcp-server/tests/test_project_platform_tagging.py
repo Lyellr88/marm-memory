@@ -258,6 +258,37 @@ async def test_recall_project_and_platform_combined_filter(monkeypatch, tmp_path
     assert results[0]["content"] == "match"
 
 
+@pytest.mark.asyncio
+async def test_exact_recall_project_filter_respected(tmp_path):
+    mem = MARMMemory(str(tmp_path / "memory.db"))
+    mem._encoder_failed = True
+
+    with mem.get_connection() as conn:
+        _direct_insert_memory(
+            conn,
+            "s",
+            "CONFIG_KEY",
+            project="proj-a",
+        )
+        _direct_insert_memory(
+            conn,
+            "s",
+            "CONFIG_KEY",
+            project="proj-b",
+        )
+
+    results = await mem.recall_similar(
+        "CONFIG_KEY",
+        session=None,
+        limit=10,
+        exact_mode="exact",
+        project="proj-a",
+    )
+
+    assert len(results) == 1
+    assert results[0]["project"] == "proj-a"
+
+
 # ---------------------------------------------------------------------------
 # 3. Consolidation does not cross project/platform boundaries
 # ---------------------------------------------------------------------------

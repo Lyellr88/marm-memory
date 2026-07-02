@@ -24,6 +24,7 @@ from .memory_utils import (
     sanitize_content,
     _temporal_score,
     _safe_fts_query,
+    _is_exact_query,
 )
 from .memory_scoring import (
     _fetch_fts_candidate_ids,
@@ -218,6 +219,111 @@ async def _store_memory(
     return memory_id
 
 
+async def _recall_exact(
+    mem,
+    query,
+    session=None,
+    limit=5,
+    project=None,
+    platform=None,
+) -> List[Dict]:
+    """Deterministic exact/lexical recall via FTS5 BM25, with LIKE fallback.
+
+    Unlike _recall_similar, this path never re-ranks by semantic similarity.
+    Exact lexical hits are always returned in BM25 order, making it safe for
+    config keys, API names, command strings, file paths, and short code snippets
+    where a semantically-close-but-wrong result would be worse than no result.
+
+    Fallback chain:
+      1. FTS5 BM25 — fast, ranked, handles tokenisable queries.
+      2. LIKE scan  — used when FTS5 returns no results or the query cannot
+                      be sanitised into valid FTS tokens (e.g. bare operators).
+      3. Empty list — returned when both paths yield nothing; callers must
+                      never receive a semantic result on the exact lane.
+
+    Each result carries ``retrieval_mode`` set to ``"exact_fts"`` or
+    ``"exact_like"`` so callers and tests can confirm which path was taken.
+    """
+    _recall_debug(f"exact path: query='{query[:60]}', session={session}")
+
+    # --- attempt FTS5 first ---
+    fts_results = await _recall_text_search(
+            mem,
+            query,
+            session,
+            limit,
+            project=project,
+            platform=platform,
+    )
+
+    if fts_results:
+        for r in fts_results:
+            r.setdefault("retrieval_mode", "exact_fts")
+        _recall_debug(f"exact_fts: {len(fts_results)} results")
+        return fts_results
+
+    # --- FTS returned nothing: fall back to LIKE scan ---
+    _recall_debug("exact_fts returned 0 results → LIKE fallback")
+    try:
+        with mem.get_connection() as conn:
+            base = """
+                SELECT
+                    id,
+                    session_name,
+                    content,
+                    timestamp,
+                    context_type,
+                    metadata,
+                    project,
+                    platform
+                FROM memories
+                WHERE content LIKE ?
+                  AND (compaction_role IS NULL OR compaction_role != 'source')
+            """
+
+            params = [f"%{query}%"]
+
+            if session is not None:
+                base += " AND session_name = ?"
+                params.append(session)
+
+            if project is not None:
+                base += " AND project = ?"
+                params.append(project)
+
+            if platform is not None:
+                base += " AND platform = ?"
+                params.append(platform)
+
+            base += " ORDER BY timestamp DESC LIMIT ?"
+            params.append(limit)
+
+            rows = conn.execute(base, params).fetchall()
+
+        like_results = [
+            {
+
+                "id": row[0],
+                "session_name": row[1],
+                "content": row[2],
+                "timestamp": row[3],
+                "context_type": row[4],
+                "metadata": json.loads(row[5]) if row[5] else {},
+                "similarity": 0.0,
+                "retrieval_mode": "exact_like",
+                "project": row[6],
+                "platform": row[7],
+
+            }
+            for row in rows
+        ]
+        _recall_debug(f"exact_like: {len(like_results)} results")
+        return like_results
+    except Exception as e:
+        _recall_debug(f"exact_like fallback failed: {e}")
+        return []
+
+
 async def _recall_similar(
     mem,
     query: str,
@@ -225,10 +331,20 @@ async def _recall_similar(
     limit: int = 5,
     query_vec=None,
     include_scan_metadata: bool = False,
+    exact_mode: str = "auto",
     project: str = None,
     platform: str = None,
 ):
     """Find semantically similar memories.
+
+    exact_mode controls which retrieval lane is used:
+      - "auto"     (default): automatically switches to the exact/lexical lane
+                   when the query looks syntax-heavy (config keys, file paths,
+                   CLI commands, API names, code snippets). Falls back to
+                   semantic for natural-language queries.
+      - "exact"    : always use the deterministic FTS/lexical lane. Exact or
+                   lexical hits are never re-ranked by semantic similarity.
+      - "semantic" : always use the semantic lane regardless of query shape.
 
     When include_scan_metadata=True, returns (List[Dict], dict) where the second
     element contains recall_scan_truncated and recall_scan_limit. All other callers
@@ -243,6 +359,24 @@ async def _recall_similar(
                 "recall_scan_limit": scan_limit,
             }
         return results
+
+    # --- Exact lane ---
+    use_exact = (exact_mode == "exact") or (
+        exact_mode == "auto" and _is_exact_query(query)
+    )
+    if use_exact:
+        _recall_debug(
+            f"exact lane selected (mode={exact_mode!r}, query='{query[:60]}')"
+        )
+        results = await _recall_exact(
+            mem,
+            query,
+            session,
+            limit,
+            project=project,
+            platform=platform,
+        )
+        return _wrap(results, False)
 
     if query_vec is None:
         if not mem._load_encoder_lazily():

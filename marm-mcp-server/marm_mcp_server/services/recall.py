@@ -41,6 +41,7 @@ async def smart_recall(
     search_all: bool = False,
     include_logs: bool = False,
     detail: int = 1,
+    exact_mode: str = "auto",
     project: str = None,
     platform: str = None,
 ) -> dict:
@@ -86,6 +87,7 @@ async def smart_recall(
             session=search_session,
             limit=limit,
             include_scan_metadata=True,
+            exact_mode=exact_mode,
             project=project,
             platform=platform,
         )
@@ -107,6 +109,7 @@ async def smart_recall(
                     limit=limit,
                     project=project,
                     platform=platform,
+                    exact_mode=exact_mode,
                 )
                 if system_memories:
                     response["message"] = (

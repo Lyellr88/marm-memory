@@ -52,15 +52,26 @@ class SmartRecallRequest(BaseModel):
         le=3,
         description="Retrieval depth: 1=summary (~200 chars), 2=context (~500 chars), 3=full content",
     )
+    exact_mode: Literal["auto", "exact", "semantic"] = Field(
+        default="auto",
+        description=(
+            "Retrieval lane: "
+            "'auto' detects syntax-heavy queries (config keys, file paths, CLI commands, "
+            "API names, code snippets) and uses the exact/lexical lane automatically; "
+            "'exact' always uses deterministic FTS/BM25 ranking with no semantic re-ranking; "
+            "'semantic' always uses vector similarity regardless of query shape."
+        ),
+    )
+
     project: Optional[str] = Field(
         default=None,
         description="Filter to a specific project name (e.g. 'marm-systems'); omit to search all",
     )
+
     platform: Optional[str] = Field(
         default=None,
         description="Filter to a specific platform (e.g. 'claude-code', 'cursor'); omit to search all",
     )
-
 
 class DeleteRequest(BaseModel):
     type: Literal["log", "notebook"] = Field(
