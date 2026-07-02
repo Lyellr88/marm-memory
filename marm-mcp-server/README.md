@@ -100,8 +100,6 @@ pip install marm-mcp-server
 <details>
 <summary><strong>Local pip HTTP (zero config)</strong></summary>
 
-#### Local pip HTTP (zero config)
-
 > "agent" refers to claude, gemini, grok, qwen, or any MCP client. Codex uses --url instead of --transport to add MCP tools.
 
 ```bash
@@ -132,8 +130,6 @@ codex mcp add marm-memory-stdio -- marm-mcp-stdio
 <details>
 <summary><strong>Local Python swarm modes (HTTP & STDIO)</strong></summary>
 
-#### Local Python swarm modes (HTTP & STDIO)
-
 Use HTTP when multiple agents need to share one live MARM server. STDIO is still best for private single-agent use because each client owns its own local process.
 
 ```bash
@@ -156,8 +152,6 @@ marm-mcp-stdio
 
 <details>
 <summary><strong>Docker HTTP (key required)</strong></summary>
-
-#### Docker HTTP (key required)
 
 > Docker HTTP requires an API key because it exposes MARM as a network server; STDIO stays local to the client process and does not need one.
 
@@ -184,8 +178,6 @@ codex mcp add marm-memory --url http://localhost:8001/mcp --bearer-token-env-var
 <details>
 <summary><strong>Docker HTTP swarm mode</strong></summary>
 
-#### Docker HTTP swarm mode
-
 ```bash
 # --swarm: write queue on, 200 RPM - recommended for multi-agent shared servers
 docker run -d --name marm-mcp-server \
@@ -200,8 +192,6 @@ docker run -d --name marm-mcp-server \
 
 <details>
 <summary><strong>Docker STDIO (no HTTP key)</strong></summary>
-
-#### Docker STDIO (no HTTP key)
 
 ```bash
 docker run --rm -i \
@@ -218,8 +208,6 @@ docker run --rm -i \
 <details>
 <summary><strong>Support notes</strong></summary>
 
-**Most useful support info:**
-
 - Docker HTTP requires a key; Docker STDIO does not.
 - If you get `401`, verify key match and client restart after env var changes.
 - For full key setup, rotation, and troubleshooting: [INSTALL-DOCKER.md](docs/INSTALL-DOCKER.md)
@@ -228,8 +216,6 @@ docker run --rm -i \
 
 <details>
 <summary><strong>Connect your client fast</strong></summary>
-
-### Connect Your Client Fast
 
 Claude Code remains the recommended first setup path, but MARM also works with other MCP clients and IDE agents.
 
