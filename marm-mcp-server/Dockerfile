@@ -9,8 +9,8 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade wheel>=0.46.2 && \
-    pip install --no-cache-dir --user -r requirements.txt
+RUN pip install --no-cache-dir --upgrade "wheel>=0.46.2" && \
+    pip install --no-cache-dir --user --ignore-installed -r requirements.txt
 
 FROM python:3.11-slim
 
@@ -38,7 +38,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 
 LABEL org.opencontainers.image.title="MARM Universal MCP Server"
 LABEL org.opencontainers.image.description="Production-ready Universal MCP Server with advanced AI memory capabilities, semantic search, and professional-grade architecture"
-LABEL org.opencontainers.image.version="2.15.0"
+LABEL org.opencontainers.image.version="2.15.1"
 LABEL org.opencontainers.image.authors="Ryan Lyell - MARM Systems"
 LABEL org.opencontainers.image.url="https://marmsystems.com"
 LABEL org.opencontainers.image.source="https://github.com/Lyellr88/MARM-Systems"

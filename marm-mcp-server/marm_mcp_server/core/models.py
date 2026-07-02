@@ -73,6 +73,7 @@ class SmartRecallRequest(BaseModel):
         description="Filter to a specific platform (e.g. 'claude-code', 'cursor'); omit to search all",
     )
 
+
 class DeleteRequest(BaseModel):
     type: Literal["log", "notebook"] = Field(
         ..., description="What to delete: 'log' or 'notebook'"

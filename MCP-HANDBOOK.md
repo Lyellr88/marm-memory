@@ -2,7 +2,7 @@
 
 ## Complete Usage Guide for Memory-Augmented AI
 
-**MARM v2.15.0 - Universal MCP Server for AI Memory Intelligence**
+**MARM v2.15.1 - Universal MCP Server for AI Memory Intelligence**
 
 ---
 
@@ -235,7 +235,7 @@ Result: Decision logged and searchable by all future AI clients
 
 ### How Memory Works
 
-MARM uses **filter→rerank hybrid recall**. FTS5 BM25 handles exact terms like config keys, commands, filenames, and error strings first, semantic embeddings rerank that bounded candidate set by meaning, and a conservative temporal weighting step gives fresher memories a modest boost when matches are otherwise close. Long memories are embedded through overlapping chunk rows internally, but recall still collapses those chunk scores back to one parent memory result using the best matching chunk. When FTS coverage is weak or unusable, MARM falls back to the existing bounded semantic scan, and that fallback path is chunk-aware too:
+MARM uses **filter→rerank hybrid recall** plus an exact retrieval lane for syntax-heavy queries. By default, `exact_mode="auto"` detects config keys, CLI flags, file paths, API/tool names, dotted namespaces, HTTP routes, URLs, and quoted command strings, then routes those queries through deterministic FTS5 BM25 with a LIKE fallback instead of semantic reranking. Natural-language queries continue through the FTS filter→semantic rerank path, where semantic embeddings rerank a bounded candidate set by meaning and conservative temporal weighting gives fresher memories a modest boost when matches are otherwise close. Long memories are embedded through overlapping chunk rows internally, but recall still collapses those chunk scores back to one parent memory result using the best matching chunk. When FTS coverage is weak or unusable, MARM falls back to the existing bounded semantic scan, and that fallback path is chunk-aware too:
 
 ```txt
 User: "I discussed machine learning algorithms yesterday"
@@ -267,7 +267,7 @@ MARM automatically categorizes content:
 
 | Category | Tool | Description | Usage Notes |
 |----------|------|-------------|-------------|
-| **🧠 Memory** | `marm_smart_recall` | FTS-first filter→semantic rerank across all memories, with bounded semantic fallback, chunk-aware long-memory scoring, project/platform attribution filters, and a conservative recency bias in final ranking | `query` (required), `limit` (default: 5), `session_name` (optional), `detail` (default: `1`), `project` (optional), `platform` (optional). Use natural language queries or exact keys/commands |
+| **🧠 Memory** | `marm_smart_recall` | Automatic exact-query routing for config/code/API lookups, plus FTS-first filter→semantic rerank for natural-language recall, bounded semantic fallback, chunk-aware long-memory scoring, project/platform attribution filters, and conservative recency bias | `query` (required), `limit` (default: 5), `session_name` (optional), `detail` (default: `1`), `project` (optional), `platform` (optional), `exact_mode` (`"auto"`, `"exact"`, or `"semantic"`). Use default `"auto"` unless you need to force lexical or semantic behavior |
 | **📚 Logging** | `marm_log_entry` | Add structured session log entries | Use structured entries for best results. Session/topic routing, context-summary preparation, and summary-cache invalidation are handled by the server |
 | | `marm_log_show` | Display all entries and sessions with filtering | `session_name` (optional) |
 | | `marm_delete` | Delete a log session, log entry, or notebook entry | `type="log"` or `type="notebook"`, `target` (required), `session_name` (optional for log entries) |
@@ -278,6 +278,8 @@ MARM automatically categorizes content:
 **Internal automation:** lifecycle initialization, protocol delivery with periodic protocol-lite refresh, documentation refresh, current date context, summary-cache maintenance, serialized write queue handling, and system checks are no longer AI-facing tools. Documentation refresh uses `doc_index` hash tracking to avoid duplicate `marm_system` memories across restarts. Use the dashboard health panel for live server status, or `curl http://localhost:8001/health` for terminal checks.
 
 **Project/platform attribution:** MARM stores nullable `project` and `platform` columns on memories, log entries, and notebook entries. `MARM_PROJECT` overrides the detected working-directory project, while `MARM_PLATFORM` overrides client/platform detection. `marm_smart_recall(project=..., platform=...)` scopes memory recall and `include_logs=True` log search without changing the default unfiltered behavior.
+
+**Exact recall control:** `exact_mode="auto"` is the default and usually the right choice. Use `exact_mode="exact"` when a query must match literal text such as `RECALL_SCAN_LIMIT`, `--generate-key`, `settings.py`, or `marm_smart_recall`. Use `exact_mode="semantic"` when a syntax-looking query should still be treated as meaning-based recall.
 
 **Swarm / multi-agent modes:** Use CLI presets when starting an HTTP server shared by multiple agents:
 

@@ -241,6 +241,8 @@ async def marm_smart_recall(
         project=project,
         platform=platform,
     )
+
+
 _SESSION_PREFIXES = ("Session: ", "Topic: ")
 _SESSION_INACTIVITY_NOTICE_SECONDS = 3600
 

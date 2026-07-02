@@ -1,0 +1,121 @@
+# Development virtual environments (MASSIVE - exclude these!)
+venv/
+venv-windows/
+marm-env/
+.env
+env/
+.venv
+
+# Python cache and bytecode
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.pytest_cache/
+.pytest_cache
+.pytest_cache/**
+**/.pytest_cache/
+**/.pytest_cache/**
+.cache
+.cache/
+.cache/**
+.coverage
+.tox/
+htmlcov/
+
+# Development and testing files (keep tests/ for user validation)
+.pytestcache
+.pytest_tmp*/
+.pytest_tmp*/**
+tmp
+tmp/
+tmp/**
+tests/tmp
+tests/tmp/
+tests/tmp/**
+pytest-of-lyell
+**/pytest-of-lyell
+**/pytest-of-lyell/**
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.spyderproject
+.spyproject
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Git files
+.git/
+.gitignore
+.gitattributes
+
+# Development files
+*.bak
+*.backup
+
+# Database files (will be created fresh in container)
+marm_memory.db*
+*.db
+*.db-shm
+*.db-wal
+
+# Exclude database files from data directory but keep documentation
+data/marm_memory.db*
+data/marm_usage_analytics.db*
+data/*.db
+data/*.db-shm
+data/*.db-wal
+
+# Keep documentation files - they're needed for server startup
+!marm-docs/*.md
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+
+# Exclude Docker files (don't need in container)
+docker-compose.yml
+docker-build.sh
+docker-run.bat
+Dockerfile
+
+# Installation scripts (not needed in container)
+install.sh
+setup.py
+
+# user-specific files
+.claude
+.codex
+.gemini
+.qwen
+dump.md
+docs\archived
+docs\core
+docs\core\extra
+docs\current
+docs\future
+docs\Visuals
+
+# Keep these essential files:
+# - README.md (users need setup instructions)
+# - requirements.txt (for pip install)
+# - server.py (main application)
+# - All Python source code in core/, endpoints/, services/, etc.
+# - Documentation files

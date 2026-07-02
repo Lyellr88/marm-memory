@@ -248,12 +248,12 @@ async def _recall_exact(
 
     # --- attempt FTS5 first ---
     fts_results = await _recall_text_search(
-            mem,
-            query,
-            session,
-            limit,
-            project=project,
-            platform=platform,
+        mem,
+        query,
+        session,
+        limit,
+        project=project,
+        platform=platform,
     )
 
     if fts_results:
@@ -302,7 +302,6 @@ async def _recall_exact(
 
         like_results = [
             {
-
                 "id": row[0],
                 "session_name": row[1],
                 "content": row[2],
@@ -313,7 +312,6 @@ async def _recall_exact(
                 "retrieval_mode": "exact_like",
                 "project": row[6],
                 "platform": row[7],
-
             }
             for row in rows
         ]

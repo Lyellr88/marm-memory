@@ -6,7 +6,6 @@ from datetime import datetime, timezone
 import pytest
 
 from marm_mcp_server.core.memory import MARMMemory
-from marm_mcp_server.core.response_limiter import MCPResponseLimiter
 
 
 # ---------------------------------------------------------------------------
@@ -34,15 +33,26 @@ def _insert_user_memories(mem: MARMMemory, count: int, session: str = "main"):
             )
 
 
+def _patch_signup_settings(monkeypatch, *, threshold=None, enabled=True):
+    """Patch the globals used by this test module's imported MARMMemory class.
+
+    Some HTTP tests reload marm_mcp_server modules mid-suite. This file imports
+    MARMMemory at module import time, so patching sys.modules["...memory"] is not
+    always the same function graph that check_and_mark_signup_prompt() reads.
+    """
+    globals_ = MARMMemory.check_and_mark_signup_prompt.__globals__
+    monkeypatch.setitem(globals_, "SIGNUP_PROMPT_ENABLED", enabled)
+    if threshold is not None:
+        monkeypatch.setitem(globals_, "SIGNUP_PROMPT_THRESHOLD", threshold)
+
+
 # ---------------------------------------------------------------------------
 # 1. Returns False below threshold
 # ---------------------------------------------------------------------------
 
 
 def test_check_returns_false_below_threshold(tmp_path, monkeypatch):
-    import marm_mcp_server.core.memory as mem_module
-
-    monkeypatch.setattr(mem_module, "SIGNUP_PROMPT_THRESHOLD", 25)
+    _patch_signup_settings(monkeypatch, threshold=25)
 
     mem = MARMMemory(str(tmp_path / "memory.db"))
     _insert_user_memories(mem, 10)
@@ -56,9 +66,7 @@ def test_check_returns_false_below_threshold(tmp_path, monkeypatch):
 
 
 def test_check_ignores_system_and_compaction_source_rows(tmp_path, monkeypatch):
-    import marm_mcp_server.core.memory as mem_module
-
-    monkeypatch.setattr(mem_module, "SIGNUP_PROMPT_THRESHOLD", 5)
+    _patch_signup_settings(monkeypatch, threshold=5)
 
     mem = MARMMemory(str(tmp_path / "memory.db"))
 
@@ -108,9 +116,7 @@ def test_check_ignores_system_and_compaction_source_rows(tmp_path, monkeypatch):
 
 
 def test_check_returns_true_at_threshold_and_writes_flag(tmp_path, monkeypatch):
-    import marm_mcp_server.core.memory as mem_module
-
-    monkeypatch.setattr(mem_module, "SIGNUP_PROMPT_THRESHOLD", 5)
+    _patch_signup_settings(monkeypatch, threshold=5)
 
     mem = MARMMemory(str(tmp_path / "memory.db"))
     _insert_user_memories(mem, 5)
@@ -132,9 +138,7 @@ def test_check_returns_true_at_threshold_and_writes_flag(tmp_path, monkeypatch):
 
 
 def test_check_returns_false_after_flag_set(tmp_path, monkeypatch):
-    import marm_mcp_server.core.memory as mem_module
-
-    monkeypatch.setattr(mem_module, "SIGNUP_PROMPT_THRESHOLD", 3)
+    _patch_signup_settings(monkeypatch, threshold=3)
 
     mem = MARMMemory(str(tmp_path / "memory.db"))
     _insert_user_memories(mem, 5)
@@ -155,10 +159,9 @@ def test_check_returns_false_after_flag_set(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_recall_injects_signup_prompt_exactly_once(tmp_path, monkeypatch):
-    import marm_mcp_server.core.memory as mem_module
     from marm_mcp_server.services import recall as recall_module
 
-    monkeypatch.setattr(mem_module, "SIGNUP_PROMPT_THRESHOLD", 3)
+    _patch_signup_settings(monkeypatch, threshold=3)
 
     mem = MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
@@ -187,10 +190,9 @@ async def test_recall_injects_signup_prompt_exactly_once(tmp_path, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_recall_no_results_never_injects_signup_prompt(tmp_path, monkeypatch):
-    import marm_mcp_server.core.memory as mem_module
     from marm_mcp_server.services import recall as recall_module
 
-    monkeypatch.setattr(mem_module, "SIGNUP_PROMPT_THRESHOLD", 3)
+    _patch_signup_settings(monkeypatch, threshold=3)
 
     mem = MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
@@ -222,10 +224,9 @@ async def test_recall_no_results_never_injects_signup_prompt(tmp_path, monkeypat
 
 @pytest.mark.asyncio
 async def test_recall_skips_signup_prompt_when_over_size_limit(tmp_path, monkeypatch):
-    import marm_mcp_server.core.memory as mem_module
     from marm_mcp_server.services import recall as recall_module
 
-    monkeypatch.setattr(mem_module, "SIGNUP_PROMPT_THRESHOLD", 3)
+    _patch_signup_settings(monkeypatch, threshold=3)
 
     mem = MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
@@ -235,15 +236,17 @@ async def test_recall_skips_signup_prompt_when_over_size_limit(tmp_path, monkeyp
 
     # Return over-limit only when the dict already contains _signup_prompt,
     # so limit_memory_response still works normally.
-    original_estimate = MCPResponseLimiter.estimate_response_size
+    original_estimate = recall_module.MCPResponseLimiter.estimate_response_size
 
     def _oversize_if_signup(data):
         if "_signup_prompt" in data:
-            return MCPResponseLimiter.CONTENT_LIMIT + 1
+            return recall_module.MCPResponseLimiter.CONTENT_LIMIT + 1
         return original_estimate(data)
 
     monkeypatch.setattr(
-        MCPResponseLimiter, "estimate_response_size", staticmethod(_oversize_if_signup)
+        recall_module.MCPResponseLimiter,
+        "estimate_response_size",
+        staticmethod(_oversize_if_signup),
     )
 
     result = await recall_module.smart_recall(
@@ -270,11 +273,9 @@ async def test_recall_skips_signup_prompt_when_over_size_limit(tmp_path, monkeyp
 
 @pytest.mark.asyncio
 async def test_recall_disabled_by_env_flag(tmp_path, monkeypatch):
-    import marm_mcp_server.core.memory as mem_module
     from marm_mcp_server.services import recall as recall_module
 
-    monkeypatch.setattr(mem_module, "SIGNUP_PROMPT_ENABLED", False)
-    monkeypatch.setattr(mem_module, "SIGNUP_PROMPT_THRESHOLD", 3)
+    _patch_signup_settings(monkeypatch, threshold=3, enabled=False)
 
     mem = MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
@@ -303,9 +304,7 @@ async def test_recall_disabled_by_env_flag(tmp_path, monkeypatch):
 
 
 def test_signup_flag_persists_across_instances(tmp_path, monkeypatch):
-    import marm_mcp_server.core.memory as mem_module
-
-    monkeypatch.setattr(mem_module, "SIGNUP_PROMPT_THRESHOLD", 3)
+    _patch_signup_settings(monkeypatch, threshold=3)
 
     db = str(tmp_path / "memory.db")
     mem1 = MARMMemory(db)

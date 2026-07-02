@@ -3,6 +3,22 @@
 ## Version 2 - MARM Protocol to Universal MCP Server Evolution
 
 <details>
+<summary><strong>July 2nd, 2026: Exact Retrieval Lane (v2.15.1)</strong></summary>
+
+### Exact Recall for Code, Config & Commands
+
+- Added an exact/lexical retrieval lane for syntax-heavy recall queries such as config constants, CLI flags, file paths, function calls, API/tool names, dotted namespaces, HTTP routes, URLs, and quoted command strings.
+- Added automatic query detection through `exact_mode="auto"` so normal users and agents get deterministic exact recall without changing their prompts or tool calls.
+- Added explicit `exact_mode` controls across HTTP, STDIO, service, and core recall paths: `"auto"` for automatic routing, `"exact"` to force deterministic FTS/BM25 with LIKE fallback, and `"semantic"` to force vector recall.
+- Preserved project/platform filtering and session scoping in the exact lane so exact lookups respect the same attribution boundaries as semantic recall.
+
+### Tests
+
+- Added focused coverage for exact-query detection, exact/auto/semantic routing, lexical fallback behavior, response shape, scan metadata compatibility, session scoping, project/platform scoping, and exact-match ranking precedence.
+
+</details>
+
+<details>
 <summary><strong>June 24th, 2026: Guided Setup & Email Signup Prompt (v2.15.0)</strong></summary>
 
 ### marm-init Guided Setup

@@ -306,6 +306,7 @@ async def test_recall_similar_memory_without_embedding_excluded_from_results(tmp
         session="no-embed-test",
         limit=5,
         query_vec=query_vec,
+        exact_mode="semantic",
     )
 
     assert no_embed_id not in {r["id"] for r in results}

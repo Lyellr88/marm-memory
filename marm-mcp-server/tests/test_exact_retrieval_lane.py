@@ -64,7 +64,7 @@ class TestIsExactQuery:
         assert _is_exact_query("https://api.anthropic.com/v1/messages") is True
 
     def test_quoted_string(self):
-        assert _is_exact_query('`docker run --rm`') is True
+        assert _is_exact_query("`docker run --rm`") is True
 
     def test_mixed_case_config_key(self):
         assert _is_exact_query("server_HOST") is True
@@ -75,7 +75,9 @@ class TestIsExactQuery:
     # --- should return False ---
 
     def test_natural_language_sentence(self):
-        assert _is_exact_query("what was the decision we made about the database") is False
+        assert (
+            _is_exact_query("what was the decision we made about the database") is False
+        )
 
     def test_long_sentence_exceeds_word_limit(self):
         long = " ".join(["word"] * 13)
@@ -122,6 +124,16 @@ def _insert_no_embedding(conn, session: str, content: str) -> str:
     return mem_id
 
 
+def _recall_similar_globals() -> dict:
+    """Return the globals backing this test module's imported MARMMemory class.
+
+    Other tests reload marm_mcp_server modules during isolated HTTP setup. The
+    MARMMemory class imported above may therefore use an older _recall_similar
+    function object than a fresh import of memory_ops would patch.
+    """
+    return MARMMemory.recall_similar.__globals__["_recall_similar"].__globals__
+
+
 # ---------------------------------------------------------------------------
 # exact_mode="exact"  — always uses lexical lane
 # ---------------------------------------------------------------------------
@@ -133,9 +145,7 @@ async def test_exact_mode_explicit_returns_fts_result_for_config_key(tmp_path):
     mem = MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
 
-    mem_id = await mem.store_memory(
-        "RECALL_SCAN_LIMIT default is 10000", session="cfg"
-    )
+    mem_id = await mem.store_memory("RECALL_SCAN_LIMIT default is 10000", session="cfg")
 
     results = await mem.recall_similar(
         "RECALL_SCAN_LIMIT", session="cfg", limit=5, exact_mode="exact"
@@ -222,21 +232,20 @@ async def test_auto_mode_uses_exact_lane_for_upper_snake_config_key(
     monkeypatch, tmp_path
 ):
     """auto mode must route UPPER_SNAKE_CASE to the exact lane."""
-    from marm_mcp_server.core import memory_ops as ops
-
     mem = MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
 
     await mem.store_memory("FTS_CANDIDATE_LIMIT controls filter size", session="s")
 
     exact_calls: list[str] = []
-    original = ops._recall_exact
+    globals_ = _recall_similar_globals()
+    original = globals_["_recall_exact"]
 
     async def spy(*args, **kwargs):
         exact_calls.append(args[1])  # query arg
         return await original(*args, **kwargs)
 
-    monkeypatch.setattr(ops, "_recall_exact", spy)
+    monkeypatch.setitem(globals_, "_recall_exact", spy)
 
     await mem.recall_similar("FTS_CANDIDATE_LIMIT", session="s", limit=5)
 
@@ -244,12 +253,8 @@ async def test_auto_mode_uses_exact_lane_for_upper_snake_config_key(
 
 
 @pytest.mark.asyncio
-async def test_auto_mode_uses_semantic_lane_for_natural_language(
-    monkeypatch, tmp_path
-):
+async def test_auto_mode_uses_semantic_lane_for_natural_language(monkeypatch, tmp_path):
     """auto mode must NOT route a plain natural-language query to the exact lane."""
-    from marm_mcp_server.core import memory_ops as ops
-
     dim = 384
     vec = np.ones(dim, dtype=np.float32)
     vec /= np.linalg.norm(vec)
@@ -261,13 +266,14 @@ async def test_auto_mode_uses_semantic_lane_for_natural_language(
         _insert_with_embedding(conn, "nl", "what was the sprint goal", vec)
 
     exact_calls: list[str] = []
-    original = ops._recall_exact
+    globals_ = _recall_similar_globals()
+    original = globals_["_recall_exact"]
 
     async def spy(*args, **kwargs):
         exact_calls.append(args[1])
         return await original(*args, **kwargs)
 
-    monkeypatch.setattr(ops, "_recall_exact", spy)
+    monkeypatch.setitem(globals_, "_recall_exact", spy)
 
     await mem.recall_similar(
         "what was the sprint goal", session="nl", limit=5, query_vec=vec.copy()
@@ -282,12 +288,8 @@ async def test_auto_mode_uses_semantic_lane_for_natural_language(
 
 
 @pytest.mark.asyncio
-async def test_semantic_mode_bypasses_exact_lane_for_config_key(
-    monkeypatch, tmp_path
-):
+async def test_semantic_mode_bypasses_exact_lane_for_config_key(monkeypatch, tmp_path):
     """exact_mode='semantic' must skip the exact lane even for UPPER_SNAKE_CASE."""
-    from marm_mcp_server.core import memory_ops as ops
-
     dim = 384
     vec = np.ones(dim, dtype=np.float32)
     vec /= np.linalg.norm(vec)
@@ -296,22 +298,24 @@ async def test_semantic_mode_bypasses_exact_lane_for_config_key(
     mem._encoder_failed = True
 
     with mem.get_connection() as conn:
-        _insert_with_embedding(
-            conn, "sem", "RECALL_SCAN_LIMIT controls scan size", vec
-        )
+        _insert_with_embedding(conn, "sem", "RECALL_SCAN_LIMIT controls scan size", vec)
 
     exact_calls: list[str] = []
-    original = ops._recall_exact
+    globals_ = _recall_similar_globals()
+    original = globals_["_recall_exact"]
 
     async def spy(*args, **kwargs):
         exact_calls.append(args[1])
         return await original(*args, **kwargs)
 
-    monkeypatch.setattr(ops, "_recall_exact", spy)
+    monkeypatch.setitem(globals_, "_recall_exact", spy)
 
     await mem.recall_similar(
-        "RECALL_SCAN_LIMIT", session="sem", limit=5,
-        query_vec=vec.copy(), exact_mode="semantic"
+        "RECALL_SCAN_LIMIT",
+        session="sem",
+        limit=5,
+        query_vec=vec.copy(),
+        exact_mode="semantic",
     )
 
     assert not exact_calls, "exact lane must not run when exact_mode='semantic'"
@@ -372,8 +376,15 @@ async def test_exact_mode_response_shape(tmp_path):
     )
 
     assert results
-    required = {"id", "session_name", "content", "timestamp", "context_type",
-                "metadata", "similarity"}
+    required = {
+        "id",
+        "session_name",
+        "content",
+        "timestamp",
+        "context_type",
+        "metadata",
+        "similarity",
+    }
     assert required.issubset(results[0].keys())
 
 
@@ -386,8 +397,11 @@ async def test_exact_mode_include_scan_metadata_returns_tuple(tmp_path):
     await mem.store_memory("TEMPORAL_HALF_LIFE_DAYS config", session="meta")
 
     results, meta = await mem.recall_similar(
-        "TEMPORAL_HALF_LIFE_DAYS", session="meta", limit=5,
-        exact_mode="exact", include_scan_metadata=True
+        "TEMPORAL_HALF_LIFE_DAYS",
+        session="meta",
+        limit=5,
+        exact_mode="exact",
+        include_scan_metadata=True,
     )
 
     assert isinstance(results, list)
@@ -451,8 +465,6 @@ async def test_exact_lane_falls_back_to_like_when_fts_returns_nothing(
     monkeypatch, tmp_path
 ):
     """When FTS5 returns zero results, _recall_exact must fall back to LIKE scan."""
-    from marm_mcp_server.core import memory_ops as ops
-
     mem = MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
 
@@ -465,7 +477,7 @@ async def test_exact_lane_falls_back_to_like_when_fts_returns_nothing(
     async def empty_fts(*args, **kwargs):
         return []
 
-    monkeypatch.setattr(ops, "_recall_text_search", empty_fts)
+    monkeypatch.setitem(_recall_similar_globals(), "_recall_text_search", empty_fts)
 
     results = await mem.recall_similar(
         "config_key", session="fallback", limit=5, exact_mode="exact"
@@ -478,8 +490,6 @@ async def test_exact_lane_falls_back_to_like_when_fts_returns_nothing(
 @pytest.mark.asyncio
 async def test_exact_lane_like_fallback_sets_retrieval_mode(monkeypatch, tmp_path):
     """Results from the LIKE fallback must have retrieval_mode='exact_like'."""
-    from marm_mcp_server.core import memory_ops as ops
-
     mem = MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
 
@@ -488,7 +498,7 @@ async def test_exact_lane_like_fallback_sets_retrieval_mode(monkeypatch, tmp_pat
     async def empty_fts(*args, **kwargs):
         return []
 
-    monkeypatch.setattr(ops, "_recall_text_search", empty_fts)
+    monkeypatch.setitem(_recall_similar_globals(), "_recall_text_search", empty_fts)
 
     results = await mem.recall_similar(
         "fallback_KEY", session="mode-check", limit=5, exact_mode="exact"
@@ -519,8 +529,6 @@ async def test_exact_lane_returns_empty_when_both_fts_and_like_miss(
     monkeypatch, tmp_path
 ):
     """When neither FTS nor LIKE finds anything, return [] — never a semantic result."""
-    from marm_mcp_server.core import memory_ops as ops
-
     mem = MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
 
@@ -530,13 +538,15 @@ async def test_exact_lane_returns_empty_when_both_fts_and_like_miss(
     async def empty_fts(*args, **kwargs):
         return []
 
-    monkeypatch.setattr(ops, "_recall_text_search", empty_fts)
+    monkeypatch.setitem(_recall_similar_globals(), "_recall_text_search", empty_fts)
 
     results = await mem.recall_similar(
         "NONEXISTENT_CONFIG_KEY_ZZZZ", session="empty", limit=5, exact_mode="exact"
     )
 
-    assert results == [], "exact lane must return [] rather than semantic results when nothing matches"
+    assert results == [], (
+        "exact lane must return [] rather than semantic results when nothing matches"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -556,7 +566,11 @@ def test_http_endpoint_accepts_exact_mode_exact(tmp_path):
 
     resp = client.post(
         "/marm_smart_recall",
-        json={"query": "SOME_CONFIG_KEY", "session_name": "test", "exact_mode": "exact"},
+        json={
+            "query": "SOME_CONFIG_KEY",
+            "session_name": "test",
+            "exact_mode": "exact",
+        },
     )
     # Should not return 422 (validation error)
     assert resp.status_code != 422
@@ -574,7 +588,11 @@ def test_http_endpoint_accepts_exact_mode_semantic(tmp_path):
 
     resp = client.post(
         "/marm_smart_recall",
-        json={"query": "what was the sprint goal", "session_name": "test", "exact_mode": "semantic"},
+        json={
+            "query": "what was the sprint goal",
+            "session_name": "test",
+            "exact_mode": "semantic",
+        },
     )
     assert resp.status_code != 422
 
@@ -591,7 +609,11 @@ def test_http_endpoint_rejects_invalid_exact_mode():
 
     resp = client.post(
         "/marm_smart_recall",
-        json={"query": "anything", "session_name": "test", "exact_mode": "invalid_mode"},
+        json={
+            "query": "anything",
+            "session_name": "test",
+            "exact_mode": "invalid_mode",
+        },
     )
     assert resp.status_code == 422
 
@@ -640,4 +662,3 @@ async def test_marm_system_fallback_preserves_exact_mode(monkeypatch, tmp_path):
     assert fallback
     assert all(r["project"] == "proj-a" for r in fallback)
     assert all(r["platform"] == "claude-code" for r in fallback)
-

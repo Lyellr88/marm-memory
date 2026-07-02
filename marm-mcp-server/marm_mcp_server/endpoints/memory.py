@@ -133,7 +133,7 @@ async def marm_smart_recall(request: SmartRecallRequest, http_request: Request):
                 ]
 
         similar_memories, scan_meta = await memory.recall_similar(
-           request.query,
+            request.query,
             search_session,
             request.limit,
             include_scan_metadata=True,
@@ -145,13 +145,13 @@ async def marm_smart_recall(request: SmartRecallRequest, http_request: Request):
         if not similar_memories:
             if not request.search_all:
                 system_memories = await memory.recall_similar(
-                        request.query,
-                        "marm_system",
-                        request.limit,
-                        exact_mode=request.exact_mode,
-                        project=request.project,
-                        platform=request.platform,
-                    )
+                    request.query,
+                    "marm_system",
+                    request.limit,
+                    exact_mode=request.exact_mode,
+                    project=request.project,
+                    platform=request.platform,
+                )
 
                 response = {
                     "status": "no_results",

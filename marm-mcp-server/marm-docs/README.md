@@ -1,4 +1,4 @@
-# MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.15.0
+# MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.15.1
 
 > Contributions welcome! Browse [open issues](https://github.com/Lyellr88/MARM-Systems/issues) to contribute, or join the [MARM Discord](https://discord.gg/nhyJWPz2cf) to share workflows, get setup help, and connect with other builders.
 
@@ -219,7 +219,7 @@ The AI agent will automatically use the appropriate tools. Manual tool access is
 
 | **Category** | **Tool** | **Description** |
 |--------------|----------|-----------------|
-| **Memory Intelligence** | `marm_smart_recall` | Hybrid recall with FTS5 filtering, semantic reranking, bounded fallback search, and chunk-aware scoring for long memories. Supports `search_all=True`, `project`/`platform` filters, and `detail=1/2/3` depth controls |
+| **Memory Intelligence** | `marm_smart_recall` | Hybrid recall with automatic exact-query detection for config keys, commands, API names, and file paths; semantic reranking; bounded fallback search; and chunk-aware scoring for long memories. Supports `search_all=True`, `project`/`platform` filters, `exact_mode="auto"\|"exact"\|"semantic"`, and `detail=1/2/3` depth controls |
 | **Logging System** | `marm_log_entry` | Add structured session log entries. Session/topic routing, summary-cache invalidation, and context summary preparation are handled by the server |
 | | `marm_log_show` | Display all entries and sessions (filterable) |
 | | `marm_delete` | Delete a log session, log entry, or notebook entry (`type="log"\|"notebook"`) |
@@ -231,10 +231,9 @@ The AI agent will automatically use the appropriate tools. Manual tool access is
 
 MARM keeps MCP discovery lean with 7 tools by grouping domain operations behind explicit parameters like `marm_notebook(action=...)`, `marm_delete(type=...)`, and `marm_compaction(action=...)`. Behind those tools, the server handles lifecycle setup, protocol refresh, docs indexing, date context, summary-cache maintenance, write queue handling, project/platform attribution, and health checks.
 
-Under the hood, MARM uses SQLite WAL mode, connection pooling, serialized writes, HTTP swarm presets, safe local defaults, FTS→semantic reranking, bounded fallback search, chunk-aware long-memory recall, and summary/context/full recall depths to keep memory fast, stable, and token-efficient as projects grow.
+Under the hood, MARM uses SQLite WAL mode, connection pooling, serialized writes, HTTP swarm presets, safe local defaults, exact-query routing for syntax-heavy lookups, FTS→semantic reranking, bounded fallback search, chunk-aware long-memory recall, and summary/context/full recall depths to keep memory fast, stable, and token-efficient as projects grow.
 
 For a deeper look into the MCP behavior, tool parameters, automation, and workflows, see [MCP-HANDBOOK.md](MCP-HANDBOOK.md) and [FAQ.md](marm-mcp-server/marm-docs/FAQ.md).
-
 ## Performance & Scaling Benchmarks
 
 MARM is tuned for fast recall first, even as memory grows and multiple agents hit the same server.

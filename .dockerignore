@@ -1,0 +1,49 @@
+# Git and local agent/tool state
+.git/
+.agents/
+.bridgespace/
+.claude/
+.codex/
+.cursor/
+.gemini/
+.impeccable/
+.kiro/
+.qwen/
+.vscode/
+
+# Python caches and test scratch
+__pycache__/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+**/.pytest_cache/
+.pytest_tmp*/
+**/.pytest_tmp*/
+tmp/
+**/tmp/
+
+# Virtual environments and build outputs
+.venv/
+venv/
+env/
+dist/
+build/
+*.egg-info/
+**/*.egg-info/
+.ruff_cache/
+**/.ruff_cache/
+
+# Local databases and logs
+*.db
+*.db-shm
+*.db-wal
+*.log
+dump.md
+
+# Repo areas not needed for MCP server image builds
+marm-dashboard/
+marm-bot-discord/
+marm-demo/
+docs/current/
+docs/future/
+docs/archived/
