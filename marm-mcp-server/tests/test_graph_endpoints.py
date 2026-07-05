@@ -6,6 +6,9 @@ memory tools, and startup never touches the graph backend until it is used.
 """
 
 import asyncio
+import threading
+
+import httpx
 
 from conftest import load_isolated_server, local_client
 
@@ -112,6 +115,61 @@ def test_all_five_graph_tools_return_clean_error_when_unavailable(
             "status": "error",
             "message": "graph backend unavailable",
         }, path
+
+
+def test_cold_graph_startup_does_not_block_concurrent_core_requests(
+    monkeypatch, tmp_path
+):
+    """graph_supervisor's startup (subprocess spawn, handshake, schema check)
+    is synchronous, blocking I/O. If a route awaited it directly instead of
+    via asyncio.to_thread, one slow/cold first graph call would stall the
+    whole event loop -- including the 7 core tools this spec exists to keep
+    unaffected. Proves it doesn't: a concurrent /health request must complete
+    while a slow graph verification call is still blocked in its own thread.
+    """
+    release = threading.Event()
+
+    class _SlowFakeClient:
+        server_version = "0.8.1-fake"
+
+        def start(self):
+            pass
+
+        def list_tools(self):
+            assert release.wait(timeout=5), "test deadlocked waiting for release"
+            raise ConnectionError("simulated slow-then-failed handshake")
+
+        def close(self):
+            pass
+
+    server = load_isolated_server(monkeypatch, tmp_path)
+    monkeypatch.setenv("GRAPH_ENABLED", "true")
+    monkeypatch.setattr(
+        "marm_mcp_server.core.graph_supervisor.CbmClient",
+        lambda **kwargs: _SlowFakeClient(),
+    )
+
+    async def go():
+        transport = httpx.ASGITransport(app=server.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://t") as ac:
+            graph_task = asyncio.create_task(
+                ac.post("/marm_graph_index", json={"action": "list"})
+            )
+            await asyncio.sleep(0.05)  # let the graph task reach the blocking call
+            assert not graph_task.done(), "fake client should still be blocked"
+
+            health_response = await ac.get("/health")
+            assert health_response.status_code == 200
+
+            release.set()
+            return await graph_task
+
+    graph_response = asyncio.run(go())
+    assert graph_response.status_code == 200
+    assert graph_response.json() == {
+        "status": "error",
+        "message": "graph backend unavailable",
+    }
 
 
 def test_shutdown_stops_graph_supervisor_child(monkeypatch, tmp_path):

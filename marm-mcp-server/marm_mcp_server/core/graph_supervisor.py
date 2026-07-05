@@ -50,6 +50,10 @@ class GraphSupervisor:
                 backend.verify_and_start(client)
             except Exception as e:
                 logger.warning("graph.backend_start_failed", error=str(e))
+                try:
+                    client.close()
+                except Exception:
+                    pass  # best-effort; the primary failure is already logged
                 return
             self._client = client
             self._available = True

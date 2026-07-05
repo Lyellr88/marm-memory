@@ -34,7 +34,7 @@ async def marm_graph_index(req: GraphIndexRequest) -> dict:
     other tool). Omit it to list indexed projects, or pass `project` to check
     index status. Call this first — all other graph tools need an indexed project.
     """
-    if not graph_supervisor.is_available():
+    if not await asyncio.to_thread(graph_supervisor.is_available):
         return _UNAVAILABLE
     return await asyncio.to_thread(R.do_index, graph_supervisor.get_client(), req)
 
@@ -47,7 +47,7 @@ async def marm_code_lookup(req: CodeLookupRequest) -> dict:
     otherwise it searches the graph by name/keyword. Set `kind=text` to grep code,
     `kind=snippet` to read a symbol's source, `kind=symbol` to force graph search.
     """
-    if not graph_supervisor.is_available():
+    if not await asyncio.to_thread(graph_supervisor.is_available):
         return _UNAVAILABLE
     return await asyncio.to_thread(R.do_lookup, graph_supervisor.get_client(), req)
 
@@ -60,7 +60,7 @@ async def marm_graph_trace(req: GraphTraceRequest) -> dict:
     `mode=data_flow` follows value propagation; `cross_service` crosses HTTP/async
     boundaries. Use for impact analysis, dependency tracing, "who calls this".
     """
-    if not graph_supervisor.is_available():
+    if not await asyncio.to_thread(graph_supervisor.is_available):
         return _UNAVAILABLE
     return await asyncio.to_thread(R.do_trace, graph_supervisor.get_client(), req)
 
@@ -72,7 +72,7 @@ async def marm_graph_architecture(req: GraphArchitectureRequest) -> dict:
     One-shot orientation for a project — the de-facto module clusters, package
     structure, and the graph schema (node labels + properties) folded in.
     """
-    if not graph_supervisor.is_available():
+    if not await asyncio.to_thread(graph_supervisor.is_available):
         return _UNAVAILABLE
     return await asyncio.to_thread(
         R.do_architecture, graph_supervisor.get_client(), req
@@ -86,6 +86,6 @@ async def marm_graph_impact(req: GraphImpactRequest) -> dict:
     Pass `since` (a git ref/date) or a `base_branch` to compare against. Returns
     which symbols a change touches and how far the impact propagates.
     """
-    if not graph_supervisor.is_available():
+    if not await asyncio.to_thread(graph_supervisor.is_available):
         return _UNAVAILABLE
     return await asyncio.to_thread(R.do_impact, graph_supervisor.get_client(), req)
