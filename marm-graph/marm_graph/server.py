@@ -16,7 +16,7 @@ from fastapi_mcp import FastApiMCP
 
 from .config import settings
 from .core import backend
-from .core.backend import AI_OPERATIONS, _EXPECTED_UPSTREAM_TOOLS
+from .core.backend import AI_OPERATIONS
 from .core.deps import get_client, reset_client
 from .endpoints.graph_ai import router as ai_router
 from .endpoints.graph_ui import router as ui_router
@@ -24,9 +24,11 @@ from .middleware.auth import auth_middleware
 
 logger = structlog.get_logger(__name__)
 
-# Back-compat alias: tests call server._check_schema directly. The public name
-# now lives in core/backend.py (shared with marm-mcp-server's graph_supervisor).
+# Back-compat aliases: tests call server._check_schema / server._EXPECTED_UPSTREAM_TOOLS
+# directly. The public names now live in core/backend.py (shared with
+# marm-mcp-server's graph_supervisor).
 _check_schema = backend.check_schema
+_EXPECTED_UPSTREAM_TOOLS = backend._EXPECTED_UPSTREAM_TOOLS
 
 _LOOPBACK = ("127.0.0.1", "::1", "localhost")
 

@@ -94,7 +94,13 @@ def test_healthy_backend_becomes_available(monkeypatch):
 
 
 def test_schema_drift_degrades_to_unavailable_not_crash(monkeypatch):
-    """A missing expected upstream tool must be caught, not raised through."""
+    """A missing expected upstream tool must be caught, not raised through.
+
+    Also proves the started-but-failed-verification client is closed, not
+    orphaned: start() succeeds (spawning the child) before check_schema()
+    raises, so the except path in _ensure_started must call client.close()
+    itself -- nothing else would ever clean up that live subprocess.
+    """
     gs = _fresh_gs()
     monkeypatch.setattr(gs.mcp_settings, "GRAPH_ENABLED", True)
     drifted = [{"name": n} for n in _ALL_UPSTREAM_TOOLS if n != "search_graph"]
@@ -104,6 +110,8 @@ def test_schema_drift_degrades_to_unavailable_not_crash(monkeypatch):
     supervisor = gs.GraphSupervisor()
     assert supervisor.is_available() is False
     assert supervisor.get_client() is None
+    assert fake.started is True  # confirms this is the started-then-failed path
+    assert fake.closed is True
 
 
 def test_transport_failure_on_start_degrades_to_unavailable(monkeypatch):
