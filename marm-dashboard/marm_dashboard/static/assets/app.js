@@ -1,4 +1,3 @@
-const API = "";
 const MCP_STATUS_POLL_MS = 15_000;
 let unlockedApiKey = "";
 
@@ -62,7 +61,7 @@ function formatDate(iso) {
 }
 
 async function api(path, options = {}) {
-  const res = await fetch(`${API}${path}`, {
+  const res = await fetch(path, {
     headers: {
       "Content-Type": "application/json",
       ...authHeaders(),
@@ -113,7 +112,7 @@ function setupUnlock() {
     const fd = new FormData(e.target);
     const apiKey = String(fd.get("api_key") || "").trim();
     try {
-      const res = await fetch(`${API}/api/auth/unlock`, {
+      const res = await fetch(`api/auth/unlock`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ api_key: apiKey }),
@@ -216,7 +215,7 @@ async function probeMcpHealth() {
   const el = $("#mcp-status-dd");
   if (!el) return;
   try {
-    const res = await fetch(`${API}/api/mcp-status`);
+    const res = await fetch(`api/mcp-status`);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = await res.json();
     if (data.reachable) {
@@ -243,8 +242,8 @@ function startMcpHealthPolling() {
 
 async function loadSummary() {
   const [data, health] = await Promise.all([
-    api("/api/summary"),
-    fetch(`${API}/health`).then((r) => r.json()).catch(() => ({})),
+    api("api/summary"),
+    fetch(`health`).then((r) => r.json()).catch(() => ({})),
   ]);
   const c = data.counts;
   $("#stats-grid").innerHTML = [
@@ -267,7 +266,7 @@ async function loadSummary() {
     : "Localhost only (no key)";
 
   $("#status-dl").innerHTML = `
-    <div><dt>Dashboard</dt><dd><span class="pill ok">Live on :8002</span></dd></div>
+    <div><dt>Dashboard</dt><dd><span class="pill ok">Live</span></dd></div>
     <div><dt>MCP server</dt><dd id="mcp-status-dd">Checking…</dd></div>
     <div><dt>Database</dt><dd class="mono">${escapeHtml(data.db_path)}</dd></div>
     <div><dt>Active session</dt><dd>${escapeHtml(data.active_session || "—")}</dd></div>
@@ -294,7 +293,7 @@ async function loadSummary() {
 async function loadSessions() {
   const q = $("#sessions-search")?.value.trim();
   const params = q ? `?q=${encodeURIComponent(q)}` : "";
-  const { items } = await api(`/api/sessions${params}`);
+  const { items } = await api(`api/sessions${params}`);
   state.sessions = items;
 
   const el = $("#sessions-list");
@@ -341,7 +340,7 @@ async function loadSessions() {
       );
       if (!ok) return;
       try {
-        await api(`/api/sessions/${encodeURIComponent(name)}`, { method: "DELETE" });
+        await api(`api/sessions/${encodeURIComponent(name)}`, { method: "DELETE" });
         toast(`Session "${name}" deleted`);
         loadSessions();
         loadSummary();
@@ -374,7 +373,7 @@ async function loadMemories(reset = true) {
   if (q) params.set("q", q);
   updateSessionChip();
 
-  const data = await api(`/api/memories?${params}`);
+  const data = await api(`api/memories?${params}`);
   state.memoryTotal = data.total;
 
   const el = $("#memories-list");
@@ -429,7 +428,7 @@ async function loadMemories(reset = true) {
       btn.addEventListener("click", async () => {
         if (!confirm("Delete this memory permanently?")) return;
         try {
-          await api(`/api/memories/${btn.dataset.delMemory}`, { method: "DELETE" });
+          await api(`api/memories/${btn.dataset.delMemory}`, { method: "DELETE" });
           toast("Memory deleted");
           loadMemories(true);
           loadSummary();
@@ -466,7 +465,7 @@ async function loadLogs(reset = true) {
     offset: state.logOffset,
   });
   if (q) params.set("q", q);
-  const data = await api(`/api/logs?${params}`);
+  const data = await api(`api/logs?${params}`);
   state.logTotal = data.total;
   const el = $("#logs-list");
 
@@ -505,7 +504,7 @@ async function loadLogs(reset = true) {
       btn.addEventListener("click", async () => {
         if (!confirm("Delete this log entry?")) return;
         try {
-          await api(`/api/logs/${btn.dataset.delLog}`, { method: "DELETE" });
+          await api(`api/logs/${btn.dataset.delLog}`, { method: "DELETE" });
           toast("Log deleted");
           loadLogs(true);
           loadSummary();
@@ -537,7 +536,7 @@ async function loadLogs(reset = true) {
 async function loadNotebook() {
   const q = $("#notebook-search")?.value.trim();
   const params = q ? `?q=${encodeURIComponent(q)}` : "";
-  const { items } = await api(`/api/notebook${params}`);
+  const { items } = await api(`api/notebook${params}`);
   state.notebookTotal = items.length;
   const el = $("#notebook-list");
   if (!items.length) {
@@ -582,7 +581,7 @@ async function loadNotebook() {
     btn.addEventListener("click", async () => {
       if (!confirm(`Delete notebook entry "${btn.dataset.delNb}"?`)) return;
       try {
-        await api(`/api/notebook/${encodeURIComponent(btn.dataset.delNb)}`, {
+        await api(`api/notebook/${encodeURIComponent(btn.dataset.delNb)}`, {
           method: "DELETE",
         });
         toast("Notebook entry deleted");
@@ -607,7 +606,7 @@ async function loadCompaction(reset = true) {
   if (session) params.set("session", session);
 
   try {
-    const data = await api(`/api/compaction/memories?${params}`);
+    const data = await api(`api/compaction/memories?${params}`);
     state.compactionTotal = data.total;
     renderCompactionList(data.items);
     renderCompactionPager();
@@ -687,7 +686,7 @@ async function showCompactionPreview() {
   
   try {
     const memoryIds = Array.from(state.compactionSelected);
-    const preview = await api("/api/compaction/preview", {
+    const preview = await api("api/compaction/preview", {
       method: "POST",
       body: JSON.stringify({ memory_ids: memoryIds }),
     });
@@ -725,7 +724,7 @@ async function applyCompaction() {
   if (!preview) return;
   
   try {
-    const result = await api("/api/compaction/apply", {
+    const result = await api("api/compaction/apply", {
       method: "POST",
       body: JSON.stringify({
         memory_ids: preview.source_memory_ids,
@@ -768,7 +767,7 @@ async function loadMaintenance() {
 
 async function loadMaintenanceSummary() {
   try {
-    const data = await api("/api/maintenance/compaction-summary");
+    const data = await api("api/maintenance/compaction-summary");
     renderMaintenanceStats(data);
   } catch (e) {
     toast(e.message, true);
@@ -807,7 +806,7 @@ async function loadMaintenanceCandidates(reset = true) {
   if (state.maintenanceStatus) params.set("status", state.maintenanceStatus);
 
   try {
-    const data = await api(`/api/maintenance/candidates?${params}`);
+    const data = await api(`api/maintenance/candidates?${params}`);
     state.maintenanceTotal = data.total;
     renderMaintenanceCandidates(data.items);
     renderMaintenancePager();
@@ -860,7 +859,7 @@ function renderMaintenanceCandidates(items) {
       const id = btn.dataset.discardCandidate;
       if (confirm('Discard this compaction candidate?')) {
         try {
-          await api(`/api/maintenance/candidates/${id}/discard`, { method: 'POST' });
+          await api(`api/maintenance/candidates/${id}/discard`, { method: 'POST' });
           toast('✓ Candidate discarded');
           loadMaintenanceSummary();
           loadMaintenanceCandidates(false);
@@ -1008,7 +1007,7 @@ function setupForms() {
     const editingId = e.target.dataset.editingId;
     try {
       if (editingId) {
-        await api(`/api/memories/${editingId}`, {
+        await api(`api/memories/${editingId}`, {
           method: "PUT",
           body: JSON.stringify({
             content: fd.get("content"),
@@ -1017,7 +1016,7 @@ function setupForms() {
         });
         toast("Memory updated");
       } else {
-        await api("/api/memories", {
+        await api("api/memories", {
           method: "POST",
           body: JSON.stringify({
             content: fd.get("content"),
@@ -1049,7 +1048,7 @@ function setupForms() {
     );
     if (!ok) return;
     try {
-      const res = await api("/api/memories", { method: "DELETE" });
+      const res = await api("api/memories", { method: "DELETE" });
       toast(`Deleted ${res.count} memories`);
       loadMemories(true);
       loadSummary();
@@ -1067,7 +1066,7 @@ function setupForms() {
     );
     if (!ok) return;
     try {
-      const res = await api("/api/sessions", { method: "DELETE" });
+      const res = await api("api/sessions", { method: "DELETE" });
       toast(`Deleted ${res.count} sessions`);
       loadSessions();
       loadSummary();
@@ -1084,7 +1083,7 @@ function setupForms() {
     );
     if (!ok) return;
     try {
-      const res = await api("/api/notebook", { method: "DELETE" });
+      const res = await api("api/notebook", { method: "DELETE" });
       toast(`Deleted ${res.count} notebook entries`);
       loadNotebook();
       loadSummary();
@@ -1119,7 +1118,7 @@ function setupForms() {
     e.preventDefault();
     const fd = new FormData(e.target);
     try {
-      await api("/api/sessions", {
+      await api("api/sessions", {
         method: "POST",
         body: JSON.stringify({ session_name: fd.get("session_name") }),
       });
@@ -1149,7 +1148,7 @@ function setupForms() {
     );
     if (!ok) return;
     try {
-      const res = await api("/api/logs", { method: "DELETE" });
+      const res = await api("api/logs", { method: "DELETE" });
       toast(`Deleted ${res.count} log entries`);
       loadLogs(true);
       loadSummary();
@@ -1213,7 +1212,7 @@ function setupForms() {
     e.preventDefault();
     const fd = new FormData(e.target);
     try {
-      await api("/api/notebook", {
+      await api("api/notebook", {
         method: "POST",
         body: JSON.stringify({ name: fd.get("name"), data: fd.get("data") }),
       });
@@ -1253,7 +1252,7 @@ async function init() {
   setupForms();
   setupUnlock();
 
-  const health = await fetch(`${API}/health`).then((r) => r.json()).catch(() => ({}));
+  const health = await fetch(`health`).then((r) => r.json()).catch(() => ({}));
   $("#loading-screen").hidden = true;
 
   if (health.auth_required && !getStoredKey()) {
@@ -1263,7 +1262,7 @@ async function init() {
   }
 
   if (health.auth_required && getStoredKey()) {
-    const check = await fetch(`${API}/api/summary`, { headers: authHeaders() });
+    const check = await fetch(`api/summary`, { headers: authHeaders() });
     if (check.status === 401) {
       setHeaderStatus("locked");
       showUnlock("Invalid or expired key.");

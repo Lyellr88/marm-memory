@@ -2,6 +2,8 @@
 
 Local web UI for browsing and editing MARM memory. **Separate from `marm-mcp-server`** — reads and edits the same SQLite database (`~/.marm/marm_memory.db`) while MCP keeps running on port **8001**.
 
+The unified `lyellr88/marm-mcp-server:latest` Docker image now also ships this dashboard embedded at `/dashboard` (same port as MCP, no separate container). The standalone install and Docker image below are unchanged and still supported.
+
 ## Why use it
 
 MCP tools are built for agents (search, log, recall). This dashboard is for **you**: list memories, delete stale entries, inspect sessions and protocol logs, edit notebook keys.

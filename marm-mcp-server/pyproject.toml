@@ -56,6 +56,9 @@ marm-mcp-server = "marm_mcp_server.server:main"
 marm-mcp-stdio = "marm_mcp_server.server_stdio:main"
 
 [project.optional-dependencies]
+docker-image = [
+    "marm-dashboard==1.2.0",
+]
 dev = [
     "pytest>=7.0.0",
     "pytest-asyncio>=0.21.0",

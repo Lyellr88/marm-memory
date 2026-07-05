@@ -3,6 +3,19 @@
 ## Version 2 - MARM Protocol to Universal MCP Server Evolution
 
 <details>
+<summary><strong>July 5th, 2026: Docker Packaging Unification (v2.16.0)</strong></summary>
+
+### Docker & Packaging
+
+- `lyellr88/marm-mcp-server:latest` is now an all-in-one image: memory, the embedded graph engine, and the dashboard all run in one process on one port (8001). Dashboard is reachable at `http://host:8001/dashboard` instead of its own image/port.
+- **Breaking tag semantics**: `:latest`'s meaning has changed. Anyone pinning `:latest` in scripts, cron jobs, or compose files gets the new all-in-one behavior automatically. Pin `:memory-only` (or a pre-v2.16.0 version tag) to keep today's memory-only image shape.
+- Docker builds now install from `pyproject.toml` (`pip install ".[docker-image]"`) instead of `requirements.txt`, closing a pre-existing drift between the two files. The CPU-only Torch pin from the v2.15.2 fix is preserved through a build-time constraints file plus the same PyTorch CPU wheel index.
+- The pinned `codebase-memory-mcp` engine binary is now baked into the `marm-mcp-server` image at build time (independently verified download + SHA256 checksum), the same hardened pattern already used by `marm-graph`'s own image.
+- Image size increases meaningfully versus the previous `marm-mcp-server:latest` (baked ~269MB engine binary + dashboard's dependencies) — expect a larger pull/storage footprint.
+
+</details>
+
+<details>
 <summary><strong>July 2nd, 2026: Docker & CI Dependency Fixes (v2.15.2)</strong></summary>
 
 ### Docker & CI

@@ -102,3 +102,96 @@ def test_health_endpoint_returns_correct_response_shape(monkeypatch, tmp_path):
     assert "timestamp" in body
     assert body["database"] == "connected"
     assert body["semantic_search"] in ("available", "text_only")
+
+
+def test_dashboard_mount_reachable_but_absent_from_tools_list(monkeypatch, tmp_path):
+    """Docker packaging unification's mount-visibility guarantee, in one test:
+    a mounted dashboard route is reachable over plain HTTP AND absent from
+    the MCP tool surface, so a future refactor can't silently satisfy one
+    side while breaking the other.
+    """
+    server = load_isolated_server(monkeypatch, tmp_path)
+    client = local_client(server.app)
+
+    response = client.get("/dashboard/health")
+    assert response.status_code == 200
+    # dashboard's own /health shape, not marm-mcp-server's
+    assert response.json()["status"] == "ok"
+
+    names = {t.name for t in server.mcp.tools}
+    assert len(names) == 12
+    assert "health" not in names
+
+
+def test_dashboard_mount_inherits_marm_mcp_servers_own_bearer_gate(
+    monkeypatch, tmp_path
+):
+    """Root `auth_middleware` wraps the whole ASGI app, including routing
+    into mounted sub-apps -- setting MARM_API_KEY on marm-mcp-server blocks
+    unauthenticated /dashboard requests before dashboard's own separate auth
+    gate ever runs. A plain browser navigation to /dashboard cannot reach
+    dashboard's own unlock screen once marm-mcp-server's key is set; only
+    requests already carrying marm-mcp-server's own bearer token reach the
+    mounted sub-app at all.
+    """
+    server = load_isolated_server(monkeypatch, tmp_path, api_key="test-key-123")
+    client = local_client(server.app)
+
+    blocked = client.get("/dashboard/")
+    assert blocked.status_code == 401
+
+    allowed = client.get(
+        "/dashboard/health", headers={"Authorization": "Bearer test-key-123"}
+    )
+    assert allowed.status_code == 200
+
+
+def test_dashboard_mount_reads_and_writes_the_same_db_as_marm_mcp_server(
+    monkeypatch, tmp_path
+):
+    """Dashboard keeps reading/writing the same marm_memory.db when mounted --
+    a log entry created through marm-mcp-server's own tool must be visible
+    through the dashboard's own REST API under /dashboard, and a memory
+    created through the dashboard's own REST API must be readable back the
+    same way. No separate DB, no HTTP hop between the two.
+    """
+    server = load_isolated_server(monkeypatch, tmp_path)
+    client = local_client(server.app)
+
+    log_response = client.post(
+        "/marm_log_entry",
+        json={"session_name": "mount-smoke", "entry": "dashboard mount smoke test"},
+    )
+    assert log_response.status_code == 200
+
+    summary = client.get("/dashboard/api/summary")
+    assert summary.status_code == 200
+    assert summary.json()["counts"]["log_entries"] == 1
+
+    create = client.post(
+        "/dashboard/api/memories",
+        json={
+            "content": "hello from the dashboard mount",
+            "session_name": "mount-smoke",
+            "context_type": "general",
+        },
+    )
+    assert create.status_code == 201
+
+    listing = client.get("/dashboard/api/memories", params={"session": "mount-smoke"})
+    assert listing.status_code == 200
+    assert listing.json()["total"] == 1
+
+
+def test_dashboard_mount_without_trailing_slash_redirects(monkeypatch, tmp_path):
+    """/dashboard (no trailing slash) must redirect to /dashboard/ -- otherwise
+    the dashboard's relative asset/api URLs would resolve one level too high
+    (e.g. api/summary -> /api/summary instead of /dashboard/api/summary).
+    """
+    server = load_isolated_server(monkeypatch, tmp_path)
+    client = local_client(server.app)
+
+    response = client.get("/dashboard", follow_redirects=False)
+
+    assert response.status_code in (307, 308)
+    assert response.headers["location"].endswith("/dashboard/")

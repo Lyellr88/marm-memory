@@ -152,6 +152,8 @@ marm-mcp-stdio
 
 ---
 
+> **`:latest` is now the all-in-one image** — memory, graph, and dashboard in one process on port 8001 (dashboard at `/dashboard`). If you need today's memory-only image, pin `:memory-only` instead. See [CHANGELOG.md](../CHANGELOG.md) for details.
+
 <details>
 <summary><strong>Docker HTTP (key required)</strong></summary>
 
