@@ -117,6 +117,7 @@ marm-mcp-server/.pytest_tmp/
 marm-mcp-server/.pytest_tmp*/
 marm_usage_analytics.db
 dump.md
+dump2.md
 marm-demo/
 .ruff_cache
 marm-bot-discord
