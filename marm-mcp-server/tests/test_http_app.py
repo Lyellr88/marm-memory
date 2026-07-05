@@ -123,27 +123,35 @@ def test_dashboard_mount_reachable_but_absent_from_tools_list(monkeypatch, tmp_p
     assert "health" not in names
 
 
-def test_dashboard_mount_inherits_marm_mcp_servers_own_bearer_gate(
+def test_dashboard_mount_is_exempt_from_marm_mcp_servers_own_bearer_gate(
     monkeypatch, tmp_path
 ):
-    """Root `auth_middleware` wraps the whole ASGI app, including routing
-    into mounted sub-apps -- setting MARM_API_KEY on marm-mcp-server blocks
-    unauthenticated /dashboard requests before dashboard's own separate auth
-    gate ever runs. A plain browser navigation to /dashboard cannot reach
-    dashboard's own unlock screen once marm-mcp-server's key is set; only
-    requests already carrying marm-mcp-server's own bearer token reach the
-    mounted sub-app at all.
+    """Root `auth_middleware` wraps the whole ASGI app, including routing into
+    mounted sub-apps -- if /dashboard weren't exempt, setting MARM_API_KEY on
+    marm-mcp-server would block unauthenticated /dashboard requests before
+    dashboard's own independent auth gate ever ran, and a plain browser
+    navigation could never reach dashboard's own unlock screen.
+
+    /dashboard is exempt from this gate (PUBLIC_PREFIXES) precisely so
+    dashboard's own MARM_API_KEY check is the only gate -- no double auth,
+    but still gated, not open.
     """
     server = load_isolated_server(monkeypatch, tmp_path, api_key="test-key-123")
     client = local_client(server.app)
 
-    blocked = client.get("/dashboard/")
-    assert blocked.status_code == 401
+    unauthenticated_page = client.get("/dashboard/")
+    assert unauthenticated_page.status_code == 200
 
-    allowed = client.get(
-        "/dashboard/health", headers={"Authorization": "Bearer test-key-123"}
+    unauthenticated_health = client.get("/dashboard/health")
+    assert unauthenticated_health.status_code == 200
+
+    unauthenticated_api = client.get("/dashboard/api/summary")
+    assert unauthenticated_api.status_code == 401
+
+    authenticated_api = client.get(
+        "/dashboard/api/summary", headers={"Authorization": "Bearer test-key-123"}
     )
-    assert allowed.status_code == 200
+    assert authenticated_api.status_code == 200
 
 
 def test_dashboard_mount_reads_and_writes_the_same_db_as_marm_mcp_server(

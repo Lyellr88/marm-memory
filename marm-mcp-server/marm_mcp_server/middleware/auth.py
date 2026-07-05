@@ -5,7 +5,10 @@ from fastapi.responses import JSONResponse
 from ..config.settings import MARM_API_KEY
 
 PUBLIC_PATHS = {"/health", "/ready", "/ping", "/", "/docs", "/redoc", "/openapi.json"}
-PUBLIC_PREFIXES = ("/openapi",)
+# /dashboard is exempt from this gate -- the mounted marm-dashboard sub-app runs
+# its own independent MARM_API_KEY check (marm_dashboard/auth.py), so this only
+# avoids double-gating it, not skipping auth entirely.
+PUBLIC_PREFIXES = ("/openapi", "/dashboard")
 
 
 async def auth_middleware(request: Request, call_next):
