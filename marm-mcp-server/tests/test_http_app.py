@@ -1,5 +1,7 @@
 import importlib
 
+import pytest
+
 from conftest import load_isolated_server, local_client, remote_client
 
 
@@ -109,7 +111,11 @@ def test_dashboard_mount_reachable_but_absent_from_tools_list(monkeypatch, tmp_p
     a mounted dashboard route is reachable over plain HTTP AND absent from
     the MCP tool surface, so a future refactor can't silently satisfy one
     side while breaking the other.
+
+    Requires marm_dashboard installed -- a docker-only extra, absent from
+    the plain pip/CI install path by design.
     """
+    pytest.importorskip("marm_dashboard")
     server = load_isolated_server(monkeypatch, tmp_path)
     client = local_client(server.app)
 
@@ -135,7 +141,10 @@ def test_dashboard_mount_is_exempt_from_marm_mcp_servers_own_bearer_gate(
     /dashboard is exempt from this gate (PUBLIC_PREFIXES) precisely so
     dashboard's own MARM_API_KEY check is the only gate -- no double auth,
     but still gated, not open.
+
+    Requires marm_dashboard installed -- see skip note above.
     """
+    pytest.importorskip("marm_dashboard")
     server = load_isolated_server(monkeypatch, tmp_path, api_key="test-key-123")
     client = local_client(server.app)
 
@@ -162,7 +171,10 @@ def test_dashboard_mount_reads_and_writes_the_same_db_as_marm_mcp_server(
     through the dashboard's own REST API under /dashboard, and a memory
     created through the dashboard's own REST API must be readable back the
     same way. No separate DB, no HTTP hop between the two.
+
+    Requires marm_dashboard installed -- see skip note above.
     """
+    pytest.importorskip("marm_dashboard")
     server = load_isolated_server(monkeypatch, tmp_path)
     client = local_client(server.app)
 
@@ -195,7 +207,10 @@ def test_dashboard_mount_without_trailing_slash_redirects(monkeypatch, tmp_path)
     """/dashboard (no trailing slash) must redirect to /dashboard/ -- otherwise
     the dashboard's relative asset/api URLs would resolve one level too high
     (e.g. api/summary -> /api/summary instead of /dashboard/api/summary).
+
+    Requires marm_dashboard installed -- see skip note above.
     """
+    pytest.importorskip("marm_dashboard")
     server = load_isolated_server(monkeypatch, tmp_path)
     client = local_client(server.app)
 

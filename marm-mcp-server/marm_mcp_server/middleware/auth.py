@@ -25,7 +25,11 @@ async def auth_middleware(request: Request, call_next):
       - MARM_API_KEY set: require Authorization: Bearer <key> on all non-public routes.
     """
     path = request.url.path
-    if path in PUBLIC_PATHS or path.startswith(PUBLIC_PREFIXES) or _is_dashboard_path(path):
+    if (
+        path in PUBLIC_PATHS
+        or path.startswith(PUBLIC_PREFIXES)
+        or _is_dashboard_path(path)
+    ):
         return await call_next(request)
 
     if not MARM_API_KEY:

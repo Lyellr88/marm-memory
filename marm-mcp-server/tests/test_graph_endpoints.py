@@ -128,6 +128,7 @@ def test_cold_graph_startup_does_not_block_concurrent_core_requests(
     while a slow graph verification call is still blocked in its own thread.
     """
     release = threading.Event()
+    entered = threading.Event()
 
     class _SlowFakeClient:
         server_version = "0.8.1-fake"
@@ -136,6 +137,7 @@ def test_cold_graph_startup_does_not_block_concurrent_core_requests(
             pass
 
         def list_tools(self):
+            entered.set()
             assert release.wait(timeout=5), "test deadlocked waiting for release"
             raise ConnectionError("simulated slow-then-failed handshake")
 
@@ -155,7 +157,11 @@ def test_cold_graph_startup_does_not_block_concurrent_core_requests(
             graph_task = asyncio.create_task(
                 ac.post("/marm_graph_index", json={"action": "list"})
             )
-            await asyncio.sleep(0.05)  # let the graph task reach the blocking call
+            # Wait for the fake client to actually reach the blocking call
+            # (not a fixed sleep) -- deterministic, no flakiness under load.
+            assert await asyncio.to_thread(
+                entered.wait, 5
+            ), "graph task never reached the blocking call"
             assert not graph_task.done(), "fake client should still be blocked"
 
             health_response = await ac.get("/health")
