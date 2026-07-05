@@ -107,6 +107,8 @@ if not (1 <= _raw_port <= 65535):
     )
 SERVER_VERSION = "2.15.2"
 
+GRAPH_ENABLED = os.environ.get("GRAPH_ENABLED", "true").lower() != "false"
+
 
 def _detect_project() -> str:
     explicit = os.environ.get("MARM_PROJECT", "")

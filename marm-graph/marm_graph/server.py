@@ -5,7 +5,6 @@ the UI router is REST-only and never mounted into MCP. Mirrors marm-mcp-server's
 lifespan / router-registration / mount shape.
 """
 
-import os
 import sys
 from contextlib import asynccontextmanager
 
@@ -16,6 +15,8 @@ from fastapi.responses import JSONResponse
 from fastapi_mcp import FastApiMCP
 
 from .config import settings
+from .core import backend
+from .core.backend import AI_OPERATIONS, _EXPECTED_UPSTREAM_TOOLS
 from .core.deps import get_client, reset_client
 from .endpoints.graph_ai import router as ai_router
 from .endpoints.graph_ui import router as ui_router
@@ -23,65 +24,11 @@ from .middleware.auth import auth_middleware
 
 logger = structlog.get_logger(__name__)
 
-# The 5 AI operation_ids that are exposed as MCP tools. A whitelist: anything not
-# listed here (i.e. the entire UI router) can never appear in the AI's tools/list.
-AI_OPERATIONS = [
-    "marm_graph_index",
-    "marm_code_lookup",
-    "marm_graph_trace",
-    "marm_graph_architecture",
-    "marm_graph_impact",
-]
+# Back-compat alias: tests call server._check_schema directly. The public name
+# now lives in core/backend.py (shared with marm-mcp-server's graph_supervisor).
+_check_schema = backend.check_schema
 
-_EXPECTED_UPSTREAM_TOOLS = {
-    "index_repository", "search_graph", "query_graph", "trace_path",
-    "get_code_snippet", "get_graph_schema", "get_architecture", "search_code",
-    "list_projects", "delete_project", "index_status", "detect_changes",
-    "manage_adr", "ingest_traces",
-}
 _LOOPBACK = ("127.0.0.1", "::1", "localhost")
-
-
-def _verify_backend() -> None:
-    """Start the child, verify the binary trust boundary, check for schema drift."""
-    client = get_client()
-    if settings.CBM_BINARY_PATH and not os.path.exists(settings.CBM_BINARY_PATH):
-        raise RuntimeError(
-            f"CBM_BINARY_PATH does not exist: {settings.CBM_BINARY_PATH}"
-        )
-    client.start()
-    logger.info(
-        "cbm.backend_ready",
-        spawn_command=settings.cbm_spawn_command(),
-        pinned_pip_version=settings.PINNED_CBM_VERSION,
-        binary_version=client.server_version,  # the true schema-contract version
-    )
-    try:
-        names = {t["name"] for t in client.list_tools()}
-    except Exception as e:
-        raise RuntimeError(f"Could not list upstream tools to verify schema: {e}") from e
-    _check_schema(names)
-
-
-def _check_schema(names: set[str]) -> None:
-    """Fail fast if an expected upstream tool is gone; warn on unexpected extras.
-
-    tools/list is a fixed contract that tool_router maps by hand — a missing tool
-    means a hand-written mapping is silently broken, so refuse to start. Extra
-    tools are forward-compatible and only worth a warning.
-    """
-    missing = _EXPECTED_UPSTREAM_TOOLS - names
-    extra = names - _EXPECTED_UPSTREAM_TOOLS
-    if missing:
-        raise RuntimeError(
-            f"Upstream schema drift: expected codebase-memory-mcp tools missing "
-            f"from the binary: {sorted(missing)}. The pinned contract changed — "
-            f"review the router mapping before running."
-        )
-    if extra:
-        logger.warning("cbm.schema_drift_extra", extra=sorted(extra))
-    else:
-        logger.info("cbm.schema_ok", tool_count=len(names))
 
 
 @asynccontextmanager
@@ -92,7 +39,7 @@ async def lifespan(app: FastAPI):
         host=settings.SERVER_HOST,
         port=settings.SERVER_PORT,
     )
-    _verify_backend()
+    backend.verify_and_start(get_client())
     yield
     logger.info("marm-graph shutting down")
     reset_client()

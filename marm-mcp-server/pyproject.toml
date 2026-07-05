@@ -41,6 +41,7 @@ dependencies = [
     "packaging>=24.0,<27.0",
     "torch>=1.13.0",
     "fastmcp>=3.2.0,<3.5.0",
+    "marm-graph==0.1.0",
 ]
 
 [project.urls]

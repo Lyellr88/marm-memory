@@ -12,7 +12,7 @@
 - [Getting Started](#getting-started)
 - [Example Workflow](#example-workflow-cross-ai-research-project)
 - [Understanding MARM Memory](#understanding-marm-memory)
-- [Complete Tool Reference (7 Tools)](#complete-tool-reference-7-tools)
+- [Complete Tool Reference (12 Tools)](#complete-tool-reference-12-tools)
 - [Pro Tips & Best Practices](#pro-tips--best-practices)
 - [Advanced Workflows](#advanced-workflows)
 - [FAQ](#faq)
@@ -31,6 +31,7 @@ MARM MCP Server supports two transport modes for different deployment scenarios:
 - Traditional server-client architecture
 - Best for: Multiple concurrent AI clients, cloud/remote deployment, shared memory server
 - Setup: Run `python -m marm_mcp_server` and connect via `http://localhost:8001/mcp`
+- Bundles marm-graph's 5 code-structure tools by default — `pip install marm-mcp-server` is the only install step, no separate `marm-graph` package needed
 
 **STDIO Transport** (Process-based)
 
@@ -263,7 +264,7 @@ MARM automatically categorizes content:
 
 ---
 
-## Complete Tool Reference (7 Tools)
+## Complete Tool Reference (12 Tools)
 
 | Category | Tool | Description | Usage Notes |
 |----------|------|-------------|-------------|
@@ -274,8 +275,15 @@ MARM automatically categorizes content:
 | **📔 Notebook** | `marm_notebook` | Unified notebook management | `action="add"` saves entries, `action="use"` activates entries, `action="show"` lists saved entries, `action="status"` shows active entries, `action="clear"` clears active entries. `session_name` scopes active entries when needed |
 | **🔄 Workflow** | `marm_summary` | Generate cached, paste-ready session summaries with intelligent truncation | Create summaries for new conversations or context bridging |
 | **🧹 Maintenance** | `marm_compaction` | Agent-assisted memory compaction | `action="status"`, `"candidates"`, `"review"`, `"stage"`, `"apply"`, or `"discard"`. Used when MARM detects duplicate memory clusters and asks the agent to summarize them |
+| **🕸️ Code Graph** (bundled, HTTP only) | `marm_graph_index` | Index a repo into the code-structure graph, or check status / list indexed projects | `repo_path` to index, `project` to check status, omit both to list |
+| | `marm_code_lookup` | Find symbols, text patterns, or a symbol's source — use instead of grep/glob | `kind="auto"\|"symbol"\|"text"\|"snippet"` |
+| | `marm_graph_trace` | Trace call paths / data flow through the graph from a function | `direction="inbound"\|"outbound"\|"both"`, `mode="calls"\|"data_flow"\|"cross_service"` |
+| | `marm_graph_architecture` | High-level architecture overview: node/edge breakdown, modules, and schema | `project` (optional) |
+| | `marm_graph_impact` | Blast radius of code changes: git diff → affected symbols + risk | `since`, `base_branch`, `depth` |
 
 **Internal automation:** lifecycle initialization, protocol delivery with periodic protocol-lite refresh, documentation refresh, current date context, summary-cache maintenance, serialized write queue handling, and system checks are no longer AI-facing tools. Documentation refresh uses `doc_index` hash tracking to avoid duplicate `marm_system` memories across restarts. Use the dashboard health panel for live server status, or `curl http://localhost:8001/health` for terminal checks.
+
+**Graph degraded mode:** the 5 code-graph tools start lazily on first use (first-run may download a ~269MB engine binary) and are always listed in `tools/list`, but they never affect the 7 core memory tools. If the graph engine fails to start (no network, disk full, schema drift) or `GRAPH_ENABLED=false` is set, graph tools return `{"status": "error", "message": "graph backend unavailable"}` while memory, logging, notebook, and compaction keep working normally.
 
 **Project/platform attribution:** MARM stores nullable `project` and `platform` columns on memories, log entries, and notebook entries. `MARM_PROJECT` overrides the detected working-directory project, while `MARM_PLATFORM` overrides client/platform detection. `marm_smart_recall(project=..., platform=...)` scopes memory recall and `include_logs=True` log search without changing the default unfiltered behavior.
 

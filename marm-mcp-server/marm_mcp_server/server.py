@@ -43,9 +43,11 @@ from .config.settings import (
 )
 from .core import memory as memory_module
 from .core.compaction import claim_pending_compaction_prompt
+from .core.graph_supervisor import graph_supervisor
 from .core.memory import memory
 from .core.rate_limiter import rate_limiter
 from .endpoints.compaction import router as compaction_router
+from .endpoints.graph import router as graph_router
 from .endpoints.logging import router as logging_router
 from .endpoints.memory import router as memory_router
 from .endpoints.notebook import router as notebook_router
@@ -248,6 +250,7 @@ async def lifespan(app: FastAPI):
     if _compaction_scheduler and _compaction_scheduler.running:
         _compaction_scheduler.shutdown(wait=False)
     await memory.stop_write_queue()
+    graph_supervisor.stop()
     track_usage("server_shutdown")
 
 
@@ -512,6 +515,7 @@ app.include_router(notebook_router)
 app.include_router(memory_router)
 app.include_router(system_router)
 app.include_router(compaction_router)
+app.include_router(graph_router)
 
 
 mcp = FastApiMCP(app)

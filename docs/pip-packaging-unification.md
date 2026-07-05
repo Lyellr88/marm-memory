@@ -1,6 +1,6 @@
 # Pip Packaging Unification (marm-mcp-server + marm-graph)
 
-**Status**: Planned
+**Status**: Complete
 **Version Target**: v2.16.0 (MINOR — new install capability, no breaking change to the existing 7 tools/params)
 **Priority**: High
 **Parent doc**: `docs/current/graph-index/packaging-integration.md` — this spec answers that doc's pip-direction open question and non-negotiables checklist. Docker unification is a separate spec (not covered here).
@@ -148,26 +148,26 @@ return await asyncio.to_thread(R.do_index, graph_supervisor.get_client(), req)
 
 ## Testing Checklist
 
-- [ ] `pip install marm-mcp-server` in a clean venv pulls in `marm-graph` and `codebase-memory-mcp` transitively (dependency resolution sanity check)
-- [ ] `marm-mcp-server/requirements.txt` also contains `marm-graph==0.1.0` so the current Docker build path does not drift from the pip package before the Docker unification spec lands
-- [ ] `marm-mcp-server` starts with **zero** graph-related network activity or child-process spawn when no graph tool has been called yet (lazy-start assertion)
-- [ ] First call to any `marm_graph_*` tool triggers the download (mock/skip-guard the real 269MB fetch in CI, same `requires_binary`-style skip marm-graph's own tests use) and an INFO log line appears before the child spawns
-- [ ] `tools/list` on the unified server returns all 12 operation_ids (7 core + 5 graph) — schema-stability test, mirrors marm-graph's own `test_mcp_exposes_exactly_five_ai_tools`
-- [ ] Core memory tools (`marm_log_entry`, `marm_smart_recall`, etc.) work normally when the graph backend fails to start (simulate via `GRAPH_ENABLED=false` or a broken `CBM_BINARY_PATH`) — this is the critical failure-isolation test the whole spec exists to guarantee
-- [ ] A forced schema-drift condition (mismatched `_EXPECTED_UPSTREAM_TOOLS`) is caught by the supervisor and downgrades to "graph unavailable," not a crashed server
-- [ ] `GRAPH_ENABLED=false` short-circuits before any subprocess spawn attempt; graph tools return the clean error dict immediately
-- [ ] Graceful shutdown: killing/stopping `marm-mcp-server` after graph has been used cleanly terminates the `codebase-memory-mcp` child (no orphaned process)
-- [ ] Existing marm-graph standalone tests (`marm-graph/tests/`) still pass unchanged after the `core/backend.py` extraction — pure-refactor regression check
+- [x] `pip install marm-mcp-server` in a clean venv pulls in `marm-graph` and `codebase-memory-mcp` transitively (dependency resolution sanity check) — verified via local editable installs of both packages into a clean venv (marm-graph is not yet published to the real PyPI index, so the real `pip install marm-mcp-server` end-to-end pull could not be exercised against the live index; see final report)
+- [x] `marm-mcp-server/requirements.txt` also contains `marm-graph==0.1.0` so the current Docker build path does not drift from the pip package before the Docker unification spec lands
+- [x] `marm-mcp-server` starts with **zero** graph-related network activity or child-process spawn when no graph tool has been called yet (lazy-start assertion) — `tests/test_graph_endpoints.py::test_no_graph_network_activity_or_spawn_at_boot`
+- [x] First call to any `marm_graph_*` tool triggers the download (mock/skip-guard the real 269MB fetch in CI, same `requires_binary`-style skip marm-graph's own tests use) and an INFO log line appears before the child spawns — `tests/test_graph_supervisor.py::test_first_run_download_logs_before_start` (binary presence mocked, matching marm-graph's own skip-guard policy for the real 269MB fetch)
+- [x] `tools/list` on the unified server returns all 12 operation_ids (7 core + 5 graph) — schema-stability test, mirrors marm-graph's own `test_mcp_exposes_exactly_five_ai_tools` — `tests/test_graph_endpoints.py::test_tools_list_exposes_twelve_operation_ids`
+- [x] Core memory tools (`marm_log_entry`, `marm_smart_recall`, etc.) work normally when the graph backend fails to start (simulate via `GRAPH_ENABLED=false` or a broken `CBM_BINARY_PATH`) — this is the critical failure-isolation test the whole spec exists to guarantee — `tests/test_graph_endpoints.py::test_core_memory_tools_work_when_graph_disabled`
+- [x] A forced schema-drift condition (mismatched `_EXPECTED_UPSTREAM_TOOLS`) is caught by the supervisor and downgrades to "graph unavailable," not a crashed server — `tests/test_graph_supervisor.py::test_schema_drift_degrades_to_unavailable_not_crash`
+- [x] `GRAPH_ENABLED=false` short-circuits before any subprocess spawn attempt; graph tools return the clean error dict immediately — `tests/test_graph_endpoints.py::test_graph_enabled_false_short_circuits_before_subprocess_spawn`
+- [x] Graceful shutdown: killing/stopping `marm-mcp-server` after graph has been used cleanly terminates the `codebase-memory-mcp` child (no orphaned process) — `tests/test_graph_supervisor.py::test_stop_closes_client_and_resets_state` (real-subprocess close() verified against a CbmClient double; wiring into lifespan verified by `tests/test_graph_endpoints.py::test_shutdown_stops_graph_supervisor_child`)
+- [x] Existing marm-graph standalone tests (`marm-graph/tests/`) still pass unchanged after the `core/backend.py` extraction — pure-refactor regression check — 22 passed, 18 skipped (binary-gated), 0 failed
 
 ---
 
 ## Docs to Update
 
-- [ ] `docs/current/graph-index/pip-packaging-unification.md` — mark Status: Complete when done
-- [ ] `docs/current/graph-index/packaging-integration.md` — mark the pip-direction open question as resolved, link to this spec
-- [ ] `marm-mcp-server/README.md` — quick start + tool count
-- [ ] `MCP-HANDBOOK.md` — tool count + degraded-mode behavior note
-- [ ] `marm-graph/README.md` — note that marm-mcp-server now embeds marm-graph by default; standalone install/Docker path is unchanged and still documented as-is
+- [x] `docs/pip-packaging-unification.md` — Status marked Complete (this file; the path in this checklist item pointed to `docs/current/graph-index/...`, which does not exist in this repo layout — updated the actual file instead)
+- [ ] `docs/current/graph-index/packaging-integration.md` — file does not exist in this repository checkout; not applicable / could not be updated
+- [x] `marm-mcp-server/README.md` — quick start + tool count
+- [x] `MCP-HANDBOOK.md` — tool count + degraded-mode behavior note
+- [x] `marm-graph/README.md` — note that marm-mcp-server now embeds marm-graph by default; standalone install/Docker path is unchanged and still documented as-is
 
 ---
 

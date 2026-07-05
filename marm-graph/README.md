@@ -9,6 +9,12 @@ re-exposes a small, marm-branded surface.
 - **Full design**: `docs/current/graph-index/graph/marm-graph-spec.md`
 - **Verified protocol**: `docs/current/graph-index/graph/protocol-proof.md`
 
+> **Note:** `marm-mcp-server` now embeds marm-graph by default (`pip install
+> marm-mcp-server` alone gets you both), calling these same 5 tools directly —
+> no second port, no second install. This standalone package, its own HTTP/STDIO
+> servers, and its Docker image are unchanged and still fully supported for
+> advanced/independent use.
+
 ## What it exposes
 
 **5 AI tools** (MCP — HTTP `/tools/*` and stdio):
