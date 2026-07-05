@@ -243,12 +243,14 @@ Claude Code remains the recommended first setup path, but MARM also works with o
 </picture>
 </div>
 
-A local web UI for browsing and managing your MARM memory; separate from the MCP server, reads and writes the same `~/.marm/marm_memory.db`.
+A local web UI for browsing and managing your MARM memory, reads and writes the same `~/.marm/marm_memory.db`.
+
+> **Already using the unified `:latest` Docker image?** The dashboard is bundled in — no separate install or port, just open `http://localhost:8001/dashboard`. Everything below is for the standalone pip/Docker path (its own port, its own image), still fully supported for users who want it independent of marm-mcp-server.
 
 | What it gives you | How it works |
 |-------------------|-------------|
 | Browse/search/edit all memories | Direct SQLite, no MCP required |
-| Manage sessions and protocol logs | Runs on port `:8002` alongside MCP on `:8001` |
+| Manage sessions and protocol logs | Standalone: runs on its own port `:8002`. Unified image: mounted at `/dashboard` on marm-mcp-server's `:8001`. |
 | Notebook CRUD with inline editor | Same auth model (`MARM_API_KEY`) as the MCP server |
 | Delete-all with count confirmation | Docker image included; WAL mode handles concurrent access |
 | View the write queue in real time | Pulls live data from the write queue |

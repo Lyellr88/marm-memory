@@ -5,10 +5,17 @@ from fastapi.responses import JSONResponse
 from ..config.settings import MARM_API_KEY
 
 PUBLIC_PATHS = {"/health", "/ready", "/ping", "/", "/docs", "/redoc", "/openapi.json"}
-# /dashboard is exempt from this gate -- the mounted marm-dashboard sub-app runs
-# its own independent MARM_API_KEY check (marm_dashboard/auth.py), so this only
-# avoids double-gating it, not skipping auth entirely.
-PUBLIC_PREFIXES = ("/openapi", "/dashboard")
+PUBLIC_PREFIXES = ("/openapi",)
+
+
+def _is_dashboard_path(path: str) -> bool:
+    """/dashboard and /dashboard/* only -- not /dashboardevil or similar.
+
+    Exempt from this gate because the mounted marm-dashboard sub-app runs its
+    own independent MARM_API_KEY check (marm_dashboard/auth.py); this only
+    avoids double-gating it, not skipping auth entirely.
+    """
+    return path == "/dashboard" or path.startswith("/dashboard/")
 
 
 async def auth_middleware(request: Request, call_next):
@@ -17,7 +24,8 @@ async def auth_middleware(request: Request, call_next):
       - No MARM_API_KEY set: loopback-only (127.0.0.1 / ::1). Safe default for local deployments.
       - MARM_API_KEY set: require Authorization: Bearer <key> on all non-public routes.
     """
-    if request.url.path in PUBLIC_PATHS or request.url.path.startswith(PUBLIC_PREFIXES):
+    path = request.url.path
+    if path in PUBLIC_PATHS or path.startswith(PUBLIC_PREFIXES) or _is_dashboard_path(path):
         return await call_next(request)
 
     if not MARM_API_KEY:

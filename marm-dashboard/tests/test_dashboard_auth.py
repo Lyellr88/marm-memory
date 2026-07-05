@@ -13,6 +13,27 @@ def test_loopback_without_key_can_use_api_but_remote_is_blocked(monkeypatch, tmp
     assert "MARM_API_KEY" in blocked.json()["message"]
 
 
+def test_remote_client_cannot_spoof_loopback_via_forwarded_headers(
+    monkeypatch, tmp_path
+):
+    """A remote direct TCP peer must not bypass the loopback-only gate just by
+    sending X-Forwarded-For: 127.0.0.1 -- those headers are only trusted when
+    the direct connection itself is already a known local proxy.
+    """
+    server = load_dashboard(monkeypatch, tmp_path)
+    remote = remote_client(server.app)
+
+    spoofed = remote.get(
+        "/api/summary", headers={"X-Forwarded-For": "127.0.0.1"}
+    )
+    assert spoofed.status_code == 401
+
+    spoofed_real_ip = remote.get(
+        "/api/summary", headers={"X-Real-IP": "127.0.0.1"}
+    )
+    assert spoofed_real_ip.status_code == 401
+
+
 def test_key_mode_requires_bearer_token_and_unlock_validates_key(monkeypatch, tmp_path):
     server = load_dashboard(monkeypatch, tmp_path, api_key="dash-key-123")
     client = local_client(server.app)

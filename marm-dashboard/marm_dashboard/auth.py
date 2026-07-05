@@ -28,14 +28,28 @@ SECURITY_HEADERS = {
 }
 
 
+_TRUSTED_PROXY_IPS = {"127.0.0.1", "::1"}
+
+
 def _client_ip(request: Request) -> str:
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        return forwarded.split(",")[0].strip()
-    real = request.headers.get("X-Real-IP")
-    if real:
-        return real.strip()
-    return request.client.host if request.client else ""
+    """Extract client IP from request, handling proxies.
+
+    X-Forwarded-For/X-Real-IP are only trusted when the direct TCP connection
+    comes from a known local proxy -- mirrors marm-mcp-server's own
+    middleware/rate_limiting.py get_client_ip(), so a remote caller can't spoof
+    127.0.0.1 to bypass the loopback-only auth mode.
+    """
+    direct_ip = request.client.host if request.client else ""
+
+    if direct_ip in _TRUSTED_PROXY_IPS:
+        forwarded = request.headers.get("X-Forwarded-For")
+        if forwarded:
+            return forwarded.split(",")[0].strip()
+        real = request.headers.get("X-Real-IP")
+        if real:
+            return real.strip()
+
+    return direct_ip
 
 
 def _bearer_token(request: Request) -> str:

@@ -45,8 +45,6 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
-
 RUN groupadd -r marm && useradd -r -g marm marm
 RUN mkdir -p /home/marm /home/marm/.marm /home/marm/.cache
 RUN chown -R marm:marm /home/marm
@@ -64,7 +62,7 @@ ENV PATH=/home/marm/.local/bin:$PATH
 EXPOSE 8001
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8001/health || exit 1
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8001/health', timeout=5)" || exit 1
 
 LABEL org.opencontainers.image.title="MARM Universal MCP Server"
 LABEL org.opencontainers.image.description="Production-ready Universal MCP Server with advanced AI memory capabilities, semantic search, and professional-grade architecture"

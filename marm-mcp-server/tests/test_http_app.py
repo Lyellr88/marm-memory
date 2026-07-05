@@ -203,3 +203,16 @@ def test_dashboard_mount_without_trailing_slash_redirects(monkeypatch, tmp_path)
 
     assert response.status_code in (307, 308)
     assert response.headers["location"].endswith("/dashboard/")
+
+
+def test_dashboard_exemption_does_not_match_lookalike_paths(monkeypatch, tmp_path):
+    """The /dashboard auth exemption must match /dashboard and /dashboard/*
+    only -- a naive startswith("/dashboard") would also exempt an unrelated
+    route like /dashboardevil, which isn't part of the mount at all.
+    """
+    server = load_isolated_server(monkeypatch, tmp_path, api_key="test-key-123")
+    client = remote_client(server.app)
+
+    response = client.get("/dashboardevil")
+
+    assert response.status_code == 401

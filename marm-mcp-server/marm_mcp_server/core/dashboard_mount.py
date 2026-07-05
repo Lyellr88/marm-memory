@@ -8,7 +8,10 @@ can skip the mount entirely instead of crashing on import.
 
 from typing import Optional
 
+import structlog
 from fastapi import FastAPI
+
+logger = structlog.get_logger()
 
 
 def get_dashboard_app() -> Optional[FastAPI]:
@@ -18,3 +21,9 @@ def get_dashboard_app() -> Optional[FastAPI]:
         return dashboard_app
     except ImportError:
         return None  # not installed in this build variant
+    except Exception as e:
+        # Any other import-time failure (bad config, unwritable DB path, etc.)
+        # must not take memory/graph down with it -- same degrade-not-crash
+        # posture as graph_supervisor's own failure handling.
+        logger.warning("dashboard.mount_failed", error=str(e))
+        return None
