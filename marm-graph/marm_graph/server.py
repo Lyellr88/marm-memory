@@ -41,7 +41,17 @@ async def lifespan(app: FastAPI):
         host=settings.SERVER_HOST,
         port=settings.SERVER_PORT,
     )
-    backend.verify_and_start(get_client())
+    try:
+        backend.verify_and_start(get_client())
+    except Exception:
+        # verify_and_start can spawn the child (client.start()) then fail
+        # later (schema drift, list_tools failure) -- without this, that
+        # started-but-unverified child is orphaned since reset_client() below
+        # is only reached on the normal post-yield shutdown path. Standalone
+        # marm-graph still fails fast on purpose; this only adds cleanup
+        # before re-raising, it doesn't change that behavior.
+        reset_client()
+        raise
     yield
     logger.info("marm-graph shutting down")
     reset_client()

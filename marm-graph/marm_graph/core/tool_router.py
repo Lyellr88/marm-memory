@@ -299,7 +299,7 @@ def do_architecture(client: CbmClient, req: GraphArchitectureRequest) -> dict:
     if isinstance(arch, dict):
         try:
             arch["schema"] = client.call_tool("get_graph_schema", {"project": proj})
-        except CbmToolError:
+        except (CbmToolError, CbmError):
             pass  # schema is a nice-to-have fold-in, not essential
         return _bound(arch)
     return _bound({"architecture": arch})

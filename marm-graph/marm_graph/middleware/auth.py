@@ -5,18 +5,27 @@ required when a key is set. This is what makes "UI-only" REST endpoints actually
 safe on the wire — they are HTTP-facing, so they go through this gate too.
 """
 
+import secrets
+
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
 from ..config.settings import MARM_GRAPH_API_KEY
 
-PUBLIC_PATHS = {"/health", "/", "/docs", "/redoc", "/openapi.json"}
-PUBLIC_PREFIXES = ("/openapi",)
+PUBLIC_PATHS = {"/health"}
+# Root/docs/openapi are only public in loopback-only mode (no key configured).
+# Once MARM_GRAPH_API_KEY is set, they're gated like everything else instead
+# of leaking the route/schema surface on a locked-down deployment.
+_DOCS_PATHS = {"/", "/docs", "/redoc", "/openapi.json"}
+_DOCS_PREFIXES = ("/openapi",)
 _LOOPBACK = ("127.0.0.1", "::1", "localhost")
 
 
 async def auth_middleware(request: Request, call_next):
-    if request.url.path in PUBLIC_PATHS or request.url.path.startswith(PUBLIC_PREFIXES):
+    path = request.url.path
+    is_docs_path = path in _DOCS_PATHS or path.startswith(_DOCS_PREFIXES)
+
+    if path in PUBLIC_PATHS or (is_docs_path and not MARM_GRAPH_API_KEY):
         return await call_next(request)
 
     if not MARM_GRAPH_API_KEY:
@@ -36,7 +45,8 @@ async def auth_middleware(request: Request, call_next):
         return await call_next(request)
 
     auth_header = request.headers.get("Authorization", "")
-    if not auth_header.startswith("Bearer ") or auth_header[7:] != MARM_GRAPH_API_KEY:
+    token = auth_header[7:] if auth_header.startswith("Bearer ") else ""
+    if not secrets.compare_digest(token, MARM_GRAPH_API_KEY):
         return JSONResponse(
             status_code=401,
             content={

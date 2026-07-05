@@ -39,6 +39,12 @@ def verify_and_start(client: CbmClient) -> None:
         raise RuntimeError(
             f"CBM_BINARY_PATH does not exist: {settings.CBM_BINARY_PATH}"
         )
+    # Lazy, not import-time: this is the one shared path both marm-graph's own
+    # fail-fast standalone lifespan and marm-mcp-server's degrade-not-crash
+    # graph_supervisor call before spawning -- an unwritable/invalid
+    # MARM_GRAPH_STORE_DIR must surface here (raising, caught appropriately by
+    # each caller), not at import time regardless of GRAPH_ENABLED.
+    settings.STORE_DIR.mkdir(parents=True, exist_ok=True)
     client.start()
     logger.info(
         "cbm.backend_ready",

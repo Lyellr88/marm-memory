@@ -40,7 +40,7 @@ def test_no_graph_network_activity_or_spawn_at_boot(monkeypatch, tmp_path):
     """Lazy-start assertion: importing/booting the server must not touch graph."""
     server = load_isolated_server(monkeypatch, tmp_path)
 
-    assert server.graph_supervisor._start_attempted is False
+    assert server.graph_supervisor._ready.is_set() is False
     assert server.graph_supervisor._client is None
 
 
@@ -159,9 +159,9 @@ def test_cold_graph_startup_does_not_block_concurrent_core_requests(
             )
             # Wait for the fake client to actually reach the blocking call
             # (not a fixed sleep) -- deterministic, no flakiness under load.
-            assert await asyncio.to_thread(
-                entered.wait, 5
-            ), "graph task never reached the blocking call"
+            assert await asyncio.to_thread(entered.wait, 5), (
+                "graph task never reached the blocking call"
+            )
             assert not graph_task.done(), "fake client should still be blocked"
 
             health_response = await ac.get("/health")

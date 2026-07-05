@@ -13,6 +13,7 @@ constructed GraphSupervisor actually reads from.
 """
 
 import importlib
+import threading
 
 import structlog
 
@@ -142,6 +143,57 @@ def test_start_is_lazy_and_idempotent(monkeypatch):
     supervisor.is_available()
     supervisor.get_client()
     assert len(calls) == 1  # only one CbmClient built despite 3 calls
+
+
+def test_concurrent_calls_during_inflight_startup_all_wait_for_the_result(
+    monkeypatch,
+):
+    """A caller during an in-flight (slow) startup must not observe a
+    premature False -- it must block on the lock until the first caller's
+    attempt actually resolves, then see the real result. Before the fix,
+    a plain "start attempted" flag was set before verify_and_start()
+    completed, so a second caller could skip the lock entirely and read
+    _available while it was still False but startup was genuinely ongoing.
+    """
+    gs = _fresh_gs()
+    monkeypatch.setattr(gs.mcp_settings, "GRAPH_ENABLED", True)
+
+    entered = threading.Event()
+    release = threading.Event()
+
+    class _SlowFakeClient(_FakeClient):
+        def start(self):
+            entered.set()
+            assert release.wait(timeout=5), "test deadlocked waiting for release"
+            super().start()
+
+    fake = _SlowFakeClient()
+    monkeypatch.setattr(gs, "CbmClient", lambda **kwargs: fake)
+
+    supervisor = gs.GraphSupervisor()
+    results = []
+
+    def _caller():
+        results.append(supervisor.is_available())
+
+    first = threading.Thread(target=_caller)
+    first.start()
+    assert entered.wait(timeout=5), "first caller never reached the blocking call"
+
+    # A second caller starts while the first is still blocked inside start().
+    second = threading.Thread(target=_caller)
+    second.start()
+
+    # It must still be blocked (on the lock), not already returned with a
+    # premature False -- this is the actual regression check.
+    second.join(timeout=0.2)
+    assert second.is_alive(), "second caller returned before startup resolved"
+
+    release.set()
+    first.join(timeout=5)
+    second.join(timeout=5)
+
+    assert results == [True, True]
 
 
 def test_first_run_download_logs_before_start(monkeypatch, tmp_path):

@@ -12,6 +12,7 @@ Extra guards on the higher-risk actions:
 import asyncio
 import re
 
+import structlog
 from fastapi import APIRouter
 from pydantic import BaseModel
 
@@ -23,6 +24,8 @@ from ..core.models import (
     ManageAdrRequest,
     QueryGraphRequest,
 )
+
+logger = structlog.get_logger(__name__)
 
 router = APIRouter(tags=["ui"])
 
@@ -38,13 +41,20 @@ class ProjectRequest(BaseModel):
 
 
 async def _call(tool: str, args: dict) -> dict:
-    """Passthrough to the binary, translating failures into status dicts."""
+    """Passthrough to the binary, translating failures into status dicts.
+
+    These are HTTP-facing endpoints (auth-gated, but still on the wire), so
+    raw backend exception text/hint/payload must not reach the client --
+    logged server-side instead, per CodeQL's exception-exposure finding.
+    """
     try:
         payload = await asyncio.to_thread(get_client().call_tool, tool, args)
     except cbm_client.CbmToolError as e:
-        return {"status": "error", "message": str(e), "hint": e.hint, "payload": e.payload}
+        logger.warning("ui.tool_error", tool=tool, error=str(e), hint=e.hint)
+        return {"status": "error", "message": "graph tool call failed"}
     except cbm_client.CbmError as e:
-        return {"status": "error", "message": f"graph backend unavailable: {e}"}
+        logger.warning("ui.backend_unavailable", tool=tool, error=str(e))
+        return {"status": "error", "message": "graph backend unavailable"}
     return payload if isinstance(payload, dict) else {"result": payload}
 
 

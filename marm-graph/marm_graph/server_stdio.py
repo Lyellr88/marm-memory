@@ -123,7 +123,9 @@ async def marm_graph_trace(
 @mcp.tool()
 async def marm_graph_architecture(project: Optional[str] = None) -> dict:
     """High-level architecture overview: node/edge breakdown, modules, and schema."""
-    req = GraphArchitectureRequest(project=project)
+    req, err = _build(GraphArchitectureRequest, project=project)
+    if err:
+        return err
     return await asyncio.to_thread(R.do_architecture, get_client(), req)
 
 

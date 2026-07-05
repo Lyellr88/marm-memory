@@ -24,39 +24,47 @@ class GraphSupervisor:
     def __init__(self) -> None:
         self._client: Optional[CbmClient] = None
         self._available: bool = False
-        self._start_attempted: bool = False
         self._lock = threading.Lock()
+        # Set only once a startup attempt is FULLY resolved (success, failure,
+        # or disabled) -- never set early. A plain "start attempted" flag set
+        # before verify_and_start() completes would let a concurrent caller
+        # skip the lock entirely and read _available while it's still False
+        # but startup is genuinely still in progress. Callers during an
+        # in-flight startup must block on _lock, not race past it.
+        self._ready = threading.Event()
 
     def _ensure_started(self) -> None:
         """Idempotent lazy start. Never raises — failures leave is_available() False."""
-        if self._start_attempted:
+        if self._ready.is_set():
             return
         with self._lock:
-            if self._start_attempted:
+            if self._ready.is_set():
                 return
-            self._start_attempted = True
-            if not mcp_settings.GRAPH_ENABLED:
-                logger.info("graph.disabled", reason="GRAPH_ENABLED=false")
-                return
-            self._log_first_run_download()
-            client = CbmClient(
-                command=graph_settings.cbm_spawn_command(),
-                cwd=graph_settings.CBM_CWD,
-                startup_timeout=graph_settings.CBM_STARTUP_TIMEOUT,
-                call_timeout=graph_settings.CBM_CALL_TIMEOUT,
-                client_name="marm-mcp-server",
-            )
             try:
-                backend.verify_and_start(client)
-            except Exception as e:
-                logger.warning("graph.backend_start_failed", error=str(e))
+                if not mcp_settings.GRAPH_ENABLED:
+                    logger.info("graph.disabled", reason="GRAPH_ENABLED=false")
+                    return
+                self._log_first_run_download()
+                client = CbmClient(
+                    command=graph_settings.cbm_spawn_command(),
+                    cwd=graph_settings.CBM_CWD,
+                    startup_timeout=graph_settings.CBM_STARTUP_TIMEOUT,
+                    call_timeout=graph_settings.CBM_CALL_TIMEOUT,
+                    client_name="marm-mcp-server",
+                )
                 try:
-                    client.close()
-                except Exception:
-                    pass  # best-effort; the primary failure is already logged
-                return
-            self._client = client
-            self._available = True
+                    backend.verify_and_start(client)
+                except Exception as e:
+                    logger.warning("graph.backend_start_failed", error=str(e))
+                    try:
+                        client.close()
+                    except Exception:
+                        pass  # best-effort; the primary failure is already logged
+                    return
+                self._client = client
+                self._available = True
+            finally:
+                self._ready.set()
 
     @staticmethod
     def _log_first_run_download() -> None:
@@ -87,7 +95,7 @@ class GraphSupervisor:
             self._client.close()
         self._client = None
         self._available = False
-        self._start_attempted = False
+        self._ready.clear()
 
 
 graph_supervisor = GraphSupervisor()

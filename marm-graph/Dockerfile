@@ -36,6 +36,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl \
  && apt-get purge -y --auto-remove curl && rm -rf /var/lib/apt/lists/* \
  && test -f /usr/local/bin/codebase-memory-mcp-bin
 
+RUN groupadd -r marm && useradd -r -g marm marm \
+ && mkdir -p /home/marm/.marm && chown -R marm:marm /home/marm /app
+
 ENV CBM_BINARY_PATH=/usr/local/bin/codebase-memory-mcp-bin
 ENV SERVER_PORT=8003
 
@@ -43,5 +46,7 @@ ENV SERVER_PORT=8003
 # BOTH  SERVER_HOST=0.0.0.0  AND  MARM_GRAPH_API_KEY=<key>  — the server refuses to
 # start on a non-loopback interface without a key.
 EXPOSE 8003
+
+USER marm
 
 CMD ["marm-graph"]

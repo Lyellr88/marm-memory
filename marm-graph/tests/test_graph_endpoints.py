@@ -76,6 +76,25 @@ def test_unauthenticated_ui_call_rejected():
     assert r.status_code == 401
 
 
+def test_docs_and_openapi_require_auth_when_key_is_configured():
+    """Root/docs/openapi are only public in loopback-only (no-key) mode --
+    this test suite always has MARM_GRAPH_API_KEY set (see conftest), so
+    these must now require the bearer token too, not leak the route/schema
+    surface on a locked-down deployment. Only /health stays unconditionally
+    public.
+
+    "/" has no real route (marm-graph never defines one) -- unauthenticated
+    must still be blocked by auth *before* the router 404s, so its
+    authenticated response is 404, not 200, unlike the real docs routes.
+    """
+    for path in ("/docs", "/redoc", "/openapi.json"):
+        assert _req("GET", path).status_code == 401, path
+        assert _req("GET", path, headers=AUTH).status_code == 200, path
+
+    assert _req("GET", "/").status_code == 401
+    assert _req("GET", "/", headers=AUTH).status_code == 404
+
+
 # ── UI guards (return before touching the backend) ──────────────────
 
 

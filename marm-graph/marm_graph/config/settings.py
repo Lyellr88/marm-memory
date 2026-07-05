@@ -81,8 +81,12 @@ MAX_RESPONSE_BYTES = _safe_int("MARM_GRAPH_MAX_RESPONSE_BYTES", 900_000)
 
 # ── Store location (informational) ─────────────────────────────────
 # The wrapped binary owns all storage. Kept for logging/hardening checks.
+# NOT created here: this module is imported at process-import time (including
+# by marm-mcp-server's embedded graph_supervisor, even when GRAPH_ENABLED=false
+# and no graph tool is ever called), so an invalid/unwritable
+# MARM_GRAPH_STORE_DIR must not crash import. backend.verify_and_start()
+# creates it lazily, right before the child actually needs it.
 STORE_DIR = Path(os.environ.get("MARM_GRAPH_STORE_DIR", str(Path.home() / ".marm" / "graph")))
-STORE_DIR.mkdir(parents=True, exist_ok=True)
 
 # Working directory for the child (repo_path args may be relative to it).
 # Defaults to STORE_DIR, NOT the server's own CWD: if the server happened to
