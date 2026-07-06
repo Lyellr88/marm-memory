@@ -46,7 +46,10 @@ async def auth_middleware(request: Request, call_next):
 
     auth_header = request.headers.get("Authorization", "")
     token = auth_header[7:] if auth_header.startswith("Bearer ") else ""
-    if not secrets.compare_digest(token, MARM_GRAPH_API_KEY):
+    # Compare as bytes, not str -- compare_digest raises TypeError on
+    # non-ASCII str, so a malformed/unicode Authorization header would 500
+    # instead of cleanly 401ing. bytes has no such restriction.
+    if not secrets.compare_digest(token.encode(), MARM_GRAPH_API_KEY.encode()):
         return JSONResponse(
             status_code=401,
             content={

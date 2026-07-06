@@ -28,17 +28,21 @@ def _req(method: str, path: str, **kw) -> httpx.Response:
 
 
 def test_mcp_exposes_exactly_five_ai_tools():
-    names = set(server.mcp.tools.keys()) if isinstance(server.mcp.tools, dict) else {
-        t.name for t in server.mcp.tools
-    }
+    names = (
+        set(server.mcp.tools.keys())
+        if isinstance(server.mcp.tools, dict)
+        else {t.name for t in server.mcp.tools}
+    )
     assert names == set(server.AI_OPERATIONS)
     assert len(names) == 5
 
 
 def test_no_ui_operation_in_mcp_surface():
-    names = set(server.mcp.tools.keys()) if isinstance(server.mcp.tools, dict) else {
-        t.name for t in server.mcp.tools
-    }
+    names = (
+        set(server.mcp.tools.keys())
+        if isinstance(server.mcp.tools, dict)
+        else {t.name for t in server.mcp.tools}
+    )
     assert not any("ui_" in n for n in names)
 
 
@@ -68,6 +72,31 @@ def test_health_is_public():
 
 def test_unauthenticated_tool_call_rejected():
     r = _req("POST", "/tools/code_lookup", json={"query": "x"})
+    assert r.status_code == 401
+
+
+def test_non_ascii_bearer_token_rejects_cleanly_not_500():
+    """secrets.compare_digest raises TypeError on non-ASCII str (not bytes) --
+    comparing as str would 500 a malformed header instead of a clean 401.
+
+    Real HTTP header bytes decode as latin-1 (can be non-ASCII without being
+    invalid HTTP), so this sends raw bytes via a manually built httpx.Request
+    -- httpx's normal client-side header dict rejects non-ASCII str outright,
+    which would prevent this from ever reaching the server to test the fix.
+    """
+
+    async def go():
+        transport = httpx.ASGITransport(app=server.app)
+        async with httpx.AsyncClient(transport=transport, base_url="http://t") as ac:
+            request = httpx.Request(
+                "POST",
+                "http://t/tools/code_lookup",
+                headers=[(b"authorization", b"Bearer \xe9llo")],
+                json={"query": "x"},
+            )
+            return await ac.send(request)
+
+    r = asyncio.run(go())
     assert r.status_code == 401
 
 
@@ -134,16 +163,20 @@ def test_no_key_mode_is_loopback_only(monkeypatch):
 
 def test_delete_project_requires_confirmation():
     r = _req(
-        "POST", "/ui/delete_project",
-        json={"project": "anything", "confirm": False}, headers=AUTH,
+        "POST",
+        "/ui/delete_project",
+        json={"project": "anything", "confirm": False},
+        headers=AUTH,
     )
     assert r.json()["status"] == "confirmation_required"
 
 
 def test_query_graph_rejects_write_clauses():
     r = _req(
-        "POST", "/ui/query_graph",
-        json={"project": "p", "query": "MATCH (n) DELETE n"}, headers=AUTH,
+        "POST",
+        "/ui/query_graph",
+        json={"project": "p", "query": "MATCH (n) DELETE n"},
+        headers=AUTH,
     )
     assert r.json()["status"] == "rejected"
 
@@ -154,8 +187,10 @@ def test_query_graph_rejects_write_clauses():
 @requires_binary
 def test_authed_code_lookup_returns_results(client, project):
     r = _req(
-        "POST", "/tools/code_lookup",
-        json={"query": "CbmClient", "project": project}, headers=AUTH,
+        "POST",
+        "/tools/code_lookup",
+        json={"query": "CbmClient", "project": project},
+        headers=AUTH,
     )
     assert r.status_code == 200
     assert r.json()["results"]
@@ -164,7 +199,8 @@ def test_authed_code_lookup_returns_results(client, project):
 @requires_binary
 def test_query_graph_read_executes(client, project):
     r = _req(
-        "POST", "/ui/query_graph",
+        "POST",
+        "/ui/query_graph",
         json={"project": project, "query": "MATCH (n) RETURN count(n) AS c"},
         headers=AUTH,
     )
