@@ -147,8 +147,6 @@ class CbmClient:
         try:
             for raw in iter(pipe.readline, b""):
                 line = raw.decode("utf-8", "replace").rstrip()
-                if line == "The system cannot find the path specified.":
-                    continue
                 if line:
                     logger.debug("cbm.stderr", line=line)
         except (ValueError, OSError):

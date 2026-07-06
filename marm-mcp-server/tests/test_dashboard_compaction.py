@@ -153,26 +153,6 @@ def test_compaction_apply_creates_summary_and_marks_sources(monkeypatch, tmp_pat
     db_path = tmp_path / "marm_memory.db"
 
     with sqlite3.connect(db_path) as conn:
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS compaction_staging (
-                id TEXT PRIMARY KEY,
-                session_name TEXT NOT NULL,
-                source_memory_ids TEXT NOT NULL,
-                preview TEXT NOT NULL,
-                suggested_summary TEXT,
-                status TEXT NOT NULL DEFAULT 'pending_summary',
-                candidate_hash TEXT NOT NULL,
-                source_updated_at_snapshot TEXT NOT NULL,
-                expires_at TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL,
-                reviewed_at TEXT,
-                nudge_count INTEGER NOT NULL DEFAULT 0,
-                last_nudged_at TEXT
-            )
-            """
-        )
         conn.executemany(
             "INSERT INTO memories (id, session_name, content, timestamp, context_type) VALUES (?, ?, ?, ?, ?)",
             [
@@ -335,26 +315,6 @@ def test_maintenance_compaction_summary_counts_by_status(monkeypatch, tmp_path):
     future_expires_at = _future_iso()
 
     with sqlite3.connect(db_path) as conn:
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS compaction_staging (
-                id TEXT PRIMARY KEY,
-                session_name TEXT NOT NULL,
-                source_memory_ids TEXT NOT NULL,
-                preview TEXT NOT NULL,
-                suggested_summary TEXT,
-                status TEXT NOT NULL DEFAULT 'pending_summary',
-                candidate_hash TEXT NOT NULL,
-                source_updated_at_snapshot TEXT NOT NULL,
-                expires_at TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL,
-                reviewed_at TEXT,
-                nudge_count INTEGER NOT NULL DEFAULT 0,
-                last_nudged_at TEXT
-            )
-            """
-        )
         conn.executemany(
             "INSERT INTO compaction_staging (id, session_name, source_memory_ids, preview, status, candidate_hash, source_updated_at_snapshot, expires_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
@@ -427,26 +387,6 @@ def test_maintenance_candidates_filters_by_session(monkeypatch, tmp_path):
     future_expires_at = _future_iso()
 
     with sqlite3.connect(db_path) as conn:
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS compaction_staging (
-                id TEXT PRIMARY KEY,
-                session_name TEXT NOT NULL,
-                source_memory_ids TEXT NOT NULL,
-                preview TEXT NOT NULL,
-                suggested_summary TEXT,
-                status TEXT NOT NULL DEFAULT 'pending_summary',
-                candidate_hash TEXT NOT NULL,
-                source_updated_at_snapshot TEXT NOT NULL,
-                expires_at TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL,
-                reviewed_at TEXT,
-                nudge_count INTEGER NOT NULL DEFAULT 0,
-                last_nudged_at TEXT
-            )
-            """
-        )
         conn.executemany(
             "INSERT INTO compaction_staging (id, session_name, source_memory_ids, preview, status, candidate_hash, source_updated_at_snapshot, expires_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
@@ -496,26 +436,6 @@ def test_maintenance_candidates_filters_by_status(monkeypatch, tmp_path):
     future_expires_at = _future_iso()
 
     with sqlite3.connect(db_path) as conn:
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS compaction_staging (
-                id TEXT PRIMARY KEY,
-                session_name TEXT NOT NULL,
-                source_memory_ids TEXT NOT NULL,
-                preview TEXT NOT NULL,
-                suggested_summary TEXT,
-                status TEXT NOT NULL DEFAULT 'pending_summary',
-                candidate_hash TEXT NOT NULL,
-                source_updated_at_snapshot TEXT NOT NULL,
-                expires_at TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL,
-                reviewed_at TEXT,
-                nudge_count INTEGER NOT NULL DEFAULT 0,
-                last_nudged_at TEXT
-            )
-            """
-        )
         conn.executemany(
             "INSERT INTO compaction_staging (id, session_name, source_memory_ids, preview, status, candidate_hash, source_updated_at_snapshot, expires_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
@@ -569,26 +489,6 @@ def test_maintenance_discard_candidate_marks_as_discarded(monkeypatch, tmp_path)
 
     with sqlite3.connect(db_path) as conn:
         conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS compaction_staging (
-                id TEXT PRIMARY KEY,
-                session_name TEXT NOT NULL,
-                source_memory_ids TEXT NOT NULL,
-                preview TEXT NOT NULL,
-                suggested_summary TEXT,
-                status TEXT NOT NULL DEFAULT 'pending_summary',
-                candidate_hash TEXT NOT NULL,
-                source_updated_at_snapshot TEXT NOT NULL,
-                expires_at TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL,
-                reviewed_at TEXT,
-                nudge_count INTEGER NOT NULL DEFAULT 0,
-                last_nudged_at TEXT
-            )
-            """
-        )
-        conn.execute(
             "INSERT INTO compaction_staging (id, session_name, source_memory_ids, preview, status, candidate_hash, source_updated_at_snapshot, expires_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
                 "00000000-0000-4000-8000-000000000031",
@@ -627,26 +527,6 @@ def test_maintenance_discard_nonexistent_candidate_returns_404(monkeypatch, tmp_
     db_path = tmp_path / "marm_memory.db"
 
     with sqlite3.connect(db_path) as conn:
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS compaction_staging (
-                id TEXT PRIMARY KEY,
-                session_name TEXT NOT NULL,
-                source_memory_ids TEXT NOT NULL,
-                preview TEXT NOT NULL,
-                suggested_summary TEXT,
-                status TEXT NOT NULL DEFAULT 'pending_summary',
-                candidate_hash TEXT NOT NULL,
-                source_updated_at_snapshot TEXT NOT NULL,
-                expires_at TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL,
-                reviewed_at TEXT,
-                nudge_count INTEGER NOT NULL DEFAULT 0,
-                last_nudged_at TEXT
-            )
-            """
-        )
         conn.commit()
 
     response = client.post("/api/maintenance/candidates/nonexistent-id/discard")
@@ -661,26 +541,6 @@ def test_maintenance_candidates_parses_source_memory_ids_json(monkeypatch, tmp_p
     future_expires_at = _future_iso()
 
     with sqlite3.connect(db_path) as conn:
-        conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS compaction_staging (
-                id TEXT PRIMARY KEY,
-                session_name TEXT NOT NULL,
-                source_memory_ids TEXT NOT NULL,
-                preview TEXT NOT NULL,
-                suggested_summary TEXT,
-                status TEXT NOT NULL DEFAULT 'pending_summary',
-                candidate_hash TEXT NOT NULL,
-                source_updated_at_snapshot TEXT NOT NULL,
-                expires_at TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL,
-                reviewed_at TEXT,
-                nudge_count INTEGER NOT NULL DEFAULT 0,
-                last_nudged_at TEXT
-            )
-            """
-        )
         conn.executemany(
             "INSERT INTO compaction_staging (id, session_name, source_memory_ids, preview, status, candidate_hash, source_updated_at_snapshot, expires_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
