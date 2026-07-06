@@ -99,6 +99,7 @@ docs/current/
 docs/future/
 
 # User-specific files
+.claude/
 .claude/config.yaml
 .codex/
 .kiro/
