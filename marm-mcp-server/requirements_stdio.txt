@@ -1,5 +1,5 @@
 # Requirements for STDIO version (no FastAPI/uvicorn needed)
-fastmcp>=3.2.0,<3.5.0
+mcp>=1.26.0,<2.0.0
 pydantic>=2.11.9,<3.0.0
 sentence-transformers>=5.1.0,<6.0.0
 numpy>=2.1.2,<3.0.0

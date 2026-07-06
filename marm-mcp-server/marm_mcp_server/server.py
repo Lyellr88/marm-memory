@@ -5,7 +5,7 @@ This server integrates all modular components of the MARM protocol into a single
 FastAPI application, compliant with the MCP protocol via FastApiMCP.
 
 Author: Lyell - MARM Systems
-Version: 2.15.2
+Version: 2.17.0
 """
 
 import asyncio

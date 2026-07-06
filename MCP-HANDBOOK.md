@@ -2,7 +2,7 @@
 
 ## Complete Usage Guide for Memory-Augmented AI
 
-**MARM v2.15.2 - Universal MCP Server for AI Memory Intelligence**
+**MARM v2.17.0 - Universal MCP Server for AI Memory Intelligence**
 
 ---
 
@@ -32,6 +32,7 @@ MARM MCP Server supports two transport modes for different deployment scenarios:
 - Best for: Multiple concurrent AI clients, cloud/remote deployment, shared memory server
 - Setup: Run `python -m marm_mcp_server` and connect via `http://localhost:8001/mcp`
 - Bundles marm-graph's 5 code-structure tools by default — `pip install marm-mcp-server` is the only install step, no separate `marm-graph` package needed
+- Includes the dashboard at `http://localhost:8001/dashboard`; no separate dashboard process or package is required
 
 **STDIO Transport** (Process-based)
 
@@ -161,6 +162,7 @@ MARM also handles lifecycle work internally. Docs and session state initialize o
 MARM is a **Universal MCP Server** providing intelligent memory that saves across sessions for AI conversations with:
 
 - **Hybrid Recall** - Find memories by meaning and exact terms like commands, config keys, and error text
+- **Code Graph Indexing** - Index repositories once, then ask agents to look up symbols, trace call paths, inspect architecture, and estimate change impact
 - **Cross-App Memory** - Share memories between AI clients (Claude, Qwen, Gemini)
 - **Auto-Classification** - Content automatically categorized for intelligent recall
 - **Session Management** - Organize conversations with structured logging
@@ -171,6 +173,8 @@ MARM is a **Universal MCP Server** providing intelligent memory that saves acros
 **Memories**: Stored content with semantic embeddings plus an FTS index for hybrid recall
 **Notebooks**: Reusable instructions and knowledge snippets
 **Logging**: Structured conversation history with timestamps
+**Code Graph**: Optional repository index used by the 5 HTTP graph tools for code lookup, call tracing, architecture views, and impact analysis
+**Dashboard**: Bundled browser UI mounted under the same HTTP server at `/dashboard`
 
 ### Example Workflow: Cross-AI Research Project
 
@@ -284,6 +288,8 @@ MARM automatically categorizes content:
 **Internal automation:** lifecycle initialization, protocol delivery with periodic protocol-lite refresh, documentation refresh, current date context, summary-cache maintenance, serialized write queue handling, and system checks are no longer AI-facing tools. Documentation refresh uses `doc_index` hash tracking to avoid duplicate `marm_system` memories across restarts. Use the dashboard health panel for live server status, or `curl http://localhost:8001/health` for terminal checks.
 
 **Graph degraded mode:** the 5 code-graph tools start lazily on first use (first-run may download a ~269MB engine binary) and are always listed in `tools/list`, but they never affect the 7 core memory tools. If the graph engine fails to start (no network, disk full, schema drift) or `GRAPH_ENABLED=false` is set, graph tools return `{"status": "error", "message": "graph backend unavailable"}` while memory, logging, notebook, and compaction keep working normally.
+
+**Code graph workflow:** first call `marm_graph_index(repo_path="...")` for the repository you want indexed. The response returns the project name the graph backend recognizes. After that, agents should use `marm_code_lookup` before broad file reads, `marm_graph_trace` when they need callers/callees or data-flow context, `marm_graph_architecture` for orientation, and `marm_graph_impact` before risky refactors. Re-index after meaningful code changes; the graph is local and does not replace normal memory logs.
 
 **Project/platform attribution:** MARM stores nullable `project` and `platform` columns on memories, log entries, and notebook entries. `MARM_PROJECT` overrides the detected working-directory project, while `MARM_PLATFORM` overrides client/platform detection. `marm_smart_recall(project=..., platform=...)` scopes memory recall and `include_logs=True` log search without changing the default unfiltered behavior.
 
@@ -411,6 +417,15 @@ The canonical FAQ lives in [marm-mcp-server/marm-docs/FAQ.md](marm-mcp-server/ma
 - Verify HTTP mode in the dashboard health panel, or with `curl http://localhost:8001/health`
 - Check server logs for initialization errors
 - Disconnect and reconnect AI client to refresh tool list
+- In HTTP mode, expect 12 tools: 7 core memory/logging/notebook/compaction tools plus 5 bundled code-graph tools. In STDIO mode, expect the 7 core tools only.
+
+#### Graph tools return `graph backend unavailable`
+
+- Confirm you are using HTTP mode; graph tools are not wired into STDIO yet
+- Confirm `GRAPH_ENABLED` is not set to `false`
+- First graph use may take longer while the pinned codebase-memory engine starts or downloads locally
+- In Docker, the graph engine binary is baked into the image; local pip installs may fetch it on first graph use
+- Core memory tools continue working even when graph startup fails
 
 ### Memory & Data Issues
 

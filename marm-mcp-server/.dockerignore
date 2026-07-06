@@ -9,6 +9,8 @@ env/
 # Python cache and bytecode
 __pycache__/
 __pycache__
+**/__pycache__/
+**/__pycache__
 *.py[cod]
 *$py.class
 *.so
@@ -16,9 +18,15 @@ __pycache__
 .pytest_cache/
 .pytest_cache
 .pytest_cache/**
+**/.pytest_cache/
+**/.pytest_cache
+**/.pytest_cache/**
 .cache
 .cache/
 .cache/**
+**/.cache/
+**/.cache
+**/.cache/**
 .coverage
 .tox/
 htmlcov/
@@ -27,13 +35,23 @@ htmlcov/
 .pytestcache
 .pytest_tmp*/
 .pytest_tmp*
+.pytest_tmp/
+.pytest_tmp/**
+**/.pytest_tmp*/
+**/.pytest_tmp*
+**/.pytest_tmp/
+**/.pytest_tmp/**
 tmp
 tmp/
 tmp/**
+**/tmp/
+**/tmp
+**/tmp/**
 tests/tmp
 tests/tmp/
 tests/tmp/**
 pytest-of-lyell
+**/pytest-of-*
 
 # IDE and editor files
 .vscode/

@@ -1,4 +1,4 @@
-"""marm-graph — STDIO transport (FastMCP).
+"""marm-graph — STDIO transport (official MCP SDK).
 
 Runs over stdin/stdout. No port, no API key, no HTTP listener. Intended for local
 single-client use (Docker STDIO, direct CLI). Mirrors marm-mcp-server's stdio shim:
@@ -23,7 +23,7 @@ from typing import Optional  # noqa: E402
 
 os.environ.setdefault("SERVER_HOST", "127.0.0.1")
 
-from fastmcp import FastMCP  # noqa: E402
+from mcp.server.fastmcp import FastMCP  # noqa: E402
 from pydantic import ValidationError  # noqa: E402
 
 from .core import tool_router as R  # noqa: E402
@@ -67,7 +67,11 @@ async def marm_graph_index(
     to list projects, or pass project to check status. Call this first.
     """
     req, err = _build(
-        GraphIndexRequest, repo_path=repo_path, project=project, mode=mode, action=action
+        GraphIndexRequest,
+        repo_path=repo_path,
+        project=project,
+        mode=mode,
+        action=action,
     )
     if err:
         return err
@@ -89,8 +93,13 @@ async def marm_code_lookup(
     kind=text to grep, kind=snippet to read source, kind=symbol to force graph.
     """
     req, err = _build(
-        CodeLookupRequest, query=query, project=project, kind=kind, regex=regex,
-        file_pattern=file_pattern, limit=limit,
+        CodeLookupRequest,
+        query=query,
+        project=project,
+        kind=kind,
+        regex=regex,
+        file_pattern=file_pattern,
+        limit=limit,
     )
     if err:
         return err
@@ -112,8 +121,13 @@ async def marm_graph_trace(
     value propagation; cross_service crosses HTTP/async boundaries.
     """
     req, err = _build(
-        GraphTraceRequest, function_name=function_name, project=project, direction=direction,
-        depth=depth, mode=mode, risk_labels=risk_labels,
+        GraphTraceRequest,
+        function_name=function_name,
+        project=project,
+        direction=direction,
+        depth=depth,
+        mode=mode,
+        risk_labels=risk_labels,
     )
     if err:
         return err
@@ -138,7 +152,11 @@ async def marm_graph_impact(
 ) -> dict:
     """Blast radius of code changes: git diff → affected symbols + risk."""
     req, err = _build(
-        GraphImpactRequest, project=project, since=since, base_branch=base_branch, depth=depth
+        GraphImpactRequest,
+        project=project,
+        since=since,
+        base_branch=base_branch,
+        depth=depth,
     )
     if err:
         return err
@@ -149,7 +167,7 @@ def main() -> None:
     _log.info("marm-graph stdio starting")
     try:
         get_client().start()
-    except Exception as e:  # noqa: BLE001 — surface but don't crash before mcp.run
+    except Exception as e:  # surface but don't crash before mcp.run
         _log.warning("backend start deferred: %s", e)
     try:
         mcp.run()

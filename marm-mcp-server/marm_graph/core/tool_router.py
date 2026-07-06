@@ -137,8 +137,10 @@ def _largest_string_ref(root: Any) -> Optional[tuple]:
 
     def walk(node: Any) -> None:
         nonlocal best
-        items = node.items() if isinstance(node, dict) else (
-            enumerate(node) if isinstance(node, list) else ()
+        items = (
+            node.items()
+            if isinstance(node, dict)
+            else (enumerate(node) if isinstance(node, list) else ())
         )
         for k, v in items:
             if isinstance(v, str):
@@ -215,7 +217,10 @@ def do_index(client: CbmClient, req: GraphIndexRequest) -> dict:
 
     # index
     if not req.repo_path:
-        return {"status": "error", "message": "repo_path is required to index a repository."}
+        return {
+            "status": "error",
+            "message": "repo_path is required to index a repository.",
+        }
     return _bound(
         client.call_tool(
             "index_repository", {"repo_path": req.repo_path, "mode": req.mode}

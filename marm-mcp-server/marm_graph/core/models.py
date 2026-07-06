@@ -21,7 +21,8 @@ class GraphIndexRequest(BaseModel):
         None, description="Path to the repository to index. Omit to list/status only."
     )
     project: Optional[str] = Field(
-        None, description="Existing project name for a status check. Omit to auto-resolve."
+        None,
+        description="Existing project name for a status check. Omit to auto-resolve.",
     )
     mode: Literal["full", "moderate", "fast"] = Field(
         "moderate",
@@ -38,9 +39,12 @@ class CodeLookupRequest(BaseModel):
     reading a symbol's source. The wrapper routes by `kind` (auto by default)."""
 
     query: str = Field(
-        ..., description="Symbol name, natural-language phrase, code/text pattern, or a qualified_name."
+        ...,
+        description="Symbol name, natural-language phrase, code/text pattern, or a qualified_name.",
     )
-    project: Optional[str] = Field(None, description="Project name. Omit to auto-resolve.")
+    project: Optional[str] = Field(
+        None, description="Project name. Omit to auto-resolve."
+    )
     kind: Literal["auto", "symbol", "text", "snippet"] = Field(
         "auto",
         description="auto | symbol | text | snippet. auto: qualified_name→snippet, "
@@ -57,7 +61,9 @@ class GraphTraceRequest(BaseModel):
     """marm_graph_trace — trace call paths / data flow through the graph."""
 
     function_name: str = Field(..., description="Function or method to trace from.")
-    project: Optional[str] = Field(None, description="Project name. Omit to auto-resolve.")
+    project: Optional[str] = Field(
+        None, description="Project name. Omit to auto-resolve."
+    )
     direction: Literal["inbound", "outbound", "both"] = Field(
         "both", description="inbound | outbound | both."
     )
@@ -73,13 +79,17 @@ class GraphTraceRequest(BaseModel):
 class GraphArchitectureRequest(BaseModel):
     """marm_graph_architecture — high-level overview + schema in one response."""
 
-    project: Optional[str] = Field(None, description="Project name. Omit to auto-resolve.")
+    project: Optional[str] = Field(
+        None, description="Project name. Omit to auto-resolve."
+    )
 
 
 class GraphImpactRequest(BaseModel):
     """marm_graph_impact — blast radius of code changes (git diff → affected symbols)."""
 
-    project: Optional[str] = Field(None, description="Project name. Omit to auto-resolve.")
+    project: Optional[str] = Field(
+        None, description="Project name. Omit to auto-resolve."
+    )
     since: Optional[str] = Field(
         None, description="Git ref or date to compare from (e.g. HEAD~5, v0.5.0)."
     )
@@ -93,7 +103,8 @@ class GraphImpactRequest(BaseModel):
 class DeleteProjectRequest(BaseModel):
     project: str = Field(..., description="Project to delete (irreversible).")
     confirm: bool = Field(
-        False, description="Must be true to proceed — guards against accidental deletion."
+        False,
+        description="Must be true to proceed — guards against accidental deletion.",
     )
 
 

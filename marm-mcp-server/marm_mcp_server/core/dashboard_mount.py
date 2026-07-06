@@ -1,9 +1,8 @@
-"""Optional marm-dashboard sub-app mount for the unified Docker image.
+"""Optional marm-dashboard sub-app mount for the unified server.
 
-`marm-dashboard` is a docker-only extra (see pyproject.toml's `docker-image`
-optional-dependencies group) — plain `pip install marm-mcp-server` never has
-it installed. `get_dashboard_app()` returns None in that case so `server.py`
-can skip the mount entirely instead of crashing on import.
+The dashboard package is bundled with marm-mcp-server. `get_dashboard_app()`
+still degrades to None on import failure so a dashboard issue cannot take down
+the memory/graph MCP server.
 """
 
 from typing import Optional

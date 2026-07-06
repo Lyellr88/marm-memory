@@ -6,7 +6,7 @@ mcp-name: io.github.Lyellr88/marm-mcp-server
      width="700"
      height="400">
 </picture>
-<h1 align="center">MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.15.2</h1>
+<h1 align="center">MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.17.0</h1>
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
@@ -29,6 +29,7 @@ mcp-name: io.github.Lyellr88/marm-mcp-server
 
 - [Why MARM MCP](#why-marm-mcp-the-problem--solution)
 - [Quick Start](#-quick-start-for-mcp-http--stdio)
+- [Code Graph](#code-graph-repo-indexing-and-code-lookup)
 - [Complete MCP Tool Suite](#complete-mcp-tool-suite-12-tools)
 - [MARM Dashboard](#marm-dashboard)
 - [Performance & Scaling Benchmarks](#performance--scaling-benchmarks)
@@ -41,7 +42,7 @@ mcp-name: io.github.Lyellr88/marm-mcp-server
 
 MARM MCP is a local memory infrastructure layer for AI agents. It gives Claude, Codex, Gemini, Qwen, IDE agents, and other MCP clients one persistent place to store decisions, retrieve context, reuse notebooks, and keep long-running work from drifting.
 
-The point is not "more tools." MARM exposes **7 focused core MCP tools** and moves the heavy work behind the server: session routing, protocol delivery, hybrid recall, serialized writes, rate-limit presets, write-time consolidation, and agent-assisted compaction. Because the tool surface stays small, re-ranking filters results before they reach the model, and consolidation catches duplicates at write time, token spend stays low and predictable as workloads grow. Over HTTP, `pip install marm-mcp-server` also bundles marm-graph's 5 code-structure tools by default (12 tools total) — no second install, no second port.
+MARM is built around two focused surfaces: **7 core memory tools** for daily agent context and **5 HTTP code-graph tools** for repo intelligence. The server handles the heavy work behind those tools: protocol delivery, hybrid recall, serialized writes, rate-limit presets, write-time consolidation, agent-assisted compaction, and lazy graph startup. Agents get a compact memory workflow plus codebase lookup when they need it, without rereading the whole project or flooding the model with duplicate context.
 
 ### How It Works
 
@@ -50,6 +51,7 @@ The point is not "more tools." MARM exposes **7 focused core MCP tools** and mov
 | **Memory model** | Sessions, structured logs, notebooks, summaries, and semantic memories | Keeps project history searchable instead of trapped in one chat |
 | **Scale layer** | SQLite WAL mode, connection pooling, serialized write queue, and HTTP rate-limit presets | Lets one server support solo use, multi-agent work, and swarm-style bursts |
 | **Intelligence layer** | FTS filter, semantic re-rank, bounded semantic fallback, auto-classification, write-time consolidation, and compaction candidates | Keeps recall useful as memory grows instead of letting duplicates pile up |
+| **Code graph layer** | Repo indexing, symbol lookup, call tracing, architecture overview, and change-impact analysis | Gives agents project structure without rereading the whole codebase |
 | **Token layer** | Lightweight 7-tool core surface (12 over HTTP with bundled graph tools), semantic re-rank before retrieval, and write-time deduplication | Reduces tokens sent to the model on every recall and cost stays predictable as memory scales |
 | **Deployment layer** | Pip, Docker, STDIO, HTTP, `--swarm`, `--swarm-max`, and `--trusted` | Lets you run private local memory or shared multi-agent memory with the same MCP surface |
 
@@ -75,8 +77,6 @@ Then tell your agent: **"Use the marm-init skill to set up MARM."**
 
 **Manual pip install**
 
-One command covers memory + code-graph over HTTP — no separate `marm-graph` install needed:
-
 ```bash
 pip install marm-mcp-server
 ```
@@ -88,6 +88,20 @@ pip install marm-mcp-server
 | **Multiple agents sharing memory** | `python -m marm_mcp_server --swarm` | `"agent" mcp add --transport http marm-memory http://localhost:8001/mcp` |
 | **Private high-throughput swarm** | `python -m marm_mcp_server --swarm-max` | `"agent" mcp add --transport http marm-memory http://localhost:8001/mcp` |
 | **Trusted private lab/server** | `python -m marm_mcp_server --trusted` | `"agent" mcp add --transport http marm-memory http://localhost:8001/mcp` |
+
+### Code Graph: repo indexing and code lookup
+
+`marm-graph` is bundled into the HTTP server. It indexes a repository once, then lets agents ask code-structure questions without repeatedly scanning files. The graph backend starts lazily on first graph-tool use, so normal memory, logging, notebook, and summary tools still start fast.
+
+Use HTTP mode, then ask your agent to index the repo:
+
+```text
+Use marm_graph_index to index this repository.
+Then use marm_code_lookup when you need symbols, files, or source snippets.
+Use marm_graph_trace for call paths, marm_graph_architecture for an overview, and marm_graph_impact for change-risk checks.
+```
+
+Graph tools are currently part of the HTTP MCP surface. STDIO remains focused on the 7 core memory tools for private local use.
 
 ## 🚀 Quick Start for MCP (HTTP & STDIO)
 
@@ -151,8 +165,6 @@ marm-mcp-stdio
 </details>
 
 ---
-
-> **`:latest` is now the all-in-one image** — memory, graph, and dashboard in one process on port 8001 (dashboard at `/dashboard`). If you need today's memory-only image, pin `:memory-only` instead. See [CHANGELOG.md](../CHANGELOG.md) for details.
 
 <details>
 <summary><strong>Docker HTTP (key required)</strong></summary>
@@ -243,35 +255,33 @@ Claude Code remains the recommended first setup path, but MARM also works with o
 </picture>
 </div>
 
-A local web UI for browsing and managing your MARM memory, reads and writes the same `~/.marm/marm_memory.db`.
-
-> **Already using the unified `:latest` Docker image?** The dashboard is bundled in — no separate install or port, just open `http://localhost:8001/dashboard`. Everything below is for the standalone pip/Docker path (its own port, its own image), still fully supported for users who want it independent of marm-mcp-server.
+A local web UI for browsing and managing your MARM memory. It is bundled with `marm-mcp-server` and mounts at `/dashboard` when the HTTP server starts.
 
 | What it gives you | How it works |
 |-------------------|-------------|
-| Browse/search/edit all memories | Direct SQLite, no MCP required |
-| Manage sessions and protocol logs | Standalone: runs on its own port `:8002`. Unified image: mounted at `/dashboard` on marm-mcp-server's `:8001`. |
-| Notebook CRUD with inline editor | Same auth model (`MARM_API_KEY`) as the MCP server |
-| Delete-all with count confirmation | Docker image included; WAL mode handles concurrent access |
+| Browse/search/edit all memories | Direct SQLite access to the same `~/.marm/marm_memory.db` |
+| Manage sessions and protocol logs | Open `http://localhost:8001/dashboard` beside the MCP endpoint on `:8001` |
+| Notebook CRUD with inline editor | Same `MARM_API_KEY` auth model as the MCP server |
+| Delete-all with count confirmation | Included in the unified pip package and Docker image |
 | View the write queue in real time | Pulls live data from the write queue |
 
-```bash
-# Quick start (pip)
-cd marm-dashboard
-pip install -e .
-python -m marm_dashboard --open
-```
+Start MARM HTTP, then open the dashboard:
 
 ```bash
-# Docker (same key and volume as MCP)
-docker build -t marm-dashboard:local ./marm-dashboard
-docker run --rm -p 127.0.0.1:8002:8002 \
+python -m marm_mcp_server
+# browser: http://localhost:8001/dashboard
+```
+
+Docker uses the same unified image and key:
+
+```bash
+docker run -d --name marm-mcp-server \
+  -p 127.0.0.1:8001:8001 \
   -e MARM_API_KEY=your-key \
   -v ~/.marm:/home/marm/.marm \
-  marm-dashboard:local
+  lyellr88/marm-mcp-server:latest
+# browser: http://localhost:8001/dashboard
 ```
-
-See [`marm-dashboard/README.md`](marm-dashboard/README.md) for the full guide.
 
 ## Complete MCP Tool Suite (12 Tools)
 
@@ -381,7 +391,7 @@ Good places to help:
 
 ## License & Usage Notice
 
-MARM is released under the Apache 2.0 License, and forks, experiments, and integrations are welcome. If you build on it, please make unofficial versions easy to distinguish from releases published by the [official MARM repository](https://github.com/Lyellr88/MARM-Systems) so users know what they are installing.
+MARM is released under the Apache 2.0 License, and forks, experiments, and integrations are welcome. MARM also wraps third-party open-source components such as `codebase-memory-mcp` under MIT; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for attribution. If you build on it, please make unofficial versions easy to distinguish from releases published by the [official MARM repository](https://github.com/Lyellr88/MARM-Systems) so users know what they are installing.
 
 ## Project Documentation
 

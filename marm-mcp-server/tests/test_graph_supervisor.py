@@ -15,6 +15,7 @@ constructed GraphSupervisor actually reads from.
 import importlib
 import threading
 
+import pytest
 import structlog
 
 
@@ -199,7 +200,7 @@ def test_concurrent_calls_during_inflight_startup_all_wait_for_the_result(
 def test_first_run_download_logs_before_start(monkeypatch, tmp_path):
     """The supervisor's own INFO line must appear when the binary isn't cached
     yet, independent of the child's own stderr (routed to DEBUG by CbmClient)."""
-    from codebase_memory_mcp import _cli
+    _cli = pytest.importorskip("codebase_memory_mcp._cli")
 
     gs = _fresh_gs()
     monkeypatch.setattr(gs.mcp_settings, "GRAPH_ENABLED", True)
@@ -216,7 +217,7 @@ def test_first_run_download_logs_before_start(monkeypatch, tmp_path):
 
 
 def test_cached_binary_skips_download_log(monkeypatch, tmp_path):
-    from codebase_memory_mcp import _cli
+    _cli = pytest.importorskip("codebase_memory_mcp._cli")
 
     gs = _fresh_gs()
     monkeypatch.setattr(gs.mcp_settings, "GRAPH_ENABLED", True)

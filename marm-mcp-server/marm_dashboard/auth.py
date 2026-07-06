@@ -78,7 +78,7 @@ def _mount_relative_path(request: Request) -> str:
     path = request.url.path
     root_path = request.scope.get("root_path", "")
     if root_path and path.startswith(root_path):
-        path = path[len(root_path):] or "/"
+        path = path[len(root_path) :] or "/"
     return path
 
 

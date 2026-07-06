@@ -122,46 +122,8 @@ jobs:
           cache-from: type=gha,scope=marm-mcp-server
           cache-to: type=gha,scope=marm-mcp-server,mode=max
 
-  publish-docker-dashboard:
-    needs: validate-and-test
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - name: Extract version
-        id: version
-        run: |
-          if [[ $GITHUB_REF == refs/tags/* ]]; then
-            echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-          else
-            echo "version=$(grep '^version = ' marm-mcp-server/pyproject.toml | cut -d '"' -f 2)" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Build and push Dashboard Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: marm-dashboard
-          push: true
-          tags: |
-            lyellr88/marm-dashboard:${{ steps.version.outputs.version }}
-            lyellr88/marm-dashboard:latest
-          platforms: linux/amd64
-          cache-from: type=gha,scope=marm-dashboard
-          cache-to: type=gha,scope=marm-dashboard,mode=max
-
   publish-mcp-registry:
-    needs: [validate-and-test, publish-pypi, publish-docker-server, publish-docker-dashboard]
+    needs: [validate-and-test, publish-pypi, publish-docker-server]
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -218,7 +180,7 @@ jobs:
           cache-to: type=gha,scope=marm-glama,mode=max
 
   notify-success:
-    needs: [publish-docker-server, publish-docker-dashboard, publish-pypi, publish-mcp-registry, publish-glama]
+    needs: [publish-docker-server, publish-pypi, publish-mcp-registry, publish-glama]
     runs-on: ubuntu-latest
     if: success()
 
@@ -228,5 +190,5 @@ jobs:
           echo "MARM MCP Server published successfully!"
           echo "PyPI: https://pypi.org/project/marm-mcp-server/"
           echo "Docker MCP: https://hub.docker.com/r/lyellr88/marm-mcp-server"
-          echo "Docker Dashboard: https://hub.docker.com/r/lyellr88/marm-dashboard"
+          echo "Dashboard: bundled in lyellr88/marm-mcp-server at /dashboard"
           echo "MCP Registry: https://registry.modelcontextprotocol.io/servers/io.github.Lyellr88/marm-mcp-server"

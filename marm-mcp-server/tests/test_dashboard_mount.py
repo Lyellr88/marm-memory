@@ -22,10 +22,9 @@ def test_dashboard_mount_survives_non_import_error_during_dashboard_import(
     value raises ValueError (not ImportError) the moment marm_dashboard.server
     is imported. get_dashboard_app() must catch this too.
 
-    Requires marm_dashboard actually installed -- it's a docker-only extra
-    (pyproject.toml's docker-image group), absent from the plain pip/CI
-    install path by design, so this test would otherwise pass for the wrong
-    reason (ModuleNotFoundError instead of the intended ValueError).
+    Requires the bundled marm_dashboard package to import far enough to hit the
+    intended ValueError, rather than passing for the wrong reason through a
+    ModuleNotFoundError.
     """
     pytest.importorskip("marm_dashboard")
     _purge_dashboard_modules()
@@ -37,7 +36,7 @@ def test_dashboard_mount_survives_non_import_error_during_dashboard_import(
 
 
 def test_dashboard_mount_returns_app_when_import_succeeds(monkeypatch):
-    """Requires marm_dashboard actually installed -- see skip note above."""
+    """The bundled dashboard package should mount when import succeeds."""
     pytest.importorskip("marm_dashboard")
     _purge_dashboard_modules()
     monkeypatch.delenv("MARM_DASHBOARD_PORT", raising=False)
