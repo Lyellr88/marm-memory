@@ -102,10 +102,12 @@ docs/future/
 .claude/config.yaml
 .codex/
 .kiro/
+.agents
 .codexignore
 .claudeignore
 .kiroignore
 .bridgespace
+.impeccable
 .cursor
 .pytest_cache/
 .pytest_tmp*/

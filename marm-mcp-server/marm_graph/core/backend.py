@@ -26,10 +26,20 @@ AI_OPERATIONS = [
 ]
 
 _EXPECTED_UPSTREAM_TOOLS = {
-    "index_repository", "search_graph", "query_graph", "trace_path",
-    "get_code_snippet", "get_graph_schema", "get_architecture", "search_code",
-    "list_projects", "delete_project", "index_status", "detect_changes",
-    "manage_adr", "ingest_traces",
+    "index_repository",
+    "search_graph",
+    "query_graph",
+    "trace_path",
+    "get_code_snippet",
+    "get_graph_schema",
+    "get_architecture",
+    "search_code",
+    "list_projects",
+    "delete_project",
+    "index_status",
+    "detect_changes",
+    "manage_adr",
+    "ingest_traces",
 }
 
 
@@ -55,7 +65,9 @@ def verify_and_start(client: CbmClient) -> None:
     try:
         names = {t["name"] for t in client.list_tools()}
     except Exception as e:
-        raise RuntimeError(f"Could not list upstream tools to verify schema: {e}") from e
+        raise RuntimeError(
+            f"Could not list upstream tools to verify schema: {e}"
+        ) from e
     check_schema(names)
 
 

@@ -12,7 +12,7 @@ MARM Systems is a persistent memory layer for AI agents. The MCP server gives Cl
 
 | Component | Description | Best For |
 |-----------|-------------|----------|
-| **MARM MCP Server** | Persistent memory server with 7 focused MCP tools | AI agents, IDEs, local workflows, shared team memory |
+| **MARM MCP Server** | Persistent memory server with 12 HTTP MCP tools: 7 core memory tools plus 5 bundled code-graph tools | AI agents, IDEs, local workflows, shared team memory |
 | **MARM Protocol** | Runtime guidance delivered automatically by the MCP server | Keeping agents aligned on what to store, recall, and trust |
 | **MARM Dashboard** | Local browser UI for viewing memory and server health | Inspection, cleanup, and quick status checks |
 
@@ -79,7 +79,7 @@ For HTTP mode, use the MARM Dashboard status panel or run `curl http://localhost
 
 #### Q: What MCP tools does MARM provide?
 
-MARM currently exposes **7 focused MCP tools**:
+MARM currently exposes **12 HTTP MCP tools**: 7 focused core memory tools plus 5 bundled code-graph tools. STDIO stays focused on the 7 core memory tools.
 
 | Category | Tools | Description |
 |----------|-------|-------------|
@@ -89,6 +89,7 @@ MARM currently exposes **7 focused MCP tools**:
 | **Delete** | `marm_delete` | Delete log sessions, log entries, or notebook entries |
 | **Summary** | `marm_summary` | Generate concise context summaries |
 | **Maintenance** | `marm_compaction` | Agent-assisted memory compaction with `action="status"`, `"candidates"`, `"review"`, `"stage"`, `"apply"`, or `"discard"` |
+| **Code Graph (HTTP only)** | `marm_graph_index`, `marm_code_lookup`, `marm_graph_trace`, `marm_graph_architecture`, `marm_graph_impact` | Index repositories, look up symbols/source, trace call paths, summarize architecture, and inspect change impact |
 
 #### Q: Do I still need to call `marm_start`?
 

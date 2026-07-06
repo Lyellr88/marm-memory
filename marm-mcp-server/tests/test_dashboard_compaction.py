@@ -19,16 +19,6 @@ def test_compaction_memories_list_excludes_compacted_sources(monkeypatch, tmp_pa
     db_path = tmp_path / "marm_memory.db"
 
     with sqlite3.connect(db_path) as conn:
-        conn.execute(
-            """
-            ALTER TABLE memories ADD COLUMN compaction_role TEXT DEFAULT NULL
-            """
-        )
-        conn.execute(
-            """
-            ALTER TABLE memories ADD COLUMN compacted_into TEXT DEFAULT NULL
-            """
-        )
         conn.executemany(
             "INSERT INTO memories (id, session_name, content, timestamp, context_type, compaction_role, compacted_into) VALUES (?, ?, ?, ?, ?, ?, ?)",
             [
@@ -88,30 +78,25 @@ def test_compaction_preview_generates_summary_with_savings(monkeypatch, tmp_path
     db_path = tmp_path / "marm_memory.db"
 
     with sqlite3.connect(db_path) as conn:
-        conn.execute(
-            """
-            ALTER TABLE memories ADD COLUMN compaction_role TEXT DEFAULT NULL
-            """
-        )
         conn.executemany(
             "INSERT INTO memories (id, session_name, content, timestamp, context_type) VALUES (?, ?, ?, ?, ?)",
             [
                 (
-                    "p1",
+                    "00000000-0000-4000-8000-000000000001",
                     "preview-test",
                     "Memory about Docker deployment process with detailed steps",
                     "2026-01-01T10:00:00Z",
                     "general",
                 ),
                 (
-                    "p2",
+                    "00000000-0000-4000-8000-000000000002",
                     "preview-test",
                     "Another memory discussing Docker configuration settings",
                     "2026-01-01T11:00:00Z",
                     "general",
                 ),
                 (
-                    "p3",
+                    "00000000-0000-4000-8000-000000000003",
                     "preview-test",
                     "Final memory covering Docker troubleshooting techniques",
                     "2026-01-01T12:00:00Z",
@@ -123,7 +108,13 @@ def test_compaction_preview_generates_summary_with_savings(monkeypatch, tmp_path
 
     preview = client.post(
         "/api/compaction/preview",
-        json={"memory_ids": ["p1", "p2", "p3"]},
+        json={
+            "memory_ids": [
+                "00000000-0000-4000-8000-000000000001",
+                "00000000-0000-4000-8000-000000000002",
+                "00000000-0000-4000-8000-000000000003",
+            ]
+        },
     ).json()
 
     assert preview["source_count"] == 3
@@ -164,16 +155,6 @@ def test_compaction_apply_creates_summary_and_marks_sources(monkeypatch, tmp_pat
     with sqlite3.connect(db_path) as conn:
         conn.execute(
             """
-            ALTER TABLE memories ADD COLUMN compaction_role TEXT DEFAULT NULL
-            """
-        )
-        conn.execute(
-            """
-            ALTER TABLE memories ADD COLUMN compacted_into TEXT DEFAULT NULL
-            """
-        )
-        conn.execute(
-            """
             CREATE TABLE IF NOT EXISTS compaction_staging (
                 id TEXT PRIMARY KEY,
                 session_name TEXT NOT NULL,
@@ -196,14 +177,14 @@ def test_compaction_apply_creates_summary_and_marks_sources(monkeypatch, tmp_pat
             "INSERT INTO memories (id, session_name, content, timestamp, context_type) VALUES (?, ?, ?, ?, ?)",
             [
                 (
-                    "a1",
+                    "00000000-0000-4000-8000-000000000011",
                     "apply-test",
                     "source memory 1",
                     "2026-01-01T10:00:00Z",
                     "general",
                 ),
                 (
-                    "a2",
+                    "00000000-0000-4000-8000-000000000012",
                     "apply-test",
                     "source memory 2",
                     "2026-01-01T11:00:00Z",
@@ -216,7 +197,10 @@ def test_compaction_apply_creates_summary_and_marks_sources(monkeypatch, tmp_pat
     result = client.post(
         "/api/compaction/apply",
         json={
-            "memory_ids": ["a1", "a2"],
+            "memory_ids": [
+                "00000000-0000-4000-8000-000000000011",
+                "00000000-0000-4000-8000-000000000012",
+            ],
             "summary_content": "Combined summary of both memories",
             "session_name": "apply-test",
         },
@@ -238,7 +222,7 @@ def test_compaction_apply_creates_summary_and_marks_sources(monkeypatch, tmp_pat
 
         # Verify sources were marked
         sources = conn.execute(
-            "SELECT id, compaction_role, compacted_into FROM memories WHERE id IN ('a1', 'a2')"
+            "SELECT id, compaction_role, compacted_into FROM memories WHERE id IN ('00000000-0000-4000-8000-000000000011', '00000000-0000-4000-8000-000000000012')"
         ).fetchall()
         assert len(sources) == 2
         for row in sources:
@@ -257,7 +241,10 @@ def test_compaction_apply_creates_summary_and_marks_sources(monkeypatch, tmp_pat
         import json as test_json
 
         source_ids = test_json.loads(staging_row[1])
-        assert set(source_ids) == {"a1", "a2"}
+        assert set(source_ids) == {
+            "00000000-0000-4000-8000-000000000011",
+            "00000000-0000-4000-8000-000000000012",
+        }
 
 
 def test_compaction_apply_rejects_cross_session_memories(monkeypatch, tmp_path):
@@ -267,23 +254,18 @@ def test_compaction_apply_rejects_cross_session_memories(monkeypatch, tmp_path):
     db_path = tmp_path / "marm_memory.db"
 
     with sqlite3.connect(db_path) as conn:
-        conn.execute(
-            """
-            ALTER TABLE memories ADD COLUMN compaction_role TEXT DEFAULT NULL
-            """
-        )
         conn.executemany(
             "INSERT INTO memories (id, session_name, content, timestamp, context_type) VALUES (?, ?, ?, ?, ?)",
             [
                 (
-                    "cs1",
+                    "00000000-0000-4000-8000-000000000021",
                     "session-a",
                     "memory in session A",
                     "2026-01-01T10:00:00Z",
                     "general",
                 ),
                 (
-                    "cs2",
+                    "00000000-0000-4000-8000-000000000022",
                     "session-b",
                     "memory in session B",
                     "2026-01-01T11:00:00Z",
@@ -296,7 +278,10 @@ def test_compaction_apply_rejects_cross_session_memories(monkeypatch, tmp_path):
     response = client.post(
         "/api/compaction/apply",
         json={
-            "memory_ids": ["cs1", "cs2"],
+            "memory_ids": [
+                "00000000-0000-4000-8000-000000000021",
+                "00000000-0000-4000-8000-000000000022",
+            ],
             "summary_content": "invalid cross-session summary",
             "session_name": "session-a",
         },
@@ -313,11 +298,6 @@ def test_compaction_memories_pagination_works(monkeypatch, tmp_path):
     db_path = tmp_path / "marm_memory.db"
 
     with sqlite3.connect(db_path) as conn:
-        conn.execute(
-            """
-            ALTER TABLE memories ADD COLUMN compaction_role TEXT DEFAULT NULL
-            """
-        )
         for i in range(5):
             conn.execute(
                 "INSERT INTO memories (id, session_name, content, timestamp, context_type) VALUES (?, ?, ?, ?, ?)",
@@ -611,7 +591,7 @@ def test_maintenance_discard_candidate_marks_as_discarded(monkeypatch, tmp_path)
         conn.execute(
             "INSERT INTO compaction_staging (id, session_name, source_memory_ids, preview, status, candidate_hash, source_updated_at_snapshot, expires_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (
-                "discard-1",
+                "00000000-0000-4000-8000-000000000031",
                 "main",
                 '["m1"]',
                 "preview",
@@ -625,14 +605,16 @@ def test_maintenance_discard_candidate_marks_as_discarded(monkeypatch, tmp_path)
         )
         conn.commit()
 
-    result = client.post("/api/maintenance/candidates/discard-1/discard").json()
+    result = client.post(
+        "/api/maintenance/candidates/00000000-0000-4000-8000-000000000031/discard"
+    ).json()
     assert result["status"] == "discarded"
-    assert result["id"] == "discard-1"
+    assert result["id"] == "00000000-0000-4000-8000-000000000031"
 
     with sqlite3.connect(db_path) as conn:
         row = conn.execute(
             "SELECT status, reviewed_at FROM compaction_staging WHERE id = ?",
-            ("discard-1",),
+            ("00000000-0000-4000-8000-000000000031",),
         ).fetchone()
         assert row[0] == "discarded"
         assert row[1] is not None

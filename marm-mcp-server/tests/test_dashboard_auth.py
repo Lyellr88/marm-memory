@@ -23,14 +23,10 @@ def test_remote_client_cannot_spoof_loopback_via_forwarded_headers(
     server = load_dashboard(monkeypatch, tmp_path)
     remote = remote_client(server.app)
 
-    spoofed = remote.get(
-        "/api/summary", headers={"X-Forwarded-For": "127.0.0.1"}
-    )
+    spoofed = remote.get("/api/summary", headers={"X-Forwarded-For": "127.0.0.1"})
     assert spoofed.status_code == 401
 
-    spoofed_real_ip = remote.get(
-        "/api/summary", headers={"X-Real-IP": "127.0.0.1"}
-    )
+    spoofed_real_ip = remote.get("/api/summary", headers={"X-Real-IP": "127.0.0.1"})
     assert spoofed_real_ip.status_code == 401
 
 

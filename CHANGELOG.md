@@ -3,15 +3,67 @@
 ## Version 2 - MARM Protocol to Universal MCP Server Evolution
 
 <details>
-<summary><strong>July 5th, 2026: Docker Packaging Unification (v2.16.0)</strong></summary>
+<summary><strong>July 6th, 2026: Unified Graph & Dashboard Package Layout (v2.17.0)</strong></summary>
 
-### Docker & Packaging
+### Packaging Cleanup
 
+- Folded the first-party graph and dashboard packages into `marm-mcp-server` so pip and Docker installs ship one unified MARM system instead of separate root packages.
+- Removed the standalone root `marm-graph/` and `marm-dashboard/` package trees after preserving the active graph/dashboard source inside `marm-mcp-server/`.
+- Bundled `marm_graph*` and `marm_dashboard*` through `marm-mcp-server` package discovery, including dashboard static assets.
+- Updated the Docker build to copy `marm_graph` and `marm_dashboard` before `pip install`, so both modules are installed into the wheel instead of relying on raw `PYTHONPATH` imports from the final image layer.
+- Removed the local-only `marm-dashboard==1.2.0` Docker extra dependency that could not resolve from PyPI during image builds.
+- Hardened `.dockerignore` and disabled pytest's repo-local cache provider to keep generated pytest/cache folders out of Docker build contexts on Windows.
+
+### Tests
+
+- Migrated dashboard auth, database, MCP status, and compaction tests into `marm-mcp-server/tests`.
+- Migrated graph client/router tests into `marm-mcp-server/tests` and kept graph test hygiene notes with the unified test suite.
+- Verified focused graph + dashboard coverage after the move (`86 passed`, one Pydantic deprecation warning).
+
+</details>
+
+<details>
+<summary><strong>July 6th, 2026: Official MCP SDK for STDIO Transport (v2.16.2)</strong></summary>
+
+### Dependency Fix
+
+- Replaced the external `fastmcp` package with the official `mcp` Python SDK's compatibility class (`mcp.server.fastmcp.FastMCP`) for all STDIO transports, including the embedded graph package. `@mcp.tool()` / `mcp.run()` usage is unchanged.
+- `fastmcp` is no longer a runtime dependency anywhere in the release packaging (`pyproject.toml`, `requirements.txt`, `requirements_stdio.txt`, `requirements-glama.txt`), removing a `python-dotenv>=1.1.0` requirement that conflicted with common AI tooling (e.g. `litellm==1.83.7` pins `python-dotenv==1.0.1`).
+- HTTP transport is untouched: `fastapi-mcp` already depends on the official `mcp` SDK and was never the source of the conflict.
+- Existing STDIO tool surface, response shapes, and decorator/logging order are unchanged.
+
+</details>
+
+<details>
+<summary><strong>July 5th, 2026: Pip & Docker Packaging Unification (v2.16.1)</strong></summary>
+
+### Unified Packaging
+
+- `pip install marm-mcp-server` now includes the embedded graph/index package path instead of requiring users to install or publish a separate `marm-graph` package.
 - `lyellr88/marm-mcp-server:latest` is now an all-in-one image: memory, the embedded graph engine, and the dashboard all run in one process on one port (8001). Dashboard is reachable at `http://host:8001/dashboard` instead of its own image/port.
-- **Breaking tag semantics**: `:latest`'s meaning has changed. Anyone pinning `:latest` in scripts, cron jobs, or compose files gets the new all-in-one behavior automatically. Pin `:memory-only` (or a pre-v2.16.0 version tag) to keep today's memory-only image shape.
+- **Breaking tag semantics**: `:latest`'s meaning has changed. Anyone pinning `:latest` in scripts, cron jobs, or compose files gets the new all-in-one behavior automatically. Pin `:memory-only` (or a pre-v2.16.0 version tag) to keep the previous memory-only image shape.
 - Docker builds now install from `pyproject.toml` (`pip install ".[docker-image]"`) instead of `requirements.txt`, closing a pre-existing drift between the two files. The CPU-only Torch pin from the v2.15.2 fix is preserved through a build-time constraints file plus the same PyTorch CPU wheel index.
-- The pinned `codebase-memory-mcp` engine binary is now baked into the `marm-mcp-server` image at build time (independently verified download + SHA256 checksum), the same hardened pattern already used by `marm-graph`'s own image.
+- The pinned `codebase-memory-mcp` engine binary is now baked into the unified `marm-mcp-server` image at build time through an independently verified download plus SHA256 checksum.
 - Image size increases meaningfully versus the previous `marm-mcp-server:latest` (baked ~269MB engine binary + dashboard's dependencies) — expect a larger pull/storage footprint.
+
+</details>
+
+<details>
+<summary><strong>July 4th, 2026: Embedded Code Graph & Project Indexing (v2.16.0)</strong></summary>
+
+### marm-graph
+
+- Added the `marm-graph` integration layer for project indexing, code lookup, graph tracing, architecture inspection, and change-impact analysis.
+- Wrapped the pinned `codebase-memory-mcp` engine behind a safer MARM-facing API so agents can query code structure without talking to the upstream binary directly.
+- Added five graph tools to the HTTP MCP surface: `marm_graph_index`, `marm_code_lookup`, `marm_graph_trace`, `marm_graph_architecture`, and `marm_graph_impact`.
+- Kept graph startup lazy so the normal memory/logging server remains light until a graph command is actually used.
+- Added backend hardening for protocol framing, update-notice handling, timeout behavior, neutral child-process working directory, response limits, and loopback/API-key access boundaries.
+- Documented the graph/index packaging direction so MARM can move toward one unified memory system with graph/indexing bundled into the main server package.
+
+### Tests & Docs
+
+- Added focused graph tests for tool routing, backend supervision, HTTP endpoint behavior, MCP tool visibility, response limiting, and authentication boundaries.
+- Added graph/index planning docs covering protocol proof, packaging integration, auto-indexing follow-up work, and future test isolation cleanup.
 
 </details>
 

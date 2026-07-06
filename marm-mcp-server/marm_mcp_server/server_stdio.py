@@ -2,7 +2,7 @@
 MARM MCP Server - STDIO Transport
 Memory Accurate Response Mode for Model Context Protocol
 
-Runs via FastMCP over standard input/output. No port, no API key, no HTTP listener.
+Runs via the official MCP SDK over standard input/output. No port, no API key, no HTTP listener.
 Intended for local single-client use (e.g. Docker STDIO, direct CLI invocation).
 
 Usage:
@@ -167,7 +167,7 @@ def _log_tool_call(fn):
     return wrapper
 
 
-from fastmcp import FastMCP  # noqa: E402
+from mcp.server.fastmcp import FastMCP  # noqa: E402
 
 from marm_mcp_server.core.memory import memory  # noqa: E402
 from marm_mcp_server.core.compaction import claim_pending_compaction_prompt  # noqa: E402

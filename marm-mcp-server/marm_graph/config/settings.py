@@ -72,9 +72,8 @@ CBM_CALL_TIMEOUT = float(_safe_int("CBM_CALL_TIMEOUT", 300))
 
 # ── Response bounding ──────────────────────────────────────────────
 # Defensive cap on marm-graph's own tool responses. Set below the MCP 1MB
-# ceiling, not equal to it: the bounded dict is re-serialized and JSON-escaped
-# a second time inside the transport's own content[0].text envelope (fastmcp /
-# fastapi_mcp), and that escaping (quotes, backslashes, unicode) can add
+# ceiling, not equal to it: transport wrappers serialize the bounded dict inside
+# a content[0].text envelope, and that escaping (quotes, backslashes, unicode) can add
 # several percent on top of the raw payload size. ~10% headroom keeps a
 # just-under-cap response from crossing 1MB on the wire.
 MAX_RESPONSE_BYTES = _safe_int("MARM_GRAPH_MAX_RESPONSE_BYTES", 900_000)
@@ -86,7 +85,9 @@ MAX_RESPONSE_BYTES = _safe_int("MARM_GRAPH_MAX_RESPONSE_BYTES", 900_000)
 # and no graph tool is ever called), so an invalid/unwritable
 # MARM_GRAPH_STORE_DIR must not crash import. backend.verify_and_start()
 # creates it lazily, right before the child actually needs it.
-STORE_DIR = Path(os.environ.get("MARM_GRAPH_STORE_DIR", str(Path.home() / ".marm" / "graph")))
+STORE_DIR = Path(
+    os.environ.get("MARM_GRAPH_STORE_DIR", str(Path.home() / ".marm" / "graph"))
+)
 
 # Working directory for the child (repo_path args may be relative to it).
 # Defaults to STORE_DIR, NOT the server's own CWD: if the server happened to

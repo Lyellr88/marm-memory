@@ -7,7 +7,7 @@ import asyncio
 
 import pytest
 from anyio import ClosedResourceError, EndOfStream
-from fastmcp import Client
+from mcp.shared.memory import create_connected_server_and_client_session
 
 
 def _isolated_stdio(monkeypatch, tmp_path):
@@ -254,7 +254,7 @@ def test_stdio_inprocess_client_wraps_notebook_delete_and_log_results(
     stdio = _isolated_stdio(monkeypatch, tmp_path)
 
     async def run():
-        async with Client(stdio.mcp) as client:
+        async with create_connected_server_and_client_session(stdio.mcp) as client:
             add_result = await client.call_tool(
                 "marm_notebook",
                 {
@@ -371,7 +371,7 @@ def test_stdio_log_records_tool_call_and_ok_status(tmp_path):
             }
         )
         # Drain call — keeps stdin open until doc loading and the tool response are
-        # both written before EOF. Single-tool-call sessions race with FastMCP shutdown.
+        # both written before EOF. Single-tool-call sessions race with STDIO shutdown.
         + message(
             {
                 "jsonrpc": "2.0",
@@ -454,7 +454,7 @@ def test_stdio_debug_mode_logs_session_name_not_content(tmp_path):
             }
         )
         # Drain call — keeps stdin open until doc loading and the tool response are
-        # both written before EOF. Single-tool-call sessions race with FastMCP shutdown.
+        # both written before EOF. Single-tool-call sessions race with STDIO shutdown.
         + message(
             {
                 "jsonrpc": "2.0",
@@ -537,7 +537,7 @@ def test_stdio_log_does_not_contain_stored_memory_content(tmp_path):
             }
         )
         # Drain call — keeps stdin open until doc loading and the tool response are
-        # both written before EOF. Single-tool-call sessions race with FastMCP shutdown.
+        # both written before EOF. Single-tool-call sessions race with STDIO shutdown.
         + message(
             {
                 "jsonrpc": "2.0",

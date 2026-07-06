@@ -48,7 +48,7 @@ python -m marm_mcp_server --generate-key
 marm-mcp-server/
   marm_mcp_server/
     server.py                  # FastAPI HTTP MCP server
-    server_stdio.py            # FastMCP STDIO transport
+    server_stdio.py            # Official MCP SDK STDIO transport
     config/settings.py         # Paths, host/port, auth, feature flags
     core/
       memory.py                # MARMMemory facade and public memory object wiring
@@ -88,7 +88,6 @@ marm-mcp-server/
   Dockerfile                   # One image, HTTP default, STDIO override
   pyproject.toml               # Package metadata and console scripts
 
-marm-dashboard/                # Local dashboard for inspecting MARM memory data
 docs/                          # User-facing docs and project docs
 scripts/                       # Local validation, release, and maintenance helpers
 ```
@@ -99,7 +98,7 @@ scripts/                       # Local validation, release, and maintenance help
 
 HTTP mode lives in `marm_mcp_server/server.py` and is mounted through FastAPI/FastApiMCP at `/mcp`.
 
-STDIO mode lives in `marm_mcp_server/server_stdio.py` and uses FastMCP over standard input/output. STDIO must keep stdout clean for JSON-RPC messages; logs and incidental `print()` output belong on stderr.
+STDIO mode lives in `marm_mcp_server/server_stdio.py` and uses the official MCP Python SDK over standard input/output. STDIO must keep stdout clean for JSON-RPC messages; logs and incidental `print()` output belong on stderr.
 
 If a tool behavior changes, check whether the HTTP endpoint and STDIO tool both need the same update.
 
@@ -239,7 +238,7 @@ Use short, descriptive branch names:
 
 ```text
 feature/notebook-polish
-fix/fastmcp-range
+fix/dependency-range
 docs/install-cleanup
 release/v2.6.3
 ```

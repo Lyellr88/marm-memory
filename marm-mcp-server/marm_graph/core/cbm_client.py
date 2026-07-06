@@ -147,6 +147,8 @@ class CbmClient:
         try:
             for raw in iter(pipe.readline, b""):
                 line = raw.decode("utf-8", "replace").rstrip()
+                if line == "The system cannot find the path specified.":
+                    continue
                 if line:
                     logger.debug("cbm.stderr", line=line)
         except (ValueError, OSError):
@@ -219,8 +221,10 @@ class CbmClient:
                 raise CbmTimeoutError(f"timeout waiting for response id={expect_id}")
             try:
                 raw = self._out_q.get(timeout=remaining)
-            except queue.Empty:
-                raise CbmTimeoutError(f"timeout waiting for response id={expect_id}")
+            except queue.Empty as err:
+                raise CbmTimeoutError(
+                    f"timeout waiting for response id={expect_id}"
+                ) from err
             if raw is _EOF:
                 raise CbmError("child process closed stdout (EOF)")
             text = raw.decode("utf-8", "replace").strip("\r\n").strip()
@@ -251,7 +255,9 @@ class CbmClient:
 
     # ── public API ──────────────────────────────────────────────────
 
-    def call_tool(self, name: str, arguments: dict, timeout: Optional[float] = None) -> Any:
+    def call_tool(
+        self, name: str, arguments: dict, timeout: Optional[float] = None
+    ) -> Any:
         """Invoke an upstream tool. Returns the parsed payload (dict or str).
 
         Raises CbmToolError when the child sets result.isError == true, and
@@ -314,7 +320,9 @@ class CbmClient:
                 continue
 
         if result.get("isError"):
-            message = payload.get("error") if isinstance(payload, dict) else str(payload)
+            message = (
+                payload.get("error") if isinstance(payload, dict) else str(payload)
+            )
             raise CbmToolError(f"{tool}: {message}", payload=payload)
         return payload
 

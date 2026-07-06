@@ -2,7 +2,7 @@
 
 ## Complete Usage Guide for Memory-Augmented AI
 
-**MARM v2.15.2 - Universal MCP Server for AI Memory Intelligence**
+**MARM v2.17.0 - Universal MCP Server for AI Memory Intelligence**
 
 ---
 
@@ -12,7 +12,7 @@
 - [Getting Started](#getting-started)
 - [Example Workflow](#example-workflow-cross-ai-research-project)
 - [Understanding MARM Memory](#understanding-marm-memory)
-- [Complete Tool Reference (7 Tools)](#complete-tool-reference-7-tools)
+- [Complete Tool Reference (12 Tools)](#complete-tool-reference-12-tools)
 - [Pro Tips & Best Practices](#pro-tips--best-practices)
 - [Advanced Workflows](#advanced-workflows)
 - [FAQ](#faq)
@@ -31,6 +31,8 @@ MARM MCP Server supports two transport modes for different deployment scenarios:
 - Traditional server-client architecture
 - Best for: Multiple concurrent AI clients, cloud/remote deployment, shared memory server
 - Setup: Run `python -m marm_mcp_server` and connect via `http://localhost:8001/mcp`
+- Bundles marm-graph's 5 code-structure tools by default — `pip install marm-mcp-server` is the only install step, no separate `marm-graph` package needed
+- Includes the dashboard at `http://localhost:8001/dashboard`; no separate dashboard process or package is required
 
 **STDIO Transport** (Process-based)
 
@@ -160,6 +162,7 @@ MARM also handles lifecycle work internally. Docs and session state initialize o
 MARM is a **Universal MCP Server** providing intelligent memory that saves across sessions for AI conversations with:
 
 - **Hybrid Recall** - Find memories by meaning and exact terms like commands, config keys, and error text
+- **Code Graph Indexing** - Index repositories once, then ask agents to look up symbols, trace call paths, inspect architecture, and estimate change impact
 - **Cross-App Memory** - Share memories between AI clients (Claude, Qwen, Gemini)
 - **Auto-Classification** - Content automatically categorized for intelligent recall
 - **Session Management** - Organize conversations with structured logging
@@ -170,6 +173,8 @@ MARM is a **Universal MCP Server** providing intelligent memory that saves acros
 **Memories**: Stored content with semantic embeddings plus an FTS index for hybrid recall
 **Notebooks**: Reusable instructions and knowledge snippets
 **Logging**: Structured conversation history with timestamps
+**Code Graph**: Optional repository index used by the 5 HTTP graph tools for code lookup, call tracing, architecture views, and impact analysis
+**Dashboard**: Bundled browser UI mounted under the same HTTP server at `/dashboard`
 
 ### Example Workflow: Cross-AI Research Project
 
@@ -235,7 +240,7 @@ Result: Decision logged and searchable by all future AI clients
 
 ### How Memory Works
 
-MARM uses **filter→rerank hybrid recall**. FTS5 BM25 handles exact terms like config keys, commands, filenames, and error strings first, semantic embeddings rerank that bounded candidate set by meaning, and a conservative temporal weighting step gives fresher memories a modest boost when matches are otherwise close. Long memories are embedded through overlapping chunk rows internally, but recall still collapses those chunk scores back to one parent memory result using the best matching chunk. When FTS coverage is weak or unusable, MARM falls back to the existing bounded semantic scan, and that fallback path is chunk-aware too:
+MARM uses **filter→rerank hybrid recall** plus an exact retrieval lane for syntax-heavy queries. By default, `exact_mode="auto"` detects config keys, CLI flags, file paths, API/tool names, dotted namespaces, HTTP routes, URLs, and quoted command strings, then routes those queries through deterministic FTS5 BM25 with a LIKE fallback instead of semantic reranking. Natural-language queries continue through the FTS filter→semantic rerank path, where semantic embeddings rerank a bounded candidate set by meaning and conservative temporal weighting gives fresher memories a modest boost when matches are otherwise close. Long memories are embedded through overlapping chunk rows internally, but recall still collapses those chunk scores back to one parent memory result using the best matching chunk. When FTS coverage is weak or unusable, MARM falls back to the existing bounded semantic scan, and that fallback path is chunk-aware too:
 
 ```txt
 User: "I discussed machine learning algorithms yesterday"
@@ -263,21 +268,32 @@ MARM automatically categorizes content:
 
 ---
 
-## Complete Tool Reference (7 Tools)
+## Complete Tool Reference (12 Tools)
 
 | Category | Tool | Description | Usage Notes |
 |----------|------|-------------|-------------|
-| **🧠 Memory** | `marm_smart_recall` | FTS-first filter→semantic rerank across all memories, with bounded semantic fallback, chunk-aware long-memory scoring, project/platform attribution filters, and a conservative recency bias in final ranking | `query` (required), `limit` (default: 5), `session_name` (optional), `detail` (default: `1`), `project` (optional), `platform` (optional). Use natural language queries or exact keys/commands |
+| **🧠 Memory** | `marm_smart_recall` | Automatic exact-query routing for config/code/API lookups, plus FTS-first filter→semantic rerank for natural-language recall, bounded semantic fallback, chunk-aware long-memory scoring, project/platform attribution filters, and conservative recency bias | `query` (required), `limit` (default: 5), `session_name` (optional), `detail` (default: `1`), `project` (optional), `platform` (optional), `exact_mode` (`"auto"`, `"exact"`, or `"semantic"`). Use default `"auto"` unless you need to force lexical or semantic behavior |
 | **📚 Logging** | `marm_log_entry` | Add structured session log entries | Use structured entries for best results. Session/topic routing, context-summary preparation, and summary-cache invalidation are handled by the server |
 | | `marm_log_show` | Display all entries and sessions with filtering | `session_name` (optional) |
 | | `marm_delete` | Delete a log session, log entry, or notebook entry | `type="log"` or `type="notebook"`, `target` (required), `session_name` (optional for log entries) |
 | **📔 Notebook** | `marm_notebook` | Unified notebook management | `action="add"` saves entries, `action="use"` activates entries, `action="show"` lists saved entries, `action="status"` shows active entries, `action="clear"` clears active entries. `session_name` scopes active entries when needed |
 | **🔄 Workflow** | `marm_summary` | Generate cached, paste-ready session summaries with intelligent truncation | Create summaries for new conversations or context bridging |
 | **🧹 Maintenance** | `marm_compaction` | Agent-assisted memory compaction | `action="status"`, `"candidates"`, `"review"`, `"stage"`, `"apply"`, or `"discard"`. Used when MARM detects duplicate memory clusters and asks the agent to summarize them |
+| **🕸️ Code Graph** (bundled, HTTP only) | `marm_graph_index` | Index a repo into the code-structure graph, or check status / list indexed projects | `repo_path` to index, `project` to check status, omit both to list |
+| | `marm_code_lookup` | Find symbols, text patterns, or a symbol's source — use instead of grep/glob | `kind="auto"\|"symbol"\|"text"\|"snippet"` |
+| | `marm_graph_trace` | Trace call paths / data flow through the graph from a function | `direction="inbound"\|"outbound"\|"both"`, `mode="calls"\|"data_flow"\|"cross_service"` |
+| | `marm_graph_architecture` | High-level architecture overview: node/edge breakdown, modules, and schema | `project` (optional) |
+| | `marm_graph_impact` | Blast radius of code changes: git diff → affected symbols + risk | `since`, `base_branch`, `depth` |
 
 **Internal automation:** lifecycle initialization, protocol delivery with periodic protocol-lite refresh, documentation refresh, current date context, summary-cache maintenance, serialized write queue handling, and system checks are no longer AI-facing tools. Documentation refresh uses `doc_index` hash tracking to avoid duplicate `marm_system` memories across restarts. Use the dashboard health panel for live server status, or `curl http://localhost:8001/health` for terminal checks.
 
+**Graph degraded mode:** the 5 code-graph tools start lazily on first use (first-run may download a ~269MB engine binary) and are always listed in `tools/list`, but they never affect the 7 core memory tools. If the graph engine fails to start (no network, disk full, schema drift) or `GRAPH_ENABLED=false` is set, graph tools return `{"status": "error", "message": "graph backend unavailable"}` while memory, logging, notebook, and compaction keep working normally.
+
+**Code graph workflow:** first call `marm_graph_index(repo_path="...")` for the repository you want indexed. The response returns the project name the graph backend recognizes. After that, agents should use `marm_code_lookup` before broad file reads, `marm_graph_trace` when they need callers/callees or data-flow context, `marm_graph_architecture` for orientation, and `marm_graph_impact` before risky refactors. Re-index after meaningful code changes; the graph is local and does not replace normal memory logs.
+
 **Project/platform attribution:** MARM stores nullable `project` and `platform` columns on memories, log entries, and notebook entries. `MARM_PROJECT` overrides the detected working-directory project, while `MARM_PLATFORM` overrides client/platform detection. `marm_smart_recall(project=..., platform=...)` scopes memory recall and `include_logs=True` log search without changing the default unfiltered behavior.
+
+**Exact recall control:** `exact_mode="auto"` is the default and usually the right choice. Use `exact_mode="exact"` when a query must match literal text such as `RECALL_SCAN_LIMIT`, `--generate-key`, `settings.py`, or `marm_smart_recall`. Use `exact_mode="semantic"` when a syntax-looking query should still be treated as meaning-based recall.
 
 **Swarm / multi-agent modes:** Use CLI presets when starting an HTTP server shared by multiple agents:
 
@@ -401,6 +417,15 @@ The canonical FAQ lives in [marm-mcp-server/marm-docs/FAQ.md](marm-mcp-server/ma
 - Verify HTTP mode in the dashboard health panel, or with `curl http://localhost:8001/health`
 - Check server logs for initialization errors
 - Disconnect and reconnect AI client to refresh tool list
+- In HTTP mode, expect 12 tools: 7 core memory/logging/notebook/compaction tools plus 5 bundled code-graph tools. In STDIO mode, expect the 7 core tools only.
+
+#### Graph tools return `graph backend unavailable`
+
+- Confirm you are using HTTP mode; graph tools are not wired into STDIO yet
+- Confirm `GRAPH_ENABLED` is not set to `false`
+- First graph use may take longer while the pinned codebase-memory engine starts or downloads locally
+- In Docker, the graph engine binary is baked into the image; local pip installs may fetch it on first graph use
+- Core memory tools continue working even when graph startup fails
 
 ### Memory & Data Issues
 
@@ -464,3 +489,29 @@ The canonical FAQ lives in [marm-mcp-server/marm-docs/FAQ.md](marm-mcp-server/ma
 | `module not found: core.memory` | Missing dependencies | Reinstall from `marm-mcp-server/`: `pip install -e ".[dev]"` |
 | `database is locked` | Multiple processes accessing DB | Close other connections, restart server |
 | `embedding model not found` | Semantic search model didn't download | First run takes time; be patient, check internet connection |
+
+---
+
+## Project Documentation
+
+### **Usage Guides**
+
+- **[MCP-HANDBOOK.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/MCP-HANDBOOK.md)** - Complete MCP server usage guide with commands, workflows, and examples
+- **[PROTOCOL.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/PROTOCOL.md)** - MCP operating protocol
+- **[FAQ.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/marm-mcp-server/marm-docs/FAQ.md)** - Answers to common questions about using MARM
+
+### **MCP Server Installation**
+
+- **[INSTALL-DOCKER.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-DOCKER.md)** - Docker deployment (recommended)
+- **[INSTALL-WINDOWS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-WINDOWS.md)** - Windows installation guide
+- **[INSTALL-LINUX.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-LINUX.md)** - Linux installation guide
+- **[INSTALL-PLATFORMS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-PLATFORMS.md)** - Platform installation guide
+
+### **Project Information**
+
+- **[README.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/README.md)** - This file - ecosystem overview and MCP server guide
+- **[CONTRIBUTING.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/CONTRIBUTING.md)** - How to contribute to MARM
+- **[CHANGELOG.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/CHANGELOG.md)** - Version history and updates
+- **[ACKNOWLEDGMENTS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/ACKNOWLEDGMENTS.md)** - Contributors and acknowledgments
+- **[ROADMAP.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/ROADMAP.md)** - Planned features and development roadmap
+- **[LICENSE](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/LICENSE)** - Apache 2.0 license terms

@@ -5,14 +5,28 @@ Pure envelope-decoding tests run everywhere; transport tests use the real binary
 
 import pytest
 
-from marm_graph.core.cbm_client import CbmClient, CbmError, CbmTimeoutError, CbmToolError
+from marm_graph.core.cbm_client import (
+    CbmClient,
+    CbmTimeoutError,
+    CbmToolError,
+)
 from conftest import requires_binary
 
 EXPECTED_TOOLS = {
-    "index_repository", "search_graph", "query_graph", "trace_path",
-    "get_code_snippet", "get_graph_schema", "get_architecture", "search_code",
-    "list_projects", "delete_project", "index_status", "detect_changes",
-    "manage_adr", "ingest_traces",
+    "index_repository",
+    "search_graph",
+    "query_graph",
+    "trace_path",
+    "get_code_snippet",
+    "get_graph_schema",
+    "get_architecture",
+    "search_code",
+    "list_projects",
+    "delete_project",
+    "index_status",
+    "detect_changes",
+    "manage_adr",
+    "ingest_traces",
 }
 
 
@@ -55,7 +69,10 @@ def test_unwrap_skips_prepended_update_notice():
     """
     result = {
         "content": [
-            {"type": "text", "text": "Update available: 0.10.0 -> 0.11.0 -- run: codebase-memory-mcp update"},
+            {
+                "type": "text",
+                "text": "Update available: 0.10.0 -> 0.11.0 -- run: codebase-memory-mcp update",
+            },
             {"type": "text", "text": '{"projects": ["demo"]}'},
         ]
     }
@@ -112,7 +129,7 @@ def test_call_tool_missing_arg_raises_with_hint(client):
 
 
 @requires_binary
-def test_timeout_does_not_kill_child(binary):
+def test_timeout_does_not_kill_child(binary, monkeypatch):
     """A slow-but-alive child must not be killed on timeout (finding 3):
     killing it mid-call would destroy in-flight work (e.g. a long index run)
     and force a blind retry from zero. Force a timeout with an unreasonably
@@ -123,10 +140,19 @@ def test_timeout_does_not_kill_child(binary):
     c.start()
     try:
         pid_before = c._proc.pid
+
+        original_send_recv = c._send_recv
+
+        def timeout_once(method, params, timeout):
+            raise CbmTimeoutError("forced timeout")
+
+        monkeypatch.setattr(c, "_send_recv", timeout_once)
         with pytest.raises(CbmTimeoutError):
-            c.call_tool("list_projects", {}, timeout=0.001)
+            c.call_tool("list_projects", {})
         assert c._proc is not None and c._proc.pid == pid_before
         assert c._proc.poll() is None  # still alive, not killed
+
+        monkeypatch.setattr(c, "_send_recv", original_send_recv)
         payload = c.call_tool("list_projects", {})
         assert isinstance(payload, dict) and "projects" in payload
     finally:
