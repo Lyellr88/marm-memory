@@ -95,6 +95,40 @@ def test_docs_and_openapi_require_auth_when_key_is_configured():
     assert _req("GET", "/", headers=AUTH).status_code == 404
 
 
+def test_no_key_mode_is_loopback_only(monkeypatch):
+    """The other auth branch, previously uncovered: with no
+    MARM_GRAPH_API_KEY configured, a loopback client needs no
+    Authorization header at all, while a remote (non-loopback) client is
+    rejected outright. Uses /ui/delete_project's confirm=false path, which
+    returns before ever touching the real backend.
+    """
+    import marm_graph.middleware.auth as auth_module
+
+    monkeypatch.setattr(auth_module, "MARM_GRAPH_API_KEY", "")
+
+    body = {"project": "anything", "confirm": False}
+
+    loopback_transport = httpx.ASGITransport(app=server.app)  # defaults to 127.0.0.1
+    remote_transport = httpx.ASGITransport(app=server.app, client=("10.0.0.25", 12345))
+
+    async def go():
+        async with httpx.AsyncClient(
+            transport=loopback_transport, base_url="http://t"
+        ) as ac:
+            loopback_response = await ac.post("/ui/delete_project", json=body)
+        async with httpx.AsyncClient(
+            transport=remote_transport, base_url="http://t"
+        ) as ac:
+            remote_response = await ac.post("/ui/delete_project", json=body)
+        return loopback_response, remote_response
+
+    loopback_response, remote_response = asyncio.run(go())
+
+    assert loopback_response.status_code == 200
+    assert loopback_response.json()["status"] == "confirmation_required"
+    assert remote_response.status_code == 401
+
+
 # ── UI guards (return before touching the backend) ──────────────────
 
 

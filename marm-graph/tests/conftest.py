@@ -15,8 +15,10 @@ _PKG_ROOT = Path(__file__).resolve().parents[1]
 if str(_PKG_ROOT) not in sys.path:
     sys.path.insert(0, str(_PKG_ROOT))
 
-# Auth tests need a key set before settings is imported.
-os.environ.setdefault("MARM_GRAPH_API_KEY", "testkey")
+# Auth tests need a key set before settings is imported. Assigned directly,
+# not setdefault -- a real MARM_GRAPH_API_KEY already set in the host/CI
+# environment must not leak into this suite's fixed "testkey" expectations.
+os.environ["MARM_GRAPH_API_KEY"] = "testkey"
 
 
 def _resolve_binary() -> str | None:
