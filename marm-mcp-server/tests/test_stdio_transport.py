@@ -142,7 +142,12 @@ def test_stdio_handles_mcp_initialize_and_exposes_tools(tmp_path):
     assert "marm_stage_compaction_summaries" not in tool_names
     assert "marm_get_staged_summaries" not in tool_names
     assert "marm_apply_compaction" not in tool_names
-    assert len(tools) == 7
+    assert "marm_graph_index" in tool_names
+    assert "marm_code_lookup" in tool_names
+    assert "marm_graph_trace" in tool_names
+    assert "marm_graph_architecture" in tool_names
+    assert "marm_graph_impact" in tool_names
+    assert len(tools) == 12
 
 
 def test_stdio_delete_notebook_removes_entry_from_active_state(monkeypatch, tmp_path):
@@ -296,6 +301,71 @@ def test_stdio_inprocess_client_wraps_notebook_delete_and_log_results(
     assert json.loads(delete_result.content[0].text)["deleted"] is True
     assert json.loads(session_result.content[0].text)["status"] == "session_switched"
     assert json.loads(entry_result.content[0].text)["status"] == "success"
+
+
+def test_stdio_graph_tool_returns_unavailable_when_backend_down(monkeypatch, tmp_path):
+    stdio = _isolated_stdio(monkeypatch, tmp_path)
+    monkeypatch.setattr(stdio.graph_supervisor, "is_available", lambda: False)
+
+    result = asyncio.run(stdio.marm_graph_index(repo_path="/tmp/some-repo"))
+
+    assert result == {"status": "error", "message": "graph backend unavailable"}
+
+
+def test_stdio_core_tool_unaffected_by_graph_unavailable(monkeypatch, tmp_path):
+    """GRAPH_ENABLED=false (or a failed backend) must never break core STDIO tools."""
+    stdio = _isolated_stdio(monkeypatch, tmp_path)
+    monkeypatch.setattr(stdio.graph_supervisor, "is_available", lambda: False)
+
+    result = asyncio.run(stdio.marm_notebook(action="status"))
+
+    assert result["status"] == "success"
+
+
+def test_stdio_inprocess_client_wraps_graph_index_happy_path(monkeypatch, tmp_path):
+    stdio = _isolated_stdio(monkeypatch, tmp_path)
+    monkeypatch.setattr(stdio.graph_supervisor, "is_available", lambda: True)
+    monkeypatch.setattr(stdio.graph_supervisor, "get_client", lambda: "fake-client")
+
+    captured = {}
+
+    def _fake_do_index(client, req):
+        captured["client"] = client
+        captured["req"] = req
+        return {"status": "success", "project": "marm-systems"}
+
+    monkeypatch.setattr(stdio.graph_router, "do_index", _fake_do_index)
+
+    async def run():
+        async with create_connected_server_and_client_session(stdio.mcp) as client:
+            return await client.call_tool(
+                "marm_graph_index", {"repo_path": "/tmp/some-repo"}
+            )
+
+    result = asyncio.run(run())
+
+    assert result.content
+    assert result.content[0].type == "text"
+    payload = json.loads(result.content[0].text)
+    assert payload["status"] == "success"
+    assert payload["project"] == "marm-systems"
+
+    # Proves the wrapper reused graph_supervisor's client and built the same
+    # Pydantic request model the HTTP endpoint uses, rather than duplicating
+    # HTTP endpoint logic by hand.
+    assert captured["client"] == "fake-client"
+    assert captured["req"].repo_path == "/tmp/some-repo"
+
+
+def test_stop_graph_supervisor_safely_swallows_errors(monkeypatch):
+    import marm_mcp_server.server_stdio as stdio
+
+    def _boom():
+        raise RuntimeError("child process gone")
+
+    monkeypatch.setattr(stdio.graph_supervisor, "stop", _boom)
+
+    stdio._stop_graph_supervisor_safely()  # must not raise
 
 
 def _base_rpc_stdin():

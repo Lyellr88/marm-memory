@@ -3,6 +3,18 @@
 ## Version 2 - MARM Protocol to Universal MCP Server Evolution
 
 <details>
+<summary><strong>July 6th, 2026: STDIO Graph Tool Parity (v2.17.x)</strong></summary>
+
+### STDIO Transport
+
+- Added the 5 bundled marm-graph tools (`marm_graph_index`, `marm_code_lookup`, `marm_graph_trace`, `marm_graph_architecture`, `marm_graph_impact`) to `marm_mcp_server.server_stdio`, bringing STDIO's discoverable tool count from 7 to 12 and matching the HTTP surface.
+- STDIO graph tools reuse the same `graph_supervisor` and `marm_graph.core.tool_router` path HTTP uses; no second graph process, no new install step, no port or API key added to STDIO.
+- Graph startup stays lazy (triggered by the first graph tool call) and degrades cleanly (`{"status": "error", "message": "graph backend unavailable"}`) if the graph engine is disabled or fails to start, without affecting the 7 core memory tools.
+- `graph_supervisor.stop()` now runs during STDIO shutdown so a started graph child process is not left running after the STDIO process exits.
+
+</details>
+
+<details>
 <summary><strong>July 6th, 2026: Unified Graph & Dashboard Package Layout (v2.17.0)</strong></summary>
 
 ### Packaging Cleanup
