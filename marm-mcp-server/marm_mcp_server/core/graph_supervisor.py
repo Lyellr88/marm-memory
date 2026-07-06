@@ -90,12 +90,20 @@ class GraphSupervisor:
         return self._client
 
     def stop(self) -> None:
-        """Terminate the child process, if one was ever started."""
-        if self._client is not None:
-            self._client.close()
-        self._client = None
-        self._available = False
-        self._ready.clear()
+        """Terminate the child process, if one was ever started.
+
+        Must share _lock with _ensure_started(): without it, a stop() racing
+        an in-flight lazy startup could interleave with that critical section
+        and leave _ready set + _available True but _client None -- a caller's
+        get_client() would then return None while is_available() just said
+        the backend was up.
+        """
+        with self._lock:
+            if self._client is not None:
+                self._client.close()
+            self._client = None
+            self._available = False
+            self._ready.clear()
 
 
 graph_supervisor = GraphSupervisor()

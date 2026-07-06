@@ -251,6 +251,55 @@ def test_stop_closes_client_and_resets_state(monkeypatch):
     assert supervisor._available is False
 
 
+def test_stop_during_inflight_startup_waits_and_leaves_consistent_state(
+    monkeypatch,
+):
+    """Regression: stop() used to mutate _client/_available/_ready without
+    the lock _ensure_started() uses. A stop() racing an in-flight startup
+    could interleave with that critical section and leave _available True
+    with _client None -- a caller's get_client() would then return None
+    while is_available() just said the backend was up. stop() must block on
+    the same lock until the in-flight startup resolves, then tear down
+    whatever it produced.
+    """
+    gs = _fresh_gs()
+    monkeypatch.setattr(gs.mcp_settings, "GRAPH_ENABLED", True)
+
+    entered = threading.Event()
+    release = threading.Event()
+
+    class _SlowFakeClient(_FakeClient):
+        def start(self):
+            entered.set()
+            assert release.wait(timeout=5), "test deadlocked waiting for release"
+            super().start()
+
+    fake = _SlowFakeClient()
+    monkeypatch.setattr(gs, "CbmClient", lambda **kwargs: fake)
+
+    supervisor = gs.GraphSupervisor()
+
+    starter = threading.Thread(target=supervisor.is_available)
+    starter.start()
+    assert entered.wait(timeout=5), "startup never reached the blocking call"
+
+    stopper = threading.Thread(target=supervisor.stop)
+    stopper.start()
+
+    # stop() must block on the same lock as _ensure_started(), not interleave
+    stopper.join(timeout=0.2)
+    assert stopper.is_alive(), "stop() proceeded before startup resolved"
+
+    release.set()
+    starter.join(timeout=5)
+    stopper.join(timeout=5)
+
+    assert fake.started is True  # the in-flight startup actually completed
+    assert fake.closed is True  # ...then stop() tore it down
+    assert supervisor._client is None
+    assert supervisor._available is False
+
+
 def test_stop_on_never_started_supervisor_is_a_no_op(monkeypatch):
     """Shutdown must be safe even if no graph tool was ever called."""
     gs = _fresh_gs()
