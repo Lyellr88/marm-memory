@@ -1,8 +1,10 @@
 services:
   marm-mcp-server:
-    build: 
+    build:
       context: .
       dockerfile: Dockerfile
+    # :latest is now the all-in-one image (memory + graph + dashboard, one port).
+    # Pin :memory-only instead if you need the pre-unification image shape.
     image: lyellr88/marm-mcp-server:latest
     container_name: marm-mcp-server
     restart: unless-stopped
@@ -33,7 +35,10 @@ services:
           cpus: '0.5'
     
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      # Mirrors the Dockerfile's own HEALTHCHECK -- the final image no longer
+      # installs curl (removed to shrink the CBM binary's runtime network
+      # surface), so this must use the same pure-Python check, not curl.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health', timeout=5)"]
       interval: 30s
       timeout: 10s
       retries: 3

@@ -1,0 +1,36 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "marm-graph"
+version = "0.1.0"
+description = "MARM code-structure graph — a thin wrapper over codebase-memory-mcp exposing a small MCP + REST surface for MARM/MARMIS"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+authors = [{ name = "Lyell", email = "info@marmsystems.com" }]
+keywords = ["mcp", "code-graph", "marm", "codebase-memory", "ai"]
+
+dependencies = [
+  # Pinned EXACTLY. A version bump changes the wrapped binary's tool schemas,
+  # which tool_router.py maps by hand — treat every bump as a reviewed change,
+  # never an auto-update. See docs/current/graph-index/graph/protocol-proof.md.
+  "codebase-memory-mcp==0.8.1",
+  "fastapi>=0.110",
+  "fastapi-mcp>=0.1.0",
+  "uvicorn>=0.30",
+  "fastmcp>=2.0",
+  "pydantic>=2.0",
+  "structlog>=24.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "httpx>=0.27"]
+
+[project.scripts]
+marm-graph = "marm_graph.server:main"
+marm-graph-stdio = "marm_graph.server_stdio:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["marm_graph"]

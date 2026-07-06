@@ -29,7 +29,7 @@ mcp-name: io.github.Lyellr88/marm-mcp-server
 
 - [Why MARM MCP](#why-marm-mcp-the-problem--solution)
 - [Quick Start](#-quick-start-for-mcp-http--stdio)
-- [Complete MCP Tool Suite](#complete-mcp-tool-suite-7-tools)
+- [Complete MCP Tool Suite](#complete-mcp-tool-suite-12-tools)
 - [MARM Dashboard](#marm-dashboard)
 - [Performance & Scaling Benchmarks](#performance--scaling-benchmarks)
 - [Contributing](#contributing)
@@ -41,7 +41,7 @@ mcp-name: io.github.Lyellr88/marm-mcp-server
 
 MARM MCP is a local memory infrastructure layer for AI agents. It gives Claude, Codex, Gemini, Qwen, IDE agents, and other MCP clients one persistent place to store decisions, retrieve context, reuse notebooks, and keep long-running work from drifting.
 
-The point is not "more tools." MARM exposes **7 focused MCP tools** and moves the heavy work behind the server: session routing, protocol delivery, hybrid recall, serialized writes, rate-limit presets, write-time consolidation, and agent-assisted compaction. Because the tool surface stays small, re-ranking filters results before they reach the model, and consolidation catches duplicates at write time, token spend stays low and predictable as workloads grow.
+The point is not "more tools." MARM exposes **7 focused core MCP tools** and moves the heavy work behind the server: session routing, protocol delivery, hybrid recall, serialized writes, rate-limit presets, write-time consolidation, and agent-assisted compaction. Because the tool surface stays small, re-ranking filters results before they reach the model, and consolidation catches duplicates at write time, token spend stays low and predictable as workloads grow. Over HTTP, `pip install marm-mcp-server` also bundles marm-graph's 5 code-structure tools by default (12 tools total) — no second install, no second port.
 
 ### How It Works
 
@@ -50,7 +50,7 @@ The point is not "more tools." MARM exposes **7 focused MCP tools** and moves th
 | **Memory model** | Sessions, structured logs, notebooks, summaries, and semantic memories | Keeps project history searchable instead of trapped in one chat |
 | **Scale layer** | SQLite WAL mode, connection pooling, serialized write queue, and HTTP rate-limit presets | Lets one server support solo use, multi-agent work, and swarm-style bursts |
 | **Intelligence layer** | FTS filter, semantic re-rank, bounded semantic fallback, auto-classification, write-time consolidation, and compaction candidates | Keeps recall useful as memory grows instead of letting duplicates pile up |
-| **Token layer** | Lightweight 7-tool surface, semantic re-rank before retrieval, and write-time deduplication | Reduces tokens sent to the model on every recall and cost stays predictable as memory scales |
+| **Token layer** | Lightweight 7-tool core surface (12 over HTTP with bundled graph tools), semantic re-rank before retrieval, and write-time deduplication | Reduces tokens sent to the model on every recall and cost stays predictable as memory scales |
 | **Deployment layer** | Pip, Docker, STDIO, HTTP, `--swarm`, `--swarm-max`, and `--trusted` | Lets you run private local memory or shared multi-agent memory with the same MCP surface |
 
 See [Performance & Scaling Benchmarks](#performance--scaling-benchmarks) for retrieval latency, concurrency, and write-cost numbers.
@@ -74,6 +74,8 @@ npx degit Lyellr88/MARM-Systems/skills
 Then tell your agent: **"Use the marm-init skill to set up MARM."**
 
 **Manual pip install**
+
+One command covers memory + code-graph over HTTP — no separate `marm-graph` install needed:
 
 ```bash
 pip install marm-mcp-server
@@ -149,6 +151,8 @@ marm-mcp-stdio
 </details>
 
 ---
+
+> **`:latest` is now the all-in-one image** — memory, graph, and dashboard in one process on port 8001 (dashboard at `/dashboard`). If you need today's memory-only image, pin `:memory-only` instead. See [CHANGELOG.md](../CHANGELOG.md) for details.
 
 <details>
 <summary><strong>Docker HTTP (key required)</strong></summary>
@@ -239,12 +243,14 @@ Claude Code remains the recommended first setup path, but MARM also works with o
 </picture>
 </div>
 
-A local web UI for browsing and managing your MARM memory; separate from the MCP server, reads and writes the same `~/.marm/marm_memory.db`.
+A local web UI for browsing and managing your MARM memory, reads and writes the same `~/.marm/marm_memory.db`.
+
+> **Already using the unified `:latest` Docker image?** The dashboard is bundled in — no separate install or port, just open `http://localhost:8001/dashboard`. Everything below is for the standalone pip/Docker path (its own port, its own image), still fully supported for users who want it independent of marm-mcp-server.
 
 | What it gives you | How it works |
 |-------------------|-------------|
 | Browse/search/edit all memories | Direct SQLite, no MCP required |
-| Manage sessions and protocol logs | Runs on port `:8002` alongside MCP on `:8001` |
+| Manage sessions and protocol logs | Standalone: runs on its own port `:8002`. Unified image: mounted at `/dashboard` on marm-mcp-server's `:8001`. |
 | Notebook CRUD with inline editor | Same auth model (`MARM_API_KEY`) as the MCP server |
 | Delete-all with count confirmation | Docker image included; WAL mode handles concurrent access |
 | View the write queue in real time | Pulls live data from the write queue |
@@ -267,7 +273,7 @@ docker run --rm -p 127.0.0.1:8002:8002 \
 
 See [`marm-dashboard/README.md`](marm-dashboard/README.md) for the full guide.
 
-## Complete MCP Tool Suite (7 Tools)
+## Complete MCP Tool Suite (12 Tools)
 
 <div align="center">
 <picture>
@@ -294,10 +300,15 @@ The AI agent will automatically use the appropriate tools. Manual tool access is
 | **Reasoning & Workflow** | `marm_summary` | Generate cached session summaries with intelligent truncation for LLM conversations |
 | **Notebook Management** | `marm_notebook` | Unified notebook tool: add, use, show, status, or clear entries with `action="add"\|"use"\|"show"\|"status"\|"clear"` |
 | **Memory Maintenance** | `marm_compaction` | Unified compaction workflow with `action="status"\|"candidates"\|"review"\|"stage"\|"apply"\|"discard"` for agent-assisted memory cleanup |
+| **Code Graph (bundled, HTTP only)** | `marm_graph_index` | Index a repo into the code-structure graph, or check status / list indexed projects |
+| | `marm_code_lookup` | Find symbols, text patterns, or a symbol's source — use instead of grep/glob |
+| | `marm_graph_trace` | Trace call paths / data flow through the graph from a function |
+| | `marm_graph_architecture` | High-level architecture overview: node/edge breakdown, modules, and schema |
+| | `marm_graph_impact` | Blast radius of code changes: git diff → affected symbols + risk |
 
 ### A Deeper Look
 
-MARM keeps MCP discovery lean with 7 tools by grouping domain operations behind explicit parameters like `marm_notebook(action=...)`, `marm_delete(type=...)`, and `marm_compaction(action=...)`. Behind those tools, the server handles lifecycle setup, protocol refresh, docs indexing, date context, summary-cache maintenance, write queue handling, project/platform attribution, and health checks.
+MARM keeps the core MCP surface lean with 7 tools by grouping domain operations behind explicit parameters like `marm_notebook(action=...)`, `marm_delete(type=...)`, and `marm_compaction(action=...)`. Behind those tools, the server handles lifecycle setup, protocol refresh, docs indexing, date context, summary-cache maintenance, write queue handling, project/platform attribution, and health checks. Over HTTP, marm-graph's 5 code-structure tools are bundled by default, bringing the discoverable surface to 12; the code-graph engine starts lazily on first use and never blocks the 7 core tools if it fails to start (`GRAPH_ENABLED=false` disables it outright).
 
 Under the hood, MARM uses SQLite WAL mode, connection pooling, serialized writes, HTTP swarm presets, safe local defaults, exact-query routing for syntax-heavy lookups, FTS→semantic reranking, bounded fallback search, chunk-aware long-memory recall, and summary/context/full recall depths to keep memory fast, stable, and token-efficient as projects grow.
 

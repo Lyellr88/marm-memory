@@ -43,9 +43,12 @@ from .config.settings import (
 )
 from .core import memory as memory_module
 from .core.compaction import claim_pending_compaction_prompt
+from .core.dashboard_mount import get_dashboard_app
+from .core.graph_supervisor import graph_supervisor
 from .core.memory import memory
 from .core.rate_limiter import rate_limiter
 from .endpoints.compaction import router as compaction_router
+from .endpoints.graph import router as graph_router
 from .endpoints.logging import router as logging_router
 from .endpoints.memory import router as memory_router
 from .endpoints.notebook import router as notebook_router
@@ -248,6 +251,7 @@ async def lifespan(app: FastAPI):
     if _compaction_scheduler and _compaction_scheduler.running:
         _compaction_scheduler.shutdown(wait=False)
     await memory.stop_write_queue()
+    graph_supervisor.stop()
     track_usage("server_shutdown")
 
 
@@ -512,9 +516,33 @@ app.include_router(notebook_router)
 app.include_router(memory_router)
 app.include_router(system_router)
 app.include_router(compaction_router)
+app.include_router(graph_router)
+
+_dashboard_app = get_dashboard_app()
+if _dashboard_app is not None:
+    app.mount("/dashboard", _dashboard_app)
 
 
-mcp = FastApiMCP(app)
+# Explicit whitelist as defense-in-depth: mounted sub-app routes (dashboard)
+# already never appear in FastApiMCP's OpenAPI-derived tool list, but this
+# matches marm-graph's own stricter whitelist pattern instead of relying on
+# that alone.
+MCP_TOOL_OPERATIONS = [
+    "marm_smart_recall",
+    "marm_log_entry",
+    "marm_log_show",
+    "marm_delete",
+    "marm_summary",
+    "marm_notebook",
+    "marm_compaction",
+    "marm_graph_index",
+    "marm_code_lookup",
+    "marm_graph_trace",
+    "marm_graph_architecture",
+    "marm_graph_impact",
+]
+
+mcp = FastApiMCP(app, include_operations=MCP_TOOL_OPERATIONS)
 mcp.mount_http()
 
 

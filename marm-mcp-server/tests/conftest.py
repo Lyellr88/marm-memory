@@ -9,7 +9,12 @@ from fastapi.testclient import TestClient
 def load_isolated_server(monkeypatch, tmp_path, api_key="", write_queue_enabled=False):
     """Import the server after pointing global state at a temporary database."""
     for name in list(sys.modules):
-        if name == "marm_mcp_server" or name.startswith("marm_mcp_server."):
+        if (
+            name == "marm_mcp_server"
+            or name.startswith("marm_mcp_server.")
+            or name == "marm_dashboard"
+            or name.startswith("marm_dashboard.")
+        ):
             del sys.modules[name]
 
     monkeypatch.setenv("MARM_DB_PATH", str(tmp_path / "marm_memory.db"))
