@@ -27,7 +27,7 @@ import pathlib  # noqa: E402
 import re  # noqa: E402
 import uuid  # noqa: E402
 from datetime import datetime, timezone  # noqa: E402
-from typing import Optional  # noqa: E402
+from typing import Literal, Optional  # noqa: E402
 
 from anyio import BrokenResourceError, ClosedResourceError, EndOfStream  # noqa: E402
 
@@ -199,7 +199,12 @@ from marm_graph.core.models import (  # noqa: E402
 
 mcp = FastMCP("MARM MCP Server")
 
-_GRAPH_UNAVAILABLE = {"status": "error", "message": "graph backend unavailable"}
+
+def _graph_unavailable() -> dict:
+    """Fresh dict per call -- _log_tool_call mutates result in place (protocol
+    injection, compaction blocks), so a shared constant here would leak state
+    (e.g. marm_protocol) into every subsequent unavailable response."""
+    return {"status": "error", "message": "graph backend unavailable"}
 
 
 async def _graph_available() -> bool:
@@ -699,8 +704,8 @@ async def marm_compaction(
 async def marm_graph_index(
     repo_path: Optional[str] = None,
     project: Optional[str] = None,
-    mode: str = "moderate",
-    action: str = "auto",
+    mode: Literal["full", "moderate", "fast"] = "moderate",
+    action: Literal["auto", "index", "status", "list"] = "auto",
 ) -> dict:
     """
     🕸️ Index a code repository into the graph, or check status / list known projects.
@@ -719,7 +724,7 @@ async def marm_graph_index(
     graph backend is disabled or failed to start
     """
     if not await _graph_available():
-        return _GRAPH_UNAVAILABLE
+        return _graph_unavailable()
     req = GraphIndexRequest(
         repo_path=repo_path, project=project, mode=mode, action=action
     )
@@ -733,7 +738,7 @@ async def marm_graph_index(
 async def marm_code_lookup(
     query: str,
     project: Optional[str] = None,
-    kind: str = "auto",
+    kind: Literal["auto", "symbol", "text", "snippet"] = "auto",
     regex: bool = False,
     file_pattern: Optional[str] = None,
     limit: int = 20,
@@ -757,7 +762,7 @@ async def marm_code_lookup(
     backend is disabled or failed to start
     """
     if not await _graph_available():
-        return _GRAPH_UNAVAILABLE
+        return _graph_unavailable()
     req = CodeLookupRequest(
         query=query,
         project=project,
@@ -776,9 +781,9 @@ async def marm_code_lookup(
 async def marm_graph_trace(
     function_name: str,
     project: Optional[str] = None,
-    direction: str = "both",
+    direction: Literal["inbound", "outbound", "both"] = "both",
     depth: int = 3,
-    mode: str = "calls",
+    mode: Literal["calls", "data_flow", "cross_service"] = "calls",
     risk_labels: bool = True,
 ) -> dict:
     """
@@ -800,7 +805,7 @@ async def marm_graph_trace(
     backend is disabled or failed to start
     """
     if not await _graph_available():
-        return _GRAPH_UNAVAILABLE
+        return _graph_unavailable()
     req = GraphTraceRequest(
         function_name=function_name,
         project=project,
@@ -832,7 +837,7 @@ async def marm_graph_architecture(
     graph backend is disabled or failed to start
     """
     if not await _graph_available():
-        return _GRAPH_UNAVAILABLE
+        return _graph_unavailable()
     req = GraphArchitectureRequest(project=project)
     return await asyncio.to_thread(
         graph_router.do_architecture, graph_supervisor.get_client(), req
@@ -863,7 +868,7 @@ async def marm_graph_impact(
     backend is disabled or failed to start
     """
     if not await _graph_available():
-        return _GRAPH_UNAVAILABLE
+        return _graph_unavailable()
     req = GraphImpactRequest(
         project=project, since=since, base_branch=base_branch, depth=depth
     )

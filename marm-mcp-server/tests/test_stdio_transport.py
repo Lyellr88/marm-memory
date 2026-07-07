@@ -312,6 +312,29 @@ def test_stdio_graph_tool_returns_unavailable_when_backend_down(monkeypatch, tmp
     assert result == {"status": "error", "message": "graph backend unavailable"}
 
 
+def test_stdio_graph_unavailable_response_is_not_shared_mutable_state(
+    monkeypatch, tmp_path
+):
+    """Regression: the unavailable response used to be one shared module-level
+    dict returned by every call. _log_tool_call mutates its result in place
+    (injecting marm_protocol on the first delivered call), so if the first
+    STDIO call ever made were an unavailable graph call, that injected key
+    would leak into every subsequent unavailable response forever. Force the
+    real first-call path (_protocol_delivered = False, unlike the other tests
+    in this module) and call twice to prove no state survives between calls.
+    """
+    stdio = _isolated_stdio(monkeypatch, tmp_path)
+    stdio._protocol_delivered = False
+    monkeypatch.setattr(stdio.graph_supervisor, "is_available", lambda: False)
+
+    first = asyncio.run(stdio.marm_graph_index(repo_path="/tmp/some-repo"))
+    assert "marm_protocol" in first  # confirms injection actually happened
+
+    second = asyncio.run(stdio.marm_graph_index(repo_path="/tmp/some-repo"))
+
+    assert second == {"status": "error", "message": "graph backend unavailable"}
+
+
 def test_stdio_core_tool_unaffected_by_graph_unavailable(monkeypatch, tmp_path):
     """GRAPH_ENABLED=false (or a failed backend) must never break core STDIO tools."""
     stdio = _isolated_stdio(monkeypatch, tmp_path)
