@@ -20,6 +20,7 @@ from .memory_utils import (
     _safe_print,
     _recall_debug,
     _chunk_text,
+    _embedding_to_bytes,
     _write_chunks,
     sanitize_content,
     _temporal_score,
@@ -81,7 +82,7 @@ async def _update_memory(mem, memory_id: str, new_content: str) -> None:
         if encoder_ok:
             try:
                 merged_vec = await asyncio.to_thread(mem._encode_sync, merged_content)
-                merged_embedding_bytes = merged_vec.tobytes()
+                merged_embedding_bytes = _embedding_to_bytes(merged_vec)
             except Exception as e:
                 _safe_print(f"Failed to regenerate embedding after merge: {e}")
 
@@ -148,7 +149,7 @@ async def _store_memory(
     if sanitized_content.strip() and mem._load_encoder_lazily():
         try:
             pre_embedding = await asyncio.to_thread(mem._encode_sync, sanitized_content)
-            pre_embedding_bytes = pre_embedding.tobytes()
+            pre_embedding_bytes = _embedding_to_bytes(pre_embedding)
         except Exception as e:
             _safe_print(f"Failed to generate embedding: {e}")
 

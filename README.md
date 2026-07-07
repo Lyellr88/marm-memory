@@ -4,7 +4,7 @@
      width="700"
      height="400">
 </picture>
-<h1 align="center">MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.17.1</h1>
+<h1 align="center">MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.18.0</h1>
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
@@ -369,26 +369,40 @@ For a deeper look into the MCP behavior, tool parameters, automation, and workfl
 </picture>
 </div>
 
-MARM is tuned for fast recall first, even as memory grows and multiple agents hit the same server.
+MARM is tuned for fast recall first, even as memory grows and long memories are chunked behind the scenes.
 
 ### 1. Retrieval Latency Scaling
 
 | Session Size ($N$) | Min Latency | Median Latency | p95 Latency |
 | :--- | :--- | :--- | :--- |
-| **N = 100** | 12.0 ms | 17.4 ms | 20.8 ms |
-| **N = 500** | 12.4 ms | 20.5 ms | 22.6 ms |
-| **N = 1,000** | 15.9 ms | 23.3 ms | 25.1 ms |
-| **N = 4,000** | 23.1 ms | 30.4 ms | 31.3 ms |
+| **N = 100** | 12.3 ms | 13.8 ms | 15.0 ms |
+| **N = 500** | 13.3 ms | 14.1 ms | 16.4 ms |
+| **N = 1,000** | 14.5 ms | 16.2 ms | 17.1 ms |
+| **N = 2,000** | 15.9 ms | 18.4 ms | 20.8 ms |
+| **N = 4,000** | 17.6 ms | 20.8 ms | 22.5 ms |
 
-### 2. Multi-Agent Concurrency
+### 2. Encoder + Concurrency
 
-- **Parallel recall wins:** 10 concurrent recalls completed in `316.3ms` vs `647.0ms` serial, a `51%` time reduction.
+- **Cold model load:** `972ms`
+- **Warm encode:** median `10.3ms`, p95 `11.2ms`
+- **Concurrent recall:** 10 gathered recalls completed in `394.7ms` vs `436.6ms` serial. The current path is intentionally serialized around shared encoder/SQLite work, so this is stable under load rather than true parallel speedup.
 
 ### 3. Write-Time Ingestion Cost
 
-- **Write-time tradeoff:** consolidation raises median ingest from `20.3ms` to `85.2ms` (`4.2x`) so dedupe/clustering cost stays off the hot recall path.
+- **Consolidation off:** median `10.3ms`, p95 `11.6ms`
+- **Consolidation on:** median `42.0ms`, p95 `46.3ms`
+- **Tradeoff:** write-time dedupe/clustering adds `4.1x` median cost so recall stays fast and cleaner over time.
 
-Benchmarks used a real SQLite database and the live `all-MiniLM-L6-v2` encoder on local hardware. Reproduce them: [`marm-mcp-server/scripts/bench_hotpath.py`](marm-mcp-server/scripts/bench_hotpath.py)
+### 4. Hybrid Search Scaling
+
+| Session Size ($N$) | Pure Semantic | Production Hybrid | FTS Filter -> Rerank | Speedup vs Pure |
+| :--- | :--- | :--- | :--- | :--- |
+| **N = 100** | 2.4 ms | 15.1 ms | 2.2 ms | 1.1x |
+| **N = 1,000** | 23.6 ms | 16.2 ms | 2.7 ms | 8.8x |
+| **N = 4,000** | 93.8 ms | 18.3 ms | 4.9 ms | 19.0x |
+| **N = 10,000** | 242.7 ms | 19.7 ms | 5.4 ms | 45.1x |
+
+Benchmarks used a throwaway real SQLite database and the live fastembed-backed `all-MiniLM-L6-v2` encoder on local hardware. Reproduce them: [`marm-mcp-server/scripts/bench_hotpath.py`](marm-mcp-server/scripts/bench_hotpath.py)
 
 ## ⭐ Star the Project
 

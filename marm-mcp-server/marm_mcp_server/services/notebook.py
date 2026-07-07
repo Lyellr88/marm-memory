@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from ..core.memory import memory
+from ..core.memory_utils import _embedding_to_bytes
 from ..core.events import events
 from ..config.settings import MARM_PROJECT, MARM_PLATFORM
 
@@ -20,7 +21,7 @@ async def _add(name: Optional[str], data: Optional[str], **_) -> dict:
     if memory.encoder:
         try:
             embedding = await asyncio.to_thread(memory._encode_sync, data)
-            embedding_bytes = embedding.tobytes()
+            embedding_bytes = _embedding_to_bytes(embedding)
         except Exception:
             pass
     project = MARM_PROJECT or None

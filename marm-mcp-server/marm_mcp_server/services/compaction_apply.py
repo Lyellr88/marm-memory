@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 
 from ..core.consolidation import compute_content_hash
 from ..core.memory import sanitize_content, _safe_print
+from ..core.memory_utils import _embedding_to_bytes
 
 
 async def apply_compaction_write(memory_store, candidate_id: str) -> str:
@@ -38,7 +39,7 @@ async def apply_compaction_write(memory_store, candidate_id: str) -> str:
                 summary_vec = await asyncio.to_thread(
                     memory_store._encode_sync, precomputed_summary
                 )
-                precomputed_summary_embedding = summary_vec.tobytes()
+                precomputed_summary_embedding = _embedding_to_bytes(summary_vec)
             except Exception as e:
                 _safe_print(
                     f"Embedding pre-compute failed for compaction {candidate_id}, continuing without: {e}"

@@ -9,6 +9,8 @@ import sqlite3
 import sys
 from datetime import datetime, timezone
 
+import numpy as np
+
 
 def _safe_print(msg: str) -> None:
     """Write diagnostics to stderr so STDIO stdout stays JSON-RPC clean."""
@@ -93,6 +95,11 @@ CHUNK_OVERLAP_TOKENS = 50
 CHUNK_THRESHOLD_WORDS = 180
 
 
+def _embedding_to_bytes(vector) -> bytes:
+    """Store embeddings in the float32 layout expected by recall scoring."""
+    return np.asarray(vector, dtype=np.float32).tobytes()
+
+
 def _chunk_text(text: str) -> list[str]:
     words = text.split()
     if len(words) <= CHUNK_THRESHOLD_WORDS:
@@ -117,7 +124,7 @@ async def _write_chunks(
     for chunk in chunks:
         try:
             vec = await asyncio.to_thread(mem_instance._encode_sync, chunk)
-            embeddings.append(vec.tobytes())
+            embeddings.append(_embedding_to_bytes(vec))
         except Exception as e:
             _safe_print(f"Chunk encoding failed for memory {memory_id}: {e}")
             return

@@ -253,18 +253,16 @@ def test_notebook_active_state_is_scoped_by_session(monkeypatch, tmp_path):
 
 
 def test_http_notebook_add_persists_entry_and_embedding(monkeypatch, tmp_path):
+    import numpy as np
+
     server = load_isolated_server(monkeypatch, tmp_path)
     client = local_client(server.app)
     memory_module = importlib.import_module("marm_mcp_server.core.memory")
 
-    class FakeEmbedding:
-        def tobytes(self):
-            return b"fake-embedding-bytes"
-
     class FakeEncoder:
         def encode(self, text):
             assert text == "Notebook entries should keep embeddings when available."
-            return FakeEmbedding()
+            return np.ones(384, dtype=np.float64)
 
     monkeypatch.setattr(memory_module.memory, "encoder", FakeEncoder())
 
@@ -289,7 +287,7 @@ def test_http_notebook_add_persists_entry_and_embedding(monkeypatch, tmp_path):
     assert row is not None
     assert row[0] == "embedded_rule"
     assert row[1] == "Notebook entries should keep embeddings when available."
-    assert row[2] == b"fake-embedding-bytes"
+    assert len(row[2]) == 384 * 4
 
 
 def test_http_notebook_service_errors_return_structured_error(monkeypatch, tmp_path):
