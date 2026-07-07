@@ -418,7 +418,7 @@ async def run(require_encoder: bool) -> bool:
                 r.require("long content triggers background chunk task", msg)
                 r.require("late-body phrase returned by recall_similar", msg)
                 print(
-                    "  Install sentence-transformers to pass these, or re-run with --no-encoder-checks to skip them."
+                    "  Install fastembed to pass these, or re-run with --no-encoder-checks to skip them."
                 )
             else:
                 r.skip("long content triggers background chunk task", msg)

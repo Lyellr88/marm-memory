@@ -3,6 +3,18 @@
 ## Version 2 - MARM Protocol to Universal MCP Server Evolution
 
 <details>
+<summary><strong>July 7th, 2026: Fastembed Embedding Backend (v2.18.0)</strong></summary>
+
+### Semantic Search
+
+- Replaced `sentence-transformers` + `torch` with `fastembed` (ONNX Runtime-based) as the encoder backend. Same model (`sentence-transformers/all-MiniLM-L6-v2`, 384 dimensions), same recall behavior, same DB schema — verified numerically equivalent before the swap (1.0000 cosine similarity across a real-sentence test corpus, identical top-5 retrieval ranking against both backends).
+- Cuts the main Docker image's dependency footprint substantially: `torch`'s CPU wheel alone was 200MB+, plus the `scipy`/`scikit-learn` `sentence-transformers` also required — `fastembed` needs none of that.
+- The lean `glama-latest` image (`requirements-glama.txt`) gains real semantic search for the first time. It previously shipped with neither `torch` nor `sentence-transformers`, so semantic recall was fully disabled there (text-search fallback only); `fastembed` is light enough to include in that build too.
+- Failure behavior is unchanged: if the encoder fails to load (no network, disk full, etc.), memory falls back to text-only search without affecting core memory, logging, notebook, or startup — same as before.
+
+</details>
+
+<details>
 <summary><strong>July 6th, 2026: STDIO Graph Tool Parity (v2.17.1)</strong></summary>
 
 ### STDIO Transport

@@ -6,6 +6,7 @@ import html
 import json
 import re
 import sqlite3
+import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -15,6 +16,7 @@ from .config import get_db_path
 
 _ENCODER = None
 _ENCODER_FAILED = False
+_ENCODER_LOCK = threading.Lock()
 _SEMANTIC_MODEL = "all-MiniLM-L6-v2"
 _CONTEXT_TYPES = frozenset({"general", "code", "project", "book"})
 
@@ -124,7 +126,7 @@ def _touch_session(conn: sqlite3.Connection, session_name: str, timestamp: str) 
 
 def embeddings_package_available() -> bool:
     try:
-        import sentence_transformers  # noqa: F401
+        import fastembed  # noqa: F401
 
         return True
     except ImportError:
@@ -132,17 +134,23 @@ def embeddings_package_available() -> bool:
 
 
 def _maybe_embedding(text: str) -> Optional[bytes]:
+    """Serialized like core/memory.py's _encode_sync: dashboard routes are sync
+    def handlers, which FastAPI runs on its thread pool, so concurrent requests
+    can genuinely race on lazy TextEmbedding init and .embed() without a lock."""
     global _ENCODER, _ENCODER_FAILED
     if _ENCODER_FAILED or not text.strip():
         return None
     try:
-        if _ENCODER is None:
-            from sentence_transformers import SentenceTransformer
+        with _ENCODER_LOCK:
+            if _ENCODER is None:
+                from fastembed import TextEmbedding
 
-            _ENCODER = SentenceTransformer(_SEMANTIC_MODEL)
-        import numpy as np
+                _ENCODER = TextEmbedding(
+                    model_name=f"sentence-transformers/{_SEMANTIC_MODEL}"
+                )
+            import numpy as np
 
-        return _ENCODER.encode(text).astype(np.float32).tobytes()
+            return next(iter(_ENCODER.embed([text]))).astype(np.float32).tobytes()
     except Exception:
         _ENCODER_FAILED = True
         return None
