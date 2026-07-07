@@ -27,7 +27,7 @@ import pathlib  # noqa: E402
 import re  # noqa: E402
 import uuid  # noqa: E402
 from datetime import datetime, timezone  # noqa: E402
-from typing import Optional  # noqa: E402
+from typing import Literal, Optional  # noqa: E402
 
 from anyio import BrokenResourceError, ClosedResourceError, EndOfStream  # noqa: E402
 
@@ -187,8 +187,28 @@ from marm_mcp_server.config.settings import (  # noqa: E402
     MARM_PROJECT,
     MARM_PLATFORM,
 )
+from marm_mcp_server.core.graph_supervisor import graph_supervisor  # noqa: E402
+from marm_graph.core import tool_router as graph_router  # noqa: E402
+from marm_graph.core.models import (  # noqa: E402
+    CodeLookupRequest,
+    GraphArchitectureRequest,
+    GraphImpactRequest,
+    GraphIndexRequest,
+    GraphTraceRequest,
+)
 
 mcp = FastMCP("MARM MCP Server")
+
+
+def _graph_unavailable() -> dict:
+    """Fresh dict per call -- _log_tool_call mutates result in place (protocol
+    injection, compaction blocks), so a shared constant here would leak state
+    (e.g. marm_protocol) into every subsequent unavailable response."""
+    return {"status": "error", "message": "graph backend unavailable"}
+
+
+async def _graph_available() -> bool:
+    return await asyncio.to_thread(graph_supervisor.is_available)
 
 
 @mcp.tool()
@@ -679,6 +699,184 @@ async def marm_compaction(
         return {"status": "error", "message": f"Compaction operation failed: {e!s}"}
 
 
+@mcp.tool()
+@_log_tool_call
+async def marm_graph_index(
+    repo_path: Optional[str] = None,
+    project: Optional[str] = None,
+    mode: Literal["full", "moderate", "fast"] = "moderate",
+    action: Literal["auto", "index", "status", "list"] = "auto",
+) -> dict:
+    """
+    🕸️ Index a code repository into the graph, or check status / list known projects.
+
+    Pass `repo_path` to index a repo (returns the project name to use in every
+    other tool). Omit it to list indexed projects, or pass `project` to check
+    index status. Call this first — all other graph tools need an indexed project.
+
+    Parameters:
+    - repo_path: path to the repository to index; omit to list/status only
+    - project: existing project name for a status check; omit to auto-resolve
+    - mode: index depth — full | moderate | fast (default moderate)
+    - action: auto | index | status | list (default auto; infers from repo_path presence)
+
+    Returns: graph index/status/list response, or a graph-unavailable error if the
+    graph backend is disabled or failed to start
+    """
+    if not await _graph_available():
+        return _graph_unavailable()
+    req = GraphIndexRequest(
+        repo_path=repo_path, project=project, mode=mode, action=action
+    )
+    return await asyncio.to_thread(
+        graph_router.do_index, graph_supervisor.get_client(), req
+    )
+
+
+@mcp.tool()
+@_log_tool_call
+async def marm_code_lookup(
+    query: str,
+    project: Optional[str] = None,
+    kind: Literal["auto", "symbol", "text", "snippet"] = "auto",
+    regex: bool = False,
+    file_pattern: Optional[str] = None,
+    limit: int = 20,
+) -> dict:
+    """
+    🔎 Find code: symbols/definitions, text patterns, or a symbol's source.
+
+    Use INSTEAD OF grep/glob. `kind=auto` picks: a qualified_name reads source;
+    otherwise it searches the graph by name/keyword. Set `kind=text` to grep code,
+    `kind=snippet` to read a symbol's source, `kind=symbol` to force graph search.
+
+    Parameters:
+    - query: symbol name, natural-language phrase, code/text pattern, or a qualified_name
+    - project: project name; omit to auto-resolve
+    - kind: auto | symbol | text | snippet (default auto)
+    - regex: for text search, treat query as a regex (default False)
+    - file_pattern: glob to scope search, e.g. "*.py" (optional)
+    - limit: max results, 1-200 (default 20)
+
+    Returns: graph lookup response, or a graph-unavailable error if the graph
+    backend is disabled or failed to start
+    """
+    if not await _graph_available():
+        return _graph_unavailable()
+    req = CodeLookupRequest(
+        query=query,
+        project=project,
+        kind=kind,
+        regex=regex,
+        file_pattern=file_pattern,
+        limit=limit,
+    )
+    return await asyncio.to_thread(
+        graph_router.do_lookup, graph_supervisor.get_client(), req
+    )
+
+
+@mcp.tool()
+@_log_tool_call
+async def marm_graph_trace(
+    function_name: str,
+    project: Optional[str] = None,
+    direction: Literal["inbound", "outbound", "both"] = "both",
+    depth: int = 3,
+    mode: Literal["calls", "data_flow", "cross_service"] = "calls",
+    risk_labels: bool = True,
+) -> dict:
+    """
+    🧭 Trace call paths / data flow through the graph from a function.
+
+    `direction=inbound` finds callers, `outbound` finds callees, `both` for all.
+    `mode=data_flow` follows value propagation; `cross_service` crosses HTTP/async
+    boundaries. Use for impact analysis, dependency tracing, "who calls this".
+
+    Parameters:
+    - function_name: function or method to trace from
+    - project: project name; omit to auto-resolve
+    - direction: inbound | outbound | both (default both)
+    - depth: max hops, 1-5 (default 3)
+    - mode: calls | data_flow | cross_service (default calls)
+    - risk_labels: add CRITICAL/HIGH/MEDIUM/LOW risk tiers by hop distance (default True)
+
+    Returns: graph trace response, or a graph-unavailable error if the graph
+    backend is disabled or failed to start
+    """
+    if not await _graph_available():
+        return _graph_unavailable()
+    req = GraphTraceRequest(
+        function_name=function_name,
+        project=project,
+        direction=direction,
+        depth=depth,
+        mode=mode,
+        risk_labels=risk_labels,
+    )
+    return await asyncio.to_thread(
+        graph_router.do_trace, graph_supervisor.get_client(), req
+    )
+
+
+@mcp.tool()
+@_log_tool_call
+async def marm_graph_architecture(
+    project: Optional[str] = None,
+) -> dict:
+    """
+    🏛️ High-level architecture overview: node/edge breakdown, modules, and schema.
+
+    One-shot orientation for a project — the de-facto module clusters, package
+    structure, and the graph schema (node labels + properties) folded in.
+
+    Parameters:
+    - project: project name; omit to auto-resolve
+
+    Returns: graph architecture response, or a graph-unavailable error if the
+    graph backend is disabled or failed to start
+    """
+    if not await _graph_available():
+        return _graph_unavailable()
+    req = GraphArchitectureRequest(project=project)
+    return await asyncio.to_thread(
+        graph_router.do_architecture, graph_supervisor.get_client(), req
+    )
+
+
+@mcp.tool()
+@_log_tool_call
+async def marm_graph_impact(
+    project: Optional[str] = None,
+    since: Optional[str] = None,
+    base_branch: str = "main",
+    depth: int = 2,
+) -> dict:
+    """
+    💥 Blast radius of code changes: git diff → affected symbols + risk.
+
+    Pass `since` (a git ref/date) or a `base_branch` to compare against. Returns
+    which symbols a change touches and how far the impact propagates.
+
+    Parameters:
+    - project: project name; omit to auto-resolve
+    - since: git ref or date to compare from, e.g. HEAD~5, v0.5.0 (optional)
+    - base_branch: base branch to diff against (default "main")
+    - depth: impact propagation depth, 1-5 (default 2)
+
+    Returns: graph impact response, or a graph-unavailable error if the graph
+    backend is disabled or failed to start
+    """
+    if not await _graph_available():
+        return _graph_unavailable()
+    req = GraphImpactRequest(
+        project=project, since=since, base_branch=base_branch, depth=depth
+    )
+    return await asyncio.to_thread(
+        graph_router.do_impact, graph_supervisor.get_client(), req
+    )
+
+
 def _is_graceful_teardown(exc: BaseException) -> bool:
     """Return True only if exc is safe to swallow as normal STDIO EOF teardown.
 
@@ -701,6 +899,14 @@ def _is_graceful_teardown(exc: BaseException) -> bool:
     return True
 
 
+def _stop_graph_supervisor_safely() -> None:
+    """Best-effort graph child-process shutdown; must not mask normal STDIO teardown."""
+    try:
+        graph_supervisor.stop()
+    except Exception as e:
+        _stdio_log.warning("graph shutdown failed: %s", e)
+
+
 def main() -> None:
     _stdio_log.info(
         "startup version=%s db=%s semantic_search=%s",
@@ -717,6 +923,7 @@ def main() -> None:
             return
         raise
     finally:
+        _stop_graph_supervisor_safely()
         _stdio_log.info("shutdown")
 
 

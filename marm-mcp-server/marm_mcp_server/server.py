@@ -251,7 +251,7 @@ async def lifespan(app: FastAPI):
     if _compaction_scheduler and _compaction_scheduler.running:
         _compaction_scheduler.shutdown(wait=False)
     await memory.stop_write_queue()
-    graph_supervisor.stop()
+    await asyncio.to_thread(graph_supervisor.stop)
     track_usage("server_shutdown")
 
 

@@ -279,7 +279,7 @@ MARM automatically categorizes content:
 | **📔 Notebook** | `marm_notebook` | Unified notebook management | `action="add"` saves entries, `action="use"` activates entries, `action="show"` lists saved entries, `action="status"` shows active entries, `action="clear"` clears active entries. `session_name` scopes active entries when needed |
 | **🔄 Workflow** | `marm_summary` | Generate cached, paste-ready session summaries with intelligent truncation | Create summaries for new conversations or context bridging |
 | **🧹 Maintenance** | `marm_compaction` | Agent-assisted memory compaction | `action="status"`, `"candidates"`, `"review"`, `"stage"`, `"apply"`, or `"discard"`. Used when MARM detects duplicate memory clusters and asks the agent to summarize them |
-| **🕸️ Code Graph** (bundled, HTTP only) | `marm_graph_index` | Index a repo into the code-structure graph, or check status / list indexed projects | `repo_path` to index, `project` to check status, omit both to list |
+| **🕸️ Code Graph** (bundled, HTTP + STDIO) | `marm_graph_index` | Index a repo into the code-structure graph, or check status / list indexed projects | `repo_path` to index, `project` to check status, omit both to list |
 | | `marm_code_lookup` | Find symbols, text patterns, or a symbol's source — use instead of grep/glob | `kind="auto"\|"symbol"\|"text"\|"snippet"` |
 | | `marm_graph_trace` | Trace call paths / data flow through the graph from a function | `direction="inbound"\|"outbound"\|"both"`, `mode="calls"\|"data_flow"\|"cross_service"` |
 | | `marm_graph_architecture` | High-level architecture overview: node/edge breakdown, modules, and schema | `project` (optional) |
@@ -287,7 +287,7 @@ MARM automatically categorizes content:
 
 **Internal automation:** lifecycle initialization, protocol delivery with periodic protocol-lite refresh, documentation refresh, current date context, summary-cache maintenance, serialized write queue handling, and system checks are no longer AI-facing tools. Documentation refresh uses `doc_index` hash tracking to avoid duplicate `marm_system` memories across restarts. Use the dashboard health panel for live server status, or `curl http://localhost:8001/health` for terminal checks.
 
-**Graph degraded mode:** the 5 code-graph tools start lazily on first use (first-run may download a ~269MB engine binary) and are always listed in `tools/list`, but they never affect the 7 core memory tools. If the graph engine fails to start (no network, disk full, schema drift) or `GRAPH_ENABLED=false` is set, graph tools return `{"status": "error", "message": "graph backend unavailable"}` while memory, logging, notebook, and compaction keep working normally.
+**Graph degraded mode:** the 5 code-graph tools start lazily on first use on both HTTP and STDIO (first-run may download a ~269MB engine binary) and are always listed in `tools/list`, but they never affect the 7 core memory tools. If the graph engine fails to start (no network, disk full, schema drift) or `GRAPH_ENABLED=false` is set, graph tools return `{"status": "error", "message": "graph backend unavailable"}` while memory, logging, notebook, and compaction keep working normally.
 
 **Code graph workflow:** first call `marm_graph_index(repo_path="...")` for the repository you want indexed. The response returns the project name the graph backend recognizes. After that, agents should use `marm_code_lookup` before broad file reads, `marm_graph_trace` when they need callers/callees or data-flow context, `marm_graph_architecture` for orientation, and `marm_graph_impact` before risky refactors. Re-index after meaningful code changes; the graph is local and does not replace normal memory logs.
 
@@ -417,7 +417,7 @@ The canonical FAQ lives in [marm-mcp-server/marm-docs/FAQ.md](marm-mcp-server/ma
 - Verify HTTP mode in the dashboard health panel, or with `curl http://localhost:8001/health`
 - Check server logs for initialization errors
 - Disconnect and reconnect AI client to refresh tool list
-- In HTTP mode, expect 12 tools: 7 core memory/logging/notebook/compaction tools plus 5 bundled code-graph tools. In STDIO mode, expect the 7 core tools only.
+- Both HTTP and STDIO expose 12 tools: 7 core memory/logging/notebook/compaction tools plus 5 bundled code-graph tools.
 
 #### Graph tools return `graph backend unavailable`
 

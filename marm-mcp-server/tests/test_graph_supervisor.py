@@ -46,11 +46,12 @@ _ALL_UPSTREAM_TOOLS = [
 class _FakeClient:
     """Stands in for CbmClient: same start()/list_tools()/close() surface."""
 
-    def __init__(self, tools=None, start_error=None):
+    def __init__(self, tools=None, start_error=None, close_error=None):
         self._tools = (
             tools if tools is not None else [{"name": n} for n in _ALL_UPSTREAM_TOOLS]
         )
         self._start_error = start_error
+        self._close_error = close_error
         self.server_version = "0.8.1-fake"
         self.started = False
         self.closed = False
@@ -65,6 +66,8 @@ class _FakeClient:
 
     def close(self):
         self.closed = True
+        if self._close_error:
+            raise self._close_error
 
 
 def test_graph_disabled_short_circuits_before_any_client_construction(monkeypatch):
@@ -247,6 +250,81 @@ def test_stop_closes_client_and_resets_state(monkeypatch):
 
     supervisor.stop()
     assert fake.closed is True
+    assert supervisor._client is None
+    assert supervisor._available is False
+
+
+def test_stop_resets_state_even_if_close_raises(monkeypatch):
+    """Regression: stop() used to mutate _client/_available/_ready only after
+    close() returned. A raising close() (e.g. the child already died) would
+    then skip that cleanup entirely, leaving is_available() claim True with
+    a dead/closing client still cached -- get_client() would hand callers a
+    client that's no longer usable. The reset must happen in a finally, so a
+    close() failure still leaves the supervisor in a clean not-started state.
+    """
+    gs = _fresh_gs()
+    monkeypatch.setattr(gs.mcp_settings, "GRAPH_ENABLED", True)
+    fake = _FakeClient(close_error=RuntimeError("child already dead"))
+    monkeypatch.setattr(gs, "CbmClient", lambda **kwargs: fake)
+
+    supervisor = gs.GraphSupervisor()
+    supervisor.is_available()
+    assert fake.started is True
+
+    with pytest.raises(RuntimeError, match="child already dead"):
+        supervisor.stop()
+
+    assert fake.closed is True  # close() was attempted
+    assert supervisor._client is None
+    assert supervisor._available is False
+    assert not supervisor._ready.is_set()
+
+
+def test_stop_during_inflight_startup_waits_and_leaves_consistent_state(
+    monkeypatch,
+):
+    """Regression: stop() used to mutate _client/_available/_ready without
+    the lock _ensure_started() uses. A stop() racing an in-flight startup
+    could interleave with that critical section and leave _available True
+    with _client None -- a caller's get_client() would then return None
+    while is_available() just said the backend was up. stop() must block on
+    the same lock until the in-flight startup resolves, then tear down
+    whatever it produced.
+    """
+    gs = _fresh_gs()
+    monkeypatch.setattr(gs.mcp_settings, "GRAPH_ENABLED", True)
+
+    entered = threading.Event()
+    release = threading.Event()
+
+    class _SlowFakeClient(_FakeClient):
+        def start(self):
+            entered.set()
+            assert release.wait(timeout=5), "test deadlocked waiting for release"
+            super().start()
+
+    fake = _SlowFakeClient()
+    monkeypatch.setattr(gs, "CbmClient", lambda **kwargs: fake)
+
+    supervisor = gs.GraphSupervisor()
+
+    starter = threading.Thread(target=supervisor.is_available)
+    starter.start()
+    assert entered.wait(timeout=5), "startup never reached the blocking call"
+
+    stopper = threading.Thread(target=supervisor.stop)
+    stopper.start()
+
+    # stop() must block on the same lock as _ensure_started(), not interleave
+    stopper.join(timeout=0.2)
+    assert stopper.is_alive(), "stop() proceeded before startup resolved"
+
+    release.set()
+    starter.join(timeout=5)
+    stopper.join(timeout=5)
+
+    assert fake.started is True  # the in-flight startup actually completed
+    assert fake.closed is True  # ...then stop() tore it down
     assert supervisor._client is None
     assert supervisor._available is False
 

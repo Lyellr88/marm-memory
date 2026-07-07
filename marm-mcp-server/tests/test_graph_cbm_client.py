@@ -132,9 +132,11 @@ def test_call_tool_missing_arg_raises_with_hint(client):
 def test_timeout_does_not_kill_child(binary, monkeypatch):
     """A slow-but-alive child must not be killed on timeout (finding 3):
     killing it mid-call would destroy in-flight work (e.g. a long index run)
-    and force a blind retry from zero. Force a timeout with an unreasonably
-    short call_timeout, then confirm the same process is still running and
-    still answers correctly once given a normal timeout.
+    and force a blind retry from zero. Force a deterministic timeout by
+    monkeypatching _send_recv (not a real short call_timeout racing against
+    actual IPC latency, which would make this test flaky), then confirm the
+    same process is still running and still answers correctly once given a
+    normal timeout.
     """
     c = CbmClient(command=[binary], startup_timeout=90, call_timeout=300)
     c.start()
