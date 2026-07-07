@@ -50,8 +50,24 @@ from .memory_ops import (
 )
 
 if SEMANTIC_SEARCH_AVAILABLE:
-    if importlib.util.find_spec("sentence_transformers") is None:
+    if importlib.util.find_spec("fastembed") is None:
         SEMANTIC_SEARCH_AVAILABLE = False
+
+
+class _FastEmbedEncoder:
+    """Adapts fastembed's batch/generator API to the .encode(text) shape
+    every caller in this codebase (and its tests) already expects from
+    SentenceTransformer -- both a single string and a list of strings."""
+
+    def __init__(self, model_name: str):
+        from fastembed import TextEmbedding
+
+        self._model = TextEmbedding(model_name=f"sentence-transformers/{model_name}")
+
+    def encode(self, text):
+        if isinstance(text, str):
+            return next(iter(self._model.embed([text])))
+        return list(self._model.embed(text))
 
 
 class MARMMemory:
@@ -180,9 +196,7 @@ class MARMMemory:
             self._encoder_loading = True
             _safe_print(f"Loading semantic search model ({DEFAULT_SEMANTIC_MODEL})...")
 
-            from sentence_transformers import SentenceTransformer
-
-            self.encoder = SentenceTransformer(DEFAULT_SEMANTIC_MODEL)
+            self.encoder = _FastEmbedEncoder(DEFAULT_SEMANTIC_MODEL)
 
             _safe_print("Semantic search model loaded successfully")
             return True

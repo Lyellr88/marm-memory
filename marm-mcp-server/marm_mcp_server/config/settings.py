@@ -38,13 +38,9 @@ def _safe_float(env_key: str, default: float) -> float:
         return default
 
 
-SEMANTIC_SEARCH_AVAILABLE = (
-    importlib.util.find_spec("sentence_transformers") is not None
-)
+SEMANTIC_SEARCH_AVAILABLE = importlib.util.find_spec("fastembed") is not None
 if not SEMANTIC_SEARCH_AVAILABLE:
-    print(
-        "WARNING: Semantic search not available. Install: pip install sentence-transformers"
-    )
+    print("WARNING: Semantic search not available. Install: pip install fastembed")
 
 SCHEDULER_AVAILABLE = importlib.util.find_spec("apscheduler") is not None
 if not SCHEDULER_AVAILABLE:

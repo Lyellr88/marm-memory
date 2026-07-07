@@ -33,7 +33,7 @@ dependencies = [
     "fastapi-mcp>=0.4.0",
     "uvicorn>=0.32.0",
     "pydantic>=2.9.2",
-    "sentence-transformers>=3.3.1",
+    "fastembed>=0.8.0,<1.0.0",
     "numpy>=2.1.2",
     "python-multipart>=0.0.12",
     "apscheduler>=3.10.4",
@@ -41,7 +41,6 @@ dependencies = [
     "structlog>=24.4.0",
     "httpx>=0.27.0",
     "packaging>=24.0,<27.0",
-    "torch>=1.13.0",
     "mcp>=1.26.0,<2.0.0",
     "codebase-memory-mcp==0.8.1",
 ]

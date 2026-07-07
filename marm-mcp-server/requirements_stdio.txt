@@ -1,11 +1,10 @@
 # Requirements for STDIO version (no FastAPI/uvicorn needed)
 mcp>=1.26.0,<2.0.0
 pydantic>=2.11.9,<3.0.0
-sentence-transformers>=5.1.0,<6.0.0
+fastembed>=0.8.0,<1.0.0
 numpy>=2.1.2,<3.0.0
 apscheduler>=3.10.4,<4.0.0
 psutil>=6.1.0,<8.0.0
 structlog>=24.4.0,<27.0.0
 packaging>=24.0,<27.0
-torch>=1.13.0
 codebase-memory-mcp==0.8.1

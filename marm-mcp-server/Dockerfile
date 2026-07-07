@@ -13,12 +13,7 @@ COPY marm_mcp_server ./marm_mcp_server
 COPY marm_graph ./marm_graph
 COPY marm_dashboard ./marm_dashboard
 RUN pip install --no-cache-dir --upgrade "wheel>=0.46.2" && \
-    printf 'torch==2.8.0+cpu\n' > /tmp/torch-constraints.txt && \
-    pip install --no-cache-dir --user --ignore-installed \
-      --index-url https://download.pytorch.org/whl/cpu \
-      --extra-index-url https://pypi.org/simple \
-      -c /tmp/torch-constraints.txt \
-      ".[docker-image]"
+    pip install --no-cache-dir --user ".[docker-image]"
 
 # Bake the pinned codebase-memory-mcp static binary into the image NOW, not at
 # runtime. The archive is downloaded directly from the upstream release,

@@ -124,7 +124,7 @@ def _touch_session(conn: sqlite3.Connection, session_name: str, timestamp: str) 
 
 def embeddings_package_available() -> bool:
     try:
-        import sentence_transformers  # noqa: F401
+        import fastembed  # noqa: F401
 
         return True
     except ImportError:
@@ -137,12 +137,14 @@ def _maybe_embedding(text: str) -> Optional[bytes]:
         return None
     try:
         if _ENCODER is None:
-            from sentence_transformers import SentenceTransformer
+            from fastembed import TextEmbedding
 
-            _ENCODER = SentenceTransformer(_SEMANTIC_MODEL)
+            _ENCODER = TextEmbedding(
+                model_name=f"sentence-transformers/{_SEMANTIC_MODEL}"
+            )
         import numpy as np
 
-        return _ENCODER.encode(text).astype(np.float32).tobytes()
+        return next(iter(_ENCODER.embed([text]))).astype(np.float32).tobytes()
     except Exception:
         _ENCODER_FAILED = True
         return None
