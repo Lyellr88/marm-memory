@@ -3,7 +3,7 @@
 ## Version 2 - MARM Protocol to Universal MCP Server Evolution
 
 <details>
-<summary><strong>July 6th, 2026: STDIO Graph Tool Parity (v2.17.x)</strong></summary>
+<summary><strong>July 6th, 2026: STDIO Graph Tool Parity (v2.17.1)</strong></summary>
 
 ### STDIO Transport
 
