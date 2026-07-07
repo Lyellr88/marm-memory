@@ -99,7 +99,7 @@ async def run(fts_weight: float) -> bool:
         if not encoder_ok:
             memory._encoder_failed = True
             print(
-                "NOTE: sentence-transformers not available — vector scores will be 0.00\n"
+                "NOTE: fastembed not available — vector scores will be 0.00\n"
             )
 
         for content in SEED_MEMORIES:

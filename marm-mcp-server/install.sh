@@ -32,11 +32,11 @@ install_deps() {
     
     echo "🧠 Pre-downloading AI models (this may take 2-3 minutes)..."
     python3 -c "
-from sentence_transformers import SentenceTransformer
+from fastembed import TextEmbedding
 import sys
 try:
     print('Downloading semantic model...')
-    SentenceTransformer('all-MiniLM-L6-v2')
+    list(TextEmbedding(model_name='sentence-transformers/all-MiniLM-L6-v2').embed(['warmup']))
     print('✅ AI models ready!')
 except Exception as e:
     print(f'⚠️  Model download failed: {e}')
