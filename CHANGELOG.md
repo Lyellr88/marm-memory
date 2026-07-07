@@ -118,6 +118,8 @@
 
 </details>
 
+---
+
 <details>
 <summary><strong>June 24th, 2026: Guided Setup & Email Signup Prompt (v2.15.0)</strong></summary>
 
