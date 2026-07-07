@@ -41,6 +41,26 @@ jobs:
           cd marm-mcp-server
           python validate_server_json.py
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Builds and loads the image locally (no push) so tests/test_docker_*.py's
+      # docker-marked tests have something to run against -- without this, their
+      # own _image_available() gate always skips them, since this is the only
+      # point in the pipeline before publish-docker-server actually builds and
+      # pushes the real image. Same tag docker_image's MARM_DOCKER_IMAGE default
+      # expects, and the same GHA cache scope publish-docker-server's later
+      # build reads from, so that build stays fast instead of starting cold.
+      - name: Build Docker image for docker-marked tests
+        uses: docker/build-push-action@v5
+        with:
+          context: marm-mcp-server
+          push: false
+          load: true
+          tags: lyellr88/marm-mcp-server:latest
+          cache-from: type=gha,scope=marm-mcp-server
+          cache-to: type=gha,scope=marm-mcp-server,mode=max
+
       - name: Run tests
         working-directory: marm-mcp-server
         run: python -m pytest tests/ -v
