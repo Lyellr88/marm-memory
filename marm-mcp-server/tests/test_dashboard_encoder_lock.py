@@ -29,12 +29,19 @@ class _SlowFakeTextEmbedding:
     instances_created = 0
     entered = threading.Event()
     release = threading.Event()
+    timed_out_waiting_for_release = False
 
     def __init__(self, model_name):
         type(self).instances_created += 1
         self.model_name = model_name
         type(self).entered.set()
-        assert type(self).release.wait(timeout=5), "test deadlocked waiting for release"
+        if not type(self).release.wait(timeout=5):
+            # Don't assert here: this runs inside _maybe_embedding's try block,
+            # so an AssertionError would be swallowed by its blanket
+            # `except Exception`, surfacing only as a confusing `None` result
+            # instead of the real "deadlocked" diagnostic. Record it and let
+            # the test body assert after joining both threads instead.
+            type(self).timed_out_waiting_for_release = True
 
     def embed(self, texts):
         for _ in texts:
@@ -46,6 +53,7 @@ def test_concurrent_embedding_calls_do_not_race_on_encoder_init(monkeypatch):
     _SlowFakeTextEmbedding.instances_created = 0
     _SlowFakeTextEmbedding.entered = threading.Event()
     _SlowFakeTextEmbedding.release = threading.Event()
+    _SlowFakeTextEmbedding.timed_out_waiting_for_release = False
 
     import fastembed
 
@@ -76,6 +84,9 @@ def test_concurrent_embedding_calls_do_not_race_on_encoder_init(monkeypatch):
     first.join(timeout=5)
     second.join(timeout=5)
 
+    assert not _SlowFakeTextEmbedding.timed_out_waiting_for_release, (
+        "test deadlocked waiting for release"
+    )
     assert _SlowFakeTextEmbedding.instances_created == 1
     assert len(results) == 2
     assert all(r is not None for r in results)
