@@ -3,6 +3,18 @@
 ## Version 2 - MARM Protocol to Universal MCP Server Evolution
 
 <details>
+<summary><strong>July 7th, 2026: Concept Graph (v2.19.0)</strong></summary>
+
+### New Tools
+
+- Added `marm_concept_build` and `marm_concept_recall` — extracts entities (concept/decision/pattern/error/tool, plus person/org/gpe/product/event from spaCy's NER) and co-occurrence relationships out of stored memory content, and lets an agent query them by name or as a "related to X" traversal. Optionally cross-links extracted entities to marm-graph code symbols when marm-graph is available and indexed for the project.
+- Runs entirely in-process — its own SQLite file (`~/.marm/index/marm_index.db`, own connection pool, never shares `memory.py`'s pool) and its own extraction pass, reading memory content directly (never through `marm_smart_recall`'s ranked/limited recall path). `marm_concept_build` is explicit/on-demand, not a live hook into the memory write path.
+- Optional dependency: base installs carry no spaCy. `pip install marm-mcp-server[concepts]` plus a separate `python -m spacy download en_core_web_sm` enables real extraction; without it, both tools stay registered and return `entities_extracted: 0` cleanly (same fail-open pattern as `SEMANTIC_SEARCH_AVAILABLE`).
+- Marm-mcp's discoverable tool count moves from 12 to 14 (HTTP and STDIO parity).
+
+</details>
+
+<details>
 <summary><strong>July 7th, 2026: Fastembed Embedding Backend (v2.18.0)</strong></summary>
 
 ### Semantic Search

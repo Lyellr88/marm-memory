@@ -48,6 +48,7 @@ from .core.graph_supervisor import graph_supervisor
 from .core.memory import memory
 from .core.rate_limiter import rate_limiter
 from .endpoints.compaction import router as compaction_router
+from .endpoints.concepts import router as concepts_router
 from .endpoints.graph import router as graph_router
 from .endpoints.logging import router as logging_router
 from .endpoints.memory import router as memory_router
@@ -517,6 +518,7 @@ app.include_router(memory_router)
 app.include_router(system_router)
 app.include_router(compaction_router)
 app.include_router(graph_router)
+app.include_router(concepts_router)
 
 _dashboard_app = get_dashboard_app()
 if _dashboard_app is not None:
@@ -540,6 +542,8 @@ MCP_TOOL_OPERATIONS = [
     "marm_graph_trace",
     "marm_graph_architecture",
     "marm_graph_impact",
+    "marm_concept_build",
+    "marm_concept_recall",
 ]
 
 mcp = FastApiMCP(app, include_operations=MCP_TOOL_OPERATIONS)

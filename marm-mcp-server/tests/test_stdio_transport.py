@@ -147,7 +147,9 @@ def test_stdio_handles_mcp_initialize_and_exposes_tools(tmp_path):
     assert "marm_graph_trace" in tool_names
     assert "marm_graph_architecture" in tool_names
     assert "marm_graph_impact" in tool_names
-    assert len(tools) == 12
+    assert "marm_concept_build" in tool_names
+    assert "marm_concept_recall" in tool_names
+    assert len(tools) == 14
 
 
 def test_stdio_delete_notebook_removes_entry_from_active_state(monkeypatch, tmp_path):

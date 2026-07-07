@@ -14,6 +14,7 @@ import asyncio
 import builtins
 import json
 import sys
+import time
 
 _real_print = builtins.print
 builtins.print = lambda *args, **kwargs: _real_print(
@@ -180,6 +181,11 @@ from marm_mcp_server.services.documentation import (  # noqa: E402
 from marm_mcp_server.utils.helpers import read_protocol_file, read_protocol_lite_file  # noqa: E402
 from marm_mcp_server.services.summary import generate_session_summary  # noqa: E402
 from marm_mcp_server.services.recall import smart_recall  # noqa: E402
+from marm_mcp_server.endpoints.concepts import (  # noqa: E402
+    _fetch_memory_rows,
+    _run_build,
+    _run_recall,
+)
 from marm_mcp_server.config.settings import (  # noqa: E402
     SERVER_VERSION,
     DEFAULT_DB_PATH,
@@ -875,6 +881,68 @@ async def marm_graph_impact(
     return await asyncio.to_thread(
         graph_router.do_impact, graph_supervisor.get_client(), req
     )
+
+
+@mcp.tool()
+@_log_tool_call
+async def marm_concept_build(
+    session_name: Optional[str] = None,
+    search_all: bool = False,
+    project: Optional[str] = None,
+) -> dict:
+    """
+    🕸️ Extract entities/relationships from memory content into the concept graph.
+
+    Scope with session_name or project for a targeted build, or pass
+    search_all=True for everything (row-capped). Links extracted entities to
+    marm-graph code symbols when available. Call this before marm_concept_recall
+    — there's no data until a build has run at least once.
+
+    Parameters:
+    - session_name: scope extraction to this session; omit with search_all=True
+    - search_all: extract across all sessions, row-capped (default False)
+    - project: scope extraction to this project (optional)
+
+    Returns: entities_extracted, relationships_created, code_links_created, duration_ms
+    """
+    start = time.monotonic()
+    try:
+        rows = await asyncio.to_thread(
+            _fetch_memory_rows, session_name, project, search_all
+        )
+        result = await asyncio.to_thread(_run_build, rows)
+    except Exception as e:
+        return {"status": "error", "message": f"Concept build failed: {e!s}"}
+    result["duration_ms"] = int((time.monotonic() - start) * 1000)
+    return result
+
+
+@mcp.tool()
+@_log_tool_call
+async def marm_concept_recall(
+    query: str,
+    session_name: Optional[str] = None,
+    limit: int = 10,
+) -> dict:
+    """
+    🔎 Search the concept graph: entities, their relationships, and linked code.
+
+    Query as a bare concept name for a lookup, or phrase it as "related to X"
+    to emphasize traversal — both route from query shape alone. Returns empty
+    lists (not an error) when marm_concept_build hasn't run yet or marm-graph
+    has no matching code symbols.
+
+    Parameters:
+    - query: concept name, or a "related to X" style ask
+    - session_name: scope to this session; omit to search across all (optional)
+    - limit: max entities/relationships returned, 1-100 (default 10)
+
+    Returns: entities, related_entities, linked_code
+    """
+    try:
+        return await asyncio.to_thread(_run_recall, query, session_name, limit)
+    except Exception as e:
+        return {"status": "error", "message": f"Concept recall failed: {e!s}"}
 
 
 def _is_graceful_teardown(exc: BaseException) -> bool:
