@@ -581,9 +581,9 @@ def check_dependencies():
 
     print("\nOptional Features:")
     if SEMANTIC_SEARCH_AVAILABLE:
-        print("OK Semantic search (sentence-transformers)")
+        print("OK Semantic search (fastembed)")
     else:
-        print("Semantic search disabled - install sentence-transformers")
+        print("Semantic search disabled - install fastembed")
 
     if SCHEDULER_AVAILABLE:
         print("OK Automation scheduler (apscheduler)")
@@ -780,9 +780,7 @@ def main():
     logger.info(
         "Feature status",
         semantic_search=(
-            "ENABLED"
-            if SEMANTIC_SEARCH_AVAILABLE
-            else "DISABLED - install sentence-transformers"
+            "ENABLED" if SEMANTIC_SEARCH_AVAILABLE else "DISABLED - install fastembed"
         ),
         scheduler=(
             "ENABLED" if SCHEDULER_AVAILABLE else "DISABLED - install apscheduler"
