@@ -99,11 +99,13 @@ class GraphSupervisor:
         the backend was up.
         """
         with self._lock:
-            if self._client is not None:
-                self._client.close()
-            self._client = None
-            self._available = False
-            self._ready.clear()
+            try:
+                if self._client is not None:
+                    self._client.close()
+            finally:
+                self._client = None
+                self._available = False
+                self._ready.clear()
 
 
 graph_supervisor = GraphSupervisor()
