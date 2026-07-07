@@ -1,4 +1,4 @@
-# MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.17.0
+# MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.17.1
 
 ## Table of Contents
 
@@ -155,8 +155,16 @@ docker run -d --name marm-mcp-server \
 
 # Step 3: connect client
 "agent" mcp add --transport http marm-memory http://localhost:8001/mcp --header "Authorization: Bearer your-generated-key"
+
+# PowerShell: set this before starting/restarting Codex
+$env:MARM_API_KEY="your-generated-key"
 codex mcp add marm-memory --url http://localhost:8001/mcp --bearer-token-env-var MARM_API_KEY
+
+# Quick auth smoke test
+curl -i -H "Authorization: Bearer $env:MARM_API_KEY" http://127.0.0.1:8001/mcp
 ```
+
+`--bearer-token-env-var` takes the environment variable name, not the raw key. Start or restart Codex from the same shell after setting `$env:MARM_API_KEY`. For local Docker smoke tests, `MARM_API_KEY=test` is fine and avoids shell escaping problems; use a generated key for real deployments. A `406 Not Acceptable` from the smoke-test `GET /mcp` means auth reached the MCP endpoint; `401 Unauthorized` means the key is missing or mismatched.
 
 </details>
 
@@ -176,7 +184,36 @@ docker run -d --name marm-mcp-server \
 </details>
 
 <details>
+<summary><strong>Docker graph indexing: mount the repo</strong></summary>
+
+Docker graph tools run inside the container, so they cannot see host paths unless you mount them at `docker run`.
+
+```powershell
+$env:MARM_API_KEY="test"
+
+docker run -d --name marm-mcp-server `
+  -p 127.0.0.1:8001:8001 `
+  -e SERVER_HOST=0.0.0.0 `
+  -e MARM_API_KEY=$env:MARM_API_KEY `
+  -v ~/.marm:/home/marm/.marm `
+  -v C:\Users\lyell\Desktop\MARM-Systems:/workspace/MARM-Systems `
+  lyellr88/marm-mcp-server:latest
+```
+
+Then index the container path, not the Windows host path:
+
+```text
+marm_graph_index(repo_path="/workspace/MARM-Systems")
+```
+
+Graph tools must use the container path. Mounts cannot be added to an already-running container; stop and restart the container with the repo mount when you want Docker graph indexing.
+
+</details>
+
+<details>
 <summary><strong>Docker STDIO (no HTTP key)</strong></summary>
+
+Docker STDIO includes the same built-in marm-graph tools; no extra image or install step is required.
 
 ```bash
 docker run --rm -i \
@@ -245,6 +282,7 @@ docker run -d --name marm-mcp-server \
 ```
 
 ## Complete MCP Tool Suite (12 Tools)
+
 
 **💡 Pro Tip:** You don't need to manually call these tools! Just tell your AI agent what you want in natural language:
 
