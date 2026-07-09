@@ -22,7 +22,7 @@ RESET = "\033[0m"
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SERVER_ROOT = PROJECT_ROOT / "marm-mcp-server"
-DASHBOARD_ROOT = PROJECT_ROOT / "marm-dashboard"
+DASHBOARD_ROOT = SERVER_ROOT / "marm_dashboard"
 CHANGELOG = PROJECT_ROOT / "CHANGELOG.md"
 
 CRITICAL_FILES = [
@@ -40,9 +40,7 @@ OCI_IDENTIFIER_FILES = [
 ]
 
 DASHBOARD_CRITICAL_FILES = [
-    DASHBOARD_ROOT / "marm_dashboard" / "__init__.py",
-    DASHBOARD_ROOT / "pyproject.toml",
-    DASHBOARD_ROOT / "Dockerfile",
+    DASHBOARD_ROOT / "__init__.py",
 ]
 
 DOC_ROOT = PROJECT_ROOT / "docs"
@@ -114,18 +112,11 @@ def discover_docs() -> list[Path]:
     server_readme = SERVER_ROOT / "README.md"
     if server_readme.exists():
         paths.append(server_readme)
-    # marm-dashboard/README.md
-    dash_readme = DASHBOARD_ROOT / "README.md"
-    if dash_readme.exists():
-        paths.append(dash_readme)
     return paths
 
 
 def discover_dashboard_docs() -> list[Path]:
-    paths: list[Path] = []
-    if (DASHBOARD_ROOT / "README.md").exists():
-        paths.append(DASHBOARD_ROOT / "README.md")
-    return paths
+    return []
 
 
 def scan_versions(path: Path, pattern: re.Pattern = VERSION_RE) -> list[VersionHit]:
@@ -226,7 +217,7 @@ def scan_latest_changelog_versions() -> list[VersionHit]:
 
 
 def current_dashboard_version() -> str:
-    init = DASHBOARD_ROOT / "marm_dashboard" / "__init__.py"
+    init = DASHBOARD_ROOT / "__init__.py"
     if not init.exists():
         raise FileNotFoundError(f"Dashboard __init__.py not found: {init}")
     for line in read_text(init).splitlines():
@@ -370,7 +361,7 @@ def main() -> int:
     parser.add_argument(
         "--dashboard",
         action="store_true",
-        help="Scan and sync the marm-dashboard package instead of the MCP server.",
+        help="Scan and sync the embedded marm_dashboard package instead of the MCP server.",
     )
     args = parser.parse_args()
     dashboard: bool = args.dashboard
@@ -378,7 +369,7 @@ def main() -> int:
     try:
         if dashboard:
             target_version = current_dashboard_version()
-            version_source = "marm-dashboard __init__.py"
+            version_source = "embedded marm_dashboard __init__.py"
         else:
             target_version = current_version_from_changelog()
             version_source = "first changelog entry"

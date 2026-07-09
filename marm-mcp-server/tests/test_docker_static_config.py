@@ -63,9 +63,9 @@ def test_dockerfile_and_compose_healthchecks_stay_in_sync():
 
 
 def test_dockerfile_runs_as_non_root_user():
-    assert re.search(
-        r"^USER\s+marm\s*$", DOCKERFILE, re.MULTILINE
-    ), "final image must drop to a non-root user before ENTRYPOINT"
+    assert re.search(r"^USER\s+marm\s*$", DOCKERFILE, re.MULTILINE), (
+        "final image must drop to a non-root user before ENTRYPOINT"
+    )
     # USER must appear before ENTRYPOINT, not just anywhere in the file.
     user_pos = DOCKERFILE.index("USER marm")
     entrypoint_pos = DOCKERFILE.index("ENTRYPOINT")
@@ -81,7 +81,7 @@ def test_dockerfile_expose_matches_settings_default_port():
 def test_compose_port_mapping_matches_dockerfile_expose():
     match = re.search(r'"(\d+):(\d+)"', COMPOSE)
     assert match, "docker-compose.yml has no port mapping"
-    host_port, container_port = match.groups()
+    _host_port, container_port = match.groups()
     assert int(container_port) == SERVER_PORT
 
 
@@ -172,9 +172,9 @@ def test_dockerignore_excludes_database_files_but_not_source():
     exclude real source directories that happen to share a name pattern."""
     assert "*.db" in DOCKERIGNORE
     for package_dir in ("marm_mcp_server", "marm_graph", "marm_dashboard"):
-        assert not re.search(
-            rf"^{package_dir}/?\s*$", DOCKERIGNORE, re.MULTILINE
-        ), f"{package_dir} must not be excluded from the build context"
+        assert not re.search(rf"^{package_dir}/?\s*$", DOCKERIGNORE, re.MULTILINE), (
+            f"{package_dir} must not be excluded from the build context"
+        )
 
 
 def test_dockerfile_healthcheck_uses_localhost_not_0_0_0_0():

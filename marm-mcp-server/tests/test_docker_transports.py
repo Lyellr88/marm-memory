@@ -247,9 +247,9 @@ def test_docker_healthcheck_status_becomes_healthy(docker_image, tmp_path):
                 break
             time.sleep(2)
 
-        assert (
-            status == "healthy"
-        ), f"container health status never became healthy (last: {status})"
+        assert status == "healthy", (
+            f"container health status never became healthy (last: {status})"
+        )
     finally:
         _run_docker(["rm", "-f", container], timeout=30)
 
@@ -452,8 +452,8 @@ def test_docker_stdio_tool_count_matches_http_registered_tools(docker_image, tmp
         if "id" in msg:
             responses[msg["id"]] = msg
 
-    assert (
-        2 in responses
-    ), f"No tools/list response; stderr: {result.stderr.decode('utf-8', errors='replace')[:500]}"
+    assert 2 in responses, (
+        f"No tools/list response; stderr: {result.stderr.decode('utf-8', errors='replace')[:500]}"
+    )
     tool_names = {t["name"] for t in responses[2]["result"]["tools"]}
     assert tool_names == set(MCP_TOOL_OPERATIONS)

@@ -31,6 +31,11 @@ CANONICAL_TOOLS = [
     "marm_summary",
     "marm_notebook",
     "marm_compaction",
+    "marm_graph_index",
+    "marm_code_lookup",
+    "marm_graph_trace",
+    "marm_graph_architecture",
+    "marm_graph_impact",
 ]
 
 # These are the surfaces that should stay synchronized with the full public
@@ -58,7 +63,6 @@ MENTION_SKIP_DIR_NAMES = {
     "__pycache__",
     "dist",
     "marm-bot-discord",
-    "marm-dashboard",
     "marm-demo",
     "node_modules",
     "project-architecture",
@@ -101,6 +105,8 @@ def resolve_rel(path_text: str) -> Path:
 def is_relevant_count_line(line: str) -> bool:
     lowered = line.lower()
     if "tool call" in lowered or "tool-call" in lowered:
+        return False
+    if "core mcp surface" in lowered or "core tools" in lowered:
         return False
     return bool(FULL_LIST_HEADING_RE.search(line))
 

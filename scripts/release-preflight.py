@@ -66,18 +66,25 @@ def main() -> int:
             True,
         ),
         (
-            "Stale docs scan",
-            [sys.executable, "scripts/scan-stale-docs.py"],
-            None,
-            False,
-        ),
-        (
             "Known-good test runner",
             [sys.executable, "scripts/run-tests.py"],
             None,
             True,
         ),
     ]
+    stale_docs_script = ROOT / "scripts" / "scan-stale-docs.py"
+    if stale_docs_script.exists():
+        steps.insert(
+            1,
+            (
+                "Stale docs scan",
+                [sys.executable, "scripts/scan-stale-docs.py"],
+                None,
+                False,
+            ),
+        )
+    else:
+        print(f"{YELLOW}Stale docs scan skipped; script not present.{RESET}")
 
     failed = False
     for name, command, input_text, required in steps:
