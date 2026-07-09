@@ -12,6 +12,7 @@ accuracy, so a fake ExtractionResult at that one boundary is appropriate
 import importlib
 import sys
 
+import numpy as np
 import pytest
 from conftest import load_isolated_server
 
@@ -288,6 +289,89 @@ def test_run_build_links_code_when_graph_available(concepts_env, monkeypatch):
     assert result["code_links_created"] == 1
 
 
+def test_run_build_reports_no_duplicates_when_embedding_unavailable(
+    concepts_env, monkeypatch
+):
+    """Default state: conftest.load_isolated_server forces _encoder_failed =
+    True for test isolation, so _try_embed fails open for real (not
+    simulated) and possible_duplicates stays empty rather than erroring."""
+    _server, concepts, _memory_module = concepts_env
+    from marm_mcp_server.core.concept_extraction import Entity, ExtractionResult
+
+    monkeypatch.setattr(
+        concepts,
+        "extract_entities",
+        lambda content: ExtractionResult(
+            entities=[Entity("auth module", "concept")], relationship_pairs=[]
+        ),
+    )
+    monkeypatch.setattr(concepts, "is_graph_available", lambda: False)
+
+    result = concepts._run_build([("m1", "auth module content", "sess-a", None)])
+    assert result["possible_duplicates"] == []
+
+
+def test_run_build_reports_possible_duplicate_when_similar_entity_exists(
+    concepts_env, monkeypatch
+):
+    """_try_embed monkeypatched at the module boundary (same convention as
+    extract_entities/find_code_match) with deterministic fake vectors --
+    exercises find_similar_entities' real SQL/numpy cosine logic without
+    depending on a real model being loadable."""
+    _server, concepts, _memory_module = concepts_env
+    from marm_mcp_server.core.concept_extraction import Entity, ExtractionResult
+
+    fake_vectors = {
+        "Auth": np.asarray([1.0, 0.0, 0.0], dtype=np.float32).tobytes(),
+        "OAuth": np.asarray([0.99, 0.01, 0.0], dtype=np.float32).tobytes(),
+    }
+    monkeypatch.setattr(concepts, "_try_embed", lambda name: fake_vectors[name])
+    monkeypatch.setattr(concepts, "is_graph_available", lambda: False)
+
+    extraction_by_content = {
+        "Auth content": ExtractionResult(
+            entities=[Entity("Auth", "concept")], relationship_pairs=[]
+        ),
+        "OAuth content": ExtractionResult(
+            entities=[Entity("OAuth", "concept")], relationship_pairs=[]
+        ),
+    }
+    monkeypatch.setattr(
+        concepts, "extract_entities", lambda content: extraction_by_content[content]
+    )
+
+    rows = [
+        ("m1", "Auth content", "sess-a", None),
+        ("m2", "OAuth content", "sess-a", None),
+    ]
+    result = concepts._run_build(rows)
+
+    assert len(result["possible_duplicates"]) == 1
+    dup = result["possible_duplicates"][0]
+    assert dup["entity"] == "OAuth"
+    assert dup["candidates"][0]["name"] == "Auth"
+    assert dup["candidates"][0]["similarity"] >= 0.9
+
+
+def test_try_embed_real_fastembed_end_to_end(concepts_env):
+    """The one place real-model coverage is actually possible in this
+    sandbox for Goal 3 -- fastembed itself is installed (unlike spaCy's
+    en_core_web_sm), but its model weights are also network-blocked here
+    (confirmed: 403 on download), so this dynamically skips rather than
+    asserting a specific outcome if loading genuinely isn't possible in the
+    current environment."""
+    _server, concepts, memory_module = concepts_env
+    memory_module.memory._encoder_failed = False
+    memory_module.memory.encoder = None
+
+    emb_bytes = concepts._try_embed("auth module")
+    if emb_bytes is None:
+        pytest.skip("fastembed model weights not downloadable in this sandbox")
+
+    assert isinstance(emb_bytes, bytes)
+    assert len(emb_bytes) % 4 == 0  # whole number of float32 values
+
+
 def test_run_recall_lookup_mode_returns_matching_entities(concepts_env):
     _server, concepts, memory_module = concepts_env
     concept_db = concepts._get_concept_db()
@@ -318,10 +402,10 @@ def test_run_recall_returns_related_entities_from_relationships(concepts_env):
     _server, concepts, memory_module = concepts_env
     concept_db = concepts._get_concept_db()
     with concept_db.get_connection() as conn:
-        id_a = concept_db.get_or_create_entity(
+        id_a, _ = concept_db.get_or_create_entity(
             conn, "auth module", "concept", "sess-a", None, "m1"
         )
-        id_b = concept_db.get_or_create_entity(
+        id_b, _ = concept_db.get_or_create_entity(
             conn, "rate limiter", "pattern", "sess-a", None, "m1"
         )
         concept_db.store_relationship(conn, id_a, id_b, "co_occurs_with", "m1", None)
@@ -347,7 +431,7 @@ def test_run_recall_on_entity_with_code_match_populates_linked_code(concepts_env
     _server, concepts, memory_module = concepts_env
     concept_db = concepts._get_concept_db()
     with concept_db.get_connection() as conn:
-        entity_id = concept_db.get_or_create_entity(
+        entity_id, _ = concept_db.get_or_create_entity(
             conn, "CbmClient", "concept", "sess-a", "proj-a", "m1"
         )
         concept_db.store_code_link(

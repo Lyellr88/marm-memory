@@ -16,12 +16,15 @@ from typing import Optional
 
 from fastapi import APIRouter
 
-from ..config.settings import CONCEPT_BUILD_ROW_CAP
+from ..config.settings import (
+    CONCEPT_BUILD_ROW_CAP,
+    CONCEPT_DUPLICATE_SIMILARITY_THRESHOLD,
+)
 from ..core.concept_db import ConceptDB
 from ..core.concept_extraction import extract_entities
 from ..core.graph_client import find_code_match, is_graph_available
 from ..core.memory import memory
-from ..core.memory_utils import _safe_print
+from ..core.memory_utils import _embedding_to_bytes, _safe_print
 from ..core.models import ConceptBuildRequest, ConceptRecallRequest
 
 router = APIRouter(prefix="", tags=["Concepts"])
@@ -95,12 +98,32 @@ def _fetch_memory_rows(
         return conn.execute(query, params).fetchall()
 
 
+def _try_embed(name: str) -> Optional[bytes]:
+    """Best-effort entity-name embedding for duplicate-candidate detection.
+    None on any failure -- fail-open, matching find_code_match's soft-fail
+    contract. This is the first place the concept graph reaches into
+    memory._encoder_lock (core/memory.py:178-181, fully serialized
+    process-wide) -- a large search_all=True build embedding many new
+    entity names now competes for encoder time with concurrent
+    marm_smart_recall/memory-write calls, a new cross-feature coupling
+    that didn't exist before (spaCy extraction was fully independent of
+    the memory-write path)."""
+    if not memory._load_encoder_lazily():
+        return None
+    try:
+        return _embedding_to_bytes(memory._encode_sync(name))
+    except Exception as e:
+        _safe_print(f"Concept entity embedding failed for {name!r}: {e}")
+        return None
+
+
 def _run_build(rows: list[tuple[str, str, Optional[str], Optional[str]]]) -> dict:
     concept_db = _get_concept_db()
     entities_extracted = 0
     relationships_created = 0
     code_links_created = 0
     graph_available = is_graph_available()
+    possible_duplicates: list[dict] = []
 
     with concept_db.get_connection() as conn:
         for mem_id, content, mem_session, mem_project in rows:
@@ -112,15 +135,40 @@ def _run_build(rows: list[tuple[str, str, Optional[str], Optional[str]]]) -> dic
 
             name_to_id: dict[str, int] = {}
             for entity in result.entities:
+                emb_bytes = _try_embed(entity.name)
                 try:
-                    entity_id = concept_db.get_or_create_entity(
-                        conn, entity.name, entity.type, mem_session, mem_project, mem_id
+                    entity_id, was_created = concept_db.get_or_create_entity(
+                        conn,
+                        entity.name,
+                        entity.type,
+                        mem_session,
+                        mem_project,
+                        mem_id,
+                        name_embedding=emb_bytes,
                     )
                 except Exception as e:
                     _safe_print(f"Concept entity write failed for memory {mem_id}: {e}")
                     continue
                 name_to_id[entity.name] = entity_id
                 entities_extracted += 1
+
+                if was_created and emb_bytes is not None:
+                    try:
+                        candidates = concept_db.find_similar_entities(
+                            conn,
+                            emb_bytes,
+                            mem_session,
+                            mem_project,
+                            CONCEPT_DUPLICATE_SIMILARITY_THRESHOLD,
+                            exclude_id=entity_id,
+                        )
+                    except Exception as e:
+                        _safe_print(f"Concept duplicate-candidate scan failed: {e}")
+                        candidates = []
+                    if candidates:
+                        possible_duplicates.append(
+                            {"entity": entity.name, "candidates": candidates}
+                        )
 
             for name_a, name_b, predicate in result.relationship_pairs:
                 id_a = name_to_id.get(name_a)
@@ -165,6 +213,7 @@ def _run_build(rows: list[tuple[str, str, Optional[str], Optional[str]]]) -> dic
         "entities_extracted": entities_extracted,
         "relationships_created": relationships_created,
         "code_links_created": code_links_created,
+        "possible_duplicates": possible_duplicates,
     }
 
 

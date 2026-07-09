@@ -211,6 +211,22 @@ if _raw_cbc < 1:
         file=sys.stderr,
     )
 
+# Starting point to tune from real usage, not a validated-forever constant --
+# fastembed's model is tuned for sentence-length input; behavior on single-
+# word/short-phrase entity names is less validated than on the full-memory-
+# content strings this encoder already handles elsewhere. Same band as this
+# codebase's two existing analogous "is this basically the same thing"
+# embedding thresholds (CONSOLIDATION_THRESHOLD=0.92, COMPACTION_SIMILARITY_
+# THRESHOLD=0.88).
+_raw_cdst = _safe_float("CONCEPT_DUPLICATE_SIMILARITY_THRESHOLD", 0.90)
+CONCEPT_DUPLICATE_SIMILARITY_THRESHOLD = max(0.0, min(1.0, _raw_cdst))
+if not (0.0 <= _raw_cdst <= 1.0):
+    print(
+        f"WARNING: CONCEPT_DUPLICATE_SIMILARITY_THRESHOLD={_raw_cdst} out of [0, 1], "
+        f"clamped to {CONCEPT_DUPLICATE_SIMILARITY_THRESHOLD}",
+        file=sys.stderr,
+    )
+
 _raw_hsw = _safe_float("HYBRID_SEARCH_TEXT_WEIGHT", 0.35)
 _raw_tw = _safe_float("TEMPORAL_WEIGHT", 0.1)
 _raw_hld = _safe_float("TEMPORAL_HALF_LIFE_DAYS", 30)
@@ -379,8 +395,8 @@ if SERVER_HOST == "0.0.0.0" and not MARM_API_KEY and not _is_generate_key_cmd:
             pass
         if sys.platform == "win32":
             try:
-                import subprocess
                 import getpass
+                import subprocess
 
                 user = getpass.getuser()
                 subprocess.run(
