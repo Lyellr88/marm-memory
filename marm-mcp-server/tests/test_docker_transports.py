@@ -96,6 +96,16 @@ def test_docker_http_requires_key_and_serves_tools(docker_image, tmp_path):
         assert ready.status_code == 200
         assert "websocket" not in ready.text.lower()
 
+        openapi = requests.get(f"{base_url}/openapi.json", timeout=5)
+        assert openapi.status_code == 200
+        operation_ids = {
+            operation.get("operationId")
+            for path_item in openapi.json()["paths"].values()
+            for operation in path_item.values()
+            if isinstance(operation, dict)
+        }
+        assert set(MCP_TOOL_OPERATIONS).issubset(operation_ids)
+
         missing_auth = requests.get(
             f"{base_url}/marm_log_show", params={"session_name": "main"}, timeout=5
         )
@@ -145,6 +155,41 @@ def test_docker_stdio_import_keeps_stdout_clean(docker_image, tmp_path):
 
     assert result.returncode == 0, result.stderr
     assert result.stdout == ""
+
+
+def test_docker_env_passthrough_reaches_runtime_settings(docker_image, tmp_path):
+    """Environment variables passed to docker run must reach Python settings.
+
+    This catches regressions where the image entrypoint or packaging path stops
+    honoring documented runtime knobs such as MARM_DB_PATH and WRITE_QUEUE_ENABLED.
+    """
+    custom_db = "/home/marm/.marm/custom-env-test.db"
+    result = _run_docker(
+        [
+            "run",
+            "--rm",
+            "-i",
+            "-v",
+            f"{tmp_path}:/home/marm/.marm",
+            "-e",
+            f"MARM_DB_PATH={custom_db}",
+            "-e",
+            "WRITE_QUEUE_ENABLED=0",
+            "--entrypoint",
+            "python",
+            docker_image,
+            "-c",
+            (
+                "from marm_mcp_server.config.settings import "
+                "DEFAULT_DB_PATH, WRITE_QUEUE_ENABLED; "
+                f"assert DEFAULT_DB_PATH == {custom_db!r}; "
+                "assert WRITE_QUEUE_ENABLED is False"
+            ),
+        ],
+        timeout=60,
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 def test_docker_runs_as_non_root_user(docker_image):
@@ -242,6 +287,45 @@ def test_docker_dashboard_mounted_and_reachable(docker_image, tmp_path):
         response = requests.get(f"{base_url}/dashboard/health", timeout=5)
         assert response.status_code == 200
         assert response.json()["status"] == "ok"
+    finally:
+        _run_docker(["rm", "-f", container], timeout=30)
+
+
+def test_docker_http_container_stops_gracefully(docker_image, tmp_path):
+    """SIGTERM from docker stop should shut down the HTTP server cleanly."""
+    container = f"marm-test-stop-{uuid.uuid4().hex[:10]}"
+    port = _free_port()
+
+    run = _run_docker(
+        [
+            "run",
+            "-d",
+            "--name",
+            container,
+            "-p",
+            f"127.0.0.1:{port}:8001",
+            "-e",
+            "SERVER_HOST=0.0.0.0",
+            "-e",
+            "MARM_API_KEY=TestStopKey_12345#abcDEF",
+            "-v",
+            f"{tmp_path}:/home/marm/.marm",
+            docker_image,
+        ],
+        timeout=90,
+    )
+    assert run.returncode == 0, run.stderr
+
+    try:
+        _wait_for_health(f"http://127.0.0.1:{port}")
+        stopped = _run_docker(["stop", "-t", "10", container], timeout=30)
+        assert stopped.returncode == 0, stopped.stderr
+
+        inspect = _run_docker(
+            ["inspect", "--format={{.State.ExitCode}}", container], timeout=20
+        )
+        assert inspect.returncode == 0, inspect.stderr
+        assert inspect.stdout.strip() == "0"
     finally:
         _run_docker(["rm", "-f", container], timeout=30)
 

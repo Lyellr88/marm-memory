@@ -14,7 +14,7 @@ settings.py's default, etc.
 import re
 from pathlib import Path
 
-from marm_mcp_server.config.settings import SERVER_PORT
+from marm_mcp_server.config.settings import SERVER_PORT, SERVER_VERSION
 from marm_mcp_server.server import MCP_TOOL_OPERATIONS
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -83,6 +83,12 @@ def test_compose_port_mapping_matches_dockerfile_expose():
     assert match, "docker-compose.yml has no port mapping"
     host_port, container_port = match.groups()
     assert int(container_port) == SERVER_PORT
+
+
+def test_compose_server_version_matches_runtime_settings():
+    match = re.search(r"SERVER_VERSION=([^\s]+)", COMPOSE)
+    assert match, "docker-compose.yml has no SERVER_VERSION env entry"
+    assert match.group(1) == SERVER_VERSION
 
 
 def test_dockerfile_label_tool_count_matches_registered_tools():

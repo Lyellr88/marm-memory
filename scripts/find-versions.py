@@ -32,6 +32,7 @@ CRITICAL_FILES = [
     SERVER_ROOT / "pyproject.toml",
     SERVER_ROOT / "server.json",
     SERVER_ROOT / "Dockerfile",
+    SERVER_ROOT / "docker-compose.yml",
 ]
 
 OCI_IDENTIFIER_FILES = [

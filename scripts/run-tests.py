@@ -18,8 +18,6 @@ RESET = "\033[0m"
 ROOT = Path(__file__).resolve().parent.parent
 SERVER_ROOT = ROOT / "marm-mcp-server"
 TESTS_ROOT = SERVER_ROOT / "tests"
-DASHBOARD_ROOT = ROOT / "marm-dashboard"
-DASHBOARD_TESTS_ROOT = DASHBOARD_ROOT / "tests"
 BASE_TEMP = Path(r"C:\tmp\marm-pytest") if os.name == "nt" else Path("/tmp/marm-pytest")
 FAST_TEMP_ROOT = SERVER_ROOT / ".pytest_tmp_fast"
 DOCKER_IMAGE = "lyellr88/marm-mcp-server:latest"
@@ -73,7 +71,7 @@ def docker_available() -> bool:
 
 def pytest_base_command(args: argparse.Namespace) -> list[str]:
     command = [sys.executable, "-m", "pytest", "-q", "--tb=short"]
-    if not args.project_addopts and not args.db:
+    if not args.project_addopts:
         # pyproject.toml sets --basetemp=.pytest_tmp globally. Fast local runs
         # intentionally bypass that cleanup cost unless --clean-temp/--full is used.
         command.extend(["-o", "addopts="])
@@ -85,19 +83,14 @@ def pytest_base_command(args: argparse.Namespace) -> list[str]:
     if args.last_failed:
         command.append("--lf")
     marker_filters = []
-    if not args.docker:
+    include_docker = args.docker or args.slow
+    if not include_docker:
         marker_filters.append("not docker")
     if not args.slow:
         marker_filters.append("not slow_stdio")
     if marker_filters:
         command.extend(["-m", " and ".join(marker_filters)])
     return command
-
-
-def run_pytest_dashboard(args: argparse.Namespace) -> bool:
-    command = pytest_base_command(args)
-    command.append("tests")
-    return run_step("Dashboard pytest suite", command, DASHBOARD_ROOT)
 
 
 def run_pytest_all(args: argparse.Namespace) -> bool:
@@ -126,7 +119,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--slow",
         action="store_true",
-        help="Include slow subprocess STDIO transport tests.",
+        help=(
+            "Include slow subprocess STDIO tests and Docker tests. Docker tests "
+            "skip themselves if Docker or the local image is unavailable."
+        ),
     )
     parser.add_argument(
         "--compile",
@@ -158,37 +154,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Use pytest addopts from pyproject.toml instead of clearing them.",
     )
-    parser.add_argument(
-        "--db",
-        action="store_true",
-        help="Run marm-dashboard tests instead of marm-mcp-server tests.",
-    )
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
-
-    if args.db:
-        if not DASHBOARD_ROOT.exists():
-            print(f"{RED}Dashboard folder not found: {DASHBOARD_ROOT}{RESET}")
-            return 1
-        if not DASHBOARD_TESTS_ROOT.exists():
-            print(
-                f"{RED}Dashboard tests folder not found: {DASHBOARD_TESTS_ROOT}{RESET}"
-            )
-            return 1
-        if args.compile and not run_compile_check(
-            DASHBOARD_ROOT, "marm_dashboard", "tests"
-        ):
-            print(f"\n{RED}Test runner failed.{RESET}")
-            return 1
-        ok = run_pytest_dashboard(args)
-        if not ok:
-            print(f"\n{RED}Test runner failed.{RESET}")
-            return 1
-        print(f"\n{GREEN}All dashboard test checks passed.{RESET}")
-        return 0
 
     if not SERVER_ROOT.exists():
         print(f"{RED}MCP server folder not found: {SERVER_ROOT}{RESET}")
@@ -201,12 +171,20 @@ def main() -> int:
                 f"skipping docker-marked tests.{RESET}"
             )
             args.docker = False
+    elif args.slow:
+        if not docker_available():
+            print(
+                f"{YELLOW}Slow mode includes Docker tests, but Docker/image is "
+                f"unavailable; docker-marked tests will skip.{RESET}"
+            )
     else:
         print(
             f"{YELLOW}Docker tests skipped by default. Use --docker to include them.{RESET}"
         )
 
-    if args.compile and not run_compile_check(SERVER_ROOT, "marm_mcp_server", "tests"):
+    if args.compile and not run_compile_check(
+        SERVER_ROOT, "marm_mcp_server", "marm_dashboard", "marm_graph", "tests"
+    ):
         print(f"\n{RED}Test runner failed.{RESET}")
         return 1
 
