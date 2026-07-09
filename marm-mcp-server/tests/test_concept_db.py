@@ -5,6 +5,7 @@ ConceptDB's real connection pool.
 
 import json
 import sqlite3
+import threading
 
 import numpy as np
 import pytest
@@ -45,6 +46,56 @@ def test_get_or_create_entity_dedups_same_name_session_project(concept_db):
 
     assert count == 1
     assert json.loads(row[0]) == ["mem-1", "mem-2"]
+
+
+def test_get_or_create_entity_concurrent_appends_lose_no_memory_id(concept_db):
+    """Real-thread regression for the lost-update race: the re-mention
+    branch used to be a Python read-modify-write (SELECT source_memory_ids,
+    json.loads, append, json.dumps, UPDATE). Two connections racing on that
+    pattern can both read the same array, append different memory_ids, and
+    whichever UPDATE commits last silently discards the other's append.
+    json_insert's atomic SQL-side append (with a NOT EXISTS dedup guard)
+    closes this -- each worker gets its own real pooled connection and a
+    barrier maximizes actual overlap, not just interleaved Python bytecode."""
+    with concept_db.get_connection() as conn:
+        concept_db.get_or_create_entity(
+            conn, "auth module", "concept", "sess-1", "proj-a", "seed"
+        )
+
+    n_workers = 8
+    barrier = threading.Barrier(n_workers)
+    errors = []
+
+    def worker(i):
+        try:
+            barrier.wait(timeout=5)
+            with concept_db.get_connection() as conn:
+                concept_db.get_or_create_entity(
+                    conn, "auth module", "concept", "sess-1", "proj-a", f"mem-{i}"
+                )
+        except Exception as e:
+            errors.append(e)
+
+    threads = [threading.Thread(target=worker, args=(i,)) for i in range(n_workers)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join(timeout=10)
+
+    assert not errors, errors
+
+    with concept_db.get_connection() as conn:
+        row = conn.execute(
+            "SELECT source_memory_ids FROM entities WHERE name = 'auth module'"
+        ).fetchone()
+        count = conn.execute(
+            "SELECT COUNT(*) FROM entities WHERE name = 'auth module'"
+        ).fetchone()[0]
+
+    assert count == 1
+    source_ids = json.loads(row[0])
+    assert set(source_ids) == {"seed", *[f"mem-{i}" for i in range(n_workers)]}
+    assert len(source_ids) == n_workers + 1  # no dupes, nothing dropped
 
 
 def test_get_or_create_entity_dedups_when_session_and_project_are_both_null(

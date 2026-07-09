@@ -158,7 +158,15 @@ class ConceptDB:
         TOCTOU race under concurrent builds sharing a scope: two connections
         can both SELECT (no row found) before either INSERTs, and idx_entities_dedup
         (or the table-level UNIQUE, for non-NULL session_name/project) only
-        stops one of the two INSERTs, not both from being attempted."""
+        stops one of the two INSERTs, not both from being attempted.
+
+        The re-mention branch's append is a single atomic UPDATE via SQLite's
+        JSON1 extension (json_insert/json_each), not a Python read-modify-
+        write -- two connections both reading the same source_memory_ids
+        array, appending different memory_ids, and whichever UPDATE commits
+        last silently discarding the other's append was the same class of
+        race as the INSERT-side one above, just on the re-mention path
+        instead of the first-mention path."""
         cursor = conn.execute(
             "INSERT OR IGNORE INTO entities "
             "(name, type, session_name, project, source_memory_ids, name_embedding) "
@@ -175,20 +183,21 @@ class ConceptDB:
         was_created = cursor.rowcount > 0
 
         row = conn.execute(
-            "SELECT id, source_memory_ids FROM entities "
+            "SELECT id FROM entities "
             "WHERE name = ? AND session_name IS ? AND project IS ?",
             (name, session_name, project),
         ).fetchone()
-        entity_id, source_ids_json = row
+        entity_id = row[0]
 
         if not was_created:
-            source_ids = json.loads(source_ids_json)
-            if memory_id not in source_ids:
-                source_ids.append(memory_id)
-                conn.execute(
-                    "UPDATE entities SET source_memory_ids = ? WHERE id = ?",
-                    (json.dumps(source_ids), entity_id),
-                )
+            conn.execute(
+                "UPDATE entities SET source_memory_ids = "
+                "json_insert(source_memory_ids, '$[#]', ?) "
+                "WHERE id = ? AND NOT EXISTS ("
+                "  SELECT 1 FROM json_each(entities.source_memory_ids) WHERE value = ?"
+                ")",
+                (memory_id, entity_id, memory_id),
+            )
 
         return entity_id, was_created
 

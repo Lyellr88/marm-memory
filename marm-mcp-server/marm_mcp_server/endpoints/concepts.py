@@ -60,6 +60,12 @@ def _get_concept_db() -> ConceptDB:
     return _concept_db
 
 
+_MISSING_BUILD_SCOPE_MESSAGE = (
+    "marm_concept_build requires session_name, project, or "
+    "search_all=True to scope the build."
+)
+
+
 def _fetch_memory_rows(
     session_name: Optional[str], project: Optional[str], search_all: bool
 ) -> list[tuple[str, str, Optional[str], Optional[str]]]:
@@ -71,10 +77,7 @@ def _fetch_memory_rows(
     in the DB (up to the row cap), making search_all's "explicit opt-in for
     everything" meaningless."""
     if not (session_name or project or search_all):
-        raise ValueError(
-            "marm_concept_build requires session_name, project, or "
-            "search_all=True to scope the build."
-        )
+        raise ValueError(_MISSING_BUILD_SCOPE_MESSAGE)
 
     conditions = [
         "session_name != 'marm_system'",
@@ -401,8 +404,13 @@ async def marm_concept_build(req: ConceptBuildRequest) -> dict:
             _fetch_memory_rows, req.session_name, req.project, req.search_all
         )
         result = await asyncio.to_thread(_run_build, rows)
-    except ValueError as e:
-        return {"status": "error", "message": str(e)}
+    except ValueError:
+        # _fetch_memory_rows raises exactly one ValueError, always this
+        # static, safe-to-surface message -- return the known-good literal
+        # rather than str(e), so the response never carries a live exception
+        # object (CodeQL: exception-info-exposure) even if this branch is
+        # ever reached by a different ValueError in the future.
+        return {"status": "error", "message": _MISSING_BUILD_SCOPE_MESSAGE}
     except Exception as e:
         # HTTP-facing route body -- log server-side via structured logging
         # rather than interpolating exception text into a plain print/f-string

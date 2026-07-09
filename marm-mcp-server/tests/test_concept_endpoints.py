@@ -9,6 +9,7 @@ accuracy, so a fake ExtractionResult at that one boundary is appropriate
 (testing-philosophy.md: mock only where it doesn't weaken what's being tested).
 """
 
+import asyncio
 import importlib
 import sys
 
@@ -65,6 +66,35 @@ def test_fetch_memory_rows_requires_explicit_scope(concepts_env):
     _server, concepts, _memory_module = concepts_env
     with pytest.raises(ValueError, match="session_name, project, or search_all"):
         concepts._fetch_memory_rows(session_name=None, project=None, search_all=False)
+
+
+def test_marm_concept_build_route_returns_static_message_on_missing_scope(
+    concepts_env,
+):
+    """The HTTP route's ValueError handler must return the known-good
+    literal, not str(e) -- regression coverage for the CodeQL
+    exception-info-exposure fix: same response text as before, but no
+    longer built from a live exception object.
+
+    ConceptBuildRequest's own model_validator already rejects this same
+    input at the pydantic layer (a different message, enforced before the
+    route body ever runs), so _fetch_memory_rows' runtime ValueError is
+    unreachable via a normally-constructed request -- model_construct
+    bypasses that validation to exercise the route's own except-ValueError
+    handling directly, same as it would need to if _fetch_memory_rows'
+    check were ever the only guard left."""
+    _server, concepts, _memory_module = concepts_env
+    from marm_mcp_server.core.models import ConceptBuildRequest
+
+    req = ConceptBuildRequest.model_construct(
+        session_name=None, project=None, search_all=False
+    )
+    result = asyncio.run(concepts.marm_concept_build(req))
+
+    assert result == {
+        "status": "error",
+        "message": concepts._MISSING_BUILD_SCOPE_MESSAGE,
+    }
 
 
 def test_fetch_memory_rows_excludes_marm_system_session(concepts_env):
