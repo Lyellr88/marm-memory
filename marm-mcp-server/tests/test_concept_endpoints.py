@@ -415,6 +415,155 @@ def test_run_recall_returns_related_entities_from_relationships(concepts_env):
     assert "rate limiter" in related_names
 
 
+# ── Goal 2: multi-hop traversal ──────────────────────────────────────
+
+
+def _build_chain_graph(concept_db, conn):
+    """A -> B -> C, plus a D -> A back-edge to make a genuine cycle
+    (A -> B -> C, D -> A) without any entity pointing directly at itself."""
+    id_a, _ = concept_db.get_or_create_entity(
+        conn, "A", "concept", "sess-a", None, "m1"
+    )
+    id_b, _ = concept_db.get_or_create_entity(
+        conn, "B", "concept", "sess-a", None, "m1"
+    )
+    id_c, _ = concept_db.get_or_create_entity(
+        conn, "C", "concept", "sess-a", None, "m1"
+    )
+    id_d, _ = concept_db.get_or_create_entity(
+        conn, "D", "concept", "sess-a", None, "m1"
+    )
+    concept_db.store_relationship(conn, id_a, id_b, "uses", "m1", None)
+    concept_db.store_relationship(conn, id_b, id_c, "uses", "m1", None)
+    concept_db.store_relationship(conn, id_d, id_a, "uses", "m1", None)
+    return id_a, id_b, id_c, id_d
+
+
+def test_traverse_depth_1_reproduces_one_hop_behavior(concepts_env):
+    _server, concepts, _memory_module = concepts_env
+    concept_db = concepts._get_concept_db()
+    with concept_db.get_connection() as conn:
+        id_a, id_b, id_c, id_d = _build_chain_graph(concept_db, conn)
+        results = concepts._traverse(conn, [id_a], depth=1, direction="both", limit=10)
+
+    names = {r["name"] for r in results}
+    assert names == {"B", "D"}  # A's direct neighbors only, not C
+    assert all(r["hop"] == 1 for r in results)
+    assert all("path" not in r for r in results)  # depth=1: no path field
+
+
+def test_traverse_multi_hop_finds_second_degree_neighbor(concepts_env):
+    _server, concepts, _memory_module = concepts_env
+    concept_db = concepts._get_concept_db()
+    with concept_db.get_connection() as conn:
+        id_a, id_b, id_c, id_d = _build_chain_graph(concept_db, conn)
+        results = concepts._traverse(conn, [id_a], depth=2, direction="both", limit=10)
+
+    by_name = {r["name"]: r for r in results}
+    assert "C" in by_name  # only reachable at hop 2 (A -> B -> C)
+    assert by_name["C"]["hop"] == 2
+    assert by_name["B"]["hop"] == 1
+    assert by_name["C"]["path"] == [
+        {"predicate": "uses", "name": "B"},
+        {"predicate": "uses", "name": "C"},
+    ]
+
+
+def test_traverse_handles_cycles_without_infinite_loop_or_duplicates(concepts_env):
+    """A -> B -> C -> A is a genuine 3-node cycle. Traversing outgoing from
+    A at depth=5 must terminate (not loop forever re-visiting A) and must
+    not return A itself or duplicate B/C -- proves the visited-set is
+    actually load-bearing, not just documentation."""
+    _server, concepts, _memory_module = concepts_env
+    concept_db = concepts._get_concept_db()
+    with concept_db.get_connection() as conn:
+        id_a, _ = concept_db.get_or_create_entity(
+            conn, "A", "concept", "sess-a", None, "m1"
+        )
+        id_b, _ = concept_db.get_or_create_entity(
+            conn, "B", "concept", "sess-a", None, "m1"
+        )
+        id_c, _ = concept_db.get_or_create_entity(
+            conn, "C", "concept", "sess-a", None, "m1"
+        )
+        concept_db.store_relationship(conn, id_a, id_b, "uses", "m1", None)
+        concept_db.store_relationship(conn, id_b, id_c, "uses", "m1", None)
+        concept_db.store_relationship(conn, id_c, id_a, "uses", "m1", None)
+
+        results = concepts._traverse(
+            conn, [id_a], depth=5, direction="outgoing", limit=100
+        )
+
+    names = [r["name"] for r in results]
+    assert names.count("A") == 0  # seed itself never re-appears as a result
+    assert names.count("B") == 1
+    assert names.count("C") == 1
+
+
+def test_traverse_direction_outgoing_only_excludes_incoming(concepts_env):
+    _server, concepts, _memory_module = concepts_env
+    concept_db = concepts._get_concept_db()
+    with concept_db.get_connection() as conn:
+        id_a, id_b, id_c, id_d = _build_chain_graph(concept_db, conn)
+        results = concepts._traverse(
+            conn, [id_a], depth=1, direction="outgoing", limit=10
+        )
+
+    names = {r["name"] for r in results}
+    assert names == {"B"}  # D -> A is incoming, excluded
+
+
+def test_traverse_direction_incoming_only_excludes_outgoing(concepts_env):
+    _server, concepts, _memory_module = concepts_env
+    concept_db = concepts._get_concept_db()
+    with concept_db.get_connection() as conn:
+        id_a, id_b, id_c, id_d = _build_chain_graph(concept_db, conn)
+        results = concepts._traverse(
+            conn, [id_a], depth=1, direction="incoming", limit=10
+        )
+
+    names = {r["name"] for r in results}
+    assert names == {"D"}  # A -> B is outgoing, excluded
+
+
+def test_traverse_respects_limit_across_whole_traversal(concepts_env):
+    _server, concepts, _memory_module = concepts_env
+    concept_db = concepts._get_concept_db()
+    with concept_db.get_connection() as conn:
+        id_a, id_b, id_c, id_d = _build_chain_graph(concept_db, conn)
+        results = concepts._traverse(conn, [id_a], depth=5, direction="both", limit=1)
+
+    assert len(results) == 1
+
+
+def test_run_recall_depth_2_returns_second_hop_entity(concepts_env):
+    _server, concepts, _memory_module = concepts_env
+    concept_db = concepts._get_concept_db()
+    with concept_db.get_connection() as conn:
+        _build_chain_graph(concept_db, conn)
+
+    result = concepts._run_recall(
+        "A", session_name=None, limit=10, depth=2, direction="both"
+    )
+    names = {r["name"] for r in result["related_entities"]}
+    assert "C" in names
+
+
+def test_run_recall_default_depth_matches_prior_one_hop_behavior(concepts_env):
+    """Omitting depth/direction (STDIO callers, or older client code) must
+    reproduce exactly today's one-hop behavior -- backward-compatible
+    defaults, not a breaking change to marm_concept_recall."""
+    _server, concepts, _memory_module = concepts_env
+    concept_db = concepts._get_concept_db()
+    with concept_db.get_connection() as conn:
+        _build_chain_graph(concept_db, conn)
+
+    result = concepts._run_recall("A", session_name=None, limit=10)
+    names = {r["name"] for r in result["related_entities"]}
+    assert names == {"B", "D"}
+    assert "C" not in names
+
+
 def test_run_recall_on_entity_with_no_code_match_returns_empty_not_error(concepts_env):
     _server, concepts, memory_module = concepts_env
     concept_db = concepts._get_concept_db()

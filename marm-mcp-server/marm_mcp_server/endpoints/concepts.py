@@ -217,7 +217,77 @@ def _run_build(rows: list[tuple[str, str, Optional[str], Optional[str]]]) -> dic
     }
 
 
-def _run_recall(query: str, session_name: Optional[str], limit: int) -> dict:
+def _traverse(
+    conn, seed_ids: list[int], depth: int, direction: str, limit: int
+) -> list[dict]:
+    """Bounded BFS over entities/relationships -- single connection, one
+    batched SQL query per hop-level, matches this codebase's established
+    IN (...)-in-a-Python-loop convention (compaction.py, memory_ops.py; zero
+    WITH RECURSIVE uses anywhere in this repo). At depth=1 this reproduces
+    the original one-hop outgoing+incoming+union+truncate behavior exactly.
+
+    visited is load-bearing, not optional: store_relationship prevents
+    self-loops, but multi-node cycles (A->B->C->A) are possible without it
+    the BFS would loop/duplicate-explode. ORDER BY r.id makes which parent
+    "wins" for path reconstruction deterministic when a node is reachable
+    from two frontier members in the same hop."""
+    visited: dict[int, int] = {eid: 0 for eid in seed_ids}
+    paths: dict[int, list[dict]] = {eid: [] for eid in seed_ids}
+    frontier = list(seed_ids)
+    results: list[dict] = []
+
+    for hop in range(1, depth + 1):
+        if not frontier or len(results) >= limit:
+            break
+        placeholders = ",".join("?" * len(frontier))
+        rows = []
+        if direction in ("outgoing", "both"):
+            rows += conn.execute(
+                f"""SELECT r.source_id, e.id, e.name, e.type, r.predicate FROM relationships r
+                    JOIN entities e ON e.id = r.target_id
+                    WHERE r.source_id IN ({placeholders}) ORDER BY r.id""",
+                frontier,
+            ).fetchall()
+        if direction in ("incoming", "both"):
+            rows += conn.execute(
+                f"""SELECT r.target_id, e.id, e.name, e.type, r.predicate FROM relationships r
+                    JOIN entities e ON e.id = r.source_id
+                    WHERE r.target_id IN ({placeholders}) ORDER BY r.id""",
+                frontier,
+            ).fetchall()
+
+        next_frontier = []
+        for from_id, neighbor_id, name, entity_type, predicate in rows:
+            if neighbor_id in visited:
+                continue
+            visited[neighbor_id] = hop
+            paths[neighbor_id] = paths[from_id] + [
+                {"predicate": predicate, "name": name}
+            ]
+            entry = {
+                "name": name,
+                "type": entity_type,
+                "predicate": predicate,
+                "hop": hop,
+            }
+            if depth > 1:
+                entry["path"] = paths[neighbor_id]
+            results.append(entry)
+            next_frontier.append(neighbor_id)
+            if len(results) >= limit:
+                break
+        frontier = next_frontier
+
+    return results
+
+
+def _run_recall(
+    query: str,
+    session_name: Optional[str],
+    limit: int,
+    depth: int = 1,
+    direction: str = "both",
+) -> dict:
     concept_db = _get_concept_db()
 
     target_name = query
@@ -257,22 +327,7 @@ def _run_recall(query: str, session_name: Optional[str], limit: int) -> dict:
         if entity_ids:
             placeholders = ",".join("?" * len(entity_ids))
 
-            outgoing = conn.execute(
-                f"""SELECT e.name, e.type, r.predicate FROM relationships r
-                    JOIN entities e ON e.id = r.target_id
-                    WHERE r.source_id IN ({placeholders}) LIMIT ?""",
-                entity_ids + [limit],
-            ).fetchall()
-            incoming = conn.execute(
-                f"""SELECT e.name, e.type, r.predicate FROM relationships r
-                    JOIN entities e ON e.id = r.source_id
-                    WHERE r.target_id IN ({placeholders}) LIMIT ?""",
-                entity_ids + [limit],
-            ).fetchall()
-            for name, entity_type, predicate in (outgoing + incoming)[:limit]:
-                related_entities.append(
-                    {"name": name, "type": entity_type, "predicate": predicate}
-                )
+            related_entities = _traverse(conn, entity_ids, depth, direction, limit)
 
             code_rows = conn.execute(
                 f"""SELECT graph_qualified_name, label, file_path FROM entity_code_links
@@ -325,13 +380,20 @@ async def marm_concept_recall(req: ConceptRecallRequest) -> dict:
     """🔎 Search the concept graph: entities, their relationships, and linked code.
 
     Query as a bare concept name for a lookup, or phrase it as "related to X"
-    to emphasize traversal — both route from query shape alone. Returns empty
-    lists (not an error) when marm_concept_build hasn't run yet or marm-graph
-    has no matching code symbols.
+    to emphasize traversal — both route from query shape alone. Pass depth
+    to traverse multiple hops (default 1 = direct neighbors only), direction
+    to scope traversal (outgoing/incoming/both). Returns empty lists (not an
+    error) when marm_concept_build hasn't run yet or marm-graph has no
+    matching code symbols.
     """
     try:
         return await asyncio.to_thread(
-            _run_recall, req.query, req.session_name, req.limit
+            _run_recall,
+            req.query,
+            req.session_name,
+            req.limit,
+            req.depth,
+            req.direction,
         )
     except Exception as e:
         print(f"Unexpected error in marm_concept_recall: {e}")

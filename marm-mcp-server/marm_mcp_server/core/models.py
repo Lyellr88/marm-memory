@@ -171,3 +171,12 @@ class ConceptRecallRequest(BaseModel):
     limit: int = Field(
         default=10, ge=1, le=100, description="Max entities/relationships returned."
     )
+    depth: int = Field(
+        default=1,
+        ge=1,
+        le=5,
+        description="Max hop distance to traverse (1 = direct neighbors only).",
+    )
+    direction: Literal["outgoing", "incoming", "both"] = Field(
+        default="both", description="Traversal direction per hop."
+    )
