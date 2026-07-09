@@ -4,6 +4,7 @@ ConceptDB's real connection pool.
 """
 
 import json
+import sqlite3
 
 import numpy as np
 import pytest
@@ -44,6 +45,50 @@ def test_get_or_create_entity_dedups_same_name_session_project(concept_db):
 
     assert count == 1
     assert json.loads(row[0]) == ["mem-1", "mem-2"]
+
+
+def test_get_or_create_entity_dedups_when_session_and_project_are_both_null(
+    concept_db,
+):
+    """SQLite treats NULL as distinct from NULL in a table-level UNIQUE
+    constraint, so entities.UNIQUE(name, session_name, project) alone does
+    not dedupe rows where session_name/project are both NULL -- exactly the
+    case for memories logged without an explicit session/project tag. The
+    COALESCE-based idx_entities_dedup index (and get_or_create_entity's
+    INSERT OR IGNORE + SELECT) must still dedupe correctly here."""
+    with concept_db.get_connection() as conn:
+        id_first, created_first = concept_db.get_or_create_entity(
+            conn, "auth module", "concept", None, None, "mem-1"
+        )
+        id_second, created_second = concept_db.get_or_create_entity(
+            conn, "auth module", "concept", None, None, "mem-2"
+        )
+
+    assert id_first == id_second
+    assert created_first is True
+    assert created_second is False
+
+    with concept_db.get_connection() as conn:
+        count = conn.execute("SELECT COUNT(*) FROM entities").fetchone()[0]
+    assert count == 1
+
+
+def test_entities_dedup_index_rejects_duplicate_null_scoped_row_at_sql_level(
+    concept_db,
+):
+    """Direct proof the schema fix closes the gap, independent of
+    get_or_create_entity's own logic: a second raw INSERT for the same
+    (name, NULL, NULL) tuple must be rejected by idx_entities_dedup."""
+    with concept_db.get_connection() as conn:
+        conn.execute(
+            "INSERT INTO entities (name, type, session_name, project, "
+            "source_memory_ids) VALUES ('auth module', 'concept', NULL, NULL, '[]')"
+        )
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "INSERT INTO entities (name, type, session_name, project, "
+                "source_memory_ids) VALUES ('auth module', 'concept', NULL, NULL, '[]')"
+            )
 
 
 def test_same_name_session_different_project_stored_as_two_rows(concept_db):
@@ -123,7 +168,7 @@ def test_store_code_link_persists_label_and_file_path(concept_db):
 
 
 def test_relationship_fk_constraint_rejects_missing_entity(concept_db):
-    with pytest.raises(Exception):
+    with pytest.raises(sqlite3.IntegrityError):
         with concept_db.get_connection() as conn:
             concept_db.store_relationship(
                 conn, 999, 998, "co_occurs_with", "mem-1", None

@@ -14,6 +14,7 @@ import threading
 import time
 from typing import Optional
 
+import structlog
 from fastapi import APIRouter
 
 from ..config.settings import (
@@ -26,6 +27,8 @@ from ..core.graph_client import find_code_match, is_graph_available
 from ..core.memory import memory
 from ..core.memory_utils import _embedding_to_bytes, _safe_print
 from ..core.models import ConceptBuildRequest, ConceptRecallRequest
+
+logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="", tags=["Concepts"])
 
@@ -77,6 +80,7 @@ def _fetch_memory_rows(
         "session_name != 'marm_system'",
         "content IS NOT NULL",
         "content != ''",
+        "(compaction_role IS NULL OR compaction_role != 'source')",
     ]
     params: list = []
 
@@ -342,7 +346,7 @@ def _run_recall(
         rows = conn.execute(
             f"SELECT id, name, type, source_memory_ids FROM entities "
             f"WHERE {' AND '.join(conditions)} LIMIT ?",
-            params + [limit],
+            [*params, limit],
         ).fetchall()
 
         entity_ids = []
@@ -364,7 +368,7 @@ def _run_recall(
             code_rows = conn.execute(
                 f"""SELECT graph_qualified_name, label, file_path FROM entity_code_links
                     WHERE entity_id IN ({placeholders}) LIMIT ?""",
-                entity_ids + [limit],
+                [*entity_ids, limit],
             ).fetchall()
             for qualified_name, label, file_path in code_rows:
                 linked_code.append(
@@ -400,7 +404,11 @@ async def marm_concept_build(req: ConceptBuildRequest) -> dict:
     except ValueError as e:
         return {"status": "error", "message": str(e)}
     except Exception as e:
-        _safe_print(f"Unexpected error in marm_concept_build: {e}")
+        # HTTP-facing route body -- log server-side via structured logging
+        # rather than interpolating exception text into a plain print/f-string
+        # (CodeQL: exception-info-exposure). The client only ever gets the
+        # generic message below.
+        logger.warning("concepts.build_error", error=str(e))
         return {"status": "error", "message": "Concept build failed."}
 
     result["duration_ms"] = int((time.monotonic() - start) * 1000)
@@ -431,5 +439,5 @@ async def marm_concept_recall(req: ConceptRecallRequest) -> dict:
             req.project,
         )
     except Exception as e:
-        _safe_print(f"Unexpected error in marm_concept_recall: {e}")
+        logger.warning("concepts.recall_error", error=str(e))
         return {"status": "error", "message": "Concept recall failed."}

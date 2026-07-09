@@ -112,6 +112,17 @@ def init_concept_database(db_path: str) -> None:
             "ON entity_code_links(entity_id, graph_qualified_name)"
         )
 
+        # entities' table-level UNIQUE(name, session_name, project) doesn't
+        # actually dedupe when session_name/project are NULL -- SQLite treats
+        # NULL as distinct from NULL in UNIQUE constraints, so two concurrent
+        # get_or_create_entity calls for the same (name, NULL, NULL) can both
+        # insert. This COALESCE-normalized index closes that gap and is what
+        # get_or_create_entity's INSERT OR IGNORE relies on for atomicity.
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_entities_dedup "
+            "ON entities(name, COALESCE(session_name, ''), COALESCE(project, ''))"
+        )
+
 
 class ConceptDB:
     """Owns the concept graph's SQLite pool. One instance per process, lazily built."""
@@ -141,26 +152,15 @@ class ConceptDB:
         run duplicate-candidate detection only once per entity ever, not on
         every re-mention across future builds. name_embedding is only stored
         on the INSERT branch; re-mentions never overwrite an existing
-        entity's embedding."""
-        row = conn.execute(
-            "SELECT id, source_memory_ids FROM entities "
-            "WHERE name = ? AND session_name IS ? AND project IS ?",
-            (name, session_name, project),
-        ).fetchone()
+        entity's embedding.
 
-        if row is not None:
-            entity_id, source_ids_json = row
-            source_ids = json.loads(source_ids_json)
-            if memory_id not in source_ids:
-                source_ids.append(memory_id)
-                conn.execute(
-                    "UPDATE entities SET source_memory_ids = ? WHERE id = ?",
-                    (json.dumps(source_ids), entity_id),
-                )
-            return entity_id, False
-
+        INSERT OR IGNORE + SELECT, not SELECT-then-INSERT -- the latter is a
+        TOCTOU race under concurrent builds sharing a scope: two connections
+        can both SELECT (no row found) before either INSERTs, and idx_entities_dedup
+        (or the table-level UNIQUE, for non-NULL session_name/project) only
+        stops one of the two INSERTs, not both from being attempted."""
         cursor = conn.execute(
-            "INSERT INTO entities "
+            "INSERT OR IGNORE INTO entities "
             "(name, type, session_name, project, source_memory_ids, name_embedding) "
             "VALUES (?, ?, ?, ?, ?, ?)",
             (
@@ -172,7 +172,25 @@ class ConceptDB:
                 name_embedding,
             ),
         )
-        return cursor.lastrowid, True
+        was_created = cursor.rowcount > 0
+
+        row = conn.execute(
+            "SELECT id, source_memory_ids FROM entities "
+            "WHERE name = ? AND session_name IS ? AND project IS ?",
+            (name, session_name, project),
+        ).fetchone()
+        entity_id, source_ids_json = row
+
+        if not was_created:
+            source_ids = json.loads(source_ids_json)
+            if memory_id not in source_ids:
+                source_ids.append(memory_id)
+                conn.execute(
+                    "UPDATE entities SET source_memory_ids = ? WHERE id = ?",
+                    (json.dumps(source_ids), entity_id),
+                )
+
+        return entity_id, was_created
 
     def find_similar_entities(
         self,

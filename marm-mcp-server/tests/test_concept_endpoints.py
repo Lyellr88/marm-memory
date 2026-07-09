@@ -80,6 +80,31 @@ def test_fetch_memory_rows_excludes_marm_system_session(concepts_env):
     assert [r[0] for r in rows] == ["m2"]
 
 
+def test_fetch_memory_rows_excludes_compacted_source_rows(concepts_env):
+    """Mirrors core/memory_ops.py's active-recall filter -- a compacted
+    session's stale source rows must not be indexed alongside their summary,
+    or a build reintroduces obsolete concepts/relationships and inflates
+    mention counts."""
+    _server, concepts, memory_module = concepts_env
+    with memory_module.memory.get_connection() as conn:
+        conn.execute(
+            "INSERT INTO memories (id, session_name, content, timestamp, project) "
+            "VALUES ('m1', 'sess-a', 'stale source content', datetime('now'), NULL)"
+        )
+        conn.execute(
+            "UPDATE memories SET compaction_role = 'source' WHERE id = 'm1'"
+        )
+        conn.execute(
+            "INSERT INTO memories (id, session_name, content, timestamp, project) "
+            "VALUES ('m2', 'sess-a', 'compaction summary content', datetime('now'), NULL)"
+        )
+
+    rows = concepts._fetch_memory_rows(
+        session_name="sess-a", project=None, search_all=False
+    )
+    assert [r[0] for r in rows] == ["m2"]
+
+
 def test_fetch_memory_rows_search_all_respects_row_cap(concepts_env, monkeypatch):
     _server, concepts, memory_module = concepts_env
     monkeypatch.setattr(concepts, "CONCEPT_BUILD_ROW_CAP", 3)
@@ -94,7 +119,7 @@ def test_fetch_memory_rows_search_all_respects_row_cap(concepts_env, monkeypatch
 def test_run_build_writes_entities_and_relationship_for_two_entities(
     concepts_env, monkeypatch
 ):
-    _server, concepts, memory_module = concepts_env
+    _server, concepts, _memory_module = concepts_env
     from marm_mcp_server.core.concept_extraction import Entity, ExtractionResult
 
     monkeypatch.setattr(
@@ -214,7 +239,7 @@ def test_run_recall_does_not_return_duplicate_linked_code_after_repeat_build(
 def test_run_build_same_entity_across_two_memories_dedups_in_same_session(
     concepts_env, monkeypatch
 ):
-    _server, concepts, memory_module = concepts_env
+    _server, concepts, _memory_module = concepts_env
     from marm_mcp_server.core.concept_extraction import Entity, ExtractionResult
 
     monkeypatch.setattr(
@@ -242,7 +267,7 @@ def test_run_build_same_entity_across_two_memories_dedups_in_same_session(
 def test_run_build_with_graph_unavailable_creates_zero_code_links(
     concepts_env, monkeypatch
 ):
-    _server, concepts, memory_module = concepts_env
+    _server, concepts, _memory_module = concepts_env
     from marm_mcp_server.core.concept_extraction import Entity, ExtractionResult
 
     monkeypatch.setattr(
@@ -264,7 +289,7 @@ def test_run_build_with_graph_unavailable_creates_zero_code_links(
 
 
 def test_run_build_links_code_when_graph_available(concepts_env, monkeypatch):
-    _server, concepts, memory_module = concepts_env
+    _server, concepts, _memory_module = concepts_env
     from marm_mcp_server.core.concept_extraction import Entity, ExtractionResult
 
     monkeypatch.setattr(
@@ -410,7 +435,7 @@ def test_try_embed_real_fastembed_end_to_end(concepts_env):
 
 
 def test_run_recall_lookup_mode_returns_matching_entities(concepts_env):
-    _server, concepts, memory_module = concepts_env
+    _server, concepts, _memory_module = concepts_env
     concept_db = concepts._get_concept_db()
     with concept_db.get_connection() as conn:
         concept_db.get_or_create_entity(
@@ -424,7 +449,7 @@ def test_run_recall_lookup_mode_returns_matching_entities(concepts_env):
 
 
 def test_run_recall_related_to_prefix_strips_and_still_matches(concepts_env):
-    _server, concepts, memory_module = concepts_env
+    _server, concepts, _memory_module = concepts_env
     concept_db = concepts._get_concept_db()
     with concept_db.get_connection() as conn:
         concept_db.get_or_create_entity(
@@ -436,7 +461,7 @@ def test_run_recall_related_to_prefix_strips_and_still_matches(concepts_env):
 
 
 def test_run_recall_returns_related_entities_from_relationships(concepts_env):
-    _server, concepts, memory_module = concepts_env
+    _server, concepts, _memory_module = concepts_env
     concept_db = concepts._get_concept_db()
     with concept_db.get_connection() as conn:
         id_a, _ = concept_db.get_or_create_entity(
@@ -505,7 +530,7 @@ def test_traverse_depth_1_reproduces_one_hop_behavior(concepts_env):
     _server, concepts, _memory_module = concepts_env
     concept_db = concepts._get_concept_db()
     with concept_db.get_connection() as conn:
-        id_a, id_b, id_c, id_d = _build_chain_graph(concept_db, conn)
+        id_a, _id_b, _id_c, _id_d = _build_chain_graph(concept_db, conn)
         results = concepts._traverse(conn, [id_a], depth=1, direction="both", limit=10)
 
     names = {r["name"] for r in results}
@@ -564,7 +589,7 @@ def test_traverse_multi_hop_finds_second_degree_neighbor(concepts_env):
     _server, concepts, _memory_module = concepts_env
     concept_db = concepts._get_concept_db()
     with concept_db.get_connection() as conn:
-        id_a, id_b, id_c, id_d = _build_chain_graph(concept_db, conn)
+        id_a, _id_b, _id_c, _id_d = _build_chain_graph(concept_db, conn)
         results = concepts._traverse(conn, [id_a], depth=2, direction="both", limit=10)
 
     by_name = {r["name"]: r for r in results}
@@ -612,7 +637,7 @@ def test_traverse_direction_outgoing_only_excludes_incoming(concepts_env):
     _server, concepts, _memory_module = concepts_env
     concept_db = concepts._get_concept_db()
     with concept_db.get_connection() as conn:
-        id_a, id_b, id_c, id_d = _build_chain_graph(concept_db, conn)
+        id_a, _id_b, _id_c, _id_d = _build_chain_graph(concept_db, conn)
         results = concepts._traverse(
             conn, [id_a], depth=1, direction="outgoing", limit=10
         )
@@ -625,7 +650,7 @@ def test_traverse_direction_incoming_only_excludes_outgoing(concepts_env):
     _server, concepts, _memory_module = concepts_env
     concept_db = concepts._get_concept_db()
     with concept_db.get_connection() as conn:
-        id_a, id_b, id_c, id_d = _build_chain_graph(concept_db, conn)
+        id_a, _id_b, _id_c, _id_d = _build_chain_graph(concept_db, conn)
         results = concepts._traverse(
             conn, [id_a], depth=1, direction="incoming", limit=10
         )
@@ -638,7 +663,7 @@ def test_traverse_respects_limit_across_whole_traversal(concepts_env):
     _server, concepts, _memory_module = concepts_env
     concept_db = concepts._get_concept_db()
     with concept_db.get_connection() as conn:
-        id_a, id_b, id_c, id_d = _build_chain_graph(concept_db, conn)
+        id_a, _id_b, _id_c, _id_d = _build_chain_graph(concept_db, conn)
         results = concepts._traverse(conn, [id_a], depth=5, direction="both", limit=1)
 
     assert len(results) == 1
@@ -673,7 +698,7 @@ def test_run_recall_default_depth_matches_prior_one_hop_behavior(concepts_env):
 
 
 def test_run_recall_on_entity_with_no_code_match_returns_empty_not_error(concepts_env):
-    _server, concepts, memory_module = concepts_env
+    _server, concepts, _memory_module = concepts_env
     concept_db = concepts._get_concept_db()
     with concept_db.get_connection() as conn:
         concept_db.get_or_create_entity(
@@ -685,7 +710,7 @@ def test_run_recall_on_entity_with_no_code_match_returns_empty_not_error(concept
 
 
 def test_run_recall_on_entity_with_code_match_populates_linked_code(concepts_env):
-    _server, concepts, memory_module = concepts_env
+    _server, concepts, _memory_module = concepts_env
     concept_db = concepts._get_concept_db()
     with concept_db.get_connection() as conn:
         entity_id, _ = concept_db.get_or_create_entity(

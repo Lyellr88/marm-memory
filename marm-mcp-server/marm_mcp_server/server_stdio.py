@@ -186,6 +186,7 @@ from marm_mcp_server.endpoints.concepts import (  # noqa: E402
     _run_build,
     _run_recall,
 )
+from marm_mcp_server.core.models import ConceptRecallRequest  # noqa: E402
 from marm_mcp_server.config.settings import (  # noqa: E402
     SERVER_VERSION,
     DEFAULT_DB_PATH,
@@ -947,8 +948,26 @@ async def marm_concept_recall(
     Returns: entities, related_entities, linked_code
     """
     try:
+        # Validate through the same pydantic model the HTTP endpoint uses --
+        # limit (1-100) and depth (1-5) are plain ints on this signature, so
+        # without this, an out-of-range STDIO call (e.g. limit=-1) would reach
+        # SQLite as a raw LIMIT/BFS bound instead of being rejected.
+        req = ConceptRecallRequest(
+            query=query,
+            session_name=session_name,
+            limit=limit,
+            depth=depth,
+            direction=direction,
+            project=project,
+        )
         return await asyncio.to_thread(
-            _run_recall, query, session_name, limit, depth, direction, project
+            _run_recall,
+            req.query,
+            req.session_name,
+            req.limit,
+            req.depth,
+            req.direction,
+            req.project,
         )
     except Exception as e:
         return {"status": "error", "message": f"Concept recall failed: {e!s}"}

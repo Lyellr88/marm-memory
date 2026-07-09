@@ -79,6 +79,10 @@ def test_classify_chunk_defaults_to_concept_with_no_trigger_keywords():
     assert _classify_chunk("the weather", "The weather was nice today") == "concept"
 
 
+@pytest.mark.skipif(
+    CONCEPTS_AVAILABLE,
+    reason="documents/exercises the unavailable-model path; spacy+en_core_web_sm is installed here",
+)
 def test_concepts_unavailable_in_this_sandbox():
     """Documents why extraction-quality tests are skipped below -- if this
     ever flips True (e.g. CI has network access to github.com releases),
@@ -86,11 +90,19 @@ def test_concepts_unavailable_in_this_sandbox():
     assert CONCEPTS_AVAILABLE is False
 
 
+@pytest.mark.skipif(
+    CONCEPTS_AVAILABLE,
+    reason="fail-open path only reachable when the model is genuinely unavailable",
+)
 def test_extract_entities_fails_open_when_model_unavailable():
     result = extract_entities("MARM stores memories with fastembed embeddings.")
     assert result == ExtractionResult(entities=[], relationship_pairs=[])
 
 
+@pytest.mark.skipif(
+    CONCEPTS_AVAILABLE,
+    reason="fail-open path only reachable when the model is genuinely unavailable",
+)
 def test_load_nlp_lazily_returns_none_without_model():
     assert concept_extraction._load_nlp_lazily() is None
 

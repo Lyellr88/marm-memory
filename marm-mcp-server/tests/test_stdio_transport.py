@@ -427,6 +427,24 @@ def test_stdio_concept_recall_passes_through_to_run_recall(monkeypatch, tmp_path
     }
 
 
+def test_stdio_concept_recall_rejects_out_of_range_limit(monkeypatch, tmp_path):
+    """The STDIO wrapper's limit/depth are plain ints, not a bounded pydantic
+    field like the HTTP endpoint's ConceptRecallRequest -- without explicit
+    validation, limit=-1 would reach SQLite as a raw `LIMIT -1` (no limit at
+    all, returning every matching entity/relationship/code link)."""
+    stdio = _isolated_stdio(monkeypatch, tmp_path)
+
+    def _unreachable(*args, **kwargs):
+        raise AssertionError("_run_recall must not be reached for invalid input")
+
+    monkeypatch.setattr(stdio, "_run_recall", _unreachable)
+
+    result = asyncio.run(stdio.marm_concept_recall(query="auth", limit=-1))
+
+    assert result["status"] == "error"
+    assert "Concept recall failed" in result["message"]
+
+
 def test_stdio_concept_build_passes_through_to_fetch_and_run_build(
     monkeypatch, tmp_path
 ):
