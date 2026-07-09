@@ -7,10 +7,16 @@
 
 ### New Tools
 
-- Added `marm_concept_build` and `marm_concept_recall` — extracts entities (concept/decision/pattern/error/tool, plus person/org/gpe/product/event from spaCy's NER) and co-occurrence relationships out of stored memory content, and lets an agent query them by name or as a "related to X" traversal. Optionally cross-links extracted entities to marm-graph code symbols when marm-graph is available and indexed for the project.
+- Added `marm_concept_build` and `marm_concept_recall` — extracts entities (concept/decision/pattern/error/tool, plus person/org/gpe/product/event from spaCy's NER) and relationships out of stored memory content, and lets an agent query them by name or as a "related to X" traversal. Optionally cross-links extracted entities to marm-graph code symbols when marm-graph is available and indexed for the project.
 - Runs entirely in-process — its own SQLite file (`~/.marm/index/marm_index.db`, own connection pool, never shares `memory.py`'s pool) and its own extraction pass, reading memory content directly (never through `marm_smart_recall`'s ranked/limited recall path). `marm_concept_build` is explicit/on-demand, not a live hook into the memory write path.
 - Optional dependency: base installs carry no spaCy. `pip install marm-mcp-server[concepts]` plus a separate `python -m spacy download en_core_web_sm` enables real extraction; without it, both tools stay registered and return `entities_extracted: 0` cleanly (same fail-open pattern as `SEMANTIC_SEARCH_AVAILABLE`).
 - Marm-mcp's discoverable tool count moves from 12 to 14 (HTTP and STDIO parity).
+
+### Typed Relationships, Multi-Hop Recall, Entity Resolution
+
+- Relationships now carry real predicates (`fixes`/`implements`/`depends_on`/`uses`/`causes`/`replaces`/`extends`, plus `related_to`/`co_occurs_with` fallbacks) derived from spaCy's dependency parse, instead of a single generic `co_occurs_with` label on every edge. No LLM call involved.
+- `marm_concept_recall` gains `depth` (1-5, default 1) and `direction` (`outgoing`/`incoming`/`both`, default `both`) for multi-hop traversal — defaults reproduce the original one-hop behavior exactly. Backed by a bounded, cycle-safe in-process BFS over the concept graph's own tables.
+- `marm_concept_build` now flags fuzzy-candidate near-duplicate entities (via cosine similarity on the existing fastembed encoder — no new dependency) as a `possible_duplicates` field, without ever auto-merging them. Exact-match dedup is unchanged.
 
 </details>
 
