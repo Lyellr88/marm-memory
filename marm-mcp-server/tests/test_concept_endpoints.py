@@ -452,6 +452,31 @@ def test_run_recall_returns_related_entities_from_relationships(concepts_env):
     assert "rate limiter" in related_names
 
 
+def test_run_recall_project_scoping_excludes_other_projects(concepts_env):
+    """entities.UNIQUE(name, session_name, project) treats project as part
+    of an entity's identity -- two projects can each have their own
+    same-named entity as distinct rows. Recall must not blend them together
+    when a project is given."""
+    _server, concepts, _memory_module = concepts_env
+    concept_db = concepts._get_concept_db()
+    with concept_db.get_connection() as conn:
+        concept_db.get_or_create_entity(
+            conn, "config", "concept", "sess-a", "proj-a", "m1"
+        )
+        concept_db.get_or_create_entity(
+            conn, "config", "concept", "sess-a", "proj-b", "m2"
+        )
+
+    unscoped = concepts._run_recall("config", session_name=None, limit=10)
+    assert len(unscoped["entities"]) == 2
+
+    scoped = concepts._run_recall(
+        "config", session_name=None, limit=10, project="proj-a"
+    )
+    assert len(scoped["entities"]) == 1
+    assert scoped["entities"][0]["name"] == "config"
+
+
 # ── Goal 2: multi-hop traversal ──────────────────────────────────────
 
 

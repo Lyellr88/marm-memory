@@ -36,7 +36,16 @@ def find_code_match(entity_name: str, project: Optional[str]) -> Optional[dict]:
         result = R.do_lookup(
             client,
             CodeLookupRequest(
-                query=entity_name, project=project, kind="symbol", limit=1
+                # symbol kind is BM25 discovery (tool_router.py's search_graph
+                # branch), not an exact-name lookup -- limit=1 would truncate
+                # to the top-ranked row before the exact-match filter below
+                # ever runs, dropping real matches that BM25 didn't rank
+                # first. Widen the candidate window, filter for exact match
+                # across all of them.
+                query=entity_name,
+                project=project,
+                kind="symbol",
+                limit=10,
             ),
         )
     except Exception:

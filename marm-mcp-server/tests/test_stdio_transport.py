@@ -382,6 +382,92 @@ def test_stdio_inprocess_client_wraps_graph_index_happy_path(monkeypatch, tmp_pa
     assert captured["req"].repo_path == "/tmp/some-repo"
 
 
+def test_stdio_concept_recall_passes_through_to_run_recall(monkeypatch, tmp_path):
+    """marm_concept_recall's STDIO wrapper has its own try/except and
+    duration_ms-free passthrough, distinct code from the HTTP endpoint --
+    test_concept_endpoints.py covers _run_recall itself thoroughly but never
+    through this wrapper. Guards against wrong argument order/names in the
+    passthrough (e.g. project silently dropped or swapped with direction)."""
+    stdio = _isolated_stdio(monkeypatch, tmp_path)
+
+    captured = {}
+
+    def _fake_run_recall(query, session_name, limit, depth, direction, project):
+        captured.update(
+            query=query,
+            session_name=session_name,
+            limit=limit,
+            depth=depth,
+            direction=direction,
+            project=project,
+        )
+        return {"entities": [], "related_entities": [], "linked_code": []}
+
+    monkeypatch.setattr(stdio, "_run_recall", _fake_run_recall)
+
+    result = asyncio.run(
+        stdio.marm_concept_recall(
+            query="auth",
+            session_name="sess-a",
+            limit=5,
+            depth=2,
+            direction="outgoing",
+            project="proj-a",
+        )
+    )
+
+    assert result == {"entities": [], "related_entities": [], "linked_code": []}
+    assert captured == {
+        "query": "auth",
+        "session_name": "sess-a",
+        "limit": 5,
+        "depth": 2,
+        "direction": "outgoing",
+        "project": "proj-a",
+    }
+
+
+def test_stdio_concept_build_passes_through_to_fetch_and_run_build(
+    monkeypatch, tmp_path
+):
+    stdio = _isolated_stdio(monkeypatch, tmp_path)
+
+    fetch_captured = {}
+    fake_rows = [("m1", "content", "sess-a", "proj-a")]
+
+    def _fake_fetch(session_name, project, search_all):
+        fetch_captured.update(
+            session_name=session_name, project=project, search_all=search_all
+        )
+        return fake_rows
+
+    build_captured = {}
+
+    def _fake_run_build(rows):
+        build_captured["rows"] = rows
+        return {
+            "entities_extracted": 1,
+            "relationships_created": 0,
+            "code_links_created": 0,
+        }
+
+    monkeypatch.setattr(stdio, "_fetch_memory_rows", _fake_fetch)
+    monkeypatch.setattr(stdio, "_run_build", _fake_run_build)
+
+    result = asyncio.run(
+        stdio.marm_concept_build(session_name="sess-a", project="proj-a")
+    )
+
+    assert fetch_captured == {
+        "session_name": "sess-a",
+        "project": "proj-a",
+        "search_all": False,
+    }
+    assert build_captured["rows"] == fake_rows
+    assert result["entities_extracted"] == 1
+    assert "duration_ms" in result
+
+
 def test_stop_graph_supervisor_safely_swallows_errors(monkeypatch):
     import marm_mcp_server.server_stdio as stdio
 

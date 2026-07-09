@@ -925,6 +925,7 @@ async def marm_concept_recall(
     limit: int = 10,
     depth: int = 1,
     direction: Literal["outgoing", "incoming", "both"] = "both",
+    project: Optional[str] = None,
 ) -> dict:
     """
     🔎 Search the concept graph: entities, their relationships, and linked code.
@@ -940,12 +941,14 @@ async def marm_concept_recall(
     - limit: max entities/relationships returned, 1-100 (default 10)
     - depth: max hop distance to traverse, 1-5 (default 1 = direct neighbors only)
     - direction: outgoing | incoming | both (default both)
+    - project: scope to this project; entities with the same name in
+      different projects are distinct nodes; omit to search across all (optional)
 
     Returns: entities, related_entities, linked_code
     """
     try:
         return await asyncio.to_thread(
-            _run_recall, query, session_name, limit, depth, direction
+            _run_recall, query, session_name, limit, depth, direction, project
         )
     except Exception as e:
         return {"status": "error", "message": f"Concept recall failed: {e!s}"}

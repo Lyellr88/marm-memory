@@ -315,6 +315,7 @@ def _run_recall(
     limit: int,
     depth: int = 1,
     direction: str = "both",
+    project: Optional[str] = None,
 ) -> dict:
     concept_db = _get_concept_db()
 
@@ -334,6 +335,9 @@ def _run_recall(
         if session_name:
             conditions.append("session_name = ?")
             params.append(session_name)
+        if project:
+            conditions.append("project = ?")
+            params.append(project)
 
         rows = conn.execute(
             f"SELECT id, name, type, source_memory_ids FROM entities "
@@ -396,7 +400,7 @@ async def marm_concept_build(req: ConceptBuildRequest) -> dict:
     except ValueError as e:
         return {"status": "error", "message": str(e)}
     except Exception as e:
-        print(f"Unexpected error in marm_concept_build: {e}")
+        _safe_print(f"Unexpected error in marm_concept_build: {e}")
         return {"status": "error", "message": "Concept build failed."}
 
     result["duration_ms"] = int((time.monotonic() - start) * 1000)
@@ -410,9 +414,11 @@ async def marm_concept_recall(req: ConceptRecallRequest) -> dict:
     Query as a bare concept name for a lookup, or phrase it as "related to X"
     to emphasize traversal — both route from query shape alone. Pass depth
     to traverse multiple hops (default 1 = direct neighbors only), direction
-    to scope traversal (outgoing/incoming/both). Returns empty lists (not an
-    error) when marm_concept_build hasn't run yet or marm-graph has no
-    matching code symbols.
+    to scope traversal (outgoing/incoming/both), project to scope to one
+    project (entities with the same name in different projects are distinct
+    nodes -- omit to search across all). Returns empty lists (not an error)
+    when marm_concept_build hasn't run yet or marm-graph has no matching
+    code symbols.
     """
     try:
         return await asyncio.to_thread(
@@ -422,7 +428,8 @@ async def marm_concept_recall(req: ConceptRecallRequest) -> dict:
             req.limit,
             req.depth,
             req.direction,
+            req.project,
         )
     except Exception as e:
-        print(f"Unexpected error in marm_concept_recall: {e}")
+        _safe_print(f"Unexpected error in marm_concept_recall: {e}")
         return {"status": "error", "message": "Concept recall failed."}

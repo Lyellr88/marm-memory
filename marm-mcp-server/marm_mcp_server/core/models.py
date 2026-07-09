@@ -168,6 +168,10 @@ class ConceptRecallRequest(BaseModel):
     session_name: Optional[str] = Field(
         default=None, description="Scope to this session. Omit to search across all."
     )
+    project: Optional[str] = Field(
+        default=None,
+        description="Scope to this project. Omit to search across all projects.",
+    )
     limit: int = Field(
         default=10, ge=1, le=100, description="Max entities/relationships returned."
     )
