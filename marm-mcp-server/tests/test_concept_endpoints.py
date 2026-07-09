@@ -104,7 +104,7 @@ def test_run_build_writes_entities_and_relationship_for_two_entities(
                 Entity("auth module", "concept"),
                 Entity("rate limiter", "pattern"),
             ],
-            relationship_pairs=[("auth module", "rate limiter")],
+            relationship_pairs=[("auth module", "rate limiter", "uses")],
         ),
     )
     monkeypatch.setattr(concepts, "is_graph_available", lambda: False)
@@ -141,7 +141,7 @@ def test_run_build_is_idempotent_on_repeat_runs(concepts_env, monkeypatch):
                 Entity("auth module", "concept"),
                 Entity("rate limiter", "pattern"),
             ],
-            relationship_pairs=[("auth module", "rate limiter")],
+            relationship_pairs=[("auth module", "rate limiter", "uses")],
         ),
     )
     monkeypatch.setattr(concepts, "is_graph_available", lambda: True)

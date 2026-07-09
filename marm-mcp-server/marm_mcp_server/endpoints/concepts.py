@@ -122,14 +122,14 @@ def _run_build(rows: list[tuple[str, str, Optional[str], Optional[str]]]) -> dic
                 name_to_id[entity.name] = entity_id
                 entities_extracted += 1
 
-            for name_a, name_b in result.relationship_pairs:
+            for name_a, name_b, predicate in result.relationship_pairs:
                 id_a = name_to_id.get(name_a)
                 id_b = name_to_id.get(name_b)
                 if id_a is None or id_b is None:
                     continue
                 try:
                     if concept_db.store_relationship(
-                        conn, id_a, id_b, "co_occurs_with", mem_id, mem_project
+                        conn, id_a, id_b, predicate, mem_id, mem_project
                     ):
                         relationships_created += 1
                 except Exception as e:
