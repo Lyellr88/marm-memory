@@ -23,6 +23,7 @@ PACKAGE_DIRS = [
     ROOT / "marm_graph",
     ROOT / "marm_dashboard",
 ]
+PACKAGE_NAMES = {package.name for package in PACKAGE_DIRS}
 SERVER_PACKAGE = ROOT / "marm_mcp_server"
 SERVER_FILE = SERVER_PACKAGE / "server.py"
 
@@ -76,9 +77,9 @@ def module_reference_patterns(module_path: str) -> set[str]:
     """Return import/reference strings that can indicate a module is used."""
     parts = module_path.split(".")
     stem = parts[-1]
-    package_relative = (
-        ".".join(parts[1:]) if parts and parts[0] == "marm_mcp_server" else module_path
-    )
+    relative_parts = parts[1:] if parts and parts[0] in PACKAGE_NAMES else parts
+    package_relative = ".".join(relative_parts)
+    parent_relative = ".".join(relative_parts[:-1])
 
     patterns = {
         module_path,
@@ -95,6 +96,13 @@ def module_reference_patterns(module_path: str) -> set[str]:
                 f"from .{package_relative}",
                 f"from ..{package_relative}",
                 f"import {package_relative}",
+            }
+        )
+    if parent_relative:
+        patterns.update(
+            {
+                f"from .{parent_relative} import {stem}",
+                f"from ..{parent_relative} import {stem}",
             }
         )
 

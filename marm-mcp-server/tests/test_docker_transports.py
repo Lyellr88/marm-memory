@@ -448,7 +448,10 @@ def test_docker_stdio_tool_count_matches_http_registered_tools(docker_image, tmp
     for line in result.stdout.splitlines():
         if not line.strip():
             continue
-        msg = json.loads(line)
+        try:
+            msg = json.loads(line)
+        except json.JSONDecodeError:
+            continue
         if "id" in msg:
             responses[msg["id"]] = msg
 

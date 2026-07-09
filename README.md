@@ -320,14 +320,6 @@ docker run -d --name marm-mcp-server \
 
 ## Complete MCP Tool Suite (12 Tools)
 
-<div align="center">
-<picture>
-<img src="https://raw.githubusercontent.com/Lyellr88/MARM-Systems/MARM-main/assets/mcp-tools.png"
-   width="700"
-   height="400"
-</picture>
-</div>
-
 **💡 Pro Tip:** You don't need to manually call these tools! Just tell your AI agent what you want in natural language:
 
 - *"Claude, log this session as 'Project Alpha' and add this conversation as 'database design discussion'"*
@@ -360,14 +352,6 @@ Under the hood, MARM uses SQLite WAL mode, connection pooling, serialized writes
 For a deeper look into the MCP behavior, tool parameters, automation, and workflows, see [MCP-HANDBOOK.md](MCP-HANDBOOK.md) and [FAQ.md](marm-mcp-server/marm-docs/FAQ.md).
 
 ## Performance & Scaling Benchmarks
-
-<div align="center">
-<picture>
-<img src="https://raw.githubusercontent.com/Lyellr88/MARM-Systems/MARM-main/assets/marm-bench.png"
-   width="700"
-   height="400"
-</picture>
-</div>
 
 MARM is tuned for fast recall first, even as memory grows and long memories are chunked behind the scenes.
 
