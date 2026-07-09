@@ -353,6 +353,43 @@ def test_run_build_reports_possible_duplicate_when_similar_entity_exists(
     assert dup["candidates"][0]["similarity"] >= 0.9
 
 
+def test_run_build_caches_embed_calls_across_repeated_entity_names(
+    concepts_env, monkeypatch
+):
+    """get_or_create_entity only stores an embedding on the INSERT branch --
+    re-mentions of the same name across multiple memories in one build must
+    not re-run the (encoder-lock-serialized) embed call for a result that's
+    discarded every time but the first."""
+    _server, concepts, _memory_module = concepts_env
+    from marm_mcp_server.core.concept_extraction import Entity, ExtractionResult
+
+    call_count = {"n": 0}
+
+    def _counting_embed(name):
+        call_count["n"] += 1
+        return np.asarray([1.0, 0.0, 0.0], dtype=np.float32).tobytes()
+
+    monkeypatch.setattr(concepts, "_try_embed", _counting_embed)
+    monkeypatch.setattr(concepts, "is_graph_available", lambda: False)
+    monkeypatch.setattr(
+        concepts,
+        "extract_entities",
+        lambda content: ExtractionResult(
+            entities=[Entity("auth module", "concept")], relationship_pairs=[]
+        ),
+    )
+
+    rows = [
+        ("m1", "auth module content one", "sess-a", None),
+        ("m2", "auth module content two", "sess-a", None),
+        ("m3", "auth module content three", "sess-a", None),
+    ]
+    result = concepts._run_build(rows)
+
+    assert result["entities_extracted"] == 3  # three mentions processed
+    assert call_count["n"] == 1  # but the name was only ever embedded once
+
+
 def test_try_embed_real_fastembed_end_to_end(concepts_env):
     """The one place real-model coverage is actually possible in this
     sandbox for Goal 3 -- fastembed itself is installed (unlike spaCy's
@@ -450,6 +487,52 @@ def test_traverse_depth_1_reproduces_one_hop_behavior(concepts_env):
     assert names == {"B", "D"}  # A's direct neighbors only, not C
     assert all(r["hop"] == 1 for r in results)
     assert all("path" not in r for r in results)  # depth=1: no path field
+
+
+def test_traverse_emits_direct_edges_between_two_seeds(concepts_env):
+    """Regression test: recall's `name LIKE '%query%'` routinely matches a
+    cluster of related entities that are themselves directly connected --
+    e.g. "auth module" and "auth service" both match a query for "auth".
+    Those direct edges are exactly the most relevant relationships to
+    surface, but an earlier version of _traverse silently suppressed them
+    (both seeds were pre-loaded into a single visited set, so neither could
+    ever be emitted as the other's neighbor)."""
+    _server, concepts, _memory_module = concepts_env
+    concept_db = concepts._get_concept_db()
+    with concept_db.get_connection() as conn:
+        id_module, _ = concept_db.get_or_create_entity(
+            conn, "auth module", "concept", "sess-a", None, "m1"
+        )
+        id_service, _ = concept_db.get_or_create_entity(
+            conn, "auth service", "concept", "sess-a", None, "m1"
+        )
+        concept_db.store_relationship(conn, id_module, id_service, "uses", "m1", None)
+
+        results = concepts._traverse(
+            conn, [id_module, id_service], depth=1, direction="both", limit=10
+        )
+
+    names = {r["name"] for r in results}
+    assert names == {"auth module", "auth service"}
+
+
+def test_run_recall_emits_direct_edges_between_two_matched_seeds(concepts_env):
+    """Same regression, exercised through the real marm_concept_recall path
+    (name LIKE matching two related entities), not just _traverse directly."""
+    _server, concepts, _memory_module = concepts_env
+    concept_db = concepts._get_concept_db()
+    with concept_db.get_connection() as conn:
+        id_module, _ = concept_db.get_or_create_entity(
+            conn, "auth module", "concept", "sess-a", None, "m1"
+        )
+        id_service, _ = concept_db.get_or_create_entity(
+            conn, "auth service", "concept", "sess-a", None, "m1"
+        )
+        concept_db.store_relationship(conn, id_module, id_service, "uses", "m1", None)
+
+    result = concepts._run_recall("auth", session_name=None, limit=10)
+    related_names = {r["name"] for r in result["related_entities"]}
+    assert related_names == {"auth module", "auth service"}
 
 
 def test_traverse_multi_hop_finds_second_degree_neighbor(concepts_env):

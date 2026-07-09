@@ -124,6 +124,14 @@ def _run_build(rows: list[tuple[str, str, Optional[str], Optional[str]]]) -> dic
     code_links_created = 0
     graph_available = is_graph_available()
     possible_duplicates: list[dict] = []
+    # Memoized per build, not per call: get_or_create_entity only ever
+    # stores the embedding on the INSERT branch (re-mentions ignore it), so
+    # without this cache, a name repeated across many memories in one
+    # search_all=True build re-runs the (process-wide, encoder-lock-
+    # serialized) encode for a result that's thrown away every time but the
+    # first. Same input text always produces the same embedding, so caching
+    # is always safe.
+    embed_cache: dict[str, Optional[bytes]] = {}
 
     with concept_db.get_connection() as conn:
         for mem_id, content, mem_session, mem_project in rows:
@@ -135,7 +143,9 @@ def _run_build(rows: list[tuple[str, str, Optional[str], Optional[str]]]) -> dic
 
             name_to_id: dict[str, int] = {}
             for entity in result.entities:
-                emb_bytes = _try_embed(entity.name)
+                if entity.name not in embed_cache:
+                    embed_cache[entity.name] = _try_embed(entity.name)
+                emb_bytes = embed_cache[entity.name]
                 try:
                     entity_id, was_created = concept_db.get_or_create_entity(
                         conn,
@@ -226,12 +236,26 @@ def _traverse(
     WITH RECURSIVE uses anywhere in this repo). At depth=1 this reproduces
     the original one-hop outgoing+incoming+union+truncate behavior exactly.
 
-    visited is load-bearing, not optional: store_relationship prevents
-    self-loops, but multi-node cycles (A->B->C->A) are possible without it
-    the BFS would loop/duplicate-explode. ORDER BY r.id makes which parent
-    "wins" for path reconstruction deterministic when a node is reachable
-    from two frontier members in the same hop."""
-    visited: dict[int, int] = {eid: 0 for eid in seed_ids}
+    Two separate sets, not one -- an earlier version pre-seeded a single
+    `visited` set with every seed id, which silently suppressed direct edges
+    *between* two seeds (recall's `name LIKE '%query%'` routinely matches a
+    cluster of related entities that are themselves directly connected --
+    those edges are exactly the most relevant ones to surface). `emitted`
+    tracks what's already in `results` and is NOT pre-seeded, so a seed can
+    be emitted as another seed's hop-1 neighbor. `expanded` IS pre-seeded
+    with every seed id and prevents re-querying from a node whose
+    relationships we've already fetched -- this is what stops multi-node
+    cycles (A->B->C->A) from looping/duplicate-exploding. The `hop > 1`
+    guard is the key: at hop 1, `expanded` never blocks emission (frontier
+    *is* the seed set, so every hop-1 row is by definition a direct edge
+    between two seeds or a seed and a fresh neighbor); from hop 2 onward,
+    re-reaching anything already in `expanded` (including an original seed
+    via a cycle) is genuinely old information, not a new discovery, and is
+    excluded. ORDER BY r.id makes which parent "wins" for path
+    reconstruction deterministic when a node is reachable from two frontier
+    members in the same hop."""
+    emitted: set[int] = set()
+    expanded: set[int] = set(seed_ids)
     paths: dict[int, list[dict]] = {eid: [] for eid in seed_ids}
     frontier = list(seed_ids)
     results: list[dict] = []
@@ -258,9 +282,11 @@ def _traverse(
 
         next_frontier = []
         for from_id, neighbor_id, name, entity_type, predicate in rows:
-            if neighbor_id in visited:
+            if neighbor_id in emitted:
                 continue
-            visited[neighbor_id] = hop
+            if hop > 1 and neighbor_id in expanded:
+                continue
+            emitted.add(neighbor_id)
             paths[neighbor_id] = paths[from_id] + [
                 {"predicate": predicate, "name": name}
             ]
@@ -273,7 +299,9 @@ def _traverse(
             if depth > 1:
                 entry["path"] = paths[neighbor_id]
             results.append(entry)
-            next_frontier.append(neighbor_id)
+            if neighbor_id not in expanded:
+                expanded.add(neighbor_id)
+                next_frontier.append(neighbor_id)
             if len(results) >= limit:
                 break
         frontier = next_frontier
