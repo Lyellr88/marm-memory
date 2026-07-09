@@ -125,7 +125,7 @@ def test_dashboard_mount_reachable_but_absent_from_tools_list(monkeypatch, tmp_p
     assert response.json()["status"] == "ok"
 
     names = {t.name for t in server.mcp.tools}
-    assert len(names) == 12
+    assert len(names) == 14
     assert "health" not in names
 
 

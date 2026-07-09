@@ -147,7 +147,9 @@ def test_stdio_handles_mcp_initialize_and_exposes_tools(tmp_path):
     assert "marm_graph_trace" in tool_names
     assert "marm_graph_architecture" in tool_names
     assert "marm_graph_impact" in tool_names
-    assert len(tools) == 12
+    assert "marm_concept_build" in tool_names
+    assert "marm_concept_recall" in tool_names
+    assert len(tools) == 14
 
 
 def test_stdio_delete_notebook_removes_entry_from_active_state(monkeypatch, tmp_path):
@@ -378,6 +380,110 @@ def test_stdio_inprocess_client_wraps_graph_index_happy_path(monkeypatch, tmp_pa
     # HTTP endpoint logic by hand.
     assert captured["client"] == "fake-client"
     assert captured["req"].repo_path == "/tmp/some-repo"
+
+
+def test_stdio_concept_recall_passes_through_to_run_recall(monkeypatch, tmp_path):
+    """marm_concept_recall's STDIO wrapper has its own try/except and
+    duration_ms-free passthrough, distinct code from the HTTP endpoint --
+    test_concept_endpoints.py covers _run_recall itself thoroughly but never
+    through this wrapper. Guards against wrong argument order/names in the
+    passthrough (e.g. project silently dropped or swapped with direction)."""
+    stdio = _isolated_stdio(monkeypatch, tmp_path)
+
+    captured = {}
+
+    def _fake_run_recall(query, session_name, limit, depth, direction, project):
+        captured.update(
+            query=query,
+            session_name=session_name,
+            limit=limit,
+            depth=depth,
+            direction=direction,
+            project=project,
+        )
+        return {"entities": [], "related_entities": [], "linked_code": []}
+
+    monkeypatch.setattr(stdio, "_run_recall", _fake_run_recall)
+
+    result = asyncio.run(
+        stdio.marm_concept_recall(
+            query="auth",
+            session_name="sess-a",
+            limit=5,
+            depth=2,
+            direction="outgoing",
+            project="proj-a",
+        )
+    )
+
+    assert result == {"entities": [], "related_entities": [], "linked_code": []}
+    assert captured == {
+        "query": "auth",
+        "session_name": "sess-a",
+        "limit": 5,
+        "depth": 2,
+        "direction": "outgoing",
+        "project": "proj-a",
+    }
+
+
+def test_stdio_concept_recall_rejects_out_of_range_limit(monkeypatch, tmp_path):
+    """The STDIO wrapper's limit/depth are plain ints, not a bounded pydantic
+    field like the HTTP endpoint's ConceptRecallRequest -- without explicit
+    validation, limit=-1 would reach SQLite as a raw `LIMIT -1` (no limit at
+    all, returning every matching entity/relationship/code link)."""
+    stdio = _isolated_stdio(monkeypatch, tmp_path)
+
+    def _unreachable(*args, **kwargs):
+        raise AssertionError("_run_recall must not be reached for invalid input")
+
+    monkeypatch.setattr(stdio, "_run_recall", _unreachable)
+
+    result = asyncio.run(stdio.marm_concept_recall(query="auth", limit=-1))
+
+    assert result["status"] == "error"
+    assert "Concept recall failed" in result["message"]
+
+
+def test_stdio_concept_build_passes_through_to_fetch_and_run_build(
+    monkeypatch, tmp_path
+):
+    stdio = _isolated_stdio(monkeypatch, tmp_path)
+
+    fetch_captured = {}
+    fake_rows = [("m1", "content", "sess-a", "proj-a")]
+
+    def _fake_fetch(session_name, project, search_all):
+        fetch_captured.update(
+            session_name=session_name, project=project, search_all=search_all
+        )
+        return fake_rows
+
+    build_captured = {}
+
+    def _fake_run_build(rows):
+        build_captured["rows"] = rows
+        return {
+            "entities_extracted": 1,
+            "relationships_created": 0,
+            "code_links_created": 0,
+        }
+
+    monkeypatch.setattr(stdio, "_fetch_memory_rows", _fake_fetch)
+    monkeypatch.setattr(stdio, "_run_build", _fake_run_build)
+
+    result = asyncio.run(
+        stdio.marm_concept_build(session_name="sess-a", project="proj-a")
+    )
+
+    assert fetch_captured == {
+        "session_name": "sess-a",
+        "project": "proj-a",
+        "search_all": False,
+    }
+    assert build_captured["rows"] == fake_rows
+    assert result["entities_extracted"] == 1
+    assert "duration_ms" in result
 
 
 def test_stop_graph_supervisor_safely_swallows_errors(monkeypatch):

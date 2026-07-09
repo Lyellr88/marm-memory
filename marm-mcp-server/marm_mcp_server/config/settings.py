@@ -46,6 +46,26 @@ SCHEDULER_AVAILABLE = importlib.util.find_spec("apscheduler") is not None
 if not SCHEDULER_AVAILABLE:
     print("WARNING: Scheduler not available. Install: pip install apscheduler")
 
+# en_core_web_sm can't be a direct pip dependency of the [concepts] extra --
+# PyPI rejects package uploads containing direct URL/VCS dependencies, which
+# is how spaCy models are normally referenced. So this is a two-step install
+# (pip install marm-mcp-server[concepts], then python -m spacy download
+# en_core_web_sm) rather than one, same as every other PyPI package that
+# depends on a spaCy model.
+CONCEPTS_AVAILABLE = (
+    importlib.util.find_spec("spacy") is not None
+    and importlib.util.find_spec("en_core_web_sm") is not None
+)
+if not CONCEPTS_AVAILABLE:
+    # stderr, not stdout -- STDIO transport's stdout must stay JSON-RPC clean
+    # (see core/memory_utils.py's _safe_print), and this module is imported
+    # on every server start including the STDIO entrypoint.
+    print(
+        "WARNING: Concept graph extraction not available. Install: "
+        "pip install marm-mcp-server[concepts] && python -m spacy download en_core_web_sm",
+        file=sys.stderr,
+    )
+
 
 def _file_link(path: Path) -> str:
     try:
@@ -180,6 +200,30 @@ RECALL_SCAN_LIMIT = max(1, _raw_rsl)
 if _raw_rsl < 1:
     print(
         f"WARNING: RECALL_SCAN_LIMIT={_raw_rsl} below minimum 1, clamped to {RECALL_SCAN_LIMIT}",
+        file=sys.stderr,
+    )
+
+_raw_cbc = _safe_int("CONCEPT_BUILD_ROW_CAP", 500)
+CONCEPT_BUILD_ROW_CAP = max(1, _raw_cbc)
+if _raw_cbc < 1:
+    print(
+        f"WARNING: CONCEPT_BUILD_ROW_CAP={_raw_cbc} below minimum 1, clamped to {CONCEPT_BUILD_ROW_CAP}",
+        file=sys.stderr,
+    )
+
+# Starting point to tune from real usage, not a validated-forever constant --
+# fastembed's model is tuned for sentence-length input; behavior on single-
+# word/short-phrase entity names is less validated than on the full-memory-
+# content strings this encoder already handles elsewhere. Same band as this
+# codebase's two existing analogous "is this basically the same thing"
+# embedding thresholds (CONSOLIDATION_THRESHOLD=0.92, COMPACTION_SIMILARITY_
+# THRESHOLD=0.88).
+_raw_cdst = _safe_float("CONCEPT_DUPLICATE_SIMILARITY_THRESHOLD", 0.90)
+CONCEPT_DUPLICATE_SIMILARITY_THRESHOLD = max(0.0, min(1.0, _raw_cdst))
+if not (0.0 <= _raw_cdst <= 1.0):
+    print(
+        f"WARNING: CONCEPT_DUPLICATE_SIMILARITY_THRESHOLD={_raw_cdst} out of [0, 1], "
+        f"clamped to {CONCEPT_DUPLICATE_SIMILARITY_THRESHOLD}",
         file=sys.stderr,
     )
 
@@ -351,8 +395,8 @@ if SERVER_HOST == "0.0.0.0" and not MARM_API_KEY and not _is_generate_key_cmd:
             pass
         if sys.platform == "win32":
             try:
-                import subprocess
                 import getpass
+                import subprocess
 
                 user = getpass.getuser()
                 subprocess.run(

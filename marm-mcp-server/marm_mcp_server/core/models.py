@@ -1,7 +1,8 @@
 """Pydantic models for MARM MCP Server endpoints."""
 
-from pydantic import BaseModel, Field, model_validator
 from typing import Literal, Optional
+
+from pydantic import BaseModel, Field, model_validator
 
 
 class SessionRequest(BaseModel):
@@ -135,3 +136,51 @@ class CompactionRequest(BaseModel):
         if self.action in ("apply", "discard") and not self.candidate_id:
             raise ValueError(f"candidate_id is required for action='{self.action}'")
         return self
+
+
+class ConceptBuildRequest(BaseModel):
+    session_name: Optional[str] = Field(
+        default=None,
+        description="Scope extraction to this session. Omit with search_all=True for everything.",
+    )
+    search_all: bool = Field(
+        default=False,
+        description="Extract across all sessions (row-capped, see CONCEPT_BUILD_ROW_CAP).",
+    )
+    project: Optional[str] = Field(
+        default=None, description="Scope extraction to this project."
+    )
+
+    @model_validator(mode="after")
+    def validate_scope_requirements(self):
+        if not (self.session_name or self.project or self.search_all):
+            raise ValueError(
+                "session_name, project, or search_all=True is required to scope the build"
+            )
+        return self
+
+
+class ConceptRecallRequest(BaseModel):
+    query: str = Field(
+        ...,
+        description="Concept name, or a 'related to X' style ask. Both route from query shape alone.",
+    )
+    session_name: Optional[str] = Field(
+        default=None, description="Scope to this session. Omit to search across all."
+    )
+    project: Optional[str] = Field(
+        default=None,
+        description="Scope to this project. Omit to search across all projects.",
+    )
+    limit: int = Field(
+        default=10, ge=1, le=100, description="Max entities/relationships returned."
+    )
+    depth: int = Field(
+        default=1,
+        ge=1,
+        le=5,
+        description="Max hop distance to traverse (1 = direct neighbors only).",
+    )
+    direction: Literal["outgoing", "incoming", "both"] = Field(
+        default="both", description="Traversal direction per hop."
+    )
