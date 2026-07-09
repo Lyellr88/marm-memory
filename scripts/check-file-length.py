@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Report Python files in marm_mcp_server/ that exceed a line threshold."""
+"""Report source files in shipped MARM server packages that exceed a threshold."""
 
 import argparse
 import sys
@@ -14,7 +14,7 @@ GRAY = "\033[90m"
 RESET = "\033[0m"
 
 ROOT = Path(__file__).parent.parent / "marm-mcp-server"
-SCAN_DIRS = ["marm_mcp_server"]
+SCAN_DIRS = ["marm_mcp_server", "marm_graph", "marm_dashboard"]
 EXTENSIONS = {".py", ".toml", ".md", ".txt", ".json"}
 
 

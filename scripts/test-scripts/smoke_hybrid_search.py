@@ -98,9 +98,7 @@ async def run(fts_weight: float) -> bool:
         encoder_ok = SEMANTIC_SEARCH_AVAILABLE and memory._load_encoder_lazily()
         if not encoder_ok:
             memory._encoder_failed = True
-            print(
-                "NOTE: fastembed not available — vector scores will be 0.00\n"
-            )
+            print("NOTE: fastembed not available — vector scores will be 0.00\n")
 
         for content in SEED_MEMORIES:
             await memory.store_memory(content, session=SESSION)

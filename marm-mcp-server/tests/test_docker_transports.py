@@ -1,3 +1,4 @@
+import json
 import os
 import socket
 import subprocess
@@ -7,6 +8,7 @@ import uuid
 import pytest
 import requests
 
+from marm_mcp_server.server import MCP_TOOL_OPERATIONS
 
 pytestmark = pytest.mark.docker
 
@@ -94,6 +96,16 @@ def test_docker_http_requires_key_and_serves_tools(docker_image, tmp_path):
         assert ready.status_code == 200
         assert "websocket" not in ready.text.lower()
 
+        openapi = requests.get(f"{base_url}/openapi.json", timeout=5)
+        assert openapi.status_code == 200
+        operation_ids = {
+            operation.get("operationId")
+            for path_item in openapi.json()["paths"].values()
+            for operation in path_item.values()
+            if isinstance(operation, dict)
+        }
+        assert set(MCP_TOOL_OPERATIONS).issubset(operation_ids)
+
         missing_auth = requests.get(
             f"{base_url}/marm_log_show", params={"session_name": "main"}, timeout=5
         )
@@ -143,3 +155,305 @@ def test_docker_stdio_import_keeps_stdout_clean(docker_image, tmp_path):
 
     assert result.returncode == 0, result.stderr
     assert result.stdout == ""
+
+
+def test_docker_env_passthrough_reaches_runtime_settings(docker_image, tmp_path):
+    """Environment variables passed to docker run must reach Python settings.
+
+    This catches regressions where the image entrypoint or packaging path stops
+    honoring documented runtime knobs such as MARM_DB_PATH and WRITE_QUEUE_ENABLED.
+    """
+    custom_db = "/home/marm/.marm/custom-env-test.db"
+    result = _run_docker(
+        [
+            "run",
+            "--rm",
+            "-i",
+            "-v",
+            f"{tmp_path}:/home/marm/.marm",
+            "-e",
+            f"MARM_DB_PATH={custom_db}",
+            "-e",
+            "WRITE_QUEUE_ENABLED=0",
+            "--entrypoint",
+            "python",
+            docker_image,
+            "-c",
+            (
+                "from marm_mcp_server.config.settings import "
+                "DEFAULT_DB_PATH, WRITE_QUEUE_ENABLED; "
+                f"assert DEFAULT_DB_PATH == {custom_db!r}; "
+                "assert WRITE_QUEUE_ENABLED is False"
+            ),
+        ],
+        timeout=60,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_docker_runs_as_non_root_user(docker_image):
+    """Dockerfile drops to USER marm before ENTRYPOINT (see
+    test_docker_static_config.py's static check on the Dockerfile itself) --
+    this proves the *running* container actually honors it, not just that
+    the directive is present in the file."""
+    result = _run_docker(
+        ["run", "--rm", "--entrypoint", "whoami", docker_image],
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "marm"
+
+
+def test_docker_healthcheck_status_becomes_healthy(docker_image, tmp_path):
+    """Exercises the container's own built-in HEALTHCHECK mechanism (docker
+    inspect's Health.Status), not just our own HTTP polling of /health like
+    test_docker_http_requires_key_and_serves_tools does -- these are
+    different code paths (Docker's healthcheck runner vs. a plain HTTP
+    client) and either can be broken independently."""
+    container = f"marm-test-health-{uuid.uuid4().hex[:10]}"
+    port = _free_port()
+
+    run = _run_docker(
+        [
+            "run",
+            "-d",
+            "--name",
+            container,
+            "-p",
+            f"127.0.0.1:{port}:8001",
+            "-e",
+            "SERVER_HOST=0.0.0.0",
+            "-v",
+            f"{tmp_path}:/home/marm/.marm",
+            docker_image,
+        ],
+        timeout=90,
+    )
+    assert run.returncode == 0, run.stderr
+
+    try:
+        _wait_for_health(f"http://127.0.0.1:{port}")
+
+        deadline = time.time() + 60
+        status = None
+        while time.time() < deadline:
+            inspect = _run_docker(
+                ["inspect", "--format={{.State.Health.Status}}", container],
+                timeout=20,
+            )
+            status = inspect.stdout.strip()
+            if status == "healthy":
+                break
+            time.sleep(2)
+
+        assert status == "healthy", (
+            f"container health status never became healthy (last: {status})"
+        )
+    finally:
+        _run_docker(["rm", "-f", container], timeout=30)
+
+
+def test_docker_dashboard_mounted_and_reachable(docker_image, tmp_path):
+    """The v2.16.1 packaging unification made the dashboard bundled into the
+    same process/port as the main server (see docker-compose.yml's comment:
+    'memory + graph + dashboard, one port') -- this must hold for every
+    build of the image, not just the one it was true for at the time."""
+    container = f"marm-test-dashboard-{uuid.uuid4().hex[:10]}"
+    port = _free_port()
+
+    run = _run_docker(
+        [
+            "run",
+            "-d",
+            "--name",
+            container,
+            "-p",
+            f"127.0.0.1:{port}:8001",
+            "-e",
+            "SERVER_HOST=0.0.0.0",
+            "-v",
+            f"{tmp_path}:/home/marm/.marm",
+            docker_image,
+        ],
+        timeout=90,
+    )
+    assert run.returncode == 0, run.stderr
+
+    try:
+        base_url = f"http://127.0.0.1:{port}"
+        _wait_for_health(base_url)
+
+        response = requests.get(f"{base_url}/dashboard/health", timeout=5)
+        assert response.status_code == 200
+        assert response.json()["status"] == "ok"
+    finally:
+        _run_docker(["rm", "-f", container], timeout=30)
+
+
+def test_docker_http_container_stops_gracefully(docker_image, tmp_path):
+    """SIGTERM from docker stop should shut down the HTTP server cleanly."""
+    container = f"marm-test-stop-{uuid.uuid4().hex[:10]}"
+    port = _free_port()
+
+    run = _run_docker(
+        [
+            "run",
+            "-d",
+            "--name",
+            container,
+            "-p",
+            f"127.0.0.1:{port}:8001",
+            "-e",
+            "SERVER_HOST=0.0.0.0",
+            "-e",
+            "MARM_API_KEY=TestStopKey_12345#abcDEF",
+            "-v",
+            f"{tmp_path}:/home/marm/.marm",
+            docker_image,
+        ],
+        timeout=90,
+    )
+    assert run.returncode == 0, run.stderr
+
+    try:
+        _wait_for_health(f"http://127.0.0.1:{port}")
+        stopped = _run_docker(["stop", "-t", "10", container], timeout=30)
+        assert stopped.returncode == 0, stopped.stderr
+
+        inspect = _run_docker(
+            ["inspect", "--format={{.State.ExitCode}}", container], timeout=20
+        )
+        assert inspect.returncode == 0, inspect.stderr
+        assert inspect.stdout.strip() == "0"
+    finally:
+        _run_docker(["rm", "-f", container], timeout=30)
+
+
+def test_docker_data_persists_across_container_restart(docker_image, tmp_path):
+    """~/.marm is meant to be the durable state; a fresh container over the
+    same volume mount must see data written by a previous, now-removed
+    container -- proves the volume mount actually round-trips the memory DB,
+    not just that the container can read/write within its own lifetime."""
+    api_key = "TestPersistKey_12345#abcDEF"
+    session_name = f"persist-test-{uuid.uuid4().hex[:8]}"
+
+    def _start(name):
+        port = _free_port()
+        run = _run_docker(
+            [
+                "run",
+                "-d",
+                "--name",
+                name,
+                "-p",
+                f"127.0.0.1:{port}:8001",
+                "-e",
+                "SERVER_HOST=0.0.0.0",
+                "-e",
+                f"MARM_API_KEY={api_key}",
+                "-v",
+                f"{tmp_path}:/home/marm/.marm",
+                docker_image,
+            ],
+            timeout=90,
+        )
+        assert run.returncode == 0, run.stderr
+        base_url = f"http://127.0.0.1:{port}"
+        _wait_for_health(base_url)
+        return base_url
+
+    first_container = f"marm-test-persist-a-{uuid.uuid4().hex[:10]}"
+    second_container = f"marm-test-persist-b-{uuid.uuid4().hex[:10]}"
+    headers = {"Authorization": f"Bearer {api_key}"}
+
+    try:
+        base_url = _start(first_container)
+        write = requests.post(
+            f"{base_url}/marm_log_entry",
+            json={
+                "entry": f"2026-07-07-persist-check-wrote from {first_container}",
+                "session_name": session_name,
+            },
+            headers=headers,
+            timeout=5,
+        )
+        assert write.status_code == 200
+    finally:
+        _run_docker(["rm", "-f", first_container], timeout=30)
+
+    try:
+        base_url = _start(second_container)
+        read = requests.get(
+            f"{base_url}/marm_log_show",
+            params={"session_name": session_name},
+            headers=headers,
+            timeout=5,
+        )
+        assert read.status_code == 200
+        assert "persist-check" in read.text
+    finally:
+        _run_docker(["rm", "-f", second_container], timeout=30)
+
+
+def test_docker_stdio_tool_count_matches_http_registered_tools(docker_image, tmp_path):
+    """STDIO and HTTP must expose the same tool surface from the same image
+    (see CHANGELOG's "STDIO Graph Tool Parity" entry) -- this proves parity
+    inside the actual built image, not just in the in-process test suite."""
+
+    def message(msg):
+        return (json.dumps(msg) + "\n").encode("utf-8")
+
+    stdin_data = (
+        message(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2024-11-05",
+                    "capabilities": {},
+                    "clientInfo": {"name": "docker-test-client", "version": "0.1"},
+                },
+            }
+        )
+        + message(
+            {"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}}
+        )
+        + message({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
+    )
+
+    result = subprocess.run(
+        [
+            "docker",
+            "run",
+            "--rm",
+            "-i",
+            "-v",
+            f"{tmp_path}:/home/marm/.marm",
+            "--entrypoint",
+            "python",
+            docker_image,
+            "-m",
+            "marm_mcp_server.server_stdio",
+        ],
+        input=stdin_data,
+        capture_output=True,
+        timeout=60,
+    )
+
+    assert result.returncode == 0, result.stderr.decode("utf-8", errors="replace")[:500]
+
+    responses = {}
+    for line in result.stdout.splitlines():
+        if not line.strip():
+            continue
+        msg = json.loads(line)
+        if "id" in msg:
+            responses[msg["id"]] = msg
+
+    assert 2 in responses, (
+        f"No tools/list response; stderr: {result.stderr.decode('utf-8', errors='replace')[:500]}"
+    )
+    tool_names = {t["name"] for t in responses[2]["result"]["tools"]}
+    assert tool_names == set(MCP_TOOL_OPERATIONS)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Find potentially dead code in marm_mcp_server/.
+"""Find potentially dead code in shipped MARM server packages.
 
 This is a static heuristic scanner, not a deletion oracle. It is meant to
 surface files/functions worth reviewing by a human or code-review agent.
@@ -18,8 +18,13 @@ GRAY = "\033[90m"
 RESET = "\033[0m"
 
 ROOT = Path(__file__).parent.parent / "marm-mcp-server"
-PACKAGE = ROOT / "marm_mcp_server"
-SERVER_FILE = PACKAGE / "server.py"
+PACKAGE_DIRS = [
+    ROOT / "marm_mcp_server",
+    ROOT / "marm_graph",
+    ROOT / "marm_dashboard",
+]
+SERVER_PACKAGE = ROOT / "marm_mcp_server"
+SERVER_FILE = SERVER_PACKAGE / "server.py"
 
 SKIP_FUNC_PREFIXES = ("__",)
 SKIP_FUNC_NAMES = {
@@ -36,7 +41,11 @@ FAIL = "x"
 
 
 def all_py_files() -> list[Path]:
-    return sorted(PACKAGE.rglob("*.py"))
+    files: list[Path] = []
+    for package in PACKAGE_DIRS:
+        if package.exists():
+            files.extend(package.rglob("*.py"))
+    return sorted(files)
 
 
 def read(path: Path) -> str:
@@ -93,12 +102,12 @@ def module_reference_patterns(module_path: str) -> set[str]:
 
 
 # ---------------------------------------------------------------------------
-# Check 1: Orphaned modules — never imported by anything in the package
+# Check 1: Orphaned modules — never imported by anything in shipped packages
 # ---------------------------------------------------------------------------
 def check_orphaned_modules() -> int:
     print(f"{YELLOW}1. Checking for orphaned modules...{RESET}")
     print(
-        f"{GRAY}   Meaning: a Python file under marm_mcp_server/ whose module name was not{RESET}"
+        f"{GRAY}   Meaning: a Python file under shipped packages whose module name was not{RESET}"
     )
     print(
         f"{GRAY}   found in package imports. It may still be used by CLI entry points,{RESET}"
@@ -114,8 +123,8 @@ def check_orphaned_modules() -> int:
     for f in files:
         if f.name in skip:
             continue
-        # Build the dotted module name relative to package root
-        rel = f.relative_to(PACKAGE.parent)
+        # Build the dotted module name relative to marm-mcp-server/
+        rel = f.relative_to(ROOT)
         module_path = ".".join(
             rel.with_suffix("").parts
         )  # e.g. marm_mcp_server.core.memory
@@ -154,7 +163,7 @@ def check_unregistered_routers() -> int:
         f"{GRAY}   expected <name>_router alias is not referenced in server.py.{RESET}"
     )
 
-    endpoints_dir = PACKAGE / "endpoints"
+    endpoints_dir = SERVER_PACKAGE / "endpoints"
     server_src = read(SERVER_FILE) if SERVER_FILE.exists() else ""
 
     unregistered = []
@@ -202,7 +211,7 @@ def check_unused_functions() -> int:
         f"{GRAY}   Meaning: a function name appears only at its definition site across{RESET}"
     )
     print(
-        f"{GRAY}   marm_mcp_server/. This is noisy for decorators, route handlers, protocol{RESET}"
+        f"{GRAY}   shipped packages. This is noisy for decorators, route handlers, protocol{RESET}"
     )
     print(f"{GRAY}   callbacks, and framework-discovered functions.{RESET}")
 
@@ -216,11 +225,24 @@ def check_unused_functions() -> int:
 
     for f in files:
         src = read(f)
+        lines = src.splitlines()
         for m in def_pattern.finditer(src):
             name = m.group(1)
             if name.startswith(SKIP_FUNC_PREFIXES) or name in SKIP_FUNC_NAMES:
                 continue
             lineno = src[: m.start()].count("\n") + 1
+            # FastAPI/MCP route handlers are referenced by decorators, not by
+            # ordinary function-name calls. Suppress those to keep the report
+            # focused on reviewable candidates.
+            index = lineno - 2
+            decorated = False
+            while index >= 0 and lines[index].strip():
+                if lines[index].lstrip().startswith("@"):
+                    decorated = True
+                    break
+                index -= 1
+            if decorated:
+                continue
             definitions[name].append((str(f), lineno))
 
     unused = []
@@ -263,11 +285,11 @@ def main() -> int:
     except Exception:
         pass
 
-    print(f"{CYAN}=== Dead Code Finder — marm_mcp_server/ ==={RESET}\n")
+    print(f"{CYAN}=== Dead Code Finder — shipped MARM packages ==={RESET}\n")
     explain_static_limits()
 
-    if not PACKAGE.exists():
-        print(f"{RED}✗ marm_mcp_server/ not found. Run from project root.{RESET}")
+    if not any(package.exists() for package in PACKAGE_DIRS):
+        print(f"{RED}✗ No shipped package folders found. Run from project root.{RESET}")
         return 1
 
     orphaned = check_orphaned_modules()
@@ -282,7 +304,7 @@ def main() -> int:
     )
     print()
     print(
-        f"{CYAN}Tip: run `python -m py_compile marm_mcp_server/**/*.py` to catch syntax errors{RESET}\n"
+        f"{CYAN}Tip: run `python -m compileall marm_mcp_server marm_graph marm_dashboard` from marm-mcp-server/ to catch syntax errors{RESET}\n"
     )
 
     return 0
