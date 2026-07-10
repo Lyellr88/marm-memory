@@ -66,14 +66,14 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 
 LABEL org.opencontainers.image.title="MARM Universal MCP Server"
 LABEL org.opencontainers.image.description="Production-ready Universal MCP Server with advanced AI memory capabilities, semantic search, and professional-grade architecture"
-LABEL org.opencontainers.image.version="2.18.0"
+LABEL org.opencontainers.image.version="2.19.0"
 LABEL org.opencontainers.image.authors="Ryan Lyell - MARM Systems"
 LABEL org.opencontainers.image.url="https://marmsystems.com"
 LABEL org.opencontainers.image.source="https://github.com/Lyellr88/MARM-Systems"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
 LABEL mcp.server="true"
 LABEL mcp.name="marm-mcp-server"
-LABEL mcp.tools="12"
+LABEL mcp.tools="14"
 LABEL io.modelcontextprotocol.server.name="io.github.Lyellr88/marm-mcp-server"
 
 ENV PYTHONPATH=/app

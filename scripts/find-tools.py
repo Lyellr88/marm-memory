@@ -36,6 +36,8 @@ CANONICAL_TOOLS = [
     "marm_graph_trace",
     "marm_graph_architecture",
     "marm_graph_impact",
+    "marm_concept_build",
+    "marm_concept_recall",
 ]
 
 # These are the surfaces that should stay synchronized with the full public
@@ -43,13 +45,11 @@ CANONICAL_TOOLS = [
 # the default report.
 FULL_LIST_FILES = {
     "README.md",
-    "MCP-HANDBOOK.md",
     "docs/PROTOCOL.md",
     "docs/PROTOCOL-LITE.md",
     "marm-mcp-server/README.md",
     "marm-mcp-server/server.json",
     "marm-mcp-server/marm-docs/FAQ.md",
-    "marm-mcp-server/marm-docs/MCP-HANDBOOK.md",
     "marm-mcp-server/marm-docs/PROTOCOL.md",
     "marm-mcp-server/marm-docs/PROTOCOL-LITE.md",
     "marm-mcp-server/marm-docs/README.md",
@@ -107,6 +107,8 @@ def is_relevant_count_line(line: str) -> bool:
     if "tool call" in lowered or "tool-call" in lowered:
         return False
     if "core mcp surface" in lowered or "core tools" in lowered:
+        return False
+    if "upstream" in lowered:
         return False
     return bool(FULL_LIST_HEADING_RE.search(line))
 

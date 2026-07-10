@@ -12,7 +12,7 @@ MARM Systems is a persistent memory layer for AI agents. The MCP server gives Cl
 
 | Component | Description | Best For |
 |-----------|-------------|----------|
-| **MARM MCP Server** | Persistent memory server with 12 MCP tools (HTTP + STDIO): 7 core memory tools plus 5 bundled code-graph tools | AI agents, IDEs, local workflows, shared team memory |
+| **MARM MCP Server** | Persistent memory server with 14 MCP tools (HTTP + STDIO): 7 core memory tools, 5 bundled code-graph tools, and 2 concept-graph tools | AI agents, IDEs, local workflows, shared team memory |
 | **MARM Protocol** | Runtime guidance delivered automatically by the MCP server | Keeping agents aligned on what to store, recall, and trust |
 | **MARM Dashboard** | Local browser UI for viewing memory and server health | Inspection, cleanup, and quick status checks |
 
@@ -79,7 +79,7 @@ For HTTP mode, use the MARM Dashboard status panel or run `curl http://localhost
 
 #### Q: What MCP tools does MARM provide?
 
-MARM currently exposes **12 MCP tools on both HTTP and STDIO**: 7 focused core memory tools plus 5 bundled code-graph tools.
+MARM currently exposes **14 MCP tools on both HTTP and STDIO**: 7 focused core memory tools, 5 bundled code-graph tools, and 2 concept-graph tools.
 
 | Category | Tools | Description |
 |----------|-------|-------------|
@@ -90,10 +90,23 @@ MARM currently exposes **12 MCP tools on both HTTP and STDIO**: 7 focused core m
 | **Summary** | `marm_summary` | Generate concise context summaries |
 | **Maintenance** | `marm_compaction` | Agent-assisted memory compaction with `action="status"`, `"candidates"`, `"review"`, `"stage"`, `"apply"`, or `"discard"` |
 | **Code Graph (HTTP + STDIO)** | `marm_graph_index`, `marm_code_lookup`, `marm_graph_trace`, `marm_graph_architecture`, `marm_graph_impact` | Index repositories, look up symbols/source, trace call paths, summarize architecture, and inspect change impact |
+| **Concept Graph (HTTP + STDIO)** | `marm_concept_build`, `marm_concept_recall` | Extract entities and typed relationships from stored memories, then query them with multi-hop traversal and code-symbol cross-links |
 
 #### Q: Do I still need to call `marm_start`?
 
 No. Session startup, protocol delivery, protocol-lite refresh, and documentation loading are automatic. The server injects the protocol on the first successful MCP tool call for each session scope, then periodically refreshes the lightweight protocol reference and keeps docs indexed with hash-based caching so unchanged docs are not repeatedly duplicated.
+
+#### Q: What is the concept graph and how do I use it?
+
+The concept graph turns stored memories into a queryable knowledge graph. `marm_concept_build` extracts typed entities (concepts, decisions, patterns, errors, tools, people, organizations) and typed relationships (fixes, implements, depends_on, uses, causes, replaces, extends) from memory content. `marm_concept_recall` then answers direct lookups (a bare entity name) or multi-hop traversals (`"related to X"` with `depth` up to 5). Builds are explicit and on-demand: run a build scoped to a `session_name`, `project`, or `search_all=True` first, and re-run after logging significant new memories. When the code graph has indexed the same project, matching entities cross-link to code symbols.
+
+#### Q: Why does `marm_concept_build` return `entities_extracted: 0`?
+
+Real extraction needs the optional extra: `pip install marm-mcp-server[concepts]` plus `python -m spacy download en_core_web_sm`. Without it, both concept tools stay registered and return empty results instead of erroring, so base installs stay lightweight.
+
+#### Q: What happens if a graph engine fails to start?
+
+Nothing breaks. The code-graph engine starts lazily on first graph-tool use; if it cannot start (no network for the first-run download, disk full, `GRAPH_ENABLED=false`), graph tools return `{"status": "error", "message": "graph backend unavailable"}` while all other tools keep working. The concept graph stores its data in a separate SQLite database (`~/.marm/index/`) with its own connection pool, so it can never block the main memory database.
 
 ---
 
@@ -133,6 +146,8 @@ MARM uses filter→rerank hybrid recall. FTS keyword/BM25 search handles exact t
 
 Both. `marm_smart_recall` searches one session by default and can search across all sessions with `search_all=True`.
 
+It can also filter by `project` and `platform` when those metadata fields are available. New memories, logs, and notebook entries are tagged from detected settings or explicit `MARM_PROJECT` / `MARM_PLATFORM` environment variables. Leaving those filters unset keeps the current broad search behavior.
+
 When the semantic fallback lane reaches its configured scan cap, responses include `recall_scan_truncated=true` and `recall_scan_limit` so agents know that part of recall was bounded. The primary filter→rerank lane does not set truncation because it works over a fixed FTS candidate set instead of a broad embedding scan.
 
 `FTS_CANDIDATE_LIMIT` (default `50`) controls how many FTS candidates are fetched before semantic reranking. Most users should leave it alone unless their memory store has weak keyword overlap and they want a wider rerank pool.
@@ -151,7 +166,7 @@ Be selective. Log decisions, solutions, insights, requirements, constraints, and
 
 #### Q: How do I organize memories for team collaboration?
 
-Use consistent session names, include project or workstream names, and rely on cross-session search for broad recall. For shared agent workflows, prefer HTTP mode so one server coordinates writes.
+Use consistent session names, include project or workstream names, and rely on cross-session search for broad recall. MARM also records nullable `project` and `platform` metadata on new memories, logs, and notebook entries, so agents can scope recall to a project or client when needed. For shared agent workflows, prefer HTTP mode so one server coordinates writes.
 
 #### Q: Does MARM clean up duplicate memories automatically?
 

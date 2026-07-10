@@ -56,7 +56,10 @@ def test_find_code_match_returns_none_when_no_exact_name_match(monkeypatch):
         "do_lookup",
         lambda client, req: {
             "results": [
-                {"qualified_name": "marm_graph.core.cbm_client.OtherClass", "name": "OtherClass"}
+                {
+                    "qualified_name": "marm_graph.core.cbm_client.OtherClass",
+                    "name": "OtherClass",
+                }
             ]
         },
     )

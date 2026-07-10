@@ -121,9 +121,7 @@ def test_fetch_memory_rows_excludes_compacted_source_rows(concepts_env):
             "INSERT INTO memories (id, session_name, content, timestamp, project) "
             "VALUES ('m1', 'sess-a', 'stale source content', datetime('now'), NULL)"
         )
-        conn.execute(
-            "UPDATE memories SET compaction_role = 'source' WHERE id = 'm1'"
-        )
+        conn.execute("UPDATE memories SET compaction_role = 'source' WHERE id = 'm1'")
         conn.execute(
             "INSERT INTO memories (id, session_name, content, timestamp, project) "
             "VALUES ('m2', 'sess-a', 'compaction summary content', datetime('now'), NULL)"

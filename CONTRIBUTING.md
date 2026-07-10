@@ -2,7 +2,7 @@
 
 You do not need to write code to contribute. Testing MARM with your client setup, reporting what broke, sharing your workflow in [Discussions](https://github.com/Lyellr88/MARM-Systems/discussions), or jumping into [Discord](https://discord.gg/nhyJWPz2cf) to help someone get unstuck are all real contributions.
 
-If you do want to go deeper, MARM is focused on the MCP server, local memory workflows, Docker/STDIO transports, IDE and client integrations, and the dashboard for inspecting local memory data. This guide covers that practical development workflow. For project history and community recognition, see [ACKNOWLEDGMENTS.md](docs/ACKNOWLEDGMENTS.md).
+If you do want to go deeper, MARM is focused on the MCP server, local memory workflows, the code and concept knowledge graphs, Docker/STDIO transports, IDE and client integrations, and the dashboard for inspecting local memory data. This guide covers that practical development workflow. For project history and community recognition, see [ACKNOWLEDGMENTS.md](docs/ACKNOWLEDGMENTS.md).
 
 ## Questions or Ideas
 
@@ -20,6 +20,13 @@ Install the MCP server in editable mode:
 ```powershell
 cd marm-mcp-server
 pip install -e ".[dev]"
+```
+
+Working on the concept graph? Add the optional extraction extra:
+
+```powershell
+pip install -e ".[dev,concepts]"
+python -m spacy download en_core_web_sm
 ```
 
 Run the HTTP server:
@@ -59,6 +66,12 @@ marm-mcp-server/
       write_queue.py           # Serialized write queue for SQLite writer stability
       consolidation.py         # Content-hash and semantic write-time consolidation
       compaction.py            # Background compaction candidate detection and nudges
+      concept_db.py            # Concept graph schema and isolated SQLite pool
+      concept_extraction.py    # spaCy entity/relationship extraction (optional extra)
+      graph_supervisor.py      # Lazy singleton supervisor for the embedded graph engine
+      graph_client.py          # Concept graph's in-process link into the code graph
+      dashboard_mount.py       # Mounts the bundled dashboard under /dashboard
+      models.py                # Shared Pydantic request/response models
       events.py                # Internal event hooks
       rate_limiter.py          # Rate limiting primitives
       response_limiter.py      # MCP response size controls
@@ -70,6 +83,8 @@ marm-mcp-server/
       notebook.py              # Notebook tools
       memory.py                # Recall/search tools
       compaction.py            # Unified compaction tool and hidden helper routes
+      graph.py                 # 5 bundled code-graph tools (routed through marm_graph)
+      concepts.py              # 2 concept-graph tools (build + recall)
       system.py                # Health/system tools
     middleware/
       auth.py                  # Bearer auth for HTTP mode
@@ -81,9 +96,14 @@ marm-mcp-server/
       recall.py                # Shared smart-recall response logic
       summary.py               # Shared session summary formatting
       compaction_apply.py      # Atomic compaction apply transaction
+      compaction_summarize.py  # Compaction cluster summarization helpers
     utils/
       helpers.py               # Shared helpers
       security.py              # API key generation
+  marm_graph/                  # Embedded marm-graph wrapper: subprocess JSON-RPC client,
+                               #   tool router, and backend verification for the pinned
+                               #   codebase-memory-mcp binary
+  marm_dashboard/              # Bundled dashboard web UI
   tests/                       # MCP server test suite
   Dockerfile                   # One image, HTTP default, STDIO override
   pyproject.toml               # Package metadata and console scripts
@@ -275,7 +295,7 @@ Use normal branch pushes for review. Use tag pushes only for intentional release
 
 ### **Usage Guides**
 
-- **[MCP-HANDBOOK.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/MCP-HANDBOOK.md)** - Complete MCP server usage guide with commands, workflows, and examples
+- **[README.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/README.md)** - Complete MCP server usage guide with commands, workflows, and examples
 - **[PROTOCOL.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/PROTOCOL.md)** - Quick start commands and protocol reference
 - **[FAQ.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/marm-mcp-server/marm-docs/FAQ.md)** - Answers to common questions about using MARM
 
@@ -288,8 +308,7 @@ Use normal branch pushes for review. Use tag pushes only for intentional release
 
 ### **Project Information**
 
-- **[README.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/README.md)** - This file - ecosystem overview and MCP server guide
-- **[CONTRIBUTING.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/CONTRIBUTING.md)** - How to contribute to MARM
+- **[CONTRIBUTING.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/CONTRIBUTING.md)** - This file - how to contribute to MARM
 - **[CHANGELOG.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/CHANGELOG.md)** - Version history and updates
 - **[ACKNOWLEDGMENTS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/ACKNOWLEDGMENTS.md)** - Contributors and acknowledgments
 - **[ROADMAP.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/ROADMAP.md)** - Planned features and development roadmap

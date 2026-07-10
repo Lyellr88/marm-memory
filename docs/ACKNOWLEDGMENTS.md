@@ -123,8 +123,7 @@ Provided deep technical analysis of LLM memory limitations and validation of MAR
 
 ## Related Docs
 
-- [README.md](../README.md) - Project overview and quick start
-- [MCP-HANDBOOK.md](../MCP-HANDBOOK.md) - MCP usage guide
+- [README.md](../README.md) - Project overview, quick start, and MCP usage guide
 - [PROTOCOL.md](PROTOCOL.md) - Core memory protocol
 - [CHANGELOG.md](../CHANGELOG.md) - Version history
 - [ROADMAP.md](ROADMAP.md) - Current direction and planned work

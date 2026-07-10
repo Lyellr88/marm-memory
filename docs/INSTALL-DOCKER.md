@@ -2,7 +2,7 @@
 
 ## Universal Memory Intelligence Platform for AI Agents
 
-**MARM v2.18.0** - Memory Accurate Response Mode
+**MARM v2.19.0** - Memory Accurate Response Mode
 *Docker deployment guide for Windows, Mac, and Linux*
 
 ---
@@ -51,7 +51,7 @@
 ### **Option 1: Docker Run (Recommended for Testing)**
 
 **Best for:** First-time users, quick testing, simple setup
-
+ 
 > **Docker always requires an API key.** Docker's bridge network means the server sees requests from a gateway IP (172.x.x.x), not 127.0.0.1 - even when you're on the same machine. Generate a key using the container itself - no pip install needed:
 
 > ```bash
@@ -79,6 +79,13 @@ docker run -d --name marm-mcp-server \
   -v ~/.marm:/home/marm/.marm \
   --restart unless-stopped \
   lyellr88/marm-mcp-server:latest
+
+# Connect client
+"agent" mcp add --transport http marm-memory http://localhost:8001/mcp --header "Authorization: Bearer your-generated-key"
+
+# PowerShell: set this before starting/restarting Codex
+$env:MARM_API_KEY="your-generated-key"
+codex mcp add marm-memory --url http://localhost:8001/mcp --bearer-token-env-var MARM_API_KEY
 ```
 
 **Why choose this:**
@@ -111,6 +118,15 @@ services:
 
 ```bash
 docker-compose up -d
+```
+
+```bash
+# Connect client
+"agent" mcp add --transport http marm-memory http://localhost:8001/mcp --header "Authorization: Bearer your-generated-key"
+
+# PowerShell: set this before starting/restarting Codex
+$env:MARM_API_KEY="your-generated-key"
+codex mcp add marm-memory --url http://localhost:8001/mcp --bearer-token-env-var MARM_API_KEY
 ```
 
 **Why choose this:**
@@ -153,6 +169,15 @@ docker run -d --name marm-mcp-server \
   lyellr88/marm-mcp-server:latest --trusted
 ```
 
+```bash
+# Connect client
+"agent" mcp add --transport http marm-memory http://localhost:8001/mcp --header "Authorization: Bearer your-generated-key"
+
+# PowerShell: set this before starting/restarting Codex
+$env:MARM_API_KEY="your-generated-key"
+codex mcp add marm-memory --url http://localhost:8001/mcp --bearer-token-env-var MARM_API_KEY
+```
+
 | Preset | Rate Limit | Write Queue | Use When |
 |--------|------------|-------------|----------|
 | `--swarm` | 200 RPM | enabled | Normal multi-agent shared server |
@@ -162,6 +187,24 @@ docker run -d --name marm-mcp-server \
 Use one MARM HTTP process/container per SQLite database. Multi-process
 Uvicorn/Gunicorn workers (`--workers N`) are not supported yet because MARM's
 write queue, scheduler, and protocol/session coordination are process-local.
+
+### Docker Graph Indexing
+
+```powershell
+# Docker graph indexing: mount the repo
+
+Docker graph tools run inside the container, so they cannot see host paths unless you mount them at `docker run`.
+
+$env:MARM_API_KEY="test"
+
+docker run -d --name marm-mcp-server `
+  -p 127.0.0.1:8001:8001 `
+  -e SERVER_HOST=0.0.0.0 `
+  -e MARM_API_KEY=$env:MARM_API_KEY `
+  -v ~/.marm:/home/marm/.marm `
+  -v C:\Users\lyell\Desktop\MARM-Systems:/workspace/MARM-Systems ` (example host path)
+  lyellr88/marm-mcp-server:latest
+```
 
 ---
 
@@ -642,7 +685,7 @@ services:
 
 ## Related Docs
 
-- [MCP-HANDBOOK.md](../MCP-HANDBOOK.md) - MCP tool usage and workflows
+- [README.md](../README.md) - MCP tool usage and workflows
 - [INSTALL-WINDOWS.md](INSTALL-WINDOWS.md) - Native Windows installation
 - [INSTALL-LINUX.md](INSTALL-LINUX.md) - Native Linux installation
 - [INSTALL-PLATFORMS.md](INSTALL-PLATFORMS.md) - Platform and API integration
