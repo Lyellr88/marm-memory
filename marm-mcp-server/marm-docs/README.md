@@ -1,4 +1,6 @@
-# MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.19.0
+# MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.20.0
+
+> Contributions welcome! Browse [open issues](https://github.com/Lyellr88/marm-memory/issues) to contribute, or join the [MARM Discord](https://discord.gg/nhyJWPz2cf) to share workflows, get setup help, and connect with other builders.
 
 ## Table of Contents
 
@@ -12,6 +14,8 @@
 - [MARM Dashboard](#marm-dashboard)
 - [Architecture & Internals](#architecture--internals)
 - [Troubleshooting](#troubleshooting)
+- [Contributing](#contributing)
+- [Project Documentation](#project-documentation)
 
 ## Why MARM MCP
 
@@ -42,7 +46,7 @@ See [Performance & Scaling Benchmarks](#performance--scaling-benchmarks) for ret
 The easiest way to install MARM is to let your agent do the setup with you. `marm-init` turns the usual MCP setup mess into one guided conversation: Python or Docker, HTTP or STDIO, local or remote server, API keys, config paths, dashboard startup, and multi-agent linking for Claude, Codex, Gemini, Qwen, Cursor, VS Code, and other MCP clients. No hunting through install docs, no guessing which config file your client uses, and no rewriting the same connection by hand for every agent.
 
 ```bash
-npx degit Lyellr88/MARM-Systems/skills
+npx degit Lyellr88/marm-memory/skills
 ```
 
 Then tell your agent: **"Use the marm-init skill to set up MARM."**
@@ -100,12 +104,12 @@ Benchmarks used a throwaway real SQLite database and the live fastembed-backed `
 
 ### 5. vs Competitors: Architecture
 
-MARM targets a specific niche: local-first, zero-dependency memory for MCP-connected coding agents, not general personalization memory or a full agent runtime. Here's how it differs architecturally from established names in AI agent memory:
+MARM targets a specific niche: local-first memory for MCP-connected coding agents, not general personalization memory or a full agent runtime. Here's how it differs architecturally from established names in AI agent memory:
  
 | | MARM | Mem0 | Letta (MemGPT) | Zep / Graphiti | agentmemory |
 |---|---|---|---|---|---|
 | **Type** | Memory engine, MCP-native | Memory layer API | Full agent runtime | Temporal knowledge graph | Memory engine, MCP-native |
-| **External dependencies** | None (SQLite only) | Vector DB (Qdrant/pgvector) | Postgres + vector DB | Neo4j | Separate `iii-engine` runtime |
+| **Required infrastructure** | No separate data service (embedded SQLite) | Vector DB (Qdrant/pgvector) | Postgres + vector DB | Neo4j | Separate `iii-engine` runtime |
 | **Deployment** | Local-first by default; Docker for shared/remote | Cloud API or self-hosted | Self-hosted or cloud | Cloud or self-hosted | Local-first |
 | **Retrieval model** | Hybrid: FTS5 BM25 exact lane + semantic rerank | Vector + graph + key-value | Vector archival store + agent-managed core memory | Temporal knowledge graph (fact validity windows) | BM25 + vector + graph (RRF fusion) |
 | **Write capture** | Explicit tool calls from the connected agent | Explicit `add()` calls (some integrations auto-extract) | Agent self-edits its own memory | Explicit API calls | Hook-based, automatic (no explicit calls needed) |
@@ -115,16 +119,6 @@ MARM targets a specific niche: local-first, zero-dependency memory for MCP-conne
 **Disclaimers & Accuracy:** Competitor landscapes evolve rapidly. The matrix above reflects core architectural traits as of Q3 2026, based on public documentation and READMEs, not internal testing of each system. If any data point regarding an alternative framework has changed or is misrepresented, please open an issue or submit a Pull Request to update the table. We actively welcome corrections from peer maintainers.
 
 ## 🚀 Quick Start for MCP (HTTP & STDIO)
-
-**Recommended: guided setup with `marm-init`**
-
-The easiest way to install MARM is to let your agent do the setup with you. `marm-init` turns the usual MCP setup mess into one guided conversation: Python or Docker, HTTP or STDIO, local or remote server, API keys, config paths, dashboard startup, and multi-agent linking for Claude, Codex, Gemini, Qwen, Cursor, VS Code, and other MCP clients. No hunting through install docs, no guessing which config file your client uses, and no rewriting the same connection by hand for every agent.
-
-```bash
-npx degit Lyellr88/MARM-Systems/skills
-```
-
-Then tell your agent: **"Use the marm-init skill to set up MARM."**
 
 **Manual pip install**
 
@@ -156,7 +150,7 @@ pip install marm-mcp-server
 ```bash
 pip install marm-mcp-server
 python -m marm_mcp_server
-# Stuck on client setup? Open a Q&A thread: https://github.com/Lyellr88/MARM-Systems/discussions
+# Stuck on client setup? Open a Q&A thread: https://github.com/Lyellr88/marm-memory/discussions
 # most agents use this --transport command
 "agent" mcp add --transport http marm-memory http://localhost:8001/mcp
 codex mcp add marm-memory --url http://localhost:8001/mcp
@@ -266,14 +260,14 @@ docker run -d --name marm-mcp-server `
   -e SERVER_HOST=0.0.0.0 `
   -e MARM_API_KEY=$env:MARM_API_KEY `
   -v ~/.marm:/home/marm/.marm `
-  -v C:\Users\lyell\Desktop\MARM-Systems:/workspace/MARM-Systems `
+  -v C:\Users\lyell\Desktop\marm-memory:/workspace/marm-memory `
   lyellr88/marm-mcp-server:latest
 ```
 
 Then index the container path, not the Windows host path:
 
 ```text
-marm_graph_index(repo_path="/workspace/MARM-Systems")
+marm_graph_index(repo_path="/workspace/marm-memory")
 ```
 
 Graph tools must use the container path. Mounts cannot be added to an already-running container; stop and restart the container with the repo mount when you want Docker graph indexing.
@@ -479,7 +473,7 @@ xAI connects from its own infrastructure, so `localhost` will not work. Expose M
 
 Full platform walkthroughs, key setup, and OS-specific notes: [Windows](docs/INSTALL-WINDOWS.md#client-connections) · [Linux](docs/INSTALL-LINUX.md#client-connections) · [Docker/key mode](docs/INSTALL-DOCKER.md#client-connections) · [Other platforms](docs/INSTALL-PLATFORMS.md)
 
-> Using a client that isn't listed? [Open an issue](https://github.com/Lyellr88/MARM-Systems/issues/new/choose) and let us know; client adapters are a first-class feature request.
+> Using a client that isn't listed? [Open an issue](https://github.com/Lyellr88/marm-memory/issues/new/choose) and let us know; client adapters are a first-class feature request.
 
 <details>
 <summary><strong>System requirements, data location & backup</strong></summary>
@@ -510,6 +504,12 @@ curl http://localhost:8001/health
 Expected output includes server version, feature availability (semantic search status), database connection status, and service health status.
 
 </details>
+
+### MARM Demo
+
+<https://github.com/user-attachments/assets/dabfe44f-689d-404f-a2c7-dcf8fa4ef0c1>
+
+MARM gives AI agents persistent long-term memory, shared cross-session context, write-queue safety, swarm presets, and hybrid semantic + exact recall so commands, config keys, and project meaning all stay reachable.
 
 ## Complete MCP Tool Suite (14 Tools)
 
@@ -976,3 +976,64 @@ Packaged docs are indexed into the `marm_system` memory namespace on startup and
 </details>
 
 For memory behavior, transports, supported clients, compaction, and backup questions, see the [FAQ](marm-mcp-server/marm-docs/FAQ.md).
+
+## ⭐ Star the Project
+
+If MARM helps with your AI memory needs, please star the repository to support development!
+
+<div align="center">
+
+<a href="https://star-history.com/#Lyellr88/marm-memory&Date">
+  <img src="https://api.star-history.com/svg?repos=Lyellr88/marm-memory&type=Date"
+       width="700"
+       height="400"
+       alt="MARM Systems star history chart">
+</a>
+</div>
+
+## Contributing
+
+MARM welcomes contributors at every level. Code helps, but so do docs, setup notes, client testing, bug reports, benchmarks, and real workflow feedback from people using AI tools every day.
+
+Good places to help:
+
+- Test MARM with more MCP clients, IDE agents, and operating systems
+- Improve docs, screenshots, examples, and platform-specific setup notes
+- Report bugs or confusing install steps with clear reproduction details
+- Share memory workflows, agent habits, and tool ideas from real use
+- Check out open [issues](https://github.com/Lyellr88/marm-memory/issues)
+
+> 💡 Want to get your name on this list? Check out our [CONTRIBUTING.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/CONTRIBUTING.md) guide to get started!
+
+## Join the MARM Community
+
+**Help build the future of AI memory - no coding required!**
+
+**Connect:** [MARM Discord](https://discord.gg/nhyJWPz2cf) | [GitHub Discussions](https://github.com/Lyellr88/marm-memory/discussions)
+
+## License & Usage Notice
+
+Copyright © 2026 Ryan A. Lyell. MARM is released under the [Apache 2.0 License](LICENSE) (see [NOTICE](NOTICE) for the copyright statement), and forks, experiments, and integrations are welcome. MARM also wraps third-party open-source components such as `codebase-memory-mcp` under MIT; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for attribution. If you build on it, please make unofficial versions easy to distinguish from releases published by the [official MARM repository](https://github.com/Lyellr88/marm-memory) so users know what they are installing.
+
+## Project Documentation
+
+### **Usage Guides**
+
+- **[README.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/README.md)** - This file: complete usage guide, tool reference, workflows, and architecture
+- **[PROTOCOL.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/PROTOCOL.md)** - MCP operating protocol
+- **[FAQ.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/marm-mcp-server/marm-docs/FAQ.md)** - Answers to common questions about using MARM
+
+### **MCP Server Installation**
+
+- **[INSTALL-DOCKER.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-DOCKER.md)** - Docker deployment (recommended)
+- **[INSTALL-WINDOWS.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-WINDOWS.md)** - Windows installation guide
+- **[INSTALL-LINUX.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-LINUX.md)** - Linux installation guide
+- **[INSTALL-PLATFORMS.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-PLATFORMS.md)** - Platform installation guide
+
+### **Project Information**
+
+- **[CONTRIBUTING.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/CONTRIBUTING.md)** - How to contribute to MARM
+- **[CHANGELOG.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/CHANGELOG.md)** - Version history and updates
+- **[ACKNOWLEDGMENTS.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/ACKNOWLEDGMENTS.md)** - Contributors and acknowledgments
+- **[ROADMAP.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/ROADMAP.md)** - Planned features and development roadmap
+- **[LICENSE](https://github.com/Lyellr88/marm-memory/blob/MARM-main/LICENSE)** - Apache 2.0 license terms

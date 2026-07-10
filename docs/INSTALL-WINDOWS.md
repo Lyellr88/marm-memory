@@ -2,7 +2,7 @@
 
 ## Universal Memory Intelligence Platform for AI Agents
 
-**MARM v2.19.0** - Memory Accurate Response Mode
+**MARM v2.20.0** - Memory Accurate Response Mode
 *Complete Windows installation guide*
 
 ---
@@ -91,8 +91,8 @@ Then restart your terminal.
 ### **Option 3: From source** 🔧 **(Advanced)**
 
 ```powershell
-git clone https://github.com/Lyellr88/MARM-Systems.git
-cd MARM-Systems\marm-mcp-server
+git clone https://github.com/Lyellr88/marm-memory.git
+cd marm-memory\marm-mcp-server
 pip install -e ".[dev]"
 python -m marm_mcp_server
 ```
@@ -293,7 +293,7 @@ Invoke-WebRequest -Uri http://localhost:8001/health
 {
   "status": "healthy",
   "service": "MARM MCP Server",
-  "version": "2.19.0",
+  "version": "2.20.0",
   "timestamp": "2026-01-01T00:00:00+00:00",
   "database": "connected",
   "semantic_search": "available"
@@ -482,5 +482,5 @@ Add MARM folder to antivirus exclusions to prevent:
 
 **MARM Windows Guide** - *Universal memory intelligence for AI agents*
 
-*For usage instructions, see **[README.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/README.md)***  
-*For Docker deployment, see **[INSTALL-DOCKER.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-DOCKER.md)***
+*For usage instructions, see **[README.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/README.md)***  
+*For Docker deployment, see **[INSTALL-DOCKER.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-DOCKER.md)***

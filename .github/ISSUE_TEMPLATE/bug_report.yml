@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Before filing, check the [FAQ](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/marm-mcp-server/marm-docs/FAQ.md) and [open issues](https://github.com/Lyellr88/MARM-Systems/issues). For setup questions, use [Discussions](https://github.com/Lyellr88/MARM-Systems/discussions) instead.
+        Before filing, check the [FAQ](https://github.com/Lyellr88/marm-memory/blob/MARM-main/marm-mcp-server/marm-docs/FAQ.md) and [open issues](https://github.com/Lyellr88/marm-memory/issues). For setup questions, use [Discussions](https://github.com/Lyellr88/marm-memory/discussions) instead.
   - type: dropdown
     id: client
     attributes:

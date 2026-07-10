@@ -1,4 +1,4 @@
-# MARM Systems - Agent Instructions
+# marm-memory - Agent Instructions
 
 Instructions for AI coding agents working on this repo. Keep changes surgical: touch only what the task requires, match existing style, preserve behavior in refactors.
 
@@ -34,7 +34,6 @@ Then run `python scripts/find-tools.py`; every surface must report OK.
 - Root `README.md` is the single source of truth.
 - `marm-mcp-server/README.md` is the PyPI variant (adds the `mcp-name:` header and two image divs).
 - `marm-mcp-server/marm-docs/README.md` is the text-only agent-facing subset (badges, demo, and footer sections stripped).
-- After any root README change, regenerate both mirrors: `python scripts/make-readme-mirrors.py`. `marm-mcp-server/marm-docs/FAQ.md` is likewise a copy of `docs/FAQ.md`; edit the docs copy and sync.
 
 **When bumping the version, update ALL of the following** (audit with `python scripts/find-versions.py`):
 

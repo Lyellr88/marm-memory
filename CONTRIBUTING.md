@@ -1,6 +1,6 @@
-# Contributing to MARM Systems
+# Contributing to marm-memory
 
-You do not need to write code to contribute. Testing MARM with your client setup, reporting what broke, sharing your workflow in [Discussions](https://github.com/Lyellr88/MARM-Systems/discussions), or jumping into [Discord](https://discord.gg/nhyJWPz2cf) to help someone get unstuck are all real contributions.
+You do not need to write code to contribute. Testing MARM with your client setup, reporting what broke, sharing your workflow in [Discussions](https://github.com/Lyellr88/marm-memory/discussions), or jumping into [Discord](https://discord.gg/nhyJWPz2cf) to help someone get unstuck are all real contributions.
 
 If you do want to go deeper, MARM is focused on the MCP server, local memory workflows, the code and concept knowledge graphs, Docker/STDIO transports, IDE and client integrations, and the dashboard for inspecting local memory data. This guide covers that practical development workflow. For project history and community recognition, see [ACKNOWLEDGMENTS.md](docs/ACKNOWLEDGMENTS.md).
 
@@ -11,8 +11,8 @@ Drop a message in [MARM Discord](https://discord.gg/nhyJWPz2cf) or reach out dir
 ## Getting Started
 
 ```powershell
-git clone https://github.com/Lyellr88/MARM-Systems.git
-cd MARM-Systems
+git clone https://github.com/Lyellr88/marm-memory.git
+cd marm-memory
 ```
 
 Install the MCP server in editable mode:
@@ -295,21 +295,21 @@ Use normal branch pushes for review. Use tag pushes only for intentional release
 
 ### **Usage Guides**
 
-- **[README.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/README.md)** - Complete MCP server usage guide with commands, workflows, and examples
-- **[PROTOCOL.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/PROTOCOL.md)** - Quick start commands and protocol reference
-- **[FAQ.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/marm-mcp-server/marm-docs/FAQ.md)** - Answers to common questions about using MARM
+- **[README.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/README.md)** - Complete MCP server usage guide with commands, workflows, and examples
+- **[PROTOCOL.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/PROTOCOL.md)** - Quick start commands and protocol reference
+- **[FAQ.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/marm-mcp-server/marm-docs/FAQ.md)** - Answers to common questions about using MARM
 
 ### **MCP Server Installation**
 
-- **[INSTALL-DOCKER.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-DOCKER.md)** - Docker deployment (recommended)
-- **[INSTALL-WINDOWS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-WINDOWS.md)** - Windows installation guide
-- **[INSTALL-LINUX.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-LINUX.md)** - Linux installation guide
-- **[INSTALL-PLATFORMS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-PLATFORMS.md)** - Platform installation guide
+- **[INSTALL-DOCKER.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-DOCKER.md)** - Docker deployment (recommended)
+- **[INSTALL-WINDOWS.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-WINDOWS.md)** - Windows installation guide
+- **[INSTALL-LINUX.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-LINUX.md)** - Linux installation guide
+- **[INSTALL-PLATFORMS.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-PLATFORMS.md)** - Platform installation guide
 
 ### **Project Information**
 
-- **[CONTRIBUTING.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/CONTRIBUTING.md)** - This file - how to contribute to MARM
-- **[CHANGELOG.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/CHANGELOG.md)** - Version history and updates
-- **[ACKNOWLEDGMENTS.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/ACKNOWLEDGMENTS.md)** - Contributors and acknowledgments
-- **[ROADMAP.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/ROADMAP.md)** - Planned features and development roadmap
-- **[LICENSE](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/LICENSE)** - Apache 2.0 license terms
+- **[CONTRIBUTING.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/CONTRIBUTING.md)** - This file - how to contribute to MARM
+- **[CHANGELOG.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/CHANGELOG.md)** - Version history and updates
+- **[ACKNOWLEDGMENTS.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/ACKNOWLEDGMENTS.md)** - Contributors and acknowledgments
+- **[ROADMAP.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/ROADMAP.md)** - Planned features and development roadmap
+- **[LICENSE](https://github.com/Lyellr88/marm-memory/blob/MARM-main/LICENSE)** - Apache 2.0 license terms

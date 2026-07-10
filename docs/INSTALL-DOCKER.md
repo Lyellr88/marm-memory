@@ -2,7 +2,7 @@
 
 ## Universal Memory Intelligence Platform for AI Agents
 
-**MARM v2.19.0** - Memory Accurate Response Mode
+**MARM v2.20.0** - Memory Accurate Response Mode
 *Docker deployment guide for Windows, Mac, and Linux*
 
 ---
@@ -202,7 +202,7 @@ docker run -d --name marm-mcp-server `
   -e SERVER_HOST=0.0.0.0 `
   -e MARM_API_KEY=$env:MARM_API_KEY `
   -v ~/.marm:/home/marm/.marm `
-  -v C:\Users\lyell\Desktop\MARM-Systems:/workspace/MARM-Systems ` (example host path)
+  -v C:\Users\lyell\Desktop\marm-memory:/workspace/marm-memory ` (example host path)
   lyellr88/marm-mcp-server:latest
 ```
 

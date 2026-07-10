@@ -3,6 +3,32 @@
 ## Version 2 - MARM Protocol to Universal MCP Server Evolution
 
 <details>
+<summary><strong>July 10th, 2026: Project Rename to marm-memory, Doc Overhaul (v2.20.0)</strong></summary>
+
+### Project Rename
+
+- GitHub repository renamed from `MARM-Systems` to `marm-memory`. The PyPI package (`marm-mcp-server`), Docker image (`lyellr88/marm-mcp-server`), and MCP Registry listing are unchanged — this is a repo/branding rename only, no installed artifact names moved, no tool schema changed, nothing breaks for existing consumers.
+- All GitHub URLs, clone instructions, and badge links updated across `README.md`, `CONTRIBUTING.md`, `CONTRIBUTORS.md`, the install guides, issue templates, and the `marm-init` skill.
+- New hero image and wordmark reflecting the `marm-memory` name; the old logo's baked-in project name text is gone in favor of an icon + separately-editable text lockup, so future name changes don't require regenerating artwork.
+
+### Documentation Consolidation
+
+- `MCP-HANDBOOK.md` merged into `README.md` and removed as a standalone file (mirrored across `marm-mcp-server/README.md` and `marm-mcp-server/marm-docs/README.md`).
+- Added an architecture-only competitor comparison table (Mem0, Letta, Zep/Graphiti, agentmemory) under Performance & Scaling Benchmarks.
+- Fixed stale tool-count references (12 tools/v2.18) left over from the v2.19.0 concept-graph launch in `docs/PROTOCOL.md`, `docs/PROTOCOL-LITE.md`, `marm-mcp-server/server.json`, and their `marm-docs` mirrors — all now correctly reflect 14 tools.
+- Added `AGENTS.md` with an architecture summary and a consistency checklist for future tool/version changes.
+- Added a root `NOTICE` file with the Apache 2.0 copyright statement. Root `LICENSE` text is unmodified, per Apache convention (attribution belongs in `NOTICE`, not the license terms).
+
+### `marm-init` Skill
+
+- API keys are no longer generated or handled by the connecting agent for setups that require one (Docker HTTP, or local HTTP exposed via `SERVER_HOST=0.0.0.0`). The skill now hands the user copy-paste instructions to run in their own terminal, so key values never enter the conversation.
+- Fixed the Docker HTTP command block: missing `-e SERVER_HOST=0.0.0.0` and an incorrect data volume mount (`-v marm-data:/app/data` instead of `-v ~/.marm:/home/marm/.marm`).
+- Added the code-graph Docker mount pattern (mounting a host repo into the container for `marm_graph_index`) and a Windows/Codex `--bearer-token-env-var` connection path.
+- Fixed the dashboard address, which pointed at a nonexistent `localhost:8002`; the dashboard actually mounts at `localhost:8001/dashboard`.
+
+</details>
+
+<details>
 <summary><strong>July 7th, 2026: Concept Graph (v2.19.0)</strong></summary>
 
 ### New Tools
