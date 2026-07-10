@@ -23,6 +23,7 @@ You are under the MARM operating contract. The full protocol was delivered at se
 `marm_notebook` | `marm_summary` | `marm_delete` | `marm_compaction`
 `marm_graph_index` | `marm_code_lookup` | `marm_graph_trace`
 `marm_graph_architecture` | `marm_graph_impact`
+`marm_concept_build` | `marm_concept_recall`
 
 ## When to Act
 

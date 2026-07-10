@@ -1,4 +1,4 @@
-# MARM v2.18.0 MCP Server - Platform Integration Guide
+# MARM v2.20.0 MCP Server - Platform Integration Guide
 
 ## Table of Contents
 
@@ -9,7 +9,6 @@
   - [Gemini (Google)](#gemini-google)
   - [Grok (xAI)](#grok-xai)
 - [Part 2: Developer Integration](#part-2-developer-integration)
-- [Part 3: Coming Soon - Unified SDK Solutions](#part-3-coming-soon---unified-sdk-solutions)
 - [Platform Comparison Summary](#platform-comparison-summary)
 - [Best Practices](#best-practices)
 
@@ -19,7 +18,7 @@
 
 This guide provides platform-specific instructions for integrating the MARM MCP Server with major AI applications and developer platforms.
 
-**Important:** This covers **base applications** and **API integrations** - not CLI tools. For CLI setup, see the dedicated docs folder for install guides [Docs](https://github.com/Lyellr88/MARM-Systems/tree/MARM-main/docs)
+**Important:** This covers **base applications** and **API integrations** - not CLI tools. For CLI setup, see the dedicated docs folder for install guides [Docs](https://github.com/Lyellr88/marm-memory/tree/MARM-main/docs)
 
 ---
 
@@ -206,4 +205,4 @@ Each provider has different API patterns, but the MARM connection stays the same
 
 ---
 
-**Need Help?** Check our **[README.md](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/README.md)**  or [join Discord](https://discord.gg/EuBsHvSRks) for integration support.
+**Need Help?** Check our **[README.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/README.md)**  or [join Discord](https://discord.gg/EuBsHvSRks) for integration support.

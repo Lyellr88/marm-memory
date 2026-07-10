@@ -3,7 +3,7 @@
   "_schema_date": "2025-12-11",
   "name": "io.github.Lyellr88/marm-mcp-server",
   "description": "Universal MCP Server with advanced AI memory capabilities and semantic search.",
-  "version": "2.18.0",
+  "version": "2.20.0",
   "author": "Ryan Lyell - MARM Systems",
   "license": "Apache-2.0",
   "homepage": "https://marmsystems.com",
@@ -17,12 +17,12 @@
     {
       "registryType": "pypi",
       "identifier": "marm-mcp-server",
-      "version": "2.18.0",
+      "version": "2.20.0",
       "transport": { "type": "stdio" }
     },
     {
       "registryType": "oci",
-      "identifier": "lyellr88/marm-mcp-server:2.18.0",
+      "identifier": "lyellr88/marm-mcp-server:2.20.0",
       "transport": { "type": "stdio" }
     }
   ],
@@ -74,6 +74,14 @@
     {
       "name": "marm_graph_impact",
       "description": "Estimate change impact from git diff context and affected graph symbols"
+    },
+    {
+      "name": "marm_concept_build",
+      "description": "Extract entities and typed relationships from stored memories into the concept graph"
+    },
+    {
+      "name": "marm_concept_recall",
+      "description": "Query concept-graph entities, relationships, and linked code symbols"
     }
   ],
   "capabilities": {

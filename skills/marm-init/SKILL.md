@@ -4,8 +4,8 @@ description: Guided MARM MCP setup. Invoke after running `marm-init` on the CLI 
 version: 1
 metadata:
   description: A local-first, privacy-centric memory infrastructure layer for MCP clients. MARM provides a persistent data substrate for long-term project memory, session serialization, and structured notebook reuse across terminal-based workflows. Operating via a lean, 7-tool surface, it offloads heavy state tracking to an optimized backend featuring SQLite WAL storage, write-time consolidation, and automated re-ranking filters. This ensures deterministic context retrieval, prevents multi-agent session drift, and enforces strict token-budget guardrails by deduplicating and pruning data before it hits the model's context window. Includes a live web dashboard for managing memories, logs, and sessions.
-  source: https://raw.githubusercontent.com/Lyellr88/MARM-Systems/MARM-main/skills/marm-init/SKILL.md
-  protocol_source: https://raw.githubusercontent.com/Lyellr88/MARM-Systems/MARM-main/docs/PROTOCOL.md
+  source: https://raw.githubusercontent.com/Lyellr88/marm-memory/MARM-main/skills/marm-init/SKILL.md
+  protocol_source: https://raw.githubusercontent.com/Lyellr88/marm-memory/MARM-main/docs/PROTOCOL.md
 ---
 
 <MARM_INIT_EXECUTOR_ACTIVE>
@@ -71,7 +71,7 @@ Confirm it is present, or install it, before continuing.
 Do this before talking to the user.
 
 1. Read the full MARM protocol from source:
-   `https://raw.githubusercontent.com/Lyellr88/MARM-Systems/MARM-main/docs/PROTOCOL.md`
+   `https://raw.githubusercontent.com/Lyellr88/marm-memory/MARM-main/docs/PROTOCOL.md`
    If the network read fails, fall back in this order:
    - local repo `docs/PROTOCOL.md`
    - packaged copy `marm-mcp-server/marm-docs/PROTOCOL.md`
@@ -136,26 +136,52 @@ Ask: "Docker or local Python?"
 
 You now have enough to act. Run the matching block.
 
-### HTTP + Docker
+**Key handling rule:** Docker HTTP always requires an `MARM_API_KEY`; local Python HTTP only requires one if the user exposes it with `SERVER_HOST=0.0.0.0` (remote/network access). Whenever a key is required, do not run `--generate-key` yourself and do not read the key back from any command output. Print the steps below for the user to run in their own terminal instead, so the key value never enters this conversation. Once they confirm the server is running, verify with an unauthenticated check (`curl http://localhost:8001/health`, no key needed) rather than asking them to paste the key back to you.
+
+### HTTP + Docker (key required)
+Give the user these steps to run themselves; do not execute steps 1, 3, or 4 on their behalf:
 1. Generate a key: `docker run --rm lyellr88/marm-mcp-server:latest --generate-key`
-2. Pull: `docker pull lyellr88/marm-mcp-server:latest`
-3. Run (local-only bind):
+2. Pull the image (you may run this step, it has no secret in it): `docker pull lyellr88/marm-mcp-server:latest`
+3. Run, with their own key pasted in:
    ```
    docker run -d --name marm-mcp-server \
      -p 127.0.0.1:8001:8001 \
-     -v marm-data:/app/data \
-     -e MARM_API_KEY=<key-from-step-1> \
+     -e SERVER_HOST=0.0.0.0 \
+     -e MARM_API_KEY=<paste-your-key> \
+     -v ~/.marm:/home/marm/.marm \
      lyellr88/marm-mcp-server:latest
    ```
    For remote access, change the bind to `-p 8001:8001`.
-4. Connect this agent (Claude CLI shown, adapt for the active agent):
-   `claude mcp add --transport http marm-memory http://localhost:8001/mcp --header "Authorization: Bearer <key>"`
+4. Connect their MCP client with their own key (adapt the CLI shown for the active agent):
+   `"agent" mcp add --transport http marm-memory http://localhost:8001/mcp --header "Authorization: Bearer <paste-your-key>"`
 
-### HTTP + Local Python
+   Windows/PowerShell agents that use a bearer-token-env-var flag (for example Codex):
+   ```
+   $env:MARM_API_KEY="<paste-your-key>"
+   codex mcp add marm-memory --url http://localhost:8001/mcp --bearer-token-env-var MARM_API_KEY
+   ```
+5. They can smoke test themselves: `curl -i -H "Authorization: Bearer <their-key>" http://127.0.0.1:8001/mcp` (PowerShell: `curl -i -H "Authorization: Bearer $env:MARM_API_KEY" http://127.0.0.1:8001/mcp`). `406` means auth reached the MCP endpoint; `401` means the key is missing or mismatched.
+6. Optional, code-graph tools: the container cannot see host paths unless mounted. Add a second volume line for the repo to index, then use the container path (not the host path) with `marm_graph_index`:
+   ```
+   -v <host-repo-path>:/workspace/<project-name>
+   ```
+   `marm_graph_index(repo_path="/workspace/<project-name>")`. Mounts cannot be added to an already-running container; stop and recreate it with the mount to enable graph indexing.
+
+Once they say it's running, verify with `curl http://localhost:8001/health` and confirm tools appear in their client. Do not ask them to paste the key into the chat.
+
+### HTTP + Local Python, local-only (no key)
+Default bind is loopback and needs no key. Safe to run yourself:
+1. Start: `marm-mcp-server`
+2. Connect: `claude mcp add --transport http marm-memory http://localhost:8001/mcp`
+
+### HTTP + Local Python, exposed (key required)
+Only applies if the user asked for remote/network access in Step 2. Give them these steps to run themselves; do not execute steps 1 or 2 on their behalf:
 1. Generate a key: `marm-mcp-server --generate-key`
-2. Start: `MARM_API_KEY=<key> marm-mcp-server` (PowerShell: `$env:MARM_API_KEY="<key>"; marm-mcp-server`)
-3. Connect:
-   `claude mcp add --transport http marm-memory http://localhost:8001/mcp --header "Authorization: Bearer <key>"`
+2. Start with their own key: `MARM_API_KEY=<paste-your-key> SERVER_HOST=0.0.0.0 marm-mcp-server` (PowerShell: `$env:MARM_API_KEY="<paste-your-key>"; $env:SERVER_HOST="0.0.0.0"; marm-mcp-server`)
+3. Connect their client with their own key:
+   `claude mcp add --transport http marm-memory http://localhost:8001/mcp --header "Authorization: Bearer <paste-your-key>"`
+
+Verify with `curl http://localhost:8001/health` once they confirm it's running. Do not ask them to paste the key into the chat.
 
 ### STDIO + Docker
 1. Connect this agent to the STDIO entry inside the image. No key needed.
@@ -168,7 +194,8 @@ You now have enough to act. Run the matching block.
 
 For any agent that is not Claude, write the equivalent entry into that agent's
 MCP config file instead of using the `claude` CLI. Same transport, same address
-or command, same key.
+or command. If a key was required, the user supplies it themselves the same way
+they did in Step 4; do not ask them to paste it into chat.
 
 ---
 
@@ -179,14 +206,16 @@ platforms, Claude, Codex, Gemini, Qwen, VS Code, Cursor and most MCP apps all
 read and write the same pool."
 
 If yes:
-- Use the same transport and key from Steps 3 and 4 for every agent.
+- Use the same transport for every agent. If a key was required, the user
+  provides it themselves for each additional client the same way they did in
+  Step 4; do not ask them to paste it into chat.
 - Use these docs to find the exact connection instructions for each client:
 
-  **CLI clients** — [Claude Code](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-WINDOWS.md#claude-code-recommended) · [Codex](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-WINDOWS.md#codex-cli) · [Gemini CLI](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-WINDOWS.md#gemini-cli) · [Qwen CLI](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-WINDOWS.md#qwen-code) · [Linux variants](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-LINUX.md#client-connections) · [Docker/key](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-DOCKER.md#client-connections)
+  **CLI clients** — [Claude Code](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-WINDOWS.md#claude-code-recommended) · [Codex](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-WINDOWS.md#codex-cli) · [Gemini CLI](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-WINDOWS.md#gemini-cli) · [Qwen CLI](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-WINDOWS.md#qwen-code) · [Linux variants](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-LINUX.md#client-connections) · [Docker/key](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-DOCKER.md#client-connections)
 
-  **IDE agents** — [VS Code / Copilot Agent](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-WINDOWS.md#vs-code-mcp--github-copilot-agent) · [Cursor](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-WINDOWS.md#cursor) · [Docker/key IDE setup](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-DOCKER.md#vs-code-mcp--github-copilot-agent)
+  **IDE agents** — [VS Code / Copilot Agent](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-WINDOWS.md#vs-code-mcp--github-copilot-agent) · [Cursor](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-WINDOWS.md#cursor) · [Docker/key IDE setup](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-DOCKER.md#vs-code-mcp--github-copilot-agent)
 
-  **Remote/API platforms** — [xAI / Grok Remote MCP](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-DOCKER.md#xai--grok-remote-mcp) · [Platform integration](https://github.com/Lyellr88/MARM-Systems/blob/MARM-main/docs/INSTALL-PLATFORMS.md)
+  **Remote/API platforms** — [xAI / Grok Remote MCP](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-DOCKER.md#xai--grok-remote-mcp) · [Platform integration](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-PLATFORMS.md)
 
 - Report which agents you wired up and which you could not find.
 
@@ -200,7 +229,9 @@ Ask: "Want the MARM dashboard? It is a light UI to browse and manage your
 memories."
 
 If yes: start the server if it is not already running, then give the user the
-address: http://localhost:8002
+address: http://localhost:8001/dashboard. If a key was required for this setup,
+tell the user they will need to enter it in the dashboard's own UI; do not ask
+them for it in chat.
 
 If no, skip.
 
