@@ -57,7 +57,7 @@ Confirm it is present, or install it, before continuing.
 4. Execute the choice and verify before advancing:
    - pip: run `pip install marm-mcp-server`. Confirm success, for example
      `marm-mcp-server --version` resolves. Record runtime = python.
-   - Docker: run `docker pull lyellr88/marm-mcp-server:2.20.0`. Confirm the image
+   - Docker: run `docker pull lyellr88/marm-mcp-server:latest`. Confirm the image
      is present with `docker images -q lyellr88/marm-mcp-server`. Record
      runtime = docker.
 
@@ -140,8 +140,8 @@ You now have enough to act. Run the matching block.
 
 ### HTTP + Docker (key required)
 Give the user these steps to run themselves; do not execute steps 1, 3, or 4 on their behalf:
-1. Generate a key: `docker run --rm lyellr88/marm-mcp-server:2.20.0 --generate-key`
-2. Pull the image (you may run this step, it has no secret in it): `docker pull lyellr88/marm-mcp-server:2.20.0`
+1. Generate a key: `docker run --rm lyellr88/marm-mcp-server:latest --generate-key`
+2. Pull the image (you may run this step, it has no secret in it): `docker pull lyellr88/marm-mcp-server:latest`
 3. Run, with their own key pasted in:
    ```
    docker run -d --name marm-mcp-server \
@@ -149,7 +149,7 @@ Give the user these steps to run themselves; do not execute steps 1, 3, or 4 on 
      -e SERVER_HOST=0.0.0.0 \
      -e MARM_API_KEY=<paste-your-key> \
      -v ~/.marm:/home/marm/.marm \
-     lyellr88/marm-mcp-server:2.20.0
+     lyellr88/marm-mcp-server:latest
    ```
    For remote access, change the bind to `-p 8001:8001`.
 4. Connect their MCP client with their own key (adapt the CLI shown for the active agent):

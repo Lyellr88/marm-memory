@@ -81,7 +81,7 @@ docker run -d --name marm-mcp-server \
   lyellr88/marm-mcp-server:latest
 
 # Connect client (replace "agent" with your MCP client's command, e.g., "claude" or "cursor")
-claude mcp add --transport http marm-memory http://localhost:8001/mcp --header "Authorization: Bearer your-generated-key"
+"agent" mcp add --transport http marm-memory http://localhost:8001/mcp --header "Authorization: Bearer your-generated-key"
 
 # PowerShell: set this before starting/restarting Codex
 $env:MARM_API_KEY="your-generated-key"
