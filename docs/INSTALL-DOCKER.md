@@ -80,8 +80,8 @@ docker run -d --name marm-mcp-server \
   --restart unless-stopped \
   lyellr88/marm-mcp-server:latest
 
-# Connect client
-"agent" mcp add --transport http marm-memory http://localhost:8001/mcp --header "Authorization: Bearer your-generated-key"
+# Connect client (replace "agent" with your MCP client's command, e.g., "claude" or "cursor")
+claude mcp add --transport http marm-memory http://localhost:8001/mcp --header "Authorization: Bearer your-generated-key"
 
 # PowerShell: set this before starting/restarting Codex
 $env:MARM_API_KEY="your-generated-key"
@@ -190,10 +190,11 @@ write queue, scheduler, and protocol/session coordination are process-local.
 
 ### Docker Graph Indexing
 
+Docker graph tools run inside the container, so they cannot see host paths unless you mount them at `docker run`.
+
 ```powershell
 # Docker graph indexing: mount the repo
-
-Docker graph tools run inside the container, so they cannot see host paths unless you mount them at `docker run`.
+# Replace C:\Users\lyell\Desktop\marm-memory with your actual repository path
 
 $env:MARM_API_KEY="test"
 
@@ -202,7 +203,7 @@ docker run -d --name marm-mcp-server `
   -e SERVER_HOST=0.0.0.0 `
   -e MARM_API_KEY=$env:MARM_API_KEY `
   -v ~/.marm:/home/marm/.marm `
-  -v C:\Users\lyell\Desktop\marm-memory:/workspace/marm-memory ` (example host path)
+  -v "C:\Users\lyell\Desktop\marm-memory:/workspace/marm-memory" `
   lyellr88/marm-mcp-server:latest
 ```
 

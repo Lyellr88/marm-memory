@@ -39,9 +39,9 @@ Then run `python scripts/find-tools.py`; every surface must report OK.
 
 1. `marm-mcp-server/pyproject.toml`
 2. `marm-mcp-server/server.json` (three occurrences, including the Docker identifier)
-3. `marm_mcp_server/__init__.py` (`__version__` and docstring)
-4. `marm_mcp_server/config/settings.py` (`SERVER_VERSION`)
-5. `marm_mcp_server/server.py` docstring
+3. `marm-mcp-server/marm_mcp_server/__init__.py` (`__version__` and docstring)
+4. `marm-mcp-server/marm_mcp_server/config/settings.py` (`SERVER_VERSION`)
+5. `marm-mcp-server/marm_mcp_server/server.py` docstring
 6. `marm-mcp-server/Dockerfile` version label and `docker-compose.yml`
 7. Root `README.md` h1 (then regenerate mirrors) and the version headers in `docs/INSTALL-*.md`
 
@@ -67,7 +67,7 @@ Semver: MAJOR = breaking (schema renames, parameter removals), MINOR = new tools
 - Dev setup: `cd marm-mcp-server && pip install -e ".[dev,concepts]" && python -m spacy download en_core_web_sm`
 - Benchmarks are reproducible via `marm-mcp-server/scripts/bench_hotpath.py`; do not publish performance claims that script cannot back.
 
-## Current Stats (v2.19.0)
+## Current Stats (v2.20.0)
 
 - 14 MCP tools over HTTP + STDIO
 - 2 isolated SQLite databases (memory + concept graph)

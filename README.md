@@ -738,7 +738,7 @@ Under the hood, the engine is [codebase-memory-mcp](https://github.com/DeusData/
 
 ### Concept Graph: what your memories are about
 
-New in v2.19: MARM can extract a knowledge graph from the memories you've already stored. `marm_concept_build` runs entity and relationship extraction over stored memory content, producing typed entities (**concepts, decisions, patterns, errors, tools, people, organizations**) connected by typed relationships (**fixes, implements, depends_on, uses, causes, replaces, extends**). `marm_concept_recall` then answers questions like:
+MARM can extract a knowledge graph from the memories you've already stored. `marm_concept_build` runs entity and relationship extraction over stored memory content, producing typed entities (**concepts, decisions, patterns, errors, tools, people, organizations**) connected by typed relationships (**fixes, implements, depends_on, uses, causes, replaces, extends**). `marm_concept_recall` then answers questions like:
 
 ```text
 marm_concept_recall(query="write queue")            → the entity, its relationships, linked code symbols
@@ -961,8 +961,12 @@ Packaged docs are indexed into the `marm_system` memory namespace on startup and
 
 - Close all AI client connections
 - Stop the server: `Ctrl+C`
-- Remove lock file if present: `rm ~/.marm/marm_memory.db-wal` (Linux/macOS)
-- Restart server
+- Back up the entire database directory: `cp -r ~/.marm ~/.marm.backup`
+- Check for processes holding the database: `lsof ~/.marm/marm_memory.db` (macOS/Linux) or check Task Manager (Windows)
+- If a process is holding the lock, terminate it
+- Verify database integrity: `sqlite3 ~/.marm/marm_memory.db "PRAGMA integrity_check;"`
+- If integrity check fails, restore from your backup
+- If integrity check passes, the lock should be released; restart server
 
 </details>
 
