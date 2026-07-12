@@ -529,12 +529,17 @@ def trace_project(project: str, payload: ProjectTracePayload) -> dict:
         "internal/projects/trace", {"project": project, **payload.model_dump()}
     )
     steps = []
-    for relation, rows in (("caller", result.get("callers", [])), ("callee", result.get("callees", []))):
+    for relation, rows in (
+        ("caller", result.get("callers", [])),
+        ("callee", result.get("callees", [])),
+    ):
         for row in rows if isinstance(rows, list) else []:
             if isinstance(row, dict):
                 steps.append(
                     {
-                        "qualified_name": row.get("qualified_name", row.get("name", "")),
+                        "qualified_name": row.get(
+                            "qualified_name", row.get("name", "")
+                        ),
                         "file_path": row.get("file_path", row.get("path", "")),
                         "relation": relation,
                     }
@@ -581,5 +586,7 @@ def _project_operation(operation: str, payload: dict) -> dict:
     except mcp_client.McpUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     if result.get("status") == "error":
-        raise HTTPException(status_code=503, detail=result.get("message", "Graph operation failed."))
+        raise HTTPException(
+            status_code=503, detail=result.get("message", "Graph operation failed.")
+        )
     return result

@@ -7,7 +7,7 @@ model judging.
 
 ```
 scripts/benchmarking/
-  preformance/
+  performance/
     bench_hotpath.py      # encode/recall/write/hybrid-search latency
     dump_tool_schema.py   # dumps the real MCP tool schema an agent sees
   accuracy/
@@ -17,7 +17,7 @@ scripts/benchmarking/
 
 All scripts run from the **repo root**.
 
-## Performance (`preformance/`)
+## Performance (`performance/`)
 
 ### `bench_hotpath.py`
 
@@ -30,7 +30,7 @@ Measures, against the real `MARMMemory` + fastembed-backed `all-MiniLM-L6-v2` en
 5. Hybrid search: FTS5 filter→rerank vs. weighted fusion vs. pure semantic
 
 ```
-python scripts/benchmarking/preformance/bench_hotpath.py
+python scripts/benchmarking/performance/bench_hotpath.py
 ```
 
 The numbers in the root [README's Performance & Scaling Benchmarks section](../../README.md#performance--scaling-benchmarks) come from this script. Don't publish a performance claim this script can't reproduce.

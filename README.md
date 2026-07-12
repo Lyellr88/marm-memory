@@ -130,7 +130,7 @@ MARM is tuned for fast recall first, even as memory grows and long memories are 
 | **N = 4,000** | 93.8 ms | 18.3 ms | 4.9 ms | 19.0x |
 | **N = 10,000** | 242.7 ms | 19.7 ms | 5.4 ms | 45.1x |
 
-Benchmarks used a throwaway real SQLite database and the live fastembed-backed `all-MiniLM-L6-v2` encoder on local hardware. Reproduce them: [`scripts/benchmarking/preformance/bench_hotpath.py`](scripts/benchmarking/preformance/bench_hotpath.py)
+Benchmarks used a throwaway real SQLite database and the live fastembed-backed `all-MiniLM-L6-v2` encoder on local hardware. Reproduce them: [`scripts/benchmarking/performance/bench_hotpath.py`](scripts/benchmarking/performance/bench_hotpath.py)
 
 ### 5. vs Competitors: Architecture
 
