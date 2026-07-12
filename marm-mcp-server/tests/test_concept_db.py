@@ -25,6 +25,51 @@ def test_own_file_created_separately_from_memory_db(tmp_path):
     assert db_path.exists()
 
 
+def test_concept_build_run_persists_lifecycle_fields(concept_db):
+    with concept_db.get_connection() as conn:
+        concept_db.create_build_run(
+            conn,
+            run_id="run-1",
+            scope_type="session",
+            scope_value="sess-1",
+            created_at="2026-07-12T00:00:00+00:00",
+        )
+        concept_db.update_build_run(
+            conn,
+            "run-1",
+            status="success",
+            memories_processed=3,
+            entities_extracted=5,
+            relationships_created=2,
+            code_links_created=1,
+            duplicate_candidates=1,
+            duration_ms=42,
+            finished_at="2026-07-12T00:00:01+00:00",
+        )
+
+    with concept_db.get_connection() as conn:
+        row = conn.execute(
+            """SELECT scope_type, scope_value, status, memories_processed,
+                      entities_extracted, relationships_created, code_links_created,
+                      duplicate_candidates, duration_ms, error_code, finished_at
+               FROM concept_build_runs WHERE id = 'run-1'"""
+        ).fetchone()
+
+    assert row == (
+        "session",
+        "sess-1",
+        "success",
+        3,
+        5,
+        2,
+        1,
+        1,
+        42,
+        None,
+        "2026-07-12T00:00:01+00:00",
+    )
+
+
 def test_get_or_create_entity_dedups_same_name_session_project(concept_db):
     with concept_db.get_connection() as conn:
         id_first, created_first = concept_db.get_or_create_entity(

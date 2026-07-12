@@ -14,7 +14,6 @@ import asyncio
 import builtins
 import json
 import sys
-import time
 
 _real_print = builtins.print
 builtins.print = lambda *args, **kwargs: _real_print(
@@ -31,6 +30,7 @@ from datetime import datetime, timezone  # noqa: E402
 from typing import Literal, Optional  # noqa: E402
 
 from anyio import BrokenResourceError, ClosedResourceError, EndOfStream  # noqa: E402
+from pydantic import ValidationError  # noqa: E402
 
 os.environ["SERVER_HOST"] = "127.0.0.1"
 
@@ -182,11 +182,13 @@ from marm_mcp_server.utils.helpers import read_protocol_file, read_protocol_lite
 from marm_mcp_server.services.summary import generate_session_summary  # noqa: E402
 from marm_mcp_server.services.recall import smart_recall  # noqa: E402
 from marm_mcp_server.endpoints.concepts import (  # noqa: E402
-    _fetch_memory_rows,
-    _run_build,
+    marm_concept_build as _marm_concept_build_endpoint,
     _run_recall,
 )
-from marm_mcp_server.core.models import ConceptRecallRequest  # noqa: E402
+from marm_mcp_server.core.models import (  # noqa: E402
+    ConceptBuildRequest,
+    ConceptRecallRequest,
+)
 from marm_mcp_server.config.settings import (  # noqa: E402
     SERVER_VERSION,
     DEFAULT_DB_PATH,
@@ -252,7 +254,7 @@ async def marm_smart_recall(
                      (config keys, file paths, CLI commands, API names, code snippets)
         'exact'    = always use deterministic FTS/BM25, no semantic re-ranking
         'semantic' = always use vector similarity regardless of query shape
-    - project: filter results to a specific project (e.g. "marm-systems"); omit to search all
+    - project: filter results to a specific project (e.g. "marm-memory"); omit to search all
     - platform: filter results to a specific platform (e.g. "claude-code", "cursor"); omit to search all
 
     Returns: status, results list with id/content/score/project/platform, results_count
@@ -285,7 +287,8 @@ async def marm_log_entry(
 
     Entries are stored with a date, topic, and summary. If `entry` begins with
     "Session: [name]" or "Topic: [name]", the active session switches to that name
-    and all subsequent entries route there automatically.
+    and all subsequent entries route there automatically. Entries are also stored
+    as semantic memories so marm_smart_recall can find them.
 
     Entry format: YYYY-MM-DD-topic-summary (date prefix is optional; auto-tagged if omitted)
 
@@ -293,7 +296,7 @@ async def marm_log_entry(
     - entry: the text to log; plain text or prefixed with "Session:" / "Topic:" to switch sessions
     - session_name: override the target session explicitly (optional; active session used if omitted)
 
-    Returns: status, message confirming the entry or session switch, entry_id
+    Returns: status, message confirming the entry or session switch, entry_id, memory_id
     """
     try:
         formatted_entry = entry.strip()
@@ -442,6 +445,20 @@ async def marm_log_entry(
                 pass
             conn.commit()
 
+        # Dual-write into semantic memory so marm_smart_recall can find it;
+        # a store failure must never fail the log write itself.
+        memory_id = None
+        try:
+            memory_id = await memory.store_memory_queued(
+                formatted_entry,
+                session,
+                metadata={"source": "log_entry", "log_entry_id": entry_id},
+            )
+        except Exception as store_error:
+            _stdio_log.warning(
+                "semantic store failed for log entry %s: %s", entry_id, store_error
+            )
+
         await events.emit(
             "log_entry_created",
             {"entry_id": entry_id, "session": session, "content": formatted_entry},
@@ -451,6 +468,7 @@ async def marm_log_entry(
             "status": "success",
             "message": f"📝 Log entry added: {formatted_entry}",
             "entry_id": entry_id,
+            "memory_id": memory_id,
             "formatted_entry": formatted_entry,
         }
     except Exception as e:
@@ -536,12 +554,26 @@ async def marm_delete(
     try:
         with memory.get_connection() as conn:
             if type == "log":
+                memories_deleted = 0
                 if session_name:
+                    # Dual-written semantic memories must not outlive their log entries
+                    rows = conn.execute(
+                        "SELECT id FROM log_entries WHERE session_name = ? AND (id = ? OR topic = ?)",
+                        (session_name, target, target),
+                    ).fetchall()
+                    entry_ids = [r[0] for r in rows]
                     cursor = conn.execute(
                         "DELETE FROM log_entries WHERE session_name = ? AND (id = ? OR topic = ?)",
                         (session_name, target, target),
                     )
                     deleted = cursor.rowcount
+                    if entry_ids:
+                        placeholders = ",".join("?" * len(entry_ids))
+                        memories_deleted = conn.execute(
+                            "DELETE FROM memories WHERE json_extract(metadata, '$.source') = 'log_entry' "
+                            f"AND json_extract(metadata, '$.log_entry_id') IN ({placeholders})",
+                            entry_ids,
+                        ).rowcount
                     if deleted:
                         try:
                             conn.execute(
@@ -565,6 +597,11 @@ async def marm_delete(
                         )
                     except Exception:
                         pass
+                    memories_deleted = conn.execute(
+                        "DELETE FROM memories WHERE session_name = ? "
+                        "AND json_extract(metadata, '$.source') = 'log_entry'",
+                        (target,),
+                    ).rowcount
                     if memory.active_log_session == target:
                         memory.active_log_session = "main"
                 conn.commit()
@@ -572,6 +609,7 @@ async def marm_delete(
                     "status": "success",
                     "message": f"🗑️ Deleted {deleted} items",
                     "deleted_count": deleted,
+                    "memories_deleted": memories_deleted,
                 }
             elif type == "notebook":
                 cursor = conn.execute(
@@ -890,6 +928,7 @@ async def marm_concept_build(
     session_name: Optional[str] = None,
     search_all: bool = False,
     project: Optional[str] = None,
+    run_id: Optional[str] = None,
 ) -> dict:
     """
     🕸️ Extract entities/relationships from memory content into the concept graph.
@@ -903,19 +942,25 @@ async def marm_concept_build(
     - session_name: scope extraction to this session; omit with search_all=True
     - search_all: extract across all sessions, row-capped (default False)
     - project: scope extraction to this project (optional)
+    - run_id: optional Console build-run ID for status polling
 
     Returns: entities_extracted, relationships_created, code_links_created, duration_ms
     """
-    start = time.monotonic()
     try:
-        rows = await asyncio.to_thread(
-            _fetch_memory_rows, session_name, project, search_all
+        req = ConceptBuildRequest(
+            session_name=session_name,
+            search_all=search_all,
+            project=project,
+            run_id=run_id,
         )
-        result = await asyncio.to_thread(_run_build, rows)
-    except Exception as e:
-        return {"status": "error", "message": f"Concept build failed: {e!s}"}
-    result["duration_ms"] = int((time.monotonic() - start) * 1000)
-    return result
+        return await _marm_concept_build_endpoint(req)
+    except ValidationError:
+        return {
+            "status": "error",
+            "message": "Concept build requires session_name, project, or search_all=True.",
+        }
+    except Exception:
+        return {"status": "error", "message": "Concept build failed."}
 
 
 @mcp.tool()

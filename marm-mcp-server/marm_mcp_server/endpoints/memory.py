@@ -103,7 +103,7 @@ async def marm_smart_recall(request: SmartRecallRequest, http_request: Request):
         if request.include_logs:
             with memory.get_connection() as conn:
                 log_base = """
-                    SELECT session_name, topic, summary, entry_date, project, platform
+                    SELECT id, session_name, topic, summary, entry_date, project, platform
                     FROM log_entries
                     WHERE (topic LIKE ? OR summary LIKE ?)
                 """
@@ -121,12 +121,13 @@ async def marm_smart_recall(request: SmartRecallRequest, http_request: Request):
                 log_params.append(request.limit)
                 log_results = [
                     {
-                        "session_name": r[0],
-                        "topic": r[1],
-                        "summary": r[2],
-                        "entry_date": r[3],
-                        "project": r[4],
-                        "platform": r[5],
+                        "id": r[0],
+                        "session_name": r[1],
+                        "topic": r[2],
+                        "summary": r[3],
+                        "entry_date": r[4],
+                        "project": r[5],
+                        "platform": r[6],
                         "type": "log",
                     }
                     for r in conn.execute(log_base, log_params).fetchall()

@@ -155,7 +155,7 @@ def publish_instructions():
 
     print("\n6. Verify publication:")
     print(
-        "   Check: https://registry.modelcontextprotocol.io/servers/io.github.marm-systems/marm-mcp-server"
+        "   Check: https://registry.modelcontextprotocol.io/servers/io.github.Lyellr88/marm-mcp-server"
     )
 
     print("\n" + "=" * 60)

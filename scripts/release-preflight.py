@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Interactive release preflight for MARM Systems."""
+"""Interactive release preflight for marm-memory."""
 
 from __future__ import annotations
 

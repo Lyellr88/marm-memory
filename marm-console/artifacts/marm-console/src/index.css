@@ -1,0 +1,120 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-card-border: var(--card-border);
+
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover-border: var(--popover-border);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+
+  --font-sans: var(--app-font-sans);
+  --font-mono: var(--app-font-mono);
+
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+}
+
+:root, .dark {
+  /* Very deep technical navy/black */
+  --background: #040810;
+  --foreground: #e2e8f0;
+  
+  --card: #0a1120;
+  --card-foreground: #e2e8f0;
+  --card-border: #1e293b;
+
+  --popover: #0a1120;
+  --popover-foreground: #e2e8f0;
+  --popover-border: #1e293b;
+
+  --border: #1e293b;
+  --input: #1e293b;
+  --ring: #0ea5e9;
+
+  /* Cyan network telemetry vibe */
+  --primary: #0ea5e9;
+  --primary-foreground: #020617;
+
+  --secondary: #1e293b;
+  --secondary-foreground: #f8fafc;
+
+  --muted: #0f172a;
+  --muted-foreground: #94a3b8;
+
+  --accent: #1e293b;
+  --accent-foreground: #38bdf8;
+
+  --destructive: #ef4444;
+  --destructive-foreground: #f8fafc;
+
+  --sidebar: #040810;
+  --sidebar-foreground: #e2e8f0;
+  --sidebar-border: #1e293b;
+
+  --radius: 0.25rem;
+
+  --app-font-sans: 'Inter', -apple-system, sans-serif;
+  --app-font-mono: 'JetBrains Mono', 'Menlo', monospace;
+}
+
+body {
+  @apply font-sans antialiased text-foreground text-sm selection:bg-primary/30;
+  background-color: var(--background);
+}
+
+/* Scrollbar styling for density and precision */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--muted);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border);
+}
+
+/* Force dark mode */
+html {
+  color-scheme: dark;
+}
+
+/* Graph container defaults */
+.force-graph-container {
+  background: var(--background);
+  cursor: crosshair;
+}

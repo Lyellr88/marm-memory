@@ -122,6 +122,28 @@ def init_concept_database(db_path: str) -> None:
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_entities_dedup "
             "ON entities(name, COALESCE(session_name, ''), COALESCE(project, ''))"
         )
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS concept_build_runs (
+                id TEXT PRIMARY KEY,
+                scope_type TEXT NOT NULL,
+                scope_value TEXT,
+                status TEXT NOT NULL,
+                memories_processed INTEGER NOT NULL DEFAULT 0,
+                entities_extracted INTEGER NOT NULL DEFAULT 0,
+                relationships_created INTEGER NOT NULL DEFAULT 0,
+                code_links_created INTEGER NOT NULL DEFAULT 0,
+                duplicate_candidates INTEGER NOT NULL DEFAULT 0,
+                duration_ms INTEGER,
+                error_code TEXT,
+                created_at TEXT NOT NULL,
+                started_at TEXT,
+                finished_at TEXT
+            )
+        """)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_concept_build_runs_created "
+            "ON concept_build_runs(created_at DESC)"
+        )
 
 
 class ConceptDB:
@@ -136,6 +158,44 @@ class ConceptDB:
 
     def get_connection(self):
         return ConnectionContext(self.connection_pool)
+
+    def create_build_run(
+        self,
+        conn,
+        *,
+        run_id: str,
+        scope_type: str,
+        scope_value: Optional[str],
+        created_at: str,
+    ) -> None:
+        conn.execute(
+            """INSERT INTO concept_build_runs
+               (id, scope_type, scope_value, status, created_at)
+               VALUES (?, ?, ?, 'queued', ?)""",
+            (run_id, scope_type, scope_value, created_at),
+        )
+
+    def update_build_run(self, conn, run_id: str, **fields) -> None:
+        allowed = {
+            "status",
+            "memories_processed",
+            "entities_extracted",
+            "relationships_created",
+            "code_links_created",
+            "duplicate_candidates",
+            "duration_ms",
+            "error_code",
+            "started_at",
+            "finished_at",
+        }
+        updates = {key: value for key, value in fields.items() if key in allowed}
+        if not updates:
+            return
+        assignments = ", ".join(f"{key} = ?" for key in updates)
+        conn.execute(
+            f"UPDATE concept_build_runs SET {assignments} WHERE id = ?",
+            [*updates.values(), run_id],
+        )
 
     def get_or_create_entity(
         self,

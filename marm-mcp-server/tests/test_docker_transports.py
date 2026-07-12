@@ -369,6 +369,10 @@ def test_docker_data_persists_across_container_restart(docker_image, tmp_path):
 
     try:
         base_url = _start(first_container)
+        # This is the first marm_log_entry call in a brand-new container, so it
+        # also pays the one-time cold-start cost of loading the semantic encoder
+        # (dual-write now embeds every log entry) -- measured ~4.5s locally, so
+        # 5s was too tight and flaked under any extra container overhead.
         write = requests.post(
             f"{base_url}/marm_log_entry",
             json={
@@ -376,7 +380,7 @@ def test_docker_data_persists_across_container_restart(docker_image, tmp_path):
                 "session_name": session_name,
             },
             headers=headers,
-            timeout=5,
+            timeout=20,
         )
         assert write.status_code == 200
     finally:

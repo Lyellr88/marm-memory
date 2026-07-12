@@ -1,5 +1,6 @@
 import asyncio
 import importlib
+import json
 import sqlite3
 import uuid
 from datetime import datetime, timezone
@@ -379,10 +380,11 @@ def test_smart_recall_with_include_logs_and_system_info(monkeypatch, tmp_path):
         f"Expected qwen in log topics, got: {log_topics}"
     )
 
+    # seeded memory + the dual-written log entry memory
     memory_module = importlib.import_module("marm_mcp_server.core.memory")
     with memory_module.memory.get_connection() as conn:
         count = conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
-    assert count == 1
+    assert count == 2
 
 
 def test_memory_write_queue_is_used_when_enabled(monkeypatch, tmp_path):
@@ -411,17 +413,26 @@ def test_memory_write_queue_is_used_when_enabled(monkeypatch, tmp_path):
 def test_smart_recall_include_logs_returns_log_matches_without_memory_hits(
     monkeypatch, tmp_path
 ):
+    """Legacy log rows (pre-dual-write DBs) must still surface via include_logs
+    even when nothing matches in the memories table."""
     server = load_isolated_server(monkeypatch, tmp_path)
     client = local_client(server.app)
 
-    created = client.post(
-        "/marm_log_entry",
-        json={
-            "session_name": "log-only-session",
-            "entry": "2026-05-20-logonlysentinel-transport command captured",
-        },
-    )
-    assert created.status_code == 200
+    legacy_id = str(uuid.uuid4())
+    db_path = str(tmp_path / "marm_memory.db")
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            "INSERT INTO log_entries (id, session_name, entry_date, topic, summary, full_entry) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                legacy_id,
+                "log-only-session",
+                "2026-05-20",
+                "logonlysentinel",
+                "transport command captured",
+                "2026-05-20-logonlysentinel-transport command captured",
+            ),
+        )
 
     recall = client.post(
         "/marm_smart_recall",
@@ -438,6 +449,7 @@ def test_smart_recall_include_logs_returns_log_matches_without_memory_hits(
     assert body["status"] == "no_results"
     assert body["results"] == []
     assert body["log_results_count"] == 1
+    assert body["log_results"][0]["id"] == legacy_id
     assert body["log_results"][0]["topic"] == "logonlysentinel"
     assert body["log_results"][0]["session_name"] == "log-only-session"
 
@@ -1221,3 +1233,173 @@ def test_log_entries_are_isolated_by_session(monkeypatch, tmp_path):
     assert beta.json()["entries"][0]["topic"] == "beta"
     assert alpha.json()["entries"][0]["entry_date"] == "2026-01-01"
     assert beta.json()["entries"][0]["entry_date"] == "2026-01-02"
+
+
+def test_log_entry_dual_writes_semantic_memory(monkeypatch, tmp_path):
+    server = load_isolated_server(monkeypatch, tmp_path)
+    client = local_client(server.app)
+
+    created = client.post(
+        "/marm_log_entry",
+        json={
+            "session_name": "dual-write",
+            "entry": "2026-07-11-benchmarks-locomo retrieval harness landed",
+        },
+    )
+    assert created.status_code == 200
+    body = created.json()
+    entry_id = body["entry_id"]
+    memory_id = body["memory_id"]
+    assert memory_id, f"log entry did not report a semantic memory id: {body}"
+
+    memory_module = importlib.import_module("marm_mcp_server.core.memory")
+    with memory_module.memory.get_connection() as conn:
+        row = conn.execute(
+            "SELECT session_name, content, metadata FROM memories WHERE id = ?",
+            (memory_id,),
+        ).fetchone()
+    assert row is not None, "dual-written memory row missing from memories table"
+    assert row[0] == "dual-write"
+    assert row[1] == "2026-07-11-benchmarks-locomo retrieval harness landed"
+    metadata = json.loads(row[2])
+    assert metadata["source"] == "log_entry"
+    assert metadata["log_entry_id"] == entry_id
+
+    recall = client.post(
+        "/marm_smart_recall",
+        json={
+            "session_name": "dual-write",
+            "query": "locomo retrieval harness",
+            "limit": 3,
+            "detail": 3,
+        },
+    )
+    assert recall.status_code == 200
+    assert recall.json()["status"] == "success"
+    assert any(r["id"] == memory_id for r in recall.json()["results"]), (
+        f"semantic recall did not surface the dual-written memory: {recall.json()}"
+    )
+
+
+def test_smart_recall_log_results_carry_entry_id(monkeypatch, tmp_path):
+    server = load_isolated_server(monkeypatch, tmp_path)
+    client = local_client(server.app)
+
+    created = client.post(
+        "/marm_log_entry",
+        json={
+            "session_name": "id-check",
+            "entry": "2026-07-11-idcheck-entry id surfaced in recall",
+        },
+    )
+    assert created.status_code == 200
+    entry_id = created.json()["entry_id"]
+
+    recall = client.post(
+        "/marm_smart_recall",
+        json={
+            "session_name": "id-check",
+            "query": "idcheck",
+            "limit": 3,
+            "include_logs": True,
+        },
+    )
+    assert recall.status_code == 200
+    log_results = recall.json()["log_results"]
+    assert [r["id"] for r in log_results] == [entry_id]
+
+
+def test_delete_log_cascades_dual_written_memories(monkeypatch, tmp_path):
+    server = load_isolated_server(monkeypatch, tmp_path)
+    client = local_client(server.app)
+
+    first = client.post(
+        "/marm_log_entry",
+        json={
+            "session_name": "cascade",
+            "entry": "2026-07-11-alpha-first entry for cascade delete",
+        },
+    ).json()
+    second = client.post(
+        "/marm_log_entry",
+        json={
+            "session_name": "cascade",
+            "entry": "2026-07-11-beta-second entry for cascade delete",
+        },
+    ).json()
+    assert first["memory_id"] and second["memory_id"]
+
+    memory_module = importlib.import_module("marm_mcp_server.core.memory")
+
+    # Branch 1: delete one entry by id — only its memory goes away
+    resp = client.post(
+        "/marm_delete",
+        json={"type": "log", "session_name": "cascade", "target": first["entry_id"]},
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["deleted_count"] == 1
+    assert body["memories_deleted"] == 1
+    with memory_module.memory.get_connection() as conn:
+        remaining = {
+            r[0]
+            for r in conn.execute(
+                "SELECT id FROM memories WHERE session_name = 'cascade'"
+            ).fetchall()
+        }
+    assert first["memory_id"] not in remaining
+    assert second["memory_id"] in remaining
+
+    # Branch 2: delete the whole session — remaining dual-written memory goes too
+    resp = client.post("/marm_delete", json={"type": "log", "target": "cascade"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["deleted_count"] == 1
+    assert body["memories_deleted"] == 1
+    with memory_module.memory.get_connection() as conn:
+        count = conn.execute(
+            "SELECT COUNT(*) FROM memories WHERE session_name = 'cascade'"
+        ).fetchone()[0]
+    assert count == 0
+
+
+def test_delete_log_session_spares_non_log_memories(monkeypatch, tmp_path):
+    """A whole-session log delete must only remove memories that were
+    dual-written from a log entry (metadata.source == "log_entry") --
+    memories created any other way (e.g. the dashboard's manual Add Memory
+    form) live in the same `memories` table and session, and must survive."""
+    server = load_isolated_server(monkeypatch, tmp_path)
+    client = local_client(server.app)
+
+    logged = client.post(
+        "/marm_log_entry",
+        json={
+            "session_name": "mixed-session",
+            "entry": "2026-07-11-gamma-logged entry for mixed session",
+        },
+    ).json()
+    assert logged["memory_id"]
+
+    memory_module = importlib.import_module("marm_mcp_server.core.memory")
+    manual_id = asyncio.run(
+        memory_module.memory.store_memory(
+            "manually authored memory, not from a log entry",
+            "mixed-session",
+        )
+    )
+
+    resp = client.post("/marm_delete", json={"type": "log", "target": "mixed-session"})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["deleted_count"] == 1
+    assert body["memories_deleted"] == 1
+
+    with memory_module.memory.get_connection() as conn:
+        remaining = {
+            r[0]
+            for r in conn.execute(
+                "SELECT id FROM memories WHERE session_name = 'mixed-session'"
+            ).fetchall()
+        }
+    assert logged["memory_id"] not in remaining
+    assert manual_id in remaining

@@ -15,7 +15,10 @@ os.environ["MARM_DB_PATH"] = os.path.join(_TMP, "s.db")
 os.environ["MARM_ANALYTICS_DB_PATH"] = os.path.join(_TMP, "a.db")
 os.environ["SERVER_HOST"] = "127.0.0.1"
 os.environ["WRITE_QUEUE_ENABLED"] = "0"
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_REPO_ROOT = os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+)
+sys.path.insert(0, os.path.join(_REPO_ROOT, "marm-mcp-server"))
 
 from fastapi.testclient import TestClient  # noqa: E402
 from marm_mcp_server.server import app  # noqa: E402

@@ -4,8 +4,8 @@ MARM MCP Server - Memory Accurate Response Mode for Model Context Protocol
 This server integrates all modular components of the MARM protocol into a single
 FastAPI application, compliant with the MCP protocol via FastApiMCP.
 
-Author: Lyell - MARM Systems
-Version: 2.20.0
+Author: Lyell - marm-memory
+Version: 2.21.0
 """
 
 import asyncio
@@ -796,7 +796,7 @@ def main():
     )
 
     print(
-        "  Community: discord.gg/nhyJWPz2cf  |  github.com/Lyellr88/MARM-Systems/discussions"
+        "  Community: discord.gg/nhyJWPz2cf  |  github.com/Lyellr88/marm-memory/discussions"
     )
 
     try:

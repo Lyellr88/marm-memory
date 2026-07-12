@@ -13,11 +13,11 @@ Features:
 - Docker deployment ready
 - Production-grade performance
 
-Author: Ryan Lyell - MARM Systems
-Version: 2.20.0
+Author: Ryan Lyell - marm-memory
+Version: 2.21.0
 """
 
-__version__ = "2.20.0"
+__version__ = "2.21.0"
 __author__ = "Ryan Lyell"
 __email__ = "lyell@marmsystems.com"
 

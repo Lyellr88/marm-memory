@@ -1,0 +1,38 @@
+{
+  "name": "@workspace/marm-console",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --config vite.config.ts --host 0.0.0.0",
+    "build": "vite build --config vite.config.ts",
+    "serve": "vite preview --config vite.config.ts --host 0.0.0.0",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "d3-force": "^3.0.0",
+    "force-graph": "^1.51.4",
+    "react-force-graph-2d": "^1.29.1"
+  },
+  "devDependencies": {
+    "@radix-ui/react-dialog": "catalog:",
+    "@radix-ui/react-select": "catalog:",
+    "@radix-ui/react-tabs": "catalog:",
+    "@tailwindcss/vite": "catalog:",
+    "@tanstack/react-query": "catalog:",
+    "@types/d3-force": "^3.0.10",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "clsx": "catalog:",
+    "date-fns": "^3.6.0",
+    "lucide-react": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "tailwind-merge": "catalog:",
+    "tailwindcss": "catalog:",
+    "vite": "catalog:",
+    "wouter": "catalog:"
+  }
+}

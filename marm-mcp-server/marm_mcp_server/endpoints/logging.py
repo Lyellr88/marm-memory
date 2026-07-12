@@ -25,6 +25,7 @@ async def marm_log_entry(request: LogEntryRequest):
 
     Start with "Session: [name]" or "Topic: [name]" to switch active session.
     The backend auto-tags the date. All subsequent entries route to that session.
+    Entries are also stored as semantic memories so marm_smart_recall can find them.
     Equivalent to /log entry: [YYYY-MM-DD-topic-summary] command
     """
     try:
@@ -174,6 +175,18 @@ async def marm_log_entry(request: LogEntryRequest):
                 pass
             conn.commit()
 
+        # Dual-write into semantic memory so marm_smart_recall can find it;
+        # a store failure must never fail the log write itself.
+        memory_id = None
+        try:
+            memory_id = await memory.store_memory_queued(
+                formatted_entry,
+                session,
+                metadata={"source": "log_entry", "log_entry_id": entry_id},
+            )
+        except Exception as store_error:
+            print(f"Semantic store failed for log entry {entry_id}: {store_error}")
+
         await events.emit(
             "log_entry_created",
             {"entry_id": entry_id, "session": session, "content": formatted_entry},
@@ -183,6 +196,7 @@ async def marm_log_entry(request: LogEntryRequest):
             "status": "success",
             "message": f"📝 Log entry added: {formatted_entry}",
             "entry_id": entry_id,
+            "memory_id": memory_id,
             "formatted_entry": formatted_entry,
         }
     except sqlite3.Error as e:
@@ -269,12 +283,26 @@ async def marm_delete(request: DeleteRequest):
     try:
         with memory.get_connection() as conn:
             if request.type == "log":
+                memories_deleted = 0
                 if request.session_name:
+                    # Dual-written semantic memories must not outlive their log entries
+                    rows = conn.execute(
+                        "SELECT id FROM log_entries WHERE session_name = ? AND (id = ? OR topic = ?)",
+                        (request.session_name, request.target, request.target),
+                    ).fetchall()
+                    entry_ids = [r[0] for r in rows]
                     cursor = conn.execute(
                         "DELETE FROM log_entries WHERE session_name = ? AND (id = ? OR topic = ?)",
                         (request.session_name, request.target, request.target),
                     )
                     deleted = cursor.rowcount
+                    if entry_ids:
+                        placeholders = ",".join("?" * len(entry_ids))
+                        memories_deleted = conn.execute(
+                            "DELETE FROM memories WHERE json_extract(metadata, '$.source') = 'log_entry' "
+                            f"AND json_extract(metadata, '$.log_entry_id') IN ({placeholders})",
+                            entry_ids,
+                        ).rowcount
                     if deleted:
                         try:
                             conn.execute(
@@ -299,6 +327,11 @@ async def marm_delete(request: DeleteRequest):
                         "DELETE FROM session_summary_cache WHERE session_name = ?",
                         (request.target,),
                     )
+                    memories_deleted = conn.execute(
+                        "DELETE FROM memories WHERE session_name = ? "
+                        "AND json_extract(metadata, '$.source') = 'log_entry'",
+                        (request.target,),
+                    ).rowcount
                     if memory.active_log_session == request.target:
                         memory.active_log_session = "main"
                 conn.commit()
@@ -306,6 +339,7 @@ async def marm_delete(request: DeleteRequest):
                     "status": "success",
                     "message": f"🗑️ Deleted {deleted} items",
                     "deleted_count": deleted,
+                    "memories_deleted": memories_deleted,
                 }
             elif request.type == "notebook":
                 cursor = conn.execute(

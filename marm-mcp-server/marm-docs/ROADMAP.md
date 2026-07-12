@@ -1,6 +1,6 @@
-# MARM Systems Roadmap 
+# marm-memory Roadmap
 
-> Updated 05/17/2026 this roadmap reflects the current strategic direction and near-term priorities for MARM Systems. It is a living document that will evolve as we learn from users, research, and the rapidly changing AI landscape.
+> Updated 05/17/2026 this roadmap reflects the current strategic direction and near-term priorities for marm-memory. It is a living document that will evolve as we learn from users, research, and the rapidly changing AI landscape.
 
 ## Strategic Direction
 

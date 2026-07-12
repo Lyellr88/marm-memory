@@ -1,4 +1,4 @@
-"""Hot-path benchmark for the opus-review findings.
+"""Hot-path benchmark.
 
 Measures, against the REAL MARMMemory + fastembed-backed all-MiniLM-L6-v2 encoder:
   1. encode() wall time (the per-call CPU cost)
@@ -7,7 +7,7 @@ Measures, against the REAL MARMMemory + fastembed-backed all-MiniLM-L6-v2 encode
   4. write latency with consolidation OFF vs ON (double-encode + scan-per-write)
   5. HYBRID SEARCH: FTS5 filter→re-rank vs weighted fusion vs pure semantic
 
-Run from marm-mcp-server/:  python scripts/bench_hotpath.py
+Run from repo root:  python scripts/benchmarking/preformance/bench_hotpath.py
 Uses a throwaway temp DB; never touches ~/.marm.
 """
 
@@ -27,7 +27,10 @@ os.environ["MARM_ANALYTICS_DB_PATH"] = os.path.join(_TMP, "analytics.db")
 os.environ["SERVER_HOST"] = "127.0.0.1"
 os.environ["WRITE_QUEUE_ENABLED"] = "0"
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_REPO_ROOT = os.path.dirname(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+)
+sys.path.insert(0, os.path.join(_REPO_ROOT, "marm-mcp-server"))
 
 from marm_mcp_server.core.memory import MARMMemory, _safe_fts_query  # noqa: E402
 from marm_mcp_server.core import consolidation  # noqa: E402
