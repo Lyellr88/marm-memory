@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { useProjects, useIndexProject, useIndexJob, useDeleteProject, useSearchProjectCode, useTraceProject, useProjectImpact } from '@/hooks/use-marm-queries';
+import { useEffect, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useProjects, useIndexProject, useIndexJob, useDeleteProject, useSearchProjectCode, useTraceProject, useProjectImpact, useProjectArchitecture, useMarmConfig } from '@/hooks/use-marm-queries';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, Badge, Button, Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Tabs, TabsList, TabsTrigger, TabsContent, Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/core';
 import { FolderCode, HardDrive, RefreshCw, Trash2, SearchCode, GitBranch, Search, Share2, AlertCircle } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
@@ -8,21 +9,31 @@ import type { IndexMode, ProjectIndexInput, ProjectSummary, CodeSearchKind, Trac
 function IndexDialog({ open, onOpenChange }: { open: boolean, onOpenChange: (o: boolean) => void }) {
   const indexProj = useIndexProject();
   const [repoPath, setRepoPath] = useState('');
-  const [name, setName] = useState('');
   const [mode, setMode] = useState<IndexMode>('fast');
   const [jobId, setJobId] = useState<string | null>(null);
   const { data: jobStatus } = useIndexJob(jobId || '');
+  const { baseUrl } = useMarmConfig();
+  const queryClient = useQueryClient();
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!repoPath) return;
     indexProj.mutate(
-      { repo_path: repoPath, project: name || undefined, mode },
+      { repo_path: repoPath, mode },
       { onSuccess: (res) => setJobId(res.job_id) }
     );
   };
 
-  const isRunning = jobStatus?.status === 'queued' || jobStatus?.status === 'running';
+  // Until the first poll returns, the job counts as running — the dialog
+  // must not offer Done/close before a real terminal status is known.
+  const isSettled = !!jobStatus && jobStatus.status !== 'queued' && jobStatus.status !== 'running';
+  const isRunning = !!jobId && !isSettled;
+
+  useEffect(() => {
+    if (jobStatus?.status === 'success') {
+      queryClient.invalidateQueries({ queryKey: ['projects', baseUrl] });
+    }
+  }, [baseUrl, jobStatus?.status, queryClient]);
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!isRunning) onOpenChange(o); }}>
@@ -41,10 +52,6 @@ function IndexDialog({ open, onOpenChange }: { open: boolean, onOpenChange: (o: 
               <Input placeholder="/Users/dev/workspace/my-app" value={repoPath} onChange={e => setRepoPath(e.target.value)} required className="font-mono text-xs" />
             </div>
             <div className="space-y-2">
-              <Label>Project Name (Optional)</Label>
-              <Input placeholder="Inferred from folder if empty" value={name} onChange={e => setName(e.target.value)} />
-            </div>
-            <div className="space-y-2">
               <Label>Index Mode</Label>
               <Select value={mode} onValueChange={(v: IndexMode) => setMode(v)}>
                 <SelectTrigger>
@@ -57,6 +64,9 @@ function IndexDialog({ open, onOpenChange }: { open: boolean, onOpenChange: (o: 
                 </SelectContent>
               </Select>
             </div>
+            {indexProj.error && (
+              <p className="text-xs text-destructive p-2 bg-destructive/10 rounded">{indexProj.error.message}</p>
+            )}
             <DialogFooter className="mt-6">
               <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
               <Button type="submit" isLoading={indexProj.isPending}>Start Indexing</Button>
@@ -69,7 +79,7 @@ function IndexDialog({ open, onOpenChange }: { open: boolean, onOpenChange: (o: 
             {jobStatus?.phase && <p className="text-sm font-mono text-muted-foreground">{jobStatus.phase}</p>}
             {jobStatus?.error && <p className="text-xs text-destructive p-2 bg-destructive/10 rounded">{jobStatus.error}</p>}
             
-            {!isRunning && (
+            {isSettled && (
               <Button className="mt-4" onClick={() => onOpenChange(false)}>Done</Button>
             )}
           </div>
@@ -103,10 +113,13 @@ function DeleteDialog({ project, open, onOpenChange }: { project: ProjectSummary
             className="font-mono border-destructive/50 focus-visible:ring-destructive"
           />
         </div>
+        {deleteProj.error && (
+          <p className="text-xs text-destructive p-2 bg-destructive/10 rounded">{deleteProj.error.message}</p>
+        )}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button 
-            variant="destructive" 
+          <Button
+            variant="destructive"
             disabled={confirmName !== project.name}
             isLoading={deleteProj.isPending}
             onClick={() => {
@@ -127,6 +140,7 @@ function ExploreDialog({ project, open, onOpenChange }: { project: ProjectSummar
   const searchCode = useSearchProjectCode();
   const traceCode = useTraceProject();
   const impactCode = useProjectImpact();
+  const { data: architecture, isLoading: architectureLoading } = useProjectArchitecture(project?.name || '');
 
   // Search
   const [searchQuery, setSearchQuery] = useState('');
@@ -150,11 +164,44 @@ function ExploreDialog({ project, open, onOpenChange }: { project: ProjectSummar
         </DialogHeader>
 
         <Tabs defaultValue="search" className="flex-1 flex flex-col overflow-hidden">
-          <TabsList className="grid w-full grid-cols-3">
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="architecture">Architecture</TabsTrigger>
             <TabsTrigger value="search">Code Search</TabsTrigger>
             <TabsTrigger value="trace">Trace Symbol</TabsTrigger>
             <TabsTrigger value="impact">Impact Analysis</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="architecture" className="flex-1 overflow-auto pt-4">
+            {architectureLoading ? (
+              <div className="p-8 text-center text-sm text-muted-foreground">Loading architecture...</div>
+            ) : (
+              <div className="space-y-5">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="border rounded-md p-4">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wider">Node types</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {architecture?.schema.node_types.map((type) => <Badge key={type} variant="secondary">{type}</Badge>)}
+                    </div>
+                  </div>
+                  <div className="border rounded-md p-4">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wider">Edge types</p>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {architecture?.schema.edge_types.map((type) => <Badge key={type} variant="outline">{type}</Badge>)}
+                    </div>
+                  </div>
+                </div>
+                <div className="border rounded-md overflow-hidden">
+                  <Table>
+                    <TableHeader className="bg-muted/80"><TableRow><TableHead>Module</TableHead><TableHead className="text-right">Files</TableHead><TableHead className="text-right">Nodes</TableHead></TableRow></TableHeader>
+                    <TableBody>
+                      {architecture?.modules.length === 0 && <TableRow><TableCell colSpan={3} className="h-24 text-center text-muted-foreground">No module summary available.</TableCell></TableRow>}
+                      {architecture?.modules.map((module) => <TableRow key={module.name}><TableCell className="font-mono text-xs">{module.name}</TableCell><TableCell className="text-right">{module.file_count}</TableCell><TableCell className="text-right">{module.node_count}</TableCell></TableRow>)}
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            )}
+          </TabsContent>
           
           <TabsContent value="search" className="flex-1 overflow-hidden flex flex-col gap-4 pt-4">
             <div className="flex gap-2">
@@ -183,7 +230,10 @@ function ExploreDialog({ project, open, onOpenChange }: { project: ProjectSummar
                 <Search className="w-4 h-4" />
               </Button>
             </div>
-            
+            {searchCode.error && (
+              <p className="text-xs text-destructive p-2 bg-destructive/10 rounded">{searchCode.error.message}</p>
+            )}
+
             <div className="flex-1 overflow-auto border rounded-md">
               <Table>
                 <TableHeader className="sticky top-0 bg-muted/80 backdrop-blur">
@@ -243,6 +293,9 @@ function ExploreDialog({ project, open, onOpenChange }: { project: ProjectSummar
                 Trace
               </Button>
             </div>
+            {traceCode.error && (
+              <p className="text-xs text-destructive p-2 bg-destructive/10 rounded">{traceCode.error.message}</p>
+            )}
 
             <div className="flex-1 overflow-auto border rounded-md">
               <Table>
@@ -287,6 +340,9 @@ function ExploreDialog({ project, open, onOpenChange }: { project: ProjectSummar
                 Analyze
               </Button>
             </div>
+            {impactCode.error && (
+              <p className="text-xs text-destructive p-2 bg-destructive/10 rounded">{impactCode.error.message}</p>
+            )}
 
             <div className="flex-1 overflow-auto border rounded-md">
               <Table>

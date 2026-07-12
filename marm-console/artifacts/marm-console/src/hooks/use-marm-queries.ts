@@ -226,8 +226,12 @@ export function useProjects() {
 }
 
 export function useIndexProject() {
-  const { client } = useMarmConfig();
-  return useMutation({ mutationFn: (data: ProjectIndexInput) => client.indexProject(data) });
+  const { baseUrl, client } = useMarmConfig();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: ProjectIndexInput) => client.indexProject(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['projects', baseUrl] }),
+  });
 }
 
 export function useIndexJob(jobId: string) {

@@ -8,7 +8,6 @@ import {
 } from 'react';
 
 const BASE_URL_STORAGE_KEY = 'marm-console:base-url';
-const API_KEY_STORAGE_KEY = 'marm-console:api-key';
 
 export const DEFAULT_BASE_URL =
   typeof window !== 'undefined' && window.location.port === '8002'
@@ -30,14 +29,11 @@ function readStoredBaseUrl(): string {
   return window.localStorage.getItem(BASE_URL_STORAGE_KEY) ?? DEFAULT_BASE_URL;
 }
 
-function readStoredApiKey(): string | null {
-  if (typeof window === 'undefined') return null;
-  return window.sessionStorage.getItem(API_KEY_STORAGE_KEY);
-}
-
 export function ConnectionProvider({ children }: { children: ReactNode }) {
   const [baseUrl, setBaseUrlState] = useState<string>(readStoredBaseUrl);
-  const [apiKey, setApiKeyState] = useState<string | null>(readStoredApiKey);
+  // The bearer token lives only in React state — never persisted to
+  // web storage, so it can't outlive the tab or leak to other scripts.
+  const [apiKey, setApiKeyState] = useState<string | null>(null);
 
   const setBaseUrl = useCallback((url: string) => {
     const trimmed = url.trim().replace(/\/+$/, '');
@@ -49,13 +45,6 @@ export function ConnectionProvider({ children }: { children: ReactNode }) {
 
   const setApiKey = useCallback((key: string | null) => {
     setApiKeyState(key);
-    if (typeof window !== 'undefined') {
-      if (key) {
-        window.sessionStorage.setItem(API_KEY_STORAGE_KEY, key);
-      } else {
-        window.sessionStorage.removeItem(API_KEY_STORAGE_KEY);
-      }
-    }
   }, []);
 
   const clearApiKey = useCallback(() => setApiKey(null), [setApiKey]);

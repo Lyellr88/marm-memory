@@ -58,6 +58,7 @@ Semver: MAJOR = breaking (schema renames, parameter removals), MINOR = new tools
 
 - Tests live in `marm-mcp-server/tests/`; run with `pytest` from `marm-mcp-server/`.
 - Hit real FastAPI endpoints and real SQLite. Mock only when it meaningfully speeds the test AND matches real behavior with at least 95% fidelity.
+- Every new MARM Console API route needs at least one happy-path FastAPI response-contract test with the MCP adapter stubbed. This verifies the actual response model without requiring a live graph backend.
 - No existence-check or coded-to-pass tests. Deep tests that exercise real paths beat broad shallow coverage.
 - `pytest.mark.skip` only for genuinely unavailable dependencies (no embedding model, no spaCy `[concepts]` extra), never for effort.
 

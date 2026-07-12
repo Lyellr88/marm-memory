@@ -13,7 +13,26 @@ class McpUnavailable(RuntimeError):
     """The running MARM MCP server could not complete a Console request."""
 
 
+class McpRequestError(McpUnavailable):
+    """MARM MCP received the request but rejected it."""
+
+    def __init__(self, status_code: int, detail: str) -> None:
+        super().__init__(detail)
+        self.status_code = status_code
+
+
 _projects_cache: tuple[float, list[dict]] | None = None
+
+
+def _http_error(exc: HTTPError) -> McpRequestError:
+    detail = "MARM MCP server rejected this request."
+    try:
+        payload = json.load(exc)
+        if isinstance(payload, dict) and isinstance(payload.get("detail"), str):
+            detail = payload["detail"]
+    except (OSError, ValueError, json.JSONDecodeError):
+        pass
+    return McpRequestError(exc.code, detail)
 
 
 def post(operation: str, payload: dict, *, timeout: float = 10.0) -> dict:
@@ -31,7 +50,32 @@ def post(operation: str, payload: dict, *, timeout: float = 10.0) -> dict:
     try:
         with urlopen(request, timeout=timeout) as response:
             result = json.load(response)
-    except (HTTPError, URLError, OSError, ValueError) as exc:
+    except HTTPError as exc:
+        raise _http_error(exc) from exc
+    except (URLError, OSError, ValueError) as exc:
+        raise McpUnavailable(
+            "MARM MCP server is unavailable for this request."
+        ) from exc
+    if not isinstance(result, dict):
+        raise McpUnavailable("MARM MCP server returned an invalid response.")
+    return result
+
+
+def get(operation: str, *, timeout: float = 10.0) -> dict:
+    base_url = os.environ.get("MARM_MCP_URL", "http://127.0.0.1:8001").rstrip("/")
+    headers = {"Accept": "application/json"}
+    api_key = os.environ.get("MARM_API_KEY")
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    request = Request(
+        f"{base_url}/{operation.lstrip('/')}", headers=headers, method="GET"
+    )
+    try:
+        with urlopen(request, timeout=timeout) as response:
+            result = json.load(response)
+    except HTTPError as exc:
+        raise _http_error(exc) from exc
+    except (URLError, OSError, ValueError) as exc:
         raise McpUnavailable(
             "MARM MCP server is unavailable for this request."
         ) from exc
@@ -44,7 +88,7 @@ def list_projects() -> list[dict]:
     global _projects_cache
     if _projects_cache and time.monotonic() - _projects_cache[0] < 15:
         return _projects_cache[1]
-    result = post("marm_graph_index", {"action": "list"})
+    result = post("internal/projects/list", {})
     if result.get("status") == "error":
         raise McpUnavailable(
             result.get("message", "MARM graph backend is unavailable.")

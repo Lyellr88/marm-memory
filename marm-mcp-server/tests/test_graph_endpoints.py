@@ -120,6 +120,62 @@ def test_all_five_graph_tools_return_clean_error_when_unavailable(
         }, path
 
 
+def test_console_project_routes_are_internal_and_degrade_cleanly(monkeypatch, tmp_path):
+    monkeypatch.setenv("GRAPH_ENABLED", "false")
+    server = load_isolated_server(monkeypatch, tmp_path)
+    client = local_client(server.app)
+
+    response = client.post("/internal/projects/list", json={})
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "error",
+        "message": "graph backend unavailable",
+    }
+    assert "internal/projects/list" not in {tool.name for tool in server.mcp.tools}
+
+
+def test_console_index_rejects_invalid_path_before_graph_start(monkeypatch, tmp_path):
+    server = load_isolated_server(monkeypatch, tmp_path)
+    client = local_client(server.app)
+
+    response = client.post(
+        "/internal/projects/index", json={"repo_path": "relative/project", "mode": "fast"}
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Repository path must be an existing absolute directory."
+    assert server.graph_supervisor._client is None
+
+
+def test_console_index_releases_single_flight_lock_when_thread_cannot_start(
+    monkeypatch, tmp_path
+):
+    server = load_isolated_server(monkeypatch, tmp_path)
+    graph = __import__("marm_mcp_server.endpoints.graph", fromlist=["router"])
+    client = local_client(server.app)
+    original_thread = graph.threading.Thread
+
+    class FailingThread:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def start(self):
+            raise RuntimeError("thread startup failed")
+
+    monkeypatch.setattr(graph.threading, "Thread", FailingThread)
+    failed = client.post(
+        "/internal/projects/index", json={"repo_path": str(tmp_path), "mode": "fast"}
+    )
+    assert failed.status_code == 500
+
+    monkeypatch.setattr(graph.threading, "Thread", original_thread)
+    retry = client.post(
+        "/internal/projects/index", json={"repo_path": str(tmp_path), "mode": "fast"}
+    )
+    assert retry.status_code == 202
+
+
 def test_cold_graph_startup_does_not_block_concurrent_core_requests(
     monkeypatch, tmp_path
 ):

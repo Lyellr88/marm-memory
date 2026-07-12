@@ -79,15 +79,23 @@ async function request<T>(
   if (opts?.body !== undefined) headers['Content-Type'] = 'application/json';
   if (config.apiKey) headers.Authorization = `Bearer ${config.apiKey}`;
 
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 30000);
   let res: Response;
   try {
     res = await fetch(url, {
       method,
       headers,
       body: opts?.body !== undefined ? JSON.stringify(opts.body) : undefined,
+      signal: controller.signal,
     });
-  } catch {
+  } catch (err) {
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      throw new MarmApiError(0, 'Request to MARM server timed out after 30s');
+    }
     throw new MarmApiError(0, `Could not reach MARM server at ${config.baseUrl}`);
+  } finally {
+    clearTimeout(timer);
   }
 
   if (!res.ok) {
@@ -179,7 +187,7 @@ export function createMarmClient(config: MarmClientConfig) {
       request<ImpactResult>(config, 'POST', `/projects/${encodeURIComponent(project)}/impact`, { body: data }),
     deleteProject: (project: string, name: string) =>
       request<void>(config, 'DELETE', `/projects/${encodeURIComponent(project)}`, {
-        query: { name, confirm: true },
+        body: { name, confirm: true },
       }),
   };
 }
