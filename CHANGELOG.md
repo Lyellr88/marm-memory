@@ -26,7 +26,7 @@
 
 ### LoCoMo Retrieval Benchmark
 
-- Added `scripts/eval/locomo/` — a deterministic, LLM-free retrieval benchmark against the LoCoMo long-conversation dataset. Ingests each conversation through `marm_log_entry`, then checks whether `marm_smart_recall` surfaces the gold evidence turns for every annotated question. Pure evidence-ID matching, per-category and per-lane (semantic vs log) hit rates, no judge model anywhere.
+- Added `scripts/benchmarking/accuracy/locomo/` — a deterministic, LLM-free retrieval benchmark against the LoCoMo long-conversation dataset. Ingests each conversation through `marm_log_entry`, then checks whether `marm_smart_recall` surfaces the gold evidence turns for every annotated question. Pure evidence-ID matching, per-category and per-lane (semantic vs log) hit rates, no judge model anywhere.
 
 </details>
 
