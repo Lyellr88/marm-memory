@@ -302,7 +302,11 @@ def test_stdio_inprocess_client_wraps_notebook_delete_and_log_results(
     ]
     assert json.loads(delete_result.content[0].text)["deleted"] is True
     assert json.loads(session_result.content[0].text)["status"] == "session_switched"
-    assert json.loads(entry_result.content[0].text)["status"] == "success"
+    entry_body = json.loads(entry_result.content[0].text)
+    assert entry_body["status"] == "success"
+    assert entry_body["memory_id"], (
+        f"stdio log entry did not dual-write a semantic memory: {entry_body}"
+    )
 
 
 def test_stdio_graph_tool_returns_unavailable_when_backend_down(monkeypatch, tmp_path):
@@ -357,7 +361,7 @@ def test_stdio_inprocess_client_wraps_graph_index_happy_path(monkeypatch, tmp_pa
     def _fake_do_index(client, req):
         captured["client"] = client
         captured["req"] = req
-        return {"status": "success", "project": "marm-systems"}
+        return {"status": "success", "project": "marm-memory"}
 
     monkeypatch.setattr(stdio.graph_router, "do_index", _fake_do_index)
 
@@ -373,7 +377,7 @@ def test_stdio_inprocess_client_wraps_graph_index_happy_path(monkeypatch, tmp_pa
     assert result.content[0].type == "text"
     payload = json.loads(result.content[0].text)
     assert payload["status"] == "success"
-    assert payload["project"] == "marm-systems"
+    assert payload["project"] == "marm-memory"
 
     # Proves the wrapper reused graph_supervisor's client and built the same
     # Pydantic request model the HTTP endpoint uses, rather than duplicating
@@ -445,45 +449,48 @@ def test_stdio_concept_recall_rejects_out_of_range_limit(monkeypatch, tmp_path):
     assert "Concept recall failed" in result["message"]
 
 
-def test_stdio_concept_build_passes_through_to_fetch_and_run_build(
+def test_stdio_concept_build_uses_same_endpoint_logic(monkeypatch, tmp_path):
+    stdio = _isolated_stdio(monkeypatch, tmp_path)
+    captured = {}
+
+    async def _fake_endpoint(request):
+        captured.update(request.model_dump())
+        return {"status": "success", "build_run_id": request.run_id}
+
+    monkeypatch.setattr(stdio, "_marm_concept_build_endpoint", _fake_endpoint)
+
+    result = asyncio.run(
+        stdio.marm_concept_build(
+            session_name="sess-a", project="proj-a", run_id="console-run-1"
+        )
+    )
+
+    assert captured == {
+        "session_name": "sess-a",
+        "project": "proj-a",
+        "search_all": False,
+        "run_id": "console-run-1",
+    }
+    assert result == {"status": "success", "build_run_id": "console-run-1"}
+
+
+def test_stdio_concept_build_distinguishes_validation_and_runtime_failures(
     monkeypatch, tmp_path
 ):
     stdio = _isolated_stdio(monkeypatch, tmp_path)
 
-    fetch_captured = {}
-    fake_rows = [("m1", "content", "sess-a", "proj-a")]
-
-    def _fake_fetch(session_name, project, search_all):
-        fetch_captured.update(
-            session_name=session_name, project=project, search_all=search_all
-        )
-        return fake_rows
-
-    build_captured = {}
-
-    def _fake_run_build(rows):
-        build_captured["rows"] = rows
-        return {
-            "entities_extracted": 1,
-            "relationships_created": 0,
-            "code_links_created": 0,
-        }
-
-    monkeypatch.setattr(stdio, "_fetch_memory_rows", _fake_fetch)
-    monkeypatch.setattr(stdio, "_run_build", _fake_run_build)
-
-    result = asyncio.run(
-        stdio.marm_concept_build(session_name="sess-a", project="proj-a")
-    )
-
-    assert fetch_captured == {
-        "session_name": "sess-a",
-        "project": "proj-a",
-        "search_all": False,
+    invalid = asyncio.run(stdio.marm_concept_build())
+    assert invalid == {
+        "status": "error",
+        "message": "Concept build requires session_name, project, or search_all=True.",
     }
-    assert build_captured["rows"] == fake_rows
-    assert result["entities_extracted"] == 1
-    assert "duration_ms" in result
+
+    async def _boom(_request):
+        raise RuntimeError("concept database unavailable")
+
+    monkeypatch.setattr(stdio, "_marm_concept_build_endpoint", _boom)
+    failed = asyncio.run(stdio.marm_concept_build(session_name="sess-a"))
+    assert failed == {"status": "error", "message": "Concept build failed."}
 
 
 def test_stop_graph_supervisor_safely_swallows_errors(monkeypatch):

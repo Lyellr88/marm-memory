@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "marm-mcp-server"
-version = "2.20.0"
-description = "MARM-Systems is a complete protocol and platform—combining an advanced memory backend, modular semantic search, and agent-to-agent coordination with a scientifically structured, community-vetted methodology for reasoning, session recall, and collaborative AI workflows. More then just a set of tools, it's a complete AI memory ecosystem"
+version = "2.21.0"
+description = "marm-memory is a local-first MCP memory layer with hybrid recall, agent coordination, code intelligence, and persistent project context."
 readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md"]
@@ -48,8 +48,8 @@ dependencies = [
 [project.urls]
 Homepage = "https://marmsystems.com"
 Documentation = "https://docs.marmsystems.com"
-Repository = "https://github.com/Lyellr88/MARM-Systems"
-"Bug Tracker" = "https://github.com/Lyellr88/MARM-Systems/issues"
+Repository = "https://github.com/Lyellr88/marm-memory"
+"Bug Tracker" = "https://github.com/Lyellr88/marm-memory/issues"
 "Docker Hub" = "https://hub.docker.com/r/lyellr88/marm-mcp-server"
 
 [project.scripts]

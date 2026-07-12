@@ -5,7 +5,11 @@ import logging
 from datetime import datetime, timezone
 
 from ..core.memory import memory
-from ..config.settings import SEMANTIC_SEARCH_AVAILABLE, SERVER_VERSION
+from ..config.settings import (
+    CONCEPTS_AVAILABLE,
+    SEMANTIC_SEARCH_AVAILABLE,
+    SERVER_VERSION,
+)
 from ..services.documentation import reload_marm_documentation
 
 logger = logging.getLogger(__name__)
@@ -29,6 +33,7 @@ async def health_check():
             "semantic_search": "available"
             if SEMANTIC_SEARCH_AVAILABLE
             else "text_only",
+            "concept_extraction": "available" if CONCEPTS_AVAILABLE else "unavailable",
         }
     except Exception as e:
         logger.error(f"Health check failed: {e!s}", exc_info=True)

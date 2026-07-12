@@ -5,7 +5,7 @@
      width="800"
      height="200">
 </picture>
-<h1 align="center">MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.20.0</h1>
+<h1 align="center">MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.21.0</h1>
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/Lyellr88/marm-memory/blob/MARM-main/LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
@@ -24,9 +24,11 @@
 
 </div>
 
+## Important Message - marm-console has been added but it is not fully active yet coming soon!
+
 ## Table of Contents
 
-- [Why MARM MCP](#why-marm-mcp)
+- [Why MARM Memory](#why-marm-memory)
 - [Performance & Scaling Benchmarks](#performance--scaling-benchmarks)
 - [Quick Start](#-quick-start-for-mcp-http--stdio)
 - [Complete MCP Tool Suite](#complete-mcp-tool-suite-14-tools)
@@ -39,13 +41,19 @@
 - [Contributing](#contributing)
 - [Project Documentation](#project-documentation)
 
-## Why MARM MCP
+## Why MARM Memory
 
-**Your AI forgets everything. MARM MCP doesn't.**
+**Your AI forgets everything. MARM Memory doesn't.**
 
-Claude Code, Codex, Gemini, Qwen, Cursor, VS Code agents, and any other MCP client share the same memory server, so decisions, context, notebooks, and code structure survive across sessions, across agents, and across projects. Cross-session context is the whole point: long-running multi-agent work stops drifting because every agent recalls the same history.
+marm-memory is a high-performance 3-in-1 AI Memory Framework that solves conversational drift, context pollution, and agent amnesia. Instead of juggling fragmented tools, it natively fuses three context layers into a single local runtime:
 
-MARM is built around three focused surfaces: **7 core memory tools** for daily agent context, **5 code-graph tools** for repo intelligence, and **2 concept-graph tools** that turn stored memories into a queryable knowledge graph. All 14 are bundled over both HTTP and STDIO transports. The server handles the heavy work behind those tools: protocol delivery, hybrid semantic + full-text retrieval, serialized writes, rate-limit presets, write-time consolidation, agent-assisted compaction, and lazy graph startup. Agents get a compact memory workflow plus codebase and concept lookup when they need it, without rereading the whole project or flooding the model with duplicate context.
+* 🧠 **Core Memory (7 Tools)** — long-term episodic memory, session logs, notebooks, and intelligent summaries via local vector embeddings and deterministic exact matching
+* 💻 **Code Graph (5 Tools)** — instant repo indexing, symbol lookup, and tree-sitter syntax analysis, powered by the codebase-memory-mcp static binary wrapper
+* 🧩 **Concept Graph (2 Tools)** — extracts entities and typed relationships from stored history, linking developer decisions straight back to source code symbols
+
+One query resolves what was decided, why, and where it lives — no traffic-cop routing across isolated tools. Claude Code, Codex, Gemini, Qwen, Cursor, and VS Code agents share the same persistent memory server across sessions and long-running multi-agent projects, with all 14 tools bundled over both HTTP and STDIO.
+
+Under the hood: a serialized SQLite WAL write queue kills multi-agent swarm contention, write-time consolidation merges duplicates, and hybrid semantic + full-text retrieval keeps recall sharp as memory grows. Agent-assisted compaction keeps context windows clean without losing traceability, and the local marm-console web app gives you real-time visual telemetry to browse and debug your entire memory layout.
 
 ### How It Works
 
@@ -122,7 +130,7 @@ MARM is tuned for fast recall first, even as memory grows and long memories are 
 | **N = 4,000** | 93.8 ms | 18.3 ms | 4.9 ms | 19.0x |
 | **N = 10,000** | 242.7 ms | 19.7 ms | 5.4 ms | 45.1x |
 
-Benchmarks used a throwaway real SQLite database and the live fastembed-backed `all-MiniLM-L6-v2` encoder on local hardware. Reproduce them: [`marm-mcp-server/scripts/bench_hotpath.py`](marm-mcp-server/scripts/bench_hotpath.py)
+Benchmarks used a throwaway real SQLite database and the live fastembed-backed `all-MiniLM-L6-v2` encoder on local hardware. Reproduce them: [`scripts/benchmarking/preformance/bench_hotpath.py`](scripts/benchmarking/preformance/bench_hotpath.py)
 
 ### 5. vs Competitors: Architecture
 
@@ -147,14 +155,6 @@ MARM targets a specific niche: local-first memory for MCP-connected coding agent
 ```bash
 pip install marm-mcp-server
 ```
-
-| If you are... | Start the server | Connect your MCP client |
-|---------------|------------------|-------------------------|
-| **Solo developer / researcher** | `python -m marm_mcp_server` | `"agent" mcp add --transport http marm-memory http://localhost:8001/mcp` |
-| **Private local STDIO user** | `marm-mcp-stdio` | `"agent" mcp add --transport stdio marm-memory-stdio marm-mcp-stdio` |
-| **Multiple agents sharing memory** | `python -m marm_mcp_server --swarm` | `"agent" mcp add --transport http marm-memory http://localhost:8001/mcp` |
-| **Private high-throughput swarm** | `python -m marm_mcp_server --swarm-max` | `"agent" mcp add --transport http marm-memory http://localhost:8001/mcp` |
-| **Trusted private lab/server** | `python -m marm_mcp_server --trusted` | `"agent" mcp add --transport http marm-memory http://localhost:8001/mcp` |
 
 ### Use this quick rule of thumb to choose your setup
 
@@ -548,7 +548,7 @@ The AI agent will automatically use the appropriate tools. Manual tool access is
 | Tool | What it does | Key parameters |
 |------|--------------|----------------|
 | `marm_smart_recall` | Hybrid recall: exact lane for config keys, commands, and file paths; semantic rerank for natural-language queries | `query`, `limit`, `session_name`, `search_all`, `detail=1/2/3`, `project`, `platform`, `exact_mode` |
-| `marm_log_entry` | Add structured session log entries; routing and cache upkeep are handled by the server | `entry`, `session_name` |
+| `marm_log_entry` | Add structured session log entries; each entry is also embedded into semantic memory so `marm_smart_recall` can find it | `entry`, `session_name` |
 | `marm_log_show` | Display all entries and sessions, with filtering | `session_name` |
 | `marm_delete` | Delete a log session, log entry, or notebook entry | `type`, `target`, `session_name` |
 | `marm_summary` | Cached, paste-ready session summaries with intelligent truncation | `session_name` |
@@ -1013,7 +1013,7 @@ If MARM helps with your AI memory needs, please star the repository to support d
   <img src="https://api.star-history.com/svg?repos=Lyellr88/marm-memory&type=Date"
        width="700"
        height="400"
-       alt="MARM Systems star history chart">
+       alt="marm-memory star history chart">
 </a>
 </div>
 

@@ -12,6 +12,8 @@ import asyncio
 import json
 import threading
 import time
+import uuid
+from datetime import datetime, timezone
 from typing import Optional
 
 import structlog
@@ -19,6 +21,7 @@ from fastapi import APIRouter
 
 from ..config.settings import (
     CONCEPT_BUILD_ROW_CAP,
+    CONCEPTS_AVAILABLE,
     CONCEPT_DUPLICATE_SIMILARITY_THRESHOLD,
 )
 from ..core.concept_db import ConceptDB
@@ -63,6 +66,11 @@ def _get_concept_db() -> ConceptDB:
 _MISSING_BUILD_SCOPE_MESSAGE = (
     "marm_concept_build requires session_name, project, or "
     "search_all=True to scope the build."
+)
+
+_CONCEPTS_UNAVAILABLE_MESSAGE = (
+    "Concept extraction is unavailable. Install: "
+    "pip install marm-mcp-server[concepts] && python -m spacy download en_core_web_sm"
 )
 
 
@@ -234,6 +242,33 @@ def _run_build(rows: list[tuple[str, str, Optional[str], Optional[str]]]) -> dic
     }
 
 
+def _scope_for_build(req: ConceptBuildRequest) -> tuple[str, Optional[str]]:
+    if req.session_name:
+        return "session", req.session_name
+    if req.project:
+        return "project", req.project
+    return "all", None
+
+
+def _create_build_run(req: ConceptBuildRequest, run_id: str, created_at: str) -> None:
+    scope_type, scope_value = _scope_for_build(req)
+    concept_db = _get_concept_db()
+    with concept_db.get_connection() as conn:
+        concept_db.create_build_run(
+            conn,
+            run_id=run_id,
+            scope_type=scope_type,
+            scope_value=scope_value,
+            created_at=created_at,
+        )
+
+
+def _finish_build_run(run_id: str, **fields) -> None:
+    concept_db = _get_concept_db()
+    with concept_db.get_connection() as conn:
+        concept_db.update_build_run(conn, run_id, **fields)
+
+
 def _traverse(
     conn, seed_ids: list[int], depth: int, direction: str, limit: int
 ) -> list[dict]:
@@ -398,8 +433,47 @@ async def marm_concept_build(req: ConceptBuildRequest) -> dict:
     marm-graph code symbols when available. Call this before marm_concept_recall
     — there's no data until a build has run at least once.
     """
+    if not (req.session_name or req.project or req.search_all):
+        return {"status": "error", "message": _MISSING_BUILD_SCOPE_MESSAGE}
+
+    run_id = req.run_id or str(uuid.uuid4())
+    created_at = datetime.now(timezone.utc).isoformat()
+    try:
+        await asyncio.to_thread(_create_build_run, req, run_id, created_at)
+    except Exception as e:
+        logger.warning("concepts.build_run_create_error", error=str(e))
+        return {"status": "error", "message": "Concept build failed."}
+
+    if not CONCEPTS_AVAILABLE:
+        result = {
+            "status": "degraded",
+            "error_code": "concepts_unavailable",
+            "message": _CONCEPTS_UNAVAILABLE_MESSAGE,
+            "entities_extracted": 0,
+            "relationships_created": 0,
+            "code_links_created": 0,
+            "possible_duplicates": [],
+            "duration_ms": 0,
+        }
+        await asyncio.to_thread(
+            _finish_build_run,
+            run_id,
+            status="degraded",
+            error_code="concepts_unavailable",
+            finished_at=datetime.now(timezone.utc).isoformat(),
+            duration_ms=0,
+        )
+        result["build_run_id"] = run_id
+        return result
+
     start = time.monotonic()
     try:
+        await asyncio.to_thread(
+            _finish_build_run,
+            run_id,
+            status="running",
+            started_at=datetime.now(timezone.utc).isoformat(),
+        )
         rows = await asyncio.to_thread(
             _fetch_memory_rows, req.session_name, req.project, req.search_all
         )
@@ -410,16 +484,51 @@ async def marm_concept_build(req: ConceptBuildRequest) -> dict:
         # rather than str(e), so the response never carries a live exception
         # object (CodeQL: exception-info-exposure) even if this branch is
         # ever reached by a different ValueError in the future.
-        return {"status": "error", "message": _MISSING_BUILD_SCOPE_MESSAGE}
+        await asyncio.to_thread(
+            _finish_build_run,
+            run_id,
+            status="error",
+            error_code="invalid_scope",
+            finished_at=datetime.now(timezone.utc).isoformat(),
+        )
+        return {
+            "status": "error",
+            "message": _MISSING_BUILD_SCOPE_MESSAGE,
+            "build_run_id": run_id,
+        }
     except Exception as e:
         # HTTP-facing route body -- log server-side via structured logging
         # rather than interpolating exception text into a plain print/f-string
         # (CodeQL: exception-info-exposure). The client only ever gets the
         # generic message below.
         logger.warning("concepts.build_error", error=str(e))
-        return {"status": "error", "message": "Concept build failed."}
+        await asyncio.to_thread(
+            _finish_build_run,
+            run_id,
+            status="error",
+            error_code="build_failed",
+            finished_at=datetime.now(timezone.utc).isoformat(),
+        )
+        return {
+            "status": "error",
+            "message": "Concept build failed.",
+            "build_run_id": run_id,
+        }
 
     result["duration_ms"] = int((time.monotonic() - start) * 1000)
+    await asyncio.to_thread(
+        _finish_build_run,
+        run_id,
+        status="success",
+        memories_processed=len(rows),
+        entities_extracted=result["entities_extracted"],
+        relationships_created=result["relationships_created"],
+        code_links_created=result["code_links_created"],
+        duplicate_candidates=len(result["possible_duplicates"]),
+        duration_ms=result["duration_ms"],
+        finished_at=datetime.now(timezone.utc).isoformat(),
+    )
+    result["build_run_id"] = run_id
     return result
 
 

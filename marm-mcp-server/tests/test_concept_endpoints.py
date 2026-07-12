@@ -97,6 +97,22 @@ def test_marm_concept_build_route_returns_static_message_on_missing_scope(
     }
 
 
+def test_marm_concept_build_reports_degraded_when_concepts_are_unavailable(
+    concepts_env, monkeypatch
+):
+    _server, concepts, _memory_module = concepts_env
+    from marm_mcp_server.core.models import ConceptBuildRequest
+
+    monkeypatch.setattr(concepts, "CONCEPTS_AVAILABLE", False)
+    result = asyncio.run(
+        concepts.marm_concept_build(ConceptBuildRequest(session_name="sess-a"))
+    )
+
+    assert result["status"] == "degraded"
+    assert result["error_code"] == "concepts_unavailable"
+    assert result["entities_extracted"] == 0
+
+
 def test_fetch_memory_rows_excludes_marm_system_session(concepts_env):
     _server, concepts, memory_module = concepts_env
     _seed_memory(
@@ -779,18 +795,37 @@ def test_tool_count_includes_both_concept_tools():
 
 
 def test_base_install_without_concepts_extra_still_registers_tools(concepts_env):
-    """CONCEPTS_AVAILABLE is False in this sandbox (no en_core_web_sm model) --
-    this genuinely exercises the base-install path, not a simulation."""
+    """marm_concept_build/marm_concept_recall must be registered regardless of
+    whether the [concepts] extra (spaCy + en_core_web_sm) is installed -- that
+    part is environment-independent and always checked.
+
+    Whether extraction itself runs for real depends on what's actually
+    installed in this environment, so we detect CONCEPTS_AVAILABLE instead of
+    assuming a fixed value: no model installed exercises the fail-open path
+    (0 entities from real content, since extract_entities degrades gracefully
+    per its own docstring); a model installed exercises the real NER path
+    with real content and expects it to actually find something."""
     from marm_mcp_server.config.settings import CONCEPTS_AVAILABLE
     from marm_mcp_server.server import MCP_TOOL_OPERATIONS
 
-    assert CONCEPTS_AVAILABLE is False
     assert "marm_concept_build" in MCP_TOOL_OPERATIONS
+    assert "marm_concept_recall" in MCP_TOOL_OPERATIONS
 
-    _server, concepts, _memory_module = concepts_env
+    _server, concepts, memory_module = concepts_env
+    _seed_memory(
+        memory_module,
+        [("m1", "sess-a", "The write queue serializes memory writes.", None)],
+    )
     rows = concepts._fetch_memory_rows(session_name=None, project=None, search_all=True)
     result = concepts._run_build(rows)
-    assert result["entities_extracted"] == 0
+
+    if CONCEPTS_AVAILABLE:
+        assert result["entities_extracted"] > 0, (
+            "concepts extra is installed in this environment, so real NER "
+            f"extraction over seeded content should find entities: {result}"
+        )
+    else:
+        assert result["entities_extracted"] == 0
 
 
 def test_get_concept_db_lock_serializes_concurrent_first_calls(

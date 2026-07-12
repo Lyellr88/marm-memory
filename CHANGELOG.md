@@ -3,6 +3,34 @@
 ## Version 2 - MARM Protocol to Universal MCP Server Evolution
 
 <details>
+<summary><strong>July 11th, 2026: Log Entries Join Semantic Memory, LoCoMo Benchmark (v2.21.0)</strong></summary>
+
+### Log Entries Are Now Semantically Recallable
+
+- `marm_log_entry` dual-writes: every entry is stored in `log_entries` as before AND embedded into the `memories` table through the serialized write queue, so `marm_smart_recall`'s hybrid semantic + FTS5 engine can actually find logged content. Previously nothing agent-facing wrote to `memories` — the semantic engine was only reachable through the dashboard's manual Add Memory form.
+- The response gains a `memory_id` field alongside `entry_id`. A semantic-store failure never fails the log write itself (`memory_id: null`).
+- Dual-written memories carry `metadata.source = "log_entry"` and `metadata.log_entry_id` for provenance, and flow into compaction like any other memory.
+- `marm_delete` (type="log") cascades: deleting a log entry or a whole log session also removes the dual-written semantic memories (matched by `metadata.log_entry_id` / `metadata.source`), so deleted logs stop surfacing in recall. Response gains a `memories_deleted` count.
+- Tradeoff to know: each `marm_log_entry` call now waits on the serialized write queue for an embedding before returning, instead of a single cheap INSERT. Fine for normal agent logging; heavy concurrent writers share one queue.
+- HTTP and STDIO parity maintained; existing pre-2.21 log rows are untouched and still surface via `include_logs`.
+
+### Recall Log Results Carry IDs
+
+- `marm_smart_recall`'s `log_results` entries (with `include_logs=True`) now include the log entry `id`, so a recalled log row can be tied back to the exact entry that produced it (both transports).
+
+### Knowledge Graph Console
+
+- Concept builds now persist durable scoped run records in the isolated concept database, including queued/running/terminal state, extraction counts, duration, and stable error codes.
+- MARM Console starts concept builds asynchronously, polls durable run status, surfaces stale local runs as errors, and preserves HTTP/STDIO concept-build behavior through one shared endpoint path.
+- The Console Knowledge workspace now supports entity provenance (source memories and linked code), bounded directional/predicate neighborhood queries, and read-only same-scope duplicate candidates from entity embeddings.
+
+### LoCoMo Retrieval Benchmark
+
+- Added `scripts/benchmarking/accuracy/locomo/` — a deterministic, LLM-free retrieval benchmark against the LoCoMo long-conversation dataset. Ingests each conversation through `marm_log_entry`, then checks whether `marm_smart_recall` surfaces the gold evidence turns for every annotated question. Pure evidence-ID matching, per-category and per-lane (semantic vs log) hit rates, no judge model anywhere.
+
+</details>
+
+<details>
 <summary><strong>July 10th, 2026: Project Rename to marm-memory, Doc Overhaul (v2.20.0)</strong></summary>
 
 ### Project Rename

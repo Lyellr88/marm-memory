@@ -1,4 +1,4 @@
-# MARM v2.20.0 MCP Server - Platform Integration Guide
+# MARM v2.21.0 MCP Server - Platform Integration Guide
 
 ## Table of Contents
 
@@ -36,8 +36,34 @@ This guide provides platform-specific instructions for integrating the MARM MCP 
 1. Log in to [claude.ai](https://claude.ai) in your browser
 2. Go to **Settings > Connectors**
 3. Click **"+ Add custom connector"**
-4. Enter your MARM server URL: `http://your-server.com:8001/mcp`
+4. Enter your MARM server URL: `http://<your-public-server-address>:8001/mcp` — the web app runs on Anthropic's servers, so this must be a publicly reachable address, not `localhost`
 5. Tools automatically available in web and mobile apps
+
+#### **Claude Desktop**
+
+**Supported:** ✅ Local MCP servers (via stdio bridge)
+**Requirements:** Node.js/npx installed
+
+Claude Desktop's `claude_desktop_config.json` only accepts `command`-based (stdio) server entries — a bare `url` entry will be rejected with "not valid MCP server configurations." To connect Desktop to a local MARM server, bridge it with `mcp-remote`:
+
+**Setup Process:**
+
+1. Open `claude_desktop_config.json` (Windows: `%APPDATA%\Claude\claude_desktop_config.json`, macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`)
+2. Add an entry under `mcpServers`:
+
+```json
+{
+  "mcpServers": {
+    "marm-memory-local": {
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "http://localhost:8001/mcp"]
+    }
+  }
+}
+```
+
+3. Restart Claude Desktop
+4. Check **Settings > Developer** to confirm the server loaded
 
 #### **Claude Mobile Apps (iOS/Android)**
 

@@ -6,10 +6,9 @@ set -e
 
 echo "🐳 Building MARM Universal MCP Server Docker Container..."
 
-IMAGE_NAME="marm-systems/marm-mcp-server"
+IMAGE_NAME="lyellr88/marm-mcp-server"
 TAG="latest"
-VERSION="2.2.3"
-
+VERSION="2.21.0"
 mkdir -p ./data
 
 echo "📦 Building Docker image..."
@@ -20,7 +19,7 @@ docker build \
     .
 
 echo "✅ Build complete!"
-docker images | grep marm-systems
+docker images | grep lyellr88/marm-mcp-server
 
 echo ""
 echo "🚀 Ready to deploy! Use these commands:"

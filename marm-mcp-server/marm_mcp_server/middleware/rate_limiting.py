@@ -50,7 +50,7 @@ async def rate_limit_middleware(request: Request, call_next):
         "/docs",
         "/openapi.json",
         "/ready",
-    ]:
+    ] or request.url.path.startswith("/internal/projects/jobs/"):
         return await call_next(request)
 
     client_ip = get_client_ip(request)

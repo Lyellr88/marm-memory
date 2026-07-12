@@ -11,7 +11,7 @@ MARM is a local-first MCP memory server: Python FastAPI in `marm-mcp-server/`, p
 - **STDIO transport**: `marm_mcp_server/server_stdio.py`; thin `@mcp.tool()` wrappers that call the same core logic as HTTP. Never fork behavior between transports.
 - **Endpoint logic** lives in `marm_mcp_server/endpoints/` split by surface (memory, logging, notebook, session, compaction, graph, concepts, system). Shared helpers stay in `core/`.
 - **Storage**: SQLite WAL at `~/.marm/marm_memory.db` (connection pool, FTS5 external-content index `memories_fts`, `memory_chunks` for long-memory chunking). The concept graph uses its own database `~/.marm/index/marm_index.db` with its own pool. Never share connections between the two.
-- **Write path**: all memory writes go through the serialized async write queue (one worker). Do not add write paths that bypass it.
+- **Write path**: all memory writes go through the serialized async write queue (one worker). Do not add write paths that bypass it. `marm_log_entry` dual-writes: a `log_entries` row plus a semantic memory in `memories` (via the queue); a semantic-store failure must never fail the log write.
 - **Code graph**: a pinned external binary (codebase-memory-mcp) supervised as a child process over newline-delimited JSON-RPC (`core/graph_supervisor.py`, `core/graph_client.py`). It starts lazily and runs degraded on failure. Graph or concept failures must never break the 7 core memory tools.
 - **Embeddings**: one fastembed `all-MiniLM-L6-v2` encoder, lazy-loaded, serialized behind a lock. Writes must succeed even when the encoder is unavailable.
 
@@ -58,6 +58,7 @@ Semver: MAJOR = breaking (schema renames, parameter removals), MINOR = new tools
 
 - Tests live in `marm-mcp-server/tests/`; run with `pytest` from `marm-mcp-server/`.
 - Hit real FastAPI endpoints and real SQLite. Mock only when it meaningfully speeds the test AND matches real behavior with at least 95% fidelity.
+- Every new MARM Console API route needs at least one happy-path FastAPI response-contract test with the MCP adapter stubbed. This verifies the actual response model without requiring a live graph backend.
 - No existence-check or coded-to-pass tests. Deep tests that exercise real paths beat broad shallow coverage.
 - `pytest.mark.skip` only for genuinely unavailable dependencies (no embedding model, no spaCy `[concepts]` extra), never for effort.
 
@@ -65,9 +66,9 @@ Semver: MAJOR = breaking (schema renames, parameter removals), MINOR = new tools
 
 - **Never commit without an explicit user request.** The user reviews all changes first.
 - Dev setup: `cd marm-mcp-server && pip install -e ".[dev,concepts]" && python -m spacy download en_core_web_sm`
-- Benchmarks are reproducible via `marm-mcp-server/scripts/bench_hotpath.py`; do not publish performance claims that script cannot back.
+- Benchmarks live in `scripts/benchmarking/`: `preformance/bench_hotpath.py` for hot-path performance, `accuracy/locomo/run_eval.py` for LoCoMo retrieval accuracy. Do not publish performance claims neither script can back.
 
-## Current Stats (v2.20.0)
+## Current Stats (v2.21.0)
 
 - 14 MCP tools over HTTP + STDIO
 - 2 isolated SQLite databases (memory + concept graph)

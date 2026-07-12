@@ -1,4 +1,4 @@
-# MARM Systems FAQ
+# marm-memory FAQ
 
 Common questions about MARM MCP, memory behavior, transports, supported clients, and local deployment.
 
@@ -6,9 +6,9 @@ Common questions about MARM MCP, memory behavior, transports, supported clients,
 
 ## General
 
-### Q: What is MARM Systems?
+### Q: What is marm-memory?
 
-MARM Systems is a persistent memory layer for AI agents. The MCP server gives Claude, Codex, Gemini, Qwen, VS Code, Cursor, and other MCP-compatible clients a shared way to store, recall, organize, and reuse project context across sessions.
+marm-memory is a persistent memory layer for AI agents. The MCP server gives Claude, Codex, Gemini, Qwen, VS Code, Cursor, and other MCP-compatible clients a shared way to store, recall, organize, and reuse project context across sessions.
 
 | Component | Description | Best For |
 |-----------|-------------|----------|
@@ -18,7 +18,7 @@ MARM Systems is a persistent memory layer for AI agents. The MCP server gives Cl
 
 ### Q: How is MARM different from built-in AI memory?
 
-| Feature | Built-in AI Memory | MARM Systems |
+| Feature | Built-in AI Memory | marm-memory |
 |---------|-------------------|--------------|
 | **Control** | Limited and platform-defined | User-owned SQLite database |
 | **Portability** | Usually platform-locked | Works across MCP-compatible clients |
@@ -84,7 +84,7 @@ MARM currently exposes **14 MCP tools on both HTTP and STDIO**: 7 focused core m
 | Category | Tools | Description |
 |----------|-------|-------------|
 | **Memory Intelligence** | `marm_smart_recall` | Hybrid recall across memories |
-| **Logging** | `marm_log_entry`, `marm_log_show` | Session-based conversation/project logs with server-managed summary-cache refresh |
+| **Logging** | `marm_log_entry`, `marm_log_show` | Session-based conversation/project logs with server-managed summary-cache refresh; entries are also stored as semantic memories for recall |
 | **Notebook** | `marm_notebook` | Reusable instructions and knowledge with `action="add"`, `"use"`, `"show"`, `"status"`, or `"clear"` |
 | **Delete** | `marm_delete` | Delete log sessions, log entries, or notebook entries |
 | **Summary** | `marm_summary` | Generate concise context summaries |

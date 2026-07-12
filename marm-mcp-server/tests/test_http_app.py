@@ -198,9 +198,11 @@ def test_dashboard_mount_reads_and_writes_the_same_db_as_marm_mcp_server(
     )
     assert create.status_code == 201
 
+    # 2 memories: the log entry's dual-written semantic memory + the
+    # dashboard-created one
     listing = client.get("/dashboard/api/memories", params={"session": "mount-smoke"})
     assert listing.status_code == 200
-    assert listing.json()["total"] == 1
+    assert listing.json()["total"] == 2
 
 
 def test_dashboard_mount_without_trailing_slash_redirects(monkeypatch, tmp_path):

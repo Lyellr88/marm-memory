@@ -66,7 +66,7 @@ class SmartRecallRequest(BaseModel):
 
     project: Optional[str] = Field(
         default=None,
-        description="Filter to a specific project name (e.g. 'marm-systems'); omit to search all",
+        description="Filter to a specific project name (e.g. 'marm-memory'); omit to search all",
     )
 
     platform: Optional[str] = Field(
@@ -139,6 +139,10 @@ class CompactionRequest(BaseModel):
 
 
 class ConceptBuildRequest(BaseModel):
+    run_id: Optional[str] = Field(
+        default=None,
+        description="Optional caller-provided build-run ID for Console status polling.",
+    )
     session_name: Optional[str] = Field(
         default=None,
         description="Scope extraction to this session. Omit with search_all=True for everything.",

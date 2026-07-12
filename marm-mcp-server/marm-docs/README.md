@@ -1,10 +1,8 @@
-# MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.20.0
-
-> Contributions welcome! Browse [open issues](https://github.com/Lyellr88/marm-memory/issues) to contribute, or join the [MARM Discord](https://discord.gg/nhyJWPz2cf) to share workflows, get setup help, and connect with other builders.
+# MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.21.0
 
 ## Table of Contents
 
-- [Why MARM MCP](#why-marm-mcp)
+- [Why MARM Memory](#why-marm-memory)
 - [Performance & Scaling Benchmarks](#performance--scaling-benchmarks)
 - [Quick Start](#-quick-start-for-mcp-http--stdio)
 - [Complete MCP Tool Suite](#complete-mcp-tool-suite-14-tools)
@@ -14,16 +12,20 @@
 - [MARM Dashboard](#marm-dashboard)
 - [Architecture & Internals](#architecture--internals)
 - [Troubleshooting](#troubleshooting)
-- [Contributing](#contributing)
-- [Project Documentation](#project-documentation)
 
-## Why MARM MCP
+## Why MARM Memory
 
-**Your AI forgets everything. MARM MCP doesn't.**
+**Your AI forgets everything. MARM Memory doesn't.**
 
-Claude Code, Codex, Gemini, Qwen, Cursor, VS Code agents, and any other MCP client share the same memory server, so decisions, context, notebooks, and code structure survive across sessions, across agents, and across projects. Cross-session context is the whole point: long-running multi-agent work stops drifting because every agent recalls the same history.
+marm-memory is a high-performance 3-in-1 AI Memory Framework that solves conversational drift, context pollution, and agent amnesia. Instead of juggling fragmented tools, it natively fuses three context layers into a single local runtime:
 
-MARM is built around three focused surfaces: **7 core memory tools** for daily agent context, **5 code-graph tools** for repo intelligence, and **2 concept-graph tools** that turn stored memories into a queryable knowledge graph. All 14 are bundled over both HTTP and STDIO transports. The server handles the heavy work behind those tools: protocol delivery, hybrid semantic + full-text retrieval, serialized writes, rate-limit presets, write-time consolidation, agent-assisted compaction, and lazy graph startup. Agents get a compact memory workflow plus codebase and concept lookup when they need it, without rereading the whole project or flooding the model with duplicate context.
+* 🧠 **Core Memory (7 Tools)** — long-term episodic memory, session logs, notebooks, and intelligent summaries via local vector embeddings and deterministic exact matching
+* 💻 **Code Graph (5 Tools)** — instant repo indexing, symbol lookup, and tree-sitter syntax analysis, powered by the codebase-memory-mcp static binary wrapper
+* 🧩 **Concept Graph (2 Tools)** — extracts entities and typed relationships from stored history, linking developer decisions straight back to source code symbols
+
+One query resolves what was decided, why, and where it lives — no traffic-cop routing across isolated tools. Claude Code, Codex, Gemini, Qwen, Cursor, and VS Code agents share the same persistent memory server across sessions and long-running multi-agent projects, with all 14 tools bundled over both HTTP and STDIO.
+
+Under the hood: a serialized SQLite WAL write queue kills multi-agent swarm contention, write-time consolidation merges duplicates, and hybrid semantic + full-text retrieval keeps recall sharp as memory grows. Agent-assisted compaction keeps context windows clean without losing traceability, and the local marm-console web app gives you real-time visual telemetry to browse and debug your entire memory layout.
 
 ### How It Works
 
@@ -100,7 +102,7 @@ MARM is tuned for fast recall first, even as memory grows and long memories are 
 | **N = 4,000** | 93.8 ms | 18.3 ms | 4.9 ms | 19.0x |
 | **N = 10,000** | 242.7 ms | 19.7 ms | 5.4 ms | 45.1x |
 
-Benchmarks used a throwaway real SQLite database and the live fastembed-backed `all-MiniLM-L6-v2` encoder on local hardware. Reproduce them: [`marm-mcp-server/scripts/bench_hotpath.py`](marm-mcp-server/scripts/bench_hotpath.py)
+Benchmarks used a throwaway real SQLite database and the live fastembed-backed `all-MiniLM-L6-v2` encoder on local hardware. Reproduce them: [`scripts/benchmarking/preformance/bench_hotpath.py`](scripts/benchmarking/preformance/bench_hotpath.py)
 
 ### 5. vs Competitors: Architecture
 
@@ -125,14 +127,6 @@ MARM targets a specific niche: local-first memory for MCP-connected coding agent
 ```bash
 pip install marm-mcp-server
 ```
-
-| If you are... | Start the server | Connect your MCP client |
-|---------------|------------------|-------------------------|
-| **Solo developer / researcher** | `python -m marm_mcp_server` | `"agent" mcp add --transport http marm-memory http://localhost:8001/mcp` |
-| **Private local STDIO user** | `marm-mcp-stdio` | `"agent" mcp add --transport stdio marm-memory-stdio marm-mcp-stdio` |
-| **Multiple agents sharing memory** | `python -m marm_mcp_server --swarm` | `"agent" mcp add --transport http marm-memory http://localhost:8001/mcp` |
-| **Private high-throughput swarm** | `python -m marm_mcp_server --swarm-max` | `"agent" mcp add --transport http marm-memory http://localhost:8001/mcp` |
-| **Trusted private lab/server** | `python -m marm_mcp_server --trusted` | `"agent" mcp add --transport http marm-memory http://localhost:8001/mcp` |
 
 ### Use this quick rule of thumb to choose your setup
 
@@ -505,12 +499,6 @@ Expected output includes server version, feature availability (semantic search s
 
 </details>
 
-### MARM Demo
-
-<https://github.com/user-attachments/assets/dabfe44f-689d-404f-a2c7-dcf8fa4ef0c1>
-
-MARM gives AI agents persistent long-term memory, shared cross-session context, write-queue safety, swarm presets, and hybrid semantic + exact recall so commands, config keys, and project meaning all stay reachable.
-
 ## Complete MCP Tool Suite (14 Tools)
 
 **💡 Pro Tip:** You don't need to manually call these tools! Just tell your AI agent what you want in natural language:
@@ -526,7 +514,7 @@ The AI agent will automatically use the appropriate tools. Manual tool access is
 | Tool | What it does | Key parameters |
 |------|--------------|----------------|
 | `marm_smart_recall` | Hybrid recall: exact lane for config keys, commands, and file paths; semantic rerank for natural-language queries | `query`, `limit`, `session_name`, `search_all`, `detail=1/2/3`, `project`, `platform`, `exact_mode` |
-| `marm_log_entry` | Add structured session log entries; routing and cache upkeep are handled by the server | `entry`, `session_name` |
+| `marm_log_entry` | Add structured session log entries; each entry is also embedded into semantic memory so `marm_smart_recall` can find it | `entry`, `session_name` |
 | `marm_log_show` | Display all entries and sessions, with filtering | `session_name` |
 | `marm_delete` | Delete a log session, log entry, or notebook entry | `type`, `target`, `session_name` |
 | `marm_summary` | Cached, paste-ready session summaries with intelligent truncation | `session_name` |
@@ -716,7 +704,7 @@ Under the hood, the engine is [codebase-memory-mcp](https://github.com/DeusData/
 
 ### Concept Graph: what your memories are about
 
-New in v2.19: MARM can extract a knowledge graph from the memories you've already stored. `marm_concept_build` runs entity and relationship extraction over stored memory content, producing typed entities (**concepts, decisions, patterns, errors, tools, people, organizations**) connected by typed relationships (**fixes, implements, depends_on, uses, causes, replaces, extends**). `marm_concept_recall` then answers questions like:
+MARM can extract a knowledge graph from the memories you've already stored. `marm_concept_build` runs entity and relationship extraction over stored memory content, producing typed entities (**concepts, decisions, patterns, errors, tools, people, organizations**) connected by typed relationships (**fixes, implements, depends_on, uses, causes, replaces, extends**). `marm_concept_recall` then answers questions like:
 
 ```text
 marm_concept_recall(query="write queue")            → the entity, its relationships, linked code symbols
@@ -980,64 +968,3 @@ Packaged docs are indexed into the `marm_system` memory namespace on startup and
 </details>
 
 For memory behavior, transports, supported clients, compaction, and backup questions, see the [FAQ](marm-mcp-server/marm-docs/FAQ.md).
-
-## ⭐ Star the Project
-
-If MARM helps with your AI memory needs, please star the repository to support development!
-
-<div align="center">
-
-<a href="https://star-history.com/#Lyellr88/marm-memory&Date">
-  <img src="https://api.star-history.com/svg?repos=Lyellr88/marm-memory&type=Date"
-       width="700"
-       height="400"
-       alt="MARM Systems star history chart">
-</a>
-</div>
-
-## Contributing
-
-MARM welcomes contributors at every level. Code helps, but so do docs, setup notes, client testing, bug reports, benchmarks, and real workflow feedback from people using AI tools every day.
-
-Good places to help:
-
-- Test MARM with more MCP clients, IDE agents, and operating systems
-- Improve docs, screenshots, examples, and platform-specific setup notes
-- Report bugs or confusing install steps with clear reproduction details
-- Share memory workflows, agent habits, and tool ideas from real use
-- Check out open [issues](https://github.com/Lyellr88/marm-memory/issues)
-
-> 💡 Want to get your name on this list? Check out our [CONTRIBUTING.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/CONTRIBUTING.md) guide to get started!
-
-## Join the MARM Community
-
-**Help build the future of AI memory - no coding required!**
-
-**Connect:** [MARM Discord](https://discord.gg/nhyJWPz2cf) | [GitHub Discussions](https://github.com/Lyellr88/marm-memory/discussions)
-
-## License & Usage Notice
-
-Copyright © 2026 Ryan A. Lyell. MARM is released under the [Apache 2.0 License](LICENSE) (see [NOTICE](NOTICE) for the copyright statement), and forks, experiments, and integrations are welcome. MARM also wraps third-party open-source components such as `codebase-memory-mcp` under MIT; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for attribution. If you build on it, please make unofficial versions easy to distinguish from releases published by the [official MARM repository](https://github.com/Lyellr88/marm-memory) so users know what they are installing.
-
-## Project Documentation
-
-### **Usage Guides**
-
-- **[README.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/README.md)** - This file: complete usage guide, tool reference, workflows, and architecture
-- **[PROTOCOL.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/PROTOCOL.md)** - MCP operating protocol
-- **[FAQ.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/marm-mcp-server/marm-docs/FAQ.md)** - Answers to common questions about using MARM
-
-### **MCP Server Installation**
-
-- **[INSTALL-DOCKER.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-DOCKER.md)** - Docker deployment (recommended)
-- **[INSTALL-WINDOWS.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-WINDOWS.md)** - Windows installation guide
-- **[INSTALL-LINUX.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-LINUX.md)** - Linux installation guide
-- **[INSTALL-PLATFORMS.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-PLATFORMS.md)** - Platform installation guide
-
-### **Project Information**
-
-- **[CONTRIBUTING.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/CONTRIBUTING.md)** - How to contribute to MARM
-- **[CHANGELOG.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/CHANGELOG.md)** - Version history and updates
-- **[ACKNOWLEDGMENTS.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/ACKNOWLEDGMENTS.md)** - Contributors and acknowledgments
-- **[ROADMAP.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/ROADMAP.md)** - Planned features and development roadmap
-- **[LICENSE](https://github.com/Lyellr88/marm-memory/blob/MARM-main/LICENSE)** - Apache 2.0 license terms
