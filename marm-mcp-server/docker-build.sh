@@ -8,8 +8,7 @@ echo "🐳 Building MARM Universal MCP Server Docker Container..."
 
 IMAGE_NAME="lyellr88/marm-mcp-server"
 TAG="latest"
-VERSION="2.2.3"
-
+VERSION="2.21.0"
 mkdir -p ./data
 
 echo "📦 Building Docker image..."
