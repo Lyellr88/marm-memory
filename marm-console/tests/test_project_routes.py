@@ -90,9 +90,7 @@ def test_project_routes_map_graph_results(monkeypatch):
         assert architecture.status_code == 200
         assert architecture.json()["schema"]["edge_types"] == ["IMPORTS", "CALLS"]
 
-        search = client.post(
-            "/api/projects/marm-memory/search", json={"query": "run"}
-        )
+        search = client.post("/api/projects/marm-memory/search", json={"query": "run"})
         assert search.status_code == 200
         assert search.json()[0]["qualified_name"] == "marm.core.run"
 

@@ -140,11 +140,15 @@ def test_console_index_rejects_invalid_path_before_graph_start(monkeypatch, tmp_
     client = local_client(server.app)
 
     response = client.post(
-        "/internal/projects/index", json={"repo_path": "relative/project", "mode": "fast"}
+        "/internal/projects/index",
+        json={"repo_path": "relative/project", "mode": "fast"},
     )
 
     assert response.status_code == 422
-    assert response.json()["detail"] == "Repository path must be an existing absolute directory."
+    assert (
+        response.json()["detail"]
+        == "Repository path must be an existing absolute directory."
+    )
     assert server.graph_supervisor._client is None
 
 

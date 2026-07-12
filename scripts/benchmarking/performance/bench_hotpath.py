@@ -7,7 +7,7 @@ Measures, against the REAL MARMMemory + fastembed-backed all-MiniLM-L6-v2 encode
   4. write latency with consolidation OFF vs ON (double-encode + scan-per-write)
   5. HYBRID SEARCH: FTS5 filter→re-rank vs weighted fusion vs pure semantic
 
-Run from repo root:  python scripts/benchmarking/preformance/bench_hotpath.py
+Run from repo root:  python scripts/benchmarking/performance/bench_hotpath.py
 Uses a throwaway temp DB; never touches ~/.marm.
 """
 

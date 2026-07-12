@@ -126,4 +126,4 @@ marm-bot-discord
 scripts/benchmarking/accuracy/locomo/ingest_state.json
 scripts/benchmarking/accuracy/locomo/locomo10.json
 scripts/benchmarking/accuracy/locomo/results.json
-scripts/benchmarking/preformance/out/
+scripts/benchmarking/performance/out/

@@ -105,7 +105,9 @@ def _run_project_index(job_id: str, repo_path: str, mode: str) -> None:
             return
         job.update(status="running", phase="starting", started_at=_now_iso())
         if not graph_supervisor.is_available():
-            job.update(status="error", phase="unavailable", error="Graph backend unavailable.")
+            job.update(
+                status="error", phase="unavailable", error="Graph backend unavailable."
+            )
             return
         job["phase"] = "indexing"
         result = R.do_index(
@@ -113,7 +115,9 @@ def _run_project_index(job_id: str, repo_path: str, mode: str) -> None:
             GraphIndexRequest(repo_path=repo_path, mode=mode, action="index"),
         )
         if result.get("status") == "error":
-            job.update(status="error", phase="failed", error="Repository indexing failed.")
+            job.update(
+                status="error", phase="failed", error="Repository indexing failed."
+            )
             return
         job.update(
             status="success",
@@ -122,7 +126,9 @@ def _run_project_index(job_id: str, repo_path: str, mode: str) -> None:
         )
     except Exception:
         if job is not None:
-            job.update(status="error", phase="failed", error="Repository indexing failed.")
+            job.update(
+                status="error", phase="failed", error="Repository indexing failed."
+            )
     finally:
         if job is not None:
             job["finished_at"] = _now_iso()
@@ -245,7 +251,9 @@ async def console_index_project(req: ConsoleIndexRequest) -> dict:
         with _project_jobs_lock:
             _project_jobs.pop(job_id, None)
         _project_job_lock.release()
-        raise HTTPException(status_code=500, detail="Could not start index job.") from exc
+        raise HTTPException(
+            status_code=500, detail="Could not start index job."
+        ) from exc
     return {"job_id": job_id}
 
 
@@ -325,7 +333,9 @@ async def console_project_impact(req: GraphImpactRequest) -> dict:
 @router.post("/internal/projects/delete")
 async def console_delete_project(req: ConsoleDeleteProjectRequest) -> dict:
     if not req.confirm or req.name != req.project:
-        raise HTTPException(status_code=422, detail="Typed project confirmation is required.")
+        raise HTTPException(
+            status_code=422, detail="Typed project confirmation is required."
+        )
     if not await asyncio.to_thread(graph_supervisor.is_available):
         return _UNAVAILABLE
     result = await asyncio.to_thread(
@@ -333,7 +343,9 @@ async def console_delete_project(req: ConsoleDeleteProjectRequest) -> dict:
         "delete_project",
         {"project": req.project},
     )
-    result = _console_graph_result(result if isinstance(result, dict) else {"result": result})
+    result = _console_graph_result(
+        result if isinstance(result, dict) else {"result": result}
+    )
     if result.get("status") != "error":
         try:
             await asyncio.to_thread(_cleanup_project_code_links, req.project)
