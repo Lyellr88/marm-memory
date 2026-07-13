@@ -63,7 +63,18 @@ def docker_image():
     return DOCKER_IMAGE
 
 
-def test_docker_http_requires_key_and_serves_tools(docker_image, tmp_path):
+@pytest.fixture
+def marm_data_dir(tmp_path):
+    """Host dir bind-mounted at /home/marm/.marm. Must be world-writable: on
+    Linux hosts (e.g. GitHub runners) tmp_path is owned by the host user, and
+    the container's non-root marm user has a different uid, so without this
+    the server can't create its DB and dies at startup. Windows Docker Desktop
+    mounts are world-writable regardless, which is why this only bites in CI."""
+    tmp_path.chmod(0o777)
+    return tmp_path
+
+
+def test_docker_http_requires_key_and_serves_tools(docker_image, marm_data_dir):
     container = f"marm-test-http-{uuid.uuid4().hex[:10]}"
     port = _free_port()
     api_key = "TestDockerKey_12345#abcDEF"
@@ -82,7 +93,7 @@ def test_docker_http_requires_key_and_serves_tools(docker_image, tmp_path):
             "-e",
             f"MARM_API_KEY={api_key}",
             "-v",
-            f"{tmp_path}:/home/marm/.marm",
+            f"{marm_data_dir}:/home/marm/.marm",
             docker_image,
         ],
         timeout=90,
@@ -136,14 +147,14 @@ def test_docker_http_requires_key_and_serves_tools(docker_image, tmp_path):
         _run_docker(["rm", "-f", container], timeout=30)
 
 
-def test_docker_stdio_import_keeps_stdout_clean(docker_image, tmp_path):
+def test_docker_stdio_import_keeps_stdout_clean(docker_image, marm_data_dir):
     result = _run_docker(
         [
             "run",
             "--rm",
             "-i",
             "-v",
-            f"{tmp_path}:/home/marm/.marm",
+            f"{marm_data_dir}:/home/marm/.marm",
             "--entrypoint",
             "python",
             docker_image,
@@ -157,7 +168,7 @@ def test_docker_stdio_import_keeps_stdout_clean(docker_image, tmp_path):
     assert result.stdout == ""
 
 
-def test_docker_env_passthrough_reaches_runtime_settings(docker_image, tmp_path):
+def test_docker_env_passthrough_reaches_runtime_settings(docker_image, marm_data_dir):
     """Environment variables passed to docker run must reach Python settings.
 
     This catches regressions where the image entrypoint or packaging path stops
@@ -170,7 +181,7 @@ def test_docker_env_passthrough_reaches_runtime_settings(docker_image, tmp_path)
             "--rm",
             "-i",
             "-v",
-            f"{tmp_path}:/home/marm/.marm",
+            f"{marm_data_dir}:/home/marm/.marm",
             "-e",
             f"MARM_DB_PATH={custom_db}",
             "-e",
@@ -205,7 +216,7 @@ def test_docker_runs_as_non_root_user(docker_image):
     assert result.stdout.strip() == "marm"
 
 
-def test_docker_healthcheck_status_becomes_healthy(docker_image, tmp_path):
+def test_docker_healthcheck_status_becomes_healthy(docker_image, marm_data_dir):
     """Exercises the container's own built-in HEALTHCHECK mechanism (docker
     inspect's Health.Status), not just our own HTTP polling of /health like
     test_docker_http_requires_key_and_serves_tools does -- these are
@@ -225,7 +236,7 @@ def test_docker_healthcheck_status_becomes_healthy(docker_image, tmp_path):
             "-e",
             "SERVER_HOST=0.0.0.0",
             "-v",
-            f"{tmp_path}:/home/marm/.marm",
+            f"{marm_data_dir}:/home/marm/.marm",
             docker_image,
         ],
         timeout=90,
@@ -247,14 +258,14 @@ def test_docker_healthcheck_status_becomes_healthy(docker_image, tmp_path):
                 break
             time.sleep(2)
 
-        assert status == "healthy", (
-            f"container health status never became healthy (last: {status})"
-        )
+        assert (
+            status == "healthy"
+        ), f"container health status never became healthy (last: {status})"
     finally:
         _run_docker(["rm", "-f", container], timeout=30)
 
 
-def test_docker_dashboard_mounted_and_reachable(docker_image, tmp_path):
+def test_docker_dashboard_mounted_and_reachable(docker_image, marm_data_dir):
     """The v2.16.1 packaging unification made the dashboard bundled into the
     same process/port as the main server (see docker-compose.yml's comment:
     'memory + graph + dashboard, one port') -- this must hold for every
@@ -273,7 +284,7 @@ def test_docker_dashboard_mounted_and_reachable(docker_image, tmp_path):
             "-e",
             "SERVER_HOST=0.0.0.0",
             "-v",
-            f"{tmp_path}:/home/marm/.marm",
+            f"{marm_data_dir}:/home/marm/.marm",
             docker_image,
         ],
         timeout=90,
@@ -291,7 +302,7 @@ def test_docker_dashboard_mounted_and_reachable(docker_image, tmp_path):
         _run_docker(["rm", "-f", container], timeout=30)
 
 
-def test_docker_http_container_stops_gracefully(docker_image, tmp_path):
+def test_docker_http_container_stops_gracefully(docker_image, marm_data_dir):
     """SIGTERM from docker stop should shut down the HTTP server cleanly."""
     container = f"marm-test-stop-{uuid.uuid4().hex[:10]}"
     port = _free_port()
@@ -309,7 +320,7 @@ def test_docker_http_container_stops_gracefully(docker_image, tmp_path):
             "-e",
             "MARM_API_KEY=TestStopKey_12345#abcDEF",
             "-v",
-            f"{tmp_path}:/home/marm/.marm",
+            f"{marm_data_dir}:/home/marm/.marm",
             docker_image,
         ],
         timeout=90,
@@ -330,7 +341,7 @@ def test_docker_http_container_stops_gracefully(docker_image, tmp_path):
         _run_docker(["rm", "-f", container], timeout=30)
 
 
-def test_docker_data_persists_across_container_restart(docker_image, tmp_path):
+def test_docker_data_persists_across_container_restart(docker_image, marm_data_dir):
     """~/.marm is meant to be the durable state; a fresh container over the
     same volume mount must see data written by a previous, now-removed
     container -- proves the volume mount actually round-trips the memory DB,
@@ -353,7 +364,7 @@ def test_docker_data_persists_across_container_restart(docker_image, tmp_path):
                 "-e",
                 f"MARM_API_KEY={api_key}",
                 "-v",
-                f"{tmp_path}:/home/marm/.marm",
+                f"{marm_data_dir}:/home/marm/.marm",
                 docker_image,
             ],
             timeout=90,
@@ -400,7 +411,9 @@ def test_docker_data_persists_across_container_restart(docker_image, tmp_path):
         _run_docker(["rm", "-f", second_container], timeout=30)
 
 
-def test_docker_stdio_tool_count_matches_http_registered_tools(docker_image, tmp_path):
+def test_docker_stdio_tool_count_matches_http_registered_tools(
+    docker_image, marm_data_dir
+):
     """STDIO and HTTP must expose the same tool surface from the same image
     (see CHANGELOG's "STDIO Graph Tool Parity" entry) -- this proves parity
     inside the actual built image, not just in the in-process test suite."""
@@ -434,7 +447,7 @@ def test_docker_stdio_tool_count_matches_http_registered_tools(docker_image, tmp
             "--rm",
             "-i",
             "-v",
-            f"{tmp_path}:/home/marm/.marm",
+            f"{marm_data_dir}:/home/marm/.marm",
             "--entrypoint",
             "python",
             docker_image,
@@ -459,8 +472,8 @@ def test_docker_stdio_tool_count_matches_http_registered_tools(docker_image, tmp
         if "id" in msg:
             responses[msg["id"]] = msg
 
-    assert 2 in responses, (
-        f"No tools/list response; stderr: {result.stderr.decode('utf-8', errors='replace')[:500]}"
-    )
+    assert (
+        2 in responses
+    ), f"No tools/list response; stderr: {result.stderr.decode('utf-8', errors='replace')[:500]}"
     tool_names = {t["name"] for t in responses[2]["result"]["tools"]}
     assert tool_names == set(MCP_TOOL_OPERATIONS)
