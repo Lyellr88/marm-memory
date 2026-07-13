@@ -2,6 +2,7 @@ import json
 import os
 import socket
 import subprocess
+import threading
 import time
 import uuid
 
@@ -416,7 +417,13 @@ def test_docker_stdio_tool_count_matches_http_registered_tools(
 ):
     """STDIO and HTTP must expose the same tool surface from the same image
     (see CHANGELOG's "STDIO Graph Tool Parity" entry) -- this proves parity
-    inside the actual built image, not just in the in-process test suite."""
+    inside the actual built image, not just in the in-process test suite.
+
+    Stdin stays open until the tools/list response is read: writing all
+    messages and closing immediately (subprocess.run with input=) races the
+    server's EOF shutdown against its processing of the still-queued request,
+    which flaked on slow CI runners. Real MCP clients hold stdin open too."""
+    container = f"marm-test-stdio-{uuid.uuid4().hex[:10]}"
 
     def message(msg):
         return (json.dumps(msg) + "\n").encode("utf-8")
@@ -440,12 +447,14 @@ def test_docker_stdio_tool_count_matches_http_registered_tools(
         + message({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
     )
 
-    result = subprocess.run(
+    proc = subprocess.Popen(
         [
             "docker",
             "run",
             "--rm",
             "-i",
+            "--name",
+            container,
             "-v",
             f"{marm_data_dir}:/home/marm/.marm",
             "--entrypoint",
@@ -454,26 +463,36 @@ def test_docker_stdio_tool_count_matches_http_registered_tools(
             "-m",
             "marm_mcp_server.server_stdio",
         ],
-        input=stdin_data,
-        capture_output=True,
-        timeout=60,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
     )
-
-    assert result.returncode == 0, result.stderr.decode("utf-8", errors="replace")[:500]
-
+    watchdog = threading.Timer(90, proc.kill)
     responses = {}
-    for line in result.stdout.splitlines():
-        if not line.strip():
-            continue
-        try:
-            msg = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if "id" in msg:
-            responses[msg["id"]] = msg
+    try:
+        watchdog.start()
+        proc.stdin.write(stdin_data)
+        proc.stdin.flush()
+        while 2 not in responses:
+            line = proc.stdout.readline()
+            if not line:
+                break
+            try:
+                msg = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if "id" in msg:
+                responses[msg["id"]] = msg
+        proc.stdin.close()
+        proc.wait(timeout=30)
+    finally:
+        watchdog.cancel()
+        proc.kill()
+        proc.stdout.close()
+        stderr_text = proc.stderr.read().decode("utf-8", errors="replace")[:500]
+        proc.stderr.close()
+        _run_docker(["rm", "-f", container], timeout=30)
 
-    assert (
-        2 in responses
-    ), f"No tools/list response; stderr: {result.stderr.decode('utf-8', errors='replace')[:500]}"
+    assert 2 in responses, f"No tools/list response; stderr: {stderr_text}"
     tool_names = {t["name"] for t in responses[2]["result"]["tools"]}
     assert tool_names == set(MCP_TOOL_OPERATIONS)
