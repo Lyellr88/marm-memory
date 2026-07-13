@@ -3,6 +3,19 @@
 ## Version 2 - MARM Protocol to Universal MCP Server Evolution
 
 <details>
+<summary><strong>July 12th, 2026: CI Docker Test Fix, PyPI Publishing Paused (v2.21.1)</strong></summary>
+
+### Docker Tests Fixed on Linux CI Runners
+
+- The docker-marked tests bind-mount pytest's `tmp_path` into `/home/marm/.marm`, but on Linux hosts that directory is created mode 700 and owned by the host user, so the container's non-root `marm` user couldn't write it — the server died at DB init and every mount-dependent test failed. A new `marm_data_dir` fixture makes the mounted dir world-writable first. Windows Docker Desktop was never affected, which is why the failure only surfaced in CI.
+
+### PyPI Publishing Paused
+
+- The v2.20.0 repo rename (`MARM-Systems` → `marm-memory`) broke PyPI trusted publishing: the publisher config on PyPI still expects the old repo name, and account access is being recovered, so `publish-pypi` is temporarily disabled in the release workflow. `publish-mcp-registry` pauses with it since the registry validates the PyPI version. Docker Hub images and GitHub releases stay current; `pip install marm-mcp-server` serves 2.18.0 until access is restored.
+
+</details>
+
+<details>
 <summary><strong>July 11th, 2026: Log Entries Join Semantic Memory, LoCoMo Benchmark (v2.21.0)</strong></summary>
 
 ### Log Entries Are Now Semantically Recallable

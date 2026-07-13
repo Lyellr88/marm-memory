@@ -72,6 +72,13 @@ jobs:
           timeout 10s python -m marm_mcp_server || echo "Server startup test completed"
 
   publish-pypi:
+    # Paused: PyPI trusted publisher still points at the pre-rename repo name
+    # (MARM-Systems) and account access is being recovered, so the OIDC
+    # exchange fails with invalid-publisher. Delete this `if` once access is
+    # back and the publisher is updated to Lyellr88/marm-memory.
+    # publish-mcp-registry needs this job, so it pauses with it -- the
+    # registry validates the PyPI version, which stays at 2.18.0 until then.
+    if: false
     needs: validate-and-test
     runs-on: ubuntu-latest
     environment: pypi
