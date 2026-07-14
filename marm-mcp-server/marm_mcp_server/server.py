@@ -10,7 +10,6 @@ Version: 2.21.1
 
 import asyncio
 import json
-import logging
 import os
 import sqlite3
 import sys
@@ -64,34 +63,9 @@ from .services.documentation import (
     ensure_marm_started,
     maybe_auto_refresh,
 )
+from .utils import logging_filters  # noqa: F401
 from .utils.helpers import read_protocol_file, read_protocol_lite_file
 from .utils.security import generate_api_key
-
-
-class _SuppressProactorWindowsNoise(logging.Filter):
-    """Suppress benign WinError 10054 noise from ProactorEventLoop disconnect cleanup.
-
-    The asyncio log record has '_ProactorBasePipeTransport' in the message text
-    and the actual ConnectionResetError in record.exc_info — not in getMessage().
-    """
-
-    def filter(self, record: logging.LogRecord) -> bool:
-        if "_ProactorBasePipeTransport" not in record.getMessage():
-            return True
-        if not record.exc_info:
-            return True
-
-        exc = record.exc_info[1]
-        if not isinstance(exc, ConnectionResetError):
-            return True
-
-        winerror = getattr(exc, "winerror", None)
-        errno = getattr(exc, "errno", None)
-        return not (winerror == 10054 or errno == 10054)
-
-
-_proactor_noise_filter = _SuppressProactorWindowsNoise()
-logging.getLogger("asyncio").addFilter(_proactor_noise_filter)
 
 
 logger = structlog.get_logger()
