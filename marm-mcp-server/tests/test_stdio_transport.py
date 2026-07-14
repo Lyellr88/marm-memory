@@ -12,6 +12,7 @@ from mcp.shared.memory import create_connected_server_and_client_session
 
 def _isolated_stdio(monkeypatch, tmp_path):
     import marm_mcp_server.server_stdio as stdio
+    import marm_mcp_server.core.stdio_tool_lifecycle as lifecycle
     import marm_mcp_server.services.notebook as notebook_service
     from marm_mcp_server.core.memory import MARMMemory
 
@@ -23,12 +24,16 @@ def _isolated_stdio(monkeypatch, tmp_path):
     async def _noop(*args, **kwargs):
         return None
 
-    monkeypatch.setattr(stdio, "ensure_marm_started", _noop)
-    monkeypatch.setattr(stdio, "maybe_auto_refresh", _noop)
+    # ensure_marm_started/maybe_auto_refresh/claim_pending_compaction_prompt
+    # and the protocol-delivery state now live in core.stdio_tool_lifecycle
+    # (server-stdio-module-split.md Task 2) -- _log_tool_call resolves these
+    # from its own module's globals, not server_stdio's.
+    monkeypatch.setattr(lifecycle, "ensure_marm_started", _noop)
+    monkeypatch.setattr(lifecycle, "maybe_auto_refresh", _noop)
     monkeypatch.setattr(
-        stdio, "claim_pending_compaction_prompt", lambda *args, **kwargs: None
+        lifecycle, "claim_pending_compaction_prompt", lambda *args, **kwargs: None
     )
-    stdio._protocol_delivered = True
+    lifecycle._protocol_delivered = True
     return stdio
 
 
@@ -329,8 +334,10 @@ def test_stdio_graph_unavailable_response_is_not_shared_mutable_state(
     real first-call path (_protocol_delivered = False, unlike the other tests
     in this module) and call twice to prove no state survives between calls.
     """
+    import marm_mcp_server.core.stdio_tool_lifecycle as lifecycle
+
     stdio = _isolated_stdio(monkeypatch, tmp_path)
-    stdio._protocol_delivered = False
+    lifecycle._protocol_delivered = False
     monkeypatch.setattr(stdio.graph_supervisor, "is_available", lambda: False)
 
     first = asyncio.run(stdio.marm_graph_index(repo_path="/tmp/some-repo"))
@@ -908,6 +915,7 @@ def test_stdio_log_entry_persists(tmp_path):
 
 def test_stdio_protocol_injected_on_first_tool_call_not_on_second(monkeypatch):
     import marm_mcp_server.server_stdio as stdio
+    import marm_mcp_server.core.stdio_tool_lifecycle as lifecycle
 
     async def _noop(*args, **kwargs):
         return None
@@ -918,11 +926,11 @@ def test_stdio_protocol_injected_on_first_tool_call_not_on_second(monkeypatch):
     def _claim(memory):
         return None
 
-    monkeypatch.setattr(stdio, "ensure_marm_started", _noop)
-    monkeypatch.setattr(stdio, "maybe_auto_refresh", _noop)
-    monkeypatch.setattr(stdio, "read_protocol_file", _protocol)
-    monkeypatch.setattr(stdio, "claim_pending_compaction_prompt", _claim)
-    stdio._protocol_delivered = False
+    monkeypatch.setattr(lifecycle, "ensure_marm_started", _noop)
+    monkeypatch.setattr(lifecycle, "maybe_auto_refresh", _noop)
+    monkeypatch.setattr(lifecycle, "read_protocol_file", _protocol)
+    monkeypatch.setattr(lifecycle, "claim_pending_compaction_prompt", _claim)
+    lifecycle._protocol_delivered = False
 
     @stdio._log_tool_call
     async def fake_tool():
@@ -937,21 +945,22 @@ def test_stdio_protocol_injected_on_first_tool_call_not_on_second(monkeypatch):
 
 def test_stdio_compaction_injection_wraps_tool_result(monkeypatch, tmp_path):
     import marm_mcp_server.server_stdio as stdio
+    import marm_mcp_server.core.stdio_tool_lifecycle as lifecycle
 
     async def _noop(*args, **kwargs):
         return None
 
-    monkeypatch.setattr(stdio, "ensure_marm_started", _noop)
-    monkeypatch.setattr(stdio, "maybe_auto_refresh", _noop)
+    monkeypatch.setattr(lifecycle, "ensure_marm_started", _noop)
+    monkeypatch.setattr(lifecycle, "maybe_auto_refresh", _noop)
     monkeypatch.setattr(
-        stdio,
+        lifecycle,
         "claim_pending_compaction_prompt",
         lambda memory, session_name: {
             "type": "text",
             "text": "[MARM COMPACTION REQUEST]\nabc",
         },
     )
-    stdio._protocol_delivered = True
+    lifecycle._protocol_delivered = True
 
     @stdio._log_tool_call
     async def fake_tool():
@@ -967,6 +976,7 @@ def test_stdio_compaction_injection_wraps_tool_result(monkeypatch, tmp_path):
 
 def test_stdio_protocol_call_suppresses_same_call_compaction(monkeypatch, tmp_path):
     import marm_mcp_server.server_stdio as stdio
+    import marm_mcp_server.core.stdio_tool_lifecycle as lifecycle
 
     calls = {"claim": 0}
 
@@ -980,11 +990,11 @@ def test_stdio_protocol_call_suppresses_same_call_compaction(monkeypatch, tmp_pa
         calls["claim"] += 1
         return {"type": "text", "text": "[MARM COMPACTION REQUEST]\nabc"}
 
-    monkeypatch.setattr(stdio, "ensure_marm_started", _noop)
-    monkeypatch.setattr(stdio, "maybe_auto_refresh", _noop)
-    monkeypatch.setattr(stdio, "read_protocol_file", _protocol)
-    monkeypatch.setattr(stdio, "claim_pending_compaction_prompt", _claim)
-    stdio._protocol_delivered = False
+    monkeypatch.setattr(lifecycle, "ensure_marm_started", _noop)
+    monkeypatch.setattr(lifecycle, "maybe_auto_refresh", _noop)
+    monkeypatch.setattr(lifecycle, "read_protocol_file", _protocol)
+    monkeypatch.setattr(lifecycle, "claim_pending_compaction_prompt", _claim)
+    lifecycle._protocol_delivered = False
 
     @stdio._log_tool_call
     async def fake_tool():
