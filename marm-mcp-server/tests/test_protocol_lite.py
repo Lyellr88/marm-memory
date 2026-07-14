@@ -249,7 +249,9 @@ def test_stdio_lite_injected_on_interval(monkeypatch, tmp_path):
 
     monkeypatch.setattr(lifecycle, "ensure_marm_started", noop)
     monkeypatch.setattr(lifecycle, "maybe_auto_refresh", noop)
-    monkeypatch.setattr(lifecycle, "claim_pending_compaction_prompt", lambda *a, **kw: None)
+    monkeypatch.setattr(
+        lifecycle, "claim_pending_compaction_prompt", lambda *a, **kw: None
+    )
 
     wrapped = stdio._log_tool_call(dummy_tool)
 

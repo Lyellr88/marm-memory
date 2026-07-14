@@ -20,8 +20,6 @@ builtins.print = lambda *args, **kwargs: _real_print(
 )
 
 import os  # noqa: E402
-import re  # noqa: E402
-import uuid  # noqa: E402
 from datetime import datetime, timezone  # noqa: E402
 from typing import Literal, Optional  # noqa: E402
 
@@ -38,8 +36,8 @@ from .core.stdio_tool_lifecycle import _log_tool_call  # noqa: E402
 from mcp.server.fastmcp import FastMCP  # noqa: E402
 
 from marm_mcp_server.core.memory import memory  # noqa: E402
-from marm_mcp_server.core.events import events  # noqa: E402
 from marm_mcp_server.services.notebook import notebook_dispatch  # noqa: E402
+from marm_mcp_server.services.stdio_entry_tools import create_log_entry_stdio  # noqa: E402
 from marm_mcp_server.services.summary import generate_session_summary  # noqa: E402
 from marm_mcp_server.services.recall import smart_recall  # noqa: E402
 from marm_mcp_server.endpoints.concepts import (  # noqa: E402
@@ -54,8 +52,6 @@ from marm_mcp_server.config.settings import (  # noqa: E402
     SERVER_VERSION,
     DEFAULT_DB_PATH,
     SEMANTIC_SEARCH_AVAILABLE,
-    MARM_PROJECT,
-    MARM_PLATFORM,
 )
 from marm_mcp_server.core.graph_supervisor import graph_supervisor  # noqa: E402
 from marm_graph.core import tool_router as graph_router  # noqa: E402
@@ -133,10 +129,6 @@ async def marm_smart_recall(
     )
 
 
-_SESSION_PREFIXES = ("Session: ", "Topic: ")
-_SESSION_INACTIVITY_NOTICE_SECONDS = 3600
-
-
 @mcp.tool()
 @_log_tool_call
 async def marm_log_entry(
@@ -159,181 +151,7 @@ async def marm_log_entry(
 
     Returns: status, message confirming the entry or session switch, entry_id, memory_id
     """
-    try:
-        formatted_entry = entry.strip()
-
-        # Session-switch detection
-        for prefix in _SESSION_PREFIXES:
-            if formatted_entry.startswith(prefix):
-                base_name = formatted_entry[len(prefix) :].strip()
-                if not base_name:
-                    return {
-                        "status": "error",
-                        "message": "Session name cannot be empty.",
-                    }
-                date_tag = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-                new_session = f"{base_name}-{date_tag}"
-                marker_id = str(uuid.uuid4())
-                with memory.get_connection() as conn:
-                    conn.execute("UPDATE sessions SET marm_active = FALSE")
-                    conn.execute(
-                        """
-                        INSERT INTO sessions (session_name, last_accessed, marm_active)
-                        VALUES (?, ?, TRUE)
-                        ON CONFLICT(session_name) DO UPDATE SET
-                            last_accessed = excluded.last_accessed,
-                            marm_active = TRUE
-                        """,
-                        (new_session, datetime.now(timezone.utc).isoformat()),
-                    )
-                    conn.execute(
-                        """
-                        INSERT INTO log_entries
-                            (id, session_name, entry_date, topic, summary, full_entry, project, platform)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                        """,
-                        (
-                            marker_id,
-                            new_session,
-                            date_tag,
-                            "session_start",
-                            base_name,
-                            formatted_entry,
-                            MARM_PROJECT or None,
-                            MARM_PLATFORM or None,
-                        ),
-                    )
-                    try:
-                        conn.execute(
-                            "UPDATE session_summary_cache SET dirty = TRUE, updated_at = ? WHERE session_name = ?",
-                            (datetime.now(timezone.utc).isoformat(), new_session),
-                        )
-                    except Exception:
-                        pass
-                    conn.commit()
-                memory.active_log_session = new_session
-                await events.emit("session_created", {"session": new_session})
-                return {
-                    "status": "session_switched",
-                    "message": f"📂 Session switched to '{new_session}'",
-                    "session_name": new_session,
-                }
-
-        # Resolve session — explicit > active > dated fallback
-        if session_name:
-            session = session_name
-        elif memory.active_log_session != "main":
-            session = memory.active_log_session
-        else:
-            date_tag = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-            session = f"session-{date_tag}"
-            with memory.get_connection() as conn:
-                conn.execute("UPDATE sessions SET marm_active = FALSE")
-                conn.execute(
-                    """
-                    INSERT INTO sessions (session_name, last_accessed, marm_active)
-                    VALUES (?, ?, TRUE)
-                    ON CONFLICT(session_name) DO UPDATE SET
-                        last_accessed = excluded.last_accessed,
-                        marm_active = TRUE
-                    """,
-                    (session, datetime.now(timezone.utc).isoformat()),
-                )
-                conn.commit()
-            memory.active_log_session = session
-
-        # Chunk boundary check
-        with memory.get_connection() as conn:
-            row = conn.execute(
-                "SELECT last_accessed FROM sessions WHERE session_name = ?", (session,)
-            ).fetchone()
-        if row and row[0]:
-            try:
-                last_dt = datetime.fromisoformat(row[0])
-                if last_dt.tzinfo is None:
-                    last_dt = last_dt.replace(tzinfo=timezone.utc)
-                gap = (datetime.now(timezone.utc) - last_dt).total_seconds()
-                if gap > _SESSION_INACTIVITY_NOTICE_SECONDS:
-                    print(
-                        f"[MARM] Chunk boundary detected for '{session}' — {gap:.0f}s since last write"
-                    )
-            except Exception:
-                pass
-
-        entry_pattern = r"^(\d{4}-\d{2}-\d{2})-(.*?)-(.*?)$"
-        match = re.match(entry_pattern, formatted_entry)
-
-        if match:
-            entry_date, topic, summary = match.groups()
-        else:
-            entry_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-            topic = "general"
-            summary = formatted_entry
-
-        entry_id = str(uuid.uuid4())
-        now_iso = datetime.now(timezone.utc).isoformat()
-        with memory.get_connection() as conn:
-            conn.execute(
-                """
-                INSERT INTO log_entries (id, session_name, entry_date, topic, summary, full_entry, project, platform)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    entry_id,
-                    session,
-                    entry_date,
-                    topic,
-                    summary,
-                    formatted_entry,
-                    MARM_PROJECT or None,
-                    MARM_PLATFORM or None,
-                ),
-            )
-            conn.execute(
-                """
-                INSERT INTO sessions (session_name, last_accessed)
-                VALUES (?, ?)
-                ON CONFLICT(session_name) DO UPDATE SET last_accessed = excluded.last_accessed
-                """,
-                (session, now_iso),
-            )
-            try:
-                conn.execute(
-                    "UPDATE session_summary_cache SET dirty = TRUE, updated_at = ? WHERE session_name = ?",
-                    (now_iso, session),
-                )
-            except Exception:
-                pass
-            conn.commit()
-
-        # Dual-write into semantic memory so marm_smart_recall can find it;
-        # a store failure must never fail the log write itself.
-        memory_id = None
-        try:
-            memory_id = await memory.store_memory_queued(
-                formatted_entry,
-                session,
-                metadata={"source": "log_entry", "log_entry_id": entry_id},
-            )
-        except Exception as store_error:
-            _stdio_log.warning(
-                "semantic store failed for log entry %s: %s", entry_id, store_error
-            )
-
-        await events.emit(
-            "log_entry_created",
-            {"entry_id": entry_id, "session": session, "content": formatted_entry},
-        )
-
-        return {
-            "status": "success",
-            "message": f"📝 Log entry added: {formatted_entry}",
-            "entry_id": entry_id,
-            "memory_id": memory_id,
-            "formatted_entry": formatted_entry,
-        }
-    except Exception as e:
-        return {"status": "error", "message": f"Error creating log entry: {e!s}"}
+    return await create_log_entry_stdio(entry, session_name)
 
 
 @mcp.tool()

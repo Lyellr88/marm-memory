@@ -14,12 +14,20 @@ def _isolated_stdio(monkeypatch, tmp_path):
     import marm_mcp_server.server_stdio as stdio
     import marm_mcp_server.core.stdio_tool_lifecycle as lifecycle
     import marm_mcp_server.services.notebook as notebook_service
+    import marm_mcp_server.services.stdio_entry_tools as stdio_entry_tools
     from marm_mcp_server.core.memory import MARMMemory
 
     mem = MARMMemory(str(tmp_path / "stdio-inprocess.db"))
     mem._encoder_failed = True
     monkeypatch.setattr(stdio, "memory", mem)
     monkeypatch.setattr(notebook_service, "memory", mem)
+    # marm_log_entry's body now lives in services.stdio_entry_tools
+    # (server-stdio-module-split.md Task 3) with its own `memory` binding --
+    # without this, its writes (including the queued semantic-memory store)
+    # silently hit the real production singleton instead of this test's
+    # isolated instance, which can also hang waiting on a write queue that
+    # was never started in-process.
+    monkeypatch.setattr(stdio_entry_tools, "memory", mem)
 
     async def _noop(*args, **kwargs):
         return None
