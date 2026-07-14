@@ -20,7 +20,6 @@ builtins.print = lambda *args, **kwargs: _real_print(
 )
 
 import os  # noqa: E402
-from datetime import datetime, timezone  # noqa: E402
 from typing import Literal, Optional  # noqa: E402
 
 from anyio import BrokenResourceError, ClosedResourceError, EndOfStream  # noqa: E402
@@ -39,6 +38,7 @@ from marm_mcp_server.core.memory import memory  # noqa: E402
 from marm_mcp_server.services.notebook import notebook_dispatch  # noqa: E402
 from marm_mcp_server.services.stdio_entry_tools import (  # noqa: E402
     create_log_entry_stdio,
+    delete_entry_stdio,
     list_log_entries_stdio,
 )
 from marm_mcp_server.services.summary import generate_session_summary  # noqa: E402
@@ -192,88 +192,7 @@ async def marm_delete(
     type="log" (no session_name): delete entire session and all its entries
     type="notebook": delete notebook entry by name
     """
-    try:
-        with memory.get_connection() as conn:
-            if type == "log":
-                memories_deleted = 0
-                if session_name:
-                    # Dual-written semantic memories must not outlive their log entries
-                    rows = conn.execute(
-                        "SELECT id FROM log_entries WHERE session_name = ? AND (id = ? OR topic = ?)",
-                        (session_name, target, target),
-                    ).fetchall()
-                    entry_ids = [r[0] for r in rows]
-                    cursor = conn.execute(
-                        "DELETE FROM log_entries WHERE session_name = ? AND (id = ? OR topic = ?)",
-                        (session_name, target, target),
-                    )
-                    deleted = cursor.rowcount
-                    if entry_ids:
-                        placeholders = ",".join("?" * len(entry_ids))
-                        memories_deleted = conn.execute(
-                            "DELETE FROM memories WHERE json_extract(metadata, '$.source') = 'log_entry' "
-                            f"AND json_extract(metadata, '$.log_entry_id') IN ({placeholders})",
-                            entry_ids,
-                        ).rowcount
-                    if deleted:
-                        try:
-                            conn.execute(
-                                "UPDATE session_summary_cache SET dirty = TRUE, updated_at = ? WHERE session_name = ?",
-                                (datetime.now(timezone.utc).isoformat(), session_name),
-                            )
-                        except Exception:
-                            pass
-                else:
-                    conn.execute(
-                        "DELETE FROM sessions WHERE session_name = ?", (target,)
-                    )
-                    cursor = conn.execute(
-                        "DELETE FROM log_entries WHERE session_name = ?", (target,)
-                    )
-                    deleted = cursor.rowcount
-                    try:
-                        conn.execute(
-                            "DELETE FROM session_summary_cache WHERE session_name = ?",
-                            (target,),
-                        )
-                    except Exception:
-                        pass
-                    memories_deleted = conn.execute(
-                        "DELETE FROM memories WHERE session_name = ? "
-                        "AND json_extract(metadata, '$.source') = 'log_entry'",
-                        (target,),
-                    ).rowcount
-                    if memory.active_log_session == target:
-                        memory.active_log_session = "main"
-                conn.commit()
-                return {
-                    "status": "success",
-                    "message": f"🗑️ Deleted {deleted} items",
-                    "deleted_count": deleted,
-                    "memories_deleted": memories_deleted,
-                }
-            elif type == "notebook":
-                cursor = conn.execute(
-                    "DELETE FROM notebook_entries WHERE name = ?", (target,)
-                )
-                deleted = cursor.rowcount
-                conn.commit()
-                if deleted > 0:
-                    memory.remove_active_notebook_entry(target)
-                return {
-                    "status": "success" if deleted > 0 else "not_found",
-                    "message": f"🗑️ Deleted notebook entry '{target}'"
-                    if deleted > 0
-                    else f"Entry '{target}' not found",
-                    "deleted": deleted > 0,
-                }
-            else:
-                return {
-                    "status": "error",
-                    "message": f"Invalid type '{type}'. Must be 'log' or 'notebook'.",
-                }
-    except Exception as e:
-        return {"status": "error", "message": f"Error deleting: {e!s}"}
+    return await delete_entry_stdio(type, target, session_name)
 
 
 @mcp.tool()
