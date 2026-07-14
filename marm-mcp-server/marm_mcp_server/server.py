@@ -12,7 +12,6 @@ import asyncio
 import os
 import sys
 from contextlib import asynccontextmanager
-from pathlib import Path
 from typing import Optional
 
 import psutil
@@ -52,6 +51,7 @@ from .middleware.rate_limiting import rate_limit_middleware
 from .services.analytics import track_usage
 from .services.automation import register_event_handlers
 from .utils import logging_filters  # noqa: F401
+from .utils.dependency_check import check_dependencies
 from .utils.multiprocess_guard import _warn_if_multi_process_requested
 from .utils.security import generate_api_key
 
@@ -155,70 +155,6 @@ MCP_TOOL_OPERATIONS = [
 
 mcp = FastApiMCP(app, include_operations=MCP_TOOL_OPERATIONS)
 mcp.mount_http()
-
-
-def check_dependencies():
-    """Validate all system dependencies and requirements"""
-    print("MARM MCP Server - Dependency Check")
-    print("=" * 40)
-
-    issues = []
-
-    python_version = (
-        f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
-    )
-    print(f"Python version: {python_version}")
-    if sys.version_info < (3, 8):
-        issues.append("Python 3.8+ required")
-    else:
-        print("Python version OK")
-
-    required_modules = [
-        ("fastapi", "FastAPI web framework"),
-        ("fastapi_mcp", "MCP protocol implementation"),
-        ("uvicorn", "ASGI web server"),
-        ("pydantic", "Data validation"),
-        ("sqlite3", "Database (built-in)"),
-        ("structlog", "Structured logging"),
-    ]
-
-    for module, description in required_modules:
-        try:
-            __import__(module)
-            print(f"OK {description}")
-        except ImportError:
-            issues.append(f"Missing: {module} ({description})")
-            print(f"Missing: {module}")
-
-    print("\nOptional Features:")
-    if SEMANTIC_SEARCH_AVAILABLE:
-        print("OK Semantic search (fastembed)")
-    else:
-        print("Semantic search disabled - install fastembed")
-
-    if SCHEDULER_AVAILABLE:
-        print("OK Automation scheduler (apscheduler)")
-    else:
-        print("Scheduler disabled - install apscheduler")
-
-    print(f"\nDatabase location: {DEFAULT_DB_PATH}")
-    db_dir = Path(DEFAULT_DB_PATH).parent
-    if db_dir.exists() and os.access(db_dir, os.W_OK):
-        print("OK Database directory writable")
-    else:
-        issues.append(f"Cannot write to database directory: {db_dir}")
-
-    print("\n" + "=" * 40)
-    if issues:
-        print("Issues found:")
-        for issue in issues:
-            print(f"   • {issue}")
-        print("\nRun: pip install -r requirements.txt")
-        return False
-    else:
-        print("All dependencies satisfied!")
-        print("Ready to start MARM MCP Server")
-        return True
 
 
 async def run_server_with_shutdown():
