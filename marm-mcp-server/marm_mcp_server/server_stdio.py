@@ -37,7 +37,10 @@ from mcp.server.fastmcp import FastMCP  # noqa: E402
 
 from marm_mcp_server.core.memory import memory  # noqa: E402
 from marm_mcp_server.services.notebook import notebook_dispatch  # noqa: E402
-from marm_mcp_server.services.stdio_entry_tools import create_log_entry_stdio  # noqa: E402
+from marm_mcp_server.services.stdio_entry_tools import (  # noqa: E402
+    create_log_entry_stdio,
+    list_log_entries_stdio,
+)
 from marm_mcp_server.services.summary import generate_session_summary  # noqa: E402
 from marm_mcp_server.services.recall import smart_recall  # noqa: E402
 from marm_mcp_server.endpoints.concepts import (  # noqa: E402
@@ -172,48 +175,7 @@ async def marm_log_show(
     Returns (no session_name): status, sessions list with session_name/entry_count, total_sessions
     Returns (with session_name): status, session_name, entries list with id/entry_date/topic/summary/full_entry, total_entries
     """
-    try:
-        with memory.get_connection() as conn:
-            if session_name:
-                cursor = conn.execute(
-                    """
-                    SELECT id, entry_date, topic, summary, full_entry
-                    FROM log_entries WHERE session_name = ?
-                    ORDER BY entry_date DESC
-                    """,
-                    (session_name,),
-                )
-                entries = [
-                    {
-                        "id": r[0],
-                        "entry_date": r[1],
-                        "topic": r[2],
-                        "summary": r[3],
-                        "full_entry": r[4],
-                    }
-                    for r in cursor.fetchall()
-                ]
-                return {
-                    "status": "success",
-                    "session_name": session_name,
-                    "entries": entries,
-                    "total_entries": len(entries),
-                }
-            else:
-                cursor = conn.execute(
-                    "SELECT session_name, COUNT(*) FROM log_entries GROUP BY session_name"
-                )
-                sessions = [
-                    {"session_name": r[0], "entry_count": r[1]}
-                    for r in cursor.fetchall()
-                ]
-                return {
-                    "status": "success",
-                    "sessions": sessions,
-                    "total_sessions": len(sessions),
-                }
-    except Exception as e:
-        return {"status": "error", "message": f"Error retrieving log entries: {e!s}"}
+    return await list_log_entries_stdio(session_name)
 
 
 @mcp.tool()

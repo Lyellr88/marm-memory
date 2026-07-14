@@ -192,3 +192,48 @@ async def create_log_entry_stdio(entry: str, session_name: Optional[str]) -> dic
         }
     except Exception as e:
         return {"status": "error", "message": f"Error creating log entry: {e!s}"}
+
+
+async def list_log_entries_stdio(session_name: Optional[str]) -> dict:
+    try:
+        with memory.get_connection() as conn:
+            if session_name:
+                cursor = conn.execute(
+                    """
+                    SELECT id, entry_date, topic, summary, full_entry
+                    FROM log_entries WHERE session_name = ?
+                    ORDER BY entry_date DESC
+                    """,
+                    (session_name,),
+                )
+                entries = [
+                    {
+                        "id": r[0],
+                        "entry_date": r[1],
+                        "topic": r[2],
+                        "summary": r[3],
+                        "full_entry": r[4],
+                    }
+                    for r in cursor.fetchall()
+                ]
+                return {
+                    "status": "success",
+                    "session_name": session_name,
+                    "entries": entries,
+                    "total_entries": len(entries),
+                }
+            else:
+                cursor = conn.execute(
+                    "SELECT session_name, COUNT(*) FROM log_entries GROUP BY session_name"
+                )
+                sessions = [
+                    {"session_name": r[0], "entry_count": r[1]}
+                    for r in cursor.fetchall()
+                ]
+                return {
+                    "status": "success",
+                    "sessions": sessions,
+                    "total_sessions": len(sessions),
+                }
+    except Exception as e:
+        return {"status": "error", "message": f"Error retrieving log entries: {e!s}"}
