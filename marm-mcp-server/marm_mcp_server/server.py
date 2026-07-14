@@ -146,10 +146,12 @@ mcp.mount_http()
 
 
 # Re-export so the pip console script (marm_mcp_server.server:main, see
-# pyproject.toml) keeps resolving after main() moved to cli.py. Import placed
-# here, after app is fully defined, so cli.py's `from .server import app`
-# doesn't hit a partially-initialized module.
-from .cli import main  # noqa: E402
+# pyproject.toml), the mcp.servers entry point (server:create_server), and
+# marm_mcp_server/__init__.py's lazy `from .server import create_server, main`
+# all keep resolving after these moved to cli.py. Import placed here, after
+# app is fully defined, so cli.py's `from .server import app` doesn't hit a
+# partially-initialized module.
+from .cli import create_server, main  # noqa: E402,F401
 
 if __name__ == "__main__":
     main()

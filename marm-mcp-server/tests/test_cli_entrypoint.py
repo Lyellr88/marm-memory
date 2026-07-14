@@ -83,6 +83,41 @@ def test_import_marm_mcp_server_succeeds_with_clean_stdout(tmp_path):
     assert result.stdout == ""
 
 
+def test_create_server_stays_importable_from_package_and_server_module(tmp_path):
+    """create_server moved to cli.py during the server.py module split
+    (docs/current/server-py-module-split.md, Task H) -- server.py must keep
+    re-exporting it alongside main, matching marm_mcp_server/__init__.py's
+    lazy `from .server import create_server, main` (both names resolved in
+    one import statement, so a missing create_server breaks lazy-loading
+    main too) and pyproject.toml's `[project.entry-points."mcp.servers"]`
+    declaration (`marm = "server:create_server"`)."""
+    env = os.environ.copy()
+    env["MARM_DB_PATH"] = str(tmp_path / "create-server-memory.db")
+    env["MARM_ANALYTICS_DB_PATH"] = str(tmp_path / "create-server-analytics.db")
+    env["USERPROFILE"] = str(tmp_path)
+    env["HOME"] = str(tmp_path)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import marm_mcp_server as m\n"
+            "assert callable(m.create_server)\n"
+            "assert callable(m.main)\n"
+            "from marm_mcp_server.server import create_server, main\n"
+            "assert callable(create_server)\n"
+            "assert callable(main)\n",
+        ],
+        cwd=os.getcwd(),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
 def test_runtime_presets_configure_rate_limit_and_write_queue(monkeypatch, tmp_path):
     from conftest import load_isolated_server
 
