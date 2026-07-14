@@ -21,9 +21,7 @@ builtins.print = lambda *args, **kwargs: _real_print(
 )
 
 import functools  # noqa: E402
-import logging  # noqa: E402
 import os  # noqa: E402
-import pathlib  # noqa: E402
 import re  # noqa: E402
 import uuid  # noqa: E402
 from datetime import datetime, timezone  # noqa: E402
@@ -34,33 +32,7 @@ from pydantic import ValidationError  # noqa: E402
 
 os.environ["SERVER_HOST"] = "127.0.0.1"
 
-_log_dir_env = os.environ.get("MARM_STDIO_LOG_DIR")
-_log_dir = (
-    pathlib.Path(_log_dir_env)
-    if _log_dir_env
-    else pathlib.Path.home() / ".marm" / "logs"
-)
-_log_level_name = os.environ.get("MARM_STDIO_LOG_LEVEL", "INFO").upper()
-_log_level = getattr(logging, _log_level_name, logging.INFO)
-_debug = _log_level <= logging.DEBUG
-
-_stdio_log = logging.getLogger("marm.stdio")
-_stdio_log.setLevel(_log_level)
-_stdio_log.propagate = False
-
-_fmt = logging.Formatter("%(asctime)s [MARM] %(levelname)s %(message)s")
-
-_sh = logging.StreamHandler(sys.stderr)
-_sh.setFormatter(_fmt)
-_stdio_log.addHandler(_sh)
-
-try:
-    _log_dir.mkdir(parents=True, exist_ok=True)
-    _fh = logging.FileHandler(_log_dir / "marm-stdio.log", encoding="utf-8")
-    _fh.setFormatter(_fmt)
-    _stdio_log.addHandler(_fh)
-except Exception:
-    pass
+from .core.stdio_logging import _stdio_log, _debug  # noqa: E402
 
 _protocol_delivered = False
 _protocol_call_count = 0
