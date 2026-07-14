@@ -1,3 +1,4 @@
+import importlib
 import logging
 
 from conftest import load_isolated_server
@@ -19,8 +20,9 @@ def _record(message, exc=None):
 
 
 def test_proactor_filter_only_suppresses_known_windows_reset(monkeypatch, tmp_path):
-    server = load_isolated_server(monkeypatch, tmp_path)
-    filt = server._proactor_noise_filter
+    load_isolated_server(monkeypatch, tmp_path)
+    logging_filters = importlib.import_module("marm_mcp_server.utils.logging_filters")
+    filt = logging_filters._proactor_noise_filter
 
     reset = ConnectionResetError("connection reset")
     reset.winerror = 10054
@@ -34,8 +36,9 @@ def test_proactor_filter_only_suppresses_known_windows_reset(monkeypatch, tmp_pa
 
 
 def test_proactor_filter_keeps_other_asyncio_errors(monkeypatch, tmp_path):
-    server = load_isolated_server(monkeypatch, tmp_path)
-    filt = server._proactor_noise_filter
+    load_isolated_server(monkeypatch, tmp_path)
+    logging_filters = importlib.import_module("marm_mcp_server.utils.logging_filters")
+    filt = logging_filters._proactor_noise_filter
 
     reset = ConnectionResetError("connection reset")
     reset.winerror = 10054
