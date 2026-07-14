@@ -11,12 +11,10 @@ Version: 2.21.1
 import asyncio
 import json
 import os
-import sqlite3
 import sys
 import time
 from collections import OrderedDict
 from contextlib import asynccontextmanager
-from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -57,6 +55,7 @@ from .endpoints.session import router as session_router
 from .endpoints.system import router as system_router
 from .middleware.auth import auth_middleware
 from .middleware.rate_limiting import rate_limit_middleware
+from .services.analytics import track_usage
 from .services.automation import register_event_handlers
 from .services.documentation import (
     docs_are_loaded,
@@ -70,47 +69,6 @@ from .utils.security import generate_api_key
 
 
 logger = structlog.get_logger()
-
-
-def track_usage(event_type: str, endpoint: str = None, user_data: dict = None):
-    """Track MCP usage events for launch analytics"""
-    try:
-        usage_db = ANALYTICS_DB_PATH
-
-        with sqlite3.connect(usage_db) as conn:
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS usage_events (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    timestamp TEXT NOT NULL,
-                    event_type TEXT NOT NULL,
-                    endpoint TEXT,
-                    user_agent TEXT,
-                    ip_address TEXT,
-                    session_id TEXT,
-                    metadata TEXT,
-                    created_at TEXT DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-
-            conn.execute(
-                """
-                INSERT INTO usage_events (timestamp, event_type, endpoint, user_agent, ip_address, session_id, metadata)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-                (
-                    datetime.now().isoformat(),
-                    event_type,
-                    endpoint,
-                    user_data.get("user_agent", "unknown") if user_data else "unknown",
-                    user_data.get("ip_address", "unknown") if user_data else "unknown",
-                    user_data.get("session_id", "unknown") if user_data else "unknown",
-                    str(user_data) if user_data else "{}",
-                ),
-            )
-
-        logger.info("Usage tracked", event_type=event_type, endpoint=endpoint)
-    except Exception as e:
-        logger.warning("Analytics tracking failed", error=str(e))
 
 
 def _maybe_start_compaction_scheduler():
