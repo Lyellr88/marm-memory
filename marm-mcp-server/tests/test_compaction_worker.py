@@ -391,7 +391,7 @@ async def test_counter_threshold_default_mode_is_5(monkeypatch, tmp_path):
 
 @pytest.mark.asyncio
 async def test_counter_threshold_set_to_20_for_swarm_preset():
-    from marm_mcp_server.server import apply_runtime_preset
+    from marm_mcp_server.cli import apply_runtime_preset
     from marm_mcp_server.core import memory as memory_module
     import marm_mcp_server.config.settings as s
 
@@ -407,7 +407,7 @@ async def test_counter_threshold_set_to_20_for_swarm_preset():
 
 @pytest.mark.asyncio
 async def test_counter_threshold_set_to_20_for_trusted_preset():
-    from marm_mcp_server.server import apply_runtime_preset
+    from marm_mcp_server.cli import apply_runtime_preset
     from marm_mcp_server.core import memory as memory_module
     import marm_mcp_server.config.settings as s
 
@@ -423,7 +423,7 @@ async def test_counter_threshold_set_to_20_for_trusted_preset():
 
 @pytest.mark.asyncio
 async def test_counter_threshold_set_to_20_for_custom_preset():
-    from marm_mcp_server.server import apply_runtime_preset
+    from marm_mcp_server.cli import apply_runtime_preset
     from marm_mcp_server.core import memory as memory_module
     import marm_mcp_server.config.settings as s
 

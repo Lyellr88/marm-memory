@@ -86,12 +86,13 @@ def test_import_marm_mcp_server_succeeds_with_clean_stdout(tmp_path):
 def test_runtime_presets_configure_rate_limit_and_write_queue(monkeypatch, tmp_path):
     from conftest import load_isolated_server
 
-    server = load_isolated_server(monkeypatch, tmp_path, write_queue_enabled=True)
+    load_isolated_server(monkeypatch, tmp_path, write_queue_enabled=True)
+    cli = importlib.import_module("marm_mcp_server.cli")
     settings = importlib.import_module("marm_mcp_server.config.settings")
     memory_module = importlib.import_module("marm_mcp_server.core.memory")
     rate_limiter_module = importlib.import_module("marm_mcp_server.core.rate_limiter")
 
-    custom_only = server.apply_runtime_preset(rate_limit_rpm=150)
+    custom_only = cli.apply_runtime_preset(rate_limit_rpm=150)
     assert custom_only == {
         "mode": "custom",
         "rate_limit_rpm": 150,
@@ -103,7 +104,7 @@ def test_runtime_presets_configure_rate_limit_and_write_queue(monkeypatch, tmp_p
     assert memory_module.WRITE_QUEUE_ENABLED is True
     assert rate_limiter_module.rate_limiter.limits["default"]["requests"] == 150
 
-    swarm = server.apply_runtime_preset(swarm=True)
+    swarm = cli.apply_runtime_preset(swarm=True)
     assert swarm == {
         "mode": "swarm",
         "rate_limit_rpm": 200,
@@ -115,7 +116,7 @@ def test_runtime_presets_configure_rate_limit_and_write_queue(monkeypatch, tmp_p
     assert memory_module.WRITE_QUEUE_ENABLED is True
     assert rate_limiter_module.rate_limiter.limits["default"]["requests"] == 200
 
-    swarm_max = server.apply_runtime_preset(swarm_max=True)
+    swarm_max = cli.apply_runtime_preset(swarm_max=True)
     assert swarm_max == {
         "mode": "swarm-max",
         "rate_limit_rpm": 600,
@@ -125,7 +126,7 @@ def test_runtime_presets_configure_rate_limit_and_write_queue(monkeypatch, tmp_p
     assert memory_module.COMPACTION_TRIGGER_COUNT == 20
     assert rate_limiter_module.rate_limiter.limits["default"]["requests"] == 600
 
-    custom = server.apply_runtime_preset(swarm=True, rate_limit_rpm=150)
+    custom = cli.apply_runtime_preset(swarm=True, rate_limit_rpm=150)
     assert custom == {
         "mode": "custom",
         "rate_limit_rpm": 150,
@@ -135,9 +136,7 @@ def test_runtime_presets_configure_rate_limit_and_write_queue(monkeypatch, tmp_p
     assert memory_module.COMPACTION_TRIGGER_COUNT == 20
     assert rate_limiter_module.rate_limiter.limits["default"]["requests"] == 150
 
-    trusted = server.apply_runtime_preset(
-        swarm_max=True, trusted=True, rate_limit_rpm=150
-    )
+    trusted = cli.apply_runtime_preset(swarm_max=True, trusted=True, rate_limit_rpm=150)
     assert trusted == {
         "mode": "trusted",
         "rate_limit_rpm": 0,
@@ -151,11 +150,12 @@ def test_runtime_presets_configure_rate_limit_and_write_queue(monkeypatch, tmp_p
 def test_default_runtime_preset_uses_low_compaction_trigger(monkeypatch, tmp_path):
     from conftest import load_isolated_server
 
-    server = load_isolated_server(monkeypatch, tmp_path)
+    load_isolated_server(monkeypatch, tmp_path)
+    cli = importlib.import_module("marm_mcp_server.cli")
     settings = importlib.import_module("marm_mcp_server.config.settings")
     memory_module = importlib.import_module("marm_mcp_server.core.memory")
 
-    result = server.apply_runtime_preset()
+    result = cli.apply_runtime_preset()
 
     assert result["mode"] == "default"
     assert settings.COMPACTION_TRIGGER_COUNT == 5
@@ -166,11 +166,12 @@ def test_runtime_preset_preserves_compaction_env_override(monkeypatch, tmp_path)
     from conftest import load_isolated_server
 
     monkeypatch.setenv("COMPACTION_TRIGGER_COUNT", "50")
-    server = load_isolated_server(monkeypatch, tmp_path)
+    load_isolated_server(monkeypatch, tmp_path)
+    cli = importlib.import_module("marm_mcp_server.cli")
     settings = importlib.import_module("marm_mcp_server.config.settings")
     memory_module = importlib.import_module("marm_mcp_server.core.memory")
 
-    result = server.apply_runtime_preset(swarm=True)
+    result = cli.apply_runtime_preset(swarm=True)
 
     assert result["mode"] == "swarm"
     assert settings.COMPACTION_TRIGGER_COUNT == 50
