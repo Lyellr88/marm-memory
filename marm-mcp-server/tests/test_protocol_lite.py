@@ -6,6 +6,7 @@ coexistence with compaction, dict eviction, and STDIO counter behavior.
 
 import json
 import asyncio
+import importlib
 import time
 from unittest.mock import AsyncMock, MagicMock
 
@@ -72,7 +73,10 @@ def _injected_text(resp):
 
 
 async def _one_call(server, session="default"):
-    return await server._mcp_tool_call_tracker(
+    protocol_injection = importlib.import_module(
+        "marm_mcp_server.middleware.protocol_injection"
+    )
+    return await protocol_injection._mcp_tool_call_tracker(
         _mock_request(_tool_call_body(session)),
         AsyncMock(return_value=_mock_response()),
     )
@@ -84,8 +88,11 @@ async def _one_call(server, session="default"):
 def test_first_call_injects_full_protocol(monkeypatch, tmp_path):
     """First tool call injects PROTOCOL.md with MARM SESSION INIT prefix."""
     server = load_isolated_server(monkeypatch, tmp_path)
-    server._protocol_delivered_sessions.clear()
-    server._protocol_call_counts.clear()
+    protocol_delivery_state = importlib.import_module(
+        "marm_mcp_server.core.protocol_delivery_state"
+    )
+    protocol_delivery_state._protocol_delivered_sessions.clear()
+    protocol_delivery_state._protocol_call_counts.clear()
 
     resp = asyncio.run(_one_call(server))
     text = _injected_text(resp)
@@ -97,8 +104,11 @@ def test_first_call_injects_full_protocol(monkeypatch, tmp_path):
 def test_calls_after_first_do_not_inject_full(monkeypatch, tmp_path):
     """Calls 2-29 skip protocol injection."""
     server = load_isolated_server(monkeypatch, tmp_path)
-    server._protocol_delivered_sessions.clear()
-    server._protocol_call_counts.clear()
+    protocol_delivery_state = importlib.import_module(
+        "marm_mcp_server.core.protocol_delivery_state"
+    )
+    protocol_delivery_state._protocol_delivered_sessions.clear()
+    protocol_delivery_state._protocol_call_counts.clear()
 
     # First call gets full protocol
     r1 = asyncio.run(_one_call(server))
@@ -118,12 +128,15 @@ def test_calls_after_first_do_not_inject_full(monkeypatch, tmp_path):
 def test_lite_injects_at_interval(monkeypatch, tmp_path):
     """Lite protocol appears when counter reaches the interval (30)."""
     server = load_isolated_server(monkeypatch, tmp_path)
-    server._protocol_delivered_sessions.clear()
-    server._protocol_call_counts.clear()
+    protocol_delivery_state = importlib.import_module(
+        "marm_mcp_server.core.protocol_delivery_state"
+    )
+    protocol_delivery_state._protocol_delivered_sessions.clear()
+    protocol_delivery_state._protocol_call_counts.clear()
 
     # Prime the counter: 29 prior calls, session already delivered
-    server._protocol_call_counts["default"] = 29
-    server._protocol_delivered_sessions["default"] = _NOW
+    protocol_delivery_state._protocol_call_counts["default"] = 29
+    protocol_delivery_state._protocol_delivered_sessions["default"] = _NOW
 
     resp = asyncio.run(_one_call(server))
     text = _injected_text(resp)
@@ -136,11 +149,14 @@ def test_lite_injects_at_interval(monkeypatch, tmp_path):
 def test_lite_not_injected_before_interval(monkeypatch, tmp_path):
     """Lite does NOT inject on calls that don't hit the interval."""
     server = load_isolated_server(monkeypatch, tmp_path)
-    server._protocol_delivered_sessions.clear()
-    server._protocol_call_counts.clear()
+    protocol_delivery_state = importlib.import_module(
+        "marm_mcp_server.core.protocol_delivery_state"
+    )
+    protocol_delivery_state._protocol_delivered_sessions.clear()
+    protocol_delivery_state._protocol_call_counts.clear()
 
     # Counter at 15 — not a multiple of 30
-    server._protocol_call_counts["default"] = 15
+    protocol_delivery_state._protocol_call_counts["default"] = 15
 
     resp = asyncio.run(_one_call(server))
     text = _injected_text(resp)
@@ -150,11 +166,14 @@ def test_lite_not_injected_before_interval(monkeypatch, tmp_path):
 def test_lite_leaves_protocol_injected_false(monkeypatch, tmp_path):
     """Lite injection does NOT set protocol_injected=True — compaction still fires."""
     server = load_isolated_server(monkeypatch, tmp_path)
-    server._protocol_delivered_sessions.clear()
-    server._protocol_call_counts.clear()
+    protocol_delivery_state = importlib.import_module(
+        "marm_mcp_server.core.protocol_delivery_state"
+    )
+    protocol_delivery_state._protocol_delivered_sessions.clear()
+    protocol_delivery_state._protocol_call_counts.clear()
 
-    server._protocol_call_counts["default"] = 29
-    server._protocol_delivered_sessions["default"] = _NOW
+    protocol_delivery_state._protocol_call_counts["default"] = 29
+    protocol_delivery_state._protocol_delivered_sessions["default"] = _NOW
 
     # Verify: on interval hit, lite text is injected AND protocol_injected stays False
     resp = asyncio.run(_one_call(server))
@@ -172,11 +191,14 @@ def test_lite_leaves_protocol_injected_false(monkeypatch, tmp_path):
 def test_different_sessions_independent_counters(monkeypatch, tmp_path):
     """Session A at 29 gets lite at 30; session B at 0 gets full protocol."""
     server = load_isolated_server(monkeypatch, tmp_path)
-    server._protocol_delivered_sessions.clear()
-    server._protocol_call_counts.clear()
+    protocol_delivery_state = importlib.import_module(
+        "marm_mcp_server.core.protocol_delivery_state"
+    )
+    protocol_delivery_state._protocol_delivered_sessions.clear()
+    protocol_delivery_state._protocol_call_counts.clear()
 
-    server._protocol_call_counts["session-a"] = 29
-    server._protocol_delivered_sessions["session-a"] = _NOW
+    protocol_delivery_state._protocol_call_counts["session-a"] = 29
+    protocol_delivery_state._protocol_delivered_sessions["session-a"] = _NOW
 
     # Session B (no prior calls, not in delivered)
     r_b = asyncio.run(_one_call(server, session="session-b"))
@@ -196,31 +218,37 @@ def test_different_sessions_independent_counters(monkeypatch, tmp_path):
 def test_prune_removes_stale_sessions(monkeypatch, tmp_path):
     """Sessions not in delivered_sessions get evicted from call counts."""
     server = load_isolated_server(monkeypatch, tmp_path)
-    server._protocol_delivered_sessions.clear()
-    server._protocol_call_counts.clear()
+    protocol_delivery_state = importlib.import_module(
+        "marm_mcp_server.core.protocol_delivery_state"
+    )
+    protocol_delivery_state._protocol_delivered_sessions.clear()
+    protocol_delivery_state._protocol_call_counts.clear()
 
-    server._protocol_call_counts["stale-session"] = 15
-    assert "stale-session" in server._protocol_call_counts
+    protocol_delivery_state._protocol_call_counts["stale-session"] = 15
+    assert "stale-session" in protocol_delivery_state._protocol_call_counts
 
     # Trigger prune via a tool call on a different session
     asyncio.run(_one_call(server, session="real"))
 
-    assert "stale-session" not in server._protocol_call_counts
+    assert "stale-session" not in protocol_delivery_state._protocol_call_counts
 
 
 def test_hard_cap_limits_call_counts(monkeypatch, tmp_path):
     """Call counts capped at 4096 entries."""
-    server = load_isolated_server(monkeypatch, tmp_path)
-    server._protocol_delivered_sessions.clear()
-    server._protocol_call_counts.clear()
+    load_isolated_server(monkeypatch, tmp_path)
+    protocol_delivery_state = importlib.import_module(
+        "marm_mcp_server.core.protocol_delivery_state"
+    )
+    protocol_delivery_state._protocol_delivered_sessions.clear()
+    protocol_delivery_state._protocol_call_counts.clear()
 
     for i in range(5000):
         name = f"session-{i}"
-        server._protocol_call_counts[name] = i
-        server._protocol_delivered_sessions[name] = _NOW
+        protocol_delivery_state._protocol_call_counts[name] = i
+        protocol_delivery_state._protocol_delivered_sessions[name] = _NOW
 
-    server._prune_call_counts()
-    assert len(server._protocol_call_counts) <= 4096
+    protocol_delivery_state._prune_call_counts()
+    assert len(protocol_delivery_state._protocol_call_counts) <= 4096
 
 
 # ── STDIO Transport ──────────────────────────────────────────────────

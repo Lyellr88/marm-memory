@@ -9,7 +9,6 @@ Version: 2.21.1
 """
 
 import asyncio
-import json
 import os
 import sys
 from contextlib import asynccontextmanager
@@ -19,8 +18,7 @@ from typing import Optional
 import psutil
 import structlog
 import uvicorn
-from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI
 from fastapi_mcp import FastApiMCP
 
 from .config import settings
@@ -37,18 +35,9 @@ from .config.settings import (
     SERVER_VERSION,
 )
 from .core import memory as memory_module
-from .core.compaction import claim_pending_compaction_prompt
 from .core.dashboard_mount import get_dashboard_app
 from .core.graph_supervisor import graph_supervisor
 from .core.memory import memory
-from .core.protocol_delivery_state import (
-    _PROTOCOL_LITE_INTERVAL,
-    _mark_protocol_session_delivered,
-    _protocol_call_counts,
-    _protocol_delivery_lock,
-    _protocol_session_delivered,
-    _prune_call_counts,
-)
 from .core.rate_limiter import rate_limiter
 from .endpoints.compaction import router as compaction_router
 from .endpoints.concepts import router as concepts_router
@@ -60,16 +49,11 @@ from .endpoints.reasoning import router as reasoning_router
 from .endpoints.session import router as session_router
 from .endpoints.system import router as system_router
 from .middleware.auth import auth_middleware
+from .middleware.protocol_injection import _mcp_tool_call_tracker
 from .middleware.rate_limiting import rate_limit_middleware
 from .services.analytics import track_usage
 from .services.automation import register_event_handlers
-from .services.documentation import (
-    docs_are_loaded,
-    ensure_marm_started,
-    maybe_auto_refresh,
-)
 from .utils import logging_filters  # noqa: F401
-from .utils.helpers import read_protocol_file, read_protocol_lite_file
 from .utils.multiprocess_guard import _warn_if_multi_process_requested
 from .utils.security import generate_api_key
 
@@ -162,179 +146,6 @@ app = FastAPI(
     version=SERVER_VERSION,
     lifespan=lifespan,
 )
-
-
-async def _mcp_tool_call_tracker(request: Request, call_next):
-    """Lazy doc-load and auto-refresh for MCP tool calls.
-
-    Registered first so LIFO puts it last — only runs after rate_limit and auth pass.
-    Only acts on tools/call requests; init, discovery, and rejected requests are ignored.
-    Doc loading runs before the handler so the first tool call gets warm docs,
-    matching STDIO transport timing.
-
-    On the first successful tool call for each session, the MARM protocol is injected
-    into the response so each agent receives it exactly once. Tracked per session_name
-    in _protocol_delivered_sessions. Tools that omit session_name share a "__default__"
-    scope — agents should use distinct session names for independent delivery.
-    Note: the session is marked delivered when read_protocol_file() succeeds; a later
-    failure during response mutation marks the session delivered even if the client
-    did not receive the injection.
-    """
-    is_tool_call = False
-    body = b""
-    if request.method == "POST" and request.url.path == "/mcp":
-        try:
-            body = await request.body()
-            is_tool_call = b'"tools/call"' in body
-        except Exception as exc:
-            logger.debug(
-                "Failed to parse MCP tool call body for session routing",
-                error=str(exc),
-                body_preview=body[:200].decode("utf-8", errors="replace"),
-                exc_info=True,
-            )
-
-    if is_tool_call and not docs_are_loaded():
-        await ensure_marm_started("default")
-
-    response = await call_next(request)
-
-    if is_tool_call:
-        asyncio.create_task(maybe_auto_refresh())  # noqa: RUF006
-
-    if is_tool_call and response.status_code == 200:
-        _explicit_session = None
-        _tool_name = None
-        try:
-            _parsed_body = json.loads(body)
-            _explicit_session = (
-                _parsed_body.get("params", {}).get("arguments", {}).get("session_name")
-            ) or None
-            _tool_name = _parsed_body.get("params", {}).get("name")
-        except Exception:
-            pass
-
-        _protocol_session = _explicit_session or "__default__"
-        if _explicit_session:
-            _compaction_session = _explicit_session
-        elif _tool_name == "marm_log_entry":
-            _compaction_session = memory.active_log_session
-        elif _tool_name in ("marm_notebook", "marm_smart_recall"):
-            _compaction_session = "main"
-        else:
-            _compaction_session = None
-
-        # Move counter and pruning under lock to prevent races
-        async with _protocol_delivery_lock:
-            _protocol_call_counts[_protocol_session] = (
-                _protocol_call_counts.get(_protocol_session, 0) + 1
-            )
-            call_count = _protocol_call_counts[_protocol_session]
-            _prune_call_counts()
-
-            # Skip body mutation if protocol already delivered, compaction off,
-            # and we're not at the lite reinjection interval.
-            if (
-                _protocol_session_delivered(_protocol_session)
-                and not settings.COMPACTION_ENABLED
-            ):
-                if call_count % _PROTOCOL_LITE_INTERVAL != 0:
-                    return response
-                # Fall through to inject lite protocol below.
-
-        try:
-            content_type = response.headers.get("content-type", "") or ""
-            if (
-                isinstance(content_type, str)
-                and content_type
-                and "application/json" not in content_type
-            ):
-                return response
-        except Exception:
-            pass
-
-        body_bytes = b""
-        try:
-            async for chunk in response.body_iterator:
-                body_bytes += chunk
-            data = json.loads(body_bytes)
-            result = data.get("result", {})
-            content = result.get("content")
-
-            if not isinstance(content, list):
-                from starlette.responses import Response as StarletteResponse
-
-                return StarletteResponse(
-                    content=body_bytes,
-                    status_code=response.status_code,
-                    headers=dict(response.headers),
-                    media_type="application/json",
-                )
-
-            injections = []
-            protocol_injected = False
-            async with _protocol_delivery_lock:
-                if not _protocol_session_delivered(_protocol_session):
-                    protocol_content = await read_protocol_file()
-                    injections.append(
-                        {
-                            "type": "text",
-                            "text": f"[MARM SESSION INIT]\n\n{protocol_content}",
-                        }
-                    )
-                    _mark_protocol_session_delivered(_protocol_session)
-                    protocol_injected = True
-                elif call_count % _PROTOCOL_LITE_INTERVAL == 0:
-                    lite_content = await read_protocol_lite_file()
-                    if lite_content:
-                        injections.append(
-                            {
-                                "type": "text",
-                                "text": f"[MARM PROTOCOL REFRESH]\n\n{lite_content}",
-                            }
-                        )
-                        # Lite does not set protocol_injected=True — allows
-                        # compaction to coexist on the same call.
-
-            if not protocol_injected:
-                compaction_block = await asyncio.to_thread(
-                    claim_pending_compaction_prompt, memory, _compaction_session
-                )
-                if compaction_block:
-                    injections.append(compaction_block)
-
-            if not injections:
-                from starlette.responses import Response as StarletteResponse
-
-                return StarletteResponse(
-                    content=body_bytes,
-                    status_code=response.status_code,
-                    headers=dict(response.headers),
-                    media_type="application/json",
-                )
-
-            content[:0] = injections
-            return JSONResponse(
-                content=data,
-                status_code=response.status_code,
-                headers={
-                    k: v
-                    for k, v in response.headers.items()
-                    if k.lower() not in ("content-length", "content-type")
-                },
-            )
-        except Exception as e:
-            logger.warning("Protocol injection failed", error=str(e))
-            from starlette.responses import Response as StarletteResponse
-
-            return StarletteResponse(
-                content=body_bytes,
-                status_code=response.status_code,
-                headers=dict(response.headers),
-                media_type="application/json",
-            )
-
-    return response
 
 
 app.middleware("http")(_mcp_tool_call_tracker)
