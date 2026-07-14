@@ -43,25 +43,26 @@ async def run_server_with_shutdown():
         [server_task, shutdown_task], return_when=asyncio.FIRST_COMPLETED
     )
 
-    if shutdown_task in done:
+    graceful_shutdown_signaled = shutdown_task in done
+    if graceful_shutdown_signaled:
         logger.info("Shutdown signal received, closing server")
-
         await shutdown_manager.graceful_shutdown()
-
         server.should_exit = True
 
-        for task in pending:
-            task.cancel()
-            try:
-                await task
-            except asyncio.CancelledError:
-                pass
-
+    for task in pending:
+        task.cancel()
         try:
-            await server_task
+            await task
         except asyncio.CancelledError:
             pass
 
+    # If server_task finished first (e.g. uvicorn crashed on startup), it's
+    # in `done`, not `pending` -- awaiting it here re-raises its exception so
+    # a startup failure surfaces instead of the process silently exiting 0.
+    if server_task in done:
+        await server_task
+
+    if graceful_shutdown_signaled:
         logger.info("Server shutdown complete")
 
 
