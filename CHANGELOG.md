@@ -3,6 +3,17 @@
 ## Version 2 - MARM Protocol to Universal MCP Server Evolution
 
 <details>
+<summary><strong>Unreleased: Log-Entry Cross-Transport Dedup (v2.21.3)</strong></summary>
+
+### Shared Log-Entry Logic
+
+- `endpoints/logging.py` (HTTP) and `services/stdio_entry_tools.py` (STDIO) each carried their own near-identical copy of `marm_log_entry`/`marm_log_show`/`marm_delete`'s session-switch detection, SQL, and dual-write-to-semantic-memory logic. Extracted into a shared `services/log_entry.py`; both transports now call the same functions through thin, transport-specific wrappers.
+- Fixed an information-disclosure gap: STDIO's error responses used to return raw exception text (e.g. SQLite paths/schema) to the client on failure. Now returns the same fixed generic messages HTTP already used, logging the real exception server-side instead.
+- Fixed a latent bug: HTTP's whole-session `marm_delete` deleted from `session_summary_cache` without a `try/except` guard, unlike every other cache-invalidation touch in both files (including STDIO's equivalent). Unified on the guarded behavior for both transports.
+
+</details>
+
+<details>
 <summary><strong>Unreleased: HTTP and STDIO Server Module Refactors (v2.21.2)</strong></summary>
 
 ### Server Module Boundaries

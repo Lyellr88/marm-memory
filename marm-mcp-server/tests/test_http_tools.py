@@ -697,6 +697,22 @@ def test_marm_delete_session_resets_active_log_session(monkeypatch, tmp_path):
     assert still_gone.json().get("total_entries", 0) == 0
 
 
+def test_marm_delete_invalid_type_returns_422(monkeypatch, tmp_path):
+    """log-entry-dedup.md: invalid type="..." must still 422, unchanged by
+    the endpoints/logging.py -> services/log_entry.py extraction. On HTTP
+    this is enforced by DeleteRequest.type's Pydantic Literal before the
+    handler body ever runs (endpoints/logging.py's own type check is an
+    unreachable-in-practice safety net, preserved as-is from the
+    pre-refactor code) -- this test guards the end-to-end contract either
+    way."""
+    server = load_isolated_server(monkeypatch, tmp_path)
+    client = local_client(server.app)
+
+    resp = client.post("/marm_delete", json={"type": "bogus", "target": "x"})
+
+    assert resp.status_code == 422
+
+
 def test_http_removed_tools_absent_from_openapi_schema(monkeypatch, tmp_path):
     server = load_isolated_server(monkeypatch, tmp_path)
     client = local_client(server.app)

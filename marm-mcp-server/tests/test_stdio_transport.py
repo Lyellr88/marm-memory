@@ -14,20 +14,20 @@ def _isolated_stdio(monkeypatch, tmp_path):
     import marm_mcp_server.server_stdio as stdio
     import marm_mcp_server.core.stdio_tool_lifecycle as lifecycle
     import marm_mcp_server.services.notebook as notebook_service
-    import marm_mcp_server.services.stdio_entry_tools as stdio_entry_tools
+    import marm_mcp_server.services.log_entry as log_entry
     from marm_mcp_server.core.memory import MARMMemory
 
     mem = MARMMemory(str(tmp_path / "stdio-inprocess.db"))
     mem._encoder_failed = True
     monkeypatch.setattr(stdio, "memory", mem)
     monkeypatch.setattr(notebook_service, "memory", mem)
-    # marm_log_entry's body now lives in services.stdio_entry_tools
-    # (server-stdio-module-split.md Task 3) with its own `memory` binding --
-    # without this, its writes (including the queued semantic-memory store)
-    # silently hit the real production singleton instead of this test's
-    # isolated instance, which can also hang waiting on a write queue that
-    # was never started in-process.
-    monkeypatch.setattr(stdio_entry_tools, "memory", mem)
+    # marm_log_entry/marm_log_show/marm_delete's shared bodies now live in
+    # services.log_entry (log-entry-dedup.md) with their own `memory`
+    # binding -- without this, their writes (including the queued
+    # semantic-memory store) silently hit the real production singleton
+    # instead of this test's isolated instance, which can also hang
+    # waiting on a write queue that was never started in-process.
+    monkeypatch.setattr(log_entry, "memory", mem)
     # _log_tool_call re-resolves the compaction-claim session from
     # memory.active_log_session when the caller omits session_name (PR #88
     # CodeRabbit finding) -- without patching lifecycle's own binding too,
@@ -275,6 +275,22 @@ def test_stdio_compaction_claimed_against_resolved_session_not_literal_default(
     )
 
 
+def test_stdio_delete_invalid_type_returns_error_dict_not_raise(monkeypatch, tmp_path):
+    """log-entry-dedup.md: STDIO has no Pydantic Literal on `type` (it's a
+    plain str param), so delete_entry_stdio's own validation is the only
+    thing rejecting a bad value -- unlike HTTP where it's backstopped by
+    DeleteRequest.type's Literal. Confirms it returns an error dict rather
+    than raising, matching the pre-refactor STDIO contract."""
+    stdio = _isolated_stdio(monkeypatch, tmp_path)
+
+    result = asyncio.run(stdio.marm_delete(type="bogus", target="x"))
+
+    assert result == {
+        "status": "error",
+        "message": "Invalid type 'bogus'. Must be 'log' or 'notebook'.",
+    }
+
+
 def test_stdio_delete_notebook_removes_entry_from_active_state(monkeypatch, tmp_path):
     stdio = _isolated_stdio(monkeypatch, tmp_path)
 
@@ -376,6 +392,38 @@ def test_stdio_log_entry_without_session_uses_active_session(monkeypatch, tmp_pa
         f"Expected 2 entries in '{expected_session}'; got {project_count}"
     )
     assert main_count == 0, f"Entry incorrectly landed in 'main'; count={main_count}"
+
+
+def test_stdio_log_entry_error_returns_generic_message_not_leaked_exception(
+    monkeypatch, tmp_path
+):
+    """CWE-209 fix (log-entry-dedup.md): marm_log_entry/marm_log_show/
+    marm_delete over STDIO must return a fixed generic message on failure,
+    not the raw exception text -- matches HTTP's existing contract. Before
+    the fix, STDIO returned f"Error creating log entry: {e!s}" etc."""
+    import marm_mcp_server.services.log_entry as log_entry
+
+    stdio = _isolated_stdio(monkeypatch, tmp_path)
+
+    def _boom(*args, **kwargs):
+        raise RuntimeError("leaked/internal/db/path.sqlite schema detail")
+
+    monkeypatch.setattr(log_entry.memory, "get_connection", _boom)
+
+    entry_result = asyncio.run(stdio.marm_log_entry(entry="should not leak"))
+    assert entry_result == {
+        "status": "error",
+        "message": "Log entry creation failed.",
+    }
+
+    show_result = asyncio.run(stdio.marm_log_show())
+    assert show_result == {"status": "error", "message": "Log show failed."}
+
+    delete_result = asyncio.run(stdio.marm_delete(type="log", target="whatever"))
+    assert delete_result == {"status": "error", "message": "Delete failed."}
+
+    for result in (entry_result, show_result, delete_result):
+        assert "leaked/internal/db/path.sqlite" not in result["message"]
 
 
 def test_stdio_inprocess_client_wraps_notebook_delete_and_log_results(

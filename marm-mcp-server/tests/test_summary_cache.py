@@ -163,6 +163,34 @@ def test_full_session_delete_removes_cache_row(monkeypatch, tmp_path):
     assert _cache_row(db_path, "s6") is None
 
 
+def test_full_session_delete_survives_missing_summary_cache_table(
+    monkeypatch, tmp_path
+):
+    """log-entry-dedup.md: the whole-session marm_delete branch now guards
+    its session_summary_cache DELETE in try/except (matching every other
+    cache-invalidation call site in services/log_entry.py) instead of
+    letting a cache failure abort the log_entries/sessions/memories
+    deletes that come after it. Dropping the table is a real, not
+    synthetic, way to force that DELETE to raise."""
+    server = load_isolated_server(monkeypatch, tmp_path)
+    client = local_client(server.app)
+    db_path = str(tmp_path / "marm_memory.db")
+
+    _insert_log_entry(db_path, "s7", "entry that must still be deleted")
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("DROP TABLE session_summary_cache")
+
+    resp = client.post("/marm_delete", json={"type": "log", "target": "s7"})
+
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "success"
+    with sqlite3.connect(db_path) as conn:
+        remaining = conn.execute(
+            "SELECT COUNT(*) FROM log_entries WHERE session_name = ?", ("s7",)
+        ).fetchone()[0]
+    assert remaining == 0
+
+
 # --- disposable mode ---
 
 
