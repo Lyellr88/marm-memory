@@ -255,7 +255,7 @@ body::after {
 }
 
 #topnav {
-  max-width: 960px;
+  max-width: none;
   margin: 0 auto;
   padding: 0 48px;
   height: var(--topnav-h);
@@ -280,12 +280,13 @@ body::after {
 .topnav-link {
   display: inline-flex;
   align-items: center;
-  padding: 6px 12px;
+  min-height: 36px;
+  padding: 8px 14px;
   color: var(--text-muted);
   text-decoration: none;
   font-family: 'Inter', sans-serif;
-  font-size: 11px;
-  font-weight: 500;
+  font-size: 13.2px;
+  font-weight: 600;
   white-space: nowrap;
   border-radius: var(--radius);
   transition: color var(--t) var(--ease), background var(--t) var(--ease);
@@ -299,7 +300,7 @@ body::after {
 
 .topnav-empty {
   font-family: 'Inter', sans-serif;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-dim);
 }
 
@@ -761,6 +762,7 @@ body::after {
 
 @media (max-width: 480px) {
   #content-wrap { padding: 20px 16px 64px; }
+  #topnav { padding: 0 16px; }
   #content h1 { font-size: 20px; }
   #content table { font-size: 12.5px; }
   #content th, #content td { padding: 7px 10px; }
