@@ -4,6 +4,7 @@ on:
   push:
     branches: [MARM-main]
     paths:
+      - '.github/workflows/pages.yml'
       - 'docs-site/**'
       - '*.md'
       - 'docs/*.md'
