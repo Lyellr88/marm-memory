@@ -537,33 +537,33 @@ def test_auto_apply_disabled_by_default(monkeypatch):
 
 def test_maybe_start_scheduler_returns_none_when_disabled(monkeypatch):
     """_maybe_start_compaction_scheduler returns None when COMPACTION_AUTO_APPLY_ENABLED=False."""
-    import marm_mcp_server.server as server_mod
+    import marm_mcp_server.core.compaction_scheduler as scheduler_mod
 
-    monkeypatch.setattr(server_mod, "COMPACTION_AUTO_APPLY_ENABLED", False)
-    result = server_mod._maybe_start_compaction_scheduler()
+    monkeypatch.setattr(scheduler_mod, "COMPACTION_AUTO_APPLY_ENABLED", False)
+    result = scheduler_mod._maybe_start_compaction_scheduler()
     assert result is None
 
 
 def test_maybe_start_scheduler_returns_none_when_unavailable(monkeypatch):
     """_maybe_start_compaction_scheduler returns None when SCHEDULER_AVAILABLE=False."""
-    import marm_mcp_server.server as server_mod
+    import marm_mcp_server.core.compaction_scheduler as scheduler_mod
 
-    monkeypatch.setattr(server_mod, "COMPACTION_AUTO_APPLY_ENABLED", True)
-    monkeypatch.setattr(server_mod, "SCHEDULER_AVAILABLE", False)
-    result = server_mod._maybe_start_compaction_scheduler()
+    monkeypatch.setattr(scheduler_mod, "COMPACTION_AUTO_APPLY_ENABLED", True)
+    monkeypatch.setattr(scheduler_mod, "SCHEDULER_AVAILABLE", False)
+    result = scheduler_mod._maybe_start_compaction_scheduler()
     assert result is None
 
 
 @pytest.mark.asyncio
 async def test_maybe_start_scheduler_registers_job_when_enabled(monkeypatch):
     """_maybe_start_compaction_scheduler registers compaction_auto_apply job when both flags are True."""
-    import marm_mcp_server.server as server_mod
+    import marm_mcp_server.core.compaction_scheduler as scheduler_mod
 
-    monkeypatch.setattr(server_mod, "COMPACTION_ENABLED", True)
-    monkeypatch.setattr(server_mod, "COMPACTION_AUTO_APPLY_ENABLED", True)
-    monkeypatch.setattr(server_mod, "SCHEDULER_AVAILABLE", True)
-    monkeypatch.setattr(server_mod, "COMPACTION_AUTO_APPLY_INTERVAL_MINUTES", 60)
-    scheduler = server_mod._maybe_start_compaction_scheduler()
+    monkeypatch.setattr(scheduler_mod, "COMPACTION_ENABLED", True)
+    monkeypatch.setattr(scheduler_mod, "COMPACTION_AUTO_APPLY_ENABLED", True)
+    monkeypatch.setattr(scheduler_mod, "SCHEDULER_AVAILABLE", True)
+    monkeypatch.setattr(scheduler_mod, "COMPACTION_AUTO_APPLY_INTERVAL_MINUTES", 60)
+    scheduler = scheduler_mod._maybe_start_compaction_scheduler()
     try:
         assert scheduler is not None
         job = scheduler.get_job("compaction_auto_apply")

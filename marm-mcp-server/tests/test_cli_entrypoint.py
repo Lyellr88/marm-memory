@@ -83,15 +83,51 @@ def test_import_marm_mcp_server_succeeds_with_clean_stdout(tmp_path):
     assert result.stdout == ""
 
 
+def test_create_server_stays_importable_from_package_and_server_module(tmp_path):
+    """create_server moved to cli.py during the server.py module split
+    (docs/current/server-py-module-split.md, Task H) -- server.py must keep
+    re-exporting it alongside main, matching marm_mcp_server/__init__.py's
+    lazy `from .server import create_server, main` (both names resolved in
+    one import statement, so a missing create_server breaks lazy-loading
+    main too) and pyproject.toml's `[project.entry-points."mcp.servers"]`
+    declaration (`marm = "server:create_server"`)."""
+    env = os.environ.copy()
+    env["MARM_DB_PATH"] = str(tmp_path / "create-server-memory.db")
+    env["MARM_ANALYTICS_DB_PATH"] = str(tmp_path / "create-server-analytics.db")
+    env["USERPROFILE"] = str(tmp_path)
+    env["HOME"] = str(tmp_path)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import marm_mcp_server as m\n"
+            "assert callable(m.create_server)\n"
+            "assert callable(m.main)\n"
+            "from marm_mcp_server.server import create_server, main\n"
+            "assert callable(create_server)\n"
+            "assert callable(main)\n",
+        ],
+        cwd=os.getcwd(),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
 def test_runtime_presets_configure_rate_limit_and_write_queue(monkeypatch, tmp_path):
     from conftest import load_isolated_server
 
-    server = load_isolated_server(monkeypatch, tmp_path, write_queue_enabled=True)
+    load_isolated_server(monkeypatch, tmp_path, write_queue_enabled=True)
+    cli = importlib.import_module("marm_mcp_server.cli")
     settings = importlib.import_module("marm_mcp_server.config.settings")
     memory_module = importlib.import_module("marm_mcp_server.core.memory")
     rate_limiter_module = importlib.import_module("marm_mcp_server.core.rate_limiter")
 
-    custom_only = server.apply_runtime_preset(rate_limit_rpm=150)
+    custom_only = cli.apply_runtime_preset(rate_limit_rpm=150)
     assert custom_only == {
         "mode": "custom",
         "rate_limit_rpm": 150,
@@ -103,7 +139,7 @@ def test_runtime_presets_configure_rate_limit_and_write_queue(monkeypatch, tmp_p
     assert memory_module.WRITE_QUEUE_ENABLED is True
     assert rate_limiter_module.rate_limiter.limits["default"]["requests"] == 150
 
-    swarm = server.apply_runtime_preset(swarm=True)
+    swarm = cli.apply_runtime_preset(swarm=True)
     assert swarm == {
         "mode": "swarm",
         "rate_limit_rpm": 200,
@@ -115,7 +151,7 @@ def test_runtime_presets_configure_rate_limit_and_write_queue(monkeypatch, tmp_p
     assert memory_module.WRITE_QUEUE_ENABLED is True
     assert rate_limiter_module.rate_limiter.limits["default"]["requests"] == 200
 
-    swarm_max = server.apply_runtime_preset(swarm_max=True)
+    swarm_max = cli.apply_runtime_preset(swarm_max=True)
     assert swarm_max == {
         "mode": "swarm-max",
         "rate_limit_rpm": 600,
@@ -125,7 +161,7 @@ def test_runtime_presets_configure_rate_limit_and_write_queue(monkeypatch, tmp_p
     assert memory_module.COMPACTION_TRIGGER_COUNT == 20
     assert rate_limiter_module.rate_limiter.limits["default"]["requests"] == 600
 
-    custom = server.apply_runtime_preset(swarm=True, rate_limit_rpm=150)
+    custom = cli.apply_runtime_preset(swarm=True, rate_limit_rpm=150)
     assert custom == {
         "mode": "custom",
         "rate_limit_rpm": 150,
@@ -135,9 +171,7 @@ def test_runtime_presets_configure_rate_limit_and_write_queue(monkeypatch, tmp_p
     assert memory_module.COMPACTION_TRIGGER_COUNT == 20
     assert rate_limiter_module.rate_limiter.limits["default"]["requests"] == 150
 
-    trusted = server.apply_runtime_preset(
-        swarm_max=True, trusted=True, rate_limit_rpm=150
-    )
+    trusted = cli.apply_runtime_preset(swarm_max=True, trusted=True, rate_limit_rpm=150)
     assert trusted == {
         "mode": "trusted",
         "rate_limit_rpm": 0,
@@ -151,11 +185,12 @@ def test_runtime_presets_configure_rate_limit_and_write_queue(monkeypatch, tmp_p
 def test_default_runtime_preset_uses_low_compaction_trigger(monkeypatch, tmp_path):
     from conftest import load_isolated_server
 
-    server = load_isolated_server(monkeypatch, tmp_path)
+    load_isolated_server(monkeypatch, tmp_path)
+    cli = importlib.import_module("marm_mcp_server.cli")
     settings = importlib.import_module("marm_mcp_server.config.settings")
     memory_module = importlib.import_module("marm_mcp_server.core.memory")
 
-    result = server.apply_runtime_preset()
+    result = cli.apply_runtime_preset()
 
     assert result["mode"] == "default"
     assert settings.COMPACTION_TRIGGER_COUNT == 5
@@ -166,11 +201,12 @@ def test_runtime_preset_preserves_compaction_env_override(monkeypatch, tmp_path)
     from conftest import load_isolated_server
 
     monkeypatch.setenv("COMPACTION_TRIGGER_COUNT", "50")
-    server = load_isolated_server(monkeypatch, tmp_path)
+    load_isolated_server(monkeypatch, tmp_path)
+    cli = importlib.import_module("marm_mcp_server.cli")
     settings = importlib.import_module("marm_mcp_server.config.settings")
     memory_module = importlib.import_module("marm_mcp_server.core.memory")
 
-    result = server.apply_runtime_preset(swarm=True)
+    result = cli.apply_runtime_preset(swarm=True)
 
     assert result["mode"] == "swarm"
     assert settings.COMPACTION_TRIGGER_COUNT == 50

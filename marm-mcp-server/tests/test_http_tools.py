@@ -883,6 +883,12 @@ def test_http_mcp_tool_response_injects_compaction_prompt(monkeypatch, tmp_path)
 
     server = load_isolated_server(monkeypatch, tmp_path)
     compaction_module = importlib.import_module("marm_mcp_server.core.compaction")
+    protocol_delivery_state = importlib.import_module(
+        "marm_mcp_server.core.protocol_delivery_state"
+    )
+    protocol_injection = importlib.import_module(
+        "marm_mcp_server.middleware.protocol_injection"
+    )
 
     monkeypatch.setattr(compaction_module.settings, "COMPACTION_ENABLED", True)
     monkeypatch.setattr(compaction_module.settings, "COMPACTION_MAX_NUDGES", 5)
@@ -892,7 +898,7 @@ def test_http_mcp_tool_response_injects_compaction_prompt(monkeypatch, tmp_path)
     monkeypatch.setattr(
         compaction_module.settings, "COMPACTION_INJECTION_BYTE_BUDGET", 2048
     )
-    server._protocol_delivered_sessions = {"__default__"}
+    protocol_delivery_state._protocol_delivered_sessions = {"__default__"}
 
     candidate_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
@@ -941,7 +947,7 @@ def test_http_mcp_tool_response_injects_compaction_prompt(monkeypatch, tmp_path)
 
     async def run():
         call = AsyncMock(return_value=resp)
-        return await server._mcp_tool_call_tracker(req, call)
+        return await protocol_injection._mcp_tool_call_tracker(req, call)
 
     response = asyncio.run(run())
     payload = json.loads(response.body)
@@ -968,6 +974,12 @@ def test_http_mcp_tool_response_orders_protocol_before_compaction(
     server = load_isolated_server(monkeypatch, tmp_path)
     compaction_module = importlib.import_module("marm_mcp_server.core.compaction")
     doc_module = importlib.import_module("marm_mcp_server.services.documentation")
+    protocol_delivery_state = importlib.import_module(
+        "marm_mcp_server.core.protocol_delivery_state"
+    )
+    protocol_injection = importlib.import_module(
+        "marm_mcp_server.middleware.protocol_injection"
+    )
 
     monkeypatch.setattr(compaction_module.settings, "COMPACTION_ENABLED", True)
     monkeypatch.setattr(compaction_module.settings, "COMPACTION_MAX_NUDGES", 5)
@@ -975,7 +987,7 @@ def test_http_mcp_tool_response_orders_protocol_before_compaction(
         compaction_module.settings, "COMPACTION_NUDGE_COOLDOWN_SECONDS", 2
     )
     doc_module._docs_loaded = True
-    server._protocol_delivered_sessions = set()
+    protocol_delivery_state._protocol_delivered_sessions = set()
 
     candidate_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
@@ -1033,7 +1045,7 @@ def test_http_mcp_tool_response_orders_protocol_before_compaction(
         resp1.headers.items.return_value = [("x-request-id", "1")]
         resp1.body_iterator = body_iter()
         call1 = AsyncMock(return_value=resp1)
-        r1 = await server._mcp_tool_call_tracker(req, call1)
+        r1 = await protocol_injection._mcp_tool_call_tracker(req, call1)
 
         # Call 2: protocol already delivered, compaction fires
         resp2 = MagicMock()
@@ -1042,7 +1054,7 @@ def test_http_mcp_tool_response_orders_protocol_before_compaction(
         resp2.headers.items.return_value = [("x-request-id", "2")]
         resp2.body_iterator = body_iter()
         call2 = AsyncMock(return_value=resp2)
-        r2 = await server._mcp_tool_call_tracker(req, call2)
+        r2 = await protocol_injection._mcp_tool_call_tracker(req, call2)
 
         return r1, r2
 
@@ -1069,11 +1081,17 @@ def test_http_protocol_injected_on_first_mcp_tool_call_not_on_second(
     import json
     from unittest.mock import AsyncMock, MagicMock
 
-    server = load_isolated_server(monkeypatch, tmp_path)
+    load_isolated_server(monkeypatch, tmp_path)
     doc_module = importlib.import_module("marm_mcp_server.services.documentation")
+    protocol_delivery_state = importlib.import_module(
+        "marm_mcp_server.core.protocol_delivery_state"
+    )
+    protocol_injection = importlib.import_module(
+        "marm_mcp_server.middleware.protocol_injection"
+    )
 
     doc_module._docs_loaded = False
-    server._protocol_delivered_sessions = set()
+    protocol_delivery_state._protocol_delivered_sessions = set()
 
     tool_call_body = b'{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"marm_notebook","arguments":{"action":"status"}}}'
 
@@ -1107,10 +1125,14 @@ def test_http_protocol_injected_on_first_mcp_tool_call_not_on_second(
 
     async def run():
         call_1 = AsyncMock(return_value=make_mock_response())
-        resp_1 = await server._mcp_tool_call_tracker(make_mock_request(), call_1)
+        resp_1 = await protocol_injection._mcp_tool_call_tracker(
+            make_mock_request(), call_1
+        )
 
         call_2 = AsyncMock(return_value=make_mock_response())
-        resp_2 = await server._mcp_tool_call_tracker(make_mock_request(), call_2)
+        resp_2 = await protocol_injection._mcp_tool_call_tracker(
+            make_mock_request(), call_2
+        )
 
         return resp_1, resp_2
 
@@ -1139,10 +1161,16 @@ def test_http_protocol_injected_independently_per_session(monkeypatch, tmp_path)
     import json
     from unittest.mock import AsyncMock, MagicMock
 
-    server = load_isolated_server(monkeypatch, tmp_path)
+    load_isolated_server(monkeypatch, tmp_path)
     doc_module = importlib.import_module("marm_mcp_server.services.documentation")
+    protocol_delivery_state = importlib.import_module(
+        "marm_mcp_server.core.protocol_delivery_state"
+    )
+    protocol_injection = importlib.import_module(
+        "marm_mcp_server.middleware.protocol_injection"
+    )
     doc_module._docs_loaded = False
-    server._protocol_delivered_sessions = set()
+    protocol_delivery_state._protocol_delivered_sessions = set()
 
     def make_request(session_name):
         body = json.dumps(
@@ -1183,13 +1211,13 @@ def test_http_protocol_injected_independently_per_session(monkeypatch, tmp_path)
         return resp
 
     async def run():
-        r_alpha = await server._mcp_tool_call_tracker(
+        r_alpha = await protocol_injection._mcp_tool_call_tracker(
             make_request("alpha"), AsyncMock(return_value=make_response())
         )
-        r_beta = await server._mcp_tool_call_tracker(
+        r_beta = await protocol_injection._mcp_tool_call_tracker(
             make_request("beta"), AsyncMock(return_value=make_response())
         )
-        r_alpha_2 = await server._mcp_tool_call_tracker(
+        r_alpha_2 = await protocol_injection._mcp_tool_call_tracker(
             make_request("alpha"), AsyncMock(return_value=make_response())
         )
         return r_alpha, r_beta, r_alpha_2
