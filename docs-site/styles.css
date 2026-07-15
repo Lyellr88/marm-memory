@@ -259,9 +259,11 @@ body::after {
   width: min(320px, calc(100vw - var(--sidebar-w) - 28px));
   display: flex;
   flex-direction: column;
-  background: rgba(12, 14, 16, 0.98);
-  border: 1px solid var(--border-light);
+  background: rgba(13, 14, 17, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--radius);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   box-shadow: 16px 20px 50px rgba(0, 0, 0, 0.42);
   opacity: 0;
   pointer-events: none;
@@ -275,6 +277,8 @@ body::after {
   pointer-events: auto;
   transform: translateX(0);
 }
+
+#page-nav-flyout:hover { border-color: var(--accent-border); }
 
 .page-nav-flyout-header {
   min-height: 52px;
