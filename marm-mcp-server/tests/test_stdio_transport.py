@@ -28,6 +28,12 @@ def _isolated_stdio(monkeypatch, tmp_path):
     # isolated instance, which can also hang waiting on a write queue that
     # was never started in-process.
     monkeypatch.setattr(stdio_entry_tools, "memory", mem)
+    # _log_tool_call re-resolves the compaction-claim session from
+    # memory.active_log_session when the caller omits session_name (PR #88
+    # CodeRabbit finding) -- without patching lifecycle's own binding too,
+    # that read hits the real production singleton's state instead of this
+    # test's isolated instance.
+    monkeypatch.setattr(lifecycle, "memory", mem)
 
     async def _noop(*args, **kwargs):
         return None
@@ -42,6 +48,11 @@ def _isolated_stdio(monkeypatch, tmp_path):
         lifecycle, "claim_pending_compaction_prompt", lambda *args, **kwargs: None
     )
     lifecycle._protocol_delivered = True
+    # _protocol_call_count is also module-global and leaks across tests --
+    # if it lands on a multiple of _STDIO_LITE_INTERVAL, _log_tool_call
+    # injects marm_protocol_lite unexpectedly, breaking exact-dict
+    # assertions in tests that don't expect it.
+    lifecycle._protocol_call_count = 0
     return stdio
 
 
@@ -163,6 +174,44 @@ def test_stdio_handles_mcp_initialize_and_exposes_tools(tmp_path):
     assert "marm_concept_build" in tool_names
     assert "marm_concept_recall" in tool_names
     assert len(tools) == 14
+
+
+def test_stdio_compaction_claimed_against_resolved_session_not_literal_default(
+    monkeypatch, tmp_path
+):
+    """CodeRabbit finding on PR #88: _log_tool_call snapshots session_name =
+    kwargs.get("session_name", "default") BEFORE calling fn. create_log_entry_stdio
+    can resolve/create a totally different session internally (memory.active_log_session)
+    when the caller omits session_name -- the pre-call snapshot then claims
+    compaction against the literal string "default", which almost never has
+    any log entries, silently missing the session that actually received the
+    write.
+    """
+    import marm_mcp_server.core.stdio_tool_lifecycle as lifecycle
+
+    stdio = _isolated_stdio(monkeypatch, tmp_path)
+
+    claimed_sessions = []
+
+    def _spy_claim(memory, session_name):
+        claimed_sessions.append(session_name)
+        return None
+
+    monkeypatch.setattr(lifecycle, "claim_pending_compaction_prompt", _spy_claim)
+
+    result = asyncio.run(stdio.marm_log_entry(entry="regression test entry"))
+    assert result["status"] == "success"
+
+    resolved_session = stdio.memory.active_log_session
+    assert resolved_session != "main", (
+        "test setup assumption broken: expected create_log_entry_stdio to "
+        "resolve a fresh dated session when none was supplied"
+    )
+    assert claimed_sessions == [resolved_session], (
+        f"compaction claimed against {claimed_sessions}, expected the "
+        f"actually-resolved session {resolved_session!r}, not the literal "
+        f"string 'default'"
+    )
 
 
 def test_stdio_delete_notebook_removes_entry_from_active_state(monkeypatch, tmp_path):

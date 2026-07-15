@@ -15,6 +15,7 @@ from .stdio_logging import _debug, _stdio_log
 _protocol_delivered = False
 _protocol_call_count = 0
 _STDIO_LITE_INTERVAL = 30
+_protocol_delivery_lock = asyncio.Lock()
 
 
 def _log_tool_call(fn):
@@ -72,26 +73,36 @@ def _log_tool_call(fn):
                 _stdio_log.info("OK %s", name)
 
             protocol_injected = False
-            if not _protocol_delivered:
-                try:
-                    result["marm_protocol"] = await read_protocol_file()
-                    _protocol_delivered = True
-                    protocol_injected = True
-                except Exception as e:
-                    _stdio_log.warning("protocol injection failed: %s", e)
-            elif call_count % _STDIO_LITE_INTERVAL == 0:
-                try:
-                    lite_content = await read_protocol_lite_file()
-                    if lite_content:
-                        result["marm_protocol_lite"] = lite_content
-                        # Lite does not block compaction — protocol_injected stays False
-                except Exception as e:
-                    _stdio_log.warning("lite protocol injection failed: %s", e)
+            async with _protocol_delivery_lock:
+                if not _protocol_delivered:
+                    try:
+                        result["marm_protocol"] = await read_protocol_file()
+                        _protocol_delivered = True
+                        protocol_injected = True
+                    except Exception as e:
+                        _stdio_log.warning("protocol injection failed: %s", e)
+                elif call_count % _STDIO_LITE_INTERVAL == 0:
+                    try:
+                        lite_content = await read_protocol_lite_file()
+                        if lite_content:
+                            result["marm_protocol_lite"] = lite_content
+                            # Lite does not block compaction — protocol_injected stays False
+                    except Exception as e:
+                        _stdio_log.warning("lite protocol injection failed: %s", e)
 
             if not protocol_injected:
+                # fn may have switched or created the active session (e.g.
+                # create_log_entry_stdio without an explicit session_name
+                # writes to memory.active_log_session), which makes the
+                # pre-call session_name snapshot above stale. Only override
+                # it when the caller didn't explicitly pass one -- explicit
+                # caller intent is always respected as-is.
+                compaction_session = session_name
+                if not kwargs.get("session_name"):
+                    compaction_session = memory.active_log_session
                 try:
                     compaction_block = await asyncio.to_thread(
-                        claim_pending_compaction_prompt, memory, session_name
+                        claim_pending_compaction_prompt, memory, compaction_session
                     )
                     if compaction_block:
                         serialized_result = json.dumps(result, ensure_ascii=False)

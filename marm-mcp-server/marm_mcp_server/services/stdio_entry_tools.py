@@ -112,8 +112,10 @@ async def create_log_entry_stdio(entry: str, session_name: Optional[str]) -> dic
                     last_dt = last_dt.replace(tzinfo=timezone.utc)
                 gap = (datetime.now(timezone.utc) - last_dt).total_seconds()
                 if gap > _SESSION_INACTIVITY_NOTICE_SECONDS:
-                    print(
-                        f"[MARM] Chunk boundary detected for '{session}' — {gap:.0f}s since last write"
+                    _stdio_log.info(
+                        "Chunk boundary detected for '%s' — %.0fs since last write",
+                        session,
+                        gap,
                     )
             except Exception:
                 pass
