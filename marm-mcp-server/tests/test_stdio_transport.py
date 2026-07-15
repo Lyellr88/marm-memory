@@ -457,6 +457,8 @@ def test_stdio_core_tool_unaffected_by_graph_unavailable(monkeypatch, tmp_path):
 
 def test_stdio_inprocess_client_wraps_graph_index_happy_path(monkeypatch, tmp_path):
     stdio = _isolated_stdio(monkeypatch, tmp_path)
+    import marm_mcp_server.services.stdio_graph_tools as stdio_graph_tools
+
     monkeypatch.setattr(stdio.graph_supervisor, "is_available", lambda: True)
     monkeypatch.setattr(stdio.graph_supervisor, "get_client", lambda: "fake-client")
 
@@ -467,7 +469,11 @@ def test_stdio_inprocess_client_wraps_graph_index_happy_path(monkeypatch, tmp_pa
         captured["req"] = req
         return {"status": "success", "project": "marm-memory"}
 
-    monkeypatch.setattr(stdio.graph_router, "do_index", _fake_do_index)
+    # marm_graph_index's body now lives in services.stdio_graph_tools
+    # (Option 2 of server-stdio-module-split.md) -- server_stdio no longer
+    # imports graph_router at all, so patching it must target the module
+    # that actually owns the reference.
+    monkeypatch.setattr(stdio_graph_tools.graph_router, "do_index", _fake_do_index)
 
     async def run():
         async with create_connected_server_and_client_session(stdio.mcp) as client:
@@ -497,6 +503,7 @@ def test_stdio_concept_recall_passes_through_to_run_recall(monkeypatch, tmp_path
     through this wrapper. Guards against wrong argument order/names in the
     passthrough (e.g. project silently dropped or swapped with direction)."""
     stdio = _isolated_stdio(monkeypatch, tmp_path)
+    import marm_mcp_server.services.stdio_graph_tools as stdio_graph_tools
 
     captured = {}
 
@@ -511,7 +518,10 @@ def test_stdio_concept_recall_passes_through_to_run_recall(monkeypatch, tmp_path
         )
         return {"entities": [], "related_entities": [], "linked_code": []}
 
-    monkeypatch.setattr(stdio, "_run_recall", _fake_run_recall)
+    # marm_concept_recall's body now lives in services.stdio_graph_tools
+    # (Option 2 of server-stdio-module-split.md) -- it resolves _run_recall
+    # from that module's own globals, not server_stdio's.
+    monkeypatch.setattr(stdio_graph_tools, "_run_recall", _fake_run_recall)
 
     result = asyncio.run(
         stdio.marm_concept_recall(
@@ -541,11 +551,12 @@ def test_stdio_concept_recall_rejects_out_of_range_limit(monkeypatch, tmp_path):
     validation, limit=-1 would reach SQLite as a raw `LIMIT -1` (no limit at
     all, returning every matching entity/relationship/code link)."""
     stdio = _isolated_stdio(monkeypatch, tmp_path)
+    import marm_mcp_server.services.stdio_graph_tools as stdio_graph_tools
 
     def _unreachable(*args, **kwargs):
         raise AssertionError("_run_recall must not be reached for invalid input")
 
-    monkeypatch.setattr(stdio, "_run_recall", _unreachable)
+    monkeypatch.setattr(stdio_graph_tools, "_run_recall", _unreachable)
 
     result = asyncio.run(stdio.marm_concept_recall(query="auth", limit=-1))
 
@@ -555,13 +566,21 @@ def test_stdio_concept_recall_rejects_out_of_range_limit(monkeypatch, tmp_path):
 
 def test_stdio_concept_build_uses_same_endpoint_logic(monkeypatch, tmp_path):
     stdio = _isolated_stdio(monkeypatch, tmp_path)
+    import marm_mcp_server.services.stdio_graph_tools as stdio_graph_tools
+
     captured = {}
 
     async def _fake_endpoint(request):
         captured.update(request.model_dump())
         return {"status": "success", "build_run_id": request.run_id}
 
-    monkeypatch.setattr(stdio, "_marm_concept_build_endpoint", _fake_endpoint)
+    # marm_concept_build's body now lives in services.stdio_graph_tools
+    # (Option 2 of server-stdio-module-split.md) -- it resolves
+    # _marm_concept_build_endpoint from that module's own globals, not
+    # server_stdio's.
+    monkeypatch.setattr(
+        stdio_graph_tools, "_marm_concept_build_endpoint", _fake_endpoint
+    )
 
     result = asyncio.run(
         stdio.marm_concept_build(
@@ -582,6 +601,7 @@ def test_stdio_concept_build_distinguishes_validation_and_runtime_failures(
     monkeypatch, tmp_path
 ):
     stdio = _isolated_stdio(monkeypatch, tmp_path)
+    import marm_mcp_server.services.stdio_graph_tools as stdio_graph_tools
 
     invalid = asyncio.run(stdio.marm_concept_build())
     assert invalid == {
@@ -592,7 +612,7 @@ def test_stdio_concept_build_distinguishes_validation_and_runtime_failures(
     async def _boom(_request):
         raise RuntimeError("concept database unavailable")
 
-    monkeypatch.setattr(stdio, "_marm_concept_build_endpoint", _boom)
+    monkeypatch.setattr(stdio_graph_tools, "_marm_concept_build_endpoint", _boom)
     failed = asyncio.run(stdio.marm_concept_build(session_name="sess-a"))
     assert failed == {"status": "error", "message": "Concept build failed."}
 
