@@ -344,17 +344,45 @@ def test_stdio_inprocess_client_wraps_notebook_delete_and_log_results(
                 "marm_log_entry",
                 {"entry": "Session: envelope-session"},
             )
+            resolved_session = json.loads(session_result.content[0].text)[
+                "session_name"
+            ]
             entry_result = await client.call_tool(
                 "marm_log_entry",
                 {"entry": "2026-06-03-envelope-routing verified"},
             )
-        return add_result, use_result, delete_result, session_result, entry_result
+            log_show_result = await client.call_tool(
+                "marm_log_show",
+                {"session_name": resolved_session},
+            )
+        return (
+            add_result,
+            use_result,
+            delete_result,
+            session_result,
+            entry_result,
+            log_show_result,
+            resolved_session,
+        )
 
-    add_result, use_result, delete_result, session_result, entry_result = asyncio.run(
-        run()
-    )
+    (
+        add_result,
+        use_result,
+        delete_result,
+        session_result,
+        entry_result,
+        log_show_result,
+        resolved_session,
+    ) = asyncio.run(run())
 
-    for result in (add_result, use_result, delete_result, session_result, entry_result):
+    for result in (
+        add_result,
+        use_result,
+        delete_result,
+        session_result,
+        entry_result,
+        log_show_result,
+    ):
         assert result.content
         assert result.content[0].type == "text"
 
@@ -369,6 +397,18 @@ def test_stdio_inprocess_client_wraps_notebook_delete_and_log_results(
     assert entry_body["memory_id"], (
         f"stdio log entry did not dual-write a semantic memory: {entry_body}"
     )
+
+    # marm_log_show through the real MCP tool surface -- not exercised
+    # anywhere else in this file (PR #88 review finding). Two entries are
+    # expected: the "Session: envelope-session" switch itself writes a
+    # session_start marker entry, plus the envelope-routing entry below.
+    log_show_body = json.loads(log_show_result.content[0].text)
+    assert log_show_body["status"] == "success"
+    assert log_show_body["session_name"] == resolved_session
+    assert log_show_body["total_entries"] == 2
+    assert "2026-06-03-envelope-routing verified" in [
+        e["full_entry"] for e in log_show_body["entries"]
+    ]
 
 
 def test_stdio_graph_tool_returns_unavailable_when_backend_down(monkeypatch, tmp_path):
