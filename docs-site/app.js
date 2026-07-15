@@ -21,7 +21,7 @@ const DOCS = [
 ];
 
 // Curated section labels keep top navigation focused on useful destinations.
-const TOPNAV_ITEMS = {
+const PAGE_NAV_ITEMS = {
   readme: [
     ['Why MARM Memory', 'Why MARM'],
     ['Performance & Scaling Benchmarks', 'Performance'],
@@ -166,8 +166,11 @@ function applyCodeBlocks(container) {
   });
 }
 
-// ── Top navigation ─────────────────────────────────────────────────
-const topnavInner = document.getElementById('topnav-inner');
+// ── Current-page navigation ────────────────────────────────────────
+const pageNavInner = document.getElementById('page-nav-inner');
+const pageNavToggle = document.getElementById('page-nav-toggle');
+const pageNavFlyout = document.getElementById('page-nav-flyout');
+const pageNavClose = document.getElementById('page-nav-close');
 
 function normalizeHeading(value) {
   return value
@@ -177,9 +180,16 @@ function normalizeHeading(value) {
     .toLowerCase();
 }
 
-function buildTopNav(container, docId) {
-  topnavInner.innerHTML = '';
-  const configuredItems = TOPNAV_ITEMS[docId];
+function setPageNavOpen(open) {
+  const shouldOpen = open && !pageNavToggle.disabled;
+  pageNavFlyout.classList.toggle('open', shouldOpen);
+  pageNavFlyout.setAttribute('aria-hidden', String(!shouldOpen));
+  pageNavToggle.setAttribute('aria-expanded', String(shouldOpen));
+}
+
+function buildPageNav(container, docId) {
+  pageNavInner.innerHTML = '';
+  const configuredItems = PAGE_NAV_ITEMS[docId];
   const headings = configuredItems
     ? configuredItems.map(([heading, label]) => {
       const target = [...container.querySelectorAll('h2, h3')]
@@ -191,23 +201,36 @@ function buildTopNav(container, docId) {
       .map(target => ({ target, label: target.textContent.trim() }));
 
   if (!headings.length) {
-    const em = document.createElement('span');
-    em.className = 'topnav-empty';
-    topnavInner.appendChild(em);
+    const em = document.createElement('p');
+    em.className = 'page-nav-empty';
+    em.textContent = 'This document does not have section navigation.';
+    pageNavInner.appendChild(em);
+    pageNavToggle.disabled = true;
+    setPageNavOpen(false);
     return;
   }
+
+  pageNavToggle.disabled = false;
 
   headings.forEach(({ target, label }) => {
     const a = document.createElement('a');
     a.href = `#${target.id}`;
-    a.className = 'topnav-link';
+    a.className = 'page-nav-link';
     a.textContent = label;
     a.addEventListener('click', e => {
       e.preventDefault();
       target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      setPageNavOpen(false);
     });
-    topnavInner.appendChild(a);
+    pageNavInner.appendChild(a);
   });
+}
+
+function applyTableOfContents(container) {
+  const heading = [...container.querySelectorAll('h2')]
+    .find(element => normalizeHeading(element.textContent) === 'table of contents');
+  const list = heading?.nextElementSibling;
+  if (list?.tagName === 'UL') list.classList.add('table-of-contents-grid');
 }
 
 // ── Markdown fetch cache ──────────────────────────────────────────
@@ -237,7 +260,7 @@ async function loadDoc(id) {
 
   setActiveNav(doc.id);
   contentEl.classList.remove('loaded');
-  topnavInner.innerHTML = '';
+  pageNavInner.innerHTML = '';
   contentEl.innerHTML = `<div class="loading-state">
     <div class="loading-spinner"></div>
     <span>Loading ${doc.label}...</span>
@@ -255,7 +278,8 @@ async function loadDoc(id) {
     window.scrollTo({ top: 0, behavior: 'instant' });
 
     applyCodeBlocks(contentEl);
-    buildTopNav(contentEl, doc.id);
+    applyTableOfContents(contentEl);
+    buildPageNav(contentEl, doc.id);
 
     // Page title from first h1
     const h1 = contentEl.querySelector('h1');
@@ -268,7 +292,7 @@ async function loadDoc(id) {
       <p class="error-title">◈ Failed to load document</p>
       <p>${err.message}</p>
     </div>`;
-    buildTopNav(contentEl, doc.id);
+    buildPageNav(contentEl, doc.id);
   }
 }
 
@@ -283,6 +307,7 @@ function navigate(id) {
     history.pushState(null, '', `#${id}`);
   }
   loadDoc(id);
+  setPageNavOpen(false);
   closeSidebar();
 }
 
@@ -295,6 +320,12 @@ document.querySelectorAll('.nav-item[data-doc]').forEach(link => {
     navigate(link.dataset.doc);
   });
 });
+
+pageNavToggle.addEventListener('click', () => {
+  setPageNavOpen(!pageNavFlyout.classList.contains('open'));
+});
+
+pageNavClose.addEventListener('click', () => setPageNavOpen(false));
 
 // ── Mobile sidebar ────────────────────────────────────────────────
 const menuToggle   = document.getElementById('menu-toggle');
@@ -319,10 +350,16 @@ menuToggle.addEventListener('click', () => {
   sidebar.classList.contains('open') ? closeSidebar() : openSidebar();
 });
 
-overlay.addEventListener('click', closeSidebar);
+overlay.addEventListener('click', () => {
+  closeSidebar();
+  setPageNavOpen(false);
+});
 
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') closeSidebar();
+  if (e.key === 'Escape') {
+    closeSidebar();
+    setPageNavOpen(false);
+  }
 });
 
 // ── Boot ──────────────────────────────────────────────────────────

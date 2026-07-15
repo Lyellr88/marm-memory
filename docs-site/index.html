@@ -93,6 +93,13 @@
       </div>
     </nav>
 
+    <div class="page-nav-trigger-wrap">
+      <button id="page-nav-toggle" class="page-nav-trigger" type="button" aria-expanded="false" aria-controls="page-nav-flyout">
+        <span>On this page</span>
+        <span class="page-nav-chevron" aria-hidden="true">›</span>
+      </button>
+    </div>
+
     <div class="sidebar-footer">
       <a href="https://github.com/Lyellr88/marm-memory" target="_blank" rel="noopener noreferrer" class="footer-link" id="github-link">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -109,18 +116,19 @@
     </div>
   </aside>
 
+  <aside id="page-nav-flyout" aria-label="Current page navigation" aria-hidden="true">
+    <div class="page-nav-flyout-header">
+      <span id="page-nav-title">On this page</span>
+      <button id="page-nav-close" type="button" aria-label="Close page navigation" title="Close">×</button>
+    </div>
+    <nav id="page-nav-inner" aria-label="Current page sections"></nav>
+  </aside>
+
   <!-- Mobile overlay -->
   <div id="mobile-overlay" role="presentation"></div>
 
   <!-- Main content area -->
   <main id="main">
-    <!-- Sticky document navigation -->
-    <div id="topnav-wrap" role="navigation" aria-label="Section navigation">
-      <nav id="topnav">
-        <div id="topnav-inner"></div>
-      </nav>
-    </div>
-
     <!-- Rendered markdown -->
     <div id="content-wrap">
       <article id="content" aria-live="polite">
