@@ -102,7 +102,7 @@ const PAGE_NAV_ITEMS = {
 const renderer = new marked.Renderer();
 
 renderer.heading = function (text, level) {
-  const plain = text.replace(/<[^>]+>/g, '');
+  const plain = DOMPurify.sanitize(text, { ALLOWED_TAGS: [], ALLOWED_ATTR: [] });
   const id = plain
     .toLowerCase()
     .replace(/[^\w\s-]/g, '')
@@ -113,6 +113,13 @@ renderer.heading = function (text, level) {
 };
 
 marked.setOptions({ renderer, gfm: true, breaks: false });
+
+function sanitizeRenderedHtml(html) {
+  if (typeof DOMPurify === 'undefined') {
+    throw new Error('The documentation sanitizer did not load.');
+  }
+  return DOMPurify.sanitize(html, { USE_PROFILES: { html: true } });
+}
 
 // ── GitHub-style alert post-processor ────────────────────────────
 const ALERT_TYPES = {
@@ -270,6 +277,7 @@ async function loadDoc(id) {
     const markdown = await fetchMarkdown(doc.path);
     let html = marked.parse(markdown);
     html = processAlerts(html);
+    html = sanitizeRenderedHtml(html);
 
     contentEl.innerHTML = html;
     contentEl.classList.add('loaded');

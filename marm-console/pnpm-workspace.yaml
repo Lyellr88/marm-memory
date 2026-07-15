@@ -4,6 +4,9 @@ minimumReleaseAgeExclude: []
 packages:
   - artifacts/marm-console
 
+overrides:
+  esbuild: 0.28.1
+
 catalog:
   '@radix-ui/react-dialog': ^1.1.7
   '@radix-ui/react-select': ^2.1.7
