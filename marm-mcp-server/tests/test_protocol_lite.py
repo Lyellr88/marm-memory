@@ -229,6 +229,7 @@ def test_hard_cap_limits_call_counts(monkeypatch, tmp_path):
 def test_stdio_lite_injected_on_interval(monkeypatch, tmp_path):
     """STDIO transport injects lite every 30 calls."""
     import marm_mcp_server.server_stdio as stdio
+    import marm_mcp_server.core.stdio_tool_lifecycle as lifecycle
     import marm_mcp_server.services.notebook as notebook_service
     from marm_mcp_server.core.memory import MARMMemory
 
@@ -237,8 +238,8 @@ def test_stdio_lite_injected_on_interval(monkeypatch, tmp_path):
     monkeypatch.setattr(stdio, "memory", mem)
     monkeypatch.setattr(notebook_service, "memory", mem)
 
-    stdio._protocol_delivered = False
-    stdio._protocol_call_count = 0
+    lifecycle._protocol_delivered = False
+    lifecycle._protocol_call_count = 0
 
     async def dummy_tool(*args, **kwargs):
         return {"status": "success"}
@@ -246,9 +247,11 @@ def test_stdio_lite_injected_on_interval(monkeypatch, tmp_path):
     async def noop(*args, **kwargs):
         return None
 
-    monkeypatch.setattr(stdio, "ensure_marm_started", noop)
-    monkeypatch.setattr(stdio, "maybe_auto_refresh", noop)
-    monkeypatch.setattr(stdio, "claim_pending_compaction_prompt", lambda *a, **kw: None)
+    monkeypatch.setattr(lifecycle, "ensure_marm_started", noop)
+    monkeypatch.setattr(lifecycle, "maybe_auto_refresh", noop)
+    monkeypatch.setattr(
+        lifecycle, "claim_pending_compaction_prompt", lambda *a, **kw: None
+    )
 
     wrapped = stdio._log_tool_call(dummy_tool)
 
@@ -272,6 +275,7 @@ def test_stdio_lite_injected_on_interval(monkeypatch, tmp_path):
 def test_stdio_lite_and_compaction_coexist(monkeypatch, tmp_path):
     """STDIO: on call 30, lite AND compaction both appear in result."""
     import marm_mcp_server.server_stdio as stdio
+    import marm_mcp_server.core.stdio_tool_lifecycle as lifecycle
     import marm_mcp_server.services.notebook as notebook_service
     from marm_mcp_server.core.memory import MARMMemory
 
@@ -280,8 +284,8 @@ def test_stdio_lite_and_compaction_coexist(monkeypatch, tmp_path):
     monkeypatch.setattr(stdio, "memory", mem)
     monkeypatch.setattr(notebook_service, "memory", mem)
 
-    stdio._protocol_delivered = False
-    stdio._protocol_call_count = 0
+    lifecycle._protocol_delivered = False
+    lifecycle._protocol_call_count = 0
 
     async def dummy_tool(*args, **kwargs):
         return {"status": "success"}
@@ -289,12 +293,12 @@ def test_stdio_lite_and_compaction_coexist(monkeypatch, tmp_path):
     async def noop(*args, **kwargs):
         return None
 
-    monkeypatch.setattr(stdio, "ensure_marm_started", noop)
-    monkeypatch.setattr(stdio, "maybe_auto_refresh", noop)
+    monkeypatch.setattr(lifecycle, "ensure_marm_started", noop)
+    monkeypatch.setattr(lifecycle, "maybe_auto_refresh", noop)
 
     # Return a known compaction string instead of None
     monkeypatch.setattr(
-        stdio,
+        lifecycle,
         "claim_pending_compaction_prompt",
         lambda *a, **kw: {"type": "text", "text": "COMPACTION_NUDGE_CONTENT"},
     )

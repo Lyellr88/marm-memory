@@ -12,23 +12,47 @@ from mcp.shared.memory import create_connected_server_and_client_session
 
 def _isolated_stdio(monkeypatch, tmp_path):
     import marm_mcp_server.server_stdio as stdio
+    import marm_mcp_server.core.stdio_tool_lifecycle as lifecycle
     import marm_mcp_server.services.notebook as notebook_service
+    import marm_mcp_server.services.stdio_entry_tools as stdio_entry_tools
     from marm_mcp_server.core.memory import MARMMemory
 
     mem = MARMMemory(str(tmp_path / "stdio-inprocess.db"))
     mem._encoder_failed = True
     monkeypatch.setattr(stdio, "memory", mem)
     monkeypatch.setattr(notebook_service, "memory", mem)
+    # marm_log_entry's body now lives in services.stdio_entry_tools
+    # (server-stdio-module-split.md Task 3) with its own `memory` binding --
+    # without this, its writes (including the queued semantic-memory store)
+    # silently hit the real production singleton instead of this test's
+    # isolated instance, which can also hang waiting on a write queue that
+    # was never started in-process.
+    monkeypatch.setattr(stdio_entry_tools, "memory", mem)
+    # _log_tool_call re-resolves the compaction-claim session from
+    # memory.active_log_session when the caller omits session_name (PR #88
+    # CodeRabbit finding) -- without patching lifecycle's own binding too,
+    # that read hits the real production singleton's state instead of this
+    # test's isolated instance.
+    monkeypatch.setattr(lifecycle, "memory", mem)
 
     async def _noop(*args, **kwargs):
         return None
 
-    monkeypatch.setattr(stdio, "ensure_marm_started", _noop)
-    monkeypatch.setattr(stdio, "maybe_auto_refresh", _noop)
+    # ensure_marm_started/maybe_auto_refresh/claim_pending_compaction_prompt
+    # and the protocol-delivery state now live in core.stdio_tool_lifecycle
+    # (server-stdio-module-split.md Task 2) -- _log_tool_call resolves these
+    # from its own module's globals, not server_stdio's.
+    monkeypatch.setattr(lifecycle, "ensure_marm_started", _noop)
+    monkeypatch.setattr(lifecycle, "maybe_auto_refresh", _noop)
     monkeypatch.setattr(
-        stdio, "claim_pending_compaction_prompt", lambda *args, **kwargs: None
+        lifecycle, "claim_pending_compaction_prompt", lambda *args, **kwargs: None
     )
-    stdio._protocol_delivered = True
+    lifecycle._protocol_delivered = True
+    # _protocol_call_count is also module-global and leaks across tests --
+    # if it lands on a multiple of _STDIO_LITE_INTERVAL, _log_tool_call
+    # injects marm_protocol_lite unexpectedly, breaking exact-dict
+    # assertions in tests that don't expect it.
+    lifecycle._protocol_call_count = 0
     return stdio
 
 
@@ -150,6 +174,44 @@ def test_stdio_handles_mcp_initialize_and_exposes_tools(tmp_path):
     assert "marm_concept_build" in tool_names
     assert "marm_concept_recall" in tool_names
     assert len(tools) == 14
+
+
+def test_stdio_compaction_claimed_against_resolved_session_not_literal_default(
+    monkeypatch, tmp_path
+):
+    """CodeRabbit finding on PR #88: _log_tool_call snapshots session_name =
+    kwargs.get("session_name", "default") BEFORE calling fn. create_log_entry_stdio
+    can resolve/create a totally different session internally (memory.active_log_session)
+    when the caller omits session_name -- the pre-call snapshot then claims
+    compaction against the literal string "default", which almost never has
+    any log entries, silently missing the session that actually received the
+    write.
+    """
+    import marm_mcp_server.core.stdio_tool_lifecycle as lifecycle
+
+    stdio = _isolated_stdio(monkeypatch, tmp_path)
+
+    claimed_sessions = []
+
+    def _spy_claim(memory, session_name):
+        claimed_sessions.append(session_name)
+        return None
+
+    monkeypatch.setattr(lifecycle, "claim_pending_compaction_prompt", _spy_claim)
+
+    result = asyncio.run(stdio.marm_log_entry(entry="regression test entry"))
+    assert result["status"] == "success"
+
+    resolved_session = stdio.memory.active_log_session
+    assert resolved_session != "main", (
+        "test setup assumption broken: expected create_log_entry_stdio to "
+        "resolve a fresh dated session when none was supplied"
+    )
+    assert claimed_sessions == [resolved_session], (
+        f"compaction claimed against {claimed_sessions}, expected the "
+        f"actually-resolved session {resolved_session!r}, not the literal "
+        f"string 'default'"
+    )
 
 
 def test_stdio_delete_notebook_removes_entry_from_active_state(monkeypatch, tmp_path):
@@ -282,17 +344,45 @@ def test_stdio_inprocess_client_wraps_notebook_delete_and_log_results(
                 "marm_log_entry",
                 {"entry": "Session: envelope-session"},
             )
+            resolved_session = json.loads(session_result.content[0].text)[
+                "session_name"
+            ]
             entry_result = await client.call_tool(
                 "marm_log_entry",
                 {"entry": "2026-06-03-envelope-routing verified"},
             )
-        return add_result, use_result, delete_result, session_result, entry_result
+            log_show_result = await client.call_tool(
+                "marm_log_show",
+                {"session_name": resolved_session},
+            )
+        return (
+            add_result,
+            use_result,
+            delete_result,
+            session_result,
+            entry_result,
+            log_show_result,
+            resolved_session,
+        )
 
-    add_result, use_result, delete_result, session_result, entry_result = asyncio.run(
-        run()
-    )
+    (
+        add_result,
+        use_result,
+        delete_result,
+        session_result,
+        entry_result,
+        log_show_result,
+        resolved_session,
+    ) = asyncio.run(run())
 
-    for result in (add_result, use_result, delete_result, session_result, entry_result):
+    for result in (
+        add_result,
+        use_result,
+        delete_result,
+        session_result,
+        entry_result,
+        log_show_result,
+    ):
         assert result.content
         assert result.content[0].type == "text"
 
@@ -307,6 +397,18 @@ def test_stdio_inprocess_client_wraps_notebook_delete_and_log_results(
     assert entry_body["memory_id"], (
         f"stdio log entry did not dual-write a semantic memory: {entry_body}"
     )
+
+    # marm_log_show through the real MCP tool surface -- not exercised
+    # anywhere else in this file (PR #88 review finding). Two entries are
+    # expected: the "Session: envelope-session" switch itself writes a
+    # session_start marker entry, plus the envelope-routing entry below.
+    log_show_body = json.loads(log_show_result.content[0].text)
+    assert log_show_body["status"] == "success"
+    assert log_show_body["session_name"] == resolved_session
+    assert log_show_body["total_entries"] == 2
+    assert "2026-06-03-envelope-routing verified" in [
+        e["full_entry"] for e in log_show_body["entries"]
+    ]
 
 
 def test_stdio_graph_tool_returns_unavailable_when_backend_down(monkeypatch, tmp_path):
@@ -329,8 +431,10 @@ def test_stdio_graph_unavailable_response_is_not_shared_mutable_state(
     real first-call path (_protocol_delivered = False, unlike the other tests
     in this module) and call twice to prove no state survives between calls.
     """
+    import marm_mcp_server.core.stdio_tool_lifecycle as lifecycle
+
     stdio = _isolated_stdio(monkeypatch, tmp_path)
-    stdio._protocol_delivered = False
+    lifecycle._protocol_delivered = False
     monkeypatch.setattr(stdio.graph_supervisor, "is_available", lambda: False)
 
     first = asyncio.run(stdio.marm_graph_index(repo_path="/tmp/some-repo"))
@@ -908,6 +1012,7 @@ def test_stdio_log_entry_persists(tmp_path):
 
 def test_stdio_protocol_injected_on_first_tool_call_not_on_second(monkeypatch):
     import marm_mcp_server.server_stdio as stdio
+    import marm_mcp_server.core.stdio_tool_lifecycle as lifecycle
 
     async def _noop(*args, **kwargs):
         return None
@@ -918,11 +1023,11 @@ def test_stdio_protocol_injected_on_first_tool_call_not_on_second(monkeypatch):
     def _claim(memory):
         return None
 
-    monkeypatch.setattr(stdio, "ensure_marm_started", _noop)
-    monkeypatch.setattr(stdio, "maybe_auto_refresh", _noop)
-    monkeypatch.setattr(stdio, "read_protocol_file", _protocol)
-    monkeypatch.setattr(stdio, "claim_pending_compaction_prompt", _claim)
-    stdio._protocol_delivered = False
+    monkeypatch.setattr(lifecycle, "ensure_marm_started", _noop)
+    monkeypatch.setattr(lifecycle, "maybe_auto_refresh", _noop)
+    monkeypatch.setattr(lifecycle, "read_protocol_file", _protocol)
+    monkeypatch.setattr(lifecycle, "claim_pending_compaction_prompt", _claim)
+    lifecycle._protocol_delivered = False
 
     @stdio._log_tool_call
     async def fake_tool():
@@ -937,21 +1042,22 @@ def test_stdio_protocol_injected_on_first_tool_call_not_on_second(monkeypatch):
 
 def test_stdio_compaction_injection_wraps_tool_result(monkeypatch, tmp_path):
     import marm_mcp_server.server_stdio as stdio
+    import marm_mcp_server.core.stdio_tool_lifecycle as lifecycle
 
     async def _noop(*args, **kwargs):
         return None
 
-    monkeypatch.setattr(stdio, "ensure_marm_started", _noop)
-    monkeypatch.setattr(stdio, "maybe_auto_refresh", _noop)
+    monkeypatch.setattr(lifecycle, "ensure_marm_started", _noop)
+    monkeypatch.setattr(lifecycle, "maybe_auto_refresh", _noop)
     monkeypatch.setattr(
-        stdio,
+        lifecycle,
         "claim_pending_compaction_prompt",
         lambda memory, session_name: {
             "type": "text",
             "text": "[MARM COMPACTION REQUEST]\nabc",
         },
     )
-    stdio._protocol_delivered = True
+    lifecycle._protocol_delivered = True
 
     @stdio._log_tool_call
     async def fake_tool():
@@ -967,6 +1073,7 @@ def test_stdio_compaction_injection_wraps_tool_result(monkeypatch, tmp_path):
 
 def test_stdio_protocol_call_suppresses_same_call_compaction(monkeypatch, tmp_path):
     import marm_mcp_server.server_stdio as stdio
+    import marm_mcp_server.core.stdio_tool_lifecycle as lifecycle
 
     calls = {"claim": 0}
 
@@ -980,11 +1087,11 @@ def test_stdio_protocol_call_suppresses_same_call_compaction(monkeypatch, tmp_pa
         calls["claim"] += 1
         return {"type": "text", "text": "[MARM COMPACTION REQUEST]\nabc"}
 
-    monkeypatch.setattr(stdio, "ensure_marm_started", _noop)
-    monkeypatch.setattr(stdio, "maybe_auto_refresh", _noop)
-    monkeypatch.setattr(stdio, "read_protocol_file", _protocol)
-    monkeypatch.setattr(stdio, "claim_pending_compaction_prompt", _claim)
-    stdio._protocol_delivered = False
+    monkeypatch.setattr(lifecycle, "ensure_marm_started", _noop)
+    monkeypatch.setattr(lifecycle, "maybe_auto_refresh", _noop)
+    monkeypatch.setattr(lifecycle, "read_protocol_file", _protocol)
+    monkeypatch.setattr(lifecycle, "claim_pending_compaction_prompt", _claim)
+    lifecycle._protocol_delivered = False
 
     @stdio._log_tool_call
     async def fake_tool():

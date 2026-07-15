@@ -12,7 +12,6 @@ Usage:
 
 import asyncio
 import builtins
-import json
 import sys
 
 _real_print = builtins.print
@@ -20,13 +19,7 @@ builtins.print = lambda *args, **kwargs: _real_print(
     *args, **{**kwargs, "file": sys.stderr}
 )
 
-import functools  # noqa: E402
-import logging  # noqa: E402
 import os  # noqa: E402
-import pathlib  # noqa: E402
-import re  # noqa: E402
-import uuid  # noqa: E402
-from datetime import datetime, timezone  # noqa: E402
 from typing import Literal, Optional  # noqa: E402
 
 from anyio import BrokenResourceError, ClosedResourceError, EndOfStream  # noqa: E402
@@ -34,151 +27,20 @@ from pydantic import ValidationError  # noqa: E402
 
 os.environ["SERVER_HOST"] = "127.0.0.1"
 
-_log_dir_env = os.environ.get("MARM_STDIO_LOG_DIR")
-_log_dir = (
-    pathlib.Path(_log_dir_env)
-    if _log_dir_env
-    else pathlib.Path.home() / ".marm" / "logs"
-)
-_log_level_name = os.environ.get("MARM_STDIO_LOG_LEVEL", "INFO").upper()
-_log_level = getattr(logging, _log_level_name, logging.INFO)
-_debug = _log_level <= logging.DEBUG
+from .core.stdio_logging import _stdio_log  # noqa: E402
 
-_stdio_log = logging.getLogger("marm.stdio")
-_stdio_log.setLevel(_log_level)
-_stdio_log.propagate = False
-
-_fmt = logging.Formatter("%(asctime)s [MARM] %(levelname)s %(message)s")
-
-_sh = logging.StreamHandler(sys.stderr)
-_sh.setFormatter(_fmt)
-_stdio_log.addHandler(_sh)
-
-try:
-    _log_dir.mkdir(parents=True, exist_ok=True)
-    _fh = logging.FileHandler(_log_dir / "marm-stdio.log", encoding="utf-8")
-    _fh.setFormatter(_fmt)
-    _stdio_log.addHandler(_fh)
-except Exception:
-    pass
-
-_protocol_delivered = False
-_protocol_call_count = 0
-_STDIO_LITE_INTERVAL = 30
-
-
-def _log_tool_call(fn):
-    @functools.wraps(fn)
-    async def wrapper(*args, **kwargs):
-        name = fn.__name__
-        if _debug:
-            safe = []
-            for k, v in kwargs.items():
-                if k == "session_name":
-                    safe.append(f"session={v}")
-                elif k == "query":
-                    safe.append(f"query_len={len(v) if v else 0}")
-                elif k in ("limit", "search_all"):
-                    safe.append(f"{k}={v}")
-            _stdio_log.debug("CALL %s %s", name, " ".join(safe))
-        else:
-            _stdio_log.info("CALL %s", name)
-
-        global _protocol_delivered, _protocol_call_count
-        session_name = kwargs.get("session_name", "default")
-        try:
-            await ensure_marm_started(session_name)
-        except Exception as e:
-            _stdio_log.warning("session init failed: %s", e)
-
-        _protocol_call_count += 1
-        call_count = _protocol_call_count
-
-        try:
-            result = await fn(*args, **kwargs)
-        except Exception as e:
-            _stdio_log.error("EXCEPTION %s %s: %s", name, type(e).__name__, e)
-            raise
-        if isinstance(result, dict):
-            status = result.get("status", "ok")
-            if status == "error":
-                _stdio_log.error("FAIL %s: %s", name, result.get("message", ""))
-            elif _debug:
-                count = next(
-                    (
-                        result[k]
-                        for k in ("results_count", "total_entries", "total_count")
-                        if k in result
-                    ),
-                    None,
-                )
-                _stdio_log.debug(
-                    "OK %s status=%s%s",
-                    name,
-                    status,
-                    f" count={count}" if count is not None else "",
-                )
-            else:
-                _stdio_log.info("OK %s", name)
-
-            protocol_injected = False
-            if not _protocol_delivered:
-                try:
-                    result["marm_protocol"] = await read_protocol_file()
-                    _protocol_delivered = True
-                    protocol_injected = True
-                except Exception as e:
-                    _stdio_log.warning("protocol injection failed: %s", e)
-            elif call_count % _STDIO_LITE_INTERVAL == 0:
-                try:
-                    lite_content = await read_protocol_lite_file()
-                    if lite_content:
-                        result["marm_protocol_lite"] = lite_content
-                        # Lite does not block compaction — protocol_injected stays False
-                except Exception as e:
-                    _stdio_log.warning("lite protocol injection failed: %s", e)
-
-            if not protocol_injected:
-                try:
-                    compaction_block = await asyncio.to_thread(
-                        claim_pending_compaction_prompt, memory, session_name
-                    )
-                    if compaction_block:
-                        serialized_result = json.dumps(result, ensure_ascii=False)
-                        result = {
-                            **result,
-                            "content": [
-                                compaction_block,
-                                {
-                                    "type": "text",
-                                    "text": serialized_result,
-                                },
-                            ],
-                        }
-                except Exception as e:
-                    _stdio_log.warning("compaction injection failed: %s", e)
-
-        try:
-            await maybe_auto_refresh()
-        except Exception as e:
-            _stdio_log.warning("auto-refresh failed: %s", e)
-
-        return result
-
-    return wrapper
+from .core.stdio_tool_lifecycle import _log_tool_call  # noqa: E402
 
 
 from mcp.server.fastmcp import FastMCP  # noqa: E402
 
 from marm_mcp_server.core.memory import memory  # noqa: E402
-from marm_mcp_server.core.compaction import claim_pending_compaction_prompt  # noqa: E402
-from marm_mcp_server.core.events import events  # noqa: E402
 from marm_mcp_server.services.notebook import notebook_dispatch  # noqa: E402
-from marm_mcp_server.services.documentation import (  # noqa: E402
-    ensure_marm_started,
-    maybe_auto_refresh,
+from marm_mcp_server.services.stdio_entry_tools import (  # noqa: E402
+    create_log_entry_stdio,
+    delete_entry_stdio,
+    list_log_entries_stdio,
 )
-from marm_mcp_server.utils.helpers import read_protocol_file, read_protocol_lite_file  # noqa: E402
 from marm_mcp_server.services.summary import generate_session_summary  # noqa: E402
 from marm_mcp_server.services.recall import smart_recall  # noqa: E402
 from marm_mcp_server.endpoints.concepts import (  # noqa: E402
@@ -193,8 +55,6 @@ from marm_mcp_server.config.settings import (  # noqa: E402
     SERVER_VERSION,
     DEFAULT_DB_PATH,
     SEMANTIC_SEARCH_AVAILABLE,
-    MARM_PROJECT,
-    MARM_PLATFORM,
 )
 from marm_mcp_server.core.graph_supervisor import graph_supervisor  # noqa: E402
 from marm_graph.core import tool_router as graph_router  # noqa: E402
@@ -272,10 +132,6 @@ async def marm_smart_recall(
     )
 
 
-_SESSION_PREFIXES = ("Session: ", "Topic: ")
-_SESSION_INACTIVITY_NOTICE_SECONDS = 3600
-
-
 @mcp.tool()
 @_log_tool_call
 async def marm_log_entry(
@@ -298,181 +154,7 @@ async def marm_log_entry(
 
     Returns: status, message confirming the entry or session switch, entry_id, memory_id
     """
-    try:
-        formatted_entry = entry.strip()
-
-        # Session-switch detection
-        for prefix in _SESSION_PREFIXES:
-            if formatted_entry.startswith(prefix):
-                base_name = formatted_entry[len(prefix) :].strip()
-                if not base_name:
-                    return {
-                        "status": "error",
-                        "message": "Session name cannot be empty.",
-                    }
-                date_tag = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-                new_session = f"{base_name}-{date_tag}"
-                marker_id = str(uuid.uuid4())
-                with memory.get_connection() as conn:
-                    conn.execute("UPDATE sessions SET marm_active = FALSE")
-                    conn.execute(
-                        """
-                        INSERT INTO sessions (session_name, last_accessed, marm_active)
-                        VALUES (?, ?, TRUE)
-                        ON CONFLICT(session_name) DO UPDATE SET
-                            last_accessed = excluded.last_accessed,
-                            marm_active = TRUE
-                        """,
-                        (new_session, datetime.now(timezone.utc).isoformat()),
-                    )
-                    conn.execute(
-                        """
-                        INSERT INTO log_entries
-                            (id, session_name, entry_date, topic, summary, full_entry, project, platform)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                        """,
-                        (
-                            marker_id,
-                            new_session,
-                            date_tag,
-                            "session_start",
-                            base_name,
-                            formatted_entry,
-                            MARM_PROJECT or None,
-                            MARM_PLATFORM or None,
-                        ),
-                    )
-                    try:
-                        conn.execute(
-                            "UPDATE session_summary_cache SET dirty = TRUE, updated_at = ? WHERE session_name = ?",
-                            (datetime.now(timezone.utc).isoformat(), new_session),
-                        )
-                    except Exception:
-                        pass
-                    conn.commit()
-                memory.active_log_session = new_session
-                await events.emit("session_created", {"session": new_session})
-                return {
-                    "status": "session_switched",
-                    "message": f"📂 Session switched to '{new_session}'",
-                    "session_name": new_session,
-                }
-
-        # Resolve session — explicit > active > dated fallback
-        if session_name:
-            session = session_name
-        elif memory.active_log_session != "main":
-            session = memory.active_log_session
-        else:
-            date_tag = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-            session = f"session-{date_tag}"
-            with memory.get_connection() as conn:
-                conn.execute("UPDATE sessions SET marm_active = FALSE")
-                conn.execute(
-                    """
-                    INSERT INTO sessions (session_name, last_accessed, marm_active)
-                    VALUES (?, ?, TRUE)
-                    ON CONFLICT(session_name) DO UPDATE SET
-                        last_accessed = excluded.last_accessed,
-                        marm_active = TRUE
-                    """,
-                    (session, datetime.now(timezone.utc).isoformat()),
-                )
-                conn.commit()
-            memory.active_log_session = session
-
-        # Chunk boundary check
-        with memory.get_connection() as conn:
-            row = conn.execute(
-                "SELECT last_accessed FROM sessions WHERE session_name = ?", (session,)
-            ).fetchone()
-        if row and row[0]:
-            try:
-                last_dt = datetime.fromisoformat(row[0])
-                if last_dt.tzinfo is None:
-                    last_dt = last_dt.replace(tzinfo=timezone.utc)
-                gap = (datetime.now(timezone.utc) - last_dt).total_seconds()
-                if gap > _SESSION_INACTIVITY_NOTICE_SECONDS:
-                    print(
-                        f"[MARM] Chunk boundary detected for '{session}' — {gap:.0f}s since last write"
-                    )
-            except Exception:
-                pass
-
-        entry_pattern = r"^(\d{4}-\d{2}-\d{2})-(.*?)-(.*?)$"
-        match = re.match(entry_pattern, formatted_entry)
-
-        if match:
-            entry_date, topic, summary = match.groups()
-        else:
-            entry_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-            topic = "general"
-            summary = formatted_entry
-
-        entry_id = str(uuid.uuid4())
-        now_iso = datetime.now(timezone.utc).isoformat()
-        with memory.get_connection() as conn:
-            conn.execute(
-                """
-                INSERT INTO log_entries (id, session_name, entry_date, topic, summary, full_entry, project, platform)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    entry_id,
-                    session,
-                    entry_date,
-                    topic,
-                    summary,
-                    formatted_entry,
-                    MARM_PROJECT or None,
-                    MARM_PLATFORM or None,
-                ),
-            )
-            conn.execute(
-                """
-                INSERT INTO sessions (session_name, last_accessed)
-                VALUES (?, ?)
-                ON CONFLICT(session_name) DO UPDATE SET last_accessed = excluded.last_accessed
-                """,
-                (session, now_iso),
-            )
-            try:
-                conn.execute(
-                    "UPDATE session_summary_cache SET dirty = TRUE, updated_at = ? WHERE session_name = ?",
-                    (now_iso, session),
-                )
-            except Exception:
-                pass
-            conn.commit()
-
-        # Dual-write into semantic memory so marm_smart_recall can find it;
-        # a store failure must never fail the log write itself.
-        memory_id = None
-        try:
-            memory_id = await memory.store_memory_queued(
-                formatted_entry,
-                session,
-                metadata={"source": "log_entry", "log_entry_id": entry_id},
-            )
-        except Exception as store_error:
-            _stdio_log.warning(
-                "semantic store failed for log entry %s: %s", entry_id, store_error
-            )
-
-        await events.emit(
-            "log_entry_created",
-            {"entry_id": entry_id, "session": session, "content": formatted_entry},
-        )
-
-        return {
-            "status": "success",
-            "message": f"📝 Log entry added: {formatted_entry}",
-            "entry_id": entry_id,
-            "memory_id": memory_id,
-            "formatted_entry": formatted_entry,
-        }
-    except Exception as e:
-        return {"status": "error", "message": f"Error creating log entry: {e!s}"}
+    return await create_log_entry_stdio(entry, session_name)
 
 
 @mcp.tool()
@@ -493,48 +175,7 @@ async def marm_log_show(
     Returns (no session_name): status, sessions list with session_name/entry_count, total_sessions
     Returns (with session_name): status, session_name, entries list with id/entry_date/topic/summary/full_entry, total_entries
     """
-    try:
-        with memory.get_connection() as conn:
-            if session_name:
-                cursor = conn.execute(
-                    """
-                    SELECT id, entry_date, topic, summary, full_entry
-                    FROM log_entries WHERE session_name = ?
-                    ORDER BY entry_date DESC
-                    """,
-                    (session_name,),
-                )
-                entries = [
-                    {
-                        "id": r[0],
-                        "entry_date": r[1],
-                        "topic": r[2],
-                        "summary": r[3],
-                        "full_entry": r[4],
-                    }
-                    for r in cursor.fetchall()
-                ]
-                return {
-                    "status": "success",
-                    "session_name": session_name,
-                    "entries": entries,
-                    "total_entries": len(entries),
-                }
-            else:
-                cursor = conn.execute(
-                    "SELECT session_name, COUNT(*) FROM log_entries GROUP BY session_name"
-                )
-                sessions = [
-                    {"session_name": r[0], "entry_count": r[1]}
-                    for r in cursor.fetchall()
-                ]
-                return {
-                    "status": "success",
-                    "sessions": sessions,
-                    "total_sessions": len(sessions),
-                }
-    except Exception as e:
-        return {"status": "error", "message": f"Error retrieving log entries: {e!s}"}
+    return await list_log_entries_stdio(session_name)
 
 
 @mcp.tool()
@@ -551,88 +192,7 @@ async def marm_delete(
     type="log" (no session_name): delete entire session and all its entries
     type="notebook": delete notebook entry by name
     """
-    try:
-        with memory.get_connection() as conn:
-            if type == "log":
-                memories_deleted = 0
-                if session_name:
-                    # Dual-written semantic memories must not outlive their log entries
-                    rows = conn.execute(
-                        "SELECT id FROM log_entries WHERE session_name = ? AND (id = ? OR topic = ?)",
-                        (session_name, target, target),
-                    ).fetchall()
-                    entry_ids = [r[0] for r in rows]
-                    cursor = conn.execute(
-                        "DELETE FROM log_entries WHERE session_name = ? AND (id = ? OR topic = ?)",
-                        (session_name, target, target),
-                    )
-                    deleted = cursor.rowcount
-                    if entry_ids:
-                        placeholders = ",".join("?" * len(entry_ids))
-                        memories_deleted = conn.execute(
-                            "DELETE FROM memories WHERE json_extract(metadata, '$.source') = 'log_entry' "
-                            f"AND json_extract(metadata, '$.log_entry_id') IN ({placeholders})",
-                            entry_ids,
-                        ).rowcount
-                    if deleted:
-                        try:
-                            conn.execute(
-                                "UPDATE session_summary_cache SET dirty = TRUE, updated_at = ? WHERE session_name = ?",
-                                (datetime.now(timezone.utc).isoformat(), session_name),
-                            )
-                        except Exception:
-                            pass
-                else:
-                    conn.execute(
-                        "DELETE FROM sessions WHERE session_name = ?", (target,)
-                    )
-                    cursor = conn.execute(
-                        "DELETE FROM log_entries WHERE session_name = ?", (target,)
-                    )
-                    deleted = cursor.rowcount
-                    try:
-                        conn.execute(
-                            "DELETE FROM session_summary_cache WHERE session_name = ?",
-                            (target,),
-                        )
-                    except Exception:
-                        pass
-                    memories_deleted = conn.execute(
-                        "DELETE FROM memories WHERE session_name = ? "
-                        "AND json_extract(metadata, '$.source') = 'log_entry'",
-                        (target,),
-                    ).rowcount
-                    if memory.active_log_session == target:
-                        memory.active_log_session = "main"
-                conn.commit()
-                return {
-                    "status": "success",
-                    "message": f"🗑️ Deleted {deleted} items",
-                    "deleted_count": deleted,
-                    "memories_deleted": memories_deleted,
-                }
-            elif type == "notebook":
-                cursor = conn.execute(
-                    "DELETE FROM notebook_entries WHERE name = ?", (target,)
-                )
-                deleted = cursor.rowcount
-                conn.commit()
-                if deleted > 0:
-                    memory.remove_active_notebook_entry(target)
-                return {
-                    "status": "success" if deleted > 0 else "not_found",
-                    "message": f"🗑️ Deleted notebook entry '{target}'"
-                    if deleted > 0
-                    else f"Entry '{target}' not found",
-                    "deleted": deleted > 0,
-                }
-            else:
-                return {
-                    "status": "error",
-                    "message": f"Invalid type '{type}'. Must be 'log' or 'notebook'.",
-                }
-    except Exception as e:
-        return {"status": "error", "message": f"Error deleting: {e!s}"}
+    return await delete_entry_stdio(type, target, session_name)
 
 
 @mcp.tool()

@@ -259,9 +259,9 @@ def test_docker_healthcheck_status_becomes_healthy(docker_image, marm_data_dir):
                 break
             time.sleep(2)
 
-        assert (
-            status == "healthy"
-        ), f"container health status never became healthy (last: {status})"
+        assert status == "healthy", (
+            f"container health status never became healthy (last: {status})"
+        )
     finally:
         _run_docker(["rm", "-f", container], timeout=30)
 
