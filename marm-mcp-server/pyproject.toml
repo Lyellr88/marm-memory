@@ -29,7 +29,7 @@ classifiers = [
 ]
 requires-python = ">=3.10"
 dependencies = [
-    "fastapi>=0.115.4",
+    "fastapi>=0.139.0",
     "fastapi-mcp>=0.4.0",
     "uvicorn>=0.32.0",
     "pydantic>=2.9.2",
