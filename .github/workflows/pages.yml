@@ -29,6 +29,9 @@ jobs:
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
+        with:
+          # Create the Pages site on the first deployment and select Actions.
+          enablement: true
 
       - name: Assemble site
         run: |
