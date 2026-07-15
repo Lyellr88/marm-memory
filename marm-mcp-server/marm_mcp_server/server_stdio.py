@@ -29,7 +29,8 @@ from .core.stdio_logging import _stdio_log  # noqa: E402
 
 from .core.stdio_tool_lifecycle import _log_tool_call  # noqa: E402
 
-from .core.stdio_mcp_app import mcp  # noqa: E402
+
+from mcp.server.fastmcp import FastMCP  # noqa: E402
 
 from marm_mcp_server.core.memory import memory  # noqa: E402
 from marm_mcp_server.services.notebook import notebook_dispatch  # noqa: E402
@@ -46,6 +47,8 @@ from marm_mcp_server.config.settings import (  # noqa: E402
     SEMANTIC_SEARCH_AVAILABLE,
 )
 from marm_mcp_server.core.graph_supervisor import graph_supervisor  # noqa: E402
+
+mcp = FastMCP("MARM MCP Server")
 
 
 @mcp.tool()
@@ -272,13 +275,15 @@ async def marm_compaction(
         return {"status": "error", "message": f"Compaction operation failed: {e!s}"}
 
 
-# Registers marm_graph_*/marm_concept_* tools onto `mcp` at import time
-# (Option 2 of docs/current/server-stdio-module-split.md); re-imported here
-# so `server_stdio.marm_graph_index` etc. still resolve for existing callers.
-# Placed after the 7 core tool definitions above (not with the other
-# top-of-file imports) so registration order matches pre-refactor
-# behavior: core tools first, then graph/concept tools -- tools/list
-# order is a public transport detail, not an implementation choice.
+# marm_graph_*/marm_concept_* tools (Option 2 of
+# docs/current/server-stdio-module-split.md) -- re-imported here so
+# `server_stdio.marm_graph_index` etc. still resolve for existing callers.
+# stdio_graph_tools.py deliberately has no @mcp.tool() decorators of its
+# own (CodeRabbit PR #90: import-order-dependent registration would let
+# any future caller that imports that module before this one silently
+# register these 7 tools first). register_graph_tools() explicitly
+# registers them onto `mcp` here, after the 7 core tools above, so
+# tools/list order is deterministic regardless of import order.
 from .services.stdio_graph_tools import (  # noqa: E402,F401
     marm_graph_index,
     marm_code_lookup,
@@ -287,7 +292,10 @@ from .services.stdio_graph_tools import (  # noqa: E402,F401
     marm_graph_impact,
     marm_concept_build,
     marm_concept_recall,
+    register_graph_tools,
 )
+
+register_graph_tools(mcp)
 
 
 def _is_graceful_teardown(exc: BaseException) -> bool:

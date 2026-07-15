@@ -1,9 +1,16 @@
-"""STDIO graph/concept-graph MCP tool registrations: marm_graph_index,
+"""STDIO graph/concept-graph MCP tool bodies: marm_graph_index,
 marm_code_lookup, marm_graph_trace, marm_graph_architecture,
 marm_graph_impact, marm_concept_build, marm_concept_recall.
 
-Registers onto the shared `mcp` instance from core/stdio_mcp_app.py at
-import time -- server_stdio.py imports this module for that side effect.
+Deliberately not decorated with @mcp.tool() here -- registration is import
+order-dependent by construction (whichever module's decorators execute
+first wins), so importing this module anywhere before server_stdio.py
+(e.g. a future test's top-level import, a script, a REPL session) would
+silently register these 7 tools ahead of the 7 core ones defined in
+server_stdio.py, reversing tools/list order. register_graph_tools() below
+is called explicitly from server_stdio.py's own bootstrap instead, after
+the core tools are already registered, so order is deterministic
+regardless of import order.
 """
 
 import asyncio
@@ -11,7 +18,7 @@ from typing import Literal, Optional
 
 from pydantic import ValidationError
 
-from ..core.stdio_mcp_app import mcp
+from ..core.stdio_logging import _stdio_log
 from ..core.stdio_tool_lifecycle import _log_tool_call
 from marm_mcp_server.core.graph_supervisor import graph_supervisor
 from marm_mcp_server.endpoints.concepts import (
@@ -43,7 +50,6 @@ async def _graph_available() -> bool:
     return await asyncio.to_thread(graph_supervisor.is_available)
 
 
-@mcp.tool()
 @_log_tool_call
 async def marm_graph_index(
     repo_path: Optional[str] = None,
@@ -77,7 +83,6 @@ async def marm_graph_index(
     )
 
 
-@mcp.tool()
 @_log_tool_call
 async def marm_code_lookup(
     query: str,
@@ -120,7 +125,6 @@ async def marm_code_lookup(
     )
 
 
-@mcp.tool()
 @_log_tool_call
 async def marm_graph_trace(
     function_name: str,
@@ -163,7 +167,6 @@ async def marm_graph_trace(
     )
 
 
-@mcp.tool()
 @_log_tool_call
 async def marm_graph_architecture(
     project: Optional[str] = None,
@@ -188,7 +191,6 @@ async def marm_graph_architecture(
     )
 
 
-@mcp.tool()
 @_log_tool_call
 async def marm_graph_impact(
     project: Optional[str] = None,
@@ -221,7 +223,6 @@ async def marm_graph_impact(
     )
 
 
-@mcp.tool()
 @_log_tool_call
 async def marm_concept_build(
     session_name: Optional[str] = None,
@@ -262,7 +263,6 @@ async def marm_concept_build(
         return {"status": "error", "message": "Concept build failed."}
 
 
-@mcp.tool()
 @_log_tool_call
 async def marm_concept_recall(
     query: str,
@@ -314,4 +314,24 @@ async def marm_concept_recall(
             req.project,
         )
     except Exception as e:
-        return {"status": "error", "message": f"Concept recall failed: {e!s}"}
+        # _run_recall failures can include SQLite paths/schema details --
+        # log server-side (the HTTP endpoint's own try/except does this via
+        # its "concepts.recall_error" log, but this STDIO wrapper calls
+        # _run_recall directly and bypasses that), return a fixed message
+        # to the client. Matches marm_concept_build's existing contract.
+        _stdio_log.warning("concept recall failed: %s", e)
+        return {"status": "error", "message": "Concept recall failed."}
+
+
+def register_graph_tools(mcp) -> None:
+    """Explicit, order-independent tool registration -- called once from
+    server_stdio.py after the 7 core tools are already registered, so
+    tools/list order never depends on which module happens to import this
+    one first."""
+    mcp.add_tool(marm_graph_index)
+    mcp.add_tool(marm_code_lookup)
+    mcp.add_tool(marm_graph_trace)
+    mcp.add_tool(marm_graph_architecture)
+    mcp.add_tool(marm_graph_impact)
+    mcp.add_tool(marm_concept_build)
+    mcp.add_tool(marm_concept_recall)

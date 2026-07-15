@@ -80,6 +80,44 @@ def test_stdio_module_import_keeps_stdout_clean_for_json_rpc(tmp_path):
 
 
 @pytest.mark.slow_stdio
+def test_stdio_graph_tools_import_order_does_not_affect_registration(tmp_path):
+    """CodeRabbit PR #90 finding: stdio_graph_tools.py used to register its
+    7 tools via @mcp.tool() at import time, so importing it before
+    server_stdio.py (a future test's top-level import, a script, a REPL
+    session) would have silently registered those 7 tools ahead of the 7
+    core tools defined in server_stdio.py, reversing tools/list order.
+    Fresh subprocess/interpreter required -- sys.modules caching is
+    per-process, so this can't be exercised against an already-imported
+    server_stdio in this test process."""
+    env = os.environ.copy()
+    env["MARM_DB_PATH"] = str(tmp_path / "stdio-import-order.db")
+    env["MARM_ANALYTICS_DB_PATH"] = str(tmp_path / "stdio-import-order-analytics.db")
+
+    script = (
+        "import asyncio\n"
+        "import marm_mcp_server.services.stdio_graph_tools\n"
+        "import marm_mcp_server.server_stdio as stdio\n"
+        "names = [t.name for t in asyncio.run(stdio.mcp.list_tools())]\n"
+        "assert names == [\n"
+        "    'marm_smart_recall', 'marm_log_entry', 'marm_log_show', 'marm_delete',\n"
+        "    'marm_notebook', 'marm_summary', 'marm_compaction', 'marm_graph_index',\n"
+        "    'marm_code_lookup', 'marm_graph_trace', 'marm_graph_architecture',\n"
+        "    'marm_graph_impact', 'marm_concept_build', 'marm_concept_recall',\n"
+        "], names\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", script],
+        cwd=os.getcwd(),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.slow_stdio
 def test_stdio_handles_mcp_initialize_and_exposes_tools(tmp_path):
     env = os.environ.copy()
     env["MARM_DB_PATH"] = str(tmp_path / "stdio-rpc.db")
