@@ -47,19 +47,6 @@ from marm_mcp_server.config.settings import (  # noqa: E402
 )
 from marm_mcp_server.core.graph_supervisor import graph_supervisor  # noqa: E402
 
-# Registers marm_graph_*/marm_concept_* tools onto `mcp` at import time
-# (Option 2 of docs/current/server-stdio-module-split.md); re-imported here
-# so `server_stdio.marm_graph_index` etc. still resolve for existing callers.
-from .services.stdio_graph_tools import (  # noqa: E402,F401
-    marm_graph_index,
-    marm_code_lookup,
-    marm_graph_trace,
-    marm_graph_architecture,
-    marm_graph_impact,
-    marm_concept_build,
-    marm_concept_recall,
-)
-
 
 @mcp.tool()
 @_log_tool_call
@@ -283,6 +270,24 @@ async def marm_compaction(
         )
     except Exception as e:
         return {"status": "error", "message": f"Compaction operation failed: {e!s}"}
+
+
+# Registers marm_graph_*/marm_concept_* tools onto `mcp` at import time
+# (Option 2 of docs/current/server-stdio-module-split.md); re-imported here
+# so `server_stdio.marm_graph_index` etc. still resolve for existing callers.
+# Placed after the 7 core tool definitions above (not with the other
+# top-of-file imports) so registration order matches pre-refactor
+# behavior: core tools first, then graph/concept tools -- tools/list
+# order is a public transport detail, not an implementation choice.
+from .services.stdio_graph_tools import (  # noqa: E402,F401
+    marm_graph_index,
+    marm_code_lookup,
+    marm_graph_trace,
+    marm_graph_architecture,
+    marm_graph_impact,
+    marm_concept_build,
+    marm_concept_recall,
+)
 
 
 def _is_graceful_teardown(exc: BaseException) -> bool:

@@ -175,6 +175,29 @@ def test_stdio_handles_mcp_initialize_and_exposes_tools(tmp_path):
     assert "marm_concept_recall" in tool_names
     assert len(tools) == 14
 
+    # tools/list order is a public transport detail, not an implementation
+    # choice -- server-stdio-module-split.md's Option 2 extraction moved
+    # marm_graph_*/marm_concept_* into their own module registered via a
+    # separate import, which silently reversed this order once (core tools
+    # registered after graph/concept tools instead of before).
+    ordered_names = [t["name"] for t in tools]
+    assert ordered_names == [
+        "marm_smart_recall",
+        "marm_log_entry",
+        "marm_log_show",
+        "marm_delete",
+        "marm_notebook",
+        "marm_summary",
+        "marm_compaction",
+        "marm_graph_index",
+        "marm_code_lookup",
+        "marm_graph_trace",
+        "marm_graph_architecture",
+        "marm_graph_impact",
+        "marm_concept_build",
+        "marm_concept_recall",
+    ]
+
 
 def test_stdio_compaction_claimed_against_resolved_session_not_literal_default(
     monkeypatch, tmp_path
