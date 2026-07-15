@@ -3,6 +3,18 @@
 ## Version 2 - MARM Protocol to Universal MCP Server Evolution
 
 <details>
+<summary><strong>Unreleased: HTTP and STDIO Server Module Refactors (v2.21.2)</strong></summary>
+
+### Server Module Boundaries
+
+- Split the HTTP server's supporting concerns into focused modules while preserving the existing FastAPI app, route registration, MCP whitelist, CLI entry points, and lifespan behavior. The new boundaries cover CLI/bootstrap, compaction scheduling, protocol-delivery state and middleware, analytics, dependency checks, multiprocess warnings, and logging filters.
+- Split STDIO support into dedicated logging, tool-lifecycle, log-entry, and graph/concept tool modules. The public `marm_mcp_server.server_stdio` entry point remains the compatibility surface for existing users and scripts.
+- STDIO graph and concept tool registration is now explicit after the seven core tools, preserving the public `tools/list` order regardless of import order. HTTP and STDIO continue to expose the same 14 tools.
+- Added regression coverage for the real STDIO `marm_log_show` path, graph/concept wrapper boundaries, and the ordered `tools/list` response. Docker STDIO tool discovery now keeps stdin open until the response is received, matching real MCP client behavior and avoiding an EOF race on slow CI runners.
+
+</details>
+
+<details>
 <summary><strong>July 12th, 2026: CI Docker Test Fix, PyPI Publishing Paused (v2.21.1)</strong></summary>
 
 ### Docker Tests Fixed on Linux CI Runners

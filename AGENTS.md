@@ -8,7 +8,7 @@ MARM is a local-first MCP memory server: Python FastAPI in `marm-mcp-server/`, p
 
 - **14 public MCP tools**: 7 core memory, 5 code graph, 2 concept graph. HTTP and STDIO must stay in exact parity.
 - **HTTP transport**: `marm_mcp_server/server.py`; tools are whitelisted in `MCP_TOOL_OPERATIONS`. A tool not in that list does not exist over HTTP.
-- **STDIO transport**: `marm_mcp_server/server_stdio.py`; thin `@mcp.tool()` wrappers that call the same core logic as HTTP. Never fork behavior between transports.
+- **STDIO transport**: `marm_mcp_server/server_stdio.py` owns the `FastMCP` app and seven core `@mcp.tool()` wrappers. Graph/concept bodies live in `services/stdio_graph_tools.py` and are explicitly registered after the core tools so `tools/list` order stays stable. Never fork behavior between transports.
 - **Endpoint logic** lives in `marm_mcp_server/endpoints/` split by surface (memory, logging, notebook, session, compaction, graph, concepts, system). Shared helpers stay in `core/`.
 - **Storage**: SQLite WAL at `~/.marm/marm_memory.db` (connection pool, FTS5 external-content index `memories_fts`, `memory_chunks` for long-memory chunking). The concept graph uses its own database `~/.marm/index/marm_index.db` with its own pool. Never share connections between the two.
 - **Write path**: all memory writes go through the serialized async write queue (one worker). Do not add write paths that bypass it. `marm_log_entry` dual-writes: a `log_entries` row plus a semantic memory in `memories` (via the queue); a semantic-store failure must never fail the log write.
@@ -21,7 +21,7 @@ MARM is a local-first MCP memory server: Python FastAPI in `marm-mcp-server/`, p
 
 1. `marm_mcp_server/endpoints/<surface>.py` - the implementation
 2. `marm_mcp_server/server.py` - route + `MCP_TOOL_OPERATIONS` whitelist
-3. `marm_mcp_server/server_stdio.py` - STDIO wrapper
+3. `marm_mcp_server/server_stdio.py` - STDIO bootstrap/registration and matching wrapper or service path
 4. `marm-mcp-server/server.json` - tools array
 5. `scripts/find-tools.py` - `CANONICAL_TOOLS` list
 6. Docs with full tool lists: `README.md`, `docs/PROTOCOL.md`, `docs/PROTOCOL-LITE.md`, and their `marm-mcp-server/marm-docs/` copies, plus tool counts in FAQ
@@ -68,7 +68,7 @@ Semver: MAJOR = breaking (schema renames, parameter removals), MINOR = new tools
 - Dev setup: `cd marm-mcp-server && pip install -e ".[dev,concepts]" && python -m spacy download en_core_web_sm`
 - Benchmarks live in `scripts/benchmarking/`: `preformance/bench_hotpath.py` for hot-path performance, `accuracy/locomo/run_eval.py` for LoCoMo retrieval accuracy. Do not publish performance claims neither script can back.
 
-## Current Stats (v2.21.0)
+## Current Stats (v2.21.1)
 
 - 14 MCP tools over HTTP + STDIO
 - 2 isolated SQLite databases (memory + concept graph)

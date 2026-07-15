@@ -106,7 +106,7 @@ docs/future/
 .codexignore
 .claudeignore
 .kiroignore
-.bridgespace
+.geminiignore
 .impeccable
 .cursor
 .pytest_cache/

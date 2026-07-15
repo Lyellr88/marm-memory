@@ -54,8 +54,9 @@ python -m marm_mcp_server --generate-key
 ```text
 marm-mcp-server/
   marm_mcp_server/
-    server.py                  # FastAPI HTTP MCP server
-    server_stdio.py            # Official MCP SDK STDIO transport
+    cli.py                     # HTTP CLI, dependency checks, and server factory
+    server.py                  # FastAPI HTTP composition root
+    server_stdio.py            # STDIO bootstrap and core-tool registration
     config/settings.py         # Paths, host/port, auth, feature flags
     core/
       memory.py                # MARMMemory facade and public memory object wiring
@@ -66,16 +67,20 @@ marm-mcp-server/
       write_queue.py           # Serialized write queue for SQLite writer stability
       consolidation.py         # Content-hash and semantic write-time consolidation
       compaction.py            # Background compaction candidate detection and nudges
+      compaction_scheduler.py  # Optional compaction maintenance scheduler
       concept_db.py            # Concept graph schema and isolated SQLite pool
       concept_extraction.py    # spaCy entity/relationship extraction (optional extra)
       graph_supervisor.py      # Lazy singleton supervisor for the embedded graph engine
       graph_client.py          # Concept graph's in-process link into the code graph
       dashboard_mount.py       # Mounts the bundled dashboard under /dashboard
+      protocol_delivery_state.py  # Bounded HTTP protocol-delivery state
       models.py                # Shared Pydantic request/response models
       events.py                # Internal event hooks
       rate_limiter.py          # Rate limiting primitives
       response_limiter.py      # MCP response size controls
       shutdown_manager.py      # Graceful shutdown handling
+      stdio_logging.py         # STDERR-only STDIO logger setup
+      stdio_tool_lifecycle.py  # STDIO protocol, logging, and compaction wrapper
     endpoints/
       session.py               # Session tools
       logging.py               # Log tools
@@ -88,8 +93,10 @@ marm-mcp-server/
       system.py                # Health/system tools
     middleware/
       auth.py                  # Bearer auth for HTTP mode
+      protocol_injection.py    # HTTP MCP protocol/compaction response injection
       rate_limiting.py         # HTTP rate limiting middleware
     services/
+      analytics.py             # Best-effort local usage analytics
       documentation.py         # Startup documentation loading
       automation.py            # Event handler registration
       notebook.py              # Notebook dispatch service
@@ -97,8 +104,13 @@ marm-mcp-server/
       summary.py               # Shared session summary formatting
       compaction_apply.py      # Atomic compaction apply transaction
       compaction_summarize.py  # Compaction cluster summarization helpers
+      stdio_entry_tools.py     # STDIO log entry/show/delete workflow bodies
+      stdio_graph_tools.py     # STDIO graph/concept bodies and registration helper
     utils/
+      dependency_check.py      # Runtime dependency validation
       helpers.py               # Shared helpers
+      logging_filters.py       # Process logging noise filters
+      multiprocess_guard.py    # Unsupported multi-worker runtime warning
       security.py              # API key generation
   marm_graph/                  # Embedded marm-graph wrapper: subprocess JSON-RPC client,
                                #   tool router, and backend verification for the pinned
@@ -110,6 +122,7 @@ marm-mcp-server/
 
 docs/                          # User-facing docs and project docs
 scripts/                       # Local validation, release, and maintenance helpers
+marm-console/                  # Standalone local Console app in active development (:8002)
 ```
 
 ### Key Patterns
@@ -118,7 +131,7 @@ scripts/                       # Local validation, release, and maintenance help
 
 HTTP mode lives in `marm_mcp_server/server.py` and is mounted through FastAPI/FastApiMCP at `/mcp`.
 
-STDIO mode lives in `marm_mcp_server/server_stdio.py` and uses the official MCP Python SDK over standard input/output. STDIO must keep stdout clean for JSON-RPC messages; logs and incidental `print()` output belong on stderr.
+STDIO mode lives in `marm_mcp_server/server_stdio.py` and uses the official MCP Python SDK over standard input/output. It owns the FastMCP app and registers the seven core tools first; `services/stdio_graph_tools.py` supplies the graph/concept tool bodies through explicit registration so `tools/list` order remains stable. STDIO must keep stdout clean for JSON-RPC messages; logs and incidental `print()` output belong on stderr.
 
 If a tool behavior changes, check whether the HTTP endpoint and STDIO tool both need the same update.
 
