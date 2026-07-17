@@ -1,6 +1,7 @@
 from fastapi.testclient import TestClient
 
 from server import app as console_app
+from server import memory_store
 
 
 def test_memory_mutation_routes_proxy_to_marm_runtime(monkeypatch):
@@ -111,3 +112,11 @@ def test_memory_mutation_routes_proxy_to_marm_runtime(monkeypatch):
             30.0,
         ),
     ]
+
+
+def test_concept_link_counts_are_best_effort(monkeypatch, tmp_path):
+    concept_db_path = tmp_path / "marm_index.db"
+    concept_db_path.write_text("not a sqlite database", encoding="utf-8")
+    monkeypatch.setenv("MARM_CONCEPT_DB_PATH", str(concept_db_path))
+
+    assert memory_store._concept_link_counts(["mem-1"]) == {}

@@ -4,6 +4,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
+import structlog
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
@@ -12,6 +13,8 @@ from ..core.memory import memory
 from ..core.response_limiter import MCPResponseLimiter
 from ..core.concept_db import ConceptDB, get_concept_db_path
 from ..services.recall import _apply_detail_level
+
+logger = structlog.get_logger(__name__)
 
 
 def track_endpoint_usage(endpoint: str, request: Request, extra_data: dict = None):
@@ -95,7 +98,19 @@ def _cleanup_deleted_concepts(memory_ids: list[str]) -> dict:
     try:
         return ConceptDB(db_path).cleanup_deleted_memory_provenance(memory_ids)
     except Exception as exc:
-        return {"status": "failed", "error": str(exc)}
+        logger.warning("memory.concept_cleanup_failed", error=str(exc))
+        return {"status": "failed", "error": "Concept cleanup failed."}
+
+
+def _memory_conflict(exc: RuntimeError) -> HTTPException:
+    logger.warning("memory.console_mutation_failed", error=str(exc))
+    if str(exc) == "memory write queue is unavailable":
+        detail = "memory write queue is unavailable"
+    elif str(exc) == "write queue is shutting down":
+        detail = "Memory write queue is shutting down."
+    else:
+        detail = "Memory mutation failed."
+    return HTTPException(status_code=409, detail=detail)
 
 
 @router.post("/internal/memories", status_code=201)
@@ -110,7 +125,7 @@ async def console_create_memory(payload: ConsoleMemoryPayload) -> dict:
             _console_scope(payload.platform),
         )
     except RuntimeError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise _memory_conflict(exc) from exc
     return memory.console_memory_row(memory_id) or {"id": memory_id}
 
 
@@ -127,7 +142,7 @@ async def console_replace_memory(memory_id: str, payload: ConsoleMemoryPayload) 
             _console_scope(payload.platform),
         )
     except RuntimeError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise _memory_conflict(exc) from exc
     if not updated:
         raise HTTPException(status_code=404, detail="Memory not found")
     return memory.console_memory_row(memory_id) or {"id": memory_id}
@@ -138,7 +153,7 @@ async def console_delete_memory(memory_id: str, payload: ConsoleDeletePayload) -
     try:
         result = await memory.console_delete_memory(memory_id)
     except RuntimeError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise _memory_conflict(exc) from exc
     if not result["deleted_ids"]:
         raise HTTPException(status_code=404, detail="Memory not found")
     result["concept_cleanup"] = _cleanup_deleted_concepts(result["deleted_ids"])
@@ -150,7 +165,7 @@ async def console_bulk_delete_memories(payload: ConsoleBulkDeletePayload) -> dic
     try:
         result = await memory.console_delete_memories(payload.memory_ids)
     except RuntimeError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise _memory_conflict(exc) from exc
     result["concept_cleanup"] = _cleanup_deleted_concepts(result["deleted_ids"])
     return result
 

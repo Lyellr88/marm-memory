@@ -212,6 +212,65 @@ def test_internal_bulk_delete_is_bounded_and_reports_missing(monkeypatch, tmp_pa
         _stop_queue()
 
 
+def test_console_create_dedupes_only_within_explicit_scope(monkeypatch, tmp_path):
+    server = load_isolated_server(
+        monkeypatch, tmp_path, api_key="test-key", write_queue_enabled=True
+    )
+    from marm_mcp_server.core import memory_ops as memory_ops_module
+
+    monkeypatch.setattr(memory_ops_module, "CONSOLIDATION_ENABLED", True)
+    headers = {"Authorization": "Bearer test-key"}
+
+    try:
+        with TestClient(server.app) as client:
+            first = client.post(
+                "/internal/memories",
+                headers=headers,
+                json={
+                    "content": "Scoped duplicate memory",
+                    "session_name": "console-scope",
+                    "project": "alpha",
+                },
+            )
+            assert first.status_code == 201
+            first_id = first.json()["id"]
+
+            second = client.post(
+                "/internal/memories",
+                headers=headers,
+                json={
+                    "content": "Scoped duplicate memory",
+                    "session_name": "console-scope",
+                    "project": "beta",
+                },
+            )
+            assert second.status_code == 201
+            second_id = second.json()["id"]
+
+            third = client.post(
+                "/internal/memories",
+                headers=headers,
+                json={
+                    "content": "Scoped duplicate memory",
+                    "session_name": "console-scope",
+                    "project": "alpha",
+                },
+            )
+            assert third.status_code == 201
+            third_id = third.json()["id"]
+
+        assert first_id != second_id
+        assert third_id == first_id
+
+        with sqlite3.connect(tmp_path / "marm_memory.db") as conn:
+            rows = conn.execute(
+                "SELECT project, COUNT(*) FROM memories GROUP BY project ORDER BY project"
+            ).fetchall()
+        assert rows == [("alpha", 1), ("beta", 1)]
+    finally:
+        _stop_queue()
+
+
 def test_internal_memory_mutation_rejects_disabled_write_queue(monkeypatch, tmp_path):
     server = load_isolated_server(
         monkeypatch, tmp_path, api_key="test-key", write_queue_enabled=False

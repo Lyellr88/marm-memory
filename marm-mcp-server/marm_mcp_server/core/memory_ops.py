@@ -138,12 +138,24 @@ async def _store_memory(
 
     content_hash = compute_content_hash(sanitized_content)
     normalized_content = normalize_content(sanitized_content)
+    scoped_project = project if explicit_scope else MARM_PROJECT or None
+    scoped_platform = platform if explicit_scope else MARM_PLATFORM or None
 
     if CONSOLIDATION_ENABLED:
         with mem.get_connection() as conn:
-            existing_id = find_exact_duplicate(
-                conn, content_hash, session, normalized_content
-            )
+            if explicit_scope:
+                existing_id = find_exact_duplicate(
+                    conn,
+                    content_hash,
+                    session,
+                    normalized_content,
+                    scoped_project,
+                    scoped_platform,
+                )
+            else:
+                existing_id = find_exact_duplicate(
+                    conn, content_hash, session, normalized_content
+                )
             if existing_id:
                 return existing_id
 
@@ -157,13 +169,24 @@ async def _store_memory(
             _safe_print(f"Failed to generate embedding: {e}")
 
     if CONSOLIDATION_ENABLED:
-        existing_id = await find_semantic_duplicate(
-            mem,
-            sanitized_content,
-            session,
-            CONSOLIDATION_THRESHOLD,
-            query_vec=pre_embedding,
-        )
+        if explicit_scope:
+            existing_id = await find_semantic_duplicate(
+                mem,
+                sanitized_content,
+                session,
+                CONSOLIDATION_THRESHOLD,
+                query_vec=pre_embedding,
+                project=scoped_project,
+                platform=scoped_platform,
+            )
+        else:
+            existing_id = await find_semantic_duplicate(
+                mem,
+                sanitized_content,
+                session,
+                CONSOLIDATION_THRESHOLD,
+                query_vec=pre_embedding,
+            )
         if existing_id:
             await _update_memory(mem, existing_id, sanitized_content)
             mem._on_memory_written(session)
@@ -178,9 +201,19 @@ async def _store_memory(
     with mem.get_connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
         if CONSOLIDATION_ENABLED:
-            under_lock_id = find_exact_duplicate(
-                conn, content_hash, session, normalized_content
-            )
+            if explicit_scope:
+                under_lock_id = find_exact_duplicate(
+                    conn,
+                    content_hash,
+                    session,
+                    normalized_content,
+                    scoped_project,
+                    scoped_platform,
+                )
+            else:
+                under_lock_id = find_exact_duplicate(
+                    conn, content_hash, session, normalized_content
+                )
             if under_lock_id:
                 conn.execute("ROLLBACK")
                 return under_lock_id
@@ -199,8 +232,8 @@ async def _store_memory(
                 timestamp,
                 context_type,
                 json.dumps(metadata),
-                project if explicit_scope else MARM_PROJECT or None,
-                platform if explicit_scope else MARM_PLATFORM or None,
+                scoped_project,
+                scoped_platform,
             ),
         )
 

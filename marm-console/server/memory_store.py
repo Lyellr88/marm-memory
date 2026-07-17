@@ -39,28 +39,31 @@ def _concept_link_counts(memory_ids: list[str]) -> dict[str, int]:
         return {}
 
     counts = dict.fromkeys(memory_ids, 0)
-    with sqlite3.connect(db_path) as connection:
-        placeholders = ",".join("?" for _ in memory_ids)
-        for memory_id, count in connection.execute(
-            f"""
-            SELECT memory_id, COUNT(*)
-            FROM relationships
-            WHERE memory_id IN ({placeholders})
-            GROUP BY memory_id
-            """,
-            memory_ids,
-        ).fetchall():
-            counts[str(memory_id)] = counts.get(str(memory_id), 0) + count
+    try:
+        with sqlite3.connect(db_path) as connection:
+            placeholders = ",".join("?" for _ in memory_ids)
+            for memory_id, count in connection.execute(
+                f"""
+                SELECT memory_id, COUNT(*)
+                FROM relationships
+                WHERE memory_id IN ({placeholders})
+                GROUP BY memory_id
+                """,
+                memory_ids,
+            ).fetchall():
+                counts[str(memory_id)] = counts.get(str(memory_id), 0) + count
 
-        for (source_json,) in connection.execute(
-            "SELECT source_memory_ids FROM entities"
-        ).fetchall():
-            try:
-                source_ids = {str(item) for item in json.loads(source_json or "[]")}
-            except (TypeError, ValueError, json.JSONDecodeError):
-                continue
-            for memory_id in source_ids.intersection(counts):
-                counts[memory_id] += 1
+            for (source_json,) in connection.execute(
+                "SELECT source_memory_ids FROM entities"
+            ).fetchall():
+                try:
+                    source_ids = {str(item) for item in json.loads(source_json or "[]")}
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    continue
+                for memory_id in source_ids.intersection(counts):
+                    counts[memory_id] += 1
+    except sqlite3.Error:
+        return {}
 
     return counts
 
