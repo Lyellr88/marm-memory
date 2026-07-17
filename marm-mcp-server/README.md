@@ -1,11 +1,9 @@
-mcp-name: io.github.Lyellr88/marm-mcp-server
-
 <div align="center">
 <picture>
-<img src="https://raw.githubusercontent.com/Lyellr88/marm-memory/MARM-main/assets/icons/icon-gen-1.png"
+<img src="https://raw.githubusercontent.com/Lyellr88/marm-memory/MARM-main/assets/marm-logo.png"
      alt="marm-memory - persistent local memory server for AI agents (Model Context Protocol)"
-     width="200"
-     height="200">
+     width="900"
+     height="250">
 </picture>
 <h1 align="center">MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.22.0</h1>
 
@@ -1065,3 +1063,7 @@ Copyright © 2026 Ryan A. Lyell. MARM is released under the [Apache 2.0 License]
 - **[ACKNOWLEDGMENTS.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/ACKNOWLEDGMENTS.md)** - Contributors and acknowledgments
 - **[ROADMAP.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/ROADMAP.md)** - Planned features and development roadmap
 - **[LICENSE](https://github.com/Lyellr88/marm-memory/blob/MARM-main/LICENSE)** - Apache 2.0 license terms
+
+---
+
+mcp-name: io.github.Lyellr88/marm-mcp-server
