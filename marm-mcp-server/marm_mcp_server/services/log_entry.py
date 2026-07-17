@@ -83,7 +83,16 @@ async def create_log_entry(
                         pass
                     conn.commit()
                 memory.active_log_session = new_session
-                await events.emit("session_created", {"session": new_session})
+                # The session row and marker entry above are already durably
+                # committed -- an event-publish failure must not turn that
+                # into a client-visible error (same principle as the
+                # semantic-store try/except below: a retry on a false
+                # "error" response would create a duplicate session_start
+                # marker).
+                try:
+                    await events.emit("session_created", {"session": new_session})
+                except Exception as event_error:
+                    log_warning(f"session_created event failed: {event_error}")
                 return {
                     "status": "session_switched",
                     "message": f"📂 Session switched to '{new_session}'",
@@ -191,10 +200,21 @@ async def create_log_entry(
                 f"Semantic store failed for log entry {entry_id}: {store_error}"
             )
 
-        await events.emit(
-            "log_entry_created",
-            {"entry_id": entry_id, "session": session, "content": formatted_entry},
-        )
+        # Same reasoning as the session_created emit above -- the log_entries
+        # row (and the semantic memory, if the dual-write above succeeded)
+        # are already committed, so an event-publish failure here must not
+        # turn an already-durable write into a client-visible error.
+        try:
+            await events.emit(
+                "log_entry_created",
+                {
+                    "entry_id": entry_id,
+                    "session": session,
+                    "content": formatted_entry,
+                },
+            )
+        except Exception as event_error:
+            log_warning(f"log_entry_created event failed: {event_error}")
 
         return {
             "status": "success",
@@ -335,9 +355,13 @@ async def delete_log_or_notebook_entry(
                         "AND json_extract(metadata, '$.source') = 'log_entry'",
                         (target,),
                     ).rowcount
-                    if memory.active_log_session == target:
-                        memory.active_log_session = "main"
                 conn.commit()
+                # Flip the runtime pointer only after the delete durably
+                # commits -- otherwise a failed commit leaves the process
+                # thinking the active session is "main" while the target
+                # session's rows are still intact in the DB.
+                if not session_name and memory.active_log_session == target:
+                    memory.active_log_session = "main"
                 return {
                     "status": "success",
                     "message": f"🗑️ Deleted {deleted} items",

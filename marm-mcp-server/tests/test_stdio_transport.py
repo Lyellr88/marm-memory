@@ -291,6 +291,53 @@ def test_stdio_delete_invalid_type_returns_error_dict_not_raise(monkeypatch, tmp
     }
 
 
+def test_stdio_delete_whole_session_keeps_active_session_if_commit_fails(
+    monkeypatch, tmp_path
+):
+    """PR #94 CodeRabbit finding: active_log_session must flip to "main"
+    only after the whole-session delete's conn.commit() actually succeeds
+    -- otherwise a failed commit leaves the runtime pointer saying "main"
+    while the target session's rows are still intact in the DB.
+
+    sqlite3.Connection is an immutable C type (can't monkeypatch .commit
+    on it directly), so this wraps the real connection in a thin proxy
+    that forwards everything except commit(), which raises."""
+    import contextlib
+    import sqlite3
+
+    stdio = _isolated_stdio(monkeypatch, tmp_path)
+
+    switch_result = asyncio.run(stdio.marm_log_entry(entry="Session: commit-fail-test"))
+    active_before = switch_result["session_name"]
+    assert active_before != "main"
+
+    class _CommitFailsConn:
+        def __init__(self, real):
+            self._real = real
+
+        def commit(self):
+            raise sqlite3.OperationalError("disk I/O error (forced)")
+
+        def __getattr__(self, name):
+            return getattr(self._real, name)
+
+    real_get_connection = stdio.memory.get_connection
+
+    @contextlib.contextmanager
+    def _patched_get_connection():
+        with real_get_connection() as real_conn:
+            yield _CommitFailsConn(real_conn)
+
+    monkeypatch.setattr(stdio.memory, "get_connection", _patched_get_connection)
+
+    result = asyncio.run(stdio.marm_delete(type="log", target=active_before))
+    assert result["status"] == "error"
+    assert stdio.memory.active_log_session == active_before, (
+        "active_log_session flipped to 'main' even though the delete's "
+        "commit never succeeded"
+    )
+
+
 def test_stdio_delete_notebook_removes_entry_from_active_state(monkeypatch, tmp_path):
     stdio = _isolated_stdio(monkeypatch, tmp_path)
 
