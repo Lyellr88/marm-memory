@@ -470,3 +470,108 @@ def test_console_replace_memory_rollback_regression(monkeypatch, tmp_path):
         "memory content was replaced despite the transaction's second "
         "statement failing -- _replace_memory's existing atomicity regressed"
     )
+
+
+def test_stage_compaction_summaries_processes_candidates_independently(
+    monkeypatch, tmp_path
+):
+    """endpoints/compaction.py audit (no code changes made there): every
+    per-candidate mutation in marm_stage_compaction_summaries is a single
+    UPDATE statement, so there's no multi-statement atomicity gap to
+    wrap -- and wrapping the whole per-request loop in one transaction
+    would be a *regression*, not a hardening, since each candidate is
+    designed to succeed or fail independently. Proves that intended
+    semantic directly: one expired candidate in the same request as one
+    valid candidate must not block the valid one from staging."""
+    server = load_isolated_server(monkeypatch, tmp_path)
+    client = local_client(server.app)
+
+    db_path = tmp_path / "marm_memory.db"
+    with sqlite3.connect(db_path) as conn:
+        for mem_id, content in (
+            ("mem-valid", "valid source"),
+            ("mem-expired", "expired source"),
+        ):
+            conn.execute(
+                "INSERT INTO memories (id, session_name, content, content_hash, timestamp) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (mem_id, "atomicity-c4", content, mem_id, "2026-01-01T00:00:00+00:00"),
+            )
+        conn.execute(
+            """
+            INSERT INTO compaction_staging (
+                id, session_name, source_memory_ids, preview, suggested_summary,
+                status, candidate_hash, source_updated_at_snapshot,
+                expires_at, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "candidate-valid",
+                "atomicity-c4",
+                '["mem-valid"]',
+                "valid source",
+                "",
+                "pending_summary",
+                "hash-valid",
+                "{}",
+                "2099-01-01T00:00:00+00:00",
+                "2026-01-01T00:00:00+00:00",
+                "2026-01-01T00:00:00+00:00",
+            ),
+        )
+        conn.execute(
+            """
+            INSERT INTO compaction_staging (
+                id, session_name, source_memory_ids, preview, suggested_summary,
+                status, candidate_hash, source_updated_at_snapshot,
+                expires_at, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "candidate-expired",
+                "atomicity-c4",
+                '["mem-expired"]',
+                "expired source",
+                "",
+                "pending_summary",
+                "hash-expired",
+                "{}",
+                "2020-01-01T00:00:00+00:00",  # already past
+                "2026-01-01T00:00:00+00:00",
+                "2026-01-01T00:00:00+00:00",
+            ),
+        )
+        conn.commit()
+
+    resp = client.post(
+        "/marm_stage_compaction_summaries",
+        json={
+            "summaries": [
+                {
+                    "candidate_id": "candidate-valid",
+                    "suggested_summary": "a real summary",
+                },
+                {
+                    "candidate_id": "candidate-expired",
+                    "suggested_summary": "should not matter, candidate is expired",
+                },
+            ]
+        },
+    )
+    results = {r["candidate_id"]: r for r in resp.json()["results"]}
+    assert results["candidate-valid"]["status"] == "summary_staged", (
+        "the valid candidate was blocked by the expired one being in the "
+        "same request -- per-candidate independence regressed"
+    )
+    assert results["candidate-expired"]["status"] == "error"
+
+    with sqlite3.connect(db_path) as conn:
+        valid_status = conn.execute(
+            "SELECT status FROM compaction_staging WHERE id = ?", ("candidate-valid",)
+        ).fetchone()[0]
+        expired_status = conn.execute(
+            "SELECT status FROM compaction_staging WHERE id = ?",
+            ("candidate-expired",),
+        ).fetchone()[0]
+    assert valid_status == "summary_staged"
+    assert expired_status == "stale"
