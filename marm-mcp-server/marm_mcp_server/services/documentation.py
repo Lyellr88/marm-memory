@@ -263,17 +263,22 @@ async def load_marm_documentation():
             "SELECT value FROM user_settings WHERE key = 'system_notebook_cleanup_v1'"
         ).fetchone()
         if not already_cleaned:
-            for name in _LEGACY_SYSTEM_NOTEBOOK_NAMES:
-                conn.execute("DELETE FROM notebook_entries WHERE name = ?", (name,))
-            conn.execute(
-                "INSERT OR REPLACE INTO user_settings (key, value, updated_at) VALUES (?, ?, ?)",
-                (
-                    "system_notebook_cleanup_v1",
-                    "done",
-                    datetime.now(timezone.utc).isoformat(),
-                ),
-            )
-            conn.commit()
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                for name in _LEGACY_SYSTEM_NOTEBOOK_NAMES:
+                    conn.execute("DELETE FROM notebook_entries WHERE name = ?", (name,))
+                conn.execute(
+                    "INSERT OR REPLACE INTO user_settings (key, value, updated_at) VALUES (?, ?, ?)",
+                    (
+                        "system_notebook_cleanup_v1",
+                        "done",
+                        datetime.now(timezone.utc).isoformat(),
+                    ),
+                )
+                conn.execute("COMMIT")
+            except Exception:
+                conn.execute("ROLLBACK")
+                raise
             print("[DOCS] Cleaned up legacy system notebook entries")
 
     docs = get_docs_to_load()

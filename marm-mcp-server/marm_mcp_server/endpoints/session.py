@@ -22,15 +22,20 @@ async def marm_start(request: SessionRequest):
     """
     try:
         with memory.get_connection() as conn:
-            conn.execute("UPDATE sessions SET marm_active = FALSE")
-            conn.execute(
-                """
-                INSERT OR REPLACE INTO sessions (session_name, marm_active, last_accessed)
-                VALUES (?, TRUE, ?)
-            """,
-                (request.session_name, datetime.now(timezone.utc).isoformat()),
-            )
-            conn.commit()
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                conn.execute("UPDATE sessions SET marm_active = FALSE")
+                conn.execute(
+                    """
+                    INSERT OR REPLACE INTO sessions (session_name, marm_active, last_accessed)
+                    VALUES (?, TRUE, ?)
+                """,
+                    (request.session_name, datetime.now(timezone.utc).isoformat()),
+                )
+                conn.execute("COMMIT")
+            except Exception:
+                conn.execute("ROLLBACK")
+                raise
 
         if not docs_are_loaded():
             await load_marm_documentation()

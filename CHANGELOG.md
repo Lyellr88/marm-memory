@@ -3,6 +3,18 @@
 ## Version 2 - MARM Protocol to Universal MCP Server Evolution
 
 <details>
+<summary><strong>Unreleased: SQLite Write Atomicity Hardening (v2.22.x)</strong></summary>
+
+### Multi-Statement Writes Are Now Real Transactions
+
+- MARM's pooled SQLite connections run in full autocommit mode (`isolation_level=None`), so a multi-statement write sequence followed by `conn.commit()` was never actually atomic — each statement committed immediately on its own, and a failure partway through left the earlier statements permanently applied with nothing to roll back. Hardened every meaningful multi-statement mutation path with the project's existing `BEGIN IMMEDIATE` / explicit `COMMIT` / `ROLLBACK`-on-exception pattern (already used by `_store_memory` and `apply_compaction_write`): log-entry creation, session-switch, and whole-session delete (`services/log_entry.py`); session activation (`endpoints/session.py`); notebook add (`services/notebook.py`); the legacy system-notebook cleanup pass (`services/documentation.py`).
+- Fixed a real, independently-discovered bug while auditing `_update_memory` (the consolidation merge path): it used to hold `BEGIN IMMEDIATE`'s write lock open across an `await` for embedding generation, which could stall the whole event loop for any other writer waiting on the same database. Restructured to compute the merge and its embedding before acquiring the lock, then re-verify under the lock (matching content *and* metadata, not just content) that nothing changed concurrently before writing — and folded the memory-chunks cleanup into the same transaction as the content update, so the two can no longer disagree after a partial failure.
+- Every new transaction boundary has a mutation-tested regression test (`tests/test_sqlite_write_atomicity.py`): each one forces a specific SQL statement to fail and asserts the earlier statement(s) in the same block did not durably apply — a happy-path-only test doesn't prove rollback.
+- No schema changes, no new endpoints, no tool-surface changes. Pure reliability hardening.
+
+</details>
+
+<details>
 <summary><strong>July 15th, 2026: MARM Console Safe Memory Mutations (v2.22.0)</strong></summary>
 
 ### Console Can Now Create, Edit, and Delete Memories
