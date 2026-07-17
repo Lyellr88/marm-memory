@@ -1,5 +1,6 @@
 """Memory endpoints for MARM MCP Server."""
 
+import asyncio
 from datetime import datetime
 from pathlib import Path
 from typing import Literal
@@ -102,6 +103,10 @@ def _cleanup_deleted_concepts(memory_ids: list[str]) -> dict:
         return {"status": "failed", "error": "Concept cleanup failed."}
 
 
+async def _cleanup_deleted_concepts_async(memory_ids: list[str]) -> dict:
+    return await asyncio.to_thread(_cleanup_deleted_concepts, memory_ids)
+
+
 def _memory_conflict(exc: RuntimeError) -> HTTPException:
     logger.warning("memory.console_mutation_failed", error=str(exc))
     if str(exc) == "memory write queue is unavailable":
@@ -145,7 +150,7 @@ async def console_replace_memory(memory_id: str, payload: ConsoleMemoryPayload) 
         raise _memory_conflict(exc) from exc
     if not updated:
         raise HTTPException(status_code=404, detail="Memory not found")
-    _cleanup_deleted_concepts([memory_id])
+    await _cleanup_deleted_concepts_async([memory_id])
     return memory.console_memory_row(memory_id) or {"id": memory_id}
 
 
@@ -157,7 +162,9 @@ async def console_delete_memory(memory_id: str, payload: ConsoleDeletePayload) -
         raise _memory_conflict(exc) from exc
     if not result["deleted_ids"]:
         raise HTTPException(status_code=404, detail="Memory not found")
-    result["concept_cleanup"] = _cleanup_deleted_concepts(result["deleted_ids"])
+    result["concept_cleanup"] = await _cleanup_deleted_concepts_async(
+        result["deleted_ids"]
+    )
     return result
 
 
@@ -167,7 +174,9 @@ async def console_bulk_delete_memories(payload: ConsoleBulkDeletePayload) -> dic
         result = await memory.console_delete_memories(payload.memory_ids)
     except RuntimeError as exc:
         raise _memory_conflict(exc) from exc
-    result["concept_cleanup"] = _cleanup_deleted_concepts(result["deleted_ids"])
+    result["concept_cleanup"] = await _cleanup_deleted_concepts_async(
+        result["deleted_ids"]
+    )
     return result
 
 
