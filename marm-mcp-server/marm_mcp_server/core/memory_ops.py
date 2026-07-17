@@ -239,8 +239,9 @@ async def _store_memory(
 
         conn.execute(
             """
-            INSERT OR REPLACE INTO sessions (session_name, last_accessed)
+            INSERT INTO sessions (session_name, last_accessed)
             VALUES (?, ?)
+            ON CONFLICT(session_name) DO UPDATE SET last_accessed = excluded.last_accessed
         """,
             (session, timestamp),
         )
@@ -278,6 +279,7 @@ async def _replace_memory(
             _safe_print(f"Failed to generate replacement embedding: {exc}")
     timestamp = datetime.now(timezone.utc).isoformat()
     with mem.get_connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
         cursor = conn.execute(
             """UPDATE memories SET content = ?, session_name = ?, context_type = ?, metadata = ?,
                project = ?, platform = ?, content_hash = ?, embedding = ?, timestamp = ? WHERE id = ?""",
@@ -295,9 +297,26 @@ async def _replace_memory(
             ),
         )
         if not cursor.rowcount:
+            conn.execute("ROLLBACK")
             return False
         conn.execute(
-            "INSERT OR REPLACE INTO sessions (session_name, last_accessed) VALUES (?, ?)",
+            """
+            UPDATE compaction_staging
+            SET status = 'stale', updated_at = ?
+            WHERE status != 'applied'
+              AND EXISTS (
+                  SELECT 1 FROM json_each(compaction_staging.source_memory_ids)
+                  WHERE value = ?
+              )
+            """,
+            (timestamp, memory_id),
+        )
+        conn.execute(
+            """
+            INSERT INTO sessions (session_name, last_accessed)
+            VALUES (?, ?)
+            ON CONFLICT(session_name) DO UPDATE SET last_accessed = excluded.last_accessed
+            """,
             (session, timestamp),
         )
         conn.execute("DELETE FROM memory_chunks WHERE memory_id = ?", (memory_id,))

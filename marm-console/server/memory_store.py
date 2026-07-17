@@ -41,15 +41,14 @@ def _concept_link_counts(memory_ids: list[str]) -> dict[str, int]:
     counts = dict.fromkeys(memory_ids, 0)
     try:
         with sqlite3.connect(db_path) as connection:
-            placeholders = ",".join("?" for _ in memory_ids)
             for memory_id, count in connection.execute(
-                f"""
+                """
                 SELECT memory_id, COUNT(*)
                 FROM relationships
-                WHERE memory_id IN ({placeholders})
+                WHERE memory_id IN (SELECT value FROM json_each(?))
                 GROUP BY memory_id
                 """,
-                memory_ids,
+                (json.dumps(memory_ids),),
             ).fetchall():
                 counts[str(memory_id)] = counts.get(str(memory_id), 0) + count
 

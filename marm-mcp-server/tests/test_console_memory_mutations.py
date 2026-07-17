@@ -44,11 +44,65 @@ def test_internal_memory_mutations_use_queue_and_keep_indexes(monkeypatch, tmp_p
             db_path = tmp_path / "marm_memory.db"
             with sqlite3.connect(db_path) as conn:
                 conn.execute(
+                    "UPDATE sessions SET marm_active = TRUE WHERE session_name = ?",
+                    ("console-session",),
+                )
+                conn.execute(
                     "INSERT INTO memory_chunks (memory_id, chunk_index, chunk_text, embedding) "
                     "VALUES (?, 0, 'stale chunk', ?)",
                     (memory_id, b"1234"),
                 )
+                conn.execute(
+                    """
+                    INSERT INTO compaction_staging (
+                        id, session_name, source_memory_ids, preview, suggested_summary,
+                        status, candidate_hash, source_updated_at_snapshot,
+                        expires_at, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        "replace-candidate",
+                        "console-session",
+                        json.dumps([memory_id]),
+                        "Original console memory",
+                        "Original summary",
+                        "ready",
+                        "candidate-hash",
+                        "source-hash",
+                        "2099-01-01T00:00:00+00:00",
+                        "2026-01-01T00:00:00+00:00",
+                        "2026-01-01T00:00:00+00:00",
+                    ),
+                )
                 conn.commit()
+
+            from marm_mcp_server.core.concept_db import ConceptDB
+
+            concept_db = ConceptDB(str(concept_db_path))
+            with concept_db.get_connection() as conn:
+                entity_a, _ = concept_db.get_or_create_entity(
+                    conn,
+                    "Console",
+                    "component",
+                    "console-session",
+                    "marm-console",
+                    memory_id,
+                )
+                entity_b, _ = concept_db.get_or_create_entity(
+                    conn,
+                    "MARM",
+                    "system",
+                    "console-session",
+                    "marm-console",
+                    "other-memory",
+                )
+                conn.execute(
+                    "UPDATE entities SET source_memory_ids = ? WHERE id = ?",
+                    (json.dumps([memory_id, "other-memory"]), entity_a),
+                )
+                concept_db.store_relationship(
+                    conn, entity_a, entity_b, "references", memory_id, "marm-console"
+                )
 
             replace = client.put(
                 f"/internal/memories/{memory_id}",
@@ -85,33 +139,29 @@ def test_internal_memory_mutations_use_queue_and_keep_indexes(monkeypatch, tmp_p
                     "SELECT COUNT(*) FROM memories_fts WHERE memories_fts MATCH 'Replacement'",
                 ).fetchone()[0]
                 assert fts_count == 1
+                active, staging_status = conn.execute(
+                    """
+                    SELECT s.marm_active, c.status
+                    FROM sessions s
+                    JOIN compaction_staging c ON c.session_name = s.session_name
+                    WHERE s.session_name = ? AND c.id = ?
+                    """,
+                    ("console-session", "replace-candidate"),
+                ).fetchone()
+                assert active == 1
+                assert staging_status == "stale"
 
-            from marm_mcp_server.core.concept_db import ConceptDB
-
-            concept_db = ConceptDB(str(concept_db_path))
-            with concept_db.get_connection() as conn:
-                entity_a, _ = concept_db.get_or_create_entity(
-                    conn,
-                    "Console",
-                    "component",
-                    "console-session",
-                    "marm-console",
-                    memory_id,
-                )
-                entity_b, _ = concept_db.get_or_create_entity(
-                    conn,
-                    "MARM",
-                    "system",
-                    "console-session",
-                    "marm-console",
-                    "other-memory",
-                )
-                conn.execute(
-                    "UPDATE entities SET source_memory_ids = ? WHERE id = ?",
-                    (json.dumps([memory_id, "other-memory"]), entity_a),
-                )
-                concept_db.store_relationship(
-                    conn, entity_a, entity_b, "references", memory_id, "marm-console"
+            with sqlite3.connect(concept_db_path) as conn:
+                source_ids = conn.execute(
+                    "SELECT source_memory_ids FROM entities WHERE id = ?", (entity_a,)
+                ).fetchone()[0]
+                assert json.loads(source_ids) == ["other-memory"]
+                assert (
+                    conn.execute(
+                        "SELECT COUNT(*) FROM relationships WHERE memory_id = ?",
+                        (memory_id,),
+                    ).fetchone()[0]
+                    == 0
                 )
 
             delete = client.request(

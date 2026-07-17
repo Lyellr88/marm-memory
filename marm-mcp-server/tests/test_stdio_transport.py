@@ -158,8 +158,16 @@ def test_stdio_handles_mcp_initialize_and_exposes_tools(tmp_path):
     watchdog = threading.Timer(30, proc.kill)
     responses = {}
     stderr_text = ""
+    stderr_chunks = []
+
+    def _drain_stderr():
+        for chunk in iter(proc.stderr.readline, b""):
+            stderr_chunks.append(chunk)
+
+    stderr_thread = threading.Thread(target=_drain_stderr, daemon=True)
 
     try:
+        stderr_thread.start()
         watchdog.start()
         proc.stdin.write(stdin_data)
         proc.stdin.flush()
@@ -178,7 +186,8 @@ def test_stdio_handles_mcp_initialize_and_exposes_tools(tmp_path):
         watchdog.cancel()
         proc.stdin.close()
         proc.wait(timeout=10)
-        stderr_text = proc.stderr.read().decode("utf-8", errors="replace")
+        stderr_thread.join(timeout=1)
+        stderr_text = b"".join(stderr_chunks).decode("utf-8", errors="replace")
         proc.stdout.close()
         proc.stderr.close()
 

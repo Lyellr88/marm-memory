@@ -89,7 +89,7 @@ class ProjectDeletePayload(BaseModel):
 class MemoryMutationPayload(BaseModel):
     content: str
     session_name: str
-    context_type: str = "general"
+    context_type: str | None = "general"
     project: str | None = None
     platform: str | None = None
     metadata: dict | None = None
@@ -283,15 +283,21 @@ def _memory_mutation(
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
+def _memory_payload(payload: MemoryMutationPayload) -> dict:
+    data = payload.model_dump()
+    data["context_type"] = data.get("context_type") or "general"
+    return data
+
+
 @app.post("/api/memories", status_code=201)
 def create_memory(payload: MemoryMutationPayload) -> dict:
-    return _memory_mutation("internal/memories", payload.model_dump())
+    return _memory_mutation("internal/memories", _memory_payload(payload))
 
 
 @app.put("/api/memories/{memory_id}")
 def replace_memory(memory_id: str, payload: MemoryMutationPayload) -> dict:
     return _memory_mutation(
-        f"internal/memories/{memory_id}", payload.model_dump(), method="PUT"
+        f"internal/memories/{memory_id}", _memory_payload(payload), method="PUT"
     )
 
 

@@ -47,7 +47,7 @@ def test_memory_mutation_routes_proxy_to_marm_runtime(monkeypatch):
             json={
                 "content": "Edited write",
                 "session_name": "session",
-                "context_type": "note",
+                "context_type": None,
                 "project": None,
                 "platform": "cursor",
                 "metadata": {"edited": True},
@@ -92,7 +92,7 @@ def test_memory_mutation_routes_proxy_to_marm_runtime(monkeypatch):
             {
                 "content": "Edited write",
                 "session_name": "session",
-                "context_type": "note",
+                "context_type": "general",
                 "project": None,
                 "platform": "cursor",
                 "metadata": {"edited": True},

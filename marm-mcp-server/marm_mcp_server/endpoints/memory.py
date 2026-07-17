@@ -145,6 +145,7 @@ async def console_replace_memory(memory_id: str, payload: ConsoleMemoryPayload) 
         raise _memory_conflict(exc) from exc
     if not updated:
         raise HTTPException(status_code=404, detail="Memory not found")
+    _cleanup_deleted_concepts([memory_id])
     return memory.console_memory_row(memory_id) or {"id": memory_id}
 
 
