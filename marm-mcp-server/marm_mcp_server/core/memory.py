@@ -1,6 +1,7 @@
 """Advanced memory system with semantic search and MARM protocol support."""
 
 import importlib.util
+import json
 import threading
 from datetime import datetime, timezone
 from typing import List, Dict, Optional
@@ -45,6 +46,8 @@ from .write_queue import WriteQueue
 from .memory_ops import (
     _store_memory,
     _update_memory,
+    _replace_memory,
+    _delete_memories,
     _recall_similar,
     _recall_text_search,
 )
@@ -269,6 +272,93 @@ class MARMMemory:
         if self._write_queue is not None:
             return await self._write_queue.put(content, session, context_type, metadata)
         return await self.store_memory(content, session, context_type, metadata)
+
+    async def console_create_memory(
+        self,
+        content: str,
+        session: str,
+        context_type: str,
+        metadata: Dict | None,
+        project: str | None,
+        platform: str | None,
+    ) -> str:
+        await self.start_write_queue()
+        if self._write_queue is None:
+            raise RuntimeError("memory write queue is unavailable")
+        return await self._write_queue.put_callable(
+            _store_memory,
+            self,
+            content,
+            session,
+            context_type,
+            metadata,
+            project,
+            platform,
+            True,
+        )
+
+    async def console_replace_memory(
+        self,
+        memory_id: str,
+        content: str,
+        session: str,
+        context_type: str,
+        metadata: Dict | None,
+        project: str | None,
+        platform: str | None,
+    ) -> bool:
+        await self.start_write_queue()
+        if self._write_queue is None:
+            raise RuntimeError("memory write queue is unavailable")
+        return await self._write_queue.put_callable(
+            _replace_memory,
+            self,
+            memory_id,
+            content,
+            session,
+            context_type,
+            metadata,
+            project,
+            platform,
+        )
+
+    async def console_delete_memory(self, memory_id: str) -> dict:
+        await self.start_write_queue()
+        if self._write_queue is None:
+            raise RuntimeError("memory write queue is unavailable")
+        return await self._write_queue.put_callable(_delete_memories, self, [memory_id])
+
+    async def console_delete_memories(self, memory_ids: list[str]) -> dict:
+        await self.start_write_queue()
+        if self._write_queue is None:
+            raise RuntimeError("memory write queue is unavailable")
+        return await self._write_queue.put_callable(_delete_memories, self, memory_ids)
+
+    def console_memory_row(self, memory_id: str) -> dict | None:
+        with self.get_connection() as conn:
+            row = conn.execute(
+                """SELECT id, content, session_name, project, platform, context_type, metadata,
+                   content_hash, timestamp, compaction_role, embedding,
+                   (SELECT COUNT(*) FROM memory_chunks WHERE memory_id = memories.id)
+                   FROM memories WHERE id = ?""",
+                (memory_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return {
+            "id": row[0],
+            "content": row[1],
+            "session_name": row[2],
+            "project": row[3],
+            "platform": row[4],
+            "context_type": row[5],
+            "metadata": json.loads(row[6]) if row[6] else {},
+            "content_hash": row[7],
+            "timestamp": row[8],
+            "compaction_role": row[9] or "none",
+            "has_embedding": row[10] is not None,
+            "chunk_count": row[11],
+        }
 
     async def recall_similar(
         self,

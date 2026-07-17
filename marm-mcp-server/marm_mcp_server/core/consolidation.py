@@ -7,6 +7,7 @@ from typing import Optional
 from ..config.settings import MARM_PROJECT, MARM_PLATFORM
 
 logger = logging.getLogger(__name__)
+_UNSET = object()
 
 
 def normalize_content(content: str) -> str:
@@ -20,16 +21,23 @@ def compute_content_hash(content: str) -> str:
 
 
 def find_exact_duplicate(
-    conn, content_hash: str, session_name: str, normalized_content: str
+    conn,
+    content_hash: str,
+    session_name: str,
+    normalized_content: str,
+    project: object = _UNSET,
+    platform: object = _UNSET,
 ) -> Optional[str]:
     """Return memory_id of an existing exact match within the session, or None.
 
     Verifies content equality after the hash match so SHA-256 collisions store
     as a new row rather than silently deduplicating different content.
     """
+    scoped_project = MARM_PROJECT or None if project is _UNSET else project
+    scoped_platform = MARM_PLATFORM or None if platform is _UNSET else platform
     rows = conn.execute(
         "SELECT id, content FROM memories WHERE content_hash = ? AND session_name = ? AND project IS ? AND platform IS ?",
-        (content_hash, session_name, MARM_PROJECT or None, MARM_PLATFORM or None),
+        (content_hash, session_name, scoped_project, scoped_platform),
     ).fetchall()
     for row_id, row_content in rows:
         if normalize_content(row_content) == normalized_content:
@@ -38,7 +46,13 @@ def find_exact_duplicate(
 
 
 async def find_semantic_duplicate(
-    memory, content: str, session_name: str, threshold: float, query_vec=None
+    memory,
+    content: str,
+    session_name: str,
+    threshold: float,
+    query_vec=None,
+    project: object = _UNSET,
+    platform: object = _UNSET,
 ) -> Optional[str]:
     """Return memory_id of nearest semantic match at or above threshold in session, or None.
 
@@ -48,13 +62,15 @@ async def find_semantic_duplicate(
     try:
         if query_vec is None and not memory._load_encoder_lazily():
             return None
+        scoped_project = MARM_PROJECT or None if project is _UNSET else project
+        scoped_platform = MARM_PLATFORM or None if platform is _UNSET else platform
         results = await memory.recall_similar(
             content,
             session=session_name,
             limit=1,
             query_vec=query_vec,
-            project=MARM_PROJECT or None,
-            platform=MARM_PLATFORM or None,
+            project=scoped_project,
+            platform=scoped_platform,
         )
         if results and results[0]["similarity"] >= threshold:
             return results[0]["id"]

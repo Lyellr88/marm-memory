@@ -74,7 +74,12 @@ export function useCreateMemory() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: MemoryInput) => client.createMemory(data),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['memories', baseUrl] })
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['memories', baseUrl] });
+      qc.invalidateQueries({ queryKey: queryKeys.overview(baseUrl) });
+      qc.invalidateQueries({ queryKey: queryKeys.filters(baseUrl) });
+      qc.invalidateQueries({ queryKey: queryKeys.sessions(baseUrl) });
+    }
   });
 }
 
@@ -82,10 +87,18 @@ export function useUpdateMemory() {
   const { baseUrl, client } = useMarmConfig();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, data }: { id: MemoryId, data: Partial<MemoryInput> }) => client.updateMemory(id, data),
+    mutationFn: ({ id, data }: { id: MemoryId, data: MemoryInput }) => client.updateMemory(id, data),
     onSuccess: (res, vars) => {
       qc.invalidateQueries({ queryKey: ['memories', baseUrl] });
       qc.invalidateQueries({ queryKey: queryKeys.memory(baseUrl, vars.id) });
+      qc.invalidateQueries({ queryKey: queryKeys.overview(baseUrl) });
+      qc.invalidateQueries({ queryKey: queryKeys.filters(baseUrl) });
+      qc.invalidateQueries({ queryKey: queryKeys.sessions(baseUrl) });
+      qc.invalidateQueries({ queryKey: queryKeys.compaction(baseUrl) });
+      qc.invalidateQueries({ queryKey: ['conceptsSummary', baseUrl] });
+      qc.invalidateQueries({ queryKey: ['conceptsGraph', baseUrl] });
+      qc.invalidateQueries({ queryKey: ['conceptsSearch', baseUrl] });
+      qc.invalidateQueries({ queryKey: queryKeys.duplicates(baseUrl) });
     }
   });
 }
@@ -95,7 +108,17 @@ export function useDeleteMemory() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: MemoryId) => client.deleteMemory(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['memories', baseUrl] })
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['memories', baseUrl] });
+      qc.invalidateQueries({ queryKey: queryKeys.overview(baseUrl) });
+      qc.invalidateQueries({ queryKey: queryKeys.filters(baseUrl) });
+      qc.invalidateQueries({ queryKey: queryKeys.sessions(baseUrl) });
+      qc.invalidateQueries({ queryKey: queryKeys.compaction(baseUrl) });
+      qc.invalidateQueries({ queryKey: ['conceptsSummary', baseUrl] });
+      qc.invalidateQueries({ queryKey: ['conceptsGraph', baseUrl] });
+      qc.invalidateQueries({ queryKey: ['conceptsSearch', baseUrl] });
+      qc.invalidateQueries({ queryKey: ['duplicates', baseUrl] });
+    }
   });
 }
 
@@ -104,7 +127,17 @@ export function useBulkDeleteMemories() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (ids: MemoryId[]) => client.bulkDeleteMemories(ids),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['memories', baseUrl] })
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['memories', baseUrl] });
+      qc.invalidateQueries({ queryKey: queryKeys.overview(baseUrl) });
+      qc.invalidateQueries({ queryKey: queryKeys.filters(baseUrl) });
+      qc.invalidateQueries({ queryKey: queryKeys.sessions(baseUrl) });
+      qc.invalidateQueries({ queryKey: queryKeys.compaction(baseUrl) });
+      qc.invalidateQueries({ queryKey: ['conceptsSummary', baseUrl] });
+      qc.invalidateQueries({ queryKey: ['conceptsGraph', baseUrl] });
+      qc.invalidateQueries({ queryKey: ['conceptsSearch', baseUrl] });
+      qc.invalidateQueries({ queryKey: ['duplicates', baseUrl] });
+    }
   });
 }
 

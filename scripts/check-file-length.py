@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Report source files in shipped MARM server packages that exceed a threshold."""
+"""Report source files in MARM server and Console packages that exceed a threshold."""
 
 import argparse
 import sys
@@ -13,9 +13,18 @@ RED = "\033[31m"
 GRAY = "\033[90m"
 RESET = "\033[0m"
 
-ROOT = Path(__file__).parent.parent / "marm-mcp-server"
-SCAN_DIRS = ["marm_mcp_server", "marm_graph", "marm_dashboard"]
-EXTENSIONS = {".py", ".toml", ".md", ".txt", ".json"}
+ROOT = Path(__file__).parent.parent
+SCAN_DIRS = [
+    ("marm-mcp-server/marm_mcp_server", ROOT / "marm-mcp-server" / "marm_mcp_server"),
+    ("marm-mcp-server/marm_graph", ROOT / "marm-mcp-server" / "marm_graph"),
+    ("marm-mcp-server/marm_dashboard", ROOT / "marm-mcp-server" / "marm_dashboard"),
+    ("marm-console/server", ROOT / "marm-console" / "server"),
+    (
+        "marm-console/artifacts/marm-console/src",
+        ROOT / "marm-console" / "artifacts" / "marm-console" / "src",
+    ),
+]
+EXTENSIONS = {".py", ".toml", ".md", ".txt", ".json", ".ts", ".tsx", ".css"}
 
 
 def line_count(path: Path) -> int:
@@ -26,6 +35,11 @@ def line_count(path: Path) -> int:
 
 
 def main() -> int:
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
     parser = argparse.ArgumentParser(description="Check file line lengths.")
     parser.add_argument(
         "--threshold",
@@ -47,14 +61,13 @@ def main() -> int:
 
     results: dict[str, list[tuple[int, str, str]]] = defaultdict(list)
 
-    for dir_name in SCAN_DIRS:
-        base = ROOT / dir_name
+    for label, base in SCAN_DIRS:
         if not base.exists():
-            print(f"{YELLOW}Warning: {dir_name}/ not found, skipping{RESET}")
+            print(f"{YELLOW}Warning: {label}/ not found, skipping{RESET}")
             continue
 
         files = [f for f in base.rglob("*") if f.is_file() and f.suffix in EXTENSIONS]
-        print(f"{GRAY}Scanning {len(files)} files in {dir_name}/{RESET}")
+        print(f"{GRAY}Scanning {len(files)} files in {label}/{RESET}")
 
         for f in files:
             count = line_count(f)

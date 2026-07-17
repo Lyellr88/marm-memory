@@ -4,6 +4,7 @@ import sqlite3
 import subprocess
 import sys
 import asyncio
+import threading
 
 import pytest
 from anyio import ClosedResourceError, EndOfStream
@@ -146,26 +147,53 @@ def test_stdio_handles_mcp_initialize_and_exposes_tools(tmp_path):
         + message({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
     )
 
-    result = subprocess.run(
+    proc = subprocess.Popen(
         [sys.executable, "-m", "marm_mcp_server.server_stdio"],
-        input=stdin_data,
         cwd=os.getcwd(),
         env=env,
-        capture_output=True,
-        timeout=30,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
     )
-
-    assert result.returncode == 0, result.stderr.decode("utf-8", errors="replace")[:500]
-
+    watchdog = threading.Timer(30, proc.kill)
     responses = {}
-    for line in result.stdout.splitlines():
-        msg = json.loads(line)
-        if "id" in msg:
-            responses[msg["id"]] = msg
+    stderr_text = ""
+    stderr_chunks = []
 
-    assert 1 in responses, (
-        f"No initialize response; stderr: {result.stderr.decode('utf-8', errors='replace')[:500]}"
-    )
+    def _drain_stderr():
+        for chunk in iter(proc.stderr.readline, b""):
+            stderr_chunks.append(chunk)
+
+    stderr_thread = threading.Thread(target=_drain_stderr, daemon=True)
+
+    try:
+        stderr_thread.start()
+        watchdog.start()
+        proc.stdin.write(stdin_data)
+        proc.stdin.flush()
+
+        # Keep stdin open until tools/list responds. Closing it immediately
+        # lets the server's normal EOF teardown win a race with its pending
+        # response on slower runners.
+        while 2 not in responses:
+            line = proc.stdout.readline()
+            if not line:
+                break
+            message = json.loads(line)
+            if "id" in message:
+                responses[message["id"]] = message
+    finally:
+        watchdog.cancel()
+        proc.stdin.close()
+        proc.wait(timeout=10)
+        stderr_thread.join(timeout=1)
+        stderr_text = b"".join(stderr_chunks).decode("utf-8", errors="replace")
+        proc.stdout.close()
+        proc.stderr.close()
+
+    assert proc.returncode == 0, stderr_text[:500]
+
+    assert 1 in responses, f"No initialize response; stderr: {stderr_text[:500]}"
     assert "result" in responses[1]
     assert "serverInfo" in responses[1]["result"]
 

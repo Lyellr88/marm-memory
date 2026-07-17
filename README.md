@@ -1,11 +1,11 @@
 <div align="center">
 <picture>
-<img src="https://raw.githubusercontent.com/Lyellr88/marm-memory/MARM-main/assets/marm-logo.png"
+<img src="https://raw.githubusercontent.com/Lyellr88/marm-memory/MARM-main/assets/icons/icon-gen-1.png"
      alt="marm-memory - persistent local memory server for AI agents (Model Context Protocol)"
-     width="800"
+     width="200"
      height="200">
 </picture>
-<h1 align="center">MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.21.1</h1>
+<h1 align="center">MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.22.0</h1>
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/Lyellr88/marm-memory/blob/MARM-main/LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)

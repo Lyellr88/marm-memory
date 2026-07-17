@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 from pathlib import Path
 
@@ -19,6 +20,51 @@ def _connect(db_path: Path) -> sqlite3.Connection:
     connection = sqlite3.connect(db_path)
     connection.row_factory = sqlite3.Row
     return connection
+
+
+def _concept_db_path() -> Path:
+    configured = os.environ.get("MARM_CONCEPT_DB_PATH")
+    return (
+        Path(configured).expanduser()
+        if configured
+        else Path.home() / ".marm" / "index" / "marm_index.db"
+    )
+
+
+def _concept_link_counts(memory_ids: list[str]) -> dict[str, int]:
+    if not memory_ids:
+        return {}
+    db_path = _concept_db_path()
+    if not db_path.exists():
+        return {}
+
+    counts = dict.fromkeys(memory_ids, 0)
+    try:
+        with sqlite3.connect(db_path) as connection:
+            for memory_id, count in connection.execute(
+                """
+                SELECT memory_id, COUNT(*)
+                FROM relationships
+                WHERE memory_id IN (SELECT value FROM json_each(?))
+                GROUP BY memory_id
+                """,
+                (json.dumps(memory_ids),),
+            ).fetchall():
+                counts[str(memory_id)] = counts.get(str(memory_id), 0) + count
+
+            for (source_json,) in connection.execute(
+                "SELECT source_memory_ids FROM entities"
+            ).fetchall():
+                try:
+                    source_ids = {str(item) for item in json.loads(source_json or "[]")}
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    continue
+                for memory_id in source_ids.intersection(counts):
+                    counts[memory_id] += 1
+    except sqlite3.Error:
+        return {}
+
+    return counts
 
 
 def overview(db_path: Path) -> dict:
@@ -159,6 +205,7 @@ def list_memories(
             """,
             [*params, limit, offset],
         ).fetchall()
+    concept_counts = _concept_link_counts([str(row["id"]) for row in rows])
     items = [
         {
             "id": row["id"],
@@ -173,7 +220,7 @@ def list_memories(
             "compaction_role": row["compaction_role"] or "none",
             "chunk_count": row["chunk_count"],
             "has_embedding": row["embedding"] is not None,
-            "concept_link_count": 0,
+            "concept_link_count": concept_counts.get(str(row["id"]), 0),
         }
         for row in rows
     ]
@@ -194,6 +241,7 @@ def get_memory(db_path: Path, memory_id: str) -> dict | None:
         ).fetchone()
     if row is None:
         return None
+    concept_counts = _concept_link_counts([str(row["id"])])
     return {
         "id": row["id"],
         "content": row["content"],
@@ -207,7 +255,7 @@ def get_memory(db_path: Path, memory_id: str) -> dict | None:
         "compaction_role": row["compaction_role"] or "none",
         "chunk_count": row["chunk_count"],
         "has_embedding": row["embedding"] is not None,
-        "concept_link_count": 0,
+        "concept_link_count": concept_counts.get(str(row["id"]), 0),
     }
 
 

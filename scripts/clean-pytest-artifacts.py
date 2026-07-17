@@ -10,7 +10,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SERVER_ROOT = ROOT / "marm-mcp-server"
-SAFE_ROOTS = [ROOT, SERVER_ROOT, Path(r"C:\tmp")]
+CONSOLE_ROOT = ROOT / "marm-console"
+SAFE_ROOTS = [ROOT, SERVER_ROOT, CONSOLE_ROOT, Path(r"C:\tmp")]
 
 
 def existing_safe_roots() -> list[Path]:
@@ -41,7 +42,7 @@ def add_child_directories(base: Path, pattern: str, targets: set[Path]) -> None:
 def discover_targets() -> list[Path]:
     targets: set[Path] = set()
 
-    for base in (ROOT, SERVER_ROOT):
+    for base in (ROOT, SERVER_ROOT, CONSOLE_ROOT):
         add_existing_directory(base / ".pytest_cache", targets)
         add_child_directories(base, ".pytest_tmp*", targets)
         add_child_directories(base / "tmp", "pytest-*", targets)

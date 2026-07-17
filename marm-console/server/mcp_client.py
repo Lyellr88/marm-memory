@@ -35,7 +35,13 @@ def _http_error(exc: HTTPError) -> McpRequestError:
     return McpRequestError(exc.code, detail)
 
 
-def post(operation: str, payload: dict, *, timeout: float = 10.0) -> dict:
+def request(
+    operation: str,
+    payload: dict | None = None,
+    *,
+    method: str = "POST",
+    timeout: float = 10.0,
+) -> dict:
     base_url = os.environ.get("MARM_MCP_URL", "http://127.0.0.1:8001").rstrip("/")
     headers = {"Content-Type": "application/json", "Accept": "application/json"}
     api_key = os.environ.get("MARM_API_KEY")
@@ -43,9 +49,9 @@ def post(operation: str, payload: dict, *, timeout: float = 10.0) -> dict:
         headers["Authorization"] = f"Bearer {api_key}"
     request = Request(
         f"{base_url}/{operation.lstrip('/')}",
-        data=json.dumps(payload).encode("utf-8"),
+        data=json.dumps(payload).encode("utf-8") if payload is not None else None,
         headers=headers,
-        method="POST",
+        method=method,
     )
     try:
         with urlopen(request, timeout=timeout) as response:
@@ -59,6 +65,20 @@ def post(operation: str, payload: dict, *, timeout: float = 10.0) -> dict:
     if not isinstance(result, dict):
         raise McpUnavailable("MARM MCP server returned an invalid response.")
     return result
+
+
+def post(operation: str, payload: dict, *, timeout: float = 10.0) -> dict:
+    return request(operation, payload, timeout=timeout)
+
+
+def put(operation: str, payload: dict, *, timeout: float = 10.0) -> dict:
+    return request(operation, payload, method="PUT", timeout=timeout)
+
+
+def delete(
+    operation: str, payload: dict | None = None, *, timeout: float = 10.0
+) -> dict:
+    return request(operation, payload, method="DELETE", timeout=timeout)
 
 
 def get(operation: str, *, timeout: float = 10.0) -> dict:

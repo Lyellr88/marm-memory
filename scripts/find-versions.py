@@ -23,6 +23,8 @@ RESET = "\033[0m"
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SERVER_ROOT = PROJECT_ROOT / "marm-mcp-server"
 DASHBOARD_ROOT = SERVER_ROOT / "marm_dashboard"
+CONSOLE_ROOT = PROJECT_ROOT / "marm-console"
+CONSOLE_FRONTEND_ROOT = CONSOLE_ROOT / "artifacts" / "marm-console"
 CHANGELOG = PROJECT_ROOT / "CHANGELOG.md"
 
 CRITICAL_FILES = [
@@ -42,6 +44,13 @@ OCI_IDENTIFIER_FILES = [
 DASHBOARD_CRITICAL_FILES = [
     DASHBOARD_ROOT / "__init__.py",
 ]
+
+CONSOLE_CRITICAL_FILES = [
+    CONSOLE_ROOT / "server" / "app.py",
+    CONSOLE_ROOT / "package.json",
+    CONSOLE_FRONTEND_ROOT / "package.json",
+]
+ALL_CRITICAL_FILES = CRITICAL_FILES + DASHBOARD_CRITICAL_FILES + CONSOLE_CRITICAL_FILES
 
 DOC_ROOT = PROJECT_ROOT / "docs"
 MARM_DOCS_ROOT = SERVER_ROOT / "marm-docs"
@@ -79,6 +88,10 @@ DOC_SKIP_CUES = (
 DOC_VERSION_LINE_RE = re.compile(
     r"^.*(?:marm|mcp server|pip install marm-mcp-server|server version|"
     r"git tag|git push origin).*$",
+    re.IGNORECASE,
+)
+CONSOLE_DOC_VERSION_LINE_RE = re.compile(
+    r"^.*(?:marm console|marm-console|console version|pip install marm-console).*$",
     re.IGNORECASE,
 )
 
@@ -119,6 +132,15 @@ def discover_dashboard_docs() -> list[Path]:
     return []
 
 
+def discover_console_docs() -> list[Path]:
+    paths = [
+        CONSOLE_ROOT / "README.md",
+        CONSOLE_ROOT / "server" / "README.md",
+        CONSOLE_FRONTEND_ROOT / "PRODUCT.md",
+    ]
+    return [path for path in paths if path.exists()]
+
+
 def scan_versions(path: Path, pattern: re.Pattern = VERSION_RE) -> list[VersionHit]:
     hits: list[VersionHit] = []
     for line_no, line in enumerate(read_text(path).splitlines(), start=1):
@@ -143,6 +165,22 @@ def scan_doc_versions(path: Path) -> list[VersionHit]:
     hits: list[VersionHit] = []
     for line_no, line in enumerate(lines, start=1):
         if not should_scan_doc_line(lines, line_no):
+            continue
+        for match in VERSION_RE.finditer(line):
+            hits.append(
+                VersionHit(
+                    version=match.group(1),
+                    line=line_no,
+                    text=line.rstrip(),
+                )
+            )
+    return hits
+
+
+def scan_console_doc_versions(path: Path) -> list[VersionHit]:
+    hits: list[VersionHit] = []
+    for line_no, line in enumerate(read_text(path).splitlines(), start=1):
+        if not CONSOLE_DOC_VERSION_LINE_RE.match(line):
             continue
         for match in VERSION_RE.finditer(line):
             hits.append(
@@ -247,8 +285,19 @@ def print_file_hits(path: Path, hits: list[VersionHit]) -> None:
 
 
 def replacement_files(dashboard: bool = False) -> list[Path]:
-    critical = DASHBOARD_CRITICAL_FILES if dashboard else CRITICAL_FILES
-    docs = discover_dashboard_docs() if dashboard else discover_docs()
+    return replacement_files_for_mode("dashboard" if dashboard else "server")
+
+
+def replacement_files_for_mode(mode: str) -> list[Path]:
+    if mode == "dashboard":
+        critical = DASHBOARD_CRITICAL_FILES
+        docs = discover_dashboard_docs()
+    elif mode == "console":
+        critical = CONSOLE_CRITICAL_FILES
+        docs = discover_console_docs()
+    else:
+        critical = CRITICAL_FILES
+        docs = discover_docs()
     files: list[Path] = []
     seen: set[Path] = set()
     for path in [*critical, *docs]:
@@ -268,7 +317,7 @@ def replace_versions(path: Path, target_version: str) -> int:
         prefix = "v" if match.group(0).lower().startswith("v") else ""
         return f"{prefix}{target_version}"
 
-    if path in CRITICAL_FILES or path in DASHBOARD_CRITICAL_FILES:
+    if path in ALL_CRITICAL_FILES:
         updated, count = CRITICAL_VERSION_RE.subn(
             lambda match: f"{match.group(1)}{target_version}",
             content,
@@ -285,7 +334,11 @@ def replace_versions(path: Path, target_version: str) -> int:
         raw_lines = content.splitlines()
         lines_with_endings = content.splitlines(keepends=True)
         for line_no, line in enumerate(lines_with_endings, start=1):
-            if should_scan_doc_line(raw_lines, line_no):
+            if path in discover_console_docs():
+                should_scan = CONSOLE_DOC_VERSION_LINE_RE.match(line) is not None
+            else:
+                should_scan = should_scan_doc_line(raw_lines, line_no)
+            if should_scan:
                 line, line_count = VERSION_RE.subn(broad_replacement, line)
                 count += line_count
             updated_lines.append(line)
@@ -306,7 +359,7 @@ def confirm(target_version: str, files: list[Path], assume_yes: bool) -> bool:
     for path in files:
         hits = (
             scan_versions(path, CRITICAL_VERSION_RE)
-            if path in CRITICAL_FILES
+            if path in ALL_CRITICAL_FILES
             else scan_doc_versions(path)
         )
         if hits and any(hit.version != target_version for hit in hits):
@@ -316,12 +369,12 @@ def confirm(target_version: str, files: list[Path], assume_yes: bool) -> bool:
     return answer.lower() == "y" or answer == target_version
 
 
-def prompt_target_version(changelog_version: str) -> str | None:
+def prompt_target_version(target_version: str, source_label: str) -> str | None:
     while True:
         try:
             answer = (
                 input(
-                    f"\nUpdate versions to changelog version {changelog_version}? [y/N/c custom]: "
+                    f"\nUpdate versions to {source_label} {target_version}? [y/N/c custom]: "
                 )
                 .strip()
                 .lower()
@@ -335,7 +388,7 @@ def prompt_target_version(changelog_version: str) -> str | None:
             return None
 
         if answer in {"y", "yes"}:
-            return changelog_version
+            return target_version
 
         if answer in {"c", "custom"}:
             custom = input("Enter custom version (example 2.5.1): ").strip()
@@ -349,6 +402,31 @@ def prompt_target_version(changelog_version: str) -> str | None:
         print(f"{RED}Choose y, n, or c.{RESET}")
 
 
+def prompt_console_version(initial_version: str | None) -> str | None:
+    prompt = "\nEnter Console version to set (example 0.1.0), or blank to skip"
+    if initial_version:
+        prompt += f" [{initial_version}]"
+    prompt += ": "
+
+    try:
+        answer = input(prompt).strip()
+    except EOFError:
+        print(f"\n{YELLOW}No input received. No changes made.{RESET}")
+        return None
+
+    if not answer:
+        if initial_version:
+            return initial_version
+        print(f"{YELLOW}No changes made.{RESET}")
+        return None
+
+    if VERSION_RE.fullmatch(answer):
+        return answer
+
+    print(f"{RED}Invalid version. Use semantic version format like 0.1.0.{RESET}")
+    return None
+
+
 def main() -> int:
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -358,18 +436,38 @@ def main() -> int:
     parser = argparse.ArgumentParser(
         description="Find MARM version references and optionally sync them interactively."
     )
-    parser.add_argument(
+    mode_group = parser.add_mutually_exclusive_group()
+    mode_group.add_argument(
         "--dashboard",
         action="store_true",
         help="Scan and sync the embedded marm_dashboard package instead of the MCP server.",
     )
+    mode_group.add_argument(
+        "--console",
+        nargs="?",
+        const="",
+        metavar="VERSION",
+        help=(
+            "Scan and manually sync the standalone marm-console app. "
+            "Optionally pass the target version, e.g. --console 0.1.0."
+        ),
+    )
     args = parser.parse_args()
-    dashboard: bool = args.dashboard
+    mode = (
+        "console"
+        if args.console is not None
+        else "dashboard"
+        if args.dashboard
+        else "server"
+    )
 
     try:
-        if dashboard:
+        if mode == "dashboard":
             target_version = current_dashboard_version()
             version_source = "embedded marm_dashboard __init__.py"
+        elif mode == "console":
+            target_version = args.console or None
+            version_source = "manual Console target"
         else:
             target_version = current_version_from_changelog()
             version_source = "first changelog entry"
@@ -377,11 +475,22 @@ def main() -> int:
         print(f"{RED}Could not determine current version: {exc}{RESET}")
         return 1
 
-    label = "Dashboard" if dashboard else "MCP Server"
+    label = {
+        "dashboard": "Dashboard",
+        "console": "Console",
+        "server": "MCP Server",
+    }[mode]
     print(f"{CYAN}=== MARM {label} Version Scan ==={RESET}\n")
-    print(f"{GREEN}Current version from {version_source}: {target_version}{RESET}\n")
+    if target_version:
+        print(f"{GREEN}Target version from {version_source}: {target_version}{RESET}\n")
+    else:
+        print(f"{GREEN}Console mode uses a manually supplied target version.{RESET}\n")
 
-    active_critical = DASHBOARD_CRITICAL_FILES if dashboard else CRITICAL_FILES
+    active_critical = {
+        "dashboard": DASHBOARD_CRITICAL_FILES,
+        "console": CONSOLE_CRITICAL_FILES,
+        "server": CRITICAL_FILES,
+    }[mode]
     critical_hits: dict[Path, list[VersionHit]] = {}
     print(f"{YELLOW}Critical files:{RESET}")
     for path in active_critical:
@@ -395,18 +504,27 @@ def main() -> int:
         print_file_hits(path, hits)
 
     print(f"\n{YELLOW}Documentation files:{RESET}")
-    doc_list = discover_dashboard_docs() if dashboard else discover_docs()
+    doc_list = {
+        "dashboard": discover_dashboard_docs,
+        "console": discover_console_docs,
+        "server": discover_docs,
+    }[mode]()
     for path in doc_list:
         hits = (
             scan_latest_changelog_versions()
             if is_changelog(path)
+            else scan_console_doc_versions(path)
+            if mode == "console"
             else scan_doc_versions(path)
         )
         print_file_hits(path, hits)
 
-    files = replacement_files(dashboard=dashboard)
+    files = replacement_files_for_mode(mode)
 
-    chosen_version = prompt_target_version(target_version)
+    if mode == "console":
+        chosen_version = target_version or prompt_console_version(None)
+    else:
+        chosen_version = prompt_target_version(target_version, version_source)
     if chosen_version is None:
         return 0
 

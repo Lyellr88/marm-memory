@@ -25,6 +25,7 @@ import type {
   LogEntry,
   LogListParams,
   Memory,
+  MemoryDeleteResult,
   MemoryId,
   MemoryInput,
   MemoryListParams,
@@ -125,11 +126,14 @@ export function createMarmClient(config: MarmClientConfig) {
     getMemory: (id: MemoryId) => request<Memory>(config, 'GET', `/memories/${id}`),
     createMemory: (data: MemoryInput) =>
       request<Memory>(config, 'POST', '/memories', { body: data }),
-    updateMemory: (id: MemoryId, data: Partial<MemoryInput>) =>
+    updateMemory: (id: MemoryId, data: MemoryInput) =>
       request<Memory>(config, 'PUT', `/memories/${id}`, { body: data }),
-    deleteMemory: (id: MemoryId) => request<void>(config, 'DELETE', `/memories/${id}`),
+    deleteMemory: (id: MemoryId) =>
+      request<MemoryDeleteResult>(config, 'DELETE', `/memories/${id}`, { body: { confirm: 'DELETE' } }),
     bulkDeleteMemories: (ids: MemoryId[]) =>
-      request<void>(config, 'POST', '/memories/bulk-delete', { body: { ids, confirm: true } }),
+      request<MemoryDeleteResult>(config, 'POST', '/memories/bulk-delete', {
+        body: { memory_ids: ids.map(String), confirm: 'DELETE' },
+      }),
 
     // Sessions / logs / notebook / summary
     listSessions: () => request<Session[]>(config, 'GET', '/sessions'),

@@ -2,7 +2,7 @@
 
 ## Universal Memory Intelligence Platform for AI Agents
 
-**MARM v2.21.1** - Memory Accurate Response Mode
+**MARM v2.22.0** - Memory Accurate Response Mode
 *Complete Windows installation guide*
 
 ---
@@ -293,7 +293,7 @@ Invoke-WebRequest -Uri http://localhost:8001/health
 {
   "status": "healthy",
   "service": "MARM MCP Server",
-  "version": "2.21.1",
+  "version": "2.22.0",
   "timestamp": "2026-01-01T00:00:00+00:00",
   "database": "connected",
   "semantic_search": "available"
