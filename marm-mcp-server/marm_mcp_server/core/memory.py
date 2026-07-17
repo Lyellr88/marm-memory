@@ -244,7 +244,7 @@ class MARMMemory:
         else:
             return "general"
 
-    async def update_memory(self, memory_id: str, new_content: str) -> None:
+    async def update_memory(self, memory_id: str, new_content: str) -> bool:
         return await _update_memory(self, memory_id, new_content)
 
     async def store_memory(

@@ -46,42 +46,47 @@ async def create_log_entry(
                 new_session = f"{base_name}-{date_tag}"
                 marker_id = str(uuid.uuid4())
                 with memory.get_connection() as conn:
-                    conn.execute("UPDATE sessions SET marm_active = FALSE")
-                    conn.execute(
-                        """
-                        INSERT INTO sessions (session_name, last_accessed, marm_active)
-                        VALUES (?, ?, TRUE)
-                        ON CONFLICT(session_name) DO UPDATE SET
-                            last_accessed = excluded.last_accessed,
-                            marm_active = TRUE
-                        """,
-                        (new_session, datetime.now(timezone.utc).isoformat()),
-                    )
-                    conn.execute(
-                        """
-                        INSERT INTO log_entries
-                            (id, session_name, entry_date, topic, summary, full_entry, project, platform)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                        """,
-                        (
-                            marker_id,
-                            new_session,
-                            date_tag,
-                            "session_start",
-                            base_name,
-                            formatted_entry,
-                            MARM_PROJECT or None,
-                            MARM_PLATFORM or None,
-                        ),
-                    )
+                    conn.execute("BEGIN IMMEDIATE")
                     try:
+                        conn.execute("UPDATE sessions SET marm_active = FALSE")
                         conn.execute(
-                            "UPDATE session_summary_cache SET dirty = TRUE, updated_at = ? WHERE session_name = ?",
-                            (datetime.now(timezone.utc).isoformat(), new_session),
+                            """
+                            INSERT INTO sessions (session_name, last_accessed, marm_active)
+                            VALUES (?, ?, TRUE)
+                            ON CONFLICT(session_name) DO UPDATE SET
+                                last_accessed = excluded.last_accessed,
+                                marm_active = TRUE
+                            """,
+                            (new_session, datetime.now(timezone.utc).isoformat()),
                         )
+                        conn.execute(
+                            """
+                            INSERT INTO log_entries
+                                (id, session_name, entry_date, topic, summary, full_entry, project, platform)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                            """,
+                            (
+                                marker_id,
+                                new_session,
+                                date_tag,
+                                "session_start",
+                                base_name,
+                                formatted_entry,
+                                MARM_PROJECT or None,
+                                MARM_PLATFORM or None,
+                            ),
+                        )
+                        try:
+                            conn.execute(
+                                "UPDATE session_summary_cache SET dirty = TRUE, updated_at = ? WHERE session_name = ?",
+                                (datetime.now(timezone.utc).isoformat(), new_session),
+                            )
+                        except Exception:
+                            pass
+                        conn.execute("COMMIT")
                     except Exception:
-                        pass
-                    conn.commit()
+                        conn.execute("ROLLBACK")
+                        raise
                 memory.active_log_session = new_session
                 # The session row and marker entry above are already durably
                 # committed -- an event-publish failure must not turn that
@@ -108,18 +113,23 @@ async def create_log_entry(
             date_tag = datetime.now(timezone.utc).strftime("%Y-%m-%d")
             session = f"session-{date_tag}"
             with memory.get_connection() as conn:
-                conn.execute("UPDATE sessions SET marm_active = FALSE")
-                conn.execute(
-                    """
-                    INSERT INTO sessions (session_name, last_accessed, marm_active)
-                    VALUES (?, ?, TRUE)
-                    ON CONFLICT(session_name) DO UPDATE SET
-                        last_accessed = excluded.last_accessed,
-                        marm_active = TRUE
-                    """,
-                    (session, datetime.now(timezone.utc).isoformat()),
-                )
-                conn.commit()
+                conn.execute("BEGIN IMMEDIATE")
+                try:
+                    conn.execute("UPDATE sessions SET marm_active = FALSE")
+                    conn.execute(
+                        """
+                        INSERT INTO sessions (session_name, last_accessed, marm_active)
+                        VALUES (?, ?, TRUE)
+                        ON CONFLICT(session_name) DO UPDATE SET
+                            last_accessed = excluded.last_accessed,
+                            marm_active = TRUE
+                        """,
+                        (session, datetime.now(timezone.utc).isoformat()),
+                    )
+                    conn.execute("COMMIT")
+                except Exception:
+                    conn.execute("ROLLBACK")
+                    raise
             memory.active_log_session = session
 
         # Chunk boundary check
@@ -153,38 +163,43 @@ async def create_log_entry(
         entry_id = str(uuid.uuid4())
         now_iso = datetime.now(timezone.utc).isoformat()
         with memory.get_connection() as conn:
-            conn.execute(
-                """
-                INSERT INTO log_entries (id, session_name, entry_date, topic, summary, full_entry, project, platform)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    entry_id,
-                    session,
-                    entry_date,
-                    topic,
-                    summary,
-                    formatted_entry,
-                    MARM_PROJECT or None,
-                    MARM_PLATFORM or None,
-                ),
-            )
-            conn.execute(
-                """
-                INSERT INTO sessions (session_name, last_accessed)
-                VALUES (?, ?)
-                ON CONFLICT(session_name) DO UPDATE SET last_accessed = excluded.last_accessed
-                """,
-                (session, now_iso),
-            )
+            conn.execute("BEGIN IMMEDIATE")
             try:
                 conn.execute(
-                    "UPDATE session_summary_cache SET dirty = TRUE, updated_at = ? WHERE session_name = ?",
-                    (now_iso, session),
+                    """
+                    INSERT INTO log_entries (id, session_name, entry_date, topic, summary, full_entry, project, platform)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        entry_id,
+                        session,
+                        entry_date,
+                        topic,
+                        summary,
+                        formatted_entry,
+                        MARM_PROJECT or None,
+                        MARM_PLATFORM or None,
+                    ),
                 )
+                conn.execute(
+                    """
+                    INSERT INTO sessions (session_name, last_accessed)
+                    VALUES (?, ?)
+                    ON CONFLICT(session_name) DO UPDATE SET last_accessed = excluded.last_accessed
+                    """,
+                    (session, now_iso),
+                )
+                try:
+                    conn.execute(
+                        "UPDATE session_summary_cache SET dirty = TRUE, updated_at = ? WHERE session_name = ?",
+                        (now_iso, session),
+                    )
+                except Exception:
+                    pass
+                conn.execute("COMMIT")
             except Exception:
-                pass
-            conn.commit()
+                conn.execute("ROLLBACK")
+                raise
 
         # Dual-write into semantic memory so marm_smart_recall can find it;
         # a store failure must never fail the log write itself.
@@ -306,56 +321,70 @@ async def delete_log_or_notebook_entry(
             if type == "log":
                 memories_deleted = 0
                 if session_name:
-                    # Dual-written semantic memories must not outlive their log entries
-                    rows = conn.execute(
-                        "SELECT id FROM log_entries WHERE session_name = ? AND (id = ? OR topic = ?)",
-                        (session_name, target, target),
-                    ).fetchall()
-                    entry_ids = [r[0] for r in rows]
-                    cursor = conn.execute(
-                        "DELETE FROM log_entries WHERE session_name = ? AND (id = ? OR topic = ?)",
-                        (session_name, target, target),
-                    )
-                    deleted = cursor.rowcount
-                    if entry_ids:
-                        placeholders = ",".join("?" * len(entry_ids))
-                        memories_deleted = conn.execute(
-                            "DELETE FROM memories WHERE json_extract(metadata, '$.source') = 'log_entry' "
-                            f"AND json_extract(metadata, '$.log_entry_id') IN ({placeholders})",
-                            entry_ids,
-                        ).rowcount
-                    if deleted:
+                    conn.execute("BEGIN IMMEDIATE")
+                    try:
+                        # Dual-written semantic memories must not outlive their log entries
+                        rows = conn.execute(
+                            "SELECT id FROM log_entries WHERE session_name = ? AND (id = ? OR topic = ?)",
+                            (session_name, target, target),
+                        ).fetchall()
+                        entry_ids = [r[0] for r in rows]
+                        cursor = conn.execute(
+                            "DELETE FROM log_entries WHERE session_name = ? AND (id = ? OR topic = ?)",
+                            (session_name, target, target),
+                        )
+                        deleted = cursor.rowcount
+                        if entry_ids:
+                            placeholders = ",".join("?" * len(entry_ids))
+                            memories_deleted = conn.execute(
+                                "DELETE FROM memories WHERE json_extract(metadata, '$.source') = 'log_entry' "
+                                f"AND json_extract(metadata, '$.log_entry_id') IN ({placeholders})",
+                                entry_ids,
+                            ).rowcount
+                        if deleted:
+                            try:
+                                conn.execute(
+                                    "UPDATE session_summary_cache SET dirty = TRUE, updated_at = ? WHERE session_name = ?",
+                                    (
+                                        datetime.now(timezone.utc).isoformat(),
+                                        session_name,
+                                    ),
+                                )
+                            except Exception:
+                                pass
+                        conn.execute("COMMIT")
+                    except Exception:
+                        conn.execute("ROLLBACK")
+                        raise
+                else:
+                    conn.execute("BEGIN IMMEDIATE")
+                    try:
+                        conn.execute(
+                            "DELETE FROM sessions WHERE session_name = ?", (target,)
+                        )
+                        cursor = conn.execute(
+                            "DELETE FROM log_entries WHERE session_name = ?", (target,)
+                        )
+                        deleted = cursor.rowcount
+                        # Guarded like every other session_summary_cache touch in
+                        # this module -- a missing/locked cache row must not
+                        # abort the rest of the whole-session delete.
                         try:
                             conn.execute(
-                                "UPDATE session_summary_cache SET dirty = TRUE, updated_at = ? WHERE session_name = ?",
-                                (datetime.now(timezone.utc).isoformat(), session_name),
+                                "DELETE FROM session_summary_cache WHERE session_name = ?",
+                                (target,),
                             )
                         except Exception:
                             pass
-                else:
-                    conn.execute(
-                        "DELETE FROM sessions WHERE session_name = ?", (target,)
-                    )
-                    cursor = conn.execute(
-                        "DELETE FROM log_entries WHERE session_name = ?", (target,)
-                    )
-                    deleted = cursor.rowcount
-                    # Guarded like every other session_summary_cache touch in
-                    # this module -- a missing/locked cache row must not
-                    # abort the rest of the whole-session delete.
-                    try:
-                        conn.execute(
-                            "DELETE FROM session_summary_cache WHERE session_name = ?",
+                        memories_deleted = conn.execute(
+                            "DELETE FROM memories WHERE session_name = ? "
+                            "AND json_extract(metadata, '$.source') = 'log_entry'",
                             (target,),
-                        )
+                        ).rowcount
+                        conn.execute("COMMIT")
                     except Exception:
-                        pass
-                    memories_deleted = conn.execute(
-                        "DELETE FROM memories WHERE session_name = ? "
-                        "AND json_extract(metadata, '$.source') = 'log_entry'",
-                        (target,),
-                    ).rowcount
-                conn.commit()
+                        conn.execute("ROLLBACK")
+                        raise
                 # Flip the runtime pointer only after the delete durably
                 # commits -- otherwise a failed commit leaves the process
                 # thinking the active session is "main" while the target
@@ -369,11 +398,16 @@ async def delete_log_or_notebook_entry(
                     "memories_deleted": memories_deleted,
                 }
             else:  # type == "notebook"
-                cursor = conn.execute(
-                    "DELETE FROM notebook_entries WHERE name = ?", (target,)
-                )
-                deleted = cursor.rowcount
-                conn.commit()
+                conn.execute("BEGIN IMMEDIATE")
+                try:
+                    cursor = conn.execute(
+                        "DELETE FROM notebook_entries WHERE name = ?", (target,)
+                    )
+                    deleted = cursor.rowcount
+                    conn.execute("COMMIT")
+                except Exception:
+                    conn.execute("ROLLBACK")
+                    raise
                 if deleted > 0:
                     memory.remove_active_notebook_entry(target)
                 return {

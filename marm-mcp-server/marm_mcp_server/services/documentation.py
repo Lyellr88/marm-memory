@@ -109,6 +109,14 @@ async def _index_doc(doc: Dict) -> bool:
                     return True
                 print(f"[DOCS] {fname} memory row missing, re-indexing")
 
+        # Audited under the SQLite write-atomicity hardening effort
+        # (docs/current/sqlite-write-atomicity-hardening.md): no BEGIN
+        # IMMEDIATE needed here. Exactly one of the two branches below
+        # runs per call, and each is a single statement -- a lone
+        # statement is already atomic under SQLite regardless of
+        # isolation_level, so there's no multi-statement sequence to
+        # protect. store_memory_queued below intentionally stays outside
+        # any transaction (it awaits and does its own internal locking).
         with memory.get_connection() as conn:
             if row and row[1]:
                 conn.execute("DELETE FROM memories WHERE id = ?", (row[1],))
@@ -263,17 +271,22 @@ async def load_marm_documentation():
             "SELECT value FROM user_settings WHERE key = 'system_notebook_cleanup_v1'"
         ).fetchone()
         if not already_cleaned:
-            for name in _LEGACY_SYSTEM_NOTEBOOK_NAMES:
-                conn.execute("DELETE FROM notebook_entries WHERE name = ?", (name,))
-            conn.execute(
-                "INSERT OR REPLACE INTO user_settings (key, value, updated_at) VALUES (?, ?, ?)",
-                (
-                    "system_notebook_cleanup_v1",
-                    "done",
-                    datetime.now(timezone.utc).isoformat(),
-                ),
-            )
-            conn.commit()
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                for name in _LEGACY_SYSTEM_NOTEBOOK_NAMES:
+                    conn.execute("DELETE FROM notebook_entries WHERE name = ?", (name,))
+                conn.execute(
+                    "INSERT OR REPLACE INTO user_settings (key, value, updated_at) VALUES (?, ?, ?)",
+                    (
+                        "system_notebook_cleanup_v1",
+                        "done",
+                        datetime.now(timezone.utc).isoformat(),
+                    ),
+                )
+                conn.execute("COMMIT")
+            except Exception:
+                conn.execute("ROLLBACK")
+                raise
             print("[DOCS] Cleaned up legacy system notebook entries")
 
     docs = get_docs_to_load()

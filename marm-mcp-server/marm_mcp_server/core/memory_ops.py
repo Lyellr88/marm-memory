@@ -41,83 +41,124 @@ from .consolidation import (
 )
 
 
-async def _update_memory(mem, memory_id: str, new_content: str) -> None:
+async def _update_memory(mem, memory_id: str, new_content: str) -> bool:
     """Append new_content into an existing memory and record the merge in metadata.
 
     Recomputes content_hash and embedding so Layer 1 dedup and semantic recall
-    stay accurate after the merge.
+    stay accurate after the merge. Returns False (no write happened) if the
+    row was deleted or changed concurrently between the pre-read and the
+    write lock -- callers must not assume the merge landed just because this
+    returned without raising.
     """
+    # Unlocked pre-read -- matches _store_memory's duplicate pre-check
+    # convention. This is a read-then-write, but the write lock is only
+    # acquired later, right before the actual UPDATE, so this read must
+    # be re-verified under the lock before it's trusted (see below).
     with mem.get_connection() as conn:
-        conn.execute("BEGIN IMMEDIATE")
         row = conn.execute(
             "SELECT content, metadata FROM memories WHERE id = ?", (memory_id,)
         ).fetchone()
-        if row is None:
-            conn.execute("ROLLBACK")
-            return
-        existing_content, metadata_json = row
-        metadata = json.loads(metadata_json) if metadata_json else {}
-        _MAX = 10000
-        _MARKER = "\n[merged] "
-        _new_budget = _MAX - len(_MARKER)
-        if len(new_content) > _new_budget:
-            new_content = new_content[:_new_budget]
-        _existing_budget = _MAX - len(_MARKER) - len(new_content)
-        existing_content = existing_content[: max(0, _existing_budget)]
-        merged_content = f"{existing_content}{_MARKER}{new_content}"
-        merged_at = datetime.now(timezone.utc).isoformat()
-        if "merge_history" not in metadata:
-            metadata["merge_history"] = []
-        metadata["merge_history"].append(
-            {
-                "merged_at": merged_at,
-                "content_preview": new_content[:100],
-            }
-        )
+    if row is None:
+        return False
+    existing_content, metadata_json = row
+    original_existing_content = existing_content  # unsliced, for the re-check below
+    metadata = json.loads(metadata_json) if metadata_json else {}
+    _MAX = 10000
+    _MARKER = "\n[merged] "
+    _new_budget = _MAX - len(_MARKER)
+    if len(new_content) > _new_budget:
+        new_content = new_content[:_new_budget]
+    _existing_budget = _MAX - len(_MARKER) - len(new_content)
+    existing_content = existing_content[: max(0, _existing_budget)]
+    merged_content = f"{existing_content}{_MARKER}{new_content}"
+    merged_at = datetime.now(timezone.utc).isoformat()
+    if "merge_history" not in metadata:
+        metadata["merge_history"] = []
+    metadata["merge_history"].append(
+        {
+            "merged_at": merged_at,
+            "content_preview": new_content[:100],
+        }
+    )
 
-        merged_hash = compute_content_hash(merged_content)
+    merged_hash = compute_content_hash(merged_content)
 
-        merged_embedding_bytes = None
-        encoder_ok = merged_content.strip() and mem._load_encoder_lazily()
-        if encoder_ok:
-            try:
-                merged_vec = await asyncio.to_thread(mem._encode_sync, merged_content)
-                merged_embedding_bytes = _embedding_to_bytes(merged_vec)
-            except Exception as e:
-                _safe_print(f"Failed to regenerate embedding after merge: {e}")
-
-        if merged_embedding_bytes is not None:
-            conn.execute(
-                "UPDATE memories SET content = ?, metadata = ?, content_hash = ?, embedding = ?, timestamp = ? WHERE id = ?",
-                (
-                    merged_content,
-                    json.dumps(metadata),
-                    merged_hash,
-                    merged_embedding_bytes,
-                    merged_at,
-                    memory_id,
-                ),
-            )
-        else:
-            conn.execute(
-                "UPDATE memories SET content = ?, metadata = ?, content_hash = ?, embedding = NULL, timestamp = ? WHERE id = ?",
-                (
-                    merged_content,
-                    json.dumps(metadata),
-                    merged_hash,
-                    merged_at,
-                    memory_id,
-                ),
-            )
+    # Compute the embedding before acquiring the write lock, same as
+    # _store_memory/_replace_memory -- embedding work can be slow, and
+    # holding BEGIN IMMEDIATE's write lock across an await would block
+    # every other writer (sqlite3 calls are synchronous, so a concurrent
+    # BEGIN IMMEDIATE on another connection can stall the whole event
+    # loop) for the duration.
+    merged_embedding_bytes = None
+    encoder_ok = merged_content.strip() and mem._load_encoder_lazily()
+    if encoder_ok:
+        try:
+            merged_vec = await asyncio.to_thread(mem._encode_sync, merged_content)
+            merged_embedding_bytes = _embedding_to_bytes(merged_vec)
+        except Exception as e:
+            _safe_print(f"Failed to regenerate embedding after merge: {e}")
 
     with mem.get_connection() as conn:
-        conn.execute("DELETE FROM memory_chunks WHERE memory_id = ?", (memory_id,))
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            # Re-check under the lock: the row may have been deleted, or
+            # its content OR metadata changed by a concurrent writer,
+            # since the unlocked read above -- metadata-only writers
+            # exist in this file too (_restore_sources_from_deleted_summary,
+            # _update_summary_metadata_after_delete), so content alone
+            # isn't enough to catch every concurrent write. Bail rather
+            # than risk clobbering a concurrent update with a merge based
+            # on stale data.
+            current = conn.execute(
+                "SELECT content, metadata FROM memories WHERE id = ?", (memory_id,)
+            ).fetchone()
+            if (
+                current is None
+                or current[0] != original_existing_content
+                or current[1] != metadata_json
+            ):
+                conn.execute("ROLLBACK")
+                return False
+
+            if merged_embedding_bytes is not None:
+                conn.execute(
+                    "UPDATE memories SET content = ?, metadata = ?, content_hash = ?, embedding = ?, timestamp = ? WHERE id = ?",
+                    (
+                        merged_content,
+                        json.dumps(metadata),
+                        merged_hash,
+                        merged_embedding_bytes,
+                        merged_at,
+                        memory_id,
+                    ),
+                )
+            else:
+                conn.execute(
+                    "UPDATE memories SET content = ?, metadata = ?, content_hash = ?, embedding = NULL, timestamp = ? WHERE id = ?",
+                    (
+                        merged_content,
+                        json.dumps(metadata),
+                        merged_hash,
+                        merged_at,
+                        memory_id,
+                    ),
+                )
+            # Folded into the same transaction as the content update --
+            # a chunk-delete failure must not leave stale chunks that
+            # disagree with the (already committed) merged content, and
+            # vice versa.
+            conn.execute("DELETE FROM memory_chunks WHERE memory_id = ?", (memory_id,))
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
 
     chunks = _chunk_text(merged_content)
     if chunks and mem._load_encoder_lazily():
         _chunk_task = asyncio.create_task(  # noqa: RUF006
             _write_chunks(mem, mem.db_path, memory_id, chunks, merged_hash)
         )
+    return True
 
 
 async def _store_memory(
@@ -188,9 +229,15 @@ async def _store_memory(
                 query_vec=pre_embedding,
             )
         if existing_id:
-            await _update_memory(mem, existing_id, sanitized_content)
-            mem._on_memory_written(session)
-            return existing_id
+            merged = await _update_memory(mem, existing_id, sanitized_content)
+            if merged:
+                mem._on_memory_written(session)
+                return existing_id
+            # existing_id's row was deleted or changed concurrently between
+            # the duplicate check above and _update_memory's write-lock
+            # re-verification -- the merge never happened. Fall through and
+            # store sanitized_content as a new memory instead of silently
+            # dropping it and reporting existing_id as if it succeeded.
 
     memory_id = str(uuid.uuid4())
     timestamp = datetime.now(timezone.utc).isoformat()

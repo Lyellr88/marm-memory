@@ -323,13 +323,20 @@ def test_stdio_delete_whole_session_keeps_active_session_if_commit_fails(
     monkeypatch, tmp_path
 ):
     """PR #94 CodeRabbit finding: active_log_session must flip to "main"
-    only after the whole-session delete's conn.commit() actually succeeds
-    -- otherwise a failed commit leaves the runtime pointer saying "main"
+    only after the whole-session delete's commit actually succeeds --
+    otherwise a failed commit leaves the runtime pointer saying "main"
     while the target session's rows are still intact in the DB.
 
-    sqlite3.Connection is an immutable C type (can't monkeypatch .commit
-    on it directly), so this wraps the real connection in a thin proxy
-    that forwards everything except commit(), which raises."""
+    services/log_entry.py now commits via an explicit
+    conn.execute("BEGIN IMMEDIATE") / conn.execute("COMMIT") /
+    conn.execute("ROLLBACK") transaction (SQLite write-atomicity
+    hardening) instead of relying on ConnectionContext's implicit
+    commit-on-clean-exit -- so the forced failure has to intercept the
+    execute("COMMIT") call specifically, not the .commit() DB-API method
+    (sqlite3.Connection is also an immutable C type, so .commit() can't
+    be monkeypatched directly anyway). This wraps the real connection in
+    a thin proxy that forwards everything except an execute("COMMIT"),
+    which raises."""
     import contextlib
     import sqlite3
 
@@ -342,6 +349,11 @@ def test_stdio_delete_whole_session_keeps_active_session_if_commit_fails(
     class _CommitFailsConn:
         def __init__(self, real):
             self._real = real
+
+        def execute(self, sql, *args, **kwargs):
+            if isinstance(sql, str) and sql.strip().upper() == "COMMIT":
+                raise sqlite3.OperationalError("disk I/O error (forced)")
+            return self._real.execute(sql, *args, **kwargs)
 
         def commit(self):
             raise sqlite3.OperationalError("disk I/O error (forced)")

@@ -28,24 +28,29 @@ async def _add(name: Optional[str], data: Optional[str], **_) -> dict:
     platform = MARM_PLATFORM or None
     now = datetime.now(timezone.utc).isoformat()
     with memory.get_connection() as conn:
-        cursor = conn.execute(
-            """
-            UPDATE notebook_entries
-            SET data = ?, embedding = ?, updated_at = ?
-            WHERE name = ? AND project IS ? AND platform IS ?
-            """,
-            (data, embedding_bytes, now, name, project, platform),
-        )
-        if cursor.rowcount == 0:
-            conn.execute(
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            cursor = conn.execute(
                 """
-                INSERT INTO notebook_entries
-                    (name, data, embedding, updated_at, project, platform)
-                VALUES (?, ?, ?, ?, ?, ?)
+                UPDATE notebook_entries
+                SET data = ?, embedding = ?, updated_at = ?
+                WHERE name = ? AND project IS ? AND platform IS ?
                 """,
-                (name, data, embedding_bytes, now, project, platform),
+                (data, embedding_bytes, now, name, project, platform),
             )
-        conn.commit()
+            if cursor.rowcount == 0:
+                conn.execute(
+                    """
+                    INSERT INTO notebook_entries
+                        (name, data, embedding, updated_at, project, platform)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (name, data, embedding_bytes, now, project, platform),
+                )
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
     await events.emit("notebook_entry_added", {"name": name, "data": data})
     return {
         "status": "success",
