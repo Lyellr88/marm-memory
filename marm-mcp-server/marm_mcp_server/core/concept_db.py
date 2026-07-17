@@ -370,3 +370,69 @@ class ConceptDB:
             (entity_id, graph_qualified_name, project, confidence, label, file_path),
         )
         return cursor.rowcount > 0
+
+    def cleanup_deleted_memory_provenance(self, memory_ids: list[str]) -> dict:
+        """Remove concept provenance for deleted memory rows.
+
+        Concept cleanup runs after the memory delete commits. It is deliberately
+        best-effort: failures are reported to the caller but never undo the
+        durable memory mutation.
+        """
+        deleted_ids = {str(memory_id) for memory_id in memory_ids}
+        if not deleted_ids:
+            return {
+                "status": "skipped",
+                "relationships_deleted": 0,
+                "entities_updated": 0,
+                "entities_deleted": 0,
+            }
+
+        with self.get_connection() as conn:
+            placeholders = ",".join("?" for _ in deleted_ids)
+            rel_cursor = conn.execute(
+                f"DELETE FROM relationships WHERE memory_id IN ({placeholders})",
+                list(deleted_ids),
+            )
+
+            entities_updated = 0
+            entities_deleted = 0
+            entity_rows = conn.execute(
+                "SELECT id, source_memory_ids FROM entities"
+            ).fetchall()
+            for entity_id, source_json in entity_rows:
+                try:
+                    source_ids = [str(item) for item in json.loads(source_json or "[]")]
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    source_ids = []
+                remaining = [
+                    memory_id
+                    for memory_id in source_ids
+                    if memory_id not in deleted_ids
+                ]
+                if remaining == source_ids:
+                    continue
+                if remaining:
+                    conn.execute(
+                        "UPDATE entities SET source_memory_ids = ? WHERE id = ?",
+                        (json.dumps(remaining), entity_id),
+                    )
+                    entities_updated += 1
+                    continue
+
+                conn.execute(
+                    "DELETE FROM relationships WHERE source_id = ? OR target_id = ?",
+                    (entity_id, entity_id),
+                )
+                conn.execute(
+                    "DELETE FROM entity_code_links WHERE entity_id = ?",
+                    (entity_id,),
+                )
+                conn.execute("DELETE FROM entities WHERE id = ?", (entity_id,))
+                entities_deleted += 1
+
+        return {
+            "status": "success",
+            "relationships_deleted": rel_cursor.rowcount,
+            "entities_updated": entities_updated,
+            "entities_deleted": entities_deleted,
+        }

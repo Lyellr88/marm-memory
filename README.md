@@ -1,8 +1,8 @@
 <div align="center">
 <picture>
-<img src="https://raw.githubusercontent.com/Lyellr88/marm-memory/MARM-main/assets/marm-logo.png"
+<img src="https://raw.githubusercontent.com/Lyellr88/marm-memory/MARM-main/assets/icons/icon-gen-1.png"
      alt="marm-memory - persistent local memory server for AI agents (Model Context Protocol)"
-     width="800"
+     width="200"
      height="200">
 </picture>
 <h1 align="center">MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.21.1</h1>

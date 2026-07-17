@@ -4,7 +4,57 @@ import { useMemories, useSessions, useLogs, useCompaction, useNotebook, useUpser
 import { Tabs, TabsList, TabsTrigger, TabsContent, Card, CardContent, CardHeader, CardTitle, CardDescription, Badge, Button, Input, Select, SelectTrigger, SelectValue, SelectContent, SelectItem, Table, TableHeader, TableRow, TableHead, TableBody, TableCell, Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, Textarea, Label } from '@/components/ui/core';
 import { format } from 'date-fns';
 import { Search, Trash2, CheckCircle2, XCircle, Eye, RefreshCw, Plus, Save, Edit2 } from 'lucide-react';
-import type { Memory, MemoryId, MemoryListParams, LogListParams, NotebookEntry } from '@/lib/marm-types';
+import type { Memory, MemoryDeleteResult, MemoryId, MemoryListParams, LogListParams, NotebookEntry } from '@/lib/marm-types';
+
+type ActionNotice = {
+  kind: 'success' | 'warning' | 'error';
+  message: string;
+};
+
+function mutationErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : 'The memory action failed.';
+}
+
+function deleteNotice(result: MemoryDeleteResult, fallback: string): ActionNotice {
+  const cleanup = result.concept_cleanup;
+  const deletedCount = result.deleted_ids?.length ?? 0;
+  const missingCount = result.missing_ids?.length ?? 0;
+  const base = deletedCount > 1 ? `${deletedCount} memories deleted.` : fallback;
+  const missing = missingCount ? ` ${missingCount} requested ID(s) were not found.` : '';
+
+  if (cleanup?.status === 'failed') {
+    return {
+      kind: 'warning',
+      message: `${base}${missing} Concept graph cleanup failed: ${cleanup.error || 'graph repair may be needed.'}`,
+    };
+  }
+  if (cleanup?.status === 'skipped') {
+    return {
+      kind: 'warning',
+      message: `${base}${missing} Concept graph cleanup was skipped${cleanup.reason ? `: ${cleanup.reason}` : '.'}`,
+    };
+  }
+  return {
+    kind: 'success',
+    message: `${base}${missing}`,
+  };
+}
+
+function ActionNoticePanel({ notice }: { notice: ActionNotice | null }) {
+  if (!notice) return null;
+  const styles = {
+    success: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200',
+    warning: 'border-amber-500/30 bg-amber-500/10 text-amber-100',
+    error: 'border-destructive/30 bg-destructive/10 text-destructive',
+  };
+  const Icon = notice.kind === 'success' ? CheckCircle2 : XCircle;
+  return (
+    <div className={`flex items-start gap-2 rounded-md border px-3 py-2 text-sm ${styles[notice.kind]}`}>
+      <Icon className="mt-0.5 h-4 w-4 shrink-0" />
+      <span>{notice.message}</span>
+    </div>
+  );
+}
 
 function MemoryRow({ 
   memory, 
@@ -51,6 +101,7 @@ function MemoriesTab() {
   const { data, isLoading } = useMemories(params);
   const { data: filters } = useFilters();
   const [selectedMemory, setSelectedMemory] = useState<Memory | null>(null);
+  const [actionNotice, setActionNotice] = useState<ActionNotice | null>(null);
   
   const [selectedIds, setSelectedIds] = useState<Set<MemoryId>>(new Set());
   const bulkDelete = useBulkDeleteMemories();
@@ -72,9 +123,14 @@ function MemoriesTab() {
 
   const handleBulkDelete = () => {
     if (selectedIds.size === 0) return;
-    if (confirm(`Delete ${selectedIds.size} memories?`)) {
+    const typed = prompt(`Type DELETE to delete ${selectedIds.size} selected memories.`);
+    if (typed === 'DELETE') {
       bulkDelete.mutate(Array.from(selectedIds), {
-        onSuccess: () => setSelectedIds(new Set())
+        onSuccess: (result) => {
+          setSelectedIds(new Set());
+          setActionNotice(deleteNotice(result, 'Selected memory deleted.'));
+        },
+        onError: (error) => setActionNotice({ kind: 'error', message: mutationErrorMessage(error) }),
       });
     }
   };
@@ -100,7 +156,7 @@ function MemoriesTab() {
       session_name: newSession.trim(),
       project: newProject.trim() || null,
       platform: newPlatform.trim() || null,
-      context_type: newContextType.trim() || null,
+      context_type: newContextType.trim() || 'general',
     }, {
       onSuccess: () => {
         setCreateMode(false);
@@ -109,7 +165,9 @@ function MemoriesTab() {
         setNewProject('');
         setNewPlatform('');
         setNewContextType('');
-      }
+        setActionNotice({ kind: 'success', message: 'Memory created.' });
+      },
+      onError: (error) => setActionNotice({ kind: 'error', message: mutationErrorMessage(error) }),
     });
   };
 
@@ -119,9 +177,11 @@ function MemoriesTab() {
       id: selectedMemory.id,
       data: {
         content: editContent,
+        session_name: selectedMemory.session_name,
         project: editProject.trim() || null,
         platform: editPlatform.trim() || null,
-        context_type: editContextType.trim() || null,
+        context_type: editContextType.trim() || selectedMemory.context_type || 'general',
+        metadata: selectedMemory.metadata,
       }
     }, {
       onSuccess: () => {
@@ -133,7 +193,9 @@ function MemoriesTab() {
           platform: editPlatform.trim() || null,
           context_type: editContextType.trim() || null,
         });
-      }
+        setActionNotice({ kind: 'success', message: 'Memory updated.' });
+      },
+      onError: (error) => setActionNotice({ kind: 'error', message: mutationErrorMessage(error) }),
     });
   };
 
@@ -151,7 +213,11 @@ function MemoriesTab() {
     const msg = ['Delete this memory?', ...warnings].join('\n\n');
     if (confirm(msg)) {
       deleteMemory.mutate(selectedMemory.id, {
-        onSuccess: () => setSelectedMemory(null)
+        onSuccess: (result) => {
+          setSelectedMemory(null);
+          setActionNotice(deleteNotice(result, 'Memory deleted.'));
+        },
+        onError: (error) => setActionNotice({ kind: 'error', message: mutationErrorMessage(error) }),
       });
     }
   };
@@ -199,6 +265,7 @@ function MemoriesTab() {
           </Button>
         )}
       </div>
+      <ActionNoticePanel notice={actionNotice} />
 
       <div className="border rounded-md bg-card flex-1 overflow-auto">
         <Table>
@@ -286,6 +353,7 @@ function MemoriesTab() {
               className="min-h-[150px]"
             />
           </div>
+          <ActionNoticePanel notice={createMemory.error ? { kind: 'error', message: mutationErrorMessage(createMemory.error) } : null} />
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateMode(false)}>Cancel</Button>
             <Button onClick={handleCreate} isLoading={createMemory.isPending} disabled={!editContent || !newSession.trim()}>Create</Button>
@@ -370,6 +438,7 @@ function MemoriesTab() {
                 <span className="ml-2">{selectedMemory?.concept_link_count}</span>
               </div>
             </div>
+            <ActionNoticePanel notice={updateMemory.error ? { kind: 'error', message: mutationErrorMessage(updateMemory.error) } : deleteMemory.error ? { kind: 'error', message: mutationErrorMessage(deleteMemory.error) } : null} />
           </div>
           <DialogFooter className="flex justify-between sm:justify-between items-center">
             <Button variant="destructive" onClick={handleDelete} isLoading={deleteMemory.isPending}>

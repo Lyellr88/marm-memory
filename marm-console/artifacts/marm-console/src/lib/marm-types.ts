@@ -92,6 +92,26 @@ export interface MemoryInput {
   metadata?: Record<string, unknown> | null;
 }
 
+export interface MemoryDeleteCleanup {
+  status: 'success' | 'skipped' | 'failed' | string;
+  reason?: string;
+  error?: string;
+  relationships_deleted?: number;
+  entities_updated?: number;
+  entities_deleted?: number;
+}
+
+export interface MemoryDeleteResult {
+  deleted_ids: string[];
+  missing_ids: string[];
+  concept_cleanup?: MemoryDeleteCleanup;
+  compaction_updates?: {
+    staging_candidates_marked_stale?: number;
+    summaries_updated?: number;
+    sources_restored?: number;
+  };
+}
+
 export interface Session {
   name: string;
   active: boolean;

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Find potentially dead code in shipped MARM server packages.
+"""Find potentially dead code in shipped MARM Python packages.
 
 This is a static heuristic scanner, not a deletion oracle. It is meant to
 surface files/functions worth reviewing by a human or code-review agent.
@@ -17,14 +17,17 @@ RED = "\033[31m"
 GRAY = "\033[90m"
 RESET = "\033[0m"
 
-ROOT = Path(__file__).parent.parent / "marm-mcp-server"
+REPO_ROOT = Path(__file__).parent.parent
+SERVER_ROOT = REPO_ROOT / "marm-mcp-server"
+CONSOLE_ROOT = REPO_ROOT / "marm-console"
 PACKAGE_DIRS = [
-    ROOT / "marm_mcp_server",
-    ROOT / "marm_graph",
-    ROOT / "marm_dashboard",
+    SERVER_ROOT / "marm_mcp_server",
+    SERVER_ROOT / "marm_graph",
+    SERVER_ROOT / "marm_dashboard",
+    CONSOLE_ROOT / "server",
 ]
 PACKAGE_NAMES = {package.name for package in PACKAGE_DIRS}
-SERVER_PACKAGE = ROOT / "marm_mcp_server"
+SERVER_PACKAGE = SERVER_ROOT / "marm_mcp_server"
 SERVER_FILE = SERVER_PACKAGE / "server.py"
 
 SKIP_FUNC_PREFIXES = ("__",)
@@ -56,9 +59,19 @@ def read(path: Path) -> str:
 def display_path(path: Path | str) -> str:
     p = Path(path)
     try:
-        return str(p.relative_to(ROOT.parent))
+        return str(p.relative_to(REPO_ROOT))
     except ValueError:
         return str(p)
+
+
+def module_path_for_file(path: Path) -> str:
+    for root in (SERVER_ROOT, CONSOLE_ROOT):
+        try:
+            rel = path.relative_to(root)
+            return ".".join(rel.with_suffix("").parts)
+        except ValueError:
+            continue
+    return ".".join(path.with_suffix("").parts)
 
 
 def explain_static_limits() -> None:
@@ -109,6 +122,16 @@ def module_reference_patterns(module_path: str) -> set[str]:
     return patterns
 
 
+def module_is_referenced(module_path: str, all_source: str) -> bool:
+    if any(pattern in all_source for pattern in module_reference_patterns(module_path)):
+        return True
+    stem = module_path.split(".")[-1]
+    return (
+        re.search(rf"from\s+\.+\s+import\s+[^\n#]*\b{re.escape(stem)}\b", all_source)
+        is not None
+    )
+
+
 # ---------------------------------------------------------------------------
 # Check 1: Orphaned modules — never imported by anything in shipped packages
 # ---------------------------------------------------------------------------
@@ -131,15 +154,9 @@ def check_orphaned_modules() -> int:
     for f in files:
         if f.name in skip:
             continue
-        # Build the dotted module name relative to marm-mcp-server/
-        rel = f.relative_to(ROOT)
-        module_path = ".".join(
-            rel.with_suffix("").parts
-        )  # e.g. marm_mcp_server.core.memory
+        module_path = module_path_for_file(f)
 
-        imported = any(
-            pattern in all_source for pattern in module_reference_patterns(module_path)
-        )
+        imported = module_is_referenced(module_path, all_source)
         if not imported:
             orphaned.append(str(f))
 
@@ -293,7 +310,7 @@ def main() -> int:
     except Exception:
         pass
 
-    print(f"{CYAN}=== Dead Code Finder — shipped MARM packages ==={RESET}\n")
+    print(f"{CYAN}=== Dead Code Finder — shipped MARM Python packages ==={RESET}\n")
     explain_static_limits()
 
     if not any(package.exists() for package in PACKAGE_DIRS):
@@ -312,7 +329,7 @@ def main() -> int:
     )
     print()
     print(
-        f"{CYAN}Tip: run `python -m compileall marm_mcp_server marm_graph marm_dashboard` from marm-mcp-server/ to catch syntax errors{RESET}\n"
+        f"{CYAN}Tip: run `python -m compileall marm_mcp_server marm_graph marm_dashboard` from marm-mcp-server/ and `python -m compileall server` from marm-console/ to catch syntax errors{RESET}\n"
     )
 
     return 0

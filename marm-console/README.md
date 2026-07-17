@@ -4,7 +4,7 @@ MARM Console is the standalone local web app for [marm-memory](https://github.co
 
 Console runs locally. It does not send your memory database to a hosted service and does not add MCP tools to `marm-mcp-server`.
 
-> Status: active development. The first backend slice provides live Overview, filter, and memory-list data. Knowledge, project intelligence, and safe write workflows are being wired in next.
+> Status: active development. The backend now provides live Overview, filters, memory browsing, safe memory create/edit/delete, knowledge graph reads, and project intelligence routes. Packaging and final Console parity work are still in progress.
 
 ## What It Is
 
@@ -84,6 +84,10 @@ Open the Vite URL shown in the terminal. The frontend defaults to the Console AP
 | `GET /api/filters` | Sessions, projects, platforms, and context types |
 | `GET /api/memories` | Scoped, paginated memory list |
 | `GET /api/memories/{id}` | One memory record |
+| `POST /api/memories` | Create a memory through the MARM write queue |
+| `PUT /api/memories/{id}` | Replace editable memory fields through the MARM write queue |
+| `DELETE /api/memories/{id}` | Delete one memory with typed confirmation |
+| `POST /api/memories/bulk-delete` | Delete an explicit bounded memory ID list |
 | `GET /api/sessions` | Session activity and counts |
 | `GET /api/logs` | Recent log records |
 | `GET /api/notebook` | Notebook records |
@@ -104,9 +108,8 @@ Open the Vite URL shown in the terminal. The frontend defaults to the Console AP
 
 The implementation path is:
 
-1. Complete safe memory mutations through MARM's serialized write path.
-2. Adapt concept builds and duplicate review through the existing MARM runtime.
-3. Adapt project indexing, status, architecture, code search, trace, impact, and guarded deletion through marm-graph.
-4. Package the production frontend behind the standalone Console host.
+1. Adapt concept builds and duplicate review through the existing MARM runtime.
+2. Adapt project indexing, status, architecture, code search, trace, impact, and guarded deletion through marm-graph.
+3. Package the production frontend behind the standalone Console host.
 
 MARM Console is designed to become the local control plane for marm-memory, while leaving the MCP server focused on agent workflows.

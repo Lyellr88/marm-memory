@@ -3,6 +3,20 @@
 ## Version 2 - MARM Protocol to Universal MCP Server Evolution
 
 <details>
+<summary><strong>July 15th, 2026: MARM Console Safe Memory Mutations (v2.22.0)</strong></summary>
+
+### Console Can Now Create, Edit, and Delete Memories
+
+- New internal-only HTTP routes on the MARM runtime — `POST /internal/memories`, `PUT /internal/memories/{id}`, `DELETE /internal/memories/{id}`, `POST /internal/memories/bulk-delete` — let Console mutate memory records through MARM's existing serialized write queue instead of a second SQLite writer. These are UI-only: absent from `MCP_TOOL_OPERATIONS`, `server.json`, and STDIO, so the public tool count stays at 14.
+- Replace-edit is a genuinely separate code path from consolidation's merge/append `update_memory()` — Console edits never add `[merged]` markers or merge-history metadata.
+- Deleting a memory now understands compaction lineage: it marks affected staging candidates stale, strips the deleted ID from any summary that referenced it, and restores orphaned sources if the summary itself gets deleted, instead of leaving dangling references.
+- Concept-graph provenance cleanup runs as a best-effort step after a delete commits — it never rolls back a successful memory delete if cleanup fails, and Console now surfaces that failure/skip status to the user instead of discarding it.
+- Bulk delete requires an explicit, bounded ID list (server-enforced max of 100) and now requires literally typing `DELETE` in the Console UI before the request fires, replacing a plain yes/no confirm dialog.
+- Fixed a race in `test_stdio_transport.py` on slow CI runners: the STDIO subprocess test closed stdin immediately after writing, letting the server's EOF teardown race its own pending `tools/list` response. Switched to a `Popen` + watchdog pattern that keeps stdin open until the response arrives.
+
+</details>
+
+<details>
 <summary><strong>Unreleased: Log-Entry Cross-Transport Dedup (v2.21.3)</strong></summary>
 
 ### Shared Log-Entry Logic
@@ -14,7 +28,7 @@
 </details>
 
 <details>
-<summary><strong>Unreleased: HTTP and STDIO Server Module Refactors (v2.21.2)</strong></summary>
+<summary><strong>July 14th, 2026: HTTP and STDIO Server Module Refactors (v2.21.2)</strong></summary>
 
 ### Server Module Boundaries
 

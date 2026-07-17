@@ -1,11 +1,16 @@
 """Memory endpoints for MARM MCP Server."""
 
-from fastapi import APIRouter, Request
 from datetime import datetime
+from pathlib import Path
+from typing import Literal
+
+from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel, Field
 
 from ..core.models import SmartRecallRequest
 from ..core.memory import memory
 from ..core.response_limiter import MCPResponseLimiter
+from ..core.concept_db import ConceptDB, get_concept_db_path
 from ..services.recall import _apply_detail_level
 
 
@@ -57,6 +62,97 @@ def track_endpoint_usage(endpoint: str, request: Request, extra_data: dict = Non
 
 
 router = APIRouter(prefix="", tags=["Memory"])
+
+
+class ConsoleMemoryPayload(BaseModel):
+    content: str = Field(min_length=1, max_length=10000)
+    session_name: str = Field(min_length=1, max_length=255)
+    context_type: str = Field(default="general", min_length=1, max_length=100)
+    project: str | None = Field(default=None, max_length=255)
+    platform: str | None = Field(default=None, max_length=255)
+    metadata: dict | None = None
+
+
+class ConsoleDeletePayload(BaseModel):
+    confirm: Literal["DELETE"]
+
+
+class ConsoleBulkDeletePayload(BaseModel):
+    memory_ids: list[str] = Field(min_length=1, max_length=100)
+    confirm: Literal["DELETE"]
+
+
+def _console_scope(value: str | None) -> str | None:
+    if value is None:
+        return None
+    return value.strip() or None
+
+
+def _cleanup_deleted_concepts(memory_ids: list[str]) -> dict:
+    db_path = get_concept_db_path()
+    if not Path(db_path).exists():
+        return {"status": "skipped", "reason": "concept database not found"}
+    try:
+        return ConceptDB(db_path).cleanup_deleted_memory_provenance(memory_ids)
+    except Exception as exc:
+        return {"status": "failed", "error": str(exc)}
+
+
+@router.post("/internal/memories", status_code=201)
+async def console_create_memory(payload: ConsoleMemoryPayload) -> dict:
+    try:
+        memory_id = await memory.console_create_memory(
+            payload.content,
+            payload.session_name,
+            payload.context_type,
+            payload.metadata,
+            _console_scope(payload.project),
+            _console_scope(payload.platform),
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return memory.console_memory_row(memory_id) or {"id": memory_id}
+
+
+@router.put("/internal/memories/{memory_id}")
+async def console_replace_memory(memory_id: str, payload: ConsoleMemoryPayload) -> dict:
+    try:
+        updated = await memory.console_replace_memory(
+            memory_id,
+            payload.content,
+            payload.session_name,
+            payload.context_type,
+            payload.metadata,
+            _console_scope(payload.project),
+            _console_scope(payload.platform),
+        )
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if not updated:
+        raise HTTPException(status_code=404, detail="Memory not found")
+    return memory.console_memory_row(memory_id) or {"id": memory_id}
+
+
+@router.delete("/internal/memories/{memory_id}")
+async def console_delete_memory(memory_id: str, payload: ConsoleDeletePayload) -> dict:
+    try:
+        result = await memory.console_delete_memory(memory_id)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if not result["deleted_ids"]:
+        raise HTTPException(status_code=404, detail="Memory not found")
+    result["concept_cleanup"] = _cleanup_deleted_concepts(result["deleted_ids"])
+    return result
+
+
+@router.post("/internal/memories/bulk-delete")
+async def console_bulk_delete_memories(payload: ConsoleBulkDeletePayload) -> dict:
+    try:
+        result = await memory.console_delete_memories(payload.memory_ids)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    result["concept_cleanup"] = _cleanup_deleted_concepts(result["deleted_ids"])
+    return result
 
 
 def _inject_log_results(response: dict, log_results: list) -> None:

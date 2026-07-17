@@ -14,6 +14,7 @@ import uuid
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Literal
 from urllib.error import URLError
 from urllib.request import urlopen
 
@@ -83,6 +84,24 @@ class ProjectImpactPayload(BaseModel):
 class ProjectDeletePayload(BaseModel):
     name: str
     confirm: bool = False
+
+
+class MemoryMutationPayload(BaseModel):
+    content: str
+    session_name: str
+    context_type: str = "general"
+    project: str | None = None
+    platform: str | None = None
+    metadata: dict | None = None
+
+
+class MemoryDeletePayload(BaseModel):
+    confirm: Literal["DELETE"]
+
+
+class MemoryBulkDeletePayload(BaseModel):
+    memory_ids: list[str]
+    confirm: Literal["DELETE"]
 
 
 def _now_iso() -> str:
@@ -251,6 +270,46 @@ def get_memory(memory_id: str) -> dict:
     if memory is None:
         raise HTTPException(status_code=404, detail="Memory not found")
     return memory
+
+
+def _memory_mutation(
+    operation: str, payload: dict | None = None, method: str = "POST"
+) -> dict:
+    try:
+        return mcp_client.request(operation, payload, method=method, timeout=30.0)
+    except mcp_client.McpRequestError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    except mcp_client.McpUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.post("/api/memories", status_code=201)
+def create_memory(payload: MemoryMutationPayload) -> dict:
+    return _memory_mutation("internal/memories", payload.model_dump())
+
+
+@app.put("/api/memories/{memory_id}")
+def replace_memory(memory_id: str, payload: MemoryMutationPayload) -> dict:
+    return _memory_mutation(
+        f"internal/memories/{memory_id}", payload.model_dump(), method="PUT"
+    )
+
+
+@app.delete("/api/memories/{memory_id}")
+def delete_memory(memory_id: str, payload: MemoryDeletePayload) -> dict:
+    return _memory_mutation(
+        f"internal/memories/{memory_id}",
+        payload.model_dump(),
+        method="DELETE",
+    )
+
+
+@app.post("/api/memories/bulk-delete")
+def bulk_delete_memories(payload: MemoryBulkDeletePayload) -> dict:
+    return _memory_mutation(
+        "internal/memories/bulk-delete",
+        payload.model_dump(),
+    )
 
 
 @app.get("/api/sessions")
