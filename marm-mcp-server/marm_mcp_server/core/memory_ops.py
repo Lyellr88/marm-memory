@@ -41,11 +41,14 @@ from .consolidation import (
 )
 
 
-async def _update_memory(mem, memory_id: str, new_content: str) -> None:
+async def _update_memory(mem, memory_id: str, new_content: str) -> bool:
     """Append new_content into an existing memory and record the merge in metadata.
 
     Recomputes content_hash and embedding so Layer 1 dedup and semantic recall
-    stay accurate after the merge.
+    stay accurate after the merge. Returns False (no write happened) if the
+    row was deleted or changed concurrently between the pre-read and the
+    write lock -- callers must not assume the merge landed just because this
+    returned without raising.
     """
     # Unlocked pre-read -- matches _store_memory's duplicate pre-check
     # convention. This is a read-then-write, but the write lock is only
@@ -56,7 +59,7 @@ async def _update_memory(mem, memory_id: str, new_content: str) -> None:
             "SELECT content, metadata FROM memories WHERE id = ?", (memory_id,)
         ).fetchone()
     if row is None:
-        return
+        return False
     existing_content, metadata_json = row
     original_existing_content = existing_content  # unsliced, for the re-check below
     metadata = json.loads(metadata_json) if metadata_json else {}
@@ -115,7 +118,7 @@ async def _update_memory(mem, memory_id: str, new_content: str) -> None:
                 or current[1] != metadata_json
             ):
                 conn.execute("ROLLBACK")
-                return
+                return False
 
             if merged_embedding_bytes is not None:
                 conn.execute(
@@ -155,6 +158,7 @@ async def _update_memory(mem, memory_id: str, new_content: str) -> None:
         _chunk_task = asyncio.create_task(  # noqa: RUF006
             _write_chunks(mem, mem.db_path, memory_id, chunks, merged_hash)
         )
+    return True
 
 
 async def _store_memory(
@@ -225,9 +229,15 @@ async def _store_memory(
                 query_vec=pre_embedding,
             )
         if existing_id:
-            await _update_memory(mem, existing_id, sanitized_content)
-            mem._on_memory_written(session)
-            return existing_id
+            merged = await _update_memory(mem, existing_id, sanitized_content)
+            if merged:
+                mem._on_memory_written(session)
+                return existing_id
+            # existing_id's row was deleted or changed concurrently between
+            # the duplicate check above and _update_memory's write-lock
+            # re-verification -- the merge never happened. Fall through and
+            # store sanitized_content as a new memory instead of silently
+            # dropping it and reporting existing_id as if it succeeded.
 
     memory_id = str(uuid.uuid4())
     timestamp = datetime.now(timezone.utc).isoformat()

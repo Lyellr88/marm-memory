@@ -54,8 +54,10 @@ async def test_update_memory_records_merge_history_in_metadata(tmp_path):
 @pytest.mark.asyncio
 async def test_update_memory_is_silent_for_missing_id(tmp_path):
     mem = MARMMemory(str(tmp_path / "memory.db"))
-    # Should not raise — returns None gracefully
-    await mem.update_memory("nonexistent-id", "some content")
+    # Should not raise -- returns False (no write happened) rather than
+    # raising or silently pretending the merge landed.
+    result = await mem.update_memory("nonexistent-id", "some content")
+    assert result is False
 
 
 @pytest.mark.asyncio
@@ -252,6 +254,52 @@ async def test_semantic_merge_writes_merged_content_to_existing_row(
     assert "[merged] auth error resolved" in row[0]
     metadata = json.loads(row[1])
     assert len(metadata["merge_history"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_semantic_merge_falls_through_to_new_row_if_target_deleted_concurrently(
+    monkeypatch, tmp_path
+):
+    """If the semantic-duplicate target is deleted or changed between
+    find_semantic_duplicate's read and _update_memory's write-lock
+    re-verification, _update_memory bails and returns False. _store_memory
+    must not silently report the (now-stale) existing_id as if the merge
+    succeeded -- it must store the content as a new memory instead, or the
+    second writer's content is lost with no trace."""
+    from marm_mcp_server.core import memory as memory_module
+    from marm_mcp_server.core import memory_ops as memory_ops_module
+
+    monkeypatch.setattr(memory_ops_module, "CONSOLIDATION_ENABLED", True)
+    mem = memory_module.MARMMemory(str(tmp_path / "memory.db"))
+    mem._encoder_failed = True
+
+    first_id = await mem.store_memory("fixed the authentication bug", "session-a")
+
+    async def mock_semantic_dup(
+        memory, content, session_name, threshold, query_vec=None
+    ):
+        # Simulate a concurrent delete landing between the duplicate check
+        # and _update_memory's own pre-read -- e.g. a racing marm_delete.
+        with mem.get_connection() as conn:
+            conn.execute("DELETE FROM memories WHERE id = ?", (first_id,))
+            conn.commit()
+        return first_id
+
+    monkeypatch.setattr(memory_ops_module, "find_semantic_duplicate", mock_semantic_dup)
+
+    second_id = await mem.store_memory("auth error resolved in login flow", "session-a")
+
+    assert second_id != first_id, (
+        "content was silently dropped -- _store_memory reported the "
+        "deleted row's id as if the merge succeeded"
+    )
+
+    with mem.get_connection() as conn:
+        row = conn.execute(
+            "SELECT content FROM memories WHERE id = ?", (second_id,)
+        ).fetchone()
+    assert row is not None, "the second writer's content was never stored anywhere"
+    assert row[0] == "auth error resolved in login flow"
 
 
 @pytest.mark.asyncio

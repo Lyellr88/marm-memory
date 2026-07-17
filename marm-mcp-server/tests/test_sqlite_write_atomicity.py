@@ -14,6 +14,7 @@ import asyncio
 import contextlib
 import sqlite3
 import uuid
+from datetime import datetime, timezone
 
 import pytest
 from fastapi.testclient import TestClient
@@ -224,6 +225,212 @@ def test_marm_start_rollback_keeps_previous_active_session(monkeypatch, tmp_path
         "previous active session was cleared even though the new "
         "session's insert (and the whole transaction) failed"
     )
+
+
+def test_session_switch_rollback_keeps_previous_active_session(monkeypatch, tmp_path):
+    """create_log_entry's session-switch block (triggered by a "Session: "/
+    "Topic: " prefixed entry): UPDATE sessions SET marm_active = FALSE,
+    then an INSERT for the new session, then an INSERT for the marker log
+    entry. Force the marker insert (the third statement) to fail -- the
+    previously active session's marm_active flag must not have been
+    cleared, and neither the new session row nor the marker entry should
+    exist."""
+    server = load_isolated_server(monkeypatch, tmp_path)
+    client = local_client(server.app)
+
+    first = client.post("/marm_start", json={"session_name": "atomicity-a4-old"})
+    assert first.status_code == 200
+
+    db_path = tmp_path / "marm_memory.db"
+    with sqlite3.connect(db_path) as conn:
+        active_before = conn.execute(
+            "SELECT marm_active FROM sessions WHERE session_name = ?",
+            ("atomicity-a4-old",),
+        ).fetchone()[0]
+    assert active_before in (1, True)
+
+    import marm_mcp_server.services.log_entry as log_entry
+
+    _fail_on(monkeypatch, log_entry.memory, "INSERT INTO log_entries")
+
+    resp = client.post(
+        "/marm_log_entry", json={"entry": "Session: atomicity-a4-new-topic"}
+    )
+    assert resp.json()["status"] == "error"
+
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    new_session = f"atomicity-a4-new-topic-{today}"
+    with sqlite3.connect(db_path) as conn:
+        active_after = conn.execute(
+            "SELECT marm_active FROM sessions WHERE session_name = ?",
+            ("atomicity-a4-old",),
+        ).fetchone()[0]
+        new_session_exists = conn.execute(
+            "SELECT COUNT(*) FROM sessions WHERE session_name = ?", (new_session,)
+        ).fetchone()[0]
+        marker_exists = conn.execute(
+            "SELECT COUNT(*) FROM log_entries WHERE session_name = ? AND topic = 'session_start'",
+            (new_session,),
+        ).fetchone()[0]
+    assert active_after in (1, True), (
+        "previous active session was cleared despite the marker insert (and "
+        "the whole transaction) failing"
+    )
+    assert new_session_exists == 0, "new session row survived a rolled-back transaction"
+    assert marker_exists == 0, (
+        "session_start marker row survived a rolled-back transaction"
+    )
+
+
+def test_dated_fallback_rollback_keeps_previous_active_session(monkeypatch, tmp_path):
+    """create_log_entry's dated-fallback block (no session_name given and
+    memory.active_log_session is still "main"): UPDATE sessions SET
+    marm_active = FALSE, then an INSERT for the new dated session. Force
+    that insert to fail -- the previously active session's marm_active
+    flag must not have been cleared, and the dated fallback session row
+    must not exist."""
+    server = load_isolated_server(monkeypatch, tmp_path)
+    client = local_client(server.app)
+
+    first = client.post("/marm_start", json={"session_name": "atomicity-a5-old"})
+    assert first.status_code == 200
+
+    db_path = tmp_path / "marm_memory.db"
+    with sqlite3.connect(db_path) as conn:
+        active_before = conn.execute(
+            "SELECT marm_active FROM sessions WHERE session_name = ?",
+            ("atomicity-a5-old",),
+        ).fetchone()[0]
+    assert active_before in (1, True)
+
+    import marm_mcp_server.services.log_entry as log_entry
+
+    # First occurrence of "INSERT INTO sessions" in this call path is the
+    # dated-fallback block's own insert (the later per-entry upsert further
+    # down in create_log_entry is a second, distinct occurrence that never
+    # gets reached once this one raises).
+    _fail_on(monkeypatch, log_entry.memory, "INSERT INTO sessions")
+
+    resp = client.post(
+        "/marm_log_entry", json={"entry": "plain entry with no session prefix"}
+    )
+    assert resp.json()["status"] == "error"
+
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    fallback_session = f"session-{today}"
+    with sqlite3.connect(db_path) as conn:
+        active_after = conn.execute(
+            "SELECT marm_active FROM sessions WHERE session_name = ?",
+            ("atomicity-a5-old",),
+        ).fetchone()[0]
+        fallback_exists = conn.execute(
+            "SELECT COUNT(*) FROM sessions WHERE session_name = ?",
+            (fallback_session,),
+        ).fetchone()[0]
+    assert active_after in (1, True), (
+        "previous active session was cleared despite the dated-fallback "
+        "insert (and the whole transaction) failing"
+    )
+    assert fallback_exists == 0, (
+        "dated fallback session row survived a rolled-back transaction"
+    )
+
+
+def test_targeted_log_delete_rollback_keeps_entry_and_memory(monkeypatch, tmp_path):
+    """delete_log_or_notebook_entry's targeted (session_name given) log
+    branch: DELETE FROM log_entries, then a conditional DELETE FROM
+    memories for the dual-written semantic copy. Force the memories
+    delete to fail after the log_entries delete already ran -- both rows
+    must still exist afterward."""
+    server = load_isolated_server(monkeypatch, tmp_path)
+    client = local_client(server.app)
+
+    create = client.post(
+        "/marm_log_entry",
+        json={
+            "session_name": "atomicity-a6",
+            "entry": "2026-01-01-topic6-entry that must survive targeted delete",
+        },
+    )
+    assert create.json()["status"] == "success"
+    entry_id = create.json()["entry_id"]
+    memory_id = create.json()["memory_id"]
+    assert memory_id is not None, (
+        "dual-write to semantic memory did not happen -- test can't exercise "
+        "the memories-delete branch without it"
+    )
+
+    db_path = tmp_path / "marm_memory.db"
+    with sqlite3.connect(db_path) as conn:
+        before_entry = conn.execute(
+            "SELECT COUNT(*) FROM log_entries WHERE id = ?", (entry_id,)
+        ).fetchone()[0]
+        before_memory = conn.execute(
+            "SELECT COUNT(*) FROM memories WHERE id = ?", (memory_id,)
+        ).fetchone()[0]
+    assert before_entry == 1
+    assert before_memory == 1
+
+    import marm_mcp_server.services.log_entry as log_entry
+
+    _fail_on(monkeypatch, log_entry.memory, "DELETE FROM memories")
+
+    resp = client.post(
+        "/marm_delete",
+        json={"type": "log", "target": "topic6", "session_name": "atomicity-a6"},
+    )
+    assert resp.json()["status"] == "error"
+
+    with sqlite3.connect(db_path) as conn:
+        after_entry = conn.execute(
+            "SELECT COUNT(*) FROM log_entries WHERE id = ?", (entry_id,)
+        ).fetchone()[0]
+        after_memory = conn.execute(
+            "SELECT COUNT(*) FROM memories WHERE id = ?", (memory_id,)
+        ).fetchone()[0]
+    assert after_entry == before_entry, "log_entries row deleted despite rollback"
+    assert after_memory == before_memory, (
+        "dual-written memory row deleted despite rollback"
+    )
+
+
+def test_notebook_delete_rollback_keeps_entry_on_commit_failure(monkeypatch, tmp_path):
+    """delete_log_or_notebook_entry's notebook branch: DELETE FROM
+    notebook_entries, then COMMIT. Force the commit itself to fail -- the
+    entry's row must survive, proving the delete didn't durably apply
+    without a successful commit."""
+    server = load_isolated_server(monkeypatch, tmp_path)
+    client = local_client(server.app)
+
+    db_path = tmp_path / "marm_memory.db"
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            "INSERT INTO notebook_entries (name, data, updated_at, project, platform) "
+            "VALUES (?, ?, ?, NULL, NULL)",
+            (
+                "atomicity-a7-entry",
+                "must survive rollback",
+                "2026-01-01T00:00:00+00:00",
+            ),
+        )
+        conn.commit()
+
+    import marm_mcp_server.services.log_entry as log_entry
+
+    _fail_on(monkeypatch, log_entry.memory, "COMMIT")
+
+    resp = client.post(
+        "/marm_delete", json={"type": "notebook", "target": "atomicity-a7-entry"}
+    )
+    assert resp.json()["status"] == "error"
+
+    with sqlite3.connect(db_path) as conn:
+        row = conn.execute(
+            "SELECT data FROM notebook_entries WHERE name = ?",
+            ("atomicity-a7-entry",),
+        ).fetchone()
+    assert row is not None, "notebook entry was deleted despite the commit failing"
+    assert row[0] == "must survive rollback"
 
 
 # --- Packet B: services/notebook.py, services/documentation.py ---
