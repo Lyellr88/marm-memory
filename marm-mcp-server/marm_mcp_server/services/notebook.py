@@ -10,7 +10,20 @@ from ..core.events import events
 from ..config.settings import MARM_PROJECT, MARM_PLATFORM
 
 
-async def _add(name: Optional[str], data: Optional[str], **_) -> dict:
+def _scope_or_detected(value: Optional[str], detected: Optional[str]) -> Optional[str]:
+    if value is None:
+        return detected or None
+    value = value.strip()
+    return value or None
+
+
+async def _add(
+    name: Optional[str],
+    data: Optional[str],
+    project: Optional[str] = None,
+    platform: Optional[str] = None,
+    **_,
+) -> dict:
     if not name or not name.strip() or not data or not data.strip():
         return {
             "status": "error",
@@ -24,8 +37,8 @@ async def _add(name: Optional[str], data: Optional[str], **_) -> dict:
             embedding_bytes = _embedding_to_bytes(embedding)
         except Exception:
             pass
-    project = MARM_PROJECT or None
-    platform = MARM_PLATFORM or None
+    project = _scope_or_detected(project, MARM_PROJECT)
+    platform = _scope_or_detected(platform, MARM_PLATFORM)
     now = datetime.now(timezone.utc).isoformat()
     with memory.get_connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
@@ -157,6 +170,8 @@ async def notebook_dispatch(
     data: Optional[str] = None,
     names: Optional[str] = None,
     session_name: str = "main",
+    project: Optional[str] = None,
+    platform: Optional[str] = None,
 ) -> dict:
     session_name = "main" if session_name is None else session_name.strip()
     if not session_name:
@@ -168,4 +183,11 @@ async def notebook_dispatch(
             "status": "error",
             "message": f"Unknown action '{action}'. Must be: add, use, show, status, clear",
         }
-    return await handler(name=name, data=data, names=names, session_name=session_name)
+    return await handler(
+        name=name,
+        data=data,
+        names=names,
+        session_name=session_name,
+        project=project,
+        platform=platform,
+    )

@@ -158,6 +158,53 @@ def test_notebook_use_delete_clear_lifecycle_updates_active_state(
     assert missing.json()["status"] == "not_found"
 
 
+def test_notebook_delete_can_target_project_platform_scope(monkeypatch, tmp_path):
+    server = load_isolated_server(monkeypatch, tmp_path)
+    client = local_client(server.app)
+    now = datetime.now(timezone.utc).isoformat()
+
+    with server.memory.get_connection() as conn:
+        conn.executemany(
+            """
+            INSERT INTO notebook_entries (name, data, updated_at, project, platform)
+            VALUES (?, ?, ?, ?, ?)
+            """,
+            [
+                ("shared-rule", "global", now, None, None),
+                ("shared-rule", "codex", now, "marm-console", "codex"),
+                ("shared-rule", "claude", now, "marm-console", "claude"),
+            ],
+        )
+
+    deleted = client.post(
+        "/marm_delete",
+        json={
+            "type": "notebook",
+            "target": "shared-rule",
+            "project": "marm-console",
+            "platform": "codex",
+        },
+    )
+    assert deleted.status_code == 200
+    assert deleted.json()["deleted"] is True
+
+    with server.memory.get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT data, project, platform
+            FROM notebook_entries
+            WHERE name = ?
+            ORDER BY data
+            """,
+            ("shared-rule",),
+        ).fetchall()
+
+    assert [(row[0], row[1], row[2]) for row in rows] == [
+        ("claude", "marm-console", "claude"),
+        ("global", None, None),
+    ]
+
+
 def test_notebook_show_previews_long_entries_and_clear_resets_active_list(
     monkeypatch, tmp_path
 ):

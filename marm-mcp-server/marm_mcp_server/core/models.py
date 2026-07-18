@@ -34,6 +34,14 @@ class NotebookRequest(BaseModel):
     session_name: str = Field(
         default="main", description="Session scope for active notebook entries"
     )
+    project: Optional[str] = Field(
+        default=None,
+        description="Optional notebook project scope; omit to use detected MARM_PROJECT",
+    )
+    platform: Optional[str] = Field(
+        default=None,
+        description="Optional notebook platform scope; omit to use detected MARM_PLATFORM",
+    )
 
 
 class SmartRecallRequest(BaseModel):
@@ -85,6 +93,12 @@ class DeleteRequest(BaseModel):
     session_name: Optional[str] = Field(
         default=None,
         description="Log session to scope deletion. Omit to delete an entire session.",
+    )
+    project: Optional[str] = Field(
+        default=None, description="Notebook project scope for type='notebook'"
+    )
+    platform: Optional[str] = Field(
+        default=None, description="Notebook platform scope for type='notebook'"
     )
 
 

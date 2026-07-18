@@ -147,7 +147,13 @@ export function createMarmClient(config: MarmClientConfig) {
         { body: { confirm: 'DELETE' } },
       ),
     deleteAllSessions: () =>
-      request<{ deleted_sessions: number; deleted_count: number; memories_deleted: number }>(
+      request<{
+        status: string;
+        deleted_sessions: number;
+        deleted_count: number;
+        memories_deleted: number;
+        failed_sessions: Array<{ session_name: string; status_code: number; message: string }>;
+      }>(
         config,
         'DELETE',
         '/sessions',
@@ -175,8 +181,7 @@ export function createMarmClient(config: MarmClientConfig) {
       request<NotebookEntry>(config, 'POST', '/notebook', { body: data }),
     deleteNotebookEntry: (name: string, params?: { project?: string; platform?: string }) =>
       request<{ name: string; deleted: boolean }>(config, 'DELETE', `/notebook/${encodeURIComponent(name)}`, {
-        query: params,
-        body: { confirm: 'DELETE' },
+        body: { confirm: 'DELETE', project: params?.project, platform: params?.platform },
       }),
     getSummary: (session: string) =>
       request<SessionSummary>(config, 'GET', `/summaries/${encodeURIComponent(session)}`),

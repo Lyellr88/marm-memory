@@ -55,5 +55,13 @@ async def marm_delete(request: DeleteRequest):
             detail=f"Invalid type '{request.type}'. Must be 'log' or 'notebook'.",
         )
     return await delete_log_or_notebook_entry(
-        request.type, request.target, request.session_name
+        request.type,
+        request.target,
+        request.session_name,
+        project=request.project,
+        platform=request.platform,
+        scoped_notebook=(
+            request.type == "notebook"
+            and bool({"project", "platform"} & request.model_fields_set)
+        ),
     )

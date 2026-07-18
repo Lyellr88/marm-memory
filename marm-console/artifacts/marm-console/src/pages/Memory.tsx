@@ -525,9 +525,12 @@ function SessionsTab() {
     if (typed !== 'DELETE_ALL') return;
     deleteAllSessions.mutate(undefined, {
       onSuccess: (result) => {
+        const failed = result.failed_sessions?.length ?? 0;
         setActionNotice({
-          kind: 'success',
-          message: `${result.deleted_sessions} sessions deleted. ${result.deleted_count} log entries and ${result.memories_deleted} semantic log memories removed.`,
+          kind: failed ? 'error' : 'success',
+          message: failed
+            ? `${result.deleted_sessions} sessions deleted, ${failed} failed. ${result.deleted_count} log entries and ${result.memories_deleted} semantic log memories removed.`
+            : `${result.deleted_sessions} sessions deleted. ${result.deleted_count} log entries and ${result.memories_deleted} semantic log memories removed.`,
         });
       },
     });
@@ -842,15 +845,19 @@ function NotebookTab() {
                   <Button 
                     variant="destructive" 
                     size="sm"
-                    onClick={() => deleteNote.mutate(
-                      { name: editing.name!, params: { project: editing.project || undefined, platform: editing.platform || undefined } },
-                      {
-                        onSuccess: () => {
-                          setActionNotice({ kind: 'success', message: `Notebook entry '${editing.name}' deleted.` });
-                          setEditing(null);
+                    onClick={() => {
+                      const typed = prompt(`Type DELETE to delete notebook entry '${editing.name}'.`);
+                      if (typed !== 'DELETE') return;
+                      deleteNote.mutate(
+                        { name: editing.name!, params: { project: editing.project || undefined, platform: editing.platform || undefined } },
+                        {
+                          onSuccess: () => {
+                            setActionNotice({ kind: 'success', message: `Notebook entry '${editing.name}' deleted.` });
+                            setEditing(null);
+                          },
                         },
-                      },
-                    )}
+                      );
+                    }}
                     isLoading={deleteNote.isPending}
                   >
                     <Trash2 className="w-4 h-4 mr-2" /> Delete

@@ -17,10 +17,10 @@ def test_session_log_notebook_and_compaction_mutations_proxy_to_marm(monkeypatch
                 "session_name": payload.get("session_name"),
                 "marm_active": True,
             },
-            "marm_delete": {
-                "status": "success",
-                "deleted_count": 1,
-                "memories_deleted": 1,
+        "marm_delete": {
+            "status": "success",
+            "deleted_count": 1,
+            "memories_deleted": 1,
                 "deleted": True,
             },
             "marm_notebook": {
@@ -121,13 +121,24 @@ def test_session_log_notebook_and_compaction_mutations_proxy_to_marm(monkeypatch
 
         notebook = client.post(
             "/api/notebook",
-            json={"name": "deploy-note", "content": "Ship carefully."},
+            json={
+                "name": "deploy-note",
+                "content": "Ship carefully.",
+                "project": "console",
+                "platform": "codex",
+            },
         )
         assert notebook.status_code == 200
         assert notebook.json()["name"] == "deploy-note"
 
         deleted_note = client.request(
-            "DELETE", "/api/notebook/deploy-note", json={"confirm": "DELETE"}
+            "DELETE",
+            "/api/notebook/deploy-note",
+            json={
+                "confirm": "DELETE",
+                "project": "console",
+                "platform": "codex",
+            },
         )
         assert deleted_note.status_code == 200
         assert deleted_note.json()["deleted"] is True
@@ -159,10 +170,25 @@ def test_session_log_notebook_and_compaction_mutations_proxy_to_marm(monkeypatch
         ("marm_delete", {"type": "log", "target": "main"}, 30.0),
         (
             "marm_notebook",
-            {"action": "add", "name": "deploy-note", "data": "Ship carefully."},
+            {
+                "action": "add",
+                "name": "deploy-note",
+                "data": "Ship carefully.",
+                "project": "console",
+                "platform": "codex",
+            },
             30.0,
         ),
-        ("marm_delete", {"type": "notebook", "target": "deploy-note"}, 30.0),
+        (
+            "marm_delete",
+            {
+                "type": "notebook",
+                "target": "deploy-note",
+                "project": "console",
+                "platform": "codex",
+            },
+            30.0,
+        ),
         (
             "marm_compaction",
             {
@@ -201,3 +227,128 @@ def test_log_delete_returns_404_when_marm_deletes_nothing(monkeypatch):
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Log entry not found."
+
+
+def test_bulk_session_delete_continues_after_per_session_failure(monkeypatch):
+    calls = []
+
+    def fake_post(operation: str, payload: dict, *, timeout: float = 10.0) -> dict:
+        calls.append((operation, payload, timeout))
+        if payload["target"] == "broken":
+            raise console_app.mcp_client.McpRequestError(503, "delete failed")
+        return {
+            "status": "success",
+            "deleted_count": 1,
+            "memories_deleted": 2,
+        }
+
+    monkeypatch.setattr(console_app.mcp_client, "post", fake_post)
+    monkeypatch.setattr(
+        console_app.memory_store,
+        "list_sessions",
+        lambda db_path: [
+            {"name": "alpha"},
+            {"name": "broken"},
+            {"name": "omega"},
+        ],
+    )
+
+    with TestClient(console_app.app) as client:
+        response = client.request(
+            "DELETE", "/api/sessions", json={"confirm": "DELETE_ALL"}
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "partial_success"
+    assert body["deleted_sessions"] == 2
+    assert body["deleted_count"] == 2
+    assert body["memories_deleted"] == 4
+    assert body["failed_sessions"] == [
+        {"session_name": "broken", "status_code": 503, "message": "delete failed"}
+    ]
+    assert [call[1]["target"] for call in calls] == ["alpha", "broken", "omega"]
+
+
+def test_notebook_mutations_preserve_project_platform_scope(monkeypatch):
+    calls = []
+
+    def fake_post(operation: str, payload: dict, *, timeout: float = 10.0) -> dict:
+        calls.append((operation, payload, timeout))
+        return {
+            "status": "success",
+            "name": payload.get("name"),
+            "deleted": True,
+        }
+
+    monkeypatch.setattr(console_app.mcp_client, "post", fake_post)
+    monkeypatch.setattr(
+        console_app.memory_store,
+        "list_notebook",
+        lambda db_path: [
+            {
+                "name": "shared",
+                "content": "Global rule.",
+                "project": None,
+                "platform": None,
+                "created_at": "2026-07-17T00:00:00+00:00",
+                "updated_at": "2026-07-17T00:00:00+00:00",
+            },
+            {
+                "name": "shared",
+                "content": "Scoped rule.",
+                "project": "marm-console",
+                "platform": "codex",
+                "created_at": "2026-07-17T00:00:00+00:00",
+                "updated_at": "2026-07-17T00:00:00+00:00",
+            },
+        ],
+    )
+
+    with TestClient(console_app.app) as client:
+        saved = client.post(
+            "/api/notebook",
+            json={
+                "name": "shared",
+                "content": "Scoped rule.",
+                "project": "marm-console",
+                "platform": "codex",
+            },
+        )
+        deleted = client.request(
+            "DELETE",
+            "/api/notebook/shared",
+            json={
+                "confirm": "DELETE",
+                "project": "marm-console",
+                "platform": "codex",
+            },
+        )
+
+    assert saved.status_code == 200
+    assert saved.json()["content"] == "Scoped rule."
+    assert saved.json()["project"] == "marm-console"
+    assert deleted.status_code == 200
+    assert calls == [
+        (
+            "marm_notebook",
+            {
+                "action": "add",
+                "name": "shared",
+                "data": "Scoped rule.",
+                "project": "marm-console",
+                "platform": "codex",
+            },
+            30.0,
+        ),
+        (
+            "marm_delete",
+            {
+                "type": "notebook",
+                "target": "shared",
+                "project": "marm-console",
+                "platform": "codex",
+            },
+            30.0,
+        ),
+    ]

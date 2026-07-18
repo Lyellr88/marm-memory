@@ -18,6 +18,7 @@
 - Filled the remaining Memory workspace gaps from the legacy `marm-dashboard`: Console can now create sessions, delete one session, delete all sessions, delete individual log rows, bulk-delete logs, add/delete notebook entries, and stage/apply/discard compaction candidates from the same Memory tab surface.
 - The new Console routes call existing MARM MCP tool paths for mutations instead of writing directly to SQLite, preserving the queue-backed memory write rules and transport behavior while the old dashboard remains available for reference.
 - Added visible success/error feedback for session, log, notebook, and compaction actions so failed queue/MCP operations no longer disappear silently in the UI.
+- Notebook add/delete now preserves optional `project`/`platform` scope across Console and the existing MCP tool paths, so same-name notebook entries in different scopes are not collapsed by UI mutations.
 - Added FastAPI response-contract tests for the new Console Memory routes with the MCP adapter stubbed, matching the rule that every new Console API route gets at least one real response-layer test.
 
 </details>

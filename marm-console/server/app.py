@@ -129,7 +129,9 @@ class NotebookMutationPayload(BaseModel):
 
 
 class NotebookDeletePayload(BaseModel):
-    confirm: Literal["DELETE"] = "DELETE"
+    confirm: Literal["DELETE"]
+    project: str | None = None
+    platform: str | None = None
 
 
 def _now_iso() -> str:
@@ -406,18 +408,32 @@ def delete_all_sessions(payload: BulkDeletePayload) -> dict:
     deleted_sessions = 0
     deleted_logs = 0
     deleted_memories = 0
+    failed_sessions: list[dict] = []
     for session in sessions:
-        result = _mcp_tool_mutation(
-            "marm_delete",
-            {"type": "log", "target": session["name"]},
-        )
+        session_name = session["name"]
+        try:
+            result = _mcp_tool_mutation(
+                "marm_delete",
+                {"type": "log", "target": session_name},
+            )
+        except HTTPException as exc:
+            failed_sessions.append(
+                {
+                    "session_name": session_name,
+                    "status_code": exc.status_code,
+                    "message": str(exc.detail),
+                }
+            )
+            continue
         deleted_sessions += 1
         deleted_logs += int(result.get("deleted_count", 0) or 0)
         deleted_memories += int(result.get("memories_deleted", 0) or 0)
     return {
+        "status": "partial_success" if failed_sessions else "success",
         "deleted_sessions": deleted_sessions,
         "deleted_count": deleted_logs,
         "memories_deleted": deleted_memories,
+        "failed_sessions": failed_sessions,
     }
 
 
@@ -498,11 +514,21 @@ def upsert_notebook(payload: NotebookMutationPayload) -> dict:
         raise HTTPException(status_code=422, detail="Name and content are required.")
     _mcp_tool_mutation(
         "marm_notebook",
-        {"action": "add", "name": name, "data": content},
+        {
+            "action": "add",
+            "name": name,
+            "data": content,
+            "project": payload.project,
+            "platform": payload.platform,
+        },
     )
     try:
         for entry in memory_store.list_notebook(get_memory_db_path()):
-            if entry["name"] == name:
+            if (
+                entry["name"] == name
+                and entry.get("project") == payload.project
+                and entry.get("platform") == payload.platform
+            ):
                 return entry
     except memory_store.MemoryStoreUnavailable:
         pass
@@ -518,10 +544,14 @@ def upsert_notebook(payload: NotebookMutationPayload) -> dict:
 
 @app.delete("/api/notebook/{name}")
 def delete_notebook(name: str, payload: NotebookDeletePayload) -> dict:
-    _ = payload
     result = _mcp_tool_mutation(
         "marm_delete",
-        {"type": "notebook", "target": name},
+        {
+            "type": "notebook",
+            "target": name,
+            "project": payload.project,
+            "platform": payload.platform,
+        },
     )
     return {
         "name": name,

@@ -155,6 +155,8 @@ async def marm_delete(
     type: str,
     target: str,
     session_name: Optional[str] = None,
+    project: Optional[str] = None,
+    platform: Optional[str] = None,
 ) -> dict:
     """
     🗑️ Delete a log session, log entry, or notebook entry
@@ -163,7 +165,7 @@ async def marm_delete(
     type="log" (no session_name): delete entire session and all its entries
     type="notebook": delete notebook entry by name
     """
-    return await delete_entry_stdio(type, target, session_name)
+    return await delete_entry_stdio(type, target, session_name, project, platform)
 
 
 @mcp.tool()
@@ -174,6 +176,8 @@ async def marm_notebook(
     data: Optional[str] = None,
     names: Optional[str] = None,
     session_name: str = "main",
+    project: Optional[str] = None,
+    platform: Optional[str] = None,
 ) -> dict:
     """
     📔 Unified notebook — add, use, show, status, or clear
@@ -191,6 +195,8 @@ async def marm_notebook(
             data=data,
             names=names,
             session_name=session_name,
+            project=project,
+            platform=platform,
         )
     except Exception as e:
         return {"status": "error", "message": f"Notebook operation failed: {e!s}"}

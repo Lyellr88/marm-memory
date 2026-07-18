@@ -516,9 +516,9 @@ The AI agent will automatically use the appropriate tools. Manual tool access is
 | `marm_smart_recall` | Hybrid recall: exact lane for config keys, commands, and file paths; semantic rerank for natural-language queries | `query`, `limit`, `session_name`, `search_all`, `detail=1/2/3`, `project`, `platform`, `exact_mode` |
 | `marm_log_entry` | Add structured session log entries; each entry is also embedded into semantic memory so `marm_smart_recall` can find it | `entry`, `session_name` |
 | `marm_log_show` | Display all entries and sessions, with filtering | `session_name` |
-| `marm_delete` | Delete a log session, log entry, or notebook entry | `type`, `target`, `session_name` |
+| `marm_delete` | Delete a log session, log entry, or notebook entry | `type`, `target`, `session_name`, `project`, `platform` |
 | `marm_summary` | Cached, paste-ready session summaries with intelligent truncation | `session_name` |
-| `marm_notebook` | Reusable instructions and knowledge snippets | `action="add"\|"use"\|"show"\|"status"\|"clear"`, `name`, `data` |
+| `marm_notebook` | Reusable instructions and knowledge snippets | `action="add"\|"use"\|"show"\|"status"\|"clear"`, `name`, `data`, `project`, `platform` |
 | `marm_compaction` | Agent-assisted memory cleanup with a reviewable audit trail | `action="status"\|"candidates"\|"review"\|"stage"\|"apply"\|"discard"` |
 
 ### 🕸️ Code Graph (5 tools)
