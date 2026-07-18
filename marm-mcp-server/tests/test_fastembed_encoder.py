@@ -2,13 +2,7 @@
 the .encode(text) shape every caller (and scripts/bench_hotpath.py) already
 expects from SentenceTransformer.
 
-Real cross-backend numerical fidelity (does fastembed's ONNX all-MiniLM-L6-v2
-agree with the PyTorch sentence-transformers version) was already verified
-separately against real model weights: 1.0000 cosine similarity on a
-15-sentence corpus, identical top-5 retrieval ranking. That can't be
-re-verified here -- this sandbox's network policy blocks huggingface.co, so
-the real model can never download in this environment. These tests instead
-target what's actually ours to get wrong: whether the adapter calls
+These tests target what's actually ours to get wrong: whether the adapter calls
 fastembed's real API correctly and preserves SentenceTransformer's
 single-string-vs-list-of-strings polymorphism, which is what
 scripts/bench_hotpath.py:80 depends on.
@@ -18,6 +12,7 @@ import numpy as np
 import pytest
 
 from marm_mcp_server.core.memory import _FastEmbedEncoder
+from marm_mcp_server.config.settings import DEFAULT_SEMANTIC_DIM, DEFAULT_SEMANTIC_MODEL
 
 
 class _FakeTextEmbedding:
@@ -38,14 +33,31 @@ def patched_encoder(monkeypatch):
     import fastembed
 
     monkeypatch.setattr(fastembed, "TextEmbedding", _FakeTextEmbedding)
-    return _FastEmbedEncoder("all-MiniLM-L6-v2")
+    return _FastEmbedEncoder("jinaai/jina-embeddings-v2-small-en")
 
 
-def test_model_name_gets_sentence_transformers_prefix(patched_encoder):
-    """fastembed needs the full HF repo id; DEFAULT_SEMANTIC_MODEL is the
-    short form SentenceTransformer resolved via its own aliasing -- the
-    adapter must add the prefix fastembed requires, not pass the bare name."""
-    assert patched_encoder._model.model_name == "sentence-transformers/all-MiniLM-L6-v2"
+def test_full_model_name_passes_through_unchanged(patched_encoder):
+    assert patched_encoder._model.model_name == "jinaai/jina-embeddings-v2-small-en"
+
+
+def test_legacy_minilm_short_name_keeps_compatibility(monkeypatch):
+    import fastembed
+
+    monkeypatch.setattr(fastembed, "TextEmbedding", _FakeTextEmbedding)
+    encoder = _FastEmbedEncoder("all-MiniLM-L6-v2")
+    assert encoder._model.model_name == "sentence-transformers/all-MiniLM-L6-v2"
+
+
+def test_default_model_registry_metadata_matches_configured_dimension():
+    from fastembed import TextEmbedding
+
+    model = next(
+        item
+        for item in TextEmbedding.list_supported_models()
+        if item["model"] == DEFAULT_SEMANTIC_MODEL
+    )
+    assert model["dim"] == DEFAULT_SEMANTIC_DIM
+    assert "Prefixes for queries/documents: not necessary" in model["description"]
 
 
 def test_encode_single_string_returns_one_vector_not_a_list(patched_encoder):

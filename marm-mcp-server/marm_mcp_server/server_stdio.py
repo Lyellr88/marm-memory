@@ -26,6 +26,7 @@ from anyio import BrokenResourceError, ClosedResourceError, EndOfStream  # noqa:
 os.environ["SERVER_HOST"] = "127.0.0.1"
 
 from .core.stdio_logging import _stdio_log  # noqa: E402
+from .utils.embedding_state import check_embedding_compatibility  # noqa: E402
 
 from .core.stdio_tool_lifecycle import _log_tool_call  # noqa: E402
 
@@ -340,6 +341,9 @@ def main() -> None:
         SERVER_VERSION,
         DEFAULT_DB_PATH,
         SEMANTIC_SEARCH_AVAILABLE,
+    )
+    check_embedding_compatibility(
+        warn=lambda message: _stdio_log.warning("%s", message)
     )
     memory.restore_active_session()
     try:

@@ -2,7 +2,7 @@
 
 ## Universal Memory Intelligence Platform for AI Agents
 
-**MARM v2.23.0** - Memory Accurate Response Mode
+**MARM v2.24.0** - Memory Accurate Response Mode
 *Docker deployment guide for Windows, Mac, and Linux*
 
 ---
@@ -552,6 +552,21 @@ curl http://localhost:8001/health
 docker pull lyellr88/marm-mcp-server:latest
 docker stop marm-mcp-server
 docker rm marm-mcp-server
+```
+
+**Migrate existing embeddings** when upgrading to the Jina v2 Small release. With every HTTP and STDIO MARM process stopped, run this against the persistent data volume before starting the updated container:
+
+```bash
+docker run --rm \
+  -v ~/.marm:/home/marm/.marm \
+  lyellr88/marm-mcp-server:latest --migrate-embeddings
+```
+
+The migration command refuses when it detects a live HTTP server, but cannot reliably detect STDIO processes. It re-embeds memory, chunk, notebook, and any existing concept-graph embeddings, and can be rerun safely after interruption.
+
+**Start the updated container:**
+
+```bash
 docker run -d --name marm-mcp-server \
   -p 127.0.0.1:8001:8001 \
   -e SERVER_HOST=0.0.0.0 \
@@ -565,7 +580,14 @@ docker run -d --name marm-mcp-server \
 
 ### **Migration Notes**
 
-- Database schema is compatible - no migration needed
+- The Jina v2 Small upgrade changes stored embeddings from MiniLM's 384 dimensions to 512 dimensions. Migrate the persistent volume with `--migrate-embeddings` before starting the updated container.
+
+```bash
+docker run --rm \
+  -v ~/.marm:/home/marm/.marm \
+  lyellr88/marm-mcp-server:latest --migrate-embeddings
+```
+
 - New tools automatically available after restart
 - Docker images are backward compatible with persistent volumes
 

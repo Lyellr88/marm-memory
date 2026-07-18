@@ -3,6 +3,9 @@
 import asyncio
 import os
 import sys
+import urllib.error
+import urllib.request
+from pathlib import Path
 from typing import Optional
 
 import structlog
@@ -17,7 +20,6 @@ from .config.settings import (
     SERVER_PORT,
     SERVER_VERSION,
 )
-from .core import memory as memory_module
 from .core.rate_limiter import rate_limiter
 from .utils.dependency_check import check_dependencies
 from .utils.security import generate_api_key
@@ -81,6 +83,8 @@ def apply_runtime_preset(
     rate_limit_rpm: Optional[int] = None,
 ) -> dict:
     """Apply CLI rate-limit/write-queue presets to already-imported runtime modules."""
+    from .core import memory as memory_module
+
     if rate_limit_rpm is not None and rate_limit_rpm < 0:
         raise ValueError("--rate-limit-rpm must be 0 or greater")
 
@@ -160,6 +164,11 @@ def main():
         type=int,
         help="Override HTTP rate limit RPM; 0 disables rate limiting",
     )
+    parser.add_argument(
+        "--migrate-embeddings",
+        action="store_true",
+        help="Migrate existing embeddings to the current model and exit",
+    )
     args = parser.parse_args()
 
     if args.generate_key:
@@ -172,6 +181,34 @@ def main():
     if args.check_deps:
         success = check_dependencies()
         sys.exit(0 if success else 1)
+
+    if args.migrate_embeddings:
+        print("Stop every MARM HTTP and STDIO process before migrating embeddings.")
+        print(
+            "STDIO processes cannot be detected reliably and must be stopped manually."
+        )
+        if _http_server_is_running():
+            print(
+                "Migration refused: a MARM HTTP server is still running.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+        if not Path(DEFAULT_DB_PATH).exists():
+            print("No MARM memory database exists; nothing needs migration.")
+            sys.exit(0)
+
+        from .utils.embedding_migration import migrate_embeddings
+
+        try:
+            result = migrate_embeddings(DEFAULT_DB_PATH)
+        except Exception as exc:
+            print(f"Embedding migration failed: {exc}", file=sys.stderr)
+            sys.exit(1)
+        print(
+            "Embedding migration complete: "
+            f"{result['rows_migrated']} vector(s) updated."
+        )
+        sys.exit(0)
 
     try:
         runtime_config = apply_runtime_preset(
@@ -221,3 +258,20 @@ def main():
     except Exception as e:
         logger.error("Server error", error=str(e))
         sys.exit(1)
+
+
+def _http_server_is_running() -> bool:
+    """Best-effort guard against direct migration beside a live HTTP server."""
+    probe_host = SERVER_HOST
+    if probe_host in {"0.0.0.0", "::", "[::]"}:
+        probe_host = "127.0.0.1"
+    request = urllib.request.Request(
+        f"http://{probe_host}:{SERVER_PORT}/health", method="GET"
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=0.75):
+            return True
+    except urllib.error.HTTPError:
+        return True
+    except (urllib.error.URLError, TimeoutError, OSError):
+        return False

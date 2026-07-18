@@ -6,7 +6,13 @@ import sys
 import time
 import importlib
 
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10
+    import tomli as tomllib
+
 import requests
+import pytest
 
 
 def test_generate_key_cli_prints_one_key_and_exits_without_starting_server(tmp_path):
@@ -57,6 +63,75 @@ def test_check_deps_cli_reports_dependency_status_without_starting_server(tmp_pa
     assert "MARM MCP Server - Dependency Check" in result.stdout
     assert "All dependencies satisfied!" in result.stdout
     assert "Uvicorn running" not in result.stdout
+
+
+def test_migration_entrypoints_are_side_effect_light_when_database_is_absent(tmp_path):
+    env = os.environ.copy()
+    memory_path = tmp_path / "missing-memory.db"
+    concept_path = tmp_path / "missing-concept.db"
+    env["MARM_DB_PATH"] = str(memory_path)
+    env["MARM_CONCEPT_DB_PATH"] = str(concept_path)
+    env["MARM_ANALYTICS_DB_PATH"] = str(tmp_path / "analytics.db")
+    env["USERPROFILE"] = str(tmp_path)
+    env["HOME"] = str(tmp_path)
+
+    module_result = subprocess.run(
+        [sys.executable, "-m", "marm_mcp_server", "--migrate-embeddings"],
+        cwd=os.getcwd(),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert module_result.returncode == 0, module_result.stderr
+    assert "nothing needs migration" in module_result.stdout
+    assert not memory_path.exists()
+    assert not concept_path.exists()
+
+    command = (
+        "import sys\n"
+        "from marm_mcp_server.cli import main\n"
+        "sys.argv = ['marm-mcp-server', '--migrate-embeddings']\n"
+        "try:\n"
+        "    main()\n"
+        "except SystemExit as exc:\n"
+        "    assert 'marm_mcp_server.server' not in sys.modules\n"
+        "    raise\n"
+    )
+    cli_result = subprocess.run(
+        [sys.executable, "-c", command],
+        cwd=os.getcwd(),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert cli_result.returncode == 0, cli_result.stderr
+    assert not memory_path.exists()
+    assert not concept_path.exists()
+
+    with open("pyproject.toml", "rb") as pyproject_file:
+        pyproject = tomllib.load(pyproject_file)
+    assert pyproject["project"]["scripts"]["marm-mcp-server"] == (
+        "marm_mcp_server.cli:main"
+    )
+
+
+def test_migration_cli_refuses_live_http_server(monkeypatch, tmp_path, capsys):
+    cli = importlib.import_module("marm_mcp_server.cli")
+    memory_path = tmp_path / "memory.db"
+    memory_path.touch()
+    monkeypatch.setattr(cli, "DEFAULT_DB_PATH", str(memory_path))
+    monkeypatch.setattr(cli, "_http_server_is_running", lambda: True)
+    monkeypatch.setattr(sys, "argv", ["marm-mcp-server", "--migrate-embeddings"])
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main()
+
+    assert exc_info.value.code == 1
+    captured = capsys.readouterr()
+    assert "STDIO processes cannot be detected reliably" in captured.out + captured.err
+    assert "still running" in captured.err
 
 
 def test_import_marm_mcp_server_succeeds_with_clean_stdout(tmp_path):

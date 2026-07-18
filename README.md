@@ -5,7 +5,7 @@
      width="900"
      height="250">
 </picture>
-<h1 align="center">MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.23.0</h1>
+<h1 align="center">MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.24.0</h1>
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/Lyellr88/marm-memory/blob/MARM-main/LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
@@ -98,44 +98,67 @@ pip install marm-mcp-server
 | **Private high-throughput swarm** | `python -m marm_mcp_server --swarm-max` | `"agent" mcp add --transport http marm-memory http://localhost:8001/mcp` |
 | **Trusted private lab/server** | `python -m marm_mcp_server --trusted` | `"agent" mcp add --transport http marm-memory http://localhost:8001/mcp` |
 
+### Upgrade Existing Embeddings
+
+The Jina v2 Small default uses 512-dimensional embeddings; older `all-MiniLM-L6-v2` data is 384-dimensional and must be re-embedded after upgrading. Stop every MARM HTTP and STDIO process, then run:
+
+```bash
+marm-mcp-server --migrate-embeddings
+```
+
+The command refuses to continue when it detects a live HTTP server, but STDIO processes cannot be detected reliably and must be stopped manually. It re-embeds memory, chunk, notebook, and any existing concept-graph embeddings, reports batch progress, verifies both databases, and exits. It is resumable: rerun the same command after an interruption. Do not run it against a live server.
+
 ## Performance & Scaling Benchmarks
 
 MARM is tuned for fast recall first, even as memory grows and long memories are chunked behind the scenes.
+
+These measurements use the fastembed-backed `jinaai/jina-embeddings-v2-small-en` encoder and a throwaway local SQLite database.
 
 ### 1. Retrieval Latency Scaling
 
 | Session Size ($N$) | Min Latency | Median Latency | p95 Latency |
 | :--- | :--- | :--- | :--- |
-| **N = 100** | 12.3 ms | 13.8 ms | 15.0 ms |
-| **N = 500** | 13.3 ms | 14.1 ms | 16.4 ms |
-| **N = 1,000** | 14.5 ms | 16.2 ms | 17.1 ms |
-| **N = 2,000** | 15.9 ms | 18.4 ms | 20.8 ms |
-| **N = 4,000** | 17.6 ms | 20.8 ms | 22.5 ms |
+| **N = 100** | 6.6 ms | 7.4 ms | 8.0 ms |
+| **N = 500** | 7.1 ms | 8.1 ms | 10.0 ms |
+| **N = 1,000** | 7.6 ms | 8.5 ms | 9.0 ms |
+| **N = 2,000** | 9.3 ms | 10.5 ms | 11.6 ms |
+| **N = 4,000** | 11.5 ms | 12.1 ms | 13.4 ms |
 
 ### 2. Encoder + Concurrency
 
-- **Cold model load:** `972ms`
-- **Warm encode:** median `10.3ms`, p95 `11.2ms`
-- **Concurrent recall:** 10 gathered recalls completed in `394.7ms` vs `436.6ms` serial. The current path is intentionally serialized around shared encoder/SQLite work, so this is stable under load rather than true parallel speedup.
+- **Cold model load:** `887ms`
+- **Warm encode:** median `4.0ms`, p95 `4.4ms`
+- **Concurrent recall:** 10 gathered recalls completed in `616.3ms` vs `440.7ms` serial. The current path is intentionally serialized around shared encoder/SQLite work, so gathering calls does not create parallel speedup.
 
 ### 3. Write-Time Ingestion Cost
 
-- **Consolidation off:** median `10.3ms`, p95 `11.6ms`
-- **Consolidation on:** median `42.0ms`, p95 `46.3ms`
-- **Tradeoff:** write-time dedupe/clustering adds `4.1x` median cost so recall stays fast and cleaner over time.
+- **Consolidation off:** median `6.8ms`, p95 `7.9ms`
+- **Consolidation on:** median `51.3ms`, p95 `93.7ms`
+- **Tradeoff:** write-time dedupe/clustering adds `7.6x` median cost so recall stays fast and cleaner over time.
 
 ### 4. Hybrid Search Scaling
 
 | Session Size ($N$) | Pure Semantic | Production Hybrid | FTS Filter -> Rerank | Speedup vs Pure |
 | :--- | :--- | :--- | :--- | :--- |
-| **N = 100** | 2.4 ms | 15.1 ms | 2.2 ms | 1.1x |
-| **N = 1,000** | 23.6 ms | 16.2 ms | 2.7 ms | 8.8x |
-| **N = 4,000** | 93.8 ms | 18.3 ms | 4.9 ms | 19.0x |
-| **N = 10,000** | 242.7 ms | 19.7 ms | 5.4 ms | 45.1x |
+| **N = 100** | 2.3 ms | 7.9 ms | 1.9 ms | 1.2x |
+| **N = 1,000** | 23.1 ms | 9.2 ms | 2.5 ms | 9.2x |
+| **N = 4,000** | 106.5 ms | 13.2 ms | 4.7 ms | 22.8x |
+| **N = 10,000** | 267.1 ms | 13.6 ms | 5.3 ms | 50.4x |
 
-Benchmarks used a throwaway real SQLite database and the live fastembed-backed `all-MiniLM-L6-v2` encoder on local hardware. Reproduce them: [`scripts/benchmarking/performance/bench_hotpath.py`](scripts/benchmarking/performance/bench_hotpath.py)
+These Jina v2 Small benchmarks used a throwaway real SQLite database and the live configured encoder on local hardware. Reproduce them: [`scripts/benchmarking/performance/bench_hotpath.py`](scripts/benchmarking/performance/bench_hotpath.py)
 
-### 5. vs Competitors: Architecture
+### 5. LoCoMo Retrieval Accuracy
+
+A fresh Jina v2 Small run ingested all 10 LoCoMo conversations through `marm_log_entry`, then scored top-5 `marm_smart_recall` results against 1,977 evidence-annotated questions. No answer-generation model or LLM judge was used.
+
+| Encoder | Any evidence hit | All evidence hit | Mean evidence recall |
+| :--- | :--- | :--- | :--- |
+| **MiniLM baseline** | 37.5% | 29.5% | not previously published |
+| **Jina v2 Small** | 53.0% | 43.4% | 47.6% |
+
+The Jina run improved both hit metrics in this benchmark. This comparison does not isolate context length as the sole cause; model quality, 512-dimensional vectors, and reranking behavior changed together. Reproduce it with [`scripts/benchmarking/accuracy/locomo/run_eval.py`](scripts/benchmarking/accuracy/locomo/run_eval.py).
+
+### 6. vs Competitors: Architecture
 
 MARM targets a specific niche: local-first memory for MCP-connected coding agents, not general personalization memory or a full agent runtime. Here's how it differs architecturally from established names in AI agent memory:
  
@@ -767,7 +790,7 @@ Everything above runs on a small number of deliberate mechanisms. This section i
 - **SQLite in WAL mode** at `~/.marm/marm_memory.db` with a connection pool (5 connections). WAL keeps readers unblocked during writes, which matters when several agents recall while one writes.
 - **FTS5 full-text index** (`memories_fts`) is maintained as an external-content table over the memories table and powers both the exact lane (BM25) and the filter stage of hybrid recall.
 - **Chunk storage**: memories past ~180 words are split into overlapping 150-token chunks (50-token overlap) in a `memory_chunks` table, each with its own embedding. Recall scores chunks and collapses to the parent memory.
-- **Embeddings** come from a fastembed-backed `all-MiniLM-L6-v2` encoder, lazily loaded on first semantic use and serialized behind a lock so concurrent encodes can't corrupt each other. If the encoder is unavailable, writes still succeed; memories are simply stored without embeddings until it loads. Semantic scoring runs as a single NumPy batch (matrix cosine) rather than a Python loop.
+- **Embeddings** come from the fastembed-backed `jinaai/jina-embeddings-v2-small-en` encoder: 33M parameters, 512 dimensions, an 8,192-token context window, and an Apache-2.0 license. It does not require separate query/document text prefixes. The encoder is lazily loaded on first semantic use and serialized behind a lock so concurrent encodes can't corrupt each other. If it is unavailable, writes still succeed; memories are stored without embeddings until it loads. Semantic scoring runs as a single NumPy batch (matrix cosine) rather than a Python loop.
 - **The concept graph gets its own database** (`~/.marm/index/marm_index.db`) and its own pool, reusing the same pool implementation but never sharing connections with the memory store. Deliberate isolation: an experimental graph build must not be able to stall the production WAL.
 
 ### Write path

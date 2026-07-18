@@ -1,6 +1,6 @@
 """Hot-path benchmark.
 
-Measures, against the REAL MARMMemory + fastembed-backed all-MiniLM-L6-v2 encoder:
+Measures, against the REAL MARMMemory + configured fastembed-backed semantic encoder:
   1. encode() wall time (the per-call CPU cost)
   2. recall_similar latency vs session size N (FTS filter + bounded embedding rerank)
   3. event-loop blocking: concurrent recalls via asyncio.gather vs serial sum
@@ -35,6 +35,7 @@ sys.path.insert(0, os.path.join(_REPO_ROOT, "marm-mcp-server"))
 from marm_mcp_server.core.memory import MARMMemory, _safe_fts_query  # noqa: E402
 from marm_mcp_server.core import consolidation  # noqa: E402
 from marm_mcp_server.core import memory_ops  # noqa: E402
+from marm_mcp_server.config.settings import DEFAULT_SEMANTIC_DIM  # noqa: E402
 
 try:
     import numpy as np
@@ -67,7 +68,7 @@ VOCAB = (
     "summary cluster threshold nudge staging idempotent transaction lock writer"
 ).split()
 
-EMBEDDING_DIM = 384
+EMBEDDING_DIM = DEFAULT_SEMANTIC_DIM
 EMBEDDING_BYTES = EMBEDDING_DIM * 4
 
 
@@ -250,8 +251,8 @@ async def bench_hybrid_strategies(mem, sizes=None, iters=15):
             try:
                 conn.row_factory = sqlite3.Row
                 rows = conn.execute(
-                    """SELECT id, content, embedding FROM memories 
-                       WHERE session_name = 'bench' AND embedding IS NOT NULL 
+                    """SELECT id, content, embedding FROM memories
+                       WHERE session_name = 'bench' AND embedding IS NOT NULL
                        ORDER BY timestamp DESC LIMIT 10000"""
                 ).fetchall()
 

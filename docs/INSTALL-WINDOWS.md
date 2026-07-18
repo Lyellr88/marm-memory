@@ -2,7 +2,7 @@
 
 ## Universal Memory Intelligence Platform for AI Agents
 
-**MARM v2.23.0** - Memory Accurate Response Mode
+**MARM v2.24.0** - Memory Accurate Response Mode
 *Complete Windows installation guide*
 
 ---
@@ -293,7 +293,7 @@ Invoke-WebRequest -Uri http://localhost:8001/health
 {
   "status": "healthy",
   "service": "MARM MCP Server",
-  "version": "2.23.0",
+  "version": "2.24.0",
   "timestamp": "2026-01-01T00:00:00+00:00",
   "database": "connected",
   "semantic_search": "available"
@@ -321,7 +321,15 @@ Invoke-WebRequest -Uri http://localhost:8001/health
    pip install marm-mcp-server --upgrade
    ```
 
-4. **Restart Server**: `python -m marm_mcp_server`
+4. **Migrate existing embeddings** when upgrading to the Jina v2 Small release:
+
+   ```powershell
+   marm-mcp-server --migrate-embeddings
+   ```
+
+   Keep every MARM HTTP and STDIO process stopped while this runs. The command refuses when it detects an HTTP server, but cannot reliably detect STDIO processes. It is resumable after interruption.
+
+5. **Restart Server**: `python -m marm_mcp_server`
 
 **🐳 Docker Update:**
 
@@ -329,6 +337,7 @@ Invoke-WebRequest -Uri http://localhost:8001/health
 docker pull lyellr88/marm-mcp-server:latest
 docker stop marm-mcp-server
 docker rm marm-mcp-server
+docker run --rm -v ${HOME}\.marm:/home/marm/.marm lyellr88/marm-mcp-server:latest --migrate-embeddings
 docker run -d --name marm-mcp-server -p 127.0.0.1:8001:8001 -e SERVER_HOST=0.0.0.0 -e MARM_API_KEY=your-generated-key -v ${HOME}\.marm:/home/marm/.marm --restart unless-stopped lyellr88/marm-mcp-server:latest
 ```
 
@@ -349,7 +358,7 @@ python -m marm_mcp_server
 
 ### **Migration Notes**
 
-- Database schema is compatible - no migration needed
+- The Jina v2 Small upgrade changes stored embeddings from MiniLM's 384 dimensions to 512 dimensions. After upgrading, stop every MARM process and run `marm-mcp-server --migrate-embeddings` before restarting; it migrates memory, chunk, notebook, and any existing concept-graph embeddings.
 - New tools automatically available after restart
 - Docker images are backward compatible with persistent volumes
 
@@ -408,7 +417,7 @@ python -m marm_mcp_server
 | `MARM_API_KEY` | *(unset)* | Bearer token for all capability endpoints. Auto-generated when `SERVER_HOST=0.0.0.0` and not set. Required for Docker. Generate manually: `python -m marm_mcp_server --generate-key` |
 | `MAX_DB_CONNECTIONS` | `5` | Database connection pool size |
 | `MARM_ANALYTICS_DB_PATH` | `marm_usage_analytics.db` | Override analytics database path |
-| `DEFAULT_SEMANTIC_MODEL` | `all-MiniLM-L6-v2` | AI model for semantic search |
+| `DEFAULT_SEMANTIC_MODEL` | `jinaai/jina-embeddings-v2-small-en` | Default semantic-search model: 512 dimensions, 8,192-token context, 33M parameters, Apache-2.0 licensed; no query/document text prefixes required. |
 | `RECALL_SCAN_LIMIT` | `10000` | Maximum embedded memories semantic recall scans per query before surfacing `recall_scan_truncated=true`. |
 | `MARM_RATE_LIMIT_RPM` | `80` | HTTP rate limit (requests per minute per client IP). Set to `0` to disable. Overridden by `--swarm`, `--swarm-max`, `--trusted` presets. |
 | `WRITE_QUEUE_ENABLED` | `1` | Serialized memory write queue. Set to `0` only for debugging/direct-write comparisons. |

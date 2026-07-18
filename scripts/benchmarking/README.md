@@ -21,7 +21,7 @@ All scripts run from the **repo root**.
 
 ### `bench_hotpath.py`
 
-Measures, against the real `MARMMemory` + fastembed-backed `all-MiniLM-L6-v2` encoder, using a throwaway temp DB (never touches `~/.marm`):
+Measures, against the real `MARMMemory` + configured fastembed-backed semantic encoder, using a throwaway temp DB (never touches `~/.marm`):
 
 1. `encode()` wall time
 2. `recall_similar` latency vs. session size N (FTS filter + bounded embedding rerank)
@@ -89,3 +89,5 @@ Reported per LoCoMo category (single-hop, temporal, multi-hop, open-domain, adve
 - `all_hit_rate`: fraction where every gold evidence turn was recalled (matters for multi-hop questions with multiple evidence IDs).
 - `evidence_recall`: mean fraction of gold evidence turns recalled per question — smoother than the all-or-nothing pair.
 - `semantic_any_hit_rate` / `log_any_hit_rate`: per-lane breakdown of any-hit, showing how much each retrieval lane contributes.
+
+**Latest full run (`jinaai/jina-embeddings-v2-small-en`, top-5):** 1,977 scored questions, 53.0% any-hit, 43.4% all-hit, and 47.6% mean evidence recall. The previous MiniLM baseline was 37.5% any-hit and 29.5% all-hit. This is a measured end-to-end comparison, not proof that context length alone caused the change.

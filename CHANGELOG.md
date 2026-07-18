@@ -3,6 +3,31 @@
 ## Version 2 - MARM Protocol to Universal MCP Server Evolution
 
 <details>
+<summary><strong>Unreleased: Jina v2 Small Embedding Migration (v2.24.0)</strong></summary>
+
+### Default Embedding Model Changed
+
+- Switched the default semantic encoder from `all-MiniLM-L6-v2` (384 dimensions, 256-token context) to fastembed-backed `jinaai/jina-embeddings-v2-small-en` (512 dimensions, 8,192-token context). Jina v2 Small has 33M parameters, is Apache-2.0 licensed, and does not require separate query/document text prefixes.
+- **Upgrade required for existing data:** stop every MARM HTTP and STDIO process, then run `marm-mcp-server --migrate-embeddings` before restarting MARM. The command refuses when it detects a live HTTP server, but cannot reliably detect STDIO processes, so those must be stopped manually.
+- The migration re-embeds memory, chunk, notebook, and any existing concept-graph embeddings. It reports batch progress, verifies both database files before recording completion, and can be rerun safely after interruption.
+- Existing installations still start before migration, but mixed-dimension embeddings degrade semantic recall; startup and affected recall lanes now log actionable dimension-mismatch warnings.
+- Re-ran both benchmark suites with Jina v2 Small. The hot-path benchmark now publishes the measured latency/write profile; a fresh 10-conversation LoCoMo run reached 53.0% any-hit and 43.4% all-hit at top-5 across 1,977 questions, compared with the prior MiniLM baseline of 37.5% and 29.5%. This is an end-to-end result, not a claim that context length alone caused the change.
+
+</details>
+
+<details>
+<summary><strong>July 18th, 2026: Focused Console and Memory Module Refactors (v2.23.1)</strong></summary>
+
+### Clearer Module Boundaries
+
+- Split MARM Console's large Memory and Knowledge workspace components into focused tab, graph, and dialog modules without changing the Console API or user-facing behavior.
+- Split the Console FastAPI application into endpoint, model, and core modules while preserving the standalone Console entry point and route contract.
+- Split MARM's memory operations into focused internal modules while retaining the existing core-memory compatibility surface, serialized write queue, and public MCP behavior.
+- Added regression coverage around the extracted Console and memory-operation boundaries. No schema, endpoint, or MCP tool-surface changes.
+
+</details>
+
+<details>
 <summary><strong>Unreleased: SQLite Write Atomicity Hardening (v2.23.0)</strong></summary>
 
 ### Multi-Statement Writes Are Now Real Transactions

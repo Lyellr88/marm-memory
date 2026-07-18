@@ -111,7 +111,8 @@ def get_analytics_db_path():
 
 ANALYTICS_DB_PATH = get_analytics_db_path()
 
-DEFAULT_SEMANTIC_MODEL = "all-MiniLM-L6-v2"
+DEFAULT_SEMANTIC_MODEL = "jinaai/jina-embeddings-v2-small-en"
+DEFAULT_SEMANTIC_DIM = 512
 
 SERVER_HOST = os.environ.get("SERVER_HOST", "127.0.0.1")
 _raw_port = _safe_int("SERVER_PORT", 8001)
@@ -121,7 +122,7 @@ if not (1 <= _raw_port <= 65535):
         f"WARNING: SERVER_PORT={_raw_port} out of [1, 65535], clamped to {SERVER_PORT}",
         file=sys.stderr,
     )
-SERVER_VERSION = "2.23.0"
+SERVER_VERSION = "2.24.0"
 
 GRAPH_ENABLED = os.environ.get("GRAPH_ENABLED", "true").lower() != "false"
 

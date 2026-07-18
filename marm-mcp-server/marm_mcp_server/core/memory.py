@@ -60,7 +60,12 @@ class _FastEmbedEncoder:
     def __init__(self, model_name: str):
         from fastembed import TextEmbedding
 
-        self._model = TextEmbedding(model_name=f"sentence-transformers/{model_name}")
+        resolved_name = (
+            f"sentence-transformers/{model_name}"
+            if model_name == "all-MiniLM-L6-v2"
+            else model_name
+        )
+        self._model = TextEmbedding(model_name=resolved_name)
 
     def encode(self, text):
         if isinstance(text, str):
