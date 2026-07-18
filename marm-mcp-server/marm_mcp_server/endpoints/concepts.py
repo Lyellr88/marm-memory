@@ -274,7 +274,7 @@ def _traverse(
 ) -> list[dict]:
     """Bounded BFS over entities/relationships -- single connection, one
     batched SQL query per hop-level, matches this codebase's established
-    IN (...)-in-a-Python-loop convention (compaction.py, memory_ops.py; zero
+    IN (...)-in-a-Python-loop convention (compaction.py, memory_delete.py; zero
     WITH RECURSIVE uses anywhere in this repo). At depth=1 this reproduces
     the original one-hop outgoing+incoming+union+truncate behavior exactly.
 

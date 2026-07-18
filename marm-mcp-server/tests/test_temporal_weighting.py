@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 
 from marm_mcp_server.core.memory import MARMMemory, _temporal_score
-import marm_mcp_server.core.memory_ops as memory_ops_module
+import marm_mcp_server.core.memory_recall as memory_recall_module
 
 
 # --- _temporal_score unit tests ---
@@ -99,7 +99,7 @@ async def test_newer_memory_ranks_above_equally_similar_older_one(tmp_path):
 async def test_temporal_weight_zero_means_fts_winner_ranks_first_despite_age(
     tmp_path, monkeypatch
 ):
-    monkeypatch.setattr(memory_ops_module, "TEMPORAL_WEIGHT", 0.0)
+    monkeypatch.setattr(memory_recall_module, "TEMPORAL_WEIGHT", 0.0)
 
     mem = MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
