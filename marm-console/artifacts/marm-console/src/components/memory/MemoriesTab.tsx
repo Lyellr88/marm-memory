@@ -369,7 +369,7 @@ export function MemoriesTab() {
                   <div className="grid grid-cols-3 gap-2">
                     <Input placeholder="Project (blank = null)" value={editProject} onChange={e => setEditProject(e.target.value)} className="text-xs" />
                     <Input placeholder="Platform (blank = null)" value={editPlatform} onChange={e => setEditPlatform(e.target.value)} className="text-xs" />
-                    <Input placeholder="Context type (blank = null)" value={editContextType} onChange={e => setEditContextType(e.target.value)} className="text-xs" />
+                    <Input placeholder="Context type (blank = general)" value={editContextType} onChange={e => setEditContextType(e.target.value)} className="text-xs" />
                   </div>
                   <div className="flex justify-end gap-2">
                     <Button variant="outline" size="sm" onClick={() => setEditMode(false)}>Cancel</Button>
