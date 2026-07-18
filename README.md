@@ -27,6 +27,7 @@
 ## Important Messages
 
 - marm-console now ships as the local web app for memory, knowledge, projects, and MCP-backed memory mutation actions. Packaging and one-command startup polish are still in progress.
+- **Embedding upgrade:** v2.24 switches MARM to Jina v2 Small. Existing MiniLM data must be migrated before restart: stop MARM, run `marm-mcp-server --migrate-embeddings`, then restart. See [Upgrade Existing Embeddings](#upgrade-existing-embeddings).
 - I am waiting to get access back to my PYPI account, till restored pip will be behind a few versions. I will update the README when it is back up to date.
 
 
