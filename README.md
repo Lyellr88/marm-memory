@@ -5,7 +5,7 @@
      width="900"
      height="250">
 </picture>
-<h1 align="center">MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.22.0</h1>
+<h1 align="center">MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.22.1</h1>
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/Lyellr88/marm-memory/blob/MARM-main/LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
@@ -24,7 +24,11 @@
 
 </div>
 
-## Important Message - marm-console has been added but it is not fully active yet coming soon!
+## Important Messages
+
+- marm-console now ships as the local web app successor to marm-dashboard, with live Memory, Knowledge, and Projects workspaces plus MCP-backed Memory mutation actions. Packaging and one-command startup polish are still in progress.
+- I am waiting to get access back to my PYPI account, till restored pip will be behind a few versions. I will update the README when it is back up to date.
+
 
 ## Table of Contents
 
@@ -550,9 +554,9 @@ The AI agent will automatically use the appropriate tools. Manual tool access is
 | `marm_smart_recall` | Hybrid recall: exact lane for config keys, commands, and file paths; semantic rerank for natural-language queries | `query`, `limit`, `session_name`, `search_all`, `detail=1/2/3`, `project`, `platform`, `exact_mode` |
 | `marm_log_entry` | Add structured session log entries; each entry is also embedded into semantic memory so `marm_smart_recall` can find it | `entry`, `session_name` |
 | `marm_log_show` | Display all entries and sessions, with filtering | `session_name` |
-| `marm_delete` | Delete a log session, log entry, or notebook entry | `type`, `target`, `session_name` |
+| `marm_delete` | Delete a log session, log entry, or notebook entry | `type`, `target`, `session_name`, `project`, `platform` |
 | `marm_summary` | Cached, paste-ready session summaries with intelligent truncation | `session_name` |
-| `marm_notebook` | Reusable instructions and knowledge snippets | `action="add"\|"use"\|"show"\|"status"\|"clear"`, `name`, `data` |
+| `marm_notebook` | Reusable instructions and knowledge snippets | `action="add"\|"use"\|"show"\|"status"\|"clear"`, `name`, `data`, `project`, `platform` |
 | `marm_compaction` | Agent-assisted memory cleanup with a reviewable audit trail | `action="status"\|"candidates"\|"review"\|"stage"\|"apply"\|"discard"` |
 
 ### 🕸️ Code Graph (5 tools)

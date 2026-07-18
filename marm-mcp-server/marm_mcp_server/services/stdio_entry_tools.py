@@ -23,7 +23,11 @@ async def list_log_entries_stdio(session_name: Optional[str]) -> dict:
 
 
 async def delete_entry_stdio(
-    type: str, target: str, session_name: Optional[str]
+    type: str,
+    target: str,
+    session_name: Optional[str],
+    project: Optional[str] = None,
+    platform: Optional[str] = None,
 ) -> dict:
     if type not in ("log", "notebook"):
         return {
@@ -31,5 +35,11 @@ async def delete_entry_stdio(
             "message": f"Invalid type '{type}'. Must be 'log' or 'notebook'.",
         }
     return await delete_log_or_notebook_entry(
-        type, target, session_name, log_warning=_stdio_log.warning
+        type,
+        target,
+        session_name,
+        project=project,
+        platform=platform,
+        scoped_notebook=project is not None or platform is not None,
+        log_warning=_stdio_log.warning,
     )

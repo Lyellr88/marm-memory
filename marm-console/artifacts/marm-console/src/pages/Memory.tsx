@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useMemories, useSessions, useLogs, useCompaction, useNotebook, useUpsertNotebook, useDeleteNotebook, useRunCompactionAction, useFilters, useCreateMemory, useUpdateMemory, useDeleteMemory, useBulkDeleteMemories, useSummary } from '@/hooks/use-marm-queries';
+import { useMemories, useSessions, useLogs, useCompaction, useNotebook, useUpsertNotebook, useDeleteNotebook, useRunCompactionAction, useFilters, useCreateMemory, useUpdateMemory, useDeleteMemory, useBulkDeleteMemories, useSummary, useCreateSession, useDeleteSession, useDeleteAllSessions, useDeleteLog, useDeleteAllLogs } from '@/hooks/use-marm-queries';
 import { Tabs, TabsList, TabsTrigger, TabsContent, Card, CardContent, CardHeader, CardTitle, CardDescription, Badge, Button, Input, Select, SelectTrigger, SelectValue, SelectContent, SelectItem, Table, TableHeader, TableRow, TableHead, TableBody, TableCell, Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, Textarea, Label } from '@/components/ui/core';
 import { format } from 'date-fns';
 import { Search, Trash2, CheckCircle2, XCircle, Eye, RefreshCw, Plus, Save, Edit2 } from 'lucide-react';
@@ -494,13 +494,82 @@ function SessionSummaryDialog({ session, open, onOpenChange }: { session: string
 function SessionsTab() {
   const { data, isLoading } = useSessions();
   const [summarySession, setSummarySession] = useState<string | null>(null);
+  const [actionNotice, setActionNotice] = useState<ActionNotice | null>(null);
+  const createSession = useCreateSession();
+  const deleteSession = useDeleteSession();
+  const deleteAllSessions = useDeleteAllSessions();
+
+  const handleCreateSession = () => {
+    const name = prompt('Session name');
+    if (!name?.trim()) return;
+    createSession.mutate(name.trim(), {
+      onSuccess: () => setActionNotice({ kind: 'success', message: `Session '${name.trim()}' created.` }),
+    });
+  };
+
+  const handleDeleteSession = (name: string) => {
+    const typed = prompt(`Type DELETE to delete session '${name}' and its log-backed memories.`);
+    if (typed !== 'DELETE') return;
+    deleteSession.mutate(name, {
+      onSuccess: (result) => {
+        setActionNotice({
+          kind: 'success',
+          message: `Session '${name}' deleted. ${result.deleted_count} log entries and ${result.memories_deleted} semantic log memories removed.`,
+        });
+      },
+    });
+  };
+
+  const handleDeleteAllSessions = () => {
+    const typed = prompt('Type DELETE_ALL to delete every session and its log-backed memories.');
+    if (typed !== 'DELETE_ALL') return;
+    deleteAllSessions.mutate(undefined, {
+      onSuccess: (result) => {
+        const failed = result.failed_sessions?.length ?? 0;
+        setActionNotice({
+          kind: failed ? 'error' : 'success',
+          message: failed
+            ? `${result.deleted_sessions} sessions deleted, ${failed} failed. ${result.deleted_count} log entries and ${result.memories_deleted} semantic log memories removed.`
+            : `${result.deleted_sessions} sessions deleted. ${result.deleted_count} log entries and ${result.memories_deleted} semantic log memories removed.`,
+        });
+      },
+    });
+  };
   
   if (isLoading) return <div className="p-8 text-center text-muted-foreground">Loading sessions...</div>;
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 h-full content-start overflow-auto pb-4">
-      {data?.map(session => (
-        <Card key={session.name} className={session.active ? 'border-primary' : ''}>
+    <div className="h-full overflow-auto pb-4 space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <ActionNoticePanel
+          notice={
+            createSession.error
+              ? { kind: 'error', message: mutationErrorMessage(createSession.error) }
+              : deleteSession.error
+                ? { kind: 'error', message: mutationErrorMessage(deleteSession.error) }
+                : deleteAllSessions.error
+                  ? { kind: 'error', message: mutationErrorMessage(deleteAllSessions.error) }
+                : actionNotice
+          }
+        />
+        <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-destructive hover:text-destructive"
+            onClick={handleDeleteAllSessions}
+            isLoading={deleteAllSessions.isPending}
+          >
+            <Trash2 className="w-4 h-4 mr-2" /> Delete All
+          </Button>
+          <Button size="sm" onClick={handleCreateSession} isLoading={createSession.isPending}>
+            <Plus className="w-4 h-4 mr-2" /> New Session
+          </Button>
+        </div>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 content-start">
+        {data?.map(session => (
+          <Card key={session.name} className={session.active ? 'border-primary' : ''}>
           <CardHeader className="pb-2">
             <div className="flex justify-between items-start">
               <CardTitle className="font-mono text-base">{session.name}</CardTitle>
@@ -529,12 +598,24 @@ function SessionsTab() {
                 </div>
               </div>
             )}
-            <Button variant="outline" size="sm" className="w-full mt-4" onClick={() => setSummarySession(session.name)}>
-              <Eye className="w-4 h-4 mr-2" /> View Summary
-            </Button>
+            <div className="grid grid-cols-2 gap-2 mt-4">
+              <Button variant="outline" size="sm" onClick={() => setSummarySession(session.name)}>
+                <Eye className="w-4 h-4 mr-2" /> Summary
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-destructive hover:text-destructive"
+                onClick={() => handleDeleteSession(session.name)}
+                isLoading={deleteSession.isPending}
+              >
+                <Trash2 className="w-4 h-4 mr-2" /> Delete
+              </Button>
+            </div>
           </CardContent>
-        </Card>
-      ))}
+          </Card>
+        ))}
+      </div>
       <SessionSummaryDialog session={summarySession} open={!!summarySession} onOpenChange={(o) => !o && setSummarySession(null)} />
     </div>
   );
@@ -544,9 +625,47 @@ function LogsTab() {
   const [params, setParams] = useState<LogListParams>({ limit: 50 });
   const { data, isLoading } = useLogs(params);
   const { data: filters } = useFilters();
+  const [actionNotice, setActionNotice] = useState<ActionNotice | null>(null);
+  const deleteLog = useDeleteLog();
+  const deleteAllLogs = useDeleteAllLogs();
+
+  const handleDeleteLog = (id: number, sessionName: string) => {
+    const typed = prompt(`Type DELETE to delete log entry ${id}.`);
+    if (typed !== 'DELETE') return;
+    deleteLog.mutate({ id, sessionName }, {
+      onSuccess: (result) => {
+        setActionNotice({
+          kind: 'success',
+          message: `Log ${result.log_id} deleted. ${result.memories_deleted} semantic log memories removed.`,
+        });
+      },
+    });
+  };
+
+  const handleDeleteAllLogs = () => {
+    const typed = prompt('Type DELETE_ALL to delete every log entry.');
+    if (typed !== 'DELETE_ALL') return;
+    deleteAllLogs.mutate(undefined, {
+      onSuccess: (result) => {
+        setActionNotice({
+          kind: 'success',
+          message: `${result.deleted_count} log entries deleted. ${result.memories_deleted} semantic log memories removed.`,
+        });
+      },
+    });
+  };
 
   return (
     <div className="space-y-4 h-full flex flex-col">
+      <ActionNoticePanel
+        notice={
+          deleteLog.error
+            ? { kind: 'error', message: mutationErrorMessage(deleteLog.error) }
+            : deleteAllLogs.error
+              ? { kind: 'error', message: mutationErrorMessage(deleteAllLogs.error) }
+              : actionNotice
+        }
+      />
       <div className="flex gap-4 items-center shrink-0">
         <div className="relative flex-1">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -566,6 +685,14 @@ function LogsTab() {
             {filters?.sessions.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
           </SelectContent>
         </Select>
+        <Button
+          variant="outline"
+          className="text-destructive hover:text-destructive"
+          onClick={handleDeleteAllLogs}
+          isLoading={deleteAllLogs.isPending}
+        >
+          <Trash2 className="w-4 h-4 mr-2" /> Delete All
+        </Button>
       </div>
 
       <div className="border rounded-md bg-card flex-1 overflow-auto">
@@ -575,13 +702,14 @@ function LogsTab() {
               <TableHead>Time</TableHead>
               <TableHead>Topic / Context</TableHead>
               <TableHead>Summary</TableHead>
+              <TableHead className="w-[80px]" />
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              <TableRow><TableCell colSpan={3} className="h-24 text-center text-muted-foreground">Loading logs...</TableCell></TableRow>
+              <TableRow><TableCell colSpan={4} className="h-24 text-center text-muted-foreground">Loading logs...</TableCell></TableRow>
             ) : data?.length === 0 ? (
-              <TableRow><TableCell colSpan={3} className="h-24 text-center text-muted-foreground">No logs found</TableCell></TableRow>
+              <TableRow><TableCell colSpan={4} className="h-24 text-center text-muted-foreground">No logs found</TableCell></TableRow>
             ) : (
               data?.map(l => (
                 <TableRow key={l.id}>
@@ -593,6 +721,17 @@ function LogsTab() {
                     </div>
                   </TableCell>
                   <TableCell className="text-sm line-clamp-2">{l.summary || l.entry}</TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => handleDeleteLog(l.id, l.session_name)}
+                      isLoading={deleteLog.isPending}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </TableCell>
                 </TableRow>
               ))
             )}
@@ -607,6 +746,7 @@ function NotebookTab() {
   const { data, isLoading } = useNotebook();
   const upsert = useUpsertNotebook();
   const deleteNote = useDeleteNotebook();
+  const [actionNotice, setActionNotice] = useState<ActionNotice | null>(null);
   
   const [editing, setEditing] = useState<NotebookEntry | Partial<NotebookEntry> | null>(null);
 
@@ -618,7 +758,10 @@ function NotebookTab() {
       project: editing.project,
       platform: editing.platform
     }, {
-      onSuccess: () => setEditing(null)
+      onSuccess: () => {
+        setActionNotice({ kind: 'success', message: `Notebook entry '${editing.name}' saved.` });
+        setEditing(null);
+      }
     });
   };
 
@@ -632,6 +775,15 @@ function NotebookTab() {
           <Plus className="w-4 h-4 mr-2" /> New Entry
         </Button>
       </div>
+      <ActionNoticePanel
+        notice={
+          upsert.error
+            ? { kind: 'error', message: mutationErrorMessage(upsert.error) }
+            : deleteNote.error
+              ? { kind: 'error', message: mutationErrorMessage(deleteNote.error) }
+              : actionNotice
+        }
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 flex-1 overflow-hidden">
         <div className="lg:col-span-1 border rounded-md bg-card overflow-auto">
@@ -693,7 +845,19 @@ function NotebookTab() {
                   <Button 
                     variant="destructive" 
                     size="sm"
-                    onClick={() => deleteNote.mutate({ name: editing.name!, params: { project: editing.project || undefined, platform: editing.platform || undefined } }, { onSuccess: () => setEditing(null) })}
+                    onClick={() => {
+                      const typed = prompt(`Type DELETE to delete notebook entry '${editing.name}'.`);
+                      if (typed !== 'DELETE') return;
+                      deleteNote.mutate(
+                        { name: editing.name!, params: { project: editing.project || undefined, platform: editing.platform || undefined } },
+                        {
+                          onSuccess: () => {
+                            setActionNotice({ kind: 'success', message: `Notebook entry '${editing.name}' deleted.` });
+                            setEditing(null);
+                          },
+                        },
+                      );
+                    }}
                     isLoading={deleteNote.isPending}
                   >
                     <Trash2 className="w-4 h-4 mr-2" /> Delete
@@ -747,6 +911,16 @@ function CompactionTab() {
   const { data, isLoading } = useCompaction();
   const runAction = useRunCompactionAction();
   const [view, setView] = useState<'active' | 'history'>('active');
+  const [actionNotice, setActionNotice] = useState<ActionNotice | null>(null);
+
+  const handleCompactionAction = (id: string, action: 'stage' | 'apply' | 'discard') => {
+    runAction.mutate({ id, action }, {
+      onSuccess: () => {
+        const label = action === 'stage' ? 'staged for review' : action === 'apply' ? 'applied' : 'discarded';
+        setActionNotice({ kind: 'success', message: `Compaction candidate ${label}.` });
+      },
+    });
+  };
 
   if (isLoading) return <div className="p-8 text-center text-muted-foreground">Loading candidates...</div>;
 
@@ -769,6 +943,9 @@ function CompactionTab() {
           </Button>
         </div>
       </div>
+      <ActionNoticePanel
+        notice={runAction.error ? { kind: 'error', message: mutationErrorMessage(runAction.error) } : actionNotice}
+      />
 
       {view === 'history' ? (
         history.length === 0 ? (
@@ -815,7 +992,7 @@ function CompactionTab() {
                     className="w-full justify-start" 
                     variant="default"
                     isLoading={runAction.isPending}
-                    onClick={() => runAction.mutate({ id: candidate.id, action: 'apply' })}
+                    onClick={() => handleCompactionAction(candidate.id, 'apply')}
                   >
                     <CheckCircle2 className="w-4 h-4 mr-2" /> Apply Summary
                   </Button>
@@ -824,7 +1001,7 @@ function CompactionTab() {
                       className="w-full justify-start" 
                       variant="secondary"
                       isLoading={runAction.isPending}
-                      onClick={() => runAction.mutate({ id: candidate.id, action: 'stage' })}
+                      onClick={() => handleCompactionAction(candidate.id, 'stage')}
                     >
                       <Eye className="w-4 h-4 mr-2" /> Stage for Review
                     </Button>
@@ -833,7 +1010,7 @@ function CompactionTab() {
                     className="w-full justify-start text-destructive hover:text-destructive" 
                     variant="ghost"
                     isLoading={runAction.isPending}
-                    onClick={() => runAction.mutate({ id: candidate.id, action: 'discard' })}
+                    onClick={() => handleCompactionAction(candidate.id, 'discard')}
                   >
                     <XCircle className="w-4 h-4 mr-2" /> Discard
                   </Button>

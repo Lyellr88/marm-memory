@@ -310,6 +310,9 @@ async def delete_log_or_notebook_entry(
     target: str,
     session_name: Optional[str],
     *,
+    project: Optional[str] = None,
+    platform: Optional[str] = None,
+    scoped_notebook: bool = False,
     log_warning: Callable[[str], None] = print,
 ) -> dict:
     """type must already be validated as "log" or "notebook" by the caller
@@ -400,9 +403,18 @@ async def delete_log_or_notebook_entry(
             else:  # type == "notebook"
                 conn.execute("BEGIN IMMEDIATE")
                 try:
-                    cursor = conn.execute(
-                        "DELETE FROM notebook_entries WHERE name = ?", (target,)
-                    )
+                    if scoped_notebook or project is not None or platform is not None:
+                        cursor = conn.execute(
+                            """
+                            DELETE FROM notebook_entries
+                            WHERE name = ? AND project IS ? AND platform IS ?
+                            """,
+                            (target, project, platform),
+                        )
+                    else:
+                        cursor = conn.execute(
+                            "DELETE FROM notebook_entries WHERE name = ?", (target,)
+                        )
                     deleted = cursor.rowcount
                     conn.execute("COMMIT")
                 except Exception:

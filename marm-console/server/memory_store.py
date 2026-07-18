@@ -367,6 +367,14 @@ def list_logs(
     ]
 
 
+def list_log_refs(db_path: Path) -> list[dict]:
+    with _connect(db_path) as connection:
+        rows = connection.execute(
+            "SELECT id, session_name FROM log_entries ORDER BY entry_date DESC"
+        ).fetchall()
+    return [{"id": str(row["id"]), "session_name": row["session_name"]} for row in rows]
+
+
 def list_notebook(db_path: Path) -> list[dict]:
     with _connect(db_path) as connection:
         rows = connection.execute(
