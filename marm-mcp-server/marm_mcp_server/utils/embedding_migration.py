@@ -63,6 +63,7 @@ def _migrate_database(
     encoder,
     batch_size: int,
     progress: Callable[[str], None],
+    force_reencode: bool = False,
 ) -> int:
     migrated = 0
     target_bytes = DEFAULT_SEMANTIC_DIM * 4
@@ -78,18 +79,20 @@ def _migrate_database(
                     conn.execute("ALTER TABLE entities ADD COLUMN name_embedding BLOB")
                 else:
                     continue
+            where_clause = f"{embedding_column} IS NOT NULL"
+            params: tuple[int, ...] = ()
+            if not force_reencode:
+                where_clause += f" AND LENGTH({embedding_column}) != ?"
+                params = (target_bytes,)
             total = conn.execute(
-                f"SELECT COUNT(*) FROM {table} WHERE {embedding_column} IS NOT NULL "
-                f"AND LENGTH({embedding_column}) != ?",
-                (target_bytes,),
+                f"SELECT COUNT(*) FROM {table} WHERE {where_clause}", params
             ).fetchone()[0]
             completed = 0
             while completed < total:
                 rows = conn.execute(
                     f"SELECT rowid, {text_column} FROM {table} "
-                    f"WHERE {embedding_column} IS NOT NULL "
-                    f"AND LENGTH({embedding_column}) != ? ORDER BY rowid LIMIT ?",
-                    (target_bytes, batch_size),
+                    f"WHERE {where_clause} ORDER BY rowid LIMIT ?",
+                    (*params, batch_size),
                 ).fetchall()
                 if not rows:
                     break
@@ -131,19 +134,31 @@ def migrate_embeddings(
     if not memory_path.exists():
         return {"rows_migrated": 0, "concept_db_present": concept_path.exists()}
 
+    initial_state = inspect_embedding_state(str(memory_path), str(concept_path))
+    force_reencode = (
+        initial_state.marker != DEFAULT_SEMANTIC_MODEL
+        and initial_state.has_vectors
+        and initial_state.incompatible == 0
+    )
     encoder = (encoder_factory or _load_encoder)()
     _encode_batch(encoder, ["MARM embedding migration dimension check"])
 
+    migration_args = (force_reencode,) if force_reencode else ()
     rows_migrated = _migrate_database(
-        memory_path, _MEMORY_TABLES, encoder, batch_size, progress
+        memory_path, _MEMORY_TABLES, encoder, batch_size, progress, *migration_args
     )
     if concept_path.exists():
         rows_migrated += _migrate_database(
-            concept_path, _CONCEPT_TABLES, encoder, batch_size, progress
+            concept_path,
+            _CONCEPT_TABLES,
+            encoder,
+            batch_size,
+            progress,
+            *migration_args,
         )
 
     state = inspect_embedding_state(str(memory_path), str(concept_path))
-    if not state.compatible:
+    if state.incompatible or state.errors:
         detail = (
             "; ".join(state.errors)
             if state.errors
@@ -151,6 +166,10 @@ def migrate_embeddings(
         )
         raise RuntimeError(f"Verification failed: {detail}")
     write_embedding_model_marker(str(memory_path))
+    if not inspect_embedding_state(str(memory_path), str(concept_path)).compatible:
+        raise RuntimeError(
+            "Verification failed: embedding model marker was not recorded"
+        )
     return {
         "rows_migrated": rows_migrated,
         "concept_db_present": concept_path.exists(),

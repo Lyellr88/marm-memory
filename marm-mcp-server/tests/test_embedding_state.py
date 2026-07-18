@@ -65,6 +65,38 @@ def test_old_notebook_vector_requires_migration_when_memories_are_empty(tmp_path
         )
 
 
+def test_different_512_dimension_model_marker_requires_migration(tmp_path):
+    memory_path = tmp_path / "memory.db"
+    init_database(str(memory_path))
+    with sqlite3.connect(memory_path) as conn:
+        conn.execute(
+            "INSERT INTO notebook_entries (name, data, embedding) VALUES (?, ?, ?)",
+            ("notes", "other model vector", _vector(512)),
+        )
+        conn.execute(
+            "INSERT INTO user_settings (key, value) VALUES ('embedding_model', ?)",
+            ("other-512-dimension-model",),
+        )
+    warnings = []
+
+    state = check_embedding_compatibility(
+        memory_db_path=str(memory_path),
+        concept_db_path=str(tmp_path / "missing.db"),
+        warn=warnings.append,
+    )
+
+    assert state.incompatible == 0
+    assert state.marker_incompatible
+    assert not state.compatible
+    assert len(warnings) == 1
+    assert "other-512-dimension-model" in warnings[0]
+    with sqlite3.connect(memory_path) as conn:
+        marker = conn.execute(
+            "SELECT value FROM user_settings WHERE key = 'embedding_model'"
+        ).fetchone()[0]
+    assert marker == "other-512-dimension-model"
+
+
 def test_restored_old_concept_vectors_override_current_marker(tmp_path):
     memory_path = tmp_path / "memory.db"
     concept_path = tmp_path / "concept.db"

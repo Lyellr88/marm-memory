@@ -93,6 +93,36 @@ def test_migrates_both_databases_then_sets_marker_and_is_idempotent(tmp_path):
     assert second_encoder.calls == [["MARM embedding migration dimension check"]]
 
 
+def test_migrates_same_dimension_vectors_when_model_marker_differs(tmp_path):
+    memory_path = tmp_path / "memory.db"
+    concept_path = tmp_path / "concept.db"
+    init_database(str(memory_path))
+    with sqlite3.connect(memory_path) as conn:
+        conn.execute(
+            "INSERT INTO notebook_entries (name, data, embedding) VALUES (?, ?, ?)",
+            ("n1", "same-dimension text", _vector(DEFAULT_SEMANTIC_DIM)),
+        )
+        conn.execute(
+            "INSERT INTO user_settings (key, value) VALUES ('embedding_model', ?)",
+            ("other-512-dimension-model",),
+        )
+
+    encoder = FakeEncoder()
+    result = migrate_embeddings(
+        str(memory_path),
+        str(concept_path),
+        encoder_factory=lambda: encoder,
+        progress=lambda _message: None,
+    )
+
+    assert result == {"rows_migrated": 1, "concept_db_present": False}
+    assert encoder.calls == [
+        ["MARM embedding migration dimension check"],
+        ["same-dimension text"],
+    ]
+    assert inspect_embedding_state(str(memory_path), str(concept_path)).compatible
+
+
 def test_missing_concept_database_is_not_created(tmp_path):
     memory_path = tmp_path / "memory.db"
     concept_path = tmp_path / "missing" / "concept.db"

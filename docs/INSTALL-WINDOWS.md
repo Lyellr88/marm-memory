@@ -337,6 +337,7 @@ Invoke-WebRequest -Uri http://localhost:8001/health
 docker pull lyellr88/marm-mcp-server:latest
 docker stop marm-mcp-server
 docker rm marm-mcp-server
+docker run --rm -v ${HOME}\.marm:/home/marm/.marm lyellr88/marm-mcp-server:latest --migrate-embeddings
 docker run -d --name marm-mcp-server -p 127.0.0.1:8001:8001 -e SERVER_HOST=0.0.0.0 -e MARM_API_KEY=your-generated-key -v ${HOME}\.marm:/home/marm/.marm --restart unless-stopped lyellr88/marm-mcp-server:latest
 ```
 

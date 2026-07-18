@@ -44,8 +44,18 @@ class EmbeddingState:
         return sum(table.incompatible for table in self.tables)
 
     @property
+    def has_vectors(self) -> bool:
+        return any(table.total for table in self.tables)
+
+    @property
+    def marker_incompatible(self) -> bool:
+        return self.has_vectors and self.marker != DEFAULT_SEMANTIC_MODEL
+
+    @property
     def compatible(self) -> bool:
-        return self.incompatible == 0 and not self.errors
+        return (
+            self.incompatible == 0 and not self.marker_incompatible and not self.errors
+        )
 
 
 def get_default_concept_db_path() -> str:
@@ -168,10 +178,10 @@ def check_embedding_compatibility(
     concept_db_path: str | None = None,
     warn: Callable[[str], None] | None = None,
 ) -> EmbeddingState:
-    """Inspect dimensions, repair a valid marker, or emit one migration warning."""
+    """Inspect vector/model compatibility or emit one migration warning."""
     state = inspect_embedding_state(memory_db_path, concept_db_path)
     if state.compatible:
-        if state.marker != DEFAULT_SEMANTIC_MODEL:
+        if not state.has_vectors and state.marker != DEFAULT_SEMANTIC_MODEL:
             write_embedding_model_marker(memory_db_path)
         return state
 
@@ -182,6 +192,12 @@ def check_embedding_compatibility(
                 + "; ".join(state.errors)
                 + "); core memory remains available, but inspect the database before "
                 "running marm-mcp-server --migrate-embeddings"
+            )
+        elif state.marker_incompatible:
+            prior_model = state.marker or "an unmarked prior model"
+            warn(
+                f"Found embeddings written by {prior_model}; stop MARM and run "
+                "marm-mcp-server --migrate-embeddings"
             )
         else:
             warn(

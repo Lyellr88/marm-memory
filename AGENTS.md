@@ -13,7 +13,7 @@ MARM is a local-first MCP memory server: Python FastAPI in `marm-mcp-server/`, p
 - **Storage**: SQLite WAL at `~/.marm/marm_memory.db` (connection pool, FTS5 external-content index `memories_fts`, `memory_chunks` for long-memory chunking). The concept graph uses its own database `~/.marm/index/marm_index.db` with its own pool. Never share connections between the two.
 - **Write path**: all memory writes go through the serialized async write queue (one worker). Do not add write paths that bypass it. `marm_log_entry` dual-writes: a `log_entries` row plus a semantic memory in `memories` (via the queue); a semantic-store failure must never fail the log write.
 - **Code graph**: a pinned external binary (codebase-memory-mcp) supervised as a child process over newline-delimited JSON-RPC (`core/graph_supervisor.py`, `core/graph_client.py`). It starts lazily and runs degraded on failure. Graph or concept failures must never break the 7 core memory tools.
-- **Embeddings**: one fastembed `all-MiniLM-L6-v2` encoder, lazy-loaded, serialized behind a lock. Writes must succeed even when the encoder is unavailable.
+- **Embeddings**: one fastembed `jinaai/jina-embeddings-v2-small-en` encoder (512 dimensions), lazy-loaded and serialized behind a lock. Writes must succeed even when the encoder is unavailable. Existing data requires `marm-mcp-server --migrate-embeddings` before restart when upgrading from MiniLM.
 
 ## Consistency Rules
 
@@ -68,9 +68,9 @@ Semver: MAJOR = breaking (schema renames, parameter removals), MINOR = new tools
 - Dev setup: `cd marm-mcp-server && pip install -e ".[dev,concepts]" && python -m spacy download en_core_web_sm`
 - Benchmarks live in `scripts/benchmarking/`: `preformance/bench_hotpath.py` for hot-path performance, `accuracy/locomo/run_eval.py` for LoCoMo retrieval accuracy. Do not publish performance claims neither script can back.
 
-## Current Stats (v2.21.1)
+## Current Stats (v2.24.0)
 
 - 14 MCP tools over HTTP + STDIO
 - 2 isolated SQLite databases (memory + concept graph)
-- Hybrid recall: FTS5 BM25 exact lane + bounded semantic rerank, ~20ms median at N=10,000
+- Hybrid recall: FTS5 BM25 exact lane + bounded semantic rerank
 - Optional extras: `[concepts]` (spaCy extraction), Docker image with the graph engine baked in

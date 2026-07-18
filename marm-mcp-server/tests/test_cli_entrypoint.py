@@ -5,7 +5,11 @@ import subprocess
 import sys
 import time
 import importlib
-import tomllib
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10
+    import tomli as tomllib
 
 import requests
 import pytest
