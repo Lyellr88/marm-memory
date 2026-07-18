@@ -104,6 +104,34 @@ class MemoryBulkDeletePayload(BaseModel):
     confirm: Literal["DELETE"]
 
 
+class SessionCreatePayload(BaseModel):
+    name: str
+
+
+class SessionDeletePayload(BaseModel):
+    confirm: Literal["DELETE"]
+
+
+class BulkDeletePayload(BaseModel):
+    confirm: Literal["DELETE_ALL"]
+
+
+class LogDeletePayload(BaseModel):
+    session_name: str
+    confirm: Literal["DELETE"]
+
+
+class NotebookMutationPayload(BaseModel):
+    name: str
+    content: str
+    project: str | None = None
+    platform: str | None = None
+
+
+class NotebookDeletePayload(BaseModel):
+    confirm: Literal["DELETE"] = "DELETE"
+
+
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -318,12 +346,79 @@ def bulk_delete_memories(payload: MemoryBulkDeletePayload) -> dict:
     )
 
 
+def _mcp_tool_mutation(operation: str, payload: dict, timeout: float = 30.0) -> dict:
+    try:
+        result = mcp_client.post(operation, payload, timeout=timeout)
+    except mcp_client.McpRequestError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    except mcp_client.McpUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    if result.get("status") in {"error", "not_found"}:
+        status_code = 404 if result.get("status") == "not_found" else 503
+        raise HTTPException(
+            status_code=status_code,
+            detail=result.get("message", "MARM operation failed."),
+        )
+    return result
+
+
 @app.get("/api/sessions")
 def get_sessions() -> list[dict]:
     try:
         return memory_store.list_sessions(get_memory_db_path())
     except memory_store.MemoryStoreUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.post("/api/sessions", status_code=201)
+def create_session(payload: SessionCreatePayload) -> dict:
+    session_name = payload.name.strip()
+    if not session_name:
+        raise HTTPException(status_code=422, detail="Session name is required.")
+    result = _mcp_tool_mutation("marm_start", {"session_name": session_name})
+    return {
+        "name": result.get("session_name", session_name),
+        "active": bool(result.get("marm_active", True)),
+        "status": result.get("status", "success"),
+    }
+
+
+@app.delete("/api/sessions/{session_name}")
+def delete_session(session_name: str, payload: SessionDeletePayload) -> dict:
+    result = _mcp_tool_mutation(
+        "marm_delete",
+        {"type": "log", "target": session_name},
+    )
+    return {
+        "session_name": session_name,
+        "deleted_count": result.get("deleted_count", 0),
+        "memories_deleted": result.get("memories_deleted", 0),
+    }
+
+
+@app.delete("/api/sessions")
+def delete_all_sessions(payload: BulkDeletePayload) -> dict:
+    _ = payload
+    try:
+        sessions = memory_store.list_sessions(get_memory_db_path())
+    except memory_store.MemoryStoreUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    deleted_sessions = 0
+    deleted_logs = 0
+    deleted_memories = 0
+    for session in sessions:
+        result = _mcp_tool_mutation(
+            "marm_delete",
+            {"type": "log", "target": session["name"]},
+        )
+        deleted_sessions += 1
+        deleted_logs += int(result.get("deleted_count", 0) or 0)
+        deleted_memories += int(result.get("memories_deleted", 0) or 0)
+    return {
+        "deleted_sessions": deleted_sessions,
+        "deleted_count": deleted_logs,
+        "memories_deleted": deleted_memories,
+    }
 
 
 @app.get("/api/logs")
@@ -340,12 +435,98 @@ def get_logs(
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
+@app.delete("/api/logs/{log_id}")
+def delete_log(log_id: str, payload: LogDeletePayload) -> dict:
+    result = _mcp_tool_mutation(
+        "marm_delete",
+        {
+            "type": "log",
+            "target": log_id,
+            "session_name": payload.session_name,
+        },
+    )
+    deleted_count = result.get("deleted_count", 0)
+    if not deleted_count:
+        raise HTTPException(status_code=404, detail="Log entry not found.")
+    return {
+        "log_id": log_id,
+        "session_name": payload.session_name,
+        "deleted_count": deleted_count,
+        "memories_deleted": result.get("memories_deleted", 0),
+    }
+
+
+@app.delete("/api/logs")
+def delete_all_logs(payload: BulkDeletePayload) -> dict:
+    _ = payload
+    try:
+        logs = memory_store.list_log_refs(get_memory_db_path())
+    except memory_store.MemoryStoreUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    deleted_logs = 0
+    deleted_memories = 0
+    for log in logs:
+        result = _mcp_tool_mutation(
+            "marm_delete",
+            {
+                "type": "log",
+                "target": log["id"],
+                "session_name": log["session_name"],
+            },
+        )
+        deleted_logs += int(result.get("deleted_count", 0) or 0)
+        deleted_memories += int(result.get("memories_deleted", 0) or 0)
+    return {
+        "deleted_count": deleted_logs,
+        "memories_deleted": deleted_memories,
+    }
+
+
 @app.get("/api/notebook")
 def get_notebook() -> list[dict]:
     try:
         return memory_store.list_notebook(get_memory_db_path())
     except memory_store.MemoryStoreUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.post("/api/notebook")
+def upsert_notebook(payload: NotebookMutationPayload) -> dict:
+    name = payload.name.strip()
+    content = payload.content.strip()
+    if not name or not content:
+        raise HTTPException(status_code=422, detail="Name and content are required.")
+    _mcp_tool_mutation(
+        "marm_notebook",
+        {"action": "add", "name": name, "data": content},
+    )
+    try:
+        for entry in memory_store.list_notebook(get_memory_db_path()):
+            if entry["name"] == name:
+                return entry
+    except memory_store.MemoryStoreUnavailable:
+        pass
+    return {
+        "name": name,
+        "content": content,
+        "project": payload.project,
+        "platform": payload.platform,
+        "created_at": _now_iso(),
+        "updated_at": _now_iso(),
+    }
+
+
+@app.delete("/api/notebook/{name}")
+def delete_notebook(name: str, payload: NotebookDeletePayload) -> dict:
+    _ = payload
+    result = _mcp_tool_mutation(
+        "marm_delete",
+        {"type": "notebook", "target": name},
+    )
+    return {
+        "name": name,
+        "deleted": bool(result.get("deleted", True)),
+    }
 
 
 @app.get("/api/summaries/{session_name}")
@@ -362,6 +543,53 @@ def get_compaction() -> list[dict]:
         return memory_store.list_compaction(get_memory_db_path())
     except memory_store.MemoryStoreUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@app.post("/api/compaction/{candidate_id}/{action}")
+def run_compaction_action(
+    candidate_id: str, action: Literal["stage", "apply", "discard"]
+) -> dict:
+    if action == "stage":
+        try:
+            candidates = memory_store.list_compaction(get_memory_db_path())
+        except memory_store.MemoryStoreUnavailable as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        candidate = next(
+            (item for item in candidates if item["id"] == candidate_id), None
+        )
+        if candidate is None:
+            raise HTTPException(
+                status_code=404, detail="Compaction candidate not found."
+            )
+        result = _mcp_tool_mutation(
+            "marm_compaction",
+            {
+                "action": "stage",
+                "summaries": [
+                    {
+                        "candidate_id": candidate_id,
+                        "source_memory_ids": candidate["source_memory_ids"],
+                        "suggested_summary": candidate["proposed_summary"],
+                    }
+                ],
+            },
+            timeout=60.0,
+        )
+    else:
+        result = _mcp_tool_mutation(
+            "marm_compaction",
+            {"action": action, "candidate_id": candidate_id},
+            timeout=60.0,
+        )
+    return {
+        "id": candidate_id,
+        "status": "staged"
+        if action == "stage"
+        else "applied"
+        if action == "apply"
+        else "discarded",
+        "result": result,
+    }
 
 
 @app.get("/api/concepts/summary")

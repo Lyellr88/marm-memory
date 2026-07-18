@@ -5,7 +5,7 @@
      width="900"
      height="250">
 </picture>
-<h1 align="center">MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.22.0</h1>
+<h1 align="center">MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.22.1</h1>
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/Lyellr88/marm-memory/blob/MARM-main/LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
@@ -24,7 +24,10 @@
 
 </div>
 
-## Important Message - marm-console has been added but it is not fully active yet coming soon!
+## Important Messages
+
+- marm-console has been added but it is not fully active yet coming soon!
+- I am waiting to get access back to my PYPI account, till restored pip will be behind a few versions. I will update the README when it is back up to date.
 
 ## Table of Contents
 

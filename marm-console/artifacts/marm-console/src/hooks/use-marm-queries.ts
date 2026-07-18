@@ -147,9 +147,82 @@ export function useSessions() {
   return useQuery({ queryKey: queryKeys.sessions(baseUrl), queryFn: client.listSessions });
 }
 
+export function useCreateSession() {
+  const { baseUrl, client } = useMarmConfig();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) => client.createSession(name),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.sessions(baseUrl) });
+      qc.invalidateQueries({ queryKey: queryKeys.filters(baseUrl) });
+      qc.invalidateQueries({ queryKey: queryKeys.overview(baseUrl) });
+    },
+  });
+}
+
+export function useDeleteSession() {
+  const { baseUrl, client } = useMarmConfig();
+  const qc = useQueryClient();
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: queryKeys.sessions(baseUrl) });
+    qc.invalidateQueries({ queryKey: ['logs', baseUrl] });
+    qc.invalidateQueries({ queryKey: ['memories', baseUrl] });
+    qc.invalidateQueries({ queryKey: queryKeys.filters(baseUrl) });
+    qc.invalidateQueries({ queryKey: queryKeys.overview(baseUrl) });
+  };
+  return useMutation({
+    mutationFn: (name: string) => client.deleteSession(name),
+    onSuccess: invalidate,
+  });
+}
+
+export function useDeleteAllSessions() {
+  const { baseUrl, client } = useMarmConfig();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => client.deleteAllSessions(),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.sessions(baseUrl) });
+      qc.invalidateQueries({ queryKey: ['logs', baseUrl] });
+      qc.invalidateQueries({ queryKey: ['memories', baseUrl] });
+      qc.invalidateQueries({ queryKey: queryKeys.filters(baseUrl) });
+      qc.invalidateQueries({ queryKey: queryKeys.overview(baseUrl) });
+    },
+  });
+}
+
 export function useLogs(params?: LogListParams) {
   const { baseUrl, client } = useMarmConfig();
   return useQuery({ queryKey: queryKeys.logs(baseUrl, params), queryFn: () => client.listLogs(params) });
+}
+
+export function useDeleteLog() {
+  const { baseUrl, client } = useMarmConfig();
+  const qc = useQueryClient();
+  const invalidate = () => {
+    qc.invalidateQueries({ queryKey: ['logs', baseUrl] });
+    qc.invalidateQueries({ queryKey: ['memories', baseUrl] });
+    qc.invalidateQueries({ queryKey: queryKeys.sessions(baseUrl) });
+    qc.invalidateQueries({ queryKey: queryKeys.overview(baseUrl) });
+  };
+  return useMutation({
+    mutationFn: ({ id, sessionName }: { id: number; sessionName: string }) => client.deleteLog(id, sessionName),
+    onSuccess: invalidate,
+  });
+}
+
+export function useDeleteAllLogs() {
+  const { baseUrl, client } = useMarmConfig();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => client.deleteAllLogs(),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['logs', baseUrl] });
+      qc.invalidateQueries({ queryKey: ['memories', baseUrl] });
+      qc.invalidateQueries({ queryKey: queryKeys.sessions(baseUrl) });
+      qc.invalidateQueries({ queryKey: queryKeys.overview(baseUrl) });
+    },
+  });
 }
 
 export function useSummary(session: string) {

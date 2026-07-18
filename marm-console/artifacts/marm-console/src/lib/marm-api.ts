@@ -137,14 +137,47 @@ export function createMarmClient(config: MarmClientConfig) {
 
     // Sessions / logs / notebook / summary
     listSessions: () => request<Session[]>(config, 'GET', '/sessions'),
+    createSession: (name: string) =>
+      request<{ name: string; active: boolean; status: string }>(config, 'POST', '/sessions', { body: { name } }),
+    deleteSession: (name: string) =>
+      request<{ session_name: string; deleted_count: number; memories_deleted: number }>(
+        config,
+        'DELETE',
+        `/sessions/${encodeURIComponent(name)}`,
+        { body: { confirm: 'DELETE' } },
+      ),
+    deleteAllSessions: () =>
+      request<{ deleted_sessions: number; deleted_count: number; memories_deleted: number }>(
+        config,
+        'DELETE',
+        '/sessions',
+        { body: { confirm: 'DELETE_ALL' } },
+      ),
     listLogs: (params?: LogListParams) =>
       request<LogEntry[]>(config, 'GET', '/logs', { query: params }),
+    deleteLog: (id: number, sessionName: string) =>
+      request<{ log_id: string; session_name: string; deleted_count: number; memories_deleted: number }>(
+        config,
+        'DELETE',
+        `/logs/${encodeURIComponent(String(id))}`,
+        { body: { session_name: sessionName, confirm: 'DELETE' } },
+      ),
+    deleteAllLogs: () =>
+      request<{ deleted_count: number; memories_deleted: number }>(
+        config,
+        'DELETE',
+        '/logs',
+        { body: { confirm: 'DELETE_ALL' } },
+      ),
     listNotebook: (params?: { q?: string; project?: string; platform?: string }) =>
       request<NotebookEntry[]>(config, 'GET', '/notebook', { query: params }),
     upsertNotebook: (data: NotebookInput) =>
       request<NotebookEntry>(config, 'POST', '/notebook', { body: data }),
     deleteNotebookEntry: (name: string, params?: { project?: string; platform?: string }) =>
-      request<void>(config, 'DELETE', `/notebook/${encodeURIComponent(name)}`, { query: params }),
+      request<{ name: string; deleted: boolean }>(config, 'DELETE', `/notebook/${encodeURIComponent(name)}`, {
+        query: params,
+        body: { confirm: 'DELETE' },
+      }),
     getSummary: (session: string) =>
       request<SessionSummary>(config, 'GET', `/summaries/${encodeURIComponent(session)}`),
 

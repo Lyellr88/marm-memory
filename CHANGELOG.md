@@ -3,7 +3,7 @@
 ## Version 2 - MARM Protocol to Universal MCP Server Evolution
 
 <details>
-<summary><strong>Unreleased: SQLite Write Atomicity Hardening (v2.22.x)</strong></summary>
+<summary><strong>Unreleased: SQLite Write Atomicity Hardening (v2.22.1)</strong></summary>
 
 ### Multi-Statement Writes Are Now Real Transactions
 
@@ -12,6 +12,13 @@
 - Fixed a second bug found in independent review: `_update_memory` can legitimately no-op (return without writing) when its target row was deleted or changed concurrently between the duplicate check and the write-lock re-verification, but `_store_memory` still reported the stale `existing_id` as a successful merge — silently dropping the caller's content with no trace. `_update_memory` now returns a bool signaling whether it actually wrote; `_store_memory` falls through and stores the content as a new memory instead of reporting success on a merge that never happened.
 - Every new transaction boundary has a mutation-tested regression test (`tests/test_sqlite_write_atomicity.py`): each one forces a specific SQL statement to fail and asserts the earlier statement(s) in the same block did not durably apply — a happy-path-only test doesn't prove rollback. Coverage now also includes the session-switch, dated-fallback, targeted log-delete, and notebook-delete transaction boundaries.
 - No schema changes, no new endpoints, no tool-surface changes. Pure reliability hardening.
+
+### MARM Console Memory Tab Reaches Dashboard Parity
+
+- Filled the remaining Memory workspace gaps from the legacy `marm-dashboard`: Console can now create sessions, delete one session, delete all sessions, delete individual log rows, bulk-delete logs, add/delete notebook entries, and stage/apply/discard compaction candidates from the same Memory tab surface.
+- The new Console routes call existing MARM MCP tool paths for mutations instead of writing directly to SQLite, preserving the queue-backed memory write rules and transport behavior while the old dashboard remains available for reference.
+- Added visible success/error feedback for session, log, notebook, and compaction actions so failed queue/MCP operations no longer disappear silently in the UI.
+- Added FastAPI response-contract tests for the new Console Memory routes with the MCP adapter stubbed, matching the rule that every new Console API route gets at least one real response-layer test.
 
 </details>
 
@@ -30,7 +37,7 @@
 </details>
 
 <details>
-<summary><strong>Unreleased: Log-Entry Cross-Transport Dedup (v2.21.3)</strong></summary>
+<summary><strong>July 15th, 2026: Log-Entry Cross-Transport Dedup (v2.21.3)</strong></summary>
 
 ### Shared Log-Entry Logic
 
