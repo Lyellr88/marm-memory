@@ -1,8 +1,61 @@
 """Console Memory tab gap route tests with the MCP adapter stubbed."""
 
+import sqlite3
+
 from fastapi.testclient import TestClient
 
 from server import app as console_app
+
+
+def _memory_db(tmp_path, monkeypatch):
+    db_path = tmp_path / "marm_memory.db"
+    monkeypatch.setenv("MARM_DB_PATH", str(db_path))
+    with sqlite3.connect(db_path) as conn:
+        conn.executescript(
+            """
+            CREATE TABLE sessions (
+                session_name TEXT PRIMARY KEY,
+                marm_active INTEGER DEFAULT 0,
+                created_at TEXT,
+                last_accessed TEXT
+            );
+
+            CREATE TABLE memories (
+                id TEXT PRIMARY KEY,
+                session_name TEXT NOT NULL,
+                content TEXT NOT NULL,
+                project TEXT,
+                platform TEXT
+            );
+
+            CREATE TABLE log_entries (
+                id TEXT PRIMARY KEY,
+                session_name TEXT NOT NULL,
+                entry_date TEXT NOT NULL,
+                topic TEXT NOT NULL,
+                summary TEXT NOT NULL,
+                full_entry TEXT NOT NULL,
+                project TEXT,
+                platform TEXT
+            );
+
+            CREATE TABLE compaction_staging (
+                id TEXT PRIMARY KEY,
+                session_name TEXT NOT NULL
+            );
+
+            CREATE TABLE notebook_entries (
+                name TEXT NOT NULL,
+                data TEXT NOT NULL,
+                project TEXT,
+                platform TEXT,
+                created_at TEXT,
+                updated_at TEXT,
+                PRIMARY KEY (name, project, platform)
+            );
+            """
+        )
+    return db_path
 
 
 def test_session_log_notebook_and_compaction_mutations_proxy_to_marm(monkeypatch):
@@ -229,8 +282,22 @@ def test_log_delete_returns_404_when_marm_deletes_nothing(monkeypatch):
     assert response.json()["detail"] == "Log entry not found."
 
 
-def test_bulk_session_delete_continues_after_per_session_failure(monkeypatch):
+def test_bulk_session_delete_continues_after_per_session_failure(monkeypatch, tmp_path):
     calls = []
+    db_path = _memory_db(tmp_path, monkeypatch)
+    now = "2026-07-17T00:00:00+00:00"
+    with sqlite3.connect(db_path) as conn:
+        conn.executemany(
+            """
+            INSERT INTO sessions (session_name, marm_active, created_at, last_accessed)
+            VALUES (?, ?, ?, ?)
+            """,
+            [
+                ("alpha", 0, now, "2026-07-17T00:00:03+00:00"),
+                ("broken", 0, now, "2026-07-17T00:00:02+00:00"),
+                ("omega", 0, now, "2026-07-17T00:00:01+00:00"),
+            ],
+        )
 
     def fake_post(operation: str, payload: dict, *, timeout: float = 10.0) -> dict:
         calls.append((operation, payload, timeout))
@@ -243,15 +310,6 @@ def test_bulk_session_delete_continues_after_per_session_failure(monkeypatch):
         }
 
     monkeypatch.setattr(console_app.mcp_client, "post", fake_post)
-    monkeypatch.setattr(
-        console_app.memory_store,
-        "list_sessions",
-        lambda db_path: [
-            {"name": "alpha"},
-            {"name": "broken"},
-            {"name": "omega"},
-        ],
-    )
 
     with TestClient(console_app.app) as client:
         response = client.request(
@@ -270,8 +328,22 @@ def test_bulk_session_delete_continues_after_per_session_failure(monkeypatch):
     assert [call[1]["target"] for call in calls] == ["alpha", "broken", "omega"]
 
 
-def test_notebook_mutations_preserve_project_platform_scope(monkeypatch):
+def test_notebook_mutations_preserve_project_platform_scope(monkeypatch, tmp_path):
     calls = []
+    db_path = _memory_db(tmp_path, monkeypatch)
+    now = "2026-07-17T00:00:00+00:00"
+    with sqlite3.connect(db_path) as conn:
+        conn.executemany(
+            """
+            INSERT INTO notebook_entries
+                (name, data, project, platform, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            [
+                ("shared", "Global rule.", None, None, now, now),
+                ("shared", "Scoped rule.", "marm-console", "codex", now, now),
+            ],
+        )
 
     def fake_post(operation: str, payload: dict, *, timeout: float = 10.0) -> dict:
         calls.append((operation, payload, timeout))
@@ -282,28 +354,6 @@ def test_notebook_mutations_preserve_project_platform_scope(monkeypatch):
         }
 
     monkeypatch.setattr(console_app.mcp_client, "post", fake_post)
-    monkeypatch.setattr(
-        console_app.memory_store,
-        "list_notebook",
-        lambda db_path: [
-            {
-                "name": "shared",
-                "content": "Global rule.",
-                "project": None,
-                "platform": None,
-                "created_at": "2026-07-17T00:00:00+00:00",
-                "updated_at": "2026-07-17T00:00:00+00:00",
-            },
-            {
-                "name": "shared",
-                "content": "Scoped rule.",
-                "project": "marm-console",
-                "platform": "codex",
-                "created_at": "2026-07-17T00:00:00+00:00",
-                "updated_at": "2026-07-17T00:00:00+00:00",
-            },
-        ],
-    )
 
     with TestClient(console_app.app) as client:
         saved = client.post(
