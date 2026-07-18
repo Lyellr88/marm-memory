@@ -129,7 +129,9 @@ def _recall_similar_globals() -> dict:
 
     Other tests reload marm_mcp_server modules during isolated HTTP setup. The
     MARMMemory class imported above may therefore use an older _recall_similar
-    function object than a fresh import of memory_ops would patch.
+    function object than a fresh import of memory_recall would patch --
+    walking __globals__ from the actual bound function is what keeps this
+    resolving correctly regardless of which module _recall_similar lives in.
     """
     return MARMMemory.recall_similar.__globals__["_recall_similar"].__globals__
 
