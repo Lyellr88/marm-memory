@@ -43,14 +43,9 @@ from ..config.settings import (
 )
 from .compaction import trigger_compaction
 from .write_queue import WriteQueue
-from .memory_ops import (
-    _store_memory,
-    _update_memory,
-    _replace_memory,
-    _delete_memories,
-    _recall_similar,
-    _recall_text_search,
-)
+from .memory_ops import _store_memory, _update_memory, _replace_memory
+from .memory_delete import _delete_memories
+from .memory_recall import _recall_similar, _recall_text_search
 
 if SEMANTIC_SEARCH_AVAILABLE:
     if importlib.util.find_spec("fastembed") is None:

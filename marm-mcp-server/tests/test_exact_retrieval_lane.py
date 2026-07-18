@@ -129,7 +129,9 @@ def _recall_similar_globals() -> dict:
 
     Other tests reload marm_mcp_server modules during isolated HTTP setup. The
     MARMMemory class imported above may therefore use an older _recall_similar
-    function object than a fresh import of memory_ops would patch.
+    function object than a fresh import of memory_recall would patch --
+    walking __globals__ from the actual bound function is what keeps this
+    resolving correctly regardless of which module _recall_similar lives in.
     """
     return MARMMemory.recall_similar.__globals__["_recall_similar"].__globals__
 
@@ -522,6 +524,33 @@ async def test_exact_lane_fts_hit_sets_retrieval_mode_exact_fts(tmp_path):
 
     assert results
     assert all(r.get("retrieval_mode") == "exact_fts" for r in results)
+
+
+@pytest.mark.asyncio
+async def test_exact_lane_internal_like_fallback_sets_exact_like_not_exact_fts(
+    tmp_path,
+):
+    """_recall_text_search has its own internal FTS->LIKE fallback for
+    unsanitizable queries. Those results must be labeled exact_like, not
+    blindly labeled exact_fts just because _recall_text_search returned
+    something non-empty."""
+    mem = MARMMemory(str(tmp_path / "memory.db"))
+    mem._encoder_failed = True
+
+    # "---" is unsanitizable for FTS (_safe_fts_query returns None), so this
+    # goes straight to _recall_text_search's own LIKE fallback -- no
+    # monkeypatching needed to force the real internal fallback path.
+    mem_id = await mem.store_memory(
+        "content with --- dashes inside", session="internal-like"
+    )
+
+    results = await mem.recall_similar(
+        "---", session="internal-like", limit=5, exact_mode="exact"
+    )
+
+    assert results
+    assert any(r["id"] == mem_id for r in results)
+    assert all(r.get("retrieval_mode") == "exact_like" for r in results)
 
 
 @pytest.mark.asyncio

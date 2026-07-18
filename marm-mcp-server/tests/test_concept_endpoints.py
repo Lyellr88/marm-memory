@@ -127,7 +127,7 @@ def test_fetch_memory_rows_excludes_marm_system_session(concepts_env):
 
 
 def test_fetch_memory_rows_excludes_compacted_source_rows(concepts_env):
-    """Mirrors core/memory_ops.py's active-recall filter -- a compacted
+    """Mirrors core/memory_recall.py's active-recall filter -- a compacted
     session's stale source rows must not be indexed alongside their summary,
     or a build reintroduces obsolete concepts/relationships and inflates
     mention counts."""
