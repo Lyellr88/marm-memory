@@ -147,6 +147,10 @@ export function MemoriesTab() {
 
   const handleUpdate = () => {
     if (!selectedMemory) return;
+    // context_type has no null/blank state on the server -- it's a required
+    // non-empty string there (and downstream recall code assumes as much),
+    // so clearing the field falls back to the same 'general' default used
+    // for new memories, not the previous value and not null.
     updateMemory.mutate({
       id: selectedMemory.id,
       data: {
@@ -154,7 +158,7 @@ export function MemoriesTab() {
         session_name: selectedMemory.session_name,
         project: editProject.trim() || null,
         platform: editPlatform.trim() || null,
-        context_type: editContextType.trim() || null,
+        context_type: editContextType.trim() || 'general',
         metadata: selectedMemory.metadata,
       }
     }, {
@@ -165,7 +169,7 @@ export function MemoriesTab() {
           content: editContent,
           project: editProject.trim() || null,
           platform: editPlatform.trim() || null,
-          context_type: editContextType.trim() || null,
+          context_type: editContextType.trim() || 'general',
         });
         setActionNotice({ kind: 'success', message: 'Memory updated.' });
       },
