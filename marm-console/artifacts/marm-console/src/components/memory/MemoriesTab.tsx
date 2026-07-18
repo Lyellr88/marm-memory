@@ -147,6 +147,10 @@ export function MemoriesTab() {
 
   const handleUpdate = () => {
     if (!selectedMemory) return;
+    // context_type has no null/blank state on the server -- it's a required
+    // non-empty string there (and downstream recall code assumes as much),
+    // so clearing the field falls back to the same 'general' default used
+    // for new memories, not the previous value and not null.
     updateMemory.mutate({
       id: selectedMemory.id,
       data: {
@@ -154,7 +158,7 @@ export function MemoriesTab() {
         session_name: selectedMemory.session_name,
         project: editProject.trim() || null,
         platform: editPlatform.trim() || null,
-        context_type: editContextType.trim() || null,
+        context_type: editContextType.trim() || 'general',
         metadata: selectedMemory.metadata,
       }
     }, {
@@ -165,7 +169,7 @@ export function MemoriesTab() {
           content: editContent,
           project: editProject.trim() || null,
           platform: editPlatform.trim() || null,
-          context_type: editContextType.trim() || null,
+          context_type: editContextType.trim() || 'general',
         });
         setActionNotice({ kind: 'success', message: 'Memory updated.' });
       },
@@ -365,7 +369,7 @@ export function MemoriesTab() {
                   <div className="grid grid-cols-3 gap-2">
                     <Input placeholder="Project (blank = null)" value={editProject} onChange={e => setEditProject(e.target.value)} className="text-xs" />
                     <Input placeholder="Platform (blank = null)" value={editPlatform} onChange={e => setEditPlatform(e.target.value)} className="text-xs" />
-                    <Input placeholder="Context type (blank = null)" value={editContextType} onChange={e => setEditContextType(e.target.value)} className="text-xs" />
+                    <Input placeholder="Context type (blank = general)" value={editContextType} onChange={e => setEditContextType(e.target.value)} className="text-xs" />
                   </div>
                   <div className="flex justify-end gap-2">
                     <Button variant="outline" size="sm" onClick={() => setEditMode(false)}>Cancel</Button>
