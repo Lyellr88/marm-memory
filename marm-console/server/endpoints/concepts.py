@@ -174,7 +174,9 @@ def get_concept_build(job_id: str) -> dict:
     if job is None:
         with _launching_concept_builds_lock:
             launch = _launching_concept_builds.get(job_id)
-            job = launch[0] if launch else None
+            # Copy while locked -- the background build thread can still
+            # mutate this same dict object after the lock releases.
+            job = dict(launch[0]) if launch else None
     if job is None:
         raise HTTPException(status_code=404, detail="Concept build not found")
     return _stale_build_result(job)

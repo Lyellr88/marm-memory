@@ -13,7 +13,8 @@ from server.endpoints import concepts as concepts_endpoint
 
 
 def test_launching_concept_builds_survives_concurrent_insert_and_prune():
-    concepts_endpoint._launching_concept_builds.clear()
+    with concepts_endpoint._launching_concept_builds_lock:
+        concepts_endpoint._launching_concept_builds.clear()
     errors: list[Exception] = []
 
     def insert_jobs(worker_id: int) -> None:
@@ -48,9 +49,13 @@ def test_launching_concept_builds_survives_concurrent_insert_and_prune():
         + [threading.Thread(target=prune_repeatedly) for _ in range(4)]
         + [threading.Thread(target=read_repeatedly) for _ in range(2)]
     )
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join()
+    try:
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
 
-    assert errors == []
+        assert errors == []
+    finally:
+        with concepts_endpoint._launching_concept_builds_lock:
+            concepts_endpoint._launching_concept_builds.clear()
