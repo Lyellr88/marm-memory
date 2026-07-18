@@ -114,6 +114,55 @@ def test_memory_mutation_routes_proxy_to_marm_runtime(monkeypatch):
     ]
 
 
+def test_memory_mutation_maps_inline_error_status_to_http_error(monkeypatch):
+    def fake_request(
+        operation: str,
+        payload: dict | None = None,
+        *,
+        method: str = "POST",
+        timeout: float = 10.0,
+    ) -> dict:
+        if operation == "internal/projects/list":
+            return {"projects": []}
+        return {"status": "error", "message": "MARM store is locked."}
+
+    monkeypatch.setattr(console_app.mcp_client, "request", fake_request)
+
+    with TestClient(console_app.app) as client:
+        response = client.post(
+            "/api/memories",
+            json={"content": "x", "session_name": "session"},
+        )
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "MARM store is locked."
+
+
+def test_memory_mutation_maps_inline_not_found_status_to_404(monkeypatch):
+    def fake_request(
+        operation: str,
+        payload: dict | None = None,
+        *,
+        method: str = "POST",
+        timeout: float = 10.0,
+    ) -> dict:
+        if operation == "internal/projects/list":
+            return {"projects": []}
+        return {"status": "not_found", "message": "Memory not found."}
+
+    monkeypatch.setattr(console_app.mcp_client, "request", fake_request)
+
+    with TestClient(console_app.app) as client:
+        response = client.request(
+            "DELETE",
+            "/api/memories/mem-missing",
+            json={"confirm": "DELETE"},
+        )
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Memory not found."
+
+
 def test_concept_link_counts_are_best_effort(monkeypatch, tmp_path):
     concept_db_path = tmp_path / "marm_index.db"
     concept_db_path.write_text("not a sqlite database", encoding="utf-8")

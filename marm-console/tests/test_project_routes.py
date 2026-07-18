@@ -131,3 +131,41 @@ def test_project_request_error_preserves_mcp_status(monkeypatch):
 
     assert response.status_code == 422
     assert response.json()["detail"] == "Repository path is invalid."
+
+
+def test_project_index_inline_error_status_maps_to_503(monkeypatch):
+    """index_project must catch a 200-with-{"status": "error"} body too,
+    not just a raised McpRequestError -- both are ways the graph backend
+    reports a rejected index request."""
+    monkeypatch.setattr(
+        console_app.mcp_client,
+        "post",
+        lambda *args, **kwargs: {
+            "status": "error",
+            "message": "Repo already indexing.",
+        },
+    )
+
+    with TestClient(console_app.app) as client:
+        response = client.post(
+            "/api/projects/index", json={"repo_path": "C:/repos/marm-memory"}
+        )
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "Repo already indexing."
+
+
+def test_get_projects_maps_request_error_instead_of_500(monkeypatch):
+    monkeypatch.setattr(
+        console_app.mcp_client,
+        "list_projects",
+        lambda: (_ for _ in ()).throw(
+            mcp_client.McpRequestError(429, "Too many index requests.")
+        ),
+    )
+
+    with TestClient(console_app.app) as client:
+        response = client.get("/api/projects")
+
+    assert response.status_code == 429
+    assert response.json()["detail"] == "Too many index requests."

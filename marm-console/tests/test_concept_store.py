@@ -8,7 +8,7 @@ from pathlib import Path
 
 
 from server import concept_store
-from server import app as console_app
+from server.endpoints import concepts as concepts_endpoint
 
 
 def make_db(tmp_path: Path) -> Path:
@@ -297,9 +297,9 @@ def test_stale_build_result_stops_console_polling():
         "finished_at": None,
     }
 
-    stale_result = console_app._stale_build_result(stale)
+    stale_result = concepts_endpoint._stale_build_result(stale)
 
     assert stale_result["status"] == "error"
     assert stale_result["error_code"] == "stale_run"
     assert stale_result["finished_at"] is not None
-    assert console_app._stale_build_result(fresh) is fresh
+    assert concepts_endpoint._stale_build_result(fresh) is fresh

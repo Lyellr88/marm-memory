@@ -1,10 +1,12 @@
 """Console Memory tab gap route tests with the MCP adapter stubbed."""
 
+import json
 import sqlite3
 
 from fastapi.testclient import TestClient
 
 from server import app as console_app
+from server import memory_store
 
 
 def _memory_db(tmp_path, monkeypatch):
@@ -41,7 +43,12 @@ def _memory_db(tmp_path, monkeypatch):
 
             CREATE TABLE compaction_staging (
                 id TEXT PRIMARY KEY,
-                session_name TEXT NOT NULL
+                session_name TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending_summary',
+                source_memory_ids TEXT NOT NULL DEFAULT '[]',
+                suggested_summary TEXT,
+                expires_at TEXT,
+                created_at TEXT
             );
 
             CREATE TABLE notebook_entries (
@@ -89,7 +96,7 @@ def test_session_log_notebook_and_compaction_mutations_proxy_to_marm(monkeypatch
 
     monkeypatch.setattr(console_app.mcp_client, "post", fake_post)
     monkeypatch.setattr(
-        console_app.memory_store,
+        memory_store,
         "list_sessions",
         lambda db_path: [
             {
@@ -106,12 +113,12 @@ def test_session_log_notebook_and_compaction_mutations_proxy_to_marm(monkeypatch
         ],
     )
     monkeypatch.setattr(
-        console_app.memory_store,
+        memory_store,
         "list_log_refs",
         lambda db_path: [{"id": "123", "session_name": "main"}],
     )
     monkeypatch.setattr(
-        console_app.memory_store,
+        memory_store,
         "list_notebook",
         lambda db_path: [
             {
@@ -125,7 +132,7 @@ def test_session_log_notebook_and_compaction_mutations_proxy_to_marm(monkeypatch
         ],
     )
     monkeypatch.setattr(
-        console_app.memory_store,
+        memory_store,
         "list_compaction",
         lambda db_path: [
             {
@@ -139,6 +146,24 @@ def test_session_log_notebook_and_compaction_mutations_proxy_to_marm(monkeypatch
                 "created_at": "2026-07-17T00:00:00+00:00",
             }
         ],
+    )
+    monkeypatch.setattr(
+        memory_store,
+        "get_compaction_candidate",
+        lambda db_path, candidate_id: (
+            {
+                "id": "cand-1",
+                "status": "pending",
+                "session_name": "main",
+                "source_memory_ids": ["m1", "m2"],
+                "proposed_summary": "Summary text",
+                "expected_reduction": 42,
+                "expiry": None,
+                "created_at": "2026-07-17T00:00:00+00:00",
+            }
+            if candidate_id == "cand-1"
+            else None
+        ),
     )
 
     with TestClient(console_app.app) as client:
@@ -402,3 +427,112 @@ def test_notebook_mutations_preserve_project_platform_scope(monkeypatch, tmp_pat
             30.0,
         ),
     ]
+
+
+def test_compaction_stage_finds_candidate_beyond_200_row_window(monkeypatch, tmp_path):
+    db_path = _memory_db(tmp_path, monkeypatch)
+    with sqlite3.connect(db_path) as conn:
+        rows = [
+            (
+                f"cand-{i}",
+                "main",
+                "pending_summary",
+                json.dumps([f"m{i}"]),
+                f"Summary {i}",
+                None,
+                # zero-padded so DESC text ordering matches insertion order;
+                # cand-0 is the oldest and falls outside a 200-row DESC window.
+                f"2026-01-01T00:00:00.{i:04d}Z",
+            )
+            for i in range(205)
+        ]
+        conn.executemany(
+            """
+            INSERT INTO compaction_staging
+                (id, session_name, status, source_memory_ids, suggested_summary, expires_at, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            rows,
+        )
+
+    calls = []
+
+    def fake_post(operation: str, payload: dict, *, timeout: float = 10.0) -> dict:
+        calls.append((operation, payload, timeout))
+        return {
+            "status": "success",
+            "candidate_id": payload["summaries"][0]["candidate_id"],
+        }
+
+    monkeypatch.setattr(console_app.mcp_client, "post", fake_post)
+
+    with TestClient(console_app.app) as client:
+        response = client.post("/api/compaction/cand-0/stage")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "staged"
+    assert calls[0][1]["summaries"][0]["candidate_id"] == "cand-0"
+    assert calls[0][1]["summaries"][0]["source_memory_ids"] == ["m0"]
+
+
+def test_bulk_log_delete_continues_after_per_log_failure(monkeypatch, tmp_path):
+    db_path = _memory_db(tmp_path, monkeypatch)
+    with sqlite3.connect(db_path) as conn:
+        conn.executemany(
+            """
+            INSERT INTO log_entries
+                (id, session_name, entry_date, topic, summary, full_entry)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            [
+                # distinct entry_date values so ORDER BY entry_date DESC
+                # gives a deterministic, assertable processing order.
+                (
+                    "log-a",
+                    "main",
+                    "2026-07-18T00:00:03+00:00",
+                    "topic-a",
+                    "sum-a",
+                    "full-a",
+                ),
+                (
+                    "log-broken",
+                    "main",
+                    "2026-07-18T00:00:02+00:00",
+                    "topic-b",
+                    "sum-b",
+                    "full-b",
+                ),
+                (
+                    "log-c",
+                    "main",
+                    "2026-07-18T00:00:01+00:00",
+                    "topic-c",
+                    "sum-c",
+                    "full-c",
+                ),
+            ],
+        )
+
+    calls = []
+
+    def fake_post(operation: str, payload: dict, *, timeout: float = 10.0) -> dict:
+        calls.append((operation, payload, timeout))
+        if payload["target"] == "log-broken":
+            raise console_app.mcp_client.McpRequestError(503, "delete failed")
+        return {"status": "success", "deleted_count": 1, "memories_deleted": 2}
+
+    monkeypatch.setattr(console_app.mcp_client, "post", fake_post)
+
+    with TestClient(console_app.app) as client:
+        response = client.request("DELETE", "/api/logs", json={"confirm": "DELETE_ALL"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "partial_success"
+    assert body["deleted_count"] == 2
+    assert body["memories_deleted"] == 4
+    assert body["failed_logs"] == [
+        {"log_id": "log-broken", "status_code": 503, "message": "delete failed"}
+    ]
+    assert [call[1]["target"] for call in calls] == ["log-a", "log-broken", "log-c"]
