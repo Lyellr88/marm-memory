@@ -2,7 +2,7 @@
 
 You do not need to write code to contribute. Testing MARM with your client setup, reporting what broke, sharing your workflow in [Discussions](https://github.com/Lyellr88/marm-memory/discussions), or jumping into [Discord](https://discord.gg/nhyJWPz2cf) to help someone get unstuck are all real contributions.
 
-If you do want to go deeper, MARM is focused on the MCP server, local memory workflows, the code and concept knowledge graphs, Docker/STDIO transports, IDE and client integrations, and the dashboard for inspecting local memory data. This guide covers that practical development workflow. For project history and community recognition, see [ACKNOWLEDGMENTS.md](docs/ACKNOWLEDGMENTS.md).
+If you do want to go deeper, MARM is focused on the MCP server, local memory workflows, the code and concept knowledge graphs, Docker/STDIO transports, IDE and client integrations, and marm-console for inspecting local memory data. This guide covers that practical development workflow. For project history and community recognition, see [ACKNOWLEDGMENTS.md](docs/ACKNOWLEDGMENTS.md).
 
 ## Questions or Ideas
 
@@ -72,7 +72,6 @@ marm-mcp-server/
       concept_extraction.py    # spaCy entity/relationship extraction (optional extra)
       graph_supervisor.py      # Lazy singleton supervisor for the embedded graph engine
       graph_client.py          # Concept graph's in-process link into the code graph
-      dashboard_mount.py       # Mounts the bundled dashboard under /dashboard
       protocol_delivery_state.py  # Bounded HTTP protocol-delivery state
       models.py                # Shared Pydantic request/response models
       events.py                # Internal event hooks
@@ -115,7 +114,7 @@ marm-mcp-server/
   marm_graph/                  # Embedded marm-graph wrapper: subprocess JSON-RPC client,
                                #   tool router, and backend verification for the pinned
                                #   codebase-memory-mcp binary
-  marm_dashboard/              # Bundled dashboard web UI
+  marm_dashboard/              # Archived dashboard UI, superseded by marm-console
   tests/                       # MCP server test suite
   Dockerfile                   # One image, HTTP default, STDIO override
   pyproject.toml               # Package metadata and console scripts
@@ -299,7 +298,6 @@ The `v*` tag triggers the publish workflow for:
 
 - PyPI package publish
 - MCP server Docker image
-- Dashboard Docker image
 - MCP Registry publish
 
 Use normal branch pushes for review. Use tag pushes only for intentional releases.

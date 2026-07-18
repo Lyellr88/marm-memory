@@ -11,7 +11,6 @@ RUN apt-get update && apt-get install -y \
 COPY pyproject.toml README.md ./
 COPY marm_mcp_server ./marm_mcp_server
 COPY marm_graph ./marm_graph
-COPY marm_dashboard ./marm_dashboard
 RUN pip install --no-cache-dir --upgrade "wheel>=0.46.2" && \
     pip install --no-cache-dir --user ".[docker-image]"
 
@@ -66,7 +65,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 
 LABEL org.opencontainers.image.title="MARM Universal MCP Server"
 LABEL org.opencontainers.image.description="Production-ready Universal MCP Server with advanced AI memory capabilities, semantic search, and professional-grade architecture"
-LABEL org.opencontainers.image.version="2.22.1"
+LABEL org.opencontainers.image.version="2.23.0"
 LABEL org.opencontainers.image.authors="Ryan Lyell - marm-memory"
 LABEL org.opencontainers.image.url="https://marmsystems.com"
 LABEL org.opencontainers.image.source="https://github.com/Lyellr88/marm-memory"

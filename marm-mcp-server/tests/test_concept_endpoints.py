@@ -834,7 +834,7 @@ def test_get_concept_db_lock_serializes_concurrent_first_calls(
     """Both tools dispatch via asyncio.to_thread, so first-use is genuinely
     concurrent-capable. Before the lock, two concurrent first calls could
     each construct (and one leak) a ConceptDB/connection pool -- mirrors
-    test_dashboard_encoder_lock.py's proven mutation-test pattern."""
+    the existing encoder-lock mutation-test pattern."""
     import threading
 
     _server, concepts, _memory_module = concepts_env

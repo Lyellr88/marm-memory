@@ -171,7 +171,7 @@ def test_dockerignore_excludes_database_files_but_not_source():
     a fresh DB via the volume mount), but this must not accidentally also
     exclude real source directories that happen to share a name pattern."""
     assert "*.db" in DOCKERIGNORE
-    for package_dir in ("marm_mcp_server", "marm_graph", "marm_dashboard"):
+    for package_dir in ("marm_mcp_server", "marm_graph"):
         assert not re.search(rf"^{package_dir}/?\s*$", DOCKERIGNORE, re.MULTILINE), (
             f"{package_dir} must not be excluded from the build context"
         )

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "marm-mcp-server"
-version = "2.22.1"
+version = "2.23.0"
 description = "marm-memory is a local-first MCP memory layer with hybrid recall, agent coordination, code intelligence, and persistent project context."
 readme = "README.md"
 license = "Apache-2.0"
@@ -79,12 +79,11 @@ dev = [
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["marm_mcp_server*", "marm_graph*", "marm_dashboard*"]
+include = ["marm_mcp_server*", "marm_graph*"]
 exclude = ["tests*", "*.tests*", "docs*"]
 
 [tool.setuptools.package-data]
 "*" = ["*.json", "*.yaml", "*.yml", "config/*", "templates/*"]
-"marm_dashboard" = ["static/**/*"]
 
 [tool.black]
 line-length = 88

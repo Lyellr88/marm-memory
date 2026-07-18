@@ -70,10 +70,10 @@ def test_session_log_notebook_and_compaction_mutations_proxy_to_marm(monkeypatch
                 "session_name": payload.get("session_name"),
                 "marm_active": True,
             },
-        "marm_delete": {
-            "status": "success",
-            "deleted_count": 1,
-            "memories_deleted": 1,
+            "marm_delete": {
+                "status": "success",
+                "deleted_count": 1,
+                "memories_deleted": 1,
                 "deleted": True,
             },
             "marm_notebook": {

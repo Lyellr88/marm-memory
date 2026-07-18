@@ -13,7 +13,7 @@ MARM Console is a separate localhost application that reads the same local MARM 
 - `marm-mcp-server` remains the agent-facing MCP server, normally on port `8001`.
 - MARM Console owns the human-facing REST API on port `8002`.
 - The browser frontend runs separately during development and calls the Console API.
-- Existing `marm-dashboard` remains a legacy reference while Console reaches feature parity.
+- The legacy `marm-dashboard` source is archived under `docs/archived/` for reference.
 
 ## Requirements
 
@@ -101,7 +101,7 @@ Open the Vite URL shown in the terminal. The frontend defaults to the Console AP
 ## Development Notes
 
 - Keep all new Console code inside this directory.
-- Treat `marm-dashboard` as read-only reference material until Console parity is complete.
+- Treat the archived dashboard source as read-only reference material.
 - The Console must degrade cleanly when MARM data has not been initialized or optional knowledge/code graph data is unavailable.
 
 ## Roadmap

@@ -9,9 +9,9 @@ MARM is focused on one clear goal: make AI memory practical across real tools, r
 The active product direction has two tracks:
 
 - **MARM MCP Server**: the agent-facing memory layer used by Claude, Codex, Gemini, Qwen, VS Code, Cursor, and other MCP clients.
-- **MARM Dashboard**: the human-facing local admin UI for inspecting, editing, exporting, and maintaining the same memory database.
+- **MARM Console**: the human-facing local admin UI for inspecting, editing, exporting, and maintaining the same memory database.
 
-MARM is not currently being built as a paid upgrade product. The near-term focus is a strong open base: reliable local memory, clean transports, useful dashboard workflows, and future extension points for plugins, SDKs, research, and team workflows.
+MARM is not currently being built as a paid upgrade product. The near-term focus is a strong open base: reliable local memory, clean transports, useful console workflows, and future extension points for plugins, SDKs, research, and team workflows.
 
 ---
 
@@ -25,7 +25,7 @@ MARM now has the core pieces needed for a serious local memory system:
 - **Docker support** with HTTP and STDIO modes from one image
 - **API-key auth** for Docker, exposed, or shared HTTP deployments
 - **VS Code and Cursor support** through native MCP config files
-- **MARM Dashboard** as an optional local SQLite admin UI for human memory management
+- **MARM Console** as an optional local admin UI for human memory management
 - **Fresh test suite** covering HTTP tools, auth, rate limits, response limits, database behavior, STDIO, and Docker smoke paths
 - **Automation scripts** for version sync, test runs, stale-doc scans, Docker smoke, and release preflight
 
@@ -57,7 +57,7 @@ Planned direction:
 - Track lightweight usage signals such as recalled, edited, deleted, reused, or ignored memories
 - Improve ranking over time using recency, frequency, session/project relevance, and user cleanup behavior
 - Identify related memories across sessions so solutions, decisions, and patterns are easier to rediscover
-- Add stale-memory indicators so users can clean old or low-value entries from the dashboard
+- Add stale-memory indicators so users can clean old or low-value entries from marm-console
 
 Why it matters:
 
@@ -114,11 +114,11 @@ Fewer, clearer tools improve client discovery, reduce token overhead, and make a
 
 ---
 
-## Dashboard Roadmap
+## Console Roadmap
 
 ### 1. Export and Reporting
 
-The dashboard is the natural place for human-friendly memory export.
+marm-console is the natural place for human-friendly memory export.
 
 Planned direction:
 
@@ -134,7 +134,7 @@ Memory should be portable. Users need backups, reports, and ways to move MARM kn
 
 ### 2. Safer Admin Workflows
 
-The dashboard already asks before destructive actions. The next step is making high-impact edits even safer and easier to inspect.
+marm-console already asks before destructive actions. The next step is making high-impact edits even safer and easier to inspect.
 
 Planned direction:
 
@@ -147,22 +147,22 @@ Planned direction:
 
 Why it matters:
 
-The dashboard can edit real memory. It should feel efficient, but not casual about destructive changes.
+marm-console can edit real memory. It should feel efficient, but not casual about destructive changes.
 
-### 3. Dashboard and MCP Schema Alignment
+### 3. Console and MCP Schema Alignment
 
-The dashboard writes directly to SQLite, so it must stay aligned with MCP schema changes.
+marm-console uses MCP-backed mutation paths and local read APIs, so it must stay aligned with MCP schema changes.
 
 Planned direction:
 
-- Add tests for dashboard compatibility with current MCP tables
-- Keep dashboard CRUD behavior aligned with MCP sanitization and metadata conventions
+- Add tests for console compatibility with current MCP tables
+- Keep console CRUD behavior aligned with MCP sanitization and metadata conventions
 - Surface MCP server reachability and database state clearly
-- Avoid adding dashboard-only fields unless the MCP server also understands them
+- Avoid adding console-only fields unless the MCP server also understands them
 
 Why it matters:
 
-The dashboard is useful because it manages the same data. Schema drift would make it dangerous.
+marm-console is useful because it manages the same data. Schema drift would make it dangerous.
 
 ---
 
@@ -181,7 +181,7 @@ These are not product features, but they keep both tracks trustworthy.
 
 ## Long-Term Possibilities
 
-These are conditional directions after the MCP server and dashboard are stable:
+These are conditional directions after the MCP server and marm-console are stable:
 
 - **Plugin integrations** for editors, local tools, and MCP client ecosystems
 - **SDKs** for developers who want MARM-backed memory in their own apps

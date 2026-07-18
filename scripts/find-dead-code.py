@@ -23,7 +23,6 @@ CONSOLE_ROOT = REPO_ROOT / "marm-console"
 PACKAGE_DIRS = [
     SERVER_ROOT / "marm_mcp_server",
     SERVER_ROOT / "marm_graph",
-    SERVER_ROOT / "marm_dashboard",
     CONSOLE_ROOT / "server",
 ]
 PACKAGE_NAMES = {package.name for package in PACKAGE_DIRS}
@@ -329,7 +328,7 @@ def main() -> int:
     )
     print()
     print(
-        f"{CYAN}Tip: run `python -m compileall marm_mcp_server marm_graph marm_dashboard` from marm-mcp-server/ and `python -m compileall server` from marm-console/ to catch syntax errors{RESET}\n"
+        f"{CYAN}Tip: run `python -m compileall marm_mcp_server marm_graph` from marm-mcp-server/ and `python -m compileall server` from marm-console/ to catch syntax errors{RESET}\n"
     )
 
     return 0

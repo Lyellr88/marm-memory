@@ -266,43 +266,6 @@ def test_docker_healthcheck_status_becomes_healthy(docker_image, marm_data_dir):
         _run_docker(["rm", "-f", container], timeout=30)
 
 
-def test_docker_dashboard_mounted_and_reachable(docker_image, marm_data_dir):
-    """The v2.16.1 packaging unification made the dashboard bundled into the
-    same process/port as the main server (see docker-compose.yml's comment:
-    'memory + graph + dashboard, one port') -- this must hold for every
-    build of the image, not just the one it was true for at the time."""
-    container = f"marm-test-dashboard-{uuid.uuid4().hex[:10]}"
-    port = _free_port()
-
-    run = _run_docker(
-        [
-            "run",
-            "-d",
-            "--name",
-            container,
-            "-p",
-            f"127.0.0.1:{port}:8001",
-            "-e",
-            "SERVER_HOST=0.0.0.0",
-            "-v",
-            f"{marm_data_dir}:/home/marm/.marm",
-            docker_image,
-        ],
-        timeout=90,
-    )
-    assert run.returncode == 0, run.stderr
-
-    try:
-        base_url = f"http://127.0.0.1:{port}"
-        _wait_for_health(base_url)
-
-        response = requests.get(f"{base_url}/dashboard/health", timeout=5)
-        assert response.status_code == 200
-        assert response.json()["status"] == "ok"
-    finally:
-        _run_docker(["rm", "-f", container], timeout=30)
-
-
 def test_docker_http_container_stops_gracefully(docker_image, marm_data_dir):
     """SIGTERM from docker stop should shut down the HTTP server cleanly."""
     container = f"marm-test-stop-{uuid.uuid4().hex[:10]}"

@@ -568,7 +568,7 @@ def test_doc_loader_reindexes_when_memory_row_deleted(monkeypatch, tmp_path):
         "doc_index should have a memory_id after first load"
     )
 
-    # Delete the memory row externally (simulates dashboard/manual cleanup)
+    # Delete the memory row externally (simulates manual cleanup)
     with memory_module.memory.get_connection() as conn:
         conn.execute("DELETE FROM memories WHERE id = ?", (memory_id[0],))
         conn.commit()
@@ -1457,7 +1457,7 @@ def test_delete_log_cascades_dual_written_memories(monkeypatch, tmp_path):
 def test_delete_log_session_spares_non_log_memories(monkeypatch, tmp_path):
     """A whole-session log delete must only remove memories that were
     dual-written from a log entry (metadata.source == "log_entry") --
-    memories created any other way (e.g. the dashboard's manual Add Memory
+    memories created any other way (for example manual memory creation
     form) live in the same `memories` table and session, and must survive."""
     server = load_isolated_server(monkeypatch, tmp_path)
     client = local_client(server.app)

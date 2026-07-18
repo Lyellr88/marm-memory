@@ -50,10 +50,6 @@ async def _update_memory(mem, memory_id: str, new_content: str) -> bool:
     write lock -- callers must not assume the merge landed just because this
     returned without raising.
     """
-    # Unlocked pre-read -- matches _store_memory's duplicate pre-check
-    # convention. This is a read-then-write, but the write lock is only
-    # acquired later, right before the actual UPDATE, so this read must
-    # be re-verified under the lock before it's trusted (see below).
     with mem.get_connection() as conn:
         row = conn.execute(
             "SELECT content, metadata FROM memories WHERE id = ?", (memory_id,)
@@ -83,12 +79,6 @@ async def _update_memory(mem, memory_id: str, new_content: str) -> bool:
 
     merged_hash = compute_content_hash(merged_content)
 
-    # Compute the embedding before acquiring the write lock, same as
-    # _store_memory/_replace_memory -- embedding work can be slow, and
-    # holding BEGIN IMMEDIATE's write lock across an await would block
-    # every other writer (sqlite3 calls are synchronous, so a concurrent
-    # BEGIN IMMEDIATE on another connection can stall the whole event
-    # loop) for the duration.
     merged_embedding_bytes = None
     encoder_ok = merged_content.strip() and mem._load_encoder_lazily()
     if encoder_ok:
@@ -101,14 +91,6 @@ async def _update_memory(mem, memory_id: str, new_content: str) -> bool:
     with mem.get_connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
         try:
-            # Re-check under the lock: the row may have been deleted, or
-            # its content OR metadata changed by a concurrent writer,
-            # since the unlocked read above -- metadata-only writers
-            # exist in this file too (_restore_sources_from_deleted_summary,
-            # _update_summary_metadata_after_delete), so content alone
-            # isn't enough to catch every concurrent write. Bail rather
-            # than risk clobbering a concurrent update with a merge based
-            # on stale data.
             current = conn.execute(
                 "SELECT content, metadata FROM memories WHERE id = ?", (memory_id,)
             ).fetchone()

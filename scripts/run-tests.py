@@ -183,7 +183,7 @@ def main() -> int:
         )
 
     if args.compile and not run_compile_check(
-        SERVER_ROOT, "marm_mcp_server", "marm_dashboard", "marm_graph", "tests"
+        SERVER_ROOT, "marm_mcp_server", "marm_graph", "tests"
     ):
         print(f"\n{RED}Test runner failed.{RESET}")
         return 1

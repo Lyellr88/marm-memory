@@ -5,7 +5,7 @@ This server integrates all modular components of the MARM protocol into a single
 FastAPI application, compliant with the MCP protocol via FastApiMCP.
 
 Author: Lyell - marm-memory
-Version: 2.22.1
+Version: 2.23.0
 """
 
 import asyncio
@@ -23,7 +23,6 @@ from .config.settings import (
     SERVER_VERSION,
 )
 from .core.compaction_scheduler import _maybe_start_compaction_scheduler
-from .core.dashboard_mount import get_dashboard_app
 from .core.graph_supervisor import graph_supervisor
 from .core.memory import memory
 from .endpoints.compaction import router as compaction_router
@@ -115,15 +114,9 @@ app.include_router(compaction_router)
 app.include_router(graph_router)
 app.include_router(concepts_router)
 
-_dashboard_app = get_dashboard_app()
-if _dashboard_app is not None:
-    app.mount("/dashboard", _dashboard_app)
 
-
-# Explicit whitelist as defense-in-depth: mounted sub-app routes (dashboard)
-# already never appear in FastApiMCP's OpenAPI-derived tool list, but this
-# matches marm-graph's own stricter whitelist pattern instead of relying on
-# that alone.
+# Explicit whitelist as defense-in-depth: marm-graph/internal routes must not
+# appear in FastApiMCP's OpenAPI-derived tool list unless intentionally exposed.
 MCP_TOOL_OPERATIONS = [
     "marm_smart_recall",
     "marm_log_entry",

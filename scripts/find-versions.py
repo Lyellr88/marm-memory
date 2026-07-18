@@ -22,7 +22,6 @@ RESET = "\033[0m"
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SERVER_ROOT = PROJECT_ROOT / "marm-mcp-server"
-DASHBOARD_ROOT = SERVER_ROOT / "marm_dashboard"
 CONSOLE_ROOT = PROJECT_ROOT / "marm-console"
 CONSOLE_FRONTEND_ROOT = CONSOLE_ROOT / "artifacts" / "marm-console"
 CHANGELOG = PROJECT_ROOT / "CHANGELOG.md"
@@ -41,16 +40,12 @@ OCI_IDENTIFIER_FILES = [
     SERVER_ROOT / "server.json",
 ]
 
-DASHBOARD_CRITICAL_FILES = [
-    DASHBOARD_ROOT / "__init__.py",
-]
-
 CONSOLE_CRITICAL_FILES = [
     CONSOLE_ROOT / "server" / "app.py",
     CONSOLE_ROOT / "package.json",
     CONSOLE_FRONTEND_ROOT / "package.json",
 ]
-ALL_CRITICAL_FILES = CRITICAL_FILES + DASHBOARD_CRITICAL_FILES + CONSOLE_CRITICAL_FILES
+ALL_CRITICAL_FILES = CRITICAL_FILES + CONSOLE_CRITICAL_FILES
 
 DOC_ROOT = PROJECT_ROOT / "docs"
 MARM_DOCS_ROOT = SERVER_ROOT / "marm-docs"
@@ -126,10 +121,6 @@ def discover_docs() -> list[Path]:
     if server_readme.exists():
         paths.append(server_readme)
     return paths
-
-
-def discover_dashboard_docs() -> list[Path]:
-    return []
 
 
 def discover_console_docs() -> list[Path]:
@@ -254,17 +245,6 @@ def scan_latest_changelog_versions() -> list[VersionHit]:
     return hits
 
 
-def current_dashboard_version() -> str:
-    init = DASHBOARD_ROOT / "__init__.py"
-    if not init.exists():
-        raise FileNotFoundError(f"Dashboard __init__.py not found: {init}")
-    for line in read_text(init).splitlines():
-        match = re.search(r'__version__\s*=\s*["\'](\d+\.\d+\.\d+)["\']', line)
-        if match:
-            return match.group(1)
-    raise ValueError("No __version__ found in dashboard __init__.py")
-
-
 def rel(path: Path) -> str:
     try:
         return str(path.relative_to(PROJECT_ROOT))
@@ -284,15 +264,12 @@ def print_file_hits(path: Path, hits: list[VersionHit]) -> None:
         print(f"    L{hit.line}: {YELLOW}{hit.version}{RESET} :: {hit.text}")
 
 
-def replacement_files(dashboard: bool = False) -> list[Path]:
-    return replacement_files_for_mode("dashboard" if dashboard else "server")
+def replacement_files() -> list[Path]:
+    return replacement_files_for_mode("server")
 
 
 def replacement_files_for_mode(mode: str) -> list[Path]:
-    if mode == "dashboard":
-        critical = DASHBOARD_CRITICAL_FILES
-        docs = discover_dashboard_docs()
-    elif mode == "console":
+    if mode == "console":
         critical = CONSOLE_CRITICAL_FILES
         docs = discover_console_docs()
     else:
@@ -438,11 +415,6 @@ def main() -> int:
     )
     mode_group = parser.add_mutually_exclusive_group()
     mode_group.add_argument(
-        "--dashboard",
-        action="store_true",
-        help="Scan and sync the embedded marm_dashboard package instead of the MCP server.",
-    )
-    mode_group.add_argument(
         "--console",
         nargs="?",
         const="",
@@ -453,19 +425,10 @@ def main() -> int:
         ),
     )
     args = parser.parse_args()
-    mode = (
-        "console"
-        if args.console is not None
-        else "dashboard"
-        if args.dashboard
-        else "server"
-    )
+    mode = "console" if args.console is not None else "server"
 
     try:
-        if mode == "dashboard":
-            target_version = current_dashboard_version()
-            version_source = "embedded marm_dashboard __init__.py"
-        elif mode == "console":
+        if mode == "console":
             target_version = args.console or None
             version_source = "manual Console target"
         else:
@@ -476,7 +439,6 @@ def main() -> int:
         return 1
 
     label = {
-        "dashboard": "Dashboard",
         "console": "Console",
         "server": "MCP Server",
     }[mode]
@@ -487,7 +449,6 @@ def main() -> int:
         print(f"{GREEN}Console mode uses a manually supplied target version.{RESET}\n")
 
     active_critical = {
-        "dashboard": DASHBOARD_CRITICAL_FILES,
         "console": CONSOLE_CRITICAL_FILES,
         "server": CRITICAL_FILES,
     }[mode]
@@ -505,7 +466,6 @@ def main() -> int:
 
     print(f"\n{YELLOW}Documentation files:{RESET}")
     doc_list = {
-        "dashboard": discover_dashboard_docs,
         "console": discover_console_docs,
         "server": discover_docs,
     }[mode]()

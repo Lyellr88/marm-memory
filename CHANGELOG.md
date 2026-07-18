@@ -3,7 +3,7 @@
 ## Version 2 - MARM Protocol to Universal MCP Server Evolution
 
 <details>
-<summary><strong>Unreleased: SQLite Write Atomicity Hardening (v2.22.1)</strong></summary>
+<summary><strong>Unreleased: SQLite Write Atomicity Hardening (v2.23.0)</strong></summary>
 
 ### Multi-Statement Writes Are Now Real Transactions
 
@@ -16,10 +16,16 @@
 ### MARM Console Memory Tab Reaches Dashboard Parity
 
 - Filled the remaining Memory workspace gaps from the legacy `marm-dashboard`: Console can now create sessions, delete one session, delete all sessions, delete individual log rows, bulk-delete logs, add/delete notebook entries, and stage/apply/discard compaction candidates from the same Memory tab surface.
-- The new Console routes call existing MARM MCP tool paths for mutations instead of writing directly to SQLite, preserving the queue-backed memory write rules and transport behavior while the old dashboard remains available for reference.
+- The new Console routes call existing MARM MCP tool paths for mutations instead of writing directly to SQLite, preserving the queue-backed memory write rules and transport behavior.
 - Added visible success/error feedback for session, log, notebook, and compaction actions so failed queue/MCP operations no longer disappear silently in the UI.
 - Notebook add/delete now preserves optional `project`/`platform` scope across Console and the existing MCP tool paths, so same-name notebook entries in different scopes are not collapsed by UI mutations.
 - Added FastAPI response-contract tests for the new Console Memory routes with the MCP adapter stubbed, matching the rule that every new Console API route gets at least one real response-layer test.
+
+### Legacy Dashboard Removed From MCP Server Runtime
+
+- Removed the bundled `marm_dashboard` package from the shipped `marm-mcp-server` package and Docker image. The old source is archived locally under `docs/archived/` for reference while marm-console becomes the human-facing local app.
+- Unmounted `/dashboard` from the FastAPI app and removed the parent-server auth exemption that existed only for that mounted sub-app. `/dashboard` is now an ordinary missing route.
+- Removed dashboard-specific tests and replaced the HTTP app coverage with assertions that the route is no longer mounted or public. Maintenance scripts now scan only shipped packages and marm-console.
 
 </details>
 

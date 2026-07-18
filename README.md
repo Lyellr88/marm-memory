@@ -5,7 +5,7 @@
      width="900"
      height="250">
 </picture>
-<h1 align="center">MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.22.1</h1>
+<h1 align="center">MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.23.0</h1>
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/Lyellr88/marm-memory/blob/MARM-main/LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
@@ -26,7 +26,7 @@
 
 ## Important Messages
 
-- marm-console now ships as the local web app successor to marm-dashboard, with live Memory, Knowledge, and Projects workspaces plus MCP-backed Memory mutation actions. Packaging and one-command startup polish are still in progress.
+- marm-console now ships as the local web app for memory, knowledge, projects, and MCP-backed memory mutation actions. Packaging and one-command startup polish are still in progress.
 - I am waiting to get access back to my PYPI account, till restored pip will be behind a few versions. I will update the README when it is back up to date.
 
 
@@ -39,7 +39,6 @@
 - [Using MARM: Talk, Don't Call Tools](#using-marm-talk-dont-call-tools)
 - [Understanding MARM Memory](#understanding-marm-memory)
 - [Knowledge Graphs: Code & Concepts](#knowledge-graphs-code--concepts)
-- [MARM Dashboard](#marm-dashboard)
 - [Architecture & Internals](#architecture--internals)
 - [Troubleshooting](#troubleshooting)
 - [Contributing](#contributing)
@@ -77,7 +76,7 @@ See [Performance & Scaling Benchmarks](#performance--scaling-benchmarks) for ret
 
 **Recommended: guided setup with `marm-init`**
 
-The easiest way to install MARM is to let your agent do the setup with you. `marm-init` turns the usual MCP setup mess into one guided conversation: Python or Docker, HTTP or STDIO, local or remote server, API keys, config paths, dashboard startup, and multi-agent linking for Claude, Codex, Gemini, Qwen, Cursor, VS Code, and other MCP clients. No hunting through install docs, no guessing which config file your client uses, and no rewriting the same connection by hand for every agent.
+The easiest way to install MARM is to let your agent do the setup with you. `marm-init` turns the usual MCP setup mess into one guided conversation: Python or Docker, HTTP or STDIO, local or remote server, API keys, config paths, server startup, and multi-agent linking for Claude, Codex, Gemini, Qwen, Cursor, VS Code, and other MCP clients. No hunting through install docs, no guessing which config file your client uses, and no rewriting the same connection by hand for every agent.
 
 ```bash
 npx degit Lyellr88/marm-memory/skills
@@ -521,7 +520,7 @@ Full platform walkthroughs, key setup, and OS-specific notes: [Windows](docs/INS
 
 **Verify installation**
 
-Use the MARM Dashboard status panel for the easiest live check. It polls the MCP server health endpoint and shows reachability, version, status, latency, and last checked time. For terminal validation:
+Use the MCP server health endpoint for the fastest live check:
 
 ```bash
 curl http://localhost:8001/health
@@ -759,37 +758,6 @@ How to use it:
 
 This fills the cross-session structure gap that flat memory search leaves open: sessions organize memories, but the concept graph *connects* them, so "what depends on the write queue?" is answerable even when the answer spans five sessions from three different agents.
 
-## MARM Dashboard
-
-A local web UI for browsing and managing your MARM memory. It is bundled with `marm-mcp-server` and mounts at `/dashboard` when the HTTP server starts.
-
-| What it gives you | How it works |
-|-------------------|-------------|
-| Browse/search/edit all memories | Direct SQLite access to the same `~/.marm/marm_memory.db` |
-| Manage sessions and protocol logs | Open `http://localhost:8001/dashboard` beside the MCP endpoint on `:8001` |
-| Notebook CRUD with inline editor | Same `MARM_API_KEY` auth model as the MCP server |
-| Delete-all with count confirmation | Included in the unified pip package and Docker image |
-| View the write queue in real time | Pulls live data from the write queue |
-| Live server health panel | Polls the health endpoint: reachability, version, latency, last checked |
-
-Start MARM HTTP, then open the dashboard:
-
-```bash
-python -m marm_mcp_server
-# browser: http://localhost:8001/dashboard
-```
-
-Docker uses the same unified image and key:
-
-```bash
-docker run -d --name marm-mcp-server \
-  -p 127.0.0.1:8001:8001 \
-  -e MARM_API_KEY=your-key \
-  -v ~/.marm:/home/marm/.marm \
-  lyellr88/marm-mcp-server:latest
-# browser: http://localhost:8001/dashboard
-```
-
 ## Architecture & Internals
 
 Everything above runs on a small number of deliberate mechanisms. This section is the full map, so you (or your agent) never have to guess what the server is doing.
@@ -905,14 +873,14 @@ Packaged docs are indexed into the `marm_system` memory namespace on startup and
 
 **AI client can't connect to MARM**
 
-- Verify server is running in the dashboard health panel, or with `curl http://localhost:8001/health`
+- Verify the server is running with `curl http://localhost:8001/health`
 - Check firewall isn't blocking port 8001
 - For STDIO: use `marm-mcp-stdio` (console script) or `python -m marm_mcp_server.server_stdio`
 - Restart both server and AI client
 
 **Tools not appearing in AI client**
 
-- Verify HTTP mode in the dashboard health panel, or with `curl http://localhost:8001/health`
+- Verify HTTP mode with `curl http://localhost:8001/health`
 - Check server logs for initialization errors
 - Disconnect and reconnect AI client to refresh tool list
 - Both HTTP and STDIO expose 14 tools: 7 core memory/logging/notebook/compaction tools, 5 bundled code-graph tools, and 2 concept-graph tools
@@ -939,7 +907,7 @@ Packaged docs are indexed into the `marm_system` memory namespace on startup and
 - Verify `~/.marm/` directory exists and has write permissions
 - Check available disk space
 - Test with simple memory: ask AI to save a single line and check with `marm_log_show`
-- For HTTP mode, verify server health in the dashboard health panel, or with `curl http://localhost:8001/health`
+- For HTTP mode, verify server health with `curl http://localhost:8001/health`
 
 **Search returns no results**
 

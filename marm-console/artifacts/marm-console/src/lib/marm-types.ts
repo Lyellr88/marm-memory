@@ -1,7 +1,7 @@
 // Types for the MARM Console frontend. These mirror the REST contract of the
-// external MARM dashboard backend (FastAPI, run separately by the user on
-// localhost). This app does not implement or proxy that backend — it is a
-// pure client against whatever base URL is configured in Settings.
+// local MARM Console backend (FastAPI, run separately by the user on localhost).
+// The frontend is a pure client against whatever base URL is configured in
+// Settings.
 
 export interface Overview {
   memory: {
