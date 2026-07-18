@@ -26,7 +26,7 @@ export function BuildConceptsDialog({ open, onOpenChange }: { open: boolean, onO
     });
   };
 
-  const isRunning = jobStatus?.status === 'queued' || jobStatus?.status === 'running';
+  const isRunning = !!jobId && (!jobStatus || jobStatus.status === 'queued' || jobStatus.status === 'running');
   const canSubmit = scope === 'all' ? confirmAll : !!scopeValue;
 
   useEffect(() => {
@@ -36,6 +36,15 @@ export function BuildConceptsDialog({ open, onOpenChange }: { open: boolean, onO
     queryClient.invalidateQueries({ queryKey: ['conceptsGraph', baseUrl] });
     queryClient.invalidateQueries({ queryKey: ['duplicates', baseUrl] });
   }, [baseUrl, isRunning, jobStatus, queryClient]);
+
+  useEffect(() => {
+    if (!open) {
+      setJobId(null);
+      setScope('session');
+      setScopeValue('');
+      setConfirmAll(false);
+    }
+  }, [open]);
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if(!isRunning) onOpenChange(o); }}>

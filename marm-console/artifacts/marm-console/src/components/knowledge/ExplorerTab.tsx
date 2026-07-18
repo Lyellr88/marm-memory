@@ -301,6 +301,11 @@ export function ExplorerTab() {
                 then explore them here.
               </p>
             </div>
+          ) : loadError ? (
+            <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground gap-2">
+              <AlertTriangle className="w-8 h-8 text-amber-500" />
+              <p>{selectedId === null ? 'Could not load the knowledge graph.' : 'Could not load this neighborhood.'}</p>
+            </div>
           ) : graph && !isLoading ? (
             <>
               <GraphViz
@@ -323,11 +328,6 @@ export function ExplorerTab() {
                 />
               )}
             </>
-          ) : loadError ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground gap-2">
-              <AlertTriangle className="w-8 h-8 text-amber-500" />
-              <p>{selectedId === null ? 'Could not load the knowledge graph.' : 'Could not load this neighborhood.'}</p>
-            </div>
           ) : (
             <div className="flex-1 flex items-center justify-center text-muted-foreground">
               Loading graph...
