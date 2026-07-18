@@ -14,7 +14,7 @@ marm-memory is a persistent memory layer for AI agents. The MCP server gives Cla
 |-----------|-------------|----------|
 | **MARM MCP Server** | Persistent memory server with 14 MCP tools (HTTP + STDIO): 7 core memory tools, 5 bundled code-graph tools, and 2 concept-graph tools | AI agents, IDEs, local workflows, shared team memory |
 | **MARM Protocol** | Runtime guidance delivered automatically by the MCP server | Keeping agents aligned on what to store, recall, and trust |
-| **MARM Dashboard** | Local browser UI for viewing memory and server health | Inspection, cleanup, and quick status checks |
+| **MARM Console** | Local browser UI for viewing memory, knowledge, projects, and server health | Inspection, cleanup, and quick status checks |
 
 ### Q: How is MARM different from built-in AI memory?
 
@@ -71,7 +71,7 @@ Docker HTTP mode should use `MARM_API_KEY` because the server is listening throu
 
 #### Q: How do I know if MARM is working correctly?
 
-For HTTP mode, use the MARM Dashboard status panel or run `curl http://localhost:8001/health`. For STDIO mode, confirm your MCP client lists the MARM tools and can call a simple recall or log command.
+For HTTP mode, run `curl http://localhost:8001/health` or use MARM Console when it is running locally. For STDIO mode, confirm your MCP client lists the MARM tools and can call a simple recall or log command.
 
 ---
 

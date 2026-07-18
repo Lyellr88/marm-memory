@@ -17,7 +17,6 @@ ROOT = Path(__file__).parent.parent
 SCAN_DIRS = [
     ("marm-mcp-server/marm_mcp_server", ROOT / "marm-mcp-server" / "marm_mcp_server"),
     ("marm-mcp-server/marm_graph", ROOT / "marm-mcp-server" / "marm_graph"),
-    ("marm-mcp-server/marm_dashboard", ROOT / "marm-mcp-server" / "marm_dashboard"),
     ("marm-console/server", ROOT / "marm-console" / "server"),
     (
         "marm-console/artifacts/marm-console/src",

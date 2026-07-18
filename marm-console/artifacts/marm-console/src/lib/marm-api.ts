@@ -1,9 +1,8 @@
-// Thin typed fetch client for the external MARM dashboard REST API.
-// The backend is NOT part of this workspace — it is the user's own
-// marm-mcp-server / marm-dashboard process running locally (default
+// Thin typed fetch client for the local MARM Console REST API.
+// The backend is the user's own Console API process running locally (default
 // http://127.0.0.1:8002, configurable in Settings). Every call here targets
-// `${baseUrl}/api/...` per the documented contract. Until that backend is
-// wired up and reachable, calls will fail — callers must render loading /
+// `${baseUrl}/api/...` per the documented contract. If that backend is not
+// reachable, calls will fail and callers must render loading /
 // error / empty states rather than assuming data exists.
 
 import type {

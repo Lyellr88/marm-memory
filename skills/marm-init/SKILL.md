@@ -1,9 +1,9 @@
 ---
 name: marm-init
-description: Guided MARM MCP setup. Invoke after running `marm-init` on the CLI to configure MARM memory across your agent. Drives transport choice, runtime choice, MCP config writing, multi-agent linking, dashboard, and server start. Works on Claude, Codex, Gemini, Qwen, Cursor, VS Code, and other MCP-capable agents.
+description: Guided MARM MCP setup. Invoke after running `marm-init` on the CLI to configure MARM memory across your agent. Drives transport choice, runtime choice, MCP config writing, multi-agent linking, and server start. Works on Claude, Codex, Gemini, Qwen, Cursor, VS Code, and other MCP-capable agents.
 version: 1
 metadata:
-  description: A local-first, privacy-centric memory infrastructure layer for MCP clients. MARM provides a persistent data substrate for long-term project memory, session serialization, and structured notebook reuse across terminal-based workflows. Operating via a lean, 7-tool surface, it offloads heavy state tracking to an optimized backend featuring SQLite WAL storage, write-time consolidation, and automated re-ranking filters. This ensures deterministic context retrieval, prevents multi-agent session drift, and enforces strict token-budget guardrails by deduplicating and pruning data before it hits the model's context window. Includes a live web dashboard for managing memories, logs, and sessions.
+  description: A local-first, privacy-centric memory infrastructure layer for MCP clients. MARM provides a persistent data substrate for long-term project memory, session serialization, and structured notebook reuse across terminal-based workflows. Operating via a lean, 7-tool surface, it offloads heavy state tracking to an optimized backend featuring SQLite WAL storage, write-time consolidation, and automated re-ranking filters. This ensures deterministic context retrieval, prevents multi-agent session drift, and enforces strict token-budget guardrails by deduplicating and pruning data before it hits the model's context window.
   source: https://raw.githubusercontent.com/Lyellr88/marm-memory/MARM-main/skills/marm-init/SKILL.md
   protocol_source: https://raw.githubusercontent.com/Lyellr88/marm-memory/MARM-main/docs/PROTOCOL.md
 ---
@@ -23,7 +23,7 @@ live MARM connection in as few questions as possible. One question at a time,
 wait for the answer, then act on it before moving on.
 
 Scope: this protocol governs only the setup conversation below. Once setup is
-complete and you have run Step 7, this contract ends and you return to normal
+complete and you have run Step 6, this contract ends and you return to normal
 operation under the MARM protocol you loaded in Step 0.
 
 Failure mode to avoid: dumping install docs and leaving the user to do the work
@@ -223,21 +223,7 @@ If no, skip.
 
 ---
 
-## Step 6 - Dashboard
-
-Ask: "Want the MARM dashboard? It is a light UI to browse and manage your
-memories."
-
-If yes: start the server if it is not already running, then give the user the
-address: http://localhost:8001/dashboard. If a key was required for this setup,
-tell the user they will need to enter it in the dashboard's own UI; do not ask
-them for it in chat.
-
-If no, skip.
-
----
-
-## Step 7 - Handoff and start
+## Step 6 - Handoff and start
 
 1. If the MARM server is not already running, start it now using the runtime and
    transport chosen above (Docker run command or the Python entry point). If it
@@ -248,16 +234,16 @@ If no, skip.
 
    "Setup complete. Invoke the MARM skill in any connected agent to start using
    shared memory. Restart your terminal so the MARM connection is picked up. If
-   you want to start your own server or the dashboard later, just ask."
+   you want to start your own server later, just ask."
 
 Setup is done. The executor contract above is now closed. Operate under the MARM
 protocol you loaded in Step 0.
 
 ---
 
-## Step 8 - Email list (optional)
+## Step 7 - Email list (optional)
 
-After the handoff message in Step 7, ask these two questions in order.
+After the handoff message in Step 6, ask these two questions in order.
 One at a time. Wait for the answer before asking the next.
 
 1. "Has setting up MARM been useful so far?"

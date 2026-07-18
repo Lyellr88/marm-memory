@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    # :latest is now the all-in-one image (memory + graph + dashboard, one port).
+    # :latest is the all-in-one MCP image (memory + graph, one port).
     # Pin :memory-only instead if you need the pre-unification image shape.
     image: lyellr88/marm-mcp-server:latest
     container_name: marm-mcp-server
@@ -18,7 +18,7 @@ services:
     environment:
       - SERVER_HOST=0.0.0.0
       - SERVER_PORT=8001
-      - SERVER_VERSION=2.22.1
+      - SERVER_VERSION=2.23.0
       
       - SEMANTIC_MODEL=all-MiniLM-L6-v2
       

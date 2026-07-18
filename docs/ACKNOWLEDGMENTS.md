@@ -4,7 +4,7 @@
 
 MARM has been shaped by early users, testers, reviewers, and open-source contributors who gave feedback when the project was still rough. This page recognizes that help and keeps a record of the community influence behind the project.
 
-This project started as a personal answer to a simple problem: AI tools forget too much between sessions. The project is now focused on the MARM MCP server, local memory workflows, Docker and STDIO transports, IDE/client integrations, and the dashboard for inspecting local memory data.
+This project started as a personal answer to a simple problem: AI tools forget too much between sessions. The project is now focused on the MARM MCP server, local memory workflows, Docker and STDIO transports, IDE/client integrations, and marm-console for inspecting local memory data.
 
 ## What This Page Is For
 
