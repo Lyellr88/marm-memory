@@ -14,7 +14,12 @@ export function deleteNotice(result: MemoryDeleteResult, fallback: string): Acti
   const cleanup = result.concept_cleanup;
   const deletedCount = result.deleted_ids?.length ?? 0;
   const missingCount = result.missing_ids?.length ?? 0;
-  const base = deletedCount > 1 ? `${deletedCount} memories deleted.` : fallback;
+  const base =
+    deletedCount === 0
+      ? 'No memories were deleted.'
+      : deletedCount > 1
+        ? `${deletedCount} memories deleted.`
+        : fallback;
   const missing = missingCount ? ` ${missingCount} requested ID(s) were not found.` : '';
 
   if (cleanup?.status === 'failed') {
@@ -30,7 +35,7 @@ export function deleteNotice(result: MemoryDeleteResult, fallback: string): Acti
     };
   }
   return {
-    kind: 'success',
+    kind: missingCount > 0 ? 'warning' : 'success',
     message: `${base}${missing}`,
   };
 }

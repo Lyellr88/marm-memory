@@ -58,6 +58,7 @@ export function SessionsTab() {
     if (!name?.trim()) return;
     createSession.mutate(name.trim(), {
       onSuccess: () => setActionNotice({ kind: 'success', message: `Session '${name.trim()}' created.` }),
+      onError: (error) => setActionNotice({ kind: 'error', message: mutationErrorMessage(error) }),
     });
   };
 
@@ -71,6 +72,7 @@ export function SessionsTab() {
           message: `Session '${name}' deleted. ${result.deleted_count} log entries and ${result.memories_deleted} semantic log memories removed.`,
         });
       },
+      onError: (error) => setActionNotice({ kind: 'error', message: mutationErrorMessage(error) }),
     });
   };
 
@@ -87,6 +89,7 @@ export function SessionsTab() {
             : `${result.deleted_sessions} sessions deleted. ${result.deleted_count} log entries and ${result.memories_deleted} semantic log memories removed.`,
         });
       },
+      onError: (error) => setActionNotice({ kind: 'error', message: mutationErrorMessage(error) }),
     });
   };
   
@@ -95,17 +98,7 @@ export function SessionsTab() {
   return (
     <div className="h-full overflow-auto pb-4 space-y-4">
       <div className="flex items-center justify-between gap-3">
-        <ActionNoticePanel
-          notice={
-            createSession.error
-              ? { kind: 'error', message: mutationErrorMessage(createSession.error) }
-              : deleteSession.error
-                ? { kind: 'error', message: mutationErrorMessage(deleteSession.error) }
-                : deleteAllSessions.error
-                  ? { kind: 'error', message: mutationErrorMessage(deleteAllSessions.error) }
-                : actionNotice
-          }
-        />
+        <ActionNoticePanel notice={actionNotice} />
         <div className="flex gap-2">
           <Button
             size="sm"
@@ -193,6 +186,7 @@ export function LogsTab() {
           message: `Log ${result.log_id} deleted. ${result.memories_deleted} semantic log memories removed.`,
         });
       },
+      onError: (error) => setActionNotice({ kind: 'error', message: mutationErrorMessage(error) }),
     });
   };
 
@@ -206,20 +200,13 @@ export function LogsTab() {
           message: `${result.deleted_count} log entries deleted. ${result.memories_deleted} semantic log memories removed.`,
         });
       },
+      onError: (error) => setActionNotice({ kind: 'error', message: mutationErrorMessage(error) }),
     });
   };
 
   return (
     <div className="space-y-4 h-full flex flex-col">
-      <ActionNoticePanel
-        notice={
-          deleteLog.error
-            ? { kind: 'error', message: mutationErrorMessage(deleteLog.error) }
-            : deleteAllLogs.error
-              ? { kind: 'error', message: mutationErrorMessage(deleteAllLogs.error) }
-              : actionNotice
-        }
-      />
+      <ActionNoticePanel notice={actionNotice} />
       <div className="flex gap-4 items-center shrink-0">
         <div className="relative flex-1">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />

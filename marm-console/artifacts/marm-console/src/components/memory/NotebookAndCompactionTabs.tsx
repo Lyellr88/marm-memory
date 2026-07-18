@@ -13,6 +13,11 @@ export function NotebookTab() {
   const [actionNotice, setActionNotice] = useState<ActionNotice | null>(null);
   
   const [editing, setEditing] = useState<NotebookEntry | Partial<NotebookEntry> | null>(null);
+  // name/project/platform form the entry's identity key in the store, so an
+  // existing entry's identity is locked once editing starts -- otherwise
+  // saving after editing one of these fields would upsert a new entry and
+  // leave the original behind instead of updating it.
+  const isExistingEntry = !!editing?.created_at;
 
   const handleSave = () => {
     if (!editing?.name || !editing?.content) return;
@@ -25,7 +30,8 @@ export function NotebookTab() {
       onSuccess: () => {
         setActionNotice({ kind: 'success', message: `Notebook entry '${editing.name}' saved.` });
         setEditing(null);
-      }
+      },
+      onError: (error) => setActionNotice({ kind: 'error', message: mutationErrorMessage(error) }),
     });
   };
 
@@ -39,15 +45,7 @@ export function NotebookTab() {
           <Plus className="w-4 h-4 mr-2" /> New Entry
         </Button>
       </div>
-      <ActionNoticePanel
-        notice={
-          upsert.error
-            ? { kind: 'error', message: mutationErrorMessage(upsert.error) }
-            : deleteNote.error
-              ? { kind: 'error', message: mutationErrorMessage(deleteNote.error) }
-              : actionNotice
-        }
-      />
+      <ActionNoticePanel notice={actionNotice} />
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 flex-1 overflow-hidden">
         <div className="lg:col-span-1 border rounded-md bg-card overflow-auto">
@@ -76,27 +74,31 @@ export function NotebookTab() {
           {editing ? (
             <div className="p-6 flex flex-col h-full gap-4">
               <div className="flex gap-4">
-                <Input 
-                  placeholder="Entry Name" 
-                  value={editing.name || ''} 
+                <Input
+                  placeholder="Entry Name"
+                  value={editing.name || ''}
                   onChange={e => setEditing(p => ({ ...p!, name: e.target.value }))}
                   className="font-mono"
+                  disabled={isExistingEntry}
                 />
-                <Input 
-                  placeholder="Project (optional)" 
-                  value={editing.project || ''} 
+                <Input
+                  placeholder="Project (optional)"
+                  value={editing.project || ''}
                   onChange={e => setEditing(p => ({ ...p!, project: e.target.value }))}
                   className="w-40 font-mono"
+                  disabled={isExistingEntry}
                 />
                 <Input
                   placeholder="Platform (optional)"
                   value={editing.platform || ''}
                   onChange={e => setEditing(p => ({ ...p!, platform: e.target.value }))}
                   className="w-40 font-mono"
+                  disabled={isExistingEntry}
                 />
               </div>
               <p className="text-xs text-muted-foreground -mt-2">
                 Entries are keyed by name + project + platform, so the same name can exist in different scopes.
+                {isExistingEntry && ' Delete and re-create the entry to change its name, project, or platform.'}
               </p>
               <Textarea 
                 placeholder="Markdown content..." 
@@ -119,6 +121,7 @@ export function NotebookTab() {
                             setActionNotice({ kind: 'success', message: `Notebook entry '${editing.name}' deleted.` });
                             setEditing(null);
                           },
+                          onError: (error) => setActionNotice({ kind: 'error', message: mutationErrorMessage(error) }),
                         },
                       );
                     }}
@@ -183,6 +186,7 @@ export function CompactionTab() {
         const label = action === 'stage' ? 'staged for review' : action === 'apply' ? 'applied' : 'discarded';
         setActionNotice({ kind: 'success', message: `Compaction candidate ${label}.` });
       },
+      onError: (error) => setActionNotice({ kind: 'error', message: mutationErrorMessage(error) }),
     });
   };
 
@@ -207,9 +211,7 @@ export function CompactionTab() {
           </Button>
         </div>
       </div>
-      <ActionNoticePanel
-        notice={runAction.error ? { kind: 'error', message: mutationErrorMessage(runAction.error) } : actionNotice}
-      />
+      <ActionNoticePanel notice={actionNotice} />
 
       {view === 'history' ? (
         history.length === 0 ? (

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useMemories, useFilters, useCreateMemory, useUpdateMemory, useDeleteMemory, useBulkDeleteMemories } from '@/hooks/use-marm-queries';
 import { Badge, Button, Input, Select, SelectTrigger, SelectValue, SelectContent, SelectItem, Table, TableHeader, TableRow, TableHead, TableBody, TableCell, Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, Textarea, Label } from '@/components/ui/core';
 import { format } from 'date-fns';
@@ -55,16 +55,34 @@ export function MemoriesTab() {
   
   const [selectedIds, setSelectedIds] = useState<Set<MemoryId>>(new Set());
   const bulkDelete = useBulkDeleteMemories();
-  
+
+  // Drop selections that are no longer in the visible result set (search,
+  // filter, or pagination changed) so bulk delete can't act on hidden rows.
+  useEffect(() => {
+    if (!data?.items) return;
+    const visibleIds = new Set(data.items.map(m => m.id));
+    setSelectedIds(prev => {
+      let changed = false;
+      const next = new Set<MemoryId>();
+      for (const id of prev) {
+        if (visibleIds.has(id)) next.add(id);
+        else changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [data?.items]);
+
+  const allVisibleSelected = !!data?.items.length && data.items.every(m => selectedIds.has(m.id));
+
   const toggleSelect = (id: MemoryId) => {
     const newSet = new Set(selectedIds);
     if (newSet.has(id)) newSet.delete(id);
     else newSet.add(id);
     setSelectedIds(newSet);
   };
-  
+
   const toggleAll = () => {
-    if (selectedIds.size === data?.items.length) {
+    if (allVisibleSelected) {
       setSelectedIds(new Set());
     } else {
       setSelectedIds(new Set(data?.items.map(m => m.id)));
@@ -130,7 +148,7 @@ export function MemoriesTab() {
         session_name: selectedMemory.session_name,
         project: editProject.trim() || null,
         platform: editPlatform.trim() || null,
-        context_type: editContextType.trim() || selectedMemory.context_type || 'general',
+        context_type: editContextType.trim() || null,
         metadata: selectedMemory.metadata,
       }
     }, {
@@ -224,9 +242,7 @@ export function MemoriesTab() {
               <TableHead className="w-[40px] pl-4">
                 <input 
                   type="checkbox"
-                  checked={
-                    !!data?.items.length && selectedIds.size === data.items.length
-                  }
+                  checked={allVisibleSelected}
                   onChange={toggleAll}
                   className="rounded border-input bg-background"
                 />
