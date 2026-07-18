@@ -527,6 +527,33 @@ async def test_exact_lane_fts_hit_sets_retrieval_mode_exact_fts(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_exact_lane_internal_like_fallback_sets_exact_like_not_exact_fts(
+    tmp_path,
+):
+    """_recall_text_search has its own internal FTS->LIKE fallback for
+    unsanitizable queries. Those results must be labeled exact_like, not
+    blindly labeled exact_fts just because _recall_text_search returned
+    something non-empty."""
+    mem = MARMMemory(str(tmp_path / "memory.db"))
+    mem._encoder_failed = True
+
+    # "---" is unsanitizable for FTS (_safe_fts_query returns None), so this
+    # goes straight to _recall_text_search's own LIKE fallback -- no
+    # monkeypatching needed to force the real internal fallback path.
+    mem_id = await mem.store_memory(
+        "content with --- dashes inside", session="internal-like"
+    )
+
+    results = await mem.recall_similar(
+        "---", session="internal-like", limit=5, exact_mode="exact"
+    )
+
+    assert results
+    assert any(r["id"] == mem_id for r in results)
+    assert all(r.get("retrieval_mode") == "exact_like" for r in results)
+
+
+@pytest.mark.asyncio
 async def test_exact_lane_returns_empty_when_both_fts_and_like_miss(
     monkeypatch, tmp_path
 ):

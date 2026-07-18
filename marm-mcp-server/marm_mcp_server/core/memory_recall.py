@@ -335,6 +335,7 @@ async def _recall_text_search(
                         "similarity": float(score),
                         "project": row["project"],
                         "platform": row["platform"],
+                        "retrieval_mode": "exact_fts",
                     }
                     for row, score in fts_rows
                 ]
@@ -378,6 +379,7 @@ async def _recall_text_search(
                     "similarity": 0.8,
                     "project": row[6],
                     "platform": row[7],
+                    "retrieval_mode": "exact_like",
                 }
             )
 
