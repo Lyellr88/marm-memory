@@ -79,23 +79,28 @@ def _migrate_database(
                     conn.execute("ALTER TABLE entities ADD COLUMN name_embedding BLOB")
                 else:
                     continue
-            where_clause = f"{embedding_column} IS NOT NULL"
+            where_clause = f"{text_column} IS NOT NULL"
             params: tuple[int, ...] = ()
             if not force_reencode:
-                where_clause += f" AND LENGTH({embedding_column}) != ?"
+                where_clause += (
+                    f" AND ({embedding_column} IS NULL "
+                    f"OR LENGTH({embedding_column}) != ?)"
+                )
                 params = (target_bytes,)
             total = conn.execute(
                 f"SELECT COUNT(*) FROM {table} WHERE {where_clause}", params
             ).fetchone()[0]
             completed = 0
+            last_rowid = 0
             while completed < total:
                 rows = conn.execute(
                     f"SELECT rowid, {text_column} FROM {table} "
-                    f"WHERE {where_clause} ORDER BY rowid LIMIT ?",
-                    (*params, batch_size),
+                    f"WHERE {where_clause} AND rowid > ? ORDER BY rowid LIMIT ?",
+                    (*params, last_rowid, batch_size),
                 ).fetchall()
                 if not rows:
                     break
+                last_rowid = rows[-1][0]
                 vectors = _encode_batch(encoder, [row[1] for row in rows])
                 try:
                     conn.execute("BEGIN IMMEDIATE")

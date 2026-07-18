@@ -103,6 +103,10 @@ def test_migrates_same_dimension_vectors_when_model_marker_differs(tmp_path):
             ("n1", "same-dimension text", _vector(DEFAULT_SEMANTIC_DIM)),
         )
         conn.execute(
+            "INSERT INTO notebook_entries (name, data, embedding) VALUES (?, ?, ?)",
+            ("n2", "second same-dimension text", _vector(DEFAULT_SEMANTIC_DIM)),
+        )
+        conn.execute(
             "INSERT INTO user_settings (key, value) VALUES ('embedding_model', ?)",
             ("other-512-dimension-model",),
         )
@@ -111,16 +115,43 @@ def test_migrates_same_dimension_vectors_when_model_marker_differs(tmp_path):
     result = migrate_embeddings(
         str(memory_path),
         str(concept_path),
+        batch_size=1,
         encoder_factory=lambda: encoder,
         progress=lambda _message: None,
     )
 
-    assert result == {"rows_migrated": 1, "concept_db_present": False}
+    assert result == {"rows_migrated": 2, "concept_db_present": False}
     assert encoder.calls == [
         ["MARM embedding migration dimension check"],
         ["same-dimension text"],
+        ["second same-dimension text"],
     ]
     assert inspect_embedding_state(str(memory_path), str(concept_path)).compatible
+
+
+def test_backfills_missing_embeddings_during_normal_migration(tmp_path):
+    memory_path = tmp_path / "memory.db"
+    concept_path = tmp_path / "missing-concept.db"
+    init_database(str(memory_path))
+    with sqlite3.connect(memory_path) as conn:
+        conn.execute(
+            "INSERT INTO notebook_entries (name, data, embedding) VALUES (?, ?, NULL)",
+            ("n1", "missing embedding"),
+        )
+
+    result = migrate_embeddings(
+        str(memory_path),
+        str(concept_path),
+        encoder_factory=FakeEncoder,
+        progress=lambda _message: None,
+    )
+
+    assert result == {"rows_migrated": 1, "concept_db_present": False}
+    with sqlite3.connect(memory_path) as conn:
+        embedding = conn.execute(
+            "SELECT embedding FROM notebook_entries WHERE name = 'n1'"
+        ).fetchone()[0]
+    assert len(embedding) == DEFAULT_SEMANTIC_DIM * 4
 
 
 def test_missing_concept_database_is_not_created(tmp_path):
