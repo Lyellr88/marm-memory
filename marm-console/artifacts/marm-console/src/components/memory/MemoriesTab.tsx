@@ -90,10 +90,16 @@ export function MemoriesTab() {
   };
 
   const handleBulkDelete = () => {
-    if (selectedIds.size === 0) return;
-    const typed = prompt(`Type DELETE to delete ${selectedIds.size} selected memories.`);
+    // Recompute against the current visible items instead of trusting
+    // selectedIds directly -- the cleanup effect runs after render, so a
+    // stale ID could still be present in selectedIds at click time if
+    // data changed on this same render.
+    const visibleIds = new Set(data?.items.map(m => m.id));
+    const targetIds = Array.from(selectedIds).filter(id => visibleIds.has(id));
+    if (targetIds.length === 0) return;
+    const typed = prompt(`Type DELETE to delete ${targetIds.length} selected memories.`);
     if (typed === 'DELETE') {
-      bulkDelete.mutate(Array.from(selectedIds), {
+      bulkDelete.mutate(targetIds, {
         onSuccess: (result) => {
           setSelectedIds(new Set());
           setActionNotice(deleteNotice(result, 'Selected memory deleted.'));
