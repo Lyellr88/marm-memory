@@ -5,6 +5,7 @@ import sqlite3
 from fastapi.testclient import TestClient
 
 from server import app as console_app
+from server import memory_store
 
 
 def _memory_db(tmp_path, monkeypatch):
@@ -89,7 +90,7 @@ def test_session_log_notebook_and_compaction_mutations_proxy_to_marm(monkeypatch
 
     monkeypatch.setattr(console_app.mcp_client, "post", fake_post)
     monkeypatch.setattr(
-        console_app.memory_store,
+        memory_store,
         "list_sessions",
         lambda db_path: [
             {
@@ -106,12 +107,12 @@ def test_session_log_notebook_and_compaction_mutations_proxy_to_marm(monkeypatch
         ],
     )
     monkeypatch.setattr(
-        console_app.memory_store,
+        memory_store,
         "list_log_refs",
         lambda db_path: [{"id": "123", "session_name": "main"}],
     )
     monkeypatch.setattr(
-        console_app.memory_store,
+        memory_store,
         "list_notebook",
         lambda db_path: [
             {
@@ -125,7 +126,7 @@ def test_session_log_notebook_and_compaction_mutations_proxy_to_marm(monkeypatch
         ],
     )
     monkeypatch.setattr(
-        console_app.memory_store,
+        memory_store,
         "list_compaction",
         lambda db_path: [
             {
