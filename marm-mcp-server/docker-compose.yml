@@ -18,7 +18,7 @@ services:
     environment:
       - SERVER_HOST=0.0.0.0
       - SERVER_PORT=8001
-      - SERVER_VERSION=2.23.0
+      - SERVER_VERSION=2.24.0
       
       - SEMANTIC_MODEL=all-MiniLM-L6-v2
       

@@ -5,7 +5,7 @@ This server integrates all modular components of the MARM protocol into a single
 FastAPI application, compliant with the MCP protocol via FastApiMCP.
 
 Author: Lyell - marm-memory
-Version: 2.23.0
+Version: 2.24.0
 """
 
 import asyncio
@@ -40,8 +40,8 @@ from .middleware.rate_limiting import rate_limit_middleware
 from .services.analytics import track_usage
 from .services.automation import register_event_handlers
 from .utils import logging_filters  # noqa: F401
+from .utils.embedding_state import check_embedding_compatibility
 from .utils.multiprocess_guard import _warn_if_multi_process_requested
-
 
 logger = structlog.get_logger()
 
@@ -58,6 +58,7 @@ async def lifespan(app: FastAPI):
     logger.info(
         "Database locations", memory_db=DEFAULT_DB_PATH, analytics_db=ANALYTICS_DB_PATH
     )
+    check_embedding_compatibility(warn=lambda message: logger.warning(message))
 
     register_event_handlers()
     await memory.start_write_queue()
@@ -138,12 +139,8 @@ mcp = FastApiMCP(app, include_operations=MCP_TOOL_OPERATIONS)
 mcp.mount_http()
 
 
-# Re-export so the pip console script (marm_mcp_server.server:main, see
-# pyproject.toml), the mcp.servers entry point (server:create_server), and
-# marm_mcp_server/__init__.py's lazy `from .server import create_server, main`
-# all keep resolving after these moved to cli.py. Import placed here, after
-# app is fully defined, so cli.py's `from .server import app` doesn't hit a
-# partially-initialized module.
+# Preserve direct imports from server.py while the installed CLI resolves
+# through cli.py and the MCP server entry point continues to use create_server.
 from .cli import create_server, main  # noqa: E402,F401
 
 if __name__ == "__main__":

@@ -16,6 +16,7 @@ from typing import Optional
 import numpy as np
 
 from .memory_db import ConnectionContext, SQLiteConnectionPool
+from .memory_utils import _safe_print
 
 MAX_CONCEPT_DB_CONNECTIONS = 3
 
@@ -292,15 +293,24 @@ class ConceptDB:
 
         vectors = []
         kept_rows = []
+        dim_skipped = 0
         for entity_id, name, emb_bytes in rows:
             try:
                 vector = np.frombuffer(emb_bytes, dtype=np.float32)
             except Exception:
                 continue
             if vector.shape[0] != query_vec.shape[0]:
+                dim_skipped += 1
                 continue
             vectors.append(vector)
             kept_rows.append((entity_id, name))
+
+        if dim_skipped:
+            _safe_print(
+                "Concept similarity skipped "
+                f"{dim_skipped} incompatible embedding vector(s); "
+                "run marm-mcp-server --migrate-embeddings"
+            )
 
         if not vectors:
             return []

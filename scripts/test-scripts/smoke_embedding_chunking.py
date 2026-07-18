@@ -39,16 +39,22 @@ os.environ["MARM_DB_PATH"] = _BOOT_DB_PATH
 
 import numpy as np  # noqa: E402
 
-from marm_mcp_server.config.settings import RECALL_SCAN_LIMIT, SEMANTIC_SEARCH_AVAILABLE  # noqa: E402
+from marm_mcp_server.config.settings import (  # noqa: E402
+    DEFAULT_SEMANTIC_DIM,
+    RECALL_SCAN_LIMIT,
+    SEMANTIC_SEARCH_AVAILABLE,
+)
 from marm_mcp_server.core import memory as memory_module  # noqa: E402
 from marm_mcp_server.core.memory import (  # noqa: E402
     MARMMemory,
     _chunk_text,
-    _fetch_and_score_embedding_rows,
-    _score_chunk_aware,
     CHUNK_THRESHOLD_WORDS,
     CHUNK_TOKEN_LIMIT,
     CHUNK_OVERLAP_TOKENS,
+)
+from marm_mcp_server.core.memory_scoring import (  # noqa: E402
+    _fetch_and_score_embedding_rows,
+    _score_chunk_aware,
 )
 
 SEP = "-" * 70
@@ -56,7 +62,7 @@ SESSION = "smoke-chunking"
 
 # Long memory: first ~210 words are generic filler, distinctive phrase
 # "crystallization threshold boundary" only appears near the end.
-# Without chunking MiniLM truncates at ~256 tokens and misses it entirely.
+# Chunking preserves recall of the distinctive late-body phrase.
 _FILLER = (
     "This document covers general system architecture notes for the server. "
     "Connection pools are initialized at startup to reduce open/close overhead. "
@@ -66,7 +72,7 @@ _FILLER = (
     "The write queue serializes concurrent agent writes to prevent contention. "
     "Rate limiting presets are applied per deployment mode at the HTTP layer. "
     "FTS5 uses the porter ascii tokenizer for stemming on all recall queries. "
-    "Embeddings are generated with all-MiniLM-L6-v2 at three hundred eighty four dimensions. "
+    f"Embeddings are generated at {DEFAULT_SEMANTIC_DIM} dimensions. "
     "Compaction candidates are surfaced to agents after the configured write threshold. "
 )
 _LONG_BODY = (_FILLER * 3) + (
@@ -78,7 +84,7 @@ _LONG_BODY = (_FILLER * 3) + (
 SHORT_CONTENT = "MARM stores memories in SQLite with WAL mode."
 
 
-def _unit_vec(dim: int = 384) -> np.ndarray:
+def _unit_vec(dim: int = DEFAULT_SEMANTIC_DIM) -> np.ndarray:
     v = np.ones(dim, dtype=np.float32)
     return v / np.linalg.norm(v)
 
@@ -276,7 +282,7 @@ async def run(require_encoder: bool) -> bool:
         print(SEP)
         print("CHECK 4: _score_chunk_aware — MAX scoring and deduplication")
         print(SEP)
-        ortho = np.zeros(384, dtype=np.float32)
+        ortho = np.zeros(DEFAULT_SEMANTIC_DIM, dtype=np.float32)
         ortho[0] = 1.0
 
         mem_id = str(uuid.uuid4())

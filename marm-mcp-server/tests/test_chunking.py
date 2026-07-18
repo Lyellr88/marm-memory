@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 import numpy as np
 import pytest
 
+from marm_mcp_server.config.settings import DEFAULT_SEMANTIC_DIM
 from marm_mcp_server.core.memory import (
     MARMMemory,
     _chunk_text,
@@ -15,7 +16,6 @@ from marm_mcp_server.core.memory import (
     CHUNK_TOKEN_LIMIT,
     CHUNK_OVERLAP_TOKENS,
 )
-
 
 # --- _chunk_text unit tests ---
 
@@ -65,7 +65,7 @@ def test_chunk_text_covers_all_words():
 # --- _score_chunk_aware unit tests ---
 
 
-def _make_unit_vec(dim: int = 384) -> np.ndarray:
+def _make_unit_vec(dim: int = DEFAULT_SEMANTIC_DIM) -> np.ndarray:
     v = np.ones(dim, dtype=np.float32)
     return v / np.linalg.norm(v)
 
@@ -96,7 +96,7 @@ def test_score_chunk_aware_uses_parent_embedding_when_no_chunks():
 def test_score_chunk_aware_uses_chunk_embeddings_over_parent():
     unit_vec = _make_unit_vec()
     # Parent embedding is zero (would score 0), chunk embedding is unit (scores 1.0)
-    zero_bytes = np.zeros(384, dtype=np.float32).tobytes()
+    zero_bytes = np.zeros(DEFAULT_SEMANTIC_DIM, dtype=np.float32).tobytes()
     mem_id = str(uuid.uuid4())
     row = _make_sqlite_row(mem_id, zero_bytes)
     chunks_by_id = {mem_id: [unit_vec.tobytes()]}
@@ -108,7 +108,7 @@ def test_score_chunk_aware_uses_chunk_embeddings_over_parent():
 def test_score_chunk_aware_takes_max_over_chunks():
     query = _make_unit_vec()
     # One chunk aligned with query (score ~1.0), one orthogonal (score ~0)
-    ortho = np.zeros(384, dtype=np.float32)
+    ortho = np.zeros(DEFAULT_SEMANTIC_DIM, dtype=np.float32)
     ortho[0] = 1.0
     mem_id = str(uuid.uuid4())
     row = _make_sqlite_row(mem_id, None)

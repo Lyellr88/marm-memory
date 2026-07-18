@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "marm-mcp-server"
-version = "2.23.0"
+version = "2.24.0"
 description = "marm-memory is a local-first MCP memory layer with hybrid recall, agent coordination, code intelligence, and persistent project context."
 readme = "README.md"
 license = "Apache-2.0"
@@ -53,7 +53,7 @@ Repository = "https://github.com/Lyellr88/marm-memory"
 "Docker Hub" = "https://hub.docker.com/r/lyellr88/marm-mcp-server"
 
 [project.scripts]
-marm-mcp-server = "marm_mcp_server.server:main"
+marm-mcp-server = "marm_mcp_server.cli:main"
 marm-mcp-stdio = "marm_mcp_server.server_stdio:main"
 
 [project.optional-dependencies]

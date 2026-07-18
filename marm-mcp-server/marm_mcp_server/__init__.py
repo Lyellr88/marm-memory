@@ -14,10 +14,10 @@ Features:
 - Production-grade performance
 
 Author: Ryan Lyell - marm-memory
-Version: 2.23.0
+Version: 2.24.0
 """
 
-__version__ = "2.23.0"
+__version__ = "2.24.0"
 __author__ = "Ryan Lyell"
 __email__ = "lyell@marmsystems.com"
 
@@ -26,8 +26,12 @@ __all__ = ["__version__", "create_server", "main"]
 
 def __getattr__(name):
     """Lazy-load HTTP server exports without side effects during STDIO imports."""
-    if name in {"create_server", "main"}:
-        from .server import create_server, main
+    if name == "create_server":
+        from .server import create_server
 
-        return {"create_server": create_server, "main": main}[name]
+        return create_server
+    if name == "main":
+        from .cli import main
+
+        return main
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
