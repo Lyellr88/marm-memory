@@ -409,25 +409,37 @@ def get_summary(db_path: Path, session_name: str) -> dict:
     }
 
 
+def _compaction_row_to_dict(row: sqlite3.Row) -> dict:
+    return {
+        "id": row["id"],
+        "status": _console_compaction_status(row["status"]),
+        "session_name": row["session_name"],
+        "source_memory_ids": json.loads(row["source_memory_ids"]),
+        "proposed_summary": row["suggested_summary"] or "Summary pending",
+        "expected_reduction": 0,
+        "expiry": row["expires_at"],
+        "created_at": row["created_at"],
+    }
+
+
 def list_compaction(db_path: Path) -> list[dict]:
     with _connect(db_path) as connection:
         rows = connection.execute(
             """SELECT id, status, session_name, source_memory_ids, suggested_summary, expires_at, created_at
                FROM compaction_staging ORDER BY created_at DESC LIMIT 200"""
         ).fetchall()
-    return [
-        {
-            "id": row["id"],
-            "status": _console_compaction_status(row["status"]),
-            "session_name": row["session_name"],
-            "source_memory_ids": json.loads(row["source_memory_ids"]),
-            "proposed_summary": row["suggested_summary"] or "Summary pending",
-            "expected_reduction": 0,
-            "expiry": row["expires_at"],
-            "created_at": row["created_at"],
-        }
-        for row in rows
-    ]
+    return [_compaction_row_to_dict(row) for row in rows]
+
+
+def get_compaction_candidate(db_path: Path, candidate_id: str) -> dict | None:
+    """Direct by-ID lookup, unlike list_compaction's 200-row window."""
+    with _connect(db_path) as connection:
+        row = connection.execute(
+            """SELECT id, status, session_name, source_memory_ids, suggested_summary, expires_at, created_at
+               FROM compaction_staging WHERE id = ?""",
+            (candidate_id,),
+        ).fetchone()
+    return _compaction_row_to_dict(row) if row else None
 
 
 def _console_compaction_status(status: str) -> str:

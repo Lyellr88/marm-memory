@@ -19,13 +19,15 @@ router = APIRouter()
 _CONCEPT_BUILD_STALE_SECONDS = 300
 _CONCEPT_BUILD_LAUNCH_TTL_SECONDS = 300
 _launching_concept_builds: dict[str, tuple[dict, float]] = {}
+_launching_concept_builds_lock = threading.Lock()
 
 
 def _prune_launching_concept_builds() -> None:
     cutoff = time.monotonic() - _CONCEPT_BUILD_LAUNCH_TTL_SECONDS
-    for job_id, (_, launched_at) in list(_launching_concept_builds.items()):
-        if launched_at < cutoff:
-            _launching_concept_builds.pop(job_id, None)
+    with _launching_concept_builds_lock:
+        for job_id, (_, launched_at) in list(_launching_concept_builds.items()):
+            if launched_at < cutoff:
+                _launching_concept_builds.pop(job_id, None)
 
 
 def _stale_build_result(job: dict) -> dict:
@@ -121,25 +123,26 @@ def build_concepts(payload: ConceptBuildPayload) -> dict:
     scope_type = (
         "session" if payload.session_name else "project" if payload.project else "all"
     )
-    _launching_concept_builds[job_id] = (
-        {
-            "id": job_id,
-            "scope_type": scope_type,
-            "scope_value": payload.session_name or payload.project,
-            "status": "queued",
-            "memories_processed": 0,
-            "entities_extracted": 0,
-            "relationships_created": 0,
-            "code_links_created": 0,
-            "duplicate_candidates": 0,
-            "duration_ms": None,
-            "error_code": None,
-            "created_at": _now_iso(),
-            "started_at": None,
-            "finished_at": None,
-        },
-        time.monotonic(),
-    )
+    with _launching_concept_builds_lock:
+        _launching_concept_builds[job_id] = (
+            {
+                "id": job_id,
+                "scope_type": scope_type,
+                "scope_value": payload.session_name or payload.project,
+                "status": "queued",
+                "memories_processed": 0,
+                "entities_extracted": 0,
+                "relationships_created": 0,
+                "code_links_created": 0,
+                "duplicate_candidates": 0,
+                "duration_ms": None,
+                "error_code": None,
+                "created_at": _now_iso(),
+                "started_at": None,
+                "finished_at": None,
+            },
+            time.monotonic(),
+        )
     threading.Thread(
         target=_run_concept_build,
         args=(job_id, payload.model_dump(exclude_none=True)),
@@ -153,14 +156,15 @@ def _run_concept_build(job_id: str, payload: dict) -> None:
     try:
         mcp_client.post("marm_concept_build", payload, timeout=120.0)
     except mcp_client.McpUnavailable:
-        launch = _launching_concept_builds.get(job_id)
-        if launch:
-            failed, _ = launch
-            failed.update(
-                status="error",
-                error_code="mcp_unavailable",
-                finished_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            )
+        with _launching_concept_builds_lock:
+            launch = _launching_concept_builds.get(job_id)
+            if launch:
+                failed, _ = launch
+                failed.update(
+                    status="error",
+                    error_code="mcp_unavailable",
+                    finished_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                )
 
 
 @router.get("/api/concepts/builds/{job_id}")
@@ -168,8 +172,9 @@ def get_concept_build(job_id: str) -> dict:
     _prune_launching_concept_builds()
     job = concept_store.get_build_run(get_concept_db_path(), job_id)
     if job is None:
-        launch = _launching_concept_builds.get(job_id)
-        job = launch[0] if launch else None
+        with _launching_concept_builds_lock:
+            launch = _launching_concept_builds.get(job_id)
+            job = launch[0] if launch else None
     if job is None:
         raise HTTPException(status_code=404, detail="Concept build not found")
     return _stale_build_result(job)

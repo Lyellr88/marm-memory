@@ -53,11 +53,18 @@ def _memory_mutation(
     operation: str, payload: dict | None = None, method: str = "POST"
 ) -> dict:
     try:
-        return mcp_client.request(operation, payload, method=method, timeout=30.0)
+        result = mcp_client.request(operation, payload, method=method, timeout=30.0)
     except mcp_client.McpRequestError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
     except mcp_client.McpUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+    if result.get("status") in {"error", "not_found"}:
+        status_code = 404 if result.get("status") == "not_found" else 503
+        raise HTTPException(
+            status_code=status_code,
+            detail=result.get("message", "MARM operation failed."),
+        )
+    return result
 
 
 def _memory_payload(payload: MemoryMutationPayload) -> dict:

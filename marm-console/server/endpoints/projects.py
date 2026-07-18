@@ -20,18 +20,15 @@ router = APIRouter()
 def get_projects() -> list[dict]:
     try:
         return mcp_client.list_projects()
+    except mcp_client.McpRequestError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
     except mcp_client.McpUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @router.post("/api/projects/index", status_code=202)
 def index_project(payload: ProjectIndexPayload) -> dict:
-    try:
-        return mcp_client.post("internal/projects/index", payload.model_dump())
-    except mcp_client.McpRequestError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
-    except mcp_client.McpUnavailable as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return _project_operation("internal/projects/index", payload.model_dump())
 
 
 @router.get("/api/projects/jobs/{job_id}")

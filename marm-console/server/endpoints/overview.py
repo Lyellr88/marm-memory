@@ -2,11 +2,7 @@
 
 from __future__ import annotations
 
-import json
-import os
 import time
-from urllib.error import URLError
-from urllib.request import urlopen
 
 from fastapi import APIRouter, HTTPException
 
@@ -17,23 +13,19 @@ router = APIRouter()
 
 
 def _mcp_status() -> dict:
-    url = (
-        os.environ.get("MARM_MCP_URL", "http://127.0.0.1:8001").rstrip("/") + "/health"
-    )
     started = time.perf_counter()
     try:
-        with urlopen(url, timeout=1.5) as response:
-            payload = json.load(response)
-        return {
-            "reachable": response.status == 200 and payload.get("status") == "healthy",
-            "status": payload.get("status"),
-            "version": payload.get("version"),
-            "latency_ms": round((time.perf_counter() - started) * 1000, 1),
-            "last_checked": payload.get("timestamp"),
-            "concept_extraction": payload.get("concept_extraction"),
-        }
-    except (URLError, OSError, ValueError):
+        payload = mcp_client.get("health", timeout=1.5)
+    except mcp_client.McpUnavailable:
         return {"reachable": False}
+    return {
+        "reachable": payload.get("status") == "healthy",
+        "status": payload.get("status"),
+        "version": payload.get("version"),
+        "latency_ms": round((time.perf_counter() - started) * 1000, 1),
+        "last_checked": payload.get("timestamp"),
+        "concept_extraction": payload.get("concept_extraction"),
+    }
 
 
 def _concept_status(mcp_status: dict) -> str:

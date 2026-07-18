@@ -34,12 +34,11 @@ def run_compaction_action(
 ) -> dict:
     if action == "stage":
         try:
-            candidates = memory_store.list_compaction(get_memory_db_path())
+            candidate = memory_store.get_compaction_candidate(
+                get_memory_db_path(), candidate_id
+            )
         except memory_store.MemoryStoreUnavailable as exc:
             raise HTTPException(status_code=503, detail=str(exc)) from exc
-        candidate = next(
-            (item for item in candidates if item["id"] == candidate_id), None
-        )
         if candidate is None:
             raise HTTPException(
                 status_code=404, detail="Compaction candidate not found."

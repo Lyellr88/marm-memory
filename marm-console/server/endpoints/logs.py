@@ -55,18 +55,31 @@ def delete_all_logs(payload: BulkDeletePayload) -> dict:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     deleted_logs = 0
     deleted_memories = 0
+    failed_logs: list[dict] = []
     for log in logs:
-        result = _mcp_tool_mutation(
-            "marm_delete",
-            {
-                "type": "log",
-                "target": log["id"],
-                "session_name": log["session_name"],
-            },
-        )
+        try:
+            result = _mcp_tool_mutation(
+                "marm_delete",
+                {
+                    "type": "log",
+                    "target": log["id"],
+                    "session_name": log["session_name"],
+                },
+            )
+        except HTTPException as exc:
+            failed_logs.append(
+                {
+                    "log_id": log["id"],
+                    "status_code": exc.status_code,
+                    "message": str(exc.detail),
+                }
+            )
+            continue
         deleted_logs += int(result.get("deleted_count", 0) or 0)
         deleted_memories += int(result.get("memories_deleted", 0) or 0)
     return {
+        "status": "partial_success" if failed_logs else "success",
         "deleted_count": deleted_logs,
         "memories_deleted": deleted_memories,
+        "failed_logs": failed_logs,
     }
