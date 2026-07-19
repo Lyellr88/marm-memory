@@ -486,3 +486,64 @@ async def test_write_chunks_same_content_hash_twice_does_not_duplicate_rows(tmp_
         chunks
     ), "duplicate chunk rows accumulated across identical-content writes"
     assert [r[1] for r in rows] == chunks
+
+
+def test_init_database_collapses_preexisting_duplicate_chunks_before_indexing(
+    tmp_path,
+):
+    """A database written before idx_memory_chunks_dedup existed could
+    already contain duplicate (memory_id, chunk_index) rows from the exact
+    race test_write_chunks_same_content_hash_twice_does_not_duplicate_rows
+    guards against. CREATE UNIQUE INDEX on such a database must not raise
+    -- init_database has to collapse existing duplicates first (keeping
+    the newest row) rather than leaving upgraded users unable to start
+    the server at all."""
+    from marm_mcp_server.core.memory_db import init_database
+
+    db_path = tmp_path / "memory.db"
+    init_database(str(db_path))
+
+    mid = str(uuid.uuid4())
+    ts = datetime.now(timezone.utc).isoformat()
+    with sqlite3.connect(db_path) as conn:
+        # Simulate the pre-fix database state directly: drop the dedup
+        # index this init_database() call already created, then seed
+        # duplicate (memory_id, chunk_index) rows as the old race would
+        # have produced.
+        conn.execute("DROP INDEX IF EXISTS idx_memory_chunks_dedup")
+        conn.execute(
+            "INSERT INTO memories (id, session_name, content, timestamp, context_type, metadata)"
+            " VALUES (?, 'test', 'content', ?, 'general', '{}')",
+            (mid, ts),
+        )
+        conn.executemany(
+            "INSERT INTO memory_chunks (memory_id, chunk_index, chunk_text, embedding)"
+            " VALUES (?, ?, ?, ?)",
+            [
+                (mid, 0, "stale duplicate", b"\x00" * 4),
+                (mid, 0, "current duplicate", b"\x01" * 4),
+                (mid, 1, "only copy", b"\x02" * 4),
+            ],
+        )
+        conn.commit()
+
+    # Must not raise sqlite3.IntegrityError ("UNIQUE constraint failed").
+    init_database(str(db_path))
+
+    with sqlite3.connect(db_path) as conn:
+        indexes = {
+            row[0]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='index'"
+            ).fetchall()
+        }
+        rows = conn.execute(
+            "SELECT chunk_index, chunk_text FROM memory_chunks WHERE memory_id = ? "
+            "ORDER BY chunk_index",
+            (mid,),
+        ).fetchall()
+
+    assert "idx_memory_chunks_dedup" in indexes
+    # One row per chunk_index, and the survivor is the higher-id (most
+    # recently inserted) row for the duplicated index.
+    assert rows == [(0, "current duplicate"), (1, "only copy")]

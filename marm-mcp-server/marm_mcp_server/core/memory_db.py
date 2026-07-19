@@ -352,6 +352,27 @@ def init_database(db_path: str) -> None:
         # set of chunk rows, doubling storage with no way to tell the
         # duplicates apart. This index plus _write_chunks' INSERT OR REPLACE
         # makes concurrent identical-content chunk writes idempotent instead.
+        #
+        # A database that already has duplicate (memory_id, chunk_index)
+        # rows from before this index existed (the exact race above,
+        # pre-fix) would fail CREATE UNIQUE INDEX outright and the server
+        # could never start again. Collapse existing duplicates first --
+        # keep the highest id (most recent write) per pair, drop the rest
+        # -- but only do this scan once: guard it behind the index not
+        # existing yet, so every other startup is a cheap no-op.
+        existing_indexes = {
+            row[0]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='index'"
+            ).fetchall()
+        }
+        if "idx_memory_chunks_dedup" not in existing_indexes:
+            conn.execute("""
+                DELETE FROM memory_chunks
+                WHERE id NOT IN (
+                    SELECT MAX(id) FROM memory_chunks GROUP BY memory_id, chunk_index
+                )
+                """)
         conn.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_memory_chunks_dedup"
             " ON memory_chunks(memory_id, chunk_index)"

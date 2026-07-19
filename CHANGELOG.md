@@ -31,6 +31,7 @@
 - `memory_chunks` gains a `(memory_id, chunk_index)` unique index, and chunk writes use `INSERT OR REPLACE`: two resaves of identical content share the same `content_hash`, so the existing staleness guard couldn't tell them apart, and back-to-back saves of an unchanged doc could each insert a full duplicate set of chunk rows.
 - `server.json`'s published tool metadata and version strings were out of sync with the actual `2.25.0` release (still advertised the old 5-action notebook description); READMEs and the CHANGELOG's own embedding-migration notes still claimed `notebook` embeddings were re-embedded after that path was retired above. All corrected.
 - Fixed a Windows-only test bug (`test_docs_db.py` used the POSIX-only `HOME` env var to redirect `Path.home()`, which Windows ignores) and a Console test fixture that predated the `session_name` schema change (a hand-rolled `notebook_entries` table missing the column, plus stale `marm_notebook`/`marm_delete` call assertions).
+- The new `memory_chunks` unique index above would fail to create on any database that already had duplicate `(memory_id, chunk_index)` rows from the pre-fix race — an upgrade could no longer start the server at all. `init_database()` now collapses existing duplicates (keeping the most recent row) before creating the index, guarded to run only once.
 
 </details>
 
