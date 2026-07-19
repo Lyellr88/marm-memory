@@ -231,7 +231,7 @@ export function useSummary(session: string) {
 }
 
 // --- Notebook ---
-export function useNotebook(params?: { q?: string; project?: string; platform?: string }) {
+export function useNotebook(params?: { q?: string; session_name?: string; project?: string; platform?: string }) {
   const { baseUrl, client } = useMarmConfig();
   return useQuery({ queryKey: queryKeys.notebook(baseUrl, params), queryFn: () => client.listNotebook(params) });
 }
@@ -249,7 +249,7 @@ export function useDeleteNotebook() {
   const { baseUrl, client } = useMarmConfig();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ name, params }: { name: string, params?: { project?: string; platform?: string } }) => client.deleteNotebookEntry(name, params),
+    mutationFn: ({ name, params }: { name: string, params?: { session_name?: string; project?: string; platform?: string } }) => client.deleteNotebookEntry(name, params),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['notebook', baseUrl] })
   });
 }

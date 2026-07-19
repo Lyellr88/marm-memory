@@ -1,4 +1,4 @@
-# MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.24.0
+# MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.25.0
 
 ## Table of Contents
 
@@ -74,7 +74,7 @@ The Jina v2 Small default uses 512-dimensional embeddings; older `all-MiniLM-L6-
 marm-mcp-server --migrate-embeddings
 ```
 
-The command refuses to continue when it detects a live HTTP server, but STDIO processes cannot be detected reliably and must be stopped manually. It re-embeds memory, chunk, notebook, and any existing concept-graph embeddings, reports batch progress, verifies both databases, and exits. It is resumable: rerun the same command after an interruption. Do not run it against a live server.
+The command refuses to continue when it detects a live HTTP server, but STDIO processes cannot be detected reliably and must be stopped manually. It re-embeds memory, chunk, and any existing concept-graph embeddings (notebook scratch entries no longer carry embeddings), reports batch progress, verifies both databases, and exits. It is resumable: rerun the same command after an interruption. Do not run it against a live server.
 
 ## Performance & Scaling Benchmarks
 
@@ -540,7 +540,7 @@ The AI agent will automatically use the appropriate tools. Manual tool access is
 | `marm_log_show` | Display all entries and sessions, with filtering | `session_name` |
 | `marm_delete` | Delete a log session, log entry, or notebook entry | `type`, `target`, `session_name`, `project`, `platform` |
 | `marm_summary` | Cached, paste-ready session summaries with intelligent truncation | `session_name` |
-| `marm_notebook` | Reusable instructions and knowledge snippets | `action="add"\|"use"\|"show"\|"status"\|"clear"`, `name`, `data`, `project`, `platform` |
+| `marm_notebook` | Session-scoped scratch pad plus promotion to a permanent, graph-linked doc | `action="add"\|"use"\|"show"\|"status"\|"clear"\|"save"`, `name`, `data`, `session_name`, `project`, `platform` |
 | `marm_compaction` | Agent-assisted memory cleanup with a reviewable audit trail | `action="status"\|"candidates"\|"review"\|"stage"\|"apply"\|"discard"` |
 
 ### 🕸️ Code Graph (5 tools)

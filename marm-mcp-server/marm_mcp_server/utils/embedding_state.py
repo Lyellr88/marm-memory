@@ -17,10 +17,13 @@ from ..config.settings import (
 )
 
 EMBEDDING_MODEL_SETTING = "embedding_model"
+# notebook_entries.embedding is retired -- scratch writes no longer populate
+# it (services/notebook.py's _add), so it's deliberately excluded here.
+# Promoted docs get their recall reach through their memories mirror, which
+# the "memories" table below already covers.
 _MEMORY_TABLES = (
     ("memories", "embedding"),
     ("memory_chunks", "embedding"),
-    ("notebook_entries", "embedding"),
 )
 _CONCEPT_TABLES = (("entities", "name_embedding"),)
 

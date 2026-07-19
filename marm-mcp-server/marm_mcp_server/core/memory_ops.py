@@ -9,21 +9,27 @@ from typing import Dict
 from ..config.settings import (
     CONSOLIDATION_ENABLED,
     CONSOLIDATION_THRESHOLD,
-    MARM_PROJECT,
     MARM_PLATFORM,
-)
-from .memory_utils import (
-    _safe_print,
-    _chunk_text,
-    _embedding_to_bytes,
-    _write_chunks,
-    sanitize_content,
+    MARM_PROJECT,
 )
 from .consolidation import (
     compute_content_hash,
     find_exact_duplicate,
     find_semantic_duplicate,
     normalize_content,
+)
+from .memory_utils import (
+    DOC_CHUNK_OVERLAP_WORDS,
+    DOC_CHUNK_TARGET_WORDS,
+    DOC_CHUNK_THRESHOLD_WORDS,
+    MEMORY_CHUNK_OVERLAP_WORDS,
+    MEMORY_CHUNK_TARGET_WORDS,
+    MEMORY_CHUNK_THRESHOLD_WORDS,
+    _chunk_text,
+    _embedding_to_bytes,
+    _safe_print,
+    _write_chunks,
+    sanitize_content,
 )
 
 
@@ -121,7 +127,12 @@ async def _update_memory(mem, memory_id: str, new_content: str) -> bool:
             conn.execute("ROLLBACK")
             raise
 
-    chunks = _chunk_text(merged_content)
+    chunks = _chunk_text(
+        merged_content,
+        threshold=MEMORY_CHUNK_THRESHOLD_WORDS,
+        target_size=MEMORY_CHUNK_TARGET_WORDS,
+        overlap=MEMORY_CHUNK_OVERLAP_WORDS,
+    )
     if chunks and mem._load_encoder_lazily():
         _chunk_task = asyncio.create_task(  # noqa: RUF006
             _write_chunks(mem, mem.db_path, memory_id, chunks, merged_hash)
@@ -263,7 +274,12 @@ async def _store_memory(
 
     mem._on_memory_written(session)
 
-    chunks = _chunk_text(sanitized_content)
+    chunks = _chunk_text(
+        sanitized_content,
+        threshold=MEMORY_CHUNK_THRESHOLD_WORDS,
+        target_size=MEMORY_CHUNK_TARGET_WORDS,
+        overlap=MEMORY_CHUNK_OVERLAP_WORDS,
+    )
     if chunks and mem._load_encoder_lazily():
         _chunk_task = asyncio.create_task(  # noqa: RUF006
             _write_chunks(mem, mem.db_path, memory_id, chunks, content_hash)
@@ -335,10 +351,143 @@ async def _replace_memory(
             (session, timestamp),
         )
         conn.execute("DELETE FROM memory_chunks WHERE memory_id = ?", (memory_id,))
-    chunks = _chunk_text(sanitized_content)
+    chunks = _chunk_text(
+        sanitized_content,
+        threshold=MEMORY_CHUNK_THRESHOLD_WORDS,
+        target_size=MEMORY_CHUNK_TARGET_WORDS,
+        overlap=MEMORY_CHUNK_OVERLAP_WORDS,
+    )
     if chunks and mem._load_encoder_lazily():
         _chunk_task = asyncio.create_task(  # noqa: RUF006
             _write_chunks(mem, mem.db_path, memory_id, chunks, content_hash)
         )
     mem._on_memory_written(session)
     return True
+
+
+async def _store_doc_mirror(
+    mem,
+    content: str,
+    session: str,
+    project: str | None,
+    platform: str | None,
+    metadata: Dict,
+    existing_memory_id: str | None = None,
+) -> str:
+    """Create or replace a stable, non-consolidating mirror row for a
+    promoted doc (services/notebook.py's action='save').
+
+    Bypasses consolidation entirely -- a doc's own dedup/versioning
+    already lives in docs_db.save_doc, so an exact/semantic duplicate
+    check here would be redundant and could accidentally merge a doc's
+    mirror into an unrelated memory. Uses the doc chunk profile instead
+    of the memory profile. If existing_memory_id is provided and its row
+    still exists, the row is replaced in place (keeps its id stable, so
+    a routine resave never needs to touch docs.memory_id); otherwise a
+    fresh row is created with a new id -- this also doubles as the repair
+    path for a doc whose prior mirror was deleted out from under it (e.g.
+    via a direct Console memory delete).
+    """
+    sanitized_content = sanitize_content(content)
+    content_hash = compute_content_hash(sanitized_content)
+
+    embedding_bytes = None
+    if sanitized_content.strip() and mem._load_encoder_lazily():
+        try:
+            vec = await asyncio.to_thread(mem._encode_sync, sanitized_content)
+            embedding_bytes = _embedding_to_bytes(vec)
+        except Exception as e:
+            _safe_print(f"Failed to generate doc mirror embedding: {e}")
+
+    timestamp = datetime.now(timezone.utc).isoformat()
+
+    with mem.get_connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            replaced = False
+            if existing_memory_id:
+                cursor = conn.execute(
+                    """
+                    UPDATE memories SET content = ?, session_name = ?, embedding = ?,
+                       content_hash = ?, timestamp = ?, context_type = 'doc',
+                       metadata = ?, project = ?, platform = ?
+                    WHERE id = ?
+                    """,
+                    (
+                        sanitized_content,
+                        session,
+                        embedding_bytes,
+                        content_hash,
+                        timestamp,
+                        json.dumps(metadata),
+                        project,
+                        platform,
+                        existing_memory_id,
+                    ),
+                )
+                replaced = cursor.rowcount > 0
+
+            if replaced:
+                assert existing_memory_id is not None
+                memory_id = existing_memory_id
+                conn.execute(
+                    """
+                    UPDATE compaction_staging
+                    SET status = 'stale', updated_at = ?
+                    WHERE status != 'applied'
+                      AND EXISTS (
+                          SELECT 1 FROM json_each(compaction_staging.source_memory_ids)
+                          WHERE value = ?
+                      )
+                    """,
+                    (timestamp, memory_id),
+                )
+            else:
+                memory_id = str(uuid.uuid4())
+                conn.execute(
+                    """
+                    INSERT INTO memories
+                        (id, session_name, content, embedding, content_hash, timestamp,
+                         context_type, metadata, project, platform)
+                    VALUES (?, ?, ?, ?, ?, ?, 'doc', ?, ?, ?)
+                    """,
+                    (
+                        memory_id,
+                        session,
+                        sanitized_content,
+                        embedding_bytes,
+                        content_hash,
+                        timestamp,
+                        json.dumps(metadata),
+                        project,
+                        platform,
+                    ),
+                )
+
+            conn.execute(
+                """
+                INSERT INTO sessions (session_name, last_accessed)
+                VALUES (?, ?)
+                ON CONFLICT(session_name) DO UPDATE SET last_accessed = excluded.last_accessed
+                """,
+                (session, timestamp),
+            )
+            conn.execute("DELETE FROM memory_chunks WHERE memory_id = ?", (memory_id,))
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+
+    chunks = _chunk_text(
+        sanitized_content,
+        threshold=DOC_CHUNK_THRESHOLD_WORDS,
+        target_size=DOC_CHUNK_TARGET_WORDS,
+        overlap=DOC_CHUNK_OVERLAP_WORDS,
+    )
+    if chunks and mem._load_encoder_lazily():
+        _chunk_task = asyncio.create_task(  # noqa: RUF006
+            _write_chunks(mem, mem.db_path, memory_id, chunks, content_hash)
+        )
+
+    mem._on_memory_written(session)
+    return memory_id

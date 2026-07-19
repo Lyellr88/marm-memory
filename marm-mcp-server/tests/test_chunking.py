@@ -9,57 +9,124 @@ import pytest
 
 from marm_mcp_server.config.settings import DEFAULT_SEMANTIC_DIM
 from marm_mcp_server.core.memory import (
+    DOC_CHUNK_OVERLAP_WORDS,
+    DOC_CHUNK_TARGET_WORDS,
+    DOC_CHUNK_THRESHOLD_WORDS,
+    MEMORY_CHUNK_OVERLAP_WORDS,
+    MEMORY_CHUNK_TARGET_WORDS,
+    MEMORY_CHUNK_THRESHOLD_WORDS,
     MARMMemory,
     _chunk_text,
     _score_chunk_aware,
-    CHUNK_THRESHOLD_WORDS,
-    CHUNK_TOKEN_LIMIT,
-    CHUNK_OVERLAP_TOKENS,
 )
+from marm_mcp_server.core.memory_utils import _split_evenly
 
 # --- _chunk_text unit tests ---
 
 
+def _mem_chunk(text: str) -> list[str]:
+    return _chunk_text(
+        text,
+        threshold=MEMORY_CHUNK_THRESHOLD_WORDS,
+        target_size=MEMORY_CHUNK_TARGET_WORDS,
+        overlap=MEMORY_CHUNK_OVERLAP_WORDS,
+    )
+
+
 def test_chunk_text_returns_empty_for_short_content():
-    words = ["word"] * (CHUNK_THRESHOLD_WORDS - 1)
-    assert _chunk_text(" ".join(words)) == []
+    words = ["word"] * (MEMORY_CHUNK_THRESHOLD_WORDS - 1)
+    assert _mem_chunk(" ".join(words)) == []
 
 
 def test_chunk_text_returns_empty_at_exact_threshold():
-    words = ["word"] * CHUNK_THRESHOLD_WORDS
-    assert _chunk_text(" ".join(words)) == []
+    words = ["word"] * MEMORY_CHUNK_THRESHOLD_WORDS
+    assert _mem_chunk(" ".join(words)) == []
 
 
 def test_chunk_text_splits_content_above_threshold():
-    words = ["word"] * (CHUNK_THRESHOLD_WORDS + 1)
-    chunks = _chunk_text(" ".join(words))
+    words = ["word"] * (MEMORY_CHUNK_THRESHOLD_WORDS + 1)
+    chunks = _mem_chunk(" ".join(words))
     assert len(chunks) >= 1
 
 
-def test_chunk_text_chunk_size_does_not_exceed_limit():
-    words = [f"w{i}" for i in range(500)]
-    chunks = _chunk_text(" ".join(words))
-    for chunk in chunks:
-        assert len(chunk.split()) <= CHUNK_TOKEN_LIMIT
-
-
-def test_chunk_text_chunks_overlap_correctly():
-    words = [f"w{i}" for i in range(300)]
-    chunks = _chunk_text(" ".join(words))
-    step = CHUNK_TOKEN_LIMIT - CHUNK_OVERLAP_TOKENS
-    # Second chunk should start at word `step`, not word `CHUNK_TOKEN_LIMIT`
-    second_chunk_words = chunks[1].split()
-    assert second_chunk_words[0] == words[step]
-
-
 def test_chunk_text_covers_all_words():
-    words = [f"w{i}" for i in range(400)]
+    words = [f"w{i}" for i in range(MEMORY_CHUNK_THRESHOLD_WORDS + 100)]
     text = " ".join(words)
-    chunks = _chunk_text(text)
+    chunks = _mem_chunk(text)
     all_chunk_words = set()
     for chunk in chunks:
         all_chunk_words.update(chunk.split())
     assert all(w in all_chunk_words for w in words)
+
+
+def test_chunk_text_doc_profile_uses_larger_threshold_and_target():
+    # A word count between the memory and doc thresholds must chunk under
+    # the memory profile but stay a single unchunked unit under the doc
+    # profile -- proves the two profiles are genuinely independent, not
+    # just cosmetically different constants.
+    n = MEMORY_CHUNK_THRESHOLD_WORDS + 50
+    words = [f"w{i}" for i in range(n)]
+    text = " ".join(words)
+
+    memory_chunks = _mem_chunk(text)
+    doc_chunks = _chunk_text(
+        text,
+        threshold=DOC_CHUNK_THRESHOLD_WORDS,
+        target_size=DOC_CHUNK_TARGET_WORDS,
+        overlap=DOC_CHUNK_OVERLAP_WORDS,
+    )
+
+    assert len(memory_chunks) >= 1
+    assert doc_chunks == []
+
+
+def test_chunk_text_even_split_avoids_tiny_trailing_fragment():
+    """The user-identified failure mode: content just over threshold must
+    not split into one full-size chunk plus a tiny low-value fragment
+    (e.g. 250 + 30 words). Uses the same threshold/target shape as the
+    original bug report (180/150) so the assertion targets the algorithm
+    itself, independent of whichever profile constants are configured."""
+    n = 280
+    words = [f"w{i}" for i in range(n)]
+    chunks = _chunk_text(" ".join(words), threshold=180, target_size=150, overlap=50)
+
+    assert len(chunks) == 2
+    sizes = [len(c.split()) for c in chunks]
+    # Overlap padding means sizes won't be exactly equal, but neither
+    # chunk should be a tiny fragment relative to the other.
+    assert min(sizes) / max(sizes) > 0.5
+
+
+def test_chunk_text_memory_profile_produces_balanced_chunks_at_threshold_edge():
+    """With the configured memory profile (threshold == 2x target), the
+    smallest content that chunks at all lands on 3 balanced spans, not a
+    full-size chunk plus a sliver -- confirms the fix holds for the actual
+    shipped constants, not just the algorithm in isolation."""
+    n = MEMORY_CHUNK_THRESHOLD_WORDS + 1
+    words = [f"w{i}" for i in range(n)]
+    chunks = _mem_chunk(" ".join(words))
+
+    assert len(chunks) == 3
+    sizes = [len(c.split()) for c in chunks]
+    assert min(sizes) / max(sizes) > 0.5
+
+
+def test_split_evenly_distributes_remainder_across_first_spans():
+    words = list(range(10))
+    spans = _split_evenly(words, 3)
+    sizes = [end - start for start, end in spans]
+    assert sizes == [4, 3, 3]
+    assert spans[0] == (0, 4)
+    assert spans[-1][1] == 10
+
+
+def test_split_evenly_covers_all_indices_with_no_gaps_or_overlap():
+    words = list(range(97))
+    spans = _split_evenly(words, 7)
+    covered = []
+    for start, end in spans:
+        covered.extend(range(start, end))
+    assert covered == list(range(97))
 
 
 # --- _score_chunk_aware unit tests ---
@@ -244,7 +311,7 @@ async def test_encoder_unavailable_long_content_no_crash_no_chunks(tmp_path):
     mem = MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
 
-    long_content = " ".join(["word"] * (CHUNK_THRESHOLD_WORDS + 50))
+    long_content = " ".join(["word"] * (MEMORY_CHUNK_THRESHOLD_WORDS + 50))
     mid = await mem.store_memory(long_content, "test")
 
     assert mid is not None
@@ -369,3 +436,114 @@ async def test_merge_path_deletes_stale_chunks(tmp_path):
     # All stale chunks must be gone (encoder is disabled so no new chunks written)
     stale = [r[0] for r in remaining if r[0] == "stale chunk"]
     assert stale == []
+
+
+@pytest.mark.asyncio
+async def test_write_chunks_same_content_hash_twice_does_not_duplicate_rows(tmp_path):
+    """Two resaves with unchanged content share the same content_hash, so
+    _write_chunks' own staleness guard (compares expected_content_hash
+    against memories.content_hash) can't tell them apart -- this is
+    exactly what a doc save() followed immediately by an identical resave
+    produces. Without a uniqueness guard on (memory_id, chunk_index), both
+    fire-and-forget writes could each insert a full set of chunk rows.
+    INSERT OR REPLACE plus the unique index must keep this idempotent."""
+    from marm_mcp_server.core.memory_utils import _write_chunks
+
+    db_path = str(tmp_path / "memory.db")
+    mem = MARMMemory(db_path)
+    mem.encoder = type(
+        "_FakeEncoder", (), {"encode": staticmethod(lambda text: _make_unit_vec())}
+    )()
+
+    mid = str(uuid.uuid4())
+    ts = datetime.now(timezone.utc).isoformat()
+    content_hash = "same-hash-both-writes"
+    chunks = ["chunk one text", "chunk two text"]
+
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            "INSERT INTO memories "
+            "(id, session_name, content, timestamp, context_type, metadata, content_hash)"
+            " VALUES (?, 'test', 'content', ?, 'general', '{}', ?)",
+            (mid, ts, content_hash),
+        )
+        conn.commit()
+
+    # Two writes for the same memory_id with identical content and hash --
+    # mirrors a resave landing while the prior save's fire-and-forget chunk
+    # write is still in flight.
+    await _write_chunks(mem, db_path, mid, chunks, content_hash)
+    await _write_chunks(mem, db_path, mid, chunks, content_hash)
+
+    with sqlite3.connect(db_path) as conn:
+        rows = conn.execute(
+            "SELECT chunk_index, chunk_text FROM memory_chunks WHERE memory_id = ? "
+            "ORDER BY chunk_index",
+            (mid,),
+        ).fetchall()
+
+    assert len(rows) == len(chunks), (
+        "duplicate chunk rows accumulated across identical-content writes"
+    )
+    assert [r[1] for r in rows] == chunks
+
+
+def test_init_database_collapses_preexisting_duplicate_chunks_before_indexing(
+    tmp_path,
+):
+    """A database written before idx_memory_chunks_dedup existed could
+    already contain duplicate (memory_id, chunk_index) rows from the exact
+    race test_write_chunks_same_content_hash_twice_does_not_duplicate_rows
+    guards against. CREATE UNIQUE INDEX on such a database must not raise
+    -- init_database has to collapse existing duplicates first (keeping
+    the newest row) rather than leaving upgraded users unable to start
+    the server at all."""
+    from marm_mcp_server.core.memory_db import init_database
+
+    db_path = tmp_path / "memory.db"
+    init_database(str(db_path))
+
+    mid = str(uuid.uuid4())
+    ts = datetime.now(timezone.utc).isoformat()
+    with sqlite3.connect(db_path) as conn:
+        # Simulate the pre-fix database state directly: drop the dedup
+        # index this init_database() call already created, then seed
+        # duplicate (memory_id, chunk_index) rows as the old race would
+        # have produced.
+        conn.execute("DROP INDEX IF EXISTS idx_memory_chunks_dedup")
+        conn.execute(
+            "INSERT INTO memories (id, session_name, content, timestamp, context_type, metadata)"
+            " VALUES (?, 'test', 'content', ?, 'general', '{}')",
+            (mid, ts),
+        )
+        conn.executemany(
+            "INSERT INTO memory_chunks (memory_id, chunk_index, chunk_text, embedding)"
+            " VALUES (?, ?, ?, ?)",
+            [
+                (mid, 0, "stale duplicate", b"\x00" * 4),
+                (mid, 0, "current duplicate", b"\x01" * 4),
+                (mid, 1, "only copy", b"\x02" * 4),
+            ],
+        )
+        conn.commit()
+
+    # Must not raise sqlite3.IntegrityError ("UNIQUE constraint failed").
+    init_database(str(db_path))
+
+    with sqlite3.connect(db_path) as conn:
+        indexes = {
+            row[0]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='index'"
+            ).fetchall()
+        }
+        rows = conn.execute(
+            "SELECT chunk_index, chunk_text FROM memory_chunks WHERE memory_id = ? "
+            "ORDER BY chunk_index",
+            (mid,),
+        ).fetchall()
+
+    assert "idx_memory_chunks_dedup" in indexes
+    # One row per chunk_index, and the survivor is the higher-id (most
+    # recently inserted) row for the duplicated index.
+    assert rows == [(0, "current duplicate"), (1, "only copy")]

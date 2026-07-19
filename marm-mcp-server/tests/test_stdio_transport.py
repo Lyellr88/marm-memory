@@ -427,6 +427,7 @@ def test_stdio_notebook_session_name_scopes_active_state(monkeypatch, tmp_path):
             action="add",
             name="alpha_rule",
             data="alpha scoped instruction",
+            session_name="alpha",
         )
     )
     asyncio.run(

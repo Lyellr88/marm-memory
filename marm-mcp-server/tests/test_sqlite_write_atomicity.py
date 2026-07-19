@@ -405,8 +405,8 @@ def test_notebook_delete_rollback_keeps_entry_on_commit_failure(monkeypatch, tmp
     db_path = tmp_path / "marm_memory.db"
     with sqlite3.connect(db_path) as conn:
         conn.execute(
-            "INSERT INTO notebook_entries (name, data, updated_at, project, platform) "
-            "VALUES (?, ?, ?, NULL, NULL)",
+            "INSERT INTO notebook_entries (name, data, updated_at, session_name, project, platform) "
+            "VALUES (?, ?, ?, 'main', NULL, NULL)",
             (
                 "atomicity-a7-entry",
                 "must survive rollback",
@@ -451,8 +451,8 @@ def test_notebook_add_rollback_no_partial_update(monkeypatch, tmp_path):
     db_path = tmp_path / "marm_memory.db"
     with sqlite3.connect(db_path) as conn:
         conn.execute(
-            "INSERT INTO notebook_entries (name, data, updated_at, project, platform) "
-            "VALUES (?, ?, ?, NULL, NULL)",
+            "INSERT INTO notebook_entries (name, data, updated_at, session_name, project, platform) "
+            "VALUES (?, ?, ?, 'main', NULL, NULL)",
             ("atomicity-b1-existing", "original data", "2026-01-01T00:00:00+00:00"),
         )
         conn.commit()

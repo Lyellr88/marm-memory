@@ -80,11 +80,13 @@ class LogDeletePayload(BaseModel):
 class NotebookMutationPayload(BaseModel):
     name: str
     content: str
+    session_name: str = "main"
     project: str | None = None
     platform: str | None = None
 
 
 class NotebookDeletePayload(BaseModel):
     confirm: Literal["DELETE"]
+    session_name: str = "main"
     project: str | None = None
     platform: str | None = None

@@ -174,13 +174,18 @@ export function createMarmClient(config: MarmClientConfig) {
         '/logs',
         { body: { confirm: 'DELETE_ALL' } },
       ),
-    listNotebook: (params?: { q?: string; project?: string; platform?: string }) =>
+    listNotebook: (params?: { q?: string; session_name?: string; project?: string; platform?: string }) =>
       request<NotebookEntry[]>(config, 'GET', '/notebook', { query: params }),
     upsertNotebook: (data: NotebookInput) =>
       request<NotebookEntry>(config, 'POST', '/notebook', { body: data }),
-    deleteNotebookEntry: (name: string, params?: { project?: string; platform?: string }) =>
+    deleteNotebookEntry: (name: string, params?: { session_name?: string; project?: string; platform?: string }) =>
       request<{ name: string; deleted: boolean }>(config, 'DELETE', `/notebook/${encodeURIComponent(name)}`, {
-        body: { confirm: 'DELETE', project: params?.project, platform: params?.platform },
+        body: {
+          confirm: 'DELETE',
+          session_name: params?.session_name,
+          project: params?.project,
+          platform: params?.platform,
+        },
       }),
     getSummary: (session: string) =>
       request<SessionSummary>(config, 'GET', `/summaries/${encodeURIComponent(session)}`),

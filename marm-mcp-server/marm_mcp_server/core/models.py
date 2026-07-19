@@ -18,14 +18,19 @@ class LogEntryRequest(BaseModel):
 
 
 class NotebookRequest(BaseModel):
-    action: Literal["add", "use", "show", "status", "clear"] = Field(
-        ..., description="Action: add, use, show, status, or clear"
+    action: Literal["add", "use", "show", "status", "clear", "save"] = Field(
+        ..., description="Action: add, use, show, status, clear, or save"
     )
     name: Optional[str] = Field(
-        default=None, description="Entry name (required for action='add')"
+        default=None, description="Entry name (required for action='add' or 'save')"
     )
     data: Optional[str] = Field(
-        default=None, description="Entry content (required for action='add')"
+        default=None,
+        description=(
+            "Entry content (required for action='add'; for action='save', "
+            "provide to save new content directly or omit to promote the "
+            "existing scratch entry of the same name)"
+        ),
     )
     names: Optional[str] = Field(
         default=None,
@@ -92,7 +97,11 @@ class DeleteRequest(BaseModel):
     )
     session_name: Optional[str] = Field(
         default=None,
-        description="Log session to scope deletion. Omit to delete an entire session.",
+        description=(
+            "For type='log': session to scope deletion, omit to delete an "
+            "entire session. For type='notebook': scratch pad session to "
+            "delete from, defaults to 'main'."
+        ),
     )
     project: Optional[str] = Field(
         default=None, description="Notebook project scope for type='notebook'"

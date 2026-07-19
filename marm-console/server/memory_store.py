@@ -378,12 +378,14 @@ def list_log_refs(db_path: Path) -> list[dict]:
 def list_notebook(db_path: Path) -> list[dict]:
     with _connect(db_path) as connection:
         rows = connection.execute(
-            "SELECT name, data, project, platform, created_at, updated_at FROM notebook_entries ORDER BY updated_at DESC"
+            "SELECT name, data, session_name, project, platform, created_at, updated_at "
+            "FROM notebook_entries ORDER BY updated_at DESC"
         ).fetchall()
     return [
         {
             "name": row["name"],
             "content": row["data"],
+            "session_name": row["session_name"],
             "project": row["project"],
             "platform": row["platform"],
             "created_at": row["created_at"],

@@ -23,6 +23,7 @@ def get_notebook() -> list[dict]:
 def upsert_notebook(payload: NotebookMutationPayload) -> dict:
     name = payload.name.strip()
     content = payload.content.strip()
+    session_name = (payload.session_name or "main").strip() or "main"
     if not name or not content:
         raise HTTPException(status_code=422, detail="Name and content are required.")
     _mcp_tool_mutation(
@@ -31,6 +32,7 @@ def upsert_notebook(payload: NotebookMutationPayload) -> dict:
             "action": "add",
             "name": name,
             "data": content,
+            "session_name": session_name,
             "project": payload.project,
             "platform": payload.platform,
         },
@@ -39,6 +41,7 @@ def upsert_notebook(payload: NotebookMutationPayload) -> dict:
         for entry in memory_store.list_notebook(get_memory_db_path()):
             if (
                 entry["name"] == name
+                and entry.get("session_name") == session_name
                 and entry.get("project") == payload.project
                 and entry.get("platform") == payload.platform
             ):
@@ -48,6 +51,7 @@ def upsert_notebook(payload: NotebookMutationPayload) -> dict:
     return {
         "name": name,
         "content": content,
+        "session_name": session_name,
         "project": payload.project,
         "platform": payload.platform,
         "created_at": _now_iso(),
@@ -57,11 +61,13 @@ def upsert_notebook(payload: NotebookMutationPayload) -> dict:
 
 @router.delete("/api/notebook/{name}")
 def delete_notebook(name: str, payload: NotebookDeletePayload) -> dict:
+    session_name = (payload.session_name or "main").strip() or "main"
     result = _mcp_tool_mutation(
         "marm_delete",
         {
             "type": "notebook",
             "target": name,
+            "session_name": session_name,
             "project": payload.project,
             "platform": payload.platform,
         },

@@ -90,9 +90,18 @@ def _safe_fts_query(query: str) -> str | None:
     return " ".join(f'"{t}"' for t in tokens)
 
 
-CHUNK_TOKEN_LIMIT = 150
-CHUNK_OVERLAP_TOKENS = 50
-CHUNK_THRESHOLD_WORDS = 180
+# Sized for jina-embeddings-v2-small-en's 8,192-token window (config/settings.py's
+# DEFAULT_SEMANTIC_MODEL) -- roughly 30x the 256-token window the old 150-word
+# chunks were tuned for. Starting points to tune from real usage, not
+# validated-forever constants -- same framing as this codebase's other
+# embedding-adjacent thresholds (CONCEPT_DUPLICATE_SIMILARITY_THRESHOLD).
+MEMORY_CHUNK_THRESHOLD_WORDS = 500
+MEMORY_CHUNK_TARGET_WORDS = 250
+MEMORY_CHUNK_OVERLAP_WORDS = 50
+
+DOC_CHUNK_THRESHOLD_WORDS = 1000
+DOC_CHUNK_TARGET_WORDS = 800
+DOC_CHUNK_OVERLAP_WORDS = 100
 
 
 def _embedding_to_bytes(vector) -> bytes:
@@ -100,16 +109,45 @@ def _embedding_to_bytes(vector) -> bytes:
     return np.asarray(vector, dtype=np.float32).tobytes()
 
 
-def _chunk_text(text: str) -> list[str]:
+def _split_evenly(words: list, num_chunks: int) -> list:
+    """Divide word indices into num_chunks contiguous, near-equal spans.
+
+    Remainder words are distributed across the first few spans (not dumped
+    entirely on the last one), so a memory just over threshold never
+    produces one full-size chunk plus a tiny low-value fragment.
+    """
+    n = len(words)
+    base = n // num_chunks
+    remainder = n % num_chunks
+    spans = []
+    start = 0
+    for i in range(num_chunks):
+        size = base + (1 if i < remainder else 0)
+        spans.append((start, start + size))
+        start += size
+    return spans
+
+
+def _chunk_text(
+    text: str, *, threshold: int, target_size: int, overlap: int
+) -> list[str]:
+    """Split text into evenly-sized chunks once it exceeds threshold words.
+
+    Replaces the old fixed-window sliding approach, which could leave a
+    tiny, low-value trailing fragment (e.g. a 280-word memory splitting
+    into 250+30 words) instead of evenly-sized, coherent chunks.
+    """
     words = text.split()
-    if len(words) <= CHUNK_THRESHOLD_WORDS:
+    n = len(words)
+    if n <= threshold:
         return []
-    step = CHUNK_TOKEN_LIMIT - CHUNK_OVERLAP_TOKENS
+    num_chunks = max(1, -(-n // target_size))  # ceil division
+    spans = _split_evenly(words, num_chunks)
     chunks = []
-    i = 0
-    while i < len(words):
-        chunks.append(" ".join(words[i : i + CHUNK_TOKEN_LIMIT]))
-        i += step
+    for start, end in spans:
+        pad_start = max(0, start - overlap // 2)
+        pad_end = min(n, end + overlap // 2)
+        chunks.append(" ".join(words[pad_start:pad_end]))
     return chunks
 
 
@@ -140,7 +178,8 @@ async def _write_chunks(
             )
             return
         conn.executemany(
-            "INSERT INTO memory_chunks (memory_id, chunk_index, chunk_text, embedding)"
+            "INSERT OR REPLACE INTO memory_chunks"
+            " (memory_id, chunk_index, chunk_text, embedding)"
             " VALUES (?, ?, ?, ?)",
             [
                 (memory_id, i, chunk, emb)

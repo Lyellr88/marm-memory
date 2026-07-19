@@ -48,6 +48,9 @@ def _seed_databases(memory_path, concept_path):
             "VALUES ('m1', 0, 'chunk text', ?)",
             (_vector(384),),
         )
+        # notebook_entries.embedding is retired and deliberately outside
+        # migration scope -- inserted here so the tests below can assert
+        # it's left untouched, not to be counted as a migrated row.
         conn.execute(
             "INSERT INTO notebook_entries (name, data, embedding) "
             "VALUES ('n1', 'notebook text', ?)",
@@ -77,10 +80,18 @@ def test_migrates_both_databases_then_sets_marker_and_is_idempotent(tmp_path):
         progress=lambda _message: None,
     )
 
-    assert result == {"rows_migrated": 4, "concept_db_present": True}
+    assert result == {"rows_migrated": 3, "concept_db_present": True}
     state = inspect_embedding_state(str(memory_path), str(concept_path))
     assert state.compatible
     assert state.marker == DEFAULT_SEMANTIC_MODEL
+
+    with sqlite3.connect(memory_path) as conn:
+        notebook_embedding = conn.execute(
+            "SELECT embedding FROM notebook_entries WHERE name = 'n1'"
+        ).fetchone()[0]
+    assert len(notebook_embedding) == 384 * 4, (
+        "notebook_entries.embedding is retired and must be left untouched by migration"
+    )
 
     second_encoder = FakeEncoder()
     second = migrate_embeddings(
@@ -99,12 +110,14 @@ def test_migrates_same_dimension_vectors_when_model_marker_differs(tmp_path):
     init_database(str(memory_path))
     with sqlite3.connect(memory_path) as conn:
         conn.execute(
-            "INSERT INTO notebook_entries (name, data, embedding) VALUES (?, ?, ?)",
-            ("n1", "same-dimension text", _vector(DEFAULT_SEMANTIC_DIM)),
+            "INSERT INTO memories (id, session_name, content, embedding, timestamp) "
+            "VALUES (?, 's1', ?, ?, '2026-01-01T00:00:00Z')",
+            ("m1", "same-dimension text", _vector(DEFAULT_SEMANTIC_DIM)),
         )
         conn.execute(
-            "INSERT INTO notebook_entries (name, data, embedding) VALUES (?, ?, ?)",
-            ("n2", "second same-dimension text", _vector(DEFAULT_SEMANTIC_DIM)),
+            "INSERT INTO memory_chunks (memory_id, chunk_index, chunk_text, embedding) "
+            "VALUES (?, 0, ?, ?)",
+            ("m1", "second same-dimension text", _vector(DEFAULT_SEMANTIC_DIM)),
         )
         conn.execute(
             "INSERT INTO user_settings (key, value) VALUES ('embedding_model', ?)",
@@ -135,8 +148,8 @@ def test_backfills_missing_embeddings_during_normal_migration(tmp_path):
     init_database(str(memory_path))
     with sqlite3.connect(memory_path) as conn:
         conn.execute(
-            "INSERT INTO notebook_entries (name, data, embedding) VALUES (?, ?, NULL)",
-            ("n1", "missing embedding"),
+            "INSERT INTO memories (id, session_name, content, embedding, timestamp) "
+            "VALUES ('m1', 's1', 'missing embedding', NULL, '2026-01-01T00:00:00Z')"
         )
 
     result = migrate_embeddings(
@@ -149,7 +162,7 @@ def test_backfills_missing_embeddings_during_normal_migration(tmp_path):
     assert result == {"rows_migrated": 1, "concept_db_present": False}
     with sqlite3.connect(memory_path) as conn:
         embedding = conn.execute(
-            "SELECT embedding FROM notebook_entries WHERE name = 'n1'"
+            "SELECT embedding FROM memories WHERE id = 'm1'"
         ).fetchone()[0]
     assert len(embedding) == DEFAULT_SEMANTIC_DIM * 4
 
@@ -249,7 +262,7 @@ def test_preflight_dimension_mismatch_aborts_before_writes(tmp_path):
         )
 
     assert (
-        inspect_embedding_state(str(memory_path), str(concept_path)).incompatible == 4
+        inspect_embedding_state(str(memory_path), str(concept_path)).incompatible == 3
     )
 
 

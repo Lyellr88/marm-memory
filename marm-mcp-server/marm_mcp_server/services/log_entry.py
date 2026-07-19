@@ -401,32 +401,62 @@ async def delete_log_or_notebook_entry(
                     "memories_deleted": memories_deleted,
                 }
             else:  # type == "notebook"
+                # Scratchpads are session-local (see NotebookRequest/notebook_dispatch's
+                # own "main" default) -- deletion must be scoped the same way, or a
+                # bare name-only delete could remove a same-named entry from an
+                # unrelated session's scratchpad.
+                notebook_session = (session_name or "main").strip() or "main"
                 conn.execute("BEGIN IMMEDIATE")
                 try:
                     if scoped_notebook or project is not None or platform is not None:
                         cursor = conn.execute(
                             """
                             DELETE FROM notebook_entries
-                            WHERE name = ? AND project IS ? AND platform IS ?
+                            WHERE name = ? AND session_name = ? AND project IS ? AND platform IS ?
                             """,
-                            (target, project, platform),
+                            (target, notebook_session, project, platform),
                         )
+                        deleted = cursor.rowcount
                     else:
+                        # The (name, session_name, project, platform) identity lets
+                        # the same name coexist across multiple project/platform
+                        # scopes within one session -- an unscoped delete-by-name
+                        # must not silently wipe all of them at once. Refuse and
+                        # ask the caller to disambiguate when more than one exists.
+                        matches = conn.execute(
+                            "SELECT project, platform FROM notebook_entries "
+                            "WHERE name = ? AND session_name = ?",
+                            (target, notebook_session),
+                        ).fetchall()
+                        if len(matches) > 1:
+                            conn.execute("ROLLBACK")
+                            return {
+                                "status": "error",
+                                "message": (
+                                    f"Multiple notebook entries named '{target}' exist "
+                                    f"in session '{notebook_session}' across different "
+                                    "project/platform scopes; pass project and/or "
+                                    "platform to disambiguate."
+                                ),
+                            }
                         cursor = conn.execute(
-                            "DELETE FROM notebook_entries WHERE name = ?", (target,)
+                            "DELETE FROM notebook_entries WHERE name = ? AND session_name = ?",
+                            (target, notebook_session),
                         )
-                    deleted = cursor.rowcount
+                        deleted = cursor.rowcount
                     conn.execute("COMMIT")
                 except Exception:
                     conn.execute("ROLLBACK")
                     raise
                 if deleted > 0:
-                    memory.remove_active_notebook_entry(target)
+                    memory.remove_active_notebook_entry(target, notebook_session)
                 return {
                     "status": "success" if deleted > 0 else "not_found",
-                    "message": f"🗑️ Deleted notebook entry '{target}'"
-                    if deleted > 0
-                    else f"Entry '{target}' not found",
+                    "message": (
+                        f"🗑️ Deleted notebook entry '{target}'"
+                        if deleted > 0
+                        else f"Entry '{target}' not found"
+                    ),
                     "deleted": deleted > 0,
                 }
     except sqlite3.Error as e:
