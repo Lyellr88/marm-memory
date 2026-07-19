@@ -1,13 +1,33 @@
 """Shared notebook action dispatcher for MARM MCP Server."""
 
-import asyncio
+import threading
 from datetime import datetime, timezone
 from typing import Optional
 
-from ..core.memory import memory
-from ..core.memory_utils import _embedding_to_bytes
+from ..config.settings import MARM_PLATFORM, MARM_PROJECT
+from ..core.docs_db import DocsDB
 from ..core.events import events
-from ..config.settings import MARM_PROJECT, MARM_PLATFORM
+from ..core.memory import memory
+from ..core.memory_utils import _safe_print
+
+_RESERVED_SESSION_NAME = "marm_system"
+
+_docs_db: Optional[DocsDB] = None
+_docs_db_lock = threading.Lock()
+
+
+def _get_docs_db() -> DocsDB:
+    """Lazy singleton, mirrors endpoints/concepts.py's _get_concept_db() --
+    the docs DB file is only created on first real save, and the lock
+    guards against two concurrent first saves each building (and one
+    leaking) a DocsDB/connection pool."""
+    global _docs_db
+    if _docs_db is not None:
+        return _docs_db
+    with _docs_db_lock:
+        if _docs_db is None:
+            _docs_db = DocsDB()
+    return _docs_db
 
 
 def _scope_or_detected(value: Optional[str], detected: Optional[str]) -> Optional[str]:
@@ -20,6 +40,7 @@ def _scope_or_detected(value: Optional[str], detected: Optional[str]) -> Optiona
 async def _add(
     name: Optional[str],
     data: Optional[str],
+    session_name: str = "main",
     project: Optional[str] = None,
     platform: Optional[str] = None,
     **_,
@@ -30,13 +51,6 @@ async def _add(
             "message": "name and data are required for action='add'",
         }
     name = name.strip()
-    embedding_bytes = None
-    if memory.encoder:
-        try:
-            embedding = await asyncio.to_thread(memory._encode_sync, data)
-            embedding_bytes = _embedding_to_bytes(embedding)
-        except Exception:
-            pass
     project = _scope_or_detected(project, MARM_PROJECT)
     platform = _scope_or_detected(platform, MARM_PLATFORM)
     now = datetime.now(timezone.utc).isoformat()
@@ -46,19 +60,19 @@ async def _add(
             cursor = conn.execute(
                 """
                 UPDATE notebook_entries
-                SET data = ?, embedding = ?, updated_at = ?
-                WHERE name = ? AND project IS ? AND platform IS ?
+                SET data = ?, updated_at = ?
+                WHERE name = ? AND session_name = ? AND project IS ? AND platform IS ?
                 """,
-                (data, embedding_bytes, now, name, project, platform),
+                (data, now, name, session_name, project, platform),
             )
             if cursor.rowcount == 0:
                 conn.execute(
                     """
                     INSERT INTO notebook_entries
-                        (name, data, embedding, updated_at, project, platform)
+                        (name, data, session_name, updated_at, project, platform)
                     VALUES (?, ?, ?, ?, ?, ?)
                     """,
-                    (name, data, embedding_bytes, now, project, platform),
+                    (name, data, session_name, now, project, platform),
                 )
             conn.execute("COMMIT")
         except Exception:
@@ -86,18 +100,18 @@ async def _use(names: Optional[str], session_name: str = "main", **_) -> dict:
             cursor = conn.execute(
                 """
                 SELECT name, data FROM notebook_entries
-                WHERE name = ? AND project IS ? AND platform IS ?
+                WHERE name = ? AND session_name = ? AND project IS ? AND platform IS ?
                 """,
-                (n, project, platform),
+                (n, session_name, project, platform),
             )
             result = cursor.fetchone()
             if result is None and (project is not None or platform is not None):
                 result = conn.execute(
                     """
                     SELECT name, data FROM notebook_entries
-                    WHERE name = ? AND project IS NULL AND platform IS NULL
+                    WHERE name = ? AND session_name = ? AND project IS NULL AND platform IS NULL
                     """,
-                    (n,),
+                    (n, session_name),
                 ).fetchone()
             if result:
                 activated_entries.append({"name": result[0], "data": result[1]})
@@ -110,10 +124,14 @@ async def _use(names: Optional[str], session_name: str = "main", **_) -> dict:
     }
 
 
-async def _show(**_) -> dict:
+async def _show(session_name: str = "main", **_) -> dict:
     with memory.get_connection() as conn:
         cursor = conn.execute(
-            "SELECT name, data, created_at, updated_at FROM notebook_entries ORDER BY updated_at DESC"
+            """
+            SELECT name, data, created_at, updated_at FROM notebook_entries
+            WHERE session_name = ? ORDER BY updated_at DESC
+            """,
+            (session_name,),
         )
         entries = []
         for row in cursor.fetchall():
@@ -155,12 +173,110 @@ async def _clear(session_name: str = "main", **_) -> dict:
     }
 
 
+async def _save(
+    name: Optional[str],
+    data: Optional[str],
+    session_name: str = "main",
+    project: Optional[str] = None,
+    platform: Optional[str] = None,
+    **_,
+) -> dict:
+    """Promote a scratch entry (or new inline content) into the permanent
+    docs store. Copy, not move -- the source scratch entry is left
+    untouched. The docs row commits first and is the source of truth; the
+    memories mirror that gives the concept graph reach is best-effort --
+    a failed mirror sync never rolls back the durable save, it just
+    reports mirror_status='pending' so a later save can repair it.
+    """
+    if not name or not name.strip():
+        return {"status": "error", "message": "name is required for action='save'"}
+    name = name.strip()
+    if session_name == _RESERVED_SESSION_NAME:
+        return {
+            "status": "error",
+            "message": (
+                f"session_name '{_RESERVED_SESSION_NAME}' is reserved and "
+                "cannot be used for action='save'"
+            ),
+        }
+    scoped_project = _scope_or_detected(project, MARM_PROJECT)
+    scoped_platform = _scope_or_detected(platform, MARM_PLATFORM)
+
+    source_notebook_name = None
+    content = data.strip() if data and data.strip() else None
+    if content is None:
+        with memory.get_connection() as conn:
+            row = conn.execute(
+                """
+                SELECT data FROM notebook_entries
+                WHERE name = ? AND session_name = ? AND project IS ? AND platform IS ?
+                """,
+                (name, session_name, scoped_project, scoped_platform),
+            ).fetchone()
+        if row is None:
+            return {
+                "status": "error",
+                "message": (
+                    f"No scratch entry named '{name}' found to promote; "
+                    "pass data= to save new content directly"
+                ),
+            }
+        content = row[0]
+        source_notebook_name = name
+
+    docs_db = _get_docs_db()
+    with docs_db.get_connection() as conn:
+        doc_row, was_created = docs_db.save_doc(
+            conn,
+            name=name,
+            content=content,
+            session_name=session_name,
+            project=scoped_project,
+            platform=scoped_platform,
+            source_notebook_name=source_notebook_name,
+        )
+
+    mirror_status = "synced"
+    memory_id = doc_row.memory_id
+    try:
+        memory_id = await memory.store_doc_mirror(
+            content,
+            session_name,
+            scoped_project,
+            scoped_platform,
+            {
+                "doc_type": "promoted_doc",
+                "doc_id": doc_row.id,
+                "source_notebook_name": source_notebook_name,
+            },
+            existing_memory_id=doc_row.memory_id,
+        )
+    except Exception as e:
+        _safe_print(f"Doc mirror write failed for doc {doc_row.id}: {e}")
+        mirror_status = "pending"
+
+    if mirror_status == "synced":
+        with docs_db.get_connection() as conn:
+            docs_db.set_memory_id(conn, doc_row.id, memory_id)
+
+    verb = "saved" if was_created else "updated"
+    promoted_note = " (promoted from scratch)" if source_notebook_name else ""
+    return {
+        "status": "success",
+        "message": f"📄 Doc '{name}' {verb}{promoted_note}",
+        "doc_id": doc_row.id,
+        "memory_id": memory_id if mirror_status == "synced" else doc_row.memory_id,
+        "mirror_status": mirror_status,
+    }
+
+
 _ACTION_HANDLERS = {
     "add": _add,
     "use": _use,
     "show": _show,
     "status": _status,
     "clear": _clear,
+    "save": _save,
 }
 
 
@@ -181,7 +297,7 @@ async def notebook_dispatch(
     if handler is None:
         return {
             "status": "error",
-            "message": f"Unknown action '{action}'. Must be: add, use, show, status, clear",
+            "message": f"Unknown action '{action}'. Must be: add, use, show, status, clear, save",
         }
     return await handler(
         name=name,

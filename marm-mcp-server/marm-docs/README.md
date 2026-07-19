@@ -540,7 +540,7 @@ The AI agent will automatically use the appropriate tools. Manual tool access is
 | `marm_log_show` | Display all entries and sessions, with filtering | `session_name` |
 | `marm_delete` | Delete a log session, log entry, or notebook entry | `type`, `target`, `session_name`, `project`, `platform` |
 | `marm_summary` | Cached, paste-ready session summaries with intelligent truncation | `session_name` |
-| `marm_notebook` | Reusable instructions and knowledge snippets | `action="add"\|"use"\|"show"\|"status"\|"clear"`, `name`, `data`, `project`, `platform` |
+| `marm_notebook` | Session-scoped scratch pad plus promotion to a permanent, graph-linked doc | `action="add"\|"use"\|"show"\|"status"\|"clear"\|"save"`, `name`, `data`, `session_name`, `project`, `platform` |
 | `marm_compaction` | Agent-assisted memory cleanup with a reviewable audit trail | `action="status"\|"candidates"\|"review"\|"stage"\|"apply"\|"discard"` |
 
 ### 🕸️ Code Graph (5 tools)

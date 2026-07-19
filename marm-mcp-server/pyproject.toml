@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "marm-mcp-server"
-version = "2.24.0"
+version = "2.25.0"
 description = "marm-memory is a local-first MCP memory layer with hybrid recall, agent coordination, code intelligence, and persistent project context."
 readme = "README.md"
 license = "Apache-2.0"

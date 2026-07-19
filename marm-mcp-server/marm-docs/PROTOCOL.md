@@ -31,7 +31,7 @@ Tool Contract (versioned runtime):
 - Surface: 14 MCP tools: 7 core memory/logging/notebook/compaction tools, 5 bundled code-graph tools, and 2 bundled concept-graph tools.
 - Memory: `marm_smart_recall` (semantic retrieval, use `include_logs=True` when logs matter).
 - Session Logs: `marm_log_entry`, `marm_log_show`. Logged entries are also embedded into semantic memory, so `marm_smart_recall` finds them later.
-- Notebook: `marm_notebook(action="add"|"use"|"show"|"status"|"clear")`.
+- Notebook: `marm_notebook(action="add"|"use"|"show"|"status"|"clear"|"save")`. Scratch entries are per-session; `action="save"` promotes one (or new inline content) into a permanent, concept-graph-linked doc.
 - Workflow: `marm_summary` (handoff/recap), `marm_delete` (explicit delete requests only), `marm_compaction` (agent-assisted memory cleanup).
 - Code Graph: `marm_graph_index`, `marm_code_lookup`, `marm_graph_trace`, `marm_graph_architecture`, `marm_graph_impact` for repo indexing, symbol/source lookup, call tracing, architecture overview, and change-impact checks. Graph starts lazily on first graph call.
 - Concept Graph: `marm_concept_build` (extract entities/relationships from stored memories), `marm_concept_recall` (query entities, relationships, and linked code symbols).

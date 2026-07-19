@@ -12,54 +12,121 @@ from marm_mcp_server.core.memory import (
     MARMMemory,
     _chunk_text,
     _score_chunk_aware,
-    CHUNK_THRESHOLD_WORDS,
-    CHUNK_TOKEN_LIMIT,
-    CHUNK_OVERLAP_TOKENS,
+    MEMORY_CHUNK_THRESHOLD_WORDS,
+    MEMORY_CHUNK_TARGET_WORDS,
+    MEMORY_CHUNK_OVERLAP_WORDS,
+    DOC_CHUNK_THRESHOLD_WORDS,
+    DOC_CHUNK_TARGET_WORDS,
+    DOC_CHUNK_OVERLAP_WORDS,
 )
+from marm_mcp_server.core.memory_utils import _split_evenly
 
 # --- _chunk_text unit tests ---
 
 
+def _mem_chunk(text: str) -> list[str]:
+    return _chunk_text(
+        text,
+        threshold=MEMORY_CHUNK_THRESHOLD_WORDS,
+        target_size=MEMORY_CHUNK_TARGET_WORDS,
+        overlap=MEMORY_CHUNK_OVERLAP_WORDS,
+    )
+
+
 def test_chunk_text_returns_empty_for_short_content():
-    words = ["word"] * (CHUNK_THRESHOLD_WORDS - 1)
-    assert _chunk_text(" ".join(words)) == []
+    words = ["word"] * (MEMORY_CHUNK_THRESHOLD_WORDS - 1)
+    assert _mem_chunk(" ".join(words)) == []
 
 
 def test_chunk_text_returns_empty_at_exact_threshold():
-    words = ["word"] * CHUNK_THRESHOLD_WORDS
-    assert _chunk_text(" ".join(words)) == []
+    words = ["word"] * MEMORY_CHUNK_THRESHOLD_WORDS
+    assert _mem_chunk(" ".join(words)) == []
 
 
 def test_chunk_text_splits_content_above_threshold():
-    words = ["word"] * (CHUNK_THRESHOLD_WORDS + 1)
-    chunks = _chunk_text(" ".join(words))
+    words = ["word"] * (MEMORY_CHUNK_THRESHOLD_WORDS + 1)
+    chunks = _mem_chunk(" ".join(words))
     assert len(chunks) >= 1
 
 
-def test_chunk_text_chunk_size_does_not_exceed_limit():
-    words = [f"w{i}" for i in range(500)]
-    chunks = _chunk_text(" ".join(words))
-    for chunk in chunks:
-        assert len(chunk.split()) <= CHUNK_TOKEN_LIMIT
-
-
-def test_chunk_text_chunks_overlap_correctly():
-    words = [f"w{i}" for i in range(300)]
-    chunks = _chunk_text(" ".join(words))
-    step = CHUNK_TOKEN_LIMIT - CHUNK_OVERLAP_TOKENS
-    # Second chunk should start at word `step`, not word `CHUNK_TOKEN_LIMIT`
-    second_chunk_words = chunks[1].split()
-    assert second_chunk_words[0] == words[step]
-
-
 def test_chunk_text_covers_all_words():
-    words = [f"w{i}" for i in range(400)]
+    words = [f"w{i}" for i in range(MEMORY_CHUNK_THRESHOLD_WORDS + 100)]
     text = " ".join(words)
-    chunks = _chunk_text(text)
+    chunks = _mem_chunk(text)
     all_chunk_words = set()
     for chunk in chunks:
         all_chunk_words.update(chunk.split())
     assert all(w in all_chunk_words for w in words)
+
+
+def test_chunk_text_doc_profile_uses_larger_threshold_and_target():
+    # A word count between the memory and doc thresholds must chunk under
+    # the memory profile but stay a single unchunked unit under the doc
+    # profile -- proves the two profiles are genuinely independent, not
+    # just cosmetically different constants.
+    n = MEMORY_CHUNK_THRESHOLD_WORDS + 50
+    words = [f"w{i}" for i in range(n)]
+    text = " ".join(words)
+
+    memory_chunks = _mem_chunk(text)
+    doc_chunks = _chunk_text(
+        text,
+        threshold=DOC_CHUNK_THRESHOLD_WORDS,
+        target_size=DOC_CHUNK_TARGET_WORDS,
+        overlap=DOC_CHUNK_OVERLAP_WORDS,
+    )
+
+    assert len(memory_chunks) >= 1
+    assert doc_chunks == []
+
+
+def test_chunk_text_even_split_avoids_tiny_trailing_fragment():
+    """The user-identified failure mode: content just over threshold must
+    not split into one full-size chunk plus a tiny low-value fragment
+    (e.g. 250 + 30 words). Uses the same threshold/target shape as the
+    original bug report (180/150) so the assertion targets the algorithm
+    itself, independent of whichever profile constants are configured."""
+    n = 280
+    words = [f"w{i}" for i in range(n)]
+    chunks = _chunk_text(" ".join(words), threshold=180, target_size=150, overlap=50)
+
+    assert len(chunks) == 2
+    sizes = [len(c.split()) for c in chunks]
+    # Overlap padding means sizes won't be exactly equal, but neither
+    # chunk should be a tiny fragment relative to the other.
+    assert min(sizes) / max(sizes) > 0.5
+
+
+def test_chunk_text_memory_profile_produces_balanced_chunks_at_threshold_edge():
+    """With the configured memory profile (threshold == 2x target), the
+    smallest content that chunks at all lands on 3 balanced spans, not a
+    full-size chunk plus a sliver -- confirms the fix holds for the actual
+    shipped constants, not just the algorithm in isolation."""
+    n = MEMORY_CHUNK_THRESHOLD_WORDS + 1
+    words = [f"w{i}" for i in range(n)]
+    chunks = _mem_chunk(" ".join(words))
+
+    assert len(chunks) == 3
+    sizes = [len(c.split()) for c in chunks]
+    assert min(sizes) / max(sizes) > 0.5
+
+
+def test_split_evenly_distributes_remainder_across_first_spans():
+    words = list(range(10))
+    spans = _split_evenly(words, 3)
+    sizes = [end - start for start, end in spans]
+    assert sizes == [4, 3, 3]
+    assert spans[0] == (0, 4)
+    assert spans[-1][1] == 10
+
+
+def test_split_evenly_covers_all_indices_with_no_gaps_or_overlap():
+    words = list(range(97))
+    spans = _split_evenly(words, 7)
+    covered = []
+    for start, end in spans:
+        covered.extend(range(start, end))
+    assert covered == list(range(97))
 
 
 # --- _score_chunk_aware unit tests ---
@@ -244,7 +311,7 @@ async def test_encoder_unavailable_long_content_no_crash_no_chunks(tmp_path):
     mem = MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
 
-    long_content = " ".join(["word"] * (CHUNK_THRESHOLD_WORDS + 50))
+    long_content = " ".join(["word"] * (MEMORY_CHUNK_THRESHOLD_WORDS + 50))
     mid = await mem.store_memory(long_content, "test")
 
     assert mid is not None

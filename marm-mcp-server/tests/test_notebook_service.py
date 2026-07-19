@@ -1,3 +1,4 @@
+import sqlite3
 import sys
 import pytest
 
@@ -10,6 +11,7 @@ def notebook_svc(monkeypatch, tmp_path):
 
     monkeypatch.setenv("MARM_DB_PATH", str(tmp_path / "nb-test.db"))
     monkeypatch.setenv("MARM_ANALYTICS_DB_PATH", str(tmp_path / "nb-analytics.db"))
+    monkeypatch.setenv("MARM_DOCS_DB_PATH", str(tmp_path / "nb-docs.db"))
 
     from marm_mcp_server.services.notebook import notebook_dispatch
     from marm_mcp_server.core.memory import memory
@@ -130,8 +132,14 @@ async def test_dispatch_use_silently_skips_nonexistent_entries(notebook_svc):
 @pytest.mark.asyncio
 async def test_dispatch_scopes_active_entries_by_session(notebook_svc):
     dispatch, memory = notebook_svc
-    await dispatch(action="add", name="alpha_rule", data="alpha instructions")
-    await dispatch(action="add", name="beta_rule", data="beta instructions")
+    # A scratchpad is session-local (locked decision): each entry must be
+    # added under the same session it will later be use'd from.
+    await dispatch(
+        action="add", name="alpha_rule", data="alpha instructions", session_name="alpha"
+    )
+    await dispatch(
+        action="add", name="beta_rule", data="beta instructions", session_name="beta"
+    )
 
     await dispatch(action="use", names="alpha_rule", session_name="alpha")
     await dispatch(action="use", names="beta_rule", session_name="beta")
@@ -148,8 +156,12 @@ async def test_dispatch_scopes_active_entries_by_session(notebook_svc):
 @pytest.mark.asyncio
 async def test_dispatch_clear_only_clears_requested_session(notebook_svc):
     dispatch, _ = notebook_svc
-    await dispatch(action="add", name="alpha_rule", data="alpha instructions")
-    await dispatch(action="add", name="beta_rule", data="beta instructions")
+    await dispatch(
+        action="add", name="alpha_rule", data="alpha instructions", session_name="alpha"
+    )
+    await dispatch(
+        action="add", name="beta_rule", data="beta instructions", session_name="beta"
+    )
     await dispatch(action="use", names="alpha_rule", session_name="alpha")
     await dispatch(action="use", names="beta_rule", session_name="beta")
 
@@ -163,7 +175,9 @@ async def test_dispatch_clear_only_clears_requested_session(notebook_svc):
 @pytest.mark.asyncio
 async def test_dispatch_normalizes_session_name(notebook_svc):
     dispatch, memory = notebook_svc
-    await dispatch(action="add", name="alpha_rule", data="alpha instructions")
+    await dispatch(
+        action="add", name="alpha_rule", data="alpha instructions", session_name="alpha"
+    )
 
     await dispatch(action="use", names="alpha_rule", session_name="  alpha  ")
     result = await dispatch(action="status", session_name="alpha")
@@ -187,13 +201,232 @@ async def test_dispatch_blank_session_name_returns_error(notebook_svc):
 
 
 @pytest.mark.asyncio
-async def test_memory_remove_active_notebook_entry_cleans_all_sessions(notebook_svc):
+async def test_memory_remove_active_notebook_entry_scopes_to_one_session(notebook_svc):
+    """Session isolation is end-to-end: removing a deleted entry from the
+    active scratchpad must only touch the session it was deleted from, not
+    every session that happens to have an entry of the same name active."""
     dispatch, memory = notebook_svc
-    await dispatch(action="add", name="shared_rule", data="shared instructions")
+    await dispatch(
+        action="add", name="shared_rule", data="alpha copy", session_name="alpha"
+    )
+    await dispatch(
+        action="add", name="shared_rule", data="beta copy", session_name="beta"
+    )
     await dispatch(action="use", names="shared_rule", session_name="alpha")
     await dispatch(action="use", names="shared_rule", session_name="beta")
 
-    memory.remove_active_notebook_entry("shared_rule")
+    memory.remove_active_notebook_entry("shared_rule", "alpha")
 
     assert memory.get_active_notebook_entries("alpha") == []
+    assert memory.get_active_notebook_entries("beta")[0]["name"] == "shared_rule"
+
+
+# --- Session-scoped scratch storage (add/use/show) ---
+
+
+@pytest.mark.asyncio
+async def test_add_same_name_project_platform_different_sessions_do_not_collide(
+    notebook_svc,
+):
+    dispatch, _ = notebook_svc
+    await dispatch(
+        action="add", name="dup", data="alpha content", session_name="alpha"
+    )
+    await dispatch(action="add", name="dup", data="beta content", session_name="beta")
+
+    alpha_show = await dispatch(action="show", session_name="alpha")
+    beta_show = await dispatch(action="show", session_name="beta")
+
+    assert alpha_show["total_count"] == 1
+    assert alpha_show["entries"][0]["preview"] == "alpha content"
+    assert beta_show["total_count"] == 1
+    assert beta_show["entries"][0]["preview"] == "beta content"
+
+
+@pytest.mark.asyncio
+async def test_show_only_returns_entries_for_requested_session(notebook_svc):
+    dispatch, _ = notebook_svc
+    await dispatch(action="add", name="a1", data="alpha one", session_name="alpha")
+    await dispatch(action="add", name="a2", data="alpha two", session_name="alpha")
+    await dispatch(action="add", name="b1", data="beta one", session_name="beta")
+
+    alpha_show = await dispatch(action="show", session_name="alpha")
+
+    assert alpha_show["total_count"] == 2
+    assert {e["name"] for e in alpha_show["entries"]} == {"a1", "a2"}
+
+
+@pytest.mark.asyncio
+async def test_use_does_not_fall_back_across_sessions(notebook_svc):
+    """A scratchpad is session-local -- an entry saved under session 'alpha'
+    must not be reachable via action='use' from session 'beta', even
+    though project/platform match (both None)."""
+    dispatch, memory = notebook_svc
+    await dispatch(action="add", name="alpha-only", data="secret", session_name="alpha")
+
+    result = await dispatch(action="use", names="alpha-only", session_name="beta")
+
+    assert result["activated_entries"] == []
     assert memory.get_active_notebook_entries("beta") == []
+
+
+@pytest.mark.asyncio
+async def test_add_writes_no_embedding(notebook_svc, tmp_path):
+    dispatch, _ = notebook_svc
+    await dispatch(action="add", name="no-embed", data="plain scratch text")
+
+    with sqlite3.connect(str(tmp_path / "nb-test.db")) as conn:
+        embedding = conn.execute(
+            "SELECT embedding FROM notebook_entries WHERE name = 'no-embed'"
+        ).fetchone()[0]
+    assert embedding is None
+
+
+# --- action='save' ---
+
+
+@pytest.mark.asyncio
+async def test_save_with_data_creates_doc_without_existing_scratch_entry(
+    notebook_svc,
+):
+    dispatch, _ = notebook_svc
+    result = await dispatch(
+        action="save", name="new-doc", data="fresh permanent content"
+    )
+
+    assert result["status"] == "success"
+    assert result["doc_id"] is not None
+    assert result["mirror_status"] == "synced"
+
+
+@pytest.mark.asyncio
+async def test_save_without_data_promotes_existing_scratch_entry(notebook_svc):
+    dispatch, _ = notebook_svc
+    await dispatch(action="add", name="promote-me", data="scratch content to promote")
+
+    result = await dispatch(action="save", name="promote-me")
+
+    assert result["status"] == "success"
+    assert "promoted from scratch" in result["message"]
+
+
+@pytest.mark.asyncio
+async def test_save_without_data_and_no_scratch_entry_fails_cleanly(notebook_svc):
+    dispatch, _ = notebook_svc
+    result = await dispatch(action="save", name="ghost-doc")
+
+    assert result["status"] == "error"
+    assert "ghost-doc" in result["message"]
+
+
+@pytest.mark.asyncio
+async def test_save_leaves_source_scratch_entry_untouched(notebook_svc, tmp_path):
+    """save is a copy, not a move -- the scratch entry must survive exactly
+    as it was."""
+    dispatch, _ = notebook_svc
+    await dispatch(action="add", name="copy-not-move", data="original scratch")
+
+    await dispatch(action="save", name="copy-not-move")
+
+    with sqlite3.connect(str(tmp_path / "nb-test.db")) as conn:
+        row = conn.execute(
+            "SELECT data FROM notebook_entries WHERE name = 'copy-not-move'"
+        ).fetchone()
+    assert row is not None
+    assert row[0] == "original scratch"
+
+
+@pytest.mark.asyncio
+async def test_save_twice_updates_existing_doc_not_duplicate(notebook_svc, tmp_path):
+    dispatch, _ = notebook_svc
+    first = await dispatch(action="save", name="resaved", data="version one")
+    second = await dispatch(action="save", name="resaved", data="version two")
+
+    assert first["doc_id"] == second["doc_id"]
+
+    with sqlite3.connect(str(tmp_path / "nb-docs.db")) as conn:
+        rows = conn.execute(
+            "SELECT content FROM docs WHERE name = 'resaved'"
+        ).fetchall()
+    assert len(rows) == 1
+    assert rows[0][0] == "version two"
+
+
+@pytest.mark.asyncio
+async def test_save_resave_replaces_mirror_row_in_place(notebook_svc, tmp_path):
+    """Resave must reuse the same memories row id rather than leaving a
+    stale duplicate mirror behind."""
+    dispatch, _ = notebook_svc
+    first = await dispatch(action="save", name="stable-mirror", data="version one")
+    second = await dispatch(action="save", name="stable-mirror", data="version two")
+
+    assert first["mirror_status"] == "synced"
+    assert second["mirror_status"] == "synced"
+    assert first["memory_id"] == second["memory_id"]
+
+    with sqlite3.connect(str(tmp_path / "nb-test.db")) as conn:
+        rows = conn.execute(
+            "SELECT content, context_type FROM memories WHERE id = ?",
+            (second["memory_id"],),
+        ).fetchall()
+    assert len(rows) == 1
+    assert rows[0][0] == "version two"
+    assert rows[0][1] == "doc"
+
+
+@pytest.mark.asyncio
+async def test_save_rejects_reserved_marm_system_session(notebook_svc):
+    dispatch, _ = notebook_svc
+    result = await dispatch(
+        action="save", name="bad", data="content", session_name="marm_system"
+    )
+
+    assert result["status"] == "error"
+    assert "marm_system" in result["message"]
+
+
+@pytest.mark.asyncio
+async def test_save_mirror_write_failure_still_saves_doc_as_pending(
+    notebook_svc, monkeypatch, tmp_path
+):
+    dispatch, memory = notebook_svc
+
+    async def _boom(*args, **kwargs):
+        raise RuntimeError("write queue unavailable")
+
+    monkeypatch.setattr(memory, "store_doc_mirror", _boom)
+
+    result = await dispatch(action="save", name="mirror-fails", data="durable content")
+
+    assert result["status"] == "success"
+    assert result["mirror_status"] == "pending"
+    assert result["doc_id"] is not None
+
+    with sqlite3.connect(str(tmp_path / "nb-docs.db")) as conn:
+        row = conn.execute(
+            "SELECT content, memory_id FROM docs WHERE name = 'mirror-fails'"
+        ).fetchone()
+    assert row[0] == "durable content"
+    assert row[1] is None
+
+
+@pytest.mark.asyncio
+async def test_save_preserves_session_project_platform_on_mirror(
+    notebook_svc, tmp_path
+):
+    dispatch, _ = notebook_svc
+    result = await dispatch(
+        action="save",
+        name="scoped-doc",
+        data="scoped content",
+        session_name="proj-session",
+        project="marm",
+        platform="claude-code",
+    )
+
+    with sqlite3.connect(str(tmp_path / "nb-test.db")) as conn:
+        row = conn.execute(
+            "SELECT session_name, project, platform FROM memories WHERE id = ?",
+            (result["memory_id"],),
+        ).fetchone()
+    assert row == ("proj-session", "marm", "claude-code")

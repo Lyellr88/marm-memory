@@ -166,8 +166,8 @@ def test_notebook_delete_can_target_project_platform_scope(monkeypatch, tmp_path
     with server.memory.get_connection() as conn:
         conn.executemany(
             """
-            INSERT INTO notebook_entries (name, data, updated_at, project, platform)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO notebook_entries (name, data, updated_at, session_name, project, platform)
+            VALUES (?, ?, ?, 'main', ?, ?)
             """,
             [
                 ("shared-rule", "global", now, None, None),
@@ -250,14 +250,24 @@ def test_notebook_active_state_is_scoped_by_session(monkeypatch, tmp_path):
     assert (
         client.post(
             "/marm_notebook",
-            json={"action": "add", "name": "alpha_rule", "data": "alpha instructions"},
+            json={
+                "action": "add",
+                "name": "alpha_rule",
+                "data": "alpha instructions",
+                "session_name": "alpha",
+            },
         ).status_code
         == 200
     )
     assert (
         client.post(
             "/marm_notebook",
-            json={"action": "add", "name": "beta_rule", "data": "beta instructions"},
+            json={
+                "action": "add",
+                "name": "beta_rule",
+                "data": "beta instructions",
+                "session_name": "beta",
+            },
         ).status_code
         == 200
     )
@@ -300,17 +310,20 @@ def test_notebook_active_state_is_scoped_by_session(monkeypatch, tmp_path):
     assert beta_after_clear.json()["active_entries"] == ["beta_rule"]
 
 
-def test_http_notebook_add_persists_entry_and_embedding(monkeypatch, tmp_path):
-    import numpy as np
-
+def test_http_notebook_add_persists_entry_without_embedding(monkeypatch, tmp_path):
+    """Scratch entries are retrieved by exact name, not semantic search --
+    action='add' must never populate notebook_entries.embedding, even when
+    an encoder is available, so upgrades never pay to re-embed content
+    with no recall path."""
     server = load_isolated_server(monkeypatch, tmp_path)
     client = local_client(server.app)
     memory_module = importlib.import_module("marm_mcp_server.core.memory")
 
     class FakeEncoder:
         def encode(self, text):
-            assert text == "Notebook entries should keep embeddings when available."
-            return np.ones(384, dtype=np.float64)
+            raise AssertionError(
+                "notebook add must not call the encoder at all"
+            )
 
     monkeypatch.setattr(memory_module.memory, "encoder", FakeEncoder())
 
@@ -319,7 +332,7 @@ def test_http_notebook_add_persists_entry_and_embedding(monkeypatch, tmp_path):
         json={
             "action": "add",
             "name": "embedded_rule",
-            "data": "Notebook entries should keep embeddings when available.",
+            "data": "Notebook scratch entries no longer carry embeddings.",
         },
     )
 
@@ -334,8 +347,8 @@ def test_http_notebook_add_persists_entry_and_embedding(monkeypatch, tmp_path):
 
     assert row is not None
     assert row[0] == "embedded_rule"
-    assert row[1] == "Notebook entries should keep embeddings when available."
-    assert len(row[2]) == 384 * 4
+    assert row[1] == "Notebook scratch entries no longer carry embeddings."
+    assert row[2] is None
 
 
 def test_http_notebook_service_errors_return_structured_error(monkeypatch, tmp_path):

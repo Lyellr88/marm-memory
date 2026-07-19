@@ -11,13 +11,14 @@ router = APIRouter(prefix="", tags=["Notebook"])
 @router.post("/marm_notebook", operation_id="marm_notebook")
 async def marm_notebook(request: NotebookRequest):
     """
-    📔 Unified notebook — add, use, show, status, or clear
+    📔 Unified notebook — add, use, show, status, clear, or save
 
-    action="add": save or update an entry (name + data required)
+    action="add": save or update a scratch entry (name + data required)
     action="use": activate entries as instructions (names required, comma-separated)
-    action="show": list all saved entries with previews
+    action="show": list scratch entries for this session with previews
     action="status": show currently active entries
     action="clear": clear the active entry list
+    action="save": promote a scratch entry (or new data) into the permanent docs store
     """
     try:
         return await notebook_dispatch(

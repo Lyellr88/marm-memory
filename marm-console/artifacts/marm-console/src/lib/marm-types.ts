@@ -148,6 +148,7 @@ export interface LogListParams {
 export interface NotebookEntry {
   name: string;
   content: string;
+  session_name: string;
   project: string | null;
   platform: string | null;
   created_at: string;
@@ -157,6 +158,7 @@ export interface NotebookEntry {
 export interface NotebookInput {
   name: string;
   content: string;
+  session_name?: string;
   project?: string | null;
   platform?: string | null;
 }

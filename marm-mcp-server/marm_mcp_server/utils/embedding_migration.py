@@ -15,10 +15,12 @@ from .embedding_state import (
     write_embedding_model_marker,
 )
 
+# notebook_entries.embedding is retired -- scratch writes no longer populate
+# it (services/notebook.py's _add). Promoted docs are covered through their
+# memories mirror ("memories" below), not a separate embedding path here.
 _MEMORY_TABLES = (
     ("memories", "content", "embedding"),
     ("memory_chunks", "chunk_text", "embedding"),
-    ("notebook_entries", "data", "embedding"),
 )
 _CONCEPT_TABLES = (("entities", "name", "name_embedding"),)
 

@@ -68,6 +68,46 @@ def test_fetch_memory_rows_requires_explicit_scope(concepts_env):
         concepts._fetch_memory_rows(session_name=None, project=None, search_all=False)
 
 
+def test_promoted_doc_mirror_reachable_by_matching_scoped_build(monkeypatch, tmp_path):
+    """notebook-scratch-and-docs-db.md's Testing Checklist: a promoted
+    doc's memories mirror must be picked up by a marm_concept_build call
+    scoped to the doc's own project/session, and must NOT be picked up by
+    a build scoped to a different project. Drives the real action='save'
+    path (not a hand-inserted memories row) so this proves the actual
+    mirror-write wiring, not just that _fetch_memory_rows' SQL is capable
+    of finding a row shaped like one."""
+    from conftest import load_isolated_server
+
+    load_isolated_server(monkeypatch, tmp_path, write_queue_enabled=True)
+    monkeypatch.setenv("MARM_CONCEPT_DB_PATH", str(tmp_path / "marm_index.db"))
+    monkeypatch.setenv("MARM_DOCS_DB_PATH", str(tmp_path / "marm_docs.db"))
+    concepts = importlib.import_module("marm_mcp_server.endpoints.concepts")
+    notebook_service = importlib.import_module("marm_mcp_server.services.notebook")
+
+    result = asyncio.run(
+        notebook_service.notebook_dispatch(
+            action="save",
+            name="architecture-doc",
+            data="MARM uses three separate SQLite databases for memory, index, and docs.",
+            session_name="main",
+            project="marm-systems",
+            platform=None,
+        )
+    )
+    assert result["status"] == "success"
+    assert result["mirror_status"] == "synced"
+
+    matching_rows = concepts._fetch_memory_rows(
+        session_name=None, project="marm-systems", search_all=False
+    )
+    assert result["memory_id"] in [r[0] for r in matching_rows]
+
+    other_project_rows = concepts._fetch_memory_rows(
+        session_name=None, project="a-different-project", search_all=False
+    )
+    assert result["memory_id"] not in [r[0] for r in other_project_rows]
+
+
 def test_marm_concept_build_route_returns_static_message_on_missing_scope(
     concepts_env,
 ):

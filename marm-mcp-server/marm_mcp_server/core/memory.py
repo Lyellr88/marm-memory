@@ -4,48 +4,57 @@ import importlib.util
 import json
 import threading
 from datetime import datetime, timezone
-from typing import List, Dict, Optional
-
-from .memory_utils import (
-    _safe_print,
-    _chunk_text,  # noqa: F401
-    _safe_fts_query,  # noqa: F401
-    _temporal_score,  # noqa: F401
-    sanitize_content,  # noqa: F401
-    CHUNK_TOKEN_LIMIT,  # noqa: F401
-    CHUNK_OVERLAP_TOKENS,  # noqa: F401
-    CHUNK_THRESHOLD_WORDS,  # noqa: F401
-    _is_exact_query,  # noqa: F401
-)
-from .memory_db import (
-    SQLiteConnectionPool,
-    ConnectionContext,
-    init_database,
-    _get_compaction_write_count as _get_compaction_write_count_db,
-    _set_compaction_write_count as _set_compaction_write_count_db,
-    _increment_compaction_write_count as _increment_compaction_write_count_db,
-)
-from .memory_scoring import (
-    _score_chunk_aware,  # noqa: F401
-)
+from typing import Dict, List, Optional
 
 from ..config.settings import (
-    SEMANTIC_SEARCH_AVAILABLE,
-    DEFAULT_DB_PATH,
-    MAX_DB_CONNECTIONS,
-    DEFAULT_SEMANTIC_MODEL,
-    MAX_QUEUE_SIZE,
-    WRITE_QUEUE_ENABLED,
     COMPACTION_ENABLED,
     COMPACTION_TRIGGER_COUNT,
+    DEFAULT_DB_PATH,
+    DEFAULT_SEMANTIC_MODEL,
+    MAX_DB_CONNECTIONS,
+    MAX_QUEUE_SIZE,
+    SEMANTIC_SEARCH_AVAILABLE,
     SIGNUP_PROMPT_ENABLED,
     SIGNUP_PROMPT_THRESHOLD,
+    WRITE_QUEUE_ENABLED,
 )
 from .compaction import trigger_compaction
-from .write_queue import WriteQueue
-from .memory_ops import _store_memory, _update_memory, _replace_memory
+from .memory_db import (
+    ConnectionContext,
+    SQLiteConnectionPool,
+)
+from .memory_db import _get_compaction_write_count as _get_compaction_write_count_db
+from .memory_db import (
+    _increment_compaction_write_count as _increment_compaction_write_count_db,
+)
+from .memory_db import _set_compaction_write_count as _set_compaction_write_count_db
+from .memory_db import (
+    init_database,
+)
 from .memory_delete import _delete_memories
+from .memory_ops import (
+    _replace_memory,
+    _store_doc_mirror,
+    _store_memory,
+    _update_memory,
+)
 from .memory_recall import _recall_similar, _recall_text_search
+from .memory_scoring import _score_chunk_aware  # noqa: F401
+from .memory_utils import (  # noqa: F401
+    DOC_CHUNK_OVERLAP_WORDS,
+    DOC_CHUNK_TARGET_WORDS,
+    DOC_CHUNK_THRESHOLD_WORDS,
+    MEMORY_CHUNK_OVERLAP_WORDS,
+    MEMORY_CHUNK_TARGET_WORDS,
+    MEMORY_CHUNK_THRESHOLD_WORDS,
+    _chunk_text,
+    _is_exact_query,
+    _safe_fts_query,
+    _safe_print,
+    _temporal_score,
+    sanitize_content,
+)
+from .write_queue import WriteQueue
 
 if SEMANTIC_SEARCH_AVAILABLE:
     if importlib.util.find_spec("fastembed") is None:
@@ -166,14 +175,19 @@ class MARMMemory:
         """Clear active notebook entries for one session."""
         self.active_notebook_entries_by_session[session_name] = []
 
-    def remove_active_notebook_entry(self, name: str) -> None:
-        """Remove a deleted notebook entry from every active session scope."""
-        for session_name, entries in list(
-            self.active_notebook_entries_by_session.items()
-        ):
-            self.active_notebook_entries_by_session[session_name] = [
-                entry for entry in entries if entry.get("name") != name
-            ]
+    def remove_active_notebook_entry(self, name: str, session_name: str) -> None:
+        """Remove a deleted notebook entry from one session's active scope.
+
+        Session-scoped, not global -- a scratchpad is session-local, so
+        deleting session A's 'foo' must not touch session B's differently-
+        scoped active entry of the same name.
+        """
+        entries = self.active_notebook_entries_by_session.get(session_name)
+        if entries is None:
+            return
+        self.active_notebook_entries_by_session[session_name] = [
+            entry for entry in entries if entry.get("name") != name
+        ]
 
     def get_connection(self):
         return ConnectionContext(self.connection_pool)
@@ -322,6 +336,33 @@ class MARMMemory:
             platform,
         )
 
+    async def store_doc_mirror(
+        self,
+        content: str,
+        session: str,
+        project: str | None,
+        platform: str | None,
+        metadata: Dict,
+        existing_memory_id: str | None = None,
+    ) -> str:
+        """Queue-backed create/replace for a promoted doc's memories mirror
+        (services/notebook.py's action='save'). Same put_callable pattern as
+        console_create_memory/console_replace_memory -- serializes through
+        the write queue without needing a dedicated queue request type."""
+        await self.start_write_queue()
+        if self._write_queue is None:
+            raise RuntimeError("memory write queue is unavailable")
+        return await self._write_queue.put_callable(
+            _store_doc_mirror,
+            self,
+            content,
+            session,
+            project,
+            platform,
+            metadata,
+            existing_memory_id,
+        )
+
     async def console_delete_memory(self, memory_id: str) -> dict:
         await self.start_write_queue()
         if self._write_queue is None:
@@ -404,13 +445,11 @@ class MARMMemory:
             ).fetchone()
             if row:
                 return False
-            count = conn.execute(
-                """
+            count = conn.execute("""
                 SELECT COUNT(*) FROM memories
                 WHERE session_name != 'marm_system'
                   AND (compaction_role IS NULL OR compaction_role != 'source')
-                """
-            ).fetchone()[0]
+                """).fetchone()[0]
             if count < SIGNUP_PROMPT_THRESHOLD:
                 return False
             now = datetime.now(timezone.utc).isoformat()

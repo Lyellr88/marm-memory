@@ -200,6 +200,17 @@ def init_database(db_path: str) -> None:
             conn.execute(
                 "ALTER TABLE notebook_entries ADD COLUMN platform TEXT DEFAULT NULL"
             )
+        if "session_name" not in nb_cols:
+            conn.execute(
+                "ALTER TABLE notebook_entries ADD COLUMN session_name TEXT DEFAULT NULL"
+            )
+            # Legacy rows predate the session dimension entirely -- migrate
+            # them to "main" (notebook_dispatch's own default) rather than
+            # leaving them at NULL, which would strand them as a scope no
+            # add/use/show/save caller can ever reach again by default.
+            conn.execute(
+                "UPDATE notebook_entries SET session_name = 'main' WHERE session_name IS NULL"
+            )
         if any(row[1] == "name" and row[5] for row in nb_info):
             conn.execute("ALTER TABLE notebook_entries RENAME TO notebook_entries_old")
             conn.execute("""
@@ -209,6 +220,7 @@ def init_database(db_path: str) -> None:
                     embedding BLOB,
                     project TEXT DEFAULT NULL,
                     platform TEXT DEFAULT NULL,
+                    session_name TEXT DEFAULT NULL,
                     created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                     updated_at TEXT DEFAULT CURRENT_TIMESTAMP
                 )
@@ -221,17 +233,24 @@ def init_database(db_path: str) -> None:
             }
             project_expr = "project" if "project" in old_cols else "NULL"
             platform_expr = "platform" if "platform" in old_cols else "NULL"
+            session_expr = "session_name" if "session_name" in old_cols else "'main'"
             conn.execute(f"""
                 INSERT INTO notebook_entries
-                    (name, data, embedding, project, platform, created_at, updated_at)
-                SELECT name, data, embedding, {project_expr}, {platform_expr},
+                    (name, data, embedding, project, platform, session_name, created_at, updated_at)
+                SELECT name, data, embedding, {project_expr}, {platform_expr}, {session_expr},
                        created_at, updated_at
                 FROM notebook_entries_old
             """)
             conn.execute("DROP TABLE notebook_entries_old")
+        # Replaces the prior 3-column (name, project, platform) unique index --
+        # DROP is required because SQLite has no CREATE OR REPLACE INDEX, and
+        # the old index would otherwise keep enforcing the narrower identity
+        # forever alongside this one.
+        conn.execute("DROP INDEX IF EXISTS idx_notebook_entries_scope_unique")
         conn.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_notebook_entries_scope_unique "
-            "ON notebook_entries(name, COALESCE(project, ''), COALESCE(platform, ''))"
+            "ON notebook_entries(name, COALESCE(session_name, ''), "
+            "COALESCE(project, ''), COALESCE(platform, ''))"
         )
 
         conn.execute("""
@@ -281,46 +300,37 @@ def init_database(db_path: str) -> None:
             "ON compaction_staging(candidate_hash)"
         )
 
-        conn.execute(
-            """
+        conn.execute("""
             CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts
                 USING fts5(content, content='memories', content_rowid='rowid',
                            tokenize='porter ascii')
-            """
-        )
-        conn.execute(
-            """
+            """)
+        conn.execute("""
             CREATE TRIGGER IF NOT EXISTS memories_ai
                 AFTER INSERT ON memories BEGIN
                 INSERT INTO memories_fts(rowid, content) VALUES (new.rowid, new.content);
             END
-            """
-        )
-        conn.execute(
-            """
+            """)
+        conn.execute("""
             CREATE TRIGGER IF NOT EXISTS memories_au
                 AFTER UPDATE OF content ON memories BEGIN
                 INSERT INTO memories_fts(memories_fts, rowid, content)
                     VALUES ('delete', old.rowid, old.content);
                 INSERT INTO memories_fts(rowid, content) VALUES (new.rowid, new.content);
             END
-            """
-        )
-        conn.execute(
-            """
+            """)
+        conn.execute("""
             CREATE TRIGGER IF NOT EXISTS memories_ad
                 AFTER DELETE ON memories BEGIN
                 INSERT INTO memories_fts(memories_fts, rowid, content)
                     VALUES ('delete', old.rowid, old.content);
             END
-            """
-        )
+            """)
         conn.execute(
             "INSERT OR IGNORE INTO memories_fts(rowid, content) "
             "SELECT rowid, content FROM memories"
         )
-        conn.execute(
-            """
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS memory_chunks (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 memory_id TEXT NOT NULL,
@@ -329,8 +339,7 @@ def init_database(db_path: str) -> None:
                 embedding BLOB NOT NULL,
                 FOREIGN KEY (memory_id) REFERENCES memories(id) ON DELETE CASCADE
             )
-            """
-        )
+            """)
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_memory_chunks_memory_id"
             " ON memory_chunks(memory_id)"
@@ -338,8 +347,7 @@ def init_database(db_path: str) -> None:
 
         conn.execute("DROP TABLE IF EXISTS session_summary_chunks")
 
-        conn.execute(
-            """
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS session_summary_cache (
                 session_name TEXT PRIMARY KEY,
                 raw_digest TEXT NOT NULL DEFAULT '',
@@ -349,8 +357,7 @@ def init_database(db_path: str) -> None:
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 updated_at TEXT DEFAULT CURRENT_TIMESTAMP
             )
-            """
-        )
+            """)
         conn.commit()
 
 

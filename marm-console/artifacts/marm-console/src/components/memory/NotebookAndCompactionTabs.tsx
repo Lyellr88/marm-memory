@@ -13,10 +13,10 @@ export function NotebookTab() {
   const [actionNotice, setActionNotice] = useState<ActionNotice | null>(null);
   
   const [editing, setEditing] = useState<NotebookEntry | Partial<NotebookEntry> | null>(null);
-  // name/project/platform form the entry's identity key in the store, so an
-  // existing entry's identity is locked once editing starts -- otherwise
-  // saving after editing one of these fields would upsert a new entry and
-  // leave the original behind instead of updating it.
+  // name/session_name/project/platform form the entry's identity key in the
+  // store, so an existing entry's identity is locked once editing starts --
+  // otherwise saving after editing one of these fields would upsert a new
+  // entry and leave the original behind instead of updating it.
   const isExistingEntry = !!editing?.created_at;
 
   const handleSave = () => {
@@ -24,6 +24,7 @@ export function NotebookTab() {
     upsert.mutate({
       name: editing.name,
       content: editing.content,
+      session_name: editing.session_name || 'main',
       project: editing.project,
       platform: editing.platform
     }, {
@@ -55,12 +56,13 @@ export function NotebookTab() {
             <div className="divide-y">
               {data?.map(note => (
                 <button
-                  key={`${note.name}-${note.project}-${note.platform}`}
+                  key={`${note.name}-${note.session_name}-${note.project}-${note.platform}`}
                   onClick={() => setEditing(note)}
                   className="w-full text-left p-4 hover:bg-muted transition-colors"
                 >
                   <div className="font-medium text-sm">{note.name}</div>
                   <div className="flex gap-1 mt-2">
+                    <Badge variant="secondary" className="text-[10px]">{note.session_name}</Badge>
                     {note.project && <Badge variant="secondary" className="text-[10px]">{note.project}</Badge>}
                     {note.platform && <Badge variant="outline" className="text-[10px]">{note.platform}</Badge>}
                   </div>
@@ -82,6 +84,13 @@ export function NotebookTab() {
                   disabled={isExistingEntry}
                 />
                 <Input
+                  placeholder="Session (default: main)"
+                  value={editing.session_name || ''}
+                  onChange={e => setEditing(p => ({ ...p!, session_name: e.target.value }))}
+                  className="w-40 font-mono"
+                  disabled={isExistingEntry}
+                />
+                <Input
                   placeholder="Project (optional)"
                   value={editing.project || ''}
                   onChange={e => setEditing(p => ({ ...p!, project: e.target.value }))}
@@ -97,8 +106,8 @@ export function NotebookTab() {
                 />
               </div>
               <p className="text-xs text-muted-foreground -mt-2">
-                Entries are keyed by name + project + platform, so the same name can exist in different scopes.
-                {isExistingEntry && ' Delete and re-create the entry to change its name, project, or platform.'}
+                Entries are keyed by name + session + project + platform, so the same name can exist in different scopes.
+                {isExistingEntry && ' Delete and re-create the entry to change its name, session, project, or platform.'}
               </p>
               <Textarea 
                 placeholder="Markdown content..." 
@@ -115,7 +124,14 @@ export function NotebookTab() {
                       const typed = prompt(`Type DELETE to delete notebook entry '${editing.name}'.`);
                       if (typed !== 'DELETE') return;
                       deleteNote.mutate(
-                        { name: editing.name!, params: { project: editing.project || undefined, platform: editing.platform || undefined } },
+                        {
+                          name: editing.name!,
+                          params: {
+                            session_name: editing.session_name || undefined,
+                            project: editing.project || undefined,
+                            platform: editing.platform || undefined,
+                          },
+                        },
                         {
                           onSuccess: () => {
                             setActionNotice({ kind: 'success', message: `Notebook entry '${editing.name}' deleted.` });

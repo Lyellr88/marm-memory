@@ -401,19 +401,25 @@ async def delete_log_or_notebook_entry(
                     "memories_deleted": memories_deleted,
                 }
             else:  # type == "notebook"
+                # Scratchpads are session-local (see NotebookRequest/notebook_dispatch's
+                # own "main" default) -- deletion must be scoped the same way, or a
+                # bare name-only delete could remove a same-named entry from an
+                # unrelated session's scratchpad.
+                notebook_session = (session_name or "main").strip() or "main"
                 conn.execute("BEGIN IMMEDIATE")
                 try:
                     if scoped_notebook or project is not None or platform is not None:
                         cursor = conn.execute(
                             """
                             DELETE FROM notebook_entries
-                            WHERE name = ? AND project IS ? AND platform IS ?
+                            WHERE name = ? AND session_name = ? AND project IS ? AND platform IS ?
                             """,
-                            (target, project, platform),
+                            (target, notebook_session, project, platform),
                         )
                     else:
                         cursor = conn.execute(
-                            "DELETE FROM notebook_entries WHERE name = ?", (target,)
+                            "DELETE FROM notebook_entries WHERE name = ? AND session_name = ?",
+                            (target, notebook_session),
                         )
                     deleted = cursor.rowcount
                     conn.execute("COMMIT")
@@ -421,12 +427,14 @@ async def delete_log_or_notebook_entry(
                     conn.execute("ROLLBACK")
                     raise
                 if deleted > 0:
-                    memory.remove_active_notebook_entry(target)
+                    memory.remove_active_notebook_entry(target, notebook_session)
                 return {
                     "status": "success" if deleted > 0 else "not_found",
-                    "message": f"🗑️ Deleted notebook entry '{target}'"
-                    if deleted > 0
-                    else f"Entry '{target}' not found",
+                    "message": (
+                        f"🗑️ Deleted notebook entry '{target}'"
+                        if deleted > 0
+                        else f"Entry '{target}' not found"
+                    ),
                     "deleted": deleted > 0,
                 }
     except sqlite3.Error as e:

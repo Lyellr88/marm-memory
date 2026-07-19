@@ -3,6 +3,31 @@
 ## Version 2 - MARM Protocol to Universal MCP Server Evolution
 
 <details>
+<summary><strong>Unreleased: Notebook Scratch Pad, Permanent Docs Store, and Chunking Rework (v2.25.0)</strong></summary>
+
+### Notebook Is Now a Real Per-Session Scratch Pad
+
+- `notebook_entries` gains `session_name` as part of its identity (was `name`+`project`+`platform` only). Legacy rows migrate to `session_name='main'` on upgrade so nothing already saved becomes unreachable. `add`, `use`, `show`, and `marm_delete(type="notebook")` all now scope by session — a scratch note saved under one session is no longer visible from a different one.
+- Scratch entries stop writing embeddings entirely; they're retrieved by exact name, not semantic search. `--migrate-embeddings` and the embedding-compatibility inspector both stop touching `notebook_entries.embedding`.
+
+### New: `marm_notebook(action="save")` and the Permanent Docs Store
+
+- `marm_notebook` gains a `save` action that promotes a scratch entry — or new inline content passed directly — into a new, separate SQLite database (`marm_docs.db`, `~/.marm/docs/` by default, override with `MARM_DOCS_DB_PATH`). `save` is a copy, not a move: the original scratch entry is left untouched, and saving again under the same name updates the existing doc rather than duplicating it.
+- Saved docs reach `marm_smart_recall` and `marm_concept_build` by being mirrored into `memories` under their own original session/project/platform, through a new queue-backed, non-consolidating mirror path (`memory.store_doc_mirror`) that keeps one stable row per doc across resaves. The mirror is best-effort: a sync failure never loses the durable doc save, it just reports `mirror_status="pending"` so a later save can repair it. The mirror always excludes the `marm_system` session so it can never disappear into `marm_concept_build`'s reserved-session exclusion filter.
+- No new tool, no new endpoint — same `marm_notebook` operation, one more action.
+
+### Memory and Doc Chunking Reworked for the Larger Embedding Window
+
+- Replaced the fixed-window chunker (150-word chunks, tuned for the old 256-token model) with an even-split algorithm sized for the current `jina-embeddings-v2-small-en` model's 8,192-token window: a memory profile (500-word threshold / 250-word target / 50-word overlap) and a larger doc profile (1,000 / 800 / 100). The old algorithm could leave a tiny, low-value trailing fragment (e.g. a 280-word memory splitting into 250+30 words); the new one distributes remainder words evenly across the leading chunks instead.
+- Applies to new writes only — `--migrate-embeddings` is unchanged (it re-embeds existing text, it never re-derives chunk boundaries), so pre-upgrade memories keep their old chunk sizing until naturally rewritten. Old and new chunk sizes coexist safely in recall since each chunk is scored independently.
+
+### Console
+
+- Notebook list/create/update/delete now carry `session_name` end to end (server and UI), so same-named scratch entries from different sessions are no longer conflated in the Console.
+
+</details>
+
+<details>
 <summary><strong>Unreleased: Jina v2 Small Embedding Migration (v2.24.0)</strong></summary>
 
 ### Default Embedding Model Changed

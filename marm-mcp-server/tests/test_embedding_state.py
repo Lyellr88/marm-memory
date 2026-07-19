@@ -37,13 +37,14 @@ def test_fresh_state_seeds_marker_without_creating_concept_db(tmp_path):
     assert marker == DEFAULT_SEMANTIC_MODEL
 
 
-def test_old_notebook_vector_requires_migration_when_memories_are_empty(tmp_path):
+def test_old_chunk_vector_requires_migration_when_memories_are_empty(tmp_path):
     memory_path = tmp_path / "memory.db"
     init_database(str(memory_path))
     with sqlite3.connect(memory_path) as conn:
         conn.execute(
-            "INSERT INTO notebook_entries (name, data, embedding) VALUES (?, ?, ?)",
-            ("notes", "old notebook vector", _vector(384)),
+            "INSERT INTO memory_chunks (memory_id, chunk_index, chunk_text, embedding) "
+            "VALUES ('m1', 0, 'old chunk vector', ?)",
+            (_vector(384),),
         )
     warnings = []
 
@@ -65,13 +66,38 @@ def test_old_notebook_vector_requires_migration_when_memories_are_empty(tmp_path
         )
 
 
-def test_different_512_dimension_model_marker_requires_migration(tmp_path):
+def test_notebook_embedding_is_excluded_from_inspection(tmp_path):
+    """notebook_entries.embedding is retired -- scratch writes no longer
+    populate it, so an old-dimension vector sitting in that column must
+    never trigger a migration warning or count as incompatible."""
     memory_path = tmp_path / "memory.db"
     init_database(str(memory_path))
     with sqlite3.connect(memory_path) as conn:
         conn.execute(
             "INSERT INTO notebook_entries (name, data, embedding) VALUES (?, ?, ?)",
-            ("notes", "other model vector", _vector(512)),
+            ("notes", "old notebook vector", _vector(384)),
+        )
+    warnings = []
+
+    state = check_embedding_compatibility(
+        memory_db_path=str(memory_path),
+        concept_db_path=str(tmp_path / "missing.db"),
+        warn=warnings.append,
+    )
+
+    assert state.incompatible == 0
+    assert state.compatible
+    assert warnings == []
+
+
+def test_different_512_dimension_model_marker_requires_migration(tmp_path):
+    memory_path = tmp_path / "memory.db"
+    init_database(str(memory_path))
+    with sqlite3.connect(memory_path) as conn:
+        conn.execute(
+            "INSERT INTO memories (id, session_name, content, embedding, timestamp) "
+            "VALUES ('m1', 's1', 'other model vector', ?, '2026-01-01T00:00:00Z')",
+            (_vector(512),),
         )
         conn.execute(
             "INSERT INTO user_settings (key, value) VALUES ('embedding_model', ?)",
@@ -163,8 +189,9 @@ def test_http_lifespan_runs_shared_compatibility_check(monkeypatch, tmp_path):
     memory_path = tmp_path / "marm_memory.db"
     with sqlite3.connect(memory_path) as conn:
         conn.execute(
-            "INSERT INTO notebook_entries (name, data, embedding) VALUES (?, ?, ?)",
-            ("old", "old vector", _vector(384)),
+            "INSERT INTO memories (id, session_name, content, embedding, timestamp) "
+            "VALUES ('m1', 's1', 'old vector', ?, '2026-01-01T00:00:00Z')",
+            (_vector(384),),
         )
     warnings = []
     real_check = check_embedding_compatibility
@@ -196,8 +223,9 @@ def test_stdio_main_runs_shared_compatibility_check(monkeypatch, tmp_path):
     memory_path = stdio.memory.db_path
     with sqlite3.connect(memory_path) as conn:
         conn.execute(
-            "INSERT INTO notebook_entries (name, data, embedding) VALUES (?, ?, ?)",
-            ("stdio-old", "old vector", _vector(384)),
+            "INSERT INTO memories (id, session_name, content, embedding, timestamp) "
+            "VALUES ('m1', 's1', 'old vector', ?, '2026-01-01T00:00:00Z')",
+            (_vector(384),),
         )
     warnings = []
     real_check = check_embedding_compatibility

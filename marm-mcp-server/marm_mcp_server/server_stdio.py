@@ -25,29 +25,27 @@ from anyio import BrokenResourceError, ClosedResourceError, EndOfStream  # noqa:
 
 os.environ["SERVER_HOST"] = "127.0.0.1"
 
-from .core.stdio_logging import _stdio_log  # noqa: E402
-from .utils.embedding_state import check_embedding_compatibility  # noqa: E402
-
-from .core.stdio_tool_lifecycle import _log_tool_call  # noqa: E402
-
-
 from mcp.server.fastmcp import FastMCP  # noqa: E402
 
+from marm_mcp_server.config.settings import (  # noqa: E402
+    DEFAULT_DB_PATH,
+    SEMANTIC_SEARCH_AVAILABLE,
+    SERVER_VERSION,
+)
+from marm_mcp_server.core.graph_supervisor import graph_supervisor  # noqa: E402
 from marm_mcp_server.core.memory import memory  # noqa: E402
 from marm_mcp_server.services.notebook import notebook_dispatch  # noqa: E402
+from marm_mcp_server.services.recall import smart_recall  # noqa: E402
 from marm_mcp_server.services.stdio_entry_tools import (  # noqa: E402
     create_log_entry_stdio,
     delete_entry_stdio,
     list_log_entries_stdio,
 )
 from marm_mcp_server.services.summary import generate_session_summary  # noqa: E402
-from marm_mcp_server.services.recall import smart_recall  # noqa: E402
-from marm_mcp_server.config.settings import (  # noqa: E402
-    SERVER_VERSION,
-    DEFAULT_DB_PATH,
-    SEMANTIC_SEARCH_AVAILABLE,
-)
-from marm_mcp_server.core.graph_supervisor import graph_supervisor  # noqa: E402
+
+from .core.stdio_logging import _stdio_log  # noqa: E402
+from .core.stdio_tool_lifecycle import _log_tool_call  # noqa: E402
+from .utils.embedding_state import check_embedding_compatibility  # noqa: E402
 
 mcp = FastMCP("MARM MCP Server")
 
@@ -181,13 +179,14 @@ async def marm_notebook(
     platform: Optional[str] = None,
 ) -> dict:
     """
-    📔 Unified notebook — add, use, show, status, or clear
+    📔 Unified notebook — add, use, show, status, clear, or save
 
-    action="add": save or update an entry (name + data required)
+    action="add": save or update a scratch entry (name + data required)
     action="use": activate entries as instructions (names required, comma-separated)
-    action="show": list all saved entries with previews
+    action="show": list scratch entries for this session with previews
     action="status": show currently active entries
     action="clear": clear the active entry list
+    action="save": promote a scratch entry (or new data) into the permanent docs store
     """
     try:
         return await notebook_dispatch(
@@ -292,13 +291,13 @@ async def marm_compaction(
 # registers them onto `mcp` here, after the 7 core tools above, so
 # tools/list order is deterministic regardless of import order.
 from .services.stdio_graph_tools import (  # noqa: E402,F401
-    marm_graph_index,
     marm_code_lookup,
-    marm_graph_trace,
-    marm_graph_architecture,
-    marm_graph_impact,
     marm_concept_build,
     marm_concept_recall,
+    marm_graph_architecture,
+    marm_graph_impact,
+    marm_graph_index,
+    marm_graph_trace,
     register_graph_tools,
 )
 
