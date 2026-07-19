@@ -229,9 +229,7 @@ async def test_add_same_name_project_platform_different_sessions_do_not_collide(
     notebook_svc,
 ):
     dispatch, _ = notebook_svc
-    await dispatch(
-        action="add", name="dup", data="alpha content", session_name="alpha"
-    )
+    await dispatch(action="add", name="dup", data="alpha content", session_name="alpha")
     await dispatch(action="add", name="dup", data="beta content", session_name="beta")
 
     alpha_show = await dispatch(action="show", session_name="alpha")
@@ -372,6 +370,66 @@ async def test_save_resave_replaces_mirror_row_in_place(notebook_svc, tmp_path):
     assert len(rows) == 1
     assert rows[0][0] == "version two"
     assert rows[0][1] == "doc"
+
+
+@pytest.mark.asyncio
+async def test_save_resave_marks_staged_compaction_candidates_stale(
+    notebook_svc, tmp_path
+):
+    """_store_doc_mirror's replace branch overwrites the mirror memory row
+    in place, just like core/compaction.py's _replace_memory -- but unlike
+    _replace_memory, it wasn't marking active compaction_staging rows that
+    reference that memory id as stale. Without this, a resave could silently
+    leave a staged summary pointing at content that no longer exists,
+    letting marm_apply_compaction_summary later apply a summary against
+    changed content."""
+    dispatch, _ = notebook_svc
+    first = await dispatch(
+        action="save", name="staged-doc", data="version one -- pre-resave"
+    )
+    assert first["mirror_status"] == "synced"
+    memory_id = first["memory_id"]
+
+    with sqlite3.connect(str(tmp_path / "nb-test.db")) as conn:
+        conn.execute(
+            """
+            INSERT INTO compaction_staging (
+                id, session_name, source_memory_ids, preview, suggested_summary,
+                status, candidate_hash, source_updated_at_snapshot,
+                expires_at, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "candidate-doc-mirror",
+                "main",
+                f'["{memory_id}"]',
+                "version one -- pre-resave",
+                "a suggested summary",
+                "pending_summary",
+                "hash-doesnt-matter",
+                "{}",
+                "2099-01-01T00:00:00+00:00",
+                "2026-01-01T00:00:00+00:00",
+                "2026-01-01T00:00:00+00:00",
+            ),
+        )
+        conn.commit()
+
+    second = await dispatch(
+        action="save", name="staged-doc", data="version two -- post-resave"
+    )
+    assert second["mirror_status"] == "synced"
+    assert second["memory_id"] == memory_id
+
+    with sqlite3.connect(str(tmp_path / "nb-test.db")) as conn:
+        status = conn.execute(
+            "SELECT status FROM compaction_staging WHERE id = ?",
+            ("candidate-doc-mirror",),
+        ).fetchone()[0]
+    assert status == "stale", (
+        "compaction_staging candidate referencing the resaved doc's memory "
+        "id must be invalidated, matching _replace_memory's behavior"
+    )
 
 
 @pytest.mark.asyncio

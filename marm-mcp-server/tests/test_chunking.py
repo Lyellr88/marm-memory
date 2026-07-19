@@ -482,9 +482,9 @@ async def test_write_chunks_same_content_hash_twice_does_not_duplicate_rows(tmp_
             (mid,),
         ).fetchall()
 
-    assert len(rows) == len(
-        chunks
-    ), "duplicate chunk rows accumulated across identical-content writes"
+    assert len(rows) == len(chunks), (
+        "duplicate chunk rows accumulated across identical-content writes"
+    )
     assert [r[1] for r in rows] == chunks
 
 

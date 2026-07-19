@@ -430,6 +430,18 @@ async def _store_doc_mirror(
             if replaced:
                 assert existing_memory_id is not None
                 memory_id = existing_memory_id
+                conn.execute(
+                    """
+                    UPDATE compaction_staging
+                    SET status = 'stale', updated_at = ?
+                    WHERE status != 'applied'
+                      AND EXISTS (
+                          SELECT 1 FROM json_each(compaction_staging.source_memory_ids)
+                          WHERE value = ?
+                      )
+                    """,
+                    (timestamp, memory_id),
+                )
             else:
                 memory_id = str(uuid.uuid4())
                 conn.execute(
