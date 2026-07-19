@@ -9,15 +9,15 @@ import pytest
 
 from marm_mcp_server.config.settings import DEFAULT_SEMANTIC_DIM
 from marm_mcp_server.core.memory import (
+    DOC_CHUNK_OVERLAP_WORDS,
+    DOC_CHUNK_TARGET_WORDS,
+    DOC_CHUNK_THRESHOLD_WORDS,
+    MEMORY_CHUNK_OVERLAP_WORDS,
+    MEMORY_CHUNK_TARGET_WORDS,
+    MEMORY_CHUNK_THRESHOLD_WORDS,
     MARMMemory,
     _chunk_text,
     _score_chunk_aware,
-    MEMORY_CHUNK_THRESHOLD_WORDS,
-    MEMORY_CHUNK_TARGET_WORDS,
-    MEMORY_CHUNK_OVERLAP_WORDS,
-    DOC_CHUNK_THRESHOLD_WORDS,
-    DOC_CHUNK_TARGET_WORDS,
-    DOC_CHUNK_OVERLAP_WORDS,
 )
 from marm_mcp_server.core.memory_utils import _split_evenly
 
@@ -436,3 +436,53 @@ async def test_merge_path_deletes_stale_chunks(tmp_path):
     # All stale chunks must be gone (encoder is disabled so no new chunks written)
     stale = [r[0] for r in remaining if r[0] == "stale chunk"]
     assert stale == []
+
+
+@pytest.mark.asyncio
+async def test_write_chunks_same_content_hash_twice_does_not_duplicate_rows(tmp_path):
+    """Two resaves with unchanged content share the same content_hash, so
+    _write_chunks' own staleness guard (compares expected_content_hash
+    against memories.content_hash) can't tell them apart -- this is
+    exactly what a doc save() followed immediately by an identical resave
+    produces. Without a uniqueness guard on (memory_id, chunk_index), both
+    fire-and-forget writes could each insert a full set of chunk rows.
+    INSERT OR REPLACE plus the unique index must keep this idempotent."""
+    from marm_mcp_server.core.memory_utils import _write_chunks
+
+    db_path = str(tmp_path / "memory.db")
+    mem = MARMMemory(db_path)
+    mem.encoder = type(
+        "_FakeEncoder", (), {"encode": staticmethod(lambda text: _make_unit_vec())}
+    )()
+
+    mid = str(uuid.uuid4())
+    ts = datetime.now(timezone.utc).isoformat()
+    content_hash = "same-hash-both-writes"
+    chunks = ["chunk one text", "chunk two text"]
+
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            "INSERT INTO memories "
+            "(id, session_name, content, timestamp, context_type, metadata, content_hash)"
+            " VALUES (?, 'test', 'content', ?, 'general', '{}', ?)",
+            (mid, ts, content_hash),
+        )
+        conn.commit()
+
+    # Two writes for the same memory_id with identical content and hash --
+    # mirrors a resave landing while the prior save's fire-and-forget chunk
+    # write is still in flight.
+    await _write_chunks(mem, db_path, mid, chunks, content_hash)
+    await _write_chunks(mem, db_path, mid, chunks, content_hash)
+
+    with sqlite3.connect(db_path) as conn:
+        rows = conn.execute(
+            "SELECT chunk_index, chunk_text FROM memory_chunks WHERE memory_id = ? "
+            "ORDER BY chunk_index",
+            (mid,),
+        ).fetchall()
+
+    assert len(rows) == len(
+        chunks
+    ), "duplicate chunk rows accumulated across identical-content writes"
+    assert [r[1] for r in rows] == chunks

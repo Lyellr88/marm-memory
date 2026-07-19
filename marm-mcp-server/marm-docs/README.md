@@ -1,4 +1,4 @@
-# MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.24.0
+# MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.25.0
 
 ## Table of Contents
 
@@ -74,7 +74,7 @@ The Jina v2 Small default uses 512-dimensional embeddings; older `all-MiniLM-L6-
 marm-mcp-server --migrate-embeddings
 ```
 
-The command refuses to continue when it detects a live HTTP server, but STDIO processes cannot be detected reliably and must be stopped manually. It re-embeds memory, chunk, notebook, and any existing concept-graph embeddings, reports batch progress, verifies both databases, and exits. It is resumable: rerun the same command after an interruption. Do not run it against a live server.
+The command refuses to continue when it detects a live HTTP server, but STDIO processes cannot be detected reliably and must be stopped manually. It re-embeds memory, chunk, and any existing concept-graph embeddings (notebook scratch entries no longer carry embeddings), reports batch progress, verifies both databases, and exits. It is resumable: rerun the same command after an interruption. Do not run it against a live server.
 
 ## Performance & Scaling Benchmarks
 

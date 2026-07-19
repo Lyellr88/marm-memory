@@ -416,12 +416,34 @@ async def delete_log_or_notebook_entry(
                             """,
                             (target, notebook_session, project, platform),
                         )
+                        deleted = cursor.rowcount
                     else:
+                        # The (name, session_name, project, platform) identity lets
+                        # the same name coexist across multiple project/platform
+                        # scopes within one session -- an unscoped delete-by-name
+                        # must not silently wipe all of them at once. Refuse and
+                        # ask the caller to disambiguate when more than one exists.
+                        matches = conn.execute(
+                            "SELECT project, platform FROM notebook_entries "
+                            "WHERE name = ? AND session_name = ?",
+                            (target, notebook_session),
+                        ).fetchall()
+                        if len(matches) > 1:
+                            conn.execute("ROLLBACK")
+                            return {
+                                "status": "error",
+                                "message": (
+                                    f"Multiple notebook entries named '{target}' exist "
+                                    f"in session '{notebook_session}' across different "
+                                    "project/platform scopes; pass project and/or "
+                                    "platform to disambiguate."
+                                ),
+                            }
                         cursor = conn.execute(
                             "DELETE FROM notebook_entries WHERE name = ? AND session_name = ?",
                             (target, notebook_session),
                         )
-                    deleted = cursor.rowcount
+                        deleted = cursor.rowcount
                     conn.execute("COMMIT")
                 except Exception:
                     conn.execute("ROLLBACK")

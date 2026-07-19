@@ -344,6 +344,18 @@ def init_database(db_path: str) -> None:
             "CREATE INDEX IF NOT EXISTS idx_memory_chunks_memory_id"
             " ON memory_chunks(memory_id)"
         )
+        # Two writes for the same memory_id with identical content share the
+        # same expected_content_hash (_write_chunks' own staleness guard
+        # can't tell them apart), so back-to-back resaves with unchanged
+        # content -- a real, supported action for a promoted doc -- could
+        # otherwise both pass the staleness check and both INSERT a full
+        # set of chunk rows, doubling storage with no way to tell the
+        # duplicates apart. This index plus _write_chunks' INSERT OR REPLACE
+        # makes concurrent identical-content chunk writes idempotent instead.
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_memory_chunks_dedup"
+            " ON memory_chunks(memory_id, chunk_index)"
+        )
 
         conn.execute("DROP TABLE IF EXISTS session_summary_chunks")
 

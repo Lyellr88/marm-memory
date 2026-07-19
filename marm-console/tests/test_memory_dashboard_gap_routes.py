@@ -54,11 +54,12 @@ def _memory_db(tmp_path, monkeypatch):
             CREATE TABLE notebook_entries (
                 name TEXT NOT NULL,
                 data TEXT NOT NULL,
+                session_name TEXT,
                 project TEXT,
                 platform TEXT,
                 created_at TEXT,
                 updated_at TEXT,
-                PRIMARY KEY (name, project, platform)
+                PRIMARY KEY (name, session_name, project, platform)
             );
             """
         )
@@ -252,6 +253,7 @@ def test_session_log_notebook_and_compaction_mutations_proxy_to_marm(monkeypatch
                 "action": "add",
                 "name": "deploy-note",
                 "data": "Ship carefully.",
+                "session_name": "main",
                 "project": "console",
                 "platform": "codex",
             },
@@ -262,6 +264,7 @@ def test_session_log_notebook_and_compaction_mutations_proxy_to_marm(monkeypatch
             {
                 "type": "notebook",
                 "target": "deploy-note",
+                "session_name": "main",
                 "project": "console",
                 "platform": "codex",
             },
@@ -361,12 +364,12 @@ def test_notebook_mutations_preserve_project_platform_scope(monkeypatch, tmp_pat
         conn.executemany(
             """
             INSERT INTO notebook_entries
-                (name, data, project, platform, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+                (name, data, session_name, project, platform, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             [
-                ("shared", "Global rule.", None, None, now, now),
-                ("shared", "Scoped rule.", "marm-console", "codex", now, now),
+                ("shared", "Global rule.", "main", None, None, now, now),
+                ("shared", "Scoped rule.", "main", "marm-console", "codex", now, now),
             ],
         )
 
@@ -411,6 +414,7 @@ def test_notebook_mutations_preserve_project_platform_scope(monkeypatch, tmp_pat
                 "action": "add",
                 "name": "shared",
                 "data": "Scoped rule.",
+                "session_name": "main",
                 "project": "marm-console",
                 "platform": "codex",
             },
@@ -421,6 +425,7 @@ def test_notebook_mutations_preserve_project_platform_scope(monkeypatch, tmp_pat
             {
                 "type": "notebook",
                 "target": "shared",
+                "session_name": "main",
                 "project": "marm-console",
                 "platform": "codex",
             },

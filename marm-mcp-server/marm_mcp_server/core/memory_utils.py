@@ -178,7 +178,8 @@ async def _write_chunks(
             )
             return
         conn.executemany(
-            "INSERT INTO memory_chunks (memory_id, chunk_index, chunk_text, embedding)"
+            "INSERT OR REPLACE INTO memory_chunks"
+            " (memory_id, chunk_index, chunk_text, embedding)"
             " VALUES (?, ?, ?, ?)",
             [
                 (memory_id, i, chunk, emb)

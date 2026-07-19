@@ -205,6 +205,67 @@ def test_notebook_delete_can_target_project_platform_scope(monkeypatch, tmp_path
     ]
 
 
+def test_notebook_unscoped_delete_refuses_when_multiple_scopes_match(
+    monkeypatch, tmp_path
+):
+    """The (name, session_name, project, platform) identity lets the same
+    name coexist across project/platform scopes within one session -- an
+    unscoped delete-by-name-only must not silently wipe every one of them."""
+    server = load_isolated_server(monkeypatch, tmp_path)
+    client = local_client(server.app)
+    now = datetime.now(timezone.utc).isoformat()
+
+    with server.memory.get_connection() as conn:
+        conn.executemany(
+            """
+            INSERT INTO notebook_entries (name, data, updated_at, session_name, project, platform)
+            VALUES (?, ?, ?, 'main', ?, ?)
+            """,
+            [
+                ("ambiguous-rule", "alpha", now, "proj-a", None),
+                ("ambiguous-rule", "beta", now, "proj-b", None),
+            ],
+        )
+
+    deleted = client.post(
+        "/marm_delete",
+        json={"type": "notebook", "target": "ambiguous-rule"},
+    )
+    assert deleted.status_code == 200
+    assert deleted.json()["status"] == "error"
+    assert "ambiguous-rule" in deleted.json()["message"]
+
+    with server.memory.get_connection() as conn:
+        count = conn.execute(
+            "SELECT COUNT(*) FROM notebook_entries WHERE name = 'ambiguous-rule'"
+        ).fetchone()[0]
+    assert count == 2, "both scoped entries must survive a refused ambiguous delete"
+
+
+def test_notebook_unscoped_delete_still_works_for_single_match(monkeypatch, tmp_path):
+    """The disambiguation guard must not regress the common case: a single
+    unscoped notebook entry still deletes cleanly by name alone."""
+    server = load_isolated_server(monkeypatch, tmp_path)
+    client = local_client(server.app)
+    now = datetime.now(timezone.utc).isoformat()
+
+    with server.memory.get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO notebook_entries (name, data, updated_at, session_name, project, platform)
+            VALUES (?, ?, ?, 'main', NULL, NULL)
+            """,
+            ("solo-rule", "content", now),
+        )
+
+    deleted = client.post(
+        "/marm_delete",
+        json={"type": "notebook", "target": "solo-rule"},
+    )
+    assert deleted.status_code == 200
+    assert deleted.json()["deleted"] is True
+
+
 def test_notebook_show_previews_long_entries_and_clear_resets_active_list(
     monkeypatch, tmp_path
 ):
@@ -321,9 +382,7 @@ def test_http_notebook_add_persists_entry_without_embedding(monkeypatch, tmp_pat
 
     class FakeEncoder:
         def encode(self, text):
-            raise AssertionError(
-                "notebook add must not call the encoder at all"
-            )
+            raise AssertionError("notebook add must not call the encoder at all")
 
     monkeypatch.setattr(memory_module.memory, "encoder", FakeEncoder())
 
@@ -432,13 +491,13 @@ def test_smart_recall_with_include_logs_and_system_info(monkeypatch, tmp_path):
     assert recall_with_logs.status_code == 200
     assert "log_results" in recall_with_logs.json()
     assert "log_results_count" in recall_with_logs.json()
-    assert recall_with_logs.json()["log_results_count"] >= 1, (
-        f"include_logs=True returned no log entries: {recall_with_logs.json()}"
-    )
+    assert (
+        recall_with_logs.json()["log_results_count"] >= 1
+    ), f"include_logs=True returned no log entries: {recall_with_logs.json()}"
     log_topics = [r["topic"] for r in recall_with_logs.json()["log_results"]]
-    assert any("qwen" in t for t in log_topics), (
-        f"Expected qwen in log topics, got: {log_topics}"
-    )
+    assert any(
+        "qwen" in t for t in log_topics
+    ), f"Expected qwen in log topics, got: {log_topics}"
 
     # seeded memory + the dual-written log entry memory
     memory_module = importlib.import_module("marm_mcp_server.core.memory")
@@ -526,12 +585,12 @@ def test_cold_startup_leaves_doc_tables_empty(monkeypatch, tmp_path):
             "SELECT COUNT(*) FROM memories WHERE session_name = 'marm_system'"
         ).fetchone()[0]
 
-    assert nb_count == 0, (
-        f"Expected 0 marm_ notebook entries on cold boot, got {nb_count}"
-    )
-    assert mem_count == 0, (
-        f"Expected 0 marm_system memories on cold boot, got {mem_count}"
-    )
+    assert (
+        nb_count == 0
+    ), f"Expected 0 marm_ notebook entries on cold boot, got {nb_count}"
+    assert (
+        mem_count == 0
+    ), f"Expected 0 marm_system memories on cold boot, got {mem_count}"
 
 
 def test_marm_start_loads_docs_once_not_on_repeated_calls(monkeypatch, tmp_path):
@@ -559,9 +618,9 @@ def test_marm_start_loads_docs_once_not_on_repeated_calls(monkeypatch, tmp_path)
             "SELECT COUNT(*) FROM memories WHERE session_name = 'marm_system'"
         ).fetchone()[0]
 
-    assert count_after_second == count_after_first, (
-        f"marm_system memory count grew on repeated load: {count_after_first} -> {count_after_second}"
-    )
+    assert (
+        count_after_second == count_after_first
+    ), f"marm_system memory count grew on repeated load: {count_after_first} -> {count_after_second}"
 
 
 def test_doc_loader_reindexes_when_memory_row_deleted(monkeypatch, tmp_path):
@@ -577,9 +636,9 @@ def test_doc_loader_reindexes_when_memory_row_deleted(monkeypatch, tmp_path):
     with memory_module.memory.get_connection() as conn:
         memory_id = conn.execute("SELECT memory_id FROM doc_index LIMIT 1").fetchone()
 
-    assert memory_id and memory_id[0], (
-        "doc_index should have a memory_id after first load"
-    )
+    assert (
+        memory_id and memory_id[0]
+    ), "doc_index should have a memory_id after first load"
 
     # Delete the memory row externally (simulates manual cleanup)
     with memory_module.memory.get_connection() as conn:
@@ -598,22 +657,22 @@ def test_doc_loader_reindexes_when_memory_row_deleted(monkeypatch, tmp_path):
             "SELECT COUNT(*) FROM memories WHERE session_name = 'marm_system'"
         ).fetchone()[0]
 
-    assert marm_count > 0, (
-        "Re-index after missing memory row should restore marm_system memories"
-    )
-    assert new_memory_id and new_memory_id[0], (
-        "doc_index should have a memory_id after re-index"
-    )
-    assert new_memory_id[0] != memory_id[0], (
-        "doc_index memory_id should be updated to the new row after re-index"
-    )
+    assert (
+        marm_count > 0
+    ), "Re-index after missing memory row should restore marm_system memories"
+    assert (
+        new_memory_id and new_memory_id[0]
+    ), "doc_index should have a memory_id after re-index"
+    assert (
+        new_memory_id[0] != memory_id[0]
+    ), "doc_index memory_id should be updated to the new row after re-index"
     with memory_module.memory.get_connection() as conn:
         new_row_exists = conn.execute(
             "SELECT 1 FROM memories WHERE id = ?", (new_memory_id[0],)
         ).fetchone()
-    assert new_row_exists, (
-        "new doc_index memory_id must point to an existing memories row"
-    )
+    assert (
+        new_row_exists
+    ), "new doc_index memory_id must point to an existing memories row"
 
 
 def test_legacy_system_notebook_entries_cleaned_on_load(monkeypatch, tmp_path):
@@ -639,9 +698,9 @@ def test_legacy_system_notebook_entries_cleaned_on_load(monkeypatch, tmp_path):
             tuple(legacy_names),
         ).fetchall()
 
-    assert remaining == [], (
-        f"Legacy system notebook entries should be removed: {remaining}"
-    )
+    assert (
+        remaining == []
+    ), f"Legacy system notebook entries should be removed: {remaining}"
 
 
 def test_marm_reload_docs_indexes_documentation(monkeypatch, tmp_path):
@@ -781,14 +840,14 @@ def test_http_removed_tools_absent_from_openapi_schema(monkeypatch, tmp_path):
     assert response.status_code == 200
     paths = response.json().get("paths", {})
 
-    assert "/marm_start" not in paths, (
-        "marm_start must be hidden from MCP (include_in_schema=False)"
-    )
+    assert (
+        "/marm_start" not in paths
+    ), "marm_start must be hidden from MCP (include_in_schema=False)"
     assert "/marm_refresh" not in paths, "marm_refresh must be hidden from MCP"
     assert "/marm_reload_docs" not in paths, "marm_reload_docs must be hidden from MCP"
-    assert "/marm_current_context" not in paths, (
-        "marm_current_context must be hidden from MCP"
-    )
+    assert (
+        "/marm_current_context" not in paths
+    ), "marm_current_context must be hidden from MCP"
     assert "/marm_system_info" not in paths, "marm_system_info must be hidden from MCP"
 
     assert "/marm_smart_recall" in paths
@@ -797,12 +856,12 @@ def test_http_removed_tools_absent_from_openapi_schema(monkeypatch, tmp_path):
     assert "/marm_notebook_add" not in paths, "old marm_notebook_add must be removed"
     assert "/marm_notebook_use" not in paths, "old marm_notebook_use must be removed"
     assert "/marm_notebook_show" not in paths, "old marm_notebook_show must be removed"
-    assert "/marm_notebook_status" not in paths, (
-        "old marm_notebook_status must be removed"
-    )
-    assert "/marm_notebook_clear" not in paths, (
-        "old marm_notebook_clear must be removed"
-    )
+    assert (
+        "/marm_notebook_status" not in paths
+    ), "old marm_notebook_status must be removed"
+    assert (
+        "/marm_notebook_clear" not in paths
+    ), "old marm_notebook_clear must be removed"
     assert "/marm_compaction" in paths
     assert "/marm_get_compaction_candidates" not in paths
     assert "/marm_stage_compaction_summaries" not in paths
@@ -875,9 +934,9 @@ def test_auto_refresh_triggers_reload_after_threshold(monkeypatch, tmp_path):
     assert len(reload_calls) == 0, "Reload fired before threshold"
 
     asyncio.run(run_n(1))
-    assert len(reload_calls) == 1, (
-        f"Expected 1 reload at threshold, got {len(reload_calls)}"
-    )
+    assert (
+        len(reload_calls) == 1
+    ), f"Expected 1 reload at threshold, got {len(reload_calls)}"
     assert doc_module._tool_call_count == 0, "Counter should reset after reload"
 
 
@@ -1137,17 +1196,17 @@ def test_http_mcp_tool_response_orders_protocol_before_compaction(
     r1, r2 = asyncio.run(run())
 
     content1 = json.loads(r1.body)["result"]["content"]
-    assert content1[0]["text"].startswith("[MARM SESSION INIT]"), (
-        "protocol must inject on first call"
-    )
-    assert not any("[MARM COMPACTION REQUEST]" in c["text"] for c in content1), (
-        "compaction must not co-inject with protocol on first call"
-    )
+    assert content1[0]["text"].startswith(
+        "[MARM SESSION INIT]"
+    ), "protocol must inject on first call"
+    assert not any(
+        "[MARM COMPACTION REQUEST]" in c["text"] for c in content1
+    ), "compaction must not co-inject with protocol on first call"
 
     content2 = json.loads(r2.body)["result"]["content"]
-    assert content2[0]["text"].startswith("[MARM COMPACTION REQUEST]"), (
-        "compaction must inject on second call"
-    )
+    assert content2[0]["text"].startswith(
+        "[MARM COMPACTION REQUEST]"
+    ), "compaction must inject on second call"
     assert candidate_id in content2[0]["text"]
 
 
@@ -1216,15 +1275,15 @@ def test_http_protocol_injected_on_first_mcp_tool_call_not_on_second(
 
     body_1 = json.loads(resp_1.body)
     content_1 = body_1["result"]["content"]
-    assert any("[MARM SESSION INIT]" in c["text"] for c in content_1), (
-        "Protocol not injected in first MCP tool call response"
-    )
+    assert any(
+        "[MARM SESSION INIT]" in c["text"] for c in content_1
+    ), "Protocol not injected in first MCP tool call response"
 
     body_2 = json.loads(resp_2.body)
     content_2 = body_2["result"]["content"]
-    assert not any("[MARM SESSION INIT]" in c["text"] for c in content_2), (
-        "Protocol must not repeat on second MCP tool call"
-    )
+    assert not any(
+        "[MARM SESSION INIT]" in c["text"] for c in content_2
+    ), "Protocol must not repeat on second MCP tool call"
 
 
 def test_http_protocol_injected_independently_per_session(monkeypatch, tmp_path):
@@ -1304,15 +1363,15 @@ def test_http_protocol_injected_independently_per_session(monkeypatch, tmp_path)
     beta_content = json.loads(r_beta.body)["result"]["content"]
     alpha_2_content = json.loads(r_alpha_2.body)["result"]["content"]
 
-    assert any("[MARM SESSION INIT]" in c["text"] for c in alpha_content), (
-        "alpha session must receive protocol on first call"
-    )
-    assert any("[MARM SESSION INIT]" in c["text"] for c in beta_content), (
-        "beta session must receive protocol independently — not blocked by alpha delivery"
-    )
-    assert not any("[MARM SESSION INIT]" in c["text"] for c in alpha_2_content), (
-        "alpha session must not receive protocol twice"
-    )
+    assert any(
+        "[MARM SESSION INIT]" in c["text"] for c in alpha_content
+    ), "alpha session must receive protocol on first call"
+    assert any(
+        "[MARM SESSION INIT]" in c["text"] for c in beta_content
+    ), "beta session must receive protocol independently — not blocked by alpha delivery"
+    assert not any(
+        "[MARM SESSION INIT]" in c["text"] for c in alpha_2_content
+    ), "alpha session must not receive protocol twice"
 
 
 def test_log_entries_are_isolated_by_session(monkeypatch, tmp_path):
@@ -1380,9 +1439,9 @@ def test_log_entry_dual_writes_semantic_memory(monkeypatch, tmp_path):
     )
     assert recall.status_code == 200
     assert recall.json()["status"] == "success"
-    assert any(r["id"] == memory_id for r in recall.json()["results"]), (
-        f"semantic recall did not surface the dual-written memory: {recall.json()}"
-    )
+    assert any(
+        r["id"] == memory_id for r in recall.json()["results"]
+    ), f"semantic recall did not surface the dual-written memory: {recall.json()}"
 
 
 def test_smart_recall_log_results_carry_entry_id(monkeypatch, tmp_path):
