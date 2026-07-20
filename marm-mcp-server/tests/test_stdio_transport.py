@@ -761,6 +761,30 @@ def test_stdio_concept_recall_rejects_out_of_range_limit(monkeypatch, tmp_path):
     assert "Concept recall failed" in result["message"]
 
 
+def test_stdio_concept_recall_forwards_platform_scope(monkeypatch, tmp_path):
+    stdio = _isolated_stdio(monkeypatch, tmp_path)
+    import marm_mcp_server.services.stdio_graph_tools as stdio_graph_tools
+
+    captured = {}
+
+    def _fake_recall(*args):
+        captured["args"] = args
+        return {"status": "success", "entities": []}
+
+    monkeypatch.setattr(stdio_graph_tools, "_run_recall", _fake_recall)
+
+    result = asyncio.run(
+        stdio.marm_concept_recall(
+            query="auth",
+            project="marm-memory",
+            platform="claude-code",
+        )
+    )
+
+    assert result["status"] == "success"
+    assert captured["args"][-2:] == ("marm-memory", "claude-code")
+
+
 def test_stdio_concept_build_uses_same_endpoint_logic(monkeypatch, tmp_path):
     stdio = _isolated_stdio(monkeypatch, tmp_path)
     import marm_mcp_server.services.stdio_graph_tools as stdio_graph_tools

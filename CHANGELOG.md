@@ -5,6 +5,14 @@
 <details>
 <summary><strong>Unreleased: Notebook Scratch Pad, Permanent Docs Store, and Chunking Rework (v2.25.0)</strong></summary>
 
+### Concept Context Joins Normal Recall
+
+- `marm_smart_recall` now preserves its existing memory ranking while attaching bounded concept relationships and linked code symbols as an additive `graph_context` sidecar. Missing, empty, incompatible, or unavailable graph data fails open and never blocks core recall.
+- Concept entities and relationships now retain platform provenance alongside session and project scope. Existing concept graphs require one explicit `marm_concept_build(search_all=True)` rebuild; MARM backs up and resets only the derived concept database and never modifies primary memories.
+- `marm_concept_recall` accepts optional platform scope over both HTTP and STDIO while retaining its explicit bounded traversal role.
+- MARM Console's graph explorer now uses a full-atlas mode through 750 entities and 6,000 stored relationships. Oversized graphs use a deterministic connected sample capped at 600 entities and 4,000 aggregated visual edges, with honest full/sampled metadata in the API and UI.
+- Replaced permanently pinned graph coordinates with adaptive force simulation, weighted repeated relationships, focused labels, and reheating when filters or graph membership change.
+
 ### Notebook Is Now a Real Per-Session Scratch Pad
 
 - `notebook_entries` gains `session_name` as part of its identity (was `name`+`project`+`platform` only). Legacy rows migrate to `session_name='main'` on upgrade so nothing already saved becomes unreachable. `add`, `use`, `show`, and `marm_delete(type="notebook")` all now scope by session — a scratch note saved under one session is no longer visible from a different one.

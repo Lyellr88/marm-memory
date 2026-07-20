@@ -10,6 +10,8 @@ production-critical memories table's WAL.
 import json
 import os
 import sqlite3
+from contextlib import closing
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -19,6 +21,8 @@ from .memory_db import ConnectionContext, SQLiteConnectionPool
 from .memory_utils import _safe_print
 
 MAX_CONCEPT_DB_CONNECTIONS = 3
+CONCEPT_SCHEMA_VERSION = 2
+_SCHEMA_VERSION_KEY = "schema_version"
 
 
 def get_concept_db_path() -> str:
@@ -39,6 +43,27 @@ def init_concept_database(db_path: str) -> None:
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA foreign_keys=ON")
 
+        existing_tables = {
+            row[0]
+            for row in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            ).fetchall()
+        }
+        if "entities" in existing_tables:
+            entity_columns = {
+                row[1] for row in conn.execute("PRAGMA table_info(entities)")
+            }
+            relationship_columns = {
+                row[1] for row in conn.execute("PRAGMA table_info(relationships)")
+            }
+            if (
+                "platform" not in entity_columns
+                or "platform" not in relationship_columns
+            ):
+                # Historical graph rows cannot be assigned a trustworthy platform.
+                # Leave the derived database untouched until an explicit full rebuild.
+                return
+
         conn.execute("""
             CREATE TABLE IF NOT EXISTS entities (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -46,9 +71,10 @@ def init_concept_database(db_path: str) -> None:
                 type TEXT NOT NULL,
                 session_name TEXT,
                 project TEXT,
+                platform TEXT,
                 source_memory_ids TEXT DEFAULT '[]',
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                UNIQUE(name, session_name, project)
+                UNIQUE(name, session_name, project, platform)
             )
         """)
 
@@ -69,6 +95,7 @@ def init_concept_database(db_path: str) -> None:
                 predicate TEXT NOT NULL,
                 memory_id TEXT,
                 project TEXT,
+                platform TEXT,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY(source_id) REFERENCES entities(id),
                 FOREIGN KEY(target_id) REFERENCES entities(id)
@@ -106,14 +133,15 @@ def init_concept_database(db_path: str) -> None:
         # these to make builds idempotent.
         conn.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_relationships_dedup "
-            "ON relationships(source_id, target_id, predicate, memory_id)"
+            "ON relationships(source_id, target_id, predicate, memory_id, "
+            "COALESCE(platform, ''))"
         )
         conn.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_code_links_dedup "
             "ON entity_code_links(entity_id, graph_qualified_name)"
         )
 
-        # entities' table-level UNIQUE(name, session_name, project) doesn't
+        # entities' table-level scoped UNIQUE doesn't
         # actually dedupe when session_name/project are NULL -- SQLite treats
         # NULL as distinct from NULL in UNIQUE constraints, so two concurrent
         # get_or_create_entity calls for the same (name, NULL, NULL) can both
@@ -121,7 +149,18 @@ def init_concept_database(db_path: str) -> None:
         # get_or_create_entity's INSERT OR IGNORE relies on for atomicity.
         conn.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_entities_dedup "
-            "ON entities(name, COALESCE(session_name, ''), COALESCE(project, ''))"
+            "ON entities(name, COALESCE(session_name, ''), COALESCE(project, ''), "
+            "COALESCE(platform, ''))"
+        )
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS concept_schema_metadata (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            )
+        """)
+        conn.execute(
+            "INSERT OR REPLACE INTO concept_schema_metadata (key, value) VALUES (?, ?)",
+            (_SCHEMA_VERSION_KEY, str(CONCEPT_SCHEMA_VERSION)),
         )
         conn.execute("""
             CREATE TABLE IF NOT EXISTS concept_build_runs (
@@ -147,6 +186,85 @@ def init_concept_database(db_path: str) -> None:
         )
 
 
+def inspect_concept_schema(db_path: str) -> str:
+    """Return missing, current, rebuild_required, or unavailable without DDL."""
+    path = Path(db_path)
+    if not path.exists():
+        return "missing"
+    try:
+        uri = f"{path.resolve().as_uri()}?mode=ro"
+        with closing(sqlite3.connect(uri, uri=True)) as conn:
+            tables = {
+                row[0]
+                for row in conn.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'table'"
+                ).fetchall()
+            }
+            if "entities" not in tables or "relationships" not in tables:
+                return "rebuild_required"
+            entity_columns = {
+                row[1] for row in conn.execute("PRAGMA table_info(entities)")
+            }
+            relationship_columns = {
+                row[1] for row in conn.execute("PRAGMA table_info(relationships)")
+            }
+            if (
+                "platform" not in entity_columns
+                or "platform" not in relationship_columns
+            ):
+                return "rebuild_required"
+            if "concept_schema_metadata" not in tables:
+                return "rebuild_required"
+            row = conn.execute(
+                "SELECT value FROM concept_schema_metadata WHERE key = ?",
+                (_SCHEMA_VERSION_KEY,),
+            ).fetchone()
+            if row is None or row[0] != str(CONCEPT_SCHEMA_VERSION):
+                return "rebuild_required"
+            return "current"
+    except (OSError, sqlite3.Error):
+        return "unavailable"
+
+
+def backup_and_reset_concept_database(db_path: str) -> str:
+    """Back up derived graph data, replace it, and return the backup path."""
+    path = Path(db_path)
+    if not path.exists():
+        init_concept_database(db_path)
+        return ""
+
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+    backup_path = path.with_name(f"{path.name}.backup-{stamp}")
+    source = sqlite3.connect(db_path)
+    backup = sqlite3.connect(backup_path)
+    try:
+        source.backup(backup)
+    finally:
+        backup.close()
+        source.close()
+
+    reset = sqlite3.connect(db_path, timeout=20.0)
+    try:
+        reset.execute("PRAGMA foreign_keys=OFF")
+        reset.execute("BEGIN IMMEDIATE")
+        for table in (
+            "entity_code_links",
+            "relationships",
+            "entities",
+            "concept_build_runs",
+            "concept_schema_metadata",
+        ):
+            reset.execute(f"DROP TABLE IF EXISTS {table}")
+        reset.execute("COMMIT")
+    except Exception:
+        reset.rollback()
+        raise
+    finally:
+        reset.close()
+    init_concept_database(db_path)
+    return str(backup_path)
+
+
 class ConceptDB:
     """Owns the concept graph's SQLite pool. One instance per process, lazily built."""
 
@@ -159,6 +277,9 @@ class ConceptDB:
 
     def get_connection(self):
         return ConnectionContext(self.connection_pool)
+
+    def close(self) -> None:
+        self.connection_pool.close_all()
 
     def create_build_run(
         self,
@@ -207,6 +328,7 @@ class ConceptDB:
         project: Optional[str],
         memory_id: str,
         name_embedding: Optional[bytes] = None,
+        platform: Optional[str] = None,
     ) -> tuple[int, bool]:
         """Insert a new entity or append memory_id to an existing one's source
         list. Returns (entity_id, was_created) -- callers use was_created to
@@ -230,13 +352,14 @@ class ConceptDB:
         instead of the first-mention path."""
         cursor = conn.execute(
             "INSERT OR IGNORE INTO entities "
-            "(name, type, session_name, project, source_memory_ids, name_embedding) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
+            "(name, type, session_name, project, platform, source_memory_ids, name_embedding) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
             (
                 name,
                 entity_type,
                 session_name,
                 project,
+                platform,
                 json.dumps([memory_id]),
                 name_embedding,
             ),
@@ -245,8 +368,8 @@ class ConceptDB:
 
         row = conn.execute(
             "SELECT id FROM entities "
-            "WHERE name = ? AND session_name IS ? AND project IS ?",
-            (name, session_name, project),
+            "WHERE name = ? AND session_name IS ? AND project IS ? AND platform IS ?",
+            (name, session_name, project, platform),
         ).fetchone()
         entity_id = row[0]
 
@@ -270,6 +393,7 @@ class ConceptDB:
         project: Optional[str],
         threshold: float,
         exclude_id: Optional[int] = None,
+        platform: Optional[str] = None,
     ) -> list[dict]:
         """Linear cosine-similarity scan against same-scope entities' stored
         name embeddings -- bounded by deployment scale (personal/small-team
@@ -278,9 +402,14 @@ class ConceptDB:
         cosine pattern. Returns candidates >= threshold, most-similar-first."""
         rows = conn.execute(
             "SELECT id, name, name_embedding FROM entities "
-            "WHERE session_name IS ? AND project IS ? "
+            "WHERE session_name IS ? AND project IS ? AND platform IS ? "
             "AND name_embedding IS NOT NULL AND id != ?",
-            (session_name, project, exclude_id if exclude_id is not None else -1),
+            (
+                session_name,
+                project,
+                platform,
+                exclude_id if exclude_id is not None else -1,
+            ),
         ).fetchall()
         if not rows:
             return []
@@ -340,6 +469,7 @@ class ConceptDB:
         predicate: str,
         memory_id: str,
         project: Optional[str],
+        platform: Optional[str] = None,
     ) -> bool:
         """Insert a relationship. Caller must have already confirmed both entity
         ids exist (get_or_create_entity returns real ids) — this only guards
@@ -350,9 +480,9 @@ class ConceptDB:
             return False
         cursor = conn.execute(
             "INSERT OR IGNORE INTO relationships "
-            "(source_id, target_id, predicate, memory_id, project) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (source_id, target_id, predicate, memory_id, project),
+            "(source_id, target_id, predicate, memory_id, project, platform) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (source_id, target_id, predicate, memory_id, project, platform),
         )
         return cursor.rowcount > 0
 

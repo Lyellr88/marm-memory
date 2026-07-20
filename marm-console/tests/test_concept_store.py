@@ -5,10 +5,25 @@ import sqlite3
 from array import array
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+import re
 
 
 from server import concept_store
 from server.endpoints import concepts as concepts_endpoint
+
+
+def test_console_schema_version_tracks_mcp_source() -> None:
+    source = (
+        Path(__file__).resolve().parents[2]
+        / "marm-mcp-server"
+        / "marm_mcp_server"
+        / "core"
+        / "concept_db.py"
+    ).read_text(encoding="utf-8")
+    match = re.search(r"CONCEPT_SCHEMA_VERSION = (\d+)", source)
+
+    assert match is not None
+    assert concept_store._CURRENT_CONCEPT_SCHEMA_VERSION == match.group(1)
 
 
 def make_db(tmp_path: Path) -> Path:
@@ -22,10 +37,11 @@ def make_db(tmp_path: Path) -> Path:
             type TEXT NOT NULL,
             session_name TEXT,
             project TEXT,
+            platform TEXT,
             source_memory_ids TEXT DEFAULT '[]',
             name_embedding BLOB,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(name, session_name, project)
+            UNIQUE(name, session_name, project, platform)
         );
         CREATE TABLE relationships (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -34,6 +50,7 @@ def make_db(tmp_path: Path) -> Path:
             predicate TEXT NOT NULL,
             memory_id TEXT,
             project TEXT,
+            platform TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY(source_id) REFERENCES entities(id),
             FOREIGN KEY(target_id) REFERENCES entities(id)
@@ -64,6 +81,12 @@ def make_db(tmp_path: Path) -> Path:
             started_at TEXT,
             finished_at TEXT
         );
+        CREATE TABLE concept_schema_metadata (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
+        INSERT INTO concept_schema_metadata (key, value)
+        VALUES ('schema_version', '2');
         """
     )
     conn.commit()
@@ -99,6 +122,17 @@ def set_embedding(db_path: Path, entity_id: int, *values: float) -> None:
     )
     conn.commit()
     conn.close()
+
+
+def test_summary_reports_rebuild_for_existing_database_without_graph_schema(tmp_path):
+    db_path = tmp_path / "marm_index.db"
+    sqlite3.connect(db_path).close()
+
+    result = concept_store.summary(db_path)
+
+    assert result["schema_status"] == "rebuild_required"
+    assert result["entities"] == 0
+    assert result["relationships"] == 0
 
 
 def test_neighborhood_enforces_200_node_limit(tmp_path):
@@ -181,24 +215,25 @@ def test_neighborhood_hidden_neighbor_count_reflects_real_degree(tmp_path):
     assert by_id[a]["hidden_neighbor_count"] == 0
 
 
-def test_graph_overview_returns_top_degree_slice_with_real_hidden_counts(tmp_path):
+def test_graph_overview_returns_complete_graph_under_budget(tmp_path):
     db = make_db(tmp_path)
     hub = add_entity(db, "hub")
     spokes = [add_entity(db, f"spoke-{i}") for i in range(20)]
     for spoke in spokes:
         add_edge(db, hub, spoke, "uses")
-    # An isolated entity must never beat connected ones into the overview
     add_entity(db, "isolated")
 
-    result = concept_store.graph_overview(db, limit_nodes=10)
+    result = concept_store.graph_overview(db)
 
     node_ids = {n["id"] for n in result["nodes"]}
-    assert len(result["nodes"]) == 10
+    assert result["mode"] == "full"
+    assert len(result["nodes"]) == 22
     assert hub in node_ids
-    assert "isolated" not in {n["name"] for n in result["nodes"]}
+    assert "isolated" in {n["name"] for n in result["nodes"]}
     by_id = {n["id"]: n for n in result["nodes"]}
-    # hub keeps 9 spokes in a 10-node slice, so 11 of its 20 edges are hidden
-    assert by_id[hub]["hidden_neighbor_count"] == 11
+    assert by_id[hub]["hidden_neighbor_count"] == 0
+    assert result["total"] == {"nodes": 22, "edges": 20}
+    assert result["rendered"] == {"nodes": 22, "edges": 20}
     for edge in result["edges"]:
         assert edge["source"] in node_ids
         assert edge["target"] in node_ids
@@ -211,11 +246,92 @@ def test_graph_overview_is_deterministic_across_calls(tmp_path):
         predicate = "co_occurs_with" if i % 2 else "uses"
         add_edge(db, entities[i], entities[i + 1], predicate)
 
-    first = concept_store.graph_overview(db, limit_nodes=30)
-    second = concept_store.graph_overview(db, limit_nodes=30)
+    first = concept_store.graph_overview(db)
+    second = concept_store.graph_overview(db)
 
     assert [e["id"] for e in first["edges"]] == [e["id"] for e in second["edges"]]
     assert [n["id"] for n in first["nodes"]] == [n["id"] for n in second["nodes"]]
+
+
+def test_graph_overview_aggregates_visual_evidence(tmp_path):
+    db = make_db(tmp_path)
+    source = add_entity(db, "source")
+    target = add_entity(db, "target")
+    add_edge(db, source, target, "uses")
+    add_edge(db, source, target, "uses")
+
+    result = concept_store.graph_overview(db)
+
+    assert result["total"]["edges"] == 2
+    assert result["rendered"]["edges"] == 1
+    assert result["edges"][0]["weight"] == 2
+    assert result["edges"][0]["evidence_count"] == 2
+
+
+def test_graph_overview_samples_deterministically_and_keeps_connections(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(concept_store, "FULL_ATLAS_MAX_NODES", 5)
+    monkeypatch.setattr(concept_store, "FULL_ATLAS_MAX_EDGES", 5)
+    monkeypatch.setattr(concept_store, "SAMPLED_ATLAS_MAX_NODES", 6)
+    monkeypatch.setattr(concept_store, "SAMPLED_ATLAS_MAX_EDGES", 6)
+    db = make_db(tmp_path)
+    entities = [add_entity(db, f"node-{index}") for index in range(12)]
+    for source, target in zip(entities, entities[1:]):
+        add_edge(db, source, target, "uses")
+
+    first = concept_store.graph_overview(db)
+    second = concept_store.graph_overview(db)
+
+    assert first["mode"] == "sampled"
+    assert first["truncated"] is True
+    assert first["rendered"]["nodes"] == 6
+    assert [node["id"] for node in first["nodes"]] == [
+        node["id"] for node in second["nodes"]
+    ]
+    selected_ids = {node["id"] for node in first["nodes"]}
+    connected_ids = {
+        endpoint
+        for edge in first["edges"]
+        for endpoint in (edge["source"], edge["target"])
+    }
+    assert connected_ids == selected_ids
+
+
+def test_graph_overview_bounds_sampled_raw_edge_candidates(tmp_path, monkeypatch):
+    monkeypatch.setattr(concept_store, "FULL_ATLAS_MAX_NODES", 3)
+    monkeypatch.setattr(concept_store, "FULL_ATLAS_MAX_EDGES", 3)
+    monkeypatch.setattr(concept_store, "SAMPLED_ATLAS_MAX_NODES", 4)
+    monkeypatch.setattr(concept_store, "SAMPLED_ATLAS_MAX_EDGES", 4)
+    monkeypatch.setattr(concept_store, "SAMPLED_ATLAS_RAW_EDGE_LIMIT", 2)
+    db = make_db(tmp_path)
+    entities = [add_entity(db, f"node-{index}") for index in range(4)]
+    for index in range(6):
+        add_edge(db, entities[index % 4], entities[(index + 1) % 4], f"uses-{index}")
+
+    result = concept_store.graph_overview(db)
+
+    assert result["mode"] == "sampled"
+    assert len(result["edges"]) <= 2
+
+
+def test_graph_overview_marks_platformless_schema_for_rebuild(tmp_path):
+    db = tmp_path / "legacy.db"
+    with sqlite3.connect(db) as conn:
+        conn.executescript(
+            """
+            CREATE TABLE entities (id INTEGER PRIMARY KEY, name TEXT, type TEXT);
+            CREATE TABLE relationships (
+                id INTEGER PRIMARY KEY, source_id INTEGER, target_id INTEGER,
+                predicate TEXT
+            );
+            """
+        )
+
+    result = concept_store.graph_overview(db)
+
+    assert result["schema_status"] == "rebuild_required"
+    assert result["nodes"] == []
 
 
 def test_missing_db_and_missing_seed_fail_safely(tmp_path):

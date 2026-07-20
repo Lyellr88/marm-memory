@@ -9,7 +9,6 @@ related-to intent from query shape.
 """
 
 import asyncio
-import json
 import threading
 import time
 import uuid
@@ -24,27 +23,26 @@ from ..config.settings import (
     CONCEPTS_AVAILABLE,
     CONCEPT_DUPLICATE_SIMILARITY_THRESHOLD,
 )
-from ..core.concept_db import ConceptDB
+from ..core.concept_db import (
+    ConceptDB,
+    backup_and_reset_concept_database,
+    get_concept_db_path,
+    inspect_concept_schema,
+)
 from ..core.concept_extraction import extract_entities
 from ..core.graph_client import find_code_match, is_graph_available
 from ..core.memory import memory
 from ..core.memory_utils import _embedding_to_bytes, _safe_print
 from ..core.models import ConceptBuildRequest, ConceptRecallRequest
+from ..services.graph_context import get_graph_context, traverse_graph
 
 logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="", tags=["Concepts"])
 
-_RELATED_PREFIXES = (
-    "related to ",
-    "related-to ",
-    "relationships of ",
-    "connected to ",
-    "connections of ",
-)
-
 _concept_db: Optional[ConceptDB] = None
 _concept_db_lock = threading.Lock()
+_concept_build_lock = asyncio.Lock()
 
 
 def _get_concept_db() -> ConceptDB:
@@ -76,7 +74,7 @@ _CONCEPTS_UNAVAILABLE_MESSAGE = (
 
 def _fetch_memory_rows(
     session_name: Optional[str], project: Optional[str], search_all: bool
-) -> list[tuple[str, str, Optional[str], Optional[str]]]:
+) -> list[tuple[str, str, Optional[str], Optional[str], Optional[str]]]:
     """Deterministic row-bounded read from the memory DB layer directly.
     Never goes through marm_smart_recall — no ranking/truncation here.
 
@@ -104,7 +102,7 @@ def _fetch_memory_rows(
             params.append(project)
 
     query = (
-        f"SELECT id, content, session_name, project FROM memories "
+        f"SELECT id, content, session_name, project, platform FROM memories "
         f"WHERE {' AND '.join(conditions)} ORDER BY created_at DESC LIMIT ?"
     )
     params.append(CONCEPT_BUILD_ROW_CAP)
@@ -132,7 +130,9 @@ def _try_embed(name: str) -> Optional[bytes]:
         return None
 
 
-def _run_build(rows: list[tuple[str, str, Optional[str], Optional[str]]]) -> dict:
+def _run_build(
+    rows: list[tuple[str, str, Optional[str], Optional[str], Optional[str]]],
+) -> dict:
     concept_db = _get_concept_db()
     entities_extracted = 0
     relationships_created = 0
@@ -149,7 +149,9 @@ def _run_build(rows: list[tuple[str, str, Optional[str], Optional[str]]]) -> dic
     embed_cache: dict[str, Optional[bytes]] = {}
 
     with concept_db.get_connection() as conn:
-        for mem_id, content, mem_session, mem_project in rows:
+        for row in rows:
+            mem_id, content, mem_session, mem_project = row[:4]
+            mem_platform = row[4] if len(row) > 4 else None
             try:
                 result = extract_entities(content)
             except Exception as e:
@@ -170,6 +172,7 @@ def _run_build(rows: list[tuple[str, str, Optional[str], Optional[str]]]) -> dic
                         mem_project,
                         mem_id,
                         name_embedding=emb_bytes,
+                        platform=mem_platform,
                     )
                 except Exception as e:
                     _safe_print(f"Concept entity write failed for memory {mem_id}: {e}")
@@ -186,6 +189,7 @@ def _run_build(rows: list[tuple[str, str, Optional[str], Optional[str]]]) -> dic
                             mem_project,
                             CONCEPT_DUPLICATE_SIMILARITY_THRESHOLD,
                             exclude_id=entity_id,
+                            platform=mem_platform,
                         )
                     except Exception as e:
                         _safe_print(f"Concept duplicate-candidate scan failed: {e}")
@@ -202,7 +206,13 @@ def _run_build(rows: list[tuple[str, str, Optional[str], Optional[str]]]) -> dic
                     continue
                 try:
                     if concept_db.store_relationship(
-                        conn, id_a, id_b, predicate, mem_id, mem_project
+                        conn,
+                        id_a,
+                        id_b,
+                        predicate,
+                        mem_id,
+                        mem_project,
+                        platform=mem_platform,
                     ):
                         relationships_created += 1
                 except Exception as e:
@@ -269,85 +279,39 @@ def _finish_build_run(run_id: str, **fields) -> None:
         concept_db.update_build_run(conn, run_id, **fields)
 
 
+def _prepare_build_schema(req: ConceptBuildRequest) -> bool:
+    """Return whether a historical graph was backed up and reset."""
+    global _concept_db
+    db_path = get_concept_db_path()
+    state = inspect_concept_schema(db_path)
+    if state == "unavailable":
+        raise RuntimeError("concept database unavailable")
+    if state != "rebuild_required":
+        return False
+    if not req.search_all:
+        raise ValueError("rebuild_required")
+
+    with _concept_db_lock:
+        if _concept_db is not None:
+            _concept_db.close()
+            _concept_db = None
+        backup_and_reset_concept_database(db_path)
+    return True
+
+
 def _traverse(
     conn, seed_ids: list[int], depth: int, direction: str, limit: int
 ) -> list[dict]:
-    """Bounded BFS over entities/relationships -- single connection, one
-    batched SQL query per hop-level, matches this codebase's established
-    IN (...)-in-a-Python-loop convention (compaction.py, memory_delete.py; zero
-    WITH RECURSIVE uses anywhere in this repo). At depth=1 this reproduces
-    the original one-hop outgoing+incoming+union+truncate behavior exactly.
-
-    Two separate sets, not one -- an earlier version pre-seeded a single
-    `visited` set with every seed id, which silently suppressed direct edges
-    *between* two seeds (recall's `name LIKE '%query%'` routinely matches a
-    cluster of related entities that are themselves directly connected --
-    those edges are exactly the most relevant ones to surface). `emitted`
-    tracks what's already in `results` and is NOT pre-seeded, so a seed can
-    be emitted as another seed's hop-1 neighbor. `expanded` IS pre-seeded
-    with every seed id and prevents re-querying from a node whose
-    relationships we've already fetched -- this is what stops multi-node
-    cycles (A->B->C->A) from looping/duplicate-exploding. The `hop > 1`
-    guard is the key: at hop 1, `expanded` never blocks emission (frontier
-    *is* the seed set, so every hop-1 row is by definition a direct edge
-    between two seeds or a seed and a fresh neighbor); from hop 2 onward,
-    re-reaching anything already in `expanded` (including an original seed
-    via a cycle) is genuinely old information, not a new discovery, and is
-    excluded. ORDER BY r.id makes which parent "wins" for path
-    reconstruction deterministic when a node is reachable from two frontier
-    members in the same hop."""
-    emitted: set[int] = set()
-    expanded: set[int] = set(seed_ids)
-    paths: dict[int, list[dict]] = {eid: [] for eid in seed_ids}
-    frontier = list(seed_ids)
-    results: list[dict] = []
-
-    for hop in range(1, depth + 1):
-        if not frontier or len(results) >= limit:
-            break
-        placeholders = ",".join("?" * len(frontier))
-        rows = []
-        if direction in ("outgoing", "both"):
-            rows += conn.execute(
-                f"""SELECT r.source_id, e.id, e.name, e.type, r.predicate FROM relationships r
-                    JOIN entities e ON e.id = r.target_id
-                    WHERE r.source_id IN ({placeholders}) ORDER BY r.id""",
-                frontier,
-            ).fetchall()
-        if direction in ("incoming", "both"):
-            rows += conn.execute(
-                f"""SELECT r.target_id, e.id, e.name, e.type, r.predicate FROM relationships r
-                    JOIN entities e ON e.id = r.source_id
-                    WHERE r.target_id IN ({placeholders}) ORDER BY r.id""",
-                frontier,
-            ).fetchall()
-
-        next_frontier = []
-        for from_id, neighbor_id, name, entity_type, predicate in rows:
-            if neighbor_id in emitted:
-                continue
-            if hop > 1 and neighbor_id in expanded:
-                continue
-            emitted.add(neighbor_id)
-            paths[neighbor_id] = paths[from_id] + [
-                {"predicate": predicate, "name": name}
-            ]
-            entry = {
-                "name": name,
-                "type": entity_type,
-                "predicate": predicate,
-                "hop": hop,
-            }
-            if depth > 1:
-                entry["path"] = paths[neighbor_id]
-            results.append(entry)
-            if neighbor_id not in expanded:
-                expanded.add(neighbor_id)
-                next_frontier.append(neighbor_id)
-            if len(results) >= limit:
-                break
-        frontier = next_frontier
-
+    results, _, _ = traverse_graph(
+        conn,
+        seed_ids,
+        depth=depth,
+        direction=direction,
+        limit=limit,
+        session_name=None,
+        project=None,
+        platform=None,
+    )
     return results
 
 
@@ -358,69 +322,23 @@ def _run_recall(
     depth: int = 1,
     direction: str = "both",
     project: Optional[str] = None,
+    platform: Optional[str] = None,
 ) -> dict:
-    concept_db = _get_concept_db()
-
-    target_name = query
-    for prefix in _RELATED_PREFIXES:
-        if query.lower().startswith(prefix):
-            target_name = query[len(prefix) :].strip()
-            break
-
-    entities: list[dict] = []
-    related_entities: list[dict] = []
-    linked_code: list[dict] = []
-
-    with concept_db.get_connection() as conn:
-        conditions = ["name LIKE ?"]
-        params: list = [f"%{target_name}%"]
-        if session_name:
-            conditions.append("session_name = ?")
-            params.append(session_name)
-        if project:
-            conditions.append("project = ?")
-            params.append(project)
-
-        rows = conn.execute(
-            f"SELECT id, name, type, source_memory_ids FROM entities "
-            f"WHERE {' AND '.join(conditions)} LIMIT ?",
-            [*params, limit],
-        ).fetchall()
-
-        entity_ids = []
-        for entity_id, name, entity_type, source_ids_json in rows:
-            try:
-                mention_count = len(json.loads(source_ids_json))
-            except (TypeError, ValueError):
-                mention_count = 0
-            entities.append(
-                {"name": name, "type": entity_type, "mention_count": mention_count}
-            )
-            entity_ids.append(entity_id)
-
-        if entity_ids:
-            placeholders = ",".join("?" * len(entity_ids))
-
-            related_entities = _traverse(conn, entity_ids, depth, direction, limit)
-
-            code_rows = conn.execute(
-                f"""SELECT graph_qualified_name, label, file_path FROM entity_code_links
-                    WHERE entity_id IN ({placeholders}) LIMIT ?""",
-                [*entity_ids, limit],
-            ).fetchall()
-            for qualified_name, label, file_path in code_rows:
-                linked_code.append(
-                    {
-                        "qualified_name": qualified_name,
-                        "label": label,
-                        "file_path": file_path,
-                    }
-                )
-
+    context = get_graph_context(
+        query=query,
+        session_name=session_name,
+        project=project,
+        platform=platform,
+        limit=limit,
+        depth=depth,
+        direction=direction,
+    )
     return {
-        "entities": entities,
-        "related_entities": related_entities,
-        "linked_code": linked_code,
+        "status": context["status"],
+        "entities": context["entities"],
+        "related_entities": context["related_entities"],
+        "linked_code": context["linked_code"],
+        "truncated": context["truncated"],
     }
 
 
@@ -433,18 +351,22 @@ async def marm_concept_build(req: ConceptBuildRequest) -> dict:
     marm-graph code symbols when available. Call this before marm_concept_recall
     — there's no data until a build has run at least once.
     """
+    async with _concept_build_lock:
+        return await _marm_concept_build(req)
+
+
+async def _marm_concept_build(req: ConceptBuildRequest) -> dict:
     if not (req.session_name or req.project or req.search_all):
         return {"status": "error", "message": _MISSING_BUILD_SCOPE_MESSAGE}
 
     run_id = req.run_id or str(uuid.uuid4())
     created_at = datetime.now(timezone.utc).isoformat()
-    try:
-        await asyncio.to_thread(_create_build_run, req, run_id, created_at)
-    except Exception as e:
-        logger.warning("concepts.build_run_create_error", error=str(e))
-        return {"status": "error", "message": "Concept build failed."}
-
     if not CONCEPTS_AVAILABLE:
+        try:
+            await asyncio.to_thread(_create_build_run, req, run_id, created_at)
+        except Exception as e:
+            logger.warning("concepts.build_run_create_error", error=str(e))
+            return {"status": "error", "message": "Concept build failed."}
         result = {
             "status": "degraded",
             "error_code": "concepts_unavailable",
@@ -465,6 +387,41 @@ async def marm_concept_build(req: ConceptBuildRequest) -> dict:
         )
         result["build_run_id"] = run_id
         return result
+    try:
+        graph_rebuilt = await asyncio.to_thread(_prepare_build_schema, req)
+    except ValueError:
+        try:
+            await asyncio.to_thread(_create_build_run, req, run_id, created_at)
+            await asyncio.to_thread(
+                _finish_build_run,
+                run_id,
+                status="error",
+                error_code="rebuild_required",
+                finished_at=datetime.now(timezone.utc).isoformat(),
+            )
+        except Exception as e:
+            logger.warning("concepts.build_run_create_error", error=str(e))
+        return {
+            "status": "error",
+            "error_code": "rebuild_required",
+            "message": (
+                "The concept graph must be rebuilt with "
+                "marm_concept_build(search_all=True)."
+            ),
+            "build_run_id": run_id,
+        }
+    except Exception as e:
+        logger.warning("concepts.schema_prepare_error", error=str(e))
+        return {
+            "status": "error",
+            "message": "Concept build failed.",
+            "build_run_id": run_id,
+        }
+    try:
+        await asyncio.to_thread(_create_build_run, req, run_id, created_at)
+    except Exception as e:
+        logger.warning("concepts.build_run_create_error", error=str(e))
+        return {"status": "error", "message": "Concept build failed."}
 
     start = time.monotonic()
     try:
@@ -528,6 +485,7 @@ async def marm_concept_build(req: ConceptBuildRequest) -> dict:
         duration_ms=result["duration_ms"],
         finished_at=datetime.now(timezone.utc).isoformat(),
     )
+    result["graph_rebuilt"] = graph_rebuilt
     result["build_run_id"] = run_id
     return result
 
@@ -539,15 +497,14 @@ async def marm_concept_recall(req: ConceptRecallRequest) -> dict:
     Query as a bare concept name for a lookup, or phrase it as "related to X"
     to emphasize traversal — both route from query shape alone. Pass depth
     to traverse multiple hops (default 1 = direct neighbors only), direction
-    to scope traversal (outgoing/incoming/both), project to scope to one
-    project (entities with the same name in different projects are distinct
-    nodes -- omit to search across all). Returns empty lists (not an error)
+    to scope traversal (outgoing/incoming/both), and project/platform to scope
+    provenance (entities with the same name in different scopes are distinct
+    nodes -- omit either filter to search across it). Returns empty lists (not an error)
     when marm_concept_build hasn't run yet or marm-graph has no matching
     code symbols.
     """
     try:
-        return await asyncio.to_thread(
-            _run_recall,
+        args = (
             req.query,
             req.session_name,
             req.limit,
@@ -555,6 +512,9 @@ async def marm_concept_recall(req: ConceptRecallRequest) -> dict:
             req.direction,
             req.project,
         )
+        if req.platform is None:
+            return await asyncio.to_thread(_run_recall, *args)
+        return await asyncio.to_thread(_run_recall, *args, req.platform)
     except Exception as e:
         logger.warning("concepts.recall_error", error=str(e))
         return {"status": "error", "message": "Concept recall failed."}

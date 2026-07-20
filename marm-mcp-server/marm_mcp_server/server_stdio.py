@@ -67,7 +67,9 @@ async def marm_smart_recall(
     🧠 Recall memories by semantic similarity or keyword match.
 
     Searches stored memories for the most relevant matches to `query`.
-    Returns a ranked list of results with similarity scores.
+    Returns a ranked list of results with similarity scores. When a compatible
+    concept graph exists, the response also includes bounded relationship and
+    linked-code context without changing memory ranking.
 
     Parameters:
     - query: natural language search term or phrase
@@ -87,7 +89,7 @@ async def marm_smart_recall(
     - project: filter results to a specific project (e.g. "marm-memory"); omit to search all
     - platform: filter results to a specific platform (e.g. "claude-code", "cursor"); omit to search all
 
-    Returns: status, results list with id/content/score/project/platform, results_count
+    Returns: status, ranked results, graph_context, and results_count
     """
     return await smart_recall(
         query,

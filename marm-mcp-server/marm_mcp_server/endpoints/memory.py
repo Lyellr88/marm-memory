@@ -14,6 +14,7 @@ from ..core.memory import memory
 from ..core.response_limiter import MCPResponseLimiter
 from ..core.concept_db import ConceptDB, get_concept_db_path
 from ..services.recall import _apply_detail_level
+from ..services.graph_context import attach_graph_context, get_graph_context
 
 logger = structlog.get_logger(__name__)
 
@@ -263,6 +264,15 @@ async def marm_smart_recall(request: SmartRecallRequest, http_request: Request):
             project=request.project,
             platform=request.platform,
         )
+        graph_context = await asyncio.to_thread(
+            get_graph_context,
+            query=request.query,
+            memory_ids=[item.get("id") for item in similar_memories],
+            session_name=search_session,
+            project=request.project,
+            platform=request.platform,
+            limit=request.limit,
+        )
 
         if not similar_memories:
             if not request.search_all:
@@ -316,7 +326,7 @@ async def marm_smart_recall(request: SmartRecallRequest, http_request: Request):
 
                 if request.include_logs:
                     _inject_log_results(response, log_results)
-                return response
+                return attach_graph_context(response, graph_context)
             else:
                 response = {
                     "status": "no_results",
@@ -330,7 +340,7 @@ async def marm_smart_recall(request: SmartRecallRequest, http_request: Request):
                 }
                 if request.include_logs:
                     _inject_log_results(response, log_results)
-                return response
+                return attach_graph_context(response, graph_context)
 
         base_response = {
             "status": "success",
@@ -368,7 +378,7 @@ async def marm_smart_recall(request: SmartRecallRequest, http_request: Request):
         if request.include_logs:
             _inject_log_results(final_response, log_results)
 
-        return final_response
+        return attach_graph_context(final_response, graph_context)
     except Exception as e:
         print(f"Unexpected error in marm_smart_recall: {e}")
         return {"status": "error", "message": "Memory recall failed."}

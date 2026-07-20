@@ -271,6 +271,7 @@ async def marm_concept_recall(
     depth: int = 1,
     direction: Literal["outgoing", "incoming", "both"] = "both",
     project: Optional[str] = None,
+    platform: Optional[str] = None,
 ) -> dict:
     """
     🔎 Search the concept graph: entities, their relationships, and linked code.
@@ -288,6 +289,7 @@ async def marm_concept_recall(
     - direction: outgoing | incoming | both (default both)
     - project: scope to this project; entities with the same name in
       different projects are distinct nodes; omit to search across all (optional)
+    - platform: scope to this client/platform; omit to search across all (optional)
 
     Returns: entities, related_entities, linked_code
     """
@@ -303,9 +305,9 @@ async def marm_concept_recall(
             depth=depth,
             direction=direction,
             project=project,
+            platform=platform,
         )
-        return await asyncio.to_thread(
-            _run_recall,
+        args = (
             req.query,
             req.session_name,
             req.limit,
@@ -313,6 +315,9 @@ async def marm_concept_recall(
             req.direction,
             req.project,
         )
+        if req.platform is None:
+            return await asyncio.to_thread(_run_recall, *args)
+        return await asyncio.to_thread(_run_recall, *args, req.platform)
     except Exception as e:
         # _run_recall failures can include SQLite paths/schema details --
         # log server-side (the HTTP endpoint's own try/except does this via

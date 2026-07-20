@@ -75,8 +75,8 @@ def search_concepts(
 
 
 @router.get("/api/concepts/graph")
-def get_concept_graph(limit: int = Query(150, ge=10, le=300)) -> dict:
-    return concept_store.graph_overview(get_concept_db_path(), limit_nodes=limit)
+def get_concept_graph() -> dict:
+    return concept_store.graph_overview(get_concept_db_path())
 
 
 @router.get("/api/concepts/{entity_id}")

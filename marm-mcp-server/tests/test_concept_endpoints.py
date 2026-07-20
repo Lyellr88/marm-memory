@@ -11,6 +11,8 @@ accuracy, so a fake ExtractionResult at that one boundary is appropriate
 
 import asyncio
 import importlib
+from pathlib import Path
+import sqlite3
 import sys
 
 import numpy as np
@@ -143,14 +145,112 @@ def test_marm_concept_build_reports_degraded_when_concepts_are_unavailable(
     _server, concepts, _memory_module = concepts_env
     from marm_mcp_server.core.models import ConceptBuildRequest
 
+    concept_db = concepts._get_concept_db()
+    with concept_db.get_connection() as conn:
+        concept_db.get_or_create_entity(
+            conn, "existing graph", "concept", "sess-a", None, "m1"
+        )
     monkeypatch.setattr(concepts, "CONCEPTS_AVAILABLE", False)
     result = asyncio.run(
-        concepts.marm_concept_build(ConceptBuildRequest(session_name="sess-a"))
+        concepts.marm_concept_build(
+            ConceptBuildRequest(search_all=True, run_id="unavailable-run")
+        )
     )
 
     assert result["status"] == "degraded"
     assert result["error_code"] == "concepts_unavailable"
     assert result["entities_extracted"] == 0
+    with concept_db.get_connection() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM entities").fetchone()[0] == 1
+        run = conn.execute(
+            "SELECT status, error_code FROM concept_build_runs WHERE id = ?",
+            ("unavailable-run",),
+        ).fetchone()
+    assert tuple(run) == ("degraded", "concepts_unavailable")
+
+
+def test_scoped_legacy_build_persists_rebuild_required_run(concepts_env):
+    _server, concepts, _memory_module = concepts_env
+    from marm_mcp_server.core.models import ConceptBuildRequest
+
+    concept_db = concepts._get_concept_db()
+    with concept_db.get_connection() as conn:
+        conn.execute(
+            "UPDATE concept_schema_metadata SET value = '1' WHERE key = 'schema_version'"
+        )
+
+    result = asyncio.run(
+        concepts.marm_concept_build(
+            ConceptBuildRequest(session_name="sess-a", run_id="legacy-run")
+        )
+    )
+
+    assert result["error_code"] == "rebuild_required"
+    with concept_db.get_connection() as conn:
+        run = conn.execute(
+            "SELECT status, error_code FROM concept_build_runs WHERE id = ?",
+            ("legacy-run",),
+        ).fetchone()
+    assert tuple(run) == ("error", "rebuild_required")
+
+
+def test_full_legacy_build_backs_up_and_resets_graph(concepts_env, monkeypatch):
+    _server, concepts, _memory_module = concepts_env
+    from marm_mcp_server.core.models import ConceptBuildRequest
+
+    concept_db = concepts._get_concept_db()
+    db_path = concept_db.db_path
+    with concept_db.get_connection() as conn:
+        concept_db.get_or_create_entity(
+            conn, "legacy graph", "concept", "sess-a", None, "m1"
+        )
+        conn.execute(
+            "UPDATE concept_schema_metadata SET value = '1' WHERE key = 'schema_version'"
+        )
+
+    monkeypatch.setattr(concepts, "CONCEPTS_AVAILABLE", True)
+    monkeypatch.setattr(
+        concepts,
+        "_run_build",
+        lambda _rows: {
+            "entities_extracted": 0,
+            "relationships_created": 0,
+            "code_links_created": 0,
+            "possible_duplicates": [],
+        },
+    )
+    result = asyncio.run(
+        concepts.marm_concept_build(
+            ConceptBuildRequest(search_all=True, run_id="full-rebuild-run")
+        )
+    )
+
+    backup_paths = list(Path(db_path).parent.glob(f"{Path(db_path).name}.backup-*"))
+    assert result["graph_rebuilt"] is True
+    assert result["build_run_id"] == "full-rebuild-run"
+    assert len(backup_paths) == 1
+    with sqlite3.connect(backup_paths[0]) as backup:
+        assert backup.execute("SELECT COUNT(*) FROM entities").fetchone()[0] == 1
+        assert (
+            backup.execute(
+                "SELECT value FROM concept_schema_metadata WHERE key = 'schema_version'"
+            ).fetchone()[0]
+            == "1"
+        )
+    active_concept_db = concepts._get_concept_db()
+    with active_concept_db.get_connection() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM entities").fetchone()[0] == 0
+        assert (
+            conn.execute(
+                "SELECT value FROM concept_schema_metadata WHERE key = 'schema_version'"
+            ).fetchone()[0]
+            == "2"
+        )
+        run = conn.execute(
+            "SELECT status FROM concept_build_runs WHERE id = ?",
+            ("full-rebuild-run",),
+        ).fetchone()
+    assert run[0] == "success"
 
 
 def test_fetch_memory_rows_excludes_marm_system_session(concepts_env):

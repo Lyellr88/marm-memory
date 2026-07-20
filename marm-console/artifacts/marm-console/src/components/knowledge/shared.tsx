@@ -1,6 +1,6 @@
 import type { Neighborhood, NeighborhoodNode, NeighborhoodEdge } from '@/lib/marm-types';
 
-export const DEFAULT_HIDDEN_PREDICATES = new Set(['co_occurs_with']);
+export const DEFAULT_HIDDEN_PREDICATES = new Set<string>();
 
 // CVD-validated categorical palette for the dark canvas (dataviz six-checks,
 // surface #040810). Identity is never color alone: labels + legend back it up.

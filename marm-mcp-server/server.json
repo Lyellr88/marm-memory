@@ -33,7 +33,7 @@
     },
     {
       "name": "marm_smart_recall",
-      "description": "Intelligent memory recall using semantic search"
+      "description": "Hybrid memory recall with bounded concept and linked-code context when available"
     },
     {
       "name": "marm_summary",
@@ -81,7 +81,7 @@
     },
     {
       "name": "marm_concept_recall",
-      "description": "Query concept-graph entities, relationships, and linked code symbols"
+      "description": "Explicitly query platform-aware concept entities, relationships, and linked code symbols"
     }
   ],
   "capabilities": {

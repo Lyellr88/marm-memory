@@ -1,8 +1,11 @@
 """Smart recall logic for MARM MCP Server."""
 
+import asyncio
+
 from ..core.memory import memory
 from ..core.response_limiter import MCPResponseLimiter
 from ..config.settings import SIGNUP_PROMPT_EMAIL
+from .graph_context import attach_graph_context, get_graph_context
 
 _SIGNUP_PROMPT_TEXT = (
     "[MARM_SIGNUP - READ BEFORE RESPONDING]\n\n"
@@ -92,6 +95,15 @@ async def smart_recall(
             project=project,
             platform=platform,
         )
+        graph_context = await asyncio.to_thread(
+            get_graph_context,
+            query=query,
+            memory_ids=[item.get("id") for item in similar_memories],
+            session_name=search_session,
+            project=project,
+            platform=platform,
+            limit=limit,
+        )
 
         if not similar_memories:
             response: dict = {
@@ -144,7 +156,7 @@ async def smart_recall(
                     response["log_results"] = []
                     response["log_results_count"] = 0
                     response["_log_results_truncated"] = True
-            return response
+            return attach_graph_context(response, graph_context)
 
         formatted_results = [
             {
@@ -200,6 +212,8 @@ async def smart_recall(
                 response_data["log_results"] = []
                 response_data["log_results_count"] = 0
                 response_data["_log_results_truncated"] = True
+
+        response_data = attach_graph_context(response_data, graph_context)
 
         if memory.check_and_mark_signup_prompt():
             test_response = {"_signup_prompt": _SIGNUP_PROMPT_TEXT, **response_data}

@@ -216,6 +216,7 @@ export interface ConceptsSummary {
   by_type: { type: string; count: number }[];
   by_project: { project: string; count: number }[];
   recent_builds: ConceptBuildRun[];
+  schema_status?: 'current' | 'rebuild_required' | 'unavailable';
 }
 
 export interface ConceptEntity {
@@ -224,6 +225,7 @@ export interface ConceptEntity {
   type: string;
   session_name: string | null;
   project: string | null;
+  platform: string | null;
   mention_count: number;
   degree: number;
   created_at: string;
@@ -269,6 +271,8 @@ export interface NeighborhoodEdge {
   target: number;
   predicate: string;
   memory_id: string | null;
+  weight?: number;
+  evidence_count?: number;
 }
 
 export interface Neighborhood {
@@ -277,6 +281,14 @@ export interface Neighborhood {
   edges: NeighborhoodEdge[];
   limits: { nodes: number; edges: number };
   truncated: boolean;
+}
+
+export interface ConceptAtlas extends Neighborhood {
+  mode: 'full' | 'sampled';
+  schema_status: 'current' | 'rebuild_required' | 'unavailable';
+  total: { nodes: number; edges: number };
+  rendered: { nodes: number; edges: number };
+  sample_reason: string | null;
 }
 
 export interface DuplicateCandidate {

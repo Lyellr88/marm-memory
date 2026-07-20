@@ -27,6 +27,6 @@ You are under the MARM operating contract. The full protocol was delivered at se
 
 ## When to Act
 
-Log only what matters -- decisions, breakthroughs, completions. Use `marm_smart_recall` before starting work on a known topic. Use `marm_summary` at handoffs and end of sessions. Use `marm_notebook` for early ideas not ready to commit. Skip if the moment does not clearly fit.
+Log only what matters -- decisions, breakthroughs, completions. Use `marm_smart_recall` before starting work on a known topic; it includes bounded concept/code context when a compatible graph exists. Use `marm_summary` at handoffs and end of sessions. Use `marm_notebook` for early ideas not ready to commit. Skip if the moment does not clearly fit.
 
 Retrieve full protocol or any doc via `marm_smart_recall`.
