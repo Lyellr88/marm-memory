@@ -873,7 +873,6 @@ Packaged docs are indexed into the `marm_system` memory namespace on startup and
 | `COMPACTION_STAGING_TTL_HOURS` | `168` | How long staged summaries wait before expiring |
 | `GRAPH_ENABLED` | `true` | Kill switch for the 5 code-graph tools |
 | `CONCEPT_BUILD_ROW_CAP` | `500` | Max memory rows per concept-graph build |
-| `MARM_SIGNUP_PROMPT_ENABLED` | `1` | One-time opt-in prompt for the MARM mailing list; set `0` to disable |
 
 </details>
 

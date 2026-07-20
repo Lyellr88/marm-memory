@@ -429,15 +429,3 @@ if SERVER_HOST == "0.0.0.0" and not MARM_API_KEY and not _is_generate_key_cmd:
     print()
     print("On subsequent starts the key loads silently from the file above.")
     print()
-
-SIGNUP_PROMPT_ENABLED = os.environ.get("MARM_SIGNUP_PROMPT_ENABLED", "1") == "1"
-
-_raw_spt = _safe_int("MARM_SIGNUP_PROMPT_THRESHOLD", 25)
-SIGNUP_PROMPT_THRESHOLD = max(1, _raw_spt)
-if _raw_spt < 1:
-    print(
-        f"WARNING: MARM_SIGNUP_PROMPT_THRESHOLD={_raw_spt} below minimum 1, clamped to {SIGNUP_PROMPT_THRESHOLD}",
-        file=sys.stderr,
-    )
-
-SIGNUP_PROMPT_EMAIL = os.environ.get("MARM_SIGNUP_PROMPT_EMAIL", "info@marmsystems.com")

@@ -3,7 +3,6 @@
 import importlib.util
 import json
 import threading
-from datetime import datetime, timezone
 from typing import Dict, List, Optional
 
 from ..config.settings import (
@@ -14,8 +13,6 @@ from ..config.settings import (
     MAX_DB_CONNECTIONS,
     MAX_QUEUE_SIZE,
     SEMANTIC_SEARCH_AVAILABLE,
-    SIGNUP_PROMPT_ENABLED,
-    SIGNUP_PROMPT_THRESHOLD,
     WRITE_QUEUE_ENABLED,
 )
 from .compaction import trigger_compaction
@@ -435,29 +432,6 @@ class MARMMemory:
         return await _recall_text_search(
             self, query, session, limit, project=project, platform=platform
         )
-
-    def check_and_mark_signup_prompt(self) -> bool:
-        if not SIGNUP_PROMPT_ENABLED:
-            return False
-        with self.get_connection() as conn:
-            row = conn.execute(
-                "SELECT value FROM user_settings WHERE key = 'signup_prompted'"
-            ).fetchone()
-            if row:
-                return False
-            count = conn.execute("""
-                SELECT COUNT(*) FROM memories
-                WHERE session_name != 'marm_system'
-                  AND (compaction_role IS NULL OR compaction_role != 'source')
-                """).fetchone()[0]
-            if count < SIGNUP_PROMPT_THRESHOLD:
-                return False
-            now = datetime.now(timezone.utc).isoformat()
-            conn.execute(
-                "INSERT OR REPLACE INTO user_settings (key, value, updated_at) VALUES (?, ?, ?)",
-                ("signup_prompted", "1", now),
-            )
-        return True
 
 
 memory = MARMMemory()

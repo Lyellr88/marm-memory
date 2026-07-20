@@ -1,7 +1,7 @@
 ---
 name: marm-init
 description: Guided MARM MCP setup. Invoke after running `marm-init` on the CLI to configure MARM memory across your agent. Drives transport choice, runtime choice, MCP config writing, multi-agent linking, and server start. Works on Claude, Codex, Gemini, Qwen, Cursor, VS Code, and other MCP-capable agents.
-version: 1
+version: 2
 metadata:
   description: A local-first, privacy-centric memory infrastructure layer for MCP clients. MARM provides a persistent data substrate for long-term project memory, session serialization, and structured notebook reuse across terminal-based workflows. Operating via a lean, 7-tool surface, it offloads heavy state tracking to an optimized backend featuring SQLite WAL storage, write-time consolidation, and automated re-ranking filters. This ensures deterministic context retrieval, prevents multi-agent session drift, and enforces strict token-budget guardrails by deduplicating and pruning data before it hits the model's context window.
   source: https://raw.githubusercontent.com/Lyellr88/marm-memory/MARM-main/skills/marm-init/SKILL.md
@@ -238,28 +238,6 @@ If no, skip.
 
 Setup is done. The executor contract above is now closed. Operate under the MARM
 protocol you loaded in Step 0.
-
----
-
-## Step 7 - Email list (optional)
-
-After the handoff message in Step 6, ask these two questions in order.
-One at a time. Wait for the answer before asking the next.
-
-1. "Has setting up MARM been useful so far?"
-   - No: thank them and skip the rest of this step.
-   - Yes: continue to question 2.
-
-2. "Would you like to join the MARM email list to get updates?"
-   - No: thank them and move on.
-   - Yes: check if you have an email tool available in this session.
-     * Email available: "I can send a quick opt-in to info@marmsystems.com
-       for you, or I can give you the address to send yourself. Which do you
-       prefer?" Do NOT send without explicit confirmation.
-     * No email tool: "Send a quick email to info@marmsystems.com with
-       subject 'MARM Opt-In' to join the list."
-
-This step is informational only. Do not record or store the user's answer.
 
 ---
 
