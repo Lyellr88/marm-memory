@@ -143,14 +143,53 @@ def test_marm_concept_build_reports_degraded_when_concepts_are_unavailable(
     _server, concepts, _memory_module = concepts_env
     from marm_mcp_server.core.models import ConceptBuildRequest
 
+    concept_db = concepts._get_concept_db()
+    with concept_db.get_connection() as conn:
+        concept_db.get_or_create_entity(
+            conn, "existing graph", "concept", "sess-a", None, "m1"
+        )
     monkeypatch.setattr(concepts, "CONCEPTS_AVAILABLE", False)
     result = asyncio.run(
-        concepts.marm_concept_build(ConceptBuildRequest(session_name="sess-a"))
+        concepts.marm_concept_build(
+            ConceptBuildRequest(search_all=True, run_id="unavailable-run")
+        )
     )
 
     assert result["status"] == "degraded"
     assert result["error_code"] == "concepts_unavailable"
     assert result["entities_extracted"] == 0
+    with concept_db.get_connection() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM entities").fetchone()[0] == 1
+        run = conn.execute(
+            "SELECT status, error_code FROM concept_build_runs WHERE id = ?",
+            ("unavailable-run",),
+        ).fetchone()
+    assert tuple(run) == ("degraded", "concepts_unavailable")
+
+
+def test_scoped_legacy_build_persists_rebuild_required_run(concepts_env):
+    _server, concepts, _memory_module = concepts_env
+    from marm_mcp_server.core.models import ConceptBuildRequest
+
+    concept_db = concepts._get_concept_db()
+    with concept_db.get_connection() as conn:
+        conn.execute(
+            "UPDATE concept_schema_metadata SET value = '1' WHERE key = 'schema_version'"
+        )
+
+    result = asyncio.run(
+        concepts.marm_concept_build(
+            ConceptBuildRequest(session_name="sess-a", run_id="legacy-run")
+        )
+    )
+
+    assert result["error_code"] == "rebuild_required"
+    with concept_db.get_connection() as conn:
+        run = conn.execute(
+            "SELECT status, error_code FROM concept_build_runs WHERE id = ?",
+            ("legacy-run",),
+        ).fetchone()
+    assert tuple(run) == ("error", "rebuild_required")
 
 
 def test_fetch_memory_rows_excludes_marm_system_session(concepts_env):

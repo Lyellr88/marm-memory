@@ -5,10 +5,25 @@ import sqlite3
 from array import array
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+import re
 
 
 from server import concept_store
 from server.endpoints import concepts as concepts_endpoint
+
+
+def test_console_schema_version_tracks_mcp_source() -> None:
+    source = (
+        Path(__file__).resolve().parents[2]
+        / "marm-mcp-server"
+        / "marm_mcp_server"
+        / "core"
+        / "concept_db.py"
+    ).read_text(encoding="utf-8")
+    match = re.search(r"CONCEPT_SCHEMA_VERSION = (\d+)", source)
+
+    assert match is not None
+    assert concept_store._CURRENT_CONCEPT_SCHEMA_VERSION == match.group(1)
 
 
 def make_db(tmp_path: Path) -> Path:
@@ -281,6 +296,23 @@ def test_graph_overview_samples_deterministically_and_keeps_connections(
         for endpoint in (edge["source"], edge["target"])
     }
     assert connected_ids == selected_ids
+
+
+def test_graph_overview_bounds_sampled_raw_edge_candidates(tmp_path, monkeypatch):
+    monkeypatch.setattr(concept_store, "FULL_ATLAS_MAX_NODES", 3)
+    monkeypatch.setattr(concept_store, "FULL_ATLAS_MAX_EDGES", 3)
+    monkeypatch.setattr(concept_store, "SAMPLED_ATLAS_MAX_NODES", 4)
+    monkeypatch.setattr(concept_store, "SAMPLED_ATLAS_MAX_EDGES", 4)
+    monkeypatch.setattr(concept_store, "SAMPLED_ATLAS_RAW_EDGE_LIMIT", 2)
+    db = make_db(tmp_path)
+    entities = [add_entity(db, f"node-{index}") for index in range(4)]
+    for index in range(6):
+        add_edge(db, entities[index % 4], entities[(index + 1) % 4], f"uses-{index}")
+
+    result = concept_store.graph_overview(db)
+
+    assert result["mode"] == "sampled"
+    assert len(result["edges"]) <= 2
 
 
 def test_graph_overview_marks_platformless_schema_for_rebuild(tmp_path):

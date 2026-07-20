@@ -361,9 +361,46 @@ async def _marm_concept_build(req: ConceptBuildRequest) -> dict:
 
     run_id = req.run_id or str(uuid.uuid4())
     created_at = datetime.now(timezone.utc).isoformat()
+    if not CONCEPTS_AVAILABLE:
+        try:
+            await asyncio.to_thread(_create_build_run, req, run_id, created_at)
+        except Exception as e:
+            logger.warning("concepts.build_run_create_error", error=str(e))
+            return {"status": "error", "message": "Concept build failed."}
+        result = {
+            "status": "degraded",
+            "error_code": "concepts_unavailable",
+            "message": _CONCEPTS_UNAVAILABLE_MESSAGE,
+            "entities_extracted": 0,
+            "relationships_created": 0,
+            "code_links_created": 0,
+            "possible_duplicates": [],
+            "duration_ms": 0,
+        }
+        await asyncio.to_thread(
+            _finish_build_run,
+            run_id,
+            status="degraded",
+            error_code="concepts_unavailable",
+            finished_at=datetime.now(timezone.utc).isoformat(),
+            duration_ms=0,
+        )
+        result["build_run_id"] = run_id
+        return result
     try:
         graph_rebuilt = await asyncio.to_thread(_prepare_build_schema, req)
     except ValueError:
+        try:
+            await asyncio.to_thread(_create_build_run, req, run_id, created_at)
+            await asyncio.to_thread(
+                _finish_build_run,
+                run_id,
+                status="error",
+                error_code="rebuild_required",
+                finished_at=datetime.now(timezone.utc).isoformat(),
+            )
+        except Exception as e:
+            logger.warning("concepts.build_run_create_error", error=str(e))
         return {
             "status": "error",
             "error_code": "rebuild_required",
@@ -385,28 +422,6 @@ async def _marm_concept_build(req: ConceptBuildRequest) -> dict:
     except Exception as e:
         logger.warning("concepts.build_run_create_error", error=str(e))
         return {"status": "error", "message": "Concept build failed."}
-
-    if not CONCEPTS_AVAILABLE:
-        result = {
-            "status": "degraded",
-            "error_code": "concepts_unavailable",
-            "message": _CONCEPTS_UNAVAILABLE_MESSAGE,
-            "entities_extracted": 0,
-            "relationships_created": 0,
-            "code_links_created": 0,
-            "possible_duplicates": [],
-            "duration_ms": 0,
-        }
-        await asyncio.to_thread(
-            _finish_build_run,
-            run_id,
-            status="degraded",
-            error_code="concepts_unavailable",
-            finished_at=datetime.now(timezone.utc).isoformat(),
-            duration_ms=0,
-        )
-        result["build_run_id"] = run_id
-        return result
 
     start = time.monotonic()
     try:

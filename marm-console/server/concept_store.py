@@ -13,6 +13,7 @@ FULL_ATLAS_MAX_NODES = 750
 FULL_ATLAS_MAX_EDGES = 6000
 SAMPLED_ATLAS_MAX_NODES = 600
 SAMPLED_ATLAS_MAX_EDGES = 4000
+SAMPLED_ATLAS_RAW_EDGE_LIMIT = 12000
 _CURRENT_CONCEPT_SCHEMA_VERSION = "2"
 
 
@@ -445,17 +446,47 @@ def graph_overview(db_path: Path) -> dict:
         total_edges = connection.execute(
             "SELECT COUNT(*) FROM relationships"
         ).fetchone()[0]
-        node_rows = connection.execute("""
+        mode = (
+            "full"
+            if total_nodes <= FULL_ATLAS_MAX_NODES
+            and total_edges <= FULL_ATLAS_MAX_EDGES
+            else "sampled"
+        )
+        node_query = """
             SELECT e.id, e.name, e.type, e.session_name, e.project, e.platform,
                    e.source_memory_ids, e.created_at,
                    (SELECT COUNT(*) FROM relationships r WHERE r.source_id = e.id OR r.target_id = e.id) AS degree
             FROM entities e
-            ORDER BY e.id
-            """).fetchall()
-        raw_edges = connection.execute(
-            """SELECT id, source_id, target_id, predicate, memory_id
-               FROM relationships ORDER BY id"""
-        ).fetchall()
+        """
+        if mode == "full":
+            node_rows = connection.execute(node_query + " ORDER BY e.id").fetchall()
+            raw_edges = connection.execute(
+                """SELECT id, source_id, target_id, predicate, memory_id
+                   FROM relationships ORDER BY id"""
+            ).fetchall()
+        else:
+            node_rows = connection.execute(
+                node_query + " ORDER BY degree DESC, e.id LIMIT ?",
+                (SAMPLED_ATLAS_MAX_NODES,),
+            ).fetchall()
+            raw_edges = connection.execute(
+                """WITH candidates AS (
+                       SELECT e.id
+                       FROM entities e
+                       ORDER BY (
+                           SELECT COUNT(*) FROM relationships r
+                           WHERE r.source_id = e.id OR r.target_id = e.id
+                       ) DESC, e.id
+                       LIMIT ?
+                   )
+                   SELECT id, source_id, target_id, predicate, memory_id
+                   FROM relationships
+                   WHERE source_id IN (SELECT id FROM candidates)
+                     AND target_id IN (SELECT id FROM candidates)
+                   ORDER BY id
+                   LIMIT ?""",
+                (SAMPLED_ATLAS_MAX_NODES, SAMPLED_ATLAS_RAW_EDGE_LIMIT),
+            ).fetchall()
 
     edge_groups: dict[tuple[int, int, str], dict] = {}
     for row in raw_edges:
@@ -475,11 +506,6 @@ def graph_overview(db_path: Path) -> dict:
         group["weight"] += 1
         group["evidence_count"] += 1
 
-    mode = (
-        "full"
-        if total_nodes <= FULL_ATLAS_MAX_NODES and total_edges <= FULL_ATLAS_MAX_EDGES
-        else "sampled"
-    )
     selected_ids = {row["id"] for row in node_rows}
     selected_edge_keys = set(edge_groups)
     limits = {"nodes": FULL_ATLAS_MAX_NODES, "edges": FULL_ATLAS_MAX_EDGES}

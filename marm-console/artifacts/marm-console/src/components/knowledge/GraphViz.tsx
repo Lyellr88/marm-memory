@@ -58,14 +58,16 @@ export function GraphViz({
     const visibleEdges = neighborhood.edges.filter(
       e => !hiddenPredicates.has(e.predicate) && visibleNodeIds.has(e.source) && visibleNodeIds.has(e.target)
     );
-    // Filtering edges out must not leave stranded dots: keep only nodes that
-    // still connect to something, plus the seed and the focused node.
+    // Focused neighborhoods omit stranded nodes, but the atlas must retain
+    // isolated entities returned by its overview contract.
     const connected = new Set<number>();
     visibleEdges.forEach(e => { connected.add(e.source); connected.add(e.target); });
     if (neighborhood.seed_id !== null) connected.add(neighborhood.seed_id);
     if (focusedId !== null) connected.add(focusedId);
     const nodes = neighborhood.nodes
-      .filter(n => visibleNodeIds.has(n.id) && connected.has(n.id))
+      .filter(n => visibleNodeIds.has(n.id) && (
+        neighborhood.seed_id === null || connected.has(n.id)
+      ))
       .map((n) => {
         return {
           id: n.id,
