@@ -169,10 +169,11 @@ def test_marm_concept_build_reports_degraded_when_concepts_are_unavailable(
     assert tuple(run) == ("degraded", "concepts_unavailable")
 
 
-def test_scoped_legacy_build_persists_rebuild_required_run(concepts_env):
+def test_scoped_legacy_build_persists_rebuild_required_run(concepts_env, monkeypatch):
     _server, concepts, _memory_module = concepts_env
     from marm_mcp_server.core.models import ConceptBuildRequest
 
+    monkeypatch.setattr(concepts, "CONCEPTS_AVAILABLE", True)
     concept_db = concepts._get_concept_db()
     with concept_db.get_connection() as conn:
         conn.execute(
