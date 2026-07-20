@@ -26,8 +26,8 @@ export function GraphViz({
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const [hoverId, setHoverId] = useState<number | null>(null);
   const [paused, setPaused] = useState(false);
+  const pausedRef = useRef(false);
   const didInitialFit = useRef(false);
-  const pinnedRef = useRef<Map<number, { x: number; y: number }>>(new Map());
   const reducedMotion = useMemo(
     () => window.matchMedia('(prefers-reduced-motion: reduce)').matches,
     []
@@ -45,6 +45,12 @@ export function GraphViz({
     return () => obs.disconnect();
   }, []);
 
+  useEffect(() => {
+    const fg = fgRef.current;
+    if (!fg || !didInitialFit.current || dimensions.width === 0) return;
+    fg.zoomToFit(reducedMotion ? 0 : 250, 40);
+  }, [dimensions, reducedMotion]);
+
   const gData = useMemo(() => {
     const visibleNodeIds = new Set(
       neighborhood.nodes.filter(n => !hiddenTypes.has(n.type)).map(n => n.id)
@@ -61,7 +67,6 @@ export function GraphViz({
     const nodes = neighborhood.nodes
       .filter(n => visibleNodeIds.has(n.id) && connected.has(n.id))
       .map((n) => {
-        const pinned = pinnedRef.current.get(n.id);
         return {
           id: n.id,
           name: n.name,
@@ -69,7 +74,6 @@ export function GraphViz({
           degree: n.degree ?? n.mention_count,
           hiddenNeighborCount: n.hidden_neighbor_count,
           isSeed: n.id === neighborhood.seed_id,
-          ...(pinned ? { fx: pinned.x, fy: pinned.y } : {}),
         };
       });
     return {
@@ -78,6 +82,7 @@ export function GraphViz({
         source: e.source,
         target: e.target,
         predicate: e.predicate,
+        weight: e.weight ?? e.evidence_count ?? 1,
       })),
     };
   }, [neighborhood, hiddenPredicates, hiddenTypes, focusedId]);
@@ -96,31 +101,45 @@ export function GraphViz({
   }, [gData]);
 
   const hoverNeighbors = hoverId !== null ? adjacency.get(hoverId) : null;
+  const labelledHubIds = useMemo(() => {
+    const labelBudget = Math.min(12, Math.max(4, Math.ceil(Math.sqrt(gData.nodes.length))));
+    const ranked = [...gData.nodes].sort(
+      (a: any, b: any) => b.degree - a.degree || a.id - b.id
+    );
+    const medianDegree = ranked.length
+      ? ranked[Math.floor(ranked.length / 2)].degree
+      : Infinity;
+    return new Set(
+      ranked
+        .filter((node: any) => node.degree > medianDegree)
+        .slice(0, labelBudget)
+        .map((node: any) => node.id)
+    );
+  }, [gData.nodes]);
 
   useEffect(() => {
     const fg = fgRef.current;
     if (!fg) return;
-    fg.d3Force('charge')?.strength(-110).distanceMax(280);
-    fg.d3Force('link')?.distance((l: any) => (l.predicate === 'co_occurs_with' ? 62 : 44));
-    fg.d3Force('collide', forceCollide((n: any) => nodeRadius(n.degree) + 4));
+    const nodeCount = Math.max(gData.nodes.length, 1);
+    const chargeStrength = -Math.max(24, 92 - Math.log2(nodeCount) * 7);
+    fg.d3Force('charge')?.strength(chargeStrength).distanceMax(nodeCount > 300 ? 150 : 240);
+    fg.d3Force('link')
+      ?.distance((l: any) => (l.predicate === 'co_occurs_with' ? 28 : 38))
+      .strength((l: any) => Math.min(0.35, 0.08 + Math.log2((l.weight ?? 1) + 1) * 0.04));
+    fg.d3Force('collide', forceCollide((n: any) => nodeRadius(n.degree) + 1.5).strength(0.65));
+    didInitialFit.current = false;
+    if (!pausedRef.current) fg.d3ReheatSimulation();
   }, [gData]);
 
-  // Pin positions after the first settle so expansions don't re-layout
-  // everything, then frame the graph once.
   const handleEngineStop = useCallback(() => {
     const fg = fgRef.current;
     if (!fg) return;
-    const nodes: any[] = fg.graphData?.().nodes || [];
-    nodes.forEach(n => {
-      if (typeof n.x === 'number' && typeof n.y === 'number') {
-        pinnedRef.current.set(n.id, { x: n.x, y: n.y });
-      }
-    });
     if (!didInitialFit.current) {
       didInitialFit.current = true;
       fg.zoomToFit(reducedMotion ? 0 : 500, 60);
       if (reducedMotion) {
         fg.pauseAnimation();
+        pausedRef.current = true;
         setPaused(true);
       }
     }
@@ -164,7 +183,7 @@ export function GraphViz({
 
     // Labels: hubs always, everything when zoomed in or highlighted.
     const showLabel = !dimmed && (
-      emphasized || r * globalScale > 10 || globalScale > 2.4
+      emphasized || labelledHubIds.has(node.id) || globalScale > 3.2
     );
     if (showLabel) {
       const fontSize = Math.max(11 / globalScale, 2.4);
@@ -188,7 +207,7 @@ export function GraphViz({
       }
     }
     ctx.globalAlpha = 1;
-  }, [hoverId, focusedId, expandingId, isDimmed]);
+  }, [hoverId, focusedId, expandingId, isDimmed, labelledHubIds]);
 
   const paintPointerArea = useCallback((node: any, color: string, ctx: CanvasRenderingContext2D) => {
     ctx.fillStyle = color;
@@ -204,22 +223,27 @@ export function GraphViz({
       if (s === hoverId || t === hoverId) return 'rgba(56, 189, 248, 0.55)';
       return 'rgba(148, 163, 184, 0.04)';
     }
+    const evidence = Math.min(1, Math.log2((link.weight ?? 1) + 1) / 5);
     return link.predicate === 'co_occurs_with'
-      ? 'rgba(148, 163, 184, 0.08)'
-      : 'rgba(148, 163, 184, 0.18)';
+      ? `rgba(100, 116, 139, ${0.035 + evidence * 0.055})`
+      : `rgba(148, 163, 184, ${0.12 + evidence * 0.16})`;
   }, [hoverId]);
 
   const linkWidth = useCallback((link: any) => {
     const s = typeof link.source === 'object' ? link.source.id : link.source;
     const t = typeof link.target === 'object' ? link.target.id : link.target;
-    return hoverId !== null && (s === hoverId || t === hoverId) ? 1.4 : 0.6;
+    if (hoverId !== null && (s === hoverId || t === hoverId)) return 1.5;
+    const evidenceWidth = Math.min(1.8, Math.log2((link.weight ?? 1) + 1) * 0.3);
+    return link.predicate === 'co_occurs_with' ? 0.35 + evidenceWidth * 0.3 : 0.55 + evidenceWidth;
   }, [hoverId]);
 
   const togglePause = () => {
     const fg = fgRef.current;
     if (!fg) return;
-    if (paused) fg.resumeAnimation(); else fg.pauseAnimation();
-    setPaused(!paused);
+    const nextPaused = !pausedRef.current;
+    if (nextPaused) fg.pauseAnimation(); else fg.resumeAnimation();
+    pausedRef.current = nextPaused;
+    setPaused(nextPaused);
   };
 
   const zoomBy = (factor: number) => {
@@ -253,7 +277,8 @@ export function GraphViz({
           }}
           onBackgroundClick={() => setHoverId(null)}
           onEngineStop={handleEngineStop}
-          cooldownTicks={120}
+          warmupTicks={gData.nodes.length > 300 ? 35 : 20}
+          cooldownTicks={gData.nodes.length > 300 ? 220 : 140}
         />
       )}
       <div className="absolute top-4 left-4 flex gap-2 pointer-events-none">

@@ -110,7 +110,7 @@ export function ExplorerTab() {
     data: overviewGraph,
     isError: overviewError,
     isLoading: overviewLoading,
-  } = useConceptGraph({ limit: 150 }, selectedId === null);
+  } = useConceptGraph(selectedId === null);
   const [graph, setGraph] = useState<Neighborhood | null>(null);
   const [focusedNode, setFocusedNode] = useState<NeighborhoodNode | null>(null);
   const [hiddenPredicates, setHiddenPredicates] = useState<Set<string>>(new Set(DEFAULT_HIDDEN_PREDICATES));
@@ -180,6 +180,7 @@ export function ExplorerTab() {
   const isLoading = selectedId === null ? overviewLoading : neighborhoodLoading;
   const loadError = selectedId === null ? overviewError : neighborhoodError;
   const isEmpty = (summary?.entities ?? 0) === 0;
+  const rebuildRequired = overviewGraph?.schema_status === 'rebuild_required';
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-0 h-full">
@@ -256,6 +257,13 @@ export function ExplorerTab() {
               <ArrowLeft className="w-3 h-3 mr-1" /> Full graph
             </Button>
           )}
+          {selectedId === null && overviewGraph && (
+            <Badge variant="outline" className="h-6 text-[10px] font-mono">
+              {overviewGraph.mode === 'full'
+                ? `Full atlas · ${overviewGraph.rendered.nodes} nodes`
+                : `Connected sample · ${overviewGraph.rendered.nodes}/${overviewGraph.total.nodes} nodes`}
+            </Badge>
+          )}
           {selectedId !== null && (
             <Select value={direction} onValueChange={(value: 'both' | 'incoming' | 'outgoing') => setDirection(value)}>
               <SelectTrigger className="h-6 w-28 text-xs"><SelectValue /></SelectTrigger>
@@ -292,7 +300,15 @@ export function ExplorerTab() {
           ))}
         </div>
         <div className="flex-1 border rounded-lg bg-card overflow-hidden flex flex-col relative shadow-inner">
-          {isEmpty ? (
+          {rebuildRequired ? (
+            <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground gap-3 px-8 text-center">
+              <AlertTriangle className="w-12 h-12 text-amber-500/70" />
+              <p className="font-medium text-foreground">Concept rebuild required</p>
+              <p className="text-sm max-w-md">
+                Run Build Concepts for all memories once to add platform-safe graph scope.
+              </p>
+            </div>
+          ) : isEmpty ? (
             <div className="flex-1 flex flex-col items-center justify-center text-muted-foreground gap-3 px-8 text-center">
               <GitGraph className="w-16 h-16 opacity-20" />
               <p className="font-medium text-foreground">No knowledge graph yet</p>

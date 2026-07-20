@@ -535,7 +535,7 @@ The AI agent will automatically use the appropriate tools. Manual tool access is
 
 | Tool | What it does | Key parameters |
 |------|--------------|----------------|
-| `marm_smart_recall` | Hybrid recall: exact lane for config keys, commands, and file paths; semantic rerank for natural-language queries | `query`, `limit`, `session_name`, `search_all`, `detail=1/2/3`, `project`, `platform`, `exact_mode` |
+| `marm_smart_recall` | Hybrid memory recall with an additive, bounded concept/code graph sidecar when a compatible graph exists | `query`, `limit`, `session_name`, `search_all`, `detail=1/2/3`, `project`, `platform`, `exact_mode` |
 | `marm_log_entry` | Add structured session log entries; each entry is also embedded into semantic memory so `marm_smart_recall` can find it | `entry`, `session_name` |
 | `marm_log_show` | Display all entries and sessions, with filtering | `session_name` |
 | `marm_delete` | Delete a log session, log entry, or notebook entry | `type`, `target`, `session_name`, `project`, `platform` |
@@ -558,7 +558,7 @@ The AI agent will automatically use the appropriate tools. Manual tool access is
 | Tool | What it does | Key parameters |
 |------|--------------|----------------|
 | `marm_concept_build` | Extract entities and typed relationships from stored memories | `session_name`, `project`, or `search_all=True` (one required) |
-| `marm_concept_recall` | Query entities, relationships, and linked code symbols | `query`, `depth` (1-5), `direction`, `project` |
+| `marm_concept_recall` | Explicitly query entities, relationships, and linked code symbols | `query`, `depth` (1-5), `direction`, `project`, `platform` |
 
 All 14 tools are available on both HTTP and STDIO. Behind the tool surface, the server handles lifecycle setup, protocol refresh, docs indexing, date context, summary-cache maintenance, write queue handling, project/platform attribution, and health checks automatically; none of those consume the agent's attention or tokens. The two graph engines start lazily on first use and never block the 7 core memory tools if they fail to start. See [Architecture & Internals](#architecture--internals) for the mechanisms.
 
@@ -726,7 +726,7 @@ Under the hood, the engine is [codebase-memory-mcp](https://github.com/DeusData/
 
 ### Concept Graph: what your memories are about
 
-MARM can extract a knowledge graph from the memories you've already stored. `marm_concept_build` runs entity and relationship extraction over stored memory content, producing typed entities (**concepts, decisions, patterns, errors, tools, people, organizations**) connected by typed relationships (**fixes, implements, depends_on, uses, causes, replaces, extends**). `marm_concept_recall` then answers questions like:
+MARM can extract a knowledge graph from the memories you've already stored. `marm_concept_build` runs entity and relationship extraction over stored memory content, producing typed entities (**concepts, decisions, patterns, errors, tools, people, organizations**) connected by typed relationships (**fixes, implements, depends_on, uses, causes, replaces, extends**). Once built, `marm_smart_recall` automatically adds bounded related entities, relationships, and linked code as a `graph_context` sidecar without changing primary memory ranking. `marm_concept_recall` remains available for explicit graph exploration:
 
 ```text
 marm_concept_recall(query="write queue")            → the entity, its relationships, linked code symbols
@@ -736,10 +736,13 @@ marm_concept_recall(query="related to SQLite", depth=3) → multi-hop traversal 
 How to use it:
 
 - **Build first**: call `marm_concept_build` scoped to a `session_name`, `project`, or `search_all=True`. There is no data until a build has run at least once. Builds are explicit and on-demand, not a live hook into the write path; re-run after logging significant new memories.
+- **Upgrade once**: graphs built before platform attribution require `marm_concept_build(search_all=True)`. A full build backs up and resets only the derived concept database; targeted builds refuse to guess platform ownership.
 - **Bounded by design**: each build is row-capped (`CONCEPT_BUILD_ROW_CAP`, default 500) so a huge store can't turn one tool call into a runaway job.
+- **Recall fails open**: a missing, empty, incompatible, or unavailable concept graph never blocks normal memory recall. The response reports graph status separately.
 - **Code cross-linking**: when the code graph has indexed the same project, concept entities that match code symbols get linked, connecting "what we decided" to "where it lives in the code."
 - **Optional dependency**: real extraction needs the `[concepts]` extra (`pip install marm-mcp-server[concepts]` plus `python -m spacy download en_core_web_sm`). Without it, both concept tools stay registered and return `entities_extracted: 0` instead of erroring. Base installs carry no spaCy dependency.
 - **Isolated storage**: the concept graph lives in its own SQLite database (`~/.marm/index/marm_index.db`) with its own connection pool, so concept-graph writes can never block or corrupt the production memory database.
+- **Console atlas**: MARM Console renders the complete atlas up to 750 entities and 6,000 stored relationships. Larger graphs use a deterministic connected sample of up to 600 entities and 4,000 aggregated visual edges, clearly labelled as sampled.
 
 This fills the cross-session structure gap that flat memory search leaves open: sessions organize memories, but the concept graph *connects* them, so "what depends on the write queue?" is answerable even when the answer spans five sessions from three different agents.
 

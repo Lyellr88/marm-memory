@@ -12,6 +12,7 @@ import type {
   CompactionCandidate,
   ConceptBuildInput,
   ConceptBuildRun,
+  ConceptAtlas,
   ConceptDetail,
   ConceptEntity,
   ConceptSearchParams,
@@ -201,8 +202,8 @@ export function createMarmClient(config: MarmClientConfig) {
       request<ConceptEntity[]>(config, 'GET', '/concepts/search', { query: params }),
     getConcept: (entityId: number) =>
       request<ConceptDetail>(config, 'GET', `/concepts/${entityId}`),
-    getConceptGraph: (params?: { limit?: number }) =>
-      request<Neighborhood>(config, 'GET', '/concepts/graph', { query: params }),
+    getConceptGraph: () =>
+      request<ConceptAtlas>(config, 'GET', '/concepts/graph'),
     getConceptNeighborhood: (
       entityId: number,
       params?: { depth?: number; direction?: string; predicate?: string },

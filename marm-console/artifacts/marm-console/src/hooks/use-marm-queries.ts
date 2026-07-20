@@ -19,7 +19,7 @@ export const queryKeys = {
   summary: (baseUrl: string, session: string) => ['summary', baseUrl, session],
   compaction: (baseUrl: string) => ['compaction', baseUrl],
   conceptsSummary: (baseUrl: string) => ['conceptsSummary', baseUrl],
-  conceptsGraph: (baseUrl: string, params?: { limit?: number }) => ['conceptsGraph', baseUrl, params],
+  conceptsGraph: (baseUrl: string) => ['conceptsGraph', baseUrl],
   conceptsSearch: (baseUrl: string, params?: ConceptSearchParams) => ['conceptsSearch', baseUrl, params],
   concept: (baseUrl: string, id: number) => ['concept', baseUrl, id],
   neighborhood: (baseUrl: string, id: number, params?: any) => ['neighborhood', baseUrl, id, params],
@@ -283,11 +283,11 @@ export function useSearchConcepts(params?: ConceptSearchParams) {
   return useQuery({ queryKey: queryKeys.conceptsSearch(baseUrl, params), queryFn: () => client.searchConcepts(params) });
 }
 
-export function useConceptGraph(params?: { limit?: number }, enabled = true) {
+export function useConceptGraph(enabled = true) {
   const { baseUrl, client } = useMarmConfig();
   return useQuery({
-    queryKey: queryKeys.conceptsGraph(baseUrl, params),
-    queryFn: () => client.getConceptGraph(params),
+    queryKey: queryKeys.conceptsGraph(baseUrl),
+    queryFn: client.getConceptGraph,
     enabled,
   });
 }

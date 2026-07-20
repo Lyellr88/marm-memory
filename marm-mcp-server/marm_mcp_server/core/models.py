@@ -199,6 +199,10 @@ class ConceptRecallRequest(BaseModel):
         default=None,
         description="Scope to this project. Omit to search across all projects.",
     )
+    platform: Optional[str] = Field(
+        default=None,
+        description="Scope to this platform. Omit to search across all platforms.",
+    )
     limit: int = Field(
         default=10, ge=1, le=100, description="Max entities/relationships returned."
     )
