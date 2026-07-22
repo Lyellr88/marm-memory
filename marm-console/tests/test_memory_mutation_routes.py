@@ -1,7 +1,7 @@
 from fastapi.testclient import TestClient
 
-from server import app as console_app
-from server import memory_store
+from marm_mcp_server.console import app as console_app
+from marm_mcp_server.console import memory_store
 
 
 def test_memory_mutation_routes_proxy_to_marm_runtime(monkeypatch):

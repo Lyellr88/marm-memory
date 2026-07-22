@@ -50,6 +50,8 @@ async def rate_limit_middleware(request: Request, call_next):
         "/docs",
         "/openapi.json",
         "/ready",
+        "/internal/runtime/status",
+        "/internal/runtime/shutdown",
     ] or request.url.path.startswith("/internal/projects/jobs/"):
         return await call_next(request)
 

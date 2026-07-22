@@ -1,8 +1,9 @@
-"""Graceful shutdown manager for MARM MCP Server."""
-
-import signal
 import asyncio
+import signal
+
 import structlog
+
+from .graph_supervisor import graph_supervisor
 from .memory import memory
 
 logger = structlog.get_logger()
@@ -12,6 +13,7 @@ class ShutdownManager:
     def __init__(self):
         self.shutdown_event = asyncio.Event()
         self.shutdown_initiated = False
+        self._cleanup_complete = False
 
     async def setup_signal_handlers(self):
         """Setup signal handlers for graceful shutdown"""
@@ -35,13 +37,41 @@ class ShutdownManager:
             self.shutdown_initiated = True
             self.shutdown_event.set()
 
+    def request_shutdown(self) -> None:
+        """Request the same graceful path used by process signals."""
+        if not self.shutdown_initiated:
+            self.shutdown_initiated = True
+            self.shutdown_event.set()
+
     async def wait_for_shutdown(self):
         """Wait for shutdown signal"""
         await self.shutdown_event.wait()
 
     async def graceful_shutdown(self):
         """Perform graceful shutdown of all connections and services"""
+        if self._cleanup_complete:
+            return
+        self._cleanup_complete = True
         logger.info("Initiating graceful shutdown")
+
+        try:
+            pending_scans = list(memory._pending_compaction_scans.values())
+            for task in pending_scans:
+                if not task.done():
+                    task.cancel()
+            if pending_scans:
+                await asyncio.gather(*pending_scans, return_exceptions=True)
+            memory._pending_compaction_scans.clear()
+            await memory.stop_write_queue()
+            logger.info("Serialized write queue drained")
+        except Exception:
+            logger.exception("Failed to drain serialized write queue")
+
+        try:
+            await asyncio.to_thread(graph_supervisor.stop)
+            logger.info("Graph child stopped")
+        except Exception:
+            logger.exception("Failed to stop graph child")
 
         try:
             memory.connection_pool.close_all()

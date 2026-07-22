@@ -2,8 +2,8 @@
 
 from fastapi.testclient import TestClient
 
-from server import app as console_app
-from server import mcp_client
+from marm_mcp_server.console import app as console_app
+from marm_mcp_server.console import mcp_client
 
 
 def test_project_routes_map_graph_results(monkeypatch):

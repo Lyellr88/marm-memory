@@ -67,7 +67,7 @@
 
 ```powershell
 pip install marm-mcp-server
-python -m marm_mcp_server
+marm-memory start
 ```
 
 ### **Option 2: pip install in virtualenv** ⚡ **(Clean environment)**
@@ -76,7 +76,7 @@ python -m marm_mcp_server
 python -m venv marm-env
 marm-env\Scripts\activate
 pip install marm-mcp-server
-python -m marm_mcp_server
+marm-memory start
 ```
 
 **If you prefer the `marm-mcp-stdio` CLI script**, add the Python Scripts folder to your PATH first:
@@ -94,7 +94,7 @@ Then restart your terminal.
 git clone https://github.com/Lyellr88/marm-memory.git
 cd marm-memory\marm-mcp-server
 pip install -e ".[dev]"
-python -m marm_mcp_server
+marm-memory start
 ```
 
 ### **Multi-Agent / Swarm Mode**
@@ -102,10 +102,10 @@ python -m marm_mcp_server
 For shared HTTP servers running multiple AI agents, use a preset flag:
 
 ```powershell
-python -m marm_mcp_server --swarm        # 200 RPM, write queue on
-python -m marm_mcp_server --swarm-max    # 600 RPM, write queue on
-python -m marm_mcp_server --trusted      # rate limiting off, write queue on
-python -m marm_mcp_server --rate-limit-rpm 150  # custom RPM
+marm-memory start --profile swarm        # 200 RPM, write queue on
+marm-memory start --profile swarm-max    # 600 RPM, write queue on
+marm-memory start --profile trusted      # rate limiting off, write queue on
+marm-memory start --rate-limit-rpm 150   # custom RPM
 ```
 
 Use one MARM HTTP process per SQLite database. Multi-process Uvicorn/Gunicorn

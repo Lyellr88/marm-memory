@@ -9,8 +9,8 @@ missing header.
 
 import json
 
-from server import mcp_client
-from server.endpoints import overview as overview_endpoint
+from marm_mcp_server.console import mcp_client
+from marm_mcp_server.console.endpoints import overview as overview_endpoint
 
 
 class _FakeResponse:

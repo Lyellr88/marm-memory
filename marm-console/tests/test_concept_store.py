@@ -8,8 +8,8 @@ from pathlib import Path
 import re
 
 
-from server import concept_store
-from server.endpoints import concepts as concepts_endpoint
+from marm_mcp_server.console import concept_store
+from marm_mcp_server.console.endpoints import concepts as concepts_endpoint
 
 
 def test_console_schema_version_tracks_mcp_source() -> None:

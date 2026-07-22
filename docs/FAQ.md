@@ -71,7 +71,7 @@ Docker HTTP mode should use `MARM_API_KEY` because the server is listening throu
 
 #### Q: How do I know if MARM is working correctly?
 
-For HTTP mode, run `curl http://localhost:8001/health` or use MARM Console when it is running locally. For STDIO mode, confirm your MCP client lists the MARM tools and can call a simple recall or log command.
+For HTTP mode, run `marm-memory status` or `marm-memory doctor`. The raw health endpoint remains available at `http://localhost:8001/health`. For STDIO mode, confirm your MCP client lists the MARM tools and can call a simple recall or log command.
 
 ---
 
@@ -102,7 +102,7 @@ The concept graph turns stored memories into a queryable knowledge graph. `marm_
 
 #### Q: Why does `marm_concept_build` return `entities_extracted: 0`?
 
-Real extraction needs the optional extra: `pip install marm-mcp-server[concepts]` plus `python -m spacy download en_core_web_sm`. Without it, both concept tools stay registered and return empty results instead of erroring, so base installs stay lightweight.
+Run `marm-memory knowledge setup`. MARM shows the Python environment and downloads, asks for confirmation, installs the optional spaCy runtime and model through that interpreter, and then asks you to restart MARM. Normal startup never installs optional dependencies. Without them, both concept tools stay registered and degrade cleanly, so base installs stay lightweight.
 
 #### Q: What happens if a graph engine fails to start?
 
@@ -114,7 +114,7 @@ Nothing breaks. The code-graph engine starts lazily on first graph-tool use; if 
 
 #### Q: What should I use for multi-agent or swarm-style workflows?
 
-Use HTTP mode so one MARM server coordinates shared database access. The write queue is enabled by default. Start shared servers with `--swarm` for 200 RPM, `--swarm-max` for 600 RPM, or `--trusted` to disable rate limiting on a private trusted deployment.
+Use HTTP mode so one MARM server coordinates shared database access. The write queue is enabled by default. Start shared servers with `marm-memory start --profile swarm` for 200 RPM, `--profile swarm-max` for 600 RPM, or `--profile trusted` to disable rate limiting on a private trusted deployment.
 
 Run one MARM HTTP process per SQLite database. Multi-process Uvicorn/Gunicorn workers are not supported yet because the write queue, scheduler, protocol delivery, and some active session state are process-local. Swarm presets increase safe concurrency inside one process; true multi-worker HTTP scaling is future work.
 

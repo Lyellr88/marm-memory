@@ -114,7 +114,6 @@ marm-mcp-server/
   marm_graph/                  # Embedded marm-graph wrapper: subprocess JSON-RPC client,
                                #   tool router, and backend verification for the pinned
                                #   codebase-memory-mcp binary
-  marm_dashboard/              # Archived dashboard UI, superseded by marm-console
   tests/                       # MCP server test suite
   Dockerfile                   # One image, HTTP default, STDIO override
   pyproject.toml               # Package metadata and console scripts

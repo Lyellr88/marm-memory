@@ -85,6 +85,23 @@ class GraphSupervisor:
         self._ensure_started()
         return self._available
 
+    def snapshot(self) -> dict:
+        """Return process-local graph state without starting the child."""
+        if not mcp_settings.GRAPH_ENABLED:
+            state = "disabled"
+        elif not self._ready.is_set():
+            state = "starting" if self._lock.locked() else "not_started"
+        elif self._available:
+            state = "ready"
+        else:
+            state = "error"
+        return {
+            "state": state,
+            "enabled": mcp_settings.GRAPH_ENABLED,
+            "started": self._client is not None,
+            "available": self._available,
+        }
+
     def get_client(self) -> Optional[CbmClient]:
         self._ensure_started()
         return self._client

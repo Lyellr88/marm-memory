@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "marm-mcp-server"
 version = "2.25.0"
-description = "marm-memory is a local-first MCP memory layer with hybrid recall, agent coordination, code intelligence, and persistent project context."
+description = "Local-first 3-in-1 AI memory layer & MCP server for Claude Code, Codex, Grok, Gemini, VS Code and Cursor. Fuses session history, codebase indices & concept graphs in SQLite. Enables zero-cloud, privacy-first context & instant recall also works with multi-agent swarms."
 readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md"]
@@ -53,6 +53,7 @@ Repository = "https://github.com/Lyellr88/marm-memory"
 "Docker Hub" = "https://hub.docker.com/r/lyellr88/marm-mcp-server"
 
 [project.scripts]
+marm-memory = "marm_mcp_server.cli:main"
 marm-mcp-server = "marm_mcp_server.cli:main"
 marm-mcp-stdio = "marm_mcp_server.server_stdio:main"
 
@@ -85,6 +86,7 @@ exclude = ["tests*", "*.tests*", "docs*"]
 
 [tool.setuptools.package-data]
 "*" = ["*.json", "*.yaml", "*.yml", "config/*", "templates/*"]
+"marm_mcp_server.console" = ["static/*", "static/**/*"]
 
 [tool.black]
 line-length = 88
