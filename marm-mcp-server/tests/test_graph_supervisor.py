@@ -336,3 +336,28 @@ def test_stop_on_never_started_supervisor_is_a_no_op(monkeypatch):
     supervisor = gs.GraphSupervisor()
     supervisor.stop()  # must not raise
     assert supervisor.is_available() is False
+
+
+def test_snapshot_reports_explicit_lifecycle_states(monkeypatch):
+    gs = _fresh_gs()
+    monkeypatch.setattr(gs.mcp_settings, "GRAPH_ENABLED", True)
+    supervisor = gs.GraphSupervisor()
+
+    assert supervisor.snapshot() == {
+        "state": "not_started",
+        "enabled": True,
+        "started": False,
+        "available": False,
+    }
+
+    with supervisor._state_lock:
+        supervisor._state = "stopping"
+        supervisor._client = _FakeClient()
+        supervisor._available = True
+
+    assert supervisor.snapshot() == {
+        "state": "stopping",
+        "enabled": True,
+        "started": True,
+        "available": True,
+    }

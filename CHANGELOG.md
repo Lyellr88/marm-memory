@@ -86,7 +86,7 @@
 </details>
 
 <details>
-<summary><strong>Unreleased: SQLite Write Atomicity Hardening (v2.23.0)</strong></summary>
+<summary><strong>July 16th, 2026: SQLite Write Atomicity Hardening (v2.23.0)</strong></summary>
 
 ### Multi-Statement Writes Are Now Real Transactions
 

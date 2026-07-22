@@ -34,6 +34,15 @@ from .utils.security import generate_api_key
 logger = structlog.get_logger()
 
 
+def _write_generated_api_key() -> None:
+    """Write a newly generated key directly to the requesting terminal."""
+    sys.stdout.write(f"{generate_api_key()}\n")
+    sys.stdout.write(
+        "\nSet this as your MARM_API_KEY environment variable.\n"
+        "Keep it secret - this is the only time it will be shown.\n"
+    )
+
+
 async def run_server_with_shutdown() -> None:
     """Run the HTTP server with MARM's shared graceful-shutdown path."""
     from .core.shutdown_manager import shutdown_manager
@@ -522,7 +531,7 @@ def _dispatch_product(args: argparse.Namespace) -> int:
             return 0
         return _migrate_embeddings()
     if args.command == "key":
-        print(generate_api_key())
+        _write_generated_api_key()
         return 0
     if args.command == "version":
         print(SERVER_VERSION)
@@ -640,9 +649,7 @@ def _dispatch_compatibility(
     args: argparse.Namespace, parser: argparse.ArgumentParser
 ) -> int:
     if args.generate_key:
-        print(generate_api_key())
-        print("\nSet this as your MARM_API_KEY environment variable.")
-        print("Keep it secret - this is the only time it will be shown.")
+        _write_generated_api_key()
         return 0
     if args.check_deps:
         return 0 if check_dependencies() else 1

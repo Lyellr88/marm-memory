@@ -9,14 +9,17 @@ from __future__ import annotations
 
 import logging
 import os
+import secrets
 import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
+from fastapi import Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from . import mcp_client
 from .endpoints import (
@@ -37,8 +40,25 @@ def _allowed_origins() -> list[str]:
     return origins or ["http://127.0.0.1:5173", "http://localhost:5173"]
 
 
+def _allowed_hosts() -> list[str]:
+    configured = os.environ.get("MARM_CONSOLE_ALLOWED_HOSTS", "")
+    hosts = [host.strip() for host in configured.split(",") if host.strip()]
+    if hosts:
+        return hosts
+    bind_host = os.environ.get("MARM_CONSOLE_HOST", "127.0.0.1").strip("[]")
+    hosts = ["127.0.0.1", "localhost", "::1", "testserver"]
+    if bind_host not in {"", "0.0.0.0", "::"}:
+        hosts.append(bind_host)
+    return list(dict.fromkeys(hosts))
+
+
 logger = logging.getLogger(__name__)
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+ROOT_STATIC_ASSETS = (
+    {asset.name: asset for asset in STATIC_DIR.iterdir() if asset.is_file()}
+    if STATIC_DIR.is_dir()
+    else {}
+)
 
 
 def _warm_project_cache() -> None:
@@ -65,6 +85,37 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+
+@app.middleware("http")
+async def console_api_auth(request: Request, call_next):
+    """Apply MARM's auth policy to Console data APIs, not static SPA assets."""
+    if request.method == "OPTIONS" or not request.url.path.startswith("/api/"):
+        return await call_next(request)
+
+    api_key = os.environ.get("MARM_API_KEY", "")
+    if not api_key:
+        from ..config.settings import MARM_API_KEY
+
+        api_key = MARM_API_KEY
+    if not api_key:
+        client_ip = request.client.host if request.client else ""
+        if client_ip in {"127.0.0.1", "::1", "localhost", "testclient"}:
+            return await call_next(request)
+    else:
+        auth_header = request.headers.get("Authorization", "")
+        if auth_header.startswith("Bearer ") and secrets.compare_digest(
+            auth_header[7:], api_key
+        ):
+            return await call_next(request)
+
+    return JSONResponse(
+        status_code=401,
+        content={"detail": "Valid MARM API authentication is required."},
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=_allowed_hosts())
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins(),
@@ -72,6 +123,7 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["Authorization", "Content-Type"],
 )
+
 
 app.include_router(overview.router)
 app.include_router(memory.router)
@@ -107,13 +159,9 @@ def console_index():
 def console_spa_fallback(path: str):
     if path == "api" or path.startswith("api/"):
         raise HTTPException(status_code=404, detail="Not Found")
-    candidate = (STATIC_DIR / path).resolve()
-    try:
-        candidate.relative_to(STATIC_DIR.resolve())
-    except ValueError:
-        raise HTTPException(status_code=404, detail="Not Found") from None
-    if candidate.is_file():
-        return FileResponse(candidate)
+    root_asset = ROOT_STATIC_ASSETS.get(path)
+    if root_asset is not None and root_asset.is_file():
+        return FileResponse(root_asset)
     index = STATIC_DIR / "index.html"
     if index.exists():
         return FileResponse(index)

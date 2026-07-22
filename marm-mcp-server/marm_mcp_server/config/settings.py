@@ -122,7 +122,7 @@ if not (1 <= _raw_port <= 65535):
         f"WARNING: SERVER_PORT={_raw_port} out of [1, 65535], clamped to {SERVER_PORT}",
         file=sys.stderr,
     )
-SERVER_VERSION = "2.25.0"
+SERVER_VERSION = "2.26.0"
 
 GRAPH_ENABLED = os.environ.get("GRAPH_ENABLED", "true").lower() != "false"
 
@@ -382,7 +382,10 @@ if SERVER_HOST == "0.0.0.0" and not MARM_API_KEY:
         MARM_API_KEY = _file_key
 
 
-_is_generate_key_cmd = "--generate-key" in sys.argv
+_is_generate_key_cmd = "--generate-key" in sys.argv or sys.argv[1:3] == [
+    "key",
+    "generate",
+]
 
 if SERVER_HOST == "0.0.0.0" and not MARM_API_KEY and not _is_generate_key_cmd:
     MARM_API_KEY = generate_api_key()

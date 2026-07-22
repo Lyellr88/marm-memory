@@ -1,6 +1,6 @@
 # MARM Technical Overview
 
-> Current implementation: MARM MCP Server v2.25.0
+> Current implementation: MARM MCP Server v2.26.0
 
 This document explains what MARM is, why it is built this way, and how information moves through the system from an agent writing something to that information being recalled later. It is intended as a technical product overview, not a source-code reference.
 
@@ -212,7 +212,7 @@ Chunking prevents the meaning of a long memory from being diluted into one vecto
 
 The chunker distributes remainder text across chunks instead of creating a tiny trailing fragment. Chunk rows are unique by `(memory_id, chunk_index)`, making repeated document saves idempotent.
 
-Existing installations that still contain 384-dimensional MiniLM embeddings must run `marm-mcp-server --migrate-embeddings` while MARM processes are stopped. Mixed dimensions are detected and skipped rather than being interpreted incorrectly.
+Existing installations that still contain 384-dimensional MiniLM embeddings must run `marm-memory maintenance embeddings migrate` while MARM processes are stopped. Mixed dimensions are detected and skipped rather than being interpreted incorrectly.
 
 ## Knowledge Graphs
 
@@ -282,7 +282,9 @@ STDIO runs as a private child process launched by an MCP client. It does not req
 
 ### MARM Console
 
-MARM Console is the standalone local human interface. Its FastAPI host defaults to `127.0.0.1:8002`, while the React/Vite frontend uses a development server during active development. Console can inspect memory, sessions, logs, notebooks, compaction, concept graphs, and indexed projects. It is currently a separate development application rather than part of the packaged MCP runtime.
+MARM Console is the bundled local human interface launched with `marm-memory console`. Its packaged FastAPI host defaults to `127.0.0.1:8002` and serves the production frontend without Node. Contributors can still run the separate FastAPI and React/Vite development servers during active development. Console can inspect memory, sessions, logs, notebooks, compaction, concept graphs, and indexed projects.
+
+Console protects `/api/*` with the same loopback-or-bearer policy as the MCP runtime and validates Host headers. Set `MARM_CONSOLE_ALLOWED_HOSTS` to a comma-separated allowlist when intentionally exposing Console under additional hostnames or LAN addresses.
 
 ## Failure and Safety Model
 
@@ -313,6 +315,6 @@ Other deliberate boundaries:
 - concept builds are explicit rather than running on every memory write;
 - consolidation and compaction are opt-in maintenance features;
 - concept extraction has an optional dependency;
-- MARM Console is still being packaged into a simpler end-user launch experience.
+- MARM Console shares the managed runtime's authenticated API and packaged lifecycle.
 
 Within those boundaries, the architecture is intentionally modular: the primary memory path remains small and dependable, while semantic retrieval, permanent docs, compaction, concept knowledge, code intelligence, and the human Console add capability around it without becoming single points of failure.

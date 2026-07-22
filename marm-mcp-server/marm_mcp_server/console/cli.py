@@ -24,6 +24,15 @@ def _port() -> int:
     return int(os.environ.get("MARM_CONSOLE_PORT", "8002"))
 
 
+def _console_environment() -> dict[str, str]:
+    from ..config.settings import MARM_API_KEY
+
+    environment = os.environ.copy()
+    if MARM_API_KEY:
+        environment["MARM_API_KEY"] = MARM_API_KEY
+    return environment
+
+
 def _healthy(timeout: float = 0.75) -> bool:
     host = "127.0.0.1" if _host() in {"0.0.0.0", "::", "[::]"} else _host()
     try:
@@ -73,6 +82,7 @@ def run_console(*, open_browser: bool = True, foreground: bool = False) -> int:
                 stdin=subprocess.DEVNULL,
                 stdout=log_file,
                 stderr=subprocess.STDOUT,
+                env=_console_environment(),
                 creationflags=flags,
                 **kwargs,
             )

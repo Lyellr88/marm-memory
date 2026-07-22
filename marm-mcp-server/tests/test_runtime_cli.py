@@ -181,6 +181,20 @@ def test_product_cli_reports_runtime_errors_without_traceback(monkeypatch, capsy
     assert capsys.readouterr().err == "Error: boom\n"
 
 
+def test_product_key_writes_one_generated_key(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["marm-memory", "key", "generate"])
+    monkeypatch.setattr(cli, "generate_api_key", lambda: "generated-key")
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main()
+
+    assert exc_info.value.code == 0
+    output = capsys.readouterr().out
+    assert output.splitlines()[0] == "generated-key"
+    assert "Set this as your MARM_API_KEY environment variable." in output
+    assert "Keep it secret" in output
+
+
 def test_default_status_is_human_readable(capsys):
     active_cli, _active_runtime = _active_modules()
     active_cli._print_status(
