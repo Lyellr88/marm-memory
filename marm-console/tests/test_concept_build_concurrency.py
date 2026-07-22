@@ -9,7 +9,7 @@ thread's iteration raises RuntimeError.
 import threading
 import time
 
-from server.endpoints import concepts as concepts_endpoint
+from marm_mcp_server.console.endpoints import concepts as concepts_endpoint
 
 
 def test_launching_concept_builds_survives_concurrent_insert_and_prune():

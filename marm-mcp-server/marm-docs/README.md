@@ -1,4 +1,4 @@
-# MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.25.0
+# MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.26.0
 
 ## Table of Contents
 
@@ -36,7 +36,7 @@ Under the hood: a serialized SQLite WAL write queue kills multi-agent swarm cont
 | **Code graph layer** | Repo indexing, symbol lookup, call tracing, architecture overview, and change-impact analysis | Gives agents project structure without rereading the whole codebase |
 | **Concept graph layer** | Entity and relationship extraction from stored memories, with links back into the code graph | Connects decisions, errors, tools, and people across sessions instead of leaving them as flat text |
 | **Token layer** | Lightweight 7-tool core surface (14 total with bundled graph tools), semantic re-rank before retrieval, and write-time deduplication | Reduces tokens sent to the model on every recall and cost stays predictable as memory scales |
-| **Deployment layer** | Pip, Docker, STDIO, HTTP, `--swarm`, `--swarm-max`, and `--trusted` | Lets you run private local memory or shared multi-agent memory with the same MCP surface |
+| **Deployment layer** | Pip, Docker, STDIO, HTTP, and managed `swarm`, `swarm-max`, and `trusted` profiles | Lets you run private local memory or shared multi-agent memory with the same MCP surface |
 
 See [Performance & Scaling Benchmarks](#performance--scaling-benchmarks) for retrieval latency, concurrency, and write-cost numbers, and [Architecture & Internals](#architecture--internals) for the mechanisms behind each layer.
 
@@ -60,18 +60,23 @@ pip install marm-mcp-server
 
 | If you are... | Start the server | Connect your MCP client |
 |---------------|------------------|-------------------------|
-| **Solo developer / researcher** | `python -m marm_mcp_server` | `"agent" mcp add --transport http marm-memory http://localhost:8001/mcp` |
+| **Solo developer / researcher** | `marm-memory start` | `"agent" mcp add --transport http marm-memory http://localhost:8001/mcp` |
 | **Private local STDIO user** | `marm-mcp-stdio` | `"agent" mcp add --transport stdio marm-memory-stdio marm-mcp-stdio` |
-| **Multiple agents sharing memory** | `python -m marm_mcp_server --swarm` | `"agent" mcp add --transport http marm-memory http://localhost:8001/mcp` |
-| **Private high-throughput swarm** | `python -m marm_mcp_server --swarm-max` | `"agent" mcp add --transport http marm-memory http://localhost:8001/mcp` |
-| **Trusted private lab/server** | `python -m marm_mcp_server --trusted` | `"agent" mcp add --transport http marm-memory http://localhost:8001/mcp` |
+| **Multiple agents sharing memory** | `marm-memory start --profile swarm` | `"agent" mcp add --transport http marm-memory http://localhost:8001/mcp` |
+| **Private high-throughput swarm** | `marm-memory start --profile swarm-max` | `"agent" mcp add --transport http marm-memory http://localhost:8001/mcp` |
+| **Trusted private lab/server** | `marm-memory start --profile trusted` | `"agent" mcp add --transport http marm-memory http://localhost:8001/mcp` |
+
+The managed runtime runs in the background by default. Use `marm-memory status`,
+`marm-memory logs --follow`, `marm-memory restart`, and `marm-memory stop` for
+normal lifecycle work. `marm-memory console` starts or reuses that runtime and
+opens the bundled local web app without requiring Node.js.
 
 ### Upgrade Existing Embeddings
 
 The Jina v2 Small default uses 512-dimensional embeddings; older `all-MiniLM-L6-v2` data is 384-dimensional and must be re-embedded after upgrading. Stop every MARM HTTP and STDIO process, then run:
 
 ```bash
-marm-mcp-server --migrate-embeddings
+marm-memory maintenance embeddings migrate
 ```
 
 The command refuses to continue when it detects a live HTTP server, but STDIO processes cannot be detected reliably and must be stopped manually. It re-embeds memory, chunk, and any existing concept-graph embeddings (notebook scratch entries no longer carry embeddings), reports batch progress, verifies both databases, and exits. It is resumable: rerun the same command after an interruption. Do not run it against a live server.
@@ -156,7 +161,7 @@ pip install marm-mcp-server
 - Docker HTTP = shared/always-on server (key required).
 - Docker STDIO = private containerized local use (no HTTP key).
 
-**Swarm / multi-agent note:** The write queue is enabled by default to serialize memory writes through one worker. For shared HTTP deployments, use `--swarm` (200 RPM) or `--swarm-max` (600 RPM) when starting the server. `--trusted` disables rate limiting entirely for private deployments. STDIO is still best for private single-agent/local use. See [Swarm & multi-agent presets](#swarm--multi-agent-presets) for the full table.
+**Swarm / multi-agent note:** The write queue is enabled by default to serialize memory writes through one worker. For shared HTTP deployments, use `marm-memory start --profile swarm` (200 RPM) or `--profile swarm-max` (600 RPM). `--profile trusted` disables rate limiting entirely for private deployments. STDIO is still best for private single-agent/local use. See [Swarm & multi-agent presets](#swarm--multi-agent-presets) for the full table.
 
 <details>
 <summary><strong>Local pip HTTP (zero config)</strong></summary>
@@ -165,7 +170,7 @@ pip install marm-mcp-server
 
 ```bash
 pip install marm-mcp-server
-python -m marm_mcp_server
+marm-memory start
 # Stuck on client setup? Open a Q&A thread: https://github.com/Lyellr88/marm-memory/discussions
 # most agents use this --transport command
 "agent" mcp add --transport http marm-memory http://localhost:8001/mcp
@@ -198,13 +203,13 @@ Use HTTP when multiple agents need to share one live MARM server. STDIO is still
 
 ```bash
 # HTTP shared server, normal multi-agent use
-python -m marm_mcp_server --swarm
+marm-memory start --profile swarm
 
 # HTTP shared server, heavier private swarm
-python -m marm_mcp_server --swarm-max
+marm-memory start --profile swarm-max
 
 # HTTP trusted private lab/server, rate limiting disabled
-python -m marm_mcp_server --trusted
+marm-memory start --profile trusted
 
 # STDIO remains keyless/private and does not use swarm flags
 marm-mcp-stdio
@@ -740,7 +745,7 @@ How to use it:
 - **Bounded by design**: each build is row-capped (`CONCEPT_BUILD_ROW_CAP`, default 500) so a huge store can't turn one tool call into a runaway job.
 - **Recall fails open**: a missing, empty, incompatible, or unavailable concept graph never blocks normal memory recall. The response reports graph status separately.
 - **Code cross-linking**: when the code graph has indexed the same project, concept entities that match code symbols get linked, connecting "what we decided" to "where it lives in the code."
-- **Optional dependency**: real extraction needs the `[concepts]` extra (`pip install marm-mcp-server[concepts]` plus `python -m spacy download en_core_web_sm`). Without it, both concept tools stay registered and return `entities_extracted: 0` instead of erroring. Base installs carry no spaCy dependency.
+- **Optional dependency**: run `marm-memory knowledge setup` to review and install the spaCy extraction runtime and model into MARM's current Python environment. MARM never installs it during normal startup. Without it, both concept tools stay registered and degrade cleanly while core memory remains available.
 - **Isolated storage**: the concept graph lives in its own SQLite database (`~/.marm/index/marm_index.db`) with its own connection pool, so concept-graph writes can never block or corrupt the production memory database.
 - **Console atlas**: MARM Console renders the complete atlas up to 750 entities and 6,000 stored relationships. Larger graphs use a deterministic connected sample of up to 600 entities and 4,000 aggregated visual edges, clearly labelled as sampled.
 

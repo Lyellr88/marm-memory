@@ -29,7 +29,6 @@ const PAGE_NAV_ITEMS = {
     ['Complete MCP Tool Suite (14 Tools)', 'Tools'],
     ['Using MARM: Talk, Don\'t Call Tools', 'Using MARM'],
     ['Knowledge Graphs: Code & Concepts', 'Knowledge Graphs'],
-    ['MARM Dashboard', 'Dashboard'],
     ['Architecture & Internals', 'Architecture'],
     ['Troubleshooting', 'Troubleshooting'],
     ['Contributing', 'Contributing'],

@@ -5,16 +5,9 @@
 
 version: 2
 updates:
-  # 1. Track the core MCP server requirements
+  # Track the core MCP server requirements
   - package-ecosystem: "pip"
     directory: "/marm-mcp-server"
-    schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 3
-
-  # 2. Track the dashboard pyproject settings
-  - package-ecosystem: "pip"
-    directory: "/marm-dashboard"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 3

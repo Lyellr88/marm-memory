@@ -25,6 +25,8 @@ class GraphSupervisor:
         self._client: Optional[CbmClient] = None
         self._available: bool = False
         self._lock = threading.Lock()
+        self._state_lock = threading.Lock()
+        self._state = "not_started"
         # Set only once a startup attempt is FULLY resolved (success, failure,
         # or disabled) -- never set early. A plain "start attempted" flag set
         # before verify_and_start() completes would let a concurrent caller
@@ -41,8 +43,12 @@ class GraphSupervisor:
             if self._ready.is_set():
                 return
             try:
+                with self._state_lock:
+                    self._state = "starting"
                 if not mcp_settings.GRAPH_ENABLED:
                     logger.info("graph.disabled", reason="GRAPH_ENABLED=false")
+                    with self._state_lock:
+                        self._state = "disabled"
                     return
                 self._log_first_run_download()
                 client = CbmClient(
@@ -60,9 +66,17 @@ class GraphSupervisor:
                         client.close()
                     except Exception:
                         pass  # best-effort; the primary failure is already logged
+                    with self._state_lock:
+                        self._state = "error"
                     return
-                self._client = client
-                self._available = True
+                with self._state_lock:
+                    self._client = client
+                    self._available = True
+                    self._state = "ready"
+            except Exception as e:
+                logger.warning("graph.start_failed", error=str(e))
+                with self._state_lock:
+                    self._state = "error"
             finally:
                 self._ready.set()
 
@@ -85,6 +99,16 @@ class GraphSupervisor:
         self._ensure_started()
         return self._available
 
+    def snapshot(self) -> dict:
+        """Return process-local graph state without starting the child."""
+        with self._state_lock:
+            return {
+                "state": "disabled" if not mcp_settings.GRAPH_ENABLED else self._state,
+                "enabled": mcp_settings.GRAPH_ENABLED,
+                "started": self._client is not None,
+                "available": self._available,
+            }
+
     def get_client(self) -> Optional[CbmClient]:
         self._ensure_started()
         return self._client
@@ -99,12 +123,16 @@ class GraphSupervisor:
         the backend was up.
         """
         with self._lock:
+            with self._state_lock:
+                self._state = "stopping"
             try:
                 if self._client is not None:
                     self._client.close()
             finally:
-                self._client = None
-                self._available = False
+                with self._state_lock:
+                    self._client = None
+                    self._available = False
+                    self._state = "not_started"
                 self._ready.clear()
 
 

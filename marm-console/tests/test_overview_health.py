@@ -9,8 +9,9 @@ missing header.
 
 import json
 
-from server import mcp_client
-from server.endpoints import overview as overview_endpoint
+from marm_mcp_server.console import mcp_client
+from marm_mcp_server.config import settings
+from marm_mcp_server.console.endpoints import overview as overview_endpoint
 
 
 class _FakeResponse:
@@ -53,6 +54,23 @@ def test_mcp_status_sends_api_key_through_shared_client(monkeypatch):
     assert result["reachable"] is True
     assert result["version"] == "2.23.0"
     assert result["concept_extraction"] == "available"
+
+
+def test_mcp_status_uses_key_loaded_by_runtime_settings(monkeypatch):
+    monkeypatch.delenv("MARM_API_KEY", raising=False)
+    monkeypatch.setattr(settings, "MARM_API_KEY", "settings-secret")
+    captured: dict = {}
+
+    def fake_urlopen(request, timeout=None):
+        captured["authorization"] = request.get_header("Authorization")
+        return _FakeResponse({"status": "healthy", "version": "2.25.0"})
+
+    monkeypatch.setattr(mcp_client, "urlopen", fake_urlopen)
+
+    result = overview_endpoint._mcp_status()
+
+    assert captured["authorization"] == "Bearer settings-secret"
+    assert result["reachable"] is True
 
 
 def test_mcp_status_reports_unreachable_without_raising(monkeypatch):

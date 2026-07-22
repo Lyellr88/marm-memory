@@ -26,6 +26,12 @@ def test_http_rate_limit_blocks_abuse_and_preserves_public_health(
         health = client.get("/health")
         assert health.status_code == 200
         assert health.json()["status"] == "healthy"
+
+        runtime_status = client.get("/internal/runtime/status")
+        assert runtime_status.status_code == 200
+
+        shutdown = client.post("/internal/runtime/shutdown")
+        assert shutdown.status_code == 200
     finally:
         limiter.limits = original_limits
         limiter.request_buckets.clear()

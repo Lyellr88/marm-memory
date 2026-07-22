@@ -1,7 +1,9 @@
+import sqlite3
+
 from fastapi.testclient import TestClient
 
-from server import app as console_app
-from server import memory_store
+from marm_mcp_server.console import app as console_app
+from marm_mcp_server.console import memory_store
 
 
 def test_memory_mutation_routes_proxy_to_marm_runtime(monkeypatch):
@@ -169,3 +171,55 @@ def test_concept_link_counts_are_best_effort(monkeypatch, tmp_path):
     monkeypatch.setenv("MARM_CONCEPT_DB_PATH", str(concept_db_path))
 
     assert memory_store._concept_link_counts(["mem-1"]) == {}
+
+
+def test_concept_link_counts_query_only_requested_sources(monkeypatch, tmp_path):
+    concept_db_path = tmp_path / "marm_index.db"
+    with sqlite3.connect(concept_db_path) as connection:
+        connection.executescript(
+            """
+            CREATE TABLE entities (id INTEGER PRIMARY KEY, source_memory_ids TEXT);
+            CREATE TABLE relationships (id INTEGER PRIMARY KEY, memory_id TEXT);
+            INSERT INTO entities VALUES (1, '["mem-1", "mem-1", "other"]');
+            INSERT INTO entities VALUES (2, '["mem-1"]');
+            INSERT INTO entities VALUES (3, 'malformed');
+            INSERT INTO relationships VALUES (1, 'mem-1');
+            """
+        )
+    monkeypatch.setenv("MARM_CONCEPT_DB_PATH", str(concept_db_path))
+
+    assert memory_store._concept_link_counts(["mem-1"]) == {"mem-1": 3}
+
+
+def test_none_compaction_filter_remains_scoped_to_session(tmp_path):
+    db_path = tmp_path / "marm_memory.db"
+    with sqlite3.connect(db_path) as connection:
+        connection.executescript(
+            """
+            CREATE TABLE memories (
+                id TEXT PRIMARY KEY,
+                content TEXT,
+                session_name TEXT,
+                project TEXT,
+                platform TEXT,
+                context_type TEXT,
+                metadata TEXT,
+                content_hash TEXT,
+                created_at TEXT,
+                timestamp TEXT,
+                compaction_role TEXT,
+                embedding BLOB
+            );
+            CREATE TABLE memory_chunks (memory_id TEXT);
+            INSERT INTO memories VALUES
+                ('wrong-session', 'a', 'other', NULL, NULL, 'general', NULL, '', '2026-01-01', '2026-01-01', NULL, NULL),
+                ('right-session', 'b', 'target', NULL, NULL, 'general', NULL, '', '2026-01-02', '2026-01-02', 'none', NULL);
+            """
+        )
+
+    result = memory_store.list_memories(
+        db_path, session="target", compaction_role="none"
+    )
+
+    assert result["total"] == 1
+    assert [item["id"] for item in result["items"]] == ["right-session"]

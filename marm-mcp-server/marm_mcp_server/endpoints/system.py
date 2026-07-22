@@ -1,15 +1,18 @@
-"""System endpoints for MARM MCP Server."""
-
-from fastapi import HTTPException, APIRouter
 import logging
+import os
 from datetime import datetime, timezone
 
-from ..core.memory import memory
+from fastapi import APIRouter, HTTPException
+
+from ..config import settings
 from ..config.settings import (
     CONCEPTS_AVAILABLE,
     SEMANTIC_SEARCH_AVAILABLE,
     SERVER_VERSION,
 )
+from ..core.graph_supervisor import graph_supervisor
+from ..core.memory import memory
+from ..core.shutdown_manager import shutdown_manager
 from ..services.documentation import reload_marm_documentation
 
 logger = logging.getLogger(__name__)
@@ -75,6 +78,35 @@ async def readiness_check():
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "error": "Service not ready",
         }
+
+
+@router.get("/internal/runtime/status", include_in_schema=False)
+async def runtime_status() -> dict:
+    queue = memory._write_queue
+    return {
+        "status": "ready",
+        "service": "marm-memory-runtime",
+        "runtime_id": os.environ.get("MARM_RUNTIME_ID"),
+        "pid": os.getpid(),
+        "version": SERVER_VERSION,
+        "profile": os.environ.get("MARM_RUNTIME_PROFILE", "standard"),
+        "write_queue": {
+            "enabled": settings.WRITE_QUEUE_ENABLED,
+            "running": bool(
+                queue and queue._worker_task and not queue._worker_task.done()
+            ),
+            "depth": queue.queue.qsize() if queue else 0,
+            "capacity": queue.queue.maxsize if queue else settings.MAX_QUEUE_SIZE,
+            "stopping": queue._stopping if queue else False,
+        },
+        "graph": graph_supervisor.snapshot(),
+    }
+
+
+@router.post("/internal/runtime/shutdown", include_in_schema=False)
+async def runtime_shutdown() -> dict:
+    shutdown_manager.request_shutdown()
+    return {"status": "stopping"}
 
 
 @router.post(

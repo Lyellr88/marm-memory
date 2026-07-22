@@ -15,7 +15,13 @@ import requests
 import pytest
 
 
-def test_generate_key_cli_prints_one_key_and_exits_without_starting_server(tmp_path):
+@pytest.mark.parametrize(
+    "arguments",
+    (["--generate-key"], ["key", "generate"]),
+)
+def test_generate_key_cli_prints_one_key_and_exits_without_starting_server(
+    tmp_path, arguments
+):
     env = os.environ.copy()
     env["MARM_DB_PATH"] = str(tmp_path / "cli-memory.db")
     env["MARM_ANALYTICS_DB_PATH"] = str(tmp_path / "cli-analytics.db")
@@ -25,7 +31,7 @@ def test_generate_key_cli_prints_one_key_and_exits_without_starting_server(tmp_p
     env.pop("MARM_API_KEY", None)
 
     result = subprocess.run(
-        [sys.executable, "-m", "marm_mcp_server", "--generate-key"],
+        [sys.executable, "-m", "marm_mcp_server", *arguments],
         cwd=os.getcwd(),
         env=env,
         capture_output=True,
@@ -37,6 +43,7 @@ def test_generate_key_cli_prints_one_key_and_exits_without_starting_server(tmp_p
     lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
     assert re.fullmatch(r"[A-Za-z0-9\-_\+=\.~@#%\^&*]{40}", lines[0])
     assert "Set this as your MARM_API_KEY environment variable." in result.stdout
+    assert "Keep it secret" in result.stdout
     assert "Starting MARM MCP Server" not in result.stdout
     assert "API key auto-generated" not in result.stdout
     assert not (tmp_path / ".marm" / ".env").exists()

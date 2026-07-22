@@ -1,75 +1,96 @@
-"""Validates MARM MCP Server system dependencies at CLI time."""
+"""Reusable dependency checks for legacy and product CLI diagnostics."""
 
+from __future__ import annotations
+
+import importlib.util
 import os
 import sys
 from pathlib import Path
 
-from ..config.settings import (
-    DEFAULT_DB_PATH,
-    SCHEDULER_AVAILABLE,
-    SEMANTIC_SEARCH_AVAILABLE,
-)
+from ..config.settings import DEFAULT_DB_PATH
 
 
-def check_dependencies():
-    """Validate all system dependencies and requirements"""
+def dependency_checks() -> list[dict]:
+    checks = [
+        {
+            "name": "python",
+            "ok": sys.version_info >= (3, 10),
+            "detail": f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
+            "required": True,
+        }
+    ]
+    required_modules = (
+        ("fastapi", "FastAPI"),
+        ("fastapi_mcp", "FastAPI MCP"),
+        ("uvicorn", "Uvicorn"),
+        ("pydantic", "Pydantic"),
+        ("sqlite3", "SQLite"),
+        ("structlog", "structlog"),
+    )
+    for module, label in required_modules:
+        checks.append(
+            {
+                "name": module,
+                "ok": importlib.util.find_spec(module) is not None,
+                "detail": label,
+                "required": True,
+            }
+        )
+    checks.extend(
+        [
+            {
+                "name": "fastembed",
+                "ok": importlib.util.find_spec("fastembed") is not None,
+                "detail": "Optional semantic search runtime",
+                "required": False,
+            },
+            {
+                "name": "apscheduler",
+                "ok": importlib.util.find_spec("apscheduler") is not None,
+                "detail": "Optional automation scheduler",
+                "required": False,
+            },
+            {
+                "name": "spacy",
+                "ok": importlib.util.find_spec("spacy") is not None,
+                "detail": "Optional concept extraction runtime",
+                "required": False,
+            },
+            {
+                "name": "en_core_web_sm",
+                "ok": importlib.util.find_spec("en_core_web_sm") is not None,
+                "detail": "Optional concept extraction model",
+                "required": False,
+            },
+        ]
+    )
+    db_dir = Path(DEFAULT_DB_PATH).parent
+    checks.append(
+        {
+            "name": "database_directory",
+            "ok": db_dir.exists() and os.access(db_dir, os.W_OK),
+            "detail": str(db_dir),
+            "required": True,
+        }
+    )
+    return checks
+
+
+def check_dependencies() -> bool:
+    """Print the compatibility dependency report and return required readiness."""
+    checks = dependency_checks()
     print("MARM MCP Server - Dependency Check")
     print("=" * 40)
-
-    issues = []
-
-    python_version = (
-        f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
-    )
-    print(f"Python version: {python_version}")
-    if sys.version_info < (3, 8):
-        issues.append("Python 3.8+ required")
-    else:
-        print("Python version OK")
-
-    required_modules = [
-        ("fastapi", "FastAPI web framework"),
-        ("fastapi_mcp", "MCP protocol implementation"),
-        ("uvicorn", "ASGI web server"),
-        ("pydantic", "Data validation"),
-        ("sqlite3", "Database (built-in)"),
-        ("structlog", "Structured logging"),
-    ]
-
-    for module, description in required_modules:
-        try:
-            __import__(module)
-            print(f"OK {description}")
-        except ImportError:
-            issues.append(f"Missing: {module} ({description})")
-            print(f"Missing: {module}")
-
-    print("\nOptional Features:")
-    if SEMANTIC_SEARCH_AVAILABLE:
-        print("OK Semantic search (fastembed)")
-    else:
-        print("Semantic search disabled - install fastembed")
-
-    if SCHEDULER_AVAILABLE:
-        print("OK Automation scheduler (apscheduler)")
-    else:
-        print("Scheduler disabled - install apscheduler")
-
-    print(f"\nDatabase location: {DEFAULT_DB_PATH}")
-    db_dir = Path(DEFAULT_DB_PATH).parent
-    if db_dir.exists() and os.access(db_dir, os.W_OK):
-        print("OK Database directory writable")
-    else:
-        issues.append(f"Cannot write to database directory: {db_dir}")
-
-    print("\n" + "=" * 40)
-    if issues:
-        print("Issues found:")
-        for issue in issues:
-            print(f"   • {issue}")
-        print("\nRun: pip install -r requirements.txt")
-        return False
-    else:
+    for check in checks:
+        label = "OK" if check["ok"] else "MISSING"
+        optional = " (optional)" if not check["required"] else ""
+        print(f"{label} {check['name']}{optional}: {check['detail']}")
+    required_ok = all(check["ok"] for check in checks if check["required"])
+    print("=" * 40)
+    if required_ok:
         print("All dependencies satisfied!")
         print("Ready to start MARM MCP Server")
-        return True
+    else:
+        print("Required dependencies are missing.")
+        print("Repair with: python -m pip install -U marm-mcp-server")
+    return required_ok

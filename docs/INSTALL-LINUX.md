@@ -2,7 +2,7 @@
 
 ## Universal Memory Intelligence Platform for AI Agents
 
-**MARM v2.25.0** - Memory Accurate Response Mode
+**MARM v2.26.0** - Memory Accurate Response Mode
 *Complete Linux installation guide*
 
 ---
@@ -70,7 +70,7 @@ Most distributions include these by default:
 
 ```bash
 pip install marm-mcp-server
-python3 -m marm_mcp_server
+marm-memory start
 ```
 
 ### **Option 2: pip install in virtualenv** ⚡ **(Clean environment)**
@@ -79,7 +79,7 @@ python3 -m marm_mcp_server
 python3 -m venv marm-env
 source marm-env/bin/activate
 pip install marm-mcp-server
-python3 -m marm_mcp_server
+marm-memory start
 ```
 
 ### **Option 3: From source with install.sh** 🔧 **(Advanced)**
@@ -98,10 +98,10 @@ python3 -m marm_mcp_server
 For shared HTTP servers running multiple AI agents, use a preset flag:
 
 ```bash
-python3 -m marm_mcp_server --swarm        # 200 RPM, write queue on
-python3 -m marm_mcp_server --swarm-max    # 600 RPM, write queue on
-python3 -m marm_mcp_server --trusted      # rate limiting off, write queue on
-python3 -m marm_mcp_server --rate-limit-rpm 150  # custom RPM
+marm-memory start --profile swarm        # 200 RPM, write queue on
+marm-memory start --profile swarm-max    # 600 RPM, write queue on
+marm-memory start --profile trusted      # rate limiting off, write queue on
+marm-memory start --rate-limit-rpm 150   # custom RPM
 ```
 
 Use one MARM HTTP process per SQLite database. Multi-process Uvicorn/Gunicorn
@@ -320,7 +320,7 @@ curl -s http://localhost:8001/health
 {
   "status": "healthy",
   "service": "MARM MCP Server",
-  "version": "2.25.0",
+  "version": "2.26.0",
   "timestamp": "2026-01-01T00:00:00+00:00",
   "database": "connected",
   "semantic_search": "available"

@@ -3,15 +3,22 @@
 ## Version 2 - MARM Protocol to Universal MCP Server Evolution
 
 <details>
-<summary><strong>Unreleased: Notebook Scratch Pad, Permanent Docs Store, and Chunking Rework (v2.25.0)</strong></summary>
+<summary><strong>July 21st, 2026: Managed Runtime CLI and Bundled Console (v2.26.0)</strong></summary>
 
-### Concept Context Joins Normal Recall
+### Managed Runtime CLI and Bundled Console
 
-- `marm_smart_recall` now preserves its existing memory ranking while attaching bounded concept relationships and linked code symbols as an additive `graph_context` sidecar. Missing, empty, incompatible, or unavailable graph data fails open and never blocks core recall.
-- Concept entities and relationships now retain platform provenance alongside session and project scope. Existing concept graphs require one explicit `marm_concept_build(search_all=True)` rebuild; MARM backs up and resets only the derived concept database and never modifies primary memories.
-- `marm_concept_recall` accepts optional platform scope over both HTTP and STDIO while retaining its explicit bounded traversal role.
-- MARM Console's graph explorer now uses a full-atlas mode through 750 entities and 6,000 stored relationships. Oversized graphs use a deterministic connected sample capped at 600 entities and 4,000 aggregated visual edges, with honest full/sampled metadata in the API and UI.
-- Replaced permanently pinned graph coordinates with adaptive force simulation, weighted repeated relationships, focused labels, and reheating when filters or graph membership change.
+- The existing `marm-mcp-server` package now installs a canonical `marm-memory` command while preserving the `marm-mcp-server` and `marm-mcp-stdio` compatibility entry points. `start`, `stop`, `restart`, `status`, `logs`, and `doctor` manage one verified local HTTP runtime without requiring users to track process IDs or ports manually.
+- Added named `standard`, `swarm`, `swarm-max`, and `trusted` profiles, plus passive status and maintenance inspection that do not load the embedding model, start the code graph, or create an absent concept database.
+- MARM Console is now bundled into the main wheel and launched with `marm-memory console`; users no longer need a separate Python server checkout or Node installation. Console reuses the managed runtime and shuts down with it when both were launched through MARM.
+- Added discoverable CLI workflows for optional concept setup/builds, code-project indexing and removal, embedding migration, key generation, and runtime diagnostics. `marm-memory knowledge setup` installs through MARM's active Python interpreter only after confirmation and reports when a restart is required.
+- Hardened the managed CLI after independent review: project-job polling now retries transport failures without reporting false success, runtime request errors preserve HTTP status/detail, lifecycle routes cannot be blocked by the shared loopback rate-limit bucket, and product-command failures exit cleanly without Python tracebacks.
+- Human `status`, `doctor`, and maintenance output now summarizes the runtime instead of printing raw machine JSON; `--json` remains stable for automation. Managed runtime and Console logs are capped at 5 MB and tailed incrementally, restart leaves an active Console available, and start no longer advertises a Console URL before the Console is launched.
+- Docker and Glama release jobs now build the same Console frontend as the wheel job, preventing package formats from shipping different UI bundles from one release tag.
+
+</details>
+
+<details>
+<summary><strong>July 20th, 2026: Notebook Scratch Pad, Permanent Docs Store, and Chunking Rework (v2.25.0)</strong></summary>
 
 ### Notebook Is Now a Real Per-Session Scratch Pad
 
@@ -43,10 +50,18 @@
 - `_store_doc_mirror` (the `marm_notebook(action="save")` mirror path) overwrote an existing memory row in place on resave without marking any active `compaction_staging` rows referencing it as stale, unlike `_replace_memory`'s established handling of the same in-place-overwrite case — a staged summary could later be applied against a doc whose content had since changed. Now mirrors `_replace_memory`'s stale-marking update.
 - The two packaged READMEs (`marm-mcp-server/README.md`, `marm-mcp-server/marm-docs/README.md`) were hand-edited alongside the root README's version bump instead of being regenerated via `scripts/make-readme-mirrors.py`, violating the project's generated-mirror convention. Regenerated from the (already-correct) root README — no content changed.
 
+### Concept Context Joins Normal Recall
+
+- `marm_smart_recall` now preserves its existing memory ranking while attaching bounded concept relationships and linked code symbols as an additive `graph_context` sidecar. Missing, empty, incompatible, or unavailable graph data fails open and never blocks core recall.
+- Concept entities and relationships now retain platform provenance alongside session and project scope. Existing concept graphs require one explicit `marm_concept_build(search_all=True)` rebuild; MARM backs up and resets only the derived concept database and never modifies primary memories.
+- `marm_concept_recall` accepts optional platform scope over both HTTP and STDIO while retaining its explicit bounded traversal role.
+- MARM Console's graph explorer now uses a full-atlas mode through 750 entities and 6,000 stored relationships. Oversized graphs use a deterministic connected sample capped at 600 entities and 4,000 aggregated visual edges, with honest full/sampled metadata in the API and UI.
+- Replaced permanently pinned graph coordinates with adaptive force simulation, weighted repeated relationships, focused labels, and reheating when filters or graph membership change.
+
 </details>
 
 <details>
-<summary><strong>Unreleased: Jina v2 Small Embedding Migration (v2.24.0)</strong></summary>
+<summary><strong>July 19th, 2026: Jina v2 Small Embedding Migration (v2.24.0)</strong></summary>
 
 ### Default Embedding Model Changed
 
@@ -71,7 +86,7 @@
 </details>
 
 <details>
-<summary><strong>Unreleased: SQLite Write Atomicity Hardening (v2.23.0)</strong></summary>
+<summary><strong>July 16th, 2026: SQLite Write Atomicity Hardening (v2.23.0)</strong></summary>
 
 ### Multi-Statement Writes Are Now Real Transactions
 

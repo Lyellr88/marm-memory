@@ -155,14 +155,18 @@ def _run_concept_build(job_id: str, payload: dict) -> None:
     payload["run_id"] = job_id
     try:
         mcp_client.post("marm_concept_build", payload, timeout=120.0)
-    except mcp_client.McpUnavailable:
+    except (mcp_client.McpUnavailable, mcp_client.McpRequestError) as exc:
         with _launching_concept_builds_lock:
             launch = _launching_concept_builds.get(job_id)
             if launch:
                 failed, _ = launch
                 failed.update(
                     status="error",
-                    error_code="mcp_unavailable",
+                    error_code=(
+                        "mcp_request_error"
+                        if isinstance(exc, mcp_client.McpRequestError)
+                        else "mcp_unavailable"
+                    ),
                     finished_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 )
 

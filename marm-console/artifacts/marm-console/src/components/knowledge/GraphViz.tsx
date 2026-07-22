@@ -48,7 +48,7 @@ export function GraphViz({
   useEffect(() => {
     const fg = fgRef.current;
     if (!fg || !didInitialFit.current || dimensions.width === 0) return;
-    fg.zoomToFit(reducedMotion ? 0 : 250, 40);
+    fg.zoomToFit(reducedMotion ? 0 : 250, 24);
   }, [dimensions, reducedMotion]);
 
   const gData = useMemo(() => {
@@ -104,7 +104,8 @@ export function GraphViz({
 
   const hoverNeighbors = hoverId !== null ? adjacency.get(hoverId) : null;
   const labelledHubIds = useMemo(() => {
-    const labelBudget = Math.min(12, Math.max(4, Math.ceil(Math.sqrt(gData.nodes.length))));
+    const maxLabels = gData.nodes.length > 300 ? 8 : 12;
+    const labelBudget = Math.min(maxLabels, Math.max(4, Math.ceil(Math.sqrt(gData.nodes.length))));
     const ranked = [...gData.nodes].sort(
       (a: any, b: any) => b.degree - a.degree || a.id - b.id
     );
@@ -123,12 +124,47 @@ export function GraphViz({
     const fg = fgRef.current;
     if (!fg) return;
     const nodeCount = Math.max(gData.nodes.length, 1);
-    const chargeStrength = -Math.max(24, 92 - Math.log2(nodeCount) * 7);
-    fg.d3Force('charge')?.strength(chargeStrength).distanceMax(nodeCount > 300 ? 150 : 240);
+    const denseAtlas = nodeCount > 300;
+    const chargeDistance = denseAtlas
+      ? Math.max(620, Math.sqrt(nodeCount) * 30)
+      : 360;
+    const sampleDegree = new Map<number, number>();
+    gData.links.forEach((link: any) => {
+      const source = typeof link.source === 'object' ? link.source.id : link.source;
+      const target = typeof link.target === 'object' ? link.target.id : link.target;
+      sampleDegree.set(source, (sampleDegree.get(source) ?? 0) + 1);
+      sampleDegree.set(target, (sampleDegree.get(target) ?? 0) + 1);
+    });
+    fg.d3Force('charge')
+      ?.strength((node: any) => {
+        if (!denseAtlas) return -Math.max(55, 110 - Math.log2(nodeCount) * 5);
+        const connections = sampleDegree.get(node.id) ?? 1;
+        return -Math.min(190, 58 + Math.sqrt(connections) * 8);
+      })
+      .distanceMax(chargeDistance);
     fg.d3Force('link')
-      ?.distance((l: any) => (l.predicate === 'co_occurs_with' ? 28 : 38))
-      .strength((l: any) => Math.min(0.35, 0.08 + Math.log2((l.weight ?? 1) + 1) * 0.04));
-    fg.d3Force('collide', forceCollide((n: any) => nodeRadius(n.degree) + 1.5).strength(0.65));
+      ?.distance((l: any) => {
+        if (denseAtlas) return l.predicate === 'co_occurs_with' ? 68 : 92;
+        return l.predicate === 'co_occurs_with' ? 36 : 50;
+      })
+      .strength((l: any) => {
+        const weighted = Math.log2((l.weight ?? 1) + 1);
+        if (!denseAtlas) return Math.min(0.25, 0.06 + weighted * 0.035);
+        const source = typeof l.source === 'object' ? l.source.id : l.source;
+        const target = typeof l.target === 'object' ? l.target.id : l.target;
+        const weakerEndpoint = Math.min(
+          sampleDegree.get(source) ?? 1,
+          sampleDegree.get(target) ?? 1
+        );
+        const topologyScale = 1 / Math.sqrt(Math.max(1, weakerEndpoint));
+        return Math.min(0.14, (0.055 + weighted * 0.025) * topologyScale);
+      });
+    fg.d3Force(
+      'collide',
+      forceCollide((n: any) => nodeRadius(n.degree) + (denseAtlas ? 4 : 2.5))
+        .strength(0.85)
+        .iterations(2)
+    );
     didInitialFit.current = false;
     if (!pausedRef.current) fg.d3ReheatSimulation();
   }, [gData]);
@@ -138,7 +174,7 @@ export function GraphViz({
     if (!fg) return;
     if (!didInitialFit.current) {
       didInitialFit.current = true;
-      fg.zoomToFit(reducedMotion ? 0 : 500, 60);
+      fg.zoomToFit(reducedMotion ? 0 : 500, 24);
       if (reducedMotion) {
         fg.pauseAnimation();
         pausedRef.current = true;
@@ -153,19 +189,20 @@ export function GraphViz({
   }, [hoverId, hoverNeighbors]);
 
   const paintNode = useCallback((node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
-    const r = nodeRadius(node.degree);
+    const denseAtlasScale = gData.nodes.length > 300 ? 0.62 : 1;
+    const r = nodeRadius(node.degree) * denseAtlasScale;
     const color = typeColor(node.type);
     const dimmed = isDimmed(node.id);
     const emphasized = node.id === hoverId || node.id === focusedId || node.isSeed;
 
     ctx.globalAlpha = dimmed ? 0.12 : 1;
 
-    // Soft halo keeps hubs luminous on the near-black canvas.
+    // Keep enough glow to identify hubs without merging dense clusters into a blob.
     if (!dimmed) {
       ctx.beginPath();
-      ctx.arc(node.x, node.y, r * 2, 0, 2 * Math.PI);
+      ctx.arc(node.x, node.y, r * 1.55, 0, 2 * Math.PI);
       ctx.fillStyle = color;
-      ctx.globalAlpha = emphasized ? 0.28 : 0.13;
+      ctx.globalAlpha = emphasized ? 0.2 : 0.08;
       ctx.fill();
       ctx.globalAlpha = 1;
     }
@@ -209,14 +246,15 @@ export function GraphViz({
       }
     }
     ctx.globalAlpha = 1;
-  }, [hoverId, focusedId, expandingId, isDimmed, labelledHubIds]);
+  }, [hoverId, focusedId, expandingId, isDimmed, labelledHubIds, gData.nodes.length]);
 
   const paintPointerArea = useCallback((node: any, color: string, ctx: CanvasRenderingContext2D) => {
+    const denseAtlasScale = gData.nodes.length > 300 ? 0.62 : 1;
     ctx.fillStyle = color;
     ctx.beginPath();
-    ctx.arc(node.x, node.y, nodeRadius(node.degree) + 5, 0, 2 * Math.PI);
+    ctx.arc(node.x, node.y, nodeRadius(node.degree) * denseAtlasScale + 5, 0, 2 * Math.PI);
     ctx.fill();
-  }, []);
+  }, [gData.nodes.length]);
 
   const linkColor = useCallback((link: any) => {
     const s = typeof link.source === 'object' ? link.source.id : link.source;
@@ -227,16 +265,18 @@ export function GraphViz({
     }
     const evidence = Math.min(1, Math.log2((link.weight ?? 1) + 1) / 5);
     return link.predicate === 'co_occurs_with'
-      ? `rgba(100, 116, 139, ${0.035 + evidence * 0.055})`
-      : `rgba(148, 163, 184, ${0.12 + evidence * 0.16})`;
+      ? `rgba(14, 116, 144, ${0.2 + evidence * 0.12})`
+      : `rgba(125, 211, 252, ${0.28 + evidence * 0.2})`;
   }, [hoverId]);
 
   const linkWidth = useCallback((link: any) => {
     const s = typeof link.source === 'object' ? link.source.id : link.source;
     const t = typeof link.target === 'object' ? link.target.id : link.target;
-    if (hoverId !== null && (s === hoverId || t === hoverId)) return 1.5;
+    if (hoverId !== null && (s === hoverId || t === hoverId)) return 2.2;
     const evidenceWidth = Math.min(1.8, Math.log2((link.weight ?? 1) + 1) * 0.3);
-    return link.predicate === 'co_occurs_with' ? 0.35 + evidenceWidth * 0.3 : 0.55 + evidenceWidth;
+    return link.predicate === 'co_occurs_with'
+      ? 0.75 + evidenceWidth * 0.45
+      : 0.9 + evidenceWidth;
   }, [hoverId]);
 
   const togglePause = () => {
@@ -279,8 +319,8 @@ export function GraphViz({
           }}
           onBackgroundClick={() => setHoverId(null)}
           onEngineStop={handleEngineStop}
-          warmupTicks={gData.nodes.length > 300 ? 35 : 20}
-          cooldownTicks={gData.nodes.length > 300 ? 220 : 140}
+          warmupTicks={gData.nodes.length > 300 ? 80 : 30}
+          cooldownTicks={gData.nodes.length > 300 ? 320 : 180}
         />
       )}
       <div className="absolute top-4 left-4 flex gap-2 pointer-events-none">
@@ -303,7 +343,7 @@ export function GraphViz({
         <Button variant="secondary" size="icon" className="h-7 w-7 bg-black/50 backdrop-blur border border-border" onClick={() => zoomBy(1 / 1.4)} title="Zoom out">
           <ZoomOut className="w-3.5 h-3.5" />
         </Button>
-        <Button variant="secondary" size="icon" className="h-7 w-7 bg-black/50 backdrop-blur border border-border" onClick={() => fgRef.current?.zoomToFit(300, 60)} title="Fit to view">
+        <Button variant="secondary" size="icon" className="h-7 w-7 bg-black/50 backdrop-blur border border-border" onClick={() => fgRef.current?.zoomToFit(300, 24)} title="Fit to view">
           <Maximize2 className="w-3.5 h-3.5" />
         </Button>
         <Button variant="secondary" size="icon" className="h-7 w-7 bg-black/50 backdrop-blur border border-border" onClick={togglePause} title={paused ? 'Resume layout' : 'Freeze layout'}>

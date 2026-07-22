@@ -24,6 +24,15 @@ class McpRequestError(McpUnavailable):
 _projects_cache: tuple[float, list[dict]] | None = None
 
 
+def _api_key() -> str:
+    explicit = os.environ.get("MARM_API_KEY", "")
+    if explicit:
+        return explicit
+    from ..config.settings import MARM_API_KEY
+
+    return MARM_API_KEY
+
+
 def _http_error(exc: HTTPError) -> McpRequestError:
     detail = "MARM MCP server rejected this request."
     try:
@@ -44,7 +53,7 @@ def request(
 ) -> dict:
     base_url = os.environ.get("MARM_MCP_URL", "http://127.0.0.1:8001").rstrip("/")
     headers = {"Content-Type": "application/json", "Accept": "application/json"}
-    api_key = os.environ.get("MARM_API_KEY")
+    api_key = _api_key()
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
     request = Request(
@@ -84,7 +93,7 @@ def delete(
 def get(operation: str, *, timeout: float = 10.0) -> dict:
     base_url = os.environ.get("MARM_MCP_URL", "http://127.0.0.1:8001").rstrip("/")
     headers = {"Accept": "application/json"}
-    api_key = os.environ.get("MARM_API_KEY")
+    api_key = _api_key()
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
     request = Request(

@@ -8,8 +8,8 @@ from pathlib import Path
 import re
 
 
-from server import concept_store
-from server.endpoints import concepts as concepts_endpoint
+from marm_mcp_server.console import concept_store
+from marm_mcp_server.console.endpoints import concepts as concepts_endpoint
 
 
 def test_console_schema_version_tracks_mcp_source() -> None:
@@ -419,3 +419,26 @@ def test_stale_build_result_stops_console_polling():
     assert stale_result["error_code"] == "stale_run"
     assert stale_result["finished_at"] is not None
     assert concepts_endpoint._stale_build_result(fresh) is fresh
+
+
+def test_rejected_concept_build_updates_launch_status(monkeypatch):
+    job_id = "rejected-build"
+    launch = ({"status": "queued", "error_code": None}, 0.0)
+    with concepts_endpoint._launching_concept_builds_lock:
+        concepts_endpoint._launching_concept_builds[job_id] = launch
+    monkeypatch.setattr(
+        concepts_endpoint.mcp_client,
+        "post",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            concepts_endpoint.mcp_client.McpRequestError(422, "invalid scope")
+        ),
+    )
+
+    try:
+        concepts_endpoint._run_concept_build(job_id, {})
+        assert launch[0]["status"] == "error"
+        assert launch[0]["error_code"] == "mcp_request_error"
+        assert launch[0]["finished_at"] is not None
+    finally:
+        with concepts_endpoint._launching_concept_builds_lock:
+            concepts_endpoint._launching_concept_builds.pop(job_id, None)

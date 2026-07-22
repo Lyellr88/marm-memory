@@ -4,7 +4,7 @@ MARM Console is the standalone local web app for [marm-memory](https://github.co
 
 Console runs locally. It does not send your memory database to a hosted service and does not add MCP tools to `marm-mcp-server`.
 
-> Status: active development. The backend now provides live Overview, filters, memory browsing, safe memory create/edit/delete, knowledge graph reads, and project intelligence routes. Packaging and final Console parity work are still in progress.
+> Status: active development. The backend provides live Overview, filters, memory browsing, safe memory create/edit/delete, knowledge graph reads, and project intelligence routes. The production UI is bundled with `marm-mcp-server`; contributor development remains in this directory.
 
 ## What It Is
 
@@ -13,15 +13,23 @@ MARM Console is a separate localhost application that reads the same local MARM 
 - `marm-mcp-server` remains the agent-facing MCP server, normally on port `8001`.
 - MARM Console owns the human-facing REST API on port `8002`.
 - The browser frontend runs separately during development and calls the Console API.
-- The legacy `marm-dashboard` source is archived under `docs/archived/` for reference.
 
-## Requirements
+## Run Console
 
 - Python 3.10+
-- Node.js 20+ and pnpm 10+
-- A local marm-memory installation that has initialized `~/.marm/marm_memory.db`
 
-## Quick Start
+```powershell
+pip install -U marm-mcp-server
+marm-memory console
+```
+
+This starts or reuses the managed MARM runtime, serves Console at
+`http://127.0.0.1:8002`, and opens it in your browser. The packaged path does
+not require Node or pnpm.
+
+## Build From Source
+
+Contributors need Python 3.10+, Node.js 20+ or newer, and pnpm 10+.
 
 For development, run one command from this directory:
 
@@ -30,17 +38,6 @@ For development, run one command from this directory:
 ```
 
 The launcher creates the local Python environment, installs missing frontend dependencies, starts the Console API on `127.0.0.1:8002`, and starts the frontend dev server. It stops the API when you stop the frontend.
-
-## Release Install
-
-The user-facing release flow is intended to be one install and one command:
-
-```powershell
-pip install marm-console
-marm-console
-```
-
-That packaged command is not available yet. The current commands below are implementation details for contributors while Console is under development.
 
 ## Manual Development Setup
 
@@ -100,7 +97,7 @@ Open the Vite URL shown in the terminal. The frontend defaults to the Console AP
 
 ## Development Notes
 
-- Keep all new Console code inside this directory.
+- Keep frontend source and contributor tooling inside this directory. The packaged Python host lives under `marm_mcp_server.console`.
 - Treat the archived dashboard source as read-only reference material.
 - The Console must degrade cleanly when MARM data has not been initialized or optional knowledge/code graph data is unavailable.
 
@@ -110,6 +107,6 @@ The implementation path is:
 
 1. Adapt concept builds and duplicate review through the existing MARM runtime.
 2. Adapt project indexing, status, architecture, code search, trace, impact, and guarded deletion through marm-graph.
-3. Package the production frontend behind the standalone Console host.
+3. Continue polishing the production frontend while preserving the bundled, Node-free release path.
 
 MARM Console is designed to become the local control plane for marm-memory, while leaving the MCP server focused on agent workflows.

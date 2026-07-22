@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 
 
@@ -40,7 +41,7 @@ def _concept_link_counts(memory_ids: list[str]) -> dict[str, int]:
 
     counts = dict.fromkeys(memory_ids, 0)
     try:
-        with sqlite3.connect(db_path) as connection:
+        with closing(sqlite3.connect(db_path)) as connection, connection:
             for memory_id, count in connection.execute(
                 """
                 SELECT memory_id, COUNT(*)
@@ -52,15 +53,17 @@ def _concept_link_counts(memory_ids: list[str]) -> dict[str, int]:
             ).fetchall():
                 counts[str(memory_id)] = counts.get(str(memory_id), 0) + count
 
-            for (source_json,) in connection.execute(
-                "SELECT source_memory_ids FROM entities"
+            for memory_id, count in connection.execute(
+                """
+                SELECT CAST(source.value AS TEXT), COUNT(DISTINCT e.id)
+                FROM entities e, json_each(e.source_memory_ids) AS source
+                WHERE json_valid(e.source_memory_ids)
+                  AND CAST(source.value AS TEXT) IN (SELECT value FROM json_each(?))
+                GROUP BY CAST(source.value AS TEXT)
+                """,
+                (json.dumps(memory_ids),),
             ).fetchall():
-                try:
-                    source_ids = {str(item) for item in json.loads(source_json or "[]")}
-                except (TypeError, ValueError, json.JSONDecodeError):
-                    continue
-                for memory_id in source_ids.intersection(counts):
-                    counts[memory_id] += 1
+                counts[str(memory_id)] = counts.get(str(memory_id), 0) + count
     except sqlite3.Error:
         return {}
 
@@ -68,7 +71,7 @@ def _concept_link_counts(memory_ids: list[str]) -> dict[str, int]:
 
 
 def overview(db_path: Path) -> dict:
-    with _connect(db_path) as connection:
+    with closing(_connect(db_path)) as connection, connection:
         active_memories = connection.execute(
             "SELECT COUNT(*) FROM memories WHERE compaction_role IS NULL OR compaction_role != 'source'"
         ).fetchone()[0]
@@ -110,7 +113,7 @@ def overview(db_path: Path) -> dict:
 
 
 def filters(db_path: Path) -> dict:
-    with _connect(db_path) as connection:
+    with closing(_connect(db_path)) as connection, connection:
         sessions = [
             row[0]
             for row in connection.execute(
@@ -168,7 +171,7 @@ def list_memories(
     if compaction_role is None:
         clauses.append("(compaction_role IS NULL OR compaction_role != 'source')")
     elif compaction_role == "none":
-        clauses.append("compaction_role IS NULL OR compaction_role = 'none'")
+        clauses.append("(compaction_role IS NULL OR compaction_role = 'none')")
     elif compaction_role == "compacted":
         clauses.append("compaction_role = 'source'")
     else:
@@ -189,7 +192,7 @@ def list_memories(
             "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
         )
     where = " WHERE " + " AND ".join(clauses) if clauses else ""
-    with _connect(db_path) as connection:
+    with closing(_connect(db_path)) as connection, connection:
         total = connection.execute(
             f"SELECT COUNT(*) FROM memories{where}", params
         ).fetchone()[0]
@@ -228,7 +231,7 @@ def list_memories(
 
 
 def get_memory(db_path: Path, memory_id: str) -> dict | None:
-    with _connect(db_path) as connection:
+    with closing(_connect(db_path)) as connection, connection:
         row = connection.execute(
             """
             SELECT m.id, m.content, m.session_name, m.project, m.platform,
@@ -266,7 +269,7 @@ def get_memories_by_ids(
     if not ids:
         return []
     placeholders = ",".join("?" for _ in ids)
-    with _connect(db_path) as connection:
+    with closing(_connect(db_path)) as connection, connection:
         rows = connection.execute(
             f"""SELECT id, content, session_name, project, created_at
                 FROM memories WHERE id IN ({placeholders})""",
@@ -286,7 +289,7 @@ def get_memories_by_ids(
 
 
 def list_sessions(db_path: Path) -> list[dict]:
-    with _connect(db_path) as connection:
+    with closing(_connect(db_path)) as connection, connection:
         rows = connection.execute(
             """
             SELECT s.session_name, s.marm_active, s.created_at, s.last_accessed,
@@ -346,7 +349,7 @@ def list_logs(
         )
         params.extend((escaped, escaped, escaped))
     where = " WHERE " + " AND ".join(clauses) if clauses else ""
-    with _connect(db_path) as connection:
+    with closing(_connect(db_path)) as connection, connection:
         rows = connection.execute(
             f"""SELECT id, entry_date, topic, summary, full_entry, session_name, project, platform
                 FROM log_entries{where} ORDER BY entry_date DESC LIMIT ?""",
@@ -368,7 +371,7 @@ def list_logs(
 
 
 def list_log_refs(db_path: Path) -> list[dict]:
-    with _connect(db_path) as connection:
+    with closing(_connect(db_path)) as connection, connection:
         rows = connection.execute(
             "SELECT id, session_name FROM log_entries ORDER BY entry_date DESC"
         ).fetchall()
@@ -376,7 +379,7 @@ def list_log_refs(db_path: Path) -> list[dict]:
 
 
 def list_notebook(db_path: Path) -> list[dict]:
-    with _connect(db_path) as connection:
+    with closing(_connect(db_path)) as connection, connection:
         rows = connection.execute(
             "SELECT name, data, session_name, project, platform, created_at, updated_at "
             "FROM notebook_entries ORDER BY updated_at DESC"
@@ -396,7 +399,7 @@ def list_notebook(db_path: Path) -> list[dict]:
 
 
 def get_summary(db_path: Path, session_name: str) -> dict:
-    with _connect(db_path) as connection:
+    with closing(_connect(db_path)) as connection, connection:
         row = connection.execute(
             """SELECT summary_text, entry_count, dirty, updated_at
                FROM session_summary_cache WHERE session_name = ?""",
@@ -425,7 +428,7 @@ def _compaction_row_to_dict(row: sqlite3.Row) -> dict:
 
 
 def list_compaction(db_path: Path) -> list[dict]:
-    with _connect(db_path) as connection:
+    with closing(_connect(db_path)) as connection, connection:
         rows = connection.execute(
             """SELECT id, status, session_name, source_memory_ids, suggested_summary, expires_at, created_at
                FROM compaction_staging ORDER BY created_at DESC LIMIT 200"""
@@ -435,7 +438,7 @@ def list_compaction(db_path: Path) -> list[dict]:
 
 def get_compaction_candidate(db_path: Path, candidate_id: str) -> dict | None:
     """Direct by-ID lookup, unlike list_compaction's 200-row window."""
-    with _connect(db_path) as connection:
+    with closing(_connect(db_path)) as connection, connection:
         row = connection.execute(
             """SELECT id, status, session_name, source_memory_ids, suggested_summary, expires_at, created_at
                FROM compaction_staging WHERE id = ?""",

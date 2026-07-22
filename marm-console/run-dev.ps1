@@ -12,10 +12,10 @@ if (-not (Test-Path $venvPython)) {
     python -m venv .venv
 }
 
-& $venvPython -c "import fastapi, uvicorn" 2>$null
+& $venvPython -c "import fastapi, uvicorn, marm_mcp_server.console" 2>$null
 if ($LASTEXITCODE -ne 0) {
-    if ($NoInstall) { throw "Console Python dependencies are missing. Run without -NoInstall." }
-    & $venvPython -m pip install -r server\requirements.txt
+    if ($NoInstall) { throw "MARM Console Python package is missing. Run without -NoInstall." }
+    & $venvPython -m pip install -e ..\marm-mcp-server
 }
 
 if (-not (Test-Path "node_modules")) {
@@ -23,7 +23,7 @@ if (-not (Test-Path "node_modules")) {
     pnpm install
 }
 
-$api = Start-Process -FilePath $venvPython -ArgumentList "-m", "server" -PassThru -WindowStyle Hidden
+$api = Start-Process -FilePath $venvPython -ArgumentList "-m", "marm_mcp_server.console.cli", "--serve" -PassThru -WindowStyle Hidden
 try {
     Start-Sleep -Milliseconds 800
     pnpm --filter @workspace/marm-console dev

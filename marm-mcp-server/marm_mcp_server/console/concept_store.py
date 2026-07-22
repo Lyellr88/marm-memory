@@ -6,6 +6,7 @@ import json
 import sqlite3
 from array import array
 from collections import deque
+from contextlib import closing
 from math import sqrt
 from pathlib import Path
 
@@ -62,7 +63,7 @@ def summary(db_path: Path) -> dict:
     connection = _connect(db_path)
     if connection is None:
         return _empty_summary()
-    with connection:
+    with closing(connection), connection:
         schema_status = _schema_status(connection)
         if schema_status != "current":
             return {
@@ -113,8 +114,6 @@ def search(
     connection = _connect(db_path)
     if connection is None:
         return []
-    if _schema_status(connection) != "current":
-        return []
     clauses: list[str] = []
     params: list[object] = []
     if q:
@@ -131,7 +130,9 @@ def search(
             clauses.append(f"{column} = ?")
             params.append(value)
     where = " WHERE " + " AND ".join(clauses) if clauses else ""
-    with connection:
+    with closing(connection), connection:
+        if _schema_status(connection) != "current":
+            return []
         rows = connection.execute(
             f"""
             SELECT e.id, e.name, e.type, e.session_name, e.project, e.platform,
@@ -156,10 +157,10 @@ def neighborhood(
     connection = _connect(db_path)
     if connection is None:
         return None
-    if _schema_status(connection) != "current":
-        return None
     depth = min(max(depth, 1), 3)
-    with connection:
+    with closing(connection), connection:
+        if _schema_status(connection) != "current":
+            return None
         seed = connection.execute(
             "SELECT id FROM entities WHERE id = ?", (entity_id,)
         ).fetchone()
@@ -275,9 +276,9 @@ def get_entity(db_path: Path, entity_id: int) -> dict | None:
     connection = _connect(db_path)
     if connection is None:
         return None
-    if _schema_status(connection) != "current":
-        return None
-    with connection:
+    with closing(connection), connection:
+        if _schema_status(connection) != "current":
+            return None
         row = connection.execute(
             """
             SELECT e.id, e.name, e.type, e.session_name, e.project, e.platform,
@@ -318,10 +319,10 @@ def build_runs(db_path: Path, limit: int = 20) -> list[dict]:
     connection = _connect(db_path)
     if connection is None:
         return []
-    if _schema_status(connection) != "current":
-        return []
     try:
-        with connection:
+        with closing(connection), connection:
+            if _schema_status(connection) != "current":
+                return []
             rows = connection.execute(
                 """SELECT id, scope_type, scope_value, status, memories_processed,
                           entities_extracted, relationships_created, code_links_created,
@@ -341,7 +342,7 @@ def get_build_run(db_path: Path, run_id: str) -> dict | None:
     if connection is None:
         return None
     try:
-        with connection:
+        with closing(connection), connection:
             row = connection.execute(
                 """SELECT id, scope_type, scope_value, status, memories_processed,
                           entities_extracted, relationships_created, code_links_created,
@@ -359,10 +360,10 @@ def duplicates(db_path: Path, limit: int = 100, threshold: float = 0.88) -> list
     connection = _connect(db_path)
     if connection is None:
         return []
-    if _schema_status(connection) != "current":
-        return []
     try:
-        with connection:
+        with closing(connection), connection:
+            if _schema_status(connection) != "current":
+                return []
             rows = connection.execute("""
                 SELECT e.id, e.name, e.type, e.session_name, e.project, e.platform,
                        e.source_memory_ids,
@@ -424,7 +425,7 @@ def graph_overview(db_path: Path) -> dict:
             },
             "truncated": False,
         }
-    with connection:
+    with closing(connection), connection:
         schema_status = _schema_status(connection)
         if schema_status != "current":
             return {
