@@ -5,7 +5,7 @@
      width="900"
      height="250">
 </picture>
-<h1 align="center">MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.26.0</h1>
+<h1 align="center">MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.27.0</h1>
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/Lyellr88/marm-memory/blob/MARM-main/LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
@@ -30,7 +30,6 @@
 - **Embedding upgrade:** v2.24 switches MARM to Jina v2 Small. Existing MiniLM data must be migrated before restart: stop MARM, run `marm-mcp-server --migrate-embeddings`, then restart. See [Upgrade Existing Embeddings](#upgrade-existing-embeddings).
 - **Concept graph rebuild:** the platform-aware graph schema requires one full rebuild. After upgrading, run `marm_concept_build(search_all=True)` once. MARM backs up and rebuilds only the derived concept database; memories are not modified.
 - I am waiting to get access back to my PYPI account, till restored pip will be behind a few versions. I will update the README when it is back up to date.
-
 
 ## Table of Contents
 

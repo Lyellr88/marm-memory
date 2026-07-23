@@ -3,6 +3,21 @@
 ## Version 2 - MARM Protocol to Universal MCP Server Evolution
 
 <details>
+<summary><strong>July 22nd, 2026: Bundled Concept Extraction (v2.27.0)</strong></summary>
+
+### Concept Extraction Is Bundled, No Separate Setup
+
+- The spaCy runtime and the English `en_core_web_sm` pipeline now ship inside the wheel. Concept extraction works after a normal `pip install marm-mcp-server` with no separate model download and no `knowledge setup` step; that command and the two-step `[concepts]` extra plus `spacy download` flow are removed. The `[concepts]` extra is kept empty so existing install commands stay valid.
+- The model loads lazily on the first concept build. If the runtime cannot initialize, core memory and both concept tools keep working and return empty results rather than erroring. `doctor` and `--check-deps` now treat the model as a required dependency; repair a damaged install with `python -m pip install -U --force-reinstall marm-mcp-server`.
+- The 15 MB model is not committed to source. It is fetched, SHA-256 verified, and unpacked into package data at build time (CI, both Docker images, and source setup) by `scripts/bundle-concept-model.py`, which downloads with a bounded timeout and retries so a stalled release download cannot hang a build.
+
+### Code Graph Reliability
+
+- Errors from the code-graph binary no longer lose their remediation hint when a large local project list overflows the binary's error-payload size cap. The client now recovers the error and hint fields from a truncated payload, so tool errors stay actionable regardless of how many projects are indexed. Test indexing is isolated from the developer's real project store.
+
+</details>
+
+<details>
 <summary><strong>July 21st, 2026: Managed Runtime CLI and Bundled Console (v2.26.0)</strong></summary>
 
 ### Managed Runtime CLI and Bundled Console
@@ -10,7 +25,7 @@
 - The existing `marm-mcp-server` package now installs a canonical `marm-memory` command while preserving the `marm-mcp-server` and `marm-mcp-stdio` compatibility entry points. `start`, `stop`, `restart`, `status`, `logs`, and `doctor` manage one verified local HTTP runtime without requiring users to track process IDs or ports manually.
 - Added named `standard`, `swarm`, `swarm-max`, and `trusted` profiles, plus passive status and maintenance inspection that do not load the embedding model, start the code graph, or create an absent concept database.
 - MARM Console is now bundled into the main wheel and launched with `marm-memory console`; users no longer need a separate Python server checkout or Node installation. Console reuses the managed runtime and shuts down with it when both were launched through MARM.
-- Added discoverable CLI workflows for concept builds, code-project indexing and removal, embedding migration, key generation, and runtime diagnostics. The spaCy runtime and English extraction model ship with the package, so `marm-memory knowledge status` reports readiness without a separate model download step.
+- Added discoverable CLI workflows for optional concept setup/builds, code-project indexing and removal, embedding migration, key generation, and runtime diagnostics. `marm-memory knowledge setup` installs through MARM's active Python interpreter only after confirmation and reports when a restart is required.
 - Hardened the managed CLI after independent review: project-job polling now retries transport failures without reporting false success, runtime request errors preserve HTTP status/detail, lifecycle routes cannot be blocked by the shared loopback rate-limit bucket, and product-command failures exit cleanly without Python tracebacks.
 - Human `status`, `doctor`, and maintenance output now summarizes the runtime instead of printing raw machine JSON; `--json` remains stable for automation. Managed runtime and Console logs are capped at 5 MB and tailed incrementally, restart leaves an active Console available, and start no longer advertises a Console URL before the Console is launched.
 - Docker and Glama release jobs now build the same Console frontend as the wheel job, preventing package formats from shipping different UI bundles from one release tag.
