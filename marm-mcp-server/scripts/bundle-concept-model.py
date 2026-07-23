@@ -37,9 +37,10 @@ def _is_complete(path: Path) -> bool:
         return False
     try:
         with (path / "meta.json").open(encoding="utf-8") as metadata_file:
-            return json.load(metadata_file).get("version") == MODEL_VERSION
+            metadata = json.load(metadata_file)
     except (OSError, json.JSONDecodeError, UnicodeDecodeError):
         return False
+    return isinstance(metadata, dict) and metadata.get("version") == MODEL_VERSION
 
 
 def _download(url: str, destination: Path) -> None:

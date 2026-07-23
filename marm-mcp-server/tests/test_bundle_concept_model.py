@@ -44,3 +44,16 @@ def test_complete_model_requires_the_pinned_version(tmp_path):
     (model_path / "meta.json").write_text('{"version": "0.0.0"}', encoding="utf-8")
 
     assert bundle_concept_model._is_complete(model_path) is False
+
+
+def test_complete_model_rejects_non_object_metadata(tmp_path):
+    """Valid-but-non-dict meta.json (null/list/string) must read as incomplete,
+    not raise, so a damaged install can still be repaired with --force."""
+    model_path = tmp_path / "model"
+    (model_path / "ner").mkdir(parents=True)
+    (model_path / "config.cfg").write_text("[nlp]\nlang = 'en'\n", encoding="utf-8")
+    (model_path / "ner" / "model").write_bytes(b"model")
+
+    for payload in ("null", "[1, 2]", '"3.8.0"'):
+        (model_path / "meta.json").write_text(payload, encoding="utf-8")
+        assert bundle_concept_model._is_complete(model_path) is False

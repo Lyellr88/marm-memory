@@ -25,10 +25,22 @@ from marm_mcp_server.core.concept_extraction import (
 _SPACY_INSTALLED = importlib.util.find_spec("spacy") is not None
 
 
+@pytest.fixture
+def fresh_nlp_loader():
+    """Force extract_entities to load the pipeline from CONCEPT_MODEL_PATH
+    rather than returning an _nlp another test already cached, so bundled-model
+    validation actually exercises the packaged model."""
+    concept_extraction._nlp = None
+    concept_extraction._nlp_failed = False
+    yield
+    concept_extraction._nlp = None
+    concept_extraction._nlp_failed = False
+
+
 @pytest.mark.skipif(
     not _SPACY_INSTALLED, reason="spaCy runtime not installed in this environment"
 )
-def test_bundled_concept_model_loads_and_extracts():
+def test_bundled_concept_model_loads_and_extracts(fresh_nlp_loader):
     """The model ships bundled, so its absence is a packaging failure, not a
     skip. With spaCy present, load the bundled pipeline through the real path
     and assert it extracts entities -- a missing or incomplete model dir
