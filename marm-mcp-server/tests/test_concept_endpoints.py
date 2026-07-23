@@ -602,8 +602,8 @@ def test_run_build_caches_embed_calls_across_repeated_entity_names(
 
 def test_try_embed_real_fastembed_end_to_end(concepts_env):
     """The one place real-model coverage is actually possible in this
-    sandbox for Goal 3 -- fastembed itself is installed (unlike spaCy's
-    en_core_web_sm), but its model weights are also network-blocked here
+    sandbox for Goal 3 -- fastembed itself is installed, but its model weights
+    are also network-blocked here
     (confirmed: 403 on download), so this dynamically skips rather than
     asserting a specific outcome if loading genuinely isn't possible in the
     current environment."""
@@ -935,17 +935,15 @@ def test_tool_count_includes_both_concept_tools():
     assert "marm_concept_recall" in MCP_TOOL_OPERATIONS
 
 
-def test_base_install_without_concepts_extra_still_registers_tools(concepts_env):
+def test_base_install_keeps_concept_tools_registered(concepts_env):
     """marm_concept_build/marm_concept_recall must be registered regardless of
-    whether the [concepts] extra (spaCy + en_core_web_sm) is installed -- that
+    whether a damaged environment can load the bundled spaCy runtime -- that
     part is environment-independent and always checked.
 
     Whether extraction itself runs for real depends on what's actually
     installed in this environment, so we detect CONCEPTS_AVAILABLE instead of
-    assuming a fixed value: no model installed exercises the fail-open path
-    (0 entities from real content, since extract_entities degrades gracefully
-    per its own docstring); a model installed exercises the real NER path
-    with real content and expects it to actually find something."""
+    assuming a fixed value: a partial install exercises the fail-open path,
+    while a complete installation exercises real extraction."""
     from marm_mcp_server.config.settings import CONCEPTS_AVAILABLE
     from marm_mcp_server.server import MCP_TOOL_OPERATIONS
 
@@ -962,7 +960,7 @@ def test_base_install_without_concepts_extra_still_registers_tools(concepts_env)
 
     if CONCEPTS_AVAILABLE:
         assert result["entities_extracted"] > 0, (
-            "concepts extra is installed in this environment, so real NER "
+            "the bundled runtime is installed in this environment, so real NER "
             f"extraction over seeded content should find entities: {result}"
         )
     else:

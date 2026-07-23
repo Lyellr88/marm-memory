@@ -21,6 +21,9 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Bundle concept extraction model
+        run: python marm-mcp-server/scripts/bundle-concept-model.py
+
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
@@ -114,6 +117,9 @@ jobs:
         with:
           python-version: '3.11'
 
+      - name: Bundle concept extraction model
+        run: python marm-mcp-server/scripts/bundle-concept-model.py
+
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
@@ -156,6 +162,14 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Bundle concept extraction model
+        run: python marm-mcp-server/scripts/bundle-concept-model.py
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -242,6 +256,14 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Bundle concept extraction model
+        run: python marm-mcp-server/scripts/bundle-concept-model.py
 
       - name: Set up Node
         uses: actions/setup-node@v4

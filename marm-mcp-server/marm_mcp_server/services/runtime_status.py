@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config.settings import (
+    CONCEPT_MODEL_AVAILABLE,
     DEFAULT_DB_PATH,
     DEFAULT_SEMANTIC_MODEL,
     SERVER_HOST,
@@ -92,7 +93,7 @@ def _latest_concept_build(path: Path) -> dict[str, Any] | None:
 def knowledge_status() -> dict[str, Any]:
     concept_path = Path(get_default_concept_db_path())
     spacy_available = importlib.util.find_spec("spacy") is not None
-    model_available = importlib.util.find_spec("en_core_web_sm") is not None
+    model_available = CONCEPT_MODEL_AVAILABLE
     schema = inspect_concept_schema(str(concept_path))
     if not spacy_available:
         state = "missing_spacy"
@@ -211,7 +212,6 @@ def doctor_status() -> dict[str, Any]:
                 "name": "knowledge_runtime",
                 "ok": status["knowledge"]["state"] in {"ready", "ready_no_build"},
                 "detail": status["knowledge"]["state"],
-                "optional": True,
             },
         ]
     )

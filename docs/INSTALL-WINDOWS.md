@@ -94,6 +94,7 @@ Then restart your terminal.
 git clone https://github.com/Lyellr88/marm-memory.git
 cd marm-memory\marm-mcp-server
 pip install -e ".[dev]"
+python scripts/bundle-concept-model.py
 marm-memory start
 ```
 

@@ -46,23 +46,23 @@ SCHEDULER_AVAILABLE = importlib.util.find_spec("apscheduler") is not None
 if not SCHEDULER_AVAILABLE:
     print("WARNING: Scheduler not available. Install: pip install apscheduler")
 
-# en_core_web_sm can't be a direct pip dependency of the [concepts] extra --
-# PyPI rejects package uploads containing direct URL/VCS dependencies, which
-# is how spaCy models are normally referenced. So this is a two-step install
-# (pip install marm-mcp-server[concepts], then python -m spacy download
-# en_core_web_sm) rather than one, same as every other PyPI package that
-# depends on a spaCy model.
+CONCEPT_MODEL_PATH = Path(__file__).resolve().parents[1] / "models" / "en_core_web_sm"
+# Same two files scripts/bundle-concept-model.py verifies after extraction, so a
+# partial install cannot report ready here and then fail on the first build.
+CONCEPT_MODEL_AVAILABLE = all(
+    (CONCEPT_MODEL_PATH / required).is_file()
+    for required in ("config.cfg", "ner/model")
+)
 CONCEPTS_AVAILABLE = (
-    importlib.util.find_spec("spacy") is not None
-    and importlib.util.find_spec("en_core_web_sm") is not None
+    importlib.util.find_spec("spacy") is not None and CONCEPT_MODEL_AVAILABLE
 )
 if not CONCEPTS_AVAILABLE:
     # stderr, not stdout -- STDIO transport's stdout must stay JSON-RPC clean
     # (see core/memory_utils.py's _safe_print), and this module is imported
     # on every server start including the STDIO entrypoint.
     print(
-        "WARNING: Concept graph extraction not available. Install: "
-        "pip install marm-mcp-server[concepts] && python -m spacy download en_core_web_sm",
+        "WARNING: Concept graph extraction not available. Reinstall: "
+        "python -m pip install -U --force-reinstall marm-mcp-server",
         file=sys.stderr,
     )
 

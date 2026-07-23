@@ -222,7 +222,7 @@ MARM contains two graph systems because they answer different questions.
 
 `marm_concept_build` reads stored memories and extracts entities and typed relationships. Entities retain session, project, platform, and source-memory provenance. Relationships can represent ideas such as `implements`, `depends_on`, `uses`, `causes`, or `related_to`.
 
-Concept builds are explicit and bounded. The default build cap is 500 memory rows, and build progress is persisted so Console can report queued, running, success, degraded, or failed states. Extraction requires the optional spaCy concepts dependency; its absence does not remove the tools or break normal recall.
+Concept builds are explicit and bounded. The default build cap is 500 memory rows, and build progress is persisted so Console can report queued, running, success, degraded, or failed states. Extraction uses the spaCy runtime and English model bundled with the package, loaded lazily on first build; if that runtime cannot initialize, the tools remain registered and normal recall is unaffected.
 
 `marm_concept_recall` provides explicit graph traversal with bounded depth and direction. `marm_smart_recall` also uses the graph automatically as an additive sidecar. A concept graph can be backed up and rebuilt because it is derived from authoritative memories.
 
@@ -314,7 +314,7 @@ Other deliberate boundaries:
 - code repositories must be re-indexed after meaningful source changes;
 - concept builds are explicit rather than running on every memory write;
 - consolidation and compaction are opt-in maintenance features;
-- concept extraction has an optional dependency;
+- concept extraction loads its bundled model lazily on first build;
 - MARM Console shares the managed runtime's authenticated API and packaged lifecycle.
 
 Within those boundaries, the architecture is intentionally modular: the primary memory path remains small and dependable, while semantic retrieval, permanent docs, compaction, concept knowledge, code intelligence, and the human Console add capability around it without becoming single points of failure.

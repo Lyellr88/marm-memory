@@ -43,6 +43,7 @@ dependencies = [
     "packaging>=24.0,<27.0",
     "mcp>=1.26.0,<2.0.0",
     "codebase-memory-mcp==0.8.1",
+    "spacy>=3.8.0,<3.9.0",
 ]
 
 [project.urls]
@@ -59,12 +60,9 @@ marm-mcp-stdio = "marm_mcp_server.server_stdio:main"
 
 [project.optional-dependencies]
 docker-image = []
-# en_core_web_sm (the model) is not included here -- it's referenced via a
-# direct URL, which PyPI rejects on package uploads. Install it separately:
-# python -m spacy download en_core_web_sm
-concepts = [
-    "spacy>=3.8.0,<4.0.0",
-]
+# Kept so existing ``pip install marm-mcp-server[concepts]`` commands remain
+# valid. Concept extraction is now bundled with the base distribution.
+concepts = []
 dev = [
     "pytest>=7.0.0",
     "pytest-asyncio>=0.21.0",
@@ -85,7 +83,7 @@ include = ["marm_mcp_server*", "marm_graph*"]
 exclude = ["tests*", "*.tests*", "docs*"]
 
 [tool.setuptools.package-data]
-"*" = ["*.json", "*.yaml", "*.yml", "config/*", "templates/*"]
+"*" = ["*.json", "*.yaml", "*.yml", "config/*", "templates/*", "models/en_core_web_sm/**/*"]
 "marm_mcp_server.console" = ["static/*", "static/**/*"]
 
 [tool.black]

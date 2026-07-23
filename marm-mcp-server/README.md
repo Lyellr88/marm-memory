@@ -787,7 +787,7 @@ How to use it:
 - **Bounded by design**: each build is row-capped (`CONCEPT_BUILD_ROW_CAP`, default 500) so a huge store can't turn one tool call into a runaway job.
 - **Recall fails open**: a missing, empty, incompatible, or unavailable concept graph never blocks normal memory recall. The response reports graph status separately.
 - **Code cross-linking**: when the code graph has indexed the same project, concept entities that match code symbols get linked, connecting "what we decided" to "where it lives in the code."
-- **Optional dependency**: run `marm-memory knowledge setup` to review and install the spaCy extraction runtime and model into MARM's current Python environment. MARM never installs it during normal startup. Without it, both concept tools stay registered and degrade cleanly while core memory remains available.
+- **Bundled extraction runtime**: the spaCy runtime and English extraction model ship with MARM but load only on the first concept build. If a damaged or partial installation makes them unavailable, both concept tools degrade cleanly while core memory remains available; run `marm-memory knowledge status`, then reinstall MARM if needed.
 - **Isolated storage**: the concept graph lives in its own SQLite database (`~/.marm/index/marm_index.db`) with its own connection pool, so concept-graph writes can never block or corrupt the production memory database.
 - **Console atlas**: MARM Console renders the complete atlas up to 750 entities and 6,000 stored relationships. Larger graphs use a deterministic connected sample of up to 600 entities and 4,000 aggregated visual edges, clearly labelled as sampled.
 
@@ -928,8 +928,8 @@ Packaged docs are indexed into the `marm_system` memory namespace on startup and
 
 **Concept tools return `entities_extracted: 0`**
 
-- Real extraction needs the optional extra: `pip install marm-mcp-server[concepts]` plus `python -m spacy download en_core_web_sm`
-- Without it the tools stay registered but store nothing; this is by design so base installs stay light
+- First confirm that a scoped concept build actually includes memories with extractable entities.
+- Run `marm-memory knowledge status`; if it reports a missing runtime or model, repair the install with `python -m pip install -U --force-reinstall marm-mcp-server`.
 
 </details>
 

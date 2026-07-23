@@ -11,7 +11,9 @@ RUN apt-get update && apt-get install -y \
 COPY pyproject.toml README.md ./
 COPY marm_mcp_server ./marm_mcp_server
 COPY marm_graph ./marm_graph
-RUN pip install --no-cache-dir --upgrade "wheel>=0.46.2" && \
+COPY scripts/bundle-concept-model.py ./scripts/bundle-concept-model.py
+RUN python scripts/bundle-concept-model.py && \
+    pip install --no-cache-dir --upgrade "wheel>=0.46.2" && \
     pip install --no-cache-dir --user ".[docker-image]"
 
 # Bake the pinned codebase-memory-mcp static binary into the image NOW, not at

@@ -9,7 +9,8 @@ COPY requirements-glama.txt .
 RUN pip install --no-cache-dir -r requirements-glama.txt
 
 COPY . .
-RUN pip install --no-cache-dir --no-deps .
+RUN python scripts/bundle-concept-model.py && \
+    pip install --no-cache-dir --no-deps .
 
 ENV PYTHONPATH=/app
 ENV MARM_LOG_LEVEL=INFO

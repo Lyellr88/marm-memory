@@ -1,21 +1,12 @@
-"""spaCy-based entity/relationship extraction for the concept graph.
-
-Lazy/optional import mirroring settings.SEMANTIC_SEARCH_AVAILABLE's pattern —
-base marm-mcp-server installs carry no spaCy dependency. Entity type taxonomy
-layers concept/decision/pattern/error/tool categories (borrowed conceptually
-from agentmemory's GraphNodeType, see research-notes.md §1-2) on top of
-spaCy's raw NER output, rather than replacing it.
-"""
+"""spaCy-based entity/relationship extraction for the concept graph."""
 
 import threading
 from typing import TYPE_CHECKING, NamedTuple, Optional
 
-from ..config.settings import CONCEPTS_AVAILABLE
+from ..config.settings import CONCEPT_MODEL_PATH, CONCEPTS_AVAILABLE
 
 if TYPE_CHECKING:
     from spacy.tokens import Span, Token
-
-_MODEL_NAME = "en_core_web_sm"
 
 # spaCy's raw NER labels we keep as-is (lowercased) rather than remapping —
 # these are already meaningful entity types for MARM's content.
@@ -89,7 +80,7 @@ def _load_nlp_lazily():
         try:
             import spacy
 
-            _nlp = spacy.load(_MODEL_NAME)
+            _nlp = spacy.load(CONCEPT_MODEL_PATH)
         except Exception:
             _nlp_failed = True
             return None

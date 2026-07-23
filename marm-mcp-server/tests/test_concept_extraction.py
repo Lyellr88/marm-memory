@@ -1,18 +1,16 @@
 """Tests for core/concept_extraction.py.
 
 The taxonomy rule layer (_classify_chunk) is pure and tested directly with
-real inputs -- no mocks needed. Full NER-based extraction (extract_entities
-with an actual loaded model) is skipped in this sandbox: en_core_web_sm's
-model wheel is hosted on github.com releases, which this environment's
-network policy blocks (same restriction that blocked huggingface.co during
-the fastembed work). CONCEPTS_AVAILABLE is genuinely False here -- this also
-lets the fail-open path be tested for real, not simulated.
+real inputs -- no mocks needed. Full NER-based extraction is skipped only when
+the installed environment is missing spaCy; the English pipeline data itself is
+bundled in the MARM distribution.
 """
 
 import pytest
 
 from marm_mcp_server.core import concept_extraction
 from marm_mcp_server.core.concept_extraction import (
+    CONCEPT_MODEL_PATH,
     CONCEPTS_AVAILABLE,
     ExtractionResult,
     _classify_chunk,
@@ -22,6 +20,11 @@ from marm_mcp_server.core.concept_extraction import (
     _same_sentence,
     extract_entities,
 )
+
+
+def test_bundled_concept_model_data_is_present():
+    assert (CONCEPT_MODEL_PATH / "config.cfg").is_file()
+    assert (CONCEPT_MODEL_PATH / "ner" / "model").is_file()
 
 
 class _FakeToken:
@@ -79,37 +82,33 @@ def test_classify_chunk_defaults_to_concept_with_no_trigger_keywords():
     assert _classify_chunk("the weather", "The weather was nice today") == "concept"
 
 
-@pytest.mark.skipif(
-    CONCEPTS_AVAILABLE,
-    reason="documents/exercises the unavailable-model path; spacy+en_core_web_sm is installed here",
-)
-def test_concepts_unavailable_in_this_sandbox():
-    """Documents why extraction-quality tests are skipped below -- if this
-    ever flips True (e.g. CI has network access to github.com releases),
-    the skipped test underneath should be un-skipped, not deleted."""
-    assert CONCEPTS_AVAILABLE is False
+@pytest.fixture
+def unavailable_concept_model(monkeypatch):
+    monkeypatch.setattr(
+        concept_extraction,
+        "CONCEPT_MODEL_PATH",
+        CONCEPT_MODEL_PATH.parent / "__missing_concept_model__",
+    )
+    monkeypatch.setattr(concept_extraction, "CONCEPTS_AVAILABLE", True)
+    monkeypatch.setattr(concept_extraction, "_nlp", None)
+    monkeypatch.setattr(concept_extraction, "_nlp_failed", False)
+    yield
+    concept_extraction._nlp = None
+    concept_extraction._nlp_failed = False
 
 
-@pytest.mark.skipif(
-    CONCEPTS_AVAILABLE,
-    reason="fail-open path only reachable when the model is genuinely unavailable",
-)
-def test_extract_entities_fails_open_when_model_unavailable():
+def test_extract_entities_fails_open_when_model_unavailable(unavailable_concept_model):
     result = extract_entities("MARM stores memories with fastembed embeddings.")
     assert result == ExtractionResult(entities=[], relationship_pairs=[])
 
 
-@pytest.mark.skipif(
-    CONCEPTS_AVAILABLE,
-    reason="fail-open path only reachable when the model is genuinely unavailable",
-)
-def test_load_nlp_lazily_returns_none_without_model():
+def test_load_nlp_lazily_returns_none_without_model(unavailable_concept_model):
     assert concept_extraction._load_nlp_lazily() is None
 
 
 @pytest.mark.skipif(
     not CONCEPTS_AVAILABLE,
-    reason="en_core_web_sm model not installed -- github.com releases blocked in this sandbox",
+    reason="spaCy is not installed in this test environment",
 )
 def test_extract_entities_real_ner_output():
     result = extract_entities(
@@ -122,7 +121,7 @@ def test_extract_entities_real_ner_output():
 
 @pytest.mark.skipif(
     not CONCEPTS_AVAILABLE,
-    reason="en_core_web_sm model not installed -- github.com releases blocked in this sandbox",
+    reason="spaCy is not installed in this test environment",
 )
 def test_extract_entities_real_typed_predicate():
     """Same-sentence entities with a real verb link get a typed predicate,
