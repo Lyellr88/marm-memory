@@ -3,6 +3,8 @@
 Pure envelope-decoding tests run everywhere; transport tests use the real binary.
 """
 
+import json
+
 import pytest
 
 from marm_graph.core.cbm_client import (
@@ -55,6 +57,42 @@ def test_unwrap_error_with_hint():
         CbmClient._unwrap("index_status", result)
     assert ei.value.hint == "do this"
     assert ei.value.payload["error"] == "bad"
+
+
+def test_unwrap_recovers_hint_from_truncated_error_payload():
+    """The child caps its error payload and can cut the trailing project list
+    mid-token, so json.loads fails on a document whose error/hint are intact.
+    Observed for real against 0.8.1: index_status with 45 projects indexed
+    returned 4258 chars ending '..._releases_],"count":45}' -- an unterminated
+    string. Before this fallback, .hint went None purely because the store had
+    grown, and the 4 KB blob became the exception message.
+    """
+    text = (
+        '{"error":"project not found or not indexed",'
+        '"hint":"Use list_projects to see all indexed projects",'
+        '"projects":["C-Users-lyell-Desktop-MARM-Systems",'
+        '"C-Users-lyell-Desktop],"count":45}'
+    )
+    with pytest.raises(json.JSONDecodeError):
+        json.loads(text)  # the payload really is unparseable
+
+    result = {"content": [{"type": "text", "text": text}], "isError": True}
+    with pytest.raises(CbmToolError) as ei:
+        CbmClient._unwrap("index_status", result)
+
+    assert ei.value.hint == "Use list_projects to see all indexed projects"
+    assert str(ei.value) == "index_status: project not found or not indexed"
+    assert ei.value.payload == text
+
+
+def test_unwrap_reports_no_hint_when_text_has_none():
+    result = {
+        "content": [{"type": "text", "text": "unknown tool: no_such_tool"}],
+        "isError": True,
+    }
+    with pytest.raises(CbmToolError) as ei:
+        CbmClient._unwrap("no_such_tool", result)
+    assert ei.value.hint is None
 
 
 def test_unwrap_success_has_no_iserror():

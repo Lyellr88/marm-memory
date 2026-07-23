@@ -34,6 +34,29 @@ requires_binary = pytest.mark.skipif(
 )
 
 
+@pytest.fixture(autouse=True, scope="session")
+def isolated_cbm_store(tmp_path_factory):
+    """Keep test indexes out of the developer's real code graph.
+
+    The binary stores each project in ~/.cache/codebase-memory-mcp regardless
+    of MARM_GRAPH_STORE_DIR, so any test that reaches index_repository used to
+    add a permanent entry to the machine's real project list. It resolves that
+    directory from HOME (POSIX) or USERPROFILE (Windows), both verified to
+    redirect it, so pointing them at a session temp directory isolates the
+    store without changing how the child is invoked.
+    """
+    sandbox = tmp_path_factory.mktemp("cbm-home")
+    previous = {name: os.environ.get(name) for name in ("HOME", "USERPROFILE")}
+    for name in previous:
+        os.environ[name] = str(sandbox)
+    yield sandbox
+    for name, value in previous.items():
+        if value is None:
+            os.environ.pop(name, None)
+        else:
+            os.environ[name] = value
+
+
 def load_isolated_server(monkeypatch, tmp_path, api_key="", write_queue_enabled=False):
     """Import the server after pointing global state at a temporary database."""
     for name in list(sys.modules):

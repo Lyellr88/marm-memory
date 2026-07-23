@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import queue
+import re
 import subprocess
 import threading
 from typing import Any, Optional
@@ -31,6 +32,22 @@ import structlog
 logger = structlog.get_logger(__name__)
 
 _EOF = object()  # sentinel pushed by the reader thread on child EOF
+
+
+def _field_from_truncated(text: str, field: str) -> Optional[str]:
+    """Recover one string field from an error payload too damaged to parse.
+
+    The child caps its error payload at a fixed size and can cut the final
+    value mid-token, so a long project list yields invalid JSON and json.loads
+    drops `error`/`hint` that are intact earlier in the same document.
+    """
+    match = re.search(rf'"{field}"\s*:\s*"((?:[^"\\]|\\.)*)"', text)
+    if match is None:
+        return None
+    try:
+        return json.loads(f'"{match.group(1)}"')
+    except json.JSONDecodeError:
+        return None
 
 
 class CbmError(Exception):
@@ -56,7 +73,12 @@ class CbmToolError(Exception):
     def __init__(self, message: str, payload: Any = None):
         super().__init__(message)
         self.payload = payload
-        self.hint = payload.get("hint") if isinstance(payload, dict) else None
+        if isinstance(payload, dict):
+            self.hint = payload.get("hint")
+        elif isinstance(payload, str):
+            self.hint = _field_from_truncated(payload, "hint")
+        else:
+            self.hint = None
 
 
 class CbmClient:
@@ -318,9 +340,10 @@ class CbmClient:
                 continue
 
         if result.get("isError"):
-            message = (
-                payload.get("error") if isinstance(payload, dict) else str(payload)
-            )
+            if isinstance(payload, dict):
+                message = payload.get("error")
+            else:
+                message = _field_from_truncated(str(payload), "error") or str(payload)
             raise CbmToolError(f"{tool}: {message}", payload=payload)
         return payload
 
