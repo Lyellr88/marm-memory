@@ -8,9 +8,14 @@ import hashlib
 import json
 import shutil
 import tempfile
+import time
+import urllib.error
 import urllib.request
 import zipfile
 from pathlib import Path
+
+DOWNLOAD_TIMEOUT = 60.0
+DOWNLOAD_ATTEMPTS = 3
 
 
 MODEL_NAME = "en_core_web_sm"
@@ -33,8 +38,29 @@ def _is_complete(path: Path) -> bool:
     try:
         with (path / "meta.json").open(encoding="utf-8") as metadata_file:
             return json.load(metadata_file).get("version") == MODEL_VERSION
-    except (OSError, json.JSONDecodeError):
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
         return False
+
+
+def _download(url: str, destination: Path) -> None:
+    """Fetch a URL to a file with a bounded timeout and a few retries.
+
+    urlretrieve has no timeout, so a stalled GitHub connection could hang a
+    Docker or release build indefinitely; this keeps the download bounded.
+    """
+    last_error: Exception | None = None
+    for attempt in range(1, DOWNLOAD_ATTEMPTS + 1):
+        try:
+            with urllib.request.urlopen(url, timeout=DOWNLOAD_TIMEOUT) as response:
+                with destination.open("wb") as output:
+                    shutil.copyfileobj(response, output)
+            return
+        except (urllib.error.URLError, TimeoutError, OSError) as error:
+            last_error = error
+            if attempt < DOWNLOAD_ATTEMPTS:
+                print(f"Download attempt {attempt} failed ({error}); retrying...")
+                time.sleep(2 * attempt)
+    raise RuntimeError(f"Could not download {url}: {last_error}")
 
 
 def _sha256(path: Path) -> str:
@@ -63,7 +89,7 @@ def _extract_model(wheel_path: Path, destination: Path) -> None:
 
 
 def bundle_model(*, force: bool = False) -> Path:
-    if _is_complete(MODEL_PATH) and not force:
+    if not force and _is_complete(MODEL_PATH):
         print(f"Bundled concept model already present: {MODEL_PATH}")
         return MODEL_PATH
 
@@ -71,7 +97,7 @@ def bundle_model(*, force: bool = False) -> Path:
     with tempfile.TemporaryDirectory(prefix="marm-concept-model-") as temporary:
         wheel_path = Path(temporary) / f"{MODEL_NAME}-{MODEL_VERSION}.whl"
         print(f"Downloading bundled concept model {MODEL_NAME} {MODEL_VERSION}...")
-        urllib.request.urlretrieve(MODEL_WHEEL_URL, wheel_path)
+        _download(MODEL_WHEEL_URL, wheel_path)
         if _sha256(wheel_path) != MODEL_WHEEL_SHA256:
             raise RuntimeError("Downloaded concept model failed SHA-256 verification")
         extracted = Path(temporary) / MODEL_NAME

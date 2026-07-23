@@ -53,6 +53,12 @@ COPY --from=builder /usr/local/bin/codebase-memory-mcp-bin /usr/local/bin/codeba
 RUN mkdir -p /app/data && chown marm:marm /app/data
 
 COPY --chown=marm:marm . .
+# The runtime imports from /app (PYTHONPATH below), but the bundled model is
+# gitignored and absent from a clean build context. Copy the builder's
+# generated model into /app so concept extraction works regardless of whether
+# the context carried it.
+COPY --from=builder --chown=marm:marm \
+    /app/marm_mcp_server/models /app/marm_mcp_server/models
 RUN mkdir -p /licenses \
  && cp /app/LICENSE /licenses/MARM-LICENSE \
  && cp /app/THIRD_PARTY_NOTICES.md /licenses/THIRD_PARTY_NOTICES.md

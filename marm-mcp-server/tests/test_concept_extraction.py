@@ -6,12 +6,13 @@ the installed environment is missing spaCy; the English pipeline data itself is
 bundled in the MARM distribution.
 """
 
+import importlib.util
+
 import pytest
 
 from marm_mcp_server.core import concept_extraction
 from marm_mcp_server.core.concept_extraction import (
     CONCEPT_MODEL_PATH,
-    CONCEPTS_AVAILABLE,
     ExtractionResult,
     _classify_chunk,
     _classify_predicate,
@@ -21,10 +22,23 @@ from marm_mcp_server.core.concept_extraction import (
     extract_entities,
 )
 
+_SPACY_INSTALLED = importlib.util.find_spec("spacy") is not None
 
-def test_bundled_concept_model_data_is_present():
-    assert (CONCEPT_MODEL_PATH / "config.cfg").is_file()
-    assert (CONCEPT_MODEL_PATH / "ner" / "model").is_file()
+
+@pytest.mark.skipif(
+    not _SPACY_INSTALLED, reason="spaCy runtime not installed in this environment"
+)
+def test_bundled_concept_model_loads_and_extracts():
+    """The model ships bundled, so its absence is a packaging failure, not a
+    skip. With spaCy present, load the bundled pipeline through the real path
+    and assert it extracts entities -- a missing or incomplete model dir
+    degrades extract_entities to an empty result and fails here instead of
+    silently shipping broken."""
+    result = extract_entities("Ryan Lyell adopted SQLite for MARM Systems.")
+    assert result.entities, (
+        f"bundled model at {CONCEPT_MODEL_PATH} should extract entities from "
+        "seeded content; an empty result means the model dir is missing or broken"
+    )
 
 
 class _FakeToken:
@@ -107,7 +121,7 @@ def test_load_nlp_lazily_returns_none_without_model(unavailable_concept_model):
 
 
 @pytest.mark.skipif(
-    not CONCEPTS_AVAILABLE,
+    not _SPACY_INSTALLED,
     reason="spaCy is not installed in this test environment",
 )
 def test_extract_entities_real_ner_output():
@@ -120,7 +134,7 @@ def test_extract_entities_real_ner_output():
 
 
 @pytest.mark.skipif(
-    not CONCEPTS_AVAILABLE,
+    not _SPACY_INSTALLED,
     reason="spaCy is not installed in this test environment",
 )
 def test_extract_entities_real_typed_predicate():
