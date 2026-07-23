@@ -3,6 +3,21 @@
 ## Version 2 - MARM Protocol to Universal MCP Server Evolution
 
 <details>
+<summary><strong>July 22nd, 2026: Bundled Concept Extraction (v2.27.0)</strong></summary>
+
+### Concept Extraction Is Bundled, No Separate Setup
+
+- The spaCy runtime and the English `en_core_web_sm` pipeline now ship inside the wheel. Concept extraction works after a normal `pip install marm-mcp-server` with no separate model download and no `knowledge setup` step; that command and the two-step `[concepts]` extra plus `spacy download` flow are removed. The `[concepts]` extra is kept empty so existing install commands stay valid.
+- The model loads lazily on the first concept build. If the runtime cannot initialize, core memory and both concept tools keep working and return empty results rather than erroring. `doctor` and `--check-deps` now treat the model as a required dependency; repair a damaged install with `python -m pip install -U --force-reinstall marm-mcp-server`.
+- The 15 MB model is not committed to source. It is fetched, SHA-256 verified, and unpacked into package data at build time (CI, both Docker images, and source setup) by `scripts/bundle-concept-model.py`, which downloads with a bounded timeout and retries so a stalled release download cannot hang a build.
+
+### Code Graph Reliability
+
+- Errors from the code-graph binary no longer lose their remediation hint when a large local project list overflows the binary's error-payload size cap. The client now recovers the error and hint fields from a truncated payload, so tool errors stay actionable regardless of how many projects are indexed. Test indexing is isolated from the developer's real project store.
+
+</details>
+
+<details>
 <summary><strong>July 21st, 2026: Managed Runtime CLI and Bundled Console (v2.26.0)</strong></summary>
 
 ### Managed Runtime CLI and Bundled Console

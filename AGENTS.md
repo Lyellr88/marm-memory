@@ -61,17 +61,17 @@ Semver: MAJOR = breaking (schema renames, parameter removals), MINOR = new tools
 - Hit real FastAPI endpoints and real SQLite. Mock only when it meaningfully speeds the test AND matches real behavior with at least 95% fidelity.
 - Every new MARM Console API route needs at least one happy-path FastAPI response-contract test with the MCP adapter stubbed. This verifies the actual response model without requiring a live graph backend.
 - No existence-check or coded-to-pass tests. Deep tests that exercise real paths beat broad shallow coverage.
-- `pytest.mark.skip` only for genuinely unavailable dependencies (no embedding model, no spaCy `[concepts]` extra), never for effort.
+- `pytest.mark.skip` only for genuinely unavailable dependencies (for example, an unavailable embedding model), never for effort.
 
 ## Workflow
 
 - **Never commit without an explicit user request.** The user reviews all changes first.
-- Dev setup: `cd marm-mcp-server && pip install -e ".[dev,concepts]" && python -m spacy download en_core_web_sm`
+- Dev setup: `cd marm-mcp-server && pip install -e ".[dev]" && python scripts/bundle-concept-model.py`
 - Benchmarks live in `scripts/benchmarking/`: `preformance/bench_hotpath.py` for hot-path performance, `accuracy/locomo/run_eval.py` for LoCoMo retrieval accuracy. Do not publish performance claims neither script can back.
 
-## Current Stats (v2.24.0)
+## Current Stats (v2.27.0)
 
 - 14 MCP tools over HTTP + STDIO
 - 2 isolated SQLite databases (memory + concept graph)
 - Hybrid recall: FTS5 BM25 exact lane + bounded semantic rerank
-- Optional extras: `[concepts]` (spaCy extraction), Docker image with the graph engine baked in
+- Bundled concept extraction: spaCy plus the `en_core_web_sm` pipeline, both loaded lazily; Docker image includes the graph engine

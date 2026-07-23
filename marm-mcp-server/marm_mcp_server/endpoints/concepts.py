@@ -67,8 +67,8 @@ _MISSING_BUILD_SCOPE_MESSAGE = (
 )
 
 _CONCEPTS_UNAVAILABLE_MESSAGE = (
-    "Concept extraction is unavailable. Install: "
-    "pip install marm-mcp-server[concepts] && python -m spacy download en_core_web_sm"
+    "Concept extraction is unavailable. Reinstall marm-mcp-server and run "
+    "marm-memory knowledge status to verify the local installation."
 )
 
 

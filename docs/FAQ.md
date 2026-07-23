@@ -102,7 +102,7 @@ The concept graph turns stored memories into a queryable knowledge graph. `marm_
 
 #### Q: Why does `marm_concept_build` return `entities_extracted: 0`?
 
-Run `marm-memory knowledge setup`. MARM shows the Python environment and downloads, asks for confirmation, installs the optional spaCy runtime and model through that interpreter, and then asks you to restart MARM. Normal startup never installs optional dependencies. Without them, both concept tools stay registered and degrade cleanly, so base installs stay lightweight.
+The spaCy runtime and English extraction model are bundled with MARM and load only when you build the concept graph. First confirm that the build scope includes memories with extractable entities, then run `marm-memory knowledge status`. If it reports a damaged or partial install, repair it with `python -m pip install -U --force-reinstall marm-mcp-server`. Core memory remains available if concept extraction cannot initialize.
 
 #### Q: What happens if a graph engine fails to start?
 

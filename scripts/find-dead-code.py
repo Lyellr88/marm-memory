@@ -20,10 +20,12 @@ RESET = "\033[0m"
 REPO_ROOT = Path(__file__).parent.parent
 SERVER_ROOT = REPO_ROOT / "marm-mcp-server"
 CONSOLE_ROOT = REPO_ROOT / "marm-console"
+# Console's Python moved into marm_mcp_server/console when it was bundled into
+# the wheel, so it is covered by the marm_mcp_server entry. marm-console/ is
+# now frontend-only.
 PACKAGE_DIRS = [
     SERVER_ROOT / "marm_mcp_server",
     SERVER_ROOT / "marm_graph",
-    CONSOLE_ROOT / "server",
 ]
 PACKAGE_NAMES = {package.name for package in PACKAGE_DIRS}
 SERVER_PACKAGE = SERVER_ROOT / "marm_mcp_server"
@@ -44,10 +46,19 @@ FAIL = "x"
 
 
 def all_py_files() -> list[Path]:
+    """Collect shipped sources, announcing any configured package that is gone.
+
+    A silently skipped package reads as a clean report, which is how a renamed
+    or relocated package can drop out of the scan unnoticed.
+    """
     files: list[Path] = []
     for package in PACKAGE_DIRS:
-        if package.exists():
-            files.extend(package.rglob("*.py"))
+        if not package.exists():
+            print(
+                f"{YELLOW}  Warning: {display_path(package)}/ not found, skipping{RESET}"
+            )
+            continue
+        files.extend(package.rglob("*.py"))
     return sorted(files)
 
 
@@ -124,9 +135,13 @@ def module_reference_patterns(module_path: str) -> set[str]:
 def module_is_referenced(module_path: str, all_source: str) -> bool:
     if any(pattern in all_source for pattern in module_reference_patterns(module_path)):
         return True
-    stem = module_path.split(".")[-1]
+    stem = re.escape(module_path.split(".")[-1])
+    if re.search(rf"from\s+\.+\s+import\s+[^\n#]*\b{stem}\b", all_source):
+        return True
+    # Parenthesized imports put each name on its own line, so the single-line
+    # patterns above miss every sibling module imported as a group.
     return (
-        re.search(rf"from\s+\.+\s+import\s+[^\n#]*\b{re.escape(stem)}\b", all_source)
+        re.search(rf"from\s+[.\w]+\s+import\s+\([^)]*\b{stem}\b", all_source, re.DOTALL)
         is not None
     )
 
@@ -328,7 +343,7 @@ def main() -> int:
     )
     print()
     print(
-        f"{CYAN}Tip: run `python -m compileall marm_mcp_server marm_graph` from marm-mcp-server/ and `python -m compileall server` from marm-console/ to catch syntax errors{RESET}\n"
+        f"{CYAN}Tip: run `python -m compileall marm_mcp_server marm_graph` from marm-mcp-server/ to catch syntax errors{RESET}\n"
     )
 
     return 0

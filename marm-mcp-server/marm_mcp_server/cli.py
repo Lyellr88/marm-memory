@@ -175,8 +175,6 @@ def _product_parser() -> argparse.ArgumentParser:
     knowledge = subparsers.add_parser("knowledge", help="Manage concept extraction")
     knowledge_sub = knowledge.add_subparsers(dest="knowledge_command", required=True)
     knowledge_sub.add_parser("status")
-    setup = knowledge_sub.add_parser("setup")
-    setup.add_argument("--yes", action="store_true")
     build = knowledge_sub.add_parser("build")
     scope = build.add_mutually_exclusive_group(required=True)
     scope.add_argument("--all", action="store_true", dest="search_all")
@@ -493,24 +491,6 @@ def _dispatch_product(args: argparse.Namespace) -> int:
         if args.knowledge_command == "status":
             _print_payload(knowledge_status())
             return 0
-        if args.knowledge_command == "setup":
-            from .services.knowledge_setup import install_knowledge_runtime
-
-            confirmed = args.yes
-            if not confirmed:
-                preview = install_knowledge_runtime(confirmed=False)
-                if preview["status"] == "ready":
-                    print("Knowledge runtime is already installed.")
-                    return 0
-                print(f"Python environment: {preview['environment']}")
-                for command in preview["commands"]:
-                    print("  " + " ".join(command))
-                confirmed = (
-                    input("Install these dependencies? [y/N] ").strip().lower() == "y"
-                )
-            result = install_knowledge_runtime(confirmed=confirmed)
-            _print_payload(result)
-            return 0 if result["status"] in {"ready", "installed"} else 1
         payload = {
             "search_all": args.search_all,
             "session_name": args.session,

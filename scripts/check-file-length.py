@@ -24,6 +24,15 @@ SCAN_DIRS = [
 ]
 EXTENSIONS = {".py", ".toml", ".md", ".txt", ".json", ".ts", ".tsx", ".css"}
 
+# Build artifacts, not source: the bundled spaCy pipeline and the compiled
+# Console frontend. Both are generated at release time and their size says
+# nothing about code worth refactoring.
+GENERATED_DIRS = {"models", "static", "__pycache__"}
+
+
+def is_generated(path: Path, base: Path) -> bool:
+    return any(part in GENERATED_DIRS for part in path.relative_to(base).parts[:-1])
+
 
 def line_count(path: Path) -> int:
     try:
@@ -64,7 +73,11 @@ def main() -> int:
             print(f"{YELLOW}Warning: {label}/ not found, skipping{RESET}")
             continue
 
-        files = [f for f in base.rglob("*") if f.is_file() and f.suffix in EXTENSIONS]
+        files = [
+            f
+            for f in base.rglob("*")
+            if f.is_file() and f.suffix in EXTENSIONS and not is_generated(f, base)
+        ]
         print(f"{GRAY}Scanning {len(files)} files in {label}/{RESET}")
 
         for f in files:

@@ -68,11 +68,11 @@ def test_product_script_is_installed_without_removing_compatibility_commands():
     assert scripts["marm-mcp-stdio"] == "marm_mcp_server.server_stdio:main"
 
 
-def test_legacy_dependency_check_keeps_degraded_features_optional(monkeypatch):
+def test_dependency_check_requires_bundled_knowledge_runtime(monkeypatch):
     real_find_spec = dependency_check.importlib.util.find_spec
 
     def find_spec(name):
-        if name in {"fastembed", "apscheduler", "spacy", "en_core_web_sm"}:
+        if name in {"fastembed", "apscheduler", "spacy"}:
             return None
         return real_find_spec(name)
 
@@ -80,12 +80,18 @@ def test_legacy_dependency_check_keeps_degraded_features_optional(monkeypatch):
 
     checks = dependency_check.dependency_checks()
 
-    assert all(
-        not check["required"]
-        for check in checks
-        if check["name"] in {"fastembed", "apscheduler", "spacy", "en_core_web_sm"}
-    )
-    assert all(check["ok"] for check in checks if check["required"])
+    optional = {check["name"] for check in checks if not check["required"]}
+    assert {"fastembed", "apscheduler"}.issubset(optional)
+    spacy_check = next(check for check in checks if check["name"] == "spacy")
+    model_check = next(check for check in checks if check["name"] == "concept_model")
+    assert spacy_check == {
+        "name": "spacy",
+        "ok": False,
+        "detail": "spaCy concept extraction runtime",
+        "required": True,
+    }
+    assert model_check["required"] is True
+    assert model_check["ok"] is True
 
 
 def test_status_json_contains_no_decorative_output(tmp_path):

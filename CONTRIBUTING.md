@@ -22,11 +22,10 @@ cd marm-mcp-server
 pip install -e ".[dev]"
 ```
 
-Working on the concept graph? Add the optional extraction extra:
+For source development, fetch the bundled extraction model into package data:
 
 ```powershell
-pip install -e ".[dev,concepts]"
-python -m spacy download en_core_web_sm
+python scripts/bundle-concept-model.py
 ```
 
 Run the HTTP server:
@@ -69,7 +68,7 @@ marm-mcp-server/
       compaction.py            # Background compaction candidate detection and nudges
       compaction_scheduler.py  # Optional compaction maintenance scheduler
       concept_db.py            # Concept graph schema and isolated SQLite pool
-      concept_extraction.py    # spaCy entity/relationship extraction (optional extra)
+      concept_extraction.py    # spaCy entity/relationship extraction (bundled model)
       graph_supervisor.py      # Lazy singleton supervisor for the embedded graph engine
       graph_client.py          # Concept graph's in-process link into the code graph
       protocol_delivery_state.py  # Bounded HTTP protocol-delivery state

@@ -7,7 +7,7 @@ import os
 import sys
 from pathlib import Path
 
-from ..config.settings import DEFAULT_DB_PATH
+from ..config.settings import CONCEPT_MODEL_AVAILABLE, DEFAULT_DB_PATH
 
 
 def dependency_checks() -> list[dict]:
@@ -26,6 +26,7 @@ def dependency_checks() -> list[dict]:
         ("pydantic", "Pydantic"),
         ("sqlite3", "SQLite"),
         ("structlog", "structlog"),
+        ("spacy", "spaCy concept extraction runtime"),
     )
     for module, label in required_modules:
         checks.append(
@@ -51,16 +52,10 @@ def dependency_checks() -> list[dict]:
                 "required": False,
             },
             {
-                "name": "spacy",
-                "ok": importlib.util.find_spec("spacy") is not None,
-                "detail": "Optional concept extraction runtime",
-                "required": False,
-            },
-            {
-                "name": "en_core_web_sm",
-                "ok": importlib.util.find_spec("en_core_web_sm") is not None,
-                "detail": "Optional concept extraction model",
-                "required": False,
+                "name": "concept_model",
+                "ok": CONCEPT_MODEL_AVAILABLE,
+                "detail": "Bundled en_core_web_sm concept extraction model",
+                "required": True,
             },
         ]
     )
@@ -92,5 +87,5 @@ def check_dependencies() -> bool:
         print("Ready to start MARM MCP Server")
     else:
         print("Required dependencies are missing.")
-        print("Repair with: python -m pip install -U marm-mcp-server")
+        print("Repair with: python -m pip install -U --force-reinstall marm-mcp-server")
     return required_ok
