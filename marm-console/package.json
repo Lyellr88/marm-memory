@@ -1,6 +1,5 @@
 {
   "name": "workspace",
-  "version": "0.0.0",
   "license": "MIT",
   "scripts": {
     "preinstall": "node -e \"const fs=require('fs'); for (const file of ['package-lock.json','yarn.lock']) fs.rmSync(file,{force:true}); if (!process.env.npm_config_user_agent?.startsWith('pnpm/')) process.exitCode=1\"",
