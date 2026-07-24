@@ -3,12 +3,14 @@
 set -Eeuo pipefail
 
 readonly image="${MARM_DOCKER_SMOKE_IMAGE:-lyellr88/marm-mcp-server:latest}"
-readonly smoke_root="$(mktemp -d)"
+smoke_root="$(mktemp -d)"
+readonly smoke_root
 readonly container_name="marm-linux-smoke-$$"
-readonly api_key="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
+api_key="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
+readonly api_key
 readonly data_dir="$smoke_root/data"
 readonly env_file="$smoke_root/marm.env"
-readonly port="$(python3 - <<'PY'
+port="$(python3 - <<'PY'
 import socket
 
 with socket.socket() as sock:
@@ -16,6 +18,7 @@ with socket.socket() as sock:
     print(sock.getsockname()[1])
 PY
 )"
+readonly port
 
 cleanup() {
   docker rm -f "$container_name" >/dev/null 2>&1 || true
