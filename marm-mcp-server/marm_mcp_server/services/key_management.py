@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import sys
+import os
+import stat
 from pathlib import Path
 
 from ..utils.security import generate_api_key
@@ -31,18 +33,19 @@ def read_managed_key(path: Path | None = None) -> str:
     return ""
 
 
-def _protect_key_file(path: Path) -> None:
-    try:
-        path.chmod(0o600)
-    except OSError:
-        pass
+def _protect_key_file(path: Path) -> bool:
+    """Apply and verify owner-only access before treating a key as usable."""
     if sys.platform != "win32":
-        return
+        try:
+            path.chmod(0o600)
+            return stat.S_IMODE(path.stat().st_mode) & 0o077 == 0
+        except OSError:
+            return False
     try:
         import getpass
         import subprocess
 
-        subprocess.run(
+        result = subprocess.run(
             [
                 "icacls",
                 str(path),
@@ -53,16 +56,31 @@ def _protect_key_file(path: Path) -> None:
             check=False,
             capture_output=True,
         )
+        return result.returncode == 0
     except OSError:
-        pass
+        return False
 
 
 def initialize_managed_key(path: Path | None = None) -> tuple[Path, bool]:
     """Create the managed key file once, preserving an existing credential."""
     destination = path or managed_key_path()
     if read_managed_key(destination):
+        if not _protect_key_file(destination):
+            raise RuntimeError(f"Could not secure managed key file: {destination}")
         return destination, False
     destination.parent.mkdir(parents=True, exist_ok=True)
-    destination.write_text(f"MARM_API_KEY={generate_api_key()}\n", encoding="utf-8")
-    _protect_key_file(destination)
+    try:
+        descriptor = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError as exc:
+        raise RuntimeError(
+            f"Managed key file exists but does not contain MARM_API_KEY: {destination}"
+        ) from exc
+    try:
+        with os.fdopen(descriptor, "w", encoding="utf-8") as key_file:
+            key_file.write(f"MARM_API_KEY={generate_api_key()}\n")
+    except OSError:
+        destination.unlink(missing_ok=True)
+        raise
+    if not _protect_key_file(destination):
+        raise RuntimeError(f"Could not secure managed key file: {destination}")
     return destination, True

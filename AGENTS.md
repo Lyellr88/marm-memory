@@ -69,7 +69,7 @@ Semver: MAJOR = breaking (schema renames, parameter removals), MINOR = new tools
 - Dev setup: `cd marm-mcp-server && pip install -e ".[dev]" && python scripts/bundle-concept-model.py`
 - Benchmarks live in `scripts/benchmarking/`: `preformance/bench_hotpath.py` for hot-path performance, `accuracy/locomo/run_eval.py` for LoCoMo retrieval accuracy. Do not publish performance claims neither script can back.
 
-## Current Stats (v2.27.0)
+## Current Stats (v2.28.0)
 
 - 14 MCP tools over HTTP + STDIO
 - 2 isolated SQLite databases (memory + concept graph)

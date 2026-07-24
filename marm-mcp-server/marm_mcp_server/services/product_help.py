@@ -41,7 +41,10 @@ def render_product_help(version: str) -> str:
             (
                 ("-h, --help", "Show help for any command"),
                 ("-V, --version", "Show installed version"),
-                ("--json", "Machine-readable output (status, doctor, upgrade, maintenance)"),
+                (
+                    "--json",
+                    "Machine-readable output (status, doctor, upgrade, maintenance)",
+                ),
                 ("--profile <name>", "standard | swarm | swarm-max | trusted"),
             ),
         ),
@@ -55,7 +58,10 @@ def render_product_help(version: str) -> str:
                 ("stop [--force]", "Stop the managed runtime safely"),
                 ("restart [--force]", "Restart while preserving the selected profile"),
                 ("status [--json]", "Show runtime, memory, Console, and graph status"),
-                ("console [--no-open] [--import-key]", "Launch the bundled local Console"),
+                (
+                    "console [--no-open] [--import-key]",
+                    "Launch the bundled local Console",
+                ),
                 ("logs [--follow] [--lines N]", "Read or follow bounded runtime logs"),
                 (
                     "fast-start-http [--client] [--no-console]",
@@ -81,7 +87,10 @@ def render_product_help(version: str) -> str:
             "Setup and Updates:",
             (
                 ("doctor [--json]", "Diagnose dependencies and configuration"),
-                ("key <generate|init|path|reveal>", "Manage local bearer authentication"),
+                (
+                    "key <generate|init|path|reveal>",
+                    "Manage local bearer authentication",
+                ),
                 (
                     "upgrade|update [--check] [--yes]",
                     "Check for and install a newer MARM release",

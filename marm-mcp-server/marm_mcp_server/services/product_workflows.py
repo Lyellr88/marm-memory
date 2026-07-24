@@ -63,16 +63,23 @@ def fast_start_http(args: argparse.Namespace) -> int:
     runtime_port = metadata.get("port")
     runtime_profile = metadata.get("profile")
     console_url: str | None = None
+    console_error: str | None = None
     if not args.no_console:
         from ..console.cli import run_console
         from .key_management import read_managed_key
 
         managed_auth = bool(settings.MARM_API_KEY and read_managed_key())
-        run_console(
-            open_browser=not args.no_browser,
-            import_key=managed_auth and not args.no_browser,
-        )
-        console_url = f"http://127.0.0.1:{os.environ.get('MARM_CONSOLE_PORT', '8002')}"
+        try:
+            run_console(
+                open_browser=not args.no_browser,
+                import_key=managed_auth and not args.no_browser,
+            )
+            console_url = (
+                f"http://127.0.0.1:{os.environ.get('MARM_CONSOLE_PORT', '8002')}"
+            )
+        except RuntimeError as exc:
+            console_error = str(exc)
+            print(f"Console: unavailable ({exc})", file=sys.stderr)
 
     print("MARM fast start complete.")
     if runtime_port is None and reused_runtime:
@@ -93,6 +100,8 @@ def fast_start_http(args: argparse.Namespace) -> int:
     )
     if console_url:
         print(f"Console: {console_url}")
+    elif console_error:
+        print("Console: unavailable")
     else:
         print("Console: skipped (--no-console)")
     print("Recovery: marm-memory doctor")
@@ -112,18 +121,20 @@ def upgrade(args: argparse.Namespace, *, print_payload) -> int:
     from . import package_management
     from .runtime_status import full_status
 
-    installation = package_management.inspect_installation()
     latest = package_management.check_latest_release()
     if args.as_json:
+        if args.yes:
+            raise RuntimeError("`upgrade --json` cannot be combined with `--yes`.")
         print_payload(latest, as_json=True)
-    else:
-        print(f"Installed: {latest['installed_version']}")
-        print(f"Latest: {latest['latest_version']}")
-        print(
-            "Status: already current"
-            if latest["state"] == "current" and not args.version
-            else "Status: update available"
-        )
+        return 0
+    installation = package_management.inspect_installation()
+    print(f"Installed: {latest['installed_version']}")
+    print(f"Latest: {latest['latest_version']}")
+    print(
+        "Status: already current"
+        if latest["state"] == "current" and not args.version
+        else "Status: update available"
+    )
     if args.check:
         return 0
     if installation.editable:
@@ -149,6 +160,9 @@ def upgrade(args: argparse.Namespace, *, print_payload) -> int:
         )
         return 0
 
+    current_state = runtime_manager.read_state() or {}
+    profile = current_state.get("profile", "standard")
+    rate_limit_rpm = current_state.get("rate_limit_rpm")
     status = full_status()
     restart_runtime = status["runtime"]["state"] == "ready"
     restart_console = status["console"]["state"] == "ready"
@@ -157,7 +171,9 @@ def upgrade(args: argparse.Namespace, *, print_payload) -> int:
     exit_code = package_management.run_upgrade(args.version)
     if exit_code != 0:
         if restart_runtime:
-            runtime_manager.start_background()
+            runtime_manager.start_background(
+                profile=profile, rate_limit_rpm=rate_limit_rpm
+            )
         if restart_console:
             from ..console.cli import run_console
 
@@ -170,7 +186,7 @@ def upgrade(args: argparse.Namespace, *, print_payload) -> int:
     upgraded = package_management.inspect_installation()
     print(f"Upgrade complete: {upgraded.version}")
     if restart_runtime:
-        runtime_manager.start_background()
+        runtime_manager.start_background(profile=profile, rate_limit_rpm=rate_limit_rpm)
     if restart_console:
         from ..console.cli import run_console
 

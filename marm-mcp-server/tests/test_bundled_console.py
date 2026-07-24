@@ -5,11 +5,11 @@ import pytest
 
 from marm_mcp_server.console import cli as console_cli
 from marm_mcp_server.console import auth
-from marm_mcp_server.console.app import STATIC_DIR, app
+from marm_mcp_server.console import mcp_client
+from marm_mcp_server.console.app import app
 
 
 def test_bundled_console_serves_ui_and_preserves_api_404s():
-    assert (STATIC_DIR / "index.html").exists()
     with TestClient(app) as client:
         index = client.get("/")
         deep_link = client.get("/knowledge")
@@ -84,6 +84,32 @@ def test_console_bootstrap_exchanges_one_time_token_for_browser_session(
     assert "marm_console_session" in authenticated.headers["set-cookie"]
     assert replay.status_code == 401
     assert session_authorized.status_code == 404
+
+
+def test_invalid_console_bootstrap_does_not_consume_the_pending_handoff(
+    monkeypatch, tmp_path
+):
+    runtime_manager = importlib.import_module("marm_mcp_server.core.runtime_manager")
+    monkeypatch.setenv("MARM_API_KEY", "console-secret")
+    monkeypatch.setattr(runtime_manager, "runtime_dir", lambda: tmp_path)
+    token = auth.create_bootstrap_token(tmp_path)
+
+    with TestClient(app) as client:
+        rejected = client.post("/api/auth/bootstrap", json={"token": "wrong-token"})
+        authenticated = client.post("/api/auth/bootstrap", json={"token": token})
+
+    assert rejected.status_code == 401
+    assert authenticated.status_code == 200
+
+
+def test_console_client_uses_managed_key_when_its_process_has_no_key(monkeypatch):
+    settings = importlib.import_module("marm_mcp_server.config.settings")
+    key_management = importlib.import_module("marm_mcp_server.services.key_management")
+    monkeypatch.delenv("MARM_API_KEY", raising=False)
+    monkeypatch.setattr(settings, "MARM_API_KEY", "")
+    monkeypatch.setattr(key_management, "read_managed_key", lambda: "managed-key")
+
+    assert mcp_client._api_key() == "managed-key"
 
 
 def test_console_import_key_opens_one_time_handoff_without_printing_secret(

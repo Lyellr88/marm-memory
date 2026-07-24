@@ -71,6 +71,28 @@ def test_docker_run_plan_requires_explicit_network_opt_in(tmp_path):
     assert "0.0.0.0:9123:8001" in exposed["arguments"]
 
 
+def test_linux_plans_map_bind_mount_writes_to_the_host_user(monkeypatch, tmp_path):
+    monkeypatch.setattr(docker_commands.sys, "platform", "linux")
+    monkeypatch.setattr(docker_commands.os, "getuid", lambda: 1001, raising=False)
+    monkeypatch.setattr(docker_commands.os, "getgid", lambda: 1002, raising=False)
+
+    plan = docker_commands.build_run_plan(_options(tmp_path))
+    compose = docker_commands.compose_document(_options(tmp_path))["document"]
+    stdio = docker_commands.stdio_command(data_dir=tmp_path)
+
+    assert plan["container_user"] == "1001:1002"
+    assert ["--user", "1001:1002"] == plan["arguments"][
+        plan["arguments"].index("--user") : plan["arguments"].index("--user") + 2
+    ]
+    assert compose["services"]["marm-mcp-server"]["user"] == "1001:1002"
+    assert ["--user", "1001:1002"] == stdio["arguments"][
+        stdio["arguments"].index("--user") : stdio["arguments"].index("--user") + 2
+    ]
+    assert "HOME=/home/marm" in plan["arguments"]
+    assert "HOME=/home/marm" in stdio["arguments"]
+    assert compose["services"]["marm-mcp-server"]["environment"]["HOME"] == "/home/marm"
+
+
 def test_docker_run_plan_rejects_invalid_inputs(tmp_path):
     with pytest.raises(docker_commands.DockerCommandError, match="--port"):
         docker_commands.build_run_plan(_options(tmp_path, port=0))
@@ -94,11 +116,14 @@ def test_docker_previews_allow_a_new_data_directory(tmp_path):
 def test_managed_env_file_creates_key_but_explicit_file_must_contain_one(
     monkeypatch, tmp_path
 ):
-    from marm_mcp_server.services import key_management
-
     managed = tmp_path / "managed.env"
     monkeypatch.setattr(docker_commands, "managed_env_file", lambda: managed)
-    monkeypatch.setattr(key_management, "generate_api_key", lambda: "generated-key")
+
+    def initialize_key(path):
+        path.write_text("MARM_API_KEY=generated-key\n", encoding="utf-8")
+        return path, True
+
+    monkeypatch.setattr(docker_commands, "initialize_managed_key", initialize_key)
 
     assert docker_commands.ensure_managed_env_file() == managed
     assert managed.read_text(encoding="utf-8") == "MARM_API_KEY=generated-key\n"
@@ -243,7 +268,11 @@ def test_compose_document_matches_safe_run_defaults(tmp_path):
     assert service["ports"] == ["127.0.0.1:8001:8001"]
     assert service["restart"] == "unless-stopped"
     assert service["command"] == ["--swarm"]
-    assert service["environment"] == {"SERVER_HOST": "0.0.0.0"}
+    assert service["environment"] == {
+        "SERVER_HOST": "0.0.0.0",
+        "HOME": "/home/marm",
+        "XDG_CACHE_HOME": "/home/marm/.marm/cache",
+    }
     assert service["env_file"] == [str((tmp_path / ".env").resolve())]
     assert service["volumes"][0]["target"] == "/home/marm/.marm"
 

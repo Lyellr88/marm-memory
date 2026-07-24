@@ -46,18 +46,23 @@ def consume_bootstrap_token(runtime_directory: Path, token: str) -> bool:
             payload = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError, TypeError):
             return False
+        if not isinstance(payload, dict):
+            return False
+        expected = payload.get("token")
+        expires_at = payload.get("expires_at")
+        valid = (
+            isinstance(expected, str)
+            and isinstance(expires_at, (int, float))
+            and time.time() <= expires_at
+            and secrets.compare_digest(token, expected)
+        )
+        if not valid:
+            return False
         try:
             path.unlink(missing_ok=True)
         except OSError:
             return False
-    expected = payload.get("token")
-    expires_at = payload.get("expires_at")
-    return (
-        isinstance(expected, str)
-        and isinstance(expires_at, (int, float))
-        and time.time() <= expires_at
-        and secrets.compare_digest(token, expected)
-    )
+        return True
 
 
 def create_browser_session() -> str:

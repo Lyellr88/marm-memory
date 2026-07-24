@@ -6,6 +6,7 @@ import json
 import os
 import shlex
 import subprocess
+import sys
 import time
 import urllib.error
 import urllib.request
@@ -92,6 +93,13 @@ def _repository_mounts(repositories: tuple[Path, ...]) -> tuple[list[str], list[
     return arguments, mappings
 
 
+def _container_user() -> str | None:
+    """Map Linux bind-mount writes to the invoking host user."""
+    if not sys.platform.startswith("linux"):
+        return None
+    return f"{os.getuid()}:{os.getgid()}"
+
+
 def build_run_plan(
     options: DockerRunOptions,
     *,
@@ -118,6 +126,7 @@ def build_run_plan(
     )
     env_file = (options.env_file or managed_env_file()).expanduser().resolve()
     host_binding = "0.0.0.0" if options.expose_network else "127.0.0.1"
+    container_user = _container_user()
     arguments = [
         "docker",
         "run",
@@ -134,9 +143,15 @@ def build_run_plan(
         str(env_file),
         "-e",
         "SERVER_HOST=0.0.0.0",
+        "-e",
+        "HOME=/home/marm",
+        "-e",
+        "XDG_CACHE_HOME=/home/marm/.marm/cache",
         "-p",
         f"{host_binding}:{options.port}:8001",
     ]
+    if container_user:
+        arguments.extend(["--user", container_user])
     if options.pull:
         arguments.extend(["--pull", "always"])
     if options.memory:
@@ -162,6 +177,7 @@ def build_run_plan(
         "env_file": str(env_file),
         "image": image_reference(options.tag),
         "host_binding": host_binding,
+        "container_user": container_user,
         "repository_mappings": repository_mappings,
     }
 
@@ -256,7 +272,8 @@ def _wait_for_health(port: int, *, timeout: float = 30.0) -> None:
             if payload.get("status") == "healthy":
                 return
         except (urllib.error.URLError, OSError, ValueError):
-            time.sleep(0.5)
+            pass
+        time.sleep(0.5)
     raise DockerCommandError(
         "MARM container did not become healthy. Run `marm-memory docker logs --follow`."
     )
@@ -290,14 +307,26 @@ def stdio_command(
         "--rm",
         "--mount",
         f"type=bind,src={resolved_data_dir},dst={CONTAINER_DATA_DIR}",
-        "--entrypoint",
-        "marm-mcp-stdio",
-        image_reference(tag),
+        "-e",
+        "HOME=/home/marm",
+        "-e",
+        "XDG_CACHE_HOME=/home/marm/.marm/cache",
     ]
+    container_user = _container_user()
+    if container_user:
+        arguments.extend(["--user", container_user])
+    arguments.extend(
+        [
+            "--entrypoint",
+            "marm-mcp-stdio",
+            image_reference(tag),
+        ]
+    )
     return {
         "arguments": arguments,
         "data_dir": str(resolved_data_dir),
         "image": image_reference(tag),
+        "container_user": container_user,
     }
 
 
@@ -311,7 +340,11 @@ def compose_document(options: DockerRunOptions) -> dict[str, Any]:
         "swarm-max": ["--swarm-max"],
         "trusted": ["--trusted"],
     }[options.profile]
-    environment = {"SERVER_HOST": "0.0.0.0"}
+    environment = {
+        "SERVER_HOST": "0.0.0.0",
+        "HOME": "/home/marm",
+        "XDG_CACHE_HOME": "/home/marm/.marm/cache",
+    }
     if options.rate_limit_rpm is not None:
         environment["MARM_RATE_LIMIT_RPM"] = str(options.rate_limit_rpm)
     service: dict[str, Any] = {
@@ -332,6 +365,8 @@ def compose_document(options: DockerRunOptions) -> dict[str, Any]:
     }
     if profile_args:
         service["command"] = profile_args
+    if plan["container_user"]:
+        service["user"] = plan["container_user"]
     if options.memory or options.cpus:
         service["deploy"] = {"resources": {"limits": {}}}
         limits = service["deploy"]["resources"]["limits"]
