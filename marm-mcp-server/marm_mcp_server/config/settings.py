@@ -397,8 +397,10 @@ if SERVER_HOST == "0.0.0.0" and not MARM_API_KEY and not _is_generate_key_cmd:
             _MARM_ENV_PATH.chmod(0o600)
         except OSError:
             pass
-        if sys.platform == "win32":
-            restrict_windows_file_to_current_user(_MARM_ENV_PATH)
+        if sys.platform == "win32" and not restrict_windows_file_to_current_user(
+            _MARM_ENV_PATH
+        ):
+            print(f"WARNING: Could not restrict API key file: {_MARM_ENV_PATH}")
     except Exception as _e:
         print(f"WARNING: Could not save API key to {_MARM_ENV_PATH}: {_e}")
 

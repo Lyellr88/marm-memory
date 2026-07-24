@@ -67,6 +67,7 @@ dev = [
     "pytest>=7.0.0",
     "pytest-asyncio>=0.21.0",
     "pytest-cov>=4.0.0",
+    "build>=1.2.2",
     "jsonschema>=4.0.0",
     "requests>=2.31.0",
     "black>=22.0.0",
@@ -106,13 +107,14 @@ disallow_untyped_defs = true
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 addopts = "-p no:cacheprovider"
+tmp_path_retention_policy = "none"
 markers = [
     "docker: Docker transport tests skipped by scripts/run-tests.py unless --docker is used",
     "slow_stdio: subprocess-based STDIO transport tests skipped by scripts/run-tests.py --fast",
     "smoke: local command parse, dispatch, and isolated lifecycle smoke tests",
     "smoke_lifecycle: HTTP runtime and managed-key lifecycle smoke tests",
     "smoke_docker: smoke tests that launch a real Docker container (need a daemon)",
-    "smoke_destructive: smoke tests that uninstall/reinstall MARM in a disposable virtual environment",
+    "smoke_destructive: opt-in smoke tests that uninstall/reinstall MARM in a disposable virtual environment",
 ]
 
 [tool.ruff]

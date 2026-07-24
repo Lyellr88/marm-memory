@@ -34,6 +34,22 @@ requires_binary = pytest.mark.skipif(
 )
 
 
+def pytest_collection_modifyitems(items):
+    opt_in_markers = {
+        "smoke_docker": "MARM_SMOKE_DOCKER",
+        "smoke_destructive": "MARM_SMOKE_DESTRUCTIVE",
+    }
+    for item in items:
+        for marker, environment_name in opt_in_markers.items():
+            if (
+                item.get_closest_marker(marker)
+                and os.environ.get(environment_name) != "1"
+            ):
+                item.add_marker(
+                    pytest.mark.skip(reason=f"{marker} requires {environment_name}=1")
+                )
+
+
 @pytest.fixture(autouse=True, scope="session")
 def isolated_cbm_store(tmp_path_factory):
     """Keep test indexes out of the developer's real code graph.

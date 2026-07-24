@@ -249,21 +249,41 @@ async def bench_hybrid_strategies(mem, sizes=None, iters=15):
             query_vec = mem._encode_sync(query)
             fts_query = _safe_fts_query(query)
 
-            # 1. Full semantic scan (production scorer, no pre-filter).
-            # Dispatched via asyncio.to_thread to match how recall_similar runs
-            # its DB/scoring work, so both columns share one execution model.
-            t0 = time.perf_counter()
-            await asyncio.to_thread(
-                _fetch_and_score_embedding_rows, mem.db_path, "bench", n, query_vec, 5
-            )
-            scan_samples.append((time.perf_counter() - t0) * 1000)
+            # Alternate order so one path does not always benefit from a warmed cache.
+            if iter_num % 2 == 0:
+                t0 = time.perf_counter()
+                await asyncio.to_thread(
+                    _fetch_and_score_embedding_rows,
+                    mem.db_path,
+                    "bench",
+                    n,
+                    query_vec,
+                    5,
+                )
+                scan_samples.append((time.perf_counter() - t0) * 1000)
 
-            # 2. Production hybrid recall (precomputed vector excludes encode)
-            t0 = time.perf_counter()
-            await mem.recall_similar(
-                query, session="bench", limit=5, query_vec=query_vec
-            )
-            prod_samples.append((time.perf_counter() - t0) * 1000)
+                t0 = time.perf_counter()
+                await mem.recall_similar(
+                    query, session="bench", limit=5, query_vec=query_vec
+                )
+                prod_samples.append((time.perf_counter() - t0) * 1000)
+            else:
+                t0 = time.perf_counter()
+                await mem.recall_similar(
+                    query, session="bench", limit=5, query_vec=query_vec
+                )
+                prod_samples.append((time.perf_counter() - t0) * 1000)
+
+                t0 = time.perf_counter()
+                await asyncio.to_thread(
+                    _fetch_and_score_embedding_rows,
+                    mem.db_path,
+                    "bench",
+                    n,
+                    query_vec,
+                    5,
+                )
+                scan_samples.append((time.perf_counter() - t0) * 1000)
 
             # Informational only: how many candidates the FTS pre-filter matched.
             if fts_query:

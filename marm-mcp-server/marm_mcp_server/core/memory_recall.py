@@ -379,7 +379,9 @@ async def _recall_text_search(
                         "similarity": _blend_temporal(float(score), row["timestamp"]),
                         "project": row["project"],
                         "platform": row["platform"],
-                        "retrieval_mode": "exact_fts",
+                        "retrieval_mode": (
+                            "semantic_fallback_fts" if apply_temporal else "exact_fts"
+                        ),
                     }
                     for row, score in fts_rows
                 ]
@@ -427,7 +429,9 @@ async def _recall_text_search(
                     "similarity": _blend_temporal(0.8, row[3]),
                     "project": row[6],
                     "platform": row[7],
-                    "retrieval_mode": "exact_like",
+                    "retrieval_mode": (
+                        "semantic_fallback_like" if apply_temporal else "exact_like"
+                    ),
                 }
             )
 

@@ -230,16 +230,23 @@ def test_windows_key_acl_uses_the_executing_identity(monkeypatch, tmp_path):
             self.returncode = returncode
             self.stdout = stdout
 
+    system_root = tmp_path / "windows"
+    whoami = system_root / "System32" / "whoami.exe"
+    icacls = system_root / "System32" / "icacls.exe"
+
     def run(command, **kwargs):
         calls.append(command)
-        if command == ["whoami"]:
+        if command == [str(whoami)]:
             return Completed(stdout="DOMAIN\\runtime-user\r\n")
         return Completed()
 
     monkeypatch.setattr(security.sys, "platform", "win32")
+    monkeypatch.setenv("SystemRoot", str(system_root))
     monkeypatch.setattr(security.subprocess, "run", run)
 
     assert security.restrict_windows_file_to_current_user(tmp_path / ".env")
+    assert calls[0] == [str(whoami)]
+    assert calls[1][0] == str(icacls)
     assert calls[1][-1] == "DOMAIN\\runtime-user:(F)"
 
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -59,7 +60,14 @@ def main() -> int:
         "-v",
     ]
     print(f"Running command smoke tests: {' '.join(command)}")
-    return subprocess.run(command, cwd=PACKAGE_ROOT, check=False).returncode
+    environment = os.environ.copy()
+    if args.docker:
+        environment["MARM_SMOKE_DOCKER"] = "1"
+    if args.destructive:
+        environment["MARM_SMOKE_DESTRUCTIVE"] = "1"
+    return subprocess.run(
+        command, cwd=PACKAGE_ROOT, env=environment, check=False
+    ).returncode
 
 
 if __name__ == "__main__":

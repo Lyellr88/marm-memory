@@ -196,17 +196,20 @@ async def test_text_search_fallback_applies_temporal_but_exact_lane_does_not(tmp
         "semantic-intent fallback must rank the newer memory first"
     )
 
-    # Exact lane -> identical BM25 for identical content -> insertion order, age ignored
+    assert {result["retrieval_mode"] for result in semantic} == {
+        "semantic_fallback_fts"
+    }
+
+    # Exact lane preserves lexical scores rather than applying temporal decay.
     exact = await mem.recall_similar(
         "temporal keyword content",
         session="fallback-temporal",
         limit=5,
         exact_mode="exact",
     )
-    ex_ids = [r["id"] for r in exact]
-    assert ex_ids.index(old_id) < ex_ids.index(new_id), (
-        "exact lane must preserve BM25/insertion order, not re-rank by age"
-    )
+    exact_by_id = {result["id"]: result for result in exact}
+    assert {result["retrieval_mode"] for result in exact} == {"exact_fts"}
+    assert exact_by_id[old_id]["similarity"] == exact_by_id[new_id]["similarity"]
 
 
 @pytest.mark.asyncio

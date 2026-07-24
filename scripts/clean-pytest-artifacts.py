@@ -45,7 +45,11 @@ def discover_targets() -> list[Path]:
     for base in (ROOT, SERVER_ROOT, CONSOLE_ROOT):
         add_existing_directory(base / ".pytest_cache", targets)
         add_child_directories(base, ".pytest_tmp*", targets)
+        add_child_directories(base, ".pytest-review-*", targets)
+        add_child_directories(base, ".pytest-smoke-*", targets)
         add_child_directories(base / "tmp", "pytest-*", targets)
+
+    add_child_directories(ROOT, "marm-pytest-*", targets)
 
     add_existing_directory(Path(r"C:\tmp\marm-pytest"), targets)
 

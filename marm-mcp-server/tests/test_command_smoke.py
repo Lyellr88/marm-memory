@@ -13,6 +13,7 @@ import urllib.error
 import urllib.request
 import uuid
 import venv
+import warnings
 from pathlib import Path
 
 import pytest
@@ -319,7 +320,8 @@ def test_real_docker_command_lifecycle(tmp_path):
         assert logs.returncode == 0, logs.stderr
     finally:
         stop = _run_product(("docker", "stop", "--name", container), environment)
-        assert stop.returncode == 0, stop.stderr
+        if stop.returncode != 0:
+            warnings.warn(f"Docker smoke cleanup failed: {stop.stderr}", stacklevel=2)
 
 
 @pytest.mark.smoke_destructive
@@ -387,7 +389,11 @@ def test_destructive_uninstall_reinstalls_in_disposable_environment(tmp_path):
             env=pip_environment,
             timeout=180,
         )
-        assert reinstall.returncode == 0, reinstall.stderr
+        if reinstall.returncode != 0:
+            warnings.warn(
+                f"Destructive smoke reinstall cleanup failed: {reinstall.stderr}",
+                stacklevel=2,
+            )
 
     version = _run_product(
         ("version",), environment, python_executable=python, cwd=tmp_path

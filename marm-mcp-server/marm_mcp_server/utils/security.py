@@ -1,5 +1,6 @@
 """Cryptographic utilities — no imports from settings, no side effects."""
 
+import os
 import secrets
 import string
 import subprocess
@@ -27,14 +28,22 @@ def restrict_windows_file_to_current_user(path: Path) -> bool:
     if sys.platform != "win32":
         return True
     try:
+        system_root = os.environ.get("SystemRoot")
+        if not system_root:
+            return False
+        system32 = Path(system_root) / "System32"
+        whoami = system32 / "whoami.exe"
+        icacls = system32 / "icacls.exe"
+        if not whoami.is_absolute() or not icacls.is_absolute():
+            return False
         identity = subprocess.run(
-            ["whoami"], check=False, capture_output=True, text=True
+            [str(whoami)], check=False, capture_output=True, text=True
         ).stdout.strip()
         if not identity:
             return False
         result = subprocess.run(
             [
-                "icacls",
+                str(icacls),
                 str(path),
                 "/inheritance:r",
                 "/grant:r",

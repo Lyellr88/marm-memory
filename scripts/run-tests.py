@@ -94,9 +94,12 @@ def pytest_base_command(args: argparse.Namespace) -> list[str]:
 
 
 def run_pytest_all(args: argparse.Namespace) -> bool:
+    environment = pytest_env()
+    if args.docker or args.slow:
+        environment["MARM_SMOKE_DOCKER"] = "1"
     command = pytest_base_command(args)
     command.append("tests")
-    return run_step("Pytest suite", command, SERVER_ROOT, env=pytest_env())
+    return run_step("Pytest suite", command, SERVER_ROOT, env=environment)
 
 
 def run_compile_check(cwd: Path, *targets: str) -> bool:

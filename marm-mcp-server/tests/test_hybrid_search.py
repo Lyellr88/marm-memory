@@ -175,6 +175,25 @@ async def test_recall_text_search_falls_back_to_like_for_punctuation_only_query(
 
 
 @pytest.mark.asyncio
+async def test_semantic_fallback_like_marks_its_retrieval_mode(tmp_path):
+    memory = MARMMemory(str(tmp_path / "memory.db"))
+    memory._encoder_failed = True
+
+    mem_id = await memory.store_memory(
+        "content with --- dashes inside", session="semantic-like"
+    )
+
+    results = await memory.recall_similar(
+        "---", session="semantic-like", limit=5, exact_mode="semantic"
+    )
+
+    assert any(result["id"] == mem_id for result in results)
+    assert {result["retrieval_mode"] for result in results} == {
+        "semantic_fallback_like"
+    }
+
+
+@pytest.mark.asyncio
 async def test_recall_text_search_falls_back_to_like_when_fts5_raises(
     monkeypatch, tmp_path
 ):

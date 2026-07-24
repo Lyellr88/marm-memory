@@ -201,16 +201,16 @@ End-to-end `recall_similar` latency (includes query encoding).
 
 ### 4. Recall Scaling: Full Scan vs Production Hybrid
 
-Why recall stays roughly flat as memory grows: instead of scoring every stored vector, production recall uses an FTS keyword pre-filter to a bounded candidate set, then re-ranks that set by semantic + BM25 + temporal score. Both columns are real code paths (`_fetch_and_score_embedding_rows` for the full scan, `recall_similar` for hybrid), dispatched through the same async path and timed with the query vector precomputed so the constant encode cost from section 1 is excluded from both.
+Why recall stays roughly flat as memory grows: instead of scoring every stored vector, production recall uses an FTS keyword pre-filter to a bounded candidate set, then re-ranks that set by semantic + BM25 + temporal score. Both columns are real code paths (`_fetch_and_score_embedding_rows` for the full scan, `recall_similar` for hybrid), dispatched through the same async path and timed with the query vector precomputed so the constant encode cost from section 1 is excluded from both. Each iteration alternates which path runs first so neither one consistently benefits from the other's warmed cache.
 
 | Session Size ($N$) | Full Semantic Scan | Production Hybrid | Speedup |
 | :--- | :--- | :--- | :--- |
-| **N = 100** | 3.3 ms | 4.0 ms | 0.8x |
-| **N = 500** | 15.8 ms | 4.4 ms | 3.6x |
-| **N = 1,000** | 33.5 ms | 6.4 ms | 5.2x |
-| **N = 2,000** | 69.3 ms | 6.3 ms | 11.0x |
-| **N = 4,000** | 127.3 ms | 7.2 ms | 17.7x |
-| **N = 10,000** | 320.6 ms | 8.7 ms | 37.0x |
+| **N = 100** | 3.5 ms | 3.8 ms | 0.9x |
+| **N = 500** | 15.9 ms | 4.2 ms | 3.8x |
+| **N = 1,000** | 34.4 ms | 4.9 ms | 7.0x |
+| **N = 2,000** | 67.6 ms | 5.7 ms | 11.9x |
+| **N = 4,000** | 132.5 ms | 7.3 ms | 18.0x |
+| **N = 10,000** | 330.4 ms | 8.4 ms | 39.4x |
 
 The full scan grows roughly linearly with $N$ while hybrid recall stays near-flat, so the advantage widens with session size. At very small $N$ the pre-filter overhead is not yet worth it (hybrid is marginally slower at N = 100); the win appears once there is enough to skip. Reproduce with [`scripts/benchmarking/performance/bench_hotpath.py`](scripts/benchmarking/performance/bench_hotpath.py).
 
