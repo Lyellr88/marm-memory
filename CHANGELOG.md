@@ -13,7 +13,7 @@
 
 ### Windows Managed-Key Reliability
 
-- The managed API-key file (`~/.marm/.env`) is now locked to the executing Windows identity (resolved via `whoami`) rather than an environment-derived username. This fixes a case where a key created under one resolved identity could not be read back by the same process. Both `key init` and automatic HTTP key creation use the same tested helper.
+- The managed API-key file (`~/.marm/.env`) is now locked to the executing Windows identity via the native Windows security API (process-token SID), setting both the owner and a protected owner-only DACL rather than shelling out to external tools or trusting an environment-derived username. This fixes a case where a key created under one resolved identity could not be read back by the same process, and prevents a prior owner from reopening the permissions. Both `key init` and automatic HTTP key creation use the same tested helper.
 
 ### Local Command Smoke Suite
 
