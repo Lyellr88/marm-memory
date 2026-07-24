@@ -154,3 +154,100 @@ async def test_temporal_weight_zero_means_fts_winner_ranks_first_despite_age(
         assert ids.index(old_id) < ids.index(new_id), (
             "At TEMPORAL_WEIGHT=0 the FTS-dominant old memory should rank above the new non-matching one"
         )
+
+
+@pytest.mark.asyncio
+async def test_text_search_fallback_applies_temporal_but_exact_lane_does_not(tmp_path):
+    """When the encoder is unavailable, semantic-intent recall falls back to text
+    search WITH temporal decay so newer wins. The exact lane must NOT be reordered
+    by age -- identical lexical hits keep BM25 (insertion) order."""
+    import sqlite3 as _sqlite3
+    import uuid
+
+    mem = MARMMemory(str(tmp_path / "memory.db"))
+    mem._encoder_failed = True  # forces the text-search fallback path
+
+    base = datetime.now(timezone.utc)
+
+    def _insert(ts):
+        mid = str(uuid.uuid4())
+        with _sqlite3.connect(str(tmp_path / "memory.db")) as conn:
+            conn.execute(
+                "INSERT INTO memories (id, session_name, content, timestamp, context_type, metadata) "
+                "VALUES (?, 'fallback-temporal', 'temporal keyword content', ?, 'general', '{}')",
+                (mid, ts),
+            )
+            conn.execute(
+                "INSERT INTO memories_fts(rowid, content) "
+                "SELECT rowid, content FROM memories WHERE id = ?",
+                (mid,),
+            )
+        return mid
+
+    old_id = _insert((base - timedelta(days=120)).isoformat())
+    new_id = _insert(base.isoformat())
+
+    # Natural-language query -> auto lane -> encoder unavailable -> temporal fallback
+    semantic = await mem.recall_similar(
+        "temporal keyword content", session="fallback-temporal", limit=5
+    )
+    sem_ids = [r["id"] for r in semantic]
+    assert sem_ids.index(new_id) < sem_ids.index(old_id), (
+        "semantic-intent fallback must rank the newer memory first"
+    )
+
+    # Exact lane -> identical BM25 for identical content -> insertion order, age ignored
+    exact = await mem.recall_similar(
+        "temporal keyword content",
+        session="fallback-temporal",
+        limit=5,
+        exact_mode="exact",
+    )
+    ex_ids = [r["id"] for r in exact]
+    assert ex_ids.index(old_id) < ex_ids.index(new_id), (
+        "exact lane must preserve BM25/insertion order, not re-rank by age"
+    )
+
+
+@pytest.mark.asyncio
+async def test_temporal_fallback_promotes_newer_result_outside_bm25_limit(tmp_path):
+    """With limit=1 on the temporal fallback lane, a newer result ranked just
+    outside the top-1 BM25 row must still be promoted. This fails if the lane
+    fetches only `limit` BM25 rows before re-ranking, so it guards the widened
+    candidate pool."""
+    import sqlite3 as _sqlite3
+    import uuid
+
+    mem = MARMMemory(str(tmp_path / "memory.db"))
+    mem._encoder_failed = True  # forces the text-search fallback path
+
+    base = datetime.now(timezone.utc)
+
+    def _insert(ts):
+        mid = str(uuid.uuid4())
+        with _sqlite3.connect(str(tmp_path / "memory.db")) as conn:
+            conn.execute(
+                "INSERT INTO memories (id, session_name, content, timestamp, context_type, metadata) "
+                "VALUES (?, 'limit-cutoff', 'temporal keyword content', ?, 'general', '{}')",
+                (mid, ts),
+            )
+            conn.execute(
+                "INSERT INTO memories_fts(rowid, content) "
+                "SELECT rowid, content FROM memories WHERE id = ?",
+                (mid,),
+            )
+        return mid
+
+    # Identical content -> identical BM25. Old is inserted first, so it is the
+    # single row a limit=1 BM25 fetch would return; new sits just outside it.
+    _insert((base - timedelta(days=120)).isoformat())
+    new_id = _insert(base.isoformat())
+
+    results = await mem.recall_similar(
+        "temporal keyword content", session="limit-cutoff", limit=1
+    )
+
+    assert len(results) == 1
+    assert results[0]["id"] == new_id, (
+        "temporal fallback must promote the newer row from outside the BM25 limit cutoff"
+    )

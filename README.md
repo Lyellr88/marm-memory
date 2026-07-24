@@ -5,7 +5,7 @@
      width="900"
      height="250">
 </picture>
-<h1 align="center">MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.28.2</h1>
+<h1 align="center">MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.29.0</h1>
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/Lyellr88/marm-memory/blob/MARM-main/LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
@@ -159,7 +159,6 @@ When a managed key is active, `marm-memory console --import-key` opens a local C
 
 Use `marm-memory upgrade --check` to compare the installed package with PyPI. `marm-memory upgrade` previews a safe native upgrade; `--yes` performs it only where the active installer can be replaced safely. `marm-memory uninstall` similarly previews package removal and always preserves `~/.marm`, including memory databases, graph indexes, keys, logs, and configuration. On Windows, editable installs, or pipx installs, MARM prints the exact manual command rather than attempting to replace an active launcher.
 
-
 ### Upgrade Existing Embeddings
 
 The Jina v2 Small default uses 512-dimensional embeddings; older `all-MiniLM-L6-v2` data is 384-dimensional and must be re-embedded after upgrading. Stop every MARM HTTP and STDIO process, then run:
@@ -174,40 +173,46 @@ The command refuses to continue when it detects a live HTTP server, but STDIO pr
 
 MARM is tuned for fast recall first, even as memory grows and long memories are chunked behind the scenes.
 
-These measurements use the fastembed-backed `jinaai/jina-embeddings-v2-small-en` encoder and a throwaway local SQLite database.
+These measurements use the fastembed-backed `jinaai/jina-embeddings-v2-small-en` encoder and a throwaway local SQLite database. Every timed path calls the shipped `MARMMemory` code, not a benchmark-local reimplementation. All numbers below come from a single run of [`scripts/benchmarking/performance/bench_hotpath.py`](scripts/benchmarking/performance/bench_hotpath.py) on local hardware; absolute milliseconds vary by machine, so treat the scaling shape as the signal.
 
 ### 1. Retrieval Latency Scaling
 
+End-to-end `recall_similar` latency (includes query encoding).
+
 | Session Size ($N$) | Min Latency | Median Latency | p95 Latency |
 | :--- | :--- | :--- | :--- |
-| **N = 100** | 6.6 ms | 7.4 ms | 8.0 ms |
-| **N = 500** | 7.1 ms | 8.1 ms | 10.0 ms |
-| **N = 1,000** | 7.6 ms | 8.5 ms | 9.0 ms |
-| **N = 2,000** | 9.3 ms | 10.5 ms | 11.6 ms |
-| **N = 4,000** | 11.5 ms | 12.1 ms | 13.4 ms |
+| **N = 100** | 6.3 ms | 6.5 ms | 8.1 ms |
+| **N = 500** | 7.2 ms | 7.4 ms | 8.0 ms |
+| **N = 1,000** | 8.0 ms | 8.2 ms | 9.9 ms |
+| **N = 2,000** | 9.2 ms | 9.7 ms | 10.8 ms |
+| **N = 4,000** | 11.4 ms | 12.0 ms | 14.8 ms |
 
 ### 2. Encoder + Concurrency
 
-- **Cold model load:** `887ms`
-- **Warm encode:** median `4.0ms`, p95 `4.4ms`
-- **Concurrent recall:** 10 gathered recalls completed in `616.3ms` vs `440.7ms` serial. The current path is intentionally serialized around shared encoder/SQLite work, so gathering calls does not create parallel speedup.
+- **Cold model load:** `934ms`
+- **Warm encode:** median `4.2ms`, p95 `4.8ms`
+- **Concurrent recall:** 10 gathered recalls completed in `609.5ms` vs `411.3ms` serial. The current path is intentionally serialized around shared encoder/SQLite work, so gathering calls does not create parallel speedup.
 
 ### 3. Write-Time Ingestion Cost
 
-- **Consolidation off:** median `6.8ms`, p95 `7.9ms`
-- **Consolidation on:** median `51.3ms`, p95 `93.7ms`
-- **Tradeoff:** write-time dedupe/clustering adds `7.6x` median cost so recall stays fast and cleaner over time.
+- **Consolidation off:** median `5.9ms`, p95 `7.5ms`
+- **Consolidation on:** median `61.2ms`, p95 `105.3ms`
+- **Tradeoff:** write-time dedupe/clustering adds `10.3x` median cost so recall stays fast and cleaner over time.
 
-### 4. Hybrid Search Scaling
+### 4. Recall Scaling: Full Scan vs Production Hybrid
 
-| Session Size ($N$) | Pure Semantic | Production Hybrid | FTS Filter -> Rerank | Speedup vs Pure |
-| :--- | :--- | :--- | :--- | :--- |
-| **N = 100** | 2.3 ms | 7.9 ms | 1.9 ms | 1.2x |
-| **N = 1,000** | 23.1 ms | 9.2 ms | 2.5 ms | 9.2x |
-| **N = 4,000** | 106.5 ms | 13.2 ms | 4.7 ms | 22.8x |
-| **N = 10,000** | 267.1 ms | 13.6 ms | 5.3 ms | 50.4x |
+Why recall stays roughly flat as memory grows: instead of scoring every stored vector, production recall uses an FTS keyword pre-filter to a bounded candidate set, then re-ranks that set by semantic + BM25 + temporal score. Both columns are real code paths (`_fetch_and_score_embedding_rows` for the full scan, `recall_similar` for hybrid), dispatched through the same async path and timed with the query vector precomputed so the constant encode cost from section 1 is excluded from both.
 
-These Jina v2 Small benchmarks used a throwaway real SQLite database and the live configured encoder on local hardware. Reproduce them: [`scripts/benchmarking/performance/bench_hotpath.py`](scripts/benchmarking/performance/bench_hotpath.py)
+| Session Size ($N$) | Full Semantic Scan | Production Hybrid | Speedup |
+| :--- | :--- | :--- | :--- |
+| **N = 100** | 3.3 ms | 4.0 ms | 0.8x |
+| **N = 500** | 15.8 ms | 4.4 ms | 3.6x |
+| **N = 1,000** | 33.5 ms | 6.4 ms | 5.2x |
+| **N = 2,000** | 69.3 ms | 6.3 ms | 11.0x |
+| **N = 4,000** | 127.3 ms | 7.2 ms | 17.7x |
+| **N = 10,000** | 320.6 ms | 8.7 ms | 37.0x |
+
+The full scan grows roughly linearly with $N$ while hybrid recall stays near-flat, so the advantage widens with session size. At very small $N$ the pre-filter overhead is not yet worth it (hybrid is marginally slower at N = 100); the win appears once there is enough to skip. Reproduce with [`scripts/benchmarking/performance/bench_hotpath.py`](scripts/benchmarking/performance/bench_hotpath.py).
 
 ### 5. LoCoMo Retrieval Accuracy
 

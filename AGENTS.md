@@ -58,6 +58,7 @@ Semver: MAJOR = breaking (schema renames, parameter removals), MINOR = new tools
 ## Testing
 
 - Tests live in `marm-mcp-server/tests/`; run with `pytest` from `marm-mcp-server/`.
+- Run `python scripts/test-scripts/smoke-commands.py` from the repo root for the local CLI smoke suite. It uses `smoke`, `smoke_lifecycle`, `smoke_docker`, and `smoke_destructive` markers. `--docker` and `--destructive` are explicit opt-ins; destructive mode uses a disposable virtual environment rather than the active package.
 - Hit real FastAPI endpoints and real SQLite. Mock only when it meaningfully speeds the test AND matches real behavior with at least 95% fidelity.
 - Every new MARM Console API route needs at least one happy-path FastAPI response-contract test with the MCP adapter stubbed. This verifies the actual response model without requiring a live graph backend.
 - No existence-check or coded-to-pass tests. Deep tests that exercise real paths beat broad shallow coverage.

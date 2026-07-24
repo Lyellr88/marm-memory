@@ -220,6 +220,29 @@ def test_managed_key_init_reuses_existing_credential(monkeypatch, tmp_path):
     assert active_key_management.read_managed_key(path) == "first-key"
 
 
+def test_windows_key_acl_uses_the_executing_identity(monkeypatch, tmp_path):
+    from marm_mcp_server.utils import security
+
+    calls = []
+
+    class Completed:
+        def __init__(self, returncode=0, stdout=""):
+            self.returncode = returncode
+            self.stdout = stdout
+
+    def run(command, **kwargs):
+        calls.append(command)
+        if command == ["whoami"]:
+            return Completed(stdout="DOMAIN\\runtime-user\r\n")
+        return Completed()
+
+    monkeypatch.setattr(security.sys, "platform", "win32")
+    monkeypatch.setattr(security.subprocess, "run", run)
+
+    assert security.restrict_windows_file_to_current_user(tmp_path / ".env")
+    assert calls[1][-1] == "DOMAIN\\runtime-user:(F)"
+
+
 def test_key_path_and_reveal_keep_output_intentional(monkeypatch, capsys, tmp_path):
     active_key_management = importlib.import_module(
         "marm_mcp_server.services.key_management"

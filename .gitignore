@@ -31,6 +31,7 @@ __pycache__/
 # MCP server database
 marm-mcp-server/*.db
 marm-mcp-server/marm_memory.db
+marm-mcp-server/pip/
 
 # Logs and runtime data
 logs/
@@ -117,6 +118,8 @@ docs/future/
 marm-mcp-server/.pytest_cache/
 marm-mcp-server/.pytest_tmp/
 marm-mcp-server/.pytest_tmp*/
+marm-mcp-server/.pytest-review-*/
+marm-mcp-server/.pytest-smoke-*/
 marm_usage_analytics.db
 dump.md
 dump2.md

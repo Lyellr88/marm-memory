@@ -5,13 +5,18 @@ Measures, against the REAL MARMMemory + configured fastembed-backed semantic enc
   2. recall_similar latency vs session size N (FTS filter + bounded embedding rerank)
   3. event-loop blocking: concurrent recalls via asyncio.gather vs serial sum
   4. write latency with consolidation OFF vs ON (double-encode + scan-per-write)
-  5. HYBRID SEARCH: FTS5 filter→re-rank vs weighted fusion vs pure semantic
+  5. RECALL SCALING: production full semantic scan vs production hybrid recall
+
+Every timed path calls the shipped MARMMemory code (recall_similar,
+_fetch_and_score_embedding_rows). No scoring is reimplemented in this script,
+so the numbers reflect what a caller actually gets.
 
 Run from repo root:  python scripts/benchmarking/performance/bench_hotpath.py
 Uses a throwaway temp DB; never touches ~/.marm.
 """
 
 import asyncio
+import importlib.util
 import os
 import sqlite3
 import statistics
@@ -37,12 +42,7 @@ from marm_mcp_server.core import consolidation  # noqa: E402
 from marm_mcp_server.core import memory_ops  # noqa: E402
 from marm_mcp_server.config.settings import DEFAULT_SEMANTIC_DIM  # noqa: E402
 
-try:
-    import numpy as np
-
-    NUMPY_AVAILABLE = True
-except ImportError:
-    NUMPY_AVAILABLE = False
+NUMPY_AVAILABLE = importlib.util.find_spec("numpy") is not None
 
 
 def _pct(values, p):
@@ -203,10 +203,16 @@ async def bench_connection_overhead(db_path, iters=30):
 
 
 async def bench_hybrid_strategies(mem, sizes=None, iters=15):
-    """Benchmark three hybrid search strategies:
-    1. Pure Semantic (baseline brute-force)
-    2. Current Production (weighted fusion: vector scan + FTS merge)
-    3. Filter→Re-rank (FTS top 50 → semantic re-rank only those 50)
+    """Compare two REAL production recall paths as session size N grows:
+
+    1. Full semantic scan  -- _fetch_and_score_embedding_rows scores every
+       embedding row (the cost with no keyword pre-filter).
+    2. Production hybrid    -- recall_similar: FTS pre-filter to a bounded
+       candidate set, then semantic + BM25 + temporal re-rank.
+
+    Both are timed with the query vector precomputed, so encode cost (constant
+    in N, reported in section 1) is excluded and the numbers isolate the
+    scan-vs-prefilter scaling difference. No scoring is reimplemented here.
     """
     if sizes is None:
         sizes = [100, 500, 1000, 2000, 4000, 10000]
@@ -215,12 +221,12 @@ async def bench_hybrid_strategies(mem, sizes=None, iters=15):
         print("  [SKIPPED: numpy not available]")
         return None
 
+    from marm_mcp_server.core.memory_scoring import _fetch_and_score_embedding_rows
+
     mem._load_encoder_lazily()
     results = {
-        "pure_semantic": {},
+        "full_scan": {},
         "production_hybrid": {},
-        "filter_rerank": {},
-        "fts_only": {},
         "fts_hit_rate": {},
     }
 
@@ -234,116 +240,44 @@ async def bench_hybrid_strategies(mem, sizes=None, iters=15):
     for n in sizes:
         seed(mem, n)
 
-        pure_samples = []
+        scan_samples = []
         prod_samples = []
-        filter_samples = []
-        fts_samples = []
         fts_hits = []
 
         for iter_num in range(iters):
             query = test_queries[iter_num % len(test_queries)]
-            query_emb = mem.encoder.encode(query)
+            query_vec = mem._encode_sync(query)
             fts_query = _safe_fts_query(query)
 
-            # 1. Pure Semantic (disable FTS in production code temporarily)
+            # 1. Full semantic scan (production scorer, no pre-filter).
+            # Dispatched via asyncio.to_thread to match how recall_similar runs
+            # its DB/scoring work, so both columns share one execution model.
             t0 = time.perf_counter()
-            conn = sqlite3.connect(mem.db_path, timeout=30.0)
-            try:
-                conn.row_factory = sqlite3.Row
-                rows = conn.execute(
-                    """SELECT id, content, embedding FROM memories
-                       WHERE session_name = 'bench' AND embedding IS NOT NULL
-                       ORDER BY timestamp DESC LIMIT 10000"""
-                ).fetchall()
+            await asyncio.to_thread(
+                _fetch_and_score_embedding_rows, mem.db_path, "bench", n, query_vec, 5
+            )
+            scan_samples.append((time.perf_counter() - t0) * 1000)
 
-                if rows:
-                    similarities = []
-                    for row in rows:
-                        emb_bytes = row["embedding"]
-                        if emb_bytes:
-                            emb = np.frombuffer(emb_bytes, dtype=np.float32)
-                            if len(emb) == len(query_emb):
-                                sim = float(np.dot(query_emb, emb))
-                                similarities.append((row["id"], row["content"], sim))
-                    similarities.sort(key=lambda x: x[2], reverse=True)
-                    # Top results available in similarities[:5]
-            finally:
-                conn.close()
-            pure_samples.append((time.perf_counter() - t0) * 1000)
-
-            # 2. Production Hybrid (current recall_similar implementation)
+            # 2. Production hybrid recall (precomputed vector excludes encode)
             t0 = time.perf_counter()
-            await mem.recall_similar(query, session="bench", limit=5)
+            await mem.recall_similar(
+                query, session="bench", limit=5, query_vec=query_vec
+            )
             prod_samples.append((time.perf_counter() - t0) * 1000)
 
-            # 3. Filter→Re-rank Strategy (dump.md approach)
-            t0 = time.perf_counter()
-            conn = sqlite3.connect(mem.db_path, timeout=30.0)
-            try:
-                conn.row_factory = sqlite3.Row
-
-                # Step 1: FTS filter to top 50 candidates
-                candidates = (
-                    conn.execute(
-                        """SELECT m.id, m.content, m.embedding
-                       FROM memories_fts
-                       JOIN memories m ON memories_fts.rowid = m.rowid
-                       WHERE memories_fts MATCH ? AND m.session_name = 'bench'
-                       ORDER BY bm25(memories_fts) LIMIT 50""",
-                        (fts_query,),
-                    ).fetchall()
-                    if fts_query
-                    else []
-                )
-
-                fts_hits.append(len(candidates))
-
-                # Fallback: if FTS finds nothing, take top 50 by timestamp
-                if not candidates:
-                    candidates = conn.execute(
-                        """SELECT id, content, embedding FROM memories
-                           WHERE session_name = 'bench' AND embedding IS NOT NULL
-                           ORDER BY timestamp DESC LIMIT 50"""
-                    ).fetchall()
-
-                # Step 2: Re-rank only those 50 by semantic similarity
-                if candidates:
-                    scores = []
-                    for row in candidates:
-                        emb_bytes = row["embedding"]
-                        if emb_bytes:
-                            emb = np.frombuffer(emb_bytes, dtype=np.float32)
-                            if len(emb) == len(query_emb):
-                                score = float(np.dot(query_emb, emb))
-                                scores.append((row["id"], row["content"], score))
-
-                    scores.sort(key=lambda x: x[2], reverse=True)
-                    # Top results available in scores[:5]
-            finally:
-                conn.close()
-            filter_samples.append((time.perf_counter() - t0) * 1000)
-
-            # 4. FTS-only (baseline keyword search)
+            # Informational only: how many candidates the FTS pre-filter matched.
             if fts_query:
-                t0 = time.perf_counter()
-                conn = sqlite3.connect(mem.db_path, timeout=30.0)
-                try:
-                    conn.row_factory = sqlite3.Row
-                    conn.execute(
-                        """SELECT m.id, m.content FROM memories_fts
+                with mem.get_connection() as conn:
+                    matched = conn.execute(
+                        """SELECT COUNT(*) FROM memories_fts
                            JOIN memories m ON memories_fts.rowid = m.rowid
-                           WHERE memories_fts MATCH ? AND m.session_name = 'bench'
-                           ORDER BY bm25(memories_fts) LIMIT 5""",
+                           WHERE memories_fts MATCH ? AND m.session_name = 'bench'""",
                         (fts_query,),
-                    ).fetchall()
-                finally:
-                    conn.close()
-                fts_samples.append((time.perf_counter() - t0) * 1000)
+                    ).fetchone()[0]
+                fts_hits.append(min(matched, 50))
 
-        results["pure_semantic"][n] = pure_samples
+        results["full_scan"][n] = scan_samples
         results["production_hybrid"][n] = prod_samples
-        results["filter_rerank"][n] = filter_samples
-        results["fts_only"][n] = fts_samples if fts_samples else [0.0] * iters
         results["fts_hit_rate"][n] = (sum(fts_hits) / len(fts_hits)) if fts_hits else 0
 
     return results
@@ -386,9 +320,10 @@ async def main():
     conn_overhead = await bench_connection_overhead(mem.db_path)
     print(_stat_line("connect + close", conn_overhead), "\n")
 
-    print("=== 6. HYBRID SEARCH STRATEGIES COMPARISON ===")
+    print("=== 6. RECALL SCALING: full semantic scan vs production hybrid ===")
     print(
-        "Testing: Pure Semantic | Production Hybrid (weighted fusion) | Filter→Re-rank\n"
+        "Both paths call shipped code, timed with the query vector precomputed\n"
+        "(encode is constant in N, see section 1).\n"
     )
 
     hybrid = await bench_hybrid_strategies(
@@ -397,38 +332,32 @@ async def main():
 
     if hybrid:
         print(
-            f"{'Size':<8} {'Pure Sem':<12} {'Prod Hybrid':<14} {'Filter→Rerank':<16} {'FTS-Only':<12} {'Speedup':<12} {'FTS Hits'}"
+            f"{'Size':<8} {'Full Scan':<14} {'Prod Hybrid':<14} {'Speedup':<10} {'FTS Hits'}"
         )
-        print("-" * 100)
+        print("-" * 60)
 
         for n in [100, 500, 1000, 2000, 4000, 10000]:
-            pure_med = statistics.median(hybrid["pure_semantic"][n])
+            scan_med = statistics.median(hybrid["full_scan"][n])
             prod_med = statistics.median(hybrid["production_hybrid"][n])
-            filt_med = statistics.median(hybrid["filter_rerank"][n])
-            fts_med = (
-                statistics.median(hybrid["fts_only"][n])
-                if hybrid["fts_only"][n][0] > 0
-                else 0
-            )
-
-            # Speedup: filter→re-rank vs pure semantic
-            speedup = pure_med / filt_med if filt_med > 0 else 0
+            speedup = scan_med / prod_med if prod_med > 0 else 0
             fts_hit_rate = hybrid["fts_hit_rate"][n]
 
             print(
-                f"{n:<8} {pure_med:>7.1f}ms     {prod_med:>7.1f}ms       "
-                f"{filt_med:>7.1f}ms         {fts_med:>7.1f}ms      "
-                f"{speedup:>5.1f}x        {fts_hit_rate:>4.1f}/50"
+                f"{n:<8} {scan_med:>7.1f}ms     {prod_med:>7.1f}ms      "
+                f"{speedup:>5.1f}x     {fts_hit_rate:>4.1f}/50"
             )
 
-        print("\n📊 Key Insights:")
-        print("  • Pure Semantic: O(N) brute-force vector scan (baseline)")
-        print("  • Prod Hybrid: Weighted fusion (65% vector + 35% FTS scores)")
+        print("\nKey points:")
         print(
-            "  • Filter→Re-rank: FTS narrows to 50 → semantic re-rank (dump.md strategy)"
+            "  • Full Scan: _fetch_and_score_embedding_rows over all N rows (no prefilter)"
         )
-        print("  • Speedup shows Filter→Re-rank advantage over Pure Semantic")
-        print("  • FTS Hits shows avg candidates found by keyword filter\n")
+        print(
+            "  • Prod Hybrid: recall_similar -- FTS prefilter + semantic/BM25/temporal rerank"
+        )
+        print("  • Speedup = full scan / production hybrid (both real code paths)")
+        print(
+            "  • FTS Hits: avg candidates the keyword prefilter matched (capped at 50)\n"
+        )
 
 
 if __name__ == "__main__":

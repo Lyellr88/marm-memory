@@ -9,6 +9,7 @@ from ..config.settings import (
     TEMPORAL_WEIGHT,
     TEMPORAL_HALF_LIFE_DAYS,
     FTS_CANDIDATE_LIMIT,
+    HYBRID_SEARCH_TEXT_WEIGHT,
 )
 from .memory_utils import (
     _safe_print,
@@ -187,7 +188,13 @@ async def _recall_similar(
             _recall_debug("semantic model unavailable → text-search fallback")
             return _wrap(
                 await _recall_text_search(
-                    mem, query, session, limit, project=project, platform=platform
+                    mem,
+                    query,
+                    session,
+                    limit,
+                    project=project,
+                    platform=platform,
+                    apply_temporal=True,
                 ),
                 False,
             )
@@ -199,10 +206,10 @@ async def _recall_similar(
             query_embedding = await asyncio.to_thread(mem._encode_sync, query)
 
         fts_query = _safe_fts_query(query)
-        candidate_ids: list[str] = []
+        candidates: list[tuple[str, float]] = []
         if fts_query:
             try:
-                candidate_ids = await asyncio.to_thread(
+                candidates = await asyncio.to_thread(
                     _fetch_fts_candidate_ids,
                     mem.db_path,
                     session,
@@ -212,7 +219,7 @@ async def _recall_similar(
                     platform,
                 )
                 _recall_debug(
-                    f"FTS filter: {len(candidate_ids)} candidates for '{fts_query}'"
+                    f"FTS filter: {len(candidates)} candidates for '{fts_query}'"
                 )
             except Exception as e:
                 _safe_print(
@@ -220,12 +227,13 @@ async def _recall_similar(
                 )
                 _recall_debug("FTS filter failed → semantic fallback")
 
+        bm25_by_id = dict(candidates)
         use_semantic_fallback = True
-        if candidate_ids:
+        if candidates:
             similarities, dim_skipped = await asyncio.to_thread(
                 _fetch_and_score_by_ids,
                 mem.db_path,
-                candidate_ids,
+                [cid for cid, _ in candidates],
                 query_embedding,
             )
             if similarities:
@@ -257,12 +265,24 @@ async def _recall_similar(
                 f"recall_similar: skipped {dim_skipped} memories with wrong embedding dimension (expected {len(query_embedding)})"
             )
 
+        # Lexical fusion only applies on the FTS filter->rerank path, where every
+        # scored row has a BM25 score. The semantic fallback scan has no lexical
+        # signal, so it keeps the pure semantic+temporal blend.
+        apply_bm25 = not use_semantic_fallback and bool(bm25_by_id)
+
         combined: dict[str, tuple] = {}
         for mem_row, vec_score in similarities:
             t_score = _temporal_score(mem_row["timestamp"], TEMPORAL_HALF_LIFE_DAYS)
+            if apply_bm25:
+                bm25_score = bm25_by_id.get(mem_row["id"], 0.0)
+                relevance = (
+                    1 - HYBRID_SEARCH_TEXT_WEIGHT
+                ) * vec_score + HYBRID_SEARCH_TEXT_WEIGHT * bm25_score
+            else:
+                relevance = vec_score
             combined[mem_row["id"]] = (
                 mem_row,
-                (1 - TEMPORAL_WEIGHT) * vec_score + TEMPORAL_WEIGHT * t_score,
+                (1 - TEMPORAL_WEIGHT) * relevance + TEMPORAL_WEIGHT * t_score,
             )
 
         ranked = sorted(combined.values(), key=lambda x: x[1], reverse=True)[:limit]
@@ -292,7 +312,13 @@ async def _recall_similar(
         _recall_debug(f"semantic search exception → text-search fallback: {e}")
         return _wrap(
             await _recall_text_search(
-                mem, query, session, limit, project=project, platform=platform
+                mem,
+                query,
+                session,
+                limit,
+                project=project,
+                platform=platform,
+                apply_temporal=True,
             ),
             False,
         )
@@ -305,24 +331,42 @@ async def _recall_text_search(
     limit: int = 5,
     project: str = None,
     platform: str = None,
+    apply_temporal: bool = False,
 ) -> List[Dict]:
-    """Text search via FTS5 BM25 ranking, with LIKE fallback for unsanitizable queries."""
+    """Text search via FTS5 BM25 ranking, with LIKE fallback for unsanitizable queries.
+
+    apply_temporal blends recency into the score and re-ranks by it. It is opt-in
+    because the exact lane (_recall_exact) must return lexical hits in BM25 order,
+    unaffected by age; only the semantic-intent fallbacks turn it on so their
+    ranking stays consistent with the main semantic lane.
+    """
     _recall_debug(f"text-search path: query='{query[:50]}', session={session}")
+
+    def _blend_temporal(base_sim: float, timestamp: str) -> float:
+        if not apply_temporal:
+            return base_sim
+        t_score = _temporal_score(timestamp, TEMPORAL_HALF_LIFE_DAYS)
+        return (1 - TEMPORAL_WEIGHT) * base_sim + TEMPORAL_WEIGHT * t_score
+
     fts_query = _safe_fts_query(query)
     if fts_query is not None:
+        # Temporal re-ranking must see beyond the top-`limit` BM25 rows, or a
+        # newer result ranked just outside the cutoff could never be promoted.
+        # The exact lane keeps the requested limit (pure BM25 order).
+        fetch_limit = max(limit, FTS_CANDIDATE_LIMIT) if apply_temporal else limit
         try:
             fts_rows = await asyncio.to_thread(
                 _fetch_and_score_fts_rows,
                 mem.db_path,
                 session,
                 fts_query,
-                limit,
+                fetch_limit,
                 project,
                 platform,
             )
             if fts_rows:
                 _recall_debug(f"FTS5 returned {len(fts_rows)} results")
-                return [
+                results = [
                     {
                         "id": row["id"],
                         "session_name": row["session_name"],
@@ -332,13 +376,17 @@ async def _recall_text_search(
                         "metadata": json.loads(row["metadata"])
                         if row["metadata"]
                         else {},
-                        "similarity": float(score),
+                        "similarity": _blend_temporal(float(score), row["timestamp"]),
                         "project": row["project"],
                         "platform": row["platform"],
                         "retrieval_mode": "exact_fts",
                     }
                     for row, score in fts_rows
                 ]
+                if apply_temporal:
+                    results.sort(key=lambda r: r["similarity"], reverse=True)
+                    results = results[:limit]
+                return results
         except Exception as e:
             _safe_print(f"FTS5 search failed, falling back to LIKE: {e}")
             _recall_debug("FTS5 failed → LIKE fallback")
@@ -376,11 +424,13 @@ async def _recall_text_search(
                     "timestamp": row[3],
                     "context_type": row[4],
                     "metadata": json.loads(row[5]) if row[5] else {},
-                    "similarity": 0.8,
+                    "similarity": _blend_temporal(0.8, row[3]),
                     "project": row[6],
                     "platform": row[7],
                     "retrieval_mode": "exact_like",
                 }
             )
 
+        if apply_temporal:
+            results.sort(key=lambda r: r["similarity"], reverse=True)
         return results

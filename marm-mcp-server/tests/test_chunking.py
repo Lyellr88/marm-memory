@@ -222,6 +222,38 @@ def test_score_chunk_aware_handles_mixed_chunked_and_unchunked():
     assert len(results) == 2
 
 
+def test_score_chunk_aware_batched_path_counts_wrong_dim_chunk_as_skipped():
+    """Batched scoring must still skip a wrong-dimension chunk, score the
+    remaining good chunk, and count the skip -- the collapse cannot silently
+    drop dim mismatches."""
+    unit_vec = _make_unit_vec()
+    wrong_dim = np.ones(DEFAULT_SEMANTIC_DIM + 1, dtype=np.float32)
+    wrong_dim /= np.linalg.norm(wrong_dim)
+    mem_id = str(uuid.uuid4())
+    row = _make_sqlite_row(mem_id, None)
+    chunks_by_id = {mem_id: [wrong_dim.tobytes(), unit_vec.tobytes()]}
+
+    results, skipped = _score_chunk_aware([row], chunks_by_id, unit_vec)
+
+    assert skipped == 1
+    assert len(results) == 1
+    assert abs(results[0][1] - 1.0) < 1e-4
+
+
+def test_score_chunk_aware_batched_path_excludes_wrong_dim_parent():
+    """A memory whose only embedding is the wrong dimension is excluded and
+    counted as skipped, even in the batched path."""
+    unit_vec = _make_unit_vec()
+    wrong_dim = np.ones(DEFAULT_SEMANTIC_DIM + 1, dtype=np.float32)
+    mem_id = str(uuid.uuid4())
+    row = _make_sqlite_row(mem_id, wrong_dim.tobytes())
+
+    results, skipped = _score_chunk_aware([row], {}, unit_vec)
+
+    assert results == []
+    assert skipped == 1
+
+
 # --- DB schema tests ---
 
 

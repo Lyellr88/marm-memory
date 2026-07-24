@@ -3,6 +3,29 @@
 ## Version 2 - MARM Protocol to Universal MCP Server Evolution
 
 <details>
+<summary><strong>July 24th, 2026: Hybrid Recall Fusion, Windows Key Fix, and Command Smoke Suite (v2.29.0)</strong></summary>
+
+### Hybrid Recall Now Fuses Lexical Relevance
+
+- Semantic recall now blends the FTS5 BM25 keyword score into ranking instead of using it only as a candidate pre-filter and then discarding it. On the hybrid path, relevance combines semantic similarity (65%) with the normalized BM25 score (35%) before temporal weighting, so exact-term matches such as identifiers, config keys, and error strings surface more reliably. This changes recall ordering; it is backward compatible and needs no migration.
+- The chunk-aware scorer was vectorized into a single matrix operation. Results are identical to the previous per-chunk loop, with less per-query work on large scans.
+- Temporal decay is now applied consistently on the text-search fallback lane, so newer results are preferred when the semantic model is unavailable. The deterministic exact/lexical lane still returns matches in BM25 order, unaffected by age.
+
+### Windows Managed-Key Reliability
+
+- The managed API-key file (`~/.marm/.env`) is now locked to the executing Windows identity (resolved via `whoami`) rather than an environment-derived username. This fixes a case where a key created under one resolved identity could not be read back by the same process. Both `key init` and automatic HTTP key creation use the same tested helper.
+
+### Local Command Smoke Suite
+
+- Added `scripts/test-scripts/smoke-commands.py` and a pytest module that exercise the entire `marm-memory` command surface: every help route, safe read-only dispatches, an isolated HTTP start/health/stop lifecycle, and a managed-key round trip. A real Docker lifecycle (`--docker`) and an uninstall/reinstall inside a disposable virtual environment (`--destructive`) are explicit opt-ins that never touch the active install. A static inventory check fails if a newly added command has no smoke coverage.
+
+### Benchmark Integrity
+
+- The recall-scaling benchmark now times only shipped code paths (`recall_similar` and `_fetch_and_score_embedding_rows`); the previous benchmark-local reimplementations were removed so published numbers reflect what a caller actually runs. Both compared paths use the same async dispatch and exclude the constant query-encode cost. The README performance tables were refreshed from a single run.
+
+</details>
+
+<details>
 <summary><strong>July 24th, 2026: Restored PyPI And Registry Publishing (v2.28.2)</strong></summary>
 
 - Restored the PyPI trusted-publisher workflow after account recovery and re-enabled MCP Registry publishing, which depends on the published PyPI version.
