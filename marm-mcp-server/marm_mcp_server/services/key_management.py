@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import sys
 import os
 import stat
+import sys
 from pathlib import Path
 
-from ..utils.security import generate_api_key
+from ..utils.security import generate_api_key, restrict_windows_file_to_current_user
 
 
 def managed_key_path() -> Path:
@@ -42,21 +42,7 @@ def _protect_key_file(path: Path) -> bool:
         except OSError:
             return False
     try:
-        import getpass
-        import subprocess
-
-        result = subprocess.run(
-            [
-                "icacls",
-                str(path),
-                "/inheritance:r",
-                "/grant:r",
-                f"{getpass.getuser()}:(F)",
-            ],
-            check=False,
-            capture_output=True,
-        )
-        return result.returncode == 0
+        return restrict_windows_file_to_current_user(path)
     except OSError:
         return False
 

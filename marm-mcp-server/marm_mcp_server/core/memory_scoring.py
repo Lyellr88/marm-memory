@@ -4,6 +4,21 @@ import sqlite3
 import numpy as np
 
 
+def _normalize_bm25(raw_scores: list[float]) -> list[float]:
+    """Map raw BM25 scores (more-negative = better) to [0, 1] with 1.0 best.
+
+    Single-row or all-equal result sets collapse to 1.0 so a lone lexical hit
+    still contributes its full text weight.
+    """
+    if not raw_scores:
+        return []
+    min_s, max_s = min(raw_scores), max(raw_scores)
+    if max_s == min_s:
+        return [1.0 for _ in raw_scores]
+    span = max_s - min_s
+    return [(max_s - s) / span for s in raw_scores]
+
+
 def _score_embedding_rows(rows, query_embedding, limit: int):
     """Score embedding rows in one NumPy batch instead of a Python cosine loop."""
     if limit <= 0:
@@ -67,32 +82,16 @@ def _score_chunk_aware(
     normalized_query = query_vec / query_norm
 
     dim_skipped = 0
-    results = []
+    vectors: list[np.ndarray] = []
+    owners: list[int] = []
 
-    for mem in memories:
-        mem_id = mem["id"]
-        chunk_embs = chunks_by_id.get(mem_id)
+    for mem_index, mem in enumerate(memories):
+        chunk_embs = chunks_by_id.get(mem["id"])
+        # Chunked memories score max-over-chunks; unchunked fall back to the
+        # parent embedding. A memory never mixes both.
+        candidate_embs = chunk_embs if chunk_embs else [mem["embedding"]]
 
-        if chunk_embs:
-            best_score = None
-            for emb_bytes in chunk_embs:
-                try:
-                    vec = np.frombuffer(emb_bytes, dtype=np.float32)
-                except Exception:
-                    continue
-                if vec.shape[0] != expected_dim:
-                    dim_skipped += 1
-                    continue
-                norm = np.linalg.norm(vec)
-                if norm == 0:
-                    continue
-                score = float(np.dot(vec / norm, normalized_query))
-                if best_score is None or score > best_score:
-                    best_score = score
-            if best_score is not None:
-                results.append((mem, best_score))
-        else:
-            emb_bytes = mem["embedding"]
+        for emb_bytes in candidate_embs:
             if emb_bytes is None:
                 continue
             try:
@@ -105,8 +104,25 @@ def _score_chunk_aware(
             norm = np.linalg.norm(vec)
             if norm == 0:
                 continue
-            results.append((mem, float(np.dot(vec / norm, normalized_query))))
+            vectors.append(vec / norm)
+            owners.append(mem_index)
 
+    if not vectors:
+        return [], dim_skipped
+
+    matrix = np.vstack(vectors).astype(np.float32, copy=False)
+    scores = matrix @ normalized_query
+
+    # Collapse to one score per memory (max over its chunk rows).
+    owner_arr = np.asarray(owners)
+    best_scores = np.full(len(memories), -np.inf, dtype=np.float32)
+    np.maximum.at(best_scores, owner_arr, scores)
+
+    results = [
+        (memories[i], float(best_scores[i]))
+        for i in range(len(memories))
+        if best_scores[i] != -np.inf
+    ]
     results.sort(key=lambda x: x[1], reverse=True)
     return results, dim_skipped
 
@@ -203,13 +219,7 @@ def _fetch_and_score_fts_rows(
     if not rows:
         return []
 
-    raw_scores = [row["score"] for row in rows]
-    min_s, max_s = min(raw_scores), max(raw_scores)
-    if max_s == min_s:
-        normalized = [1.0 for _ in raw_scores]
-    else:
-        span = max_s - min_s
-        normalized = [(max_s - s) / span for s in raw_scores]
+    normalized = _normalize_bm25([row["score"] for row in rows])
     return list(zip(rows, normalized))
 
 
@@ -220,12 +230,16 @@ def _fetch_fts_candidate_ids(
     limit: int,
     project: str | None = None,
     platform: str | None = None,
-) -> list[str]:
-    """Return top N memory IDs from FTS5 by BM25 rank. No scoring needed."""
+) -> list[tuple[str, float]]:
+    """Return top N (memory_id, normalized_bm25) from FTS5 by BM25 rank.
+
+    The BM25 score is normalized to [0, 1] (1.0 = best lexical match) so callers
+    can fuse the lexical signal into the semantic blend instead of discarding it.
+    """
     conn = sqlite3.connect(db_path, timeout=30.0)
     try:
         base = """
-            SELECT m.id
+            SELECT m.id, bm25(memories_fts) AS score
             FROM memories_fts
             JOIN memories m ON memories_fts.rowid = m.rowid
             WHERE memories_fts MATCH ?
@@ -244,9 +258,11 @@ def _fetch_fts_candidate_ids(
         base += " ORDER BY bm25(memories_fts) LIMIT ?"
         params.append(limit)
         rows = conn.execute(base, params).fetchall()
-        return [row[0] for row in rows]
     finally:
         conn.close()
+
+    normalized = _normalize_bm25([row[1] for row in rows])
+    return [(row[0], score) for row, score in zip(rows, normalized)]
 
 
 def _fetch_and_score_by_ids(

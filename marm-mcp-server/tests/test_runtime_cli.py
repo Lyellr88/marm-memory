@@ -220,6 +220,50 @@ def test_managed_key_init_reuses_existing_credential(monkeypatch, tmp_path):
     assert active_key_management.read_managed_key(path) == "first-key"
 
 
+def test_windows_key_acl_delegates_to_dacl_replacement(monkeypatch, tmp_path):
+    from marm_mcp_server.utils import security
+
+    calls: list[Path] = []
+
+    monkeypatch.setattr(security.sys, "platform", "win32")
+    monkeypatch.setattr(
+        security,
+        "_set_windows_owner_only_dacl",
+        lambda path: calls.append(path) or True,
+    )
+
+    assert security.restrict_windows_file_to_current_user(tmp_path / ".env")
+    assert calls == [tmp_path / ".env"]
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows DACL API only")
+def test_windows_dacl_replacement_locks_file_to_current_user(tmp_path):
+    """Exercise the real ctypes DACL path and confirm the on-disk ACL ends up
+    owner-only. Guards the security-critical replacement, not just delegation."""
+    from marm_mcp_server.utils import security
+
+    target = tmp_path / ".env"
+    target.write_text("SECRET=abc\n", encoding="utf-8")
+
+    before = subprocess.run(
+        ["icacls", str(target)], capture_output=True, text=True
+    ).stdout
+    assert "(I)" in before, "fixture file should start with inherited ACEs"
+
+    assert security._set_windows_owner_only_dacl(target) is True
+
+    after = subprocess.run(
+        ["icacls", str(target)], capture_output=True, text=True
+    ).stdout
+    identity = subprocess.run(["whoami"], capture_output=True, text=True).stdout.strip()
+
+    acl_lines = [line for line in after.splitlines() if ":(" in line]
+    assert len(acl_lines) == 1, f"expected a single ACE, got: {acl_lines}"
+    assert identity.lower() in acl_lines[0].lower()
+    assert "(F)" in acl_lines[0]
+    assert "(I)" not in after, "inheritance must be removed"
+
+
 def test_key_path_and_reveal_keep_output_intentional(monkeypatch, capsys, tmp_path):
     active_key_management = importlib.import_module(
         "marm_mcp_server.services.key_management"

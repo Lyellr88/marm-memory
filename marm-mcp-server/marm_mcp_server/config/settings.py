@@ -5,7 +5,7 @@ import os
 import sys
 from pathlib import Path
 
-from ..utils.security import generate_api_key
+from ..utils.security import generate_api_key, restrict_windows_file_to_current_user
 
 
 def _safe_int(env_key: str, default: int) -> int:
@@ -122,7 +122,7 @@ if not (1 <= _raw_port <= 65535):
         f"WARNING: SERVER_PORT={_raw_port} out of [1, 65535], clamped to {SERVER_PORT}",
         file=sys.stderr,
     )
-SERVER_VERSION = "2.28.2"
+SERVER_VERSION = "2.29.0"
 
 GRAPH_ENABLED = os.environ.get("GRAPH_ENABLED", "true").lower() != "false"
 
@@ -397,25 +397,13 @@ if SERVER_HOST == "0.0.0.0" and not MARM_API_KEY and not _is_generate_key_cmd:
             _MARM_ENV_PATH.chmod(0o600)
         except OSError:
             pass
-        if sys.platform == "win32":
-            try:
-                import getpass
-                import subprocess
-
-                user = getpass.getuser()
-                subprocess.run(
-                    [
-                        "icacls",
-                        str(_MARM_ENV_PATH),
-                        "/inheritance:r",
-                        "/grant:r",
-                        f"{user}:(F)",
-                    ],
-                    check=False,
-                    capture_output=True,
-                )
-            except Exception:
-                pass
+        if sys.platform == "win32" and not restrict_windows_file_to_current_user(
+            _MARM_ENV_PATH
+        ):
+            print(
+                f"WARNING: Could not restrict API key file: {_MARM_ENV_PATH}",
+                file=sys.stderr,
+            )
     except Exception as _e:
         print(f"WARNING: Could not save API key to {_MARM_ENV_PATH}: {_e}")
 

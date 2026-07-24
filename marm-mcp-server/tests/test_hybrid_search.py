@@ -175,6 +175,25 @@ async def test_recall_text_search_falls_back_to_like_for_punctuation_only_query(
 
 
 @pytest.mark.asyncio
+async def test_semantic_fallback_like_marks_its_retrieval_mode(tmp_path):
+    memory = MARMMemory(str(tmp_path / "memory.db"))
+    memory._encoder_failed = True
+
+    mem_id = await memory.store_memory(
+        "content with --- dashes inside", session="semantic-like"
+    )
+
+    results = await memory.recall_similar(
+        "---", session="semantic-like", limit=5, exact_mode="semantic"
+    )
+
+    assert any(result["id"] == mem_id for result in results)
+    assert {result["retrieval_mode"] for result in results} == {
+        "semantic_fallback_like"
+    }
+
+
+@pytest.mark.asyncio
 async def test_recall_text_search_falls_back_to_like_when_fts5_raises(
     monkeypatch, tmp_path
 ):
@@ -382,7 +401,9 @@ async def test_recall_similar_falls_back_when_fts_candidates_have_no_embeddings(
 
     # Return a non-existent ID so ID-bounded fetch finds nothing scoreable
     monkeypatch.setattr(
-        memory_recall_module, "_fetch_fts_candidate_ids", lambda *_: ["non-existent-id"]
+        memory_recall_module,
+        "_fetch_fts_candidate_ids",
+        lambda *_: [("non-existent-id", 1.0)],
     )
 
     results = await memory.recall_similar(
@@ -423,7 +444,7 @@ async def test_recall_similar_falls_back_when_fts_candidates_are_all_wrong_dimen
 
     # Force FTS to return only the wrong-dimension ID
     monkeypatch.setattr(
-        memory_recall_module, "_fetch_fts_candidate_ids", lambda *_: [wrong_id]
+        memory_recall_module, "_fetch_fts_candidate_ids", lambda *_: [(wrong_id, 1.0)]
     )
 
     query_vec = correct_vec.copy()
@@ -558,7 +579,7 @@ async def test_recall_similar_debug_logs_filter_rerank_path(monkeypatch, tmp_pat
     debug_calls: list[str] = []
     monkeypatch.setattr(memory_recall_module, "_recall_debug", debug_calls.append)
     monkeypatch.setattr(
-        memory_recall_module, "_fetch_fts_candidate_ids", lambda *_: [embed_id]
+        memory_recall_module, "_fetch_fts_candidate_ids", lambda *_: [(embed_id, 1.0)]
     )
 
     await mem.recall_similar(
@@ -596,3 +617,85 @@ async def test_recall_similar_debug_logs_semantic_fallback_path(monkeypatch, tmp
     )
 
     assert any("semantic fallback" in msg for msg in debug_calls)
+
+
+@pytest.mark.asyncio
+async def test_recall_similar_fuses_bm25_into_ranking(monkeypatch, tmp_path):
+    """Two candidates with identical embeddings must be ordered by their BM25
+    score, proving the lexical signal is fused into the blend rather than
+    discarded after the FTS filter."""
+    from marm_mcp_server.core import memory_recall as memory_recall_module
+
+    memory = MARMMemory(str(tmp_path / "memory.db"))
+    memory._encoder_failed = True
+
+    dim = 384
+    vec = np.ones(dim, dtype=np.float32)
+    vec /= np.linalg.norm(vec)
+
+    with memory.get_connection() as conn:
+        strong_id = _insert_with_embedding(conn, "fuse", "docker deployment", vec)
+        weak_id = _insert_with_embedding(conn, "fuse", "docker sidebar", vec)
+
+    # Identical embeddings -> identical vec_score. Only the BM25 term differs,
+    # so any ordering must come from lexical fusion.
+    monkeypatch.setattr(
+        memory_recall_module,
+        "_fetch_fts_candidate_ids",
+        lambda *_: [(strong_id, 1.0), (weak_id, 0.0)],
+    )
+
+    results = await memory.recall_similar(
+        "docker", session="fuse", limit=5, query_vec=vec.copy()
+    )
+    ids = [r["id"] for r in results]
+
+    assert ids.index(strong_id) < ids.index(weak_id)
+    strong_sim = results[ids.index(strong_id)]["similarity"]
+    weak_sim = results[ids.index(weak_id)]["similarity"]
+    assert strong_sim > weak_sim
+
+
+def test_normalize_bm25_maps_more_negative_to_higher_score():
+    """BM25 is more-negative = better, so normalization must invert: the most
+    negative raw score becomes 1.0 and the least negative becomes 0.0."""
+    from marm_mcp_server.core.memory_scoring import _normalize_bm25
+
+    assert _normalize_bm25([-5.0, -3.0, -1.0]) == [1.0, 0.5, 0.0]
+    assert _normalize_bm25([-2.0]) == [1.0]
+    assert _normalize_bm25([]) == []
+    # All-equal scores collapse to 1.0 so a lone lexical hit keeps full weight.
+    assert _normalize_bm25([-2.0, -2.0]) == [1.0, 1.0]
+
+
+def test_fetch_fts_candidate_ids_returns_normalized_bm25_from_real_index(tmp_path):
+    """Exercises the real SQLite bm25() -> normalization path end to end: the
+    tighter lexical match must score highest, and every score must land in
+    [0, 1] with 1.0 as the best. Guards against an inverted or out-of-range
+    normalization that the fusion test's stub cannot catch."""
+    from marm_mcp_server.core.memory_scoring import _fetch_fts_candidate_ids
+
+    vec = np.ones(384, dtype=np.float32)
+    vec /= np.linalg.norm(vec)
+
+    memory = MARMMemory(str(tmp_path / "memory.db"))
+    memory._encoder_failed = True
+
+    with memory.get_connection() as conn:
+        # Tight match: the query term is essentially the whole document.
+        tight_id = _insert_with_embedding(conn, "norm", "python", vec)
+        # Diluted match: the query term is buried among many others.
+        loose_id = _insert_with_embedding(
+            conn,
+            "norm",
+            "python programming language tutorial guide reference manual notes",
+            vec,
+        )
+
+    pairs = _fetch_fts_candidate_ids(memory.db_path, "norm", '"python"', 10)
+    scores = dict(pairs)
+
+    assert set(scores) == {tight_id, loose_id}
+    assert all(0.0 <= s <= 1.0 for s in scores.values())
+    assert max(scores.values()) == 1.0
+    assert scores[tight_id] > scores[loose_id]

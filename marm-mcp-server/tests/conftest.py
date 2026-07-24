@@ -34,6 +34,22 @@ requires_binary = pytest.mark.skipif(
 )
 
 
+def pytest_collection_modifyitems(items):
+    opt_in_markers = {
+        "smoke_docker": "MARM_SMOKE_DOCKER",
+        "smoke_destructive": "MARM_SMOKE_DESTRUCTIVE",
+    }
+    for item in items:
+        for marker, environment_name in opt_in_markers.items():
+            if (
+                item.get_closest_marker(marker)
+                and os.environ.get(environment_name) != "1"
+            ):
+                item.add_marker(
+                    pytest.mark.skip(reason=f"{marker} requires {environment_name}=1")
+                )
+
+
 @pytest.fixture(autouse=True, scope="session")
 def isolated_cbm_store(tmp_path_factory):
     """Keep test indexes out of the developer's real code graph.
@@ -58,10 +74,17 @@ def isolated_cbm_store(tmp_path_factory):
 
 
 def load_isolated_server(monkeypatch, tmp_path, api_key="", write_queue_enabled=False):
-    """Import the server after pointing global state at a temporary database."""
+    """Import the server after pointing global state at a temporary database.
+
+    Modules are dropped via monkeypatch.delitem, not a bare del, so the original
+    module objects are restored at teardown. Otherwise the isolated re-import
+    below leaves a new module generation in sys.modules for the rest of the
+    session, and later tests that bound symbols (e.g. MARMMemory) at import time
+    would silently reference the stale generation.
+    """
     for name in list(sys.modules):
         if name == "marm_mcp_server" or name.startswith("marm_mcp_server."):
-            del sys.modules[name]
+            monkeypatch.delitem(sys.modules, name)
 
     monkeypatch.setenv("MARM_DB_PATH", str(tmp_path / "marm_memory.db"))
     monkeypatch.setenv("MARM_ANALYTICS_DB_PATH", str(tmp_path / "analytics.db"))

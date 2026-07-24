@@ -22,6 +22,9 @@ SCAN_DIRS = [
         ROOT / "marm-console" / "artifacts" / "marm-console" / "src",
     ),
 ]
+TEST_DIRS = [
+    ("marm-mcp-server/tests", ROOT / "marm-mcp-server" / "tests"),
+]
 EXTENSIONS = {".py", ".toml", ".md", ".txt", ".json", ".ts", ".tsx", ".css"}
 
 # Build artifacts, not source: the bundled spaCy pipeline and the compiled
@@ -61,14 +64,21 @@ def main() -> int:
         action="store_true",
         help="Also run find-versions after the check",
     )
+    parser.add_argument(
+        "--tests",
+        action="store_true",
+        help="Also scan test folders (marm-mcp-server/tests)",
+    )
     args = parser.parse_args()
 
     threshold = args.threshold
     print(f"{CYAN}=== File Length Check (>{threshold} lines) ==={RESET}\n")
 
+    scan_dirs = SCAN_DIRS + TEST_DIRS if args.tests else SCAN_DIRS
+
     results: dict[str, list[tuple[int, str, str]]] = defaultdict(list)
 
-    for label, base in SCAN_DIRS:
+    for label, base in scan_dirs:
         if not base.exists():
             print(f"{YELLOW}Warning: {label}/ not found, skipping{RESET}")
             continue

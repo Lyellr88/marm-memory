@@ -15,6 +15,23 @@ Compaction smoke paths use the public `marm_compaction(action=...)` endpoint/too
 | Test full compaction stage/apply/idempotency paths | `compaction-worker-smoke.py` | Compaction Worker |
 | Simulate small local swarms writing to MARM | `swarm-smoke.py` | Swarm |
 | Test natural compaction trigger from swarm writes | `swarm-smoke.py` | Swarm + Compaction |
+| Smoke every `marm-memory` command path | `smoke-commands.py` | Command Surface |
+
+### Command Surface
+
+Run the complete safe command parse, dispatch, HTTP lifecycle, and managed-key smoke suite:
+
+```powershell
+python scripts\test-scripts\smoke-commands.py
+```
+
+Add a real Docker lifecycle only when a Docker daemon is available. `--destructive` builds a local wheel and exercises uninstall/reinstall inside a disposable virtual environment; it does not modify the active development environment.
+
+```powershell
+python scripts\test-scripts\smoke-commands.py --docker
+python scripts\test-scripts\smoke-commands.py --destructive
+python scripts\test-scripts\smoke-commands.py --skip lifecycle
+```
 
 ## Quick Choice
 
