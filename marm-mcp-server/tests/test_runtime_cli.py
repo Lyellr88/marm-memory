@@ -307,6 +307,7 @@ def test_product_help_uses_grouped_stable_layout(capsys):
 
 def test_product_help_wraps_for_narrow_terminals(monkeypatch):
     from marm_mcp_server.services import product_help
+    from marm_mcp_server.services.cli_parser import _product_help
 
     monkeypatch.setattr(
         product_help.shutil,
@@ -314,7 +315,7 @@ def test_product_help_wraps_for_narrow_terminals(monkeypatch):
         lambda fallback: os.terminal_size((72, 24)),
     )
 
-    output = cli._product_help()
+    output = _product_help()
 
     assert all(len(line) <= 72 for line in output.splitlines())
 

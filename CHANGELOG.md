@@ -3,6 +3,15 @@
 ## Version 2 - MARM Protocol to Universal MCP Server Evolution
 
 <details>
+<summary><strong>Unreleased: Product CLI Module Split (v2.29.1)</strong></summary>
+
+### Internal
+
+- Split `cli.py`'s remaining output-formatting and argparse-construction concerns into `services/cli_output.py` and `services/cli_parser.py`, continuing the v2.28.0 CLI service-module split. No behavior change; `_dispatch_product`, `main`, and runtime-preset application stay in `cli.py` as the orchestration owner. `cli.py` drops from 786 to 509 lines.
+
+</details>
+
+<details>
 <summary><strong>July 24th, 2026: Hybrid Recall Fusion, Windows Key Fix, and Command Smoke Suite (v2.29.0)</strong></summary>
 
 ### Hybrid Recall Now Fuses Lexical Relevance
