@@ -148,6 +148,23 @@ jobs:
         run: python -m build
         working-directory: marm-mcp-server
 
+      - name: Smoke test installed wheel and bundled Console
+        run: |
+          python -m venv /tmp/marm-wheel-smoke
+          /tmp/marm-wheel-smoke/bin/python -m pip install --upgrade pip
+          /tmp/marm-wheel-smoke/bin/pip install marm-mcp-server/dist/*.whl
+          /tmp/marm-wheel-smoke/bin/marm-memory --help
+          /tmp/marm-wheel-smoke/bin/marm-memory console --help
+          /tmp/marm-wheel-smoke/bin/python - <<'PY'
+          from fastapi.testclient import TestClient
+          from marm_mcp_server.console.app import app
+
+          with TestClient(app) as client:
+              response = client.get("/")
+              assert response.status_code == 200
+              assert "<div id=\"root\">" in response.text
+          PY
+
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
