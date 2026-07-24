@@ -3,6 +3,31 @@
 ## Version 2 - MARM Protocol to Universal MCP Server Evolution
 
 <details>
+<summary><strong>July 23rd, 2026: Focused Docker Commands and Full Command Surface (v2.28.0)</strong></summary>
+
+### Focused Docker Convenience Commands
+
+- Added `marm-memory docker` for pip-installed users: `status`, `pull`, `run`, `command` (paste-ready preview), `compose`, `stdio-command`, `logs`, `stop`, and `maintenance embeddings migrate`. Generated containers default to loopback binding, a persistent `~/.marm` mount via explicit `--mount`, managed env-file auth (the key never enters shell history), and `--restart unless-stopped`; network exposure requires `--expose-network`.
+- `docker run` refuses to replace an existing container and prints the exact inspect/stop choices instead; `docker pull` only downloads. Embedding migration refuses while the managed HTTP container is running and returns Docker's real exit code. `docker upgrade` is reported as a manual step rather than silently recreating a container. Compose previews by default and only writes on `--yes`, never overwriting an existing file. The raw Docker and Compose instructions remain for Docker-only users.
+
+### Complete Command and Usability Pass
+
+- Added transport aliases `http` (foreground HTTP) and `stdio` (in-process MCP STDIO), plus `fast-start-http`, which starts or reuses the runtime, launches Console, and prints a single status report. The existing `start`, `marm-mcp-server`, and `marm-mcp-stdio` entry points are unchanged.
+- Expanded key management: `key init` creates or reuses the managed `~/.marm/.env` without ever rotating an existing key, `key path` prints only the path, and `key reveal` prints the key on stdout with its capture warning on stderr. `key generate` is unchanged.
+- Added `upgrade`/`update` and `uninstall`. Both preserve all user data under `~/.marm`, detect editable, pipx, and Windows-launcher installs, and print the exact manual command when self-replacement is not safe. `upgrade --check` reports installed versus latest without installing.
+- Replaced the default argparse root help with a grouped, terminal-width-aware layout (Daily Use, Setup and Updates, Knowledge and Projects, Docker, Maintenance), added root `-V`/`--version` and a `help <command>` alias, and gave every command a visible one-line description.
+
+### Authenticated Console Handoff
+
+- Added `marm-memory console --import-key`, which hands the managed runtime key to a local Console browser session without exposing it in the frontend, URL, browser storage, or logs. A short-lived, single-use bootstrap token is exchanged for an HttpOnly, SameSite=strict session cookie, and the runtime key stays server-side. Normal Console launch stays keyless, and manual key entry remains available for remote or separately managed runtimes.
+
+### Internal
+
+- `cli.py` was split into focused service modules (Docker, key, package, workflow, help, logs, and project commands) as the command surface grew, with no behavior change to existing commands.
+
+</details>
+
+<details>
 <summary><strong>July 22nd, 2026: Bundled Concept Extraction (v2.27.0)</strong></summary>
 
 ### Concept Extraction Is Bundled, No Separate Setup

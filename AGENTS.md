@@ -30,11 +30,11 @@ MARM is a local-first MCP memory server: Python FastAPI in `marm-mcp-server/`, p
 
 Then run `python scripts/find-tools.py`; every surface must report OK.
 
-**README mirrors are generated, never hand-edited:**
+**README variants:**
 
 - Root `README.md` is the single source of truth.
-- `marm-mcp-server/README.md` is the PyPI variant (adds the `mcp-name:` header and two image divs).
-- `marm-mcp-server/marm-docs/README.md` is the text-only agent-facing subset (badges, demo, and footer sections stripped).
+- `marm-mcp-server/README.md` is the PyPI variant (adds the `mcp-name:` header and two image divs) and is maintained separately.
+- `marm-mcp-server/marm-docs/README.md` is the text-only agent-facing subset (badges, demo, and footer sections stripped) and is maintained separately.
 
 **When bumping the version, update ALL of the following** (audit with `python scripts/find-versions.py`):
 
@@ -44,7 +44,7 @@ Then run `python scripts/find-tools.py`; every surface must report OK.
 4. `marm-mcp-server/marm_mcp_server/config/settings.py` (`SERVER_VERSION`)
 5. `marm-mcp-server/marm_mcp_server/server.py` docstring
 6. `marm-mcp-server/Dockerfile` version label and `docker-compose.yml`
-7. Root `README.md` h1 (then regenerate mirrors) and the version headers in `docs/INSTALL-*.md`
+7. The h1 in `README.md`, `marm-mcp-server/README.md`, and `marm-mcp-server/marm-docs/README.md` (each maintained separately), plus the version headers in `docs/INSTALL-*.md`
 
 Semver: MAJOR = breaking (schema renames, parameter removals), MINOR = new tools/parameters/features, PATCH = fixes and doc updates.
 

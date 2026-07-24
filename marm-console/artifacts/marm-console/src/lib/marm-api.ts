@@ -89,6 +89,7 @@ async function request<T>(
       headers,
       body: opts?.body !== undefined ? JSON.stringify(opts.body) : undefined,
       signal: controller.signal,
+      credentials: 'same-origin',
     });
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') {

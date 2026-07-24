@@ -19,9 +19,10 @@ from fastapi import Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
-from . import mcp_client
+from . import auth, mcp_client
 from .endpoints import (
     compaction,
     concepts,
@@ -86,10 +87,19 @@ app = FastAPI(
 )
 
 
+class _ConsoleBootstrapRequest(BaseModel):
+    token: str
+
+
 @app.middleware("http")
 async def console_api_auth(request: Request, call_next):
     """Apply MARM's auth policy to Console data APIs, not static SPA assets."""
     if request.method == "OPTIONS" or not request.url.path.startswith("/api/"):
+        return await call_next(request)
+    if request.url.path == "/api/auth/bootstrap":
+        return await call_next(request)
+
+    if auth.valid_browser_session(request.cookies.get("marm_console_session")):
         return await call_next(request)
 
     api_key = os.environ.get("MARM_API_KEY", "")
@@ -133,6 +143,25 @@ app.include_router(notebook.router)
 app.include_router(compaction.router)
 app.include_router(concepts.router)
 app.include_router(projects.router)
+
+
+@app.post("/api/auth/bootstrap", include_in_schema=False)
+def bootstrap_console_session(payload: _ConsoleBootstrapRequest):
+    """Exchange a local one-time handoff for an HttpOnly browser session."""
+    from ..core.runtime_manager import runtime_dir
+
+    if not auth.consume_bootstrap_token(runtime_dir(), payload.token):
+        raise HTTPException(status_code=401, detail="Console bootstrap has expired.")
+    response = JSONResponse({"status": "authenticated"})
+    response.set_cookie(
+        "marm_console_session",
+        auth.create_browser_session(),
+        max_age=8 * 60 * 60,
+        httponly=True,
+        samesite="strict",
+        secure=False,
+    )
+    return response
 
 
 @app.get("/health")
