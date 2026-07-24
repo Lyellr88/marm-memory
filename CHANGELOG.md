@@ -3,6 +3,14 @@
 ## Version 2 - MARM Protocol to Universal MCP Server Evolution
 
 <details>
+<summary><strong>July 24th, 2026: Restored PyPI And Registry Publishing (v2.28.1)</strong></summary>
+
+- Restored the PyPI trusted-publisher workflow after account recovery and re-enabled MCP Registry publishing, which depends on the published PyPI version.
+- Added a release-time installed-wheel smoke test that verifies the bundled MARM Console entry point and static frontend before upload.
+
+</details>
+
+<details>
 <summary><strong>July 23rd, 2026: Focused Docker Commands and Full Command Surface (v2.28.0)</strong></summary>
 
 ### Focused Docker Convenience Commands
