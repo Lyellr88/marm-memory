@@ -5,7 +5,7 @@
      width="900"
      height="250">
 </picture>
-<h1 align="center">MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.27.0</h1>
+<h1 align="center">MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.28.0</h1>
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/Lyellr88/marm-memory/blob/MARM-main/LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
@@ -36,6 +36,7 @@
 - [Why MARM Memory](#why-marm-memory)
 - [Performance & Scaling Benchmarks](#performance--scaling-benchmarks)
 - [Quick Start](#-quick-start-for-mcp-http--stdio)
+- [Runtime CLI Commands](#runtime-cli-commands)
 - [Complete MCP Tool Suite](#complete-mcp-tool-suite-14-tools)
 - [Using MARM: Talk, Don't Call Tools](#using-marm-talk-dont-call-tools)
 - [Understanding MARM Memory](#understanding-marm-memory)
@@ -99,10 +100,65 @@ pip install marm-mcp-server
 | **Private high-throughput swarm** | `marm-memory start --profile swarm-max` | `"agent" mcp add --transport http marm-memory http://localhost:8001/mcp` |
 | **Trusted private lab/server** | `marm-memory start --profile trusted` | `"agent" mcp add --transport http marm-memory http://localhost:8001/mcp` |
 
-The managed runtime runs in the background by default. Use `marm-memory status`,
-`marm-memory logs --follow`, `marm-memory restart`, and `marm-memory stop` for
-normal lifecycle work. `marm-memory console` starts or reuses that runtime and
-opens the bundled local web app without requiring Node.js.
+The managed runtime runs in the background by default. Use `marm-memory status`, `marm-memory logs --follow`, `marm-memory restart`, and `marm-memory stop` for normal lifecycle work. `marm-memory console` starts or reuses that runtime and opens the bundled local web app without requiring Node.js.
+
+For the shortest native HTTP workflow, run `marm-memory fast-start-http`. It starts or reuses the local runtime, starts Console, opens it in the browser, and ends with the active URLs and a recovery command. Use `--no-console` or `--no-browser` when you only want the server. `--client <name>` is reserved for verified client adapters; MARM does not claim to configure a client it has not validated yet.
+
+`marm-memory http` is the foreground HTTP alias, while `marm-memory stdio` runs the same strict MCP STDIO transport as `marm-mcp-stdio`. Use `marm-memory --help` for grouped command help, `marm-memory help <command>` for command-specific help, and `marm-memory --version` for the installed version.
+
+### Runtime CLI Commands
+
+`marm-memory` is the local runtime manager installed with the Python package. These are the normal operational commands; use `marm-memory <command> --help` for flags and command-specific examples.
+
+**Daily runtime work**
+
+```bash
+marm-memory fast-start-http          # start HTTP, Console, and open the browser
+marm-memory start                    # start or reuse the managed HTTP runtime
+marm-memory start --profile swarm    # shared multi-agent preset
+marm-memory stop                     # stop the managed runtime safely
+marm-memory restart                  # restart the managed runtime
+marm-memory status                   # inspect runtime, database, queue, and graph status
+marm-memory logs --follow            # follow bounded runtime logs
+marm-memory console                  # start or reuse the bundled local Console
+```
+
+**Transports and setup**
+
+```bash
+marm-memory http                     # run HTTP in the foreground
+marm-memory stdio                    # run the strict local MCP STDIO transport
+marm-memory doctor                   # diagnose the local install
+marm-memory key init                 # create or reuse ~/.marm/.env without displaying the key
+marm-memory key path                 # print the managed key-file path
+marm-memory key reveal               # explicitly display the managed key
+marm-memory console --import-key     # open an authenticated local Console session
+marm-memory upgrade --check          # compare the installed package with PyPI
+marm-memory uninstall                # preview package removal; always preserves ~/.marm
+```
+
+**Knowledge, projects, and maintenance**
+
+```bash
+marm-memory knowledge status
+marm-memory knowledge build --all
+marm-memory projects list
+marm-memory projects index /absolute/path/to/repository
+marm-memory projects status
+marm-memory maintenance status
+marm-memory maintenance embeddings migrate
+```
+
+Docker commands are documented separately below because they require explicit data mounts, network exposure, and key-handling choices.
+
+### Local Keys And Package Lifecycle
+
+Normal localhost HTTP remains keyless and loopback-only. For an exposed runtime or a Docker deployment, use `marm-memory key init` to create or reuse the managed `~/.marm/.env` key file. `marm-memory key path` prints only its path; `marm-memory key reveal` intentionally prints the key with a terminal-capture warning. `marm-memory key generate` remains the non-persistent compatibility command.
+
+When a managed key is active, `marm-memory console --import-key` opens a local Console session without placing the API key in browser storage, frontend state, logs, or a URL query string. Manual bearer-key entry remains available for a separately managed or remote runtime.
+
+Use `marm-memory upgrade --check` to compare the installed package with PyPI. `marm-memory upgrade` previews a safe native upgrade; `--yes` performs it only where the active installer can be replaced safely. `marm-memory uninstall` similarly previews package removal and always preserves `~/.marm`, including memory databases, graph indexes, keys, logs, and configuration. On Windows, editable installs, or pipx installs, MARM prints the exact manual command rather than attempting to replace an active launcher.
+
 
 ### Upgrade Existing Embeddings
 
@@ -197,7 +253,7 @@ pip install marm-mcp-server
 **Swarm / multi-agent note:** The write queue is enabled by default to serialize memory writes through one worker. For shared HTTP deployments, use `marm-memory start --profile swarm` (200 RPM) or `--profile swarm-max` (600 RPM). `--profile trusted` disables rate limiting entirely for private deployments. STDIO is still best for private single-agent/local use. See [Swarm & multi-agent presets](#swarm--multi-agent-presets) for the full table.
 
 <details>
-<summary><strong>Local pip HTTP (zero config)</strong></summary>
+<summary><strong>Local pip HTTP </strong></summary>
 
 > "agent" refers to claude, gemini, grok, qwen, or any MCP client. Codex uses --url instead of --transport to add MCP tools.
 
@@ -256,6 +312,59 @@ marm-mcp-stdio
 <summary><strong>Docker HTTP (key required)</strong></summary>
 
 > Docker HTTP requires an API key because it exposes MARM as a network server; STDIO stays local to the client process and does not need one.
+
+If you installed MARM through pip, the product CLI can safely preview or run the same setup. It uses a loopback port by default, preserves `~/.marm`, stores the generated key in `~/.marm/.env` rather than shell history, and refuses to replace an existing container.
+
+```bash
+marm-memory docker command                 # preview the exact HTTP command
+marm-memory docker run                     # create the managed HTTP container
+marm-memory docker stdio-command           # print a Docker STDIO client command
+marm-memory docker status
+marm-memory docker logs --follow
+marm-memory docker stop
+
+# Optional: mount repositories read-only for code indexing.
+marm-memory docker run --repo /absolute/path/to/repository
+
+# Optional: preview or explicitly write a Compose configuration.
+marm-memory docker compose
+marm-memory docker compose --yes
+```
+
+The HTTP `run`, `command`, and `compose` commands accept the same operational flags:
+
+| Flag | Purpose |
+|---|---|
+| `--data-dir <absolute path>` | Persistent host directory mounted at `/home/marm/.marm`. Defaults to `~/.marm`; this holds memory, indexes, logs, and the managed key file. |
+| `--env-file <path>` | Explicit Docker env file. It must already contain `MARM_API_KEY`; without this flag, MARM uses `~/.marm/.env` and creates a key there only when `docker run` or `docker compose --yes` needs one. |
+| `--port <number>` | Host HTTP port. Default: `8001`. |
+| `--expose-network` | Bind the host port to `0.0.0.0` instead of loopback. This is deliberate network exposure; configure a firewall and TLS proxy. |
+| `--profile standard\|swarm\|swarm-max\|trusted` | Select the same write-queue and rate-limit preset as native HTTP startup. |
+| `--rate-limit-rpm <number>` | Override the selected profile's HTTP rate limit. `0` disables rate limiting. |
+| `--repo <absolute path>` | Repeatable read-only repository mount for code indexing. MARM reports each corresponding `/workspace/repo-N` path to index inside the container. |
+| `--tag <tag>` | Official image tag. Default: `latest`. |
+| `--pull` | Pull the selected image before creating a new HTTP container. |
+| `--name <name>` | Managed container name. MARM refuses to replace an existing container with that name. |
+| `--memory <limit>` / `--cpus <limit>` | Optional Docker resource limits. |
+| `--dry-run` | `docker run` only: print the planned command without creating a container or key file. `docker command` is always a preview. |
+
+For example:
+
+```bash
+# Shared local server with a custom data path and two repositories for indexing.
+marm-memory docker command \
+  --profile swarm \
+  --data-dir /srv/marm-data \
+  --repo /srv/projects/api \
+  --repo /srv/projects/web
+
+# Execute the reviewed command, pulling the image first.
+marm-memory docker run --profile swarm --data-dir /srv/marm-data --pull
+```
+
+Docker STDIO is separate from Docker HTTP: `marm-memory docker stdio-command` uses `docker run -i --rm`, has no port and no bearer key, but still mounts the data directory so SQLite memory persists after the short-lived container exits. Use `--data-dir` and `--tag` with that command when needed. There are no separate `docker key` or `docker mount` commands; `--env-file` and `--data-dir` make those choices explicit in the generated HTTP command.
+
+`marm-memory docker pull` only downloads an image. `marm-memory docker maintenance embeddings migrate` runs against the same data mount and refuses while the managed HTTP container is running. The helper is available only with the pip-installed `marm-memory` command; Docker-only users can use the raw commands below.
 
 ```bash
 # Step 1: generate key (do not add < > around the key)

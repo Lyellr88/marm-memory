@@ -117,6 +117,8 @@ def test_status_json_contains_no_decorative_output(tmp_path):
 
 def test_project_index_poll_retries_transport_failure(monkeypatch, capsys, tmp_path):
     active_cli, active_runtime = _active_modules()
+    from marm_mcp_server.services import projects_cli
+
     repository = tmp_path / "repo"
     repository.mkdir()
     args = SimpleNamespace(
@@ -141,7 +143,7 @@ def test_project_index_poll_retries_transport_failure(monkeypatch, capsys, tmp_p
         return response
 
     monkeypatch.setattr(active_runtime, "request_runtime_strict", poll)
-    monkeypatch.setattr(active_cli.time, "sleep", lambda _seconds: None)
+    monkeypatch.setattr(projects_cli.time, "sleep", lambda _seconds: None)
 
     assert active_cli._dispatch_projects(args) == 0
     captured = capsys.readouterr()
@@ -199,6 +201,402 @@ def test_product_key_writes_one_generated_key(monkeypatch, capsys):
     assert output.splitlines()[0] == "generated-key"
     assert "Set this as your MARM_API_KEY environment variable." in output
     assert "Keep it secret" in output
+
+
+def test_managed_key_init_reuses_existing_credential(monkeypatch, tmp_path):
+    active_key_management = importlib.import_module(
+        "marm_mcp_server.services.key_management"
+    )
+    path = tmp_path / ".marm" / ".env"
+    monkeypatch.setattr(active_key_management, "managed_key_path", lambda: path)
+    monkeypatch.setattr(active_key_management, "generate_api_key", lambda: "first-key")
+
+    first_path, first_created = active_key_management.initialize_managed_key()
+    second_path, second_created = active_key_management.initialize_managed_key()
+
+    assert first_path == second_path == path
+    assert first_created is True
+    assert second_created is False
+    assert active_key_management.read_managed_key(path) == "first-key"
+
+
+def test_key_path_and_reveal_keep_output_intentional(monkeypatch, capsys, tmp_path):
+    active_key_management = importlib.import_module(
+        "marm_mcp_server.services.key_management"
+    )
+    path = tmp_path / ".marm" / ".env"
+    path.parent.mkdir()
+    path.write_text("MARM_API_KEY=saved-key\n", encoding="utf-8")
+    monkeypatch.setattr(active_key_management, "managed_key_path", lambda: path)
+
+    assert (
+        cli._dispatch_product(SimpleNamespace(command="key", key_command="path")) == 0
+    )
+    captured = capsys.readouterr()
+    assert (captured.out or captured.err).strip() == str(path)
+
+    assert (
+        cli._dispatch_product(SimpleNamespace(command="key", key_command="reveal")) == 0
+    )
+    captured = capsys.readouterr()
+    assert "saved-key" in (captured.out + captured.err)
+    assert "terminal capture" in (captured.out + captured.err)
+
+
+def test_product_help_uses_grouped_stable_layout(capsys):
+    parser = cli._product_parser()
+
+    with pytest.raises(SystemExit) as exc_info:
+        parser.parse_args(["--help"])
+
+    assert exc_info.value.code == 0
+    output = capsys.readouterr().out
+    assert "Usage: marm-memory <command> [options]" in output
+    assert "Common Options:" in output
+    assert "Daily Use:" in output
+    assert "Knowledge and Projects:" in output
+    assert "start [--profile] [--foreground]" in output
+    assert "docker" in output
+    assert "{start,stop" not in output
+
+
+def test_product_help_wraps_for_narrow_terminals(monkeypatch):
+    from marm_mcp_server.services import product_help
+
+    monkeypatch.setattr(
+        product_help.shutil,
+        "get_terminal_size",
+        lambda fallback: os.terminal_size((72, 24)),
+    )
+
+    output = cli._product_help()
+
+    assert all(len(line) <= 72 for line in output.splitlines())
+
+
+def test_product_version_flag_prints_installed_version(capsys):
+    parser = cli._product_parser()
+
+    with pytest.raises(SystemExit) as exc_info:
+        parser.parse_args(["--version"])
+
+    assert exc_info.value.code == 0
+    assert capsys.readouterr().out.strip() == cli.SERVER_VERSION
+
+
+def test_product_help_alias_preserves_subcommand_help(monkeypatch, capsys):
+    monkeypatch.setattr(sys, "argv", ["marm-memory", "help", "start"])
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main()
+
+    assert exc_info.value.code == 0
+    output = capsys.readouterr().out
+    assert "--foreground" in output
+    assert "--profile" in output
+
+
+def test_http_alias_uses_existing_foreground_runtime_owner(monkeypatch):
+    calls = []
+    monkeypatch.setattr(cli, "_run_foreground", lambda **kwargs: calls.append(kwargs))
+
+    assert (
+        cli._dispatch_product(
+            SimpleNamespace(
+                command="http",
+                foreground=True,
+                profile="swarm",
+                rate_limit_rpm=200,
+                runtime_id="test-runtime",
+            )
+        )
+        == 0
+    )
+    assert calls == [
+        {
+            "profile": "swarm",
+            "rate_limit_rpm": 200,
+            "runtime_id": "test-runtime",
+        }
+    ]
+
+
+def test_stdio_alias_uses_existing_stdio_entry_point(monkeypatch):
+    from marm_mcp_server import server_stdio
+
+    calls = []
+    monkeypatch.setattr(server_stdio, "main", lambda: calls.append("stdio"))
+
+    assert cli._dispatch_product(SimpleNamespace(command="stdio")) == 0
+    assert calls == ["stdio"]
+
+
+def test_fast_start_reuses_runtime_and_leaves_it_running_on_client_gap(
+    monkeypatch, capsys
+):
+    active_cli, active_runtime = _active_modules()
+    calls = []
+    monkeypatch.setattr(
+        active_runtime,
+        "inspect_runtime",
+        lambda: {
+            "state": "ready",
+            "metadata": {"port": 8001, "profile": "swarm"},
+        },
+    )
+    monkeypatch.setattr(
+        active_runtime,
+        "start_background",
+        lambda **kwargs: calls.append(("start", kwargs)),
+    )
+    console_module = importlib.import_module("marm_mcp_server.console.cli")
+    monkeypatch.setattr(
+        console_module,
+        "run_console",
+        lambda **kwargs: calls.append(("console", kwargs)) or 0,
+    )
+    monkeypatch.setattr(active_cli.settings, "MARM_API_KEY", "")
+
+    result = active_cli._fast_start_http(
+        SimpleNamespace(
+            profile="standard",
+            rate_limit_rpm=None,
+            no_console=False,
+            no_browser=False,
+            client="claude",
+        )
+    )
+
+    assert result == 1
+    assert calls == [("console", {"open_browser": True, "import_key": False})]
+    captured = capsys.readouterr()
+    assert "Runtime:" in (captured.out or captured.err)
+    assert "Client setup is not available" in captured.err
+
+
+def test_fast_start_rejects_busy_port_before_starting(monkeypatch):
+    active_cli, active_runtime = _active_modules()
+    from marm_mcp_server.services import product_workflows
+
+    monkeypatch.setattr(active_runtime, "inspect_runtime", lambda: {"state": "stopped"})
+    monkeypatch.setattr(product_workflows, "_port_is_available", lambda *_args: False)
+
+    with pytest.raises(RuntimeError, match="port"):
+        active_cli._fast_start_http(
+            SimpleNamespace(
+                profile="standard",
+                rate_limit_rpm=None,
+                no_console=True,
+                no_browser=True,
+                client=None,
+            )
+        )
+
+
+def test_fast_start_does_not_invent_reused_runtime_metadata(monkeypatch, capsys):
+    active_cli, active_runtime = _active_modules()
+    monkeypatch.setattr(
+        active_runtime,
+        "inspect_runtime",
+        lambda: {"state": "ready", "metadata": {}},
+    )
+    monkeypatch.setattr(active_cli.settings, "MARM_API_KEY", "")
+
+    assert (
+        active_cli._fast_start_http(
+            SimpleNamespace(
+                profile="standard",
+                rate_limit_rpm=None,
+                no_console=True,
+                no_browser=True,
+                client=None,
+            )
+        )
+        == 0
+    )
+
+    captured = capsys.readouterr()
+    output = captured.out + captured.err
+    assert "endpoint unavailable" in output
+    assert "Profile: unknown" in output
+
+
+def test_fast_start_reports_runtime_when_console_launch_fails(monkeypatch, capsys):
+    active_cli, active_runtime = _active_modules()
+    console_module = importlib.import_module("marm_mcp_server.console.cli")
+    monkeypatch.setattr(
+        active_runtime,
+        "inspect_runtime",
+        lambda: {"state": "ready", "metadata": {"port": 8001, "profile": "swarm"}},
+    )
+    monkeypatch.setattr(active_cli.settings, "MARM_API_KEY", "")
+    monkeypatch.setattr(
+        console_module,
+        "run_console",
+        lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("key mismatch")),
+    )
+
+    assert (
+        active_cli._fast_start_http(
+            SimpleNamespace(
+                profile="standard",
+                rate_limit_rpm=None,
+                no_console=False,
+                no_browser=True,
+                client=None,
+            )
+        )
+        == 0
+    )
+
+    captured = capsys.readouterr()
+    output = captured.out + captured.err
+    assert "Runtime: http://127.0.0.1:8001/mcp (reused)" in output
+    assert "Console: unavailable (key mismatch)" in output
+    assert "Console: skipped" not in output
+
+
+def test_upgrade_check_reports_registry_state_without_installing(monkeypatch, capsys):
+    active_package_management = importlib.import_module(
+        "marm_mcp_server.services.package_management"
+    )
+    monkeypatch.setattr(
+        active_package_management,
+        "inspect_installation",
+        lambda: active_package_management.Installation("2.26.0", "pip", False),
+    )
+    monkeypatch.setattr(
+        active_package_management,
+        "check_latest_release",
+        lambda: {
+            "installed_version": "2.26.0",
+            "latest_version": "2.27.0",
+            "state": "update_available",
+            "installer": "pip",
+            "editable": "false",
+        },
+    )
+    monkeypatch.setattr(
+        active_package_management,
+        "run_upgrade",
+        lambda *_args: pytest.fail("--check must not install"),
+    )
+
+    assert (
+        cli._upgrade(
+            SimpleNamespace(check=True, as_json=False, version=None, yes=False)
+        )
+        == 0
+    )
+    captured = capsys.readouterr()
+    assert "Latest: 2.27.0" in (captured.out or captured.err)
+
+
+def test_upgrade_json_is_machine_readable_and_never_starts_an_upgrade(
+    monkeypatch, capsys
+):
+    active_package_management = importlib.import_module(
+        "marm_mcp_server.services.package_management"
+    )
+    payload = {
+        "installed_version": "2.26.0",
+        "latest_version": "2.27.0",
+        "state": "update_available",
+    }
+    monkeypatch.setattr(
+        active_package_management, "check_latest_release", lambda: payload
+    )
+    monkeypatch.setattr(
+        active_package_management,
+        "inspect_installation",
+        lambda: pytest.fail("JSON status must not inspect or upgrade the package"),
+    )
+
+    assert (
+        cli._upgrade(
+            SimpleNamespace(check=False, as_json=True, version=None, yes=False)
+        )
+        == 0
+    )
+    captured = capsys.readouterr()
+    assert json.loads(captured.out or captured.err) == payload
+
+
+@pytest.mark.parametrize("exit_code", [0, 1])
+def test_upgrade_restores_the_previous_runtime_profile(monkeypatch, exit_code):
+    _active_cli, active_runtime = _active_modules()
+    active_package_management = importlib.import_module(
+        "marm_mcp_server.services.package_management"
+    )
+    runtime_status = importlib.import_module("marm_mcp_server.services.runtime_status")
+    workflows = importlib.import_module("marm_mcp_server.services.product_workflows")
+    calls = []
+    monkeypatch.setattr(
+        active_package_management,
+        "inspect_installation",
+        lambda: active_package_management.Installation("2.26.0", "pip", False),
+    )
+    monkeypatch.setattr(
+        active_package_management,
+        "check_latest_release",
+        lambda: {
+            "installed_version": "2.26.0",
+            "latest_version": "2.27.0",
+            "state": "update_available",
+        },
+    )
+    monkeypatch.setattr(
+        active_package_management, "run_upgrade", lambda _version: exit_code
+    )
+    monkeypatch.setattr(
+        runtime_status,
+        "full_status",
+        lambda: {"runtime": {"state": "ready"}, "console": {"state": "stopped"}},
+    )
+    monkeypatch.setattr(
+        active_runtime,
+        "read_state",
+        lambda: {"profile": "swarm", "rate_limit_rpm": 200},
+    )
+    monkeypatch.setattr(active_runtime, "stop_runtime", lambda **_kwargs: None)
+    monkeypatch.setattr(
+        active_runtime,
+        "start_background",
+        lambda **kwargs: calls.append(kwargs),
+    )
+    monkeypatch.setattr(workflows.os, "name", "posix")
+
+    assert (
+        cli._upgrade(
+            SimpleNamespace(check=False, as_json=False, version=None, yes=True)
+        )
+        == exit_code
+    )
+    assert calls == [{"profile": "swarm", "rate_limit_rpm": 200}]
+
+
+def test_uninstall_preview_preserves_data_and_does_not_remove_package(
+    monkeypatch, capsys
+):
+    active_package_management = importlib.import_module(
+        "marm_mcp_server.services.package_management"
+    )
+    monkeypatch.setattr(
+        active_package_management,
+        "inspect_installation",
+        lambda: active_package_management.Installation("2.27.0", "pip", False),
+    )
+    monkeypatch.setattr(
+        active_package_management,
+        "run_uninstall",
+        lambda: pytest.fail("preview must not uninstall"),
+    )
+
+    assert cli._uninstall(SimpleNamespace(yes=False)) == 0
+    captured = capsys.readouterr()
+    output = captured.out or captured.err
+    assert "Preserved data and configuration" in output
+    assert "Preview only" in output
 
 
 def test_default_status_is_human_readable(capsys):

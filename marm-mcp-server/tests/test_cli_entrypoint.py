@@ -81,6 +81,7 @@ def test_migration_entrypoints_are_side_effect_light_when_database_is_absent(tmp
     env["MARM_ANALYTICS_DB_PATH"] = str(tmp_path / "analytics.db")
     env["USERPROFILE"] = str(tmp_path)
     env["HOME"] = str(tmp_path)
+    env["SERVER_PORT"] = "65534"
 
     module_result = subprocess.run(
         [sys.executable, "-m", "marm_mcp_server", "--migrate-embeddings"],

@@ -7,11 +7,9 @@ import asyncio
 import json
 import os
 import sys
-import time
 import urllib.error
 import urllib.request
 import uuid
-from collections import deque
 from pathlib import Path
 from typing import Any, Optional
 
@@ -143,16 +141,73 @@ def _add_profile_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def _add_docker_run_arguments(parser: argparse.ArgumentParser) -> None:
+    _add_profile_arguments(parser)
+    parser.add_argument("--port", type=int, default=8001)
+    parser.add_argument("--data-dir", type=Path, default=Path.home() / ".marm")
+    parser.add_argument("--name", default="marm-mcp-server")
+    parser.add_argument("--tag", default="latest")
+    parser.add_argument("--repo", type=Path, action="append", default=[])
+    parser.add_argument("--pull", action="store_true")
+    parser.add_argument("--expose-network", action="store_true")
+    parser.add_argument("--env-file", type=Path)
+    parser.add_argument("--memory")
+    parser.add_argument("--cpus")
+
+
+def _product_help() -> str:
+    """Return the stable, human-oriented root help for the product CLI."""
+    from .services.product_help import render_product_help
+
+    return render_product_help(SERVER_VERSION)
+
+
+class _ProductArgumentParser(argparse.ArgumentParser):
+    """Keep root help stable while retaining argparse for all subcommands."""
+
+    def format_help(self) -> str:
+        return _product_help()
+
+
 def _product_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog="marm-memory", description="Run and manage marm-memory locally"
+    parser = _ProductArgumentParser(
+        prog="marm-memory",
+        description="Run and manage marm-memory locally",
+        add_help=False,
     )
-    subparsers = parser.add_subparsers(dest="command", required=True)
+    parser.add_argument("-h", "--help", action="help", help="Show help")
+    parser.add_argument(
+        "-V",
+        "--version",
+        action="version",
+        version=SERVER_VERSION,
+        help="Show installed version",
+    )
+    subparsers = parser.add_subparsers(
+        dest="command", required=True, parser_class=argparse.ArgumentParser
+    )
 
     start = subparsers.add_parser("start", help="Start the local MARM runtime")
     _add_profile_arguments(start)
     start.add_argument("--foreground", action="store_true")
     start.add_argument("--runtime-id", help=argparse.SUPPRESS)
+
+    fast_start = subparsers.add_parser(
+        "fast-start-http", help="Start HTTP, Console, and optional client setup"
+    )
+    _add_profile_arguments(fast_start)
+    fast_start.add_argument("--client", help="Configure a supported MCP client")
+    fast_start.add_argument("--no-console", action="store_true")
+    fast_start.add_argument("--no-browser", action="store_true")
+
+    http = subparsers.add_parser(
+        "http", help="Run the HTTP transport in the foreground"
+    )
+    _add_profile_arguments(http)
+    http.add_argument("--runtime-id", help=argparse.SUPPRESS)
+    http.set_defaults(foreground=True)
+
+    subparsers.add_parser("stdio", help="Run the MCP STDIO transport")
 
     stop = subparsers.add_parser("stop", help="Stop the managed MARM runtime")
     stop.add_argument("--force", action="store_true")
@@ -166,6 +221,11 @@ def _product_parser() -> argparse.ArgumentParser:
     browser.add_argument("--no-open", action="store_false", dest="open_browser")
     console.set_defaults(open_browser=True)
     console.add_argument("--foreground", action="store_true")
+    console.add_argument(
+        "--import-key",
+        action="store_true",
+        help="Create a managed authenticated Console browser session",
+    )
     logs = subparsers.add_parser("logs", help="Read managed runtime logs")
     logs.add_argument("--follow", action="store_true")
     logs.add_argument("--lines", type=int, default=100)
@@ -205,10 +265,30 @@ def _product_parser() -> argparse.ArgumentParser:
     embeddings_sub = embeddings.add_subparsers(dest="embeddings_command", required=True)
     embeddings_sub.add_parser("migrate")
 
-    key = subparsers.add_parser("key")
+    key = subparsers.add_parser("key", help="Manage local bearer authentication")
     key_sub = key.add_subparsers(dest="key_command", required=True)
-    key_sub.add_parser("generate")
-    subparsers.add_parser("version")
+    key_sub.add_parser("generate", help="Generate and display an ephemeral key")
+    key_sub.add_parser("init", help="Create or reuse the managed local key file")
+    key_sub.add_parser("path", help="Print the managed local key-file path")
+    key_sub.add_parser("reveal", help="Display the managed local key")
+
+    from .services.docker_cli import add_docker_commands
+
+    add_docker_commands(subparsers, _add_docker_run_arguments)
+    upgrade = subparsers.add_parser(
+        "upgrade", aliases=["update"], help="Check for and install a newer MARM release"
+    )
+    upgrade.add_argument("--check", action="store_true")
+    upgrade.add_argument("--version")
+    upgrade.add_argument("--yes", action="store_true")
+    upgrade.add_argument("--json", action="store_true", dest="as_json")
+
+    uninstall = subparsers.add_parser(
+        "uninstall", help="Remove MARM while preserving user data"
+    )
+    uninstall.add_argument("--yes", action="store_true")
+
+    subparsers.add_parser("version", help="Show installed version")
     return parser
 
 
@@ -397,6 +477,13 @@ def _ensure_runtime() -> dict[str, Any]:
     return current if current["state"] == "ready" else start_background()
 
 
+def _fast_start_http(args: argparse.Namespace) -> int:
+    """Delegate the reusable local HTTP workflow to its service owner."""
+    from .services.product_workflows import fast_start_http
+
+    return fast_start_http(args)
+
+
 def _runtime_post(path: str, payload: dict[str, Any]) -> dict[str, Any]:
     from .core.runtime_manager import request_runtime_strict
 
@@ -427,6 +514,20 @@ def _migrate_embeddings() -> int:
     return 0
 
 
+def _upgrade(args: argparse.Namespace) -> int:
+    """Delegate package update policy to the lifecycle service."""
+    from .services.product_workflows import upgrade
+
+    return upgrade(args, print_payload=_print_payload)
+
+
+def _uninstall(args: argparse.Namespace) -> int:
+    """Delegate package removal policy to the lifecycle service."""
+    from .services.product_workflows import uninstall
+
+    return uninstall(args)
+
+
 def _dispatch_product(args: argparse.Namespace) -> int:
     from .core import runtime_manager
     from .services.runtime_status import (
@@ -436,7 +537,9 @@ def _dispatch_product(args: argparse.Namespace) -> int:
         maintenance_status,
     )
 
-    if args.command == "start":
+    if args.command == "fast-start-http":
+        return _fast_start_http(args)
+    if args.command in {"start", "http"}:
         if args.foreground:
             _run_foreground(
                 profile=args.profile,
@@ -452,6 +555,11 @@ def _dispatch_product(args: argparse.Namespace) -> int:
             f"MARM runtime ready: http://127.0.0.1:{state.get('port', SERVER_PORT)}/mcp"
         )
         print("Console: run `marm-memory console` when you want the web app.")
+        return 0
+    if args.command == "stdio":
+        from . import server_stdio
+
+        server_stdio.main()
         return 0
     if args.command == "stop":
         print(
@@ -470,14 +578,18 @@ def _dispatch_product(args: argparse.Namespace) -> int:
         return 0
     if args.command == "status":
         payload = full_status()
-        _print_payload(payload, as_json=True) if args.as_json else _print_status(
-            payload
+        (
+            _print_payload(payload, as_json=True)
+            if args.as_json
+            else _print_status(payload)
         )
         return 0
     if args.command == "doctor":
         payload = doctor_status()
-        _print_payload(payload, as_json=True) if args.as_json else _print_doctor(
-            payload
+        (
+            _print_payload(payload, as_json=True)
+            if args.as_json
+            else _print_doctor(payload)
         )
         return 0 if payload["ok"] else 1
     if args.command == "logs":
@@ -486,7 +598,11 @@ def _dispatch_product(args: argparse.Namespace) -> int:
         _ensure_runtime()
         from .console.cli import run_console
 
-        return run_console(open_browser=args.open_browser, foreground=args.foreground)
+        return run_console(
+            open_browser=args.open_browser,
+            foreground=args.foreground,
+            import_key=args.import_key,
+        )
     if args.command == "knowledge":
         if args.knowledge_command == "status":
             _print_payload(knowledge_status())
@@ -511,118 +627,69 @@ def _dispatch_product(args: argparse.Namespace) -> int:
             return 0
         return _migrate_embeddings()
     if args.command == "key":
-        _write_generated_api_key()
+        if args.key_command == "generate":
+            _write_generated_api_key()
+            return 0
+        from .services import key_management
+
+        if args.key_command == "init":
+            path, created = key_management.initialize_managed_key()
+            state = "Created" if created else "Using existing"
+            print(f"{state} MARM API key file: {path}")
+            return 0
+        if args.key_command == "path":
+            print(key_management.managed_key_path())
+            return 0
+        key = key_management.read_managed_key()
+        if not key:
+            print(
+                "No managed MARM API key exists. Run `marm-memory key init` first.",
+                file=sys.stderr,
+            )
+            return 1
+        print(
+            "Warning: terminal capture and shell history may retain this key.",
+            file=sys.stderr,
+        )
+        print(key)
         return 0
+    if args.command == "docker":
+        return _dispatch_docker(args)
+    if args.command in {"upgrade", "update"}:
+        return _upgrade(args)
+    if args.command == "uninstall":
+        return _uninstall(args)
     if args.command == "version":
         print(SERVER_VERSION)
         return 0
     return 2
 
 
-def _dispatch_projects(args: argparse.Namespace) -> int:
-    from .core.runtime_manager import (
-        RuntimeRequestError,
-        RuntimeUnavailable,
-        request_runtime,
-        request_runtime_strict,
-    )
+def _dispatch_docker(args: argparse.Namespace) -> int:
+    """Delegate Docker behavior to the shared Docker CLI service."""
+    from .services.docker_cli import dispatch_docker
 
-    _ensure_runtime()
-    if args.projects_command == "list":
-        payload = _runtime_post("/internal/projects/list", {})
-    elif args.projects_command == "status":
-        if args.project is None:
-            payload = request_runtime("/internal/runtime/status") or {}
-            payload = payload.get("graph", payload)
-        else:
-            payload = _runtime_post(
-                "/internal/projects/status", {"project": args.project}
-            )
-    elif args.projects_command == "remove":
-        if args.confirm != args.project:
-            print("--confirm must exactly match the project name.", file=sys.stderr)
-            return 2
-        payload = _runtime_post(
-            "/internal/projects/delete",
-            {"project": args.project, "name": args.confirm, "confirm": True},
-        )
-    else:
-        path = Path(args.path).expanduser()
-        if not path.is_absolute() or not path.is_dir():
-            print(
-                "Repository path must be an existing absolute directory.",
-                file=sys.stderr,
-            )
-            return 2
-        job = _runtime_post(
-            "/internal/projects/index",
-            {"repo_path": str(path.resolve()), "mode": args.mode},
-        )
-        job_id = job.get("job_id")
-        if not job_id:
-            _print_payload(job)
-            return 1
-        poll_failures = 0
-        while True:
-            try:
-                payload = request_runtime_strict(
-                    f"/internal/projects/jobs/{job_id}", timeout=5.0
-                )
-                poll_failures = 0
-            except RuntimeRequestError as exc:
-                if exc.status_code != 429 and exc.status_code < 500:
-                    raise
-                poll_failures += 1
-                if poll_failures >= 5:
-                    raise RuntimeError(
-                        "Project index status could not be read after 5 attempts."
-                    ) from exc
-                time.sleep(exc.retry_after or 1)
-                continue
-            except RuntimeUnavailable as exc:
-                poll_failures += 1
-                if poll_failures >= 5:
-                    raise RuntimeError(
-                        "Lost contact with the runtime while indexing the project."
-                    ) from exc
-                time.sleep(1)
-                continue
-            status = payload.get("status")
-            if status in {"success", "error"}:
-                break
-            if status not in {"queued", "running"}:
-                raise RuntimeError("The project index job returned an invalid status.")
-            time.sleep(1)
-    _print_payload(payload)
-    return 1 if payload.get("status") == "error" else 0
+    return dispatch_docker(args, print_payload=_print_payload)
+
+
+def _dispatch_projects(args: argparse.Namespace) -> int:
+    """Delegate code-index operations to the focused project CLI service."""
+    from .services.projects_cli import dispatch_projects
+
+    return dispatch_projects(
+        args,
+        ensure_runtime=_ensure_runtime,
+        runtime_post=_runtime_post,
+        print_payload=_print_payload,
+    )
 
 
 def _show_logs(lines: int, follow: bool) -> int:
+    """Delegate managed-log display to the focused log service."""
     from .core.runtime_manager import log_path
+    from .services.product_logs import show_logs
 
-    path = log_path()
-    if not path.exists():
-        print("No managed runtime log exists yet.")
-        return 0
-    with path.open("r", encoding="utf-8", errors="replace") as log_file:
-        recent = deque(log_file, maxlen=max(1, lines))
-        for line in recent:
-            print(line, end="")
-        if not follow:
-            return 0
-        while True:
-            line = log_file.readline()
-            if line:
-                print(line, end="")
-                continue
-            try:
-                if path.stat().st_size < log_file.tell():
-                    log_file.seek(0)
-                time.sleep(0.5)
-            except KeyboardInterrupt:
-                return 0
-            except OSError:
-                time.sleep(0.5)
+    return show_logs(lines, follow, path=log_path())
 
 
 def _dispatch_compatibility(
@@ -663,6 +730,9 @@ def main() -> None:
         and sys.argv[1]
         in {
             "start",
+            "fast-start-http",
+            "http",
+            "stdio",
             "stop",
             "restart",
             "status",
@@ -673,11 +743,21 @@ def main() -> None:
             "projects",
             "maintenance",
             "key",
+            "docker",
+            "upgrade",
+            "update",
+            "uninstall",
             "version",
         }
     )
     parser = _product_parser() if product_mode else _compatibility_parser()
-    args = parser.parse_args()
+    arguments = sys.argv[1:]
+    if product_mode and arguments[:1] == ["help"]:
+        if len(arguments) == 1:
+            parser.print_help()
+            raise SystemExit(0)
+        arguments = [arguments[1], "--help", *arguments[2:]]
+    args = parser.parse_args(arguments)
     if product_mode:
         try:
             code = _dispatch_product(args)

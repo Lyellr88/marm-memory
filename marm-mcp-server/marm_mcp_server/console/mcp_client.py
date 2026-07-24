@@ -30,7 +30,11 @@ def _api_key() -> str:
         return explicit
     from ..config.settings import MARM_API_KEY
 
-    return MARM_API_KEY
+    if MARM_API_KEY:
+        return MARM_API_KEY
+    from ..services.key_management import read_managed_key
+
+    return read_managed_key()
 
 
 def _http_error(exc: HTTPError) -> McpRequestError:

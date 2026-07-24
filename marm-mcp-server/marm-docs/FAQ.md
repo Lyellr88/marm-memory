@@ -71,7 +71,7 @@ Docker HTTP mode should use `MARM_API_KEY` because the server is listening throu
 
 #### Q: How do I know if MARM is working correctly?
 
-For HTTP mode, run `curl http://localhost:8001/health` or use MARM Console when it is running locally. For STDIO mode, confirm your MCP client lists the MARM tools and can call a simple recall or log command.
+For HTTP mode, run `marm-memory status` or `marm-memory doctor`. The raw health endpoint remains available at `http://localhost:8001/health`. For STDIO mode, confirm your MCP client lists the MARM tools and can call a simple recall or log command.
 
 ---
 
@@ -114,7 +114,7 @@ Nothing breaks. The code-graph engine starts lazily on first graph-tool use; if 
 
 #### Q: What should I use for multi-agent or swarm-style workflows?
 
-Use HTTP mode so one MARM server coordinates shared database access. The write queue is enabled by default. Start shared servers with `--swarm` for 200 RPM, `--swarm-max` for 600 RPM, or `--trusted` to disable rate limiting on a private trusted deployment.
+Use HTTP mode so one MARM server coordinates shared database access. The write queue is enabled by default. Start shared servers with `marm-memory start --profile swarm` for 200 RPM, `--profile swarm-max` for 600 RPM, or `--profile trusted` to disable rate limiting on a private trusted deployment.
 
 Run one MARM HTTP process per SQLite database. Multi-process Uvicorn/Gunicorn workers are not supported yet because the write queue, scheduler, protocol delivery, and some active session state are process-local. Swarm presets increase safe concurrency inside one process; true multi-worker HTTP scaling is future work.
 

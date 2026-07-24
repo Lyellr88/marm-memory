@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import secrets
 import subprocess
 import sys
 import time
@@ -57,10 +58,32 @@ def _serve() -> None:
     )
 
 
-def run_console(*, open_browser: bool = True, foreground: bool = False) -> int:
+def run_console(
+    *,
+    open_browser: bool = True,
+    foreground: bool = False,
+    import_key: bool = False,
+) -> int:
     from ..core.runtime_manager import bound_log_file, runtime_dir
 
     url = f"http://127.0.0.1:{_port()}"
+    if import_key:
+        from ..config.settings import MARM_API_KEY
+        from ..services.key_management import read_managed_key
+
+        managed_key = read_managed_key()
+        if not managed_key:
+            raise RuntimeError(
+                "No managed MARM API key exists. Run `marm-memory key init` first."
+            )
+        if MARM_API_KEY and not secrets.compare_digest(managed_key, MARM_API_KEY):
+            raise RuntimeError(
+                "The managed key does not match this runtime. Use Console Settings "
+                "to enter the runtime's bearer key."
+            )
+        from .auth import create_bootstrap_token
+
+        url = f"{url}/#marm-bootstrap={create_bootstrap_token(runtime_dir())}"
     if not _healthy():
         if foreground:
             if open_browser:
@@ -108,7 +131,7 @@ def run_console(*, open_browser: bool = True, foreground: bool = False) -> int:
             raise RuntimeError(f"MARM Console did not become ready. Check {log_path}.")
     if open_browser:
         webbrowser.open(url)
-    print(f"MARM Console: {url}")
+    print(f"MARM Console: {url.split('/#', 1)[0]}")
     return 0
 
 

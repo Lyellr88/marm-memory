@@ -225,6 +225,20 @@ Run Docker smoke directly when changing Docker, transport setup, auth, or startu
 python scripts/test-scripts/docker-smoke.py
 ```
 
+For changes to Docker bind mounts, container users, `HOME`, cache paths, or data persistence, also run the Linux-only smoke test. It verifies that a host-owned mounted database can be written through HTTP and survives a container restart.
+
+Run it from a native Linux host or WSL2 with Docker Desktop WSL integration enabled. The script creates its temporary mounted data directory under Linux `/tmp`; do not change that location to `/mnt/c`, or the UID/GID assertion is no longer meaningful:
+
+```bash
+bash scripts/test-scripts/docker-linux-bind-mount-smoke.sh
+```
+
+The script uses the latest official image by default. To test a locally built image instead:
+
+```bash
+MARM_DOCKER_SMOKE_IMAGE=marm-mcp-server:smoke bash scripts/test-scripts/docker-linux-bind-mount-smoke.sh
+```
+
 ## Documentation
 
 Update docs when changing:
