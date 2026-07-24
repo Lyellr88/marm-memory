@@ -5,7 +5,7 @@ set -Eeuo pipefail
 readonly image="${MARM_DOCKER_SMOKE_IMAGE:-lyellr88/marm-mcp-server:latest}"
 readonly smoke_root="$(mktemp -d)"
 readonly container_name="marm-linux-smoke-$$"
-readonly api_key="marm-linux-smoke-key-4d82fe9a"
+readonly api_key="$(python3 -c 'import secrets; print(secrets.token_urlsafe(32))')"
 readonly data_dir="$smoke_root/data"
 readonly env_file="$smoke_root/marm.env"
 readonly port="$(python3 - <<'PY'
