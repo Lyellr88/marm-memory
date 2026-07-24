@@ -3,10 +3,11 @@
 ## Version 2 - MARM Protocol to Universal MCP Server Evolution
 
 <details>
-<summary><strong>July 24th, 2026: Restored PyPI And Registry Publishing (v2.28.1)</strong></summary>
+<summary><strong>July 24th, 2026: Restored PyPI And Registry Publishing (v2.28.2)</strong></summary>
 
 - Restored the PyPI trusted-publisher workflow after account recovery and re-enabled MCP Registry publishing, which depends on the published PyPI version.
 - Added a release-time installed-wheel smoke test that verifies the bundled MARM Console entry point and static frontend before upload.
+- Updated the README status notices to confirm that MARM Console is ready and PyPI publishing is current again.
 
 </details>
 
