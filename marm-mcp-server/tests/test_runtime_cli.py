@@ -248,7 +248,8 @@ def test_windows_dacl_replacement_locks_file_to_current_user(tmp_path):
     before = subprocess.run(
         ["icacls", str(target)], capture_output=True, text=True
     ).stdout
-    assert "(I)" in before, "fixture file should start with inherited ACEs"
+    if "(I)" not in before:
+        pytest.skip("temp dir has no inherited ACEs to strip; precondition unmet")
 
     assert security._set_windows_owner_only_dacl(target) is True
 

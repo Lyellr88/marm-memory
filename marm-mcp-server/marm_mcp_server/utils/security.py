@@ -34,6 +34,7 @@ def _set_windows_owner_only_dacl(path: Path) -> bool:
     generic_all = 0x10000000
     no_inheritance = 0
     se_file_object = 1
+    owner_security_information = 0x00000001
     dacl_security_information = 0x00000004
     protected_dacl_security_information = 0x80000000
 
@@ -140,8 +141,10 @@ def _set_windows_owner_only_dacl(path: Path) -> bool:
                     advapi32.SetNamedSecurityInfoW(
                         str(path),
                         se_file_object,
-                        dacl_security_information | protected_dacl_security_information,
-                        None,
+                        owner_security_information
+                        | dacl_security_information
+                        | protected_dacl_security_information,
+                        token_user.user.sid,
                         None,
                         dacl,
                         None,
