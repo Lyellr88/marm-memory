@@ -9,7 +9,6 @@ from ..config.settings import (
     TEMPORAL_WEIGHT,
     TEMPORAL_HALF_LIFE_DAYS,
     FTS_CANDIDATE_LIMIT,
-    HYBRID_SEARCH_TEXT_WEIGHT,
 )
 from .memory_utils import (
     _safe_print,
@@ -23,6 +22,7 @@ from .memory_scoring import (
     _fetch_and_score_by_ids,
     _fetch_and_score_embedding_rows,
     _fetch_and_score_fts_rows,
+    _rrf_scores,
 )
 
 
@@ -227,7 +227,6 @@ async def _recall_similar(
                 )
                 _recall_debug("FTS filter failed → semantic fallback")
 
-        bm25_by_id = dict(candidates)
         use_semantic_fallback = True
         if candidates:
             similarities, dim_skipped = await asyncio.to_thread(
@@ -265,19 +264,21 @@ async def _recall_similar(
                 f"recall_similar: skipped {dim_skipped} memories with wrong embedding dimension (expected {len(query_embedding)})"
             )
 
-        # Lexical fusion only applies on the FTS filter->rerank path, where every
-        # scored row has a BM25 score. The semantic fallback scan has no lexical
-        # signal, so it keeps the pure semantic+temporal blend.
-        apply_bm25 = not use_semantic_fallback and bool(bm25_by_id)
+        # Hybrid path: fuse BM25 and cosine by Reciprocal Rank Fusion (ranks only).
+        # Semantic fallback has no lexical list, so it keeps pure semantic+temporal.
+        # Similarity magnitudes on the hybrid path are RRF-scaled, not cosine.
+        apply_rrf = not use_semantic_fallback and bool(candidates)
+        rrf_by_id: dict[str, float] = {}
+        if apply_rrf:
+            bm25_ranked = [cid for cid, _ in candidates]
+            cosine_ranked = [mem_row["id"] for mem_row, _ in similarities]
+            rrf_by_id = _rrf_scores([bm25_ranked, cosine_ranked])
 
         combined: dict[str, tuple] = {}
         for mem_row, vec_score in similarities:
             t_score = _temporal_score(mem_row["timestamp"], TEMPORAL_HALF_LIFE_DAYS)
-            if apply_bm25:
-                bm25_score = bm25_by_id.get(mem_row["id"], 0.0)
-                relevance = (
-                    1 - HYBRID_SEARCH_TEXT_WEIGHT
-                ) * vec_score + HYBRID_SEARCH_TEXT_WEIGHT * bm25_score
+            if apply_rrf:
+                relevance = rrf_by_id.get(mem_row["id"], 0.0)
             else:
                 relevance = vec_score
             combined[mem_row["id"]] = (

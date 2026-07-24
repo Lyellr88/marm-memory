@@ -621,9 +621,13 @@ async def test_recall_similar_debug_logs_semantic_fallback_path(monkeypatch, tmp
 
 @pytest.mark.asyncio
 async def test_recall_similar_fuses_bm25_into_ranking(monkeypatch, tmp_path):
-    """Two candidates with identical embeddings must be ordered by their BM25
-    score, proving the lexical signal is fused into the blend rather than
-    discarded after the FTS filter."""
+    """RRF must consume the BM25 candidate *order* (stub floats are ignored).
+
+    Cosine scores are forced identical with a fixed return order. When the FTS
+    list agrees with that order, the leader ranks first with a higher score;
+    when FTS order is reversed, RRF contributions cancel and the scores tie —
+    proving the lexical rank list is fused rather than discarded.
+    """
     from marm_mcp_server.core import memory_recall as memory_recall_module
 
     memory = MARMMemory(str(tmp_path / "memory.db"))
@@ -637,23 +641,68 @@ async def test_recall_similar_fuses_bm25_into_ranking(monkeypatch, tmp_path):
         strong_id = _insert_with_embedding(conn, "fuse", "docker deployment", vec)
         weak_id = _insert_with_embedding(conn, "fuse", "docker sidebar", vec)
 
-    # Identical embeddings -> identical vec_score. Only the BM25 term differs,
-    # so any ordering must come from lexical fusion.
+    original_scorer = memory_recall_module._fetch_and_score_by_ids
+
+    def tied_cosine_scorer(db_path, memory_ids, query_embedding):
+        results, skipped = original_scorer(db_path, memory_ids, query_embedding)
+        by_id = {row["id"]: (row, score) for row, score in results}
+        score = next(iter(by_id.values()))[1]
+        return [
+            (by_id[strong_id][0], score),
+            (by_id[weak_id][0], score),
+        ], skipped
+
+    monkeypatch.setattr(
+        memory_recall_module, "_fetch_and_score_by_ids", tied_cosine_scorer
+    )
+    # Neutralize temporal so a pure RRF tie is observable.
+    monkeypatch.setattr(memory_recall_module, "TEMPORAL_WEIGHT", 0.0)
+
     monkeypatch.setattr(
         memory_recall_module,
         "_fetch_fts_candidate_ids",
         lambda *_: [(strong_id, 1.0), (weak_id, 0.0)],
     )
-
-    results = await memory.recall_similar(
+    results_agree = await memory.recall_similar(
         "docker", session="fuse", limit=5, query_vec=vec.copy()
     )
-    ids = [r["id"] for r in results]
+    ids_agree = [r["id"] for r in results_agree]
+    assert ids_agree.index(strong_id) < ids_agree.index(weak_id)
+    assert (
+        results_agree[ids_agree.index(strong_id)]["similarity"]
+        > results_agree[ids_agree.index(weak_id)]["similarity"]
+    )
 
-    assert ids.index(strong_id) < ids.index(weak_id)
-    strong_sim = results[ids.index(strong_id)]["similarity"]
-    weak_sim = results[ids.index(weak_id)]["similarity"]
-    assert strong_sim > weak_sim
+    monkeypatch.setattr(
+        memory_recall_module,
+        "_fetch_fts_candidate_ids",
+        lambda *_: [(weak_id, 1.0), (strong_id, 0.0)],
+    )
+    results_swap = await memory.recall_similar(
+        "docker", session="fuse", limit=5, query_vec=vec.copy()
+    )
+    by_id = {r["id"]: r["similarity"] for r in results_swap}
+    assert by_id[strong_id] == pytest.approx(by_id[weak_id])
+
+
+def test_rrf_scores_known_ranks():
+    """Pure RRF math: known 1-based ranks map to the scaled closed form."""
+    from marm_mcp_server.core.memory_scoring import RRF_K, _rrf_scores
+
+    k = RRF_K
+    scores = _rrf_scores([["a", "b"], ["a", "b"]], k=k)
+    # Rank-1 on both lists: 2/(k+1) * (k+1)/2 = 1.0
+    assert scores["a"] == pytest.approx(1.0)
+    # Rank-2 on both: 2/(k+2) * (k+1)/2 = (k+1)/(k+2)
+    assert scores["b"] == pytest.approx((k + 1) / (k + 2))
+
+    # Present in only one list → half of the two-list ceiling.
+    single = _rrf_scores([["a"], ["b"]], k=k)
+    assert single["a"] == pytest.approx(0.5)
+    assert single["b"] == pytest.approx(0.5)
+
+    assert _rrf_scores([]) == {}
+    assert _rrf_scores([[], []]) == {}
 
 
 def test_normalize_bm25_maps_more_negative_to_higher_score():

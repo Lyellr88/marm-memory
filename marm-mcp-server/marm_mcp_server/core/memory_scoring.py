@@ -19,6 +19,31 @@ def _normalize_bm25(raw_scores: list[float]) -> list[float]:
     return [(max_s - s) / span for s in raw_scores]
 
 
+# Cormack et al. (2009) default; softens top-rank dominance without per-retriever weights.
+RRF_K = 60
+
+
+def _rrf_scores(
+    rank_lists: list[list[str]],
+    *,
+    k: int = RRF_K,
+) -> dict[str, float]:
+    """Reciprocal Rank Fusion over ranked id lists, scaled into roughly [0, 1].
+
+    For each list, rank 1 is best. A document missing from a list contributes
+    nothing for that list (fail-open). Raw RRF is scaled by (k+1)/2 so that
+    rank-1 on exactly two lists maps to 1.0 before any temporal blend.
+    """
+    scores: dict[str, float] = {}
+    for ranked_ids in rank_lists:
+        for rank, doc_id in enumerate(ranked_ids, start=1):
+            scores[doc_id] = scores.get(doc_id, 0.0) + 1.0 / (k + rank)
+    if not scores:
+        return {}
+    scale = (k + 1) / 2.0
+    return {doc_id: score * scale for doc_id, score in scores.items()}
+
+
 def _score_embedding_rows(rows, query_embedding, limit: int):
     """Score embedding rows in one NumPy batch instead of a Python cosine loop."""
     if limit <= 0:
