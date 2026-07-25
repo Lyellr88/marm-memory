@@ -947,7 +947,6 @@ Packaged docs are indexed into the `marm_system` memory namespace on startup and
 | `WRITE_QUEUE_ENABLED` | `1` | Serialize writes through one worker |
 | `FTS_CANDIDATE_LIMIT` | `50` | BM25 candidates fetched before semantic reranking; raise for stores with weak keyword overlap |
 | `RECALL_SCAN_LIMIT` | `10000` | Cap on the semantic fallback scan; `recall_scan_truncated=true` in responses means it was hit |
-| `HYBRID_SEARCH_TEXT_WEIGHT` | `0.35` | Text-vs-semantic blend in hybrid scoring |
 | `TEMPORAL_WEIGHT` / `TEMPORAL_HALF_LIFE_DAYS` | `0.1` / `30` | Strength and decay of the recency boost |
 | `CONSOLIDATION_ENABLED` | `0` | Write-time dedup + semantic merge |
 | `CONSOLIDATION_THRESHOLD` | `0.92` | Similarity needed to merge near-duplicates |

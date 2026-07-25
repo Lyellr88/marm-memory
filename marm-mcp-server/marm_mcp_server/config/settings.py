@@ -228,17 +228,10 @@ if not (0.0 <= _raw_cdst <= 1.0):
         file=sys.stderr,
     )
 
-_raw_hsw = _safe_float("HYBRID_SEARCH_TEXT_WEIGHT", 0.35)
 _raw_tw = _safe_float("TEMPORAL_WEIGHT", 0.1)
 _raw_hld = _safe_float("TEMPORAL_HALF_LIFE_DAYS", 30)
-HYBRID_SEARCH_TEXT_WEIGHT = max(0.0, min(1.0, _raw_hsw))
 TEMPORAL_WEIGHT = max(0.0, min(1.0, _raw_tw))
 TEMPORAL_HALF_LIFE_DAYS = max(1.0, _raw_hld)
-if not (0.0 <= _raw_hsw <= 1.0):
-    print(
-        f"WARNING: HYBRID_SEARCH_TEXT_WEIGHT={_raw_hsw} out of [0, 1], clamped to {HYBRID_SEARCH_TEXT_WEIGHT}",
-        file=sys.stderr,
-    )
 if not (0.0 <= _raw_tw <= 1.0):
     print(
         f"WARNING: TEMPORAL_WEIGHT={_raw_tw} out of [0, 1], clamped to {TEMPORAL_WEIGHT}",

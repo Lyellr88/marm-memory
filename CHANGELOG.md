@@ -554,7 +554,7 @@
 
 ### Recall & Search
 
-- Added SQLite FTS5 indexing for memory content with automatic insert/update/delete triggers; `marm_smart_recall` merges semantic similarity with FTS BM25 keyword scoring via `HYBRID_SEARCH_TEXT_WEIGHT`, improving recall for commands, config keys, filenames, and error strings.
+- Added SQLite FTS5 indexing for memory content with automatic insert/update/delete triggers; `marm_smart_recall` merges semantic similarity with FTS BM25 keyword scoring, improving recall for commands, config keys, filenames, and error strings.
 - Added conservative temporal weighting via `TEMPORAL_WEIGHT` and `TEMPORAL_HALF_LIFE_DAYS` for modest recency boost when matches are close; FTS backfill on DB init for existing stores; LIKE fallback for unsanitizable queries.
 - Added 3-layer retrieval depth control (`detail=1/2/3`) with read-time truncation: Layer 1 ~200 chars, Layer 2 ~500 chars, Layer 3 full content; `detail_level` surfaced in recall responses.
 
