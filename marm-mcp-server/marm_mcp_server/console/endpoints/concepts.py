@@ -11,6 +11,8 @@ from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
 
 from .. import concept_store, mcp_client, memory_store
+from ..concept_graph_overview import graph_overview
+from ..concept_neighborhood import neighborhood
 from ..core import _concepts_payload, _now_iso, get_concept_db_path, get_memory_db_path
 from ..models import ConceptBuildPayload
 
@@ -76,7 +78,7 @@ def search_concepts(
 
 @router.get("/api/concepts/graph")
 def get_concept_graph() -> dict:
-    return concept_store.graph_overview(get_concept_db_path())
+    return graph_overview(get_concept_db_path())
 
 
 @router.get("/api/concepts/{entity_id}")
@@ -100,7 +102,7 @@ def get_concept_neighborhood(
     direction: str = Query("both", pattern="^(incoming|outgoing|both)$"),
     predicate: str | None = Query(None, max_length=100),
 ) -> dict:
-    result = concept_store.neighborhood(
+    result = neighborhood(
         get_concept_db_path(),
         entity_id,
         depth=depth,

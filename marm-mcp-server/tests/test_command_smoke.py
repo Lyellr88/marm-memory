@@ -171,14 +171,14 @@ def _parser_command_paths(parser: argparse.ArgumentParser) -> set[tuple[str, ...
 
 @pytest.mark.smoke
 def test_static_inventory_matches_registered_product_parser():
-    from marm_mcp_server.cli import _product_parser
+    from marm_mcp_server.services.cli_parser import _product_parser
 
     assert set(COMMAND_HELP_PATHS) == _parser_command_paths(_product_parser())
 
 
 @pytest.mark.smoke
 def test_root_help_lists_every_registered_top_level_command():
-    from marm_mcp_server.cli import _product_help, _product_parser
+    from marm_mcp_server.services.cli_parser import _product_help, _product_parser
 
     help_text = _product_help()
     top_level = {path[0] for path in _parser_command_paths(_product_parser())}

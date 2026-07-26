@@ -8,7 +8,11 @@ from pathlib import Path
 import re
 
 
-from marm_mcp_server.console import concept_store
+from marm_mcp_server.console import (
+    concept_graph_overview,
+    concept_neighborhood,
+    concept_store,
+)
 from marm_mcp_server.console.endpoints import concepts as concepts_endpoint
 
 
@@ -142,7 +146,7 @@ def test_neighborhood_enforces_200_node_limit(tmp_path):
         spoke = add_entity(db, f"spoke-{i}")
         add_edge(db, hub, spoke, "uses")
 
-    result = concept_store.neighborhood(db, hub, depth=1)
+    result = concept_neighborhood.neighborhood(db, hub, depth=1)
 
     assert result is not None
     assert len(result["nodes"]) <= 200
@@ -166,7 +170,7 @@ def test_neighborhood_truncation_prefers_typed_edges_over_co_occurrence(tmp_path
     typed_spokes = [add_entity(db, f"typed-{i}") for i in range(150)]
     typed_edge_ids = [add_edge(db, hub, s, "uses") for s in typed_spokes]
 
-    result = concept_store.neighborhood(db, hub, depth=1)
+    result = concept_neighborhood.neighborhood(db, hub, depth=1)
 
     returned_edge_ids = {e["id"] for e in result["edges"]}
     assert set(typed_edge_ids) <= returned_edge_ids, (
@@ -185,15 +189,15 @@ def test_neighborhood_depth_is_bounded_traversal(tmp_path):
     add_edge(db, b, c, "uses")
     add_edge(db, c, d, "uses")
 
-    depth1 = concept_store.neighborhood(db, a, depth=1)
-    depth2 = concept_store.neighborhood(db, a, depth=2)
-    depth3 = concept_store.neighborhood(db, a, depth=3)
+    depth1 = concept_neighborhood.neighborhood(db, a, depth=1)
+    depth2 = concept_neighborhood.neighborhood(db, a, depth=2)
+    depth3 = concept_neighborhood.neighborhood(db, a, depth=3)
 
     assert {n["id"] for n in depth1["nodes"]} == {a, b}
     assert {n["id"] for n in depth2["nodes"]} == {a, b, c}
     assert {n["id"] for n in depth3["nodes"]} == {a, b, c, d}
     # depth is clamped to [1, 3]
-    clamped = concept_store.neighborhood(db, a, depth=99)
+    clamped = concept_neighborhood.neighborhood(db, a, depth=99)
     assert {n["id"] for n in clamped["nodes"]} == {a, b, c, d}
 
 
@@ -207,7 +211,7 @@ def test_neighborhood_hidden_neighbor_count_reflects_real_degree(tmp_path):
         other = add_entity(db, f"other-{i}")
         add_edge(db, b, other, "uses")
 
-    result = concept_store.neighborhood(db, a, depth=1)
+    result = concept_neighborhood.neighborhood(db, a, depth=1)
 
     by_id = {n["id"]: n for n in result["nodes"]}
     assert by_id[b]["degree"] == 6
@@ -223,7 +227,7 @@ def test_graph_overview_returns_complete_graph_under_budget(tmp_path):
         add_edge(db, hub, spoke, "uses")
     add_entity(db, "isolated")
 
-    result = concept_store.graph_overview(db)
+    result = concept_graph_overview.graph_overview(db)
 
     node_ids = {n["id"] for n in result["nodes"]}
     assert result["mode"] == "full"
@@ -246,8 +250,8 @@ def test_graph_overview_is_deterministic_across_calls(tmp_path):
         predicate = "co_occurs_with" if i % 2 else "uses"
         add_edge(db, entities[i], entities[i + 1], predicate)
 
-    first = concept_store.graph_overview(db)
-    second = concept_store.graph_overview(db)
+    first = concept_graph_overview.graph_overview(db)
+    second = concept_graph_overview.graph_overview(db)
 
     assert [e["id"] for e in first["edges"]] == [e["id"] for e in second["edges"]]
     assert [n["id"] for n in first["nodes"]] == [n["id"] for n in second["nodes"]]
@@ -260,7 +264,7 @@ def test_graph_overview_aggregates_visual_evidence(tmp_path):
     add_edge(db, source, target, "uses")
     add_edge(db, source, target, "uses")
 
-    result = concept_store.graph_overview(db)
+    result = concept_graph_overview.graph_overview(db)
 
     assert result["total"]["edges"] == 2
     assert result["rendered"]["edges"] == 1
@@ -271,17 +275,17 @@ def test_graph_overview_aggregates_visual_evidence(tmp_path):
 def test_graph_overview_samples_deterministically_and_keeps_connections(
     tmp_path, monkeypatch
 ):
-    monkeypatch.setattr(concept_store, "FULL_ATLAS_MAX_NODES", 5)
-    monkeypatch.setattr(concept_store, "FULL_ATLAS_MAX_EDGES", 5)
-    monkeypatch.setattr(concept_store, "SAMPLED_ATLAS_MAX_NODES", 6)
-    monkeypatch.setattr(concept_store, "SAMPLED_ATLAS_MAX_EDGES", 6)
+    monkeypatch.setattr(concept_graph_overview, "FULL_ATLAS_MAX_NODES", 5)
+    monkeypatch.setattr(concept_graph_overview, "FULL_ATLAS_MAX_EDGES", 5)
+    monkeypatch.setattr(concept_graph_overview, "SAMPLED_ATLAS_MAX_NODES", 6)
+    monkeypatch.setattr(concept_graph_overview, "SAMPLED_ATLAS_MAX_EDGES", 6)
     db = make_db(tmp_path)
     entities = [add_entity(db, f"node-{index}") for index in range(12)]
     for source, target in zip(entities, entities[1:]):
         add_edge(db, source, target, "uses")
 
-    first = concept_store.graph_overview(db)
-    second = concept_store.graph_overview(db)
+    first = concept_graph_overview.graph_overview(db)
+    second = concept_graph_overview.graph_overview(db)
 
     assert first["mode"] == "sampled"
     assert first["truncated"] is True
@@ -299,17 +303,17 @@ def test_graph_overview_samples_deterministically_and_keeps_connections(
 
 
 def test_graph_overview_bounds_sampled_raw_edge_candidates(tmp_path, monkeypatch):
-    monkeypatch.setattr(concept_store, "FULL_ATLAS_MAX_NODES", 3)
-    monkeypatch.setattr(concept_store, "FULL_ATLAS_MAX_EDGES", 3)
-    monkeypatch.setattr(concept_store, "SAMPLED_ATLAS_MAX_NODES", 4)
-    monkeypatch.setattr(concept_store, "SAMPLED_ATLAS_MAX_EDGES", 4)
-    monkeypatch.setattr(concept_store, "SAMPLED_ATLAS_RAW_EDGE_LIMIT", 2)
+    monkeypatch.setattr(concept_graph_overview, "FULL_ATLAS_MAX_NODES", 3)
+    monkeypatch.setattr(concept_graph_overview, "FULL_ATLAS_MAX_EDGES", 3)
+    monkeypatch.setattr(concept_graph_overview, "SAMPLED_ATLAS_MAX_NODES", 4)
+    monkeypatch.setattr(concept_graph_overview, "SAMPLED_ATLAS_MAX_EDGES", 4)
+    monkeypatch.setattr(concept_graph_overview, "SAMPLED_ATLAS_RAW_EDGE_LIMIT", 2)
     db = make_db(tmp_path)
     entities = [add_entity(db, f"node-{index}") for index in range(4)]
     for index in range(6):
         add_edge(db, entities[index % 4], entities[(index + 1) % 4], f"uses-{index}")
 
-    result = concept_store.graph_overview(db)
+    result = concept_graph_overview.graph_overview(db)
 
     assert result["mode"] == "sampled"
     assert len(result["edges"]) <= 2
@@ -328,7 +332,7 @@ def test_graph_overview_marks_platformless_schema_for_rebuild(tmp_path):
             """
         )
 
-    result = concept_store.graph_overview(db)
+    result = concept_graph_overview.graph_overview(db)
 
     assert result["schema_status"] == "rebuild_required"
     assert result["nodes"] == []
@@ -336,12 +340,12 @@ def test_graph_overview_marks_platformless_schema_for_rebuild(tmp_path):
 
 def test_missing_db_and_missing_seed_fail_safely(tmp_path):
     missing = tmp_path / "nope.db"
-    overview = concept_store.graph_overview(missing)
+    overview = concept_graph_overview.graph_overview(missing)
     assert overview["nodes"] == [] and overview["edges"] == []
-    assert concept_store.neighborhood(missing, 1) is None
+    assert concept_neighborhood.neighborhood(missing, 1) is None
 
     db = make_db(tmp_path)
-    assert concept_store.neighborhood(db, 12345) is None
+    assert concept_neighborhood.neighborhood(db, 12345) is None
 
 
 def test_neighborhood_respects_direction_and_predicate_filters(tmp_path):
@@ -352,9 +356,9 @@ def test_neighborhood_respects_direction_and_predicate_filters(tmp_path):
     add_edge(db, a, b, "uses")
     add_edge(db, c, a, "calls")
 
-    outgoing = concept_store.neighborhood(db, a, direction="outgoing")
-    incoming = concept_store.neighborhood(db, a, direction="incoming")
-    predicate = concept_store.neighborhood(db, a, predicate="calls")
+    outgoing = concept_neighborhood.neighborhood(db, a, direction="outgoing")
+    incoming = concept_neighborhood.neighborhood(db, a, direction="incoming")
+    predicate = concept_neighborhood.neighborhood(db, a, predicate="calls")
 
     assert {node["id"] for node in outgoing["nodes"]} == {a, b}
     assert {node["id"] for node in incoming["nodes"]} == {a, c}
