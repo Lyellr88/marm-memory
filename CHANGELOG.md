@@ -3,6 +3,21 @@
 ## Version 2 - MARM Protocol to Universal MCP Server Evolution
 
 <details>
+<summary><strong>July 25th, 2026: One-Command Skill Install and fast-start-http Guided Setup (v2.30.0)</strong></summary>
+
+### `marm-memory init`
+
+- Added `marm-memory init`, a standalone command that installs the MARM skill into agent skill folders with no server, database, or network access required. By default it scans the current project for supported agents (Claude, Codex, Gemini, Qwen, Kiro) and installs to each one found, overwriting any existing copy so re-running refreshes the skill after an upgrade. If no agent directory is present, it falls back to creating a `.agents/skills/marm-init/` folder in the project.
+- Per-agent global flags (`--g-claude`, `--g-codex`, `--g-gemini`, `--g-qwen`, `--g-kiro`) install into the matching home-folder directory instead. Global and project are separate modes; a run does one or the other, never both.
+- The skill is now bundled inside the package (`marm_mcp_server/resources/skills/marm-init/`) and read at install time, so installs work offline and always match the running version. A test asserts the bundled copy stays byte-identical to the source skill.
+
+### marm-init Skill Refresh
+
+- The guided setup skill now leads with `marm-memory fast-start-http` as the one-shot local path (starts the HTTP server, launches Console, and opens the browser with loopback-only auth), and uses the managed `marm-memory docker run` / `docker stdio-command` commands for the Docker paths in place of raw `docker run` blocks. The seven-step guided flow and the rule that key values never enter the setup conversation are preserved.
+
+</details>
+
+<details>
 <summary><strong>July 24th, 2026: Hybrid Recall Fusion, Windows Key Fix, and Command Smoke Suite (v2.29.0)</strong></summary>
 
 ### Hybrid Recall Now Fuses Lexical Relevance

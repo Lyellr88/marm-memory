@@ -86,6 +86,10 @@ def render_product_help(version: str) -> str:
         (
             "Setup and Updates:",
             (
+                (
+                    "init [--g-<agent>]",
+                    "Install the MARM skill into detected agents",
+                ),
                 ("doctor [--json]", "Diagnose dependencies and configuration"),
                 (
                     "key <generate|init|path|reveal>",

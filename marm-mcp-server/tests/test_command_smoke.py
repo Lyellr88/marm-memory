@@ -74,6 +74,7 @@ COMMAND_HELP_PATHS = (
     ("upgrade",),
     ("update",),
     ("uninstall",),
+    ("init",),
     ("version",),
 )
 

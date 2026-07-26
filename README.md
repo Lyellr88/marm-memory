@@ -5,7 +5,7 @@
      width="900"
      height="250">
 </picture>
-<h1 align="center">MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.29.0</h1>
+<h1 align="center">MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.30.0</h1>
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/Lyellr88/marm-memory/blob/MARM-main/LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
@@ -128,6 +128,8 @@ marm-memory console                  # start or reuse the bundled local Console
 ```bash
 marm-memory http                     # run HTTP in the foreground
 marm-memory stdio                    # run the strict local MCP STDIO transport
+marm-memory init                     # install the MARM skill into detected agents (project scan)
+marm-memory init --g-claude          # install the skill into the home-folder claude directory
 marm-memory doctor                   # diagnose the local install
 marm-memory key init                 # create or reuse ~/.marm/.env without displaying the key
 marm-memory key path                 # print the managed key-file path

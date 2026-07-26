@@ -288,6 +288,19 @@ def _product_parser() -> argparse.ArgumentParser:
     )
     uninstall.add_argument("--yes", action="store_true")
 
+    init = subparsers.add_parser(
+        "init", help="Install the MARM skill into detected agents"
+    )
+    from .services.skill_install import AGENTS
+
+    for agent in AGENTS:
+        init.add_argument(
+            f"--g-{agent}",
+            action="store_true",
+            dest=f"global_{agent}",
+            help=f"Install into the home-folder {agent} directory",
+        )
+
     subparsers.add_parser("version", help="Show installed version")
     return parser
 
@@ -528,6 +541,13 @@ def _uninstall(args: argparse.Namespace) -> int:
     return uninstall(args)
 
 
+def _init_skill(args: argparse.Namespace) -> int:
+    """Delegate skill installation to its focused service."""
+    from .services.skill_install import install_skill
+
+    return install_skill(args)
+
+
 def _dispatch_product(args: argparse.Namespace) -> int:
     from .core import runtime_manager
     from .services.runtime_status import (
@@ -659,6 +679,8 @@ def _dispatch_product(args: argparse.Namespace) -> int:
         return _upgrade(args)
     if args.command == "uninstall":
         return _uninstall(args)
+    if args.command == "init":
+        return _init_skill(args)
     if args.command == "version":
         print(SERVER_VERSION)
         return 0
@@ -747,6 +769,7 @@ def main() -> None:
             "upgrade",
             "update",
             "uninstall",
+            "init",
             "version",
         }
     )
