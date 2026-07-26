@@ -3,6 +3,15 @@
 ## Version 2 - MARM Protocol to Universal MCP Server Evolution
 
 <details>
+<summary><strong>Unreleased: Concept Store Module Split (v2.29.1)</strong></summary>
+
+### Internal
+
+- Split MARM Console's `concept_store.py` graph-atlas and single-entity-neighborhood queries into their own modules: `console/concept_graph_overview.py` (`graph_overview`, the full-vs-sampled visual atlas with its degree-ranked BFS tree-sampling) and `console/concept_neighborhood.py` (`neighborhood`, the bounded single-entity BFS traversal). No behavior change; shared low-level helpers (`_connect`, `_schema_status`, `_entity`) and the smaller query functions (`summary`, `search`, `get_entity`, `build_runs`, `get_build_run`, `duplicates`) stay in `concept_store.py`. `concept_store.py` drops from 676 to 334 lines.
+
+</details>
+
+<details>
 <summary><strong>July 24th, 2026: Hybrid Recall Fusion, Windows Key Fix, and Command Smoke Suite (v2.29.0)</strong></summary>
 
 ### Hybrid Recall Now Fuses Lexical Relevance
