@@ -43,14 +43,30 @@ def guess_context_type(filename):
         return "general"
 
 
+def _docs_dir() -> Path | None:
+    """Resolve the marm-docs directory across install types.
+
+    Prefers the copy bundled inside the package (present in pip wheels, Docker,
+    and dev checkouts), then a source checkout layout, then the Docker image path.
+    Pip installs previously matched none of the old candidates and silently
+    indexed nothing.
+    """
+    for candidate in (
+        Path(__file__).parent.parent / "resources" / "marm-docs",
+        Path(__file__).parent.parent.parent / "marm-docs",
+        Path("/app/marm-docs"),
+    ):
+        if candidate.exists():
+            return candidate
+    return None
+
+
 def get_docs_to_load():
     """Return all docs from marm-docs/ for memory indexing."""
-    docs_dir = Path(__file__).parent.parent.parent / "marm-docs"
-    if not docs_dir.exists():
-        docs_dir = Path("/app/marm-docs")
+    docs_dir = _docs_dir()
 
     docs = []
-    if docs_dir.exists():
+    if docs_dir is not None:
         for md_file in sorted(docs_dir.glob("*.md")):
             filename = md_file.stem.lower()
             docs.append(
@@ -64,7 +80,7 @@ def get_docs_to_load():
             names = ", ".join(d["file_path"].split("/")[-1] for d in docs)
             print(f"[DOCS] Indexing for marm_smart_recall: {names}")
     else:
-        print(f"WARNING: Documentation directory not found: {docs_dir}")
+        print("WARNING: marm-docs not found (checked packaged, source, and /app).")
 
     return docs
 
@@ -76,11 +92,10 @@ async def _index_doc(doc: Dict) -> bool:
     Re-indexes if content changed or the memory was deleted externally.
     Returns True on success, False if the file is missing or indexing fails.
     """
-    doc_path = Path(__file__).parent.parent.parent / doc["file_path"]
-    if not doc_path.exists():
-        doc_path = Path("/app") / doc["file_path"]
-    if not doc_path.exists():
-        print(f"WARNING: Documentation file not found: {doc_path}")
+    docs_dir = _docs_dir()
+    doc_path = docs_dir / Path(doc["file_path"]).name if docs_dir else None
+    if doc_path is None or not doc_path.exists():
+        print(f"WARNING: Documentation file not found: {doc['file_path']}")
         return False
 
     try:
