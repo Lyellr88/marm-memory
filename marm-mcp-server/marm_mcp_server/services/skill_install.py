@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 from importlib import resources
 from pathlib import Path
 
@@ -29,13 +30,30 @@ def _bundled_skill_text() -> str:
 
 
 def _write_skill(agent_dir: Path, text: str) -> dict[str, str]:
-    """Write (overwrite) the skill under one agent directory, failing open."""
+    """Write (overwrite) the skill under one agent directory, failing open.
+
+    Writes to a temp file and atomically replaces the target, so a failed write
+    never truncates an existing skill and a symlinked target is replaced rather
+    than followed. Symlinked targets are refused outright.
+    """
     target = agent_dir / SKILL_SUBPATH
+    tmp = target.with_name(target.name + ".tmp")
     try:
         target.parent.mkdir(parents=True, exist_ok=True)
+        if target.is_symlink():
+            return {
+                "target": str(target),
+                "state": "error",
+                "detail": "refusing to overwrite a symlinked skill file",
+            }
         existed = target.exists()
-        target.write_text(text, encoding="utf-8")
+        tmp.write_text(text, encoding="utf-8")
+        os.replace(tmp, target)
     except OSError as exc:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
         return {"target": str(target), "state": "error", "detail": str(exc)}
     return {"target": str(target), "state": "refreshed" if existed else "installed"}
 

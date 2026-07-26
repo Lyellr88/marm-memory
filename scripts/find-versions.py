@@ -41,6 +41,12 @@ OCI_IDENTIFIER_FILES = [
     SERVER_ROOT / "server.json",
 ]
 
+# docker-compose pins the published image to the release version; keep its tag in
+# sync so a floating :latest never drifts from the reported SERVER_VERSION.
+DOCKER_IMAGE_FILES = [
+    SERVER_ROOT / "docker-compose.yml",
+]
+
 DOC_ROOT = PROJECT_ROOT / "docs"
 MARM_DOCS_ROOT = SERVER_ROOT / "marm-docs"
 
@@ -50,6 +56,7 @@ CRITICAL_VERSION_RE = re.compile(
     re.IGNORECASE,
 )
 OCI_IDENTIFIER_RE = re.compile(r"(\"identifier\"\s*:\s*\"[^\"]+:)(\d+\.\d+\.\d+)(\")")
+DOCKER_IMAGE_RE = re.compile(r"(lyellr88/marm-mcp-server:)(\d+\.\d+\.\d+)")
 DOC_REPLACE_CUES = (
     "marm",
     "mcp server",
@@ -260,6 +267,12 @@ def replace_versions(path: Path, target_version: str) -> int:
                 updated,
             )
             count += oci_count
+        if path in DOCKER_IMAGE_FILES:
+            updated, image_count = DOCKER_IMAGE_RE.subn(
+                lambda m: f"{m.group(1)}{target_version}",
+                updated,
+            )
+            count += image_count
     else:
         updated_lines: list[str] = []
         count = 0

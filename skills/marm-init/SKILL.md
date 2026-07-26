@@ -183,8 +183,11 @@ mounts the data volume. Preview the exact command first if you want with
    never enters chat:
    `claude mcp add --transport http marm-memory http://localhost:8001/mcp --header "Authorization: Bearer <paste-your-key>"`
 3. Optional, code-graph tools: the container only sees host paths that are
-   mounted. Re-run with a repo mount, then index using the container path:
-   `marm-memory docker run --repo <host-repo-path>` then
+   mounted, and `marm-memory docker run` refuses to alter an existing container.
+   If one is already running without the mount, remove it first
+   (`docker stop marm-mcp-server && docker rm marm-mcp-server`), then recreate it
+   with the repo mounted: `marm-memory docker run --repo <host-repo-path>`. Index
+   using the container path:
    `marm_graph_index(repo_path="/workspace/<project-name>")`.
 
 Verify with `curl http://localhost:8001/health` and `marm-memory docker status`. Do not ask them to paste the key into the chat.
@@ -230,9 +233,11 @@ If no, skip.
 
 ## Step 6 - Handoff and start
 
-1. If the MARM server is not already running, start it now using the runtime and
-   transport chosen above (`marm-memory fast-start-http` or `marm-memory docker
-   run`). If a fast-start-http path already started it, skip the start.
+1. STDIO paths: there is no persistent server to start. The client launches
+   `marm-mcp-stdio` (or the Docker STDIO command) on demand, so skip the start and
+   go to the handoff. HTTP paths: if the server is not already running, start it now
+   using the runtime chosen above (`marm-memory fast-start-http` or `marm-memory
+   docker run`); if a fast-start-http path already started it, skip the start.
 2. Verify HTTP setups with a health check: `http://localhost:8001/health` should
    return ok.
 3. Hand off with this message, adapted to what actually happened:

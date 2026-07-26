@@ -5,7 +5,7 @@ services:
       dockerfile: Dockerfile
     # :latest is the all-in-one MCP image (memory + graph, one port).
     # Pin :memory-only instead if you need the pre-unification image shape.
-    image: lyellr88/marm-mcp-server:latest
+    image: lyellr88/marm-mcp-server:2.30.0
     container_name: marm-mcp-server
     restart: unless-stopped
     

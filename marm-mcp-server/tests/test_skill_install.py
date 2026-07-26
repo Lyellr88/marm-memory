@@ -5,8 +5,6 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-import pytest
-
 from marm_mcp_server.services import skill_install
 
 REPO_SKILL = Path(__file__).resolve().parents[2] / "skills" / "marm-init" / "SKILL.md"
