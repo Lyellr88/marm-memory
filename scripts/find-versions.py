@@ -41,8 +41,15 @@ OCI_IDENTIFIER_FILES = [
     SERVER_ROOT / "server.json",
 ]
 
+# docker-compose pins the published image to the release version; keep its tag in
+# sync so a floating :latest never drifts from the reported SERVER_VERSION.
+DOCKER_IMAGE_FILES = [
+    SERVER_ROOT / "docker-compose.yml",
+]
+
 DOC_ROOT = PROJECT_ROOT / "docs"
 MARM_DOCS_ROOT = SERVER_ROOT / "marm-docs"
+PACKAGED_DOCS_ROOT = SERVER_ROOT / "marm_mcp_server" / "resources" / "marm-docs"
 
 VERSION_RE = re.compile(r"(?<![\w.])v?(\d+\.\d+\.\d+)(?![\w.])", re.IGNORECASE)
 CRITICAL_VERSION_RE = re.compile(
@@ -50,6 +57,7 @@ CRITICAL_VERSION_RE = re.compile(
     re.IGNORECASE,
 )
 OCI_IDENTIFIER_RE = re.compile(r"(\"identifier\"\s*:\s*\"[^\"]+:)(\d+\.\d+\.\d+)(\")")
+DOCKER_IMAGE_RE = re.compile(r"(lyellr88/marm-mcp-server:)(\d+\.\d+\.\d+)")
 DOC_REPLACE_CUES = (
     "marm",
     "mcp server",
@@ -106,6 +114,11 @@ def discover_docs() -> list[Path]:
     # marm-mcp-server/marm-docs/*.md
     if MARM_DOCS_ROOT.exists():
         paths.extend(sorted(MARM_DOCS_ROOT.glob("*.md"), key=lambda p: str(p).lower()))
+    # bundled copy shipped in the wheel; keep its version strings in lockstep
+    if PACKAGED_DOCS_ROOT.exists():
+        paths.extend(
+            sorted(PACKAGED_DOCS_ROOT.glob("*.md"), key=lambda p: str(p).lower())
+        )
     # marm-mcp-server/README.md
     server_readme = SERVER_ROOT / "README.md"
     if server_readme.exists():
@@ -260,6 +273,21 @@ def replace_versions(path: Path, target_version: str) -> int:
                 updated,
             )
             count += oci_count
+        if path in DOCKER_IMAGE_FILES:
+            updated, image_count = DOCKER_IMAGE_RE.subn(
+                lambda m: f"{m.group(1)}{target_version}",
+                updated,
+            )
+            # A DOCKER_IMAGE_FILE must carry exactly one pinned semver image tag.
+            # Zero or many means an unpinned :latest crept back or the line moved,
+            # which would silently ship a drifting image; surface it loudly.
+            if image_count != 1:
+                print(
+                    f"{RED}WARNING: {rel(path)} did not have exactly one pinned "
+                    f"lyellr88/marm-mcp-server:<semver> image to sync "
+                    f"(matched {image_count}); check for an unpinned :latest.{RESET}"
+                )
+            count += image_count
     else:
         updated_lines: list[str] = []
         count = 0

@@ -251,6 +251,13 @@ def _uninstall(args: argparse.Namespace) -> int:
     return uninstall(args)
 
 
+def _init_skill(args: argparse.Namespace) -> int:
+    """Delegate skill installation to its focused service."""
+    from .services.skill_install import install_skill
+
+    return install_skill(args)
+
+
 def _dispatch_product(args: argparse.Namespace) -> int:
     from .core import runtime_manager
     from .services.runtime_status import (
@@ -382,6 +389,8 @@ def _dispatch_product(args: argparse.Namespace) -> int:
         return _upgrade(args)
     if args.command == "uninstall":
         return _uninstall(args)
+    if args.command == "init":
+        return _init_skill(args)
     if args.command == "version":
         print(SERVER_VERSION)
         return 0
@@ -470,6 +479,7 @@ def main() -> None:
             "upgrade",
             "update",
             "uninstall",
+            "init",
             "version",
         }
     )

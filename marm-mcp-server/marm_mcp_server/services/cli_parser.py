@@ -168,6 +168,19 @@ def _product_parser() -> argparse.ArgumentParser:
     )
     uninstall.add_argument("--yes", action="store_true")
 
+    init = subparsers.add_parser(
+        "init", help="Install the MARM skill into detected agents"
+    )
+    from .skill_install import AGENTS
+
+    for agent in AGENTS:
+        init.add_argument(
+            f"--g-{agent}",
+            action="store_true",
+            dest=f"global_{agent}",
+            help=f"Install into the home-folder {agent} directory",
+        )
+
     subparsers.add_parser("version", help="Show installed version")
     return parser
 

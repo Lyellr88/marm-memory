@@ -1,6 +1,6 @@
 # MARM Technical Overview
 
-> Current implementation: MARM MCP Server v2.29.0
+> Current implementation: MARM MCP Server v2.30.0
 
 This document explains what MARM is, why it is built this way, and how information moves through the system from an agent writing something to that information being recalled later. It is intended as a technical product overview, not a source-code reference.
 

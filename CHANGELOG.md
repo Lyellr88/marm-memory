@@ -3,13 +3,21 @@
 ## Version 2 - MARM Protocol to Universal MCP Server Evolution
 
 <details>
-<summary><strong>Unreleased: Product CLI Module Split (v2.29.1)</strong></summary>
+<summary><strong>July 26th, 2026: One-Command Skill Install, fast-start-http Guided Setup, and CLI/Console Module Splits (v2.30.0)</strong></summary>
+
+### `marm-memory init`
+
+- Added `marm-memory init`, a standalone command that installs the MARM skill into agent skill folders with no server, database, or network access required. By default it scans the current project for supported agents (Claude, Codex, Gemini, Qwen, Kiro) and installs to each one found, overwriting any existing copy so re-running refreshes the skill after an upgrade. If no agent directory is present, it falls back to creating a `.agents/skills/marm-init/` folder in the project.
+- Per-agent global flags (`--g-claude`, `--g-codex`, `--g-gemini`, `--g-qwen`, `--g-kiro`) install into the matching home-folder directory instead. Global and project are separate modes; a run does one or the other, never both.
+- The skill is now bundled inside the package (`marm_mcp_server/resources/skills/marm-init/`) and read at install time, so installs work offline and always match the running version. A test asserts the bundled copy stays byte-identical to the source skill.
+
+### marm-init Skill Refresh
+
+- The guided setup skill now leads with `marm-memory fast-start-http` as the one-shot local path (starts the HTTP server, launches Console, and opens the browser with loopback-only auth), and uses the managed `marm-memory docker run` / `docker stdio-command` commands for the Docker paths in place of raw `docker run` blocks. The seven-step guided flow and the rule that key values never enter the setup conversation are preserved.
 
 ### Internal
 
 - Split `cli.py`'s remaining output-formatting and argparse-construction concerns into `services/cli_output.py` and `services/cli_parser.py`, continuing the v2.28.0 CLI service-module split. No behavior change; `_dispatch_product`, `main`, and runtime-preset application stay in `cli.py` as the orchestration owner. `cli.py` drops from 786 to 509 lines.
-<summary><strong>Unreleased: Concept Store Module Split (v2.29.1)</strong></summary>
-
 - Split MARM Console's `concept_store.py` graph-atlas and single-entity-neighborhood queries into their own modules: `console/concept_graph_overview.py` (`graph_overview`, the full-vs-sampled visual atlas with its degree-ranked BFS tree-sampling) and `console/concept_neighborhood.py` (`neighborhood`, the bounded single-entity BFS traversal). No behavior change; shared low-level helpers (`_connect`, `_schema_status`, `_entity`) and the smaller query functions (`summary`, `search`, `get_entity`, `build_runs`, `get_build_run`, `duplicates`) stay in `concept_store.py`. `concept_store.py` drops from 676 to 334 lines.
 
 </details>
