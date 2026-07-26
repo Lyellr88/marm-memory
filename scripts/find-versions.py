@@ -278,6 +278,15 @@ def replace_versions(path: Path, target_version: str) -> int:
                 lambda m: f"{m.group(1)}{target_version}",
                 updated,
             )
+            # A DOCKER_IMAGE_FILE must carry exactly one pinned semver image tag.
+            # Zero or many means an unpinned :latest crept back or the line moved,
+            # which would silently ship a drifting image; surface it loudly.
+            if image_count != 1:
+                print(
+                    f"{RED}WARNING: {rel(path)} did not have exactly one pinned "
+                    f"lyellr88/marm-mcp-server:<semver> image to sync "
+                    f"(matched {image_count}); check for an unpinned :latest.{RESET}"
+                )
             count += image_count
     else:
         updated_lines: list[str] = []

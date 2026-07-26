@@ -233,11 +233,17 @@ If no, skip.
 
 ## Step 6 - Handoff and start
 
-1. STDIO paths: there is no persistent server to start. The client launches
-   `marm-mcp-stdio` (or the Docker STDIO command) on demand, so skip the start and
-   go to the handoff. HTTP paths: if the server is not already running, start it now
-   using the runtime chosen above (`marm-memory fast-start-http` or `marm-memory
-   docker run`); if a fast-start-http path already started it, skip the start.
+1. Start the server only if it is not already running, and honor the exact mode
+   chosen in Steps 3-4:
+   - STDIO (local or Docker): nothing to start; the client launches
+     `marm-mcp-stdio` (or the Docker STDIO command) on demand. Skip to the handoff.
+   - HTTP, local Python, loopback: `marm-memory fast-start-http` (skip if a
+     fast-start-http path already started it).
+   - HTTP, local Python, exposed: the user starts this themselves with their key
+     and `SERVER_HOST=0.0.0.0` (Step 4). Do not auto-run `fast-start-http` here; it
+     binds loopback without their key. Just verify once they confirm it is up.
+   - HTTP, Docker: `marm-memory docker run`, keeping `--expose-network` if the user
+     chose remote access in Step 2.
 2. Verify HTTP setups with a health check: `http://localhost:8001/health` should
    return ok.
 3. Hand off with this message, adapted to what actually happened:
