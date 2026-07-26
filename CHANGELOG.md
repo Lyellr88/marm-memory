@@ -8,6 +8,9 @@
 ### Internal
 
 - Split `cli.py`'s remaining output-formatting and argparse-construction concerns into `services/cli_output.py` and `services/cli_parser.py`, continuing the v2.28.0 CLI service-module split. No behavior change; `_dispatch_product`, `main`, and runtime-preset application stay in `cli.py` as the orchestration owner. `cli.py` drops from 786 to 509 lines.
+<summary><strong>Unreleased: Concept Store Module Split (v2.29.1)</strong></summary>
+
+- Split MARM Console's `concept_store.py` graph-atlas and single-entity-neighborhood queries into their own modules: `console/concept_graph_overview.py` (`graph_overview`, the full-vs-sampled visual atlas with its degree-ranked BFS tree-sampling) and `console/concept_neighborhood.py` (`neighborhood`, the bounded single-entity BFS traversal). No behavior change; shared low-level helpers (`_connect`, `_schema_status`, `_entity`) and the smaller query functions (`summary`, `search`, `get_entity`, `build_runs`, `get_build_run`, `duplicates`) stay in `concept_store.py`. `concept_store.py` drops from 676 to 334 lines.
 
 </details>
 
