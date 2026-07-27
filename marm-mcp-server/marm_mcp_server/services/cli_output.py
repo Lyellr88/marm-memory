@@ -88,6 +88,20 @@ def _print_doctor(payload: dict[str, Any]) -> None:
             "OK" if check.get("ok") else "WARN" if check.get("optional") else "FAIL"
         )
         print(f"[{marker}] {check.get('name')}: {check.get('detail')}")
+    retrieval = payload.get("retrieval")
+    if isinstance(retrieval, dict):
+        print()
+        print("Recall tuning")
+        print(f"  Keyword match mode: {retrieval.get('fts_query_mode')}")
+        print(f"  Keyword candidates: {retrieval.get('fts_candidate_limit')}")
+        weight = retrieval.get("hybrid_search_text_weight")
+        print(
+            f"  Keyword weight: {weight}"
+            + (" (keyword matching narrows results only)" if weight == 0 else "")
+        )
+        extra = retrieval.get("fts_extra_stopwords") or []
+        if extra:
+            print(f"  Ignored words added: {', '.join(extra)}")
     print()
     _print_status(payload.get("status", {}))
 

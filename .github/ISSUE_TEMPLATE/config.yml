@@ -7,5 +7,5 @@ contact_links:
     url: https://discord.gg/nhyJWPz2cf
     about: Connect with other builders, share workflows, and get real-time help.
   - name: FAQ
-    url: https://github.com/Lyellr88/marm-memory/blob/MARM-main/marm-mcp-server/marm-docs/FAQ.md
+    url: https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/FAQ.md
     about: Common setup and usage questions answered.

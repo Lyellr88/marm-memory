@@ -18,6 +18,10 @@ from ..config.settings import (
     CONCEPT_MODEL_AVAILABLE,
     DEFAULT_DB_PATH,
     DEFAULT_SEMANTIC_MODEL,
+    FTS_CANDIDATE_LIMIT,
+    FTS_EXTRA_STOPWORDS,
+    FTS_QUERY_MODE,
+    HYBRID_SEARCH_TEXT_WEIGHT,
     SERVER_HOST,
     SERVER_PORT,
     SERVER_VERSION,
@@ -219,4 +223,13 @@ def doctor_status() -> dict[str, Any]:
         "ok": all(item["ok"] for item in checks if not item.get("optional")),
         "checks": checks,
         "status": status,
+        # Informational, not pass/fail: these tune recall rather than gate health.
+        # Surfaced because HYBRID_SEARCH_TEXT_WEIGHT and FTS_QUERY_MODE change
+        # retrieval behavior in ways that are otherwise invisible when debugging.
+        "retrieval": {
+            "fts_query_mode": FTS_QUERY_MODE,
+            "fts_candidate_limit": FTS_CANDIDATE_LIMIT,
+            "hybrid_search_text_weight": HYBRID_SEARCH_TEXT_WEIGHT,
+            "fts_extra_stopwords": sorted(FTS_EXTRA_STOPWORDS),
+        },
     }

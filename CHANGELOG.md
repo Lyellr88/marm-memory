@@ -3,6 +3,31 @@
 ## Version 2 - MARM Protocol to Universal MCP Server Evolution
 
 <details>
+<summary><strong>July 26th, 2026: Natural-Language Keyword Retrieval Activated (v2.31.0)</strong></summary>
+
+### Natural-Language Recall Now Uses the Keyword Index
+
+- Semantic recall now finds keyword candidates for natural-language questions. Previously every word in a query had to appear in the same memory before the keyword index would return anything, so questions like "What pet does the speaker have?" matched nothing and recall fell back to scanning embeddings alone. Queries now drop filler words and match on any remaining term, so the keyword index contributes on ordinary questions instead of only on exact lookups.
+- Measured on the LoCoMo benchmark (1,977 questions, 5,882 ingested memories, top-5 recall): any-hit 53.0% to 57.8%, all-hit 43.4% to 47.8%, evidence recall 47.6% to 52.1%. Keyword candidate coverage went from 0% of questions to 99.9%. The gain is largest on adversarial questions (39.7% to 49.8% any-hit) and open-domain (57.2% to 61.1%).
+- Multi-hop questions regressed (39.3% to 33.7% any-hit, 89 questions). Those answers need evidence spread across several memories, and a keyword-filtered candidate pool can drop a memory that shares no words with the question. `FTS_CANDIDATE_LIMIT` (default 50) is the lever, and it is now a live tuning knob: 99.4% of benchmark queries filled the pool to that cap.
+- The exact/lexical lane is unchanged. Config keys, CLI flags, file paths, and other syntax-heavy lookups still require every term to match and are still returned in keyword-rank order without semantic reranking, so their precision is unaffected.
+
+### Fixed: Protocol Was Not Delivered on pip Installs
+
+- `marm_start`, the protocol-injection middleware, and the STDIO tool lifecycle all read `PROTOCOL.md` and `PROTOCOL-LITE.md` from a path outside the installed package. That path is not included in the wheel, so on every pip install the protocol read returned "PROTOCOL.md file not found" and the lite protocol returned empty. Docker images and development checkouts were unaffected, which is why it went unnoticed. Agents installing from PyPI received no MARM protocol at all.
+- Root cause was two copies of the documentation with nothing enforcing which one shipped. The copy at `marm-mcp-server/marm-docs/` has been removed; `marm_mcp_server/resources/marm-docs/` is now the single location, and it is inside the package so one path resolves correctly for pip, Docker, and source checkouts alike. The protocol readers and the document indexer now share one resolver rather than each computing their own path.
+- Added tests that read both protocol files through the packaged path, assert the indexer and the protocol readers agree on that location, and fail if a second copy is reintroduced outside the package.
+
+### New Settings
+
+- `FTS_QUERY_MODE` (`or_nostop` default, `or`, `and`) selects how the semantic lane builds its keyword query. `and` restores the pre-2.31.0 behavior.
+- `FTS_EXTRA_STOPWORDS` appends comma-separated words to the built-in ignore list, for domain terms so common in a store that they carry no signal.
+- `HYBRID_SEARCH_TEXT_WEIGHT` now defaults to `0.0` instead of `0.35`. Keyword matching narrows which memories are considered but does not influence their ranking. The previous 0.35 default was chosen while the keyword lane never ran on natural-language queries, so it was never validated against real candidates; it will be set from benchmark data in a following release. Setting the variable explicitly still applies the given weight.
+- `marm-memory doctor` now prints a "Recall tuning" section showing the effective values.
+
+</details>
+
+<details>
 <summary><strong>July 26th, 2026: One-Command Skill Install, fast-start-http Guided Setup, and CLI/Console Module Splits (v2.30.0)</strong></summary>
 
 ### `marm-memory init`

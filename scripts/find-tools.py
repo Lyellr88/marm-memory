@@ -49,10 +49,10 @@ FULL_LIST_FILES = {
     "docs/PROTOCOL-LITE.md",
     "marm-mcp-server/README.md",
     "marm-mcp-server/server.json",
-    "marm-mcp-server/marm-docs/FAQ.md",
-    "marm-mcp-server/marm-docs/PROTOCOL.md",
-    "marm-mcp-server/marm-docs/PROTOCOL-LITE.md",
-    "marm-mcp-server/marm-docs/README.md",
+    "marm-mcp-server/marm_mcp_server/resources/marm-docs/FAQ.md",
+    "marm-mcp-server/marm_mcp_server/resources/marm-docs/PROTOCOL.md",
+    "marm-mcp-server/marm_mcp_server/resources/marm-docs/PROTOCOL-LITE.md",
+    "marm-mcp-server/marm_mcp_server/resources/marm-docs/README.md",
 }
 
 MENTION_SKIP_DIR_NAMES = {

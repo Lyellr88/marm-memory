@@ -9,6 +9,7 @@ import threading
 from typing import Dict
 
 from ..core.memory import memory
+from ..utils.helpers import docs_dir as helpers_docs_dir
 
 
 def guess_context_type(filename):
@@ -44,21 +45,15 @@ def guess_context_type(filename):
 
 
 def _docs_dir() -> Path | None:
-    """Resolve the marm-docs directory across install types.
+    """Resolve the packaged marm-docs directory, or None if it is missing.
 
-    Prefers the copy bundled inside the package (present in pip wheels, Docker,
-    and dev checkouts), then a source checkout layout, then the Docker image path.
-    Pip installs previously matched none of the old candidates and silently
-    indexed nothing.
+    Delegates to utils.helpers so the protocol readers and the doc indexer can
+    never disagree about where docs live. Earlier versions searched several
+    candidate paths to cover a second copy at the repo root; that copy was never
+    included in the wheel, so pip installs matched nothing and silently indexed
+    no docs. There is now exactly one location, inside the package.
     """
-    for candidate in (
-        Path(__file__).parent.parent / "resources" / "marm-docs",
-        Path(__file__).parent.parent.parent / "marm-docs",
-        Path("/app/marm-docs"),
-    ):
-        if candidate.exists():
-            return candidate
-    return None
+    return helpers_docs_dir()
 
 
 def get_docs_to_load():
@@ -80,7 +75,10 @@ def get_docs_to_load():
             names = ", ".join(d["file_path"].split("/")[-1] for d in docs)
             print(f"[DOCS] Indexing for marm_smart_recall: {names}")
     else:
-        print("WARNING: marm-docs not found (checked packaged, source, and /app).")
+        print(
+            "WARNING: packaged marm-docs not found -- reinstall with "
+            "`python -m pip install -U --force-reinstall marm-mcp-server`"
+        )
 
     return docs
 

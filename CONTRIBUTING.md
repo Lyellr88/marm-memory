@@ -320,7 +320,7 @@ Use normal branch pushes for review. Use tag pushes only for intentional release
 
 - **[README.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/README.md)** - Complete MCP server usage guide with commands, workflows, and examples
 - **[PROTOCOL.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/PROTOCOL.md)** - Quick start commands and protocol reference
-- **[FAQ.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/marm-mcp-server/marm-docs/FAQ.md)** - Answers to common questions about using MARM
+- **[FAQ.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/FAQ.md)** - Answers to common questions about using MARM
 
 ### **MCP Server Installation**
 
