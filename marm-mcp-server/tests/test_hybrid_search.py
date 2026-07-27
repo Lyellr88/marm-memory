@@ -113,6 +113,26 @@ def test_wide_fts_query_single_token_has_no_or_operator():
     assert _wide("deployment") == '"deployment"'
 
 
+def test_wide_fts_query_keeps_words_that_double_as_content():
+    """The FTS5 tokenizer is case-insensitive, so a stopword entry also discards
+    its proper-noun or content twin -- "May" the month, "US" the country, "won"
+    the verb. Dropping those left queries with only a generic term, and because
+    any match at all suppresses the full semantic scan, the relevant memory
+    became unreachable rather than merely lower-ranked.
+    """
+    from marm_mcp_server.core import memory_utils
+
+    for word in ("may", "will", "us", "won", "can", "get", "need", "know", "said"):
+        assert word not in memory_utils._FTS_BASE_STOPWORDS, (
+            f"{word!r} has a content sense; listing it discards that meaning "
+            "for every query, since FTS5 matching is case-insensitive"
+        )
+
+    assert _wide("What happened in May?") == '"happened" OR "May"'
+    assert _wide("Will the US ship it?") == '"Will" OR "US" OR "ship"'
+    assert _wide("Who won the game?") == '"won" OR "game"'
+
+
 def test_fts_query_mode_rejects_invalid_values(monkeypatch):
     """An unrecognized FTS_QUERY_MODE falls back to the default instead of
     reaching the query builder and producing invalid FTS5 syntax."""

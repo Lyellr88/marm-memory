@@ -92,21 +92,35 @@ def _safe_fts_query(query: str) -> str | None:
     return " ".join(f'"{t}"' for t in tokens)
 
 
-# English question/function words dropped by the or_nostop query mode. Scoped to
-# the default en embedding model; non-English queries keep every token and simply
-# OR them, which degrades recall precision but never errors.
+# English function words dropped by the or_nostop query mode.
+#
+# Deliberately limited to words that are ubiquitous *and* carry no content sense,
+# because the FTS5 tokenizer is case-insensitive ("porter ascii", see
+# core/memory_db.py) so a query term cannot be distinguished from its capitalized
+# proper-noun twin. Each word is therefore all-or-nothing: listing it loses the
+# proper-noun sense entirely, omitting it keeps the function-word sense in play.
+#
+# Words with a real content sense are intentionally absent -- month and name
+# collisions ("May", "Will"), acronyms ("US"), content verbs ("won", "get",
+# "need", "know"), and contraction fragments that double as words ("don", "won").
+# Omitting them costs little: BM25 already discounts frequent terms by inverse
+# document frequency, so a mid-frequency word ranks low on its own rather than
+# swamping the candidate pool.
+#
+# Scoped to the default English embedding model; non-English queries keep every
+# token and simply OR them, which is less precise but never an error.
+# FTS_EXTRA_STOPWORDS extends this per deployment.
 _FTS_BASE_STOPWORDS = frozenset(
     """
     a an the this that these those there here
-    i me my mine you your yours he him his she her hers it its
-    we us our ours they them their theirs
+    i me my you your he him his she her hers it its
+    we our they them their
     what who whom whose when where why how which
-    is are was were be been being am do does did done
-    have has had having can could will would shall should may might must
+    is are was were be been being am do does did
+    have has had
     of to in into for on at by with from about as
-    and or but if then than so not no nor too very
-    s t don didn doesn isn aren wasn weren won
-    tell say said know think want need get got give
+    and or but if then than so not no too very
+    s t
     """.split()
 )
 
