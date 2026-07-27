@@ -9,6 +9,7 @@ from ..config.settings import (
     TEMPORAL_WEIGHT,
     TEMPORAL_HALF_LIFE_DAYS,
     FTS_CANDIDATE_LIMIT,
+    FTS_QUERY_MODE,
     HYBRID_SEARCH_TEXT_WEIGHT,
 )
 from .memory_utils import (
@@ -16,6 +17,7 @@ from .memory_utils import (
     _recall_debug,
     _temporal_score,
     _safe_fts_query,
+    _wide_fts_query,
     _is_exact_query,
 )
 from .memory_scoring import (
@@ -51,7 +53,7 @@ async def _recall_exact(
     Each result carries ``retrieval_mode`` set to ``"exact_fts"`` or
     ``"exact_like"`` so callers and tests can confirm which path was taken.
     """
-    _recall_debug(f"exact path: query='{query[:60]}', session={session}")
+    _recall_debug(f"exact path: terms={len(query.split())}, session={session}")
 
     # --- attempt FTS5 first ---
     fts_results = await _recall_text_search(
@@ -171,7 +173,7 @@ async def _recall_similar(
     )
     if use_exact:
         _recall_debug(
-            f"exact lane selected (mode={exact_mode!r}, query='{query[:60]}')"
+            f"exact lane selected (mode={exact_mode!r}, terms={len(query.split())})"
         )
         results = await _recall_exact(
             mem,
@@ -205,7 +207,7 @@ async def _recall_similar(
         else:
             query_embedding = await asyncio.to_thread(mem._encode_sync, query)
 
-        fts_query = _safe_fts_query(query)
+        fts_query = _wide_fts_query(query)
         candidates: list[tuple[str, float]] = []
         if fts_query:
             try:
@@ -218,8 +220,15 @@ async def _recall_similar(
                     project,
                     platform,
                 )
+                # Structured so a benchmark run can count how many queries
+                # actually produce candidates -- the metric that exposed this
+                # lane as dormant (0 of 400 LoCoMo questions pre-v2.31.0).
+                # Deliberately records only shape, never the search terms, so
+                # enabling recall debugging cannot leak memory content.
                 _recall_debug(
-                    f"FTS filter: {len(candidates)} candidates for '{fts_query}'"
+                    f"fts_candidates={len(candidates)} "
+                    f"terms={fts_query.count(' OR ') + 1 if ' OR ' in fts_query else 1} "
+                    f"mode={FTS_QUERY_MODE}"
                 )
             except Exception as e:
                 _safe_print(
@@ -340,7 +349,7 @@ async def _recall_text_search(
     unaffected by age; only the semantic-intent fallbacks turn it on so their
     ranking stays consistent with the main semantic lane.
     """
-    _recall_debug(f"text-search path: query='{query[:50]}', session={session}")
+    _recall_debug(f"text-search path: terms={len(query.split())}, session={session}")
 
     def _blend_temporal(base_sim: float, timestamp: str) -> float:
         if not apply_temporal:

@@ -74,7 +74,7 @@ Do this before talking to the user.
    `https://raw.githubusercontent.com/Lyellr88/marm-memory/MARM-main/docs/PROTOCOL.md`
    If the network read fails, fall back in this order:
    - local repo `docs/PROTOCOL.md`
-   - packaged copy `marm-mcp-server/marm-docs/PROTOCOL.md`
+   - packaged copy `marm-mcp-server/marm_mcp_server/resources/marm-docs/PROTOCOL.md`
 2. Freshness check: read the `version:` field in this file's frontmatter and
    compare it against the `version:` in the source copy at `metadata.source`.
    If the source version is higher, tell the user once:

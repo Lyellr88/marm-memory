@@ -38,6 +38,28 @@ def _safe_float(env_key: str, default: float) -> float:
         return default
 
 
+def _safe_choice(env_key: str, default: str, allowed: tuple[str, ...]) -> str:
+    """Read an env var constrained to a fixed set, falling back on anything else."""
+    raw = os.environ.get(env_key)
+    if raw is None:
+        return default
+    value = raw.strip().lower()
+    if value in allowed:
+        return value
+    print(
+        f"WARNING: {env_key}={raw!r} is not one of {', '.join(allowed)}, "
+        f"using default {default!r}",
+        file=sys.stderr,
+    )
+    return default
+
+
+def _csv_frozenset(env_key: str) -> frozenset[str]:
+    """Parse a comma-separated env var into a lowercased set, dropping blanks."""
+    raw = os.environ.get(env_key, "")
+    return frozenset(part.strip().lower() for part in raw.split(",") if part.strip())
+
+
 SEMANTIC_SEARCH_AVAILABLE = importlib.util.find_spec("fastembed") is not None
 if not SEMANTIC_SEARCH_AVAILABLE:
     print("WARNING: Semantic search not available. Install: pip install fastembed")
@@ -122,7 +144,7 @@ if not (1 <= _raw_port <= 65535):
         f"WARNING: SERVER_PORT={_raw_port} out of [1, 65535], clamped to {SERVER_PORT}",
         file=sys.stderr,
     )
-SERVER_VERSION = "2.30.0"
+SERVER_VERSION = "2.31.0"
 
 GRAPH_ENABLED = os.environ.get("GRAPH_ENABLED", "true").lower() != "false"
 
@@ -228,7 +250,15 @@ if not (0.0 <= _raw_cdst <= 1.0):
         file=sys.stderr,
     )
 
-_raw_hsw = _safe_float("HYBRID_SEARCH_TEXT_WEIGHT", 0.35)
+# Default is 0.0 on purpose -- do not "restore" it to 0.35.
+# Until the FTS candidate-generation fix (v2.31.0), _safe_fts_query AND-ed every
+# query token, so natural-language recall never produced FTS candidates and this
+# weight never applied on that path. Widening candidate generation makes the
+# lexical term live for the first time, so it ships at 0.0 (FTS acts purely as a
+# candidate filter for semantic reranking) until the sweep in
+# docs/current/fts-candidate-generation-fix.md Phase 2 sets an evidence-based
+# default. An explicit env var still overrides this.
+_raw_hsw = _safe_float("HYBRID_SEARCH_TEXT_WEIGHT", 0.0)
 _raw_tw = _safe_float("TEMPORAL_WEIGHT", 0.1)
 _raw_hld = _safe_float("TEMPORAL_HALF_LIFE_DAYS", 30)
 HYBRID_SEARCH_TEXT_WEIGHT = max(0.0, min(1.0, _raw_hsw))
@@ -257,6 +287,18 @@ if _raw_fcl < 1:
         f"WARNING: FTS_CANDIDATE_LIMIT={_raw_fcl} below minimum 1, clamped to {FTS_CANDIDATE_LIMIT}",
         file=sys.stderr,
     )
+
+# How the semantic lane builds its FTS5 MATCH string. The exact/lexical lane is
+# unaffected and always uses strict AND.
+#   or_nostop : drop stopwords, then OR the rest (default)
+#   or        : OR every token, stopwords included
+#   and       : strict AND, the pre-v2.31.0 behavior
+FTS_QUERY_MODES = ("or_nostop", "or", "and")
+FTS_QUERY_MODE = _safe_choice("FTS_QUERY_MODE", "or_nostop", FTS_QUERY_MODES)
+
+# Extra stopwords appended to the built-in English list used by or_nostop.
+# Additive only -- it cannot remove built-ins. Comma-separated, case-insensitive.
+FTS_EXTRA_STOPWORDS = _csv_frozenset("FTS_EXTRA_STOPWORDS")
 
 CONSOLIDATION_ENABLED = os.environ.get("CONSOLIDATION_ENABLED", "0") == "1"
 _raw_ct = _safe_float("CONSOLIDATION_THRESHOLD", 0.92)

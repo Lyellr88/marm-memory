@@ -48,6 +48,7 @@ from .memory_utils import (  # noqa: F401
     _is_exact_query,
     _safe_fts_query,
     _safe_print,
+    _wide_fts_query,
     _temporal_score,
     sanitize_content,
 )

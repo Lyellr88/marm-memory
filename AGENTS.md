@@ -25,7 +25,7 @@ MARM is a local-first MCP memory server: Python FastAPI in `marm-mcp-server/`, p
 3. `marm_mcp_server/server_stdio.py` - STDIO bootstrap/registration and matching wrapper or service path
 4. `marm-mcp-server/server.json` - tools array
 5. `scripts/find-tools.py` - `CANONICAL_TOOLS` list
-6. Docs with full tool lists: `README.md`, `docs/PROTOCOL.md`, `docs/PROTOCOL-LITE.md`, and their `marm-mcp-server/marm-docs/` copies, plus tool counts in FAQ
+6. Docs with full tool lists: `README.md`, `docs/PROTOCOL.md`, `docs/PROTOCOL-LITE.md`, and their `marm-mcp-server/marm_mcp_server/resources/marm-docs/` copies, plus tool counts in FAQ
 7. Tests covering both transports
 
 Then run `python scripts/find-tools.py`; every surface must report OK.
@@ -34,7 +34,12 @@ Then run `python scripts/find-tools.py`; every surface must report OK.
 
 - Root `README.md` is the single source of truth.
 - `marm-mcp-server/README.md` is the PyPI variant (adds the `mcp-name:` header and two image divs) and is maintained separately.
-- `marm-mcp-server/marm-docs/README.md` is the text-only agent-facing subset (badges, demo, and footer sections stripped) and is maintained separately.
+- `marm-mcp-server/marm_mcp_server/resources/marm-docs/README.md` is the text-only agent-facing subset (badges, demo, and footer sections stripped) and is maintained separately. Everything under `resources/marm-docs/` is the only copy that ships in the wheel, and it is what the server indexes and serves; a copy outside the package is not packaged and resolves to nothing once installed.
+- `FAQ.md`, `PROTOCOL.md`, and `PROTOCOL-LITE.md` are **plain copies**, not variants: root `docs/` is the source and the packaged copy should match it. After editing any of the three in `docs/`, resync with:
+
+  ```bash
+  cp docs/{FAQ,PROTOCOL,PROTOCOL-LITE}.md marm-mcp-server/marm_mcp_server/resources/marm-docs/
+  ```
 
 **When bumping the version, update ALL of the following** (audit with `python scripts/find-versions.py`):
 
@@ -44,7 +49,7 @@ Then run `python scripts/find-tools.py`; every surface must report OK.
 4. `marm-mcp-server/marm_mcp_server/config/settings.py` (`SERVER_VERSION`)
 5. `marm-mcp-server/marm_mcp_server/server.py` docstring
 6. `marm-mcp-server/Dockerfile` version label and `docker-compose.yml`
-7. The h1 in `README.md`, `marm-mcp-server/README.md`, and `marm-mcp-server/marm-docs/README.md` (each maintained separately), plus the version headers in `docs/INSTALL-*.md`
+7. The h1 in `README.md`, `marm-mcp-server/README.md`, and `marm-mcp-server/marm_mcp_server/resources/marm-docs/README.md` (each maintained separately), plus the version headers in `docs/INSTALL-*.md`
 
 Semver: MAJOR = breaking (schema renames, parameter removals), MINOR = new tools/parameters/features, PATCH = fixes and doc updates.
 

@@ -1,3 +1,4 @@
+import os
 import sqlite3
 import uuid as _uuid_module
 from datetime import datetime, timezone as _timezone
@@ -48,6 +49,132 @@ def test_safe_fts_query_preserves_underscore_tokens():
     # Underscores are \w — kept as-is so FTS5 porter tokenizer can split them
     result = _safe_fts_query("COMPACTION_TRIGGER_COUNT")
     assert result == '"COMPACTION_TRIGGER_COUNT"'
+
+
+# --- _wide_fts_query (semantic lane) ---
+#
+# The strict builder above is the exact/lexical lane and must stay unchanged; the
+# assertions in this block cover the widened semantic-lane builder only.
+
+
+def _wide(query, mode="or_nostop", stopwords=None):
+    """Call _wide_fts_query with a pinned mode, since it reads module-level config."""
+    from marm_mcp_server.core import memory_utils
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(memory_utils, "FTS_QUERY_MODE", mode)
+        if stopwords is not None:
+            mp.setattr(memory_utils, "_FTS_STOPWORDS", frozenset(stopwords))
+        return memory_utils._wide_fts_query(query)
+
+
+def test_wide_fts_query_ors_tokens_and_drops_stopwords():
+    # The regression this fix exists for: six AND-ed tokens matched nothing.
+    assert _wide("What pet does the speaker have?") == '"pet" OR "speaker"'
+
+
+def test_wide_fts_query_quotes_every_token_to_neutralize_fts5_operators():
+    # Quoting is a safety control: unquoted NEAR/OR/* would be parsed as syntax.
+    result = _wide("config NEAR value", stopwords=set())
+    assert result == '"config" OR "NEAR" OR "value"'
+
+
+def test_wide_fts_query_drops_stopwords_case_insensitively():
+    assert _wide("The THE tHe cat") == '"cat"'
+
+
+def test_wide_fts_query_returns_none_when_only_stopwords_remain():
+    # Routes to pure semantic recall instead of OR-ing filler against every row.
+    assert _wide("what is the") is None
+    assert _wide("how do you do it") is None
+
+
+def test_wide_fts_query_returns_none_for_empty_and_punctuation():
+    # Parity with _safe_fts_query so callers' fail-open path is unchanged.
+    assert _wide("") is None
+    assert _wide("---") is None
+    assert _wide("@#$%") is None
+
+
+def test_wide_fts_query_and_mode_matches_strict_builder_exactly():
+    query = "docker deployment command"
+    assert _wide(query, mode="and") == _safe_fts_query(query)
+
+
+def test_wide_fts_query_or_mode_keeps_stopwords():
+    assert _wide("the cat", mode="or") == '"the" OR "cat"'
+
+
+def test_wide_fts_query_honors_extra_stopwords():
+    assert _wide("docker deployment", stopwords={"docker"}) == '"deployment"'
+
+
+def test_wide_fts_query_single_token_has_no_or_operator():
+    assert _wide("deployment") == '"deployment"'
+
+
+def test_wide_fts_query_keeps_words_that_double_as_content():
+    """The FTS5 tokenizer is case-insensitive, so a stopword entry also discards
+    its proper-noun or content twin -- "May" the month, "US" the country, "won"
+    the verb. Dropping those left queries with only a generic term, and because
+    any match at all suppresses the full semantic scan, the relevant memory
+    became unreachable rather than merely lower-ranked.
+    """
+    from marm_mcp_server.core import memory_utils
+
+    for word in ("may", "will", "us", "won", "can", "get", "need", "know", "said"):
+        assert word not in memory_utils._FTS_BASE_STOPWORDS, (
+            f"{word!r} has a content sense; listing it discards that meaning "
+            "for every query, since FTS5 matching is case-insensitive"
+        )
+
+    assert _wide("What happened in May?") == '"happened" OR "May"'
+    assert _wide("Will the US ship it?") == '"Will" OR "US" OR "ship"'
+    assert _wide("Who won the game?") == '"won" OR "game"'
+
+
+def test_fts_query_mode_rejects_invalid_values(monkeypatch):
+    """An unrecognized FTS_QUERY_MODE falls back to the default instead of
+    reaching the query builder and producing invalid FTS5 syntax."""
+    from marm_mcp_server.config.settings import FTS_QUERY_MODES, _safe_choice
+
+    monkeypatch.setenv("FTS_QUERY_MODE", "nonsense")
+    assert _safe_choice("FTS_QUERY_MODE", "or_nostop", FTS_QUERY_MODES) == "or_nostop"
+
+    # Valid values pass through, case- and whitespace-insensitively.
+    monkeypatch.setenv("FTS_QUERY_MODE", "  AND  ")
+    assert _safe_choice("FTS_QUERY_MODE", "or_nostop", FTS_QUERY_MODES) == "and"
+
+    monkeypatch.delenv("FTS_QUERY_MODE")
+    assert _safe_choice("FTS_QUERY_MODE", "or_nostop", FTS_QUERY_MODES) == "or_nostop"
+
+
+def test_extra_stopwords_parsing(monkeypatch):
+    """FTS_EXTRA_STOPWORDS is comma-separated, lowercased, and blank-tolerant."""
+    from marm_mcp_server.config.settings import _csv_frozenset
+
+    monkeypatch.setenv("FTS_EXTRA_STOPWORDS", " Docker ,, DEPLOY ,")
+    assert _csv_frozenset("FTS_EXTRA_STOPWORDS") == {"docker", "deploy"}
+
+    monkeypatch.setenv("FTS_EXTRA_STOPWORDS", "")
+    assert _csv_frozenset("FTS_EXTRA_STOPWORDS") == frozenset()
+
+
+def test_hybrid_search_text_weight_defaults_to_zero():
+    """Phase 1 ships lexical scoring off on purpose.
+
+    The widened builder makes the BM25 term live on natural-language recall for
+    the first time. Until the weight is swept against the benchmark it stays at
+    0.0, so FTS acts purely as a candidate filter. Guards against a well-meaning
+    "restore" to the old 0.35.
+    """
+    from marm_mcp_server.config import settings
+
+    if "HYBRID_SEARCH_TEXT_WEIGHT" in os.environ:
+        pytest.skip(
+            "environment pins HYBRID_SEARCH_TEXT_WEIGHT; default not observable"
+        )
+    assert settings.HYBRID_SEARCH_TEXT_WEIGHT == 0.0
 
 
 # --- FTS5 schema ---
@@ -637,6 +764,12 @@ async def test_recall_similar_fuses_bm25_into_ranking(monkeypatch, tmp_path):
         strong_id = _insert_with_embedding(conn, "fuse", "docker deployment", vec)
         weak_id = _insert_with_embedding(conn, "fuse", "docker sidebar", vec)
 
+    # HYBRID_SEARCH_TEXT_WEIGHT ships at 0.0 (see settings.py), which by design
+    # makes the lexical term contribute nothing. This test covers the fusion
+    # mechanism itself, so it pins a non-zero weight rather than depending on the
+    # shipped default.
+    monkeypatch.setattr(memory_recall_module, "HYBRID_SEARCH_TEXT_WEIGHT", 0.35)
+
     # Identical embeddings -> identical vec_score. Only the BM25 term differs,
     # so any ordering must come from lexical fusion.
     monkeypatch.setattr(
@@ -699,3 +832,81 @@ def test_fetch_fts_candidate_ids_returns_normalized_bm25_from_real_index(tmp_pat
     assert all(0.0 <= s <= 1.0 for s in scores.values())
     assert max(scores.values()) == 1.0
     assert scores[tight_id] > scores[loose_id]
+
+
+def test_wide_builder_produces_candidates_where_strict_produced_none(tmp_path):
+    """The whole point of the fix, against a real FTS5 index.
+
+    A natural-language question returns zero candidates under the strict AND
+    builder (no single memory contains every token) and a non-empty pool under
+    the widened builder. This is the measured 0-of-400 regression in miniature.
+    """
+    from marm_mcp_server.core.memory_scoring import _fetch_fts_candidate_ids
+
+    vec = np.ones(384, dtype=np.float32)
+    vec /= np.linalg.norm(vec)
+
+    memory = MARMMemory(str(tmp_path / "memory.db"))
+    memory._encoder_failed = True
+
+    with memory.get_connection() as conn:
+        dog_id = _insert_with_embedding(
+            conn,
+            "nl",
+            "The speaker mentioned owning a golden retriever named Max.",
+            vec,
+        )
+        _insert_with_embedding(
+            conn, "nl", "Budget review scheduled for the fourth quarter.", vec
+        )
+        iguana_id = _insert_with_embedding(
+            conn, "nl", "Speaker two described their pet iguana in detail.", vec
+        )
+
+    question = "What pet does the speaker have?"
+
+    strict = _safe_fts_query(question)
+    assert _fetch_fts_candidate_ids(memory.db_path, "nl", strict, 50) == [], (
+        "strict AND is expected to match nothing here — if it matches, the "
+        "fixture no longer reproduces the bug this fix addresses"
+    )
+
+    wide = _wide(question)
+    candidate_ids = {
+        cid for cid, _ in _fetch_fts_candidate_ids(memory.db_path, "nl", wide, 50)
+    }
+
+    assert candidate_ids == {dog_id, iguana_id}, (
+        "widened builder must surface both pet/speaker memories and exclude the "
+        "unrelated budget row"
+    )
+
+
+def test_wide_builder_respects_session_scope(tmp_path):
+    """A wide MATCH must not leak across sessions.
+
+    Session filtering happens inside the FTS query, so broadening the MATCH
+    string is exactly where a scoping bug would surface.
+    """
+    from marm_mcp_server.core.memory_scoring import _fetch_fts_candidate_ids
+
+    vec = np.ones(384, dtype=np.float32)
+    vec /= np.linalg.norm(vec)
+
+    memory = MARMMemory(str(tmp_path / "memory.db"))
+    memory._encoder_failed = True
+
+    with memory.get_connection() as conn:
+        mine_id = _insert_with_embedding(conn, "mine", "my pet cat sleeps", vec)
+        _insert_with_embedding(conn, "theirs", "their pet dog barks", vec)
+
+    wide = _wide("what pet is that")
+    scoped = {
+        cid for cid, _ in _fetch_fts_candidate_ids(memory.db_path, "mine", wide, 50)
+    }
+    unscoped = {
+        cid for cid, _ in _fetch_fts_candidate_ids(memory.db_path, None, wide, 50)
+    }
+
+    assert scoped == {mine_id}
+    assert len(unscoped) == 2

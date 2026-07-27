@@ -11,6 +11,8 @@ from datetime import datetime, timezone
 
 import numpy as np
 
+from ..config.settings import FTS_EXTRA_STOPWORDS, FTS_QUERY_MODE
+
 
 def _safe_print(msg: str) -> None:
     """Write diagnostics to stderr so STDIO stdout stays JSON-RPC clean."""
@@ -88,6 +90,78 @@ def _safe_fts_query(query: str) -> str | None:
     if not tokens:
         return None
     return " ".join(f'"{t}"' for t in tokens)
+
+
+# English function words dropped by the or_nostop query mode.
+#
+# Deliberately limited to words that are ubiquitous *and* carry no content sense,
+# because the FTS5 tokenizer is case-insensitive ("porter ascii", see
+# core/memory_db.py) so a query term cannot be distinguished from its capitalized
+# proper-noun twin. Each word is therefore all-or-nothing: listing it loses the
+# proper-noun sense entirely, omitting it keeps the function-word sense in play.
+#
+# Words with a real content sense are intentionally absent -- month and name
+# collisions ("May", "Will"), acronyms ("US"), content verbs ("won", "get",
+# "need", "know"), and contraction fragments that double as words ("don", "won").
+# Omitting them costs little: BM25 already discounts frequent terms by inverse
+# document frequency, so a mid-frequency word ranks low on its own rather than
+# swamping the candidate pool.
+#
+# Scoped to the default English embedding model; non-English queries keep every
+# token and simply OR them, which is less precise but never an error.
+# FTS_EXTRA_STOPWORDS extends this per deployment.
+_FTS_BASE_STOPWORDS = frozenset(
+    """
+    a an the this that these those there here
+    i me my you your he him his she her hers it its
+    we our they them their
+    what who whom whose when where why how which
+    is are was were be been being am do does did
+    have has had
+    of to in into for on at by with from about as
+    and or but if then than so not no too very
+    s t
+    """.split()
+)
+
+_FTS_STOPWORDS = _FTS_BASE_STOPWORDS | FTS_EXTRA_STOPWORDS
+
+
+def _wide_fts_query(query: str) -> str | None:
+    """Build the semantic lane's FTS5 MATCH string, widened beyond strict AND.
+
+    `_safe_fts_query` space-joins tokens, which FTS5 reads as an implicit AND, so
+    a natural-language question only matched a memory containing *every* word --
+    measured at 0 of 400 LoCoMo questions producing candidates. This ORs the
+    tokens instead so the lane produces a real candidate pool for semantic
+    reranking to filter.
+
+    Only the semantic lane uses this. The exact/lexical lane keeps
+    `_safe_fts_query`, because its BM25 hits are returned to the caller without
+    any semantic rerank to clean up over-broad matches.
+
+    Returns None when nothing searchable survives, matching `_safe_fts_query`'s
+    contract so callers keep their existing fail-open path.
+    """
+    if FTS_QUERY_MODE == "and":
+        return _safe_fts_query(query)
+
+    tokens = re.findall(r"\w+", query)
+    if not tokens:
+        return None
+
+    if FTS_QUERY_MODE == "or_nostop":
+        kept = [t for t in tokens if t.lower() not in _FTS_STOPWORDS]
+        # An all-stopword query ("what is the") has nothing worth matching;
+        # returning None routes it to pure semantic recall rather than OR-ing
+        # filler words against every memory in the store.
+        if not kept:
+            return None
+        tokens = kept
+
+    # Quoting each token is a safety control, not formatting: it stops user input
+    # from being parsed as FTS5 syntax (NEAR, *, ^, column filters).
+    return " OR ".join(f'"{t}"' for t in tokens)
 
 
 # Sized for jina-embeddings-v2-small-en's 8,192-token window (config/settings.py's

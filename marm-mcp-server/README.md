@@ -7,7 +7,7 @@ mcp-name: io.github.Lyellr88/marm-mcp-server
      width="900"
      height="250">
 </picture>
-<h1 align="center">MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.30.0</h1>
+<h1 align="center">MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.31.0</h1>
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/Lyellr88/marm-memory/blob/MARM-main/LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
@@ -981,7 +981,9 @@ Packaged docs are indexed into the `marm_system` memory namespace on startup and
 | `WRITE_QUEUE_ENABLED` | `1` | Serialize writes through one worker |
 | `FTS_CANDIDATE_LIMIT` | `50` | BM25 candidates fetched before semantic reranking; raise for stores with weak keyword overlap |
 | `RECALL_SCAN_LIMIT` | `10000` | Cap on the semantic fallback scan; `recall_scan_truncated=true` in responses means it was hit |
-| `HYBRID_SEARCH_TEXT_WEIGHT` | `0.35` | Text-vs-semantic blend in hybrid scoring |
+| `FTS_QUERY_MODE` | `or_nostop` | How semantic recall builds its keyword query: `or_nostop` ignores filler words then matches any remaining term, `or` matches any term, `and` requires every term (the pre-2.31.0 behavior). The exact/lexical lane always requires every term. |
+| `FTS_EXTRA_STOPWORDS` | *(empty)* | Comma-separated extra words to ignore when building keyword queries, for terms so common in your store they carry no signal |
+| `HYBRID_SEARCH_TEXT_WEIGHT` | `0.0` | How much the keyword score influences ranking. At `0.0` keyword matching narrows which memories are considered but does not reorder them. |
 | `TEMPORAL_WEIGHT` / `TEMPORAL_HALF_LIFE_DAYS` | `0.1` / `30` | Strength and decay of the recency boost |
 | `CONSOLIDATION_ENABLED` | `0` | Write-time dedup + semantic merge |
 | `CONSOLIDATION_THRESHOLD` | `0.92` | Similarity needed to merge near-duplicates |
@@ -1120,7 +1122,7 @@ Packaged docs are indexed into the `marm_system` memory namespace on startup and
 
 </details>
 
-For memory behavior, transports, supported clients, compaction, and backup questions, see the [FAQ](marm-mcp-server/marm-docs/FAQ.md).
+For memory behavior, transports, supported clients, compaction, and backup questions, see the [FAQ](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/FAQ.md).
 
 ## ⭐ Star the Project
 
@@ -1166,7 +1168,7 @@ Copyright © 2026 Ryan A. Lyell. MARM is released under the [Apache 2.0 License]
 
 - **[README.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/README.md)** - This file: complete usage guide, tool reference, workflows, and architecture
 - **[PROTOCOL.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/PROTOCOL.md)** - MCP operating protocol
-- **[FAQ.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/marm-mcp-server/marm-docs/FAQ.md)** - Answers to common questions about using MARM
+- **[FAQ.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/FAQ.md)** - Answers to common questions about using MARM
 
 ### **MCP Server Installation**
 

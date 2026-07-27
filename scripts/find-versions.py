@@ -48,7 +48,6 @@ DOCKER_IMAGE_FILES = [
 ]
 
 DOC_ROOT = PROJECT_ROOT / "docs"
-MARM_DOCS_ROOT = SERVER_ROOT / "marm-docs"
 PACKAGED_DOCS_ROOT = SERVER_ROOT / "marm_mcp_server" / "resources" / "marm-docs"
 
 VERSION_RE = re.compile(r"(?<![\w.])v?(\d+\.\d+\.\d+)(?![\w.])", re.IGNORECASE)
@@ -111,10 +110,7 @@ def discover_docs() -> list[Path]:
     # docs/*.md
     if DOC_ROOT.exists():
         paths.extend(sorted(DOC_ROOT.glob("*.md"), key=lambda p: str(p).lower()))
-    # marm-mcp-server/marm-docs/*.md
-    if MARM_DOCS_ROOT.exists():
-        paths.extend(sorted(MARM_DOCS_ROOT.glob("*.md"), key=lambda p: str(p).lower()))
-    # bundled copy shipped in the wheel; keep its version strings in lockstep
+    # The packaged docs shipped in the wheel -- the only copy since v2.31.0.
     if PACKAGED_DOCS_ROOT.exists():
         paths.extend(
             sorted(PACKAGED_DOCS_ROOT.glob("*.md"), key=lambda p: str(p).lower())
