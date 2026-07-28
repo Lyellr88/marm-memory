@@ -1,5 +1,7 @@
 import os
+import pathlib
 import sqlite3
+import sys
 import uuid as _uuid_module
 from datetime import datetime, timezone as _timezone
 
@@ -959,12 +961,57 @@ def test_fts_lone_hit_score_clamped_to_unit_range(monkeypatch, capsys):
 
 def test_fts_lone_hit_score_default_is_unchanged_behavior():
     """The swept value is the pre-existing 1.0: the parameter ships as a no-op,
-    since only 1 of 1,982 benchmark queries reached the degenerate branch."""
+    since an offline diagnostic found one degenerate set across 1,982 FTS calls (a
+    call count, not the benchmark's 1,977 scored questions)."""
     from marm_mcp_server.config import settings
 
     if "FTS_LONE_HIT_SCORE" in os.environ:
         pytest.skip("environment pins FTS_LONE_HIT_SCORE; default not observable")
     assert settings.FTS_LONE_HIT_SCORE == 1.0
+
+
+def _import_settings_with(env_value: str) -> tuple[str, str]:
+    """Import settings.py in a clean process with FTS_LONE_HIT_SCORE set.
+
+    A fresh interpreter is the only way to observe an import-time constant more
+    than once per suite: monkeypatching the env after import is too late, and
+    importlib.reload raises ImportError once another test has evicted the module.
+    """
+    import subprocess
+
+    env = dict(os.environ)
+    env["FTS_LONE_HIT_SCORE"] = env_value
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from marm_mcp_server.config.settings import FTS_LONE_HIT_SCORE as v;"
+            "print(repr(v))",
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=str(pathlib.Path(__file__).resolve().parent.parent),
+    )
+    assert proc.returncode == 0, proc.stderr
+    return proc.stdout.strip(), proc.stderr
+
+
+def test_fts_lone_hit_score_env_override_reaches_the_constant():
+    """Covers the import-time assignment, not just the helper behind it.
+
+    The helper test above would still pass if settings.py were changed to call
+    `_safe_float` directly, silently dropping the clamp from the shipped value.
+    This asserts the constant the rest of the code imports, in a real process, for
+    a non-default in-range value and for one that must be clamped.
+    """
+    value, stderr = _import_settings_with("0.3")
+    assert value == "0.3"
+    assert "FTS_LONE_HIT_SCORE" not in stderr
+
+    value, stderr = _import_settings_with("2.5")
+    assert value == "1.0", "out-of-range value reached the constant unclamped"
+    assert "FTS_LONE_HIT_SCORE=2.5 out of [0, 1], clamped to 1.0" in stderr
 
 
 def test_fetch_fts_candidate_ids_returns_normalized_bm25_from_real_index(tmp_path):

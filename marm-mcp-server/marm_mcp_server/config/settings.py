@@ -331,10 +331,11 @@ FTS_EXTRA_STOPWORDS = _csv_frozenset("FTS_EXTRA_STOPWORDS")
 # against. The exact lane always uses 1.0.
 #
 # Stays at 1.0: swept over 0.0/0.3/0.5/1.0 in v2.32.0 with no measurable effect,
-# because on a corpus of any size the wide OR fills the candidate pool -- only 1
-# of 1,982 LoCoMo queries produced a degenerate set at all. It is exposed for
-# small stores, where a query matching a single memory is common and awarding it
-# a perfect lexical score may not be wanted.
+# because on a corpus of any size the wide OR fills the candidate pool. An offline
+# diagnostic found one degenerate set across 1,982 FTS calls (a call count, not the
+# benchmark's 1,977 scored questions); 1,964 of those calls saturated the pool.
+# Exposed for small stores, where a query matching a single memory is common and
+# awarding it a perfect lexical score may not be wanted.
 FTS_LONE_HIT_SCORE = _safe_unit_float("FTS_LONE_HIT_SCORE", 1.0)
 
 CONSOLIDATION_ENABLED = os.environ.get("CONSOLIDATION_ENABLED", "0") == "1"
