@@ -38,6 +38,23 @@ def _safe_float(env_key: str, default: float) -> float:
         return default
 
 
+def _safe_unit_float(env_key: str, default: float) -> float:
+    """Parse an env var as a float clamped to [0, 1], warning when it was out of range.
+
+    Several settings are weights or similarity scores that only mean anything
+    inside the unit interval; this keeps the parse, the clamp, and the warning in
+    one tested place instead of re-deriving them per setting.
+    """
+    raw = _safe_float(env_key, default)
+    clamped = max(0.0, min(1.0, raw))
+    if raw != clamped:
+        print(
+            f"WARNING: {env_key}={raw} out of [0, 1], clamped to {clamped}",
+            file=sys.stderr,
+        )
+    return clamped
+
+
 def _safe_choice(env_key: str, default: str, allowed: tuple[str, ...]) -> str:
     """Read an env var constrained to a fixed set, falling back on anything else."""
     raw = os.environ.get(env_key)
@@ -318,13 +335,7 @@ FTS_EXTRA_STOPWORDS = _csv_frozenset("FTS_EXTRA_STOPWORDS")
 # of 1,982 LoCoMo queries produced a degenerate set at all. It is exposed for
 # small stores, where a query matching a single memory is common and awarding it
 # a perfect lexical score may not be wanted.
-_raw_flhs = _safe_float("FTS_LONE_HIT_SCORE", 1.0)
-FTS_LONE_HIT_SCORE = max(0.0, min(1.0, _raw_flhs))
-if not (0.0 <= _raw_flhs <= 1.0):
-    print(
-        f"WARNING: FTS_LONE_HIT_SCORE={_raw_flhs} out of [0, 1], clamped to {FTS_LONE_HIT_SCORE}",
-        file=sys.stderr,
-    )
+FTS_LONE_HIT_SCORE = _safe_unit_float("FTS_LONE_HIT_SCORE", 1.0)
 
 CONSOLIDATION_ENABLED = os.environ.get("CONSOLIDATION_ENABLED", "0") == "1"
 _raw_ct = _safe_float("CONSOLIDATION_THRESHOLD", 0.92)

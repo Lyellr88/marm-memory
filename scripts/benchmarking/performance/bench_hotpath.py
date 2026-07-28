@@ -37,10 +37,13 @@ _REPO_ROOT = os.path.dirname(
 )
 sys.path.insert(0, os.path.join(_REPO_ROOT, "marm-mcp-server"))
 
-from marm_mcp_server.core.memory import MARMMemory, _safe_fts_query  # noqa: E402
+from marm_mcp_server.core.memory import MARMMemory, _wide_fts_query  # noqa: E402
 from marm_mcp_server.core import consolidation  # noqa: E402
 from marm_mcp_server.core import memory_ops  # noqa: E402
-from marm_mcp_server.config.settings import DEFAULT_SEMANTIC_DIM  # noqa: E402
+from marm_mcp_server.config.settings import (  # noqa: E402
+    DEFAULT_SEMANTIC_DIM,
+    FTS_CANDIDATE_LIMIT,
+)
 
 NUMPY_AVAILABLE = importlib.util.find_spec("numpy") is not None
 
@@ -247,7 +250,10 @@ async def bench_hybrid_strategies(mem, sizes=None, iters=15):
         for iter_num in range(iters):
             query = test_queries[iter_num % len(test_queries)]
             query_vec = mem._encode_sync(query)
-            fts_query = _safe_fts_query(query)
+            # Must match what recall_similar actually runs. These queries are all
+            # non-exact, so the timed path uses the wide builder; counting strict-AND
+            # matches described a query the measured path never issues.
+            fts_query = _wide_fts_query(query)
 
             # Alternate order so one path does not always benefit from a warmed cache.
             if iter_num % 2 == 0:
@@ -294,7 +300,7 @@ async def bench_hybrid_strategies(mem, sizes=None, iters=15):
                            WHERE memories_fts MATCH ? AND m.session_name = 'bench'""",
                         (fts_query,),
                     ).fetchone()[0]
-                fts_hits.append(min(matched, 50))
+                fts_hits.append(min(matched, FTS_CANDIDATE_LIMIT))
 
         results["full_scan"][n] = scan_samples
         results["production_hybrid"][n] = prod_samples
@@ -364,7 +370,7 @@ async def main():
 
             print(
                 f"{n:<8} {scan_med:>7.1f}ms     {prod_med:>7.1f}ms      "
-                f"{speedup:>5.1f}x     {fts_hit_rate:>4.1f}/50"
+                f"{speedup:>5.1f}x     {fts_hit_rate:>4.1f}/{FTS_CANDIDATE_LIMIT}"
             )
 
         print("\nKey points:")
@@ -376,7 +382,8 @@ async def main():
         )
         print("  • Speedup = full scan / production hybrid (both real code paths)")
         print(
-            "  • FTS Hits: avg candidates the keyword prefilter matched (capped at 50)\n"
+            "  • FTS Hits: avg candidates the keyword prefilter matched "
+            f"(capped at FTS_CANDIDATE_LIMIT={FTS_CANDIDATE_LIMIT})\n"
         )
 
 

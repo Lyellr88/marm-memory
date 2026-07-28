@@ -921,19 +921,50 @@ def test_tied_bm25_candidates_cut_off_deterministically(tmp_path):
     assert [row["id"] for row, _ in rows] == ["id-1", "id-2", "id-3"]
 
 
-def test_fts_lone_hit_score_clamped_to_unit_range(monkeypatch):
-    """Out-of-range values clamp rather than propagate an invalid weight into
-    ranking, matching the neighbouring settings' clamp-and-warn contract."""
-    from marm_mcp_server.config.settings import _safe_float
+def test_fts_lone_hit_score_clamped_to_unit_range(monkeypatch, capsys):
+    """Out-of-range values clamp rather than propagate an invalid weight into ranking.
+
+    Exercises `_safe_unit_float`, the helper `FTS_LONE_HIT_SCORE` is actually
+    built from, so the parse, the clamp, and the warning are all covered by the
+    real code path. Reloading `settings` would be the other way to reach the
+    constant itself, but it raises ImportError once another test in the suite has
+    evicted the module, which is why the clamp lives in a callable helper.
+    """
+    from marm_mcp_server.config.settings import _safe_unit_float
 
     monkeypatch.setenv("FTS_LONE_HIT_SCORE", "2.5")
-    assert max(0.0, min(1.0, _safe_float("FTS_LONE_HIT_SCORE", 1.0))) == 1.0
+    assert _safe_unit_float("FTS_LONE_HIT_SCORE", 1.0) == 1.0
+    assert "out of [0, 1], clamped to 1.0" in capsys.readouterr().err
 
     monkeypatch.setenv("FTS_LONE_HIT_SCORE", "-1")
-    assert max(0.0, min(1.0, _safe_float("FTS_LONE_HIT_SCORE", 1.0))) == 0.0
+    assert _safe_unit_float("FTS_LONE_HIT_SCORE", 1.0) == 0.0
+    assert "out of [0, 1], clamped to 0.0" in capsys.readouterr().err
 
+    # Unparseable input falls back to the default and must not be reported as a
+    # clamp, which would be a misleading diagnostic.
     monkeypatch.setenv("FTS_LONE_HIT_SCORE", "not-a-number")
-    assert _safe_float("FTS_LONE_HIT_SCORE", 1.0) == 1.0
+    assert _safe_unit_float("FTS_LONE_HIT_SCORE", 1.0) == 1.0
+    err = capsys.readouterr().err
+    assert "not a valid number" in err
+    assert "clamped" not in err
+
+    # In-range values pass through silently.
+    monkeypatch.setenv("FTS_LONE_HIT_SCORE", "0.3")
+    assert _safe_unit_float("FTS_LONE_HIT_SCORE", 1.0) == 0.3
+    assert capsys.readouterr().err == ""
+
+    monkeypatch.delenv("FTS_LONE_HIT_SCORE")
+    assert _safe_unit_float("FTS_LONE_HIT_SCORE", 1.0) == 1.0
+
+
+def test_fts_lone_hit_score_default_is_unchanged_behavior():
+    """The swept value is the pre-existing 1.0: the parameter ships as a no-op,
+    since only 1 of 1,982 benchmark queries reached the degenerate branch."""
+    from marm_mcp_server.config import settings
+
+    if "FTS_LONE_HIT_SCORE" in os.environ:
+        pytest.skip("environment pins FTS_LONE_HIT_SCORE; default not observable")
+    assert settings.FTS_LONE_HIT_SCORE == 1.0
 
 
 def test_fetch_fts_candidate_ids_returns_normalized_bm25_from_real_index(tmp_path):
