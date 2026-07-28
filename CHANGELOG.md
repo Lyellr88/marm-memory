@@ -3,6 +3,28 @@
 ## Version 2 - MARM Protocol to Universal MCP Server Evolution
 
 <details>
+<summary><strong>July 28th, 2026: Keyword Ranking Weight Set From Benchmark Data (v2.32.0)</strong></summary>
+
+### Keyword Relevance Now Contributes to Ranking
+
+- v2.31.0 made the keyword index find candidates for natural-language questions but deliberately left keyword scores out of ranking, because the old 35% weight had been chosen while that path never ran and so had never been validated. The weight has now been swept against the benchmark and is on.
+- `HYBRID_SEARCH_TEXT_WEIGHT` defaults to `0.05`. Swept over `0.00, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.10, 0.15, 0.20, 0.35, 0.50` on LoCoMo (1,977 questions, 5,882 ingested memories, top-5 recall), any-hit peaks across a broad `0.04`-`0.08` plateau at 62.0-62.5%, against 57.4% with keyword scoring off and 57.6% at the old 0.35. `0.05` is the middle of that plateau rather than the single best run, so the default is not fitted to one corpus. Large weights are actively harmful: single-hop accuracy falls from 56.9% at `0.05` to 47.3% at `0.35`.
+- `FTS_CANDIDATE_LIMIT` default raised from `50` to `200`. This was the lever on the multi-hop regression v2.31.0 introduced, and raising it recovers multi-hop any-hit from 34.8% to 39.3%, matching the pre-v2.31.0 baseline, while lifting single-hop 1.1 points and leaving adversarial precision unchanged. Recall costs roughly 3ms more per query. `500` recovers a further 1.1 points of multi-hop but starts giving back the adversarial gain, because a pool that large no longer narrows anything.
+- Combined result versus v2.31.0 measured on the same corpus: any-hit 57.4% to 62.5%, all-hit 47.6% to 52.6%, evidence recall 51.9% to 56.9%. Every question category improves, and multi-hop, the one category v2.31.0 set back, is fully recovered.
+
+### Fixed: Keyword Candidate Selection Was Not Reproducible
+
+- When several memories tied on keyword score at the candidate cutoff, which ones entered the pool depended on the order SQLite happened to return rows, and that order varied between server processes. Ties at the cutoff are the normal case, not an edge case: 53.7% of benchmark queries had one. Two identical benchmark runs disagreed on 18 questions and scored 0.5 points apart, and the same recall could return different results across restarts.
+- Candidate selection now breaks ties on memory ID, so the pool is stable for a given database. Accuracy is unchanged within measurement error; what changes is that results are now reproducible. This also means benchmark differences smaller than roughly 0.1 points are now meaningful, where previously anything under 0.5 points was indistinguishable from noise.
+
+### New Settings
+
+- `FTS_LONE_HIT_SCORE` (default `1.0`) sets the keyword score used when a candidate set is too degenerate to rank, meaning a single match or every match tied. It defaults to no change in behavior: swept over `0.0/0.3/0.5/1.0` with no measurable effect. The offline diagnostic found one degenerate set across 1,982 FTS calls, a count distinct from the benchmark's 1,977 scored-question result set. It is exposed for small stores, where a query matching exactly one memory is common and treating that as a perfect keyword match may not be wanted.
+- `marm-memory doctor` reports the new value in its existing "Recall tuning" section.
+
+</details>
+
+<details>
 <summary><strong>July 26th, 2026: Natural-Language Keyword Retrieval Activated (v2.31.0)</strong></summary>
 
 ### Natural-Language Recall Now Uses the Keyword Index

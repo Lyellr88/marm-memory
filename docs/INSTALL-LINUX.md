@@ -2,7 +2,7 @@
 
 ## Universal Memory Intelligence Platform for AI Agents
 
-**MARM v2.31.0** - Memory Accurate Response Mode
+**MARM v2.32.0** - Memory Accurate Response Mode
 *Complete Linux installation guide*
 
 ---
@@ -320,7 +320,7 @@ curl -s http://localhost:8001/health
 {
   "status": "healthy",
   "service": "MARM MCP Server",
-  "version": "2.31.0",
+  "version": "2.32.0",
   "timestamp": "2026-01-01T00:00:00+00:00",
   "database": "connected",
   "semantic_search": "available"

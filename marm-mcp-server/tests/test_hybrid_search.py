@@ -160,13 +160,12 @@ def test_extra_stopwords_parsing(monkeypatch):
     assert _csv_frozenset("FTS_EXTRA_STOPWORDS") == frozenset()
 
 
-def test_hybrid_search_text_weight_defaults_to_zero():
-    """Phase 1 ships lexical scoring off on purpose.
+def test_hybrid_search_text_weight_default_is_the_swept_value():
+    """The weight is the one number this whole change exists to establish.
 
-    The widened builder makes the BM25 term live on natural-language recall for
-    the first time. Until the weight is swept against the benchmark it stays at
-    0.0, so FTS acts purely as a candidate filter. Guards against a well-meaning
-    "restore" to the old 0.35.
+    0.05 came from a LoCoMo sweep over 0.00-0.50 where any-hit peaked in a broad
+    0.04-0.08 plateau, well above both 0.0 (lexical scoring off) and the old
+    unvalidated 0.35. Guards against a silent drift back to either.
     """
     from marm_mcp_server.config import settings
 
@@ -174,7 +173,18 @@ def test_hybrid_search_text_weight_defaults_to_zero():
         pytest.skip(
             "environment pins HYBRID_SEARCH_TEXT_WEIGHT; default not observable"
         )
-    assert settings.HYBRID_SEARCH_TEXT_WEIGHT == 0.0
+    assert settings.HYBRID_SEARCH_TEXT_WEIGHT == 0.05
+
+
+def test_fts_candidate_limit_default_is_the_swept_value():
+    """200 was chosen to recover the multi-hop recall that v2.31.0's 50-candidate
+    pool cost. Below ~200 multi-hop drops; far above it the pool stops acting as
+    a precision gate and the adversarial gain erodes."""
+    from marm_mcp_server.config import settings
+
+    if "FTS_CANDIDATE_LIMIT" in os.environ:
+        pytest.skip("environment pins FTS_CANDIDATE_LIMIT; default not observable")
+    assert settings.FTS_CANDIDATE_LIMIT == 200
 
 
 # --- FTS5 schema ---
@@ -764,10 +774,9 @@ async def test_recall_similar_fuses_bm25_into_ranking(monkeypatch, tmp_path):
         strong_id = _insert_with_embedding(conn, "fuse", "docker deployment", vec)
         weak_id = _insert_with_embedding(conn, "fuse", "docker sidebar", vec)
 
-    # HYBRID_SEARCH_TEXT_WEIGHT ships at 0.0 (see settings.py), which by design
-    # makes the lexical term contribute nothing. This test covers the fusion
-    # mechanism itself, so it pins a non-zero weight rather than depending on the
-    # shipped default.
+    # The shipped 0.05 weight is deliberately small. This test covers the fusion
+    # mechanism itself, so it pins a larger non-zero weight rather than depending
+    # on the shipped default.
     monkeypatch.setattr(memory_recall_module, "HYBRID_SEARCH_TEXT_WEIGHT", 0.35)
 
     # Identical embeddings -> identical vec_score. Only the BM25 term differs,
@@ -799,6 +808,132 @@ def test_normalize_bm25_maps_more_negative_to_higher_score():
     assert _normalize_bm25([]) == []
     # All-equal scores collapse to 1.0 so a lone lexical hit keeps full weight.
     assert _normalize_bm25([-2.0, -2.0]) == [1.0, 1.0]
+
+
+def test_normalize_bm25_lone_hit_score_covers_both_degenerate_shapes():
+    """`lone_hit_score` must apply to every set min-max cannot normalize.
+
+    Both a single row and a multi-row set where every score ties are degenerate:
+    there is no spread, so the caller's value is used verbatim. The all-equal
+    shape is the one easily missed -- a wide OR query where several memories hit
+    the same number of terms lands there, not on the single-row branch.
+    """
+    from marm_mcp_server.core.memory_scoring import _normalize_bm25
+
+    assert _normalize_bm25([-2.0], lone_hit_score=0.3) == [0.3]
+    assert _normalize_bm25([-2.0, -2.0, -2.0], lone_hit_score=0.3) == [0.3, 0.3, 0.3]
+    assert _normalize_bm25([], lone_hit_score=0.3) == []
+    # Zero is a real choice (ignore the lexical signal entirely), not "unset".
+    assert _normalize_bm25([-2.0], lone_hit_score=0.0) == [0.0]
+
+
+def test_normalize_bm25_lone_hit_score_ignored_when_spread_exists():
+    """A set with real spread must normalize identically regardless of the
+    parameter. Guards against the value leaking into the non-degenerate math."""
+    from marm_mcp_server.core.memory_scoring import _normalize_bm25
+
+    assert _normalize_bm25([-5.0, -3.0, -1.0], lone_hit_score=0.0) == [1.0, 0.5, 0.0]
+
+
+def test_lone_hit_score_applies_to_semantic_lane_but_not_exact_lane(
+    tmp_path, monkeypatch
+):
+    """The two lanes must diverge on the same degenerate result set.
+
+    One memory matches, so both fetchers see a single row and take the
+    degenerate branch. The semantic lane's pool comes from a wide OR where a
+    lone hit means one term matched, so it gets FTS_LONE_HIT_SCORE. The exact
+    lane's strict AND means a lone hit contained every term, so it keeps 1.0.
+    Asserting both against one real FTS5 index is what proves the wiring went
+    to the right call site.
+    """
+    from marm_mcp_server.core import memory_scoring
+
+    vec = np.ones(384, dtype=np.float32)
+    vec /= np.linalg.norm(vec)
+
+    memory = MARMMemory(str(tmp_path / "memory.db"))
+    memory._encoder_failed = True
+
+    with memory.get_connection() as conn:
+        only_id = _insert_with_embedding(
+            conn, "lone", "The quarterly budget was approved.", vec
+        )
+        _insert_with_embedding(conn, "lone", "Unrelated note about weather.", vec)
+
+    monkeypatch.setattr(memory_scoring, "FTS_LONE_HIT_SCORE", 0.25)
+
+    pairs = memory_scoring._fetch_fts_candidate_ids(
+        memory.db_path, "lone", '"budget"', 50
+    )
+    assert pairs == [(only_id, 0.25)]
+
+    exact = memory_scoring._fetch_and_score_fts_rows(
+        memory.db_path, "lone", '"budget"', 50
+    )
+    assert [score for _, score in exact] == [1.0]
+
+
+def test_tied_bm25_candidates_cut_off_deterministically(tmp_path):
+    """The candidate pool must not depend on SQLite's incidental row order.
+
+    BM25 ties at the LIMIT boundary are the common case, not an edge case: 53.7%
+    of LoCoMo queries had one at the 50-row cutoff. Without a tiebreak, which
+    candidates entered the pool varied between processes, and identical
+    benchmark configs scored up to 0.5pp apart -- larger than several of the
+    effects the pool is used to measure.
+
+    Six identical documents tie exactly, so only the ORDER BY tiebreak decides
+    which three survive a LIMIT 3. They are inserted in scrambled id order, so a
+    fetcher relying on scan order would return the insertion-order prefix
+    instead of the id-sorted one.
+    """
+    from marm_mcp_server.core.memory_scoring import (
+        _fetch_and_score_fts_rows,
+        _fetch_fts_candidate_ids,
+    )
+
+    vec = np.ones(384, dtype=np.float32)
+    vec /= np.linalg.norm(vec)
+    insertion_order = ["id-5", "id-2", "id-6", "id-1", "id-4", "id-3"]
+
+    memory = MARMMemory(str(tmp_path / "memory.db"))
+    memory._encoder_failed = True
+    with memory.get_connection() as conn:
+        for mem_id in insertion_order:
+            conn.execute(
+                "INSERT INTO memories"
+                " (id, session_name, content, embedding, content_hash, timestamp,"
+                "  context_type, metadata)"
+                " VALUES (?, 'tie', 'tiebreak marker', ?, ?, ?, 'general', '{}')",
+                (
+                    mem_id,
+                    vec.tobytes(),
+                    f"hash-{mem_id}",
+                    datetime.now(_timezone.utc).isoformat(),
+                ),
+            )
+
+    pairs = _fetch_fts_candidate_ids(memory.db_path, "tie", '"marker"', 3)
+    assert [cid for cid, _ in pairs] == ["id-1", "id-2", "id-3"]
+
+    rows = _fetch_and_score_fts_rows(memory.db_path, "tie", '"marker"', 3)
+    assert [row["id"] for row, _ in rows] == ["id-1", "id-2", "id-3"]
+
+
+def test_fts_lone_hit_score_clamped_to_unit_range(monkeypatch):
+    """Out-of-range values clamp rather than propagate an invalid weight into
+    ranking, matching the neighbouring settings' clamp-and-warn contract."""
+    from marm_mcp_server.config.settings import _safe_float
+
+    monkeypatch.setenv("FTS_LONE_HIT_SCORE", "2.5")
+    assert max(0.0, min(1.0, _safe_float("FTS_LONE_HIT_SCORE", 1.0))) == 1.0
+
+    monkeypatch.setenv("FTS_LONE_HIT_SCORE", "-1")
+    assert max(0.0, min(1.0, _safe_float("FTS_LONE_HIT_SCORE", 1.0))) == 0.0
+
+    monkeypatch.setenv("FTS_LONE_HIT_SCORE", "not-a-number")
+    assert _safe_float("FTS_LONE_HIT_SCORE", 1.0) == 1.0
 
 
 def test_fetch_fts_candidate_ids_returns_normalized_bm25_from_real_index(tmp_path):

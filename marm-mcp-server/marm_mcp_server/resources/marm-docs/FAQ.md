@@ -150,7 +150,7 @@ It can also filter by `project` and `platform` when those metadata fields are av
 
 When the semantic fallback lane reaches its configured scan cap, responses include `recall_scan_truncated=true` and `recall_scan_limit` so agents know that part of recall was bounded. The primary filter→rerank lane does not set truncation because it works over a fixed FTS candidate set instead of a broad embedding scan.
 
-`FTS_CANDIDATE_LIMIT` (default `50`) controls how many keyword candidates are fetched before semantic reranking. On a store of any size, ordinary questions usually fill this pool completely, so it is the main lever on how much recall breadth you get. Raising it helps questions whose answer is spread across several memories that do not all share wording with the question; lowering it tightens results to the closest keyword matches. `FTS_QUERY_MODE` and `FTS_EXTRA_STOPWORDS` control how the keyword query itself is built.
+`FTS_CANDIDATE_LIMIT` (default `200`) controls how many keyword candidates are fetched before semantic reranking. On a store of any size, ordinary questions usually fill this pool completely, so it is the main lever on how much recall breadth you get. Raising it helps questions whose answer is spread across several memories that do not all share wording with the question; lowering it tightens results to the closest keyword matches. `FTS_QUERY_MODE` and `FTS_EXTRA_STOPWORDS` control how the keyword query itself is built.
 
 If you need less context back from each hit, `marm_smart_recall` also supports `detail=1/2/3` so agents can default to short previews and only request full memory bodies when needed.
 

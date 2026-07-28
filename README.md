@@ -5,7 +5,7 @@
      width="900"
      height="250">
 </picture>
-<h1 align="center">MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.31.0</h1>
+<h1 align="center">MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.32.0</h1>
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/Lyellr88/marm-memory/blob/MARM-main/LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
@@ -841,7 +841,7 @@ The first query is about *meaning*, so MARM reranks candidates with local vector
 MARM uses **filter→rerank hybrid recall** plus an exact retrieval lane:
 
 1. **Exact lane** (`exact_mode="auto"`, the default): config keys, CLI flags, file paths, API/tool names, dotted namespaces, HTTP routes, URLs, and quoted command strings are detected and routed through deterministic FTS5 BM25 with a LIKE fallback. No embeddings involved, so results are stable and literal.
-2. **Filter→rerank lane**: natural-language queries first pull a bounded candidate set from the FTS index (`FTS_CANDIDATE_LIMIT`, default 50), then semantic embeddings rerank those candidates by meaning. Conservative temporal weighting gives fresher memories a modest boost when matches are otherwise close.
+2. **Filter→rerank lane**: natural-language queries first pull a bounded candidate set from the FTS index (`FTS_CANDIDATE_LIMIT`, default 200), then semantic embeddings rerank those candidates by meaning. Conservative temporal weighting gives fresher memories a modest boost when matches are otherwise close.
 3. **Bounded semantic fallback**: when FTS coverage is weak or unusable, MARM falls back to a bounded semantic scan (`RECALL_SCAN_LIMIT`). If the response includes `recall_scan_truncated=true`, the fallback hit its cap; narrow the session/query or raise the env var for larger stores.
 4. **Chunk-aware scoring**: long memories (roughly 180+ words) are embedded as overlapping chunk rows internally, and recall collapses chunk scores back to one parent memory using the best-matching chunk. Both the rerank lane and the fallback lane are chunk-aware.
 
@@ -979,11 +979,12 @@ Packaged docs are indexed into the `marm_system` memory namespace on startup and
 | `MARM_PROJECT` / `MARM_PLATFORM` | *(auto-detected)* | Override project/platform attribution |
 | `MARM_RATE_LIMIT_RPM` | `80` | Requests per minute per IP (presets override) |
 | `WRITE_QUEUE_ENABLED` | `1` | Serialize writes through one worker |
-| `FTS_CANDIDATE_LIMIT` | `50` | BM25 candidates fetched before semantic reranking; raise for stores with weak keyword overlap |
+| `FTS_CANDIDATE_LIMIT` | `200` | BM25 candidates fetched before semantic reranking; raise for stores with weak keyword overlap, lower to tighten results to the closest keyword matches |
 | `RECALL_SCAN_LIMIT` | `10000` | Cap on the semantic fallback scan; `recall_scan_truncated=true` in responses means it was hit |
 | `FTS_QUERY_MODE` | `or_nostop` | How semantic recall builds its keyword query: `or_nostop` ignores filler words then matches any remaining term, `or` matches any term, `and` requires every term (the pre-2.31.0 behavior). The exact/lexical lane always requires every term. |
 | `FTS_EXTRA_STOPWORDS` | *(empty)* | Comma-separated extra words to ignore when building keyword queries, for terms so common in your store they carry no signal |
-| `HYBRID_SEARCH_TEXT_WEIGHT` | `0.0` | How much the keyword score influences ranking. At `0.0` keyword matching narrows which memories are considered but does not reorder them. |
+| `HYBRID_SEARCH_TEXT_WEIGHT` | `0.05` | How much the keyword score influences ranking. Set from a benchmark sweep; accuracy peaks across `0.04`-`0.08` and falls off sharply above `0.10`. At `0.0` keyword matching narrows which memories are considered but does not reorder them. |
+| `FTS_LONE_HIT_SCORE` | `1.0` | Keyword score used when only one memory matches, or when every match ties. Lower it on small stores if a single keyword match should not count as a perfect one. |
 | `TEMPORAL_WEIGHT` / `TEMPORAL_HALF_LIFE_DAYS` | `0.1` / `30` | Strength and decay of the recency boost |
 | `CONSOLIDATION_ENABLED` | `0` | Write-time dedup + semantic merge |
 | `CONSOLIDATION_THRESHOLD` | `0.92` | Similarity needed to merge near-duplicates |

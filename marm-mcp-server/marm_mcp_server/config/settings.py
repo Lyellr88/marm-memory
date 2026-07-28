@@ -144,7 +144,7 @@ if not (1 <= _raw_port <= 65535):
         f"WARNING: SERVER_PORT={_raw_port} out of [1, 65535], clamped to {SERVER_PORT}",
         file=sys.stderr,
     )
-SERVER_VERSION = "2.31.0"
+SERVER_VERSION = "2.32.0"
 
 GRAPH_ENABLED = os.environ.get("GRAPH_ENABLED", "true").lower() != "false"
 
@@ -250,15 +250,15 @@ if not (0.0 <= _raw_cdst <= 1.0):
         file=sys.stderr,
     )
 
-# Default is 0.0 on purpose -- do not "restore" it to 0.35.
-# Until the FTS candidate-generation fix (v2.31.0), _safe_fts_query AND-ed every
-# query token, so natural-language recall never produced FTS candidates and this
-# weight never applied on that path. Widening candidate generation makes the
-# lexical term live for the first time, so it ships at 0.0 (FTS acts purely as a
-# candidate filter for semantic reranking) until the sweep in
-# docs/current/fts-candidate-generation-fix.md Phase 2 sets an evidence-based
-# default. An explicit env var still overrides this.
-_raw_hsw = _safe_float("HYBRID_SEARCH_TEXT_WEIGHT", 0.0)
+# 0.05 is swept, not guessed -- do not "restore" it to the old 0.35.
+# Until v2.31.0 widened candidate generation this weight never applied to
+# natural-language recall, so it had never been validated. Swept in v2.32.0 over
+# 0.00-0.50 on LoCoMo (1,977 questions, 5,882 memories, deterministic pool):
+# any-hit peaks in a broad 0.04-0.08 plateau at 62.0-62.5%, against 57.4% at 0.0
+# and 57.6% at the old 0.35. High weights collapse single-hop accuracy (56.9% at
+# 0.05 -> 47.3% at 0.35). 0.05 is the plateau centre rather than the argmax, so
+# the default is not fitted to one corpus.
+_raw_hsw = _safe_float("HYBRID_SEARCH_TEXT_WEIGHT", 0.05)
 _raw_tw = _safe_float("TEMPORAL_WEIGHT", 0.1)
 _raw_hld = _safe_float("TEMPORAL_HALF_LIFE_DAYS", 30)
 HYBRID_SEARCH_TEXT_WEIGHT = max(0.0, min(1.0, _raw_hsw))
@@ -280,7 +280,16 @@ if _raw_hld < 1.0:
         file=sys.stderr,
     )
 
-_raw_fcl = _safe_int("FTS_CANDIDATE_LIMIT", 50)
+# Raised 50 -> 200 in v2.32.0. v2.31.0 made this knob load-bearing for the first
+# time (99.4% of LoCoMo queries saturated the old 50) and its cost was a 5.6pp
+# multi-hop regression, since a keyword-filtered pool can drop a required memory
+# that shares no wording with the question. Swept over 50/100/200/500: 200
+# recovers multi-hop to 39.3% (from 34.8% at 50, matching the pre-v2.31.0
+# baseline) and lifts single-hop 1.1pp with adversarial precision unchanged, for
+# roughly 3ms more per recall. 500 buys another 1.1pp of multi-hop but starts
+# giving back the adversarial gain, because a pool that large stops acting as a
+# precision gate.
+_raw_fcl = _safe_int("FTS_CANDIDATE_LIMIT", 200)
 FTS_CANDIDATE_LIMIT = max(1, _raw_fcl)
 if _raw_fcl < 1:
     print(
@@ -299,6 +308,23 @@ FTS_QUERY_MODE = _safe_choice("FTS_QUERY_MODE", "or_nostop", FTS_QUERY_MODES)
 # Extra stopwords appended to the built-in English list used by or_nostop.
 # Additive only -- it cannot remove built-ins. Comma-separated, case-insensitive.
 FTS_EXTRA_STOPWORDS = _csv_frozenset("FTS_EXTRA_STOPWORDS")
+
+# Lexical score given to a degenerate semantic-lane candidate set (one row, or
+# every row tied on BM25), where per-query min-max has no spread to normalize
+# against. The exact lane always uses 1.0.
+#
+# Stays at 1.0: swept over 0.0/0.3/0.5/1.0 in v2.32.0 with no measurable effect,
+# because on a corpus of any size the wide OR fills the candidate pool -- only 1
+# of 1,982 LoCoMo queries produced a degenerate set at all. It is exposed for
+# small stores, where a query matching a single memory is common and awarding it
+# a perfect lexical score may not be wanted.
+_raw_flhs = _safe_float("FTS_LONE_HIT_SCORE", 1.0)
+FTS_LONE_HIT_SCORE = max(0.0, min(1.0, _raw_flhs))
+if not (0.0 <= _raw_flhs <= 1.0):
+    print(
+        f"WARNING: FTS_LONE_HIT_SCORE={_raw_flhs} out of [0, 1], clamped to {FTS_LONE_HIT_SCORE}",
+        file=sys.stderr,
+    )
 
 CONSOLIDATION_ENABLED = os.environ.get("CONSOLIDATION_ENABLED", "0") == "1"
 _raw_ct = _safe_float("CONSOLIDATION_THRESHOLD", 0.92)

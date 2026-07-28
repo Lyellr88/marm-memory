@@ -99,6 +99,7 @@ def _print_doctor(payload: dict[str, Any]) -> None:
             f"  Keyword weight: {weight}"
             + (" (keyword matching narrows results only)" if weight == 0 else "")
         )
+        print(f"  Single-match score: {retrieval.get('fts_lone_hit_score')}")
         extra = retrieval.get("fts_extra_stopwords") or []
         if extra:
             print(f"  Ignored words added: {', '.join(extra)}")

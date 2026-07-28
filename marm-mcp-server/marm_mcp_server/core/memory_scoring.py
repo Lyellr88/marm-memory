@@ -3,18 +3,28 @@
 import sqlite3
 import numpy as np
 
+from ..config.settings import FTS_LONE_HIT_SCORE
 
-def _normalize_bm25(raw_scores: list[float]) -> list[float]:
+
+def _normalize_bm25(
+    raw_scores: list[float], *, lone_hit_score: float = 1.0
+) -> list[float]:
     """Map raw BM25 scores (more-negative = better) to [0, 1] with 1.0 best.
 
-    Single-row or all-equal result sets collapse to 1.0 so a lone lexical hit
-    still contributes its full text weight.
+    Per-query min-max needs a spread to normalize against, so single-row and
+    all-equal result sets are degenerate and get `lone_hit_score` instead.
+
+    How much evidence a degenerate set represents depends on how the MATCH was
+    built, so the caller decides. Under strict AND a lone hit means every query
+    term was present, which justifies the default 1.0. Under the semantic lane's
+    wide OR it can mean one memory contained one non-stopword, so that caller
+    passes FTS_LONE_HIT_SCORE.
     """
     if not raw_scores:
         return []
     min_s, max_s = min(raw_scores), max(raw_scores)
     if max_s == min_s:
-        return [1.0 for _ in raw_scores]
+        return [lone_hit_score for _ in raw_scores]
     span = max_s - min_s
     return [(max_s - s) / span for s in raw_scores]
 
@@ -210,7 +220,7 @@ def _fetch_and_score_fts_rows(
         if platform is not None:
             base += " AND m.platform = ?"
             params.append(platform)
-        base += " ORDER BY score LIMIT ?"
+        base += " ORDER BY score, m.id LIMIT ?"
         params.append(limit)
         rows = conn.execute(base, params).fetchall()
     finally:
@@ -219,6 +229,8 @@ def _fetch_and_score_fts_rows(
     if not rows:
         return []
 
+    # Exact lane: keeps the 1.0 default because this path is only reached with a
+    # strict-AND MATCH, where a lone hit means every query term was present.
     normalized = _normalize_bm25([row["score"] for row in rows])
     return list(zip(rows, normalized))
 
@@ -255,13 +267,20 @@ def _fetch_fts_candidate_ids(
         if platform is not None:
             base += " AND m.platform = ?"
             params.append(platform)
-        base += " ORDER BY bm25(memories_fts) LIMIT ?"
+        # m.id breaks BM25 ties so the LIMIT cutoff is reproducible. Measured on
+        # the LoCoMo corpus: 53.7% of queries have a tie straddling the 50-row
+        # boundary, and without a tiebreak SQLite's row order there varied
+        # between processes -- identical configs scored up to 0.5pp apart, which
+        # is larger than several of the effects this pool is used to measure.
+        base += " ORDER BY bm25(memories_fts), m.id LIMIT ?"
         params.append(limit)
         rows = conn.execute(base, params).fetchall()
     finally:
         conn.close()
 
-    normalized = _normalize_bm25([row[1] for row in rows])
+    normalized = _normalize_bm25(
+        [row[1] for row in rows], lone_hit_score=FTS_LONE_HIT_SCORE
+    )
     return [(row[0], score) for row, score in zip(rows, normalized)]
 
 

@@ -21,6 +21,7 @@ from ..config.settings import (
     FTS_CANDIDATE_LIMIT,
     FTS_EXTRA_STOPWORDS,
     FTS_QUERY_MODE,
+    FTS_LONE_HIT_SCORE,
     HYBRID_SEARCH_TEXT_WEIGHT,
     SERVER_HOST,
     SERVER_PORT,
@@ -230,6 +231,7 @@ def doctor_status() -> dict[str, Any]:
             "fts_query_mode": FTS_QUERY_MODE,
             "fts_candidate_limit": FTS_CANDIDATE_LIMIT,
             "hybrid_search_text_weight": HYBRID_SEARCH_TEXT_WEIGHT,
+            "fts_lone_hit_score": FTS_LONE_HIT_SCORE,
             "fts_extra_stopwords": sorted(FTS_EXTRA_STOPWORDS),
         },
     }
