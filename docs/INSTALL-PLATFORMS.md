@@ -1,4 +1,4 @@
-# MARM v2.31.0 MCP Server - Platform Integration Guide
+# MARM v2.32.0 MCP Server - Platform Integration Guide
 
 ## Table of Contents
 
