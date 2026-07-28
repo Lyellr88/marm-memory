@@ -4,7 +4,7 @@
 
 Please report security issues privately by emailing:
 
-**support@marmsystems.com**
+**lyellr88@gmail.com**
 
 Do not open a public GitHub issue or pull request for vulnerabilities that could expose user memory, logs, notebook data, authentication gaps, deployment risks, secrets, or other sensitive details.
 
