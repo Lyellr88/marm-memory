@@ -274,7 +274,7 @@ async def bench_hybrid_strategies(mem, sizes=None, iters=15):
                     "bench",
                     n,
                     query_vec,
-                    5,
+                    RECALL_LIMIT,
                 )
                 scan_samples.append((time.perf_counter() - t0) * 1000)
 
@@ -297,7 +297,7 @@ async def bench_hybrid_strategies(mem, sizes=None, iters=15):
                     "bench",
                     n,
                     query_vec,
-                    5,
+                    RECALL_LIMIT,
                 )
                 scan_samples.append((time.perf_counter() - t0) * 1000)
 
