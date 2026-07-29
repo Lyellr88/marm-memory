@@ -5,15 +5,15 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "marm-mcp-server"
 version = "2.32.0"
-description = "Local-first 3-in-1 AI memory layer & MCP server for Claude Code, Codex, Grok, Gemini, VS Code and Cursor. Fuses session history, codebase indices & concept graphs in SQLite. Enables zero-cloud, privacy-first context & instant recall also works with multi-agent swarms."
+description = "Local-first 3-in-1 AI memory layer & MCP server for Claude Code, Codex, Grok, Gemini, VS Code and Cursor. Fuses session history, codebase indexing & concept graphs in SQLite. Enables zero-cloud, privacy-first context & instant recall also works with multi-agent swarms."
 readme = "README.md"
 license = "Apache-2.0"
 license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md"]
 authors = [
-    {name = "Ryan Lyell", email = "lyell@marmsystems.com"}
+    {name = "Ryan Lyell", email = "ryanlyell@marmemory.com"}
 ]
 maintainers = [
-    {name = "Ryan Lyell", email = "lyell@marmsystems.com"}
+    {name = "Ryan Lyell", email = "support@marmemory.com"}
 ]
 keywords = ["mcp", "ai", "memory", "claude", "assistant", "protocol"]
 classifiers = [
