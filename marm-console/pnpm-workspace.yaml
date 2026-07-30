@@ -6,6 +6,11 @@ packages:
 
 overrides:
   esbuild: 0.28.1
+  # Pulled in transitively by vite, so there is no dependency line to bump.
+  # <=8.5.17 auto-loads the .map file named by a sourceMappingURL comment and can
+  # be walked out of the intended directory (GHSA / Dependabot #11). A range, not
+  # a pin, so a later patch cannot silently drop back below the fix.
+  postcss: '>=8.5.18'
 
 catalog:
   '@radix-ui/react-dialog': ^1.1.7
