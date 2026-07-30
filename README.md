@@ -5,7 +5,7 @@
      width="900"
      height="250">
 </picture>
-<h1 align="center">MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.32.0</h1>
+<h1 align="center">MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.33.0</h1>
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/Lyellr88/marm-memory/blob/MARM-main/LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
@@ -985,6 +985,7 @@ Packaged docs are indexed into the `marm_system` memory namespace on startup and
 | `FTS_EXTRA_STOPWORDS` | *(empty)* | Comma-separated extra words to ignore when building keyword queries, for terms so common in your store they carry no signal |
 | `HYBRID_SEARCH_TEXT_WEIGHT` | `0.05` | How much the keyword score influences ranking. Set from a benchmark sweep; accuracy peaks across `0.04`-`0.08` and falls off sharply above `0.10`. At `0.0` keyword matching narrows which memories are considered but does not reorder them. |
 | `FTS_LONE_HIT_SCORE` | `1.0` | Keyword score used when only one memory matches, or when every match ties. Lower it on small stores if a single keyword match should not count as a perfect one. |
+| `SEMANTIC_SEARCH_ENABLED` | `1` | Set to `0` to run without the embedding model: nothing is loaded, no embeddings are written, and recall falls back to keyword matching. Useful on low-memory hosts, or to see how recall behaves when the model is unavailable. `marm-memory doctor` reports when it is off. |
 | `TEMPORAL_WEIGHT` / `TEMPORAL_HALF_LIFE_DAYS` | `0.1` / `30` | Strength and decay of the recency boost |
 | `CONSOLIDATION_ENABLED` | `0` | Write-time dedup + semantic merge |
 | `CONSOLIDATION_THRESHOLD` | `0.92` | Similarity needed to merge near-duplicates |

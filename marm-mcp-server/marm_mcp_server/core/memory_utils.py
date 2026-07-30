@@ -136,9 +136,10 @@ def _wide_fts_query(query: str) -> str | None:
     tokens instead so the lane produces a real candidate pool for semantic
     reranking to filter.
 
-    Only the semantic lane uses this. The exact/lexical lane keeps
-    `_safe_fts_query`, because its BM25 hits are returned to the caller without
-    any semantic rerank to clean up over-broad matches.
+    Used by the semantic lane and, since v2.33.0, by the semantic-fallback lane.
+    The exact/lexical lane keeps `_safe_fts_query`, because its BM25 hits are
+    returned to the caller without any semantic rerank to clean up over-broad
+    matches.
 
     Returns None when nothing searchable survives, matching `_safe_fts_query`'s
     contract so callers keep their existing fail-open path.

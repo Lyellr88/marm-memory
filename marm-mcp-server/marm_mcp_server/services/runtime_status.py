@@ -23,6 +23,7 @@ from ..config.settings import (
     FTS_QUERY_MODE,
     FTS_LONE_HIT_SCORE,
     HYBRID_SEARCH_TEXT_WEIGHT,
+    SEMANTIC_SEARCH_AVAILABLE,
     SERVER_HOST,
     SERVER_PORT,
     SERVER_VERSION,
@@ -228,6 +229,7 @@ def doctor_status() -> dict[str, Any]:
         # Surfaced because HYBRID_SEARCH_TEXT_WEIGHT and FTS_QUERY_MODE change
         # retrieval behavior in ways that are otherwise invisible when debugging.
         "retrieval": {
+            "semantic_search_available": SEMANTIC_SEARCH_AVAILABLE,
             "fts_query_mode": FTS_QUERY_MODE,
             "fts_candidate_limit": FTS_CANDIDATE_LIMIT,
             "hybrid_search_text_weight": HYBRID_SEARCH_TEXT_WEIGHT,

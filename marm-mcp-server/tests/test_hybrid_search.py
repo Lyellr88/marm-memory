@@ -1123,3 +1123,238 @@ def test_wide_builder_respects_session_scope(tmp_path):
 
     assert scoped == {mine_id}
     assert len(unscoped) == 2
+
+
+# --- Phase 3: semantic-fallback lane (v2.33.0) ---
+
+
+def _fallback_corpus(tmp_path):
+    """A store whose memories share no single word with the question below.
+
+    Strict AND therefore matches nothing, which is the condition that made this
+    lane dead; the wide builder matches on individual content words.
+    """
+    memory = MARMMemory(str(tmp_path / "memory.db"))
+    # Exactly what _load_encoder_lazily() returning False produces at runtime.
+    memory._encoder_failed = True
+
+    vec = np.ones(384, dtype=np.float32)
+    vec /= np.linalg.norm(vec)
+    with memory.get_connection() as conn:
+        target = _insert_with_embedding(
+            conn, "fb", "I adopted a golden retriever puppy last spring", vec
+        )
+        _insert_with_embedding(conn, "fb", "the quarterly budget was approved", vec)
+    return memory, target
+
+
+FALLBACK_QUESTION = "What kind of puppy did they adopt?"
+
+
+@pytest.mark.asyncio
+async def test_semantic_fallback_lane_uses_the_wide_builder(tmp_path):
+    """With no encoder, an NL question must still return the matching memory.
+
+    Before v2.33.0 this lane built a strict-AND MATCH, found nothing, fell through
+    to `content LIKE '%<whole question>%'` which also found nothing, and returned
+    an empty list for essentially every natural-language query.
+    """
+    memory, target = _fallback_corpus(tmp_path)
+
+    results = await memory.recall_similar(FALLBACK_QUESTION, session="fb", limit=5)
+
+    assert [r["id"] for r in results] == [target]
+    assert results[0]["retrieval_mode"] == "semantic_fallback_fts"
+
+
+@pytest.mark.asyncio
+async def test_strict_builder_would_have_returned_nothing_for_the_same_query(tmp_path):
+    """Pins the regression the wide builder fixes, so the test above cannot pass
+    for an unrelated reason (e.g. the LIKE fallback happening to match)."""
+    from marm_mcp_server.core.memory_scoring import _fetch_and_score_fts_rows
+
+    memory, _ = _fallback_corpus(tmp_path)
+
+    strict = _safe_fts_query(FALLBACK_QUESTION)
+    assert strict is not None, (
+        "the query is sanitizable; the AND semantics are the issue"
+    )
+    rows = _fetch_and_score_fts_rows(memory.db_path, "fb", strict, 200)
+
+    assert rows == []
+
+
+@pytest.mark.asyncio
+async def test_exact_lane_still_uses_strict_and_after_the_fallback_widened(tmp_path):
+    """The regression guard for the whole spec: widening the fallback must not
+    widen the exact lane, which returns rows with no semantic rerank."""
+    memory, _ = _fallback_corpus(tmp_path)
+
+    results = await memory.recall_similar(
+        FALLBACK_QUESTION, session="fb", limit=5, exact_mode="exact"
+    )
+
+    assert results == [], "exact lane widened; it must stay on strict AND"
+
+
+@pytest.mark.asyncio
+async def test_fallback_lane_stays_session_scoped_when_widened(tmp_path):
+    """Widening the MATCH is exactly where a scoping bug would surface, and this
+    lane bypasses the semantic reranker that would otherwise mask one."""
+    memory, target = _fallback_corpus(tmp_path)
+
+    vec = np.ones(384, dtype=np.float32)
+    vec /= np.linalg.norm(vec)
+    with memory.get_connection() as conn:
+        _insert_with_embedding(conn, "other-session", "she adopted a puppy too", vec)
+
+    results = await memory.recall_similar(FALLBACK_QUESTION, session="fb", limit=5)
+
+    assert [r["id"] for r in results] == [target]
+
+
+def _import_settings_with_semantic_enabled(env_value: str) -> tuple[str, str]:
+    """Read SEMANTIC_SEARCH_AVAILABLE from a clean process.
+
+    Same constraint as the FTS_LONE_HIT_SCORE helper above: the value is decided at
+    import time, so only a fresh interpreter can observe a second setting of it.
+    """
+    import subprocess
+
+    env = dict(os.environ)
+    env["SEMANTIC_SEARCH_ENABLED"] = env_value
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from marm_mcp_server.config.settings import SEMANTIC_SEARCH_AVAILABLE as v;"
+            "print(repr(v))",
+        ],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=str(pathlib.Path(__file__).resolve().parent.parent),
+    )
+    assert proc.returncode == 0, proc.stderr
+    return proc.stdout.strip(), proc.stderr
+
+
+def test_semantic_search_enabled_zero_forces_the_degraded_path():
+    """The switch that makes the fallback lane reachable without uninstalling
+    fastembed. If this regresses, the Phase 3 measurement cannot be reproduced."""
+    pytest.importorskip("fastembed")
+
+    value, stderr = _import_settings_with_semantic_enabled("0")
+    assert value == "False"
+    assert "disabled by SEMANTIC_SEARCH_ENABLED=0" in stderr
+    assert "pip install fastembed" not in stderr, (
+        "reported a missing dependency when it is installed but switched off"
+    )
+
+    value, _ = _import_settings_with_semantic_enabled("1")
+    assert value == "True"
+
+
+def test_lone_hit_score_applies_to_fallback_lane_but_not_exact_lane(tmp_path):
+    """Both lanes share `_fetch_and_score_fts_rows`, so the parameter is the only
+    thing that can separate them on an identical degenerate result set.
+
+    The fallback lane matches on a wide OR, where a lone hit can mean one memory
+    shared one word, so it passes FTS_LONE_HIT_SCORE. The exact lane's strict AND
+    means a lone hit contained every term, so it keeps 1.0.
+    """
+    from marm_mcp_server.core.memory_scoring import _fetch_and_score_fts_rows
+
+    memory, target = _fallback_corpus(tmp_path)
+    wide = _wide(FALLBACK_QUESTION)
+
+    fallback = _fetch_and_score_fts_rows(
+        memory.db_path, "fb", wide, 200, lone_hit_score=0.25
+    )
+    exact = _fetch_and_score_fts_rows(memory.db_path, "fb", wide, 200)
+
+    assert [row["id"] for row, _ in fallback] == [target], "expected a degenerate set"
+    assert [score for _, score in fallback] == [0.25]
+    assert [score for _, score in exact] == [1.0]
+
+
+@pytest.mark.asyncio
+async def test_fallback_lane_surfaces_the_configured_lone_hit_score(
+    tmp_path, monkeypatch
+):
+    """Proves the wiring reaches the real call site, not just the fetcher.
+
+    memory_recall reads the setting from its own namespace, so patching it here is
+    what a deployment setting the env var would produce.
+    """
+    from marm_mcp_server.core import memory_recall
+
+    memory, _ = _fallback_corpus(tmp_path)
+
+    default = await memory.recall_similar(FALLBACK_QUESTION, session="fb", limit=5)
+    assert len(default) == 1
+
+    monkeypatch.setattr(memory_recall, "FTS_LONE_HIT_SCORE", 0.25)
+    lowered = await memory.recall_similar(FALLBACK_QUESTION, session="fb", limit=5)
+
+    assert len(lowered) == 1
+    # A plain `<` would pass without the fix: recency decays between the two calls,
+    # so the later score is always fractionally lower. Only a gap this size can come
+    # from the 1.0 -> 0.25 change surviving the temporal blend.
+    assert default[0]["similarity"] - lowered[0]["similarity"] > 0.5, (
+        "FTS_LONE_HIT_SCORE did not reach the fallback lane"
+    )
+
+
+def test_semantic_disabled_refuses_the_encoder_and_writes_no_embedding(tmp_path):
+    """The switch has to degrade the running server, not just the constant.
+
+    `test_semantic_search_enabled_zero_forces_the_degraded_path` proves the flag
+    reaches settings, which is a different claim from the one the release makes:
+    no model load, and no embeddings written. Both are decided by an import-time
+    constant read inside MARMMemory, so a fresh process is the only place to
+    observe them.
+    """
+    import subprocess
+
+    pytest.importorskip("fastembed")
+
+    db_path = tmp_path / "degraded.db"
+    script = """
+import asyncio, sqlite3, sys
+from marm_mcp_server.config.settings import SEMANTIC_SEARCH_AVAILABLE
+from marm_mcp_server.core.memory import MARMMemory
+
+db = sys.argv[1]
+assert SEMANTIC_SEARCH_AVAILABLE is False, "flag did not reach settings"
+
+mem = MARMMemory(db)
+assert mem._load_encoder_lazily() is False, "encoder loaded despite the switch"
+assert mem.encoder is None, "an encoder object was constructed"
+
+mem_id = asyncio.run(
+    mem.store_memory("a normal write with the model switched off", session="degraded")
+)
+assert mem_id, "write did not return an id"
+
+conn = sqlite3.connect(db)
+row = conn.execute("SELECT embedding FROM memories WHERE id = ?", (mem_id,)).fetchone()
+conn.close()
+assert row is not None, "the write did not land in the database"
+assert row[0] is None, "an embedding was written with the model switched off"
+print("OK")
+"""
+
+    env = dict(os.environ)
+    env["SEMANTIC_SEARCH_ENABLED"] = "0"
+    proc = subprocess.run(
+        [sys.executable, "-c", script, str(db_path)],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=str(pathlib.Path(__file__).resolve().parent.parent),
+        timeout=120,
+    )
+
+    assert proc.returncode == 0, f"stdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
+    assert "OK" in proc.stdout

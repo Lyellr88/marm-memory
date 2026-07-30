@@ -6,7 +6,7 @@ If you do want to go deeper, MARM is focused on the MCP server, local memory wor
 
 ## Questions or Ideas
 
-Drop a message in [MARM Discord](https://discord.gg/nhyJWPz2cf) or reach out directly at lyellr88@gmail.com.
+Drop a message in [MARM Discord](https://discord.gg/nhyJWPz2cf) or reach out directly at support@marmemory.com.
 
 ## Getting Started
 

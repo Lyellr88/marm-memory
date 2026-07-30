@@ -3,6 +3,27 @@
 ## Version 2 - MARM Protocol to Universal MCP Server Evolution
 
 <details>
+<summary><strong>July 29th, 2026: Recall Keeps Working When the Embedding Model Does Not (v2.33.0)</strong></summary>
+
+### Fixed: Recall Returned Nothing When the Embedding Model Was Unavailable
+
+- MARM falls back to keyword-only search when the embedding model cannot load or errors during a recall. That fallback was building its keyword query with strict AND, so it only matched a memory containing *every* word of the question, including words like "what" and "the". Natural-language questions matched nothing, and the last-resort search then looked for the entire question as one literal substring, which also matched nothing.
+- The practical effect: if the model failed to load, recall returned an empty result for effectively every question asked. Measured on LoCoMo (1,977 questions, 5,882 memories, top-5, model disabled): 0.1% of questions returned any correct memory. Two questions out of 1,977.
+- The fallback now uses the same broader keyword matching the main search lane has used since v2.31.0. Same benchmark: **any-hit 0.1% to 55.4%, all-hit 0.1% to 46.7%, evidence recall 0.1% to 50.5%**. Every question category improved, and adversarial questions went from 0.0% to 51.8%. For reference, recall with the model loaded scores 62.5% on this corpus, so the degraded path now reaches about 89% of full accuracy instead of being unusable.
+- The exact-lookup lane is deliberately unchanged and still requires all terms. Its results are returned in raw keyword-score order with nothing reranking them, so broadening it would cost precision on the config-key and file-path lookups it exists for. `FTS_QUERY_MODE=and` still forces strict matching everywhere for anyone who wants it.
+
+### Fixed: FTS_LONE_HIT_SCORE Did Not Apply to the Fallback Lane
+
+- `FTS_LONE_HIT_SCORE` sets the keyword score reported when only one memory matches, or when every match ties. The keyword-only fallback lane shares its row fetcher with the exact-lookup lane, so it always reported `1.0` there and ignored the setting. Now that the fallback lane matches on a broad keyword query, a single match can mean one memory happened to share one word, which is exactly the case the setting exists to let you score lower.
+- The fallback lane now honors it; the exact-lookup lane still always uses `1.0`, because its strict all-terms match means a single hit contained every word of the query. No change at the default of `1.0`.
+
+### New Settings
+
+- `SEMANTIC_SEARCH_ENABLED` (default `1`). Set it to `0` to run exactly as though the embedding model were not installed: no model load, no embeddings written, recall served by keyword matching. It was added because the degraded path above could not be measured any other way, and it also lets a low-memory host skip loading the model. `marm-memory doctor` reports "Meaning-based search: off (keyword matching only)" when it is disabled.
+
+</details>
+
+<details>
 <summary><strong>July 28th, 2026: Keyword Ranking Weight Set From Benchmark Data (v2.32.0)</strong></summary>
 
 ### Keyword Relevance Now Contributes to Ranking

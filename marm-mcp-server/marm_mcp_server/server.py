@@ -5,7 +5,7 @@ This server integrates all modular components of the MARM protocol into a single
 FastAPI application, compliant with the MCP protocol via FastApiMCP.
 
 Author: Lyell - marm-memory
-Version: 2.32.0
+Version: 2.33.0
 """
 
 import os

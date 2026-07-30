@@ -77,13 +77,31 @@ def _csv_frozenset(env_key: str) -> frozenset[str]:
     return frozenset(part.strip().lower() for part in raw.split(",") if part.strip())
 
 
-SEMANTIC_SEARCH_AVAILABLE = importlib.util.find_spec("fastembed") is not None
-if not SEMANTIC_SEARCH_AVAILABLE:
-    print("WARNING: Semantic search not available. Install: pip install fastembed")
+# Setting this to 0 makes the server behave exactly as it does when fastembed is
+# not installed: no model load, no embeddings written, recall served by the
+# keyword/text lane. Two uses: exercising the degraded path without uninstalling
+# the dependency (there is no other way to benchmark or verify it), and letting a
+# low-memory host skip loading the model at all.
+SEMANTIC_SEARCH_ENABLED = os.environ.get("SEMANTIC_SEARCH_ENABLED", "1") == "1"
+_FASTEMBED_INSTALLED = importlib.util.find_spec("fastembed") is not None
+SEMANTIC_SEARCH_AVAILABLE = SEMANTIC_SEARCH_ENABLED and _FASTEMBED_INSTALLED
+if not _FASTEMBED_INSTALLED:
+    print(
+        "WARNING: Semantic search not available. Install: pip install fastembed",
+        file=sys.stderr,
+    )
+elif not SEMANTIC_SEARCH_ENABLED:
+    print(
+        "WARNING: Semantic search disabled by SEMANTIC_SEARCH_ENABLED=0",
+        file=sys.stderr,
+    )
 
 SCHEDULER_AVAILABLE = importlib.util.find_spec("apscheduler") is not None
 if not SCHEDULER_AVAILABLE:
-    print("WARNING: Scheduler not available. Install: pip install apscheduler")
+    print(
+        "WARNING: Scheduler not available. Install: pip install apscheduler",
+        file=sys.stderr,
+    )
 
 CONCEPT_MODEL_PATH = Path(__file__).resolve().parents[1] / "models" / "en_core_web_sm"
 # Same two files scripts/bundle-concept-model.py verifies after extraction, so a
@@ -161,7 +179,7 @@ if not (1 <= _raw_port <= 65535):
         f"WARNING: SERVER_PORT={_raw_port} out of [1, 65535], clamped to {SERVER_PORT}",
         file=sys.stderr,
     )
-SERVER_VERSION = "2.32.0"
+SERVER_VERSION = "2.33.0"
 
 GRAPH_ENABLED = os.environ.get("GRAPH_ENABLED", "true").lower() != "false"
 
@@ -326,9 +344,11 @@ FTS_QUERY_MODE = _safe_choice("FTS_QUERY_MODE", "or_nostop", FTS_QUERY_MODES)
 # Additive only -- it cannot remove built-ins. Comma-separated, case-insensitive.
 FTS_EXTRA_STOPWORDS = _csv_frozenset("FTS_EXTRA_STOPWORDS")
 
-# Lexical score given to a degenerate semantic-lane candidate set (one row, or
-# every row tied on BM25), where per-query min-max has no spread to normalize
-# against. The exact lane always uses 1.0.
+# Lexical score given to a degenerate candidate set (one row, or every row tied on
+# BM25), where per-query min-max has no spread to normalize against. Applies to
+# both lanes that match on a wide OR: the semantic lane, and since v2.33.0 the
+# semantic-fallback lane. The exact lane always uses 1.0, because its strict AND
+# means a lone hit contained every query term.
 #
 # Stays at 1.0: swept over 0.0/0.3/0.5/1.0 in v2.32.0 with no measurable effect,
 # because on a corpus of any size the wide OR fills the candidate pool. An offline

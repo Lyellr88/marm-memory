@@ -9,6 +9,7 @@ from ..config.settings import (
     TEMPORAL_WEIGHT,
     TEMPORAL_HALF_LIFE_DAYS,
     FTS_CANDIDATE_LIMIT,
+    FTS_LONE_HIT_SCORE,
     FTS_QUERY_MODE,
     HYBRID_SEARCH_TEXT_WEIGHT,
 )
@@ -348,8 +349,15 @@ async def _recall_text_search(
     because the exact lane (_recall_exact) must return lexical hits in BM25 order,
     unaffected by age; only the semantic-intent fallbacks turn it on so their
     ranking stays consistent with the main semantic lane.
+
+    It also selects the MATCH builder, since it is what distinguishes the two
+    lanes: the fallbacks get the wide builder, the exact lane strict AND.
     """
-    _recall_debug(f"text-search path: terms={len(query.split())}, session={session}")
+    _recall_debug(
+        f"text-search path: terms={len(query.split())}, session={session}, "
+        f"lane={'fallback' if apply_temporal else 'exact'}, "
+        f"builder={'wide' if apply_temporal else 'strict'}"
+    )
 
     def _blend_temporal(base_sim: float, timestamp: str) -> float:
         if not apply_temporal:
@@ -357,7 +365,16 @@ async def _recall_text_search(
         t_score = _temporal_score(timestamp, TEMPORAL_HALF_LIFE_DAYS)
         return (1 - TEMPORAL_WEIGHT) * base_sim + TEMPORAL_WEIGHT * t_score
 
-    fts_query = _safe_fts_query(query)
+    # apply_temporal is already this function's lane discriminator: True from the
+    # two semantic-fallback call sites, False from _recall_exact. The exact lane
+    # must never widen, so it stays on the strict builder.
+    #
+    # Under strict AND this lane was effectively dead: a natural-language question
+    # matched nothing, the LIKE fallback then searched for the whole question as a
+    # substring and also matched nothing. Measured at 0.1% any-hit on LoCoMo with
+    # the encoder disabled, against 55.4% using the wide builder. FTS_QUERY_MODE=and
+    # remains the escape hatch for anyone who wants strict matching everywhere.
+    fts_query = _wide_fts_query(query) if apply_temporal else _safe_fts_query(query)
     if fts_query is not None:
         # Temporal re-ranking must see beyond the top-`limit` BM25 rows, or a
         # newer result ranked just outside the cutoff could never be promoted.
@@ -372,6 +389,9 @@ async def _recall_text_search(
                 fetch_limit,
                 project,
                 platform,
+                # Same reason the semantic lane passes it: this lane's MATCH is a
+                # wide OR, so a degenerate set is weak evidence, not a perfect hit.
+                lone_hit_score=FTS_LONE_HIT_SCORE if apply_temporal else 1.0,
             )
             if fts_rows:
                 _recall_debug(f"FTS5 returned {len(fts_rows)} results")
