@@ -1304,3 +1304,57 @@ async def test_fallback_lane_surfaces_the_configured_lone_hit_score(
     assert default[0]["similarity"] - lowered[0]["similarity"] > 0.5, (
         "FTS_LONE_HIT_SCORE did not reach the fallback lane"
     )
+
+
+def test_semantic_disabled_refuses_the_encoder_and_writes_no_embedding(tmp_path):
+    """The switch has to degrade the running server, not just the constant.
+
+    `test_semantic_search_enabled_zero_forces_the_degraded_path` proves the flag
+    reaches settings, which is a different claim from the one the release makes:
+    no model load, and no embeddings written. Both are decided by an import-time
+    constant read inside MARMMemory, so a fresh process is the only place to
+    observe them.
+    """
+    import subprocess
+
+    pytest.importorskip("fastembed")
+
+    db_path = tmp_path / "degraded.db"
+    script = """
+import asyncio, sqlite3, sys
+from marm_mcp_server.config.settings import SEMANTIC_SEARCH_AVAILABLE
+from marm_mcp_server.core.memory import MARMMemory
+
+db = sys.argv[1]
+assert SEMANTIC_SEARCH_AVAILABLE is False, "flag did not reach settings"
+
+mem = MARMMemory(db)
+assert mem._load_encoder_lazily() is False, "encoder loaded despite the switch"
+assert mem.encoder is None, "an encoder object was constructed"
+
+mem_id = asyncio.run(
+    mem.store_memory("a normal write with the model switched off", session="degraded")
+)
+assert mem_id, "write did not return an id"
+
+conn = sqlite3.connect(db)
+row = conn.execute("SELECT embedding FROM memories WHERE id = ?", (mem_id,)).fetchone()
+conn.close()
+assert row is not None, "the write did not land in the database"
+assert row[0] is None, "an embedding was written with the model switched off"
+print("OK")
+"""
+
+    env = dict(os.environ)
+    env["SEMANTIC_SEARCH_ENABLED"] = "0"
+    proc = subprocess.run(
+        [sys.executable, "-c", script, str(db_path)],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=str(pathlib.Path(__file__).resolve().parent.parent),
+        timeout=120,
+    )
+
+    assert proc.returncode == 0, f"stdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
+    assert "OK" in proc.stdout
