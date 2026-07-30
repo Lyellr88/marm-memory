@@ -1,4 +1,4 @@
-# MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.32.0</h1>
+# MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.33.0
 
 ## Important Messages
 
@@ -19,6 +19,8 @@
 - [Knowledge Graphs: Code & Concepts](#knowledge-graphs-code--concepts)
 - [Architecture & Internals](#architecture--internals)
 - [Troubleshooting](#troubleshooting)
+- [Contributing](#contributing)
+- [Project Documentation](#project-documentation)
 
 ## Why MARM Memory
 
@@ -102,6 +104,8 @@ marm-memory console                  # start or reuse the bundled local Console
 ```bash
 marm-memory http                     # run HTTP in the foreground
 marm-memory stdio                    # run the strict local MCP STDIO transport
+marm-memory init                     # install the MARM skill into detected agents (project scan)
+marm-memory init --g-claude          # install the skill into the home-folder claude directory
 marm-memory doctor                   # diagnose the local install
 marm-memory key init                 # create or reuse ~/.marm/.env without displaying the key
 marm-memory key path                 # print the managed key-file path
@@ -951,6 +955,7 @@ Packaged docs are indexed into the `marm_system` memory namespace on startup and
 | `FTS_EXTRA_STOPWORDS` | *(empty)* | Comma-separated extra words to ignore when building keyword queries, for terms so common in your store they carry no signal |
 | `HYBRID_SEARCH_TEXT_WEIGHT` | `0.05` | How much the keyword score influences ranking. Set from a benchmark sweep; accuracy peaks across `0.04`-`0.08` and falls off sharply above `0.10`. At `0.0` keyword matching narrows which memories are considered but does not reorder them. |
 | `FTS_LONE_HIT_SCORE` | `1.0` | Keyword score used when only one memory matches, or when every match ties. Lower it on small stores if a single keyword match should not count as a perfect one. |
+| `SEMANTIC_SEARCH_ENABLED` | `1` | Set to `0` to run without the embedding model: nothing is loaded, no embeddings are written, and recall falls back to keyword matching. Useful on low-memory hosts, or to see how recall behaves when the model is unavailable. `marm-memory doctor` reports when it is off. |
 | `TEMPORAL_WEIGHT` / `TEMPORAL_HALF_LIFE_DAYS` | `0.1` / `30` | Strength and decay of the recency boost |
 | `CONSOLIDATION_ENABLED` | `0` | Write-time dedup + semantic merge |
 | `CONSOLIDATION_THRESHOLD` | `0.92` | Similarity needed to merge near-duplicates |
@@ -1088,5 +1093,3 @@ Packaged docs are indexed into the `marm_system` memory namespace on startup and
 | `embedding model not found` | Semantic search model didn't download | First run takes time; be patient, check internet connection |
 
 </details>
-
-For memory behavior, transports, supported clients, compaction, and backup questions, see the [FAQ](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/FAQ.md).

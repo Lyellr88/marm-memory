@@ -197,6 +197,8 @@ def _fetch_and_score_fts_rows(
     limit: int,
     project: str | None = None,
     platform: str | None = None,
+    *,
+    lone_hit_score: float = 1.0,
 ) -> list[tuple]:
     conn = sqlite3.connect(db_path, timeout=30.0)
     try:
@@ -229,9 +231,13 @@ def _fetch_and_score_fts_rows(
     if not rows:
         return []
 
-    # Exact lane: keeps the 1.0 default because this path is only reached with a
-    # strict-AND MATCH, where a lone hit means every query term was present.
-    normalized = _normalize_bm25([row["score"] for row in rows])
+    # Two lanes share this fetcher. The exact lane leaves lone_hit_score at 1.0,
+    # because its strict-AND MATCH means a lone hit had every query term present.
+    # The semantic-fallback lane passes FTS_LONE_HIT_SCORE, because since v2.33.0 it
+    # matches on a wide OR, where a lone hit can mean one memory shared one word.
+    normalized = _normalize_bm25(
+        [row["score"] for row in rows], lone_hit_score=lone_hit_score
+    )
     return list(zip(rows, normalized))
 
 

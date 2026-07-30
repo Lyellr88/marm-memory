@@ -92,6 +92,8 @@ def _print_doctor(payload: dict[str, Any]) -> None:
     if isinstance(retrieval, dict):
         print()
         print("Recall tuning")
+        if retrieval.get("semantic_search_available") is False:
+            print("  Meaning-based search: off (keyword matching only)")
         print(f"  Keyword match mode: {retrieval.get('fts_query_mode')}")
         print(f"  Keyword candidates: {retrieval.get('fts_candidate_limit')}")
         weight = retrieval.get("hybrid_search_text_weight")
