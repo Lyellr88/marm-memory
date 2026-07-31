@@ -13,21 +13,21 @@ overrides:
   postcss: '>=8.5.18'
 
 catalog:
-  '@radix-ui/react-dialog': ^1.1.7
-  '@radix-ui/react-select': ^2.1.7
-  '@radix-ui/react-tabs': ^1.1.4
-  '@tailwindcss/vite': ^4.1.14
-  '@tanstack/react-query': ^5.90.21
+  '@radix-ui/react-dialog': ^1.1.23
+  '@radix-ui/react-select': ^2.3.7
+  '@radix-ui/react-tabs': ^1.1.21
+  '@tailwindcss/vite': ^4.3.3
+  '@tanstack/react-query': ^5.101.4
   '@types/node': ^25.3.3
   '@types/react': ^19.2.0
   '@types/react-dom': ^19.2.0
   '@vitejs/plugin-react': ^5.0.4
   clsx: ^2.1.1
   lucide-react: ^0.545.0
-  react: 19.1.0
-  react-dom: 19.1.0
+  react: 19.2.8
+  react-dom: 19.2.8
   tailwind-merge: ^3.3.1
-  tailwindcss: ^4.1.14
+  tailwindcss: ^4.3.3
   vite: ^7.3.2
   wouter: ^3.3.5
 
