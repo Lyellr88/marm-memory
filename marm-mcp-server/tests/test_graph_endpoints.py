@@ -7,6 +7,7 @@ memory tools, and startup never touches the graph backend until it is used.
 
 import asyncio
 import threading
+import time
 
 import httpx
 
@@ -178,6 +179,29 @@ def test_console_index_releases_single_flight_lock_when_thread_cannot_start(
         "/internal/projects/index", json={"repo_path": str(tmp_path), "mode": "fast"}
     )
     assert retry.status_code == 202
+
+    # The 202 above proves the start-failure path released the lock. Draining the
+    # job then proves the worker's own finally released it too, and keeps the
+    # daemon thread from outliving this test: tmp_path is deleted at teardown, so
+    # an abandoned index fails against a missing directory and surfaces as a
+    # child-process error under whichever unrelated test happens to be running.
+    job = _drain_index_job(client, retry.json()["job_id"])
+    assert job["status"] in {"success", "error"}
+    assert graph._project_job_lock.acquire(blocking=False)
+    graph._project_job_lock.release()
+
+
+def _drain_index_job(client, job_id: str, timeout: float = 60.0) -> dict:
+    """Poll a console index job until it reaches a terminal state."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        response = client.get(f"/internal/projects/jobs/{job_id}")
+        assert response.status_code == 200
+        job = response.json()
+        if job["status"] in {"success", "error"}:
+            return job
+        time.sleep(0.05)
+    raise AssertionError(f"index job {job_id} did not finish within {timeout}s")
 
 
 def test_cold_graph_startup_does_not_block_concurrent_core_requests(

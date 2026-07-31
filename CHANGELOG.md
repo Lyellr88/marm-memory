@@ -3,6 +3,23 @@
 ## Version 2 - MARM Protocol to Universal MCP Server Evolution
 
 <details>
+<summary><strong>July 31st, 2026: Code Index Engine Updated (v2.34.0)</strong></summary>
+
+### Changed: Bundled Code Index Engine Updated to 0.9.0
+
+- MARM's code graph wraps a separate program, `codebase-memory-mcp`, which does the actual repository indexing. It moves from 0.8.1 to 0.9.0. The upgrade brings first-class Windows support, faster indexing, a supervisor that restarts the indexer if it crashes, and automatic pruning of projects whose folder is no longer on disk.
+- MARM verifies the version it pins against the version the program reports about itself at startup. The 0.8.1 program misreported itself as `0.10.0`, so the version shown in logs and in `cbm_binary_version` was wrong for the version actually running. 0.9.0 reports correctly and the two now agree.
+
+### Fixed: The Code Graph Would Not Have Started Against the New Engine
+
+- 0.9.0 changed how it reports the operations it supports. Instead of returning all 14 in one response, it returns them in pages of 8 with a marker pointing at the next page. MARM asked once, saw 8, and concluded the remaining 6 had been removed upstream.
+- A missing operation means one of MARM's internal mappings is silently broken, so MARM deliberately refuses to start the code graph rather than run a half-wired feature. The practical effect of upgrading without this fix would have been the code graph failing to come up at all, on every start.
+- MARM now follows the pages to the end. Nothing about the 14 operations actually changed: none were added or removed, and no required argument changed, so no other adjustment was needed. Four regression tests cover the paged response, the unpaged one, and two ways a page marker can be misread, so a future change to page size cannot quietly shrink the verified list again.
+- This was caught and fixed before the upgrade shipped, so no released version was affected. Memory, recall, logging, and the notebook do not use this component and were never involved. The code graph is on by default (`GRAPH_ENABLED=true`) and degrades to memory-only if it cannot start, so an install that hit this would have kept working minus code-graph features.
+
+</details>
+
+<details>
 <summary><strong>July 30th, 2026: Recall and Consolidation Correctness Fixes (v2.33.1)</strong></summary>
 
 ### Fixed: Semantic Duplicate Detection Compared the Wrong Score
