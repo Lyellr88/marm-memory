@@ -142,6 +142,53 @@ def test_migration_cli_refuses_live_http_server(monkeypatch, tmp_path, capsys):
     assert "still running" in captured.err
 
 
+def test_rechunk_cli_refuses_live_http_server(monkeypatch, tmp_path, capsys):
+    cli = importlib.import_module("marm_mcp_server.cli")
+    memory_path = tmp_path / "memory.db"
+    memory_path.touch()
+    monkeypatch.setattr(cli, "DEFAULT_DB_PATH", str(memory_path))
+    monkeypatch.setattr(cli, "_http_server_is_running", lambda: True)
+    monkeypatch.setattr(sys, "argv", ["marm-mcp-server", "--rechunk"])
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main()
+
+    assert exc_info.value.code == 1
+    captured = capsys.readouterr()
+    assert "STDIO processes cannot be detected reliably" in captured.out + captured.err
+    assert "still running" in captured.err
+
+
+def test_rechunk_cli_exits_clean_with_no_database(monkeypatch, tmp_path, capsys):
+    cli = importlib.import_module("marm_mcp_server.cli")
+    monkeypatch.setattr(cli, "DEFAULT_DB_PATH", str(tmp_path / "absent.db"))
+    monkeypatch.setattr(cli, "_http_server_is_running", lambda: False)
+    monkeypatch.setattr(sys, "argv", ["marm-mcp-server", "--rechunk"])
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main()
+
+    assert exc_info.value.code == 0
+    captured = capsys.readouterr()
+    assert "nothing needs re-chunking" in captured.out + captured.err
+
+
+def test_maintenance_chunks_rechunk_reaches_the_same_entry_point(monkeypatch):
+    """Both CLI surfaces must route to _rechunk, not just the compatibility flag."""
+    cli = importlib.import_module("marm_mcp_server.cli")
+    calls = []
+    monkeypatch.setattr(cli, "_rechunk", lambda: calls.append("rechunk") or 0)
+    monkeypatch.setattr(
+        sys, "argv", ["marm-memory", "maintenance", "chunks", "rechunk"]
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main()
+
+    assert exc_info.value.code == 0
+    assert calls == ["rechunk"]
+
+
 def test_import_marm_mcp_server_succeeds_with_clean_stdout(tmp_path):
     env = os.environ.copy()
     env["MARM_DB_PATH"] = str(tmp_path / "import-memory.db")

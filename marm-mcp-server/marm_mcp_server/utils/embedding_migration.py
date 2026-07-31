@@ -44,6 +44,49 @@ def _load_encoder():
     return TextEmbedding(model_name=DEFAULT_SEMANTIC_MODEL)
 
 
+# Every text in a batch is padded to the longest one, so attention memory tracks
+# row count times that longest length, not the sum of lengths. A fixed batch of 100
+# real rows requested a 35 GB buffer and crashed the migration. Measured failure
+# boundary on this metric was 227,000 for token-dense text and 333,600 for prose;
+# this keeps a 2x margin under the lower one. Long batches buy no speed anyway,
+# since encode time is linear in row count.
+MAX_BATCH_PADDED_CHARACTERS = 100_000
+
+
+def _length_bounded_batches(texts: list[str]) -> list[list[str]]:
+    """Group texts so no batch exceeds the padded-size budget.
+
+    Budget is rows times the longest row, which is what the encoder actually
+    allocates. Summing raw lengths underestimates a batch that mixes one long text
+    with many short ones, which is the normal shape of a memory corpus. A single
+    text over the budget forms its own batch; it cannot be split further without
+    changing what gets embedded.
+    """
+    batches: list[list[str]] = []
+    current: list[str] = []
+    longest = 0
+    for text in texts:
+        candidate_longest = max(longest, len(text))
+        if current and (len(current) + 1) * candidate_longest > (
+            MAX_BATCH_PADDED_CHARACTERS
+        ):
+            batches.append(current)
+            current, candidate_longest = [], len(text)
+        current.append(text)
+        longest = candidate_longest
+    if current:
+        batches.append(current)
+    return batches
+
+
+def _encode_all(encoder, texts: list[str]) -> list:
+    """Encode every text, splitting into memory-safe batches first."""
+    vectors: list = []
+    for batch in _length_bounded_batches(texts):
+        vectors.extend(_encode_batch(encoder, batch))
+    return vectors
+
+
 def _encode_batch(encoder, texts: list[str]) -> list:
     vectors = list(encoder.embed(texts))
     if len(vectors) != len(texts):
@@ -103,7 +146,7 @@ def _migrate_database(
                 if not rows:
                     break
                 last_rowid = rows[-1][0]
-                vectors = _encode_batch(encoder, [row[1] for row in rows])
+                vectors = _encode_all(encoder, [row[1] for row in rows])
                 try:
                     conn.execute("BEGIN IMMEDIATE")
                     conn.executemany(

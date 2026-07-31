@@ -3,8 +3,10 @@ import signal
 
 import structlog
 
+from ..config.settings import CHUNK_DRAIN_TIMEOUT_SECONDS
 from .graph_supervisor import graph_supervisor
 from .memory import memory
+from .memory_utils import drain_chunk_writes
 
 logger = structlog.get_logger()
 
@@ -62,10 +64,23 @@ class ShutdownManager:
             if pending_scans:
                 await asyncio.gather(*pending_scans, return_exceptions=True)
             memory._pending_compaction_scans.clear()
+        except Exception:
+            logger.exception("Failed to cancel pending compaction scans")
+
+        try:
             await memory.stop_write_queue()
             logger.info("Serialized write queue drained")
         except Exception:
             logger.exception("Failed to drain serialized write queue")
+
+        # Must follow the write-queue stop: draining the queue runs the remaining
+        # writes, and a long one spawns a chunk task, so a drain taken before this
+        # point can miss tasks that do not exist yet. Must precede the pool close:
+        # a chunk task holding BEGIN IMMEDIATE would otherwise race teardown.
+        try:
+            await drain_chunk_writes(memory, CHUNK_DRAIN_TIMEOUT_SECONDS, logger.info)
+        except Exception:
+            logger.exception("Failed to drain pending chunk writes")
 
         try:
             await asyncio.to_thread(graph_supervisor.stop)

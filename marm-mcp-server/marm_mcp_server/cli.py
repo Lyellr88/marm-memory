@@ -237,6 +237,35 @@ def _migrate_embeddings() -> int:
     return 0
 
 
+def _rechunk() -> int:
+    print("Stop every MARM HTTP and STDIO process before re-chunking.")
+    print("STDIO processes cannot be detected reliably and must be stopped manually.")
+    if _http_server_is_running():
+        print("Re-chunk refused: a MARM HTTP server is still running.", file=sys.stderr)
+        return 1
+    if not Path(DEFAULT_DB_PATH).exists():
+        print("No MARM memory database exists; nothing needs re-chunking.")
+        return 0
+    from .utils.chunk_backfill import RechunkRefused, rechunk_memories
+
+    try:
+        result = rechunk_memories(DEFAULT_DB_PATH)
+    except RechunkRefused as exc:
+        print(f"Re-chunk refused: {exc}", file=sys.stderr)
+        return 1
+    except Exception as exc:
+        logger.error("Re-chunk failed", error=str(exc))
+        print("Re-chunk failed.", file=sys.stderr)
+        return 1
+    if not result["memories_rechunked"]:
+        return 0
+    print(
+        f"Re-chunked {result['memories_rechunked']} memories."
+        f" {result['chunks_before']} chunk rows -> {result['chunks_after']}."
+    )
+    return 0
+
+
 def _upgrade(args: argparse.Namespace) -> int:
     """Delegate package update policy to the lifecycle service."""
     from .services.product_workflows import upgrade
@@ -355,6 +384,8 @@ def _dispatch_product(args: argparse.Namespace) -> int:
                 else _print_maintenance(payload)
             )
             return 0
+        if args.maintenance_command == "chunks":
+            return _rechunk()
         return _migrate_embeddings()
     if args.command == "key":
         if args.key_command == "generate":
@@ -434,6 +465,8 @@ def _dispatch_compatibility(
         return 0 if check_dependencies() else 1
     if args.migrate_embeddings:
         return _migrate_embeddings()
+    if args.rechunk:
+        return _rechunk()
     try:
         runtime_config = apply_runtime_preset(
             swarm=args.swarm,

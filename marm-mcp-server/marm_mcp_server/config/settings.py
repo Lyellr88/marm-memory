@@ -179,7 +179,7 @@ if not (1 <= _raw_port <= 65535):
         f"WARNING: SERVER_PORT={_raw_port} out of [1, 65535], clamped to {SERVER_PORT}",
         file=sys.stderr,
     )
-SERVER_VERSION = "2.34.0"
+SERVER_VERSION = "2.35.0"
 
 GRAPH_ENABLED = os.environ.get("GRAPH_ENABLED", "true").lower() != "false"
 
@@ -250,6 +250,18 @@ MAX_QUEUE_SIZE = max(1, _raw_mqs)
 if _raw_mqs < 1:
     print(
         f"WARNING: MAX_QUEUE_SIZE={_raw_mqs} below minimum 1, clamped to {MAX_QUEUE_SIZE}",
+        file=sys.stderr,
+    )
+
+# Shutdown waits this long for in-flight chunk encodes. A memory maxes out at 7
+# chunks (10,000-char content cap), which encodes in about 1s, so the default
+# leaves room for several concurrent writes. Anything still pending is recovered
+# by `marm-mcp-server --rechunk`, so the wait is allowed to expire.
+_raw_cdt = _safe_int("CHUNK_DRAIN_TIMEOUT_SECONDS", 5)
+CHUNK_DRAIN_TIMEOUT_SECONDS = max(0, _raw_cdt)
+if _raw_cdt < 0:
+    print(
+        f"WARNING: CHUNK_DRAIN_TIMEOUT_SECONDS={_raw_cdt} below minimum 0, clamped to {CHUNK_DRAIN_TIMEOUT_SECONDS}",
         file=sys.stderr,
     )
 

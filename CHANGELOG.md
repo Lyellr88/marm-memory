@@ -3,6 +3,36 @@
 ## Version 2 - MARM Protocol to Universal MCP Server Evolution
 
 <details>
+<summary><strong>July 31st, 2026: Chunk Durability and Repair (v2.35.0)</strong></summary>
+
+### Fixed: Long Memories Could Silently Lose Their Chunks on Shutdown
+
+- Memories longer than 500 words are additionally stored as smaller passages, so recall can match the relevant part of a long memory instead of judging it as one block. Those passages are written in the background, after the memory itself is saved, because encoding them takes about a second.
+- Nothing tracked that background work. If the server exited between saving the memory and writing its passages, the passages were lost, permanently and with no error shown. The memory itself was never at risk and still recalls; it just gets scored as one block, less accurately.
+- Shutdown now waits up to 5 seconds for pending passage writes on both transports, configurable with `CHUNK_DRAIN_TIMEOUT_SECONDS`. An expired wait gives up rather than blocking exit, and the repair command below recovers anything left unwritten. One limit worth stating plainly: an encode already running in a worker thread is still joined when the interpreter shuts down, so an encoder wedged mid-encode can delay exit independently of this timeout. That behavior is unchanged from before and is another reason the repair command exists.
+- This was not hypothetical. On the developer's own install, two of the eight eligible memories had no passages at all.
+
+### Added: `marm-mcp-server --rechunk` Repairs Passage Storage
+
+- The passage size settings changed over time, and the existing `--migrate-embeddings` command re-encodes stored passages where they are without re-splitting them, so passages written under older settings kept their old boundaries through every upgrade. On the developer's install, every single one was wrong: memories carrying 11 to 16 passages should have had 5 to 7.
+- Oversplitting is not cosmetic. A memory's score is the best score among its passages, so more passages means more independent chances at a high score. Measured on unrelated queries, average best-match similarity climbs from 0.028 at one passage to 0.120 at sixteen, meaning an oversplit memory carries an unearned advantage over a correctly split one.
+- Run `marm-mcp-server --rechunk` (or `marm-memory maintenance chunks rechunk`) with all MARM processes stopped. It re-splits stale passages, fills in any that were lost, and removes passages from memories that are now under the threshold. Memories already correct are skipped without loading the encoder, so a second run does nothing and costs nothing.
+- The command refuses to run if stored vectors do not match the configured embedding model, and names `--migrate-embeddings` as the fix. Proceeding in that state would write passages at a different vector size than their parent memories, which the scorer silently ignores, producing passages that exist in the database but cannot be matched.
+- Verified on a real 769-memory database: 71 passage rows became 39 across 8 repaired memories, and the second run reported zero changes.
+
+### Fixed: `--migrate-embeddings` Ran Out of Memory on Databases With Long Content
+
+- The migration encoded 100 memories at a time. The encoder pads every text in a group to the length of the longest one, so a group containing one long memory costs as much as if all 100 were that long. On the developer's own database this asked the runtime for a 35 GB block and the migration crashed outright.
+- Any install with long memories would have hit this, and the only workaround was an option the command does not expose. That put it directly in the way of the repair command above, which tells users to migrate first.
+- Group size is now chosen from the content itself, capping each group by the number of texts times the longest one, which is what the encoder actually allocates. Databases of short memories still encode in large groups, so nothing gets slower. Verified on the database that crashed: the identical command now completes, 840 vectors in 45 seconds.
+
+### Upgrade Note
+
+Existing installs should run `marm-mcp-server --rechunk` once, with MARM stopped, to correct passages written under older settings. Recall works without it; results for long memories are just less accurate. If the command reports an embedding model mismatch, run `marm-mcp-server --migrate-embeddings` first: that sequence was verified end to end on a real 769-memory database.
+
+</details>
+
+<details>
 <summary><strong>July 31st, 2026: Code Index Engine Updated (v2.34.0)</strong></summary>
 
 ### Changed: Bundled Code Index Engine Updated to 0.9.0
