@@ -5,10 +5,11 @@
 <details>
 <summary><strong>July 30th, 2026: Recall and Consolidation Correctness Fixes (v2.33.1)</strong></summary>
 
-### Fixed: Duplicate Detection Compared the Wrong Score
+### Fixed: Semantic Duplicate Detection Compared the Wrong Score
 
-- `CONSOLIDATION_THRESHOLD` (default `0.92`) is documented as the meaning-similarity a memory needs before it is merged into an existing one. The check was comparing it against the final ranking score instead, which also folds in keyword relevance and a recency boost. A memory could therefore be merged away when its actual meaning-similarity was below the threshold, because keyword overlap and freshness had pushed its ranking score above it.
-- Duplicate detection now compares the raw meaning-similarity, as documented. It also asks for the meaning-based search lane explicitly: syntax-heavy content such as config keys, file paths and commands is normally routed to exact keyword lookup, which produces no meaning-similarity at all, so duplicate detection could not have worked for it either way. And it looks at a handful of candidates rather than only the top-ranked one, because the closest memory by meaning is not always the one that ranks first. If no meaning-similarity is available, nothing is merged.
+- Consolidation has two layers. Layer 1 merges content that is byte-for-byte identical after normalization, using a content hash. Layer 2 merges near-duplicates that are worded differently but mean the same thing. Only Layer 2 changed here; exact deduplication is untouched and still catches identical content, including syntax-heavy content.
+- `CONSOLIDATION_THRESHOLD` (default `0.92`) is documented as the meaning-similarity a memory needs before Layer 2 merges it into an existing one. The check was comparing it against the final ranking score instead, which also folds in keyword relevance and a recency boost. A memory could therefore be merged away when its actual meaning-similarity was below the threshold, because keyword overlap and freshness had pushed its ranking score above it.
+- Layer 2 now compares the raw meaning-similarity, as documented. It also asks for the meaning-based search lane explicitly: syntax-heavy content such as config keys, file paths and commands is normally routed to exact keyword lookup, which produces no meaning-similarity at all, so semantic merging could not have worked for it either way. And it looks at a handful of candidates rather than only the top-ranked one, because the closest memory by meaning is not always the one that ranks first. When no meaning-similarity is available, semantic merging is skipped and the write proceeds; Layer 1 still applies.
 - This only affects installs that have turned consolidation on; it is off by default (`CONSOLIDATION_ENABLED=0`), so no existing default behavior changes. Fixes #113.
 
 ### Fixed: Recency Scoring Was Not Reproducible Within a Single Recall

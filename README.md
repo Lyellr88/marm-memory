@@ -175,9 +175,9 @@ The command refuses to continue when it detects a live HTTP server, but STDIO pr
 
 MARM is tuned for fast recall first, even as memory grows and long memories are chunked behind the scenes.
 
-These measurements use the fastembed-backed `jinaai/jina-embeddings-v2-small-en` encoder and a throwaway local SQLite database. Every timed path calls the shipped `MARMMemory` code, not a benchmark-local reimplementation. All numbers below come from a single run of [`scripts/benchmarking/performance/bench_hotpath.py`](scripts/benchmarking/performance/bench_hotpath.py) on local hardware; absolute milliseconds vary by machine, so treat the scaling shape as the signal.
+These measurements use the fastembed-backed `jinaai/jina-embeddings-v2-small-en` encoder and a throwaway local SQLite database. Every timed path calls the shipped `MARMMemory` code, not a benchmark-local reimplementation. Sections 1-4 are timings from a single run of [`scripts/benchmarking/performance/bench_hotpath.py`](scripts/benchmarking/performance/bench_hotpath.py) on local hardware; absolute milliseconds vary by machine, so treat the scaling shape as the signal. Section 5 is a separate accuracy benchmark ([`run_eval.py`](scripts/benchmarking/accuracy/locomo/run_eval.py)) and reports two runs, for the reason given there.
 
-Re-measured for v2.33.0. Latency rose and the hybrid speedup in section 4 fell substantially, both because `FTS_CANDIDATE_LIMIT` was raised from `50` to `200` in v2.32.0 to recover multi-hop accuracy. That was a deliberate trade of speed for correctness, and the older figures below were published before it.
+Re-measured on v2.33.1. Latency rose and the hybrid speedup in section 4 fell substantially, both because `FTS_CANDIDATE_LIMIT` was raised from `50` to `200` in v2.32.0 to recover multi-hop accuracy. That was a deliberate trade of speed for correctness, and the older figures below were published before it.
 
 ### 1. Retrieval Latency Scaling
 
@@ -231,9 +231,9 @@ All 10 LoCoMo conversations are ingested through `marm_log_entry` (5,882 memorie
 | :--- | :--- | :--- | :--- |
 | MiniLM baseline | 37.5% | 29.5% | not published |
 | Jina v2 Small (v2.29.0) | 53.0% | 43.4% | 47.6% |
-| **Current (v2.33.0)** | **62.9 - 63.5%** | **53.1 - 53.5%** | **57.4 - 57.9%** |
+| **Current (v2.33.1)** | **62.9 - 63.5%** | **53.1 - 53.5%** | **57.4 - 57.9%** |
 
-The v2.33.0 row is a range, not a point, because it is two identically-configured runs. Repeat runs of this harness disagree by up to **0.56pp** (19 of 1,977 questions), so differences smaller than that are not meaningful. The cause is understood: the corpus is written minutes before the benchmark, so `TEMPORAL_WEIGHT` reorders near-ties as the store ages between runs. Quote the range rather than the better run.
+The v2.33.1 row is a range, not a point, because it is two identically-configured runs. Repeat runs of this harness disagree by up to **0.56pp** (19 of 1,977 questions), so differences smaller than that are not meaningful. The cause is understood: the corpus is written minutes before the benchmark, so `TEMPORAL_WEIGHT` reorders near-ties as the store ages between runs. Quote the range rather than the better run.
 
 The gain over v2.29.0 came from making the keyword lane actually produce candidates for natural-language questions (v2.31.0), then tuning what that lane contributes (v2.32.0) and fixing the encoder-off fallback (v2.33.0). The earlier MiniLM comparison does not isolate context length as the sole cause; model quality, 512-dimensional vectors, and reranking behavior changed together. Reproduce with [`scripts/benchmarking/accuracy/locomo/run_eval.py`](scripts/benchmarking/accuracy/locomo/run_eval.py).
 
