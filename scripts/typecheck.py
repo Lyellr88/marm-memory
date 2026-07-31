@@ -65,13 +65,25 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    output, _ = run_mypy()
+    output, returncode = run_mypy()
 
     if args.raw:
         print(output.rstrip())
         return 0
 
     by_file, by_code, total = parse(output)
+
+    # mypy exits 0 clean, 1 with diagnostics, 2+ on a fatal/usage error. A
+    # non-zero exit that produced no diagnostics means it never got as far as
+    # type checking (not installed, bad config, crash), and counting that as
+    # zero errors would report the backlog as cleared and pass the gate.
+    if returncode >= 2 or (returncode != 0 and total == 0):
+        print(
+            f"mypy failed without reporting diagnostics (exit {returncode}).",
+            file=sys.stderr,
+        )
+        print(output.rstrip() or "(no output)", file=sys.stderr)
+        return 2
 
     if "is not installed" in output or "Cannot find implementation" in output:
         print("mypy could not resolve the project's dependencies.", file=sys.stderr)
