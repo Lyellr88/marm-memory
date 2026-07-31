@@ -9,7 +9,7 @@
 
 - Memories longer than 500 words are additionally stored as smaller passages, so recall can match the relevant part of a long memory instead of judging it as one block. Those passages are written in the background, after the memory itself is saved, because encoding them takes about a second.
 - Nothing tracked that background work. If the server exited between saving the memory and writing its passages, the passages were lost, permanently and with no error shown. The memory itself was never at risk and still recalls; it just gets scored as one block, less accurately.
-- Shutdown now waits up to 5 seconds for pending passage writes on both transports, configurable with `CHUNK_DRAIN_TIMEOUT_SECONDS`. The wait is deliberately allowed to expire rather than hold the process open on a stuck encoder, which is safe because the new repair command below recovers anything lost.
+- Shutdown now waits up to 5 seconds for pending passage writes on both transports, configurable with `CHUNK_DRAIN_TIMEOUT_SECONDS`. An expired wait gives up rather than blocking exit, and the repair command below recovers anything left unwritten. One limit worth stating plainly: an encode already running in a worker thread is still joined when the interpreter shuts down, so an encoder wedged mid-encode can delay exit independently of this timeout. That behavior is unchanged from before and is another reason the repair command exists.
 - This was not hypothetical. On the developer's own install, two of the eight eligible memories had no passages at all.
 
 ### Added: `marm-mcp-server --rechunk` Repairs Passage Storage

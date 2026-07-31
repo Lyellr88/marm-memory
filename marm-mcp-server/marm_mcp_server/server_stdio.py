@@ -22,6 +22,7 @@ import os  # noqa: E402
 from contextlib import asynccontextmanager  # noqa: E402
 from typing import Optional  # noqa: E402
 
+import anyio  # noqa: E402
 from anyio import BrokenResourceError, ClosedResourceError, EndOfStream  # noqa: E402
 
 os.environ["SERVER_HOST"] = "127.0.0.1"
@@ -66,14 +67,30 @@ async def _stdio_lifespan(_server: FastMCP):
     try:
         yield
     finally:
-        try:
-            await drain_chunk_writes(
-                memory,
-                CHUNK_DRAIN_TIMEOUT_SECONDS,
-                lambda message: _stdio_log.info("%s", message),
-            )
-        except Exception as exc:
-            _stdio_log.warning("chunk drain failed: %s", exc)
+        # anyio cancellation is level-triggered: inside a cancelled scope every
+        # await raises immediately, so an unshielded teardown here is skipped in
+        # exactly the case that matters, a session that died with writes pending.
+        # Shielded, and bounded so a stuck encoder cannot hold the shield open.
+        with (
+            anyio.CancelScope(shield=True),
+            anyio.move_on_after(CHUNK_DRAIN_TIMEOUT_SECONDS * 2),
+        ):
+            # Draining the queue runs the writes still in it, which is what
+            # creates the chunk tasks the next call waits on. Same order as
+            # graceful_shutdown(); STDIO starts the queue lazily on first write
+            # and otherwise never stops it.
+            try:
+                await memory.stop_write_queue()
+            except Exception as exc:
+                _stdio_log.warning("write queue drain failed: %s", exc)
+            try:
+                await drain_chunk_writes(
+                    memory,
+                    CHUNK_DRAIN_TIMEOUT_SECONDS,
+                    lambda message: _stdio_log.info("%s", message),
+                )
+            except Exception as exc:
+                _stdio_log.warning("chunk drain failed: %s", exc)
 
 
 mcp = FastMCP("MARM MCP Server", lifespan=_stdio_lifespan)

@@ -10,10 +10,12 @@ import asyncio
 import sqlite3
 import uuid
 
+import anyio
 import numpy as np
 import pytest
 
 from marm_mcp_server.config.settings import DEFAULT_SEMANTIC_DIM
+from marm_mcp_server.core import memory as memory_module
 from marm_mcp_server.core.memory import MARMMemory, MEMORY_CHUNK_THRESHOLD_WORDS
 from marm_mcp_server.core.memory_utils import _write_chunks, drain_chunk_writes
 
@@ -203,8 +205,12 @@ async def test_shutdown_catches_a_chunk_write_spawned_by_the_queue_drain(
         shutdown_module.graph_supervisor, "stop", lambda: None, raising=False
     )
 
+    # Force the queue on rather than asserting the ambient setting: with
+    # WRITE_QUEUE_ENABLED=0 start_write_queue returns immediately and this test
+    # would fail for a configuration reason instead of a code defect.
+    monkeypatch.setattr(memory_module, "WRITE_QUEUE_ENABLED", True)
     await mem.start_write_queue()
-    assert mem._write_queue is not None, "write queue must be enabled for this test"
+    assert mem._write_queue is not None
 
     # Enqueue without awaiting the future, so the write is still pending when
     # shutdown starts. Awaiting mem.store_memory() here would defeat the point.
@@ -275,10 +281,17 @@ async def test_stdio_lifespan_drains_when_the_session_raises(monkeypatch, tmp_pa
 
 
 @pytest.mark.asyncio
-async def test_stdio_lifespan_drains_when_the_session_is_cancelled(
+async def test_stdio_lifespan_drains_inside_a_cancelled_anyio_scope(
     monkeypatch, tmp_path
 ):
-    """Cancellation is the common real case: the client closes the pipe."""
+    """Cancellation is the common real case: the client closes the pipe.
+
+    This must cancel a real anyio scope, not raise CancelledError by hand. FastMCP
+    runs on anyio, whose cancellation is level-triggered: inside a cancelled scope
+    every await raises immediately, so an unshielded drain is skipped. Raising the
+    exception manually leaves the scope uncancelled and passes either way, which
+    makes it useless as a guard.
+    """
     from marm_mcp_server import server_stdio
 
     db_path = str(tmp_path / "stdio-cancel.db")
@@ -286,13 +299,49 @@ async def test_stdio_lifespan_drains_when_the_session_is_cancelled(
     _stub_encoder(mem, monkeypatch, delay=0.05)
     monkeypatch.setattr(server_stdio, "memory", mem)
 
-    with pytest.raises(asyncio.CancelledError):
+    memory_id = None
+    with anyio.CancelScope() as scope:
         async with server_stdio._stdio_lifespan(server_stdio.mcp):
             memory_id = await mem.store_memory(_long_content(), "test")
-            raise asyncio.CancelledError()
+            assert _chunk_rows(db_path, memory_id) == []
+            scope.cancel()
+            await anyio.sleep(10)
 
     assert _chunk_rows(db_path, memory_id), (
-        "drain was skipped when the session was cancelled"
+        "drain was skipped by level-triggered cancellation; it needs shielding"
+    )
+
+
+@pytest.mark.asyncio
+async def test_stdio_lifespan_drains_the_write_queue_before_chunks(
+    monkeypatch, tmp_path
+):
+    """STDIO starts the write queue lazily and otherwise never stops it.
+
+    A write still queued at teardown spawns its chunk task only when the queue
+    drains, so without stopping the queue first the chunk drain sees an empty set
+    and the write is lost. Same defect the HTTP path already covers.
+    """
+    from marm_mcp_server import server_stdio
+    from marm_mcp_server.core.write_queue import MemoryWriteRequest
+
+    db_path = str(tmp_path / "stdio-queue.db")
+    mem = MARMMemory(db_path)
+    _stub_encoder(mem, monkeypatch, delay=0.05)
+    monkeypatch.setattr(server_stdio, "memory", mem)
+    monkeypatch.setattr(memory_module, "WRITE_QUEUE_ENABLED", True)
+
+    future = asyncio.get_running_loop().create_future()
+    async with server_stdio._stdio_lifespan(server_stdio.mcp):
+        await mem.start_write_queue()
+        assert mem._write_queue is not None
+        await mem._write_queue.queue.put(
+            MemoryWriteRequest(_long_content(), "test", "general", None, future)
+        )
+
+    memory_id = await future
+    assert _chunk_rows(db_path, memory_id), (
+        "queued write's chunks were lost because the queue was not drained first"
     )
 
 
