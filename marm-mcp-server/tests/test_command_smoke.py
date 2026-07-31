@@ -53,6 +53,8 @@ COMMAND_HELP_PATHS = (
     ("maintenance", "status"),
     ("maintenance", "embeddings"),
     ("maintenance", "embeddings", "migrate"),
+    ("maintenance", "chunks"),
+    ("maintenance", "chunks", "rechunk"),
     ("key",),
     ("key", "generate"),
     ("key", "init"),

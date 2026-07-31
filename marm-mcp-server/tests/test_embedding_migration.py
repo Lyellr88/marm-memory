@@ -316,3 +316,95 @@ def test_concept_similarity_logs_mixed_dimension_skips(tmp_path, capsys):
 
     assert matches == []
     assert "--migrate-embeddings" in capsys.readouterr().err
+
+
+# --- Batch memory bounding ---
+#
+# Attention memory scales with the longest text in a batch, so a fixed row count
+# is not a safe unit of work: 100 real rows once requested a 35 GB buffer and
+# crashed the migration outright.
+
+
+def _padded_size(batch: list[str]) -> int:
+    """What the encoder actually allocates: rows times the longest row."""
+    return len(batch) * max(len(text) for text in batch)
+
+
+def test_length_bounded_batches_respects_the_padded_budget():
+    texts = ["x" * 40_000, "y" * 40_000, "z" * 40_000]
+
+    batches = embedding_migration._length_bounded_batches(texts)
+
+    assert [len(batch) for batch in batches] == [2, 1]
+    for batch in batches:
+        assert _padded_size(batch) <= embedding_migration.MAX_BATCH_PADDED_CHARACTERS
+
+
+def test_length_bounded_batches_budgets_on_padding_not_the_length_sum():
+    """One long row with many short ones is the normal shape of a memory corpus.
+
+    Summing raw lengths lets such a batch grow far past what the encoder allocates,
+    because every short row is padded up to the long one. This is the case that
+    still crashed the real corpus at the shipped batch size.
+    """
+    texts = ["x" * 10_000] + ["y" * 100] * 40
+
+    batches = embedding_migration._length_bounded_batches(texts)
+
+    assert len(batches) > 1, "a long row must cap the batch its short neighbours join"
+    for batch in batches:
+        assert _padded_size(batch) <= embedding_migration.MAX_BATCH_PADDED_CHARACTERS
+    assert sum(len(batch) for batch in batches) == len(texts), "no row may be dropped"
+
+
+def test_length_bounded_batches_keeps_an_oversized_text_alone():
+    """A single text over the budget cannot be split without changing what is embedded."""
+    huge = "x" * (embedding_migration.MAX_BATCH_PADDED_CHARACTERS + 5_000)
+
+    batches = embedding_migration._length_bounded_batches(["short", huge, "tail"])
+
+    assert batches == [["short"], [huge], ["tail"]]
+    assert all(batch for batch in batches), "must never emit an empty batch"
+
+
+def test_length_bounded_batches_keeps_short_texts_in_one_batch():
+    """Guard against a throughput regression on the common short-memory corpus."""
+    texts = ["a short memory"] * 100
+
+    assert embedding_migration._length_bounded_batches(texts) == [texts]
+
+
+def test_migration_splits_long_rows_into_memory_safe_encode_calls(tmp_path):
+    """The crash case, end to end: a full page of long rows must not encode at once."""
+    memory_path = tmp_path / "memory.db"
+    concept_path = tmp_path / "concepts.db"
+    init_database(str(memory_path))
+    long_content = "word " * 2_000  # 10,000 characters, the sanitize_content cap
+    with sqlite3.connect(memory_path) as conn:
+        for index in range(40):
+            conn.execute(
+                "INSERT INTO memories (id, session_name, content, embedding, timestamp) "
+                "VALUES (?, 's1', ?, ?, '2026-01-01T00:00:00Z')",
+                (f"m{index}", f"{long_content}{index}", _vector(384)),
+            )
+
+    encoder = FakeEncoder()
+    result = migrate_embeddings(
+        str(memory_path),
+        str(concept_path),
+        batch_size=100,
+        encoder_factory=lambda: encoder,
+        progress=lambda _message: None,
+    )
+
+    assert result["rows_migrated"] == 40
+    content_calls = [call for call in encoder.calls if len(call) > 1]
+    assert content_calls, "expected at least one multi-row encode call"
+    for call in content_calls:
+        assert _padded_size(call) <= (
+            embedding_migration.MAX_BATCH_PADDED_CHARACTERS
+        ), "a single encode call exceeded the memory budget"
+    assert len(content_calls) > 1, (
+        "40 rows of 10,000 characters must span more than one encode call"
+    )
+    assert inspect_embedding_state(str(memory_path), str(concept_path)).compatible

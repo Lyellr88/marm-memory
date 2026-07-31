@@ -28,7 +28,7 @@ from .memory_utils import (
     _chunk_text,
     _embedding_to_bytes,
     _safe_print,
-    _write_chunks,
+    _spawn_chunk_write,
     sanitize_content,
 )
 
@@ -134,9 +134,7 @@ async def _update_memory(mem, memory_id: str, new_content: str) -> bool:
         overlap=MEMORY_CHUNK_OVERLAP_WORDS,
     )
     if chunks and mem._load_encoder_lazily():
-        _chunk_task = asyncio.create_task(  # noqa: RUF006
-            _write_chunks(mem, mem.db_path, memory_id, chunks, merged_hash)
-        )
+        _spawn_chunk_write(mem, memory_id, chunks, merged_hash)
     return True
 
 
@@ -281,9 +279,7 @@ async def _store_memory(
         overlap=MEMORY_CHUNK_OVERLAP_WORDS,
     )
     if chunks and mem._load_encoder_lazily():
-        _chunk_task = asyncio.create_task(  # noqa: RUF006
-            _write_chunks(mem, mem.db_path, memory_id, chunks, content_hash)
-        )
+        _spawn_chunk_write(mem, memory_id, chunks, content_hash)
 
     return memory_id
 
@@ -358,9 +354,7 @@ async def _replace_memory(
         overlap=MEMORY_CHUNK_OVERLAP_WORDS,
     )
     if chunks and mem._load_encoder_lazily():
-        _chunk_task = asyncio.create_task(  # noqa: RUF006
-            _write_chunks(mem, mem.db_path, memory_id, chunks, content_hash)
-        )
+        _spawn_chunk_write(mem, memory_id, chunks, content_hash)
     mem._on_memory_written(session)
     return True
 
@@ -485,9 +479,7 @@ async def _store_doc_mirror(
         overlap=DOC_CHUNK_OVERLAP_WORDS,
     )
     if chunks and mem._load_encoder_lazily():
-        _chunk_task = asyncio.create_task(  # noqa: RUF006
-            _write_chunks(mem, mem.db_path, memory_id, chunks, content_hash)
-        )
+        _spawn_chunk_write(mem, memory_id, chunks, content_hash)
 
     mem._on_memory_written(session)
     return memory_id

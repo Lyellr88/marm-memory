@@ -144,6 +144,9 @@ def _product_parser() -> argparse.ArgumentParser:
     embeddings = maintenance_sub.add_parser("embeddings")
     embeddings_sub = embeddings.add_subparsers(dest="embeddings_command", required=True)
     embeddings_sub.add_parser("migrate")
+    chunks = maintenance_sub.add_parser("chunks")
+    chunks_sub = chunks.add_subparsers(dest="chunks_command", required=True)
+    chunks_sub.add_parser("rechunk")
 
     key = subparsers.add_parser("key", help="Manage local bearer authentication")
     key_sub = key.add_subparsers(dest="key_command", required=True)
@@ -194,4 +197,5 @@ def _compatibility_parser() -> argparse.ArgumentParser:
     parser.add_argument("--trusted", action="store_true")
     parser.add_argument("--rate-limit-rpm", type=int)
     parser.add_argument("--migrate-embeddings", action="store_true")
+    parser.add_argument("--rechunk", action="store_true")
     return parser

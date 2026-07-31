@@ -7,7 +7,7 @@ mcp-name: io.github.Lyellr88/marm-mcp-server
      width="900"
      height="250">
 </picture>
-<h1 align="center">MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.34.0</h1>
+<h1 align="center">MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.35.0</h1>
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/Lyellr88/marm-memory/blob/MARM-main/LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
@@ -156,21 +156,36 @@ Docker commands are documented separately below because they require explicit da
 
 ### Local Keys And Package Lifecycle
 
-Normal localhost HTTP remains keyless and loopback-only. For an exposed runtime or a Docker deployment, use `marm-memory key init` to create or reuse the managed `~/.marm/.env` key file. `marm-memory key path` prints only its path; `marm-memory key reveal` intentionally prints the key with a terminal-capture warning. `marm-memory key generate` remains the non-persistent compatibility command.
+Localhost HTTP is keyless and loopback-only. Keys apply to an exposed runtime or a Docker deployment.
 
-When a managed key is active, `marm-memory console --import-key` opens a local Console session without placing the API key in browser storage, frontend state, logs, or a URL query string. Manual bearer-key entry remains available for a separately managed or remote runtime.
+| Command | What it does |
+|---------|--------------|
+| `key init` | Creates or reuses the managed `~/.marm/.env` key file |
+| `key path` | Prints the path only |
+| `key reveal` | Prints the key, with a terminal-capture warning |
+| `key generate` | Non-persistent; kept for compatibility |
 
-Use `marm-memory upgrade --check` to compare the installed package with PyPI. `marm-memory upgrade` previews a safe native upgrade; `--yes` performs it only where the active installer can be replaced safely. `marm-memory uninstall` similarly previews package removal and always preserves `~/.marm`, including memory databases, graph indexes, keys, logs, and configuration. On Windows, editable installs, or pipx installs, MARM prints the exact manual command rather than attempting to replace an active launcher.
+With a managed key active, `marm-memory console --import-key` opens Console without putting the key in browser storage, frontend state, logs, or a URL. Manual bearer entry stays available for a remote or separately managed runtime.
 
 ### Upgrade Existing Embeddings
 
-The Jina v2 Small default uses 512-dimensional embeddings; older `all-MiniLM-L6-v2` data is 384-dimensional and must be re-embedded after upgrading. Stop every MARM HTTP and STDIO process, then run:
+The Jina v2 Small default uses 512-dimensional embeddings; older `all-MiniLM-L6-v2` data is 384-dimensional and must be re-embedded. Stop every MARM HTTP and STDIO process, then run:
 
 ```bash
 marm-memory maintenance embeddings migrate
 ```
 
-The command refuses to continue when it detects a live HTTP server, but STDIO processes cannot be detected reliably and must be stopped manually. It re-embeds memory, chunk, and any existing concept-graph embeddings (notebook scratch entries no longer carry embeddings), reports batch progress, verifies both databases, and exits. It is resumable: rerun the same command after an interruption. Do not run it against a live server.
+It re-embeds memory, chunk, and any existing concept-graph vectors (notebook scratch entries no longer carry embeddings), reports progress, verifies both databases, and is resumable after an interruption. It refuses to start against a live HTTP server; STDIO processes cannot be detected reliably and must be stopped manually.
+
+### Repair Chunked Memories
+
+Memories over 500 words are also stored as smaller chunks. Chunk sizing changed across versions, and the migration above re-embeds chunks without re-splitting them, so older chunks keep stale boundaries. Stop every MARM process, then run:
+
+```bash
+marm-memory maintenance chunks rechunk
+```
+
+It re-splits stale chunks, fills in any lost to an interrupted write, and drops chunks from memories now under the threshold. Memories already correct are skipped without loading the encoder, so rerunning costs nothing. Same live-server guard as above, plus it refuses when stored vectors do not match the configured embedding model: migrate first in that case. Recall works without this, just less accurately on long memories.
 
 ## Performance & Scaling Benchmarks
 

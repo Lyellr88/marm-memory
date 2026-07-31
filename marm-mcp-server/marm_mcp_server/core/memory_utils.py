@@ -8,6 +8,7 @@ import re
 import sqlite3
 import sys
 from datetime import datetime, timezone
+from typing import Any, Callable
 
 import numpy as np
 
@@ -237,6 +238,49 @@ def _chunk_text(
     return chunks
 
 
+def _spawn_chunk_write(
+    mem_instance: Any,
+    memory_id: str,
+    chunks: list[str],
+    expected_content_hash: str,
+) -> asyncio.Task:
+    """Start a chunk write and keep its handle so shutdown can wait for it.
+
+    The done-callback is what keeps the set from growing for the life of the
+    process; every caller must go through here rather than create_task directly.
+    """
+    task = asyncio.create_task(
+        _write_chunks(
+            mem_instance, mem_instance.db_path, memory_id, chunks, expected_content_hash
+        )
+    )
+    mem_instance._pending_chunk_writes.add(task)
+    task.add_done_callback(mem_instance._pending_chunk_writes.discard)
+    return task
+
+
+async def drain_chunk_writes(
+    mem_instance: Any, timeout: float, log: Callable[[str], None]
+) -> int:
+    """Wait up to `timeout` for in-flight chunk writes. Returns the count still pending.
+
+    Deliberately does not cancel: the point is to let the writes land. Callers
+    accept that an expired wait loses rows, which `--rechunk` then repairs.
+    """
+    pending = {task for task in mem_instance._pending_chunk_writes if not task.done()}
+    if not pending:
+        return 0
+    done, still_pending = await asyncio.wait(pending, timeout=timeout)
+    if still_pending:
+        log(
+            f"{len(still_pending)} chunk write(s) did not finish within {timeout}s; "
+            "run 'marm-mcp-server --rechunk' to restore the missing chunks"
+        )
+    else:
+        log(f"Chunk writes drained ({len(done)} task(s))")
+    return len(still_pending)
+
+
 async def _write_chunks(
     mem_instance,
     db_path: str,
@@ -259,6 +303,10 @@ async def _write_chunks(
             "SELECT content_hash FROM memories WHERE id = ?", (memory_id,)
         ).fetchone()
         if current_hash is None or current_hash[0] != expected_content_hash:
+            # Release the BEGIN IMMEDIATE write lock here rather than leaving it
+            # to conn.close(); shutdown now waits on these tasks, so a held lock
+            # sits on the teardown path.
+            conn.execute("ROLLBACK")
             _safe_print(
                 f"Chunk write aborted for memory {memory_id}: content changed before insert"
             )
@@ -274,6 +322,8 @@ async def _write_chunks(
         )
         conn.commit()
     except Exception as e:
+        if conn.in_transaction:
+            conn.execute("ROLLBACK")
         _safe_print(f"Chunk DB write failed for memory {memory_id}: {e}")
     finally:
         conn.close()

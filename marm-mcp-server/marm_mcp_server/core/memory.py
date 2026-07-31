@@ -104,6 +104,10 @@ class MARMMemory:
         self._write_queue: WriteQueue | None = None
         self._session_write_counts: dict = {}
         self._pending_compaction_scans: dict = {}
+        # In-flight chunk encode/write tasks, keyed on nothing: several memories
+        # can be chunking at once. Shutdown drains this so a clean exit does not
+        # drop chunk rows.
+        self._pending_chunk_writes: set = set()
 
     def restore_active_session(self) -> None:
         """Restore the active log session from DB on server startup."""
