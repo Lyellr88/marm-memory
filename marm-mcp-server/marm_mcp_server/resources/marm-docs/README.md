@@ -19,8 +19,6 @@
 - [Knowledge Graphs: Code & Concepts](#knowledge-graphs-code--concepts)
 - [Architecture & Internals](#architecture--internals)
 - [Troubleshooting](#troubleshooting)
-- [Contributing](#contributing)
-- [Project Documentation](#project-documentation)
 
 ## Why MARM Memory
 

@@ -11,14 +11,10 @@ def _normalize_bm25(
 ) -> list[float]:
     """Map raw BM25 scores (more-negative = better) to [0, 1] with 1.0 best.
 
-    Per-query min-max needs a spread to normalize against, so single-row and
-    all-equal result sets are degenerate and get `lone_hit_score` instead.
-
-    How much evidence a degenerate set represents depends on how the MATCH was
-    built, so the caller decides. Under strict AND a lone hit means every query
-    term was present, which justifies the default 1.0. Under the semantic lane's
-    wide OR it can mean one memory contained one non-stopword, so that caller
-    passes FTS_LONE_HIT_SCORE.
+    Min-max needs a spread, so single-row and all-equal sets get lone_hit_score.
+    The caller sets it because the evidence a lone hit represents depends on how
+    its MATCH was built: strict AND means every term was present, a wide OR can
+    mean one shared word.
     """
     if not raw_scores:
         return []
@@ -231,10 +227,6 @@ def _fetch_and_score_fts_rows(
     if not rows:
         return []
 
-    # Two lanes share this fetcher. The exact lane leaves lone_hit_score at 1.0,
-    # because its strict-AND MATCH means a lone hit had every query term present.
-    # The semantic-fallback lane passes FTS_LONE_HIT_SCORE, because since v2.33.0 it
-    # matches on a wide OR, where a lone hit can mean one memory shared one word.
     normalized = _normalize_bm25(
         [row["score"] for row in rows], lone_hit_score=lone_hit_score
     )

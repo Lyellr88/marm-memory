@@ -11,3 +11,17 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 3
+
+  # Track the Console UI. Directory is the pnpm workspace root, where the lockfile is.
+  - package-ecosystem: "npm"
+    directory: "/marm-console"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 3
+    groups:
+      console-dev:
+        dependency-type: "development"
+        update-types: ["minor", "patch"]
+      console-prod:
+        dependency-type: "production"
+        update-types: ["minor", "patch"]
