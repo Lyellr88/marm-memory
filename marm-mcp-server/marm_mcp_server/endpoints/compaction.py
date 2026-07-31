@@ -1,19 +1,12 @@
-"""Compaction MCP endpoint tools — V2 agent-driven summarization, V3 staged apply, V4 write-queue + auto-apply.
+"""MCP tools for the agent-assisted compaction lifecycle.
 
-Audited under the SQLite write-atomicity hardening effort
-(docs/current/sqlite-write-atomicity-hardening.md): no BEGIN IMMEDIATE
-added here. Every mutation on every branch of
-marm_stage_compaction_summaries and marm_apply_compaction's validation
-section is exactly one conn.execute("UPDATE compaction_staging ...")
-call -- a lone statement is already atomic under SQLite regardless of
-isolation_level, so there's no multi-statement sequence to protect.
-Wrapping the whole per-candidate loop in marm_stage_compaction_summaries
-in one transaction was considered and rejected: each candidate is
-designed to succeed or fail independently (see its own per-candidate
-`results` list), and an all-or-nothing batch wrap would change that
-intended semantic, not just add safety. The actual apply write
-(apply_compaction_write, in services/compaction_apply.py) already uses
-BEGIN IMMEDIATE internally and was not touched.
+The flow is intentionally staged: the scheduler creates ``pending_summary``
+candidates, an agent submits summaries that become ``summary_staged``, and a
+later review chooses ``apply`` or ``discard``. Staging validates each candidate
+independently so one bad summary does not cancel the rest of a batch. Applying
+delegates the memory-row transaction to ``services.compaction_apply``; when the
+write queue is running, that final write is queued there so compaction shares
+the same single-writer path as normal memory writes.
 """
 
 import json
