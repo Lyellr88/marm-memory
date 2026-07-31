@@ -73,7 +73,7 @@ dev = [
     "black>=22.0.0",
     "isort>=5.10.0",
     "flake8>=5.0.0",
-    "mypy>=1.0.0",
+    "mypy>=2.3.0",
     "ruff>=0.4.0",
     "tomli>=2.0.0; python_version < '3.11'",
 ]
