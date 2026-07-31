@@ -100,6 +100,7 @@ async def test_temporal_weight_zero_means_fts_winner_ranks_first_despite_age(
     tmp_path, monkeypatch
 ):
     monkeypatch.setattr(memory_recall_module, "TEMPORAL_WEIGHT", 0.0)
+    monkeypatch.setattr(memory_recall_module, "HYBRID_SEARCH_TEXT_WEIGHT", 0.05)
 
     mem = MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
@@ -129,14 +130,19 @@ async def test_temporal_weight_zero_means_fts_winner_ranks_first_despite_age(
             )
         return mid
 
-    # Old memory has the exact query keyword — FTS filter will include it
+    # Give the older memory the lexical advantage below.
     old_id = _insert(
         (base - timedelta(days=90)).isoformat(),
         "zephyr unique keyword only here",
     )
-    # New memory has no match for the query — FTS filter will exclude it
+    # The newer memory has identical vector similarity.
     new_id = _insert(
         base.isoformat(), "unrelated content about something else entirely"
+    )
+    monkeypatch.setattr(
+        memory_recall_module,
+        "_fetch_fts_candidate_ids",
+        lambda *_args, **_kwargs: [(old_id, 1.0), (new_id, 0.0)],
     )
 
     results = await mem.recall_similar(
@@ -147,13 +153,10 @@ async def test_temporal_weight_zero_means_fts_winner_ranks_first_despite_age(
     )
 
     ids = [r["id"] for r in results]
-    assert old_id in ids, "FTS-matching old memory must appear in results"
-    # With TEMPORAL_WEIGHT=0, only vec_score determines rank. If new_id also surfaced
-    # (e.g. via semantic fallback), old_id must still rank first.
-    if new_id in ids:
-        assert ids.index(old_id) < ids.index(new_id), (
-            "At TEMPORAL_WEIGHT=0 the FTS-dominant old memory should rank above the new non-matching one"
-        )
+    assert ids == [old_id, new_id], (
+        "At TEMPORAL_WEIGHT=0 the FTS-dominant old memory should rank above "
+        "the newer candidate"
+    )
 
 
 @pytest.mark.asyncio
