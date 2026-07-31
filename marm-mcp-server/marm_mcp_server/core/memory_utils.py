@@ -73,13 +73,24 @@ def _strip_script_tags(text: str) -> str:
     return "".join(result)
 
 
-def _temporal_score(timestamp: str, half_life_days: float) -> float:
-    """Return a recency score in [0, 1]: 1.0 for brand-new, 0.5 at half_life_days."""
+def _temporal_score(
+    timestamp: str, half_life_days: float, now: datetime | None = None
+) -> float:
+    """Return a recency score in [0, 1]: 1.0 for brand-new, 0.5 at half_life_days.
+
+    Pass `now` to score a whole candidate set against one reference instant.
+    Reading the clock per candidate instead makes two rows with the same stored
+    timestamp score fractionally apart, which is enough to decide their order
+    whenever the relevance scores are tied, so recall would rank them by
+    microsecond timing rather than by anything reproducible. Defaults to the
+    current time so existing callers are unaffected.
+    """
     try:
         ts = datetime.fromisoformat(timestamp)
         if ts.tzinfo is None:
             ts = ts.replace(tzinfo=timezone.utc)
-        age_days = (datetime.now(timezone.utc) - ts).total_seconds() / 86400
+        reference = now if now is not None else datetime.now(timezone.utc)
+        age_days = (reference - ts).total_seconds() / 86400
         return min(1.0, math.exp(-age_days * math.log(2) / half_life_days))
     except Exception:
         return 0.5

@@ -9,6 +9,9 @@ from ..config.settings import MARM_PROJECT, MARM_PLATFORM
 logger = logging.getLogger(__name__)
 _UNSET = object()
 
+# Enough rows to absorb reordering by the lexical and recency signals.
+_DUPLICATE_CANDIDATES = 5
+
 
 def normalize_content(content: str) -> str:
     return content.lower().strip()
@@ -54,26 +57,36 @@ async def find_semantic_duplicate(
     project: object = _UNSET,
     platform: object = _UNSET,
 ) -> Optional[str]:
-    """Return memory_id of nearest semantic match at or above threshold in session, or None.
+    """Return memory_id of a semantic match at or above threshold in session, or None.
 
     Falls back to None if encoder unavailable — never blocks a write.
     Accepts a pre-computed query_vec to avoid re-encoding already-embedded content.
+
+    threshold is a cosine threshold, so this compares raw cosine and not
+    "similarity", which is blended with the lexical and recency signals. A row
+    with no cosine is never a duplicate.
     """
     try:
         if query_vec is None and not memory._load_encoder_lazily():
             return None
         scoped_project = MARM_PROJECT or None if project is _UNSET else project
         scoped_platform = MARM_PLATFORM or None if platform is _UNSET else platform
+        # exact_mode="semantic" because the exact lane produces no cosine.
         results = await memory.recall_similar(
             content,
             session=session_name,
-            limit=1,
+            limit=_DUPLICATE_CANDIDATES,
             query_vec=query_vec,
             project=scoped_project,
             platform=scoped_platform,
+            exact_mode="semantic",
+            with_cosine=True,
         )
-        if results and results[0]["similarity"] >= threshold:
-            return results[0]["id"]
+        scored = [r for r in results if "cosine" in r]
+        if scored:
+            nearest = max(scored, key=lambda r: r["cosine"])
+            if nearest["cosine"] >= threshold:
+                return nearest["id"]
     except Exception:
         logger.exception("Semantic dedup check failed")
     return None

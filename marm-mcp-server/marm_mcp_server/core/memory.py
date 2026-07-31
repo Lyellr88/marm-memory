@@ -409,6 +409,8 @@ class MARMMemory:
         exact_mode: str = "auto",
         project: str = None,
         platform: str = None,
+        *,
+        with_cosine: bool = False,
     ):
         return await _recall_similar(
             self,
@@ -420,6 +422,7 @@ class MARMMemory:
             exact_mode,
             project,
             platform,
+            with_cosine=with_cosine,
         )
 
     async def recall_text_search(

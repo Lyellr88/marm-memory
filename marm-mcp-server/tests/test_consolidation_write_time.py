@@ -129,10 +129,19 @@ async def test_find_semantic_duplicate_returns_id_when_similarity_above_threshol
     mem = MARMMemory(str(tmp_path / "memory.db"))
 
     monkeypatched_recall_called = []
+    recall_kwargs = {}
 
     async def mock_recall(query, session=None, limit=5, query_vec=None, **kwargs):
         monkeypatched_recall_called.append(query)
-        return [{"id": "existing-id", "similarity": 0.95, "content": "similar content"}]
+        recall_kwargs.update(kwargs)
+        return [
+            {
+                "id": "existing-id",
+                "similarity": 0.95,
+                "cosine": 0.95,
+                "content": "similar content",
+            }
+        ]
 
     mem._load_encoder_lazily = lambda: True
     mem.recall_similar = mock_recall
@@ -143,6 +152,8 @@ async def test_find_semantic_duplicate_returns_id_when_similarity_above_threshol
 
     assert result == "existing-id"
     assert len(monkeypatched_recall_called) == 1
+    # The threshold is a cosine threshold, so the raw value has to be requested.
+    assert recall_kwargs.get("with_cosine") is True
 
 
 @pytest.mark.asyncio
@@ -152,7 +163,17 @@ async def test_find_semantic_duplicate_returns_none_when_similarity_below_thresh
     mem = MARMMemory(str(tmp_path / "memory.db"))
 
     async def mock_recall(query, session=None, limit=5, query_vec=None, **kwargs):
-        return [{"id": "existing-id", "similarity": 0.85, "content": "similar content"}]
+        # High fused score, low cosine: the row ranks first but is not a
+        # duplicate. Only the cosine may decide, or an unrelated memory gets
+        # merged away.
+        return [
+            {
+                "id": "existing-id",
+                "similarity": 0.99,
+                "cosine": 0.85,
+                "content": "similar content",
+            }
+        ]
 
     mem._load_encoder_lazily = lambda: True
     mem.recall_similar = mock_recall
