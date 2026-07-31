@@ -100,6 +100,7 @@ async def test_temporal_weight_zero_means_fts_winner_ranks_first_despite_age(
     tmp_path, monkeypatch
 ):
     monkeypatch.setattr(memory_recall_module, "TEMPORAL_WEIGHT", 0.0)
+    monkeypatch.setattr(memory_recall_module, "HYBRID_SEARCH_TEXT_WEIGHT", 0.05)
 
     mem = MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
