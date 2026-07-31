@@ -1,4 +1,4 @@
-# MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.33.1
+# MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.34.0
 
 ## Important Messages
 

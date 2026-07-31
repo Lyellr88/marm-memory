@@ -348,10 +348,33 @@ class CbmClient:
         return payload
 
     def list_tools(self, timeout: Optional[float] = None) -> list[dict]:
-        """Return the child's tools/list (for schema-drift verification)."""
+        """Return the child's full tools/list (for schema-drift verification).
+
+        Follows `nextCursor` to the end. 0.8.1 answers with all tools and no
+        cursor; 0.9.0 pages them, so reading only the first page sees a subset
+        and check_schema reports the remainder as removed.
+        """
         timeout = timeout if timeout is not None else self._call_timeout
+        tools: list[dict] = []
+        seen_cursors: set[str] = set()
+        cursor: Any = None
         with self._lock:
             if not self._alive():
                 self._spawn()
-            result = self._send_recv("tools/list", {}, timeout)
-        return result.get("tools", [])
+            while True:
+                params = {} if cursor is None else {"cursor": cursor}
+                result = self._send_recv("tools/list", params, timeout)
+                tools.extend(result.get("tools", []))
+                # Absent means done. A cursor is opaque and may be any JSON
+                # scalar, so test for None rather than truthiness -- a literal
+                # 0 or "" is a real cursor, not a terminator.
+                cursor = result.get("nextCursor")
+                if cursor is None:
+                    return tools
+                key = repr(cursor)
+                if key in seen_cursors:
+                    raise CbmError(
+                        f"tools/list repeated cursor {cursor!r} after "
+                        f"{len(seen_cursors)} page(s); refusing to loop"
+                    )
+                seen_cursors.add(key)

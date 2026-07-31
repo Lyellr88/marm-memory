@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "marm-mcp-server"
-version = "2.33.1"
+version = "2.34.0"
 description = "Local-first 3-in-1 AI memory layer & MCP server for Claude Code, Codex, Grok, Gemini, VS Code and Cursor. Fuses session history, codebase indexing & concept graphs in SQLite. Enables zero-cloud, privacy-first context & instant recall also works with multi-agent swarms."
 readme = "README.md"
 license = "Apache-2.0"
@@ -42,7 +42,7 @@ dependencies = [
     "httpx>=0.28.1",
     "packaging>=24.0,<27.0",
     "mcp>=1.26.0,<2.0.0",
-    "codebase-memory-mcp==0.8.1",
+    "codebase-memory-mcp==0.9.0",
     "spacy>=3.8.0,<3.9.0",
 ]
 
@@ -102,6 +102,11 @@ python_version = "3.10"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
+# Without this, Pydantic models read as plain classes and every optional field
+# looks like a required constructor argument.
+plugins = ["pydantic.mypy"]
+# core/ is the checked scope; imports out of it are resolved but not reported.
+follow_imports = "silent"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

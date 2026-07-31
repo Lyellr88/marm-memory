@@ -3,6 +3,31 @@
 ## Version 2 - MARM Protocol to Universal MCP Server Evolution
 
 <details>
+<summary><strong>July 31st, 2026: Code Index Engine Updated (v2.34.0)</strong></summary>
+
+### Changed: Bundled Code Index Engine Updated to 0.9.0
+
+- MARM's code graph wraps a separate program, `codebase-memory-mcp`, which does the actual repository indexing. It moves from 0.8.1 to 0.9.0. The upgrade brings first-class Windows support, faster indexing, a supervisor that restarts the indexer if it crashes, and automatic pruning of projects whose folder is no longer on disk.
+- MARM verifies the version it pins against the version the program reports about itself at startup. The 0.8.1 program misreported itself as `0.10.0`, so the version shown in logs and in `cbm_binary_version` was wrong for the version actually running. 0.9.0 reports correctly and the two now agree.
+
+### Fixed: The Code Graph Would Not Have Started Against the New Engine
+
+- 0.9.0 changed how it reports the operations it supports. Instead of returning all 14 in one response, it returns them in pages of 8 with a marker pointing at the next page. MARM asked once, saw 8, and concluded the remaining 6 had been removed upstream.
+- A missing operation means one of MARM's internal mappings is silently broken, so MARM deliberately refuses to start the code graph rather than run a half-wired feature. The practical effect of upgrading without this fix would have been the code graph failing to come up at all, on every start.
+- MARM now follows the pages to the end. Nothing about the 14 operations actually changed: none were added or removed, and no required argument changed, so no other adjustment was needed. Four regression tests cover the paged response, the unpaged one, and two ways a page marker can be misread, so a future change to page size cannot quietly shrink the verified list again.
+- This was caught and fixed before the upgrade shipped, so no released version was affected. Memory, recall, logging, and the notebook do not use this component and were never involved. The code graph is on by default (`GRAPH_ENABLED=true`) and degrades to memory-only if it cannot start, so an install that hit this would have kept working minus code-graph features.
+
+### Evaluated: Rank-Based Fusion (RRF), Not Adopted
+
+- MARM ranks hybrid recall by blending scores: it keeps how strong each match was and mixes meaning-similarity with keyword relevance and a recency boost. An outside contribution ([#112](https://github.com/Lyellr88/marm-memory/pull/112)) proposed replacing that with Reciprocal Rank Fusion, which discards the scores and combines the two lists by rank position instead. The argument for it is sound in principle: a keyword score is normalized per query, so one outlier can stretch the scale and distort the blend, and rank positions are immune to that.
+- It could not be measured as submitted, because it also removed `HYBRID_SEARCH_TEXT_WEIGHT` and gave both retrievers equal say. That is a 10x change in how much keyword matching counts (0.05 to 0.5) arriving in the same change as the fusion swap, so any difference in accuracy could not be attributed to either one. A weighted variant of RRF was derived that preserves the shipped keyword weight and produces the same `[0, 1]` output range, so both arms received identical candidates and identical weighting and the only variable was score magnitude versus rank position.
+- RRF lost. On LoCoMo (1,977 questions, 5,882 memories, top-5), any-hit fell from 63.5% to 56.2%, and the same 6.8 to 7.3 point gap appeared on all-hit and evidence recall. It was worse in all five question categories, and worst where precision matters most: adversarial dropped 13.0 points and open-domain 8.0. It found 48 questions min-max missed and lost 192 that min-max found. Latency was measured separately and was the same either way, so there was no speed gain to trade against the accuracy loss.
+- Two control runs of the identical existing configuration differed by 0.56 points, which sets the noise floor for this corpus. The gap is roughly 12 times that, and it held against both control runs and in both directions of a two-way cross-fold. Min-max is kept and the experiment branch was discarded unmerged. The scope is one corpus at one keyword weight, so this says RRF did not win here, not that rank-based fusion is worse in general.
+- The exercise corrected something about MARM's own measurement, which is the part that outlives it. Run-to-run noise on this benchmark had been assumed to sit near 0.1 points; it is 0.56. A controlled diagnostic traced the difference to recency scores shifting as the wall clock advances between runs, which reshuffles near-ties. Benchmark differences smaller than about half a point should not be read as real.
+
+</details>
+
+<details>
 <summary><strong>July 30th, 2026: Recall and Consolidation Correctness Fixes (v2.33.1)</strong></summary>
 
 ### Fixed: Semantic Duplicate Detection Compared the Wrong Score

@@ -9,6 +9,7 @@ import pytest
 
 from marm_graph.core.cbm_client import (
     CbmClient,
+    CbmError,
     CbmTimeoutError,
     CbmToolError,
 )
@@ -129,6 +130,85 @@ def test_unwrap_falls_back_to_last_text_when_nothing_is_json():
     with pytest.raises(CbmToolError) as ei:
         CbmClient._unwrap("no_such_tool", result)
     assert "unknown tool: no_such_tool" in str(ei.value)
+
+
+# ── pure: tools/list pagination (scripted wire, no subprocess) ──────
+
+
+def _paginating_client(pages, monkeypatch):
+    """A client whose tools/list answers from `pages`, recording sent params.
+
+    Fakes only the wire: real list_tools drives the loop. _alive is stubbed so
+    no child is spawned. Page shapes mirror what 0.9.0 actually returns,
+    captured from the binary: 8 tools plus nextCursor as the string "8", then a
+    final page with the remaining 6 and no cursor.
+    """
+    client = CbmClient(command=["unused"])
+    sent = []
+
+    def fake_send_recv(method, params, timeout):
+        assert method == "tools/list"
+        sent.append(params)
+        return pages[len(sent) - 1]
+
+    monkeypatch.setattr(client, "_alive", lambda: True)
+    monkeypatch.setattr(client, "_send_recv", fake_send_recv)
+    return client, sent
+
+
+def _tool_pages():
+    names = sorted(EXPECTED_TOOLS)
+    return [
+        {"tools": [{"name": n} for n in names[:8]], "nextCursor": "8"},
+        {"tools": [{"name": n} for n in names[8:]]},
+    ]
+
+
+def test_list_tools_follows_cursor_to_the_end(monkeypatch):
+    """0.9.0 pages tools/list 8-at-a-time. Reading one page saw 8 of 14 and
+    check_schema reported the other 6 as removed, refusing to start.
+    """
+    client, sent = _paginating_client(_tool_pages(), monkeypatch)
+
+    names = {t["name"] for t in client.list_tools()}
+
+    assert names == EXPECTED_TOOLS
+    assert sent == [{}, {"cursor": "8"}]
+
+
+def test_list_tools_single_page_sends_no_cursor(monkeypatch):
+    """0.8.1 returns every tool with no nextCursor: exactly one request."""
+    one_page = [{"tools": [{"name": n} for n in sorted(EXPECTED_TOOLS)]}]
+    client, sent = _paginating_client(one_page, monkeypatch)
+
+    assert {t["name"] for t in client.list_tools()} == EXPECTED_TOOLS
+    assert sent == [{}]
+
+
+def test_list_tools_treats_falsy_cursor_as_a_real_page(monkeypatch):
+    """A cursor is opaque, so 0 and "" are valid values. Terminating on
+    truthiness would silently drop every page after one of them.
+    """
+    pages = [
+        {"tools": [{"name": "index_repository"}], "nextCursor": 0},
+        {"tools": [{"name": "search_graph"}], "nextCursor": ""},
+        {"tools": [{"name": "query_graph"}]},
+    ]
+    client, sent = _paginating_client(pages, monkeypatch)
+
+    names = [t["name"] for t in client.list_tools()]
+
+    assert names == ["index_repository", "search_graph", "query_graph"]
+    assert sent == [{}, {"cursor": 0}, {"cursor": ""}]
+
+
+def test_list_tools_refuses_a_repeating_cursor(monkeypatch):
+    """A child that echoes the same cursor forever must raise, not hang."""
+    stuck = {"tools": [{"name": "index_repository"}], "nextCursor": "8"}
+    client, _ = _paginating_client([stuck] * 50, monkeypatch)
+
+    with pytest.raises(CbmError, match="repeated cursor"):
+        client.list_tools()
 
 
 # ── transport: real binary ──────────────────────────────────────────

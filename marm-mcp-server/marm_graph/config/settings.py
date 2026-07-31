@@ -9,10 +9,11 @@ import shlex
 import sys
 from pathlib import Path
 
-# The exact upstream PyPI version this wrapper was validated against. The binary
-# it downloads self-reports a DIFFERENT version (see protocol-proof.md §3); the
-# schema contract is the binary's, captured live at startup.
-PINNED_CBM_VERSION = "0.8.1"
+# The exact upstream PyPI version this wrapper was validated against. The schema
+# contract is the binary's, captured live at startup. 0.8.1's binary misreported
+# itself as 0.10.0 (protocol-proof.md §3); 0.9.0 reports correctly, so the two
+# agree again -- do not assume that holds for the next bump.
+PINNED_CBM_VERSION = "0.9.0"
 
 
 def _safe_int(env_key: str, default: int) -> int:
