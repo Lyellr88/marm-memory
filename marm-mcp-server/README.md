@@ -78,21 +78,20 @@ See [Performance & Scaling Benchmarks](#performance--scaling-benchmarks) for ret
 
 ### Start Now
 
-**Recommended: guided setup with `marm-init`**
-
-The easiest way to install MARM is to let your agent do the setup with you. `marm-init` turns the usual MCP setup mess into one guided conversation: Python or Docker, HTTP or STDIO, local or remote server, API keys, config paths, server startup, and multi-agent linking for Claude, Codex, Gemini, Qwen, Cursor, VS Code, and other MCP clients. No hunting through install docs, no guessing which config file your client uses, and no rewriting the same connection by hand for every agent.
-
-```bash
-npx degit Lyellr88/marm-memory/skills
-```
-
-Then tell your agent: **"Use the marm-init skill to set up MARM."**
-
-**Manual pip install**
+**Quick start**
 
 ```bash
 pip install marm-mcp-server
+marm-memory init --g-claude --g-codex --g-gemini
 ```
+
+Then tell your agent: **"Use the marm-init skill to set up MARM."** It handles the rest with you in one conversation: Python or Docker, HTTP or STDIO, API keys, config paths, starting the server, and connecting each agent.
+
+`--g-qwen` and `--g-kiro` are also available. Run `marm-memory init` with no flags to install into the current project instead of your home folder.
+
+**Manual setup**
+
+Prefer to wire it up yourself:
 
 | If you are... | Start the server | Connect your MCP client |
 |---------------|------------------|-------------------------|
