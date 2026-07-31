@@ -3,6 +3,23 @@
 ## Version 2 - MARM Protocol to Universal MCP Server Evolution
 
 <details>
+<summary><strong>July 30th, 2026: Recall and Consolidation Correctness Fixes (v2.33.1)</strong></summary>
+
+### Fixed: Duplicate Detection Compared the Wrong Score
+
+- `CONSOLIDATION_THRESHOLD` (default `0.92`) is documented as the meaning-similarity a memory needs before it is merged into an existing one. The check was comparing it against the final ranking score instead, which also folds in keyword relevance and a recency boost. A memory could therefore be merged away when its actual meaning-similarity was below the threshold, because keyword overlap and freshness had pushed its ranking score above it.
+- Duplicate detection now compares the raw meaning-similarity, as documented. It also asks for the meaning-based search lane explicitly: syntax-heavy content such as config keys, file paths and commands is normally routed to exact keyword lookup, which produces no meaning-similarity at all, so duplicate detection could not have worked for it either way. And it looks at a handful of candidates rather than only the top-ranked one, because the closest memory by meaning is not always the one that ranks first. If no meaning-similarity is available, nothing is merged.
+- This only affects installs that have turned consolidation on; it is off by default (`CONSOLIDATION_ENABLED=0`), so no existing default behavior changes. Fixes #113.
+
+### Fixed: Recency Scoring Was Not Reproducible Within a Single Recall
+
+- The recency boost read the clock separately for every candidate in a recall, so memories saved at the same moment received slightly different recency scores. Whenever two memories were otherwise equally relevant, which one ranked higher came down to which was processed first rather than anything about the memories.
+- All candidates in a recall are now scored against a single reference time, so identical timestamps produce identical recency scores. Applies to meaning-based search and to the keyword-only fallback; exact keyword lookup does not use recency scoring and is unchanged.
+- Note this addresses ordering *within* one recall. Recency scores still move as time passes between separate recalls, which is what the feature is for.
+
+</details>
+
+<details>
 <summary><strong>July 29th, 2026: Recall Keeps Working When the Embedding Model Does Not (v2.33.0)</strong></summary>
 
 ### Fixed: Recall Returned Nothing When the Embedding Model Was Unavailable

@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from datetime import datetime, timezone
 from typing import Dict, List
 
 from ..config.settings import (
@@ -142,6 +143,8 @@ async def _recall_similar(
     exact_mode: str = "auto",
     project: str = None,
     platform: str = None,
+    *,
+    with_cosine: bool = False,
 ):
     """Find semantically similar memories.
 
@@ -157,6 +160,12 @@ async def _recall_similar(
     When include_scan_metadata=True, returns (List[Dict], dict) where the second
     element contains recall_scan_truncated and recall_scan_limit. All other callers
     receive List[Dict] as before.
+
+    with_cosine adds a "cosine" key carrying the unfused cosine score. Internal
+    only: "similarity" is a ranking score blended with the lexical and recency
+    signals, so a caller comparing against a cosine threshold needs the raw value.
+    The key is present only on the lanes that compute a cosine at all, so a caller
+    that requires it also gets a reliable signal that none was available.
     """
     scan_limit = RECALL_SCAN_LIMIT
 
@@ -280,9 +289,14 @@ async def _recall_similar(
         # signal, so it keeps the pure semantic+temporal blend.
         apply_bm25 = not use_semantic_fallback and bool(bm25_by_id)
 
+        # One instant for the whole set, so equal timestamps score equally.
+        scored_at = datetime.now(timezone.utc)
+
         combined: dict[str, tuple] = {}
         for mem_row, vec_score in similarities:
-            t_score = _temporal_score(mem_row["timestamp"], TEMPORAL_HALF_LIFE_DAYS)
+            t_score = _temporal_score(
+                mem_row["timestamp"], TEMPORAL_HALF_LIFE_DAYS, scored_at
+            )
             if apply_bm25:
                 bm25_score = bm25_by_id.get(mem_row["id"], 0.0)
                 relevance = (
@@ -293,27 +307,29 @@ async def _recall_similar(
             combined[mem_row["id"]] = (
                 mem_row,
                 (1 - TEMPORAL_WEIGHT) * relevance + TEMPORAL_WEIGHT * t_score,
+                vec_score,
             )
 
         ranked = sorted(combined.values(), key=lambda x: x[1], reverse=True)[:limit]
 
         results = []
-        for memory, similarity in ranked:
-            results.append(
-                {
-                    "id": memory["id"],
-                    "session_name": memory["session_name"],
-                    "content": memory["content"],
-                    "timestamp": memory["timestamp"],
-                    "context_type": memory["context_type"],
-                    "metadata": json.loads(memory["metadata"])
-                    if memory["metadata"]
-                    else {},
-                    "similarity": float(similarity),
-                    "project": memory["project"],
-                    "platform": memory["platform"],
-                }
-            )
+        for memory, similarity, cosine in ranked:
+            result = {
+                "id": memory["id"],
+                "session_name": memory["session_name"],
+                "content": memory["content"],
+                "timestamp": memory["timestamp"],
+                "context_type": memory["context_type"],
+                "metadata": json.loads(memory["metadata"])
+                if memory["metadata"]
+                else {},
+                "similarity": float(similarity),
+                "project": memory["project"],
+                "platform": memory["platform"],
+            }
+            if with_cosine:
+                result["cosine"] = float(cosine)
+            results.append(result)
 
         return _wrap(results, scan_truncated)
 
@@ -359,10 +375,13 @@ async def _recall_text_search(
         f"builder={'wide' if apply_temporal else 'strict'}"
     )
 
+    # None on the exact lane, which never reaches _temporal_score.
+    scored_at = datetime.now(timezone.utc) if apply_temporal else None
+
     def _blend_temporal(base_sim: float, timestamp: str) -> float:
         if not apply_temporal:
             return base_sim
-        t_score = _temporal_score(timestamp, TEMPORAL_HALF_LIFE_DAYS)
+        t_score = _temporal_score(timestamp, TEMPORAL_HALF_LIFE_DAYS, scored_at)
         return (1 - TEMPORAL_WEIGHT) * base_sim + TEMPORAL_WEIGHT * t_score
 
     # apply_temporal is already this function's lane discriminator: True from the
@@ -389,8 +408,6 @@ async def _recall_text_search(
                 fetch_limit,
                 project,
                 platform,
-                # Same reason the semantic lane passes it: this lane's MATCH is a
-                # wide OR, so a degenerate set is weak evidence, not a perfect hit.
                 lone_hit_score=FTS_LONE_HIT_SCORE if apply_temporal else 1.0,
             )
             if fts_rows:

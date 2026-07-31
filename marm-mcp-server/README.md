@@ -7,7 +7,7 @@ mcp-name: io.github.Lyellr88/marm-mcp-server
      width="900"
      height="250">
 </picture>
-<h1 align="center">MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.33.0</h1>
+<h1 align="center">MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.33.1</h1>
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/Lyellr88/marm-memory/blob/MARM-main/LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
@@ -179,55 +179,65 @@ MARM is tuned for fast recall first, even as memory grows and long memories are 
 
 These measurements use the fastembed-backed `jinaai/jina-embeddings-v2-small-en` encoder and a throwaway local SQLite database. Every timed path calls the shipped `MARMMemory` code, not a benchmark-local reimplementation. All numbers below come from a single run of [`scripts/benchmarking/performance/bench_hotpath.py`](scripts/benchmarking/performance/bench_hotpath.py) on local hardware; absolute milliseconds vary by machine, so treat the scaling shape as the signal.
 
+Re-measured for v2.33.0. Latency rose and the hybrid speedup in section 4 fell substantially, both because `FTS_CANDIDATE_LIMIT` was raised from `50` to `200` in v2.32.0 to recover multi-hop accuracy. That was a deliberate trade of speed for correctness, and the older figures below were published before it.
+
 ### 1. Retrieval Latency Scaling
 
 End-to-end `recall_similar` latency (includes query encoding).
 
 | Session Size ($N$) | Min Latency | Median Latency | p95 Latency |
 | :--- | :--- | :--- | :--- |
-| **N = 100** | 6.3 ms | 6.5 ms | 8.1 ms |
-| **N = 500** | 7.2 ms | 7.4 ms | 8.0 ms |
-| **N = 1,000** | 8.0 ms | 8.2 ms | 9.9 ms |
-| **N = 2,000** | 9.2 ms | 9.7 ms | 10.8 ms |
-| **N = 4,000** | 11.4 ms | 12.0 ms | 14.8 ms |
+| **N = 100** | 7.4 ms | 7.9 ms | 9.4 ms |
+| **N = 250** | 11.9 ms | 13.5 ms | 15.4 ms |
+| **N = 500** | 10.9 ms | 11.8 ms | 13.4 ms |
+| **N = 1,000** | 13.3 ms | 13.5 ms | 15.6 ms |
+| **N = 2,000** | 17.5 ms | 18.2 ms | 19.6 ms |
+| **N = 4,000** | 23.8 ms | 25.9 ms | 30.9 ms |
+
+Run-to-run variance at small $N$ is larger than the gap between adjacent sizes, which is why N = 250 reads slower than N = 500 here. Treat the trend from N = 1,000 upward as the real signal.
 
 ### 2. Encoder + Concurrency
 
-- **Cold model load:** `934ms`
-- **Warm encode:** median `4.2ms`, p95 `4.8ms`
-- **Concurrent recall:** 10 gathered recalls completed in `609.5ms` vs `411.3ms` serial. The current path is intentionally serialized around shared encoder/SQLite work, so gathering calls does not create parallel speedup.
+- **Cold model load:** `893ms`
+- **Warm encode:** median `3.8ms`, p95 `4.3ms`
+- **Concurrent recall:** 10 gathered recalls completed in `151.5ms` vs `176.0ms` serial (`gather/serial = 0.86`). Do not read that as parallelism: repeated runs of this same benchmark land anywhere from `0.63` to `0.86`, so the ratio is not stable enough to claim a speedup. The path is serialized around shared encoder and SQLite work by design, and any apparent gain is measurement noise.
 
 ### 3. Write-Time Ingestion Cost
 
-- **Consolidation off:** median `5.9ms`, p95 `7.5ms`
-- **Consolidation on:** median `61.2ms`, p95 `105.3ms`
-- **Tradeoff:** write-time dedupe/clustering adds `10.3x` median cost so recall stays fast and cleaner over time.
+- **Consolidation off:** median `6.5ms`, p95 `7.6ms`
+- **Consolidation on:** median `58.1ms`, p95 `106.5ms`
+- **Tradeoff:** write-time dedupe/clustering adds `9.0x` median cost so recall stays fast and the store stays cleaner over time. Consolidation is off by default.
 
 ### 4. Recall Scaling: Full Scan vs Production Hybrid
 
 Why recall stays roughly flat as memory grows: instead of scoring every stored vector, production recall uses an FTS keyword pre-filter to a bounded candidate set, then re-ranks that set by semantic + BM25 + temporal score. Both columns are real code paths (`_fetch_and_score_embedding_rows` for the full scan, `recall_similar` for hybrid), dispatched through the same async path and timed with the query vector precomputed so the constant encode cost from section 1 is excluded from both. Each iteration alternates which path runs first so neither one consistently benefits from the other's warmed cache.
 
-| Session Size ($N$) | Full Semantic Scan | Production Hybrid | Speedup |
-| :--- | :--- | :--- | :--- |
-| **N = 100** | 3.5 ms | 3.8 ms | 0.9x |
-| **N = 500** | 15.9 ms | 4.2 ms | 3.8x |
-| **N = 1,000** | 34.4 ms | 4.9 ms | 7.0x |
-| **N = 2,000** | 67.6 ms | 5.7 ms | 11.9x |
-| **N = 4,000** | 132.5 ms | 7.3 ms | 18.0x |
-| **N = 10,000** | 330.4 ms | 8.4 ms | 39.4x |
+| Session Size ($N$) | Full Semantic Scan | Production Hybrid | Speedup | FTS candidates |
+| :--- | :--- | :--- | :--- | :--- |
+| **N = 100** | 3.3 ms | 6.6 ms | 0.5x | 85 / 200 |
+| **N = 500** | 16.3 ms | 11.6 ms | 1.4x | 200 / 200 |
+| **N = 1,000** | 31.1 ms | 14.7 ms | 2.1x | 200 / 200 |
+| **N = 2,000** | 63.5 ms | 19.0 ms | 3.3x | 200 / 200 |
+| **N = 4,000** | 127.2 ms | 29.1 ms | 4.4x | 200 / 200 |
+| **N = 10,000** | 316.7 ms | 53.8 ms | 5.9x | 200 / 200 |
 
-The full scan grows roughly linearly with $N$ while hybrid recall stays near-flat, so the advantage widens with session size. At very small $N$ the pre-filter overhead is not yet worth it (hybrid is marginally slower at N = 100); the win appears once there is enough to skip. Reproduce with [`scripts/benchmarking/performance/bench_hotpath.py`](scripts/benchmarking/performance/bench_hotpath.py).
+The full scan grows roughly linearly with $N$ while hybrid recall grows far more slowly, so the advantage still widens with session size. At very small $N$ the pre-filter is not worth its overhead and hybrid is slower.
+
+**These speedups are much lower than the figures published before v2.32.0** (which claimed up to `39.4x` at N = 10,000). Nothing regressed. `FTS_CANDIDATE_LIMIT` was raised from `50` to `200` to recover multi-hop retrieval accuracy, so the rerank step now scores four times as many candidates. The `FTS candidates` column shows the pool saturating at 200 from N = 500 upward, which is where the extra cost comes from. Lowering the setting restores the old speed and gives back the accuracy. Reproduce with [`scripts/benchmarking/performance/bench_hotpath.py`](scripts/benchmarking/performance/bench_hotpath.py).
 
 ### 5. LoCoMo Retrieval Accuracy
 
-A fresh Jina v2 Small run ingested all 10 LoCoMo conversations through `marm_log_entry`, then scored top-5 `marm_smart_recall` results against 1,977 evidence-annotated questions. No answer-generation model or LLM judge was used.
+All 10 LoCoMo conversations are ingested through `marm_log_entry` (5,882 memories), then top-5 `marm_smart_recall` results are scored against 1,977 evidence-annotated questions. No answer-generation model or LLM judge is used.
 
-| Encoder | Any evidence hit | All evidence hit | Mean evidence recall |
+| Configuration | Any evidence hit | All evidence hit | Mean evidence recall |
 | :--- | :--- | :--- | :--- |
-| **MiniLM baseline** | 37.5% | 29.5% | not previously published |
-| **Jina v2 Small** | 53.0% | 43.4% | 47.6% |
+| MiniLM baseline | 37.5% | 29.5% | not published |
+| Jina v2 Small (v2.29.0) | 53.0% | 43.4% | 47.6% |
+| **Current (v2.33.0)** | **62.9 - 63.5%** | **53.1 - 53.5%** | **57.4 - 57.9%** |
 
-The Jina run improved both hit metrics in this benchmark. This comparison does not isolate context length as the sole cause; model quality, 512-dimensional vectors, and reranking behavior changed together. Reproduce it with [`scripts/benchmarking/accuracy/locomo/run_eval.py`](scripts/benchmarking/accuracy/locomo/run_eval.py).
+The v2.33.0 row is a range, not a point, because it is two identically-configured runs. Repeat runs of this harness disagree by up to **0.56pp** (19 of 1,977 questions), so differences smaller than that are not meaningful. The cause is understood: the corpus is written minutes before the benchmark, so `TEMPORAL_WEIGHT` reorders near-ties as the store ages between runs. Quote the range rather than the better run.
+
+The gain over v2.29.0 came from making the keyword lane actually produce candidates for natural-language questions (v2.31.0), then tuning what that lane contributes (v2.32.0) and fixing the encoder-off fallback (v2.33.0). The earlier MiniLM comparison does not isolate context length as the sole cause; model quality, 512-dimensional vectors, and reranking behavior changed together. Reproduce with [`scripts/benchmarking/accuracy/locomo/run_eval.py`](scripts/benchmarking/accuracy/locomo/run_eval.py).
 
 ### 6. vs Competitors: Architecture
 
@@ -926,7 +936,7 @@ Everything above runs on a small number of deliberate mechanisms. This section i
 - **Write-time consolidation** (opt-in, `CONSOLIDATION_ENABLED=1`) runs two layers before a memory lands:
   - **Layer 1, exact dedup**: a SHA-256 hash of normalized content is checked within the session; hash hits are verified against the actual content before deduplicating, so a hash collision stores a new row instead of silently merging different content.
   - **Layer 2, semantic merge**: near-duplicates above `CONSOLIDATION_THRESHOLD` cosine similarity are merged rather than accumulated. This never blocks a write; if the encoder isn't available, the write proceeds unconsolidated.
-  - The tradeoff is measured and published: roughly 4x median write cost (still ~42ms) in exchange for a store that stays clean, because reads dominate memory workloads.
+  - The tradeoff is measured and published: roughly 9x median write cost (58ms vs 6.5ms) in exchange for a store that stays clean, because reads dominate memory workloads. See section 3 of the benchmarks above.
 - **Compaction** (opt-in, `COMPACTION_ENABLED=1`) is Layer 3: after enough writes in a session, a background pass detects clusters of related memories using cosine similarity plus union-find connected components, gated by minimum cluster size, minimum age, and an active-session grace period so it never compacts work in flight. MARM then injects a bounded request asking the connected agent to summarize each cluster: `candidates` → `stage` → `review` → `apply` or `discard`. Source memory IDs are preserved on apply, so compacted summaries stay traceable to their originals. Staged summaries expire (`COMPACTION_STAGING_TTL_HOURS`), nudges are capped and cooldown-limited, and the injection has a byte budget. The design is honest about what LLMs are for: MARM detects, the agent summarizes, and a human-reviewable stage/apply/discard loop gates the destructive step.
 
 ### Recall path
@@ -990,7 +1000,7 @@ Packaged docs are indexed into the `marm_system` memory namespace on startup and
 | `SEMANTIC_SEARCH_ENABLED` | `1` | Set to `0` to run without the embedding model: nothing is loaded, no embeddings are written, and recall falls back to keyword matching. Useful on low-memory hosts, or to see how recall behaves when the model is unavailable. `marm-memory doctor` reports when it is off. |
 | `TEMPORAL_WEIGHT` / `TEMPORAL_HALF_LIFE_DAYS` | `0.1` / `30` | Strength and decay of the recency boost |
 | `CONSOLIDATION_ENABLED` | `0` | Write-time dedup + semantic merge |
-| `CONSOLIDATION_THRESHOLD` | `0.92` | Similarity needed to merge near-duplicates |
+| `CONSOLIDATION_THRESHOLD` | `0.92` | Cosine similarity needed to merge near-duplicates. Compared against meaning-similarity alone, not the blended ranking score |
 | `COMPACTION_ENABLED` | `0` | Background cluster detection + agent-assisted compaction |
 | `COMPACTION_TRIGGER_COUNT` | `5` | Writes per session before a compaction pass |
 | `COMPACTION_SIMILARITY_THRESHOLD` / `COMPACTION_MIN_CLUSTER_SIZE` / `COMPACTION_MIN_AGE_HOURS` | `0.88` / `3` / `24` | Cluster detection gates |

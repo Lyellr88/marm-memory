@@ -1358,3 +1358,443 @@ print("OK")
 
     assert proc.returncode == 0, f"stdout:\n{proc.stdout}\nstderr:\n{proc.stderr}"
     assert "OK" in proc.stdout
+
+
+# --- temporal scoring uses one reference instant per recall ---
+
+
+def _stub_tied_cosines(monkeypatch, module, id_order):
+    """Force exactly equal cosine scores, returned in a chosen fetch order.
+
+    Storing the same embedding twice is not enough: float32 matmul accumulates in
+    SIMD blocks, so two copies of one vector differ by ~1e-6. Only the score is
+    synthesized; the rows come from the real query.
+    """
+    original = module._fetch_and_score_by_ids
+
+    def tied(db_path, memory_ids, query_embedding):
+        results, skipped = original(db_path, memory_ids, query_embedding)
+        by_id = {row["id"]: row for row, _ in results}
+        return [(by_id[mid], 1.0) for mid in id_order if mid in by_id], skipped
+
+    monkeypatch.setattr(module, "_fetch_and_score_by_ids", tied)
+
+
+def test_temporal_score_accepts_a_reference_time_and_stays_backward_compatible():
+    """The parameter is optional, so every existing caller keeps working."""
+    from datetime import timedelta
+
+    from marm_mcp_server.core.memory_utils import _temporal_score
+
+    aged = (datetime.now(_timezone.utc) - timedelta(days=30)).isoformat()
+
+    # Omitted: still the documented half-life behavior.
+    assert _temporal_score(aged, 30) == pytest.approx(0.5, abs=1e-4)
+
+    # Supplied: repeated scoring against one instant is bit-identical, which is
+    # the property the recall paths depend on.
+    now = datetime.now(_timezone.utc)
+    assert _temporal_score(aged, 30, now) == _temporal_score(aged, 30, now)
+
+    # Closed form, not a second live clock read: at a 30-day half-life the score
+    # moves ~1.3e-7 per second, so that comparison would be a stopwatch race.
+    fixed = datetime.fromisoformat("2026-01-31T00:00:00+00:00")
+    sixty_days_before = datetime.fromisoformat("2025-12-02T00:00:00+00:00")
+    assert _temporal_score(sixty_days_before.isoformat(), 30, fixed) == pytest.approx(
+        0.25, abs=1e-9
+    )
+
+    # Unparseable input keeps its neutral score with or without a reference.
+    assert _temporal_score("not a timestamp", 30) == 0.5
+    assert _temporal_score("not a timestamp", 30, now) == 0.5
+
+
+def _shared_timestamp_pool(memory, session, count, content="shared keyword row"):
+    """Insert `count` rows that share one timestamp and identical content.
+
+    Identical content makes BM25 tie exactly, so the lexical term cannot separate
+    the rows and the temporal term is the only remaining variable.
+    """
+    from datetime import timedelta
+
+    vec = np.ones(384, dtype=np.float32)
+    vec /= np.linalg.norm(vec)
+    shared = (datetime.now(_timezone.utc) - timedelta(days=7)).isoformat()
+
+    ids = []
+    with memory.get_connection() as conn:
+        for _ in range(count):
+            mem_id = str(_uuid_module.uuid4())
+            conn.execute(
+                "INSERT INTO memories"
+                " (id, session_name, content, embedding, content_hash, timestamp,"
+                "  context_type, metadata)"
+                " VALUES (?, ?, ?, ?, ?, ?, 'general', '{}')",
+                (
+                    mem_id,
+                    session,
+                    content,
+                    vec.tobytes(),
+                    f"hash-{mem_id}",
+                    shared,
+                ),
+            )
+            ids.append(mem_id)
+    return ids, vec
+
+
+@pytest.mark.asyncio
+async def test_semantic_lane_scores_equal_timestamps_against_one_reference(
+    monkeypatch, tmp_path
+):
+    """Rows sharing a timestamp, with cosine and BM25 tied, must score identically.
+
+    Eight rows rather than two: a single sub-microsecond clock tick anywhere in
+    the loop is enough to break the assertion.
+    """
+    from marm_mcp_server.core import memory_recall as memory_recall_module
+
+    memory = MARMMemory(str(tmp_path / "memory.db"))
+    memory._encoder_failed = True
+    ids, vec = _shared_timestamp_pool(memory, "tsnap", 8)
+
+    # Temporal must stay on: it is the term under test.
+    assert memory_recall_module.TEMPORAL_WEIGHT > 0
+
+    _stub_tied_cosines(monkeypatch, memory_recall_module, sorted(ids))
+    monkeypatch.setattr(
+        memory_recall_module,
+        "_fetch_fts_candidate_ids",
+        lambda *_: [(mid, 1.0) for mid in sorted(ids)],
+    )
+
+    results = await memory.recall_similar(
+        "shared", session="tsnap", limit=len(ids), query_vec=vec.copy()
+    )
+
+    assert len(results) == len(ids)
+    scores = {r["similarity"] for r in results}
+    assert len(scores) == 1, (
+        f"equal timestamps produced {len(scores)} distinct scores: {sorted(scores)}"
+    )
+    # A real recency score, not a degenerate 0.0 or 1.0 that would tie anyway.
+    assert 0.0 < results[0]["similarity"] < 1.0
+
+
+@pytest.mark.asyncio
+async def test_keyword_fallback_scores_equal_timestamps_against_one_reference(
+    tmp_path,
+):
+    """The encoder-off lane blends temporal too, so it needs the same snapshot."""
+    memory = MARMMemory(str(tmp_path / "memory.db"))
+    # Exactly what _load_encoder_lazily() returning False produces at runtime.
+    memory._encoder_failed = True
+    ids, _vec = _shared_timestamp_pool(memory, "tsnapfb", 8)
+
+    results = await memory.recall_similar(
+        "shared keyword", session="tsnapfb", limit=len(ids)
+    )
+
+    assert len(results) == len(ids)
+    assert all(r["retrieval_mode"] == "semantic_fallback_fts" for r in results)
+    scores = {r["similarity"] for r in results}
+    assert len(scores) == 1, (
+        f"equal timestamps produced {len(scores)} distinct scores: {sorted(scores)}"
+    )
+    assert 0.0 < results[0]["similarity"] < 1.0
+
+
+@pytest.mark.asyncio
+async def test_exact_lane_still_skips_temporal_scoring_entirely(tmp_path):
+    """The snapshot must not pull temporal into the exact lane, which returns raw
+    BM25 order by design."""
+    memory = MARMMemory(str(tmp_path / "memory.db"))
+    memory._encoder_failed = True
+
+    vec = np.ones(384, dtype=np.float32)
+    vec /= np.linalg.norm(vec)
+    with memory.get_connection() as conn:
+        _insert_with_embedding(conn, "ex", "FTS_CANDIDATE_LIMIT=200 note", vec)
+        _insert_with_embedding(conn, "ex", "unrelated weather prose", vec)
+
+    results = await memory.recall_similar(
+        "FTS_CANDIDATE_LIMIT", session="ex", limit=5, exact_mode="exact"
+    )
+
+    assert results
+    assert all(r["retrieval_mode"].startswith("exact_") for r in results)
+    # Un-blended BM25: the sole match of a degenerate set keeps FTS_LONE_HIT_SCORE
+    # rather than being pulled below 1.0 by a recency term.
+    assert results[0]["similarity"] == pytest.approx(1.0)
+
+
+# --- consolidation thresholds on raw cosine, not the fused ranking score ---
+
+
+def _vector_with_cosine(query_vec, target_cos, dim=384):
+    """Build a unit vector whose cosine to query_vec is target_cos."""
+    orthogonal = np.zeros(dim, dtype=np.float32)
+    half = dim // 2
+    orthogonal[:half] = 1.0
+    orthogonal[half:] = -1.0
+    orthogonal -= np.dot(orthogonal, query_vec) * query_vec
+    orthogonal /= np.linalg.norm(orthogonal)
+    out = target_cos * query_vec + np.sqrt(1.0 - target_cos**2) * orthogonal
+    return (out / np.linalg.norm(out)).astype(np.float32)
+
+
+# Fused score lands ~0.927, over the 0.92 threshold, while the true cosine is
+# under it. Usable window is cos in [0.910, 0.920).
+_TRAP_COSINE = 0.915
+
+
+def _near_miss_store(tmp_path, session="dedup"):
+    """A store holding one memory that is close but not a duplicate."""
+    from marm_mcp_server.core import memory_recall as memory_recall_module
+
+    memory = MARMMemory(str(tmp_path / "memory.db"))
+    memory._encoder_failed = True
+
+    query = np.ones(384, dtype=np.float32)
+    query /= np.linalg.norm(query)
+    near_miss = _vector_with_cosine(query, _TRAP_COSINE)
+
+    with memory.get_connection() as conn:
+        lone = _insert_with_embedding(
+            conn, session, "a nearby but distinct memory", near_miss
+        )
+    return memory, memory_recall_module, query, lone
+
+
+@pytest.mark.asyncio
+async def test_consolidation_thresholds_on_cosine_not_the_fused_score(
+    monkeypatch, tmp_path
+):
+    """Issue #113: a memory whose real cosine is under the threshold can still
+    report a blended score above it, and must not be merged."""
+    from marm_mcp_server.core.consolidation import find_semantic_duplicate
+
+    memory, module, query, lone = _near_miss_store(tmp_path)
+    # Top lexical score, which is what a real single-row match produces via
+    # FTS_LONE_HIT_SCORE. Temporal is left at its shipped weight: the trap
+    # depends on it, and pinning it to 0 would test a config nobody runs.
+    monkeypatch.setattr(module, "_fetch_fts_candidate_ids", lambda *_: [(lone, 1.0)])
+
+    ranked = await memory.recall_similar(
+        "anything", session="dedup", limit=5, query_vec=query.copy(), with_cosine=True
+    )
+    # Arm the trap, so this test cannot pass on a harmless fixture.
+    assert ranked[0]["similarity"] >= 0.92, (
+        f"fused score {ranked[0]['similarity']:.5f} does not clear the threshold, "
+        "so the old code would not have merged and there is nothing to catch"
+    )
+    assert ranked[0]["cosine"] < 0.92, "fixture is a genuine duplicate"
+
+    found = await find_semantic_duplicate(
+        memory,
+        "anything",
+        "dedup",
+        0.92,
+        query_vec=query.copy(),
+        project=None,
+        platform=None,
+    )
+    assert found is None, (
+        "merged a non-duplicate by thresholding the fused ranking score"
+    )
+
+
+@pytest.mark.asyncio
+async def test_consolidation_still_merges_a_genuine_near_duplicate(
+    monkeypatch, tmp_path
+):
+    """The other direction: reading cosine must not break real dedup."""
+    from marm_mcp_server.core import memory_recall as memory_recall_module
+    from marm_mcp_server.core.consolidation import find_semantic_duplicate
+
+    memory = MARMMemory(str(tmp_path / "memory.db"))
+    memory._encoder_failed = True
+
+    vec = np.ones(384, dtype=np.float32)
+    vec /= np.linalg.norm(vec)
+    with memory.get_connection() as conn:
+        twin = _insert_with_embedding(conn, "dedup", "the deploy step is manual", vec)
+
+    monkeypatch.setattr(
+        memory_recall_module, "_fetch_fts_candidate_ids", lambda *_: [(twin, 1.0)]
+    )
+
+    found = await find_semantic_duplicate(
+        memory,
+        "the deploy step is manual",
+        "dedup",
+        0.92,
+        query_vec=vec.copy(),
+        project=None,
+        platform=None,
+    )
+    assert found == twin
+
+
+@pytest.mark.asyncio
+async def test_with_cosine_is_opt_in_and_reports_the_unfused_score(
+    monkeypatch, tmp_path
+):
+    """Consolidation's channel for the raw value. Off by default so MCP responses
+    keep their shape, and carrying cosine rather than the blend when asked."""
+    memory, module, query, lone = _near_miss_store(tmp_path, session="cos")
+    monkeypatch.setattr(module, "_fetch_fts_candidate_ids", lambda *_: [(lone, 1.0)])
+
+    default = await memory.recall_similar(
+        "anything", session="cos", limit=5, query_vec=query.copy()
+    )
+    assert "cosine" not in default[0], "raw cosine leaked into a normal response"
+
+    opted_in = await memory.recall_similar(
+        "anything", session="cos", limit=5, query_vec=query.copy(), with_cosine=True
+    )
+    assert opted_in[0]["cosine"] == pytest.approx(_TRAP_COSINE, abs=1e-4)
+    # The two must not be the same number, or the key is reporting the blend.
+    assert opted_in[0]["cosine"] != pytest.approx(opted_in[0]["similarity"], abs=1e-3)
+
+
+@pytest.mark.asyncio
+async def test_consolidation_declines_when_no_cosine_is_available(
+    monkeypatch, tmp_path
+):
+    """When scoring fails, recall degrades to the keyword-only path, which reports
+    no cosine. An absent cosine must mean "not a duplicate"."""
+    from marm_mcp_server.core import memory_recall as memory_recall_module
+    from marm_mcp_server.core.consolidation import find_semantic_duplicate
+
+    memory, target = _fallback_corpus(tmp_path)
+
+    vec = np.ones(384, dtype=np.float32)
+    vec /= np.linalg.norm(vec)
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError("embedding scoring unavailable")
+
+    monkeypatch.setattr(memory_recall_module, "_fetch_and_score_by_ids", boom)
+    monkeypatch.setattr(memory_recall_module, "_fetch_and_score_embedding_rows", boom)
+
+    # Arm the trap: the degraded path really does return the row, with a score
+    # that would clear the threshold if "similarity" were trusted.
+    degraded = await memory.recall_similar(
+        "I adopted a golden retriever puppy last spring",
+        session="fb",
+        limit=5,
+        query_vec=vec.copy(),
+        exact_mode="semantic",
+        with_cosine=True,
+    )
+    assert degraded and degraded[0]["id"] == target
+    assert degraded[0]["similarity"] >= 0.92
+    assert "cosine" not in degraded[0]
+
+    found = await find_semantic_duplicate(
+        memory,
+        "I adopted a golden retriever puppy last spring",
+        "fb",
+        0.92,
+        query_vec=vec.copy(),
+        project=None,
+        platform=None,
+    )
+    assert found is None
+
+
+@pytest.mark.asyncio
+async def test_consolidation_reaches_cosine_for_syntax_heavy_content(tmp_path):
+    """Syntax-heavy content satisfies _is_exact_query, and the exact lane returns
+    no cosine, so on "auto" dedup would decline every such write."""
+    from marm_mcp_server.core.consolidation import find_semantic_duplicate
+    from marm_mcp_server.core.memory_utils import _is_exact_query
+
+    content = "export FTS_CANDIDATE_LIMIT=200"
+    assert _is_exact_query(content), "fixture no longer routes to the exact lane"
+
+    memory = MARMMemory(str(tmp_path / "memory.db"))
+    memory._encoder_failed = True
+
+    vec = np.ones(384, dtype=np.float32)
+    vec /= np.linalg.norm(vec)
+    with memory.get_connection() as conn:
+        twin = _insert_with_embedding(conn, "syntax", content, vec)
+
+    # Prove the premise: under "auto" this content bypasses cosine entirely.
+    routed = await memory.recall_similar(
+        content, session="syntax", limit=5, query_vec=vec.copy(), with_cosine=True
+    )
+    assert routed[0]["retrieval_mode"].startswith("exact_")
+    assert "cosine" not in routed[0]
+
+    found = await find_semantic_duplicate(
+        memory,
+        content,
+        "syntax",
+        0.92,
+        query_vec=vec.copy(),
+        project=None,
+        platform=None,
+    )
+    assert found == twin, "syntax-heavy duplicate was not consolidated"
+
+
+@pytest.mark.asyncio
+async def test_consolidation_looks_past_the_top_fused_row(monkeypatch, tmp_path):
+    """The row that ranks first is not always the closest by cosine.
+
+    near_miss  cos 0.910  bm25 1.0  -> fused 0.92305   ranks first
+    duplicate  cos 0.950  bm25 0.0  -> fused 0.91225   ranks second
+    """
+    from marm_mcp_server.core import memory_recall as memory_recall_module
+    from marm_mcp_server.core.consolidation import find_semantic_duplicate
+
+    memory = MARMMemory(str(tmp_path / "memory.db"))
+    memory._encoder_failed = True
+
+    query = np.ones(384, dtype=np.float32)
+    query /= np.linalg.norm(query)
+    near_miss_vec = _vector_with_cosine(query, 0.910)
+    duplicate_vec = _vector_with_cosine(query, 0.950)
+
+    with memory.get_connection() as conn:
+        near_miss = _insert_with_embedding(
+            conn, "past-top", "strong keyword overlap, wrong meaning", near_miss_vec
+        )
+        duplicate = _insert_with_embedding(
+            conn, "past-top", "the actual near duplicate", duplicate_vec
+        )
+
+    monkeypatch.setattr(
+        memory_recall_module,
+        "_fetch_fts_candidate_ids",
+        lambda *_: [(near_miss, 1.0), (duplicate, 0.0)],
+    )
+
+    # Arm the trap: confirm the near-miss really does outrank the duplicate, and
+    # that it alone would not clear the threshold.
+    ranked = await memory.recall_similar(
+        "anything",
+        session="past-top",
+        limit=5,
+        query_vec=query.copy(),
+        with_cosine=True,
+    )
+    assert ranked[0]["id"] == near_miss, "fixture no longer ranks the near-miss first"
+    assert ranked[0]["cosine"] < 0.92
+    assert any(r["id"] == duplicate and r["cosine"] >= 0.92 for r in ranked)
+
+    found = await find_semantic_duplicate(
+        memory,
+        "anything",
+        "past-top",
+        0.92,
+        query_vec=query.copy(),
+        project=None,
+        platform=None,
+    )
+    assert found == duplicate, (
+        "inspected only the top-ranked row and missed the real duplicate behind it"
+    )
