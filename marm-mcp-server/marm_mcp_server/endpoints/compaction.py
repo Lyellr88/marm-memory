@@ -2,8 +2,10 @@
 
 The flow is intentionally staged: the scheduler creates ``pending_summary``
 candidates, an agent submits summaries that become ``summary_staged``, and a
-later review chooses ``apply`` or ``discard``. Staging validates each candidate
-independently so one bad summary does not cancel the rest of a batch. Applying
+later review can choose ``apply`` or ``discard``. When the opt-in automatic
+apply setting is enabled, the scheduler can apply staged candidates instead.
+Staging validates each candidate independently so one bad summary does not
+cancel the rest of a batch. Applying
 delegates the memory-row transaction to ``services.compaction_apply``; when the
 write queue is running, that final write is queued there so compaction shares
 the same single-writer path as normal memory writes.
