@@ -295,6 +295,66 @@ def test_a_memory_written_during_a_build_keeps_its_queue_row(concepts_env, monke
     assert remaining == ["m2"]
 
 
+def test_a_rebuild_that_dies_partway_still_asks_to_be_rebuilt(
+    concepts_env, monkeypatch
+):
+    """The reset drops the old graph before the corpus is extracted. Stamping
+    the new schema version there would make an interrupted rebuild report
+    `current`, so nothing prompts for it again and the corpus is silently
+    missing from the graph, with no queue rows to recover it either."""
+    from marm_mcp_server.core.concept_db import inspect_concept_schema
+    from marm_mcp_server.core.models import ConceptBuildRequest
+
+    concepts, memory_module = concepts_env
+    _seed(memory_module, [("m1", "alpha")])
+    _extract(monkeypatch, concepts, {"alpha": ["Alpha"]})
+
+    concept_db = concepts._get_concept_db()
+    db_path = concept_db.db_path
+    with concept_db.get_connection() as conn:
+        concept_db.get_or_create_entity(
+            conn, "legacy", "concept", "sess-a", None, "old", platform="cli"
+        )
+        conn.execute(
+            "UPDATE concept_schema_metadata SET value = '1' WHERE key = 'schema_version'"
+        )
+    assert inspect_concept_schema(db_path) == "rebuild_required"
+
+    def explode(*_args, **_kwargs):
+        raise RuntimeError("rebuild died partway")
+
+    monkeypatch.setattr(concepts, "_run_build", explode)
+    asyncio.run(concepts.marm_concept_build(ConceptBuildRequest(search_all=True)))
+
+    assert inspect_concept_schema(db_path) == "rebuild_required"
+
+
+def test_a_completed_rebuild_marks_the_schema_current(concepts_env, monkeypatch):
+    from marm_mcp_server.core.concept_db import inspect_concept_schema
+    from marm_mcp_server.core.models import ConceptBuildRequest
+
+    concepts, memory_module = concepts_env
+    _seed(memory_module, [("m1", "alpha")])
+    _extract(monkeypatch, concepts, {"alpha": ["Alpha"]})
+
+    concept_db = concepts._get_concept_db()
+    db_path = concept_db.db_path
+    with concept_db.get_connection() as conn:
+        concept_db.get_or_create_entity(
+            conn, "legacy", "concept", "sess-a", None, "old", platform="cli"
+        )
+        conn.execute(
+            "UPDATE concept_schema_metadata SET value = '1' WHERE key = 'schema_version'"
+        )
+
+    result = asyncio.run(
+        concepts.marm_concept_build(ConceptBuildRequest(search_all=True))
+    )
+
+    assert result["graph_rebuilt"] is True
+    assert inspect_concept_schema(db_path) == "current"
+
+
 def test_a_manual_build_refuses_while_another_process_holds_the_graph(
     concepts_env, monkeypatch
 ):

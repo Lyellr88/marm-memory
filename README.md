@@ -874,7 +874,7 @@ marm_concept_recall(query="related to SQLite", depth=3) → multi-hop traversal 
 
 How to use it:
 
-- **Automatic by default**: new memories reach the graph without a tool call. Set `CONCEPT_AUTO_INDEX=false` to go back to manual builds only; `CONCEPT_INDEX_DEBOUNCE_SECONDS` (30) and `CONCEPT_INDEX_BATCH_SIZE` (20) control the pace.
+- **Automatic by default**: new memories reach the graph without a tool call. Set `CONCEPT_AUTO_INDEX=false` to go back to manual builds only, which stops the worker but keeps recording queue rows, so turning it back on picks up everything written while it was off; `CONCEPT_INDEX_DEBOUNCE_SECONDS` (30) and `CONCEPT_INDEX_BATCH_SIZE` (20) control the pace.
 - **Safe on both transports at once**: a leased lock in the memory database keeps a rebuild in one process from dropping graph tables while another process is writing to them. A build that finds the graph busy says so instead of colliding.
 - **Failure never reaches your memories**: indexing runs on a durable queue outside the write path. Extraction problems retry, a memory that fails repeatedly is parked with its error, and the memory itself stores and recalls normally throughout.
 - **Clearing a backlog costs some recall speed**: entity extraction is CPU-bound, so while the worker is working through a queue, measured recall goes from ~8ms to ~16ms median on a real 768-memory corpus. Writes are unaffected. It only applies while a backlog is draining, which for most people is once, after the upgrade rebuild. Reproduce it with `scripts/benchmarking/performance/bench_concept_worker.py --from-live`.
@@ -980,7 +980,7 @@ Packaged docs are indexed into the `marm_system` memory namespace on startup and
 | `COMPACTION_STAGING_TTL_HOURS` | `168` | How long staged summaries wait before expiring |
 | `GRAPH_ENABLED` | `true` | Kill switch for the 5 code-graph tools |
 | `CONCEPT_BUILD_ROW_CAP` | `500` | Memory rows read per page during a concept-graph build. Not a cap on the build: every memory in scope is read either way |
-| `CONCEPT_AUTO_INDEX` | `true` | Automatic concept indexing of new memories. `false`, `0`, `no`, or `off` turns it off and leaves builds manual |
+| `CONCEPT_AUTO_INDEX` | `true` | Automatic concept indexing of new memories. `false`, `0`, `no`, or `off` stops the worker and leaves builds manual. Writes still record queue rows either way |
 | `CONCEPT_INDEX_DEBOUNCE_SECONDS` | `30` | Quiet period after a write before indexing starts, so a burst becomes one pass |
 | `CONCEPT_INDEX_BATCH_SIZE` | `20` | Memories indexed per batch, capped at 500. Lowering it does not reduce contention; it measured slightly worse |
 | `CONCEPT_INDEX_BATCH_PAUSE_MS` | `250` | Pause between batches while clearing a backlog. Cuts worst-case recall during indexing from ~270ms to ~80ms for about 18% longer drain. `0` disables it |

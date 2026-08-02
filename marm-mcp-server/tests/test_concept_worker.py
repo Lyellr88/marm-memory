@@ -397,6 +397,39 @@ def test_stop_returns_without_waiting_for_an_in_flight_extraction(
     assert len(_queue_rows(mem)) == 1
 
 
+def test_stop_signals_the_running_build_before_releasing_the_graph(
+    worker_env, monkeypatch
+):
+    """Cancelling the task only cancels the await around asyncio.to_thread. The
+    extraction thread keeps writing while unwinding releases the cross-process
+    lock, so another transport could reset the concept database underneath it.
+    stop() has to raise the abort flag first."""
+    worker, _module, concepts, _queue, mem = worker_env
+    _extract_named_after_content(monkeypatch, concepts)
+    seen = {}
+
+    async def slow_build(memory_ids, abort=None):
+        seen["abort"] = abort
+        await asyncio.sleep(30)
+        return {}
+
+    monkeypatch.setattr(concepts, "build_for_memory_ids", slow_build)
+
+    async def scenario():
+        await mem.store_memory("content being indexed", "s1")
+        worker.start()
+        for _ in range(200):
+            await asyncio.sleep(0.01)
+            if "abort" in seen:
+                break
+        await worker.stop()
+
+    asyncio.run(scenario())
+
+    assert seen.get("abort") is not None, "the build was given no way to stop"
+    assert seen["abort"].is_set(), "stop() released the graph without signalling"
+
+
 def test_disabled_worker_leaves_the_queue_filling(worker_env, monkeypatch):
     worker, module, _concepts, _queue, mem = worker_env
     monkeypatch.setattr(module, "CONCEPT_AUTO_INDEX", False)

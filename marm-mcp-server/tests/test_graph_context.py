@@ -8,6 +8,7 @@ from marm_mcp_server.core.concept_db import (
     ConceptDB,
     backup_and_reset_concept_database,
     inspect_concept_schema,
+    mark_schema_current,
 )
 from marm_mcp_server.core.response_limiter import MCPResponseLimiter
 from marm_mcp_server.services.graph_context import (
@@ -182,6 +183,11 @@ def test_platformless_graph_requires_explicit_reset(monkeypatch, tmp_path):
     backup = backup_and_reset_concept_database(str(db_path))
 
     assert backup
+    # Still rebuild_required: the reset emptied the graph but nothing has been
+    # extracted into it yet. Marking it current here is what would let a
+    # rebuild that dies partway pass for a finished one.
+    assert inspect_concept_schema(str(db_path)) == "rebuild_required"
+    mark_schema_current(str(db_path))
     assert inspect_concept_schema(str(db_path)) == "current"
     with sqlite3.connect(backup) as conn:
         assert conn.execute("SELECT name FROM entities").fetchone()[0] == "legacy"
@@ -237,7 +243,13 @@ def test_console_delete_cleanup_leaves_an_older_graph_needing_rebuild(
 
     result = memory_endpoints._cleanup_deleted_concepts(["m1"])
 
-    assert result["status"] != "failed"
+    # Not just "did not fail": a missing concept database returns
+    # status="skipped", which would satisfy that and prove nothing about
+    # whether construction restamped the version.
+    assert result["status"] == "success"
+    assert result["entities_deleted"] == 1
+    with sqlite3.connect(db_path) as conn:
+        assert conn.execute("SELECT COUNT(*) FROM entities").fetchone()[0] == 0
     assert inspect_concept_schema(str(db_path)) == "rebuild_required"
 
 
@@ -264,7 +276,10 @@ def test_targeted_build_cannot_reset_platformless_graph(monkeypatch, tmp_path):
 
     assert inspect_concept_schema(str(db_path)) == "rebuild_required"
     assert concepts._prepare_build_schema(ConceptBuildRequest(search_all=True)) is True
-    assert inspect_concept_schema(str(db_path)) == "current"
+    # Preparing the schema resets the graph; it does not declare it rebuilt.
+    # The version is stamped by the build that follows, so an interrupted
+    # rebuild is still asked for on the next start.
+    assert inspect_concept_schema(str(db_path)) == "rebuild_required"
 
 
 def test_graph_context_is_reduced_before_primary_results(monkeypatch):

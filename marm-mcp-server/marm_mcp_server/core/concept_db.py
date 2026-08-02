@@ -252,6 +252,11 @@ def backup_and_reset_concept_database(db_path: str) -> str:
         backup.close()
         source.close()
 
+    # The version marker is deliberately NOT written here. Stamping it at
+    # reset time means a rebuild that dies partway leaves an empty or partial
+    # graph reporting `current`, so nothing ever prompts for the rebuild again
+    # and the corpus is silently missing from the graph. mark_schema_current()
+    # is called by the build once it has actually finished.
     reset = sqlite3.connect(db_path, timeout=20.0)
     try:
         reset.execute("PRAGMA foreign_keys=OFF")
@@ -271,7 +276,33 @@ def backup_and_reset_concept_database(db_path: str) -> str:
     finally:
         reset.close()
     init_concept_database(db_path)
+    clear_schema_marker(db_path)
     return str(backup_path)
+
+
+def clear_schema_marker(db_path: str) -> None:
+    """Leave the graph flagged for rebuild until a build says otherwise."""
+    with closing(sqlite3.connect(db_path, timeout=20.0)) as conn:
+        conn.execute(
+            "DELETE FROM concept_schema_metadata WHERE key = ?", (_SCHEMA_VERSION_KEY,)
+        )
+        conn.commit()
+
+
+def mark_schema_current(db_path: str) -> None:
+    """Record that this graph was built under the current extraction rules.
+
+    Called only after a full build finishes. Between the reset and this call
+    the graph reports `rebuild_required`, so an interrupted rebuild is retried
+    rather than mistaken for a complete one.
+    """
+    with closing(sqlite3.connect(db_path, timeout=20.0)) as conn:
+        conn.execute(
+            "INSERT INTO concept_schema_metadata (key, value) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (_SCHEMA_VERSION_KEY, str(CONCEPT_SCHEMA_VERSION)),
+        )
+        conn.commit()
 
 
 class ConceptDB:

@@ -167,9 +167,19 @@ async def concept_build_lock(
 
     async def _keep_alive() -> None:
         interval = heartbeat_interval(ttl_seconds)
+        loop = asyncio.get_running_loop()
+        last_renewed = loop.time()
         while True:
             await asyncio.sleep(interval)
             try:
+                # A renewal that keeps failing is indistinguishable from one
+                # that was refused: either way the lease runs out on its own
+                # clock and someone else can take the graph. Give up at the
+                # TTL rather than logging warnings while still writing.
+                if loop.time() - last_renewed >= ttl_seconds:
+                    logger.error("concept_lock.lost", purpose=purpose, reason="stale")
+                    lease.lost.set()
+                    return
                 if not await asyncio.to_thread(renew, holder, ttl_seconds):
                     # Only reachable if this process was stalled for longer
                     # than the whole TTL. Another process owns the graph now,
@@ -179,6 +189,7 @@ async def concept_build_lock(
                     logger.error("concept_lock.lost", purpose=purpose)
                     lease.lost.set()
                     return
+                last_renewed = loop.time()
             except Exception as exc:
                 logger.warning("concept_lock.renew_failed", error=str(exc))
 

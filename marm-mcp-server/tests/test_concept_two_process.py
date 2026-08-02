@@ -7,7 +7,9 @@ asyncio.Lock nor a Python-level set reaches across that boundary. These tests
 spawn a genuine second interpreter against the same database file.
 """
 
+import asyncio
 import json
+import sqlite3
 import subprocess
 import sys
 import textwrap
@@ -207,7 +209,12 @@ async def test_work_outliving_its_ttl_keeps_both_locks(shared_db):
             # Three times the lease. Without renewal both are long expired.
             await asyncio.sleep(ttl * 3)
 
-            other = _run_in_second_process(
+            # Through a thread, because subprocess.run is synchronous: called
+            # directly it blocks the event loop for the child's whole startup,
+            # which is exactly when the heartbeat needs to be renewing. That
+            # would make the test fail for the opposite of the real reason.
+            other = await asyncio.to_thread(
+                _run_in_second_process,
                 db_path,
                 """
                 from marm_mcp_server.core import concept_build_lock, concept_queue
@@ -236,7 +243,8 @@ async def test_both_locks_are_free_again_once_the_work_finishes(shared_db):
             pass
     concept_queue.complete("m1", tasks[0].lease_token, "h1")
 
-    result = _run_in_second_process(
+    result = await asyncio.to_thread(
+        _run_in_second_process,
         db_path,
         """
         from marm_mcp_server.core import concept_build_lock
@@ -245,6 +253,30 @@ async def test_both_locks_are_free_again_once_the_work_finishes(shared_db):
     )
 
     assert result["took_lock"] is True
+
+
+@pytest.mark.asyncio
+async def test_a_lease_that_cannot_be_renewed_gives_up_at_the_ttl(shared_db):
+    """A renewal that keeps raising is indistinguishable from one refused: the
+    lease runs out either way and another process can take the graph. Logging
+    warnings while still writing is the one outcome that must not happen."""
+    from marm_mcp_server.core import concept_build_lock
+
+    _mem, _db_path = shared_db
+
+    def always_fails(_holder, _ttl):
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(concept_build_lock, "renew", always_fails)
+    try:
+        async with concept_build_lock.concept_build_lock("auto_index", 1) as lease:
+            await asyncio.sleep(2.5)
+            assert lease.lost.is_set(), (
+                "the holder kept going with a lease it could not renew"
+            )
+    finally:
+        monkeypatch.undo()
 
 
 def test_renew_refuses_once_someone_else_owns_the_lock(shared_db):

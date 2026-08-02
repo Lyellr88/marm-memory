@@ -30,6 +30,7 @@ from ..core.concept_db import (
     backup_and_reset_concept_database,
     get_concept_db_path,
     inspect_concept_schema,
+    mark_schema_current,
 )
 from ..core import concept_queue
 from ..core.concept_build_lock import (
@@ -632,6 +633,15 @@ async def _marm_concept_build(
         finished_at=datetime.now(timezone.utc).isoformat(),
     )
     result.pop("aborted", None)
+    if graph_rebuilt:
+        # Only now, with the corpus actually extracted. The reset deliberately
+        # leaves no version marker, so a rebuild that died partway is still
+        # reported as rebuild_required and gets retried instead of passing for
+        # a graph that was never populated.
+        try:
+            await asyncio.to_thread(mark_schema_current, get_concept_db_path())
+        except Exception as e:
+            logger.warning("concepts.schema_mark_failed", error=str(e))
     result["graph_rebuilt"] = graph_rebuilt
     result["build_run_id"] = run_id
     return result

@@ -43,8 +43,8 @@ encoder for isolation, so no test exercises store and recall latency while the
 v2.36.0 background indexer is running.
 
 Times both paths twice, once with the worker stopped and once while it drains a
-queue holding the whole corpus, which is the state every install passes through
-after the upgrade rebuild.
+queue holding the whole corpus, which is the state an upgrade with an existing
+corpus passes through. A fresh install has nothing to catch up on.
 
 ```
 python scripts/benchmarking/performance/bench_concept_worker.py

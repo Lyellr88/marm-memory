@@ -26,7 +26,7 @@ from ..config.settings import (
     CONCEPTS_AVAILABLE,
 )
 from . import concept_queue
-from .concept_build_lock import ConceptBuildBusy, concept_build_lock
+from .concept_build_lock import BuildLease, ConceptBuildBusy, concept_build_lock
 
 logger = structlog.get_logger(__name__)
 
@@ -38,6 +38,7 @@ class ConceptIndexWorker:
     def __init__(self) -> None:
         self._task: Optional[asyncio.Task] = None
         self._stop = asyncio.Event()
+        self._active_lease: Optional[BuildLease] = None
         self._cycles = 0
         self._indexed = 0
 
@@ -73,7 +74,18 @@ class ConceptIndexWorker:
     async def stop(self) -> None:
         """Signal and return. Deliberately does not wait for an in-flight
         extraction: the task is a durable row and the next run picks it up,
-        so waiting would only reintroduce the shutdown delay v2.35.0 bounded."""
+        so waiting would only reintroduce the shutdown delay v2.35.0 bounded.
+
+        Signals the in-flight build first. Cancelling the task only cancels
+        the await around asyncio.to_thread; the extraction thread keeps
+        running and keeps writing, while unwinding releases the cross-process
+        graph lock. Another transport could then take the lock and reset the
+        concept database underneath that thread. Raising the flag first makes
+        the thread stop at its next memory instead, which costs no shutdown
+        time because it is not awaited."""
+        lease = self._active_lease
+        if lease is not None:
+            lease.lost.set()
         self._stop.set()
         task = self._task
         self._task = None
@@ -126,6 +138,9 @@ class ConceptIndexWorker:
                 async with concept_build_lock(
                     "auto_index", CONCEPT_INDEX_LEASE_SECONDS
                 ) as lease:
+                    # Published so stop() can signal a build that is already
+                    # running in a thread it cannot cancel.
+                    self._active_lease = lease
                     tasks = await asyncio.to_thread(
                         concept_queue.claim, CONCEPT_INDEX_BATCH_SIZE
                     )
@@ -134,10 +149,13 @@ class ConceptIndexWorker:
                     # The task leases run on the same clock as the build lock,
                     # so a batch that outlives the TTL would be reclaimed and
                     # extracted a second time by another process.
-                    async with concept_queue.keep_claimed(
-                        tasks, CONCEPT_INDEX_LEASE_SECONDS
-                    ):
-                        await self._process(tasks, lease.lost)
+                    try:
+                        async with concept_queue.keep_claimed(
+                            tasks, CONCEPT_INDEX_LEASE_SECONDS
+                        ):
+                            await self._process(tasks, lease.lost)
+                    finally:
+                        self._active_lease = None
                     if lease.lost.is_set():
                         return
             except ConceptBuildBusy:

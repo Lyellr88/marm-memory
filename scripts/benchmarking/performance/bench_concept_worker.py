@@ -27,7 +27,6 @@ without touching it.
 import argparse
 import asyncio
 import os
-import shutil
 import statistics
 import sys
 import tempfile
@@ -88,15 +87,21 @@ if ARGS.from_live:
     if not _live.exists():
         print(f"No live database at {_live}", file=sys.stderr)
         raise SystemExit(1)
-    # Copy before importing anything that opens the path, and take the WAL
-    # sidecars too: without them a recently written corpus loses its newest
-    # rows and the benchmark silently runs on less data than the user has.
-    shutil.copy2(_live, os.environ["MARM_DB_PATH"])
-    for suffix in ("-wal", "-shm"):
-        sidecar = Path(str(_live) + suffix)
-        if sidecar.exists():
-            shutil.copy2(sidecar, os.environ["MARM_DB_PATH"] + suffix)
-    print(f"Copied live corpus from {_live}\n")
+    # sqlite3's own backup API, not a file copy. Copying the database and its
+    # -wal and -shm files one at a time can capture three different instants if
+    # MARM is running, which either loses committed frames or produces a corpus
+    # that will not open. backup() takes one consistent snapshot and folds the
+    # WAL in, so no sidecars are needed. Read-only on the source either way.
+    import sqlite3 as _sqlite3
+
+    _source = _sqlite3.connect(f"file:{_live}?mode=ro", uri=True)
+    _dest = _sqlite3.connect(os.environ["MARM_DB_PATH"])
+    try:
+        _source.backup(_dest)
+    finally:
+        _dest.close()
+        _source.close()
+    print(f"Snapshotted live corpus from {_live}\n")
 
 from marm_mcp_server.config.settings import (  # noqa: E402
     CONCEPT_INDEX_BATCH_SIZE,
@@ -402,12 +407,24 @@ async def main():
     print(_stat("store_memory", cont_writes))
     print(_stat("recall_similar", cont_recalls))
 
-    still_working = left > 0
-    print(
-        f"\n{queued - left} of {queued} indexed during the timed phase"
-        f" ({'worker was busy throughout' if still_working else 'WORKER FINISHED EARLY'})"
-    )
-    if not still_working:
+    indexed = queued - left
+    if indexed == 0:
+        # Distinct from "still draining". Zero progress means the worker was
+        # spinning without indexing anything, so the deltas below are not
+        # contention measurements at all. A queue-hash mismatch produced
+        # exactly this once, and the run was reported as valid.
+        verdict = "NOTHING WAS INDEXED, DELTAS ARE NOT VALID"
+    elif left > 0:
+        verdict = "worker was busy throughout"
+    else:
+        verdict = "WORKER FINISHED EARLY"
+    print(f"\n{indexed} of {queued} indexed during the timed phase ({verdict})")
+    if indexed == 0:
+        print(
+            "  The worker claimed tasks but wrote nothing. Check for superseded\n"
+            "  or failed tasks in the queue before trusting any number here."
+        )
+    elif left == 0:
         print(
             "  Re-run with a larger --seed: the worker drained the backlog before\n"
             "  the timed phase ended, so part of it measured an idle process."

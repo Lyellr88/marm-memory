@@ -14,7 +14,18 @@ import pytest
 from conftest import load_isolated_server
 
 
-def _reload_settings(monkeypatch, **env):
+def _reload_settings(monkeypatch, tmp_path, **env):
+    """Reload settings with every path it resolves pointed at tmp_path.
+
+    Reload re-executes the module, and module level code resolves the database
+    path and can create directories and an API key file. The session HOME
+    sandbox in conftest already keeps that out of the developer's real
+    ~/.marm, but relying on a distant fixture for that is fragile, so pin the
+    paths here too.
+    """
+    monkeypatch.setenv("MARM_DB_PATH", str(tmp_path / "settings-probe.db"))
+    monkeypatch.setenv("MARM_ANALYTICS_DB_PATH", str(tmp_path / "analytics.db"))
+    monkeypatch.setenv("MARM_CONCEPT_DB_PATH", str(tmp_path / "marm_index.db"))
     for key, value in env.items():
         if value is None:
             monkeypatch.delenv(key, raising=False)
@@ -33,42 +44,48 @@ def restore_settings():
 @pytest.mark.parametrize(
     "value", ["false", "False", "FALSE", "0", "no", "off", " off "]
 )
-def test_the_documented_off_switches_actually_turn_indexing_off(monkeypatch, value):
+def test_the_documented_off_switches_actually_turn_indexing_off(
+    monkeypatch, tmp_path, value
+):
     """README and CHANGELOG both tell users CONCEPT_AUTO_INDEX=false. A check
     against a single literal read that as on, which is the opposite of what
     the user asked for."""
-    settings = _reload_settings(monkeypatch, CONCEPT_AUTO_INDEX=value)
+    settings = _reload_settings(monkeypatch, tmp_path, CONCEPT_AUTO_INDEX=value)
     assert settings.CONCEPT_AUTO_INDEX is False
 
 
 @pytest.mark.parametrize("value", ["true", "1", "yes", "on", "TRUE"])
-def test_the_on_switches_keep_indexing_on(monkeypatch, value):
-    settings = _reload_settings(monkeypatch, CONCEPT_AUTO_INDEX=value)
+def test_the_on_switches_keep_indexing_on(monkeypatch, tmp_path, value):
+    settings = _reload_settings(monkeypatch, tmp_path, CONCEPT_AUTO_INDEX=value)
     assert settings.CONCEPT_AUTO_INDEX is True
 
 
-def test_indexing_is_on_when_the_variable_is_absent(monkeypatch):
-    settings = _reload_settings(monkeypatch, CONCEPT_AUTO_INDEX=None)
+def test_indexing_is_on_when_the_variable_is_absent(monkeypatch, tmp_path):
+    settings = _reload_settings(monkeypatch, tmp_path, CONCEPT_AUTO_INDEX=None)
     assert settings.CONCEPT_AUTO_INDEX is True
 
 
-def test_an_unparseable_value_falls_back_to_the_default(monkeypatch, capsys):
-    settings = _reload_settings(monkeypatch, CONCEPT_AUTO_INDEX="maybe")
+def test_an_unparseable_value_falls_back_to_the_default(monkeypatch, tmp_path, capsys):
+    settings = _reload_settings(monkeypatch, tmp_path, CONCEPT_AUTO_INDEX="maybe")
     assert settings.CONCEPT_AUTO_INDEX is True
     assert "not a true/false value" in capsys.readouterr().err
 
 
-def test_batch_size_is_capped_below_sqlites_parameter_ceiling(monkeypatch, capsys):
+def test_batch_size_is_capped_below_sqlites_parameter_ceiling(
+    monkeypatch, tmp_path, capsys
+):
     """A claimed batch becomes one IN (...) clause in three queries. An
     oversized batch would fail identically on every cycle, forever."""
-    settings = _reload_settings(monkeypatch, CONCEPT_INDEX_BATCH_SIZE="100000")
+    settings = _reload_settings(
+        monkeypatch, tmp_path, CONCEPT_INDEX_BATCH_SIZE="100000"
+    )
     assert settings.CONCEPT_INDEX_BATCH_SIZE == settings.CONCEPT_INDEX_BATCH_SIZE_MAX
     assert settings.CONCEPT_INDEX_BATCH_SIZE < 32766
     assert "clamped" in capsys.readouterr().err
 
 
-def test_batch_size_still_has_a_floor(monkeypatch):
-    settings = _reload_settings(monkeypatch, CONCEPT_INDEX_BATCH_SIZE="0")
+def test_batch_size_still_has_a_floor(monkeypatch, tmp_path):
+    settings = _reload_settings(monkeypatch, tmp_path, CONCEPT_INDEX_BATCH_SIZE="0")
     assert settings.CONCEPT_INDEX_BATCH_SIZE == 1
 
 

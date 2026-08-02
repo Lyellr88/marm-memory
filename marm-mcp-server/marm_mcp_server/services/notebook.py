@@ -258,6 +258,18 @@ async def _save(
     if mirror_status == "synced":
         with docs_db.get_connection() as conn:
             docs_db.set_memory_id(conn, doc_row.id, memory_id)
+        if not was_created:
+            # A resave replaces the mirror's content in place. Indexing only
+            # adds entities, so without retracting first the graph keeps
+            # returning concepts from doc versions that no longer exist. The
+            # Console's own replace path does the same thing for the same
+            # reason. Best-effort: the doc is already saved either way.
+            from ..endpoints.memory import _cleanup_deleted_concepts_async
+
+            try:
+                await _cleanup_deleted_concepts_async([memory_id])
+            except Exception as e:
+                _safe_print(f"Doc mirror concept cleanup failed for {memory_id}: {e}")
 
     verb = "saved" if was_created else "updated"
     promoted_note = " (promoted from scratch)" if source_notebook_name else ""
