@@ -35,6 +35,7 @@ from marm_mcp_server.config.settings import (  # noqa: E402
     SEMANTIC_SEARCH_AVAILABLE,
     SERVER_VERSION,
 )
+from marm_mcp_server.core.concept_worker import concept_worker  # noqa: E402
 from marm_mcp_server.core.graph_supervisor import graph_supervisor  # noqa: E402
 from marm_mcp_server.core.memory import memory  # noqa: E402
 from marm_mcp_server.core.memory_utils import drain_chunk_writes  # noqa: E402
@@ -64,6 +65,7 @@ async def _stdio_lifespan(_server: FastMCP):
     the yield skips anything after it. A crashed or cancelled session is exactly
     when unwritten chunks are most likely to be pending.
     """
+    concept_worker.start()
     try:
         yield
     finally:
@@ -79,6 +81,13 @@ async def _stdio_lifespan(_server: FastMCP):
             # creates the chunk tasks the next call waits on. Same order as
             # graceful_shutdown(); STDIO starts the queue lazily on first write
             # and otherwise never stops it.
+            # Signals and returns. Its tasks are durable rows, so an
+            # interrupted extraction costs nothing and the next session picks
+            # it up; awaiting one here would put spaCy on the teardown path.
+            try:
+                await concept_worker.stop()
+            except Exception as exc:
+                _stdio_log.warning("concept worker stop failed: %s", exc)
             try:
                 await memory.stop_write_queue()
             except Exception as exc:

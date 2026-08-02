@@ -21,7 +21,10 @@ from .memory_db import ConnectionContext, SQLiteConnectionPool
 from .memory_utils import _safe_print
 
 MAX_CONCEPT_DB_CONNECTIONS = 3
-CONCEPT_SCHEMA_VERSION = 2
+# 3: builds index compaction sources instead of the generated summary. Graphs
+# built under 2 hold summary-derived entities the current rule would never
+# produce, and provenance cannot retract them selectively.
+CONCEPT_SCHEMA_VERSION = 3
 _SCHEMA_VERSION_KEY = "schema_version"
 
 
@@ -158,10 +161,16 @@ def init_concept_database(db_path: str) -> None:
                 value TEXT NOT NULL
             )
         """)
-        conn.execute(
-            "INSERT OR REPLACE INTO concept_schema_metadata (key, value) VALUES (?, ?)",
-            (_SCHEMA_VERSION_KEY, str(CONCEPT_SCHEMA_VERSION)),
-        )
+        # Only stamp a database that had no graph before this call. init runs
+        # on every ConceptDB(...) construction, including the one a console
+        # memory delete makes, so an unconditional write here would mark a
+        # stale graph as current and its rebuild would never fire.
+        if "entities" not in existing_tables:
+            conn.execute(
+                "INSERT INTO concept_schema_metadata (key, value) VALUES (?, ?) "
+                "ON CONFLICT(key) DO NOTHING",
+                (_SCHEMA_VERSION_KEY, str(CONCEPT_SCHEMA_VERSION)),
+            )
         conn.execute("""
             CREATE TABLE IF NOT EXISTS concept_build_runs (
                 id TEXT PRIMARY KEY,

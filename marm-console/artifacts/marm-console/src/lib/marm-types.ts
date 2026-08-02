@@ -291,6 +291,13 @@ export interface ConceptAtlas extends Neighborhood {
   sample_reason: string | null;
 }
 
+/** Cheap change marker polled while the Explorer is open. The value is opaque:
+ *  compare it, do not parse it. */
+export interface ConceptGraphVersion {
+  schema_status: 'current' | 'rebuild_required' | 'unavailable';
+  version: string;
+}
+
 export interface DuplicateCandidate {
   entity_a: ConceptEntity;
   entity_b: ConceptEntity;

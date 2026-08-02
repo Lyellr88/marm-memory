@@ -1,6 +1,38 @@
 # Changelog
 
-## Version 2 - MARM Protocol to Universal MCP Server Evolution
+<details>
+<summary><strong>August 2nd, 2026: Automatic Concept Graph Indexing (v2.36.0)</strong></summary>
+
+### Added: Memories Become Graph Nodes on Their Own
+
+- The concept graph only grew when someone clicked Build Concept Graph, so it was stale until a human remembered to refresh it. Storing a memory now queues it for indexing, and a background worker turns it into a node about 30 seconds later on both transports. Nothing to click.
+- The queue is a durable table in the memory database, written in the same transaction as the memory itself, so a memory cannot exist without its indexing task. A server killed mid-extraction loses nothing: the task is still there on the next start and shutdown never waits for extraction to finish.
+- Extraction failures retry with a growing delay and record the reason. A memory that fails three times is parked with its error rather than blocking the queue behind it. A failure never affects the memory itself, which stores and recalls normally throughout.
+- Turn it off with `CONCEPT_AUTO_INDEX=false` (or `0`, `no`, `off`). Pacing is `CONCEPT_INDEX_DEBOUNCE_SECONDS` (30), `CONCEPT_INDEX_BATCH_SIZE` (20, capped at 500), `CONCEPT_INDEX_LEASE_SECONDS` (300), and `CONCEPT_INDEX_MAX_ATTEMPTS` (3).
+- Running HTTP and STDIO at once is safe. Both take a leased lock in the memory database before touching the graph, so a rebuild in one cannot drop tables while the other is writing to them. A build that finds the graph busy reports `build_in_progress` and can be run again rather than colliding.
+- The Console's Knowledge Explorer picks new nodes up while it is open. It polls a small change marker rather than the graph, so an idle Explorer costs a few counts per check, and it stops entirely when the tab is not showing.
+
+### Fixed: Builds Silently Ignored Everything Past the Newest 500 Memories
+
+- Every build ended with a hard limit of 500 rows. On a corpus larger than that, the older memories were not slow to reach, they were unreachable: no scope, no setting, and no number of rebuilds would ever index them.
+- Builds now page through the whole scope. `CONCEPT_BUILD_ROW_CAP` still exists and still defaults to 500, but it is a page size now, not a ceiling. Anyone who lowered it to bound build cost gets more, smaller pages instead of a truncated graph, and a full build on a large corpus is genuinely long-running as a result.
+
+### Changed: Compacted Sessions Index Their Sources, Not Their Summary
+
+- When a session compacts, its original memories are kept as sources and a summary is written alongside them. Builds used to skip the sources and index the summary, which is backwards for a graph: the summary restates concepts the sources already stated, so every entity in a compacted session was attributed to a paraphrase rather than to where it was actually said.
+- Sources are now indexed and generated summaries are not. This is also what lets a memory reach the graph the moment it is written instead of waiting for its session to compact.
+
+### Upgrade Note
+
+This release requires one graph rebuild. Existing graphs contain entities extracted from compaction summaries that the new rule would never produce, and there is no way to remove only those. MARM detects the old graph and reports `rebuild_required` until you run:
+
+```
+marm_concept_build(search_all=True)
+```
+
+The old graph is backed up next to the database first. The build clears the queue it just covered, so the background worker does not immediately re-extract the same corpus.
+
+</details>
 
 <details>
 <summary><strong>July 31st, 2026: Chunk Durability and Repair (v2.35.0)</strong></summary>

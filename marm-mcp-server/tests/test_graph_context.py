@@ -187,6 +187,60 @@ def test_platformless_graph_requires_explicit_reset(monkeypatch, tmp_path):
         assert conn.execute("SELECT name FROM entities").fetchone()[0] == "legacy"
 
 
+def test_constructing_conceptdb_does_not_restamp_an_older_graph(tmp_path):
+    """init_concept_database runs on every ConceptDB(...) construction. If it
+    writes the current schema version unconditionally, one construction marks
+    a graph built under an older rule as current and its rebuild never
+    fires."""
+    db_path = tmp_path / "older.db"
+    graph = ConceptDB(str(db_path))
+    with graph.get_connection() as conn:
+        graph.get_or_create_entity(
+            conn, "stale entity", "concept", "sess-a", None, "m1", platform="cli"
+        )
+        conn.execute(
+            "UPDATE concept_schema_metadata SET value = '1' WHERE key = 'schema_version'"
+        )
+    graph.close()
+
+    assert inspect_concept_schema(str(db_path)) == "rebuild_required"
+
+    ConceptDB(str(db_path)).close()
+
+    with sqlite3.connect(db_path) as conn:
+        version = conn.execute(
+            "SELECT value FROM concept_schema_metadata WHERE key = 'schema_version'"
+        ).fetchone()[0]
+    assert version == "1"
+    assert inspect_concept_schema(str(db_path)) == "rebuild_required"
+
+
+def test_console_delete_cleanup_leaves_an_older_graph_needing_rebuild(
+    monkeypatch, tmp_path
+):
+    """The real path that constructs a ConceptDB outside a build: deleting a
+    memory in the Console runs provenance cleanup, which must not double as a
+    schema blessing."""
+    db_path = tmp_path / "older.db"
+    graph = ConceptDB(str(db_path))
+    with graph.get_connection() as conn:
+        graph.get_or_create_entity(
+            conn, "stale entity", "concept", "sess-a", None, "m1", platform="cli"
+        )
+        conn.execute(
+            "UPDATE concept_schema_metadata SET value = '1' WHERE key = 'schema_version'"
+        )
+    graph.close()
+    monkeypatch.setenv("MARM_CONCEPT_DB_PATH", str(db_path))
+
+    from marm_mcp_server.endpoints import memory as memory_endpoints
+
+    result = memory_endpoints._cleanup_deleted_concepts(["m1"])
+
+    assert result["status"] != "failed"
+    assert inspect_concept_schema(str(db_path)) == "rebuild_required"
+
+
 def test_targeted_build_cannot_reset_platformless_graph(monkeypatch, tmp_path):
     from marm_mcp_server.core.models import ConceptBuildRequest
     from marm_mcp_server.endpoints import concepts

@@ -5,7 +5,7 @@ This server integrates all modular components of the MARM protocol into a single
 FastAPI application, compliant with the MCP protocol via FastApiMCP.
 
 Author: Lyell - marm-memory
-Version: 2.35.0
+Version: 2.36.0
 """
 
 import os
@@ -22,6 +22,7 @@ from .config.settings import (
     SERVER_VERSION,
 )
 from .core.compaction_scheduler import _maybe_start_compaction_scheduler
+from .core.concept_worker import concept_worker
 from .core.graph_supervisor import graph_supervisor  # noqa: F401
 from .core.memory import memory
 from .endpoints.compaction import router as compaction_router
@@ -64,6 +65,7 @@ async def lifespan(app: FastAPI):
     memory.restore_active_session()
 
     _compaction_scheduler = _maybe_start_compaction_scheduler()
+    concept_worker.start()
 
     memory_after = get_memory_usage()
     logger.info("Memory usage after startup", memory_mb=f"{memory_after:.1f}")
