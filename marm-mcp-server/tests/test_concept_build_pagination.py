@@ -93,9 +93,13 @@ def test_paged_ids_match_an_unpaginated_baseline_exactly(concepts_env, monkeypat
         baseline = [
             row[0]
             for row in conn.execute(
+                # Must match production's filter, including the v2.36.0
+                # inversion to summary. A baseline that still excludes sources
+                # disagrees with the code exactly where this feature changed
+                # behavior, which is the one place it needs to agree.
                 "SELECT id FROM memories WHERE session_name != 'marm_system' "
                 "AND content IS NOT NULL AND content != '' "
-                "AND (compaction_role IS NULL OR compaction_role != 'source') "
+                "AND (compaction_role IS NULL OR compaction_role != 'summary') "
                 "ORDER BY created_at DESC, id DESC"
             ).fetchall()
         ]

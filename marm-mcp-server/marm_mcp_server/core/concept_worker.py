@@ -30,6 +30,10 @@ from .concept_build_lock import BuildLease, ConceptBuildBusy, concept_build_lock
 
 logger = structlog.get_logger(__name__)
 
+# How long stop() waits for an aborted extraction to actually stop before
+# releasing the graph anyway. Short on purpose: teardown must stay bounded.
+ABORT_GRACE_SECONDS = 2.0
+
 
 class ConceptIndexWorker:
     """Lazy singleton, mirroring graph_supervisor's shape for optional
@@ -39,6 +43,7 @@ class ConceptIndexWorker:
         self._task: Optional[asyncio.Task] = None
         self._stop = asyncio.Event()
         self._active_lease: Optional[BuildLease] = None
+        self._build_finished: Optional[threading.Event] = None
         self._cycles = 0
         self._indexed = 0
 
@@ -84,9 +89,35 @@ class ConceptIndexWorker:
         the thread stop at its next memory instead, which costs no shutdown
         time because it is not awaited."""
         lease = self._active_lease
+        in_flight = self._build_finished
         if lease is not None:
             lease.lost.set()
         self._stop.set()
+
+        if in_flight is not None and not in_flight.is_set():
+            # Bounded, and it has to be. Cancelling below unwinds the lock and
+            # releases it, but the extraction thread cannot be cancelled and
+            # keeps writing until it notices the flag above. Releasing the graph
+            # while that is true lets another process rebuild underneath it.
+            #
+            # Waiting the whole extraction out would put spaCy back on the
+            # teardown path, which v2.35.0 deliberately bounded, so this waits
+            # only for the flag to land and then proceeds regardless. Past the
+            # grace period the worst case is stray entities or a logged write
+            # failure in a graph another process now owns, not corruption.
+            try:
+                await asyncio.wait_for(
+                    asyncio.to_thread(in_flight.wait, ABORT_GRACE_SECONDS),
+                    timeout=ABORT_GRACE_SECONDS + 1,
+                )
+            except (asyncio.TimeoutError, TimeoutError):
+                pass
+            if not in_flight.is_set():
+                logger.warning(
+                    "concept_worker.extraction_still_running",
+                    grace_seconds=ABORT_GRACE_SECONDS,
+                )
+
         task = self._task
         self._task = None
         if task is None or task.done():
@@ -149,13 +180,16 @@ class ConceptIndexWorker:
                     # The task leases run on the same clock as the build lock,
                     # so a batch that outlives the TTL would be reclaimed and
                     # extracted a second time by another process.
+                    build_finished = threading.Event()
+                    self._build_finished = build_finished
                     try:
                         async with concept_queue.keep_claimed(
                             tasks, CONCEPT_INDEX_LEASE_SECONDS
                         ):
-                            await self._process(tasks, lease.lost)
+                            await self._process(tasks, lease.lost, build_finished)
                     finally:
                         self._active_lease = None
+                        self._build_finished = None
                     if lease.lost.is_set():
                         return
             except ConceptBuildBusy:
@@ -173,11 +207,14 @@ class ConceptIndexWorker:
         self,
         tasks: list[concept_queue.ClaimedTask],
         abort: Optional[threading.Event] = None,
+        finished: Optional[threading.Event] = None,
     ) -> None:
         from ..endpoints.concepts import build_for_memory_ids
 
         memory_ids = [task.memory_id for task in tasks]
-        outcomes = await build_for_memory_ids(memory_ids, abort=abort)
+        outcomes = await build_for_memory_ids(
+            memory_ids, abort=abort, finished=finished
+        )
 
         if abort is not None and abort.is_set():
             # The graph belongs to another process now and this batch stopped

@@ -11,6 +11,7 @@ installable in this sandbox.
 import asyncio
 import importlib
 import sys
+import time
 
 import pytest
 from conftest import load_isolated_server
@@ -148,7 +149,7 @@ def test_a_memory_deleted_mid_extraction_leaves_nothing_in_the_graph(
         memory_id = await mem.store_memory("doomed content", "s1")
         real_build = concepts.build_for_memory_ids
 
-        async def build_then_delete(memory_ids, abort=None):
+        async def build_then_delete(memory_ids, abort=None, finished=None):
             outcomes = await real_build(memory_ids, abort=abort)
             await _delete_memories(mem, [memory_id])
             return outcomes
@@ -175,7 +176,7 @@ def test_a_memory_merged_mid_extraction_is_reindexed_not_settled(
         memory_id = await mem.store_memory("original content", "s1")
         real_build = concepts.build_for_memory_ids
 
-        async def build_then_merge(memory_ids, abort=None):
+        async def build_then_merge(memory_ids, abort=None, finished=None):
             outcomes = await real_build(memory_ids, abort=abort)
             await mem.update_memory(memory_id, "appended content")
             return outcomes
@@ -282,7 +283,7 @@ def test_an_abandoned_batch_settles_nothing(worker_env, monkeypatch):
 
         real_build = concepts.build_for_memory_ids
 
-        async def build_then_lose(memory_ids, abort=None):
+        async def build_then_lose(memory_ids, abort=None, finished=None):
             lost.set()
             return await real_build(memory_ids, abort=abort)
 
@@ -375,11 +376,17 @@ def test_stop_returns_without_waiting_for_an_in_flight_extraction(
     worker_env, monkeypatch
 ):
     """Teardown must not put spaCy on the shutdown path. The task is a durable
-    row and the next run picks it up."""
-    worker, _module, concepts, _queue, mem = worker_env
+    row and the next run picks it up.
+
+    stop() does give an aborted extraction a short grace period to stop
+    writing before the graph lock is released, so this asserts the bound rather
+    than an instant return: it must not wait out a build that ignores the
+    abort, which here sleeps far longer than the grace."""
+    worker, module, concepts, _queue, mem = worker_env
+    monkeypatch.setattr(module, "ABORT_GRACE_SECONDS", 0.3)
     entered = asyncio.Event()
 
-    async def slow_build(memory_ids, abort=None):
+    async def slow_build(memory_ids, abort=None, finished=None):
         entered.set()
         await asyncio.sleep(30)
         return {}
@@ -390,10 +397,14 @@ def test_stop_returns_without_waiting_for_an_in_flight_extraction(
         await mem.store_memory("content", "s1")
         worker.start()
         await asyncio.wait_for(entered.wait(), timeout=5)
-        await asyncio.wait_for(worker.stop(), timeout=2)
-        return worker.running
+        started = asyncio.get_running_loop().time()
+        await asyncio.wait_for(worker.stop(), timeout=5)
+        return worker.running, asyncio.get_running_loop().time() - started
 
-    assert asyncio.run(scenario()) is False
+    running, elapsed = asyncio.run(scenario())
+
+    assert running is False
+    assert elapsed < 3, f"stop() waited {elapsed:.1f}s on a build that ignored abort"
     assert len(_queue_rows(mem)) == 1
 
 
@@ -408,7 +419,7 @@ def test_stop_signals_the_running_build_before_releasing_the_graph(
     _extract_named_after_content(monkeypatch, concepts)
     seen = {}
 
-    async def slow_build(memory_ids, abort=None):
+    async def slow_build(memory_ids, abort=None, finished=None):
         seen["abort"] = abort
         await asyncio.sleep(30)
         return {}
@@ -428,6 +439,62 @@ def test_stop_signals_the_running_build_before_releasing_the_graph(
 
     assert seen.get("abort") is not None, "the build was given no way to stop"
     assert seen["abort"].is_set(), "stop() released the graph without signalling"
+
+
+def test_stop_holds_the_graph_until_the_extraction_thread_stops(
+    worker_env, monkeypatch
+):
+    """The abort flag alone is not enough. Cancelling unwinds the lock and
+    releases it, so without waiting for the thread to acknowledge, another
+    process can take the graph while this one is still writing."""
+    import threading
+
+    worker, module, concepts, _queue, mem = worker_env
+    monkeypatch.setattr(module, "ABORT_GRACE_SECONDS", 3.0)
+    released_while_running = []
+    still_running = threading.Event()
+    still_running.set()
+
+    async def slow_build(memory_ids, abort=None, finished=None):
+        # Stands in for a thread that notices the abort and then takes a
+        # moment to unwind, which is when the lock must still be held.
+        def work():
+            abort.wait(5)
+            time.sleep(0.4)
+            if finished is not None:
+                finished.set()
+            still_running.clear()
+
+        await asyncio.to_thread(work)
+        return {}
+
+    monkeypatch.setattr(concepts, "build_for_memory_ids", slow_build)
+
+    from marm_mcp_server.core import concept_build_lock
+
+    real_release = concept_build_lock.release
+
+    def watching_release(holder):
+        if still_running.is_set():
+            released_while_running.append(holder)
+        return real_release(holder)
+
+    monkeypatch.setattr(concept_build_lock, "release", watching_release)
+
+    async def scenario():
+        await mem.store_memory("content being indexed", "s1")
+        worker.start()
+        for _ in range(300):
+            await asyncio.sleep(0.01)
+            if worker._build_finished is not None:
+                break
+        await worker.stop()
+
+    asyncio.run(scenario())
+
+    assert released_while_running == [], (
+        "the graph lock was released while extraction was still writing"
+    )
 
 
 def test_disabled_worker_leaves_the_queue_filling(worker_env, monkeypatch):

@@ -137,6 +137,17 @@ async def console_create_memory(payload: ConsoleMemoryPayload) -> dict:
 
 @router.put("/internal/memories/{memory_id}")
 async def console_replace_memory(memory_id: str, payload: ConsoleMemoryPayload) -> dict:
+    # Retract the old content's concepts before the replacement is written, not
+    # after. The write queues the memory for reindexing, so cleaning up
+    # afterwards can delete entities the indexing worker has already written for
+    # the new content, and the queue row is settled by then with nothing left to
+    # restore them. Same ordering as the promoted-doc resave path.
+    #
+    # Guarded on the memory existing, which is not true of that path: a replace
+    # against a missing id is an ordinary 404, and cleaning first would strip a
+    # live memory's provenance on the way to returning one.
+    if memory.console_memory_row(memory_id) is not None:
+        await _cleanup_deleted_concepts_async([memory_id])
     try:
         updated = await memory.console_replace_memory(
             memory_id,
@@ -151,7 +162,6 @@ async def console_replace_memory(memory_id: str, payload: ConsoleMemoryPayload) 
         raise _memory_conflict(exc) from exc
     if not updated:
         raise HTTPException(status_code=404, detail="Memory not found")
-    await _cleanup_deleted_concepts_async([memory_id])
     return memory.console_memory_row(memory_id) or {"id": memory_id}
 
 
