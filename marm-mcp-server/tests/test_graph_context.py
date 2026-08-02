@@ -4,6 +4,7 @@ import sqlite3
 import pytest
 
 from conftest import load_isolated_server, local_client
+from marm_mcp_server.core import concept_db as concept_db_module
 from marm_mcp_server.core.concept_db import (
     ConceptDB,
     backup_and_reset_concept_database,
@@ -191,6 +192,37 @@ def test_platformless_graph_requires_explicit_reset(monkeypatch, tmp_path):
     assert inspect_concept_schema(str(db_path)) == "current"
     with sqlite3.connect(backup) as conn:
         assert conn.execute("SELECT name FROM entities").fetchone()[0] == "legacy"
+
+
+def test_a_reset_never_writes_the_version_even_briefly(tmp_path):
+    """Writing the marker and deleting it again leaves a window where a crash,
+    or another process reading the schema state, sees an empty graph reported
+    as current. The reset must never write it at all."""
+    db_path = tmp_path / "legacy.db"
+    graph = ConceptDB(str(db_path))
+    with graph.get_connection() as conn:
+        graph.get_or_create_entity(
+            conn, "old", "concept", "sess-a", None, "m1", platform="cli"
+        )
+    graph.close()
+
+    seen = []
+    real_init = concept_db_module.init_concept_database
+
+    def watching_init(path, mark_current=True):
+        real_init(path, mark_current=mark_current)
+        with sqlite3.connect(path) as conn:
+            row = conn.execute(
+                "SELECT value FROM concept_schema_metadata WHERE key = 'schema_version'"
+            ).fetchone()
+        seen.append(row)
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(concept_db_module, "init_concept_database", watching_init)
+        backup_and_reset_concept_database(str(db_path))
+
+    assert seen == [None], f"the reset stamped a version mid-flight: {seen}"
+    assert inspect_concept_schema(str(db_path)) == "rebuild_required"
 
 
 def test_constructing_conceptdb_does_not_restamp_an_older_graph(tmp_path):

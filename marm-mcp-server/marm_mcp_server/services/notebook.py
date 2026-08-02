@@ -238,6 +238,25 @@ async def _save(
 
     mirror_status = "synced"
     memory_id = doc_row.memory_id
+
+    if not was_created and doc_row.memory_id:
+        # Before the replacement is written, not after. Cleanup strips every
+        # trace of a memory id, so running it once the new content is already
+        # queued can delete entities the worker has written for that content,
+        # with the queue row settled and nothing left to re-index it.
+        #
+        # Keyed on the previous id too, not the one store_doc_mirror returns.
+        # A mirror whose row was deleted out from under it is repaired with a
+        # fresh id, and it is the old id that carries the stale provenance.
+        from ..endpoints.memory import _cleanup_deleted_concepts_async
+
+        try:
+            await _cleanup_deleted_concepts_async([doc_row.memory_id])
+        except Exception as e:
+            _safe_print(
+                f"Doc mirror concept cleanup failed for {doc_row.memory_id}: {e}"
+            )
+
     try:
         memory_id = await memory.store_doc_mirror(
             content,
@@ -258,18 +277,6 @@ async def _save(
     if mirror_status == "synced":
         with docs_db.get_connection() as conn:
             docs_db.set_memory_id(conn, doc_row.id, memory_id)
-        if not was_created:
-            # A resave replaces the mirror's content in place. Indexing only
-            # adds entities, so without retracting first the graph keeps
-            # returning concepts from doc versions that no longer exist. The
-            # Console's own replace path does the same thing for the same
-            # reason. Best-effort: the doc is already saved either way.
-            from ..endpoints.memory import _cleanup_deleted_concepts_async
-
-            try:
-                await _cleanup_deleted_concepts_async([memory_id])
-            except Exception as e:
-                _safe_print(f"Doc mirror concept cleanup failed for {memory_id}: {e}")
 
     verb = "saved" if was_created else "updated"
     promoted_note = " (promoted from scratch)" if source_notebook_name else ""

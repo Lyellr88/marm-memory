@@ -40,8 +40,14 @@ def get_concept_db_path() -> str:
     return str(index_dir / "marm_index.db")
 
 
-def init_concept_database(db_path: str) -> None:
-    """Initialize SQLite database with concept graph tables."""
+def init_concept_database(db_path: str, mark_current: bool = True) -> None:
+    """Initialize SQLite database with concept graph tables.
+
+    Pass mark_current=False when initializing a graph that still has to be
+    rebuilt. Writing the version and deleting it again leaves a window where a
+    crash, or another process reading the schema state, sees an empty graph
+    reported as current.
+    """
     with sqlite3.connect(db_path) as conn:
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA foreign_keys=ON")
@@ -165,7 +171,7 @@ def init_concept_database(db_path: str) -> None:
         # on every ConceptDB(...) construction, including the one a console
         # memory delete makes, so an unconditional write here would mark a
         # stale graph as current and its rebuild would never fire.
-        if "entities" not in existing_tables:
+        if mark_current and "entities" not in existing_tables:
             conn.execute(
                 "INSERT INTO concept_schema_metadata (key, value) VALUES (?, ?) "
                 "ON CONFLICT(key) DO NOTHING",
@@ -275,18 +281,8 @@ def backup_and_reset_concept_database(db_path: str) -> str:
         raise
     finally:
         reset.close()
-    init_concept_database(db_path)
-    clear_schema_marker(db_path)
+    init_concept_database(db_path, mark_current=False)
     return str(backup_path)
-
-
-def clear_schema_marker(db_path: str) -> None:
-    """Leave the graph flagged for rebuild until a build says otherwise."""
-    with closing(sqlite3.connect(db_path, timeout=20.0)) as conn:
-        conn.execute(
-            "DELETE FROM concept_schema_metadata WHERE key = ?", (_SCHEMA_VERSION_KEY,)
-        )
-        conn.commit()
 
 
 def mark_schema_current(db_path: str) -> None:
