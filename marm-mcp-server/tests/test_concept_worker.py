@@ -30,6 +30,9 @@ def worker_env(monkeypatch, tmp_path):
     monkeypatch.setattr(worker_module, "CONCEPTS_AVAILABLE", True)
     monkeypatch.setattr(worker_module, "CONCEPT_AUTO_INDEX", True)
     monkeypatch.setattr(worker_module, "CONCEPT_INDEX_DEBOUNCE_SECONDS", 0.01)
+    # The shipped pause is a latency tradeoff, not behavior. Off here so it
+    # does not add seconds to every drain test; covered on its own below.
+    monkeypatch.setattr(worker_module, "CONCEPT_INDEX_BATCH_PAUSE_MS", 0)
 
     worker = worker_module.ConceptIndexWorker()
     return worker, worker_module, concepts, queue, memory_module.memory
@@ -455,6 +458,47 @@ def test_a_graph_awaiting_rebuild_does_not_get_incremental_writes(
 
     assert len(_queue_rows(mem)) == 1
     assert _entity_names(concepts) == set()
+
+
+def test_the_inter_batch_pause_actually_pauses(worker_env, monkeypatch):
+    """Measured, not assumed: at the shipped batch size the pause cuts the
+    worst-case recall during a drain from roughly 270ms to 80ms, and it can
+    only do that if it is really yielding between batches."""
+    worker, module, concepts, _queue, mem = worker_env
+    _extract_named_after_content(monkeypatch, concepts)
+    monkeypatch.setattr(module, "CONCEPT_INDEX_BATCH_SIZE", 1)
+    monkeypatch.setattr(module, "CONCEPT_INDEX_BATCH_PAUSE_MS", 120)
+
+    async def scenario():
+        for index in range(4):
+            await mem.store_memory(f"memory number {index}", "s1")
+        start = asyncio.get_running_loop().time()
+        await worker._drain()
+        return asyncio.get_running_loop().time() - start
+
+    elapsed = asyncio.run(scenario())
+
+    assert _queue_rows(mem) == []
+    # Four batches, so at least three pauses land between them.
+    assert elapsed >= 0.36, f"drain took {elapsed:.3f}s, the pause did not apply"
+
+
+def test_a_stop_during_the_pause_is_not_ignored(worker_env, monkeypatch):
+    """Shutdown must not wait out a pause it could skip."""
+    worker, module, concepts, _queue, mem = worker_env
+    _extract_named_after_content(monkeypatch, concepts)
+    monkeypatch.setattr(module, "CONCEPT_INDEX_BATCH_SIZE", 1)
+    monkeypatch.setattr(module, "CONCEPT_INDEX_BATCH_PAUSE_MS", 30_000)
+
+    async def scenario():
+        for index in range(3):
+            await mem.store_memory(f"memory number {index}", "s1")
+        drain = asyncio.create_task(worker._drain())
+        await asyncio.sleep(0.2)
+        worker._stop.set()
+        await asyncio.wait_for(drain, timeout=5)
+
+    asyncio.run(scenario())
 
 
 def test_start_is_idempotent(worker_env):

@@ -879,6 +879,7 @@ How to use it:
 - **Automatic by default**: new memories reach the graph without a tool call. Set `CONCEPT_AUTO_INDEX=false` to go back to manual builds only; `CONCEPT_INDEX_DEBOUNCE_SECONDS` (30) and `CONCEPT_INDEX_BATCH_SIZE` (20) control the pace.
 - **Safe on both transports at once**: a leased lock in the memory database keeps a rebuild in one process from dropping graph tables while another process is writing to them. A build that finds the graph busy says so instead of colliding.
 - **Failure never reaches your memories**: indexing runs on a durable queue outside the write path. Extraction problems retry, a memory that fails repeatedly is parked with its error, and the memory itself stores and recalls normally throughout.
+- **Clearing a backlog costs some speed**: entity extraction is CPU-bound, so while the worker is working through a queue, measured recall goes from ~12ms to ~20ms median and writes from ~11ms to ~19ms on a 400-memory corpus. It only applies while a backlog is draining, which for most people is once, after the upgrade rebuild. Reproduce it with `scripts/benchmarking/performance/bench_concept_worker.py`.
 - **Build for the backlog**: `marm_concept_build` scoped to a `session_name`, `project`, or `search_all=True` indexes memories stored before automatic indexing existed, and rebuilds after an upgrade that requires one.
 - **Upgrade twice so far**: graphs built before platform attribution, or before compaction sources replaced summaries as the indexed rows, require `marm_concept_build(search_all=True)`. A full build backs up and resets only the derived concept database; targeted builds refuse to guess platform ownership.
 - **Whole scope, paged**: builds read every memory in scope. `CONCEPT_BUILD_ROW_CAP` (default 500) is the page size, so lowering it makes a build read more, smaller pages rather than skipping the rest.
@@ -983,7 +984,8 @@ Packaged docs are indexed into the `marm_system` memory namespace on startup and
 | `CONCEPT_BUILD_ROW_CAP` | `500` | Memory rows read per page during a concept-graph build. Not a cap on the build: every memory in scope is read either way |
 | `CONCEPT_AUTO_INDEX` | `true` | Automatic concept indexing of new memories. `false`, `0`, `no`, or `off` turns it off and leaves builds manual |
 | `CONCEPT_INDEX_DEBOUNCE_SECONDS` | `30` | Quiet period after a write before indexing starts, so a burst becomes one pass |
-| `CONCEPT_INDEX_BATCH_SIZE` | `20` | Memories indexed per batch, capped at 500 |
+| `CONCEPT_INDEX_BATCH_SIZE` | `20` | Memories indexed per batch, capped at 500. Lowering it does not reduce contention; it measured slightly worse |
+| `CONCEPT_INDEX_BATCH_PAUSE_MS` | `250` | Pause between batches while clearing a backlog. Cuts worst-case recall during indexing from ~270ms to ~80ms for about 18% longer drain. `0` disables it |
 | `CONCEPT_INDEX_LEASE_SECONDS` | `300` | How long a claimed indexing task stays owned once nothing is renewing it. Work in progress renews its own lease, so this bounds how long a *killed* process holds tasks, not how long a batch may take. Reclaimed tasks spend no attempt |
 | `CONCEPT_INDEX_MAX_ATTEMPTS` | `3` | Failed attempts before a memory is parked with its error instead of retried |
 

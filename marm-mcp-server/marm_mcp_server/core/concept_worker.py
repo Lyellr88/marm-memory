@@ -19,6 +19,7 @@ import structlog
 
 from ..config.settings import (
     CONCEPT_AUTO_INDEX,
+    CONCEPT_INDEX_BATCH_PAUSE_MS,
     CONCEPT_INDEX_BATCH_SIZE,
     CONCEPT_INDEX_DEBOUNCE_SECONDS,
     CONCEPT_INDEX_LEASE_SECONDS,
@@ -141,6 +142,13 @@ class ConceptIndexWorker:
                         return
             except ConceptBuildBusy:
                 logger.info("concept_worker.deferred", reason="graph_busy")
+                return
+
+            # After the lock is released, so the pause also hands a waiting
+            # manual build a clean window rather than only yielding CPU.
+            if CONCEPT_INDEX_BATCH_PAUSE_MS and await self._wait(
+                CONCEPT_INDEX_BATCH_PAUSE_MS / 1000
+            ):
                 return
 
     async def _process(

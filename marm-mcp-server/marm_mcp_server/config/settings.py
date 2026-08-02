@@ -337,6 +337,18 @@ if not (1 <= _raw_cibs <= CONCEPT_INDEX_BATCH_SIZE_MAX):
         file=sys.stderr,
     )
 
+# Pause between batches while draining a backlog. Extraction is CPU-bound and
+# competes with recall for cores, so a worker at full throttle measurably slows
+# interactive work; this trades drain duration for that latency. 0 disables it.
+_raw_cibp = _safe_int("CONCEPT_INDEX_BATCH_PAUSE_MS", 250)
+CONCEPT_INDEX_BATCH_PAUSE_MS = max(0, min(10_000, _raw_cibp))
+if not (0 <= _raw_cibp <= 10_000):
+    print(
+        f"WARNING: CONCEPT_INDEX_BATCH_PAUSE_MS={_raw_cibp} out of [0, 10000], "
+        f"clamped to {CONCEPT_INDEX_BATCH_PAUSE_MS}",
+        file=sys.stderr,
+    )
+
 # How long a claimed task stays owned. A process killed mid-extraction leaves
 # its tasks claimable again after this, without burning an attempt.
 _raw_cils = _safe_int("CONCEPT_INDEX_LEASE_SECONDS", 300)
