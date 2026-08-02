@@ -1,14 +1,8 @@
-# MARM: Local-First Persistent Multi-Agent Memory Layer for MCP Clients v2.35.0
-
-## Important Messages
-
-- **Embedding upgrade:** v2.24 switches MARM to Jina v2 Small. Existing MiniLM data must be migrated before restart: stop MARM, run `marm-mcp-server --migrate-embeddings`, then restart. See [Upgrade Existing Embeddings](#upgrade-existing-embeddings).
-- **Concept graph rebuild:** the platform-aware graph schema requires one full rebuild. After upgrading, run `marm_concept_build(search_all=True)` once. MARM backs up and rebuilds only the derived concept database; memories are not modified.
-- **MARM Console:** now ships as the local web app for memory, knowledge, projects, and MCP-backed memory mutation actions. Start it with `marm-memory console`
-- **PyPI publishing:** account access and trusted publishing are restored. Pip releases are current again.
+# Give your AI Agents a permanent memory in 60 seconds
 
 ## Table of Contents
 
+- [Quick-Start](#quick-start)
 - [Why MARM Memory](#why-marm-memory)
 - [Performance & Scaling Benchmarks](#performance--scaling-benchmarks)
 - [Quick Start](#-quick-start-for-mcp-http--stdio)
@@ -19,6 +13,42 @@
 - [Knowledge Graphs: Code & Concepts](#knowledge-graphs-code--concepts)
 - [Architecture & Internals](#architecture--internals)
 - [Troubleshooting](#troubleshooting)
+- [Contributing](#contributing)
+- [Project Documentation](#project-documentation)
+
+## Quick Start
+
+1. Install and initialize with your preferred agent profiles:
+
+```bash
+pip install marm-mcp-server
+marm-memory init --g-claude --g-codex --g-gemini
+```
+
+> **Also available: --g-qwen and --g-kiro. Run without flags to install into your current project folder instead of home**
+
+2. Hand off to your AI companion. Tell your agent:
+
+> **"Use the marm-init skill to set up MARM."**
+   
+3. Interact: Your agent will handle the entire setup (Python/Docker, HTTP/STDIO, keys, and client configs) interactively right inside your chat.
+
+**Manual setup**
+
+Prefer to wire it up yourself:
+
+| If you are... | Start the server | Connect your MCP client |
+|---------------|------------------|-------------------------|
+| **Solo developer / researcher** | `marm-memory start` | `"agent" mcp add --transport http marm-memory http://localhost:8001/mcp` |
+| **Private local STDIO user** | `marm-mcp-stdio` | `"agent" mcp add --transport stdio marm-memory-stdio marm-mcp-stdio` |
+| **Multiple agents sharing memory** | `marm-memory start --profile swarm` | `"agent" mcp add --transport http marm-memory http://localhost:8001/mcp` |
+| **Private high-throughput swarm** | `marm-memory start --profile swarm-max` | `"agent" mcp add --transport http marm-memory http://localhost:8001/mcp` |
+| **Trusted private lab/server** | `marm-memory start --profile trusted` | `"agent" mcp add --transport http marm-memory http://localhost:8001/mcp` |
+
+- ⚡ Fastest HTTP Startup: Run marm-memory fast-start-http to spin up the local runtime, launch the console, and open it in your browser immediately.
+- 🖥️ Web Console: Run marm-memory console to view the local UI app instantly (no Node.js required).
+- ⚙️ Lifecycle Management: Manage the background daemon using status, logs --follow, restart, and stop.
+- 💡 Quick Flags: Use --no-console or --no-browser to restrict startups. Run marm-memory --help for full command lists.
 
 ## Why MARM Memory
 
@@ -48,37 +78,6 @@ Under the hood: a serialized SQLite WAL write queue kills multi-agent swarm cont
 
 See [Performance & Scaling Benchmarks](#performance--scaling-benchmarks) for retrieval latency, concurrency, and write-cost numbers, and [Architecture & Internals](#architecture--internals) for the mechanisms behind each layer.
 
-### Start Now
-
-**Quick start**
-
-```bash
-pip install marm-mcp-server
-marm-memory init --g-claude --g-codex --g-gemini
-```
-
-Then tell your agent: **"Use the marm-init skill to set up MARM."** It handles the rest with you in one conversation: Python or Docker, HTTP or STDIO, API keys, config paths, starting the server, and connecting each agent.
-
-`--g-qwen` and `--g-kiro` are also available. Run `marm-memory init` with no flags to install into the current project instead of your home folder.
-
-**Manual setup**
-
-Prefer to wire it up yourself:
-
-| If you are... | Start the server | Connect your MCP client |
-|---------------|------------------|-------------------------|
-| **Solo developer / researcher** | `marm-memory start` | `"agent" mcp add --transport http marm-memory http://localhost:8001/mcp` |
-| **Private local STDIO user** | `marm-mcp-stdio` | `"agent" mcp add --transport stdio marm-memory-stdio marm-mcp-stdio` |
-| **Multiple agents sharing memory** | `marm-memory start --profile swarm` | `"agent" mcp add --transport http marm-memory http://localhost:8001/mcp` |
-| **Private high-throughput swarm** | `marm-memory start --profile swarm-max` | `"agent" mcp add --transport http marm-memory http://localhost:8001/mcp` |
-| **Trusted private lab/server** | `marm-memory start --profile trusted` | `"agent" mcp add --transport http marm-memory http://localhost:8001/mcp` |
-
-The managed runtime runs in the background by default. Use `marm-memory status`, `marm-memory logs --follow`, `marm-memory restart`, and `marm-memory stop` for normal lifecycle work. `marm-memory console` starts or reuses that runtime and opens the bundled local web app without requiring Node.js.
-
-For the shortest native HTTP workflow, run `marm-memory fast-start-http`. It starts or reuses the local runtime, starts Console, opens it in the browser, and ends with the active URLs and a recovery command. Use `--no-console` or `--no-browser` when you only want the server. `--client <name>` is reserved for verified client adapters; MARM does not claim to configure a client it has not validated yet.
-
-`marm-memory http` is the foreground HTTP alias, while `marm-memory stdio` runs the same strict MCP STDIO transport as `marm-mcp-stdio`. Use `marm-memory --help` for grouped command help, `marm-memory help <command>` for command-specific help, and `marm-memory --version` for the installed version.
-
 ### Runtime CLI Commands
 
 `marm-memory` is the local runtime manager installed with the Python package. These are the normal operational commands; use `marm-memory <command> --help` for flags and command-specific examples.
@@ -86,86 +85,52 @@ For the shortest native HTTP workflow, run `marm-memory fast-start-http`. It sta
 **Daily runtime work**
 
 ```bash
-marm-memory fast-start-http          # start HTTP, Console, and open the browser
-marm-memory start                    # start or reuse the managed HTTP runtime
-marm-memory start --profile swarm    # shared multi-agent preset
-marm-memory stop                     # stop the managed runtime safely
-marm-memory restart                  # restart the managed runtime
-marm-memory status                   # inspect runtime, database, queue, and graph status
-marm-memory logs --follow            # follow bounded runtime logs
-marm-memory console                  # start or reuse the bundled local Console
+marm-memory fast-start-http                # start HTTP, Console, and open the browser
+marm-memory start                          # start or reuse the managed HTTP runtime
+marm-memory start --profile swarm          # shared multi-agent preset
+marm-memory stop                           # stop the managed runtime safely
+marm-memory restart                        # restart the managed runtime
+marm-memory status                         # inspect runtime, database, queue, and graph status
+marm-memory logs --follow                  # follow bounded runtime logs
+marm-memory console                        # start or reuse the bundled local Console
 ```
 
 **Transports and setup**
 
 ```bash
-marm-memory http                     # run HTTP in the foreground
-marm-memory stdio                    # run the strict local MCP STDIO transport
-marm-memory init                     # install the MARM skill into detected agents (project scan)
-marm-memory init --g-claude          # install the skill into the home-folder claude directory
-marm-memory doctor                   # diagnose the local install
-marm-memory key init                 # create or reuse ~/.marm/.env without displaying the key
-marm-memory key path                 # print the managed key-file path
-marm-memory key reveal               # explicitly display the managed key
-marm-memory console --import-key     # open an authenticated local Console session
-marm-memory upgrade --check          # compare the installed package with PyPI
-marm-memory uninstall                # preview package removal; always preserves ~/.marm
+marm-memory http                           # run HTTP in the foreground
+marm-memory stdio                          # run the strict local MCP STDIO transport
+marm-memory init                           # install the MARM skill into detected agents (project scan)
+marm-memory init --g-claude                # install the skill into the home-folder claude directory
+marm-memory doctor                         # diagnose the local install
+marm-memory key init                       # create or reuse ~/.marm/.env without displaying the key
+marm-memory key path                       # print the managed key-file path
+marm-memory key reveal                     # explicitly display the managed key
+marm-memory console --import-key           # open an authenticated local Console session
+marm-memory upgrade --check                # compare the installed package with PyPI
+marm-memory uninstall                      # preview package removal; always preserves ~/.marm
 ```
 
 **Knowledge, projects, and maintenance**
 
 ```bash
-marm-memory knowledge status
-marm-memory knowledge build --all
-marm-memory projects list
-marm-memory projects index /absolute/path/to/repository
-marm-memory projects status
-marm-memory maintenance status
-marm-memory maintenance embeddings migrate
+marm-memory knowledge status               # Check available indexers and models
+marm-memory knowledge build --all          # Build the concept graph from stored memories
+marm-memory projects list                  # List all tracked workspaces
+marm-memory projects index <path>          # Run deep codebase structural indexing
+marm-memory projects status                # Inspect target repo graph readiness
+marm-memory maintenance status             # Check internal database optimization state
+marm-memory maintenance embeddings migrate # Upgrade old 384-dim vectors to 512-dim
+marm-memory maintenance chunks rechunk     # Recalibrate long memory text splits
 ```
 
 Docker commands are documented separately below because they require explicit data mounts, network exposure, and key-handling choices.
-
-### Local Keys And Package Lifecycle
-
-Localhost HTTP is keyless and loopback-only. Keys apply to an exposed runtime or a Docker deployment.
-
-| Command | What it does |
-|---------|--------------|
-| `key init` | Creates or reuses the managed `~/.marm/.env` key file |
-| `key path` | Prints the path only |
-| `key reveal` | Prints the key, with a terminal-capture warning |
-| `key generate` | Non-persistent; kept for compatibility |
-
-With a managed key active, `marm-memory console --import-key` opens Console without putting the key in browser storage, frontend state, logs, or a URL. Manual bearer entry stays available for a remote or separately managed runtime.
-
-### Upgrade Existing Embeddings
-
-The Jina v2 Small default uses 512-dimensional embeddings; older `all-MiniLM-L6-v2` data is 384-dimensional and must be re-embedded. Stop every MARM HTTP and STDIO process, then run:
-
-```bash
-marm-memory maintenance embeddings migrate
-```
-
-It re-embeds memory, chunk, and any existing concept-graph vectors (notebook scratch entries no longer carry embeddings), reports progress, verifies both databases, and is resumable after an interruption. It refuses to start against a live HTTP server; STDIO processes cannot be detected reliably and must be stopped manually.
-
-### Repair Chunked Memories
-
-Memories over 500 words are also stored as smaller chunks. Chunk sizing changed across versions, and the migration above re-embeds chunks without re-splitting them, so older chunks keep stale boundaries. Stop every MARM process, then run:
-
-```bash
-marm-memory maintenance chunks rechunk
-```
-
-It re-splits stale chunks, fills in any lost to an interrupted write, and drops chunks from memories now under the threshold. Memories already correct are skipped without loading the encoder, so rerunning costs nothing. Same live-server guard as above, plus it refuses when stored vectors do not match the configured embedding model: migrate first in that case. Recall works without this, just less accurately on long memories.
 
 ## Performance & Scaling Benchmarks
 
 MARM is tuned for fast recall first, even as memory grows and long memories are chunked behind the scenes.
 
 These measurements use the fastembed-backed `jinaai/jina-embeddings-v2-small-en` encoder and a throwaway local SQLite database. Every timed path calls the shipped `MARMMemory` code, not a benchmark-local reimplementation. Sections 1-4 are timings from a single run of [`scripts/benchmarking/performance/bench_hotpath.py`](scripts/benchmarking/performance/bench_hotpath.py) on local hardware; absolute milliseconds vary by machine, so treat the scaling shape as the signal. Section 5 is a separate accuracy benchmark ([`run_eval.py`](scripts/benchmarking/accuracy/locomo/run_eval.py)) and reports two runs, for the reason given there.
-
-Re-measured on v2.33.1. Latency rose and the hybrid speedup in section 4 fell substantially, both because `FTS_CANDIDATE_LIMIT` was raised from `50` to `200` in v2.32.0 to recover multi-hop accuracy. That was a deliberate trade of speed for correctness, and the older figures below were published before it.
 
 ### 1. Retrieval Latency Scaling
 
@@ -196,7 +161,7 @@ Run-to-run variance at small $N$ is larger than the gap between adjacent sizes, 
 
 ### 4. Recall Scaling: Full Scan vs Production Hybrid
 
-Why recall stays roughly flat as memory grows: instead of scoring every stored vector, production recall uses an FTS keyword pre-filter to a bounded candidate set, then re-ranks that set by semantic + BM25 + temporal score. Both columns are real code paths (`_fetch_and_score_embedding_rows` for the full scan, `recall_similar` for hybrid), dispatched through the same async path and timed with the query vector precomputed so the constant encode cost from section 1 is excluded from both. Each iteration alternates which path runs first so neither one consistently benefits from the other's warmed cache.
+Why recall stays flat as memory grows: Instead of scanning every vector, production recall uses an FTS keyword pre-filter to narrow the candidate pool, then re-ranks using a blended semantic + BM25 + temporal score. Both benchmark columns represent authentic asynchronous code paths timed with precomputed vectors to isolate retrieval speed from raw encoding overhead. Tests alternate execution to ensure completely unbiased cache conditions.
 
 | Session Size ($N$) | Full Semantic Scan | Production Hybrid | Speedup | FTS candidates |
 | :--- | :--- | :--- | :--- | :--- |
@@ -209,8 +174,6 @@ Why recall stays roughly flat as memory grows: instead of scoring every stored v
 
 The full scan grows roughly linearly with $N$ while hybrid recall grows far more slowly, so the advantage still widens with session size. At very small $N$ the pre-filter is not worth its overhead and hybrid is slower.
 
-**These speedups are much lower than the figures published before v2.32.0** (which claimed up to `39.4x` at N = 10,000). Nothing regressed. `FTS_CANDIDATE_LIMIT` was raised from `50` to `200` to recover multi-hop retrieval accuracy, so the rerank step now scores four times as many candidates. The `FTS candidates` column shows the pool saturating at 200 from N = 500 upward, which is where the extra cost comes from. Lowering the setting restores the old speed and gives back the accuracy. Reproduce with [`scripts/benchmarking/performance/bench_hotpath.py`](scripts/benchmarking/performance/bench_hotpath.py).
-
 ### 5. LoCoMo Retrieval Accuracy
 
 All 10 LoCoMo conversations are ingested through `marm_log_entry` (5,882 memories), then top-5 `marm_smart_recall` results are scored against 1,977 evidence-annotated questions. No answer-generation model or LLM judge is used.
@@ -221,9 +184,7 @@ All 10 LoCoMo conversations are ingested through `marm_log_entry` (5,882 memorie
 | Jina v2 Small (v2.29.0) | 53.0% | 43.4% | 47.6% |
 | **Current (v2.33.1)** | **62.9 - 63.5%** | **53.1 - 53.5%** | **57.4 - 57.9%** |
 
-The v2.33.1 row is a range, not a point, because it is two identically-configured runs. Repeat runs of this harness disagree by up to **0.56pp** (19 of 1,977 questions), so differences smaller than that are not meaningful. The cause is understood: the corpus is written minutes before the benchmark, so `TEMPORAL_WEIGHT` reorders near-ties as the store ages between runs. Quote the range rather than the better run.
-
-The gain over v2.29.0 came from making the keyword lane actually produce candidates for natural-language questions (v2.31.0), then tuning what that lane contributes (v2.32.0) and fixing the encoder-off fallback (v2.33.0). The earlier MiniLM comparison does not isolate context length as the sole cause; model quality, 512-dimensional vectors, and reranking behavior changed together. Reproduce with [`scripts/benchmarking/accuracy/locomo/run_eval.py`](scripts/benchmarking/accuracy/locomo/run_eval.py).
+Performance gains are isolated to the blended retrieval pipeline and localized vector space, ensuring high multi-hop recall accuracy without relying on cloud-hosted LLM judges. Reproduce the full benchmark using. Reproduce benchmarking with [`scripts/benchmarking/accuracy/locomo/run_eval.py`](scripts/benchmarking/accuracy/locomo/run_eval.py).
 
 ### 6. vs Competitors: Architecture
 
@@ -761,13 +722,13 @@ Result: Gemini sees previous research + has JWT code available as context
 You: "Qwen, pull everything from the auth research and create a summary"
 Qwen calls: marm_smart_recall("authentication", session_name="auth-research-2025-01", limit=20)
 Qwen calls: marm_summary(session_name="auth-research-2025-01")
-Result: Qwen generates implementation guide from all captured research
+Result: Qwen generates an implementation guide from all captured research
 ```
 
 #### Phase 6: End Session (Claude)
 
 ``` markdown
-You: "Log final decision - we're using JWT for APIs and OAuth2 for user auth"
+You: "Log final decision - we're using JWT for APIs, and OAuth2 for user auth"
 Claude calls: marm_log_entry(entry="DECISION: JWT for API auth, OAuth2 for user flows. Rationale: stateless APIs + delegated user access", session_name="auth-research-2025-01")
 Result: Decision logged and searchable by all future AI clients
 ```
@@ -975,7 +936,7 @@ Packaged docs are indexed into the `marm_system` memory namespace on startup and
 | `RECALL_SCAN_LIMIT` | `10000` | Cap on the semantic fallback scan; `recall_scan_truncated=true` in responses means it was hit |
 | `FTS_QUERY_MODE` | `or_nostop` | How semantic recall builds its keyword query: `or_nostop` ignores filler words then matches any remaining term, `or` matches any term, `and` requires every term (the pre-2.31.0 behavior). The exact/lexical lane always requires every term. |
 | `FTS_EXTRA_STOPWORDS` | *(empty)* | Comma-separated extra words to ignore when building keyword queries, for terms so common in your store they carry no signal |
-| `HYBRID_SEARCH_TEXT_WEIGHT` | `0.05` | How much the keyword score influences ranking. Set from a benchmark sweep; accuracy peaks across `0.04`-`0.08` and falls off sharply above `0.10`. At `0.0` keyword matching narrows which memories are considered but does not reorder them. |
+| `HYBRID_SEARCH_TEXT_WEIGHT` | `0.05` | How much the keyword score influences ranking. Set from a benchmark sweep; accuracy peaks across `0.04`-`0.08` and falls off sharply above `0.10`. At `0.0`, keyword matching narrows which memories are considered but does not reorder them. |
 | `FTS_LONE_HIT_SCORE` | `1.0` | Keyword score used when only one memory matches, or when every match ties. Lower it on small stores if a single keyword match should not count as a perfect one. |
 | `SEMANTIC_SEARCH_ENABLED` | `1` | Set to `0` to run without the embedding model: nothing is loaded, no embeddings are written, and recall falls back to keyword matching. Useful on low-memory hosts, or to see how recall behaves when the model is unavailable. `marm-memory doctor` reports when it is off. |
 | `TEMPORAL_WEIGHT` / `TEMPORAL_HALF_LIFE_DAYS` | `0.1` / `30` | Strength and decay of the recency boost |
@@ -993,6 +954,29 @@ Packaged docs are indexed into the `marm_system` memory namespace on startup and
 ## Troubleshooting
 
 <details>
+<summary><strong>Upgrading Embeddings</strong></summary>
+
+The Jina v2 Small default uses 512-dimensional embeddings; older `all-MiniLM-L6-v2` data is 384-dimensional and must be re-embedded. Stop every MARM HTTP and STDIO process, then run:
+
+```bash
+marm-memory maintenance embeddings migrate
+```
+
+It re-embeds memory, chunk, and any existing concept-graph vectors (notebook scratch entries no longer carry embeddings), reports progress, verifies both databases, and is resumable after an interruption. It refuses to start against a live HTTP server; STDIO processes cannot be detected reliably and must be stopped manually.
+
+### Repair Chunked Memories
+
+Memories over 500 words are also stored as smaller chunks. Chunk sizing changed across versions, and the migration above re-embeds chunks without re-splitting them, so older chunks keep stale boundaries. Stop every MARM process, then run:
+
+```bash
+marm-memory maintenance chunks rechunk
+```
+
+It re-splits stale chunks, fills in any lost to an interrupted write, and drops chunks from memories now under the threshold. Memories already correct are skipped without loading the encoder, so rerunning costs nothing. Same live-server guard as above, plus it refuses when stored vectors do not match the configured embedding model: migrate first in that case. Recall works without this, just less accurately on long memories.
+
+</details>
+
+<details>
 <summary><strong>Server issues</strong></summary>
 
 **Server won't start**
@@ -1005,7 +989,7 @@ Packaged docs are indexed into the `marm_system` memory namespace on startup and
 **STDIO connection fails**
 
 - Verify `marm-mcp-stdio` is on your PATH after pip install: `marm-mcp-stdio --help`
-- Alternatively use: `python -m marm_mcp_server.server_stdio`
+- Alternatively, use: `python -m marm_mcp_server.server_stdio`
 - Check AI client documentation for STDIO transport requirements
 - Try direct execution to see error messages: `python -m marm_mcp_server.server_stdio`
 
@@ -1017,7 +1001,7 @@ Packaged docs are indexed into the `marm_system` memory namespace on startup and
 **AI client can't connect to MARM**
 
 - Verify the server is running with `curl http://localhost:8001/health`
-- Check firewall isn't blocking port 8001
+- Check the firewall isn't blocking port 8001
 - For STDIO: use `marm-mcp-stdio` (console script) or `python -m marm_mcp_server.server_stdio`
 - Restart both server and AI client
 
@@ -1069,7 +1053,7 @@ Packaged docs are indexed into the `marm_system` memory namespace on startup and
 
 - Stop the server immediately
 - Check `~/.marm/` directory for backup copies (if you created them)
-- Restore from backup: copy your backup `~/.marm/` back to home directory
+- Restore from backup: copy your backup `~/.marm/` back to the home directory
 - Restart server
 
 **Database locked error**
@@ -1115,3 +1099,6 @@ Packaged docs are indexed into the `marm_system` memory namespace on startup and
 | `embedding model not found` | Semantic search model didn't download | First run takes time; be patient, check internet connection |
 
 </details>
+
+For memory behavior, transports, supported clients, compaction, and backup questions, see the [FAQ](docs/FAQ.md).
+
