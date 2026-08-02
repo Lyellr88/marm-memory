@@ -70,12 +70,10 @@ usually do not. Judge both. Check the "N of M indexed" line as well, since a
 worker that finished early means part of the timed phase measured an idle
 process; raise `--seed` if so.
 
-Corpus shape changes the answer, so prefer `--from-live` before publishing
-anything. Short synthetic memories produce many small extractions and show a
-write regression that a real corpus does not, because entity-name embeddings
-are generated far faster than real content generates them. The numbers in
-[section 5 of the root README](../../README.md#5-cost-of-automatic-concept-indexing)
-come from `--from-live`.
+Corpus shape changes the answer, so prefer `--from-live` before quoting a
+number anywhere. Short synthetic memories produce many small extractions and
+show a write regression that a real corpus does not, because entity-name
+embeddings are generated far faster than real content generates them.
 
 ## Accuracy (`accuracy/locomo/`)
 
