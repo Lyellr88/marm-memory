@@ -199,6 +199,46 @@ def test_refuses_when_concept_extraction_is_unavailable(concepts_env, monkeypatc
         asyncio.run(concepts.build_for_memory_ids(["m1"]))
 
 
+def test_the_finished_signal_lands_on_every_exit_path(concepts_env, monkeypatch):
+    """The worker's shutdown handshake blocks on this event. Any path that
+    returns or raises without setting it stalls teardown for a full grace
+    period over a build that never started."""
+    import threading
+
+    concepts, memory_module = concepts_env
+    _seed(memory_module, [("m1", "alpha")])
+    _extract(monkeypatch, concepts, {"alpha": ["Alpha"]})
+
+    def run(**patch):
+        for name, value in patch.items():
+            monkeypatch.setattr(concepts, name, value)
+        finished = threading.Event()
+        try:
+            asyncio.run(concepts.build_for_memory_ids(["m1"], finished=finished))
+        except Exception:
+            pass
+        return finished.is_set()
+
+    # Normal completion.
+    assert run() is True
+
+    # Empty batch, which returns before any build happens.
+    finished = threading.Event()
+    asyncio.run(concepts.build_for_memory_ids([], finished=finished))
+    assert finished.is_set() is True
+
+    # Extraction runtime missing: refused before the lock is taken.
+    assert run(CONCEPTS_AVAILABLE=False) is True
+
+    # Setup failure inside the build itself, past the refusals.
+    monkeypatch.setattr(concepts, "CONCEPTS_AVAILABLE", True)
+
+    def explode():
+        raise RuntimeError("concept database unavailable")
+
+    assert run(_get_concept_db=explode) is True
+
+
 def test_empty_id_list_is_a_no_op(concepts_env):
     concepts, _memory_module = concepts_env
     assert asyncio.run(concepts.build_for_memory_ids([])) == {}

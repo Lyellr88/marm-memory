@@ -461,9 +461,13 @@ def test_stop_holds_the_graph_until_the_extraction_thread_stops(
         def work():
             abort.wait(5)
             time.sleep(0.4)
+            # Clear before signalling, not after. finished is what releases
+            # stop(), so setting it first leaves a window where the lock is
+            # released while this still reads as running, and the test fails
+            # on its own ordering rather than on the code under test.
+            still_running.clear()
             if finished is not None:
                 finished.set()
-            still_running.clear()
 
         await asyncio.to_thread(work)
         return {}

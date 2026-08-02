@@ -215,13 +215,11 @@ def _run_build(
     and a thread already running cannot be killed from outside; this is how it
     stops writing alongside the new owner rather than running to completion.
     The result carries `aborted` so the caller settles nothing."""
-    concept_db = _get_concept_db()
     memories_processed = 0
     aborted = False
     entities_extracted = 0
     relationships_created = 0
     code_links_created = 0
-    graph_available = is_graph_available()
     possible_duplicates: list[dict] = []
     # Memoized per build, not per call: get_or_create_entity only ever
     # stores the embedding on the INSERT branch (re-mentions ignore it), so
@@ -233,6 +231,13 @@ def _run_build(
     embed_cache: dict[str, Optional[bytes]] = {}
 
     try:
+        # Setup belongs inside the try. _get_concept_db() opens a database and
+        # runs DDL, so it can fail, and a failure that skipped the finally
+        # below would leave the caller's shutdown handshake waiting out its
+        # whole grace period and then reporting a build still running when
+        # none is.
+        concept_db = _get_concept_db()
+        graph_available = is_graph_available()
         with concept_db.get_connection() as conn:
             for row in itertools.chain.from_iterable(pages):
                 if abort is not None and abort.is_set():
@@ -721,20 +726,32 @@ async def build_for_memory_ids(
     rebuild never sees them.
 
     An empty result means the batch was abandoned partway because the graph
-    lock was lost. The caller must settle nothing in that case."""
-    if not memory_ids:
-        return {}
-    if not CONCEPTS_AVAILABLE:
-        raise RuntimeError("concept extraction unavailable")
-    state = await asyncio.to_thread(inspect_concept_schema, get_concept_db_path())
-    if state == "rebuild_required":
-        raise RuntimeError("rebuild_required")
-    if state == "unavailable":
-        raise RuntimeError("concept database unavailable")
-    async with _concept_build_lock:
-        return await asyncio.to_thread(
-            _build_for_memory_ids_sync, memory_ids, abort, finished
-        )
+    lock was lost. The caller must settle nothing in that case.
+
+    `finished` is set exactly once by the time this returns or raises, on every
+    path including the refusals below. The caller's shutdown handshake blocks on
+    it, so a path that skipped it would stall teardown for a full grace period
+    over a build that never started."""
+    try:
+        if not memory_ids:
+            return {}
+        if not CONCEPTS_AVAILABLE:
+            raise RuntimeError("concept extraction unavailable")
+        state = await asyncio.to_thread(inspect_concept_schema, get_concept_db_path())
+        if state == "rebuild_required":
+            raise RuntimeError("rebuild_required")
+        if state == "unavailable":
+            raise RuntimeError("concept database unavailable")
+        async with _concept_build_lock:
+            return await asyncio.to_thread(
+                _build_for_memory_ids_sync, memory_ids, abort, finished
+            )
+    finally:
+        # Idempotent: _run_build already sets this the moment the extraction
+        # thread stops, which is earlier and more precise. This only covers the
+        # paths that never reach it.
+        if finished is not None:
+            finished.set()
 
 
 @router.post("/marm_concept_recall", operation_id="marm_concept_recall")
