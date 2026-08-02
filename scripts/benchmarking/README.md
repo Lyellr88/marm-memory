@@ -58,10 +58,24 @@ The code-graph engine is disabled unless `--with-code-graph` is passed: each
 extracted entity otherwise costs a ~300ms round trip to that subprocess, which
 swamps the in-process contention this script is for.
 
+Also sweeps the inter-batch pause, reporting recall p95 against total drain
+time so the throttle can be set from data:
+
+```
+python scripts/benchmarking/performance/bench_concept_worker.py --from-live --sweep 0,250,500
+```
+
 Interpreting it: the relative deltas look alarming and the absolute numbers
-usually do not. Judge both. Also check the "queue still had N pending" line, since
-a worker that finished early means part of the timed phase measured an idle
+usually do not. Judge both. Check the "N of M indexed" line as well, since a
+worker that finished early means part of the timed phase measured an idle
 process; raise `--seed` if so.
+
+Corpus shape changes the answer, so prefer `--from-live` before publishing
+anything. Short synthetic memories produce many small extractions and show a
+write regression that a real corpus does not, because entity-name embeddings
+are generated far faster than real content generates them. The numbers in
+[section 5 of the root README](../../README.md#5-cost-of-automatic-concept-indexing)
+come from `--from-live`.
 
 ## Accuracy (`accuracy/locomo/`)
 

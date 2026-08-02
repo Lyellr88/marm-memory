@@ -178,7 +178,14 @@ class ConceptIndexWorker:
                     concept_queue.drop, task.memory_id, task.lease_token
                 )
                 continue
-            if live[task.memory_id] != task.content_hash:
+            # A NULL stored hash cannot be compared, and treating it as a
+            # mismatch is worse than not checking: the task is never settled
+            # and never counted as a failure, so the worker re-extracts that
+            # memory forever without ever writing it or giving up. Rows
+            # predating the content_hash column are exactly this case.
+            if live[task.memory_id] is not None and (
+                live[task.memory_id] != task.content_hash
+            ):
                 # Content changed under us. The write that changed it already
                 # re-queued the memory, so leave that row alone and let the
                 # next cycle index the current content.

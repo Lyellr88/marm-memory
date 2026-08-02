@@ -169,7 +169,7 @@ def seed_synthetic(mem, n):
             )
 
 
-def queue_everything(mem) -> int:
+def queue_ids(mem) -> list[str]:
     """Recreate the post-upgrade state: every memory waiting to be indexed.
 
     This is the worst realistic case and the one every user hits once, so it
@@ -177,12 +177,24 @@ def queue_everything(mem) -> int:
     """
     with mem.get_connection() as conn:
         rows = conn.execute(
-            "SELECT id, COALESCE(content_hash, id) FROM memories "
+            "SELECT id, content_hash, content FROM memories "
             "WHERE content IS NOT NULL AND content != ''"
         ).fetchall()
-        for memory_id, content_hash in rows:
+        for memory_id, content_hash, content in rows:
+            if content_hash is None:
+                # Rows predating the content_hash column, common in a corpus
+                # that has been through upgrades. Backfilling the real hash
+                # matters: enqueueing a fabricated one makes the worker treat
+                # every result as superseded, so it burns the extraction cost
+                # and writes nothing, and the benchmark silently measures a
+                # worker that never indexes anything.
+                content_hash = consolidation.compute_content_hash(content)
+                conn.execute(
+                    "UPDATE memories SET content_hash = ? WHERE id = ?",
+                    (content_hash, memory_id),
+                )
             concept_queue.enqueue(conn, memory_id, content_hash)
-    return len(rows)
+    return [row[0] for row in rows]
 
 
 async def measure_writes(mem, iters):
@@ -213,6 +225,23 @@ def _delta(baseline, contended):
     return f"{((cont - base) / base) * 100:+.1f}%"
 
 
+def remaining_of(mem, queued_ids) -> int:
+    """How many of the originally queued memories are still waiting.
+
+    Not the raw queue depth: the latency probes store memories of their own,
+    which enqueue themselves and would otherwise make the backlog look like
+    it grew while the worker was clearing it.
+    """
+    with mem.get_connection() as conn:
+        pending = {
+            row[0]
+            for row in conn.execute(
+                "SELECT memory_id FROM concept_index_queue WHERE state != 'parked'"
+            ).fetchall()
+        }
+    return len(pending & queued_ids)
+
+
 def reset_graph(concepts_module):
     """Drop the concept database between sweep points.
 
@@ -234,7 +263,8 @@ async def drain_with_pause(mem, pause_ms, worker_module, concepts_module):
     reset_graph(concepts_module)
     with mem.get_connection() as conn:
         conn.execute("DELETE FROM concept_index_queue")
-    queued = queue_everything(mem)
+    queued_ids = set(queue_ids(mem))
+    queued = len(queued_ids)
 
     worker_module.CONCEPT_INDEX_BATCH_PAUSE_MS = pause_ms
     worker_module.CONCEPT_INDEX_DEBOUNCE_SECONDS = 0.01
@@ -248,7 +278,7 @@ async def drain_with_pause(mem, pause_ms, worker_module, concepts_module):
         probe = time.perf_counter()
         await mem.recall_similar(query, limit=RECALL_LIMIT)
         samples.append((time.perf_counter() - probe) * 1000)
-        if concept_queue.counts()["pending"] == 0:
+        if remaining_of(mem, queued_ids) == 0:
             break
         if time.perf_counter() - started > 900:
             print("  timed out after 15 minutes", file=sys.stderr)
@@ -345,7 +375,8 @@ async def main():
     print(_stat("store_memory", base_writes))
     print(_stat("recall_similar", base_recalls))
 
-    queued = queue_everything(mem)
+    queued_ids = set(queue_ids(mem))
+    queued = len(queued_ids)
     worker = ConceptIndexWorker()
     import marm_mcp_server.core.concept_worker as worker_module
 
@@ -358,22 +389,22 @@ async def main():
     # samples measure an idle process and flatter the result.
     for _ in range(300):
         await asyncio.sleep(0.1)
-        if concept_queue.counts()["pending"] < queued:
+        if remaining_of(mem, queued_ids) < queued:
             break
 
     print(f"\n--- contended: worker draining {queued} queued memories ----------")
     cont_writes = await measure_writes(mem, ARGS.iters)
     cont_recalls = await measure_recalls(mem, ARGS.iters)
-    remaining = concept_queue.counts()
+    left = remaining_of(mem, queued_ids)
 
     await worker.stop()
 
     print(_stat("store_memory", cont_writes))
     print(_stat("recall_similar", cont_recalls))
 
-    still_working = remaining["pending"] > 0
+    still_working = left > 0
     print(
-        f"\nqueue still had {remaining['pending']} pending at the end"
+        f"\n{queued - left} of {queued} indexed during the timed phase"
         f" ({'worker was busy throughout' if still_working else 'WORKER FINISHED EARLY'})"
     )
     if not still_working:
