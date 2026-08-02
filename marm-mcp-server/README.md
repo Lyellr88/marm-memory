@@ -28,10 +28,10 @@ mcp-name: io.github.Lyellr88/marm-mcp-server
 
 ## Table of Contents
 
-- [Quick-Start](#quick-start)
+- [Quick Start](#quick-start)
 - [Why MARM Memory](#why-marm-memory)
 - [Performance & Scaling Benchmarks](#performance--scaling-benchmarks)
-- [Quick Start](#-quick-start-for-mcp-http--stdio)
+- [MCP Client Setup](#mcp-client-setup-for-http--stdio)
 - [Runtime CLI Commands](#runtime-cli-commands)
 - [Complete MCP Tool Suite](#complete-mcp-tool-suite-14-tools)
 - [Using MARM: Talk, Don't Call Tools](#using-marm-talk-dont-call-tools)
@@ -53,18 +53,20 @@ marm-memory init --g-claude --g-codex --g-gemini
 
 > **Also available: --g-qwen and --g-kiro. Run without flags to install into your current project folder instead of home**
 
-2. Hand off to your AI companion. Tell your agent:
+1. Hand off to your AI companion. Tell your agent:
 
 > **"Use the marm-init skill to set up MARM."**
-   
-3. Interact: Your agent will handle the entire setup (Python/Docker, HTTP/STDIO, keys, and client configs) interactively right inside your chat.
+
+1. Interact: Your agent will handle the entire setup (Python/Docker, HTTP/STDIO, keys, and client configs) interactively right inside your chat.
 
 **Manual setup**
 
 Prefer to wire it up yourself:
 
+> Replace "agent" with your client’s CLI command (for example, claude, gemini, or qwen). For Codex, use codex mcp add marm-memory --url http://localhost:8001/mcp instead.
+
 | If you are... | Start the server | Connect your MCP client |
-|---------------|------------------|-------------------------|
+| --------------- | ------------------ | ------------------------- |
 | **Solo developer / researcher** | `marm-memory start` | `"agent" mcp add --transport http marm-memory http://localhost:8001/mcp` |
 | **Private local STDIO user** | `marm-mcp-stdio` | `"agent" mcp add --transport stdio marm-memory-stdio marm-mcp-stdio` |
 | **Multiple agents sharing memory** | `marm-memory start --profile swarm` | `"agent" mcp add --transport http marm-memory http://localhost:8001/mcp` |
@@ -80,20 +82,20 @@ Prefer to wire it up yourself:
 
 **Your AI forgets everything. MARM Memory doesn't.**
 
-marm-memory is a high-performance 3-in-1 AI Memory Framework that solves conversational drift, context pollution, and agent amnesia. Instead of juggling fragmented tools, it natively fuses three context layers into a single local runtime:
+marm-memory gives your agents a private, shared memory for the context that normally gets lost between chats: decisions, research, fixes, notes, and project history. Switch from Claude Code to Codex or Gemini without losing the context already gathered.
 
-* 🧠 **Core Memory (7 Tools)** — long-term episodic memory, session logs, notebooks, and intelligent summaries via local vector embeddings and deterministic exact matching
-* 💻 **Code Graph (5 Tools)** — instant repo indexing, symbol lookup, and tree-sitter syntax analysis, powered by the codebase-memory-mcp static binary wrapper
-* 🧩 **Concept Graph (2 Tools)** — extracts entities and typed relationships from stored history, linking developer decisions straight back to source code symbols
+It brings three things together:
 
-One query resolves what was decided, why, and where it lives — no traffic-cop routing across isolated tools. Claude Code, Codex, Gemini, Qwen, Cursor, and VS Code agents share the same persistent memory server across sessions and long-running multi-agent projects, with all 14 tools bundled over both HTTP and STDIO.
+- 🧠 **Core Memory (7 tools)** stores conversations, notes, notebook entries, and summaries so they stay searchable.
+- 💻 **Code Graph (5 tools)** maps your repository so agents can find symbols, follow code paths, and understand the project without rereading it all.
+- 🧩 **Concept Graph (2 tools)** connects people, decisions, errors, and ideas from your stored memories, with links back to relevant code when available.
 
-Under the hood: a serialized SQLite WAL write queue kills multi-agent swarm contention, write-time consolidation merges duplicates, and hybrid semantic + full-text retrieval keeps recall sharp as memory grows. Agent-assisted compaction keeps context windows clean without losing traceability, and the local marm-console web app gives you real-time visual telemetry to browse and debug your entire memory layout.
+All 14 tools work over HTTP and STDIO. Your agents share the same local memory across sessions instead of starting from scratch each time. The built-in Console lets you see and manage what is saved.
 
 ### How It Works
 
 | Layer | What it does | Why it matters |
-|-------|--------------|----------------|
+| ------- | -------------- | ---------------- |
 | **Memory model** | Sessions, structured logs, notebooks, summaries, and semantic memories | Keeps project history searchable instead of trapped in one chat |
 | **Scale layer** | SQLite WAL mode, connection pooling, serialized write queue, and HTTP rate-limit presets | Lets one server support solo use, multi-agent work, and swarm-style bursts |
 | **Intelligence layer** | FTS filter, semantic re-rank, bounded semantic fallback, auto-classification, write-time consolidation, and compaction candidates | Keeps recall useful as memory grows instead of letting duplicates pile up |
@@ -208,16 +210,16 @@ All 10 LoCoMo conversations are ingested through `marm_log_entry` (5,882 memorie
 | :--- | :--- | :--- | :--- |
 | MiniLM baseline | 37.5% | 29.5% | not published |
 | Jina v2 Small (v2.29.0) | 53.0% | 43.4% | 47.6% |
-| **Current (v2.33.1)** | **62.9 - 63.5%** | **53.1 - 53.5%** | **57.4 - 57.9%** |
+| **Recent (v2.33.1)** | **62.9 - 63.5%** | **53.1 - 53.5%** | **57.4 - 57.9%** |
 
-Performance gains are isolated to the blended retrieval pipeline and localized vector space, ensuring high multi-hop recall accuracy without relying on cloud-hosted LLM judges. Reproduce the full benchmark using. Reproduce benchmarking with [`scripts/benchmarking/accuracy/locomo/run_eval.py`](scripts/benchmarking/accuracy/locomo/run_eval.py).
+Performance gains are isolated to the blended retrieval pipeline and localized vector space, ensuring high multi-hop recall accuracy without relying on cloud-hosted LLM judges. Reproduce the full benchmark using [`scripts/benchmarking/accuracy/locomo/run_eval.py`](scripts/benchmarking/accuracy/locomo/run_eval.py).
 
 ### 6. vs Competitors: Architecture
 
 MARM targets a specific niche: local-first memory for MCP-connected coding agents, not general personalization memory or a full agent runtime. Here's how it differs architecturally from established names in AI agent memory:
- 
+
 | | MARM | Mem0 | Letta (MemGPT) | Zep / Graphiti | agentmemory |
-|---|---|---|---|---|---|
+| --- | --- | --- | --- | --- | --- |
 | **Type** | Memory engine, MCP-native | Memory layer API | Full agent runtime | Temporal knowledge graph | Memory engine, MCP-native |
 | **Required infrastructure** | No separate data service (embedded SQLite) | Vector DB (Qdrant/pgvector) | Postgres + vector DB | Neo4j | Separate `iii-engine` runtime |
 | **Deployment** | Local-first by default; Docker for shared/remote | Cloud API or self-hosted | Self-hosted or cloud | Cloud or self-hosted | Local-first |
@@ -228,7 +230,7 @@ MARM targets a specific niche: local-first memory for MCP-connected coding agent
 
 **Disclaimers & Accuracy:** Competitor landscapes evolve rapidly. The matrix above reflects core architectural traits as of Q3 2026, based on public documentation and READMEs, not internal testing of each system. If any data point regarding an alternative framework has changed or is misrepresented, please open an issue or submit a Pull Request to update the table. We actively welcome corrections from peer maintainers.
 
-## 🚀 Quick Start for MCP (HTTP & STDIO)
+## MCP Client Setup for HTTP & STDIO
 
 **Manual pip install**
 
@@ -326,7 +328,7 @@ marm-memory docker compose --yes
 The HTTP `run`, `command`, and `compose` commands accept the same operational flags:
 
 | Flag | Purpose |
-|---|---|
+| --- | --- |
 | `--data-dir <absolute path>` | Persistent host directory mounted at `/home/marm/.marm`. Defaults to `~/.marm`; this holds memory, indexes, logs, and the managed key file. |
 | `--env-file <path>` | Explicit Docker env file. It must already contain `MARM_API_KEY`; without this flag, MARM uses `~/.marm/.env` and creates a key there only when `docker run` or `docker compose --yes` needs one. |
 | `--port <number>` | Host HTTP port. Default: `8001`. |
@@ -673,7 +675,7 @@ The AI agent will automatically use the appropriate tools. Manual tool access is
 ### 🧠 Core Memory (7 tools)
 
 | Tool | What it does | Key parameters |
-|------|--------------|----------------|
+| ------ | -------------- | ---------------- |
 | `marm_smart_recall` | Hybrid memory recall with an additive, bounded concept/code graph sidecar when a compatible graph exists | `query`, `limit`, `session_name`, `search_all`, `detail=1/2/3`, `project`, `platform`, `exact_mode` |
 | `marm_log_entry` | Add structured session log entries; each entry is also embedded into semantic memory so `marm_smart_recall` can find it | `entry`, `session_name` |
 | `marm_log_show` | Display all entries and sessions, with filtering | `session_name` |
@@ -685,7 +687,7 @@ The AI agent will automatically use the appropriate tools. Manual tool access is
 ### 🕸️ Code Graph (5 tools)
 
 | Tool | What it does | Key parameters |
-|------|--------------|----------------|
+| ------ | -------------- | ---------------- |
 | `marm_graph_index` | Index a repo into the code-structure graph, check status, or list projects | `repo_path`, `project` |
 | `marm_code_lookup` | Find symbols, text patterns, or a symbol's source; use instead of grep/glob | `kind="auto"\|"symbol"\|"text"\|"snippet"` |
 | `marm_graph_trace` | Trace call paths and data flow from a function | `direction`, `mode` |
@@ -930,7 +932,7 @@ The bundled graph engine runs as a supervised child process, not an import:
 ### Swarm & multi-agent presets
 
 | Flag | Rate Limit | Write Queue | Use When |
-|------|------------|-------------|----------|
+| ------ | ------------ | ------------- | ---------- |
 | *(none)* | 80 RPM | enabled | Normal local use and small 3-5 agent setups |
 | `--swarm` | 200 RPM | enabled | Shared HTTP server, roughly 15-30 agents depending on write style |
 | `--swarm-max` | 600 RPM | enabled | Heavier local/private swarm, roughly 50-100 agents depending on write style |
@@ -949,7 +951,7 @@ Packaged docs are indexed into the `marm_system` memory namespace on startup and
 <summary><strong>Environment variables (defaults in parentheses)</strong></summary>
 
 | Variable | Default | What it controls |
-|----------|---------|------------------|
+| ---------- | --------- | ------------------ |
 | `SERVER_HOST` | `127.0.0.1` | Bind address; `0.0.0.0` exposes the server and makes `MARM_API_KEY` mandatory |
 | `SERVER_PORT` | `8001` | HTTP port |
 | `MARM_API_KEY` | *(empty)* | Bearer key for network-exposed deployments |
@@ -1117,7 +1119,7 @@ It re-splits stale chunks, fills in any lost to an interrupted write, and drops 
 <summary><strong>Common error messages</strong></summary>
 
 | Error | Cause | Solution |
-|-------|-------|----------|
+| ------- | ------- | ---------- |
 | `address already in use` | Port 8001 occupied | Kill process on 8001 or use different port |
 | `permission denied: ~/.marm/` | Database directory not writable | `chmod 755 ~/.marm/` or check ownership |
 | `module not found: core.memory` | Missing dependencies | Reinstall from `marm-mcp-server/`: `pip install -e ".[dev]"` |
