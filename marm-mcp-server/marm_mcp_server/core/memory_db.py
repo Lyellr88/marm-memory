@@ -378,6 +378,41 @@ def init_database(db_path: str) -> None:
             " ON memory_chunks(memory_id, chunk_index)"
         )
 
+        # Durable outbox for concept indexing. Lives in the memory DB, not the
+        # concept DB, so the enqueue can join the same transaction as the
+        # memories INSERT and a memory can never exist without its task.
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS concept_index_queue (
+                memory_id    TEXT PRIMARY KEY,
+                content_hash TEXT NOT NULL,
+                enqueued_at  TEXT NOT NULL,
+                state        TEXT NOT NULL DEFAULT 'pending',
+                lease_token  TEXT,
+                leased_until TEXT,
+                attempts     INTEGER NOT NULL DEFAULT 0,
+                last_error   TEXT,
+                FOREIGN KEY (memory_id) REFERENCES memories(id) ON DELETE CASCADE
+            )
+            """)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_concept_queue_ready"
+            " ON concept_index_queue(state, leased_until, enqueued_at)"
+        )
+
+        # One row, held by whoever is currently writing the concept graph.
+        # asyncio locks cannot reach across processes, and HTTP and STDIO are
+        # two processes: without this, a full rebuild can drop the graph tables
+        # while the other process's worker is writing to them.
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS concept_build_lock (
+                id         INTEGER PRIMARY KEY CHECK (id = 1),
+                holder     TEXT NOT NULL,
+                purpose    TEXT NOT NULL,
+                acquired_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL
+            )
+            """)
+
         conn.execute("DROP TABLE IF EXISTS session_summary_chunks")
 
         conn.execute("""

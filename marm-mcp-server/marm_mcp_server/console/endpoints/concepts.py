@@ -81,6 +81,14 @@ def get_concept_graph() -> dict:
     return graph_overview(get_concept_db_path())
 
 
+@router.get("/api/concepts/graph/version")
+def get_concept_graph_version() -> dict:
+    """Polled while the Explorer is open so background indexing shows up
+    without a reload. Deliberately cheap: the atlas is only refetched when
+    this value moves."""
+    return concept_store.graph_version(get_concept_db_path())
+
+
 @router.get("/api/concepts/{entity_id}")
 def get_concept(entity_id: int) -> dict:
     entity = concept_store.get_entity(get_concept_db_path(), entity_id)

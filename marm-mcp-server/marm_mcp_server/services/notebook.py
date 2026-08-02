@@ -238,6 +238,25 @@ async def _save(
 
     mirror_status = "synced"
     memory_id = doc_row.memory_id
+
+    if not was_created and doc_row.memory_id:
+        # Before the replacement is written, not after. Cleanup strips every
+        # trace of a memory id, so running it once the new content is already
+        # queued can delete entities the worker has written for that content,
+        # with the queue row settled and nothing left to re-index it.
+        #
+        # Keyed on the previous id too, not the one store_doc_mirror returns.
+        # A mirror whose row was deleted out from under it is repaired with a
+        # fresh id, and it is the old id that carries the stale provenance.
+        from ..endpoints.memory import _cleanup_deleted_concepts_async
+
+        try:
+            await _cleanup_deleted_concepts_async([doc_row.memory_id])
+        except Exception as e:
+            _safe_print(
+                f"Doc mirror concept cleanup failed for {doc_row.memory_id}: {e}"
+            )
+
     try:
         memory_id = await memory.store_doc_mirror(
             content,

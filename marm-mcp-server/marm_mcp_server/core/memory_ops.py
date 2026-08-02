@@ -12,6 +12,7 @@ from ..config.settings import (
     MARM_PLATFORM,
     MARM_PROJECT,
 )
+from .concept_queue import enqueue as enqueue_concept_index
 from .consolidation import (
     compute_content_hash,
     find_exact_duplicate,
@@ -122,6 +123,11 @@ async def _update_memory(mem, memory_id: str, new_content: str) -> bool:
             # disagree with the (already committed) merged content, and
             # vice versa.
             conn.execute("DELETE FROM memory_chunks WHERE memory_id = ?", (memory_id,))
+            # The merge reuses this memory_id with new content, so the queue
+            # row is upserted onto the recomputed hash. Keyed on the id alone
+            # it would read as already indexed and the merged text would never
+            # reach the graph.
+            enqueue_concept_index(conn, memory_id, merged_hash)
             conn.execute("COMMIT")
         except Exception:
             conn.execute("ROLLBACK")
@@ -261,6 +267,11 @@ async def _store_memory(
             ),
         )
 
+        # Same transaction as the INSERT above, on purpose. A memory that
+        # exists without an indexing task is a memory the graph never learns
+        # about, and nothing later would notice the gap.
+        enqueue_concept_index(conn, memory_id, content_hash)
+
         conn.execute(
             """
             INSERT INTO sessions (session_name, last_accessed)
@@ -347,6 +358,9 @@ async def _replace_memory(
             (session, timestamp),
         )
         conn.execute("DELETE FROM memory_chunks WHERE memory_id = ?", (memory_id,))
+        # A console edit replaces the content wholesale, so the graph holds
+        # entities from text that no longer exists until this is re-indexed.
+        enqueue_concept_index(conn, memory_id, content_hash)
     chunks = _chunk_text(
         sanitized_content,
         threshold=MEMORY_CHUNK_THRESHOLD_WORDS,
@@ -467,6 +481,9 @@ async def _store_doc_mirror(
                 (session, timestamp),
             )
             conn.execute("DELETE FROM memory_chunks WHERE memory_id = ?", (memory_id,))
+            # A promoted doc's mirror row is an ordinary memory to the graph,
+            # and a resave changes its content in place.
+            enqueue_concept_index(conn, memory_id, content_hash)
             conn.execute("COMMIT")
         except Exception:
             conn.execute("ROLLBACK")

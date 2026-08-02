@@ -21,7 +21,10 @@ from .memory_db import ConnectionContext, SQLiteConnectionPool
 from .memory_utils import _safe_print
 
 MAX_CONCEPT_DB_CONNECTIONS = 3
-CONCEPT_SCHEMA_VERSION = 2
+# 3: builds index compaction sources instead of the generated summary. Graphs
+# built under 2 hold summary-derived entities the current rule would never
+# produce, and provenance cannot retract them selectively.
+CONCEPT_SCHEMA_VERSION = 3
 _SCHEMA_VERSION_KEY = "schema_version"
 
 
@@ -37,8 +40,14 @@ def get_concept_db_path() -> str:
     return str(index_dir / "marm_index.db")
 
 
-def init_concept_database(db_path: str) -> None:
-    """Initialize SQLite database with concept graph tables."""
+def init_concept_database(db_path: str, mark_current: bool = True) -> None:
+    """Initialize SQLite database with concept graph tables.
+
+    Pass mark_current=False when initializing a graph that still has to be
+    rebuilt. Writing the version and deleting it again leaves a window where a
+    crash, or another process reading the schema state, sees an empty graph
+    reported as current.
+    """
     with sqlite3.connect(db_path) as conn:
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA foreign_keys=ON")
@@ -158,10 +167,16 @@ def init_concept_database(db_path: str) -> None:
                 value TEXT NOT NULL
             )
         """)
-        conn.execute(
-            "INSERT OR REPLACE INTO concept_schema_metadata (key, value) VALUES (?, ?)",
-            (_SCHEMA_VERSION_KEY, str(CONCEPT_SCHEMA_VERSION)),
-        )
+        # Only stamp a database that had no graph before this call. init runs
+        # on every ConceptDB(...) construction, including the one a console
+        # memory delete makes, so an unconditional write here would mark a
+        # stale graph as current and its rebuild would never fire.
+        if mark_current and "entities" not in existing_tables:
+            conn.execute(
+                "INSERT INTO concept_schema_metadata (key, value) VALUES (?, ?) "
+                "ON CONFLICT(key) DO NOTHING",
+                (_SCHEMA_VERSION_KEY, str(CONCEPT_SCHEMA_VERSION)),
+            )
         conn.execute("""
             CREATE TABLE IF NOT EXISTS concept_build_runs (
                 id TEXT PRIMARY KEY,
@@ -243,6 +258,11 @@ def backup_and_reset_concept_database(db_path: str) -> str:
         backup.close()
         source.close()
 
+    # The version marker is deliberately NOT written here. Stamping it at
+    # reset time means a rebuild that dies partway leaves an empty or partial
+    # graph reporting `current`, so nothing ever prompts for the rebuild again
+    # and the corpus is silently missing from the graph. mark_schema_current()
+    # is called by the build once it has actually finished.
     reset = sqlite3.connect(db_path, timeout=20.0)
     try:
         reset.execute("PRAGMA foreign_keys=OFF")
@@ -261,8 +281,24 @@ def backup_and_reset_concept_database(db_path: str) -> str:
         raise
     finally:
         reset.close()
-    init_concept_database(db_path)
+    init_concept_database(db_path, mark_current=False)
     return str(backup_path)
+
+
+def mark_schema_current(db_path: str) -> None:
+    """Record that this graph was built under the current extraction rules.
+
+    Called only after a full build finishes. Between the reset and this call
+    the graph reports `rebuild_required`, so an interrupted rebuild is retried
+    rather than mistaken for a complete one.
+    """
+    with closing(sqlite3.connect(db_path, timeout=20.0)) as conn:
+        conn.execute(
+            "INSERT INTO concept_schema_metadata (key, value) VALUES (?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (_SCHEMA_VERSION_KEY, str(CONCEPT_SCHEMA_VERSION)),
+        )
+        conn.commit()
 
 
 class ConceptDB:

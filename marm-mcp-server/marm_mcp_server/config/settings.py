@@ -55,6 +55,33 @@ def _safe_unit_float(env_key: str, default: float) -> float:
     return clamped
 
 
+_TRUE_WORDS = ("1", "true", "yes", "on")
+_FALSE_WORDS = ("0", "false", "no", "off")
+
+
+def _safe_bool(env_key: str, default: bool) -> bool:
+    """Read an on/off env var, accepting the spellings people actually type.
+
+    Comparing against a single literal is what makes a flag lie: a check for
+    != "0" reads CONCEPT_AUTO_INDEX=false as on, which is the opposite of what
+    the user asked for and of what the docs promise.
+    """
+    raw = os.environ.get(env_key)
+    if raw is None:
+        return default
+    value = raw.strip().lower()
+    if value in _TRUE_WORDS:
+        return True
+    if value in _FALSE_WORDS:
+        return False
+    print(
+        f"WARNING: {env_key}={raw!r} is not a true/false value, "
+        f"using default {default}",
+        file=sys.stderr,
+    )
+    return default
+
+
 def _safe_choice(env_key: str, default: str, allowed: tuple[str, ...]) -> str:
     """Read an env var constrained to a fixed set, falling back on anything else."""
     raw = os.environ.get(env_key)
@@ -179,7 +206,7 @@ if not (1 <= _raw_port <= 65535):
         f"WARNING: SERVER_PORT={_raw_port} out of [1, 65535], clamped to {SERVER_PORT}",
         file=sys.stderr,
     )
-SERVER_VERSION = "2.35.0"
+SERVER_VERSION = "2.36.0"
 
 GRAPH_ENABLED = os.environ.get("GRAPH_ENABLED", "true").lower() != "false"
 
@@ -273,11 +300,72 @@ if _raw_rsl < 1:
         file=sys.stderr,
     )
 
+# Page size for concept builds, not a truncation limit. Lowering it makes a
+# build read more, smaller pages; it no longer makes the build skip rows.
 _raw_cbc = _safe_int("CONCEPT_BUILD_ROW_CAP", 500)
 CONCEPT_BUILD_ROW_CAP = max(1, _raw_cbc)
 if _raw_cbc < 1:
     print(
         f"WARNING: CONCEPT_BUILD_ROW_CAP={_raw_cbc} below minimum 1, clamped to {CONCEPT_BUILD_ROW_CAP}",
+        file=sys.stderr,
+    )
+
+CONCEPT_AUTO_INDEX = _safe_bool("CONCEPT_AUTO_INDEX", True)
+
+# Quiet period after the most recent write before the worker starts draining.
+# An agent storing a burst of memories produces one drain, not one per write.
+_raw_cids = _safe_int("CONCEPT_INDEX_DEBOUNCE_SECONDS", 30)
+CONCEPT_INDEX_DEBOUNCE_SECONDS = max(1, _raw_cids)
+if _raw_cids < 1:
+    print(
+        f"WARNING: CONCEPT_INDEX_DEBOUNCE_SECONDS={_raw_cids} below minimum 1, "
+        f"clamped to {CONCEPT_INDEX_DEBOUNCE_SECONDS}",
+        file=sys.stderr,
+    )
+
+# Upper bound as well as lower: a claimed batch becomes one IN (...) clause in
+# three queries, and a batch past SQLite's variable ceiling would fail the same
+# way on every cycle forever. 500 memories of spaCy extraction per batch is
+# already far beyond anything useful.
+CONCEPT_INDEX_BATCH_SIZE_MAX = 500
+_raw_cibs = _safe_int("CONCEPT_INDEX_BATCH_SIZE", 20)
+CONCEPT_INDEX_BATCH_SIZE = max(1, min(CONCEPT_INDEX_BATCH_SIZE_MAX, _raw_cibs))
+if not (1 <= _raw_cibs <= CONCEPT_INDEX_BATCH_SIZE_MAX):
+    print(
+        f"WARNING: CONCEPT_INDEX_BATCH_SIZE={_raw_cibs} out of "
+        f"[1, {CONCEPT_INDEX_BATCH_SIZE_MAX}], clamped to {CONCEPT_INDEX_BATCH_SIZE}",
+        file=sys.stderr,
+    )
+
+# Pause between batches while draining a backlog. Extraction is CPU-bound and
+# competes with recall for cores, so a worker at full throttle measurably slows
+# interactive work; this trades drain duration for that latency. 0 disables it.
+_raw_cibp = _safe_int("CONCEPT_INDEX_BATCH_PAUSE_MS", 250)
+CONCEPT_INDEX_BATCH_PAUSE_MS = max(0, min(10_000, _raw_cibp))
+if not (0 <= _raw_cibp <= 10_000):
+    print(
+        f"WARNING: CONCEPT_INDEX_BATCH_PAUSE_MS={_raw_cibp} out of [0, 10000], "
+        f"clamped to {CONCEPT_INDEX_BATCH_PAUSE_MS}",
+        file=sys.stderr,
+    )
+
+# How long a claimed task stays owned. A process killed mid-extraction leaves
+# its tasks claimable again after this, without burning an attempt.
+_raw_cils = _safe_int("CONCEPT_INDEX_LEASE_SECONDS", 300)
+CONCEPT_INDEX_LEASE_SECONDS = max(1, _raw_cils)
+if _raw_cils < 1:
+    print(
+        f"WARNING: CONCEPT_INDEX_LEASE_SECONDS={_raw_cils} below minimum 1, "
+        f"clamped to {CONCEPT_INDEX_LEASE_SECONDS}",
+        file=sys.stderr,
+    )
+
+_raw_cima = _safe_int("CONCEPT_INDEX_MAX_ATTEMPTS", 3)
+CONCEPT_INDEX_MAX_ATTEMPTS = max(1, _raw_cima)
+if _raw_cima < 1:
+    print(
+        f"WARNING: CONCEPT_INDEX_MAX_ATTEMPTS={_raw_cima} below minimum 1, "
+        f"clamped to {CONCEPT_INDEX_MAX_ATTEMPTS}",
         file=sys.stderr,
     )
 

@@ -1,6 +1,6 @@
 """Tests for endpoints/concepts.py's build/recall orchestration.
 
-_fetch_memory_rows and the concept-DB read/write paths run against real
+_fetch_memory_pages and the concept-DB read/write paths run against real
 SQLite (tmp_path-backed, via conftest.load_isolated_server). extract_entities
 is monkeypatched at the endpoints module boundary for build tests -- spaCy's
 actual model isn't installable in this sandbox (see test_concept_extraction.py),
@@ -29,6 +29,11 @@ def _fresh_concepts_module(monkeypatch, tmp_path, concept_db_path=None):
     return server, concepts
 
 
+def _all_rows(pages):
+    """Flatten _fetch_memory_pages so a test can assert over the whole scope."""
+    return [row for page in pages for row in page]
+
+
 def _seed_memory(memory_module, rows):
     """rows: list of (id, session_name, content, project) tuples."""
     with memory_module.memory.get_connection() as conn:
@@ -47,7 +52,7 @@ def concepts_env(monkeypatch, tmp_path):
     return server, concepts, memory_module
 
 
-def test_fetch_memory_rows_scoped_by_session(concepts_env):
+def test_fetch_memory_pages_scoped_by_session(concepts_env):
     _server, concepts, memory_module = concepts_env
     _seed_memory(
         memory_module,
@@ -56,18 +61,22 @@ def test_fetch_memory_rows_scoped_by_session(concepts_env):
             ("m2", "sess-b", "second memory", None),
         ],
     )
-    rows = concepts._fetch_memory_rows(
-        session_name="sess-a", project=None, search_all=False
+    rows = _all_rows(
+        concepts._fetch_memory_pages(
+            session_name="sess-a", project=None, search_all=False
+        )
     )
     assert [r[0] for r in rows] == ["m1"]
 
 
-def test_fetch_memory_rows_requires_explicit_scope(concepts_env):
+def test_fetch_memory_pages_requires_explicit_scope(concepts_env):
     """No session_name, no project, search_all=False must raise -- not
-    silently fall through to scanning every memory in the DB."""
+    silently fall through to scanning every memory in the DB. Raised at call
+    time, not on first iteration, so the route's ValueError handler still
+    sees it where it always did."""
     _server, concepts, _memory_module = concepts_env
     with pytest.raises(ValueError, match="session_name, project, or search_all"):
-        concepts._fetch_memory_rows(session_name=None, project=None, search_all=False)
+        concepts._fetch_memory_pages(session_name=None, project=None, search_all=False)
 
 
 def test_promoted_doc_mirror_reachable_by_matching_scoped_build(monkeypatch, tmp_path):
@@ -76,7 +85,7 @@ def test_promoted_doc_mirror_reachable_by_matching_scoped_build(monkeypatch, tmp
     scoped to the doc's own project/session, and must NOT be picked up by
     a build scoped to a different project. Drives the real action='save'
     path (not a hand-inserted memories row) so this proves the actual
-    mirror-write wiring, not just that _fetch_memory_rows' SQL is capable
+    mirror-write wiring, not just that _fetch_memory_pages' SQL is capable
     of finding a row shaped like one."""
     from conftest import load_isolated_server
 
@@ -99,13 +108,17 @@ def test_promoted_doc_mirror_reachable_by_matching_scoped_build(monkeypatch, tmp
     assert result["status"] == "success"
     assert result["mirror_status"] == "synced"
 
-    matching_rows = concepts._fetch_memory_rows(
-        session_name=None, project="marm-systems", search_all=False
+    matching_rows = _all_rows(
+        concepts._fetch_memory_pages(
+            session_name=None, project="marm-systems", search_all=False
+        )
     )
     assert result["memory_id"] in [r[0] for r in matching_rows]
 
-    other_project_rows = concepts._fetch_memory_rows(
-        session_name=None, project="a-different-project", search_all=False
+    other_project_rows = _all_rows(
+        concepts._fetch_memory_pages(
+            session_name=None, project="a-different-project", search_all=False
+        )
     )
     assert result["memory_id"] not in [r[0] for r in other_project_rows]
 
@@ -120,10 +133,10 @@ def test_marm_concept_build_route_returns_static_message_on_missing_scope(
 
     ConceptBuildRequest's own model_validator already rejects this same
     input at the pydantic layer (a different message, enforced before the
-    route body ever runs), so _fetch_memory_rows' runtime ValueError is
+    route body ever runs), so _fetch_memory_pages' runtime ValueError is
     unreachable via a normally-constructed request -- model_construct
     bypasses that validation to exercise the route's own except-ValueError
-    handling directly, same as it would need to if _fetch_memory_rows'
+    handling directly, same as it would need to if _fetch_memory_pages'
     check were ever the only guard left."""
     _server, concepts, _memory_module = concepts_env
     from marm_mcp_server.core.models import ConceptBuildRequest
@@ -197,6 +210,7 @@ def test_scoped_legacy_build_persists_rebuild_required_run(concepts_env, monkeyp
 
 def test_full_legacy_build_backs_up_and_resets_graph(concepts_env, monkeypatch):
     _server, concepts, _memory_module = concepts_env
+    from marm_mcp_server.core.concept_db import CONCEPT_SCHEMA_VERSION
     from marm_mcp_server.core.models import ConceptBuildRequest
 
     concept_db = concepts._get_concept_db()
@@ -213,7 +227,9 @@ def test_full_legacy_build_backs_up_and_resets_graph(concepts_env, monkeypatch):
     monkeypatch.setattr(
         concepts,
         "_run_build",
-        lambda _rows: {
+        lambda _pages, _outcomes, _abort=None: {
+            "aborted": False,
+            "memories_processed": 0,
             "entities_extracted": 0,
             "relationships_created": 0,
             "code_links_created": 0,
@@ -241,12 +257,9 @@ def test_full_legacy_build_backs_up_and_resets_graph(concepts_env, monkeypatch):
     active_concept_db = concepts._get_concept_db()
     with active_concept_db.get_connection() as conn:
         assert conn.execute("SELECT COUNT(*) FROM entities").fetchone()[0] == 0
-        assert (
-            conn.execute(
-                "SELECT value FROM concept_schema_metadata WHERE key = 'schema_version'"
-            ).fetchone()[0]
-            == "2"
-        )
+        assert conn.execute(
+            "SELECT value FROM concept_schema_metadata WHERE key = 'schema_version'"
+        ).fetchone()[0] == str(CONCEPT_SCHEMA_VERSION)
         run = conn.execute(
             "SELECT status FROM concept_build_runs WHERE id = ?",
             ("full-rebuild-run",),
@@ -254,7 +267,7 @@ def test_full_legacy_build_backs_up_and_resets_graph(concepts_env, monkeypatch):
     assert run[0] == "success"
 
 
-def test_fetch_memory_rows_excludes_marm_system_session(concepts_env):
+def test_fetch_memory_pages_excludes_marm_system_session(concepts_env):
     _server, concepts, memory_module = concepts_env
     _seed_memory(
         memory_module,
@@ -263,15 +276,21 @@ def test_fetch_memory_rows_excludes_marm_system_session(concepts_env):
             ("m2", "sess-a", "real content", None),
         ],
     )
-    rows = concepts._fetch_memory_rows(session_name=None, project=None, search_all=True)
+    rows = _all_rows(
+        concepts._fetch_memory_pages(session_name=None, project=None, search_all=True)
+    )
     assert [r[0] for r in rows] == ["m2"]
 
 
-def test_fetch_memory_rows_excludes_compacted_source_rows(concepts_env):
-    """Mirrors core/memory_recall.py's active-recall filter -- a compacted
-    session's stale source rows must not be indexed alongside their summary,
-    or a build reintroduces obsolete concepts/relationships and inflates
-    mention counts."""
+def test_fetch_memory_pages_indexes_sources_and_skips_compaction_summaries(
+    concepts_env,
+):
+    """Deliberately the opposite of core/memory_recall.py's active-recall
+    filter. Recall wants the summary because it is the compact view. The graph
+    wants the sources, because they are where the concepts were actually
+    stated and indexing both restates every entity twice. Inverted in v2.36.0;
+    this is also what makes a memory graph-eligible the moment it is written
+    rather than after its session compacts."""
     _server, concepts, memory_module = concepts_env
     with memory_module.memory.get_connection() as conn:
         conn.execute(
@@ -283,22 +302,67 @@ def test_fetch_memory_rows_excludes_compacted_source_rows(concepts_env):
             "INSERT INTO memories (id, session_name, content, timestamp, project) "
             "VALUES ('m2', 'sess-a', 'compaction summary content', datetime('now'), NULL)"
         )
+        conn.execute("UPDATE memories SET compaction_role = 'summary' WHERE id = 'm2'")
+        conn.execute(
+            "INSERT INTO memories (id, session_name, content, timestamp, project) "
+            "VALUES ('m3', 'sess-a', 'uncompacted content', datetime('now'), NULL)"
+        )
 
-    rows = concepts._fetch_memory_rows(
-        session_name="sess-a", project=None, search_all=False
+    rows = _all_rows(
+        concepts._fetch_memory_pages(
+            session_name="sess-a", project=None, search_all=False
+        )
     )
-    assert [r[0] for r in rows] == ["m2"]
+    assert sorted(r[0] for r in rows) == ["m1", "m3"]
 
 
-def test_fetch_memory_rows_search_all_respects_row_cap(concepts_env, monkeypatch):
+def test_fetch_memory_pages_reaches_every_row_beyond_one_page(
+    concepts_env, monkeypatch
+):
+    """The row cap is a page size now, not a truncation limit. Before this,
+    a corpus larger than the cap left its oldest memories permanently
+    unreachable to every build."""
     _server, concepts, memory_module = concepts_env
     monkeypatch.setattr(concepts, "CONCEPT_BUILD_ROW_CAP", 3)
     _seed_memory(
         memory_module,
-        [(f"m{i}", "sess-a", f"content {i}", None) for i in range(10)],
+        [(f"m{i:02d}", "sess-a", f"content {i}", None) for i in range(10)],
     )
-    rows = concepts._fetch_memory_rows(session_name=None, project=None, search_all=True)
-    assert len(rows) == 3
+    pages = list(
+        concepts._fetch_memory_pages(session_name=None, project=None, search_all=True)
+    )
+
+    assert [len(p) for p in pages] == [3, 3, 3, 1]
+    ids = [r[0] for page in pages for r in page]
+    assert sorted(ids) == [f"m{i:02d}" for i in range(10)]
+
+
+def test_fetch_memory_pages_no_gaps_when_created_at_ties(concepts_env, monkeypatch):
+    """created_at defaults to CURRENT_TIMESTAMP, which is second-granular, so
+    a bulk write gives every row the same value. Keyset pagination on
+    created_at alone would drop or repeat rows at each boundary; the id
+    tiebreaker is what prevents it."""
+    _server, concepts, memory_module = concepts_env
+    monkeypatch.setattr(concepts, "CONCEPT_BUILD_ROW_CAP", 4)
+    with memory_module.memory.get_connection() as conn:
+        for i in range(13):
+            conn.execute(
+                "INSERT INTO memories (id, session_name, content, timestamp, created_at) "
+                "VALUES (?, 'sess-a', ?, datetime('now'), '2026-01-01 00:00:00')",
+                (f"m{i:02d}", f"content {i}"),
+            )
+
+    ids = [
+        r[0]
+        for r in _all_rows(
+            concepts._fetch_memory_pages(
+                session_name=None, project=None, search_all=True
+            )
+        )
+    ]
+
+    assert len(ids) == len(set(ids)) == 13
+    assert sorted(ids) == [f"m{i:02d}" for i in range(13)]
 
 
 def test_run_build_writes_entities_and_relationship_for_two_entities(
@@ -321,7 +385,7 @@ def test_run_build_writes_entities_and_relationship_for_two_entities(
     monkeypatch.setattr(concepts, "is_graph_available", lambda: False)
 
     rows = [("m1", "auth module talks to the rate limiter", "sess-a", "proj-a")]
-    result = concepts._run_build(rows)
+    result = concepts._run_build([rows])
 
     assert result["entities_extracted"] == 2
     assert result["relationships_created"] == 1
@@ -367,8 +431,8 @@ def test_run_build_is_idempotent_on_repeat_runs(concepts_env, monkeypatch):
     )
 
     rows = [("m1", "auth module talks to the rate limiter", "sess-a", "proj-a")]
-    first = concepts._run_build(rows)
-    second = concepts._run_build(rows)
+    first = concepts._run_build([rows])
+    second = concepts._run_build([rows])
 
     assert first["relationships_created"] == 1
     assert first["code_links_created"] == 2  # one per entity
@@ -414,8 +478,8 @@ def test_run_recall_does_not_return_duplicate_linked_code_after_repeat_build(
     )
 
     rows = [("m1", "CbmClient reference", "sess-a", "proj-a")]
-    concepts._run_build(rows)
-    concepts._run_build(rows)  # repeat build, same corpus
+    concepts._run_build([rows])
+    concepts._run_build([rows])  # repeat build, same corpus
 
     result = concepts._run_recall("CbmClient", session_name=None, limit=10)
     assert len(result["linked_code"]) == 1
@@ -440,7 +504,7 @@ def test_run_build_same_entity_across_two_memories_dedups_in_same_session(
         ("m1", "auth module content one", "sess-a", None),
         ("m2", "auth module content two", "sess-a", None),
     ]
-    result = concepts._run_build(rows)
+    result = concepts._run_build([rows])
     assert result["entities_extracted"] == 2  # two mentions processed
 
     concept_db = concepts._get_concept_db()
@@ -469,7 +533,7 @@ def test_run_build_with_graph_unavailable_creates_zero_code_links(
         lambda *a, **k: pytest.fail("should never be called when graph is unavailable"),
     )
 
-    result = concepts._run_build([("m1", "CbmClient reference", "sess-a", "proj-a")])
+    result = concepts._run_build([[("m1", "CbmClient reference", "sess-a", "proj-a")]])
     assert result["code_links_created"] == 0
 
 
@@ -495,7 +559,7 @@ def test_run_build_links_code_when_graph_available(concepts_env, monkeypatch):
         },
     )
 
-    result = concepts._run_build([("m1", "CbmClient reference", "sess-a", "proj-a")])
+    result = concepts._run_build([[("m1", "CbmClient reference", "sess-a", "proj-a")]])
     assert result["code_links_created"] == 1
 
 
@@ -517,7 +581,7 @@ def test_run_build_reports_no_duplicates_when_embedding_unavailable(
     )
     monkeypatch.setattr(concepts, "is_graph_available", lambda: False)
 
-    result = concepts._run_build([("m1", "auth module content", "sess-a", None)])
+    result = concepts._run_build([[("m1", "auth module content", "sess-a", None)]])
     assert result["possible_duplicates"] == []
 
 
@@ -554,7 +618,7 @@ def test_run_build_reports_possible_duplicate_when_similar_entity_exists(
         ("m1", "Auth content", "sess-a", None),
         ("m2", "OAuth content", "sess-a", None),
     ]
-    result = concepts._run_build(rows)
+    result = concepts._run_build([rows])
 
     assert len(result["possible_duplicates"]) == 1
     dup = result["possible_duplicates"][0]
@@ -594,7 +658,7 @@ def test_run_build_caches_embed_calls_across_repeated_entity_names(
         ("m2", "auth module content two", "sess-a", None),
         ("m3", "auth module content three", "sess-a", None),
     ]
-    result = concepts._run_build(rows)
+    result = concepts._run_build([rows])
 
     assert result["entities_extracted"] == 3  # three mentions processed
     assert call_count["n"] == 1  # but the name was only ever embedded once
@@ -955,8 +1019,10 @@ def test_base_install_keeps_concept_tools_registered(concepts_env):
         memory_module,
         [("m1", "sess-a", "The write queue serializes memory writes.", None)],
     )
-    rows = concepts._fetch_memory_rows(session_name=None, project=None, search_all=True)
-    result = concepts._run_build(rows)
+    pages = concepts._fetch_memory_pages(
+        session_name=None, project=None, search_all=True
+    )
+    result = concepts._run_build(pages)
 
     if CONCEPTS_AVAILABLE:
         assert result["entities_extracted"] > 0, (

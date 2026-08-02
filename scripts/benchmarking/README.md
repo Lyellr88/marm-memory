@@ -8,8 +8,9 @@ model judging.
 ```
 scripts/benchmarking/
   performance/
-    bench_hotpath.py      # encode/recall/write/hybrid-search latency
-    dump_tool_schema.py   # dumps the real MCP tool schema an agent sees
+    bench_hotpath.py           # encode/recall/write/hybrid-search latency
+    bench_concept_worker.py    # store/recall latency under background indexing
+    dump_tool_schema.py        # dumps the real MCP tool schema an agent sees
   accuracy/
     locomo/
       run_eval.py          # LoCoMo retrieval accuracy harness
@@ -34,6 +35,45 @@ python scripts/benchmarking/performance/bench_hotpath.py
 ```
 
 The numbers in the root [README's Performance & Scaling Benchmarks section](../../README.md#performance--scaling-benchmarks) come from this script. Don't publish a performance claim this script can't reproduce.
+
+### `bench_concept_worker.py`
+
+Measures what the test suite structurally cannot: `conftest` disables the real
+encoder for isolation, so no test exercises store and recall latency while the
+v2.36.0 background indexer is running.
+
+Times both paths twice, once with the worker stopped and once while it drains a
+queue holding the whole corpus, which is the state an upgrade with an existing
+corpus passes through. A fresh install has nothing to catch up on.
+
+```
+python scripts/benchmarking/performance/bench_concept_worker.py
+python scripts/benchmarking/performance/bench_concept_worker.py --from-live
+```
+
+`--from-live` copies `~/.marm/marm_memory.db` (and its WAL sidecars) into a temp
+directory and measures against a real corpus. It never writes to the original.
+
+The code-graph engine is disabled unless `--with-code-graph` is passed: each
+extracted entity otherwise costs a ~300ms round trip to that subprocess, which
+swamps the in-process contention this script is for.
+
+Also sweeps the inter-batch pause, reporting recall p95 against total drain
+time so the throttle can be set from data:
+
+```
+python scripts/benchmarking/performance/bench_concept_worker.py --from-live --sweep 0,250,500
+```
+
+Interpreting it: the relative deltas look alarming and the absolute numbers
+usually do not. Judge both. Check the "N of M indexed" line as well, since a
+worker that finished early means part of the timed phase measured an idle
+process; raise `--seed` if so.
+
+Corpus shape changes the answer, so prefer `--from-live` before quoting a
+number anywhere. Short synthetic memories produce many small extractions and
+show a write regression that a real corpus does not, because entity-name
+embeddings are generated far faster than real content generates them.
 
 ## Accuracy (`accuracy/locomo/`)
 

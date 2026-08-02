@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from ..config.settings import (
+    CONCEPT_AUTO_INDEX,
     CONCEPT_MODEL_AVAILABLE,
     DEFAULT_DB_PATH,
     DEFAULT_SEMANTIC_MODEL,
@@ -116,9 +117,26 @@ def knowledge_status() -> dict[str, Any]:
         "spacy": spacy_available,
         "model": model_available,
         "schema": schema,
+        "auto_index": CONCEPT_AUTO_INDEX,
+        "index_queue": _index_queue_counts(),
         "database": {"path": str(concept_path), "exists": concept_path.exists()},
         "last_build": _latest_concept_build(concept_path),
     }
+
+
+def _index_queue_counts() -> dict[str, Any]:
+    """How far behind automatic indexing is. Without this the only symptom of
+    a dormant worker is a graph that quietly stops growing.
+
+    None on any failure: a status command must still report the runtime and
+    schema even when the memory database cannot be opened.
+    """
+    try:
+        from ..core import concept_queue
+
+        return concept_queue.counts()
+    except Exception:
+        return {"pending": None, "parked": None}
 
 
 def maintenance_status() -> dict[str, Any]:

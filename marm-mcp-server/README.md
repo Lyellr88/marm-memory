@@ -7,7 +7,7 @@ mcp-name: io.github.Lyellr88/marm-mcp-server
      width="900"
      height="250">
 </picture>
-<h1 align="center">Give your AI Agents a permanent memory in 60 seconds.</h1>
+<h1 align="center">Give your AI Agents a permanent memory in 60 seconds</h1>
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/Lyellr88/marm-memory/blob/MARM-main/LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
@@ -88,7 +88,7 @@ It brings three things together:
 
 - 🧠 **Core Memory (7 tools)** stores conversations, notes, notebook entries, and summaries so they stay searchable.
 - 💻 **Code Graph (5 tools)** maps your repository so agents can find symbols, follow code paths, and understand the project without rereading it all.
-- 🧩 **Concept Graph (2 tools)** connects people, decisions, errors, and ideas from your stored memories, with links back to relevant code when available.
+- 🧩 **Concept Graph (2 tools)** connects people, decisions, errors, and ideas from your stored memories, with links back to relevant code when available. It builds itself as you store memories.
 
 All 14 tools work over HTTP and STDIO. Your agents share the same local memory across sessions instead of starting from scratch each time. The built-in Console lets you see and manage what is saved.
 
@@ -142,8 +142,8 @@ marm-memory uninstall                      # preview package removal; always pre
 **Knowledge, projects, and maintenance**
 
 ```bash
-marm-memory knowledge status               # Check available indexers and models
-marm-memory knowledge build --all          # Build the concept graph from stored memories
+marm-memory knowledge status               # Indexers, models, and how far behind automatic indexing is
+marm-memory knowledge build --all          # Rebuild the whole concept graph (new memories index themselves)
 marm-memory projects list                  # List all tracked workspaces
 marm-memory projects index <path>          # Run deep codebase structural indexing
 marm-memory projects status                # Inspect target repo graph readiness
@@ -698,10 +698,10 @@ The AI agent will automatically use the appropriate tools. Manual tool access is
 
 | Tool | What it does | Key parameters |
 |------|--------------|----------------|
-| `marm_concept_build` | Extract entities and typed relationships from stored memories | `session_name`, `project`, or `search_all=True` (one required) |
+| `marm_concept_build` | Rebuild the graph, or index memories stored before automatic indexing. New memories are indexed on their own | `session_name`, `project`, or `search_all=True` (one required) |
 | `marm_concept_recall` | Explicitly query entities, relationships, and linked code symbols | `query`, `depth` (1-5), `direction`, `project`, `platform` |
 
-All 14 tools are available on both HTTP and STDIO. Behind the tool surface, the server handles lifecycle setup, protocol refresh, docs indexing, date context, summary-cache maintenance, write queue handling, project/platform attribution, and health checks automatically; none of those consume the agent's attention or tokens. The two graph engines start lazily on first use and never block the 7 core memory tools if they fail to start. See [Architecture & Internals](#architecture--internals) for the mechanisms.
+All 14 tools are available on both HTTP and STDIO. Behind the tool surface, the server handles lifecycle setup, protocol refresh, docs indexing, date context, summary-cache maintenance, write queue handling, concept indexing, project/platform attribution, and health checks automatically; none of those consume the agent's attention or tokens. The two graph engines start lazily on first use and never block the 7 core memory tools if they fail to start. See [Architecture & Internals](#architecture--internals) for the mechanisms.
 
 ## Using MARM: Talk, Don't Call Tools
 
@@ -867,7 +867,7 @@ Under the hood, the engine is [codebase-memory-mcp](https://github.com/DeusData/
 
 ### Concept Graph: what your memories are about
 
-MARM can extract a knowledge graph from the memories you've already stored. `marm_concept_build` runs entity and relationship extraction over stored memory content, producing typed entities (**concepts, decisions, patterns, errors, tools, people, organizations**) connected by typed relationships (**fixes, implements, depends_on, uses, causes, replaces, extends**). Once built, `marm_smart_recall` automatically adds bounded related entities, relationships, and linked code as a `graph_context` sidecar without changing primary memory ranking. `marm_concept_recall` remains available for explicit graph exploration:
+MARM extracts a knowledge graph from the memories you store, producing typed entities (**concepts, decisions, patterns, errors, tools, people, organizations**) connected by typed relationships (**fixes, implements, depends_on, uses, causes, replaces, extends**). This happens on its own: storing a memory queues it, and a background worker adds it to the graph roughly 30 seconds later. `marm_concept_build` is still there for a full or scoped rebuild. Once there is a graph, `marm_smart_recall` adds bounded related entities, relationships, and linked code as a `graph_context` sidecar without changing primary memory ranking. `marm_concept_recall` remains available for explicit graph exploration:
 
 ```text
 marm_concept_recall(query="write queue")            → the entity, its relationships, linked code symbols
@@ -876,12 +876,17 @@ marm_concept_recall(query="related to SQLite", depth=3) → multi-hop traversal 
 
 How to use it:
 
-- **Build first**: call `marm_concept_build` scoped to a `session_name`, `project`, or `search_all=True`. There is no data until a build has run at least once. Builds are explicit and on-demand, not a live hook into the write path; re-run after logging significant new memories.
-- **Upgrade once**: graphs built before platform attribution require `marm_concept_build(search_all=True)`. A full build backs up and resets only the derived concept database; targeted builds refuse to guess platform ownership.
-- **Bounded by design**: each build is row-capped (`CONCEPT_BUILD_ROW_CAP`, default 500) so a huge store can't turn one tool call into a runaway job.
+- **Automatic by default**: new memories reach the graph without a tool call. Set `CONCEPT_AUTO_INDEX=false` to go back to manual builds only, which stops the worker but keeps recording queue rows, so turning it back on picks up everything written while it was off; `CONCEPT_INDEX_DEBOUNCE_SECONDS` (30) and `CONCEPT_INDEX_BATCH_SIZE` (20) control the pace.
+- **Safe on both transports at once**: a leased lock in the memory database keeps a rebuild in one process from dropping graph tables while another process is writing to them. A build that finds the graph busy says so instead of colliding.
+- **Failure never reaches your memories**: indexing runs on a durable queue outside the write path. Extraction problems retry, a memory that fails repeatedly is parked with its error, and the memory itself stores and recalls normally throughout.
+- **Clearing a backlog costs some recall speed**: entity extraction is CPU-bound, so while the worker is working through a queue, measured recall goes from ~8ms to ~16ms median on a real 768-memory corpus. Writes are unaffected. It only applies while a backlog is draining, which for most people is once, after the upgrade rebuild. Reproduce it with `scripts/benchmarking/performance/bench_concept_worker.py --from-live`.
+- **Build for the backlog**: `marm_concept_build` scoped to a `session_name`, `project`, or `search_all=True` indexes memories stored before automatic indexing existed, and rebuilds after an upgrade that requires one.
+- **Upgrade twice so far**: graphs built before platform attribution, or before compaction sources replaced summaries as the indexed rows, require `marm_concept_build(search_all=True)`. A full build backs up and resets only the derived concept database; targeted builds refuse to guess platform ownership.
+- **Whole scope, paged**: builds read every memory in scope. `CONCEPT_BUILD_ROW_CAP` (default 500) is the page size, so lowering it makes a build read more, smaller pages rather than skipping the rest.
+- **Compacted sessions**: the original memories are indexed and the generated summary is not, so concepts stay attributed to where they were actually stated.
 - **Recall fails open**: a missing, empty, incompatible, or unavailable concept graph never blocks normal memory recall. The response reports graph status separately.
 - **Code cross-linking**: when the code graph has indexed the same project, concept entities that match code symbols get linked, connecting "what we decided" to "where it lives in the code."
-- **Bundled extraction runtime**: the spaCy runtime and English extraction model ship with MARM but load only on the first concept build. If a damaged or partial installation makes them unavailable, both concept tools degrade cleanly while core memory remains available; run `marm-memory knowledge status`, then reinstall MARM if needed.
+- **Bundled extraction runtime**: the spaCy runtime and English extraction model ship with MARM but load only on the first extraction, which now happens on its own shortly after the first memory is stored rather than when you run a build. If a damaged or partial installation makes them unavailable, both concept tools degrade cleanly while core memory remains available; run `marm-memory knowledge status`, then reinstall MARM if needed.
 - **Isolated storage**: the concept graph lives in its own SQLite database (`~/.marm/index/marm_index.db`) with its own connection pool, so concept-graph writes can never block or corrupt the production memory database.
 - **Console atlas**: MARM Console renders the complete atlas up to 750 entities and 6,000 stored relationships. Larger graphs use a deterministic connected sample of up to 600 entities and 4,000 aggregated visual edges, clearly labelled as sampled.
 
@@ -897,7 +902,7 @@ Everything above runs on a small number of deliberate mechanisms. This section i
 - **FTS5 full-text index** (`memories_fts`) is maintained as an external-content table over the memories table and powers both the exact lane (BM25) and the filter stage of hybrid recall.
 - **Chunk storage**: memories past ~180 words are split into overlapping 150-token chunks (50-token overlap) in a `memory_chunks` table, each with its own embedding. Recall scores chunks and collapses to the parent memory.
 - **Embeddings** come from the fastembed-backed `jinaai/jina-embeddings-v2-small-en` encoder: 33M parameters, 512 dimensions, an 8,192-token context window, and an Apache-2.0 license. It does not require separate query/document text prefixes. The encoder is lazily loaded on first semantic use and serialized behind a lock so concurrent encodes can't corrupt each other. If it is unavailable, writes still succeed; memories are stored without embeddings until it loads. Semantic scoring runs as a single NumPy batch (matrix cosine) rather than a Python loop.
-- **The concept graph gets its own database** (`~/.marm/index/marm_index.db`) and its own pool, reusing the same pool implementation but never sharing connections with the memory store. Deliberate isolation: an experimental graph build must not be able to stall the production WAL.
+- **The concept graph gets its own database** (`~/.marm/index/marm_index.db`) and its own pool, reusing the same pool implementation but never sharing connections with the memory store. Deliberate isolation: an experimental graph build must not be able to stall the production WAL. The one exception is the indexing queue, which lives in the memory database on purpose so a memory and its indexing task commit together; the graph itself stays derived and disposable.
 
 ### Write path
 
@@ -906,6 +911,7 @@ Everything above runs on a small number of deliberate mechanisms. This section i
   - **Layer 1, exact dedup**: a SHA-256 hash of normalized content is checked within the session; hash hits are verified against the actual content before deduplicating, so a hash collision stores a new row instead of silently merging different content.
   - **Layer 2, semantic merge**: near-duplicates above `CONSOLIDATION_THRESHOLD` cosine similarity are merged rather than accumulated. This never blocks a write; if the encoder isn't available, the write proceeds unconsolidated.
   - The tradeoff is measured and published: roughly 9x median write cost (58ms vs 6.5ms) in exchange for a store that stays clean, because reads dominate memory workloads. See section 3 of the benchmarks above.
+- **Concept indexing is a durable outbox**: a write records an indexing task in the same transaction as the memory, so a memory cannot exist without one. A background worker drains that queue and writes the concept graph. Nothing on the write path waits for extraction, and a process killed mid-extraction loses no work because the task is a row rather than an in-memory job. Both transports run a worker, so the two coordinate through a leased lock in the memory database rather than an in-process lock, which would not span them.
 - **Compaction** (opt-in, `COMPACTION_ENABLED=1`) is Layer 3: after enough writes in a session, a background pass detects clusters of related memories using cosine similarity plus union-find connected components, gated by minimum cluster size, minimum age, and an active-session grace period so it never compacts work in flight. MARM then injects a bounded request asking the connected agent to summarize each cluster: `candidates` → `stage` → `review` → `apply` or `discard`. Source memory IDs are preserved on apply, so compacted summaries stay traceable to their originals. Staged summaries expire (`COMPACTION_STAGING_TTL_HOURS`), nudges are capped and cooldown-limited, and the injection has a byte budget. The design is honest about what LLMs are for: MARM detects, the agent summarizes, and a human-reviewable stage/apply/discard loop gates the destructive step.
 
 ### Recall path
@@ -975,7 +981,13 @@ Packaged docs are indexed into the `marm_system` memory namespace on startup and
 | `COMPACTION_SIMILARITY_THRESHOLD` / `COMPACTION_MIN_CLUSTER_SIZE` / `COMPACTION_MIN_AGE_HOURS` | `0.88` / `3` / `24` | Cluster detection gates |
 | `COMPACTION_STAGING_TTL_HOURS` | `168` | How long staged summaries wait before expiring |
 | `GRAPH_ENABLED` | `true` | Kill switch for the 5 code-graph tools |
-| `CONCEPT_BUILD_ROW_CAP` | `500` | Max memory rows per concept-graph build |
+| `CONCEPT_BUILD_ROW_CAP` | `500` | Memory rows read per page during a concept-graph build. Not a cap on the build: every memory in scope is read either way |
+| `CONCEPT_AUTO_INDEX` | `true` | Automatic concept indexing of new memories. `false`, `0`, `no`, or `off` stops the worker and leaves builds manual. Writes still record queue rows either way |
+| `CONCEPT_INDEX_DEBOUNCE_SECONDS` | `30` | Quiet period after a write before indexing starts, so a burst becomes one pass |
+| `CONCEPT_INDEX_BATCH_SIZE` | `20` | Memories indexed per batch, capped at 500. Lowering it does not reduce contention; it measured slightly worse |
+| `CONCEPT_INDEX_BATCH_PAUSE_MS` | `250` | Pause between batches while clearing a backlog. Cuts worst-case recall during indexing from ~270ms to ~80ms for about 18% longer drain. `0` disables it |
+| `CONCEPT_INDEX_LEASE_SECONDS` | `300` | How long a claimed indexing task stays owned once nothing is renewing it. Work in progress renews its own lease, so this bounds how long a *killed* process holds tasks, not how long a batch may take. Reclaimed tasks spend no attempt |
+| `CONCEPT_INDEX_MAX_ATTEMPTS` | `3` | Failed attempts before a memory is parked with its error instead of retried |
 
 </details>
 
@@ -1051,6 +1063,23 @@ It re-splits stale chunks, fills in any lost to an interrupted write, and drops 
 
 - First confirm that a scoped concept build actually includes memories with extractable entities.
 - Run `marm-memory knowledge status`; if it reports a missing runtime or model, repair the install with `python -m pip install -U --force-reinstall marm-mcp-server`.
+
+**New memories are not showing up in the graph**
+
+- Run `marm-memory knowledge status`. `index_queue.pending` is how many memories are waiting; `index_queue.parked` is how many gave up. `auto_index: false` means indexing is switched off.
+- Give it the debounce interval (30 seconds by default) plus extraction time. A burst of writes is indexed as one pass, not one per memory.
+- Check that `CONCEPT_AUTO_INDEX` is not set to `false`, `0`, `no`, or `off`.
+- A graph awaiting a rebuild is not indexed into. If the Console or `marm-memory knowledge status` reports `rebuild_required`, run `marm_concept_build(search_all=True)` once; queued memories are picked up after it.
+- Automatic indexing only covers memories written since the upgrade. Run a build once to bring in everything older.
+- A memory that fails extraction three times is parked rather than retried forever. The reason is recorded with the task.
+
+**A build returns `build_in_progress`**
+
+- Another MARM process is writing the graph, usually the other transport's indexing worker. Builds are short unless it is a full rebuild; run it again in a moment.
+
+**A build returns `lock_lost`**
+
+- The build was stalled long enough for another process to take over the graph, so it stopped partway rather than writing alongside it. Usually a suspended machine or a debugger pause. Whatever it indexed before stopping is kept, and re-running the build finishes the rest.
 
 </details>
 

@@ -15,6 +15,7 @@ import type {
   ConceptAtlas,
   ConceptDetail,
   ConceptEntity,
+  ConceptGraphVersion,
   ConceptSearchParams,
   ConceptsSummary,
   DuplicateCandidate,
@@ -205,6 +206,8 @@ export function createMarmClient(config: MarmClientConfig) {
       request<ConceptDetail>(config, 'GET', `/concepts/${entityId}`),
     getConceptGraph: () =>
       request<ConceptAtlas>(config, 'GET', '/concepts/graph'),
+    getConceptGraphVersion: () =>
+      request<ConceptGraphVersion>(config, 'GET', '/concepts/graph/version'),
     getConceptNeighborhood: (
       entityId: number,
       params?: { depth?: number; direction?: string; predicate?: string },

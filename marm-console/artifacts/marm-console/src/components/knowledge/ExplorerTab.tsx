@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useConceptsSummary, useSearchConcepts, useNeighborhood, useConceptGraph, useConcept, useMarmConfig } from '@/hooks/use-marm-queries';
+import { useConceptsSummary, useSearchConcepts, useNeighborhood, useConceptGraph, useConcept, useMarmConfig, useGraphAutoRefresh } from '@/hooks/use-marm-queries';
 import { Card, CardContent, CardHeader, Input, Button, Badge, Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/core';
 import { Search, GitGraph, Network, AlertTriangle, X, ArrowLeft } from 'lucide-react';
 import type { Neighborhood, NeighborhoodNode, ConceptDetail } from '@/lib/marm-types';
@@ -94,6 +94,9 @@ function ProvenancePanel({
 }
 
 export function ExplorerTab() {
+  // Background indexing adds nodes with nobody watching. This component only
+  // exists while the Explorer tab is showing, so the polling stops with it.
+  useGraphAutoRefresh();
   const { data: summary } = useConceptsSummary();
   const { client } = useMarmConfig();
   const [q, setQ] = useState('');

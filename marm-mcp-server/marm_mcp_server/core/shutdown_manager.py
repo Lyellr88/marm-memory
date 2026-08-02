@@ -4,6 +4,7 @@ import signal
 import structlog
 
 from ..config.settings import CHUNK_DRAIN_TIMEOUT_SECONDS
+from .concept_worker import concept_worker
 from .graph_supervisor import graph_supervisor
 from .memory import memory
 from .memory_utils import drain_chunk_writes
@@ -66,6 +67,14 @@ class ShutdownManager:
             memory._pending_compaction_scans.clear()
         except Exception:
             logger.exception("Failed to cancel pending compaction scans")
+
+        # Before the write queue stops and the pools begin closing: the worker
+        # produces concept writes and reads the memory DB, and stopping it only
+        # signals, it does not wait for an in-flight extraction.
+        try:
+            await concept_worker.stop()
+        except Exception:
+            logger.exception("Failed to stop concept index worker")
 
         try:
             await memory.stop_write_queue()

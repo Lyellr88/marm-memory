@@ -9,7 +9,12 @@ from contextlib import closing
 from math import sqrt
 from pathlib import Path
 
-_CURRENT_CONCEPT_SCHEMA_VERSION = "2"
+from ..core.concept_db import CONCEPT_SCHEMA_VERSION
+
+# Read from the writer's own constant rather than restated here. As a literal
+# it silently disagreed on the next bump, and the Console would have called
+# every freshly rebuilt graph stale.
+_CURRENT_CONCEPT_SCHEMA_VERSION = str(CONCEPT_SCHEMA_VERSION)
 
 
 def _connect(db_path: Path) -> sqlite3.Connection | None:
@@ -51,6 +56,39 @@ def _schema_status(connection: sqlite3.Connection) -> str:
         )
     except sqlite3.Error:
         return "unavailable"
+
+
+def graph_version(db_path: Path) -> dict:
+    """A cheap change marker the Console can poll while the Explorer is open.
+
+    Four counters and the last build's finish time, so a poll costs two counts
+    and two max lookups instead of serializing the whole atlas. Only the graph
+    itself is refetched, and only when this moves.
+
+    It does not move when an existing entity is merely mentioned by another
+    memory: that adds provenance to a row rather than creating one. The node
+    is already on screen in that case, which is what this exists to deliver.
+    """
+    connection = _connect(db_path)
+    if connection is None:
+        return {"schema_status": "unavailable", "version": "unavailable"}
+    with closing(connection), connection:
+        schema_status = _schema_status(connection)
+        if schema_status != "current":
+            return {"schema_status": schema_status, "version": schema_status}
+        entities, max_entity = connection.execute(
+            "SELECT COUNT(*), COALESCE(MAX(id), 0) FROM entities"
+        ).fetchone()
+        relationships, max_relationship = connection.execute(
+            "SELECT COUNT(*), COALESCE(MAX(id), 0) FROM relationships"
+        ).fetchone()
+        last_build = connection.execute(
+            "SELECT COALESCE(MAX(finished_at), '') FROM concept_build_runs"
+        ).fetchone()[0]
+    return {
+        "schema_status": schema_status,
+        "version": f"{entities}:{max_entity}:{relationships}:{max_relationship}:{last_build}",
+    }
 
 
 def summary(db_path: Path) -> dict:
