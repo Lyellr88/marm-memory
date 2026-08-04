@@ -13,6 +13,9 @@ MARM is a local-first MCP memory server: Python FastAPI in `marm-mcp-server/`, p
 - **Storage**: SQLite WAL at `~/.marm/marm_memory.db` (connection pool, FTS5 external-content index `memories_fts`, `memory_chunks` for long-memory chunking). The concept graph uses its own database `~/.marm/index/marm_index.db` with its own pool. Never share connections between the two.
 - **Write path**: all memory writes go through the serialized async write queue (one worker). Do not add write paths that bypass it. `marm_log_entry` dual-writes: a `log_entries` row plus a semantic memory in `memories` (via the queue); a semantic-store failure must never fail the log write.
 - **Code graph**: a pinned external binary (codebase-memory-mcp) supervised as a child process over newline-delimited JSON-RPC (`core/graph_supervisor.py`, `core/graph_client.py`). It starts lazily and runs degraded on failure. Graph or concept failures must never break the 7 core memory tools.
+- **Both graphs index themselves**, on by default, one background worker each on both transports. Concept extraction is queue-driven: a write enqueues a durable outbox row in the same transaction as the memory (`core/concept_worker.py`). Code indexing is poll-driven: a git signature per indexed repo, re-indexing on a commit and every cycle while the tree is dirty (`core/graph_index_worker.py`). Neither may be made to block a write, a recall, or startup.
+- **Cross-process serialization is a leased DB row, never an asyncio lock.** `core/lease_lock.py` owns the mechanics; `concept_build_lock` and `graph_index_lock` are its two bindings, deliberately separate rows. HTTP and STDIO are separate processes, so an in-process lock protects nothing. Every code-index call AND `delete_project` take the graph gate. Release is driven by the engine call's completion, not the awaiting task: `asyncio.to_thread` cancellation cancels the await and leaves the thread writing.
+- **Runtime switches live in the DB, not just the environment** (`core/runtime_flags.py`). A saved override beats the env var so a Dockerfile cannot silently re-enable what a user turned off, and both workers re-read per cycle so no restart is needed. Any new background worker follows this: read the flag every cycle, and start the loop even when off so it can be turned on from another process.
 - **Graph-aware recall**: `marm_smart_recall` keeps primary memory ranking authoritative and may add bounded `graph_context` from the isolated concept database. Graph enrichment is read-only and fail-open; trim graph details before primary results when enforcing response limits.
 - **Embeddings**: one fastembed `jinaai/jina-embeddings-v2-small-en` encoder (512 dimensions), lazy-loaded and serialized behind a lock. Writes must succeed even when the encoder is unavailable. Existing data requires `marm-mcp-server --migrate-embeddings` before restart when upgrading from MiniLM.
 
@@ -75,9 +78,10 @@ Semver: MAJOR = breaking (schema renames, parameter removals), MINOR = new tools
 - Dev setup: `cd marm-mcp-server && pip install -e ".[dev]" && python scripts/bundle-concept-model.py`
 - Benchmarks live in `scripts/benchmarking/`: `preformance/bench_hotpath.py` for hot-path performance, `accuracy/locomo/run_eval.py` for LoCoMo retrieval accuracy. Do not publish performance claims neither script can back.
 
-## Current Stats (v2.28.0)
+## Current Stats (v2.37.0)
 
 - 14 MCP tools over HTTP + STDIO
-- 2 isolated SQLite databases (memory + concept graph)
+- 3 isolated SQLite databases (memory + concept graph + analytics), no shared pools. The code graph engine owns its own store outside all three
 - Hybrid recall: FTS5 BM25 exact lane + bounded semantic rerank
 - Bundled concept extraction: spaCy plus the `en_core_web_sm` pipeline, both loaded lazily; Docker image includes the graph engine
+- Two background indexers, both on by default: concept extraction from a durable outbox, code re-indexing from a git-signature poll

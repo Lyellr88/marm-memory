@@ -20,6 +20,12 @@ from pydantic import ValidationError
 
 from ..core.stdio_logging import _stdio_log
 from ..core.stdio_tool_lifecycle import _log_tool_call
+from marm_mcp_server.core.graph_index_lock import GraphIndexBusy, run_exclusive
+from marm_mcp_server.core.graph_index_worker import (
+    AUTO_ACTIONS,
+    auto_action,
+    index_repository,
+)
 from marm_mcp_server.core.graph_supervisor import graph_supervisor
 from marm_mcp_server.endpoints.concepts import (
     marm_concept_build as _marm_concept_build_endpoint,
@@ -55,7 +61,9 @@ async def marm_graph_index(
     repo_path: Optional[str] = None,
     project: Optional[str] = None,
     mode: Literal["full", "moderate", "fast"] = "moderate",
-    action: Literal["auto", "index", "status", "list"] = "auto",
+    action: Literal[
+        "auto", "index", "status", "list", "auto_on", "auto_off", "auto_status"
+    ] = "auto",
 ) -> dict:
     """
     🕸️ Index a code repository into the graph, or check status / list known projects.
@@ -64,20 +72,46 @@ async def marm_graph_index(
     other tool). Omit it to list indexed projects, or pass `project` to check
     index status. Call this first — all other graph tools need an indexed project.
 
+    Indexed repos are re-indexed automatically in the background. Use
+    `action="auto_off"` to stop that, `auto_on` to resume, `auto_status` to check.
+
     Parameters:
     - repo_path: path to the repository to index; omit to list/status only
     - project: existing project name for a status check; omit to auto-resolve
     - mode: index depth — full | moderate | fast (default moderate)
-    - action: auto | index | status | list (default auto; infers from repo_path presence)
+    - action: auto | index | status | list (default auto; infers from repo_path
+      presence), or auto_on | auto_off | auto_status to control automatic
+      re-indexing
 
     Returns: graph index/status/list response, or a graph-unavailable error if the
     graph backend is disabled or failed to start
     """
+    # Ahead of _graph_available(), which refuses when the engine is down and
+    # starts it as a side effect. The off switch must work in either state.
+    if action in AUTO_ACTIONS:
+        return await asyncio.to_thread(auto_action, action)
     if not await _graph_available():
         return _graph_unavailable()
     req = GraphIndexRequest(
         repo_path=repo_path, project=project, mode=mode, action=action
     )
+    if action == "index" or (action == "auto" and repo_path):
+        try:
+            # index_repository, not do_index: the tombstone and the path-limit
+            # marker are settled inside the gate, where they cannot race the
+            # other transport's poller writing the opposite answer.
+            return await run_exclusive(
+                "manual_index:stdio",
+                index_repository,
+                graph_supervisor.get_client(),
+                req,
+            )
+        except GraphIndexBusy as busy:
+            return {
+                "status": "error",
+                "error_code": "index_in_progress",
+                "message": str(busy),
+            }
     return await asyncio.to_thread(
         graph_router.do_index, graph_supervisor.get_client(), req
     )

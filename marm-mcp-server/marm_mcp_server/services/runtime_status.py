@@ -117,11 +117,20 @@ def knowledge_status() -> dict[str, Any]:
         "spacy": spacy_available,
         "model": model_available,
         "schema": schema,
-        "auto_index": CONCEPT_AUTO_INDEX,
+        "auto_index": _concept_auto_index(),
         "index_queue": _index_queue_counts(),
         "database": {"path": str(concept_path), "exists": concept_path.exists()},
         "last_build": _latest_concept_build(concept_path),
     }
+
+
+def _concept_auto_index() -> bool:
+    """The effective switch, not the environment variable. A saved override wins,
+    so reporting the env value told the user extraction was on after they had
+    turned it off."""
+    from ..core import runtime_flags
+
+    return runtime_flags.get_bool(runtime_flags.AUTO_INDEX_CONCEPT, CONCEPT_AUTO_INDEX)
 
 
 def _index_queue_counts() -> dict[str, Any]:
@@ -198,6 +207,25 @@ def full_status() -> dict[str, Any]:
         "write_queue": remote.get("write_queue"),
         "knowledge": knowledge_status(),
         "projects": remote.get("graph", {"state": "runtime_stopped"}),
+        "graph_auto_index": _graph_auto_index_status(),
+    }
+
+
+def _graph_auto_index_status() -> dict[str, Any]:
+    """The stored switch, readable with no server running.
+
+    Live worker detail (cycles, per-project last-indexed) belongs to whichever
+    process owns the loop, so it is not reachable from here.
+    """
+    from ..config.settings import GRAPH_AUTO_INDEX
+    from ..core import runtime_flags
+
+    key = runtime_flags.AUTO_INDEX_GRAPH
+    return {
+        "enabled": runtime_flags.get_bool(key, GRAPH_AUTO_INDEX),
+        "source": runtime_flags.source(key),
+        "suppressed_projects": runtime_flags.suppressed_watches(),
+        "unindexable_projects": runtime_flags.unindexable_watches(),
     }
 
 

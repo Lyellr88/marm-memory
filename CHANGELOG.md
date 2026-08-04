@@ -1,6 +1,30 @@
 # Changelog
 
 <details>
+<summary><strong>August 4th, 2026: Automatic Code Graph Indexing (v2.37.0)</strong></summary>
+
+### Added: Indexed Repositories Refresh Themselves
+
+- A code graph was only ever as fresh as the last time someone called `marm_graph_index`. This repo's own index was four days and a full release behind when the work started, and nothing surfaced that. A stale graph does not fail loudly, it answers confidently from deleted code. Indexed repositories are now re-indexed in the background on both transports, on by default, with nothing to click.
+- Changes are detected with a git signature computed outside the engine, so an idle check costs no engine lock. A commit moves `HEAD` and triggers a re-index. While the working tree is dirty the repo is re-indexed every cycle instead, because `git status` reports which files changed and not what is in them: the second and every later edit to one file produce byte-identical output, so any cheaper fingerprint stops noticing after the first save. Indexing is incremental, so an unchanged dirty repo costs a few hundred milliseconds.
+- Non-git directories have no cheap signature at all, so they get an unconditional re-index on a slower lane (`GRAPH_AUTO_INDEX_FULL_INTERVAL`, 300s) rather than the fast one.
+- Every index call in MARM, automatic or manual, now passes through one leased row in the memory database. HTTP and STDIO are separate processes with separate engine children over one shared engine store, and the previous in-process lock could not see across that boundary. A manual index that arrives during an automatic one reports `index_in_progress` instead of running alongside it.
+- Turn it off with `marm-mcp-server projects auto off`, or from an agent with `marm_graph_index(action="auto_off")`. `knowledge auto off` does the same for concept extraction. Both take effect on the next cycle with no restart, both survive one, and both work with the graph engine stopped. A saved switch beats the environment variable, so a `GRAPH_AUTO_INDEX=true` in a Dockerfile cannot silently re-enable something you turned off; `auto status` names which one won.
+- Deleting a project records a durable suppression, so a poller holding a cached project list cannot recreate what you just deleted. An explicit manual index re-enrolls it.
+- Pacing is `GRAPH_AUTO_INDEX_INTERVAL` (30s), `GRAPH_AUTO_INDEX_MODE` (`moderate`), `GRAPH_AUTO_INDEX_LEASE_SECONDS` (120), and `GRAPH_AUTO_INDEX_PROJECT_TTL` (300s). 30 seconds rather than the engine's own 5: a git signature measures ~103ms per project on Windows where process spawn dominates, and a code graph does not need sub-minute freshness.
+- Nothing is downloaded on your behalf. Auto-indexing is on by default, but the poller stays dormant until the graph engine binary is already on disk, so a fresh install does not pull ~269MB at first boot for a user who never calls a graph tool.
+
+### Upgrade Note
+
+No action required. Two tables are added to the memory database on first start. If you would rather index only on request, run:
+
+```
+marm-mcp-server projects auto off
+```
+
+</details>
+
+<details>
 <summary><strong>August 2nd, 2026: Automatic Concept Graph Indexing (v2.36.0)</strong></summary>
 
 ### Added: Memories Become Graph Nodes on Their Own

@@ -13,8 +13,6 @@
 - [Knowledge Graphs: Code & Concepts](#knowledge-graphs-code--concepts)
 - [Architecture & Internals](#architecture--internals)
 - [Troubleshooting](#troubleshooting)
-- [Contributing](#contributing)
-- [Project Documentation](#project-documentation)
 
 ## Quick Start
 
@@ -61,7 +59,7 @@ marm-memory gives your agents a private, shared memory for the context that norm
 It brings three things together:
 
 - 🧠 **Core Memory (7 tools)** stores conversations, notes, notebook entries, and summaries so they stay searchable.
-- 💻 **Code Graph (5 tools)** maps your repository so agents can find symbols, follow code paths, and understand the project without rereading it all.
+- 💻 **Code Graph (5 tools)** maps your repository so agents can find symbols, follow code paths, and understand the project without rereading it all. Point it at a repo once and it keeps itself current as you work.
 - 🧩 **Concept Graph (2 tools)** connects people, decisions, errors, and ideas from your stored memories, with links back to relevant code when available. It builds itself as you store memories.
 
 All 14 tools work over HTTP and STDIO. Your agents share the same local memory across sessions instead of starting from scratch each time. The built-in Console lets you see and manage what is saved.
@@ -118,9 +116,11 @@ marm-memory uninstall                      # preview package removal; always pre
 ```bash
 marm-memory knowledge status               # Indexers, models, and how far behind automatic indexing is
 marm-memory knowledge build --all          # Rebuild the whole concept graph (new memories index themselves)
+marm-memory knowledge auto off             # Stop indexing memories automatically (on, off, status)
 marm-memory projects list                  # List all tracked workspaces
-marm-memory projects index <path>          # Run deep codebase structural indexing
+marm-memory projects index <path>          # Add a repo to the code graph (kept current after that)
 marm-memory projects status                # Inspect target repo graph readiness
+marm-memory projects auto off              # Stop re-indexing repos automatically (on, off, status)
 marm-memory maintenance status             # Check internal database optimization state
 marm-memory maintenance embeddings migrate # Upgrade old 384-dim vectors to 512-dim
 marm-memory maintenance chunks rechunk     # Recalibrate long memory text splits
@@ -662,7 +662,7 @@ The AI agent will automatically use the appropriate tools. Manual tool access is
 
 | Tool | What it does | Key parameters |
 | ------ | -------------- | ---------------- |
-| `marm_graph_index` | Index a repo into the code-structure graph, check status, or list projects | `repo_path`, `project` |
+| `marm_graph_index` | Index a repo into the code-structure graph, check status, list projects, or turn automatic re-indexing on and off | `repo_path`, `project`, `action` |
 | `marm_code_lookup` | Find symbols, text patterns, or a symbol's source; use instead of grep/glob | `kind="auto"\|"symbol"\|"text"\|"snippet"` |
 | `marm_graph_trace` | Trace call paths and data flow from a function | `direction`, `mode` |
 | `marm_graph_architecture` | Architecture overview: modules, node/edge breakdown, schema | `project` |
@@ -675,7 +675,7 @@ The AI agent will automatically use the appropriate tools. Manual tool access is
 | `marm_concept_build` | Rebuild the graph, or index memories stored before automatic indexing. New memories are indexed on their own | `session_name`, `project`, or `search_all=True` (one required) |
 | `marm_concept_recall` | Explicitly query entities, relationships, and linked code symbols | `query`, `depth` (1-5), `direction`, `project`, `platform` |
 
-All 14 tools are available on both HTTP and STDIO. Behind the tool surface, the server handles lifecycle setup, protocol refresh, docs indexing, date context, summary-cache maintenance, write queue handling, concept indexing, project/platform attribution, and health checks automatically; none of those consume the agent's attention or tokens. The two graph engines start lazily on first use and never block the 7 core memory tools if they fail to start. See [Architecture & Internals](#architecture--internals) for the mechanisms.
+All 14 tools are available on both HTTP and STDIO. Behind the tool surface, the server handles lifecycle setup, protocol refresh, docs indexing, date context, summary-cache maintenance, write queue handling, concept indexing, code re-indexing as repos change, project/platform attribution, and health checks automatically; none of those consume the agent's attention or tokens. The two graph engines start lazily on first use and never block the 7 core memory tools if they fail to start. See [Architecture & Internals](#architecture--internals) for the mechanisms.
 
 ## Using MARM: Talk, Don't Call Tools
 
@@ -833,7 +833,15 @@ Then use marm_code_lookup when you need symbols, files, or source snippets.
 Use marm_graph_trace for call paths, marm_graph_architecture for an overview, and marm_graph_impact for change-risk checks.
 ```
 
-The recommended agent workflow: index once, then `marm_code_lookup` before broad file reads, `marm_graph_trace` when callers/callees or data-flow context matters, `marm_graph_architecture` for orientation, and `marm_graph_impact` before risky refactors. Re-index after meaningful code changes. One graph query replaces dozens of grep/read cycles, which is where the token savings come from.
+The recommended agent workflow: index once, then `marm_code_lookup` before broad file reads, `marm_graph_trace` when callers/callees or data-flow context matters, `marm_graph_architecture` for orientation, and `marm_graph_impact` before risky refactors. One graph query replaces dozens of grep/read cycles, which is where the token savings come from.
+
+Once a repository is indexed, MARM keeps it current on its own. A background poller notices when the repo has changed and re-indexes it, so there is no need to re-index by hand after a commit. While you have uncommitted work it refreshes every cycle, since no cheap check can see repeated edits to a file that is already modified. To index only on request instead:
+
+```text
+marm-mcp-server projects auto off
+```
+
+An agent can do the same with `marm_graph_index(action="auto_off")`, and `action="auto_status"` reports what is being watched and when each project was last indexed. The switch persists across restarts and beats the `GRAPH_AUTO_INDEX` environment variable.
 
 Under the hood, the engine is [codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp) (MIT), a zero-dependency static binary that parses 158 languages through tree-sitter with Hybrid LSP type resolution for the major ones, indexes an average repository in seconds, and answers structural queries in under a millisecond. MARM pins a specific release, verifies its tool schema on startup, and routes its 14 upstream tools through 5 focused MCP tools so the model surface stays small. The graph backend starts lazily on first graph-tool use, so memory, logging, notebook, and summary tools still start fast. In Docker, the engine binary is baked into the image; local pip installs fetch it on first graph use (~269MB, one time).
 
@@ -900,7 +908,9 @@ The bundled graph engine runs as a supervised child process, not an import:
 - **Envelope care**: responses are scanned for the first JSON-parseable content item rather than assuming index 0, because the upstream binary can prepend an update notice. Tool errors arrive as `result.isError`, not JSON-RPC errors, and are converted to clean `{"status": "error"}` dicts with the upstream's own remediation hint attached.
 - **Serialization**: one lock guards each write+read round trip on the single stdin pipe; async callers go through `asyncio.to_thread` so the event loop never blocks on subprocess IO.
 - **Crash recovery**: stderr is drained on a background thread, child EOF/crash is detected, and the process is transparently respawned on the next call. Timeouts are deliberately *not* treated as crashes; a long index run may still be working, and killing it would destroy in-flight work.
-- **Supervision**: a lazy singleton supervisor owns the client for the process lifetime. Startup is triggered by the first graph-tool call, never raises into the MCP layer, and verifies the pinned binary's tool schema so upstream drift is caught at startup instead of mid-call.
+- **Supervision**: a lazy singleton supervisor owns the client for the process lifetime. Startup is triggered by the first graph-tool call or by the auto-index poller if the engine binary is already downloaded, never raises into the MCP layer, and verifies the pinned binary's tool schema so upstream drift is caught at startup instead of mid-call.
+- **Auto re-indexing is git-signature polled, not filesystem watched**: a background task compares each indexed repo's `HEAD` and dirty state, computed by running `git` outside the engine so an idle check costs no engine lock. A commit triggers a re-index. While the tree is dirty the repo is re-indexed every cycle, because `git status` reports which files changed and not what is in them, so repeated edits to one already-modified file produce byte-identical output that no cheaper fingerprint can distinguish. Git runs with `core.fsmonitor` disabled and a scrubbed environment, since that setting names a program git would otherwise execute from a watched repository on a timer.
+- **One gate for every store mutation**: manual indexes on all three surfaces, the poller, and project deletion all pass through a single leased row in the memory database. HTTP and STDIO are separate processes with separate engine children over one shared engine store, so an in-process lock cannot span them. The lease is released when the engine call actually returns rather than when its caller stops waiting: a cancelled request cannot hand the store to another process while the engine is still writing to it.
 
 ### Security & rate limiting
 
@@ -955,6 +965,12 @@ Packaged docs are indexed into the `marm_system` memory namespace on startup and
 | `COMPACTION_SIMILARITY_THRESHOLD` / `COMPACTION_MIN_CLUSTER_SIZE` / `COMPACTION_MIN_AGE_HOURS` | `0.88` / `3` / `24` | Cluster detection gates |
 | `COMPACTION_STAGING_TTL_HOURS` | `168` | How long staged summaries wait before expiring |
 | `GRAPH_ENABLED` | `true` | Kill switch for the 5 code-graph tools |
+| `GRAPH_AUTO_INDEX` | `true` | Automatic re-indexing of repos already in the code graph. A saved switch from `projects auto off` or `marm_graph_index(action="auto_off")` overrides this, so a value set here cannot re-enable what a user turned off |
+| `GRAPH_AUTO_INDEX_INTERVAL` | `30` | Seconds between git-signature checks per repo. Minimum 5 |
+| `GRAPH_AUTO_INDEX_FULL_INTERVAL` | `300` | Seconds between re-indexes for a directory that is not a git repo, where no cheap change check exists. Minimum 60 |
+| `GRAPH_AUTO_INDEX_MODE` | `moderate` | Index depth for automatic re-indexes: `full`, `moderate`, or `fast`. Anything else warns and falls back |
+| `GRAPH_AUTO_INDEX_LEASE_SECONDS` | `120` | How long the indexing gate stays owned once nothing is renewing it. A running index renews its own lease, so this bounds how long a *killed* process blocks indexing, not how long an index may take |
+| `GRAPH_AUTO_INDEX_PROJECT_TTL` | `300` | How long the list of watched projects is trusted before it is re-read from the engine |
 | `CONCEPT_BUILD_ROW_CAP` | `500` | Memory rows read per page during a concept-graph build. Not a cap on the build: every memory in scope is read either way |
 | `CONCEPT_AUTO_INDEX` | `true` | Automatic concept indexing of new memories. `false`, `0`, `no`, or `off` stops the worker and leaves builds manual. Writes still record queue rows either way |
 | `CONCEPT_INDEX_DEBOUNCE_SECONDS` | `30` | Quiet period after a write before indexing starts, so a burst becomes one pass |
@@ -1046,6 +1062,18 @@ It re-splits stale chunks, fills in any lost to an interrupted write, and drops 
 - A graph awaiting a rebuild is not indexed into. If the Console or `marm-memory knowledge status` reports `rebuild_required`, run `marm_concept_build(search_all=True)` once; queued memories are picked up after it.
 - Automatic indexing only covers memories written since the upgrade. Run a build once to bring in everything older.
 - A memory that fails extraction three times is parked rather than retried forever. The reason is recorded with the task.
+
+**Code changes are not showing up in the code graph**
+
+- Run `marm-memory projects auto status`. `enabled: false` means automatic re-indexing is switched off; `source: override` means a saved switch is what turned it off, not the environment.
+- The repo has to be indexed once before it is watched. `marm-memory projects list` shows what is enrolled.
+- Give it the interval (30 seconds by default) plus index time. A commit is picked up on the next check.
+- A project deleted from the Console stays suppressed on purpose, so a stale watch list cannot recreate it. Indexing it explicitly re-enrolls it.
+- Automatic indexing needs the graph engine, which stays dormant until the engine binary has been downloaded. Any graph tool call downloads it once.
+
+**An index returns `index_in_progress`**
+
+- Another MARM process holds the indexing gate, usually the other transport's poller or a Console index job. Deleting a project reports the same thing, since a delete during an index would be undone by it. Run it again in a moment.
 
 **A build returns `build_in_progress`**
 

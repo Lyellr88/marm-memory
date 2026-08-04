@@ -5,7 +5,7 @@ This server integrates all modular components of the MARM protocol into a single
 FastAPI application, compliant with the MCP protocol via FastApiMCP.
 
 Author: Lyell - marm-memory
-Version: 2.36.0
+Version: 2.37.0
 """
 
 import os
@@ -23,6 +23,7 @@ from .config.settings import (
 )
 from .core.compaction_scheduler import _maybe_start_compaction_scheduler
 from .core.concept_worker import concept_worker
+from .core.graph_index_worker import graph_index_worker
 from .core.graph_supervisor import graph_supervisor  # noqa: F401
 from .core.memory import memory
 from .endpoints.compaction import router as compaction_router
@@ -66,6 +67,7 @@ async def lifespan(app: FastAPI):
 
     _compaction_scheduler = _maybe_start_compaction_scheduler()
     concept_worker.start()
+    graph_index_worker.start()
 
     memory_after = get_memory_usage()
     logger.info("Memory usage after startup", memory_mb=f"{memory_after:.1f}")
@@ -82,6 +84,10 @@ async def lifespan(app: FastAPI):
     logger.info("Shutting down MARM MCP Server")
     if _compaction_scheduler and _compaction_scheduler.running:
         _compaction_scheduler.shutdown(wait=False)
+    try:
+        await graph_index_worker.stop()
+    except Exception as exc:
+        logger.warning("graph auto-index worker stop failed", error=str(exc))
     from .core.shutdown_manager import shutdown_manager
 
     await shutdown_manager.graceful_shutdown()

@@ -366,6 +366,8 @@ def _dispatch_product(args: argparse.Namespace) -> int:
         if args.knowledge_command == "status":
             _print_payload(knowledge_status())
             return 0
+        if args.knowledge_command == "auto":
+            return _dispatch_auto(args.state, "concept")
         payload = {
             "search_all": args.search_all,
             "session_name": args.session,
@@ -374,6 +376,8 @@ def _dispatch_product(args: argparse.Namespace) -> int:
         _print_payload(_runtime_post("/marm_concept_build", payload))
         return 0
     if args.command == "projects":
+        if args.projects_command == "auto":
+            return _dispatch_auto(args.state, "graph")
         return _dispatch_projects(args)
     if args.command == "maintenance":
         if args.maintenance_command == "status":
@@ -433,6 +437,13 @@ def _dispatch_docker(args: argparse.Namespace) -> int:
     from .services.docker_cli import dispatch_docker
 
     return dispatch_docker(args, print_payload=_print_payload)
+
+
+def _dispatch_auto(state: str, scope: str) -> int:
+    """Turn automatic indexing on or off for one of the two indexers."""
+    from .services.graph_auto_cli import dispatch_auto
+
+    return dispatch_auto(state=state, scope=scope, print_payload=_print_payload)
 
 
 def _dispatch_projects(args: argparse.Namespace) -> int:

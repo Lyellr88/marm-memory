@@ -36,6 +36,7 @@ from marm_mcp_server.config.settings import (  # noqa: E402
     SERVER_VERSION,
 )
 from marm_mcp_server.core.concept_worker import concept_worker  # noqa: E402
+from marm_mcp_server.core.graph_index_worker import graph_index_worker  # noqa: E402
 from marm_mcp_server.core.graph_supervisor import graph_supervisor  # noqa: E402
 from marm_mcp_server.core.memory import memory  # noqa: E402
 from marm_mcp_server.core.memory_utils import drain_chunk_writes  # noqa: E402
@@ -66,6 +67,7 @@ async def _stdio_lifespan(_server: FastMCP):
     when unwritten chunks are most likely to be pending.
     """
     concept_worker.start()
+    graph_index_worker.start()
     try:
         yield
     finally:
@@ -88,6 +90,13 @@ async def _stdio_lifespan(_server: FastMCP):
                 await concept_worker.stop()
             except Exception as exc:
                 _stdio_log.warning("concept worker stop failed: %s", exc)
+            # Stops scheduling only. An in-flight index owns its own lease and
+            # releases it when the engine call returns, so there is nothing to
+            # wait for here.
+            try:
+                await graph_index_worker.stop()
+            except Exception as exc:
+                _stdio_log.warning("graph auto-index worker stop failed: %s", exc)
             try:
                 await memory.stop_write_queue()
             except Exception as exc:

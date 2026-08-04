@@ -1,12 +1,5 @@
 # MARM MCP Server - Docker Installation
 
-## Universal Memory Intelligence Platform for AI Agents
-
-**MARM v2.36.0** - Memory Accurate Response Mode
-*Docker deployment guide for Windows, Mac, and Linux*
-
----
-
 ## Table of Contents
 
 - [Quick Start (2 Minutes)](#quick-start-2-minutes)
