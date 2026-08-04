@@ -19,7 +19,13 @@ ROOT = Path(__file__).resolve().parent.parent
 SERVER_ROOT = ROOT / "marm-mcp-server"
 TESTS_ROOT = SERVER_ROOT / "tests"
 BASE_TEMP = Path(r"C:\tmp\marm-pytest") if os.name == "nt" else Path("/tmp/marm-pytest")
-FAST_TEMP_ROOT = SERVER_ROOT / ".pytest_tmp_fast"
+# Outside the repo, and shallow. Inside it, pytest's per-test temp paths ran ~100
+# characters deep before the test even started, and the graph engine names each
+# project's database after the repository's full path: a test repo at that depth
+# produced a 283-character database path against Windows' 260 limit, and the
+# engine's indexing worker exited non-zero. A sibling of BASE_TEMP rather than a
+# child, so a concurrent --clean-temp run cannot delete this tree mid-run.
+FAST_TEMP_ROOT = BASE_TEMP.parent / "marm-pytest-fast"
 DOCKER_IMAGE = "lyellr88/marm-mcp-server:latest"
 
 

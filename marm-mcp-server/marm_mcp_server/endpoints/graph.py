@@ -26,6 +26,9 @@ from marm_graph.core.models import (
 )
 from pydantic import BaseModel, Field
 
+from ..core import runtime_flags
+from ..core.graph_index_lock import GraphIndexBusy, gate_sync, run_exclusive
+from ..core.graph_index_worker import AUTO_ACTIONS, auto_action, graph_index_worker
 from ..core.graph_supervisor import graph_supervisor
 from ..core.concept_db import ConceptDB, get_concept_db_path
 
@@ -110,15 +113,27 @@ def _run_project_index(job_id: str, repo_path: str, mode: str) -> None:
             )
             return
         job["phase"] = "indexing"
-        result = R.do_index(
-            graph_supervisor.get_client(),
-            GraphIndexRequest(repo_path=repo_path, mode=mode, action="index"),
-        )
+        # _project_job_lock only serializes this interpreter's jobs; the lease
+        # is what keeps this off the same repo as the other transport's poller.
+        try:
+            with gate_sync("manual_index:console"):
+                result = R.do_index(
+                    graph_supervisor.get_client(),
+                    GraphIndexRequest(repo_path=repo_path, mode=mode, action="index"),
+                )
+        except GraphIndexBusy as busy:
+            job.update(status="error", phase="busy", error=str(busy))
+            return
         if result.get("status") == "error":
             job.update(
                 status="error", phase="failed", error="Repository indexing failed."
             )
             return
+        # Only after a successful index. do_index reports engine failures as an
+        # error dict rather than raising, so clearing the tombstone any earlier
+        # re-enrolls a project the user deleted on the strength of an index that
+        # did not happen. A success also proves the root is indexable again.
+        runtime_flags.clear_index_blocks(repo_path)
         job.update(
             status="success",
             phase="complete",
@@ -134,6 +149,31 @@ def _run_project_index(job_id: str, repo_path: str, mode: str) -> None:
             job["finished_at"] = _now_iso()
             job["_finished_timestamp"] = datetime.now(timezone.utc).timestamp()
         _project_job_lock.release()
+
+
+def _project_root_path(project: str) -> str | None:
+    result = R.do_index(graph_supervisor.get_client(), GraphIndexRequest(action="list"))
+    if result.get("status") == "error":
+        return None
+    for entry in result.get("projects", []):
+        if (entry or {}).get("name") == project:
+            return (entry or {}).get("root_path")
+    return None
+
+
+def _resolve_and_delete(project: str) -> tuple[str | None, dict]:
+    """Resolve the project's root, then delete it. Runs under the index gate.
+
+    The root has to be read before the delete, because afterwards the project is
+    gone and its root path with it, and without the path there is nothing to
+    suppress: the poller would re-index the root from its cached watch set and
+    recreate what the user just deleted.
+    """
+    root_path = _project_root_path(project)
+    result = graph_supervisor.get_client().call_tool(
+        "delete_project", {"project": project}
+    )
+    return root_path, result
 
 
 def _cleanup_project_code_links(project: str) -> None:
@@ -153,8 +193,30 @@ async def marm_graph_index(req: GraphIndexRequest) -> dict:
     other tool). Omit it to list indexed projects, or pass `project` to check
     index status. Call this first — all other graph tools need an indexed project.
     """
+    # Ahead of the availability gate below, which both refuses when the engine
+    # is down and starts the engine as a side effect. Turning auto-index off
+    # must work in either state.
+    if req.action in AUTO_ACTIONS:
+        return await asyncio.to_thread(auto_action, req.action)
     if not await asyncio.to_thread(graph_supervisor.is_available):
         return _UNAVAILABLE
+    if req.action == "index" or (req.action == "auto" and req.repo_path):
+        try:
+            result = await run_exclusive(
+                "manual_index:http", R.do_index, graph_supervisor.get_client(), req
+            )
+            # Only on success: do_index reports engine failures as an error dict
+            # rather than raising, and a failed index must not re-enroll a
+            # project the user deleted.
+            if req.repo_path and result.get("status") != "error":
+                await asyncio.to_thread(runtime_flags.clear_index_blocks, req.repo_path)
+            return result
+        except GraphIndexBusy as busy:
+            return {
+                "status": "error",
+                "error_code": "index_in_progress",
+                "message": str(busy),
+            }
     return await asyncio.to_thread(R.do_index, graph_supervisor.get_client(), req)
 
 
@@ -338,15 +400,33 @@ async def console_delete_project(req: ConsoleDeleteProjectRequest) -> dict:
         )
     if not await asyncio.to_thread(graph_supervisor.is_available):
         return _UNAVAILABLE
-    result = await asyncio.to_thread(
-        graph_supervisor.get_client().call_tool,
-        "delete_project",
-        {"project": req.project},
-    )
+    # Under the same gate as indexing. A delete that lands while a poller is
+    # inside index_repository on the same project is silently undone: that index
+    # finishes afterwards and writes the project back, so the user sees a deleted
+    # project reappear while the suppression stops it ever updating again.
+    #
+    # Root resolution is inside the gate too. It is a 265ms engine call, so doing
+    # it first would spend it only to discard the answer when the gate refuses.
+    try:
+        root_path, result = await run_exclusive(
+            f"delete_project:{req.project}", _resolve_and_delete, req.project
+        )
+    except GraphIndexBusy as busy:
+        return {
+            "status": "error",
+            "error_code": "index_in_progress",
+            "message": str(busy),
+        }
     result = _console_graph_result(
         result if isinstance(result, dict) else {"result": result}
     )
     if result.get("status") != "error":
+        if root_path:
+            try:
+                await asyncio.to_thread(runtime_flags.suppress_watch, root_path)
+                graph_index_worker.drop_watch(root_path)
+            except Exception:
+                result["watch_suppression"] = "failed"
         try:
             await asyncio.to_thread(_cleanup_project_code_links, req.project)
         except Exception:

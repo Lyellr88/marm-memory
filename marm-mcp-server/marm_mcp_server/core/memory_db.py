@@ -413,6 +413,30 @@ def init_database(db_path: str) -> None:
             )
             """)
 
+        # Same shape and purpose as concept_build_lock, for the code index. A
+        # separate row rather than a shared one: making concept extraction and
+        # code indexing mutually exclusive would serialize two unrelated stores.
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS graph_index_lock (
+                id         INTEGER PRIMARY KEY CHECK (id = 1),
+                holder     TEXT NOT NULL,
+                purpose    TEXT NOT NULL,
+                acquired_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL
+            )
+            """)
+
+        # Runtime overrides that must outlive the process and be visible to both
+        # transports: auto-index on/off switches and per-project watch
+        # suppressions written when a project is deleted.
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS runtime_flags (
+                key        TEXT PRIMARY KEY,
+                value      TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """)
+
         conn.execute("DROP TABLE IF EXISTS session_summary_chunks")
 
         conn.execute("""

@@ -28,9 +28,20 @@ class GraphIndexRequest(BaseModel):
         "moderate",
         description="Index depth: full | moderate | fast. moderate is a good default.",
     )
-    action: Literal["auto", "index", "status", "list"] = Field(
+    # auto_on/auto_off/auto_status control marm-mcp-server's auto-index poller
+    # and are only implemented there; standalone marm-graph rejects them. They
+    # live in this shared model because FastAPI validates the request body into
+    # it before the host's endpoint body runs, so a narrower literal here would
+    # make them unreachable. Never a bare "auto", which already means "infer".
+    action: Literal[
+        "auto", "index", "status", "list", "auto_on", "auto_off", "auto_status"
+    ] = Field(
         "auto",
-        description="auto | index | status | list. 'auto' infers from repo_path presence.",
+        description=(
+            "auto | index | status | list. 'auto' infers from repo_path presence. "
+            "auto_on | auto_off | auto_status control automatic re-indexing "
+            "(marm-mcp-server only)."
+        ),
     )
 
 

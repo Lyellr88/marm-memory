@@ -198,6 +198,25 @@ def full_status() -> dict[str, Any]:
         "write_queue": remote.get("write_queue"),
         "knowledge": knowledge_status(),
         "projects": remote.get("graph", {"state": "runtime_stopped"}),
+        "graph_auto_index": _graph_auto_index_status(),
+    }
+
+
+def _graph_auto_index_status() -> dict[str, Any]:
+    """The stored switch, readable with no server running.
+
+    Live worker detail (cycles, per-project last-indexed) belongs to whichever
+    process owns the loop, so it is not reachable from here.
+    """
+    from ..config.settings import GRAPH_AUTO_INDEX
+    from ..core import runtime_flags
+
+    key = runtime_flags.AUTO_INDEX_GRAPH
+    return {
+        "enabled": runtime_flags.get_bool(key, GRAPH_AUTO_INDEX),
+        "source": runtime_flags.source(key),
+        "suppressed_projects": runtime_flags.suppressed_watches(),
+        "unindexable_projects": runtime_flags.unindexable_watches(),
     }
 
 

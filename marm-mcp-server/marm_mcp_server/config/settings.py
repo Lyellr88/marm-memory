@@ -206,7 +206,7 @@ if not (1 <= _raw_port <= 65535):
         f"WARNING: SERVER_PORT={_raw_port} out of [1, 65535], clamped to {SERVER_PORT}",
         file=sys.stderr,
     )
-SERVER_VERSION = "2.36.0"
+SERVER_VERSION = "2.37.0"
 
 GRAPH_ENABLED = os.environ.get("GRAPH_ENABLED", "true").lower() != "false"
 
@@ -366,6 +366,62 @@ if _raw_cima < 1:
     print(
         f"WARNING: CONCEPT_INDEX_MAX_ATTEMPTS={_raw_cima} below minimum 1, "
         f"clamped to {CONCEPT_INDEX_MAX_ATTEMPTS}",
+        file=sys.stderr,
+    )
+
+# ── Code graph auto-indexing ───────────────────────────────────────
+# A saved override in runtime_flags beats this; see core/runtime_flags.py.
+GRAPH_AUTO_INDEX = _safe_bool("GRAPH_AUTO_INDEX", True)
+
+# Git-signature cycle. 30s rather than the engine's own 5s base: a git signature
+# costs ~100ms per project on Windows, where process spawn dominates, and a code
+# graph does not need sub-minute freshness.
+_raw_gaii = _safe_int("GRAPH_AUTO_INDEX_INTERVAL", 30)
+GRAPH_AUTO_INDEX_INTERVAL = max(5, _raw_gaii)
+if _raw_gaii < 5:
+    print(
+        f"WARNING: GRAPH_AUTO_INDEX_INTERVAL={_raw_gaii} below minimum 5, "
+        f"clamped to {GRAPH_AUTO_INDEX_INTERVAL}",
+        file=sys.stderr,
+    )
+
+# Non-git projects have no cheap signature, so their only option is an
+# unconditional re-index. That holds the engine lock, so it gets a slow lane.
+_raw_gaifi = _safe_int("GRAPH_AUTO_INDEX_FULL_INTERVAL", 300)
+GRAPH_AUTO_INDEX_FULL_INTERVAL = max(60, _raw_gaifi)
+if _raw_gaifi < 60:
+    print(
+        f"WARNING: GRAPH_AUTO_INDEX_FULL_INTERVAL={_raw_gaifi} below minimum 60, "
+        f"clamped to {GRAPH_AUTO_INDEX_FULL_INTERVAL}",
+        file=sys.stderr,
+    )
+
+# Validated here, not at use: an unrecognized mode fails GraphIndexRequest's
+# Literal deep inside the poll cycle, which logs a project failure every cycle
+# forever and never indexes anything.
+GRAPH_AUTO_INDEX_MODE = _safe_choice(
+    "GRAPH_AUTO_INDEX_MODE", "moderate", ("full", "moderate", "fast")
+)
+
+# Heartbeat-renewed, so this bounds a crashed holder rather than a long index.
+# Kept short because a dead event loop leaves the lease to expire on its own.
+_raw_gails = _safe_int("GRAPH_AUTO_INDEX_LEASE_SECONDS", 120)
+GRAPH_AUTO_INDEX_LEASE_SECONDS = max(1, _raw_gails)
+if _raw_gails < 1:
+    print(
+        f"WARNING: GRAPH_AUTO_INDEX_LEASE_SECONDS={_raw_gails} below minimum 1, "
+        f"clamped to {GRAPH_AUTO_INDEX_LEASE_SECONDS}",
+        file=sys.stderr,
+    )
+
+# list_projects costs ~265ms and holds the engine lock, so the watch set is
+# cached rather than refreshed every cycle.
+_raw_gaipt = _safe_int("GRAPH_AUTO_INDEX_PROJECT_TTL", 300)
+GRAPH_AUTO_INDEX_PROJECT_TTL = max(10, _raw_gaipt)
+if _raw_gaipt < 10:
+    print(
+        f"WARNING: GRAPH_AUTO_INDEX_PROJECT_TTL={_raw_gaipt} below minimum 10, "
+        f"clamped to {GRAPH_AUTO_INDEX_PROJECT_TTL}",
         file=sys.stderr,
     )
 

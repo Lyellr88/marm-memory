@@ -51,14 +51,29 @@ class ConceptIndexWorker:
     def running(self) -> bool:
         return self._task is not None and not self._task.done()
 
+    @staticmethod
+    def enabled() -> bool:
+        """A saved override beats the environment variable, so a
+        CONCEPT_AUTO_INDEX baked into a Dockerfile cannot silently re-enable
+        something the user turned off."""
+        from . import runtime_flags
+
+        return runtime_flags.get_bool(
+            runtime_flags.AUTO_INDEX_CONCEPT, CONCEPT_AUTO_INDEX
+        )
+
     def start(self) -> None:
         """Never raises. A worker that cannot run leaves the queue filling,
         which is recoverable; a worker that breaks startup is not."""
         if self.running:
             return
-        if not CONCEPT_AUTO_INDEX:
-            logger.info("concept_worker.disabled", reason="CONCEPT_AUTO_INDEX=false")
-            return
+        if not self.enabled():
+            # The loop still starts, and each cycle re-checks the flag and does
+            # nothing. That costs one indexed SELECT per debounce interval and
+            # is what lets `knowledge auto on` take effect without a restart:
+            # the switch is written to the database by a separate process, which
+            # cannot start a task in this one.
+            logger.info("concept_worker.idle", reason="auto_index_off")
         if not CONCEPTS_AVAILABLE:
             # Dormant, not spinning. Claiming tasks we cannot extract would
             # burn the attempt budget and park every memory written while the
@@ -136,6 +151,11 @@ class ConceptIndexWorker:
             await self._wait(CONCEPT_INDEX_DEBOUNCE_SECONDS)
             if self._stop.is_set():
                 return
+            if not self.enabled():
+                # Re-read per cycle, not once at start(): the flag can be
+                # turned off at runtime and an off switch that needed a restart
+                # would not be an off switch. Tasks stay queued and durable.
+                continue
             self._cycles += 1
             try:
                 await self._drain()

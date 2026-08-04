@@ -11,134 +11,63 @@ The lock is one row in the memory database, held for the duration of a build
 and released after. It expires so a killed process cannot wedge indexing
 forever, and both holders take it before the in-process lock so the two can
 never be acquired in opposite orders.
+
+The mechanics live in lease_lock.py, shared with the code index's own gate. This
+module is the concept-specific binding: the table, the TTL, and the busy error.
 """
 
 import os
 import threading
 import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta, timezone
-from typing import Any, AsyncIterator, NamedTuple, Optional
+from typing import AsyncIterator, Optional
 
 import structlog
 
+from . import lease_lock
+from .lease_lock import Lease as BuildLease
+from .lease_lock import heartbeat_interval
+
 logger = structlog.get_logger(__name__)
+
+_TABLE = "concept_build_lock"
 
 # A full-corpus rebuild is a long operation and must not have the lock pulled
 # out from under it mid-run. This only decides how long a *crashed* holder
 # blocks the next build, so it is generous on purpose.
 MANUAL_BUILD_LOCK_SECONDS = 3600
 
+__all__ = [
+    "MANUAL_BUILD_LOCK_SECONDS",
+    "BuildLease",
+    "ConceptBuildBusy",
+    "concept_build_lock",
+    "current_holder",
+    "heartbeat_interval",
+    "release",
+    "renew",
+    "try_acquire",
+]
+
 
 class ConceptBuildBusy(RuntimeError):
     """Another process is writing the concept graph."""
 
 
-class BuildLease(NamedTuple):
-    """A held lock, plus the flag that says we stopped holding it.
-
-    `lost` is a threading.Event rather than an asyncio one because the work it
-    interrupts runs in a worker thread, where an asyncio primitive cannot be
-    read safely.
-    """
-
-    holder: str
-    lost: threading.Event
-
-
-def _connection() -> Any:
-    """Resolved on use: this module is reached from endpoints and from the
-    worker, and core.memory is heavy to bind at import time."""
-    from .memory import memory
-
-    return memory.get_connection()
-
-
-def _now() -> datetime:
-    return datetime.now(timezone.utc)
-
-
 def try_acquire(holder: str, purpose: str, ttl_seconds: int) -> bool:
-    """Take the lock if it is free or the current holder's lease has expired."""
-    now = _now()
-    expires_at = (now + timedelta(seconds=ttl_seconds)).isoformat()
-    with _connection() as conn:
-        conn.execute("BEGIN IMMEDIATE")
-        try:
-            row = conn.execute(
-                "SELECT holder, purpose, expires_at FROM concept_build_lock WHERE id = 1"
-            ).fetchone()
-            if row is not None and row[2] > now.isoformat():
-                conn.execute("COMMIT")
-                return False
-            if row is not None:
-                logger.info("concept_lock.reclaimed_expired", previous=row[1])
-            conn.execute(
-                """
-                INSERT INTO concept_build_lock
-                    (id, holder, purpose, acquired_at, expires_at)
-                VALUES (1, ?, ?, ?, ?)
-                ON CONFLICT(id) DO UPDATE SET
-                    holder = excluded.holder,
-                    purpose = excluded.purpose,
-                    acquired_at = excluded.acquired_at,
-                    expires_at = excluded.expires_at
-                """,
-                (holder, purpose, now.isoformat(), expires_at),
-            )
-            conn.execute("COMMIT")
-        except Exception:
-            conn.execute("ROLLBACK")
-            raise
-    return True
+    return lease_lock.try_acquire(_TABLE, holder, purpose, ttl_seconds)
 
 
 def renew(holder: str, ttl_seconds: int) -> bool:
-    """Push our own expiry back. False means we no longer hold it.
-
-    Without this the lock is a deadline rather than a lock: a batch or a
-    rebuild that outlives its TTL gets overtaken by the next process, which is
-    the collision the lock exists to prevent.
-    """
-    now = _now()
-    expires_at = (now + timedelta(seconds=ttl_seconds)).isoformat()
-    with _connection() as conn:
-        cursor = conn.execute(
-            "UPDATE concept_build_lock SET expires_at = ? "
-            "WHERE id = 1 AND holder = ? AND expires_at > ?",
-            (expires_at, holder, now.isoformat()),
-        )
-    return bool(cursor.rowcount > 0)
+    return lease_lock.renew(_TABLE, holder, ttl_seconds)
 
 
 def release(holder: str) -> bool:
-    """Release only our own hold. A lease that already expired and was taken by
-    someone else must not be deleted out from under them."""
-    with _connection() as conn:
-        cursor = conn.execute(
-            "DELETE FROM concept_build_lock WHERE id = 1 AND holder = ?", (holder,)
-        )
-    return bool(cursor.rowcount > 0)
+    return lease_lock.release(_TABLE, holder)
 
 
 def current_holder() -> Optional[tuple[str, str]]:
-    """(purpose, expires_at) of a live hold, or None."""
-    with _connection() as conn:
-        row = conn.execute(
-            "SELECT purpose, expires_at FROM concept_build_lock WHERE id = 1"
-        ).fetchone()
-    if row is None or row[1] <= _now().isoformat():
-        return None
-    return (row[0], row[1])
-
-
-def heartbeat_interval(ttl_seconds: float) -> float:
-    """Renew well inside the TTL so one slow renewal cannot lose the lock.
-
-    Floored so a deliberately tiny lease setting cannot turn the heartbeat
-    into a busy loop against SQLite.
-    """
-    return max(0.5, ttl_seconds / 3)
+    return lease_lock.current_holder(_TABLE)
 
 
 @asynccontextmanager
@@ -164,36 +93,17 @@ async def concept_build_lock(
         raise ConceptBuildBusy("another process is writing the concept graph")
 
     lease = BuildLease(holder=holder, lost=threading.Event())
-
-    async def _keep_alive() -> None:
-        interval = heartbeat_interval(ttl_seconds)
-        loop = asyncio.get_running_loop()
-        last_renewed = loop.time()
-        while True:
-            await asyncio.sleep(interval)
-            try:
-                # A renewal that keeps failing is indistinguishable from one
-                # that was refused: either way the lease runs out on its own
-                # clock and someone else can take the graph. Give up at the
-                # TTL rather than logging warnings while still writing.
-                if loop.time() - last_renewed >= ttl_seconds:
-                    logger.error("concept_lock.lost", purpose=purpose, reason="stale")
-                    lease.lost.set()
-                    return
-                if not await asyncio.to_thread(renew, holder, ttl_seconds):
-                    # Only reachable if this process was stalled for longer
-                    # than the whole TTL. Another process owns the graph now,
-                    # so raise the flag: the work cannot be killed from here,
-                    # but it can be asked to stop at its next safe point
-                    # instead of writing alongside the new owner.
-                    logger.error("concept_lock.lost", purpose=purpose)
-                    lease.lost.set()
-                    return
-                last_renewed = loop.time()
-            except Exception as exc:
-                logger.warning("concept_lock.renew_failed", error=str(exc))
-
-    beat = asyncio.create_task(_keep_alive())
+    beat = asyncio.create_task(
+        lease_lock.keep_alive(
+            lease=lease,
+            purpose=purpose,
+            ttl_seconds=ttl_seconds,
+            log_name=lease_lock.log_name(_TABLE),
+            # Resolved per beat, not bound here, so a test that swaps out this
+            # module's renew still drives the heartbeat.
+            renew_fn=lambda h, t: renew(h, t),
+        )
+    )
     try:
         yield lease
     finally:

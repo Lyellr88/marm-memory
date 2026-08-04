@@ -120,6 +120,10 @@ def _product_parser() -> argparse.ArgumentParser:
     scope.add_argument("--all", action="store_true", dest="search_all")
     scope.add_argument("--session")
     scope.add_argument("--project")
+    knowledge_auto = knowledge_sub.add_parser(
+        "auto", help="Turn automatic concept extraction on or off"
+    )
+    knowledge_auto.add_argument("state", choices=("on", "off", "status"))
 
     projects = subparsers.add_parser("projects", help="Manage code indexes")
     projects_sub = projects.add_subparsers(dest="projects_command", required=True)
@@ -134,6 +138,10 @@ def _product_parser() -> argparse.ArgumentParser:
     remove = projects_sub.add_parser("remove")
     remove.add_argument("project")
     remove.add_argument("--confirm", required=True)
+    projects_auto = projects_sub.add_parser(
+        "auto", help="Turn automatic code re-indexing on or off"
+    )
+    projects_auto.add_argument("state", choices=("on", "off", "status"))
 
     maintenance = subparsers.add_parser("maintenance")
     maintenance_sub = maintenance.add_subparsers(

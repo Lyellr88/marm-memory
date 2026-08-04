@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import functools
 import json
+import os
 import re
 from typing import Any, Callable, Optional
 
@@ -199,12 +200,80 @@ def resolve_project(
 
 # ── marm_graph_index ────────────────────────────────────────────────
 
+# Legacy Win32 path ceiling. The margin exists because the prediction below is a
+# reconstruction of somebody else's naming scheme, not a reading of it.
+_WINDOWS_PATH_LIMIT = 260
+_WINDOWS_PATH_MARGIN = 12
+
+
+def _predicted_store_path_length(repo_path: str) -> int:
+    """Length of the database path the engine will derive from `repo_path`.
+
+    The engine names each project's database after the repository's full path
+    with the drive colon dropped and separators replaced, inside its own cache
+    directory. That is an internal which can change on a version bump, which is
+    why this is only ever used to improve an error message and never to refuse a
+    call: a wrong guess here costs a hint, not an index.
+
+    Measured against the -wal suffix rather than .db, because the write-ahead log
+    is the longest of the sibling files and so the first one to cross the limit.
+    """
+    home = os.environ.get("USERPROFILE") or os.path.expanduser("~")
+    store = os.path.join(home, ".cache", "codebase-memory-mcp")
+    project = repo_path.replace(":", "").replace("\\", "-").replace("/", "-")
+    return len(os.path.join(store, project + ".db-wal"))
+
+
+def _windows_path_limit_error(repo_path: str, exc: CbmToolError) -> Optional[dict]:
+    """Recognize a Win32 path-length failure behind the engine's generic message.
+
+    The engine reports this as a contained per-file worker crash and advises
+    re-running, which can never succeed: nothing about the path changes between
+    attempts. Users follow that hint into hunting for a corrupt source file that
+    does not exist.
+    """
+    if os.name != "nt":
+        return None
+    payload = exc.payload if isinstance(exc.payload, dict) else {}
+    if payload.get("outcome") != "exit_nonzero":
+        return None
+    predicted = _predicted_store_path_length(repo_path)
+    if predicted < _WINDOWS_PATH_LIMIT - _WINDOWS_PATH_MARGIN:
+        return None
+    return {
+        "status": "error",
+        "error_code": "windows_path_too_long",
+        "message": str(exc),
+        "hint": (
+            f"The repository path is {len(repo_path)} characters long, which makes "
+            f"the graph engine's database path about {predicted} characters against "
+            f"Windows' {_WINDOWS_PATH_LIMIT}-character limit, so its indexing worker "
+            "cannot open it. Re-running will not help. Index the repository from a "
+            "shallower path, or enable Win32 long paths."
+        ),
+        "payload": payload,
+    }
+
 
 @safe
 def do_index(client: CbmClient, req: GraphIndexRequest) -> dict:
     action = req.action
     if action == "auto":
         action = "index" if req.repo_path else ("status" if req.project else "list")
+
+    # Rejected here, not implemented: the auto-index poller and its persisted
+    # flag belong to marm-mcp-server, and this package must not read that
+    # server's database. Without this guard these actions fall through to the
+    # index branch and answer "repo_path is required", which is misleading.
+    if action in ("auto_on", "auto_off", "auto_status"):
+        return {
+            "status": "error",
+            "error_code": "unsupported_action",
+            "message": (
+                f"'{action}' is only available on marm-mcp-server, which owns the "
+                "auto-index poller. Standalone marm-graph indexes on request only."
+            ),
+        }
 
     if action == "list":
         return _bound(client.call_tool("list_projects", {}))
@@ -221,11 +290,19 @@ def do_index(client: CbmClient, req: GraphIndexRequest) -> dict:
             "status": "error",
             "message": "repo_path is required to index a repository.",
         }
-    return _bound(
-        client.call_tool(
-            "index_repository", {"repo_path": req.repo_path, "mode": req.mode}
+    try:
+        return _bound(
+            client.call_tool(
+                "index_repository", {"repo_path": req.repo_path, "mode": req.mode}
+            )
         )
-    )
+    except CbmToolError as exc:
+        # Caught here rather than left to @safe, which is outside this function
+        # and cannot see which request produced the error.
+        diagnosed = _windows_path_limit_error(req.repo_path, exc)
+        if diagnosed is not None:
+            return diagnosed
+        raise
 
 
 # ── marm_code_lookup ────────────────────────────────────────────────

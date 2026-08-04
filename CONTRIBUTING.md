@@ -53,6 +53,7 @@ python -m marm_mcp_server --generate-key
 ```text
 marm-mcp-server/
   marm_mcp_server/
+    __main__.py                # `python -m marm_mcp_server` entry, delegates to cli
     cli.py                     # HTTP CLI, dependency checks, and server factory
     server.py                  # FastAPI HTTP composition root
     server_stdio.py            # STDIO bootstrap and core-tool registration
@@ -63,14 +64,25 @@ marm-mcp-server/
       memory_db.py             # SQLite schema, connection pool, and DB maintenance routines
       memory_scoring.py        # Semantic, FTS, temporal, and chunk-aware recall scoring
       memory_ops.py            # Store/update/recall/delete/list memory operations
+      memory_recall.py         # Recall orchestration across the scoring lanes
+      memory_delete.py         # Delete paths and their cascade handling
       write_queue.py           # Serialized write queue for SQLite writer stability
       consolidation.py         # Content-hash and semantic write-time consolidation
       compaction.py            # Background compaction candidate detection and nudges
       compaction_scheduler.py  # Optional compaction maintenance scheduler
+      docs_db.py               # Indexed copy of the shipped docs served to agents
       concept_db.py            # Concept graph schema and isolated SQLite pool
       concept_extraction.py    # spaCy entity/relationship extraction (bundled model)
+      concept_queue.py         # Durable outbox: one indexing task per stored memory
+      concept_worker.py        # Background worker draining that queue into the graph
+      concept_build_lock.py    # Concept-graph binding of the cross-process lease
+      lease_lock.py            # Leased-row mutual exclusion, shared by both graphs
       graph_supervisor.py      # Lazy singleton supervisor for the embedded graph engine
       graph_client.py          # Concept graph's in-process link into the code graph
+      graph_index_lock.py      # The one gate every code-graph store mutation takes
+      graph_index_worker.py    # Git-signature poller that keeps code graphs current
+      runtime_flags.py         # Persisted on/off switches and watch suppressions
+      runtime_manager.py       # Local runtime discovery and background start/stop
       protocol_delivery_state.py  # Bounded HTTP protocol-delivery state
       models.py                # Shared Pydantic request/response models
       events.py                # Internal event hooks
@@ -100,16 +112,34 @@ marm-mcp-server/
       notebook.py              # Notebook dispatch service
       recall.py                # Shared smart-recall response logic
       summary.py               # Shared session summary formatting
+      graph_context.py         # Bounded read-only concept context for recall
+      log_entry.py             # Shared log-entry/notebook data ops, both transports
       compaction_apply.py      # Atomic compaction apply transaction
       compaction_summarize.py  # Compaction cluster summarization helpers
       stdio_entry_tools.py     # STDIO log entry/show/delete workflow bodies
       stdio_graph_tools.py     # STDIO graph/concept bodies and registration helper
+      cli_parser.py            # Argument parsers for the product and legacy CLIs
+      cli_output.py            # Human-readable status/doctor/maintenance rendering
+      product_help.py          # Terminal-aware root help rendering
+      product_workflows.py     # High-level local workflows (start, upgrade, uninstall)
+      product_logs.py          # Bounded managed-runtime log display
+      runtime_status.py        # Read-only status aggregation for diagnostics
+      projects_cli.py          # `projects` code-index commands
+      graph_auto_cli.py        # `projects auto` / `knowledge auto` on-off switches
+      key_management.py        # Persistent local API-key operations
+      package_management.py    # Installer detection and registry checks
+      skill_install.py         # Installs the bundled marm-init skill into agent folders
+      docker_cli.py            # Docker parser registration and dispatch
+      docker_commands.py       # Safe Docker command planning and execution
     utils/
       dependency_check.py      # Runtime dependency validation
       helpers.py               # Shared helpers
       logging_filters.py       # Process logging noise filters
       multiprocess_guard.py    # Unsupported multi-worker runtime warning
       security.py              # API key generation
+      embedding_state.py       # Inspect persisted embedding compatibility, no runtime init
+      embedding_migration.py   # Resumable stopped-server embedding vector migration
+      chunk_backfill.py        # Stopped-server backfill of memory_chunks after config change
   marm_graph/                  # Embedded marm-graph wrapper: subprocess JSON-RPC client,
                                #   tool router, and backend verification for the pinned
                                #   codebase-memory-mcp binary
@@ -131,6 +161,8 @@ HTTP mode lives in `marm_mcp_server/server.py` and is mounted through FastAPI/Fa
 STDIO mode lives in `marm_mcp_server/server_stdio.py` and uses the official MCP Python SDK over standard input/output. It owns the FastMCP app and registers the seven core tools first; `services/stdio_graph_tools.py` supplies the graph/concept tool bodies through explicit registration so `tools/list` order remains stable. STDIO must keep stdout clean for JSON-RPC messages; logs and incidental `print()` output belong on stderr.
 
 If a tool behavior changes, check whether the HTTP endpoint and STDIO tool both need the same update.
+
+Separate transports means separate processes. Both run the same background indexers (concept extraction and code re-indexing) against the same databases, so anything they touch needs mutual exclusion that reaches across processes: a leased row in the memory database, not an `asyncio.Lock` or a module-level `threading.Lock`. `core/lease_lock.py` is that primitive, and a run of the test suite is not enough to catch a mistake here, since one interpreter never exercises the boundary. The two-process tests in `tests/test_concept_two_process.py` and `tests/test_graph_auto_index.py` spawn a real second interpreter for exactly that reason.
 
 **Docker HTTP requires an API key**
 
