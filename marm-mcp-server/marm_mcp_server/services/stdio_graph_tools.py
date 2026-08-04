@@ -18,11 +18,14 @@ from typing import Literal, Optional
 
 from pydantic import ValidationError
 
-from ..core import runtime_flags
 from ..core.stdio_logging import _stdio_log
 from ..core.stdio_tool_lifecycle import _log_tool_call
 from marm_mcp_server.core.graph_index_lock import GraphIndexBusy, run_exclusive
-from marm_mcp_server.core.graph_index_worker import AUTO_ACTIONS, auto_action
+from marm_mcp_server.core.graph_index_worker import (
+    AUTO_ACTIONS,
+    auto_action,
+    index_repository,
+)
 from marm_mcp_server.core.graph_supervisor import graph_supervisor
 from marm_mcp_server.endpoints.concepts import (
     marm_concept_build as _marm_concept_build_endpoint,
@@ -94,18 +97,15 @@ async def marm_graph_index(
     )
     if action == "index" or (action == "auto" and repo_path):
         try:
-            result = await run_exclusive(
+            # index_repository, not do_index: the tombstone and the path-limit
+            # marker are settled inside the gate, where they cannot race the
+            # other transport's poller writing the opposite answer.
+            return await run_exclusive(
                 "manual_index:stdio",
-                graph_router.do_index,
+                index_repository,
                 graph_supervisor.get_client(),
                 req,
             )
-            # Only on success: do_index reports engine failures as an error dict
-            # rather than raising, and a failed index must not re-enroll a
-            # project the user deleted.
-            if repo_path and result.get("status") != "error":
-                await asyncio.to_thread(runtime_flags.clear_index_blocks, repo_path)
-            return result
         except GraphIndexBusy as busy:
             return {
                 "status": "error",

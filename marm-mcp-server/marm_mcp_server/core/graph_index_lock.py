@@ -23,11 +23,12 @@ collision the lease exists to prevent.
 The concept build can be asked to stop cooperatively, because it loops over
 memories and can check a flag between them. One `index_repository` call is a
 single opaque round trip into the engine child: there is no safe point to
-interrupt it. So the release is driven by the thread's completion instead. The
-work is owned by a task that acquires, calls, and releases; callers await that
-task through `asyncio.shield` and can walk away from it without collapsing the
-lease. If the event loop itself dies mid-index nothing releases, and the lease
-expires on its TTL. That is the one case the TTL is for.
+interrupt it. So acquire, call, and release all happen inside one worker thread,
+where nothing can unwind them early: a bare thread cannot be cancelled, so the
+release is reached exactly when the engine call returns. The event loop only
+waits for that thread, and a caller walking away from the wait, or the loop
+itself being torn down mid-index, leaves the lease held until the engine is
+actually done.
 """
 
 import asyncio
@@ -41,7 +42,6 @@ import structlog
 
 from ..config import settings
 from . import lease_lock
-from .lease_lock import Lease
 
 logger = structlog.get_logger(__name__)
 
@@ -53,11 +53,17 @@ _inflight: set[asyncio.Task] = set()
 
 
 class GraphIndexBusy(RuntimeError):
-    """Another index is running. Carries the holder for the error message."""
+    """Another index is running. Carries the holder for the error message.
+
+    The message reaches API responses, so it names only what kind of work holds
+    the gate. A purpose carries the repository root ("auto_index:C:\\...") and
+    that path has no business leaving the machine over an HTTP tool call.
+    """
 
     def __init__(self, purpose: Optional[str] = None) -> None:
         self.holder_purpose = purpose
-        detail = f" (held by: {purpose})" if purpose else ""
+        kind = purpose.split(":", 1)[0] if purpose else ""
+        detail = f" (held by: {kind})" if kind else ""
         super().__init__(f"another code index is already running{detail}")
 
 
@@ -117,6 +123,17 @@ def gate_sync(purpose: str, ttl_seconds: Optional[int] = None) -> Any:
             logger.warning("graph_index_lock.release_failed", error=str(exc))
 
 
+def _gated_call(
+    purpose: str,
+    ttl_seconds: int,
+    fn: Callable[..., Any],
+    args: tuple,
+    kwargs: dict,
+) -> Any:
+    with gate_sync(purpose, ttl_seconds):
+        return fn(*args, **kwargs)
+
+
 async def _owned_call(
     purpose: str,
     ttl_seconds: int,
@@ -124,36 +141,15 @@ async def _owned_call(
     args: tuple,
     kwargs: dict,
 ) -> Any:
-    """Acquire, run the engine call in a thread, release when it returns."""
-    holder = f"{os.getpid()}:{uuid.uuid4().hex}"
-    if not await asyncio.to_thread(try_acquire, holder, purpose, ttl_seconds):
-        held = await asyncio.to_thread(current_holder)
-        raise GraphIndexBusy(held[0] if held else None)
+    """Acquire, call, and release, all inside one thread.
 
-    lease = Lease(holder=holder, lost=threading.Event())
-    beat = asyncio.create_task(
-        lease_lock.keep_alive(
-            lease=lease,
-            purpose=purpose,
-            ttl_seconds=ttl_seconds,
-            log_name=lease_lock.log_name(_TABLE),
-            renew_fn=lambda h, t: renew(h, t),
-        )
-    )
-    try:
-        return await asyncio.to_thread(fn, *args, **kwargs)
-    finally:
-        beat.cancel()
-        try:
-            await beat
-        except (asyncio.CancelledError, Exception):
-            pass
-        try:
-            await asyncio.to_thread(release, holder)
-        except Exception as exc:
-            # An unreleased lease expires on its own; failing teardown here
-            # would be worse than waiting it out.
-            logger.warning("graph_index_lock.release_failed", error=str(exc))
+    The acquire and the release have to sit on the same side of the thread
+    boundary as the call. Holding the lease from the event loop meant a
+    cancellation delivered directly to this coroutine, which is what loop
+    teardown does to every pending task, unwound the release while the engine
+    thread was still writing, handing the gate to the other transport mid-index.
+    """
+    return await asyncio.to_thread(_gated_call, purpose, ttl_seconds, fn, args, kwargs)
 
 
 def _forget(task: asyncio.Task) -> None:

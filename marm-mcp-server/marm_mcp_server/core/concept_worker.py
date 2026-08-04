@@ -328,7 +328,7 @@ class ConceptIndexWorker:
     def status(self) -> dict:
         return {
             "running": self.running,
-            "enabled": CONCEPT_AUTO_INDEX,
+            "enabled": self.enabled(),
             "cycles": self._cycles,
             "memories_indexed": self._indexed,
         }

@@ -887,15 +887,23 @@ def test_an_unindexable_path_is_not_retried_at_all(shared_db, tmp_path, monkeypa
     plain.mkdir()
     attempts = []
 
-    async def path_too_long(purpose, fn, *args, **kwargs):
-        attempts.append(purpose)
-        return {
+    # Stubbed at the engine boundary, so the real index_repository still runs:
+    # it owns the marker write, and stubbing the gate instead would skip it.
+    monkeypatch.setattr(
+        module.R,
+        "do_index",
+        lambda client, req: {
             "status": "error",
             "error_code": "windows_path_too_long",
             "hint": "Index the repository from a shallower path.",
-        }
+        },
+    )
 
-    monkeypatch.setattr(module, "run_exclusive", path_too_long)
+    async def counting_gate(purpose, fn, *args, **kwargs):
+        attempts.append(purpose)
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(module, "run_exclusive", counting_gate)
     monkeypatch.setattr(
         module.graph_supervisor, "get_client", lambda: object(), raising=False
     )
@@ -936,11 +944,17 @@ def test_a_successful_manual_index_re_enables_a_previously_unindexable_root(
 
     attempts = []
 
-    async def succeeding(purpose, fn, *args, **kwargs):
-        attempts.append(purpose)
-        return {"status": "success", "project": "p"}
+    # Stubbed at the engine boundary: index_repository owns the clear, so a
+    # stubbed gate would never exercise the recovery this test is about.
+    monkeypatch.setattr(
+        module.R, "do_index", lambda client, req: {"status": "success", "project": "p"}
+    )
 
-    monkeypatch.setattr(module, "run_exclusive", succeeding)
+    async def counting_gate(purpose, fn, *args, **kwargs):
+        attempts.append(purpose)
+        return fn(*args, **kwargs)
+
+    monkeypatch.setattr(module, "run_exclusive", counting_gate)
     monkeypatch.setattr(
         module.graph_supervisor, "get_client", lambda: object(), raising=False
     )
@@ -956,7 +970,7 @@ def test_a_successful_manual_index_re_enables_a_previously_unindexable_root(
     assert attempts == [], "the marker must keep the poller off it"
 
     # A manual index succeeds, which is the proof the root is indexable again.
-    monkeypatch.setattr(endpoint, "run_exclusive", succeeding)
+    monkeypatch.setattr(endpoint, "run_exclusive", counting_gate)
     monkeypatch.setattr(
         endpoint.graph_supervisor, "get_client", lambda: object(), raising=False
     )
@@ -1145,3 +1159,309 @@ async def test_the_running_worker_refreshes_a_repo_on_its_own(
         await asyncio.to_thread(
             client.call_tool, "delete_project", {"project": project}
         )
+
+
+# ── review follow-up: cross-process blocks and lease lifetime ────────
+
+
+@pytest.mark.asyncio
+async def test_a_deleted_project_is_skipped_before_the_watch_cache_expires(
+    shared_db, tmp_path, monkeypatch
+):
+    """A delete in the other transport writes only the tombstone. This poller
+    holds the root in a watch set it reloads once per TTL, so a check tied to
+    that reload left five minutes in which it re-indexed the deleted project."""
+    from marm_mcp_server.core import graph_index_worker as module
+    from marm_mcp_server.core import runtime_flags
+
+    root_dir = tmp_path / "cached"
+    root_dir.mkdir()
+    root = str(root_dir)
+    attempts = []
+
+    async def indexing(purpose, fn, *args, **kwargs):
+        attempts.append(purpose)
+        return {"status": "success", "project": "p"}
+
+    monkeypatch.setattr(module, "run_exclusive", indexing)
+    monkeypatch.setattr(
+        module.graph_supervisor, "get_client", lambda: object(), raising=False
+    )
+    monkeypatch.setattr(
+        module.graph_supervisor, "snapshot", lambda: {"available": True}
+    )
+
+    worker = module.GraphIndexWorker()
+    worker._watched[root] = module._Watched(root)
+    # Loaded and not due to reload: exactly the window the bug lived in.
+    worker._projects_loaded_at = time.monotonic()
+
+    await worker._cycle()
+    assert len(attempts) == 1
+
+    runtime_flags.suppress_watch(root)
+    worker._watched[root].last_full = 0.0
+    await worker._cycle()
+    assert len(attempts) == 1, "the tombstone must stop it with no cache reload"
+
+
+@pytest.mark.asyncio
+async def test_the_gate_outlives_cancellation_of_the_task_that_owns_it(shared_db):
+    """Loop teardown cancels every pending task, the lease owner among them.
+    Releasing on that cancellation handed the gate to the other transport while
+    this process's engine thread was still writing."""
+    from marm_mcp_server.core import graph_index_lock as lock
+
+    entered = threading.Event()
+    finish = threading.Event()
+
+    def slow_index():
+        entered.set()
+        finish.wait(10)
+        return {"status": "success"}
+
+    before = set(lock._inflight)
+    caller = asyncio.create_task(lock.run_exclusive("manual_index:test", slow_index))
+    await asyncio.to_thread(entered.wait, 10)
+    assert lock.current_holder() is not None
+
+    owner = next(iter(set(lock._inflight) - before))
+    owner.cancel()
+    for task in (owner, caller):
+        with pytest.raises(asyncio.CancelledError):
+            await task
+    assert lock.current_holder() is not None, (
+        "the engine call is still running, so the gate must still be held"
+    )
+
+    finish.set()
+    for _ in range(200):
+        if lock.current_holder() is None:
+            break
+        await asyncio.sleep(0.05)
+    assert lock.current_holder() is None, "and released once the call returns"
+
+
+def test_a_repository_with_no_commits_is_still_polled(shared_db, tmp_path, monkeypatch):
+    """`rev-parse HEAD` fails on an unborn HEAD. Treating that as a git error
+    made _poll_one return on every cycle, so a repo indexed before its first
+    commit was never refreshed again."""
+    from marm_mcp_server.core import graph_index_worker as module
+
+    root = tmp_path / "fresh"
+    root.mkdir()
+    _git(root, "init", "-q")
+    (root / "a.py").write_text("def a():\n    return 1\n")
+
+    assert module.git_signature(str(root)) == (module._UNBORN_HEAD, True)
+
+    reasons = []
+
+    async def fake_reindex(state, reason):
+        reasons.append(reason)
+
+    worker = module.GraphIndexWorker()
+    monkeypatch.setattr(worker, "_reindex", fake_reindex)
+    asyncio.run(worker._poll_one(module._Watched(str(root))))
+    assert reasons == ["dirty"]
+
+
+def test_an_unreadable_flag_database_never_authorizes_background_work(
+    shared_db, monkeypatch
+):
+    """A locked database is ordinary and transient. Resolving it to the
+    environment default meant a saved "off" authorized indexing and a tombstone
+    stopped protecting the project it was written for."""
+    from marm_mcp_server.core import runtime_flags
+
+    def broken():
+        raise RuntimeError("database is locked")
+
+    monkeypatch.setattr(runtime_flags, "_connection", broken)
+
+    assert runtime_flags.get_bool(runtime_flags.AUTO_INDEX_GRAPH, True) is False
+    assert runtime_flags.is_watch_suppressed("/repo/x") is True
+    assert runtime_flags.is_unindexable("/repo/x") is True
+    assert runtime_flags.index_block("/repo/x") == "unreadable"
+    assert runtime_flags.source(runtime_flags.AUTO_INDEX_GRAPH) == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_the_deletion_tombstone_is_written_before_the_gate_is_released(
+    shared_db, monkeypatch
+):
+    """A tombstone written after the gate was released cannot stop an index the
+    other transport started in the gap, and the deleted project comes back."""
+    from marm_mcp_server.core import graph_index_lock as lock
+    from marm_mcp_server.core import runtime_flags
+    from marm_mcp_server.endpoints import graph as endpoint
+
+    root = "/repo/doomed"
+    seen = {}
+
+    class _Client:
+        def call_tool(self, name, args):
+            return {"status": "success", "deleted": args["project"]}
+
+    monkeypatch.setattr(endpoint.graph_supervisor, "get_client", lambda: _Client())
+    monkeypatch.setattr(endpoint.graph_supervisor, "is_available", lambda: True)
+    monkeypatch.setattr(endpoint, "_project_root_path", lambda project: root)
+    monkeypatch.setattr(endpoint, "_cleanup_project_code_links", lambda project: None)
+
+    real = endpoint.run_exclusive
+
+    async def watching(purpose, fn, *args, **kwargs):
+        def wrapped(*inner_args, **inner_kwargs):
+            outcome = fn(*inner_args, **inner_kwargs)
+            seen["held"] = lock.current_holder() is not None
+            seen["suppressed"] = runtime_flags.is_watch_suppressed(root)
+            return outcome
+
+        return await real(purpose, wrapped, *args, **kwargs)
+
+    monkeypatch.setattr(endpoint, "run_exclusive", watching)
+    result = await endpoint.console_delete_project(
+        endpoint.ConsoleDeleteProjectRequest(
+            project="doomed", name="doomed", confirm=True
+        )
+    )
+    assert result.get("status") != "error"
+    assert seen["held"] is True, "observed inside the gate, or the test proves nothing"
+    assert seen["suppressed"] is True
+
+
+@pytest.mark.asyncio
+async def test_block_state_is_settled_inside_the_gate_by_every_index_path(
+    shared_db, monkeypatch
+):
+    """Both transports index concurrently by design, so an automatic failure and a
+    manual success can release their gates in either order. Settling the blocks
+    after release let the loser's write win, and a recovered repository stayed
+    marked unindexable in both processes.
+
+    Asserted from inside the gated call rather than by racing two real indexes:
+    the ordering is what makes the race unwinnable, and observing the state while
+    the lease is provably still held tests exactly that.
+    """
+    from marm_mcp_server.core import graph_index_lock as lock
+    from marm_mcp_server.core import graph_index_worker as module
+    from marm_mcp_server.core import runtime_flags
+    from marm_graph.core.models import GraphIndexRequest
+
+    root = "/repo/contested"
+    observed = {}
+
+    def observe(label):
+        observed[label] = {
+            "held": lock.current_holder() is not None,
+            "unindexable": runtime_flags.is_unindexable(root),
+        }
+
+    # The automatic side: a path-limit failure must be durable before release.
+    monkeypatch.setattr(
+        module.R,
+        "do_index",
+        lambda client, req: {
+            "status": "error",
+            "error_code": "windows_path_too_long",
+            "hint": "shallower path",
+        },
+    )
+
+    def failing_then_observe(client, req):
+        result = module.index_repository(client, req)
+        observe("after_failure")
+        return result
+
+    await lock.run_exclusive(
+        f"auto_index:{root}",
+        failing_then_observe,
+        object(),
+        GraphIndexRequest(action="index", repo_path=root),
+    )
+    assert observed["after_failure"] == {"held": True, "unindexable": True}
+
+    # The manual side: the clear must land before its own release, or the write
+    # above could arrive afterwards and undo a recovery that already happened.
+    monkeypatch.setattr(
+        module.R, "do_index", lambda client, req: {"status": "success", "project": "p"}
+    )
+
+    def succeeding_then_observe(client, req):
+        result = module.index_repository(client, req)
+        observe("after_success")
+        return result
+
+    await lock.run_exclusive(
+        "manual_index:test",
+        succeeding_then_observe,
+        object(),
+        GraphIndexRequest(action="index", repo_path=root),
+    )
+    assert observed["after_success"] == {"held": True, "unindexable": False}
+
+
+@pytest.mark.asyncio
+async def test_an_automatic_failure_cannot_overwrite_a_manual_recovery(shared_db):
+    """The order Codex named: automatic index fails, manual index succeeds and
+    clears, then the automatic task writes its marker. With the write inside the
+    gate that interleaving cannot occur, because the manual index cannot start
+    until the automatic one has released."""
+    from marm_mcp_server.core import graph_index_lock as lock
+    from marm_mcp_server.core import graph_index_worker as module
+    from marm_mcp_server.core import runtime_flags
+    from marm_graph.core.models import GraphIndexRequest
+
+    root = "/repo/recovered"
+    entered = threading.Event()
+    release = threading.Event()
+    refused = []
+
+    def slow_failure(client, req):
+        entered.set()
+        release.wait(10)
+        return module.index_repository(client, req)
+
+    original = module.R.do_index
+    module.R.do_index = lambda client, req: {
+        "status": "error",
+        "error_code": "windows_path_too_long",
+    }
+    try:
+        automatic = asyncio.create_task(
+            lock.run_exclusive(
+                f"auto_index:{root}",
+                slow_failure,
+                object(),
+                GraphIndexRequest(action="index", repo_path=root),
+            )
+        )
+        await asyncio.to_thread(entered.wait, 10)
+
+        # The manual index arrives while the automatic one still holds the gate.
+        try:
+            await lock.run_exclusive(
+                "manual_index:test",
+                module.index_repository,
+                object(),
+                GraphIndexRequest(action="index", repo_path=root),
+            )
+        except lock.GraphIndexBusy:
+            refused.append(True)
+
+        release.set()
+        await automatic
+        assert refused == [True], "the gate must refuse the overlapping manual index"
+        assert runtime_flags.is_unindexable(root) is True
+
+        # Once the gate frees, the manual index succeeds and its clear is final.
+        module.R.do_index = lambda client, req: {"status": "success", "project": "p"}
+        await lock.run_exclusive(
+            "manual_index:test",
+            module.index_repository,
+            object(),
+            GraphIndexRequest(action="index", repo_path=root),
+        )
+        assert runtime_flags.is_unindexable(root) is False
+    finally:
+        module.R.do_index = original

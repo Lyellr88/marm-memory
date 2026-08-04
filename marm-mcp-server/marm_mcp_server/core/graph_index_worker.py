@@ -43,6 +43,9 @@ logger = structlog.get_logger(__name__)
 
 _GIT_TIMEOUT_SECONDS = 15
 
+# Stands in for HEAD in a repository with no commits yet.
+_UNBORN_HEAD = ""
+
 
 def _git_env() -> dict[str, str]:
     """A scrubbed environment for a git call on a user-chosen repository.
@@ -100,11 +103,49 @@ def git_signature(root: str) -> Optional[tuple[str, bool]]:
         return None
     head = _git(root, "rev-parse", "HEAD")
     if head is None:
-        return None
+        # A repository with no commits yet. `rev-parse HEAD` fails on an unborn
+        # HEAD, and _poll_one has already classified this as git, so returning
+        # None here meant such a repo returned early on every cycle and was
+        # never refreshed at all. A stable sentinel puts it on the dirty lane
+        # instead, which is the only signal it has until its first commit.
+        if _git(root, "rev-parse", "--is-inside-work-tree") != "true":
+            return None
+        head = _UNBORN_HEAD
     status = _git(root, "status", "--porcelain")
     if status is None:
         return None
     return (head, bool(status))
+
+
+def index_repository(client, req: GraphIndexRequest) -> dict:
+    """The callable every index path hands to the gate: index, then settle the
+    durable block state before the lease is released.
+
+    Settling it afterwards left the two blocks racing each other, because both
+    transports index concurrently by design. An automatic index that fails on the
+    path limit and a manual one that succeeds could release their gates in either
+    order, and the loser's write won: a recovered repository stayed marked
+    unindexable, silently, in both processes.
+
+    One function rather than a rule at four call sites, because the rule is
+    invisible at the call site and there is nothing to notice when it is skipped.
+    """
+    result = R.do_index(client, req)
+    root = req.repo_path
+    if not root:
+        return result
+    if result.get("status") == "error":
+        if result.get("error_code") == "windows_path_too_long":
+            # Terminal until something outside the poller changes: the remedy the
+            # error suggests (enabling Win32 long paths) leaves the path identical
+            # and fixes both transports at once, so recovery cannot be keyed on
+            # the path, and a restart must not be required to notice it.
+            runtime_flags.mark_unindexable(root, "windows_path_too_long")
+        return result
+    # A success is the proof that both blocks are stale: the root is reachable,
+    # and the user asked for it by indexing.
+    runtime_flags.clear_index_blocks(root)
+    return result
 
 
 class _Watched:
@@ -276,10 +317,11 @@ class GraphIndexWorker:
             if state.failed:
                 # In-process and genuinely terminal: the root is gone.
                 continue
-            # Read per cycle rather than cached in the state, so clearing the
-            # marker (any successful manual index does) resumes polling on the
-            # next cycle in every process, with no restart.
-            if await asyncio.to_thread(runtime_flags.is_unindexable, state.root):
+            # Read per cycle rather than cached in the state. A delete or a
+            # successful manual index in the OTHER transport is invisible here
+            # until this read, and the watch set is only reloaded once per TTL,
+            # so anything keyed to that reload lags by up to five minutes.
+            if await asyncio.to_thread(runtime_flags.index_block, state.root):
                 continue
             try:
                 await self._poll_one(state)
@@ -387,7 +429,7 @@ class GraphIndexWorker:
         started = time.monotonic()
         result = await run_exclusive(
             f"auto_index:{state.root}",
-            R.do_index,
+            index_repository,
             client,
             GraphIndexRequest(
                 action="index", repo_path=state.root, mode=GRAPH_AUTO_INDEX_MODE
@@ -400,14 +442,7 @@ class GraphIndexWorker:
         state.last_full = time.monotonic()
         if result.get("status") == "error":
             if result.get("error_code") == "windows_path_too_long":
-                # Terminal until something outside the poller changes, so the
-                # marker is durable and shared: the remedy the error suggests
-                # (enabling Win32 long paths) leaves the path identical and fixes
-                # both transports at once, so recovery cannot be keyed on the
-                # path, and a restart must not be required to notice it.
-                await asyncio.to_thread(
-                    runtime_flags.mark_unindexable, state.root, "windows_path_too_long"
-                )
+                # Marked by index_repository, inside the gate.
                 logger.warning(
                     "graph_auto_index.unindexable",
                     root=state.root,

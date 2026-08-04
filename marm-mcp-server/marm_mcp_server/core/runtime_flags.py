@@ -38,11 +38,14 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def get(key: str) -> Optional[str]:
-    """The saved value, or None if nothing was ever saved for this key.
+def _read(key: str) -> tuple[bool, Optional[str]]:
+    """(readable, value). Never raises.
 
-    Never raises: a flag read happens on every worker cycle and a missing table
-    or a locked database must not stop the cycle, only fall back to the env.
+    The two failures have to be told apart. Collapsing them onto None made an
+    unreadable database indistinguishable from an unset key, so a locked
+    database, which is transient and ordinary, resolved every switch to its
+    environment default: a saved "off" would authorize indexing and a deletion
+    tombstone would let a poller resurrect the project it protects.
     """
     try:
         with _connection() as conn:
@@ -51,8 +54,17 @@ def get(key: str) -> Optional[str]:
             ).fetchone()
     except Exception as exc:
         logger.warning("runtime_flags.read_failed", key=key, error=str(exc))
-        return None
-    return None if row is None else row[0]
+        return False, None
+    return True, None if row is None else row[0]
+
+
+def get(key: str) -> Optional[str]:
+    """The saved value, or None for both an unset key and an unreadable one.
+
+    For callers that only display the value. Anything that decides whether work
+    may run must use `_read` and fail closed instead.
+    """
+    return _read(key)[1]
 
 
 def set_(key: str, value: str) -> None:
@@ -82,7 +94,14 @@ def clear(key: str) -> bool:
 
 
 def get_bool(key: str, env_default: bool) -> bool:
-    saved = get(key)
+    """False when the switch cannot be read, rather than the env default.
+
+    These switches gate background work. An unreadable database is the one case
+    where the answer is unknown, and unknown must not authorize a worker to run.
+    """
+    readable, saved = _read(key)
+    if not readable:
+        return False
     if saved is None:
         return env_default
     return saved == _TRUE
@@ -93,8 +112,12 @@ def set_bool(key: str, value: bool) -> None:
 
 
 def source(key: str) -> str:
-    """Which layer decides this flag right now: "override" or "environment"."""
-    return "environment" if get(key) is None else "override"
+    """Which layer decides this flag right now: "override", "environment", or
+    "unknown" when the database could not be read."""
+    readable, saved = _read(key)
+    if not readable:
+        return "unknown"
+    return "environment" if saved is None else "override"
 
 
 # ── Watch suppressions ─────────────────────────────────────────────
@@ -125,7 +148,10 @@ def unsuppress_watch(root_path: str) -> bool:
 
 
 def is_watch_suppressed(root_path: str) -> bool:
-    return get(_SUPPRESS_PREFIX + canonical_root(root_path)) == _TRUE
+    """True when the tombstone cannot be read, so an unreadable database cannot
+    be the reason a deleted project comes back."""
+    readable, value = _read(_SUPPRESS_PREFIX + canonical_root(root_path))
+    return True if not readable else value == _TRUE
 
 
 # ── Unindexable roots ──────────────────────────────────────────────
@@ -143,11 +169,43 @@ def mark_unindexable(root_path: str, reason: str) -> None:
 
 
 def is_unindexable(root_path: str) -> bool:
-    return get(_UNINDEXABLE_PREFIX + canonical_root(root_path)) is not None
+    """Fails closed for the same reason as the tombstone: skipping a cycle costs
+    one stale graph, guessing wrong costs the engine gate on a doomed index."""
+    readable, value = _read(_UNINDEXABLE_PREFIX + canonical_root(root_path))
+    return True if not readable else value is not None
 
 
 def unindexable_watches() -> list[str]:
     return _keys_with_prefix(_UNINDEXABLE_PREFIX)
+
+
+def index_block(root_path: str) -> Optional[str]:
+    """Why a poller must leave this root alone right now, or None.
+
+    Both blocks in one query, because the poller has to ask about both on every
+    cycle for every project. Checking the tombstone only while reloading the
+    watch set left a whole TTL in which the other transport's poller re-indexed
+    a project this one had already deleted, recreating it.
+    """
+    root = canonical_root(root_path)
+    suppressed_key = _SUPPRESS_PREFIX + root
+    unindexable_key = _UNINDEXABLE_PREFIX + root
+    try:
+        with _connection() as conn:
+            rows = dict(
+                conn.execute(
+                    "SELECT key, value FROM runtime_flags WHERE key IN (?, ?)",
+                    (suppressed_key, unindexable_key),
+                ).fetchall()
+            )
+    except Exception as exc:
+        logger.warning("runtime_flags.read_failed", key=root, error=str(exc))
+        return "unreadable"
+    if rows.get(suppressed_key) == _TRUE:
+        return "deleted"
+    if unindexable_key in rows:
+        return rows[unindexable_key] or "unindexable"
+    return None
 
 
 def clear_index_blocks(root_path: str) -> None:

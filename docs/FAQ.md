@@ -102,11 +102,11 @@ The concept graph turns stored memories into a queryable knowledge graph. `marm_
 
 #### Q: Why does `marm_concept_build` return `entities_extracted: 0`?
 
-The spaCy runtime and English extraction model are bundled with MARM and load only when you build the concept graph. First confirm that the build scope includes memories with extractable entities, then run `marm-memory knowledge status`. If it reports a damaged or partial install, repair it with `python -m pip install -U --force-reinstall marm-mcp-server`. Core memory remains available if concept extraction cannot initialize.
+The spaCy runtime and English extraction model are bundled with MARM and load on the first extraction, whether that is a build you ran or the background worker indexing a new memory. First confirm that the build scope includes memories with extractable entities, then run `marm-memory knowledge status`. If it reports a damaged or partial install, repair it with `python -m pip install -U --force-reinstall marm-mcp-server`. Core memory remains available if concept extraction cannot initialize.
 
 #### Q: What happens if a graph engine fails to start?
 
-Nothing breaks. The code-graph engine starts lazily on first graph-tool use; if it cannot start (no network for the first-run download, disk full, `GRAPH_ENABLED=false`), graph tools return `{"status": "error", "message": "graph backend unavailable"}` while all other tools keep working. The concept graph stores its data in a separate SQLite database (`~/.marm/index/`) with its own connection pool, so it can never block the main memory database.
+Nothing breaks. The code-graph engine starts lazily on the first graph-tool use, or when the auto-index poller finds it already downloaded; if it cannot start (no network for the first-run download, disk full, `GRAPH_ENABLED=false`), graph tools return `{"status": "error", "message": "graph backend unavailable"}` while all other tools keep working. The concept graph stores its data in a separate SQLite database (`~/.marm/index/`) with its own connection pool, so it can never block the main memory database.
 
 ---
 
