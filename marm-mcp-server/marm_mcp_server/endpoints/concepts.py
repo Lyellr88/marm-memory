@@ -323,8 +323,8 @@ def _run_build(
 
                 if graph_available:
                     for entity in result.entities:
-                        entity_id = name_to_id.get(entity.name)
-                        if entity_id is None:
+                        linked_entity_id = name_to_id.get(entity.name)
+                        if linked_entity_id is None:
                             continue
                         try:
                             match = find_code_match(entity.name, mem_project)
@@ -335,7 +335,7 @@ def _run_build(
                             try:
                                 if concept_db.store_code_link(
                                     conn,
-                                    entity_id,
+                                    linked_entity_id,
                                     match["qualified_name"],
                                     mem_project or "",
                                     label=match.get("label"),
@@ -507,7 +507,7 @@ async def _marm_concept_build(
         except Exception as e:
             logger.warning("concepts.build_run_create_error", error=str(e))
             return {"status": "error", "message": "Concept build failed."}
-        result = {
+        degraded = {
             "status": "degraded",
             "error_code": "concepts_unavailable",
             "message": _CONCEPTS_UNAVAILABLE_MESSAGE,
@@ -525,8 +525,8 @@ async def _marm_concept_build(
             finished_at=datetime.now(timezone.utc).isoformat(),
             duration_ms=0,
         )
-        result["build_run_id"] = run_id
-        return result
+        degraded["build_run_id"] = run_id
+        return degraded
     try:
         graph_rebuilt = await asyncio.to_thread(_prepare_build_schema, req)
     except ValueError:

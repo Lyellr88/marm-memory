@@ -2,7 +2,7 @@
 
 import threading
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Awaitable, Callable, Optional
 
 from ..config.settings import MARM_PLATFORM, MARM_PROJECT
 from ..core.docs_db import DocsDB
@@ -237,7 +237,7 @@ async def _save(
         )
 
     mirror_status = "synced"
-    memory_id = doc_row.memory_id
+    mirror_memory_id: str | None = None
 
     if not was_created and doc_row.memory_id:
         # Before the replacement is written, not after. Cleanup strips every
@@ -258,7 +258,7 @@ async def _save(
             )
 
     try:
-        memory_id = await memory.store_doc_mirror(
+        mirror_memory_id = await memory.store_doc_mirror(
             content,
             session_name,
             scoped_project,
@@ -274,9 +274,9 @@ async def _save(
         _safe_print(f"Doc mirror write failed for doc {doc_row.id}: {e}")
         mirror_status = "pending"
 
-    if mirror_status == "synced":
+    if mirror_memory_id is not None:
         with docs_db.get_connection() as conn:
-            docs_db.set_memory_id(conn, doc_row.id, memory_id)
+            docs_db.set_memory_id(conn, doc_row.id, mirror_memory_id)
 
     verb = "saved" if was_created else "updated"
     promoted_note = " (promoted from scratch)" if source_notebook_name else ""
@@ -284,12 +284,14 @@ async def _save(
         "status": "success",
         "message": f"📄 Doc '{name}' {verb}{promoted_note}",
         "doc_id": doc_row.id,
-        "memory_id": memory_id if mirror_status == "synced" else doc_row.memory_id,
+        "memory_id": mirror_memory_id
+        if mirror_status == "synced"
+        else doc_row.memory_id,
         "mirror_status": mirror_status,
     }
 
 
-_ACTION_HANDLERS = {
+_ACTION_HANDLERS: dict[str, Callable[..., Awaitable[dict]]] = {
     "add": _add,
     "use": _use,
     "show": _show,

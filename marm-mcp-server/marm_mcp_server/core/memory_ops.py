@@ -149,7 +149,7 @@ async def _store_memory(
     content: str,
     session: str,
     context_type: str = "general",
-    metadata: Dict = None,
+    metadata: Dict | None = None,
     project: str | None = None,
     platform: str | None = None,
     explicit_scope: bool = False,

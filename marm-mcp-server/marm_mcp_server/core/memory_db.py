@@ -12,7 +12,9 @@ class SQLiteConnectionPool:
     def __init__(self, db_path: str, max_connections: int = 5):
         self.db_path = db_path
         self.max_connections = max_connections
-        self.pool = queue.Queue(maxsize=max_connections)
+        self.pool: queue.Queue[sqlite3.Connection] = queue.Queue(
+            maxsize=max_connections
+        )
         self.created_connections = 0
         self.lock = threading.Lock()
 

@@ -133,12 +133,12 @@ async def _delete_memories(mem, memory_ids: list[str]) -> dict:
             }
 
         source_summary_ids = {
-            item.get("compacted_into")
+            compacted_into
             for item in impacts
             if item.get("exists")
             and item.get("compaction_role") == "source"
-            and item.get("compacted_into")
-            and item.get("compacted_into") not in existing_ids
+            and (compacted_into := item.get("compacted_into"))
+            and compacted_into not in existing_ids
         }
         summaries_updated = sum(
             _remove_deleted_sources_from_summary(conn, summary_id, existing_ids, now)

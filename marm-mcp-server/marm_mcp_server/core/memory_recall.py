@@ -136,13 +136,13 @@ async def _recall_exact(
 async def _recall_similar(
     mem,
     query: str,
-    session: str = None,
+    session: str | None = None,
     limit: int = 5,
     query_vec=None,
     include_scan_metadata: bool = False,
     exact_mode: str = "auto",
-    project: str = None,
-    platform: str = None,
+    project: str | None = None,
+    platform: str | None = None,
     *,
     with_cosine: bool = False,
 ):
@@ -353,10 +353,10 @@ async def _recall_similar(
 async def _recall_text_search(
     mem,
     query: str,
-    session: str = None,
+    session: str | None = None,
     limit: int = 5,
-    project: str = None,
-    platform: str = None,
+    project: str | None = None,
+    platform: str | None = None,
     apply_temporal: bool = False,
 ) -> List[Dict]:
     """Text search via FTS5 BM25 ranking, with LIKE fallback for unsanitizable queries.

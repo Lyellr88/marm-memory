@@ -370,7 +370,9 @@ def stop_runtime(
             if os.name == "nt":
                 psutil.Process(int(state["pid"])).kill()
             else:
-                os.kill(int(state["pid"]), signal.SIGKILL)
+                # Unreachable on Windows, where signal.SIGKILL does not exist and
+                # mypy resolves the stdlib against.
+                os.kill(int(state["pid"]), signal.SIGKILL)  # type: ignore[attr-defined]
     clear_state(runtime_id)
     return True
 

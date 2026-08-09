@@ -19,7 +19,9 @@ from ..services.graph_context import attach_graph_context, get_graph_context
 logger = structlog.get_logger(__name__)
 
 
-def track_endpoint_usage(endpoint: str, request: Request, extra_data: dict = None):
+def track_endpoint_usage(
+    endpoint: str, request: Request, extra_data: dict | None = None
+):
     """Track MCP endpoint usage"""
     try:
         import sqlite3

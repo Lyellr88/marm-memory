@@ -91,14 +91,13 @@ class MARMMemory:
             db_path, max_connections=MAX_DB_CONNECTIONS
         )
 
-        self.encoder = None
+        self.encoder: _FastEmbedEncoder | None = None
         self._encoder_loading = False
         self._encoder_failed = False
         self._encoder_lock = threading.Lock()
 
         init_database(self.db_path)
 
-        self.active_sessions = {}
         self.active_notebook_entries_by_session: dict[str, list[dict]] = {}
         self.active_log_session: str = "main"
         self._write_queue: WriteQueue | None = None
@@ -197,7 +196,9 @@ class MARMMemory:
     def _encode_sync(self, text: str):
         """Encode text with the shared encoder, serialized to prevent concurrent-use hangs."""
         with self._encoder_lock:
-            return self.encoder.encode(text)
+            # Every caller gates on _load_encoder_lazily(), which returns
+            # `self.encoder is not None`. mypy cannot carry that through a bool.
+            return self.encoder.encode(text)  # type: ignore[union-attr]
 
     def _load_encoder_lazily(self) -> bool:
         """Lazy load the semantic search model only when needed"""
@@ -268,7 +269,7 @@ class MARMMemory:
         content: str,
         session: str,
         context_type: str = "general",
-        metadata: Dict = None,
+        metadata: Dict | None = None,
     ) -> str:
         return await _store_memory(self, content, session, context_type, metadata)
 
@@ -277,7 +278,7 @@ class MARMMemory:
         content: str,
         session: str,
         context_type: str = "general",
-        metadata: Dict = None,
+        metadata: Dict | None = None,
         queue_enabled: Optional[bool] = None,
     ) -> str:
         """Store memory through the write queue unless explicitly disabled."""
@@ -406,13 +407,13 @@ class MARMMemory:
     async def recall_similar(
         self,
         query: str,
-        session: str = None,
+        session: str | None = None,
         limit: int = 5,
         query_vec=None,
         include_scan_metadata: bool = False,
         exact_mode: str = "auto",
-        project: str = None,
-        platform: str = None,
+        project: str | None = None,
+        platform: str | None = None,
         *,
         with_cosine: bool = False,
     ):
@@ -432,10 +433,10 @@ class MARMMemory:
     async def recall_text_search(
         self,
         query: str,
-        session: str = None,
+        session: str | None = None,
         limit: int = 5,
-        project: str = None,
-        platform: str = None,
+        project: str | None = None,
+        platform: str | None = None,
     ) -> List[Dict]:
         return await _recall_text_search(
             self, query, session, limit, project=project, platform=platform

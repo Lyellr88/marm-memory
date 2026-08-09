@@ -74,6 +74,7 @@ dev = [
     "isort>=5.10.0",
     "flake8>=5.0.0",
     "mypy>=2.3.0",
+    "types-psutil>=6.0.0",
     "ruff>=0.4.0",
     "tomli>=2.0.0; python_version < '3.11'",
 ]
@@ -105,8 +106,19 @@ disallow_untyped_defs = true
 # Without this, Pydantic models read as plain classes and every optional field
 # looks like a required constructor argument.
 plugins = ["pydantic.mypy"]
-# core/ is the checked scope; imports out of it are resolved but not reported.
 follow_imports = "silent"
+
+# Third-party packages that ship no py.typed marker and have no stubs on PyPI.
+# Listed one library at a time on purpose: a global ignore_missing_imports would
+# also swallow a mistyped or deleted MARM import, which is the one import error
+# worth catching. psutil is deliberately absent, since types-psutil covers it.
+[[tool.mypy.overrides]]
+module = [
+    "codebase_memory_mcp.*",
+    "apscheduler.*",
+    "fastapi_mcp",
+]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

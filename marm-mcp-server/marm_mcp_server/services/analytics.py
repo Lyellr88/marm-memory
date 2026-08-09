@@ -10,7 +10,9 @@ from ..config.settings import ANALYTICS_DB_PATH
 logger = structlog.get_logger()
 
 
-def track_usage(event_type: str, endpoint: str = None, user_data: dict = None):
+def track_usage(
+    event_type: str, endpoint: str | None = None, user_data: dict | None = None
+):
     """Track MCP usage events for launch analytics"""
     try:
         usage_db = ANALYTICS_DB_PATH

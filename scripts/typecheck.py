@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Run mypy on the checked scope and gate on the error baseline.
 
-Local only for now. core/ carries a backlog of annotation errors, so this fails
-only when the count goes *up* rather than demanding zero. Lower BASELINE as
+Local only for now. The package carries a backlog of annotation errors, so this
+fails only when the count goes *up* rather than demanding zero. Lower BASELINE as
 errors are fixed; that edit is the record of progress. Once the backlog is
 cleared this becomes a CI job: install requirements.txt plus a pinned mypy, then
 run this script. The mypy version must be pinned there, because BASELINE is
@@ -22,11 +22,16 @@ import subprocess
 import sys
 from collections import Counter
 
-BASELINE = 113
+BASELINE = 155
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 PACKAGE_DIR = REPO_ROOT / "marm-mcp-server"
-TARGET = "marm_mcp_server/core/"
+
+# The whole package, not just core/. Checking core/ alone hid both ends of the
+# same defect: an implicit-Optional parameter counted once inside core/ while
+# every caller honestly passing None to it went unreported. It also let new
+# errors land freely in endpoints/, services/, and console/.
+TARGET = "marm_mcp_server/"
 
 _ERROR_LINE = re.compile(
     r"^(?P<path>.*?\.py):\d+: error: .*?(?:\[(?P<code>[a-z-]+)\])?$"
@@ -44,6 +49,16 @@ def run_mypy() -> tuple[str, int]:
     return proc.stdout + proc.stderr, proc.returncode
 
 
+def _relative(path: str) -> str:
+    """mypy's path, normalized to forward slashes.
+
+    Keyed on the full relative path rather than the basename: nine basenames
+    repeat across subpackages (memory.py, concepts.py, models.py, cli.py, ...),
+    so grouping on the name alone merged distinct files into one count.
+    """
+    return path.replace("\\", "/")
+
+
 def parse(output: str) -> tuple[Counter, Counter, int]:
     by_file: Counter = Counter()
     by_code: Counter = Counter()
@@ -53,7 +68,7 @@ def parse(output: str) -> tuple[Counter, Counter, int]:
         if not match:
             continue
         total += 1
-        by_file[pathlib.Path(match.group("path")).name] += 1
+        by_file[_relative(match.group("path"))] += 1
         by_code[match.group("code") or "uncoded"] += 1
     return by_file, by_code, total
 
@@ -104,12 +119,12 @@ def main() -> int:
         print("\nby file")
         for name, count in by_file.most_common():
             print(f"  {count:5d}  {name}")
-        clean = sorted(
-            p.name for p in (PACKAGE_DIR / TARGET).glob("*.py") if p.name not in by_file
-        )
-        print(f"\nclean: {len(clean)} of {len(clean) + len(by_file)} files")
-        for name in clean:
-            print(f"         {name}")
+        checked = {
+            _relative(str(path.relative_to(PACKAGE_DIR)))
+            for path in (PACKAGE_DIR / TARGET).rglob("*.py")
+            if "__pycache__" not in path.parts
+        }
+        print(f"\nclean: {len(checked - set(by_file))} of {len(checked)} files")
 
     print()
     if total > BASELINE:

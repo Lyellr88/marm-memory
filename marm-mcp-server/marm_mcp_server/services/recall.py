@@ -26,8 +26,8 @@ async def smart_recall(
     include_logs: bool = False,
     detail: int = 1,
     exact_mode: str = "auto",
-    project: str = None,
-    platform: str = None,
+    project: str | None = None,
+    platform: str | None = None,
 ) -> dict:
     try:
         search_session = None if search_all else session_name

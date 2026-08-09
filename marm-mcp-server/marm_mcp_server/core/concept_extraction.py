@@ -1,7 +1,7 @@
 """spaCy-based entity/relationship extraction for the concept graph."""
 
 import threading
-from typing import TYPE_CHECKING, NamedTuple, Optional
+from typing import TYPE_CHECKING, NamedTuple
 
 from ..config.settings import CONCEPT_MODEL_PATH, CONCEPTS_AVAILABLE
 
@@ -87,7 +87,7 @@ def _load_nlp_lazily():
     return _nlp
 
 
-def _classify_chunk(chunk_text: str, sentence_text: str) -> Optional[str]:
+def _classify_chunk(chunk_text: str, sentence_text: str) -> str:
     """Rule layer: classify a noun chunk as concept/decision/pattern/error/tool
     based on keyword triggers in its sentence, defaulting to 'concept'."""
     lowered_sentence = sentence_text.lower()
