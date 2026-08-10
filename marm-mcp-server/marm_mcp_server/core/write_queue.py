@@ -28,7 +28,7 @@ class CallableWriteRequest:
 class WriteQueue:
     """Serialize memory writes through one async worker."""
 
-    def __init__(self, memory, max_size: int = 100):
+    def __init__(self, memory, max_size: int = 100) -> None:
         self.memory = memory
         self.queue: asyncio.Queue = asyncio.Queue(maxsize=max_size)
         self._worker_task: asyncio.Task | None = None

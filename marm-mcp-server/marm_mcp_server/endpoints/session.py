@@ -14,7 +14,7 @@ router = APIRouter(prefix="", tags=["MARM Protocol"])
 
 
 @router.post("/marm_start", operation_id="marm_start", include_in_schema=False)
-async def marm_start(request: SessionRequest):
+async def marm_start(request: SessionRequest) -> dict:
     """
     🚀 Activates MARM memory and accuracy layers
 
@@ -65,7 +65,7 @@ async def marm_start(request: SessionRequest):
 
 
 @router.post("/marm_refresh", operation_id="marm_refresh", include_in_schema=False)
-async def marm_refresh(request: SessionRequest):
+async def marm_refresh(request: SessionRequest) -> dict:
     """
     🔄 Refreshes active session state and reaffirms protocol adherence
 

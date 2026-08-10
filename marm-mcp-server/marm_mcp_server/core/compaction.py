@@ -3,6 +3,7 @@
 import asyncio
 import hashlib
 import json
+import sqlite3
 import uuid
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
@@ -182,7 +183,7 @@ def _compute_candidate_hash(source_memory_ids: list) -> str:
     return hashlib.sha256(payload.encode()).hexdigest()
 
 
-def _get_source_snapshot(conn, source_ids: list) -> dict:
+def _get_source_snapshot(conn: sqlite3.Connection, source_ids: list) -> dict:
     """Return {memory_id: content_hash} for the given source IDs (staleness fingerprint)."""
     placeholders = ",".join("?" * len(source_ids))
     rows = conn.execute(

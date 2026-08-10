@@ -12,7 +12,7 @@ from ..core.memory import memory
 from ..utils.helpers import docs_dir as helpers_docs_dir
 
 
-def guess_context_type(filename):
+def guess_context_type(filename) -> str:
     filename_lower = filename.lower()
     if "protocol" in filename_lower:
         return "protocol"
@@ -259,7 +259,7 @@ async def ensure_marm_started(session_name: str = "default") -> None:
         pass
 
 
-async def reload_marm_documentation():
+async def reload_marm_documentation() -> None:
     """Force a fresh doc load regardless of prior state."""
     global _docs_loaded
     _docs_loaded = False
@@ -275,7 +275,7 @@ _LEGACY_SYSTEM_NOTEBOOK_NAMES = {
 }
 
 
-async def load_marm_documentation():
+async def load_marm_documentation() -> None:
     """Index all marm-docs/ files into memories for semantic search."""
     global _docs_loaded
 

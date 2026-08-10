@@ -33,7 +33,7 @@ router = APIRouter(prefix="", tags=["Compaction"])
     operation_id="marm_get_compaction_candidates",
     include_in_schema=False,
 )
-async def marm_get_compaction_candidates():
+async def marm_get_compaction_candidates() -> dict:
     """
     Return pending_summary compaction candidates with an embedded prompt template.
 
@@ -90,7 +90,9 @@ async def marm_get_compaction_candidates():
     operation_id="marm_stage_compaction_summaries",
     include_in_schema=False,
 )
-async def marm_stage_compaction_summaries(request: StageCompactionSummariesRequest):
+async def marm_stage_compaction_summaries(
+    request: StageCompactionSummariesRequest,
+) -> dict:
     """
     Submit agent-generated summaries for pending compaction candidates.
 
@@ -252,7 +254,7 @@ async def marm_stage_compaction_summaries(request: StageCompactionSummariesReque
     operation_id="marm_get_staged_summaries",
     include_in_schema=False,
 )
-async def marm_get_staged_summaries(limit: int = 20):
+async def marm_get_staged_summaries(limit: int = 20) -> dict:
     """
     Return all summary_staged compaction proposals awaiting main agent review.
 
@@ -305,7 +307,7 @@ async def marm_get_staged_summaries(limit: int = 20):
     operation_id="marm_apply_compaction",
     include_in_schema=False,
 )
-async def marm_apply_compaction(request: ApplyCompactionRequest):
+async def marm_apply_compaction(request: ApplyCompactionRequest) -> dict:
     """
     Apply or discard a staged compaction proposal.
 

@@ -14,7 +14,7 @@ router = APIRouter(prefix="", tags=["Logging"])
 
 
 @router.post("/marm_log_entry", operation_id="marm_log_entry")
-async def marm_log_entry(request: LogEntryRequest):
+async def marm_log_entry(request: LogEntryRequest) -> dict:
     """
     📝 Add structured log entry for milestones or decisions
 
@@ -31,7 +31,7 @@ async def marm_log_show(
     session_name: Optional[str] = Query(
         None, description="Session to show logs for. If omitted, lists all sessions."
     ),
-):
+) -> dict:
     """
     📋 Display all entries and sessions logged
 
@@ -41,7 +41,7 @@ async def marm_log_show(
 
 
 @router.post("/marm_delete", operation_id="marm_delete")
-async def marm_delete(request: DeleteRequest):
+async def marm_delete(request: DeleteRequest) -> dict:
     """
     🗑️ Delete a log session, log entry, or notebook entry
 

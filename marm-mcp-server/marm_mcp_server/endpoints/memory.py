@@ -21,7 +21,7 @@ logger = structlog.get_logger(__name__)
 
 def track_endpoint_usage(
     endpoint: str, request: Request, extra_data: dict | None = None
-):
+) -> None:
     """Track MCP endpoint usage"""
     try:
         import sqlite3

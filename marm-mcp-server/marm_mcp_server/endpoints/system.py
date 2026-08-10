@@ -21,7 +21,7 @@ router = APIRouter(prefix="", tags=["System"])
 
 
 @router.get("/health", include_in_schema=False)
-async def health_check():
+async def health_check() -> dict:
     """Health check endpoint for Docker and monitoring"""
     try:
         with memory.get_connection() as conn:
@@ -51,7 +51,7 @@ async def health_check():
 
 
 @router.get("/ready", include_in_schema=False)
-async def readiness_check():
+async def readiness_check() -> dict:
     """Readiness check endpoint - service ready to handle requests"""
     try:
         with memory.get_connection() as conn:
@@ -112,7 +112,7 @@ async def runtime_shutdown() -> dict:
 @router.post(
     "/marm_reload_docs", operation_id="marm_reload_docs", include_in_schema=False
 )
-async def marm_reload_docs():
+async def marm_reload_docs() -> dict:
     """
     📚 Reload MARM documentation into memory system
 

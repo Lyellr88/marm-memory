@@ -12,7 +12,7 @@ logger = structlog.get_logger()
 
 def track_usage(
     event_type: str, endpoint: str | None = None, user_data: dict | None = None
-):
+) -> None:
     """Track MCP usage events for launch analytics"""
     try:
         usage_db = ANALYTICS_DB_PATH

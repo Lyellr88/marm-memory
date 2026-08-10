@@ -311,7 +311,7 @@ class ConceptDB:
             self.db_path, max_connections=MAX_CONCEPT_DB_CONNECTIONS
         )
 
-    def get_connection(self):
+    def get_connection(self) -> ConnectionContext:
         return ConnectionContext(self.connection_pool)
 
     def close(self) -> None:
@@ -319,7 +319,7 @@ class ConceptDB:
 
     def create_build_run(
         self,
-        conn,
+        conn: sqlite3.Connection,
         *,
         run_id: str,
         scope_type: str,
@@ -333,7 +333,7 @@ class ConceptDB:
             (run_id, scope_type, scope_value, created_at),
         )
 
-    def update_build_run(self, conn, run_id: str, **fields) -> None:
+    def update_build_run(self, conn: sqlite3.Connection, run_id: str, **fields) -> None:
         allowed = {
             "status",
             "memories_processed",
@@ -357,7 +357,7 @@ class ConceptDB:
 
     def get_or_create_entity(
         self,
-        conn,
+        conn: sqlite3.Connection,
         name: str,
         entity_type: str,
         session_name: Optional[str],
@@ -423,7 +423,7 @@ class ConceptDB:
 
     def find_similar_entities(
         self,
-        conn,
+        conn: sqlite3.Connection,
         name_embedding: bytes,
         session_name: Optional[str],
         project: Optional[str],
@@ -499,7 +499,7 @@ class ConceptDB:
 
     def store_relationship(
         self,
-        conn,
+        conn: sqlite3.Connection,
         source_id: int,
         target_id: int,
         predicate: str,
@@ -524,7 +524,7 @@ class ConceptDB:
 
     def store_code_link(
         self,
-        conn,
+        conn: sqlite3.Connection,
         entity_id: int,
         graph_qualified_name: str,
         project: str,

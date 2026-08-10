@@ -5,7 +5,8 @@ import json
 
 import structlog
 from fastapi import Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
+from starlette.middleware.base import RequestResponseEndpoint
 
 from ..config import settings
 from ..core.compaction import claim_pending_compaction_prompt
@@ -28,7 +29,9 @@ from ..utils.helpers import read_protocol_file, read_protocol_lite_file
 logger = structlog.get_logger()
 
 
-async def _mcp_tool_call_tracker(request: Request, call_next):
+async def _mcp_tool_call_tracker(
+    request: Request, call_next: RequestResponseEndpoint
+) -> Response:
     """Lazy doc-load and auto-refresh for MCP tool calls.
 
     Registered first so LIFO puts it last — only runs after rate_limit and auth pass.
@@ -119,7 +122,9 @@ async def _mcp_tool_call_tracker(request: Request, call_next):
 
         body_bytes = b""
         try:
-            async for chunk in response.body_iterator:
+            # BaseHTTPMiddleware hands back a private _StreamingResponse, which
+            # carries body_iterator while the declared Response type does not.
+            async for chunk in response.body_iterator:  # type: ignore[attr-defined]
                 body_bytes += chunk
             data = json.loads(body_bytes)
             result = data.get("result", {})

@@ -22,7 +22,7 @@ import subprocess
 import sys
 from collections import Counter
 
-BASELINE = 155
+BASELINE = 78
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 PACKAGE_DIR = REPO_ROOT / "marm-mcp-server"

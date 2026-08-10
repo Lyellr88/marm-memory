@@ -190,7 +190,7 @@ class MARMMemory:
             entry for entry in entries if entry.get("name") != name
         ]
 
-    def get_connection(self):
+    def get_connection(self) -> ConnectionContext:
         return ConnectionContext(self.connection_pool)
 
     def _encode_sync(self, text: str):

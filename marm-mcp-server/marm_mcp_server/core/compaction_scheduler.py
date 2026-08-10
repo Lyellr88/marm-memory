@@ -28,12 +28,12 @@ def _maybe_start_compaction_scheduler():
     if COMPACTION_AUTO_APPLY_ENABLED:
         from ..endpoints.compaction import auto_apply_staged_summaries
 
-        async def _job():
+        async def _job() -> None:
             await process_nudge_exhausted_candidates(memory)
             await auto_apply_staged_summaries()
     else:
 
-        async def _job():
+        async def _job() -> None:
             await process_nudge_exhausted_candidates(memory)
 
     scheduler = AsyncIOScheduler()

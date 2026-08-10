@@ -4,6 +4,7 @@ import queue
 import sqlite3
 import threading
 from datetime import datetime, timezone
+from types import TracebackType
 
 
 class SQLiteConnectionPool:
@@ -20,12 +21,12 @@ class SQLiteConnectionPool:
 
         self._create_initial_connections()
 
-    def _create_initial_connections(self):
+    def _create_initial_connections(self) -> None:
         """Create initial pool of connections"""
         for _ in range(min(2, self.max_connections)):
             self.pool.put(self._create_connection())
 
-    def _create_connection(self):
+    def _create_connection(self) -> sqlite3.Connection:
         """Create and return a new SQLite connection with optimal settings."""
         conn = sqlite3.connect(
             self.db_path,
@@ -41,7 +42,7 @@ class SQLiteConnectionPool:
         self.created_connections += 1
         return conn
 
-    def get_connection(self):
+    def get_connection(self) -> sqlite3.Connection:
         """Get a connection from the pool"""
         try:
             return self.pool.get(block=False)
@@ -54,14 +55,14 @@ class SQLiteConnectionPool:
 
             return self.pool.get(block=True, timeout=10)
 
-    def return_connection(self, conn):
+    def return_connection(self, conn: sqlite3.Connection) -> None:
         """Return connection to pool"""
         try:
             self.pool.put(conn, block=False)
         except queue.Full:
             conn.close()
 
-    def close_all(self):
+    def close_all(self) -> None:
         """Close all connections in the pool"""
         while not self.pool.empty():
             try:
@@ -78,15 +79,20 @@ class ConnectionContext:
     connection to the pool.
     """
 
-    def __init__(self, pool):
+    def __init__(self, pool: SQLiteConnectionPool) -> None:
         self.pool = pool
-        self.conn = None
+        self.conn: sqlite3.Connection | None = None
 
-    def __enter__(self):
+    def __enter__(self) -> sqlite3.Connection:
         self.conn = self.pool.get_connection()
         return self.conn
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         if self.conn:
             if exc_type is None:
                 self.conn.commit()

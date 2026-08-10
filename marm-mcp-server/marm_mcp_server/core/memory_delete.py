@@ -1,6 +1,7 @@
 """Memory deletion and compaction-lineage cleanup for the MARM memory system."""
 
 import json
+import sqlite3
 from datetime import datetime, timezone
 
 from .concept_queue import dequeue as dequeue_concept_index
@@ -11,7 +12,7 @@ async def _delete_memory(mem, memory_id: str) -> bool:
     return bool(result["deleted_ids"])
 
 
-def _delete_impact(conn, memory_id: str) -> dict:
+def _delete_impact(conn: sqlite3.Connection, memory_id: str) -> dict:
     row = conn.execute(
         "SELECT id, compaction_role, compacted_into, metadata FROM memories WHERE id = ?",
         (memory_id,),
@@ -44,7 +45,7 @@ def _delete_impact(conn, memory_id: str) -> dict:
 
 
 def _remove_deleted_sources_from_summary(
-    conn, summary_id: str, deleted_source_ids: set[str], now: str
+    conn: sqlite3.Connection, summary_id: str, deleted_source_ids: set[str], now: str
 ) -> int:
     row = conn.execute(
         "SELECT metadata FROM memories WHERE id = ? AND compaction_role = 'summary'",
@@ -73,7 +74,7 @@ def _remove_deleted_sources_from_summary(
 
 
 def _restore_sources_from_deleted_summary(
-    conn, summary_id: str, deleted_ids: set[str], now: str
+    conn: sqlite3.Connection, summary_id: str, deleted_ids: set[str], now: str
 ) -> int:
     rows = conn.execute(
         "SELECT id, metadata FROM memories WHERE compacted_into = ?",

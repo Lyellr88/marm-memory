@@ -11,15 +11,17 @@ import logging
 import os
 import secrets
 import threading
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
 from fastapi import Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from starlette.middleware.base import RequestResponseEndpoint
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from . import auth, mcp_client
@@ -70,7 +72,7 @@ def _warm_project_cache() -> None:
 
 
 @asynccontextmanager
-async def lifespan(_app: FastAPI):
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
     if not (STATIC_DIR / "index.html").exists():
         logger.warning(
             "MARM Console frontend assets are missing; API remains available."
@@ -92,7 +94,9 @@ class _ConsoleBootstrapRequest(BaseModel):
 
 
 @app.middleware("http")
-async def console_api_auth(request: Request, call_next):
+async def console_api_auth(
+    request: Request, call_next: RequestResponseEndpoint
+) -> Response:
     """Apply MARM's auth policy to Console data APIs, not static SPA assets."""
     if request.method == "OPTIONS" or not request.url.path.startswith("/api/"):
         return await call_next(request)
@@ -174,7 +178,7 @@ if (STATIC_DIR / "assets").is_dir():
 
 
 @app.get("/", include_in_schema=False)
-def console_index():
+def console_index() -> Response:
     index = STATIC_DIR / "index.html"
     if index.exists():
         return FileResponse(index)
@@ -185,7 +189,7 @@ def console_index():
 
 
 @app.get("/{path:path}", include_in_schema=False)
-def console_spa_fallback(path: str):
+def console_spa_fallback(path: str) -> Response:
     if path == "api" or path.startswith("api/"):
         raise HTTPException(status_code=404, detail="Not Found")
     root_asset = ROOT_STATIC_ASSETS.get(path)

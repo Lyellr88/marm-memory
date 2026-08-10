@@ -159,7 +159,7 @@ def _file_link(path: Path) -> str:
         return str(path)
 
 
-def get_marm_db_path():
+def get_marm_db_path() -> str:
     """Get the official MARM database path, respecting environment variable if set"""
     env_db_path = os.environ.get("MARM_DB_PATH")
     if env_db_path:
@@ -178,7 +178,7 @@ DEFAULT_DB_PATH = get_marm_db_path()
 MAX_DB_CONNECTIONS = 5
 
 
-def get_analytics_db_path():
+def get_analytics_db_path() -> str:
     """Get the analytics database path, respecting environment variable if set"""
     env_analytics_db_path = os.environ.get("MARM_ANALYTICS_DB_PATH")
     if env_analytics_db_path:

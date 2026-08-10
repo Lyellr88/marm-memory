@@ -2,6 +2,7 @@
 
 import hashlib
 import logging
+import sqlite3
 from typing import Optional
 
 from ..config.settings import MARM_PROJECT, MARM_PLATFORM
@@ -24,7 +25,7 @@ def compute_content_hash(content: str) -> str:
 
 
 def find_exact_duplicate(
-    conn,
+    conn: sqlite3.Connection,
     content_hash: str,
     session_name: str,
     normalized_content: str,

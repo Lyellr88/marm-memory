@@ -14,7 +14,7 @@ from ..config.settings import (
 class IPRateLimiter:
     """Simple IP-based rate limiter for preventing abuse without authentication"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.request_buckets: Dict[str, deque] = defaultdict(lambda: deque())
         self.blocked_ips: Dict[str, float] = {}  # IP -> unblock_timestamp
 
@@ -83,7 +83,7 @@ class IPRateLimiter:
                 f"Rate limit exceeded: {config['requests']} requests per {config['window']}s. Blocked for {config['block_duration']}s.",
             )
 
-    def _cleanup_if_needed(self, current_time: float):
+    def _cleanup_if_needed(self, current_time: float) -> None:
         """Clean up old data to prevent memory leaks"""
         if current_time - self.last_cleanup < 300:
             return

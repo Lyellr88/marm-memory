@@ -10,6 +10,7 @@ related-to intent from query shape.
 
 import asyncio
 import itertools
+import sqlite3
 import threading
 import time
 import uuid
@@ -422,7 +423,11 @@ def _prepare_build_schema(req: ConceptBuildRequest) -> bool:
 
 
 def _traverse(
-    conn, seed_ids: list[int], depth: int, direction: str, limit: int
+    conn: sqlite3.Connection,
+    seed_ids: list[int],
+    depth: int,
+    direction: str,
+    limit: int,
 ) -> list[dict]:
     results, _, _ = traverse_graph(
         conn,
