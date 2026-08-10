@@ -394,10 +394,12 @@ async def _store_doc_mirror(
     mirror into an unrelated memory. Uses the doc chunk profile instead
     of the memory profile. If existing_memory_id is provided and its row
     still exists, the row is replaced in place (keeps its id stable, so
-    a routine resave never needs to touch docs.memory_id); otherwise a
-    fresh row is created with a new id -- this also doubles as the repair
-    path for a doc whose prior mirror was deleted out from under it (e.g.
-    via a direct Console memory delete).
+    a routine resave never needs to touch docs.memory_id). Without a usable
+    id, the doc's existing mirror is resolved by metadata.doc_id, so the
+    write is idempotent per doc even when the caller lost the id. Only when
+    neither locates a row is a fresh one created with a new id -- that is
+    the repair path for a doc whose prior mirror was deleted out from under
+    it (e.g. via a direct Console memory delete).
     """
     sanitized_content = sanitize_content(content)
     content_hash = compute_content_hash(sanitized_content)
@@ -415,6 +417,25 @@ async def _store_doc_mirror(
     with mem.get_connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
         try:
+            # A caller with no id may still have a mirror: docs.memory_id is set
+            # in a second, separate write, so a failure between the two leaves
+            # this row orphaned rather than absent. Resolving it by the doc_id
+            # already in metadata makes the write idempotent per doc; creating a
+            # fresh row instead would duplicate the mirror on every later save.
+            # Inside the transaction so the resolve cannot race the write.
+            if not existing_memory_id and metadata.get("doc_id") is not None:
+                orphan = conn.execute(
+                    """
+                    SELECT id FROM memories
+                    WHERE context_type = 'doc'
+                      AND json_extract(metadata, '$.doc_id') = ?
+                    ORDER BY timestamp LIMIT 1
+                    """,
+                    (metadata["doc_id"],),
+                ).fetchone()
+                if orphan is not None:
+                    existing_memory_id = orphan[0]
+
             replaced = False
             if existing_memory_id:
                 cursor = conn.execute(

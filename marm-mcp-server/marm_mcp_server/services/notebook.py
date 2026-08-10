@@ -275,8 +275,16 @@ async def _save(
         mirror_status = "pending"
 
     if mirror_memory_id is not None:
-        with docs_db.get_connection() as conn:
-            docs_db.set_memory_id(conn, doc_row.id, mirror_memory_id)
+        try:
+            with docs_db.get_connection() as conn:
+                docs_db.set_memory_id(conn, doc_row.id, mirror_memory_id)
+        except Exception as e:
+            # The mirror row is written but the docs row does not point at it.
+            # Reported as pending rather than raised, for the same reason a failed
+            # mirror write is: the durable save already succeeded. store_doc_mirror
+            # resolves the orphan by doc_id, so the repair costs no duplicate.
+            _safe_print(f"Doc mirror id link failed for doc {doc_row.id}: {e}")
+            mirror_status = "pending"
 
     verb = "saved" if was_created else "updated"
     promoted_note = " (promoted from scratch)" if source_notebook_name else ""

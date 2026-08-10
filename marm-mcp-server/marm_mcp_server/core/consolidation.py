@@ -42,8 +42,8 @@ def find_exact_duplicate(
     content_hash: str,
     session_name: str,
     normalized_content: str,
-    project: str | None | _Unset = _UNSET,
-    platform: str | None | _Unset = _UNSET,
+    project: str | _Unset | None = _UNSET,
+    platform: str | _Unset | None = _UNSET,
 ) -> Optional[str]:
     """Return memory_id of an existing exact match within the session, or None.
 
@@ -70,8 +70,8 @@ async def find_semantic_duplicate(
     session_name: str,
     threshold: float,
     query_vec: np.ndarray | None = None,
-    project: str | None | _Unset = _UNSET,
-    platform: str | None | _Unset = _UNSET,
+    project: str | _Unset | None = _UNSET,
+    platform: str | _Unset | None = _UNSET,
 ) -> Optional[str]:
     """Return memory_id of a semantic match at or above threshold in session, or None.
 
