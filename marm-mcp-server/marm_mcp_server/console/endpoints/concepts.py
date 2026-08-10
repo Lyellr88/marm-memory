@@ -123,7 +123,7 @@ def get_concept_neighborhood(
 
 
 @router.post("/api/concepts/build")
-def build_concepts(payload: ConceptBuildPayload) -> dict:
+def build_concepts(payload: ConceptBuildPayload) -> JSONResponse:
     if not (payload.session_name or payload.project or payload.search_all):
         raise HTTPException(
             status_code=422, detail="Choose a session, project, or all memory scope."

@@ -1,14 +1,18 @@
 """Authentication middleware for MARM MCP Server."""
 
 from fastapi import Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
+from starlette.middleware.base import RequestResponseEndpoint
+
 from ..config.settings import MARM_API_KEY
 
 PUBLIC_PATHS = {"/health", "/ready", "/ping", "/", "/docs", "/redoc", "/openapi.json"}
 PUBLIC_PREFIXES = ("/openapi",)
 
 
-async def auth_middleware(request: Request, call_next):
+async def auth_middleware(
+    request: Request, call_next: RequestResponseEndpoint
+) -> Response:
     """
     Two-mode auth gate:
       - No MARM_API_KEY set: loopback-only (127.0.0.1 / ::1). Safe default for local deployments.

@@ -159,7 +159,7 @@ def _file_link(path: Path) -> str:
         return str(path)
 
 
-def get_marm_db_path():
+def get_marm_db_path() -> str:
     """Get the official MARM database path, respecting environment variable if set"""
     env_db_path = os.environ.get("MARM_DB_PATH")
     if env_db_path:
@@ -178,7 +178,7 @@ DEFAULT_DB_PATH = get_marm_db_path()
 MAX_DB_CONNECTIONS = 5
 
 
-def get_analytics_db_path():
+def get_analytics_db_path() -> str:
     """Get the analytics database path, respecting environment variable if set"""
     env_analytics_db_path = os.environ.get("MARM_ANALYTICS_DB_PATH")
     if env_analytics_db_path:
@@ -206,7 +206,7 @@ if not (1 <= _raw_port <= 65535):
         f"WARNING: SERVER_PORT={_raw_port} out of [1, 65535], clamped to {SERVER_PORT}",
         file=sys.stderr,
     )
-SERVER_VERSION = "2.37.0"
+SERVER_VERSION = "2.38.0"
 
 GRAPH_ENABLED = os.environ.get("GRAPH_ENABLED", "true").lower() != "false"
 

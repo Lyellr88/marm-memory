@@ -19,7 +19,9 @@ from ..services.graph_context import attach_graph_context, get_graph_context
 logger = structlog.get_logger(__name__)
 
 
-def track_endpoint_usage(endpoint: str, request: Request, extra_data: dict = None):
+def track_endpoint_usage(
+    endpoint: str, request: Request, extra_data: dict | None = None
+) -> None:
     """Track MCP endpoint usage"""
     try:
         import sqlite3
@@ -210,7 +212,7 @@ def _inject_log_results(response: dict, log_results: list) -> None:
 
 
 @router.post("/marm_smart_recall", operation_id="marm_smart_recall")
-async def marm_smart_recall(request: SmartRecallRequest, http_request: Request):
+async def marm_smart_recall(request: SmartRecallRequest, http_request: Request) -> dict:
     """
     🧠 Intelligent memory recall based on semantic similarity
 

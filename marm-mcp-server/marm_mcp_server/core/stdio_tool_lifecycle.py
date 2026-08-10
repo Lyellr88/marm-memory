@@ -4,6 +4,7 @@ init, protocol/compaction injection."""
 import asyncio
 import functools
 import json
+from typing import Any, Awaitable, Callable
 
 from .compaction import claim_pending_compaction_prompt
 from .memory import memory
@@ -18,9 +19,13 @@ _STDIO_LITE_INTERVAL = 30
 _protocol_delivery_lock = asyncio.Lock()
 
 
-def _log_tool_call(fn):
+# Deliberately signature-erasing: the wrapper introspects kwargs by name
+# (session_name, query, limit), which a ParamSpec types as object.
+def _log_tool_call(
+    fn: Callable[..., Awaitable[Any]],
+) -> Callable[..., Awaitable[Any]]:
     @functools.wraps(fn)
-    async def wrapper(*args, **kwargs):
+    async def wrapper(*args: Any, **kwargs: Any) -> Any:
         name = fn.__name__
         if _debug:
             safe = []

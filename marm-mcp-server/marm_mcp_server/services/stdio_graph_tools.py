@@ -14,7 +14,10 @@ regardless of import order.
 """
 
 import asyncio
-from typing import Literal, Optional
+from typing import TYPE_CHECKING, Literal, Optional
+
+if TYPE_CHECKING:
+    from mcp.server.fastmcp import FastMCP
 
 from pydantic import ValidationError
 
@@ -362,7 +365,7 @@ async def marm_concept_recall(
         return {"status": "error", "message": "Concept recall failed."}
 
 
-def register_graph_tools(mcp) -> None:
+def register_graph_tools(mcp: "FastMCP") -> None:
     """Explicit, order-independent tool registration -- called once from
     server_stdio.py after the 7 core tools are already registered, so
     tools/list order never depends on which module happens to import this

@@ -13,12 +13,12 @@ logger = structlog.get_logger()
 
 
 class ShutdownManager:
-    def __init__(self):
+    def __init__(self) -> None:
         self.shutdown_event = asyncio.Event()
         self.shutdown_initiated = False
         self._cleanup_complete = False
 
-    async def setup_signal_handlers(self):
+    async def setup_signal_handlers(self) -> None:
         """Setup signal handlers for graceful shutdown"""
         try:
             loop = asyncio.get_event_loop()
@@ -32,7 +32,7 @@ class ShutdownManager:
             logger.info("Signal handlers not available on this platform")
             pass
 
-    def _signal_handler(self, sig):
+    def _signal_handler(self, sig: signal.Signals) -> None:
         """Handle shutdown signals"""
         logger.info("Shutdown signal received", signal=sig.name)
 
@@ -46,11 +46,11 @@ class ShutdownManager:
             self.shutdown_initiated = True
             self.shutdown_event.set()
 
-    async def wait_for_shutdown(self):
+    async def wait_for_shutdown(self) -> None:
         """Wait for shutdown signal"""
         await self.shutdown_event.wait()
 
-    async def graceful_shutdown(self):
+    async def graceful_shutdown(self) -> None:
         """Perform graceful shutdown of all connections and services"""
         if self._cleanup_complete:
             return

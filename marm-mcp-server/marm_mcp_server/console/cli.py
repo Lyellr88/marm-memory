@@ -12,6 +12,7 @@ import time
 import urllib.error
 import urllib.request
 import webbrowser
+from typing import Any
 
 import psutil
 import uvicorn
@@ -41,7 +42,7 @@ def _healthy(timeout: float = 0.75) -> bool:
             f"http://{host}:{_port()}/health", timeout=timeout
         ) as response:
             payload = json.load(response)
-            return payload.get("service") == "marm-console"
+            return bool(payload.get("service") == "marm-console")
     except (urllib.error.URLError, OSError, ValueError):
         return False
 
@@ -94,7 +95,7 @@ def run_console(
         log_path = runtime_dir() / "console.log"
         bound_log_file(log_path)
         flags = 0
-        kwargs = {}
+        kwargs: dict[str, Any] = {}
         if os.name == "nt":
             flags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
         else:

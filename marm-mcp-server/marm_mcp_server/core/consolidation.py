@@ -2,12 +2,26 @@
 
 import hashlib
 import logging
-from typing import Optional
+import sqlite3
+from typing import TYPE_CHECKING, Optional
+
+import numpy as np
+
+if TYPE_CHECKING:
+    from .memory import MARMMemory
 
 from ..config.settings import MARM_PROJECT, MARM_PLATFORM
 
 logger = logging.getLogger(__name__)
-_UNSET = object()
+
+
+class _Unset:
+    """Own type so a scope parameter can be `str | None` and still tell "not
+    passed" apart from an explicit None. A bare object() sentinel forced the
+    parameters to `object`, which no identity check can narrow back down."""
+
+
+_UNSET = _Unset()
 
 # Enough rows to absorb reordering by the lexical and recency signals.
 _DUPLICATE_CANDIDATES = 5
@@ -24,38 +38,40 @@ def compute_content_hash(content: str) -> str:
 
 
 def find_exact_duplicate(
-    conn,
+    conn: sqlite3.Connection,
     content_hash: str,
     session_name: str,
     normalized_content: str,
-    project: object = _UNSET,
-    platform: object = _UNSET,
+    project: str | _Unset | None = _UNSET,
+    platform: str | _Unset | None = _UNSET,
 ) -> Optional[str]:
     """Return memory_id of an existing exact match within the session, or None.
 
     Verifies content equality after the hash match so SHA-256 collisions store
     as a new row rather than silently deduplicating different content.
     """
-    scoped_project = MARM_PROJECT or None if project is _UNSET else project
-    scoped_platform = MARM_PLATFORM or None if platform is _UNSET else platform
+    scoped_project = MARM_PROJECT or None if isinstance(project, _Unset) else project
+    scoped_platform = (
+        MARM_PLATFORM or None if isinstance(platform, _Unset) else platform
+    )
     rows = conn.execute(
         "SELECT id, content FROM memories WHERE content_hash = ? AND session_name = ? AND project IS ? AND platform IS ?",
         (content_hash, session_name, scoped_project, scoped_platform),
     ).fetchall()
     for row_id, row_content in rows:
         if normalize_content(row_content) == normalized_content:
-            return row_id
+            return str(row_id)
     return None
 
 
 async def find_semantic_duplicate(
-    memory,
+    memory: "MARMMemory",
     content: str,
     session_name: str,
     threshold: float,
-    query_vec=None,
-    project: object = _UNSET,
-    platform: object = _UNSET,
+    query_vec: np.ndarray | None = None,
+    project: str | _Unset | None = _UNSET,
+    platform: str | _Unset | None = _UNSET,
 ) -> Optional[str]:
     """Return memory_id of a semantic match at or above threshold in session, or None.
 
@@ -69,8 +85,12 @@ async def find_semantic_duplicate(
     try:
         if query_vec is None and not memory._load_encoder_lazily():
             return None
-        scoped_project = MARM_PROJECT or None if project is _UNSET else project
-        scoped_platform = MARM_PLATFORM or None if platform is _UNSET else platform
+        scoped_project = (
+            MARM_PROJECT or None if isinstance(project, _Unset) else project
+        )
+        scoped_platform = (
+            MARM_PLATFORM or None if isinstance(platform, _Unset) else platform
+        )
         # exact_mode="semantic" because the exact lane produces no cosine.
         results = await memory.recall_similar(
             content,
@@ -86,7 +106,7 @@ async def find_semantic_duplicate(
         if scored:
             nearest = max(scored, key=lambda r: r["cosine"])
             if nearest["cosine"] >= threshold:
-                return nearest["id"]
+                return str(nearest["id"])
     except Exception:
         logger.exception("Semantic dedup check failed")
     return None

@@ -19,6 +19,7 @@ builtins.print = lambda *args, **kwargs: _real_print(
 )
 
 import os  # noqa: E402
+from collections.abc import AsyncIterator  # noqa: E402
 from contextlib import asynccontextmanager  # noqa: E402
 from typing import Optional  # noqa: E402
 
@@ -55,7 +56,7 @@ from .utils.embedding_state import check_embedding_compatibility  # noqa: E402
 
 
 @asynccontextmanager
-async def _stdio_lifespan(_server: FastMCP):
+async def _stdio_lifespan(_server: FastMCP) -> AsyncIterator[None]:
     """Drain in-flight chunk writes on teardown, inside the loop mcp.run() owns.
 
     This cannot live in main()'s finally: that runs after mcp.run() has already

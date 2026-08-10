@@ -85,12 +85,12 @@ class DocsDB:
             self.db_path, max_connections=MAX_DOCS_DB_CONNECTIONS
         )
 
-    def get_connection(self):
+    def get_connection(self) -> ConnectionContext:
         return ConnectionContext(self.connection_pool)
 
     def save_doc(
         self,
-        conn,
+        conn: sqlite3.Connection,
         *,
         name: str,
         content: str,
@@ -161,5 +161,7 @@ class DocsDB:
             raise
         return DocRow(*row), was_created
 
-    def set_memory_id(self, conn, doc_id: int, memory_id: str) -> None:
+    def set_memory_id(
+        self, conn: sqlite3.Connection, doc_id: int, memory_id: str
+    ) -> None:
         conn.execute("UPDATE docs SET memory_id = ? WHERE id = ?", (memory_id, doc_id))

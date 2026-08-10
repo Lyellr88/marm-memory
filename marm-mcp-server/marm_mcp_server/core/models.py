@@ -153,7 +153,7 @@ class CompactionRequest(BaseModel):
     )
 
     @model_validator(mode="after")
-    def validate_action_requirements(self):
+    def validate_action_requirements(self) -> "CompactionRequest":
         if self.action == "stage" and not self.summaries:
             raise ValueError("summaries is required for action='stage'")
         if self.action in ("apply", "discard") and not self.candidate_id:
@@ -179,7 +179,7 @@ class ConceptBuildRequest(BaseModel):
     )
 
     @model_validator(mode="after")
-    def validate_scope_requirements(self):
+    def validate_scope_requirements(self) -> "ConceptBuildRequest":
         if not (self.session_name or self.project or self.search_all):
             raise ValueError(
                 "session_name, project, or search_all=True is required to scope the build"

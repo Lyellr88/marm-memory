@@ -1,5 +1,7 @@
 """Starts the compaction maintenance APScheduler job."""
 
+from typing import TYPE_CHECKING
+
 import structlog
 
 from ..config.settings import (
@@ -10,10 +12,13 @@ from ..config.settings import (
 )
 from .memory import memory
 
+if TYPE_CHECKING:
+    from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
 logger = structlog.get_logger()
 
 
-def _maybe_start_compaction_scheduler():
+def _maybe_start_compaction_scheduler() -> "AsyncIOScheduler | None":
     """Start the compaction maintenance APScheduler job.
 
     Runs whenever COMPACTION_ENABLED is true — auto-apply is optional on top.
@@ -28,12 +33,12 @@ def _maybe_start_compaction_scheduler():
     if COMPACTION_AUTO_APPLY_ENABLED:
         from ..endpoints.compaction import auto_apply_staged_summaries
 
-        async def _job():
+        async def _job() -> None:
             await process_nudge_exhausted_candidates(memory)
             await auto_apply_staged_summaries()
     else:
 
-        async def _job():
+        async def _job() -> None:
             await process_nudge_exhausted_candidates(memory)
 
     scheduler = AsyncIOScheduler()

@@ -3,7 +3,9 @@
 import importlib.util
 import json
 import threading
-from typing import Dict, List, Optional
+from typing import Dict, List, Literal, Optional, Tuple, overload
+
+import numpy as np
 
 from ..config.settings import (
     COMPACTION_ENABLED,
@@ -35,7 +37,7 @@ from .memory_ops import (
     _store_memory,
     _update_memory,
 )
-from .memory_recall import _recall_similar, _recall_text_search
+from .memory_recall import RecallResult, _recall_similar, _recall_text_search
 from .memory_scoring import _score_chunk_aware  # noqa: F401
 from .memory_utils import (  # noqa: F401
     DOC_CHUNK_OVERLAP_WORDS,
@@ -74,7 +76,13 @@ class _FastEmbedEncoder:
         )
         self._model = TextEmbedding(model_name=resolved_name)
 
-    def encode(self, text):
+    @overload
+    def encode(self, text: str) -> np.ndarray: ...
+
+    @overload
+    def encode(self, text: list[str]) -> list[np.ndarray]: ...
+
+    def encode(self, text: str | list[str]) -> np.ndarray | list[np.ndarray]:
         if isinstance(text, str):
             return next(iter(self._model.embed([text])))
         return list(self._model.embed(text))
@@ -91,14 +99,13 @@ class MARMMemory:
             db_path, max_connections=MAX_DB_CONNECTIONS
         )
 
-        self.encoder = None
+        self.encoder: _FastEmbedEncoder | None = None
         self._encoder_loading = False
         self._encoder_failed = False
         self._encoder_lock = threading.Lock()
 
         init_database(self.db_path)
 
-        self.active_sessions = {}
         self.active_notebook_entries_by_session: dict[str, list[dict]] = {}
         self.active_log_session: str = "main"
         self._write_queue: WriteQueue | None = None
@@ -191,12 +198,15 @@ class MARMMemory:
             entry for entry in entries if entry.get("name") != name
         ]
 
-    def get_connection(self):
+    def get_connection(self) -> ConnectionContext:
         return ConnectionContext(self.connection_pool)
 
-    def _encode_sync(self, text: str):
+    def _encode_sync(self, text: str) -> np.ndarray:
         """Encode text with the shared encoder, serialized to prevent concurrent-use hangs."""
         with self._encoder_lock:
+            # Every caller gates on _load_encoder_lazily(), which returns
+            # `self.encoder is not None`. mypy cannot carry that through a bool.
+            assert self.encoder is not None
             return self.encoder.encode(text)
 
     def _load_encoder_lazily(self) -> bool:
@@ -268,7 +278,7 @@ class MARMMemory:
         content: str,
         session: str,
         context_type: str = "general",
-        metadata: Dict = None,
+        metadata: Dict | None = None,
     ) -> str:
         return await _store_memory(self, content, session, context_type, metadata)
 
@@ -277,7 +287,7 @@ class MARMMemory:
         content: str,
         session: str,
         context_type: str = "general",
-        metadata: Dict = None,
+        metadata: Dict | None = None,
         queue_enabled: Optional[bool] = None,
     ) -> str:
         """Store memory through the write queue unless explicitly disabled."""
@@ -403,19 +413,49 @@ class MARMMemory:
             "chunk_count": row[11],
         }
 
+    @overload
     async def recall_similar(
         self,
         query: str,
-        session: str = None,
+        session: str | None = None,
         limit: int = 5,
-        query_vec=None,
-        include_scan_metadata: bool = False,
+        query_vec: np.ndarray | None = None,
+        include_scan_metadata: Literal[False] = False,
         exact_mode: str = "auto",
-        project: str = None,
-        platform: str = None,
+        project: str | None = None,
+        platform: str | None = None,
         *,
         with_cosine: bool = False,
-    ):
+    ) -> List[Dict]: ...
+
+    @overload
+    async def recall_similar(
+        self,
+        query: str,
+        session: str | None = None,
+        limit: int = 5,
+        query_vec: np.ndarray | None = None,
+        *,
+        include_scan_metadata: Literal[True],
+        exact_mode: str = "auto",
+        project: str | None = None,
+        platform: str | None = None,
+        with_cosine: bool = False,
+    ) -> Tuple[List[Dict], dict]: ...
+
+    async def recall_similar(
+        self,
+        query: str,
+        session: str | None = None,
+        limit: int = 5,
+        query_vec: np.ndarray | None = None,
+        include_scan_metadata: bool = False,
+        exact_mode: str = "auto",
+        project: str | None = None,
+        platform: str | None = None,
+        *,
+        with_cosine: bool = False,
+    ) -> RecallResult:
         return await _recall_similar(
             self,
             query,
@@ -432,10 +472,10 @@ class MARMMemory:
     async def recall_text_search(
         self,
         query: str,
-        session: str = None,
+        session: str | None = None,
         limit: int = 5,
-        project: str = None,
-        platform: str = None,
+        project: str | None = None,
+        platform: str | None = None,
     ) -> List[Dict]:
         return await _recall_text_search(
             self, query, session, limit, project=project, platform=platform

@@ -4,6 +4,11 @@ import queue
 import sqlite3
 import threading
 from datetime import datetime, timezone
+from types import TracebackType
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .memory import MARMMemory
 
 
 class SQLiteConnectionPool:
@@ -12,18 +17,20 @@ class SQLiteConnectionPool:
     def __init__(self, db_path: str, max_connections: int = 5):
         self.db_path = db_path
         self.max_connections = max_connections
-        self.pool = queue.Queue(maxsize=max_connections)
+        self.pool: queue.Queue[sqlite3.Connection] = queue.Queue(
+            maxsize=max_connections
+        )
         self.created_connections = 0
         self.lock = threading.Lock()
 
         self._create_initial_connections()
 
-    def _create_initial_connections(self):
+    def _create_initial_connections(self) -> None:
         """Create initial pool of connections"""
         for _ in range(min(2, self.max_connections)):
             self.pool.put(self._create_connection())
 
-    def _create_connection(self):
+    def _create_connection(self) -> sqlite3.Connection:
         """Create and return a new SQLite connection with optimal settings."""
         conn = sqlite3.connect(
             self.db_path,
@@ -39,7 +46,7 @@ class SQLiteConnectionPool:
         self.created_connections += 1
         return conn
 
-    def get_connection(self):
+    def get_connection(self) -> sqlite3.Connection:
         """Get a connection from the pool"""
         try:
             return self.pool.get(block=False)
@@ -52,14 +59,14 @@ class SQLiteConnectionPool:
 
             return self.pool.get(block=True, timeout=10)
 
-    def return_connection(self, conn):
+    def return_connection(self, conn: sqlite3.Connection) -> None:
         """Return connection to pool"""
         try:
             self.pool.put(conn, block=False)
         except queue.Full:
             conn.close()
 
-    def close_all(self):
+    def close_all(self) -> None:
         """Close all connections in the pool"""
         while not self.pool.empty():
             try:
@@ -76,15 +83,20 @@ class ConnectionContext:
     connection to the pool.
     """
 
-    def __init__(self, pool):
+    def __init__(self, pool: SQLiteConnectionPool) -> None:
         self.pool = pool
-        self.conn = None
+        self.conn: sqlite3.Connection | None = None
 
-    def __enter__(self):
+    def __enter__(self) -> sqlite3.Connection:
         self.conn = self.pool.get_connection()
         return self.conn
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
         if self.conn:
             if exc_type is None:
                 self.conn.commit()
@@ -453,7 +465,7 @@ def init_database(db_path: str) -> None:
         conn.commit()
 
 
-def _get_compaction_write_count(mem, session: str) -> int:
+def _get_compaction_write_count(mem: "MARMMemory", session: str) -> int:
     with mem.get_connection() as conn:
         row = conn.execute(
             "SELECT write_count FROM compaction_session_state WHERE session_name = ?",
@@ -464,7 +476,7 @@ def _get_compaction_write_count(mem, session: str) -> int:
     return count
 
 
-def _set_compaction_write_count(mem, session: str, count: int) -> None:
+def _set_compaction_write_count(mem: "MARMMemory", session: str, count: int) -> None:
     now = datetime.now(timezone.utc).isoformat()
     with mem.get_connection() as conn:
         conn.execute(
@@ -481,7 +493,7 @@ def _set_compaction_write_count(mem, session: str, count: int) -> None:
     mem._session_write_counts[session] = count
 
 
-def _increment_compaction_write_count(mem, session: str) -> int:
+def _increment_compaction_write_count(mem: "MARMMemory", session: str) -> int:
     now = datetime.now(timezone.utc).isoformat()
     with mem.get_connection() as conn:
         conn.execute("BEGIN IMMEDIATE")

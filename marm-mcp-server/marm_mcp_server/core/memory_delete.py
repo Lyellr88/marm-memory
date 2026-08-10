@@ -1,17 +1,22 @@
 """Memory deletion and compaction-lineage cleanup for the MARM memory system."""
 
 import json
+import sqlite3
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 
 from .concept_queue import dequeue as dequeue_concept_index
 
+if TYPE_CHECKING:
+    from .memory import MARMMemory
 
-async def _delete_memory(mem, memory_id: str) -> bool:
+
+async def _delete_memory(mem: "MARMMemory", memory_id: str) -> bool:
     result = await _delete_memories(mem, [memory_id])
     return bool(result["deleted_ids"])
 
 
-def _delete_impact(conn, memory_id: str) -> dict:
+def _delete_impact(conn: sqlite3.Connection, memory_id: str) -> dict:
     row = conn.execute(
         "SELECT id, compaction_role, compacted_into, metadata FROM memories WHERE id = ?",
         (memory_id,),
@@ -44,7 +49,7 @@ def _delete_impact(conn, memory_id: str) -> dict:
 
 
 def _remove_deleted_sources_from_summary(
-    conn, summary_id: str, deleted_source_ids: set[str], now: str
+    conn: sqlite3.Connection, summary_id: str, deleted_source_ids: set[str], now: str
 ) -> int:
     row = conn.execute(
         "SELECT metadata FROM memories WHERE id = ? AND compaction_role = 'summary'",
@@ -73,7 +78,7 @@ def _remove_deleted_sources_from_summary(
 
 
 def _restore_sources_from_deleted_summary(
-    conn, summary_id: str, deleted_ids: set[str], now: str
+    conn: sqlite3.Connection, summary_id: str, deleted_ids: set[str], now: str
 ) -> int:
     rows = conn.execute(
         "SELECT id, metadata FROM memories WHERE compacted_into = ?",
@@ -96,7 +101,7 @@ def _restore_sources_from_deleted_summary(
     return restored
 
 
-async def _delete_memories(mem, memory_ids: list[str]) -> dict:
+async def _delete_memories(mem: "MARMMemory", memory_ids: list[str]) -> dict:
     unique_ids = list(dict.fromkeys(str(memory_id) for memory_id in memory_ids))
     if not unique_ids:
         return {
@@ -133,12 +138,12 @@ async def _delete_memories(mem, memory_ids: list[str]) -> dict:
             }
 
         source_summary_ids = {
-            item.get("compacted_into")
+            compacted_into
             for item in impacts
             if item.get("exists")
             and item.get("compaction_role") == "source"
-            and item.get("compacted_into")
-            and item.get("compacted_into") not in existing_ids
+            and (compacted_into := item.get("compacted_into"))
+            and compacted_into not in existing_ids
         }
         summaries_updated = sum(
             _remove_deleted_sources_from_summary(conn, summary_id, existing_ids, now)

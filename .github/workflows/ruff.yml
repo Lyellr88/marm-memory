@@ -24,8 +24,12 @@ jobs:
         with:
           python-version: '3.11'
 
+      # Pinned so a ruff release cannot turn a green PR red on its own. Unpinned,
+      # 0.16.2 promoted RUF036 out of preview and failed a PR whose code had not
+      # changed, while the developer's 0.15.16 reported the file clean.
+      # Keep local ruff on this version.
       - name: Install Ruff
-        run: pip install ruff
+        run: pip install ruff==0.16.2
 
       - name: Run Ruff Check
         run: ruff check --output-format=github

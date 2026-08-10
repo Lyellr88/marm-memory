@@ -36,7 +36,7 @@ import os
 import threading
 import uuid
 from contextlib import contextmanager
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Optional, TypeVar
 
 import structlog
 
@@ -44,6 +44,8 @@ from ..config import settings
 from . import lease_lock
 
 logger = structlog.get_logger(__name__)
+
+T = TypeVar("T")
 
 _TABLE = "graph_index_lock"
 
@@ -126,10 +128,10 @@ def gate_sync(purpose: str, ttl_seconds: Optional[int] = None) -> Any:
 def _gated_call(
     purpose: str,
     ttl_seconds: int,
-    fn: Callable[..., Any],
+    fn: Callable[..., T],
     args: tuple,
     kwargs: dict,
-) -> Any:
+) -> T:
     with gate_sync(purpose, ttl_seconds):
         return fn(*args, **kwargs)
 
@@ -137,10 +139,10 @@ def _gated_call(
 async def _owned_call(
     purpose: str,
     ttl_seconds: int,
-    fn: Callable[..., Any],
+    fn: Callable[..., T],
     args: tuple,
     kwargs: dict,
-) -> Any:
+) -> T:
     """Acquire, call, and release, all inside one thread.
 
     The acquire and the release have to sit on the same side of the thread
@@ -163,11 +165,11 @@ def _forget(task: asyncio.Task) -> None:
 
 async def run_exclusive(
     purpose: str,
-    fn: Callable[..., Any],
+    fn: Callable[..., T],
     *args: Any,
     ttl_seconds: Optional[int] = None,
     **kwargs: Any,
-) -> Any:
+) -> T:
     """Run one engine store mutation under the gate. Raises GraphIndexBusy if refused.
 
     Indexing is the common case, but a project delete mutates the same per-project

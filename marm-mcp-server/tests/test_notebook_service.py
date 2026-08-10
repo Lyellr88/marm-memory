@@ -488,3 +488,94 @@ async def test_save_preserves_session_project_platform_on_mirror(
             (result["memory_id"],),
         ).fetchone()
     assert row == ("proj-session", "marm", "claude-code")
+
+
+# --- action='save' mirror link failure and repair ---
+
+
+@pytest.mark.asyncio
+async def test_save_reports_pending_when_docs_memory_id_link_fails(
+    notebook_svc, tmp_path, monkeypatch
+):
+    """A set_memory_id failure must not escape _save.
+
+    The docs row is already committed at that point, so raising would report
+    total failure for a save that durably succeeded, and would drop the
+    mirror_status the caller uses to know a repair is owed.
+    """
+    dispatch, _ = notebook_svc
+    from marm_mcp_server.core.docs_db import DocsDB
+
+    def boom(self, conn, doc_id, memory_id):
+        raise sqlite3.OperationalError("docs db is locked")
+
+    monkeypatch.setattr(DocsDB, "set_memory_id", boom)
+    result = await dispatch(action="save", name="link-fail", data="durable content")
+
+    assert result["status"] == "success"
+    assert result["mirror_status"] == "pending"
+
+    # Docs row committed, but not yet pointing at the mirror.
+    with sqlite3.connect(str(tmp_path / "nb-docs.db")) as conn:
+        row = conn.execute(
+            "SELECT content, memory_id FROM docs WHERE name = 'link-fail'"
+        ).fetchone()
+    assert row[0] == "durable content"
+    assert row[1] is None
+
+    # The mirror itself exists, orphaned from the docs row.
+    with sqlite3.connect(str(tmp_path / "nb-test.db")) as conn:
+        mirrors = conn.execute(
+            "SELECT content FROM memories WHERE context_type = 'doc'"
+        ).fetchall()
+    assert len(mirrors) == 1
+    assert mirrors[0][0] == "durable content"
+
+
+@pytest.mark.asyncio
+async def test_save_after_failed_link_repairs_instead_of_duplicating_mirror(
+    notebook_svc, tmp_path, monkeypatch
+):
+    """The whole point of the pending status: the next save must repair.
+
+    With docs.memory_id still NULL, the resave passes existing_memory_id=None.
+    Before store_doc_mirror resolved the orphan by metadata.doc_id, that created
+    a second mirror row for one doc on every subsequent save.
+    """
+    dispatch, _ = notebook_svc
+    from marm_mcp_server.core.docs_db import DocsDB
+
+    original = DocsDB.set_memory_id
+
+    def boom(self, conn, doc_id, memory_id):
+        raise sqlite3.OperationalError("docs db is locked")
+
+    monkeypatch.setattr(DocsDB, "set_memory_id", boom)
+    first = await dispatch(action="save", name="repairable", data="version one")
+    assert first["mirror_status"] == "pending"
+
+    with sqlite3.connect(str(tmp_path / "nb-test.db")) as conn:
+        orphan_id = conn.execute(
+            "SELECT id FROM memories WHERE context_type = 'doc'"
+        ).fetchone()[0]
+
+    monkeypatch.setattr(DocsDB, "set_memory_id", original)
+    second = await dispatch(action="save", name="repairable", data="version two")
+
+    assert second["mirror_status"] == "synced"
+    assert second["doc_id"] == first["doc_id"]
+    # Same row reused, not a new one.
+    assert second["memory_id"] == orphan_id
+
+    with sqlite3.connect(str(tmp_path / "nb-test.db")) as conn:
+        mirrors = conn.execute(
+            "SELECT id, content FROM memories WHERE context_type = 'doc'"
+        ).fetchall()
+    assert len(mirrors) == 1
+    assert mirrors[0] == (orphan_id, "version two")
+
+    with sqlite3.connect(str(tmp_path / "nb-docs.db")) as conn:
+        linked = conn.execute(
+            "SELECT memory_id FROM docs WHERE name = 'repairable'"
+        ).fetchone()[0]
+    assert linked == orphan_id

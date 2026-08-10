@@ -5,10 +5,11 @@ This server integrates all modular components of the MARM protocol into a single
 FastAPI application, compliant with the MCP protocol via FastApiMCP.
 
 Author: Lyell - marm-memory
-Version: 2.37.0
+Version: 2.38.0
 """
 
 import os
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 import psutil
@@ -48,7 +49,7 @@ logger = structlog.get_logger()
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Modern FastAPI lifespan management for startup and shutdown"""
     logger.info("Initializing MARM MCP Server", version=SERVER_VERSION)
     _warn_if_multi_process_requested()
@@ -107,7 +108,7 @@ app.middleware("http")(auth_middleware)
 app.middleware("http")(rate_limit_middleware)
 
 
-def get_memory_usage():
+def get_memory_usage() -> float:
     """Get current memory usage in MB."""
     process = psutil.Process(os.getpid())
     return process.memory_info().rss / 1024 / 1024

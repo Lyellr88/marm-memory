@@ -10,6 +10,7 @@ related-to intent from query shape.
 
 import asyncio
 import itertools
+import sqlite3
 import threading
 import time
 import uuid
@@ -323,8 +324,8 @@ def _run_build(
 
                 if graph_available:
                     for entity in result.entities:
-                        entity_id = name_to_id.get(entity.name)
-                        if entity_id is None:
+                        linked_entity_id = name_to_id.get(entity.name)
+                        if linked_entity_id is None:
                             continue
                         try:
                             match = find_code_match(entity.name, mem_project)
@@ -335,7 +336,7 @@ def _run_build(
                             try:
                                 if concept_db.store_code_link(
                                     conn,
-                                    entity_id,
+                                    linked_entity_id,
                                     match["qualified_name"],
                                     mem_project or "",
                                     label=match.get("label"),
@@ -395,7 +396,7 @@ def _create_build_run(req: ConceptBuildRequest, run_id: str, created_at: str) ->
         )
 
 
-def _finish_build_run(run_id: str, **fields) -> None:
+def _finish_build_run(run_id: str, **fields: object) -> None:
     concept_db = _get_concept_db()
     with concept_db.get_connection() as conn:
         concept_db.update_build_run(conn, run_id, **fields)
@@ -422,7 +423,11 @@ def _prepare_build_schema(req: ConceptBuildRequest) -> bool:
 
 
 def _traverse(
-    conn, seed_ids: list[int], depth: int, direction: str, limit: int
+    conn: sqlite3.Connection,
+    seed_ids: list[int],
+    depth: int,
+    direction: str,
+    limit: int,
 ) -> list[dict]:
     results, _, _ = traverse_graph(
         conn,
@@ -507,7 +512,7 @@ async def _marm_concept_build(
         except Exception as e:
             logger.warning("concepts.build_run_create_error", error=str(e))
             return {"status": "error", "message": "Concept build failed."}
-        result = {
+        degraded = {
             "status": "degraded",
             "error_code": "concepts_unavailable",
             "message": _CONCEPTS_UNAVAILABLE_MESSAGE,
@@ -525,8 +530,8 @@ async def _marm_concept_build(
             finished_at=datetime.now(timezone.utc).isoformat(),
             duration_ms=0,
         )
-        result["build_run_id"] = run_id
-        return result
+        degraded["build_run_id"] = run_id
+        return degraded
     try:
         graph_rebuilt = await asyncio.to_thread(_prepare_build_schema, req)
     except ValueError:

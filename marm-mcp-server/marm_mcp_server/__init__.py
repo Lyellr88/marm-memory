@@ -14,17 +14,19 @@ Features:
 - Production-grade performance
 
 Author: Ryan Lyell - marm-memory
-Version: 2.37.0
+Version: 2.38.0
 """
 
-__version__ = "2.37.0"
+from typing import Any
+
+__version__ = "2.38.0"
 __author__ = "Ryan Lyell"
 __email__ = "ryanlyell@marmemory.com"
 
 __all__ = ["__version__", "create_server", "main"]
 
 
-def __getattr__(name):
+def __getattr__(name: str) -> Any:
     """Lazy-load HTTP server exports without side effects during STDIO imports."""
     if name == "create_server":
         from .server import create_server

@@ -56,7 +56,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r marm-mcp-server/requirements.txt
           pip install -e './marm-mcp-server' --no-deps
-          pip install pytest pytest-asyncio pytest-cov jsonschema requests black isort flake8 mypy ruff
+          pip install pytest pytest-asyncio pytest-cov jsonschema requests mypy ruff
 
       - name: Validate server.json
         run: |

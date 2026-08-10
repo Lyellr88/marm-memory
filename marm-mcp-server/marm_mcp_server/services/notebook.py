@@ -2,7 +2,7 @@
 
 import threading
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Awaitable, Callable, Optional
 
 from ..config.settings import MARM_PLATFORM, MARM_PROJECT
 from ..core.docs_db import DocsDB
@@ -43,7 +43,7 @@ async def _add(
     session_name: str = "main",
     project: Optional[str] = None,
     platform: Optional[str] = None,
-    **_,
+    **_: object,
 ) -> dict:
     if not name or not name.strip() or not data or not data.strip():
         return {
@@ -86,7 +86,7 @@ async def _add(
     }
 
 
-async def _use(names: Optional[str], session_name: str = "main", **_) -> dict:
+async def _use(names: Optional[str], session_name: str = "main", **_: object) -> dict:
     if not names or not names.strip():
         return {"status": "error", "message": "names is required for action='use'"}
     name_list = [n.strip() for n in names.split(",") if n.strip()]
@@ -124,7 +124,7 @@ async def _use(names: Optional[str], session_name: str = "main", **_) -> dict:
     }
 
 
-async def _show(session_name: str = "main", **_) -> dict:
+async def _show(session_name: str = "main", **_: object) -> dict:
     with memory.get_connection() as conn:
         cursor = conn.execute(
             """
@@ -152,7 +152,7 @@ async def _show(session_name: str = "main", **_) -> dict:
     }
 
 
-async def _status(session_name: str = "main", **_) -> dict:
+async def _status(session_name: str = "main", **_: object) -> dict:
     active_entries = memory.get_active_notebook_entries(session_name)
     active_names = [entry["name"] for entry in active_entries]
     return {
@@ -164,7 +164,7 @@ async def _status(session_name: str = "main", **_) -> dict:
     }
 
 
-async def _clear(session_name: str = "main", **_) -> dict:
+async def _clear(session_name: str = "main", **_: object) -> dict:
     memory.clear_active_notebook_entries(session_name)
     return {
         "status": "success",
@@ -179,7 +179,7 @@ async def _save(
     session_name: str = "main",
     project: Optional[str] = None,
     platform: Optional[str] = None,
-    **_,
+    **_: object,
 ) -> dict:
     """Promote a scratch entry (or new inline content) into the permanent
     docs store. Copy, not move -- the source scratch entry is left
@@ -237,7 +237,7 @@ async def _save(
         )
 
     mirror_status = "synced"
-    memory_id = doc_row.memory_id
+    mirror_memory_id: str | None = None
 
     if not was_created and doc_row.memory_id:
         # Before the replacement is written, not after. Cleanup strips every
@@ -258,7 +258,7 @@ async def _save(
             )
 
     try:
-        memory_id = await memory.store_doc_mirror(
+        mirror_memory_id = await memory.store_doc_mirror(
             content,
             session_name,
             scoped_project,
@@ -274,9 +274,17 @@ async def _save(
         _safe_print(f"Doc mirror write failed for doc {doc_row.id}: {e}")
         mirror_status = "pending"
 
-    if mirror_status == "synced":
-        with docs_db.get_connection() as conn:
-            docs_db.set_memory_id(conn, doc_row.id, memory_id)
+    if mirror_memory_id is not None:
+        try:
+            with docs_db.get_connection() as conn:
+                docs_db.set_memory_id(conn, doc_row.id, mirror_memory_id)
+        except Exception as e:
+            # The mirror row is written but the docs row does not point at it.
+            # Reported as pending rather than raised, for the same reason a failed
+            # mirror write is: the durable save already succeeded. store_doc_mirror
+            # resolves the orphan by doc_id, so the repair costs no duplicate.
+            _safe_print(f"Doc mirror id link failed for doc {doc_row.id}: {e}")
+            mirror_status = "pending"
 
     verb = "saved" if was_created else "updated"
     promoted_note = " (promoted from scratch)" if source_notebook_name else ""
@@ -284,12 +292,14 @@ async def _save(
         "status": "success",
         "message": f"📄 Doc '{name}' {verb}{promoted_note}",
         "doc_id": doc_row.id,
-        "memory_id": memory_id if mirror_status == "synced" else doc_row.memory_id,
+        "memory_id": mirror_memory_id
+        if mirror_status == "synced"
+        else doc_row.memory_id,
         "mirror_status": mirror_status,
     }
 
 
-_ACTION_HANDLERS = {
+_ACTION_HANDLERS: dict[str, Callable[..., Awaitable[dict]]] = {
     "add": _add,
     "use": _use,
     "show": _show,

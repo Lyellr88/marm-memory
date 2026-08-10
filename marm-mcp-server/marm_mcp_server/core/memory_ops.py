@@ -4,7 +4,7 @@ import asyncio
 import json
 import uuid
 from datetime import datetime, timezone
-from typing import Dict
+from typing import TYPE_CHECKING, Dict
 
 from ..config.settings import (
     CONSOLIDATION_ENABLED,
@@ -33,8 +33,11 @@ from .memory_utils import (
     sanitize_content,
 )
 
+if TYPE_CHECKING:
+    from .memory import MARMMemory
 
-async def _update_memory(mem, memory_id: str, new_content: str) -> bool:
+
+async def _update_memory(mem: "MARMMemory", memory_id: str, new_content: str) -> bool:
     """Append new_content into an existing memory and record the merge in metadata.
 
     Recomputes content_hash and embedding so Layer 1 dedup and semantic recall
@@ -145,11 +148,11 @@ async def _update_memory(mem, memory_id: str, new_content: str) -> bool:
 
 
 async def _store_memory(
-    mem,
+    mem: "MARMMemory",
     content: str,
     session: str,
     context_type: str = "general",
-    metadata: Dict = None,
+    metadata: Dict | None = None,
     project: str | None = None,
     platform: str | None = None,
     explicit_scope: bool = False,
@@ -296,7 +299,7 @@ async def _store_memory(
 
 
 async def _replace_memory(
-    mem,
+    mem: "MARMMemory",
     memory_id: str,
     content: str,
     session: str,
@@ -374,7 +377,7 @@ async def _replace_memory(
 
 
 async def _store_doc_mirror(
-    mem,
+    mem: "MARMMemory",
     content: str,
     session: str,
     project: str | None,
@@ -391,10 +394,12 @@ async def _store_doc_mirror(
     mirror into an unrelated memory. Uses the doc chunk profile instead
     of the memory profile. If existing_memory_id is provided and its row
     still exists, the row is replaced in place (keeps its id stable, so
-    a routine resave never needs to touch docs.memory_id); otherwise a
-    fresh row is created with a new id -- this also doubles as the repair
-    path for a doc whose prior mirror was deleted out from under it (e.g.
-    via a direct Console memory delete).
+    a routine resave never needs to touch docs.memory_id). Without a usable
+    id, the doc's existing mirror is resolved by metadata.doc_id, so the
+    write is idempotent per doc even when the caller lost the id. Only when
+    neither locates a row is a fresh one created with a new id -- that is
+    the repair path for a doc whose prior mirror was deleted out from under
+    it (e.g. via a direct Console memory delete).
     """
     sanitized_content = sanitize_content(content)
     content_hash = compute_content_hash(sanitized_content)
@@ -412,6 +417,25 @@ async def _store_doc_mirror(
     with mem.get_connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
         try:
+            # A caller with no id may still have a mirror: docs.memory_id is set
+            # in a second, separate write, so a failure between the two leaves
+            # this row orphaned rather than absent. Resolving it by the doc_id
+            # already in metadata makes the write idempotent per doc; creating a
+            # fresh row instead would duplicate the mirror on every later save.
+            # Inside the transaction so the resolve cannot race the write.
+            if not existing_memory_id and metadata.get("doc_id") is not None:
+                orphan = conn.execute(
+                    """
+                    SELECT id FROM memories
+                    WHERE context_type = 'doc'
+                      AND json_extract(metadata, '$.doc_id') = ?
+                    ORDER BY timestamp LIMIT 1
+                    """,
+                    (metadata["doc_id"],),
+                ).fetchone()
+                if orphan is not None:
+                    existing_memory_id = orphan[0]
+
             replaced = False
             if existing_memory_id:
                 cursor = conn.execute(

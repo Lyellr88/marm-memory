@@ -1,7 +1,8 @@
 """Rate limiting middleware for FastAPI."""
 
 from fastapi import Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
+from starlette.middleware.base import RequestResponseEndpoint
 import time
 from ..core.rate_limiter import rate_limiter
 from ..config.settings import RATE_LIMIT_BLOCK_SECONDS
@@ -40,7 +41,9 @@ def determine_endpoint_type(path: str) -> str:
         return "default"
 
 
-async def rate_limit_middleware(request: Request, call_next):
+async def rate_limit_middleware(
+    request: Request, call_next: RequestResponseEndpoint
+) -> Response:
     """Rate limiting middleware - prevents abuse while keeping service free"""
 
     if request.url.path in [

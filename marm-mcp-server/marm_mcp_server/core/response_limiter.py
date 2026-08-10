@@ -85,7 +85,7 @@ class MCPResponseLimiter:
         if available_space <= 0:
             return [], True
 
-        limited_memories = []
+        limited_memories: List[Dict[str, Any]] = []
         was_truncated = False
 
         estimated_content_per_memory = available_space // len(memories)
@@ -114,7 +114,10 @@ class MCPResponseLimiter:
 
     @classmethod
     def add_truncation_notice(
-        cls, response: Dict[str, Any], was_truncated: bool, total_available: int = None
+        cls,
+        response: Dict[str, Any],
+        was_truncated: bool,
+        total_available: int | None = None,
     ) -> Dict[str, Any]:
         """Add truncation notice to response if content was limited."""
         if was_truncated:

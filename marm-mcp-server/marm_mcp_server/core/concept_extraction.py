@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, NamedTuple, Optional
 from ..config.settings import CONCEPT_MODEL_PATH, CONCEPTS_AVAILABLE
 
 if TYPE_CHECKING:
+    from spacy.language import Language
     from spacy.tokens import Span, Token
 
 # spaCy's raw NER labels we keep as-is (lowercased) rather than remapping —
@@ -65,7 +66,7 @@ _nlp_lock = threading.Lock()
 _nlp_failed = False
 
 
-def _load_nlp_lazily():
+def _load_nlp_lazily() -> Optional["Language"]:
     """Lazy singleton load, mirroring memory.py's _load_encoder_lazily pattern."""
     global _nlp, _nlp_failed
     if _nlp is not None:
@@ -87,7 +88,7 @@ def _load_nlp_lazily():
     return _nlp
 
 
-def _classify_chunk(chunk_text: str, sentence_text: str) -> Optional[str]:
+def _classify_chunk(chunk_text: str, sentence_text: str) -> str:
     """Rule layer: classify a noun chunk as concept/decision/pattern/error/tool
     based on keyword triggers in its sentence, defaulting to 'concept'."""
     lowered_sentence = sentence_text.lower()
@@ -97,7 +98,7 @@ def _classify_chunk(chunk_text: str, sentence_text: str) -> Optional[str]:
     return "concept"
 
 
-def _ancestor_chain(token: "Token") -> list:
+def _ancestor_chain(token: "Token") -> list["Token"]:
     """token, its head, its head's head, ... up to the sentence root (where
     token.head == token, spaCy's self-loop convention). Always terminates —
     every parsed token has exactly one path to its sentence root."""
@@ -109,7 +110,7 @@ def _ancestor_chain(token: "Token") -> list:
     return chain
 
 
-def _lowest_common_ancestor(token_a: "Token", token_b: "Token"):
+def _lowest_common_ancestor(token_a: "Token", token_b: "Token") -> Optional["Token"]:
     """First token in token_a's ancestor chain that also appears in
     token_b's — the syntactic point where the two entities' dependency
     paths converge. None only if token_a/token_b aren't in the same
@@ -123,7 +124,7 @@ def _lowest_common_ancestor(token_a: "Token", token_b: "Token"):
     return None
 
 
-def _nearest_verb_ancestor(token: "Token"):
+def _nearest_verb_ancestor(token: "Token") -> Optional["Token"]:
     """token itself if already VERB/AUX, else the nearest VERB/AUX walking
     up its own head chain, else None if the sentence root has no verb
     (e.g. a bare noun-phrase list with no verb at all)."""

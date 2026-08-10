@@ -16,7 +16,7 @@ def docs_dir() -> Path | None:
     return DOCS_DIR if DOCS_DIR.is_dir() else None
 
 
-async def read_protocol_file():
+async def read_protocol_file() -> str:
     """Read the PROTOCOL.md file and return its content."""
     try:
         protocol_path = DOCS_DIR / "PROTOCOL.md"
@@ -29,7 +29,7 @@ async def read_protocol_file():
         return f"Error reading PROTOCOL.md: {e!s}"
 
 
-async def read_protocol_lite_file():
+async def read_protocol_lite_file() -> str:
     """Read the PROTOCOL-LITE.md file and return its content."""
     try:
         lite_path = DOCS_DIR / "PROTOCOL-LITE.md"

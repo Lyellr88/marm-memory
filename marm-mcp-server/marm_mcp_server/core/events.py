@@ -8,18 +8,18 @@ from typing import Dict, List, Callable
 class MARMEvents:
     """Built-in automation system with full error isolation"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.listeners: Dict[str, List[Callable]] = {}
         self.failed_callbacks: Dict[str, int] = {}
         self.logger = logging.getLogger(__name__)
 
-    def on(self, event_type: str, callback):
+    def on(self, event_type: str, callback: Callable) -> None:
         """Register event listener"""
         if event_type not in self.listeners:
             self.listeners[event_type] = []
         self.listeners[event_type].append(callback)
 
-    async def emit(self, event_type: str, data: dict):
+    async def emit(self, event_type: str, data: dict) -> None:
         """Trigger automatic actions with full error isolation"""
         if event_type not in self.listeners:
             return
@@ -57,7 +57,9 @@ class MARMEvents:
                 f"Event '{event_type}' completed successfully: {successful_callbacks} callbacks"
             )
 
-    def _log_callback_error(self, callback_id: str, error_msg: str, event_type: str):
+    def _log_callback_error(
+        self, callback_id: str, error_msg: str, event_type: str
+    ) -> None:
         """Log callback errors with failure tracking"""
         self.failed_callbacks[callback_id] = (
             self.failed_callbacks.get(callback_id, 0) + 1
