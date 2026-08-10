@@ -4,7 +4,7 @@ import asyncio
 import json
 import uuid
 from datetime import datetime, timezone
-from typing import Dict
+from typing import TYPE_CHECKING, Dict
 
 from ..config.settings import (
     CONSOLIDATION_ENABLED,
@@ -33,8 +33,11 @@ from .memory_utils import (
     sanitize_content,
 )
 
+if TYPE_CHECKING:
+    from .memory import MARMMemory
 
-async def _update_memory(mem, memory_id: str, new_content: str) -> bool:
+
+async def _update_memory(mem: "MARMMemory", memory_id: str, new_content: str) -> bool:
     """Append new_content into an existing memory and record the merge in metadata.
 
     Recomputes content_hash and embedding so Layer 1 dedup and semantic recall
@@ -145,7 +148,7 @@ async def _update_memory(mem, memory_id: str, new_content: str) -> bool:
 
 
 async def _store_memory(
-    mem,
+    mem: "MARMMemory",
     content: str,
     session: str,
     context_type: str = "general",
@@ -296,7 +299,7 @@ async def _store_memory(
 
 
 async def _replace_memory(
-    mem,
+    mem: "MARMMemory",
     memory_id: str,
     content: str,
     session: str,
@@ -374,7 +377,7 @@ async def _replace_memory(
 
 
 async def _store_doc_mirror(
-    mem,
+    mem: "MARMMemory",
     content: str,
     session: str,
     project: str | None,

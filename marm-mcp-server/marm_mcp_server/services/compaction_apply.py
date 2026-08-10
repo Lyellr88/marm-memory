@@ -6,11 +6,11 @@ import uuid
 from datetime import datetime, timezone
 
 from ..core.consolidation import compute_content_hash
-from ..core.memory import sanitize_content, _safe_print
+from ..core.memory import MARMMemory, sanitize_content, _safe_print
 from ..core.memory_utils import _embedding_to_bytes
 
 
-async def apply_compaction_write(memory_store, candidate_id: str) -> str:
+async def apply_compaction_write(memory_store: MARMMemory, candidate_id: str) -> str:
     """Execute the atomic compaction write inside BEGIN IMMEDIATE. Returns summary_id.
 
     Fetches all candidate and source data fresh inside the lock so this function

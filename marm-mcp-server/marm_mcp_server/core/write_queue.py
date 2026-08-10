@@ -3,7 +3,12 @@
 import asyncio
 import inspect
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable, Optional
+from typing import TYPE_CHECKING, Any, Awaitable, Callable, Optional, TypeVar, overload
+
+if TYPE_CHECKING:
+    from .memory import MARMMemory
+
+T = TypeVar("T")
 
 
 @dataclass
@@ -28,7 +33,7 @@ class CallableWriteRequest:
 class WriteQueue:
     """Serialize memory writes through one async worker."""
 
-    def __init__(self, memory, max_size: int = 100) -> None:
+    def __init__(self, memory: "MARMMemory", max_size: int = 100) -> None:
         self.memory = memory
         self.queue: asyncio.Queue = asyncio.Queue(maxsize=max_size)
         self._worker_task: asyncio.Task | None = None
@@ -61,20 +66,32 @@ class WriteQueue:
         if self._stopping:
             raise RuntimeError("write queue is shutting down")
         loop = asyncio.get_running_loop()
-        future: asyncio.Future = loop.create_future()
+        future: asyncio.Future[str] = loop.create_future()
         await self.queue.put(
             MemoryWriteRequest(content, session, context_type, metadata, future)
         )
         return await future
 
+    # Split by awaitability rather than one `Awaitable[T] | T` parameter: that
+    # union left T ambiguous and mypy solved it as Never at the call sites.
+    @overload
     async def put_callable(
-        self, func: Callable[..., Awaitable[Any] | Any], *args: Any, **kwargs: Any
-    ) -> Any:
+        self, func: Callable[..., Awaitable[T]], *args: Any, **kwargs: Any
+    ) -> T: ...
+
+    @overload
+    async def put_callable(
+        self, func: Callable[..., T], *args: Any, **kwargs: Any
+    ) -> T: ...
+
+    async def put_callable(
+        self, func: Callable[..., Awaitable[T] | T], *args: Any, **kwargs: Any
+    ) -> T:
         """Enqueue any async callable to be executed in write-queue order."""
         if self._stopping:
             raise RuntimeError("write queue is shutting down")
         loop = asyncio.get_running_loop()
-        future: asyncio.Future = loop.create_future()
+        future: asyncio.Future[T] = loop.create_future()
         await self.queue.put(CallableWriteRequest(func, args, kwargs, future))
         return await future
 

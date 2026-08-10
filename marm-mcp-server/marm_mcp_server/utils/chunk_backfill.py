@@ -22,7 +22,7 @@ from ..core.memory_utils import (
     _chunk_text,
     _embedding_to_bytes,
 )
-from .embedding_migration import _encode_all, _load_encoder
+from .embedding_migration import _Encoder, _encode_all, _load_encoder
 from .embedding_state import get_default_concept_db_path, inspect_embedding_state
 
 _MEMORY_PROFILE = {
@@ -134,7 +134,7 @@ def rechunk_memories(
     memory_db_path: str,
     concept_db_path: str | None = None,
     *,
-    encoder_factory: Callable[[], object] | None = None,
+    encoder_factory: Callable[[], _Encoder] | None = None,
     progress: Callable[[str], None] = print,
 ) -> dict:
     """Re-split stale chunks, fill missing ones, and drop chunks below threshold."""
@@ -177,6 +177,9 @@ def rechunk_memories(
         for item in work:
             embeddings: list[bytes] = []
             if item["desired"]:
+                # needs_encoder is any(item["desired"]), so this branch is only
+                # reachable once the encoder is loaded.
+                assert encoder is not None
                 embeddings = [
                     _embedding_to_bytes(vector)
                     for vector in _encode_all(encoder, item["desired"])

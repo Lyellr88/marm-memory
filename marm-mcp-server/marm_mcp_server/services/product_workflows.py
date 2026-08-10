@@ -7,6 +7,7 @@ import os
 import socket
 import sys
 from pathlib import Path
+from typing import Callable
 
 from ..config import settings
 from ..config.settings import SERVER_HOST, SERVER_PORT
@@ -115,7 +116,7 @@ def fast_start_http(args: argparse.Namespace) -> int:
     return 0
 
 
-def upgrade(args: argparse.Namespace, *, print_payload) -> int:
+def upgrade(args: argparse.Namespace, *, print_payload: Callable[..., None]) -> int:
     """Check or upgrade a pip-managed installation without touching user data."""
     from ..core import runtime_manager
     from . import package_management

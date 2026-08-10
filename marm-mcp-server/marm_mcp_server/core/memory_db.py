@@ -5,6 +5,10 @@ import sqlite3
 import threading
 from datetime import datetime, timezone
 from types import TracebackType
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .memory import MARMMemory
 
 
 class SQLiteConnectionPool:
@@ -461,7 +465,7 @@ def init_database(db_path: str) -> None:
         conn.commit()
 
 
-def _get_compaction_write_count(mem, session: str) -> int:
+def _get_compaction_write_count(mem: "MARMMemory", session: str) -> int:
     with mem.get_connection() as conn:
         row = conn.execute(
             "SELECT write_count FROM compaction_session_state WHERE session_name = ?",
@@ -472,7 +476,7 @@ def _get_compaction_write_count(mem, session: str) -> int:
     return count
 
 
-def _set_compaction_write_count(mem, session: str, count: int) -> None:
+def _set_compaction_write_count(mem: "MARMMemory", session: str, count: int) -> None:
     now = datetime.now(timezone.utc).isoformat()
     with mem.get_connection() as conn:
         conn.execute(
@@ -489,7 +493,7 @@ def _set_compaction_write_count(mem, session: str, count: int) -> None:
     mem._session_write_counts[session] = count
 
 
-def _increment_compaction_write_count(mem, session: str) -> int:
+def _increment_compaction_write_count(mem: "MARMMemory", session: str) -> int:
     now = datetime.now(timezone.utc).isoformat()
     with mem.get_connection() as conn:
         conn.execute("BEGIN IMMEDIATE")

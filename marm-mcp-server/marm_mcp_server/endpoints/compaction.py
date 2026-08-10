@@ -532,7 +532,7 @@ def _compaction_status() -> dict:
 
 
 @router.post("/marm_compaction", operation_id="marm_compaction")
-async def marm_compaction(request: CompactionRequest):
+async def marm_compaction(request: CompactionRequest) -> dict:
     """Compact related memories into a single summary to reduce context bloat.
 
     Workflow: status/candidates → stage → review → apply/discard

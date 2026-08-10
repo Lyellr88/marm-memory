@@ -9,7 +9,7 @@ router = APIRouter(prefix="", tags=["Notebook"])
 
 
 @router.post("/marm_notebook", operation_id="marm_notebook")
-async def marm_notebook(request: NotebookRequest):
+async def marm_notebook(request: NotebookRequest) -> dict:
     """
     📔 Unified notebook — add, use, show, status, clear, or save
 

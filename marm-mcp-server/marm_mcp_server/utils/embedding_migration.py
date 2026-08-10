@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import sqlite3
+from collections.abc import Iterable
 from contextlib import closing
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Protocol
+
+import numpy as np
 
 from ..config.settings import DEFAULT_SEMANTIC_DIM, DEFAULT_SEMANTIC_MODEL
 from ..core.memory_utils import _embedding_to_bytes
@@ -25,6 +28,18 @@ _MEMORY_TABLES = (
 _CONCEPT_TABLES = (("entities", "name", "name_embedding"),)
 
 
+class _Encoder(Protocol):
+    """All the migration needs from an encoder. Not TextEmbedding: encoder_factory
+    exists so tests can inject a double, and pinning the concrete class would
+    make every one of those call sites a type error.
+
+    Positional-only because the doubles name the parameter `texts` while fastembed
+    names it `documents`, and a named parameter would only accept one of them.
+    """
+
+    def embed(self, documents: list[str], /) -> Iterable[np.ndarray]: ...
+
+
 def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
     return (
         conn.execute(
@@ -38,7 +53,7 @@ def _column_exists(conn: sqlite3.Connection, table: str, column: str) -> bool:
     return any(row[1] == column for row in conn.execute(f"PRAGMA table_info({table})"))
 
 
-def _load_encoder():
+def _load_encoder() -> _Encoder:
     from fastembed import TextEmbedding
 
     return TextEmbedding(model_name=DEFAULT_SEMANTIC_MODEL)
@@ -79,15 +94,15 @@ def _length_bounded_batches(texts: list[str]) -> list[list[str]]:
     return batches
 
 
-def _encode_all(encoder, texts: list[str]) -> list:
+def _encode_all(encoder: _Encoder, texts: list[str]) -> list[np.ndarray]:
     """Encode every text, splitting into memory-safe batches first."""
-    vectors: list = []
+    vectors: list[np.ndarray] = []
     for batch in _length_bounded_batches(texts):
         vectors.extend(_encode_batch(encoder, batch))
     return vectors
 
 
-def _encode_batch(encoder, texts: list[str]) -> list:
+def _encode_batch(encoder: _Encoder, texts: list[str]) -> list[np.ndarray]:
     vectors = list(encoder.embed(texts))
     if len(vectors) != len(texts):
         raise RuntimeError(
@@ -105,7 +120,7 @@ def _encode_batch(encoder, texts: list[str]) -> list:
 def _migrate_database(
     path: Path,
     tables: tuple[tuple[str, str, str], ...],
-    encoder,
+    encoder: _Encoder,
     batch_size: int,
     progress: Callable[[str], None],
     force_reencode: bool = False,
@@ -172,7 +187,7 @@ def migrate_embeddings(
     concept_db_path: str | None = None,
     *,
     batch_size: int = 100,
-    encoder_factory: Callable[[], object] | None = None,
+    encoder_factory: Callable[[], _Encoder] | None = None,
     progress: Callable[[str], None] = print,
 ) -> dict:
     """Migrate incompatible vectors and mark success only after both DBs verify."""

@@ -1,6 +1,27 @@
 # Changelog
 
 <details>
+<summary><strong>August 10th, 2026: Type-Safe Core and Unified Validation (v2.38.0)</strong></summary>
+
+### Changed: MARM's Entire Server Package Is Now Type-Checked
+
+- Mypy previously checked only `core/`, which left endpoint, transport, Console, service, and utility code free to accumulate errors unnoticed. It now checks all 110 server modules and records a strict baseline, so a new type error fails the local gate instead of becoming another item in a hidden backlog.
+- The work tightened the contracts at the real boundaries: SQLite connections, memory ownership, serialized writes, recall return shapes, embeddings, compaction, graph gates, FastAPI middleware, CLI paths, and injected test doubles. These are internal contracts only; MCP tools, parameters, HTTP/STDIO behavior, and stored data are unchanged.
+- The encoder adapter now states its two actual shapes: encoding one string returns one NumPy vector, while encoding a list returns one vector per input. Migration and rechunking use a structural encoder contract, so their test doubles remain supported without pretending every encoder is FastEmbed.
+- The pass also exposed two latent type mismatches in real code, including a recall SQL parameter list that mixed text and a numeric limit. Both are corrected without changing the intended query or result behavior.
+
+### Changed: One Formatter and Linter Own the Python Style Contract
+
+- Ruff now owns formatting and linting. Black, isort, and Flake8 were removed from development and CI because their formatting and line-length rules conflicted with the project’s Ruff configuration. CI installs and checks the same tools developers run locally.
+- The bundled `marm-init` installer skill was refreshed alongside its source copy, so installed agents receive the current setup flow and both copies remain identical.
+
+### Developer Note
+
+- The typecheck gate ends at two deliberately visible graph-shutdown race findings. They are documented in `docs/current/graph-client-none-guard.md` rather than suppressed: resolving them requires a supervisor lifecycle change, not an annotation workaround.
+
+</details>
+
+<details>
 <summary><strong>August 4th, 2026: Automatic Code Graph Indexing (v2.37.0)</strong></summary>
 
 ### Added: Indexed Repositories Refresh Themselves

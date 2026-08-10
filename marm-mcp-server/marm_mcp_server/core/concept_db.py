@@ -333,7 +333,9 @@ class ConceptDB:
             (run_id, scope_type, scope_value, created_at),
         )
 
-    def update_build_run(self, conn: sqlite3.Connection, run_id: str, **fields) -> None:
+    def update_build_run(
+        self, conn: sqlite3.Connection, run_id: str, **fields: object
+    ) -> None:
         allowed = {
             "status",
             "memories_processed",

@@ -3,7 +3,9 @@
 import importlib.util
 import json
 import threading
-from typing import Dict, List, Optional
+from typing import Dict, List, Literal, Optional, Tuple, overload
+
+import numpy as np
 
 from ..config.settings import (
     COMPACTION_ENABLED,
@@ -35,7 +37,7 @@ from .memory_ops import (
     _store_memory,
     _update_memory,
 )
-from .memory_recall import _recall_similar, _recall_text_search
+from .memory_recall import RecallResult, _recall_similar, _recall_text_search
 from .memory_scoring import _score_chunk_aware  # noqa: F401
 from .memory_utils import (  # noqa: F401
     DOC_CHUNK_OVERLAP_WORDS,
@@ -74,7 +76,13 @@ class _FastEmbedEncoder:
         )
         self._model = TextEmbedding(model_name=resolved_name)
 
-    def encode(self, text):
+    @overload
+    def encode(self, text: str) -> np.ndarray: ...
+
+    @overload
+    def encode(self, text: list[str]) -> list[np.ndarray]: ...
+
+    def encode(self, text: str | list[str]) -> np.ndarray | list[np.ndarray]:
         if isinstance(text, str):
             return next(iter(self._model.embed([text])))
         return list(self._model.embed(text))
@@ -193,12 +201,13 @@ class MARMMemory:
     def get_connection(self) -> ConnectionContext:
         return ConnectionContext(self.connection_pool)
 
-    def _encode_sync(self, text: str):
+    def _encode_sync(self, text: str) -> np.ndarray:
         """Encode text with the shared encoder, serialized to prevent concurrent-use hangs."""
         with self._encoder_lock:
             # Every caller gates on _load_encoder_lazily(), which returns
             # `self.encoder is not None`. mypy cannot carry that through a bool.
-            return self.encoder.encode(text)  # type: ignore[union-attr]
+            assert self.encoder is not None
+            return self.encoder.encode(text)
 
     def _load_encoder_lazily(self) -> bool:
         """Lazy load the semantic search model only when needed"""
@@ -404,19 +413,49 @@ class MARMMemory:
             "chunk_count": row[11],
         }
 
+    @overload
     async def recall_similar(
         self,
         query: str,
         session: str | None = None,
         limit: int = 5,
-        query_vec=None,
+        query_vec: np.ndarray | None = None,
+        include_scan_metadata: Literal[False] = False,
+        exact_mode: str = "auto",
+        project: str | None = None,
+        platform: str | None = None,
+        *,
+        with_cosine: bool = False,
+    ) -> List[Dict]: ...
+
+    @overload
+    async def recall_similar(
+        self,
+        query: str,
+        session: str | None = None,
+        limit: int = 5,
+        query_vec: np.ndarray | None = None,
+        *,
+        include_scan_metadata: Literal[True],
+        exact_mode: str = "auto",
+        project: str | None = None,
+        platform: str | None = None,
+        with_cosine: bool = False,
+    ) -> Tuple[List[Dict], dict]: ...
+
+    async def recall_similar(
+        self,
+        query: str,
+        session: str | None = None,
+        limit: int = 5,
+        query_vec: np.ndarray | None = None,
         include_scan_metadata: bool = False,
         exact_mode: str = "auto",
         project: str | None = None,
         platform: str | None = None,
         *,
         with_cosine: bool = False,
-    ):
+    ) -> RecallResult:
         return await _recall_similar(
             self,
             query,

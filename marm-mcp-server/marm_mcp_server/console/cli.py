@@ -42,7 +42,7 @@ def _healthy(timeout: float = 0.75) -> bool:
             f"http://{host}:{_port()}/health", timeout=timeout
         ) as response:
             payload = json.load(response)
-            return payload.get("service") == "marm-console"
+            return bool(payload.get("service") == "marm-console")
     except (urllib.error.URLError, OSError, ValueError):
         return False
 

@@ -396,7 +396,7 @@ def _create_build_run(req: ConceptBuildRequest, run_id: str, created_at: str) ->
         )
 
 
-def _finish_build_run(run_id: str, **fields) -> None:
+def _finish_build_run(run_id: str, **fields: object) -> None:
     concept_db = _get_concept_db()
     with concept_db.get_connection() as conn:
         concept_db.update_build_run(conn, run_id, **fields)

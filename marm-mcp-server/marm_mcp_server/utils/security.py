@@ -137,20 +137,20 @@ def _set_windows_owner_only_dacl(path: Path) -> bool:
             ):
                 return False
             try:
-                return (
-                    advapi32.SetNamedSecurityInfoW(
-                        str(path),
-                        se_file_object,
-                        owner_security_information
-                        | dacl_security_information
-                        | protected_dacl_security_information,
-                        token_user.user.sid,
-                        None,
-                        dacl,
-                        None,
-                    )
-                    == 0
+                # restype is DWORD, so ctypes hands back an int; naming it keeps
+                # that contract visible instead of leaking ctypes' untyped call.
+                status: int = advapi32.SetNamedSecurityInfoW(
+                    str(path),
+                    se_file_object,
+                    owner_security_information
+                    | dacl_security_information
+                    | protected_dacl_security_information,
+                    token_user.user.sid,
+                    None,
+                    dacl,
+                    None,
                 )
+                return status == 0
             finally:
                 kernel32.LocalFree(dacl)
         finally:

@@ -10,10 +10,13 @@ import urllib.error
 import urllib.request
 import uuid
 from pathlib import Path
-from typing import Any, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 import structlog
 import uvicorn
+
+if TYPE_CHECKING:
+    from fastapi import FastAPI
 
 from .config import settings
 from .config.settings import (
@@ -83,7 +86,7 @@ async def run_server_with_shutdown() -> None:
         logger.info("Server shutdown complete")
 
 
-def create_server():
+def create_server() -> "FastAPI":
     """Return the FastAPI app instance for external use."""
     from .server import app
 

@@ -150,7 +150,7 @@ app.include_router(projects.router)
 
 
 @app.post("/api/auth/bootstrap", include_in_schema=False)
-def bootstrap_console_session(payload: _ConsoleBootstrapRequest):
+def bootstrap_console_session(payload: _ConsoleBootstrapRequest) -> JSONResponse:
     """Exchange a local one-time handoff for an HttpOnly browser session."""
     from ..core.runtime_manager import runtime_dir
 

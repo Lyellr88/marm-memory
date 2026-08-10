@@ -43,7 +43,7 @@ async def _add(
     session_name: str = "main",
     project: Optional[str] = None,
     platform: Optional[str] = None,
-    **_,
+    **_: object,
 ) -> dict:
     if not name or not name.strip() or not data or not data.strip():
         return {
@@ -86,7 +86,7 @@ async def _add(
     }
 
 
-async def _use(names: Optional[str], session_name: str = "main", **_) -> dict:
+async def _use(names: Optional[str], session_name: str = "main", **_: object) -> dict:
     if not names or not names.strip():
         return {"status": "error", "message": "names is required for action='use'"}
     name_list = [n.strip() for n in names.split(",") if n.strip()]
@@ -124,7 +124,7 @@ async def _use(names: Optional[str], session_name: str = "main", **_) -> dict:
     }
 
 
-async def _show(session_name: str = "main", **_) -> dict:
+async def _show(session_name: str = "main", **_: object) -> dict:
     with memory.get_connection() as conn:
         cursor = conn.execute(
             """
@@ -152,7 +152,7 @@ async def _show(session_name: str = "main", **_) -> dict:
     }
 
 
-async def _status(session_name: str = "main", **_) -> dict:
+async def _status(session_name: str = "main", **_: object) -> dict:
     active_entries = memory.get_active_notebook_entries(session_name)
     active_names = [entry["name"] for entry in active_entries]
     return {
@@ -164,7 +164,7 @@ async def _status(session_name: str = "main", **_) -> dict:
     }
 
 
-async def _clear(session_name: str = "main", **_) -> dict:
+async def _clear(session_name: str = "main", **_: object) -> dict:
     memory.clear_active_notebook_entries(session_name)
     return {
         "status": "success",
@@ -179,7 +179,7 @@ async def _save(
     session_name: str = "main",
     project: Optional[str] = None,
     platform: Optional[str] = None,
-    **_,
+    **_: object,
 ) -> dict:
     """Promote a scratch entry (or new inline content) into the permanent
     docs store. Copy, not move -- the source scratch entry is left

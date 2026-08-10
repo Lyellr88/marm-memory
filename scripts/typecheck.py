@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
 """Run mypy on the checked scope and gate on the error baseline.
 
-Local only for now. The package carries a backlog of annotation errors, so this
-fails only when the count goes *up* rather than demanding zero. Lower BASELINE as
-errors are fixed; that edit is the record of progress. Once the backlog is
-cleared this becomes a CI job: install requirements.txt plus a pinned mypy, then
-run this script. The mypy version must be pinned there, because BASELINE is
-version-specific.
+Local only for now. This fails when the count goes *up*, not when it is nonzero.
+Lower BASELINE as errors are fixed; that edit is the record of progress.
+
+The remaining 2 are both endpoints/graph.py's Optional get_client() race, which
+needs a supervisor-level fix (see docs/current/graph-client-none-guard.md), not
+an annotation. Reaching 0 is a code change, not a typing one.
+
+Promoting this to CI needs requirements.txt plus a pinned mypy. The pin is not
+optional: BASELINE is version-specific.
 
     python scripts/typecheck.py            summary + gate
     python scripts/typecheck.py --raw      full mypy output, no gate
@@ -22,7 +25,7 @@ import subprocess
 import sys
 from collections import Counter
 
-BASELINE = 78
+BASELINE = 2
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 PACKAGE_DIR = REPO_ROOT / "marm-mcp-server"

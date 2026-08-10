@@ -7,7 +7,7 @@ import uuid
 import numpy as np
 from datetime import datetime, timezone
 
-from ..core.memory import _safe_print
+from ..core.memory import MARMMemory, _safe_print
 from ..config.settings import COMPACTION_ENABLED
 
 
@@ -75,7 +75,7 @@ def centroid_extract_summary(
     return "\n\n".join(selected_content)
 
 
-def _mark_candidate_stale(memory_store, candidate_id: str) -> None:
+def _mark_candidate_stale(memory_store: MARMMemory, candidate_id: str) -> None:
     now = datetime.now(timezone.utc).isoformat()
     with memory_store.get_connection() as conn:
         conn.execute(
@@ -98,7 +98,7 @@ def _parse_source_ids(source_ids_json: str) -> list[str]:
     return parsed
 
 
-async def process_nudge_exhausted_candidates(memory_store) -> int:
+async def process_nudge_exhausted_candidates(memory_store: MARMMemory) -> int:
     """Promote nudge_exhausted compaction candidates to summary_staged using
     server-side centroid extraction. Returns count of candidates processed.
 

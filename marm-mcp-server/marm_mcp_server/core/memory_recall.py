@@ -3,7 +3,9 @@
 import asyncio
 import json
 from datetime import datetime, timezone
-from typing import Dict, List
+from typing import TYPE_CHECKING, Dict, List, Tuple, Union
+
+import numpy as np
 
 from ..config.settings import (
     RECALL_SCAN_LIMIT,
@@ -29,14 +31,20 @@ from .memory_scoring import (
     _fetch_and_score_fts_rows,
 )
 
+if TYPE_CHECKING:
+    from .memory import MARMMemory
+
+# include_scan_metadata=True swaps the plain list for a (list, metadata) pair.
+RecallResult = Union[List[Dict], Tuple[List[Dict], dict]]
+
 
 async def _recall_exact(
-    mem,
-    query,
-    session=None,
-    limit=5,
-    project=None,
-    platform=None,
+    mem: "MARMMemory",
+    query: str,
+    session: str | None = None,
+    limit: int = 5,
+    project: str | None = None,
+    platform: str | None = None,
 ) -> List[Dict]:
     """Deterministic exact/lexical recall via FTS5 BM25, with LIKE fallback.
 
@@ -92,7 +100,7 @@ async def _recall_exact(
                   AND (compaction_role IS NULL OR compaction_role != 'source')
             """
 
-            params = [f"%{query}%"]
+            params: list[str | int] = [f"%{query}%"]
 
             if session is not None:
                 base += " AND session_name = ?"
@@ -134,18 +142,18 @@ async def _recall_exact(
 
 
 async def _recall_similar(
-    mem,
+    mem: "MARMMemory",
     query: str,
     session: str | None = None,
     limit: int = 5,
-    query_vec=None,
+    query_vec: np.ndarray | None = None,
     include_scan_metadata: bool = False,
     exact_mode: str = "auto",
     project: str | None = None,
     platform: str | None = None,
     *,
     with_cosine: bool = False,
-):
+) -> RecallResult:
     """Find semantically similar memories.
 
     exact_mode controls which retrieval lane is used:
@@ -169,7 +177,7 @@ async def _recall_similar(
     """
     scan_limit = RECALL_SCAN_LIMIT
 
-    def _wrap(results, truncated):
+    def _wrap(results: List[Dict], truncated: bool) -> RecallResult:
         if include_scan_metadata:
             return results, {
                 "recall_scan_truncated": truncated,
@@ -351,7 +359,7 @@ async def _recall_similar(
 
 
 async def _recall_text_search(
-    mem,
+    mem: "MARMMemory",
     query: str,
     session: str | None = None,
     limit: int = 5,

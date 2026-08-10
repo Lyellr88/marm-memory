@@ -32,7 +32,7 @@ class ShutdownManager:
             logger.info("Signal handlers not available on this platform")
             pass
 
-    def _signal_handler(self, sig) -> None:
+    def _signal_handler(self, sig: signal.Signals) -> None:
         """Handle shutdown signals"""
         logger.info("Shutdown signal received", signal=sig.name)
 

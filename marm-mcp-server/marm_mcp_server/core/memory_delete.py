@@ -3,11 +3,15 @@
 import json
 import sqlite3
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 
 from .concept_queue import dequeue as dequeue_concept_index
 
+if TYPE_CHECKING:
+    from .memory import MARMMemory
 
-async def _delete_memory(mem, memory_id: str) -> bool:
+
+async def _delete_memory(mem: "MARMMemory", memory_id: str) -> bool:
     result = await _delete_memories(mem, [memory_id])
     return bool(result["deleted_ids"])
 
@@ -97,7 +101,7 @@ def _restore_sources_from_deleted_summary(
     return restored
 
 
-async def _delete_memories(mem, memory_ids: list[str]) -> dict:
+async def _delete_memories(mem: "MARMMemory", memory_ids: list[str]) -> dict:
     unique_ids = list(dict.fromkeys(str(memory_id) for memory_id in memory_ids))
     if not unique_ids:
         return {

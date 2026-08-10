@@ -212,7 +212,7 @@ def _inject_log_results(response: dict, log_results: list) -> None:
 
 
 @router.post("/marm_smart_recall", operation_id="marm_smart_recall")
-async def marm_smart_recall(request: SmartRecallRequest, http_request: Request):
+async def marm_smart_recall(request: SmartRecallRequest, http_request: Request) -> dict:
     """
     🧠 Intelligent memory recall based on semantic similarity
 

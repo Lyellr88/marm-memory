@@ -12,7 +12,7 @@ from ..core.memory import memory
 from ..utils.helpers import docs_dir as helpers_docs_dir
 
 
-def guess_context_type(filename) -> str:
+def guess_context_type(filename: str) -> str:
     filename_lower = filename.lower()
     if "protocol" in filename_lower:
         return "protocol"
@@ -56,7 +56,7 @@ def _docs_dir() -> Path | None:
     return helpers_docs_dir()
 
 
-def get_docs_to_load():
+def get_docs_to_load() -> list[dict]:
     """Return all docs from marm-docs/ for memory indexing."""
     docs_dir = _docs_dir()
 

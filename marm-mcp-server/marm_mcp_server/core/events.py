@@ -13,7 +13,7 @@ class MARMEvents:
         self.failed_callbacks: Dict[str, int] = {}
         self.logger = logging.getLogger(__name__)
 
-    def on(self, event_type: str, callback) -> None:
+    def on(self, event_type: str, callback: Callable) -> None:
         """Register event listener"""
         if event_type not in self.listeners:
             self.listeners[event_type] = []

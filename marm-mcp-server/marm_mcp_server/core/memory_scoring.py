@@ -1,9 +1,19 @@
 """Vector scoring and DB fetch-and-score operations for the MARM memory system."""
 
 import sqlite3
+from typing import Any, Protocol, Sequence
+
 import numpy as np
 
 from ..config.settings import FTS_LONE_HIT_SCORE
+
+
+class _Row(Protocol):
+    """The row shape the scorers index into. Not sqlite3.Row: the chunk-scoring
+    tests pass plain dicts carrying the same keys, and pinning the concrete class
+    would make those call sites type errors."""
+
+    def __getitem__(self, key: str, /) -> Any: ...
 
 
 def _normalize_bm25(
@@ -25,7 +35,9 @@ def _normalize_bm25(
     return [(max_s - s) / span for s in raw_scores]
 
 
-def _score_embedding_rows(rows, query_embedding, limit: int):
+def _score_embedding_rows(
+    rows: Sequence[sqlite3.Row], query_embedding: np.ndarray, limit: int
+) -> tuple[list[tuple[sqlite3.Row, float]], int]:
     """Score embedding rows in one NumPy batch instead of a Python cosine loop."""
     if limit <= 0:
         return [], 0
@@ -72,10 +84,10 @@ def _score_embedding_rows(rows, query_embedding, limit: int):
 
 
 def _score_chunk_aware(
-    memories,
-    chunks_by_id: dict,
-    query_embedding,
-) -> tuple[list[tuple], int]:
+    memories: Sequence[_Row],
+    chunks_by_id: dict[str, list],
+    query_embedding: np.ndarray,
+) -> tuple[list[tuple[_Row, float]], int]:
     """Score memories using chunk embeddings where available, parent embedding otherwise.
 
     Deduplicates to one (memory_row, best_score) per memory_id before returning.
@@ -137,11 +149,11 @@ def _fetch_and_score_embedding_rows(
     db_path: str,
     session: str | None,
     scan_limit: int,
-    query_embedding,
+    query_embedding: np.ndarray,
     limit: int,
     project: str | None = None,
     platform: str | None = None,
-):
+) -> tuple[list[tuple[_Row, float]], int, bool]:
     conn = sqlite3.connect(db_path, timeout=30.0)
     try:
         conn.row_factory = sqlite3.Row
@@ -285,7 +297,7 @@ def _fetch_fts_candidate_ids(
 def _fetch_and_score_by_ids(
     db_path: str,
     memory_ids: list[str],
-    query_embedding,
+    query_embedding: np.ndarray,
 ) -> tuple[list[tuple], int]:
     """Fetch specific memories by ID and score their embeddings.
 

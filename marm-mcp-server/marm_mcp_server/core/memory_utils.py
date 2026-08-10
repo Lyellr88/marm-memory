@@ -8,11 +8,14 @@ import re
 import sqlite3
 import sys
 from datetime import datetime, timezone
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Callable
 
 import numpy as np
 
 from ..config.settings import FTS_EXTRA_STOPWORDS, FTS_QUERY_MODE
+
+if TYPE_CHECKING:
+    from .memory import MARMMemory
 
 
 def _safe_print(msg: str) -> None:
@@ -191,7 +194,7 @@ DOC_CHUNK_TARGET_WORDS = 800
 DOC_CHUNK_OVERLAP_WORDS = 100
 
 
-def _embedding_to_bytes(vector) -> bytes:
+def _embedding_to_bytes(vector: np.ndarray) -> bytes:
     """Store embeddings in the float32 layout expected by recall scoring."""
     return np.asarray(vector, dtype=np.float32).tobytes()
 
@@ -282,7 +285,7 @@ async def drain_chunk_writes(
 
 
 async def _write_chunks(
-    mem_instance,
+    mem_instance: "MARMMemory",
     db_path: str,
     memory_id: str,
     chunks: list[str],

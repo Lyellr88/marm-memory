@@ -22,7 +22,10 @@ import os
 import subprocess
 import time
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
+
+if TYPE_CHECKING:
+    from marm_graph.core.cbm_client import CbmClient
 
 import structlog
 from marm_graph.core import tool_router as R
@@ -117,7 +120,7 @@ def git_signature(root: str) -> Optional[tuple[str, bool]]:
     return (head, bool(status))
 
 
-def index_repository(client, req: GraphIndexRequest) -> dict:
+def index_repository(client: "CbmClient", req: GraphIndexRequest) -> dict:
     """The callable every index path hands to the gate: index, then settle the
     durable block state before the lease is released.
 
