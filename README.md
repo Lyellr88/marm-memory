@@ -1,3 +1,5 @@
+[![MCP Toplist](https://mcptoplist.com/badge/io.github.Lyellr88%2Fmarm-mcp-server.svg)](https://mcptoplist.com/server/io.github.Lyellr88%2Fmarm-mcp-server)
+
 <div align="center">
 <picture>
 <img src="https://raw.githubusercontent.com/Lyellr88/marm-memory/MARM-main/assets/marm-logo.png"
