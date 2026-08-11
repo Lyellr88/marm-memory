@@ -308,7 +308,10 @@ def start_background(
     env["MARM_RUNTIME_PROFILE"] = profile
     creationflags = 0
     kwargs: dict[str, Any] = {}
-    if os.name == "nt":
+    # sys.platform, not os.name: mypy narrows platform on the former only, so
+    # with os.name it checks this branch on Linux, where these two flags do not
+    # exist. Equivalent at runtime.
+    if sys.platform == "win32":
         creationflags = (
             subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
         )
