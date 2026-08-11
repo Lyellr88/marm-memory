@@ -56,12 +56,25 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r marm-mcp-server/requirements.txt
           pip install -e './marm-mcp-server' --no-deps
-          pip install pytest pytest-asyncio pytest-cov jsonschema requests mypy ruff
+          pip install pytest pytest-asyncio pytest-cov jsonschema requests mypy==2.1.0 ruff==0.16.2
 
       - name: Validate server.json
         run: |
           cd marm-mcp-server
           python validate_server_json.py
+
+      # Gates the release on the type baseline. Both tools above are pinned
+      # because this gate compares against an absolute error count and Ruff
+      # promotes rules between minor releases; unpinned, either can fail a tag
+      # whose code is unchanged.
+      - name: Typecheck gate
+        run: python scripts/typecheck.py
+
+      - name: Lint and format
+        working-directory: marm-mcp-server
+        run: |
+          ruff check
+          ruff format --check
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3

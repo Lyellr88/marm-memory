@@ -1,0 +1,75 @@
+name: Console CI
+
+# The release workflow already builds the console, but it runs on a version tag,
+# so a broken console dependency surfaced there fails a release that is already
+# tagged. Dependabot console PRs otherwise pass on the Ruff job alone, which never
+# reads package.json or the lockfile.
+#
+# No `paths:` filter, deliberately. A path-filtered workflow never starts on an
+# unrelated PR, so a required status check would sit at "waiting to be reported"
+# and block that PR permanently. The job runs every time and decides internally
+# whether there is work, which keeps it eligible to be a required check.
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: console-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  console:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Detect relevant changes
+        id: scope
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          files=$(gh pr diff "${{ github.event.number }}" --name-only)
+          if printf '%s\n' "$files" | grep -qE '^(marm-console/|\.github/workflows/console\.yml$)'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "No console paths changed. Reporting success without installing."
+          fi
+
+      # Node and pnpm versions match publish-mcp.yml's console build. If they
+      # drift, this job stops predicting the release build.
+      - name: Set up Node
+        if: steps.scope.outputs.run == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      - name: Set up pnpm
+        if: steps.scope.outputs.run == 'true'
+        uses: pnpm/action-setup@v4
+        with:
+          version: '10'
+
+      # --frozen-lockfile, so a package.json edit that was never locked fails
+      # here rather than resolving to something the release build will not get.
+      - name: Install dependencies
+        if: steps.scope.outputs.run == 'true'
+        working-directory: marm-console
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        if: steps.scope.outputs.run == 'true'
+        working-directory: marm-console
+        run: pnpm typecheck
+
+      # The step that catches peer-dependency breakage. A plugin major that
+      # outruns its host (plugin-react 6 needs vite 8) installs and typechecks
+      # clean, then fails loading vite.config.ts.
+      - name: Build
+        if: steps.scope.outputs.run == 'true'
+        working-directory: marm-console
+        run: pnpm build

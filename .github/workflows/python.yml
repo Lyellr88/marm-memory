@@ -1,0 +1,119 @@
+name: Python CI
+
+# Ruff alone passes a dependency bump that breaks at runtime: it reads style, not
+# behavior. The test suite lives in publish-mcp.yml, which runs on a version tag,
+# so without this a bad pip bump is found after the tag is already spent.
+#
+# No `paths:` filter, deliberately. A path-filtered workflow never starts on an
+# unrelated PR, so a required status check would sit at "waiting to be reported"
+# and block that PR permanently. The job runs every time and decides internally
+# whether there is work, which keeps it eligible to be a required check.
+#
+# Both events run the typecheck gate; only pull requests run the suite. mypy needs
+# the real dependencies installed (without fastapi/pydantic/numpy it reports
+# unresolved imports and the baseline count is meaningless), so there is no
+# cheaper standalone typecheck job to split out.
+#
+# pull_request carries no branch filter on purpose, so a PR into a release branch
+# is checked the same as one into MARM-main.
+on:
+  push:
+    branches:
+      - MARM-main
+      - 'release/**'
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+# Several pushes in a row would otherwise queue a full suite each. Only the
+# newest run per ref matters.
+concurrency:
+  group: python-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Replaces the trigger-level path filter. Asking the API for the PR's file
+      # list avoids reconstructing a diff range, which is fragile on force-pushes
+      # and on a branch's first push.
+      - name: Detect relevant changes
+        id: scope
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ "${{ github.event_name }}" != "pull_request" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          files=$(gh pr diff "${{ github.event.number }}" --name-only)
+          if printf '%s\n' "$files" | grep -qE '^(marm-mcp-server/|scripts/|\.github/workflows/python\.yml$)'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "No Python-owned paths changed. Reporting success without installing."
+          fi
+
+      # Python version matches publish-mcp.yml's validate-and-test. If they
+      # drift, this job stops predicting the release gate.
+      - name: Set up Python
+        if: steps.scope.outputs.run == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # Concept extraction tests are skipif-guarded on the model being present,
+      # so without this a spaCy bump would skip the very tests that would catch
+      # it and still report green.
+      - name: Bundle concept extraction model
+        if: steps.scope.outputs.run == 'true'
+        run: python marm-mcp-server/scripts/bundle-concept-model.py
+
+      - name: Cache pip
+        if: steps.scope.outputs.run == 'true'
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('marm-mcp-server/pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      # mypy is pinned because scripts/typecheck.py gates on an absolute error
+      # count. A different mypy reports a different count and fails the job on a
+      # PR that changed nothing. Keep this equal to the local mypy that set
+      # BASELINE.
+      - name: Install dependencies
+        if: steps.scope.outputs.run == 'true'
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r marm-mcp-server/requirements.txt
+          pip install -e './marm-mcp-server' --no-deps
+          pip install pytest pytest-asyncio pytest-cov jsonschema requests mypy==2.1.0
+
+      - name: Validate server.json
+        if: steps.scope.outputs.run == 'true'
+        working-directory: marm-mcp-server
+        run: python validate_server_json.py
+
+      # Ahead of the tests: a dependency that dropped or added type information
+      # shows up here in seconds rather than after the full suite.
+      - name: Typecheck gate
+        if: steps.scope.outputs.run == 'true'
+        run: python scripts/typecheck.py
+
+      # Pull requests only: a direct push gets the type gate above, which is the
+      # part that cannot wait, while the suite stays where it can block a merge.
+      #
+      # docker is excluded because no image is built here, so those tests would
+      # self-skip anyway. smoke_lifecycle races a real HTTP stop inside a fixed
+      # window and is environment-sensitive, which publish-mcp.yml also excludes.
+      - name: Run tests
+        if: steps.scope.outputs.run == 'true' && github.event_name == 'pull_request'
+        working-directory: marm-mcp-server
+        run: python -m pytest tests/ -q -m "not docker and not smoke_lifecycle"
