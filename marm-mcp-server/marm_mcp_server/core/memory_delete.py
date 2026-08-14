@@ -62,9 +62,7 @@ def _remove_deleted_sources_from_summary(
     remaining = [item for item in source_ids if item not in deleted_source_ids]
     if remaining == source_ids:
         return 0
-    deleted_seen = set(
-        str(item) for item in metadata.get("deleted_source_memory_ids", [])
-    )
+    deleted_seen = {str(item) for item in metadata.get("deleted_source_memory_ids", [])}
     deleted_seen.update(item for item in source_ids if item in deleted_source_ids)
     metadata["source_memory_ids"] = remaining
     metadata["source_count"] = len(remaining)

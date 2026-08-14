@@ -8,7 +8,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PACKAGE_ROOT = REPO_ROOT / "marm-mcp-server"
 TEST_TARGET = "tests/test_command_smoke.py"

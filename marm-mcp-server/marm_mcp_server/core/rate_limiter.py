@@ -1,9 +1,10 @@
 """IP-based rate limiting for MARM MCP Server (no authentication required)."""
 
-import time
 import threading
-from typing import Dict, Optional, Tuple
+import time
 from collections import defaultdict, deque
+from typing import Dict, Optional, Tuple
+
 from ..config.settings import (
     MARM_RATE_LIMIT_RPM,
     RATE_LIMIT_BLOCK_SECONDS,

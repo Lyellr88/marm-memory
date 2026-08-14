@@ -38,7 +38,6 @@ _ORIG_DB_PATH = os.environ.get("MARM_DB_PATH")
 os.environ["MARM_DB_PATH"] = _BOOT_DB_PATH
 
 import numpy as np  # noqa: E402
-
 from marm_mcp_server.config.settings import (  # noqa: E402
     DEFAULT_SEMANTIC_DIM,
     RECALL_SCAN_LIMIT,
@@ -46,11 +45,11 @@ from marm_mcp_server.config.settings import (  # noqa: E402
 )
 from marm_mcp_server.core import memory as memory_module  # noqa: E402
 from marm_mcp_server.core.memory import (  # noqa: E402
-    MARMMemory,
-    _chunk_text,
+    CHUNK_OVERLAP_TOKENS,
     CHUNK_THRESHOLD_WORDS,
     CHUNK_TOKEN_LIMIT,
-    CHUNK_OVERLAP_TOKENS,
+    MARMMemory,
+    _chunk_text,
 )
 from marm_mcp_server.core.memory_scoring import (  # noqa: E402
     _fetch_and_score_embedding_rows,
@@ -270,7 +269,7 @@ async def run(require_encoder: bool) -> bool:
                 second_first_word == expected_first,
                 f"got '{second_first_word}', want '{expected_first}'",
             )
-        all_chunk_words = set(w for c in chunks for w in c.split())
+        all_chunk_words = {w for c in chunks for w in c.split()}
         all_body_words = set(_LONG_BODY.split())
         r.check(
             "chunks collectively cover all words in the long body",

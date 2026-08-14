@@ -5,9 +5,10 @@ Validate server.json against MCP schema
 
 import json
 import sys
-import requests
-import jsonschema
 from pathlib import Path
+
+import jsonschema
+import requests
 
 
 def validate_server_json():

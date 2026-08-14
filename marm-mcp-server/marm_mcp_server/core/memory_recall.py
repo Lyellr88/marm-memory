@@ -8,27 +8,27 @@ from typing import TYPE_CHECKING, Dict, List, Tuple, Union
 import numpy as np
 
 from ..config.settings import (
-    RECALL_SCAN_LIMIT,
-    TEMPORAL_WEIGHT,
-    TEMPORAL_HALF_LIFE_DAYS,
     FTS_CANDIDATE_LIMIT,
     FTS_LONE_HIT_SCORE,
     FTS_QUERY_MODE,
     HYBRID_SEARCH_TEXT_WEIGHT,
-)
-from .memory_utils import (
-    _safe_print,
-    _recall_debug,
-    _temporal_score,
-    _safe_fts_query,
-    _wide_fts_query,
-    _is_exact_query,
+    RECALL_SCAN_LIMIT,
+    TEMPORAL_HALF_LIFE_DAYS,
+    TEMPORAL_WEIGHT,
 )
 from .memory_scoring import (
-    _fetch_fts_candidate_ids,
     _fetch_and_score_by_ids,
     _fetch_and_score_embedding_rows,
     _fetch_and_score_fts_rows,
+    _fetch_fts_candidate_ids,
+)
+from .memory_utils import (
+    _is_exact_query,
+    _recall_debug,
+    _safe_fts_query,
+    _safe_print,
+    _temporal_score,
+    _wide_fts_query,
 )
 
 if TYPE_CHECKING:

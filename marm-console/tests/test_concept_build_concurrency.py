@@ -26,14 +26,14 @@ def test_launching_concept_builds_survives_concurrent_insert_and_prune():
                         {"id": job_id, "status": "queued"},
                         time.monotonic(),
                     )
-            except Exception as exc:  # noqa: BLE001 - capturing for the assertion
+            except Exception as exc:
                 errors.append(exc)
 
     def prune_repeatedly() -> None:
         for _ in range(300):
             try:
                 concepts_endpoint._prune_launching_concept_builds()
-            except Exception as exc:  # noqa: BLE001 - capturing for the assertion
+            except Exception as exc:
                 errors.append(exc)
 
     def read_repeatedly() -> None:
@@ -41,7 +41,7 @@ def test_launching_concept_builds_survives_concurrent_insert_and_prune():
             try:
                 with concepts_endpoint._launching_concept_builds_lock:
                     concepts_endpoint._launching_concept_builds.get(f"job-0-{i}")
-            except Exception as exc:  # noqa: BLE001 - capturing for the assertion
+            except Exception as exc:
                 errors.append(exc)
 
     threads = (

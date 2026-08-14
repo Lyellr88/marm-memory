@@ -17,10 +17,8 @@ import uuid
 from datetime import datetime, timezone
 
 import pytest
-from fastapi.testclient import TestClient
-
 from conftest import load_isolated_server, local_client
-
+from fastapi.testclient import TestClient
 
 # --- shared failure-injection helpers ---
 

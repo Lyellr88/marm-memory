@@ -1,11 +1,13 @@
 """Rate limiting middleware for FastAPI."""
 
+import time
+
 from fastapi import Request
 from fastapi.responses import JSONResponse, Response
 from starlette.middleware.base import RequestResponseEndpoint
-import time
-from ..core.rate_limiter import rate_limiter
+
 from ..config.settings import RATE_LIMIT_BLOCK_SECONDS
+from ..core.rate_limiter import rate_limiter
 
 _TRUSTED_PROXY_IPS = {"127.0.0.1", "::1"}
 

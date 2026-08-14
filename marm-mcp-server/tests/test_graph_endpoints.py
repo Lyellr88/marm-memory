@@ -10,7 +10,6 @@ import threading
 import time
 
 import httpx
-
 from conftest import load_isolated_server, local_client
 
 
@@ -277,3 +276,87 @@ def test_shutdown_stops_graph_supervisor_child(monkeypatch, tmp_path):
     asyncio.run(_run_lifespan_once())
 
     assert stop_calls == [1]
+
+
+def test_delete_project_with_graph_disabled_returns_unavailable_not_500(
+    monkeypatch, tmp_path
+):
+    """Contract guard, not a regression test: this passed before the None guard.
+
+    The spec listed it as evidence for the fix, which was wrong. With the engine
+    disabled the route's own gate short-circuits ahead of _resolve_and_delete, so
+    the unguarded dereference was never reachable this way. Reaching it needs the
+    supervisor to go away *after* the gate, which the stop-race test below covers.
+    Kept because it pins the payload every graph route is supposed to return.
+    """
+    monkeypatch.setenv("GRAPH_ENABLED", "false")
+    server = load_isolated_server(monkeypatch, tmp_path)
+
+    client = local_client(server.app)
+    response = client.post(
+        "/internal/projects/delete",
+        json={"project": "marm-memory", "name": "marm-memory", "confirm": True},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "error",
+        "message": "graph backend unavailable",
+    }
+
+
+def test_delete_project_after_supervisor_stop_does_not_respawn_the_engine(
+    monkeypatch, tmp_path
+):
+    """A request arriving after teardown, driven through the real route.
+
+    Named for what it does: stop() completes before the request starts, so this
+    covers the post-stop path, not the lock-order window. That window is covered
+    deterministically in test_graph_supervisor.py, where the interleaving can be
+    forced instead of raced.
+
+    The no-new-child assertion is the point. A re-acquired client used to spawn a
+    replacement engine nobody owned, and the call succeeded, so neither the
+    response nor the logs showed anything wrong.
+    """
+    server = load_isolated_server(monkeypatch, tmp_path)
+    graph = server.graph_supervisor
+    built = []
+
+    class _Client:
+        def __init__(self):
+            built.append(self)
+            self.closed = False
+
+        def start(self):
+            pass
+
+        def list_tools(self):
+            return []
+
+        def close(self):
+            self.closed = True
+
+        def call_tool(self, name, arguments, timeout=None):
+            raise AssertionError("no call may reach a disowned client")
+
+    monkeypatch.setattr(
+        "marm_mcp_server.core.graph_supervisor.CbmClient", lambda **kwargs: _Client()
+    )
+    with graph._state_lock:
+        graph._client = _Client()
+        graph._available = True
+    graph._ready.set()
+
+    graph.stop()
+
+    client = local_client(server.app)
+    response = client.post(
+        "/internal/projects/delete",
+        json={"project": "marm-memory", "name": "marm-memory", "confirm": True},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "error"
+    assert len(built) == 1, f"a replacement engine was spawned: {len(built)} clients"
+    assert built[0].closed is True

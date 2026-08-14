@@ -361,3 +361,111 @@ def test_snapshot_reports_explicit_lifecycle_states(monkeypatch):
         "started": True,
         "available": True,
     }
+
+
+def test_get_client_returns_none_once_stopped(monkeypatch):
+    """Defect 1: is_available() and get_client() were separate reads.
+
+    A caller that passed the availability check could have stop() complete
+    before its get_client(), and then dereference None. get_client() now reads
+    _available and _client together, so the answer cannot change mid-sequence.
+    """
+    gs = _fresh_gs()
+    monkeypatch.setattr(gs.mcp_settings, "GRAPH_ENABLED", True)
+    fake = _FakeClient()
+    monkeypatch.setattr(gs, "CbmClient", lambda **kwargs: fake)
+
+    supervisor = gs.GraphSupervisor()
+    assert supervisor.get_client() is fake
+
+    supervisor.stop()
+    assert supervisor.get_client() is None
+    assert supervisor.is_available() is False
+
+
+def test_get_client_after_stop_does_not_spawn_a_replacement(monkeypatch):
+    """Defect 3: stop() clears _ready, so _ensure_started() ran again.
+
+    Both get_client() and is_available() begin with _ensure_started(), so a call
+    arriving after teardown built a second client and returned it live. The
+    supervisor had already disowned the first, so nothing would ever close the
+    replacement.
+    """
+    gs = _fresh_gs()
+    monkeypatch.setattr(gs.mcp_settings, "GRAPH_ENABLED", True)
+    built = []
+
+    def _build(**kwargs):
+        client = _FakeClient()
+        built.append(client)
+        return client
+
+    monkeypatch.setattr(gs, "CbmClient", _build)
+
+    supervisor = gs.GraphSupervisor()
+    supervisor.is_available()
+    assert len(built) == 1
+
+    supervisor.stop()
+    supervisor.get_client()
+    supervisor.is_available()
+    supervisor.get_client()
+
+    assert len(built) == 1, f"stop() was not terminal: {len(built)} clients built"
+    assert supervisor.snapshot()["started"] is False
+
+
+def test_stop_during_the_lock_wait_does_not_start_a_replacement(monkeypatch):
+    """The double-checked lock has to recheck _stopped, not only _ready.
+
+    _ensure_started() tests _stopped before taking _lock. A caller can pass that
+    test, block on the lock while stop() runs to completion, and then acquire it
+    and find only _ready cleared. Rechecking _ready alone lets that caller build
+    a client after teardown, which nothing will ever close.
+
+    The wrapper below makes that interleaving deterministic instead of relying on
+    thread timing: it applies exactly the state stop() leaves behind, at the
+    moment the lock is acquired. Calling stop() itself here would deadlock, since
+    stop() takes the same lock.
+    """
+    gs = _fresh_gs()
+    monkeypatch.setattr(gs.mcp_settings, "GRAPH_ENABLED", True)
+    built = []
+
+    def _build(**kwargs):
+        client = _FakeClient()
+        built.append(client)
+        return client
+
+    monkeypatch.setattr(gs, "CbmClient", _build)
+    supervisor = gs.GraphSupervisor()
+
+    class _LockThatStopsOnEntry:
+        def __init__(self, real, target):
+            self._real = real
+            self._target = target
+            self.fired = False
+
+        def __enter__(self):
+            self._real.acquire()
+            if not self.fired:
+                self.fired = True
+                with self._target._state_lock:
+                    self._target._client = None
+                    self._target._available = False
+                    self._target._state = "not_started"
+                self._target._stopped = True
+                self._target._ready.clear()
+            return self._real
+
+        def __exit__(self, *exc_info):
+            self._real.release()
+            return False
+
+    supervisor._lock = _LockThatStopsOnEntry(supervisor._lock, supervisor)
+
+    supervisor._ensure_started()
+
+    assert built == [], f"a client was built after stop(): {len(built)}"
+    assert supervisor.get_client() is None
+    assert supervisor.is_available() is False

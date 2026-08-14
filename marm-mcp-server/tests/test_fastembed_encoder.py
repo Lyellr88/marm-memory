@@ -11,8 +11,8 @@ scripts/bench_hotpath.py:80 depends on.
 import numpy as np
 import pytest
 
-from marm_mcp_server.core.memory import _FastEmbedEncoder
 from marm_mcp_server.config.settings import DEFAULT_SEMANTIC_DIM, DEFAULT_SEMANTIC_MODEL
+from marm_mcp_server.core.memory import _FastEmbedEncoder
 
 
 class _FakeTextEmbedding:

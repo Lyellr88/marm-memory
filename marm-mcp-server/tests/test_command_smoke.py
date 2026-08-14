@@ -18,7 +18,6 @@ from pathlib import Path
 
 import pytest
 
-
 PACKAGE_ROOT = Path(__file__).resolve().parents[1]
 TRACEBACK = "Traceback (most recent call last)"
 PRODUCT_ENTRYPOINT = (

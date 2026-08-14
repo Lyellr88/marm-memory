@@ -6,12 +6,11 @@ import functools
 import json
 from typing import Any, Awaitable, Callable
 
-from .compaction import claim_pending_compaction_prompt
-from .memory import memory
 from ..services.documentation import ensure_marm_started, maybe_auto_refresh
 from ..utils.helpers import read_protocol_file, read_protocol_lite_file
+from .compaction import claim_pending_compaction_prompt
+from .memory import memory
 from .stdio_logging import _debug, _stdio_log
-
 
 _protocol_delivered = False
 _protocol_call_count = 0

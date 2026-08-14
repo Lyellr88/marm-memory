@@ -1,7 +1,7 @@
 """Automation event handlers for MARM MCP Server."""
 
-from ..core.memory import memory
 from ..core.events import events
+from ..core.memory import memory
 
 
 async def auto_classify_content(data: dict) -> None:

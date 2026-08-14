@@ -9,15 +9,14 @@ Covers:
 """
 
 import json
-import pytest
 import sqlite3
 import uuid
 from datetime import datetime, timedelta, timezone
 
-from marm_mcp_server.core.memory import MARMMemory
-
+import pytest
 from conftest import load_isolated_server, local_client
 
+from marm_mcp_server.core.memory import MARMMemory
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -606,6 +605,7 @@ def _direct_insert_memory_with_embedding(
     """Insert a memory row with a real (fake) embedding blob so semantic scoring fires."""
     import uuid
     from datetime import datetime, timezone
+
     import numpy as np
 
     embed_bytes = np.ones(384, dtype=np.float32).tobytes()
@@ -666,6 +666,7 @@ def test_fts_rows_scoring_filter_respects_platform(tmp_path):
 
 def test_embedding_rows_filter_respects_project(tmp_path):
     import numpy as np
+
     from marm_mcp_server.core.memory_scoring import _fetch_and_score_embedding_rows
 
     mem = MARMMemory(str(tmp_path / "memory.db"))
@@ -726,6 +727,7 @@ async def test_semantic_dedup_does_not_match_across_project_boundary(
     monkeypatch, tmp_path
 ):
     import numpy as np
+
     from marm_mcp_server.core import consolidation as cons
     from marm_mcp_server.core.consolidation import find_semantic_duplicate
 

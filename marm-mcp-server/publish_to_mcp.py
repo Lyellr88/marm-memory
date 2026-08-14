@@ -6,9 +6,9 @@ This script helps with the manual publishing process when GitHub Actions
 is not available or for testing purposes.
 """
 
+import platform
 import subprocess
 import sys
-import platform
 from pathlib import Path
 
 

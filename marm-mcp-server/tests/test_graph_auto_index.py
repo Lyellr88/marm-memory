@@ -456,8 +456,8 @@ def test_a_disabled_cycle_never_touches_the_engine(shared_db, monkeypatch):
     """Off must mean off before anything reads engine state, since the poller's
     own gate is the only thing standing between a disabled feature and a spawned
     269MB child."""
-    from marm_mcp_server.core import runtime_flags
     from marm_mcp_server.core import graph_index_worker as module
+    from marm_mcp_server.core import runtime_flags
 
     touched = []
     monkeypatch.setattr(
@@ -494,8 +494,8 @@ def test_concept_auto_index_honors_the_same_override(shared_db):
 def test_a_suppressed_root_is_dropped_from_the_watch_set(shared_db, monkeypatch):
     """A delete must survive the project cache. Re-indexing a root inside the
     TTL window recreates the project the user just deleted."""
-    from marm_mcp_server.core import runtime_flags
     from marm_mcp_server.core import graph_index_worker as module
+    from marm_mcp_server.core import runtime_flags
 
     worker = module.GraphIndexWorker()
     listed = {
@@ -1057,10 +1057,10 @@ async def test_a_commit_is_picked_up_by_one_poll_cycle(shared_db, git_repo):
     if _CBM_BINARY is None:
         pytest.skip("codebase-memory-mcp binary not available")
 
+    from marm_graph.core import tool_router as R
+    from marm_graph.core.models import CodeLookupRequest, GraphIndexRequest
     from marm_mcp_server.core import graph_index_worker as module
     from marm_mcp_server.core.graph_supervisor import graph_supervisor
-    from marm_graph.core.models import CodeLookupRequest, GraphIndexRequest
-    from marm_graph.core import tool_router as R
 
     if not await asyncio.to_thread(graph_supervisor.is_available):
         pytest.skip("graph engine could not start")
@@ -1108,10 +1108,10 @@ async def test_the_running_worker_refreshes_a_repo_on_its_own(
     if _CBM_BINARY is None:
         pytest.skip("codebase-memory-mcp binary not available")
 
-    from marm_mcp_server.core import graph_index_worker as module
-    from marm_mcp_server.core.graph_supervisor import graph_supervisor
     from marm_graph.core import tool_router as R
     from marm_graph.core.models import GraphIndexRequest
+    from marm_mcp_server.core import graph_index_worker as module
+    from marm_mcp_server.core.graph_supervisor import graph_supervisor
 
     if not await asyncio.to_thread(graph_supervisor.is_available):
         pytest.skip("graph engine could not start")
@@ -1343,10 +1343,10 @@ async def test_block_state_is_settled_inside_the_gate_by_every_index_path(
     the ordering is what makes the race unwinnable, and observing the state while
     the lease is provably still held tests exactly that.
     """
+    from marm_graph.core.models import GraphIndexRequest
     from marm_mcp_server.core import graph_index_lock as lock
     from marm_mcp_server.core import graph_index_worker as module
     from marm_mcp_server.core import runtime_flags
-    from marm_graph.core.models import GraphIndexRequest
 
     root = "/repo/contested"
     observed = {}
@@ -1407,10 +1407,10 @@ async def test_an_automatic_failure_cannot_overwrite_a_manual_recovery(shared_db
     clears, then the automatic task writes its marker. With the write inside the
     gate that interleaving cannot occur, because the manual index cannot start
     until the automatic one has released."""
+    from marm_graph.core.models import GraphIndexRequest
     from marm_mcp_server.core import graph_index_lock as lock
     from marm_mcp_server.core import graph_index_worker as module
     from marm_mcp_server.core import runtime_flags
-    from marm_graph.core.models import GraphIndexRequest
 
     root = "/repo/recovered"
     entered = threading.Event()

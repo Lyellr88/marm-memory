@@ -4,11 +4,12 @@ import asyncio
 import json
 import sqlite3
 import uuid
-import numpy as np
 from datetime import datetime, timezone
 
-from ..core.memory import MARMMemory, _safe_print
+import numpy as np
+
 from ..config.settings import COMPACTION_ENABLED
+from ..core.memory import MARMMemory, _safe_print
 
 
 def centroid_extract_summary(

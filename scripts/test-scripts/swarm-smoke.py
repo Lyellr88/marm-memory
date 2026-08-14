@@ -19,7 +19,7 @@ import urllib.request
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -484,7 +484,7 @@ def percentile(values: list[float], pct: float) -> float:
     if not values:
         return 0.0
     values = sorted(values)
-    idx = int(round((pct / 100.0) * (len(values) - 1)))
+    idx = round((pct / 100.0) * (len(values) - 1))
     return values[idx]
 
 
@@ -660,7 +660,7 @@ def poll_compaction_candidates(args: argparse.Namespace, base_url: str) -> dict:
 def write_artifact(args: argparse.Namespace, payload: dict) -> Path:
     out_dir = Path(args.out_dir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%S")
     path = out_dir / f"{args.out_prefix}-{stamp}.json"
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     return path
@@ -826,7 +826,7 @@ def main() -> int:
 
         if not args.no_write_artifacts:
             payload = {
-                "generated_at": datetime.now().isoformat(),
+                "generated_at": datetime.now(timezone.utc).isoformat(),
                 "result": "PASS" if exit_code == 0 else "FAIL",
                 "base_url": base_url,
                 "config": {

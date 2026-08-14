@@ -9,8 +9,8 @@ Usage:
 """
 
 import argparse
-import atexit
 import asyncio
+import atexit
 import os
 import sys
 import tempfile
@@ -31,7 +31,10 @@ os.close(_BOOT_FD)
 _ORIG_DB_PATH = os.environ.get("MARM_DB_PATH")
 os.environ["MARM_DB_PATH"] = _BOOT_DB_PATH
 
-from marm_mcp_server.config.settings import RECALL_SCAN_LIMIT, SEMANTIC_SEARCH_AVAILABLE  # noqa: E402
+from marm_mcp_server.config.settings import (  # noqa: E402
+    RECALL_SCAN_LIMIT,
+    SEMANTIC_SEARCH_AVAILABLE,
+)
 from marm_mcp_server.core import memory as memory_module  # noqa: E402
 from marm_mcp_server.core.memory import (  # noqa: E402
     MARMMemory,

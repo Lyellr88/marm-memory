@@ -9,8 +9,8 @@ missing header.
 
 import json
 
-from marm_mcp_server.console import mcp_client
 from marm_mcp_server.config import settings
+from marm_mcp_server.console import mcp_client
 from marm_mcp_server.console.endpoints import overview as overview_endpoint
 
 

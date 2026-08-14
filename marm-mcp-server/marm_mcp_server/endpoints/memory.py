@@ -1,7 +1,6 @@
 """Memory endpoints for MARM MCP Server."""
 
 import asyncio
-from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
@@ -9,12 +8,13 @@ import structlog
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from ..core.models import SmartRecallRequest
-from ..core.memory import memory
-from ..core.response_limiter import MCPResponseLimiter
 from ..core.concept_db import ConceptDB, get_concept_db_path
-from ..services.recall import _apply_detail_level
+from ..core.memory import memory
+from ..core.models import SmartRecallRequest
+from ..core.response_limiter import MCPResponseLimiter
+from ..services.analytics import track_usage
 from ..services.graph_context import attach_graph_context, get_graph_context
+from ..services.recall import _apply_detail_level
 
 logger = structlog.get_logger(__name__)
 
@@ -22,50 +22,24 @@ logger = structlog.get_logger(__name__)
 def track_endpoint_usage(
     endpoint: str, request: Request, extra_data: dict | None = None
 ) -> None:
-    """Track MCP endpoint usage"""
-    try:
-        import sqlite3
+    """Track MCP endpoint usage.
 
-        usage_db = "marm_usage_analytics.db"
-
-        user_data = {
+    Delegates rather than writing usage_events itself. Its own copy of the
+    insert opened a bare relative "marm_usage_analytics.db", so it ignored both
+    MARM_ANALYTICS_DB_PATH and the Docker /app/data path and left a stray
+    database wherever the server happened to be started from, while
+    track_usage() wrote the same table at the configured path.
+    """
+    track_usage(
+        "endpoint_usage",
+        endpoint=endpoint,
+        user_data={
             "user_agent": request.headers.get("user-agent", "unknown"),
             "ip_address": request.client.host if request.client else "unknown",
             "endpoint": endpoint,
             **(extra_data or {}),
-        }
-
-        with sqlite3.connect(usage_db) as conn:
-            conn.execute("""
-                CREATE TABLE IF NOT EXISTS usage_events (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    timestamp TEXT NOT NULL,
-                    event_type TEXT NOT NULL,
-                    endpoint TEXT,
-                    user_agent TEXT,
-                    ip_address TEXT,
-                    session_id TEXT,
-                    metadata TEXT,
-                    created_at TEXT DEFAULT CURRENT_TIMESTAMP
-                )
-            """)
-
-            conn.execute(
-                """
-                INSERT INTO usage_events (timestamp, event_type, endpoint, user_agent, ip_address, metadata)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """,
-                (
-                    datetime.now().isoformat(),
-                    "endpoint_usage",
-                    endpoint,
-                    user_data.get("user_agent"),
-                    user_data.get("ip_address"),
-                    str(user_data),
-                ),
-            )
-    except Exception:
-        pass
+        },
+    )
 
 
 router = APIRouter(prefix="", tags=["Memory"])

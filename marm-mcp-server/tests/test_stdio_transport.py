@@ -1,9 +1,9 @@
+import asyncio
 import json
 import os
 import sqlite3
 import subprocess
 import sys
-import asyncio
 import threading
 
 import pytest
@@ -12,10 +12,10 @@ from mcp.shared.memory import create_connected_server_and_client_session
 
 
 def _isolated_stdio(monkeypatch, tmp_path):
-    import marm_mcp_server.server_stdio as stdio
     import marm_mcp_server.core.stdio_tool_lifecycle as lifecycle
-    import marm_mcp_server.services.notebook as notebook_service
+    import marm_mcp_server.server_stdio as stdio
     import marm_mcp_server.services.log_entry as log_entry
+    import marm_mcp_server.services.notebook as notebook_service
     from marm_mcp_server.core.memory import MARMMemory
 
     mem = MARMMemory(str(tmp_path / "stdio-inprocess.db"))
@@ -609,8 +609,10 @@ def test_stdio_inprocess_client_wraps_notebook_delete_and_log_results(
 
 
 def test_stdio_graph_tool_returns_unavailable_when_backend_down(monkeypatch, tmp_path):
+    # get_client, not is_available: the tools acquire the client and gate on it
+    # being None, so that one read is what decides availability now.
     stdio = _isolated_stdio(monkeypatch, tmp_path)
-    monkeypatch.setattr(stdio.graph_supervisor, "is_available", lambda: False)
+    monkeypatch.setattr(stdio.graph_supervisor, "get_client", lambda: None)
 
     result = asyncio.run(stdio.marm_graph_index(repo_path="/tmp/some-repo"))
 
@@ -632,7 +634,7 @@ def test_stdio_graph_unavailable_response_is_not_shared_mutable_state(
 
     stdio = _isolated_stdio(monkeypatch, tmp_path)
     lifecycle._protocol_delivered = False
-    monkeypatch.setattr(stdio.graph_supervisor, "is_available", lambda: False)
+    monkeypatch.setattr(stdio.graph_supervisor, "get_client", lambda: None)
 
     first = asyncio.run(stdio.marm_graph_index(repo_path="/tmp/some-repo"))
     assert "marm_protocol" in first  # confirms injection actually happened
@@ -645,7 +647,7 @@ def test_stdio_graph_unavailable_response_is_not_shared_mutable_state(
 def test_stdio_core_tool_unaffected_by_graph_unavailable(monkeypatch, tmp_path):
     """GRAPH_ENABLED=false (or a failed backend) must never break core STDIO tools."""
     stdio = _isolated_stdio(monkeypatch, tmp_path)
-    monkeypatch.setattr(stdio.graph_supervisor, "is_available", lambda: False)
+    monkeypatch.setattr(stdio.graph_supervisor, "get_client", lambda: None)
 
     result = asyncio.run(stdio.marm_notebook(action="status"))
 
@@ -1252,8 +1254,8 @@ def test_stdio_log_entry_persists(tmp_path):
 
 
 def test_stdio_protocol_injected_on_first_tool_call_not_on_second(monkeypatch):
-    import marm_mcp_server.server_stdio as stdio
     import marm_mcp_server.core.stdio_tool_lifecycle as lifecycle
+    import marm_mcp_server.server_stdio as stdio
 
     async def _noop(*args, **kwargs):
         return None
@@ -1282,8 +1284,8 @@ def test_stdio_protocol_injected_on_first_tool_call_not_on_second(monkeypatch):
 
 
 def test_stdio_compaction_injection_wraps_tool_result(monkeypatch, tmp_path):
-    import marm_mcp_server.server_stdio as stdio
     import marm_mcp_server.core.stdio_tool_lifecycle as lifecycle
+    import marm_mcp_server.server_stdio as stdio
 
     async def _noop(*args, **kwargs):
         return None
@@ -1313,8 +1315,8 @@ def test_stdio_compaction_injection_wraps_tool_result(monkeypatch, tmp_path):
 
 
 def test_stdio_protocol_call_suppresses_same_call_compaction(monkeypatch, tmp_path):
-    import marm_mcp_server.server_stdio as stdio
     import marm_mcp_server.core.stdio_tool_lifecycle as lifecycle
+    import marm_mcp_server.server_stdio as stdio
 
     calls = {"claim": 0}
 

@@ -108,6 +108,11 @@ class CbmClient:
         self._reader: Optional[threading.Thread] = None
         self._stderr_reader: Optional[threading.Thread] = None
         self._next_id = 0
+        # close() is terminal. Without this, close() only clears _proc, which
+        # makes _alive() False rather than making the instance unusable, and the
+        # respawn in _call_tool_locked then starts a child that whoever owns this
+        # client has already disowned.
+        self._closed = False
 
         # Populated at handshake; the true schema-contract version (binary's, not pip's).
         self.server_version: Optional[str] = None
@@ -119,6 +124,13 @@ class CbmClient:
         return self._proc is not None and self._proc.poll() is None
 
     def _spawn(self) -> None:
+        # Here rather than in each caller: four paths reach this (start,
+        # list_tools, _call_tool_locked, _force_respawn), each gated on
+        # _alive(), which reads _proc and so cannot tell a closed client from a
+        # never-started one. Guarding one caller leaves the rest able to start a
+        # process whoever closed this client will never see or shut down.
+        if self._closed:
+            raise CbmError("client is closed")
         logger.info("cbm.spawn", command=self._command, cwd=self._cwd)
         try:
             self._proc = subprocess.Popen(
@@ -207,6 +219,7 @@ class CbmClient:
 
     def close(self) -> None:
         with self._lock:
+            self._closed = True
             proc = self._proc
             self._proc = None
         if proc and proc.poll() is None:

@@ -21,15 +21,13 @@ from .compaction import trigger_compaction
 from .memory_db import (
     ConnectionContext,
     SQLiteConnectionPool,
+    init_database,
 )
 from .memory_db import _get_compaction_write_count as _get_compaction_write_count_db
 from .memory_db import (
     _increment_compaction_write_count as _increment_compaction_write_count_db,
 )
 from .memory_db import _set_compaction_write_count as _set_compaction_write_count_db
-from .memory_db import (
-    init_database,
-)
 from .memory_delete import _delete_memories
 from .memory_ops import (
     _replace_memory,
@@ -50,8 +48,8 @@ from .memory_utils import (  # noqa: F401
     _is_exact_query,
     _safe_fts_query,
     _safe_print,
-    _wide_fts_query,
     _temporal_score,
+    _wide_fts_query,
     sanitize_content,
 )
 from .write_queue import WriteQueue

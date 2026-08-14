@@ -2,8 +2,8 @@ import asyncio
 import sqlite3
 
 import pytest
-
 from conftest import load_isolated_server, local_client
+
 from marm_mcp_server.core import concept_db as concept_db_module
 from marm_mcp_server.core.concept_db import (
     ConceptDB,
@@ -12,11 +12,11 @@ from marm_mcp_server.core.concept_db import (
     mark_schema_current,
 )
 from marm_mcp_server.core.response_limiter import MCPResponseLimiter
+from marm_mcp_server.services import recall as recall_service
 from marm_mcp_server.services.graph_context import (
     attach_graph_context,
     get_graph_context,
 )
-from marm_mcp_server.services import recall as recall_service
 
 
 def _seed_graph(db_path):

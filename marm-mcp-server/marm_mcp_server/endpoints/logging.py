@@ -1,9 +1,10 @@
 """Logging endpoints for MARM MCP Server."""
 
-from fastapi import HTTPException, APIRouter, Query
 from typing import Optional
 
-from ..core.models import LogEntryRequest, DeleteRequest
+from fastapi import APIRouter, HTTPException, Query
+
+from ..core.models import DeleteRequest, LogEntryRequest
 from ..services.log_entry import (
     create_log_entry,
     delete_log_or_notebook_entry,

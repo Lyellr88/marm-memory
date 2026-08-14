@@ -4,9 +4,9 @@ Verifies: full protocol on first MCP tool call, lite protocol every 30 calls,
 coexistence with compaction, dict eviction, and STDIO counter behavior.
 """
 
-import json
 import asyncio
 import importlib
+import json
 import time
 from unittest.mock import AsyncMock, MagicMock
 
@@ -256,8 +256,8 @@ def test_hard_cap_limits_call_counts(monkeypatch, tmp_path):
 
 def test_stdio_lite_injected_on_interval(monkeypatch, tmp_path):
     """STDIO transport injects lite every 30 calls."""
-    import marm_mcp_server.server_stdio as stdio
     import marm_mcp_server.core.stdio_tool_lifecycle as lifecycle
+    import marm_mcp_server.server_stdio as stdio
     import marm_mcp_server.services.notebook as notebook_service
     from marm_mcp_server.core.memory import MARMMemory
 
@@ -302,8 +302,8 @@ def test_stdio_lite_injected_on_interval(monkeypatch, tmp_path):
 
 def test_stdio_lite_and_compaction_coexist(monkeypatch, tmp_path):
     """STDIO: on call 30, lite AND compaction both appear in result."""
-    import marm_mcp_server.server_stdio as stdio
     import marm_mcp_server.core.stdio_tool_lifecycle as lifecycle
+    import marm_mcp_server.server_stdio as stdio
     import marm_mcp_server.services.notebook as notebook_service
     from marm_mcp_server.core.memory import MARMMemory
 

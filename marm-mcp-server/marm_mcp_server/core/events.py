@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from typing import Dict, List, Callable
+from typing import Callable, Dict, List
 
 
 class MARMEvents:

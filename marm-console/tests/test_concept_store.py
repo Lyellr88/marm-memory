@@ -1,12 +1,12 @@
 """Bounded-traversal and overview tests for concept_store against a real
 SQLite database using the production schema from marm-mcp-server."""
 
+import itertools
+import re
 import sqlite3
 from array import array
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-import re
-
 
 from marm_mcp_server.console import (
     concept_graph_overview,
@@ -281,7 +281,7 @@ def test_graph_overview_samples_deterministically_and_keeps_connections(
     monkeypatch.setattr(concept_graph_overview, "SAMPLED_ATLAS_MAX_EDGES", 6)
     db = make_db(tmp_path)
     entities = [add_entity(db, f"node-{index}") for index in range(12)]
-    for source, target in zip(entities, entities[1:]):
+    for source, target in itertools.pairwise(entities):
         add_edge(db, source, target, "uses")
 
     first = concept_graph_overview.graph_overview(db)

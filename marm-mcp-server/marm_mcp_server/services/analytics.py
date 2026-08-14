@@ -1,7 +1,7 @@
 """Usage analytics tracking for MARM MCP Server."""
 
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timezone
 
 import structlog
 
@@ -38,7 +38,7 @@ def track_usage(
                 VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
                 (
-                    datetime.now().isoformat(),
+                    datetime.now(timezone.utc).isoformat(),
                     event_type,
                     endpoint,
                     user_data.get("user_agent", "unknown") if user_data else "unknown",
@@ -48,6 +48,8 @@ def track_usage(
                 ),
             )
 
-        logger.info("Usage tracked", event_type=event_type, endpoint=endpoint)
+        # debug, not info: this now also runs once per marm_smart_recall, and a
+        # line per recall confirming an analytics insert is noise at info level.
+        logger.debug("Usage tracked", event_type=event_type, endpoint=endpoint)
     except Exception as e:
         logger.warning("Analytics tracking failed", error=str(e))

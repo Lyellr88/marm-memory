@@ -8,13 +8,13 @@ Covers:
 """
 
 import uuid as _uuid_module
-from datetime import datetime, timezone as _timezone
+from datetime import datetime
+from datetime import timezone as _timezone
 
 import numpy as np
 import pytest
 
 from marm_mcp_server.core.memory import MARMMemory, _is_exact_query
-
 
 # ---------------------------------------------------------------------------
 # _is_exact_query  — detection heuristics
@@ -585,9 +585,10 @@ async def test_exact_lane_returns_empty_when_both_fts_and_like_miss(
 
 def test_http_endpoint_accepts_exact_mode_exact(tmp_path):
     """The HTTP endpoint must accept exact_mode='exact' without error."""
-    from fastapi.testclient import TestClient
-    from marm_mcp_server.endpoints.memory import router
     from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from marm_mcp_server.endpoints.memory import router
 
     app = FastAPI()
     app.include_router(router)
@@ -607,9 +608,10 @@ def test_http_endpoint_accepts_exact_mode_exact(tmp_path):
 
 def test_http_endpoint_accepts_exact_mode_semantic(tmp_path):
     """The HTTP endpoint must accept exact_mode='semantic' without error."""
-    from fastapi.testclient import TestClient
-    from marm_mcp_server.endpoints.memory import router
     from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from marm_mcp_server.endpoints.memory import router
 
     app = FastAPI()
     app.include_router(router)
@@ -628,9 +630,10 @@ def test_http_endpoint_accepts_exact_mode_semantic(tmp_path):
 
 def test_http_endpoint_rejects_invalid_exact_mode():
     """The HTTP endpoint must reject unknown exact_mode values with 422."""
-    from fastapi.testclient import TestClient
-    from marm_mcp_server.endpoints.memory import router
     from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from marm_mcp_server.endpoints.memory import router
 
     app = FastAPI()
     app.include_router(router)

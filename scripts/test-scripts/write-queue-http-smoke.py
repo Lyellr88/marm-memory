@@ -16,7 +16,7 @@ import urllib.request
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -186,7 +186,7 @@ def percentile(values: list[float], pct: float) -> float:
     if not values:
         return 0.0
     values = sorted(values)
-    idx = int(round((pct / 100.0) * (len(values) - 1)))
+    idx = round((pct / 100.0) * (len(values) - 1))
     return values[idx]
 
 
@@ -307,7 +307,7 @@ def aggregate_results(results: list[RequestResult]) -> dict:
 def write_artifacts(args: argparse.Namespace, payload: dict) -> Path:
     out_dir = Path(args.out_dir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%S")
     json_path = out_dir / f"{args.out_prefix}-{stamp}.json"
     json_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     return json_path
@@ -467,7 +467,7 @@ def main() -> int:
             break
     if not args.no_write_artifacts:
         combined_payload = {
-            "generated_at": datetime.now().isoformat(),
+            "generated_at": datetime.now(timezone.utc).isoformat(),
             "base_url": base_url,
             "config": {
                 "total_requests": args.total_requests,

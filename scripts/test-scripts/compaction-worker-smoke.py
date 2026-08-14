@@ -15,7 +15,6 @@ import tempfile
 import time
 import urllib.error
 import urllib.request
-from urllib.parse import urlparse
 import uuid
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -23,6 +22,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlparse
 
 from marm_mcp_server.core.consolidation import compute_content_hash
 
@@ -700,7 +700,7 @@ def run_auto_apply_flow(args: argparse.Namespace, db_path: Path) -> dict:
 def write_artifact(args: argparse.Namespace, payload: dict) -> Path:
     out_dir = Path(args.out_dir).resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now().strftime("%Y-%m-%dT%H-%M-%S")
+    stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H-%M-%S")
     path = out_dir / f"{args.out_prefix}-{stamp}.json"
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     return path
@@ -735,7 +735,7 @@ def main() -> int:
     base_url = args.base_url
     db_path = Path(args.db_path).expanduser().resolve() if args.db_path else None
     exit_code = 0
-    started_at = datetime.now().isoformat()
+    started_at = datetime.now(timezone.utc).isoformat()
 
     try:
         if args.spawn_server:
@@ -833,7 +833,7 @@ def main() -> int:
                 exit_code = 1
 
         artifact_payload = {
-            "generated_at": datetime.now().isoformat(),
+            "generated_at": datetime.now(timezone.utc).isoformat(),
             "started_at": started_at,
             "base_url": base_url,
             "db_path": str(db_path),

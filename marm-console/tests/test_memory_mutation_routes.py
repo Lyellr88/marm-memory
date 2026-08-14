@@ -1,7 +1,6 @@
 import sqlite3
 
 from fastapi.testclient import TestClient
-
 from marm_mcp_server.console import app as console_app
 from marm_mcp_server.console import memory_store
 

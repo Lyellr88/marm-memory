@@ -189,8 +189,14 @@ def get_analytics_db_path() -> str:
 
     if os.path.exists("/app/data"):
         return "/app/data/marm_usage_analytics.db"
-    else:
-        return "marm_usage_analytics.db"
+
+    # ~/.marm, matching get_marm_db_path above. A bare relative name resolved
+    # against whatever directory the server was started from, so the file
+    # followed the launch location instead of the install and landed in the
+    # user's repo often enough to earn a .gitignore entry.
+    marm_dir = Path.home() / ".marm"
+    marm_dir.mkdir(exist_ok=True)
+    return str(marm_dir / "marm_usage_analytics.db")
 
 
 ANALYTICS_DB_PATH = get_analytics_db_path()

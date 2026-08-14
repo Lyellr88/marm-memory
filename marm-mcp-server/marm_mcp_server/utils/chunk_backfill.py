@@ -22,7 +22,7 @@ from ..core.memory_utils import (
     _chunk_text,
     _embedding_to_bytes,
 )
-from .embedding_migration import _Encoder, _encode_all, _load_encoder
+from .embedding_migration import _encode_all, _Encoder, _load_encoder
 from .embedding_state import get_default_concept_db_path, inspect_embedding_state
 
 _MEMORY_PROFILE = {

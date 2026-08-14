@@ -26,7 +26,6 @@ from ..config.settings import (
     CONCEPT_INDEX_MAX_ATTEMPTS,
 )
 
-
 # SQLite's default parameter ceiling is 999. A full-corpus build settles far
 # more ids than that in one call.
 _DELETE_CHUNK = 500

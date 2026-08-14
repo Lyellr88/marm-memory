@@ -8,7 +8,6 @@ import pytest
 from marm_mcp_server.core.consolidation import find_semantic_duplicate
 from marm_mcp_server.core.memory import MARMMemory
 
-
 # --- update_memory direct tests ---
 
 

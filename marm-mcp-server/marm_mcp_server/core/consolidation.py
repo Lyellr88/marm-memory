@@ -10,7 +10,7 @@ import numpy as np
 if TYPE_CHECKING:
     from .memory import MARMMemory
 
-from ..config.settings import MARM_PROJECT, MARM_PLATFORM
+from ..config.settings import MARM_PLATFORM, MARM_PROJECT
 
 logger = logging.getLogger(__name__)
 
