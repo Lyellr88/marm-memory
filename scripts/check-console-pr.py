@@ -31,6 +31,8 @@ CONSOLE = "marm-console"
 ASSET_DIR = "artifacts/marm-console/dist/public/assets"
 BASE_REF = "origin/MARM-main"
 
+_created_refs: list[str] = []
+
 
 def run(
     cmd: list[str], cwd: Path, timeout: int = 900
@@ -53,8 +55,8 @@ def tool_missing() -> list[str]:
     return [t for t in ("node", "pnpm", "gh", "git") if shutil.which(t) is None]
 
 
-def fetch_pr(number: str) -> tuple[str, str]:
-    """Fetch a PR into a local ref. Returns (ref, label suffix).
+def fetch_pr(number: str) -> tuple[str, str, bool]:
+    """Fetch a PR into a private ref. Returns (ref, label suffix, mergeable).
 
     Prefers refs/pull/N/merge, GitHub's preview of the PR already merged into
     the base. Testing the head alone compares a branch that may predate recent
@@ -62,13 +64,19 @@ def fetch_pr(number: str) -> tuple[str, str]:
     PR. Falls back to the head when no merge ref exists, which is GitHub's way
     of saying the PR does not merge cleanly.
     """
-    local = f"console-check/pr{number}"
-    for ref, suffix in ((f"refs/pull/{number}/merge", "merged"), (f"refs/pull/{number}/head", "head only, does not merge cleanly")):
+    # Under refs/console-check/ rather than refs/heads/: a branch there would
+    # collide with a developer's own branch of that name, which cleanup deletes.
+    local = f"refs/console-check/pr{number}"
+    for ref, suffix, mergeable in (
+        (f"refs/pull/{number}/merge", "merged", True),
+        (f"refs/pull/{number}/head", "head only, does not merge cleanly", False),
+    ):
         proc = run(
             ["git", "fetch", "--force", "origin", f"{ref}:{local}"], REPO_ROOT, 120
         )
         if proc.returncode == 0:
-            return local, suffix
+            _created_refs.append(local)
+            return local, suffix, mergeable
     raise RuntimeError(f"could not fetch PR {number}: no merge or head ref")
 
 
@@ -119,12 +127,8 @@ def prune(workdir: Path) -> None:
     temp dir; nested node_modules paths regularly defeat rmtree on Windows, and
     a leftover temp directory is not worth failing the run over."""
     run(["git", "worktree", "prune"], REPO_ROOT, 60)
-    for ref in run(
-        ["git", "for-each-ref", "--format=%(refname:short)", "refs/heads/console-check"],
-        REPO_ROOT,
-        60,
-    ).stdout.split():
-        run(["git", "branch", "-D", ref], REPO_ROOT, 60)
+    for ref in _created_refs:
+        run(["git", "update-ref", "-d", ref], REPO_ROOT, 60)
     shutil.rmtree(workdir, ignore_errors=True)
 
 
@@ -147,17 +151,22 @@ def main() -> int:
         print(f"FAIL  missing required tools: {', '.join(missing)}")
         return 2
 
-    run(["git", "fetch", "--quiet", "origin", "MARM-main"], REPO_ROOT, 120)
+    # Checked, not fired and forgotten: silently reusing a stale origin/MARM-main
+    # makes base drift show up as a bundle difference the PR did not cause.
+    fetched = run(["git", "fetch", "--quiet", "origin", "MARM-main"], REPO_ROOT, 120)
+    if fetched.returncode != 0:
+        print(f"FAIL  could not fetch {BASE_REF}:\n      {fetched.stderr.strip()}")
+        return 2
 
-    targets: list[tuple[str, str]] = []
+    targets: list[tuple[str, str, bool]] = []
     for number in args.prs:
         try:
-            ref, suffix = fetch_pr(number)
-            targets.append((ref, f"PR #{number} ({suffix})"))
+            ref, suffix, mergeable = fetch_pr(number)
+            targets.append((ref, f"PR #{number} ({suffix})", mergeable))
         except RuntimeError as exc:
             print(f"FAIL  {exc}")
             return 2
-    targets += [(ref, ref) for ref in args.ref]
+    targets += [(ref, ref, True) for ref in args.ref]
 
     workdir = Path(tempfile.mkdtemp(prefix="marm-console-check-"))
     results: list[tuple[str, bool, str]] = []
@@ -174,7 +183,7 @@ def main() -> int:
                 return 2
             print(f"  baseline ok, {len(baseline)} asset(s)")
 
-        for ref, label in targets:
+        for ref, label, mergeable in targets:
             print(f"\n{label}  ({ref})")
             ok, detail, produced = check(ref, label, workdir)
             if ok and baseline:
@@ -183,6 +192,11 @@ def main() -> int:
                 else:
                     changed = sorted(produced ^ baseline)
                     detail += "\n      bundle changed: " + ", ".join(changed[:6])
+            if ok and not mergeable:
+                # A clean build of the head says nothing about a PR GitHub cannot
+                # merge, so the verdict has to override the build result.
+                ok = False
+                detail += "\n      no merge ref: GitHub cannot merge this PR cleanly"
             results.append((label, ok, detail))
     finally:
         prune(workdir)

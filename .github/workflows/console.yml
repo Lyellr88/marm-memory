@@ -16,16 +16,25 @@ permissions:
   contents: read
   pull-requests: read
 
+# Keyed on the PR number, not head_ref: two PRs from different forks can both
+# use a branch called `main`, and sharing a group means one cancels the other's
+# required check, leaving that PR blocked with nothing to report.
 concurrency:
-  group: console-${{ github.head_ref || github.ref }}
+  group: console-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   console:
     runs-on: ubuntu-latest
     steps:
+      # persist-credentials: false because `pnpm install` below runs lifecycle
+      # scripts from a PR-controlled lockfile, and the default leaves the job's
+      # token in .git/config where those scripts can read it. The gh call below
+      # passes GH_TOKEN itself, so it is unaffected.
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - name: Detect relevant changes
         id: scope

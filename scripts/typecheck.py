@@ -1,15 +1,16 @@
 #!/usr/bin/env python3
 """Run mypy on the checked scope and gate on the error baseline.
 
-Local only for now. This fails when the count goes *up*, not when it is nonzero.
-Lower BASELINE as errors are fixed; that edit is the record of progress.
+This fails when the count goes *up*, not when it is nonzero. Lower BASELINE as
+errors are fixed; that edit is the record of progress.
 
 The remaining 2 are both endpoints/graph.py's Optional get_client() race, which
 needs a supervisor-level fix (see docs/current/graph-client-none-guard.md), not
 an annotation. Reaching 0 is a code change, not a typing one.
 
-Promoting this to CI needs requirements.txt plus a pinned mypy. The pin is not
-optional: BASELINE is version-specific.
+Runs in python.yml and publish-mcp.yml as well as locally. BASELINE is specific
+to a mypy version and to its stub versions, so all three places pin the same
+ones (pyproject.toml's dev extra included); upgrading either is a re-baseline.
 
     python scripts/typecheck.py            summary + gate
     python scripts/typecheck.py --raw      full mypy output, no gate

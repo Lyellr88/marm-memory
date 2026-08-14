@@ -28,17 +28,24 @@ permissions:
   pull-requests: read
 
 # Several pushes in a row would otherwise queue a full suite each. Only the
-# newest run per ref matters.
+# newest run per ref matters. Keyed on the PR number rather than head_ref: two
+# PRs from different forks can both use a branch called `main`, and sharing a
+# group means one cancels the other's required check.
 concurrency:
-  group: python-${{ github.head_ref || github.ref }}
+  group: python-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   python:
     runs-on: ubuntu-latest
     steps:
+      # persist-credentials: false because pip installs and runs PR-controlled
+      # package code, and the default leaves the job's token in .git/config where
+      # that code can read it. The gh call below passes GH_TOKEN itself.
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       # Replaces the trigger-level path filter. Asking the API for the PR's file
       # list avoids reconstructing a diff range, which is fragile on force-pushes
@@ -84,17 +91,18 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pip-
 
-      # mypy is pinned because scripts/typecheck.py gates on an absolute error
-      # count. A different mypy reports a different count and fails the job on a
-      # PR that changed nothing. Keep this equal to the local mypy that set
-      # BASELINE.
+      # mypy and its stubs are pinned because scripts/typecheck.py gates on an
+      # absolute error count, and either one reports a different count at a
+      # different version, failing a PR that changed nothing. The dev extra in
+      # pyproject.toml pins the same versions, so a developer checks against
+      # this checker rather than a newer one that resolves from a floor.
       - name: Install dependencies
         if: steps.scope.outputs.run == 'true'
         run: |
           python -m pip install --upgrade pip
           pip install -r marm-mcp-server/requirements.txt
           pip install -e './marm-mcp-server' --no-deps
-          pip install pytest pytest-asyncio pytest-cov jsonschema requests mypy==2.1.0 types-psutil
+          pip install pytest pytest-asyncio pytest-cov jsonschema requests mypy==2.1.0 types-psutil==7.2.2.20260518
 
       - name: Validate server.json
         if: steps.scope.outputs.run == 'true'
