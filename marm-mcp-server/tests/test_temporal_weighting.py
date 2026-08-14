@@ -31,9 +31,8 @@ def test_temporal_score_bad_timestamp_returns_neutral():
 
 
 def test_temporal_score_naive_timestamp_treated_as_utc():
-    # The naive timestamp is the input under test, so DTZ005 is suppressed
-    # below rather than satisfied: adding tzinfo asserts the opposite.
-    ts = datetime.now().replace(tzinfo=None).isoformat()  # noqa: DTZ005
+    # Build from UTC, then strip tzinfo to model a legacy naive timestamp.
+    ts = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
     assert _temporal_score(ts, 30) > 0.99
 
 

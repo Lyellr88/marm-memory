@@ -17,16 +17,7 @@ import sys
 from pathlib import Path
 
 import pytest
-
-
-class _FakeRequest:
-    """The two attributes track_endpoint_usage reads off a Request."""
-
-    def __init__(self) -> None:
-        self.headers = {"user-agent": "regression-probe/1.0"}
-
-    class client:
-        host = "10.1.2.3"
+from fastapi.testclient import TestClient
 
 
 def _reimport(monkeypatch, tmp_path, analytics_path=None):
@@ -41,9 +32,9 @@ def _reimport(monkeypatch, tmp_path, analytics_path=None):
         monkeypatch.setenv("MARM_ANALYTICS_DB_PATH", str(analytics_path))
 
     settings = importlib.import_module("marm_mcp_server.config.settings")
-    endpoints = importlib.import_module("marm_mcp_server.endpoints.memory")
+    server = importlib.import_module("marm_mcp_server.server")
     analytics = importlib.import_module("marm_mcp_server.services.analytics")
-    return settings, endpoints, analytics
+    return settings, server, analytics
 
 
 def _events(db_path):
@@ -51,6 +42,19 @@ def _events(db_path):
         return conn.execute(
             "SELECT event_type, endpoint, user_agent, ip_address FROM usage_events"
         ).fetchall()
+
+
+def _recall_through_http(app) -> None:
+    client = TestClient(app, client=("127.0.0.1", 50000))
+    try:
+        response = client.post(
+            "/marm_smart_recall",
+            headers={"user-agent": "regression-probe/1.0"},
+            json={"query": "analytics route regression", "limit": 1},
+        )
+    finally:
+        client.close()
+    assert response.status_code == 200
 
 
 def test_endpoint_tracking_writes_to_the_configured_analytics_db(monkeypatch, tmp_path):
@@ -64,16 +68,14 @@ def test_endpoint_tracking_writes_to_the_configured_analytics_db(monkeypatch, tm
     launch_dir = tmp_path / "launch"
     launch_dir.mkdir()
 
-    _, endpoints, _ = _reimport(monkeypatch, tmp_path, configured)
+    _, server, _ = _reimport(monkeypatch, tmp_path, configured)
     monkeypatch.chdir(launch_dir)
 
-    endpoints.track_endpoint_usage(
-        "marm_smart_recall", _FakeRequest(), {"query_length": 7}
-    )
+    _recall_through_http(server.app)
 
     assert configured.exists(), "the configured analytics database was not written"
     assert _events(configured) == [
-        ("endpoint_usage", "marm_smart_recall", "regression-probe/1.0", "10.1.2.3")
+        ("endpoint_usage", "marm_smart_recall", "regression-probe/1.0", "127.0.0.1")
     ]
     assert list(launch_dir.iterdir()) == [], (
         f"a database was created in the launch directory: "
@@ -92,11 +94,11 @@ def test_endpoint_and_lifecycle_tracking_share_one_database(monkeypatch, tmp_pat
     launch_dir = tmp_path / "launch"
     launch_dir.mkdir()
 
-    _, endpoints, analytics = _reimport(monkeypatch, tmp_path, configured)
+    _, server, analytics = _reimport(monkeypatch, tmp_path, configured)
     monkeypatch.chdir(launch_dir)
 
     analytics.track_usage("server_startup", user_data={"version": "test"})
-    endpoints.track_endpoint_usage("marm_smart_recall", _FakeRequest(), None)
+    _recall_through_http(server.app)
 
     assert [row[0] for row in _events(configured)] == [
         "server_startup",
@@ -126,13 +128,13 @@ def test_default_analytics_path_is_under_the_marm_home(monkeypatch, tmp_path):
     launch_dir.mkdir()
     monkeypatch.chdir(launch_dir)
 
-    settings, endpoints, _ = _reimport(monkeypatch, tmp_path, analytics_path=None)
+    settings, server, _ = _reimport(monkeypatch, tmp_path, analytics_path=None)
 
     resolved = Path(settings.ANALYTICS_DB_PATH)
     assert resolved.is_absolute(), f"default is not absolute: {resolved}"
     assert fake_home in resolved.parents, f"default is outside the home: {resolved}"
 
-    endpoints.track_endpoint_usage("marm_smart_recall", _FakeRequest(), None)
+    _recall_through_http(server.app)
 
     assert _events(resolved)
     assert list(launch_dir.iterdir()) == []
