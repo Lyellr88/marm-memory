@@ -132,20 +132,12 @@ markers = [
 ]
 
 [tool.ruff]
-target-version = "py310"
-line-length = 88
-
-[tool.ruff.lint]
-select = ["E", "F", "B", "RUF"]
-ignore = [
-    "E501",    # line too long — ruff format handles what it can
-    "RUF013",  # implicit Optional — existing signatures, defer to type refactor pass
-    "B905",    # zip() without strict= — pre-existing bench/test pattern
-]
-
-[tool.ruff.format]
-quote-style = "double"
-indent-style = "space"
+# The contract itself lives in the repo root's ruff.toml so that this package,
+# scripts/, and marm-console/tests/ cannot drift apart. Kept as an extend rather
+# than deleted outright: CI lints from inside this directory, and a pyproject
+# with no [tool.ruff] is skipped during config discovery, which makes the
+# inherited settings invisible from here.
+extend = "../ruff.toml"
 
 # MCP Server Configuration
 [project.entry-points."mcp.servers"]

@@ -70,8 +70,9 @@ jobs:
       - name: Typecheck gate
         run: python scripts/typecheck.py
 
+      # From the repo root so scripts/ and marm-console/tests are covered too,
+      # matching ruff.yml. All three trees resolve the root ruff.toml.
       - name: Lint and format
-        working-directory: marm-mcp-server
         run: |
           ruff check
           ruff format --check

@@ -3,19 +3,18 @@
 import json
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 
 import numpy as np
 import pytest
 
 from marm_mcp_server.core.compaction import (
-    _compute_candidate_hash,
     _build_compaction_prompt_block,
+    _compute_candidate_hash,
     mark_stale_candidates,
     persist_candidates_to_staging,
 )
 from marm_mcp_server.core.memory import MARMMemory
-
 
 # --- helpers ---
 
@@ -604,6 +603,7 @@ async def test_stage_succeeds_without_source_memory_ids(monkeypatch, tmp_path):
 @pytest.mark.asyncio
 async def test_unified_compaction_stage_requires_summaries(monkeypatch, tmp_path):
     from pydantic import ValidationError
+
     from marm_mcp_server.core.models import CompactionRequest
 
     with pytest.raises(ValidationError, match="summaries is required"):
@@ -924,6 +924,7 @@ async def test_unified_compaction_apply_action(monkeypatch, tmp_path):
 @pytest.mark.asyncio
 async def test_unified_compaction_apply_requires_candidate_id(monkeypatch, tmp_path):
     from pydantic import ValidationError
+
     from marm_mcp_server.core.models import CompactionRequest
 
     with pytest.raises(ValidationError, match="candidate_id is required"):

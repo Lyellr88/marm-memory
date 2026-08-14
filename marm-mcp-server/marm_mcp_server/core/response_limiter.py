@@ -2,7 +2,7 @@
 
 import json
 import sys
-from typing import Dict, List, Any, Tuple
+from typing import Any, Dict, List, Tuple
 
 
 class MCPResponseLimiter:

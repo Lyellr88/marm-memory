@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, timezone
 
 from ..core.consolidation import compute_content_hash
-from ..core.memory import MARMMemory, sanitize_content, _safe_print
+from ..core.memory import MARMMemory, _safe_print, sanitize_content
 from ..core.memory_utils import _embedding_to_bytes
 
 

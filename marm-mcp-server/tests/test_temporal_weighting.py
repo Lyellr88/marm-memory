@@ -1,11 +1,10 @@
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 
 import numpy as np
 import pytest
 
-from marm_mcp_server.core.memory import MARMMemory, _temporal_score
 import marm_mcp_server.core.memory_recall as memory_recall_module
-
+from marm_mcp_server.core.memory import MARMMemory, _temporal_score
 
 # --- _temporal_score unit tests ---
 
@@ -32,7 +31,9 @@ def test_temporal_score_bad_timestamp_returns_neutral():
 
 
 def test_temporal_score_naive_timestamp_treated_as_utc():
-    ts = datetime.now().replace(tzinfo=None).isoformat()
+    # The naive timestamp is the input under test, so DTZ005 is suppressed
+    # below rather than satisfied: adding tzinfo asserts the opposite.
+    ts = datetime.now().replace(tzinfo=None).isoformat()  # noqa: DTZ005
     assert _temporal_score(ts, 30) > 0.99
 
 

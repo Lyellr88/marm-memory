@@ -27,8 +27,8 @@ import os
 import re
 import sys
 import time
-import urllib.request
 import urllib.error
+import urllib.request
 from collections import defaultdict
 from pathlib import Path
 
@@ -401,7 +401,7 @@ def recall_and_score(base_url, api_key, limit_k, limit_samples=None):
     print(f"\n=== LoCoMo retrieval results (limit={limit_k}) ===")
     header = f"{'category':<14}{'n':>6}{'any-hit':>10}{'all-hit':>10}{'ev-recall':>11}{'sem-any':>10}{'log-any':>10}"
     print(header)
-    rows = list(report["per_category"].items()) + [("OVERALL", summary)]
+    rows = [*list(report["per_category"].items()), ("OVERALL", summary)]
     for cat, d in rows:
         print(
             f"{cat:<14}{d['total']:>6}{d['any_hit_rate']:>10.1%}{d['all_hit_rate']:>10.1%}"

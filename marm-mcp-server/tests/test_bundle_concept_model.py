@@ -4,7 +4,6 @@ import importlib.util
 import zipfile
 from pathlib import Path
 
-
 SCRIPT_PATH = Path(__file__).parents[1] / "scripts" / "bundle-concept-model.py"
 SPEC = importlib.util.spec_from_file_location("bundle_concept_model", SCRIPT_PATH)
 assert SPEC is not None and SPEC.loader is not None

@@ -1,13 +1,13 @@
 import importlib
+
 import pytest
+from conftest import load_isolated_server, local_client
 from pydantic import ValidationError
 
 import marm_mcp_server.services.recall as recall_mod
-from conftest import load_isolated_server, local_client
-from marm_mcp_server.core.models import SmartRecallRequest
 from marm_mcp_server.core.memory import MARMMemory
+from marm_mcp_server.core.models import SmartRecallRequest
 from marm_mcp_server.services.recall import _apply_detail_level, smart_recall
-
 
 # --- _apply_detail_level ---
 

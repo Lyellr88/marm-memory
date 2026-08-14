@@ -11,6 +11,7 @@ import threading
 from typing import Optional
 
 import structlog
+
 from marm_graph.config import settings as graph_settings
 from marm_graph.core import backend
 from marm_graph.core.cbm_client import CbmClient

@@ -37,13 +37,15 @@ _REPO_ROOT = os.path.dirname(
 )
 sys.path.insert(0, os.path.join(_REPO_ROOT, "marm-mcp-server"))
 
-from marm_mcp_server.core.memory import MARMMemory, _wide_fts_query  # noqa: E402
-from marm_mcp_server.core import consolidation  # noqa: E402
-from marm_mcp_server.core import memory_ops  # noqa: E402
 from marm_mcp_server.config.settings import (  # noqa: E402
     DEFAULT_SEMANTIC_DIM,
     FTS_CANDIDATE_LIMIT,
 )
+from marm_mcp_server.core import (  # noqa: E402
+    consolidation,
+    memory_ops,
+)
+from marm_mcp_server.core.memory import MARMMemory, _wide_fts_query  # noqa: E402
 
 # Top-K every timed recall in this script requests.
 RECALL_LIMIT = 5

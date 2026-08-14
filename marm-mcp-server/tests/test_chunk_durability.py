@@ -16,7 +16,7 @@ import pytest
 
 from marm_mcp_server.config.settings import DEFAULT_SEMANTIC_DIM
 from marm_mcp_server.core import memory as memory_module
-from marm_mcp_server.core.memory import MARMMemory, MEMORY_CHUNK_THRESHOLD_WORDS
+from marm_mcp_server.core.memory import MEMORY_CHUNK_THRESHOLD_WORDS, MARMMemory
 from marm_mcp_server.core.memory_utils import _write_chunks, drain_chunk_writes
 
 

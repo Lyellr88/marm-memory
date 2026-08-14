@@ -12,9 +12,6 @@ permissions:
 jobs:
   ruff:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: marm-mcp-server
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -31,6 +28,11 @@ jobs:
       - name: Install Ruff
         run: pip install ruff==0.16.2
 
+      # From the repo root, not marm-mcp-server. scripts/ and marm-console/tests
+      # were never linted by CI, so their result depended on whichever ruff a
+      # developer happened to have installed: 0.15.16 called scripts/ clean and
+      # 0.16.2 reported 111 findings against the same code. ruff.toml at the root
+      # is what all three trees now resolve to.
       - name: Run Ruff Check
         run: ruff check --output-format=github
 

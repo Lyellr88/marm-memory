@@ -17,28 +17,12 @@ import asyncio
 from typing import TYPE_CHECKING, Literal, Optional
 
 if TYPE_CHECKING:
-    from marm_graph.core.cbm_client import CbmClient
     from mcp.server.fastmcp import FastMCP
+
+    from marm_graph.core.cbm_client import CbmClient
 
 from pydantic import ValidationError
 
-from ..core.stdio_logging import _stdio_log
-from ..core.stdio_tool_lifecycle import _log_tool_call
-from marm_mcp_server.core.graph_index_lock import GraphIndexBusy, run_exclusive
-from marm_mcp_server.core.graph_index_worker import (
-    AUTO_ACTIONS,
-    auto_action,
-    index_repository,
-)
-from marm_mcp_server.core.graph_supervisor import graph_supervisor
-from marm_mcp_server.endpoints.concepts import (
-    marm_concept_build as _marm_concept_build_endpoint,
-    _run_recall,
-)
-from marm_mcp_server.core.models import (
-    ConceptBuildRequest,
-    ConceptRecallRequest,
-)
 from marm_graph.core import tool_router as graph_router
 from marm_graph.core.models import (
     CodeLookupRequest,
@@ -47,6 +31,26 @@ from marm_graph.core.models import (
     GraphIndexRequest,
     GraphTraceRequest,
 )
+from marm_mcp_server.core.graph_index_lock import GraphIndexBusy, run_exclusive
+from marm_mcp_server.core.graph_index_worker import (
+    AUTO_ACTIONS,
+    auto_action,
+    index_repository,
+)
+from marm_mcp_server.core.graph_supervisor import graph_supervisor
+from marm_mcp_server.core.models import (
+    ConceptBuildRequest,
+    ConceptRecallRequest,
+)
+from marm_mcp_server.endpoints.concepts import (
+    _run_recall,
+)
+from marm_mcp_server.endpoints.concepts import (
+    marm_concept_build as _marm_concept_build_endpoint,
+)
+
+from ..core.stdio_logging import _stdio_log
+from ..core.stdio_tool_lifecycle import _log_tool_call
 
 
 def _graph_unavailable() -> dict:

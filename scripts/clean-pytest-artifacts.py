@@ -7,7 +7,6 @@ import argparse
 import shutil
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parent.parent
 SERVER_ROOT = ROOT / "marm-mcp-server"
 CONSOLE_ROOT = ROOT / "marm-console"

@@ -3,7 +3,8 @@ import pathlib
 import sqlite3
 import sys
 import uuid as _uuid_module
-from datetime import datetime, timezone as _timezone
+from datetime import datetime
+from datetime import timezone as _timezone
 
 import numpy as np
 import pytest
@@ -12,7 +13,6 @@ from marm_mcp_server.core.memory import (
     MARMMemory,
     _safe_fts_query,
 )
-
 
 # --- _safe_fts_query ---
 

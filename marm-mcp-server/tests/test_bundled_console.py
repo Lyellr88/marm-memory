@@ -1,11 +1,10 @@
 import importlib
 
-from fastapi.testclient import TestClient
 import pytest
+from fastapi.testclient import TestClient
 
+from marm_mcp_server.console import auth, mcp_client
 from marm_mcp_server.console import cli as console_cli
-from marm_mcp_server.console import auth
-from marm_mcp_server.console import mcp_client
 from marm_mcp_server.console.app import app
 
 

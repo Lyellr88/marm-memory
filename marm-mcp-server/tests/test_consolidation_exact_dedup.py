@@ -5,7 +5,6 @@ import pytest
 from marm_mcp_server.core.consolidation import compute_content_hash
 from marm_mcp_server.core.memory import MARMMemory
 
-
 # --- compute_content_hash unit tests ---
 
 
@@ -187,6 +186,7 @@ async def test_concurrent_identical_writes_produce_one_row(monkeypatch, tmp_path
     # Regression: check-then-insert race — two concurrent writes of the same content must
     # not bypass Layer 1 dedup and insert duplicate rows. BEGIN IMMEDIATE closes the gap.
     import asyncio
+
     from marm_mcp_server.core import memory as memory_module
     from marm_mcp_server.core import memory_ops as memory_ops_module
 
@@ -215,6 +215,7 @@ async def test_race_window_sealed_by_begin_immediate(monkeypatch, tmp_path):
     # check and before BEGIN IMMEDIATE, then release them together. The under-lock
     # re-check must still collapse the duplicate write to a single row.
     import asyncio
+
     from marm_mcp_server.core import memory as memory_module
     from marm_mcp_server.core import memory_ops as memory_ops_module
 

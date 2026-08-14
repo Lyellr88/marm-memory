@@ -4,7 +4,6 @@ import asyncio
 import time
 from collections import OrderedDict
 
-
 _PROTOCOL_DELIVERY_MAX_SESSIONS = 4096
 _PROTOCOL_DELIVERY_TTL_SECONDS = 24 * 60 * 60
 _protocol_delivered_sessions: OrderedDict[str, float] = OrderedDict()

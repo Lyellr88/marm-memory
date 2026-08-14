@@ -237,8 +237,9 @@ async def test_mismatched_embedding_dimension_skipped_with_signal_without_breaki
     Regression for: old embeddings surviving a model change cause shape-mismatch errors
     swallowed by bare `except Exception: continue`, making memories vanish with no signal.
     """
-    import numpy as np
     import uuid
+
+    import numpy as np
 
     memory = MARMMemory(str(tmp_path / "memory.db"))
     correct_dim = 384
@@ -293,8 +294,9 @@ async def test_recall_similar_scan_truncated_fires_when_scan_limit_exceeded(
     logic) runs. Filter->rerank bypasses RECALL_SCAN_LIMIT entirely since it scores
     a fixed candidate set — truncation only applies to the semantic fallback lane.
     """
-    import numpy as np
     import uuid as uuid_module
+
+    import numpy as np
 
     from marm_mcp_server.core import memory as memory_module
     from marm_mcp_server.core import memory_recall as memory_recall_module
@@ -342,8 +344,9 @@ async def test_recall_similar_scan_not_truncated_when_under_limit(
     monkeypatch, tmp_path
 ):
     """recall_scan_truncated must be False when total rows are within RECALL_SCAN_LIMIT."""
-    import numpy as np
     import uuid as uuid_module
+
+    import numpy as np
 
     from marm_mcp_server.core import memory as memory_module
     from marm_mcp_server.core import memory_recall as memory_recall_module
@@ -386,8 +389,9 @@ async def test_recall_similar_scan_not_truncated_when_under_limit(
 @pytest.mark.asyncio
 async def test_recall_similar_vectorized_scores_preserve_ranking(tmp_path):
     """Vectorized scoring must preserve cosine ranking order."""
-    import numpy as np
     import uuid as uuid_module
+
+    import numpy as np
 
     mem = MARMMemory(str(tmp_path / "memory.db"))
     dim = 384
@@ -431,8 +435,9 @@ async def test_recall_similar_finds_match_past_old_1000_row_cliff(
     monkeypatch, tmp_path
 ):
     """Regression: a best match older than the old 1000-row window remains reachable."""
-    import numpy as np
     import uuid as uuid_module
+
+    import numpy as np
 
     from marm_mcp_server.core import memory as memory_module
     from marm_mcp_server.core import memory_recall as memory_recall_module

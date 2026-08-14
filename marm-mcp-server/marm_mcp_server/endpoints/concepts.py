@@ -23,8 +23,14 @@ from fastapi import APIRouter
 
 from ..config.settings import (
     CONCEPT_BUILD_ROW_CAP,
-    CONCEPTS_AVAILABLE,
     CONCEPT_DUPLICATE_SIMILARITY_THRESHOLD,
+    CONCEPTS_AVAILABLE,
+)
+from ..core import concept_queue
+from ..core.concept_build_lock import (
+    MANUAL_BUILD_LOCK_SECONDS,
+    ConceptBuildBusy,
+    concept_build_lock,
 )
 from ..core.concept_db import (
     ConceptDB,
@@ -32,12 +38,6 @@ from ..core.concept_db import (
     get_concept_db_path,
     inspect_concept_schema,
     mark_schema_current,
-)
-from ..core import concept_queue
-from ..core.concept_build_lock import (
-    MANUAL_BUILD_LOCK_SECONDS,
-    ConceptBuildBusy,
-    concept_build_lock,
 )
 from ..core.concept_extraction import extract_entities
 from ..core.graph_client import find_code_match, is_graph_available

@@ -5,7 +5,6 @@ import os
 import pathlib
 import sys
 
-
 _log_dir_env = os.environ.get("MARM_STDIO_LOG_DIR")
 _log_dir = (
     pathlib.Path(_log_dir_env)

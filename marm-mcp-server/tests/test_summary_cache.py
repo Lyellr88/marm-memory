@@ -6,7 +6,6 @@ import uuid
 
 from conftest import load_isolated_server, local_client
 
-
 # --- helpers ---
 
 

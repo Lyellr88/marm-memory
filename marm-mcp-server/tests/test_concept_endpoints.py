@@ -11,9 +11,9 @@ accuracy, so a fake ExtractionResult at that one boundary is appropriate
 
 import asyncio
 import importlib
-from pathlib import Path
 import sqlite3
 import sys
+from pathlib import Path
 
 import numpy as np
 import pytest

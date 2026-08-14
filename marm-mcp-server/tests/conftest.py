@@ -126,8 +126,8 @@ def binary() -> str:
 
 @pytest.fixture(scope="session")
 def graph_client(binary):
-    from marm_graph.core.cbm_client import CbmClient
     from marm_graph.config import settings as graph_settings
+    from marm_graph.core.cbm_client import CbmClient
 
     graph_settings.STORE_DIR.mkdir(parents=True, exist_ok=True)
     client = CbmClient(

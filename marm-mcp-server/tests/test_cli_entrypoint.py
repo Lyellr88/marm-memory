@@ -1,18 +1,18 @@
+import importlib
 import os
 import re
 import socket
 import subprocess
 import sys
 import time
-import importlib
 
 try:
     import tomllib
 except ModuleNotFoundError:  # Python 3.10
     import tomli as tomllib
 
-import requests
 import pytest
+import requests
 
 
 @pytest.mark.parametrize(

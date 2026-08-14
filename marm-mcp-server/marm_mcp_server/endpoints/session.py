@@ -1,14 +1,15 @@
 """Session endpoints for MARM MCP Server."""
 
-from fastapi import HTTPException, APIRouter
 import sqlite3
 from datetime import datetime, timezone
 
-from ..core.models import SessionRequest
-from ..core.memory import memory
+from fastapi import APIRouter, HTTPException
+
 from ..core.events import events
+from ..core.memory import memory
+from ..core.models import SessionRequest
+from ..services.documentation import docs_are_loaded, load_marm_documentation
 from ..utils.helpers import read_protocol_file
-from ..services.documentation import load_marm_documentation, docs_are_loaded
 
 router = APIRouter(prefix="", tags=["MARM Protocol"])
 

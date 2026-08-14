@@ -1,6 +1,7 @@
-import uuid
 import sqlite3
 import sys
+import uuid
+
 import pytest
 
 
@@ -14,8 +15,8 @@ def notebook_svc(monkeypatch, tmp_path):
     monkeypatch.setenv("MARM_ANALYTICS_DB_PATH", str(tmp_path / "nb-analytics.db"))
     monkeypatch.setenv("MARM_DOCS_DB_PATH", str(tmp_path / "nb-docs.db"))
 
-    from marm_mcp_server.services.notebook import notebook_dispatch
     from marm_mcp_server.core.memory import memory
+    from marm_mcp_server.services.notebook import notebook_dispatch
 
     monkeypatch.setattr(memory, "_encoder_failed", True)
     monkeypatch.setattr(memory, "active_notebook_entries_by_session", {})

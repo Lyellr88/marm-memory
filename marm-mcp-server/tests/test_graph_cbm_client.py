@@ -6,6 +6,7 @@ Pure envelope-decoding tests run everywhere; transport tests use the real binary
 import json
 
 import pytest
+from conftest import requires_binary
 
 from marm_graph.core.cbm_client import (
     CbmClient,
@@ -13,7 +14,6 @@ from marm_graph.core.cbm_client import (
     CbmTimeoutError,
     CbmToolError,
 )
-from conftest import requires_binary
 
 EXPECTED_TOOLS = {
     "index_repository",

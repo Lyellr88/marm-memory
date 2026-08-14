@@ -317,7 +317,7 @@ async def test_apply_compaction_write_inserts_summary_and_marks_sources(mem):
 
     now = datetime.now(timezone.utc).isoformat()
     candidate_id = str(uuid.uuid4())
-    snapshot = {mem_id: content_hash for mem_id, content_hash in ids_and_hashes}
+    snapshot = dict(ids_and_hashes)
     with mem.get_connection() as conn:
         conn.execute(
             "INSERT INTO compaction_staging "
@@ -425,7 +425,7 @@ async def test_auto_apply_skips_stale_snapshot_candidate(mem):
     source_ids = [m[0] for m in ids_and_hashes]
 
     # Snapshot with wrong hashes — will fail validation inside marm_apply_compaction
-    bad_snapshot = {sid: "wrong-hash" for sid in source_ids}
+    bad_snapshot = dict.fromkeys(source_ids, "wrong-hash")
     cid = _insert_staging_row(
         mem, session, source_ids, status="summary_staged", snapshot=bad_snapshot
     )
@@ -477,7 +477,7 @@ async def test_auto_apply_mixed_valid_and_stale(mem):
     # Stale candidate (bad snapshot)
     bad_ids_hashes = [_insert_memory_row(mem, session, f"bad m{i}") for i in range(3)]
     bad_source_ids = [m[0] for m in bad_ids_hashes]
-    bad_snapshot = {sid: "wrong-hash" for sid in bad_source_ids}
+    bad_snapshot = dict.fromkeys(bad_source_ids, "wrong-hash")
     bad_cid = _insert_staging_row(
         mem, session, bad_source_ids, status="summary_staged", snapshot=bad_snapshot
     )
@@ -527,6 +527,7 @@ async def test_auto_apply_routes_through_write_queue(mem):
 def test_auto_apply_disabled_by_default(monkeypatch):
     """COMPACTION_AUTO_APPLY_ENABLED is False when the env var is not set."""
     import importlib
+
     import marm_mcp_server.config.settings as settings_mod
 
     monkeypatch.delenv("COMPACTION_AUTO_APPLY_ENABLED", raising=False)

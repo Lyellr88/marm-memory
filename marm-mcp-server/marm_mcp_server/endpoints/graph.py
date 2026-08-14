@@ -16,6 +16,8 @@ from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field
+
 from marm_graph.core import tool_router as R
 from marm_graph.core.cbm_client import CbmError
 from marm_graph.core.models import (
@@ -25,9 +27,9 @@ from marm_graph.core.models import (
     GraphIndexRequest,
     GraphTraceRequest,
 )
-from pydantic import BaseModel, Field
 
 from ..core import runtime_flags
+from ..core.concept_db import ConceptDB, get_concept_db_path
 from ..core.graph_index_lock import GraphIndexBusy, gate_sync, run_exclusive
 from ..core.graph_index_worker import (
     AUTO_ACTIONS,
@@ -36,7 +38,6 @@ from ..core.graph_index_worker import (
     index_repository,
 )
 from ..core.graph_supervisor import graph_supervisor
-from ..core.concept_db import ConceptDB, get_concept_db_path
 
 router = APIRouter(prefix="", tags=["Graph"])
 

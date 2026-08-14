@@ -5,7 +5,7 @@ import hashlib
 import json
 import sqlite3
 import uuid
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -13,7 +13,6 @@ if TYPE_CHECKING:
     from .memory import MARMMemory
 
 from ..config import settings
-
 
 COMPACTION_PROMPT_TEMPLATE = (
     "You are summarizing a cluster of related memories from a MARM memory session.\n\n"
@@ -190,7 +189,7 @@ def _get_source_snapshot(conn: sqlite3.Connection, source_ids: list) -> dict:
         f"SELECT id, content_hash FROM memories WHERE id IN ({placeholders})",
         source_ids,
     ).fetchall()
-    return {row_id: content_hash for row_id, content_hash in rows}
+    return dict(rows)
 
 
 def persist_candidates_to_staging(memory: "MARMMemory", candidates: list) -> None:

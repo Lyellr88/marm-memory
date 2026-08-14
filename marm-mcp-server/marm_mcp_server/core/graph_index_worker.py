@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from marm_graph.core.cbm_client import CbmClient
 
 import structlog
+
 from marm_graph.core import tool_router as R
 from marm_graph.core.models import GraphIndexRequest
 

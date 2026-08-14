@@ -3,7 +3,7 @@
 import asyncio
 import json
 import uuid
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 
 import numpy as np
 import pytest
@@ -13,7 +13,6 @@ from marm_mcp_server.core.compaction import (
     run_compaction_dry_run,
 )
 from marm_mcp_server.core.memory import MARMMemory
-
 
 # --- Embedding helpers ---
 
@@ -391,9 +390,9 @@ async def test_counter_threshold_default_mode_is_5(monkeypatch, tmp_path):
 
 @pytest.mark.asyncio
 async def test_counter_threshold_set_to_20_for_swarm_preset():
+    import marm_mcp_server.config.settings as s
     from marm_mcp_server.cli import apply_runtime_preset
     from marm_mcp_server.core import memory as memory_module
-    import marm_mcp_server.config.settings as s
 
     original = s.COMPACTION_TRIGGER_COUNT
     try:
@@ -407,9 +406,9 @@ async def test_counter_threshold_set_to_20_for_swarm_preset():
 
 @pytest.mark.asyncio
 async def test_counter_threshold_set_to_20_for_trusted_preset():
+    import marm_mcp_server.config.settings as s
     from marm_mcp_server.cli import apply_runtime_preset
     from marm_mcp_server.core import memory as memory_module
-    import marm_mcp_server.config.settings as s
 
     original = s.COMPACTION_TRIGGER_COUNT
     try:
@@ -423,9 +422,9 @@ async def test_counter_threshold_set_to_20_for_trusted_preset():
 
 @pytest.mark.asyncio
 async def test_counter_threshold_set_to_20_for_custom_preset():
+    import marm_mcp_server.config.settings as s
     from marm_mcp_server.cli import apply_runtime_preset
     from marm_mcp_server.core import memory as memory_module
-    import marm_mcp_server.config.settings as s
 
     original = s.COMPACTION_TRIGGER_COUNT
     try:
@@ -442,8 +441,8 @@ async def test_counter_threshold_set_to_20_for_custom_preset():
 
 @pytest.mark.asyncio
 async def test_counter_resets_and_scan_scheduled_on_threshold(monkeypatch, tmp_path):
-    from marm_mcp_server.core import memory as memory_module
     import marm_mcp_server.config.settings as s
+    from marm_mcp_server.core import memory as memory_module
 
     monkeypatch.setattr(memory_module, "COMPACTION_ENABLED", True)
     monkeypatch.setattr(memory_module, "COMPACTION_TRIGGER_COUNT", 3)
@@ -471,8 +470,8 @@ async def test_counter_resets_and_scan_scheduled_on_threshold(monkeypatch, tmp_p
 
 @pytest.mark.asyncio
 async def test_new_write_cancels_pending_scan(monkeypatch, tmp_path):
-    from marm_mcp_server.core import memory as memory_module
     import marm_mcp_server.config.settings as s
+    from marm_mcp_server.core import memory as memory_module
 
     monkeypatch.setattr(memory_module, "COMPACTION_ENABLED", True)
     monkeypatch.setattr(memory_module, "COMPACTION_TRIGGER_COUNT", 2)
@@ -532,9 +531,9 @@ async def test_write_counter_persists_across_memory_instances(monkeypatch, tmp_p
 
 @pytest.mark.asyncio
 async def test_scan_fires_after_grace_period(monkeypatch, tmp_path):
-    from marm_mcp_server.core import memory as memory_module
     import marm_mcp_server.config.settings as s
     import marm_mcp_server.core.compaction as compaction_module
+    from marm_mcp_server.core import memory as memory_module
 
     monkeypatch.setattr(memory_module, "COMPACTION_ENABLED", True)
     monkeypatch.setattr(memory_module, "COMPACTION_TRIGGER_COUNT", 1)

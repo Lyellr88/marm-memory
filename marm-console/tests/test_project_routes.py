@@ -1,7 +1,6 @@
 """Console Projects API contract tests with the MCP adapter stubbed."""
 
 from fastapi.testclient import TestClient
-
 from marm_mcp_server.console import app as console_app
 from marm_mcp_server.console import mcp_client
 

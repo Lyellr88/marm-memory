@@ -516,7 +516,7 @@ def _compaction_status() -> dict:
             (now,),
         ).fetchall()
 
-    counts = {status: count for status, count in rows}
+    counts = dict(rows)
     return {
         "status": "ok",
         "counts": {

@@ -1,15 +1,15 @@
-import json
-import io
 import importlib
+import io
+import json
 import os
 import socket
 import subprocess
 import sys
 import urllib.request
 from email.message import Message
-from urllib.error import HTTPError
 from pathlib import Path
 from types import SimpleNamespace
+from urllib.error import HTTPError
 
 import psutil
 import pytest

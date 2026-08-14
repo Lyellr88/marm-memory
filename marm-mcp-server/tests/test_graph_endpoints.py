@@ -10,7 +10,6 @@ import threading
 import time
 
 import httpx
-
 from conftest import load_isolated_server, local_client
 
 

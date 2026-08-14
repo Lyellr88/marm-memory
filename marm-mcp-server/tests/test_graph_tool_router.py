@@ -1,5 +1,7 @@
 """Tests for the 5-tool intent router."""
 
+from conftest import requires_binary
+
 from marm_graph.core import tool_router as R
 from marm_graph.core.models import (
     CodeLookupRequest,
@@ -8,8 +10,6 @@ from marm_graph.core.models import (
     GraphIndexRequest,
     GraphTraceRequest,
 )
-from conftest import requires_binary
-
 
 # ── pure logic ──────────────────────────────────────────────────────
 
