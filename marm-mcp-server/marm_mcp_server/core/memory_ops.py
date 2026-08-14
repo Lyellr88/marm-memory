@@ -395,11 +395,11 @@ async def _store_doc_mirror(
     of the memory profile. If existing_memory_id is provided and its row
     still exists, the row is replaced in place (keeps its id stable, so
     a routine resave never needs to touch docs.memory_id). Without a usable
-    id, the doc's existing mirror is resolved by metadata.doc_id, so the
-    write is idempotent per doc even when the caller lost the id. Only when
-    neither locates a row is a fresh one created with a new id -- that is
-    the repair path for a doc whose prior mirror was deleted out from under
-    it (e.g. via a direct Console memory delete).
+    id, or with one that no longer resolves, the doc's existing mirror is
+    resolved by metadata.doc_id, so the write is idempotent per doc even when
+    the caller lost the id. Only when neither locates a row is a fresh one
+    created with a new id -- that is the repair path for a doc whose prior
+    mirror was deleted out from under it (e.g. via a direct Console delete).
     """
     sanitized_content = sanitize_content(content)
     content_hash = compute_content_hash(sanitized_content)
@@ -415,49 +415,60 @@ async def _store_doc_mirror(
     timestamp = datetime.now(timezone.utc).isoformat()
 
     with mem.get_connection() as conn:
+
+        def _replace_in_place(row_id: str) -> bool:
+            cursor = conn.execute(
+                """
+                UPDATE memories SET content = ?, session_name = ?, embedding = ?,
+                   content_hash = ?, timestamp = ?, context_type = 'doc',
+                   metadata = ?, project = ?, platform = ?
+                WHERE id = ?
+                """,
+                (
+                    sanitized_content,
+                    session,
+                    embedding_bytes,
+                    content_hash,
+                    timestamp,
+                    json.dumps(metadata),
+                    project,
+                    platform,
+                    row_id,
+                ),
+            )
+            return cursor.rowcount > 0
+
         conn.execute("BEGIN IMMEDIATE")
         try:
-            # A caller with no id may still have a mirror: docs.memory_id is set
-            # in a second, separate write, so a failure between the two leaves
-            # this row orphaned rather than absent. Resolving it by the doc_id
-            # already in metadata makes the write idempotent per doc; creating a
-            # fresh row instead would duplicate the mirror on every later save.
-            # Inside the transaction so the resolve cannot race the write.
-            if not existing_memory_id and metadata.get("doc_id") is not None:
+            replaced = False
+            if existing_memory_id:
+                replaced = _replace_in_place(existing_memory_id)
+
+            # Keyed on the id having missed, not on the caller having none:
+            # docs.memory_id is written second, so a failure between the two
+            # writes leaves a mirror orphaned rather than absent, and a deleted
+            # linked row can still leave an older duplicate behind. Either way an
+            # INSERT here would add a mirror to a doc that already has one, so
+            # the doc_id in metadata resolves it instead. Inside the transaction
+            # so the resolve cannot race the write.
+            #
+            # Ordered by id, not timestamp: the write below mutates timestamp, so
+            # ordering on it made each save pick whichever duplicate it had not
+            # just touched. On a doc with two mirrors and a link that keeps
+            # failing, saves alternated between them forever. id never changes.
+            if not replaced and metadata.get("doc_id") is not None:
                 orphan = conn.execute(
                     """
                     SELECT id FROM memories
                     WHERE context_type = 'doc'
                       AND json_extract(metadata, '$.doc_id') = ?
-                    ORDER BY timestamp LIMIT 1
+                    ORDER BY id LIMIT 1
                     """,
                     (metadata["doc_id"],),
                 ).fetchone()
                 if orphan is not None:
                     existing_memory_id = orphan[0]
-
-            replaced = False
-            if existing_memory_id:
-                cursor = conn.execute(
-                    """
-                    UPDATE memories SET content = ?, session_name = ?, embedding = ?,
-                       content_hash = ?, timestamp = ?, context_type = 'doc',
-                       metadata = ?, project = ?, platform = ?
-                    WHERE id = ?
-                    """,
-                    (
-                        sanitized_content,
-                        session,
-                        embedding_bytes,
-                        content_hash,
-                        timestamp,
-                        json.dumps(metadata),
-                        project,
-                        platform,
-                        existing_memory_id,
-                    ),
-                )
-                replaced = cursor.rowcount > 0
+                    replaced = _replace_in_place(orphan[0])
 
             if replaced:
                 assert existing_memory_id is not None

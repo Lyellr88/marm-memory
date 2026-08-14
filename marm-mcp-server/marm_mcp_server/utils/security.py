@@ -23,7 +23,15 @@ def generate_api_key(length: int = 40) -> str:
 
 
 def _set_windows_owner_only_dacl(path: Path) -> bool:
-    """Replace a file DACL with one full-control entry for the process user."""
+    """Replace a file DACL with one full-control entry for the process user.
+
+    Guards its own platform rather than trusting the caller: everything below
+    dereferences ctypes.WinDLL, which does not exist off Windows, so a direct
+    call elsewhere would raise AttributeError instead of returning False.
+    """
+    if sys.platform != "win32":
+        return False
+
     from ctypes import wintypes
 
     token_query = 0x0008

@@ -19,12 +19,21 @@
 ### Fixed: A Doc Save No Longer Fails Or Duplicates Its Memory Mirror
 
 - Saving a doc commits the docs row first, then links it to a memories mirror in a second write. If that link failed, the save reported an error even though the doc was already stored durably, and the mirror row was left behind pointing at nothing.
-- The link failure is now reported as `mirror_status: "pending"` on an otherwise successful save, matching how a failed mirror write already behaved.
-- A later save repairs the link rather than creating a second mirror. The mirror write resolves a doc's existing mirror by its `doc_id`, so a doc keeps exactly one mirror row however many times the link has to be retried. Installs that already accumulated duplicate mirrors keep them; the fix stops new ones.
+- The link failure is now reported as `mirror_status: "pending"` on an otherwise successful save, matching how a failed mirror write already behaved. The response's `memory_id` names the mirror row whenever one was written, including in that pending state; previously both pending causes reported the doc's stored link, which is null or points at a deleted row precisely when an unlinked mirror exists. It is null only when the mirror write itself failed and there is no row to name.
+- A later save repairs the link rather than creating a second mirror. The mirror write resolves a doc's existing mirror by its `doc_id`, so a doc keeps exactly one mirror row however many times the link has to be retried. That resolve now runs whenever the linked id fails to match a row, not only when the caller has no id at all: on an install carrying duplicates from before this fix, deleting the linked mirror left the link dangling and the next save added a third row on top of the surviving duplicate.
+- Installs that already accumulated duplicate mirrors keep them. Removing them means deleting memory rows, their chunks, and their concept provenance, which is a migration rather than a fix and is not done silently. Saves do now converge on a single one of them: the mirror is resolved by row id rather than by timestamp, because the save rewrites the timestamp it was ordering on and so kept picking whichever duplicate it had not just written, alternating between them indefinitely while a doc's link kept failing.
+
+### Fixed: A Never-Indexed Project Is Indexed On The First Poll
+
+- A project that had never been indexed waited out the full `GRAPH_AUTO_INDEX_FULL_INTERVAL` (300s) before its first index whenever the machine had been running for less than that interval. Fresh containers and just-rebooted machines were affected; a long-running host was not, which is why this stayed quiet.
+- The cause was the "last indexed" marker starting at `0.0` and being compared against `time.monotonic()`, which counts from boot rather than from the epoch. At `0.0` a project that had never been indexed was indistinguishable from one indexed the moment the machine started. The marker now starts at negative infinity, so "never" cannot read as "just now" at any uptime.
 
 ### Developer Note
 
 - The typecheck gate ends at two deliberately visible graph-shutdown race findings. They are documented in `docs/current/graph-client-none-guard.md` rather than suppressed: resolving them requires a supervisor lifecycle change, not an annotation workaround.
+- The type baseline is now platform-independent. Mypy narrows platform on `sys.platform` and not on `os.name`, so Windows-only branches guarded by `os.name` were analyzed on Linux, where the flags they reach for do not exist. The count is now identical on both.
+- `pip install -e ".[dev]"` pins mypy, its type stubs, and Ruff to the versions the gates pin, rather than flooring them. A floor resolved a different checker than CI ran, which defeats a gate that compares an absolute error count. Upgrading any of the three is a deliberate re-baseline, not an incidental dependency bump.
+- Pull requests now build the Console and run the Python suite. Both previously ran only on a version tag, so a dependency bump that broke either was found after the tag was already spent.
 
 </details>
 

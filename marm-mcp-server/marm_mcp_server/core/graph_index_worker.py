@@ -166,7 +166,11 @@ class _Watched:
     def __init__(self, root: str) -> None:
         self.root = root
         self.signature: Optional[tuple[str, bool]] = None
-        self.last_full: float = 0.0
+        # -inf, not 0.0: this is compared as `monotonic() - last_full < interval`,
+        # and monotonic() counts from boot. At 0.0 a never-indexed project reads as
+        # "indexed at boot", so on a machine up for less than the interval its
+        # first index waited the interval out instead of running immediately.
+        self.last_full: float = float("-inf")
         self.last_indexed: Optional[str] = None
         # Set after a failure so the next attempt waits out a backoff instead of
         # retrying on the next cycle. Cleared by a success.

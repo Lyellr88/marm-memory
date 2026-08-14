@@ -70,12 +70,19 @@ dev = [
     "build>=1.2.2",
     "jsonschema>=4.0.0",
     "requests>=2.31.0",
-    "mypy>=2.3.0",
-    "types-psutil>=6.0.0",
+    # Pinned, not floored, unlike everything above: these three decide whether
+    # a gate passes by absolute output rather than by pass/fail, so a floor lets
+    # a developer check against a different checker than CI does. mypy and its
+    # stubs set the error count scripts/typecheck.py compares to BASELINE, and
+    # ruff promotes rules between minor releases (0.16.2 graduated RUF036 and
+    # failed a PR whose code had not changed). Upgrading any of them is a
+    # deliberate re-baseline: bump here and in every workflow that pins them.
+    "mypy==2.1.0",
+    "types-psutil==7.2.2.20260518",
     # ruff owns both lint and format. black/isort/flake8 were removed rather
     # than satisfied: black disagreed with ruff format on 13 files, and flake8
     # only reported E501 against its own 79-char default while this uses 88.
-    "ruff>=0.4.0",
+    "ruff==0.16.2",
     "tomli>=2.0.0; python_version < '3.11'",
 ]
 

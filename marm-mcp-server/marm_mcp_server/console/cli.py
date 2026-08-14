@@ -96,7 +96,8 @@ def run_console(
         bound_log_file(log_path)
         flags = 0
         kwargs: dict[str, Any] = {}
-        if os.name == "nt":
+        # sys.platform, not os.name: mypy narrows platform on the former only.
+        if sys.platform == "win32":
             flags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
         else:
             kwargs["start_new_session"] = True

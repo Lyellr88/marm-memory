@@ -187,6 +187,10 @@ async def _save(
     memories mirror that gives the concept graph reach is best-effort --
     a failed mirror sync never rolls back the durable save, it just
     reports mirror_status='pending' so a later save can repair it.
+
+    memory_id names the mirror row when one was written, whatever
+    mirror_status says; on 'pending' it is the row the docs link does not
+    point at yet, and it is null only when the mirror write itself failed.
     """
     if not name or not name.strip():
         return {"status": "error", "message": "name is required for action='save'"}
@@ -292,8 +296,13 @@ async def _save(
         "status": "success",
         "message": f"📄 Doc '{name}' {verb}{promoted_note}",
         "doc_id": doc_row.id,
+        # Keyed on a mirror row existing, not on the link being recorded. Both
+        # pending causes used to report the doc's old link, which was right while
+        # pending only meant the mirror write itself failed. Now that a written
+        # mirror can go unlinked, that answer names a dangling or absent row while
+        # a real mirror exists; mirror_status already says the link is not saved.
         "memory_id": mirror_memory_id
-        if mirror_status == "synced"
+        if mirror_memory_id is not None
         else doc_row.memory_id,
         "mirror_status": mirror_status,
     }
