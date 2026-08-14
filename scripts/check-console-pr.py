@@ -48,6 +48,7 @@ def run(
         text=True,
         timeout=timeout,
         shell=False,
+        check=False,
     )
 
 
@@ -104,7 +105,11 @@ def check(ref: str, label: str, workdir: Path) -> tuple[bool, str, set[str]]:
         except subprocess.TimeoutExpired:
             return False, f"{name} timed out", set()
         if proc.returncode != 0:
-            return False, f"{name} failed\n{_first_error(proc.stdout + proc.stderr)}", set()
+            return (
+                False,
+                f"{name} failed\n{_first_error(proc.stdout + proc.stderr)}",
+                set(),
+            )
 
     return True, "install, typecheck, build all passed", assets(tree)
 
@@ -116,10 +121,20 @@ def _first_error(output: str) -> str:
         for line in output.splitlines()
         if any(
             marker in line
-            for marker in ("error", "Error", "ERR_", "failed", "not defined", "Cannot find")
+            for marker in (
+                "error",
+                "Error",
+                "ERR_",
+                "failed",
+                "not defined",
+                "Cannot find",
+            )
         )
     ]
-    return "\n".join(f"      {line.strip()}" for line in keep[:8]) or "      (no error lines captured)"
+    return (
+        "\n".join(f"      {line.strip()}" for line in keep[:8])
+        or "      (no error lines captured)"
+    )
 
 
 def prune(workdir: Path) -> None:
@@ -179,7 +194,9 @@ def main() -> int:
                 # Every later verdict would be meaningless: a failure could be
                 # the base branch rather than the PR.
                 print(f"\nFAIL  baseline {BASE_REF} does not build.\n{detail}")
-                print("Fix the base branch first; PR verdicts cannot be trusted until then.")
+                print(
+                    "Fix the base branch first; PR verdicts cannot be trusted until then."
+                )
                 return 2
             print(f"  baseline ok, {len(baseline)} asset(s)")
 
@@ -188,7 +205,9 @@ def main() -> int:
             ok, detail, produced = check(ref, label, workdir)
             if ok and baseline:
                 if produced == baseline:
-                    detail += "\n      bundle identical to baseline (same content hashes)"
+                    detail += (
+                        "\n      bundle identical to baseline (same content hashes)"
+                    )
                 else:
                     changed = sorted(produced ^ baseline)
                     detail += "\n      bundle changed: " + ", ".join(changed[:6])
