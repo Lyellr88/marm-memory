@@ -4,9 +4,9 @@
 This fails when the count goes *up*, not when it is nonzero. Lower BASELINE as
 errors are fixed; that edit is the record of progress.
 
-The remaining 2 are both endpoints/graph.py's Optional get_client() race, which
-needs a supervisor-level fix (see docs/current/graph-client-none-guard.md), not
-an annotation. Reaching 0 is a code change, not a typing one.
+At 0. The last two were endpoints/graph.py's Optional get_client() race, cleared
+by making the supervisor hand out a client only while it still owns one rather
+than by annotating around it.
 
 Runs in python.yml and publish-mcp.yml as well as locally. BASELINE is specific
 to a mypy version and to its stub versions, so all three places pin the same
@@ -26,7 +26,7 @@ import subprocess
 import sys
 from collections import Counter
 
-BASELINE = 2
+BASELINE = 0
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 PACKAGE_DIR = REPO_ROOT / "marm-mcp-server"

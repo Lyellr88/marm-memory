@@ -609,8 +609,10 @@ def test_stdio_inprocess_client_wraps_notebook_delete_and_log_results(
 
 
 def test_stdio_graph_tool_returns_unavailable_when_backend_down(monkeypatch, tmp_path):
+    # get_client, not is_available: the tools acquire the client and gate on it
+    # being None, so that one read is what decides availability now.
     stdio = _isolated_stdio(monkeypatch, tmp_path)
-    monkeypatch.setattr(stdio.graph_supervisor, "is_available", lambda: False)
+    monkeypatch.setattr(stdio.graph_supervisor, "get_client", lambda: None)
 
     result = asyncio.run(stdio.marm_graph_index(repo_path="/tmp/some-repo"))
 
@@ -632,7 +634,7 @@ def test_stdio_graph_unavailable_response_is_not_shared_mutable_state(
 
     stdio = _isolated_stdio(monkeypatch, tmp_path)
     lifecycle._protocol_delivered = False
-    monkeypatch.setattr(stdio.graph_supervisor, "is_available", lambda: False)
+    monkeypatch.setattr(stdio.graph_supervisor, "get_client", lambda: None)
 
     first = asyncio.run(stdio.marm_graph_index(repo_path="/tmp/some-repo"))
     assert "marm_protocol" in first  # confirms injection actually happened
@@ -645,7 +647,7 @@ def test_stdio_graph_unavailable_response_is_not_shared_mutable_state(
 def test_stdio_core_tool_unaffected_by_graph_unavailable(monkeypatch, tmp_path):
     """GRAPH_ENABLED=false (or a failed backend) must never break core STDIO tools."""
     stdio = _isolated_stdio(monkeypatch, tmp_path)
-    monkeypatch.setattr(stdio.graph_supervisor, "is_available", lambda: False)
+    monkeypatch.setattr(stdio.graph_supervisor, "get_client", lambda: None)
 
     result = asyncio.run(stdio.marm_notebook(action="status"))
 

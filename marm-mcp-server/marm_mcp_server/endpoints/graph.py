@@ -17,6 +17,7 @@ from typing import Literal
 
 from fastapi import APIRouter, HTTPException
 from marm_graph.core import tool_router as R
+from marm_graph.core.cbm_client import CbmError
 from marm_graph.core.models import (
     CodeLookupRequest,
     GraphArchitectureRequest,
@@ -112,7 +113,8 @@ def _run_project_index(job_id: str, repo_path: str, mode: str) -> None:
         if job is None:
             return
         job.update(status="running", phase="starting", started_at=_now_iso())
-        if not graph_supervisor.is_available():
+        client = graph_supervisor.get_client()
+        if client is None:
             job.update(
                 status="error", phase="unavailable", error="Graph backend unavailable."
             )
@@ -123,7 +125,7 @@ def _run_project_index(job_id: str, repo_path: str, mode: str) -> None:
         try:
             with gate_sync("manual_index:console"):
                 result = index_repository(
-                    graph_supervisor.get_client(),
+                    client,
                     GraphIndexRequest(repo_path=repo_path, mode=mode, action="index"),
                 )
         except GraphIndexBusy as busy:
@@ -152,7 +154,10 @@ def _run_project_index(job_id: str, repo_path: str, mode: str) -> None:
 
 
 def _project_root_path(project: str) -> str | None:
-    result = R.do_index(graph_supervisor.get_client(), GraphIndexRequest(action="list"))
+    client = graph_supervisor.get_client()
+    if client is None:
+        return None
+    result = R.do_index(client, GraphIndexRequest(action="list"))
     if result.get("status") == "error":
         return None
     for entry in result.get("projects", []):
@@ -175,10 +180,18 @@ def _resolve_and_delete(project: str) -> tuple[str | None, str | None, dict]:
     opaque re-index of its cached root; a tombstone written after that call is
     already running cannot stop it, and the project comes back.
     """
+    client = graph_supervisor.get_client()
+    if client is None:
+        return None, None, dict(_UNAVAILABLE)
     root_path = _project_root_path(project)
-    result = graph_supervisor.get_client().call_tool(
-        "delete_project", {"project": project}
-    )
+    try:
+        result = client.call_tool("delete_project", {"project": project})
+    except CbmError as exc:
+        # call_tool directly, not through tool_router.safe, which is what turns a
+        # CbmError into an error payload. Unmapped it leaves this route as a 500,
+        # and a client closed under a concurrent teardown now raises rather than
+        # respawning, so this is reachable where it previously was not.
+        return None, None, {"status": "error", "message": f"delete failed: {exc}"}
     failed = isinstance(result, dict) and result.get("status") == "error"
     if failed:
         return root_path, None, result
@@ -215,7 +228,8 @@ async def marm_graph_index(req: GraphIndexRequest) -> dict:
     # must work in either state.
     if req.action in AUTO_ACTIONS:
         return await asyncio.to_thread(auto_action, req.action)
-    if not await asyncio.to_thread(graph_supervisor.is_available):
+    client = await asyncio.to_thread(graph_supervisor.get_client)
+    if client is None:
         return _UNAVAILABLE
     if req.action == "index" or (req.action == "auto" and req.repo_path):
         try:
@@ -225,7 +239,7 @@ async def marm_graph_index(req: GraphIndexRequest) -> dict:
             return await run_exclusive(
                 "manual_index:http",
                 index_repository,
-                graph_supervisor.get_client(),
+                client,
                 req,
             )
         except GraphIndexBusy as busy:
@@ -234,7 +248,7 @@ async def marm_graph_index(req: GraphIndexRequest) -> dict:
                 "error_code": "index_in_progress",
                 "message": str(busy),
             }
-    return await asyncio.to_thread(R.do_index, graph_supervisor.get_client(), req)
+    return await asyncio.to_thread(R.do_index, client, req)
 
 
 @router.post("/marm_code_lookup", operation_id="marm_code_lookup")
@@ -245,9 +259,10 @@ async def marm_code_lookup(req: CodeLookupRequest) -> dict:
     otherwise it searches the graph by name/keyword. Set `kind=text` to grep code,
     `kind=snippet` to read a symbol's source, `kind=symbol` to force graph search.
     """
-    if not await asyncio.to_thread(graph_supervisor.is_available):
+    client = await asyncio.to_thread(graph_supervisor.get_client)
+    if client is None:
         return _UNAVAILABLE
-    return await asyncio.to_thread(R.do_lookup, graph_supervisor.get_client(), req)
+    return await asyncio.to_thread(R.do_lookup, client, req)
 
 
 @router.post("/marm_graph_trace", operation_id="marm_graph_trace")
@@ -258,9 +273,10 @@ async def marm_graph_trace(req: GraphTraceRequest) -> dict:
     `mode=data_flow` follows value propagation; `cross_service` crosses HTTP/async
     boundaries. Use for impact analysis, dependency tracing, "who calls this".
     """
-    if not await asyncio.to_thread(graph_supervisor.is_available):
+    client = await asyncio.to_thread(graph_supervisor.get_client)
+    if client is None:
         return _UNAVAILABLE
-    return await asyncio.to_thread(R.do_trace, graph_supervisor.get_client(), req)
+    return await asyncio.to_thread(R.do_trace, client, req)
 
 
 @router.post("/marm_graph_architecture", operation_id="marm_graph_architecture")
@@ -270,11 +286,10 @@ async def marm_graph_architecture(req: GraphArchitectureRequest) -> dict:
     One-shot orientation for a project — the de-facto module clusters, package
     structure, and the graph schema (node labels + properties) folded in.
     """
-    if not await asyncio.to_thread(graph_supervisor.is_available):
+    client = await asyncio.to_thread(graph_supervisor.get_client)
+    if client is None:
         return _UNAVAILABLE
-    return await asyncio.to_thread(
-        R.do_architecture, graph_supervisor.get_client(), req
-    )
+    return await asyncio.to_thread(R.do_architecture, client, req)
 
 
 @router.post("/marm_graph_impact", operation_id="marm_graph_impact")
@@ -284,20 +299,22 @@ async def marm_graph_impact(req: GraphImpactRequest) -> dict:
     Pass `since` (a git ref/date) or a `base_branch` to compare against. Returns
     which symbols a change touches and how far the impact propagates.
     """
-    if not await asyncio.to_thread(graph_supervisor.is_available):
+    client = await asyncio.to_thread(graph_supervisor.get_client)
+    if client is None:
         return _UNAVAILABLE
-    return await asyncio.to_thread(R.do_impact, graph_supervisor.get_client(), req)
+    return await asyncio.to_thread(R.do_impact, client, req)
 
 
 # Console-only routes. They are intentionally not FastApiMCP operations.
 @router.post("/internal/projects/list")
 async def console_list_projects() -> dict:
-    if not await asyncio.to_thread(graph_supervisor.is_available):
+    client = await asyncio.to_thread(graph_supervisor.get_client)
+    if client is None:
         return _UNAVAILABLE
     return _console_graph_result(
         await asyncio.to_thread(
             R.do_index,
-            graph_supervisor.get_client(),
+            client,
             GraphIndexRequest(action="list"),
         )
     )
@@ -348,12 +365,13 @@ async def console_project_job(job_id: str) -> dict:
 
 @router.post("/internal/projects/status")
 async def console_project_status(req: ConsoleProjectRequest) -> dict:
-    if not await asyncio.to_thread(graph_supervisor.is_available):
+    client = await asyncio.to_thread(graph_supervisor.get_client)
+    if client is None:
         return _UNAVAILABLE
     return _console_graph_result(
         await asyncio.to_thread(
             R.do_index,
-            graph_supervisor.get_client(),
+            client,
             GraphIndexRequest(project=req.project, action="status"),
         )
     )
@@ -361,12 +379,13 @@ async def console_project_status(req: ConsoleProjectRequest) -> dict:
 
 @router.post("/internal/projects/architecture")
 async def console_project_architecture(req: ConsoleProjectRequest) -> dict:
-    if not await asyncio.to_thread(graph_supervisor.is_available):
+    client = await asyncio.to_thread(graph_supervisor.get_client)
+    if client is None:
         return _UNAVAILABLE
     return _console_graph_result(
         await asyncio.to_thread(
             R.do_architecture,
-            graph_supervisor.get_client(),
+            client,
             GraphArchitectureRequest(project=req.project),
         )
     )
@@ -374,21 +393,21 @@ async def console_project_architecture(req: ConsoleProjectRequest) -> dict:
 
 @router.post("/internal/projects/search")
 async def console_project_search(req: CodeLookupRequest) -> dict:
-    if not await asyncio.to_thread(graph_supervisor.is_available):
+    client = await asyncio.to_thread(graph_supervisor.get_client)
+    if client is None:
         return _UNAVAILABLE
-    return _console_graph_result(
-        await asyncio.to_thread(R.do_lookup, graph_supervisor.get_client(), req)
-    )
+    return _console_graph_result(await asyncio.to_thread(R.do_lookup, client, req))
 
 
 @router.post("/internal/projects/trace")
 async def console_project_trace(req: ConsoleTraceRequest) -> dict:
-    if not await asyncio.to_thread(graph_supervisor.is_available):
+    client = await asyncio.to_thread(graph_supervisor.get_client)
+    if client is None:
         return _UNAVAILABLE
     return _console_graph_result(
         await asyncio.to_thread(
             R.do_trace,
-            graph_supervisor.get_client(),
+            client,
             GraphTraceRequest(
                 function_name=req.symbol,
                 project=req.project,
@@ -402,11 +421,10 @@ async def console_project_trace(req: ConsoleTraceRequest) -> dict:
 
 @router.post("/internal/projects/impact")
 async def console_project_impact(req: GraphImpactRequest) -> dict:
-    if not await asyncio.to_thread(graph_supervisor.is_available):
+    client = await asyncio.to_thread(graph_supervisor.get_client)
+    if client is None:
         return _UNAVAILABLE
-    return _console_graph_result(
-        await asyncio.to_thread(R.do_impact, graph_supervisor.get_client(), req)
-    )
+    return _console_graph_result(await asyncio.to_thread(R.do_impact, client, req))
 
 
 @router.post("/internal/projects/delete")
@@ -415,7 +433,8 @@ async def console_delete_project(req: ConsoleDeleteProjectRequest) -> dict:
         raise HTTPException(
             status_code=422, detail="Typed project confirmation is required."
         )
-    if not await asyncio.to_thread(graph_supervisor.is_available):
+    client = await asyncio.to_thread(graph_supervisor.get_client)
+    if client is None:
         return _UNAVAILABLE
     # Under the same gate as indexing. A delete that lands while a poller is
     # inside index_repository on the same project is silently undone: that index

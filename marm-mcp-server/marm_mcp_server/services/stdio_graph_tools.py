@@ -17,6 +17,7 @@ import asyncio
 from typing import TYPE_CHECKING, Literal, Optional
 
 if TYPE_CHECKING:
+    from marm_graph.core.cbm_client import CbmClient
     from mcp.server.fastmcp import FastMCP
 
 from pydantic import ValidationError
@@ -55,8 +56,14 @@ def _graph_unavailable() -> dict:
     return {"status": "error", "message": "graph backend unavailable"}
 
 
-async def _graph_available() -> bool:
-    return await asyncio.to_thread(graph_supervisor.is_available)
+async def _acquire_client() -> Optional["CbmClient"]:
+    """The supervisor's client, or None when the backend is unusable.
+
+    One read rather than an availability check followed by a separate fetch:
+    stop() can complete between the two, and the fetch then returns None to code
+    that has already decided the backend is up.
+    """
+    return await asyncio.to_thread(graph_supervisor.get_client)
 
 
 @_log_tool_call
@@ -89,11 +96,12 @@ async def marm_graph_index(
     Returns: graph index/status/list response, or a graph-unavailable error if the
     graph backend is disabled or failed to start
     """
-    # Ahead of _graph_available(), which refuses when the engine is down and
+    # Ahead of _acquire_client(), which refuses when the engine is down and
     # starts it as a side effect. The off switch must work in either state.
     if action in AUTO_ACTIONS:
         return await asyncio.to_thread(auto_action, action)
-    if not await _graph_available():
+    client = await _acquire_client()
+    if client is None:
         return _graph_unavailable()
     req = GraphIndexRequest(
         repo_path=repo_path, project=project, mode=mode, action=action
@@ -106,7 +114,7 @@ async def marm_graph_index(
             return await run_exclusive(
                 "manual_index:stdio",
                 index_repository,
-                graph_supervisor.get_client(),
+                client,
                 req,
             )
         except GraphIndexBusy as busy:
@@ -115,9 +123,7 @@ async def marm_graph_index(
                 "error_code": "index_in_progress",
                 "message": str(busy),
             }
-    return await asyncio.to_thread(
-        graph_router.do_index, graph_supervisor.get_client(), req
-    )
+    return await asyncio.to_thread(graph_router.do_index, client, req)
 
 
 @_log_tool_call
@@ -147,7 +153,8 @@ async def marm_code_lookup(
     Returns: graph lookup response, or a graph-unavailable error if the graph
     backend is disabled or failed to start
     """
-    if not await _graph_available():
+    client = await _acquire_client()
+    if client is None:
         return _graph_unavailable()
     req = CodeLookupRequest(
         query=query,
@@ -157,9 +164,7 @@ async def marm_code_lookup(
         file_pattern=file_pattern,
         limit=limit,
     )
-    return await asyncio.to_thread(
-        graph_router.do_lookup, graph_supervisor.get_client(), req
-    )
+    return await asyncio.to_thread(graph_router.do_lookup, client, req)
 
 
 @_log_tool_call
@@ -189,7 +194,8 @@ async def marm_graph_trace(
     Returns: graph trace response, or a graph-unavailable error if the graph
     backend is disabled or failed to start
     """
-    if not await _graph_available():
+    client = await _acquire_client()
+    if client is None:
         return _graph_unavailable()
     req = GraphTraceRequest(
         function_name=function_name,
@@ -199,9 +205,7 @@ async def marm_graph_trace(
         mode=mode,
         risk_labels=risk_labels,
     )
-    return await asyncio.to_thread(
-        graph_router.do_trace, graph_supervisor.get_client(), req
-    )
+    return await asyncio.to_thread(graph_router.do_trace, client, req)
 
 
 @_log_tool_call
@@ -220,12 +224,11 @@ async def marm_graph_architecture(
     Returns: graph architecture response, or a graph-unavailable error if the
     graph backend is disabled or failed to start
     """
-    if not await _graph_available():
+    client = await _acquire_client()
+    if client is None:
         return _graph_unavailable()
     req = GraphArchitectureRequest(project=project)
-    return await asyncio.to_thread(
-        graph_router.do_architecture, graph_supervisor.get_client(), req
-    )
+    return await asyncio.to_thread(graph_router.do_architecture, client, req)
 
 
 @_log_tool_call
@@ -250,14 +253,13 @@ async def marm_graph_impact(
     Returns: graph impact response, or a graph-unavailable error if the graph
     backend is disabled or failed to start
     """
-    if not await _graph_available():
+    client = await _acquire_client()
+    if client is None:
         return _graph_unavailable()
     req = GraphImpactRequest(
         project=project, since=since, base_branch=base_branch, depth=depth
     )
-    return await asyncio.to_thread(
-        graph_router.do_impact, graph_supervisor.get_client(), req
-    )
+    return await asyncio.to_thread(graph_router.do_impact, client, req)
 
 
 @_log_tool_call
