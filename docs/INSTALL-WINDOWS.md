@@ -410,7 +410,7 @@ python -m marm_mcp_server
 | `SERVER_PORT` | `8001` | Server port |
 | `MARM_API_KEY` | *(unset)* | Bearer token for all capability endpoints. Auto-generated when `SERVER_HOST=0.0.0.0` and not set. Required for Docker. Generate manually: `python -m marm_mcp_server --generate-key` |
 | `MAX_DB_CONNECTIONS` | `5` | Database connection pool size |
-| `MARM_ANALYTICS_DB_PATH` | `marm_usage_analytics.db` | Override analytics database path |
+| `MARM_ANALYTICS_DB_PATH` | `%USERPROFILE%\.marm\marm_usage_analytics.db` | Override analytics database path |
 | `DEFAULT_SEMANTIC_MODEL` | `jinaai/jina-embeddings-v2-small-en` | Default semantic-search model: 512 dimensions, 8,192-token context, 33M parameters, Apache-2.0 licensed; no query/document text prefixes required. |
 | `RECALL_SCAN_LIMIT` | `10000` | Maximum embedded memories semantic recall scans per query before surfacing `recall_scan_truncated=true`. |
 | `MARM_RATE_LIMIT_RPM` | `80` | HTTP rate limit (requests per minute per client IP). Set to `0` to disable. Overridden by `--swarm`, `--swarm-max`, `--trusted` presets. |
