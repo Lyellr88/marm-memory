@@ -19,8 +19,9 @@
 ### Fixed: A Doc Save No Longer Fails Or Duplicates Its Memory Mirror
 
 - Saving a doc commits the docs row first, then links it to a memories mirror in a second write. If that link failed, the save reported an error even though the doc was already stored durably, and the mirror row was left behind pointing at nothing.
-- The link failure is now reported as `mirror_status: "pending"` on an otherwise successful save, matching how a failed mirror write already behaved.
-- A later save repairs the link rather than creating a second mirror. The mirror write resolves a doc's existing mirror by its `doc_id`, so a doc keeps exactly one mirror row however many times the link has to be retried. Installs that already accumulated duplicate mirrors keep them; the fix stops new ones.
+- The link failure is now reported as `mirror_status: "pending"` on an otherwise successful save, matching how a failed mirror write already behaved. The response's `memory_id` names the mirror row whenever one was written, including in that pending state; previously both pending causes reported the doc's stored link, which is null or points at a deleted row precisely when an unlinked mirror exists. It is null only when the mirror write itself failed and there is no row to name.
+- A later save repairs the link rather than creating a second mirror. The mirror write resolves a doc's existing mirror by its `doc_id`, so a doc keeps exactly one mirror row however many times the link has to be retried. That resolve now runs whenever the linked id fails to match a row, not only when the caller has no id at all: on an install carrying duplicates from before this fix, deleting the linked mirror left the link dangling and the next save added a third row on top of the surviving duplicate.
+- Installs that already accumulated duplicate mirrors keep them. Removing them means deleting memory rows, their chunks, and their concept provenance, which is a migration rather than a fix and is not done silently. Saves do now converge on a single one of them: the mirror is resolved by row id rather than by timestamp, because the save rewrites the timestamp it was ordering on and so kept picking whichever duplicate it had not just written, alternating between them indefinitely while a doc's link kept failing.
 
 ### Developer Note
 

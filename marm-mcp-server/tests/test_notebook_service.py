@@ -1,3 +1,4 @@
+import uuid
 import sqlite3
 import sys
 import pytest
@@ -459,6 +460,9 @@ async def test_save_mirror_write_failure_still_saves_doc_as_pending(
     assert result["status"] == "success"
     assert result["mirror_status"] == "pending"
     assert result["doc_id"] is not None
+    # The other pending cause: no mirror row was written, so there is no id to
+    # report. This half is released behavior and must not start naming a row.
+    assert result["memory_id"] is None
 
     with sqlite3.connect(str(tmp_path / "nb-docs.db")) as conn:
         row = conn.execute(
@@ -466,6 +470,14 @@ async def test_save_mirror_write_failure_still_saves_doc_as_pending(
         ).fetchone()
     assert row[0] == "durable content"
     assert row[1] is None
+
+    with sqlite3.connect(str(tmp_path / "nb-test.db")) as conn:
+        assert (
+            conn.execute(
+                "SELECT COUNT(*) FROM memories WHERE context_type = 'doc'"
+            ).fetchone()[0]
+            == 0
+        )
 
 
 @pytest.mark.asyncio
@@ -526,10 +538,13 @@ async def test_save_reports_pending_when_docs_memory_id_link_fails(
     # The mirror itself exists, orphaned from the docs row.
     with sqlite3.connect(str(tmp_path / "nb-test.db")) as conn:
         mirrors = conn.execute(
-            "SELECT content FROM memories WHERE context_type = 'doc'"
+            "SELECT id, content FROM memories WHERE context_type = 'doc'"
         ).fetchall()
     assert len(mirrors) == 1
-    assert mirrors[0][0] == "durable content"
+    assert mirrors[0][1] == "durable content"
+    # Names the row that exists, not the link that was never written. Reporting
+    # docs.memory_id here would hand back NULL while a real mirror sits orphaned.
+    assert result["memory_id"] == mirrors[0][0]
 
 
 @pytest.mark.asyncio
@@ -579,3 +594,120 @@ async def test_save_after_failed_link_repairs_instead_of_duplicating_mirror(
             "SELECT memory_id FROM docs WHERE name = 'repairable'"
         ).fetchone()[0]
     assert linked == orphan_id
+
+
+@pytest.mark.asyncio
+async def test_save_with_dangling_link_reuses_a_surviving_duplicate_mirror(
+    notebook_svc, tmp_path
+):
+    """A stale docs.memory_id must not add a mirror when one already survives.
+
+    Reaching this needs a doc that already has two mirrors, which only an
+    install predating the doc_id resolve can have. Deleting the linked one
+    leaves docs.memory_id dangling, and resolving by doc_id only when the
+    caller passed no id at all skipped the survivor and inserted a third row.
+    """
+    dispatch, _ = notebook_svc
+    first = await dispatch(action="save", name="dupe", data="version one")
+    linked_id = first["memory_id"]
+    db = str(tmp_path / "nb-test.db")
+
+    duplicate_id = str(uuid.uuid4())
+    with sqlite3.connect(db) as conn:
+        conn.execute(
+            """
+            INSERT INTO memories
+                (id, session_name, content, embedding, content_hash, timestamp,
+                 context_type, metadata, project, platform)
+            SELECT ?, session_name, content, embedding, content_hash, timestamp,
+                   context_type, metadata, project, platform
+            FROM memories WHERE id = ?
+            """,
+            (duplicate_id, linked_id),
+        )
+        conn.execute("DELETE FROM memories WHERE id = ?", (linked_id,))
+        conn.commit()
+
+    second = await dispatch(action="save", name="dupe", data="version two")
+
+    assert second["memory_id"] == duplicate_id
+    with sqlite3.connect(db) as conn:
+        mirrors = conn.execute(
+            "SELECT id, content FROM memories WHERE context_type = 'doc'"
+        ).fetchall()
+    assert mirrors == [(duplicate_id, "version two")]
+
+    with sqlite3.connect(str(tmp_path / "nb-docs.db")) as conn:
+        linked = conn.execute(
+            "SELECT memory_id FROM docs WHERE name = 'dupe'"
+        ).fetchone()[0]
+    assert linked == duplicate_id
+
+
+@pytest.mark.asyncio
+async def test_repeated_saves_converge_on_one_of_two_duplicate_mirrors(
+    notebook_svc, tmp_path, monkeypatch
+):
+    """Resolution must be stable across saves, not just within one save.
+
+    The resolve reads a column the write then mutates, so ordering by timestamp
+    made each save pick whichever duplicate it had not just touched, alternating
+    between them and leaving whichever it skipped stale.
+    """
+    dispatch, _ = notebook_svc
+    from marm_mcp_server.core.docs_db import DocsDB
+
+    first = await dispatch(action="save", name="tie", data="version one")
+    db = str(tmp_path / "nb-test.db")
+
+    # Two duplicates sharing one doc_id and one timestamp, as rows cloned by the
+    # pre-fix double-insert would be. The linked row goes, so neither is linked.
+    clones = [str(uuid.uuid4()) for _ in range(2)]
+    with sqlite3.connect(db) as conn:
+        for clone_id in clones:
+            conn.execute(
+                """
+                INSERT INTO memories
+                    (id, session_name, content, embedding, content_hash, timestamp,
+                     context_type, metadata, project, platform)
+                SELECT ?, session_name, content, embedding, content_hash, timestamp,
+                       context_type, metadata, project, platform
+                FROM memories WHERE id = ?
+                """,
+                (clone_id, first["memory_id"]),
+            )
+        conn.execute("DELETE FROM memories WHERE id = ?", (first["memory_id"],))
+        conn.commit()
+
+    # The link never succeeds, so every save arrives with a stale docs.memory_id
+    # and has to re-resolve. Without that, the first save repairs the link and
+    # later saves never reach the resolve at all, which hides the instability.
+    def boom(self, conn, doc_id, memory_id):
+        raise sqlite3.OperationalError("docs db is locked")
+
+    monkeypatch.setattr(DocsDB, "set_memory_id", boom)
+
+    # Asserted against the rows themselves: a pending save reports the doc's old
+    # link as memory_id, not the row it wrote, so the response cannot show this.
+    written = []
+    for n in range(2, 6):
+        await dispatch(action="save", name="tie", data=f"version {n}")
+        with sqlite3.connect(db) as conn:
+            written.append(
+                conn.execute(
+                    "SELECT id FROM memories WHERE context_type = 'doc' AND content = ?",
+                    (f"version {n}",),
+                ).fetchone()[0]
+            )
+
+    assert len(set(written)) == 1, f"saves alternated between duplicates: {written}"
+    with sqlite3.connect(db) as conn:
+        rows = dict(
+            conn.execute(
+                "SELECT id, content FROM memories WHERE context_type = 'doc'"
+            ).fetchall()
+        )
+    assert rows[written[0]] == "version 5"
+    # The skipped duplicate is left alone, never half-updated.
+    other = next(c for c in clones if c != written[0])
+    assert rows[other] == "version one"
