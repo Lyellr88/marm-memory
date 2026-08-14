@@ -292,3 +292,80 @@ def test_crash_recovery_respawns(binary):
         assert isinstance(payload, dict) and "projects" in payload
     finally:
         c.close()
+
+
+# ── close() is terminal (no subprocess) ─────────────────────────────
+
+
+def _popen_recorder(monkeypatch):
+    """Records every real process creation attempt.
+
+    Patched at subprocess.Popen rather than at _spawn: the guard lives inside
+    _spawn, so stubbing _spawn would remove the very thing under test and the
+    assertion would pass no matter what. This asserts at the process boundary,
+    which is the thing that must not happen.
+    """
+    spawned = []
+
+    def _fake_popen(*args, **kwargs):
+        spawned.append(args[0] if args else kwargs.get("args"))
+        raise AssertionError("a closed client created a process")
+
+    monkeypatch.setattr("marm_graph.core.cbm_client.subprocess.Popen", _fake_popen)
+    return spawned
+
+
+def test_call_after_close_raises_instead_of_spawning_a_child(monkeypatch):
+    """close() used to leave the instance reusable, which orphaned a process.
+
+    It clears _proc, and _alive() reads _proc, so a closed client looked exactly
+    like a never-started one. The "transparently respawns a dead child once" path
+    then started a replacement whose owner had already dropped its reference, and
+    the call *succeeded*, so nothing surfaced.
+    """
+    client = CbmClient(command=["unused"])
+    spawned = _popen_recorder(monkeypatch)
+    client.close()
+
+    with pytest.raises(CbmError, match="closed"):
+        client.call_tool("list_projects", {})
+    assert spawned == []
+
+
+def test_start_after_close_does_not_spawn(monkeypatch):
+    """start() reaches _spawn() through the same _alive() check as call_tool.
+
+    Guarding only the call path would leave close() reversible through a public
+    method, so a stale holder could restart an engine nobody owns.
+    """
+    client = CbmClient(command=["unused"])
+    spawned = _popen_recorder(monkeypatch)
+    client.close()
+
+    with pytest.raises(CbmError, match="closed"):
+        client.start()
+    assert spawned == []
+
+
+def test_list_tools_after_close_does_not_spawn(monkeypatch):
+    """The third public path into _spawn(), and the one no review flagged."""
+    client = CbmClient(command=["unused"])
+    spawned = _popen_recorder(monkeypatch)
+    client.close()
+
+    with pytest.raises(CbmError, match="closed"):
+        client.list_tools()
+    assert spawned == []
+
+
+def test_close_is_idempotent_and_stays_closed(monkeypatch):
+    """Teardown can call close() more than once; it must not reopen anything."""
+    client = CbmClient(command=["unused"])
+    spawned = _popen_recorder(monkeypatch)
+
+    client.close()
+    client.close()
+
+    with pytest.raises(CbmError):
+        client.call_tool("list_projects", {})
+    assert spawned == []

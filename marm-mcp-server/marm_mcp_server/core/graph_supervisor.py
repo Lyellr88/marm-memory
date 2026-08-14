@@ -34,13 +34,21 @@ class GraphSupervisor:
         # but startup is genuinely still in progress. Callers during an
         # in-flight startup must block on _lock, not race past it.
         self._ready = threading.Event()
+        # stop() is terminal. It clears _ready so a later call would otherwise
+        # re-enter startup and spawn a child the supervisor never adopts, since
+        # stop() runs at process teardown and nothing sets this back.
+        self._stopped = False
 
     def _ensure_started(self) -> None:
         """Idempotent lazy start. Never raises — failures leave is_available() False."""
-        if self._ready.is_set():
+        if self._ready.is_set() or self._stopped:
             return
         with self._lock:
-            if self._ready.is_set():
+            # _stopped again, not just _ready: the check above happens outside
+            # the lock, so a caller can pass it, block here while stop() runs to
+            # completion, and then find _ready cleared and start a child that the
+            # supervisor will never adopt or close.
+            if self._ready.is_set() or self._stopped:
                 return
             try:
                 with self._state_lock:
@@ -110,8 +118,16 @@ class GraphSupervisor:
             }
 
     def get_client(self) -> Optional[CbmClient]:
+        """The client, but only while the supervisor still owns it.
+
+        _available and _client are read together under _state_lock. Callers used
+        to gate on a separate is_available() call, which leaves a window for
+        stop() to complete in between and hand back None to code that has
+        already decided the backend is up.
+        """
         self._ensure_started()
-        return self._client
+        with self._state_lock:
+            return self._client if self._available else None
 
     def stop(self) -> None:
         """Terminate the child process, if one was ever started.
@@ -133,6 +149,7 @@ class GraphSupervisor:
                     self._client = None
                     self._available = False
                     self._state = "not_started"
+                self._stopped = True
                 self._ready.clear()
 
 
