@@ -628,7 +628,7 @@ xAI connects from its own infrastructure, so `localhost` will not work. Expose M
 
 </details>
 
-Full platform walkthroughs, key setup, and OS-specific notes: [Windows](docs/INSTALL-WINDOWS.md#client-connections) · [Linux](docs/INSTALL-LINUX.md#client-connections) · [Docker/key mode](docs/INSTALL-DOCKER.md#client-connections) · [Other platforms](docs/INSTALL-PLATFORMS.md)
+Full platform walkthroughs, key setup, and OS-specific notes: [Windows](docs/INSTALL-WINDOWS.md#client-connections) · [macOS](docs/INSTALL-MACOS.md#start-marm-yourself) · [Linux](docs/INSTALL-LINUX.md#client-connections) · [Docker/key mode](docs/INSTALL-DOCKER.md#client-connections) · [Other platforms](docs/INSTALL-PLATFORMS.md)
 
 > Using a client that isn't listed? [Open an issue](https://github.com/Lyellr88/marm-memory/issues/new/choose) and let us know; client adapters are a first-class feature request.
 
@@ -1040,7 +1040,7 @@ It re-splits stale chunks, fills in any lost to an interrupted write, and drops 
 - Check Python version: `python --version` (must be 3.10+)
 - Verify port 8001 isn't in use: `lsof -i :8001` (macOS/Linux) or `netstat -ano | findstr :8001` (Windows)
 - Check for permission errors in home directory (`~/.marm/` must be readable/writable)
-- See platform-specific troubleshooting: [INSTALL-DOCKER.md](docs/INSTALL-DOCKER.md), [INSTALL-WINDOWS.md](docs/INSTALL-WINDOWS.md), [INSTALL-LINUX.md](docs/INSTALL-LINUX.md)
+- See platform-specific troubleshooting: [INSTALL-DOCKER.md](docs/INSTALL-DOCKER.md), [INSTALL-WINDOWS.md](docs/INSTALL-WINDOWS.md), [INSTALL-MACOS.md](docs/INSTALL-MACOS.md), [INSTALL-LINUX.md](docs/INSTALL-LINUX.md)
 
 **STDIO connection fails**
 
@@ -1233,6 +1233,7 @@ Copyright © 2026 Ryan A. Lyell. MARM is released under the [Apache 2.0 License]
 
 - **[INSTALL-DOCKER.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-DOCKER.md)** - Docker deployment (recommended)
 - **[INSTALL-WINDOWS.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-WINDOWS.md)** - Windows installation guide
+- **[INSTALL-MACOS.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-MACOS.md)** - macOS installation guide
 - **[INSTALL-LINUX.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-LINUX.md)** - Linux installation guide
 - **[INSTALL-PLATFORMS.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-PLATFORMS.md)** - Platform installation guide
 
