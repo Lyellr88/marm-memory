@@ -118,7 +118,9 @@ async def marm_graph_trace(
     """Trace call paths / data flow from a function.
 
     direction=inbound (callers), outbound (callees), both. mode=data_flow follows
-    value propagation; cross_service crosses HTTP/async boundaries.
+    value propagation. cross_service attempts HTTP/async boundaries but does not
+    currently join a client call to its server handler, so treat an empty result
+    as unknown rather than as "nothing calls this".
     """
     req, err = _build(
         GraphTraceRequest,
