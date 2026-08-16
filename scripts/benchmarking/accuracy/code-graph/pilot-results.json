@@ -1,0 +1,82 @@
+{
+  "provenance": {
+    "commit": "c3539c2",
+    "head_sha": "c3539c28a87508f180317be2f91bb18a2b29680d",
+    "branch": "cga-bench",
+    "engine_version": "0.9.0",
+    "os": "Windows 11 10.0.26200",
+    "index_mode": "moderate",
+    "isolated_index": true,
+    "project": "C-Users-lyell-AppData-Local-Temp-cga-bench-0si2wy9t-tree",
+    "manifest_version": "pilot-2"
+  },
+  "C1": {
+    "metric": "inbound reference recall",
+    "symbol": "notebook_dispatch",
+    "caller_count": 0,
+    "callers": [],
+    "expected": [
+      "marm_notebook"
+    ],
+    "missing_expected": [
+      "marm_notebook"
+    ],
+    "recall": 0.0,
+    "pass": false
+  },
+  "C4": {
+    "metric": "route-to-handler exposure",
+    "routes_returned": 20,
+    "with_handler": 0,
+    "exposure_rate": 0.0,
+    "sample": [
+      {
+        "method": "POST",
+        "path": "/ui/projects",
+        "handler": ""
+      },
+      {
+        "method": "POST",
+        "path": "/ui/index_status",
+        "handler": ""
+      },
+      {
+        "method": "POST",
+        "path": "/ui/graph_schema",
+        "handler": ""
+      },
+      {
+        "method": "POST",
+        "path": "/ui/query_graph",
+        "handler": ""
+      },
+      {
+        "method": "POST",
+        "path": "/ui/delete_project",
+        "handler": ""
+      }
+    ],
+    "pass": false
+  },
+  "C6": {
+    "metric": "cross-service path completion",
+    "symbol": "getMemory",
+    "callees": [
+      "/memories/:id",
+      "MarmApiError",
+      "buildQuery",
+      "request"
+    ],
+    "reached_route": [
+      "/memories/:id"
+    ],
+    "reached_python_handler": [],
+    "completed": false,
+    "dead_ends_at_route": true,
+    "pass": false
+  },
+  "cleanup": {
+    "ok": true,
+    "issues": []
+  }
+}

@@ -1,0 +1,49 @@
+{
+  "provenance": {
+    "commit": "c3539c2",
+    "branch": "cga-bench",
+    "engine_version": "0.9.0",
+    "os": "Windows 11",
+    "store": "C:\\Users\\lyell\\.cache\\codebase-memory-mcp\\C-Users-lyell-Desktop-MARM-Systems.db",
+    "source": "direct graph-store read, NOT a public-tool result",
+    "population": "direct-name calls only (ast.Name); attribute calls excluded because resolving their owner needs type inference. Both ends must resolve to exactly one indexed graph symbol."
+  },
+  "resolved_pairs": 1940,
+  "unresolved_sites": 3583,
+  "plain": {
+    "recorded": 1318,
+    "missed": 515,
+    "recall": 0.719
+  },
+  "awaited": {
+    "recorded": 45,
+    "missed": 62,
+    "recall": 0.421
+  },
+  "sample_misses": {
+    "awaited": [
+      "_reindex -> run_exclusive",
+      "update_memory -> _update_memory",
+      "store_memory -> _store_memory",
+      "recall_similar -> _recall_similar",
+      "recall_text_search -> _recall_text_search",
+      "_store_memory -> find_semantic_duplicate",
+      "graceful_shutdown -> drain_chunk_writes",
+      "marm_apply_compaction -> apply_compaction_write",
+      "marm_graph_index -> run_exclusive",
+      "console_delete_project -> run_exclusive"
+    ],
+    "plain": [
+      "marm_graph_index -> get_client",
+      "marm_code_lookup -> get_client",
+      "marm_graph_trace -> get_client",
+      "marm_graph_architecture -> get_client",
+      "marm_graph_impact -> get_client",
+      "_call -> get_client",
+      "lifespan -> get_client",
+      "lifespan -> reset_client",
+      "health -> get_client",
+      "marm_graph_index -> get_client"
+    ]
+  }
+}
