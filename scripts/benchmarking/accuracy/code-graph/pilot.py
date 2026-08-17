@@ -47,12 +47,20 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from store_cleanup import drop_project, succeeded  # noqa: E402
 
-# C1. One production caller, verified by hand at server_stdio.py:259. The five
-# test callers are excluded because no caller can ask for them: the engine filters
-# test files from traces, and GraphTraceRequest exposes no include_tests field, so
-# they are unreachable through MARM's public surface at any setting.
+# C1. Two production callers, verified by hand: endpoints/notebook.py:24 for HTTP
+# and server_stdio.py:259 for STDIO. Both are named marm_notebook and differ only
+# by module, so the expectation is a qualified-name suffix per caller. A bare-name
+# set of one collapsed them and scored recall 1.0 on whichever transport resolved,
+# even when the other transport's edge was missing entirely.
+#
+# The five test callers are excluded because no caller can ask for them: the engine
+# filters test files from traces, and GraphTraceRequest exposes no include_tests
+# field, so they are unreachable through MARM's public surface at any setting.
 C1_SYMBOL = "notebook_dispatch"
-C1_EXPECTED_CALLERS = {"marm_notebook"}
+C1_EXPECTED_CALLERS = {
+    "marm_mcp_server.server_stdio.marm_notebook",
+    "marm_mcp_server.endpoints.notebook.marm_notebook",
+}
 
 # C6. The TypeScript client calls GET /api/memories/{memory_id} through a baseURL
 # that strips the /api prefix. Completion means the trace reaches Python.
@@ -133,6 +141,21 @@ def _names(entries) -> list[str]:
     return out
 
 
+def _qualified_names(entries) -> list[str]:
+    """Qualified name per entry, falling back to the bare name when absent.
+
+    Two callers of notebook_dispatch share the bare name marm_notebook and differ
+    only by module, so anything scored on names alone counts them as one.
+    """
+    out = []
+    for item in entries or []:
+        if isinstance(item, dict):
+            out.append(str(item.get("qualified_name") or item.get("name", "")))
+        else:
+            out.append(str(item))
+    return out
+
+
 async def _resolve_project(tools, repo_path: Path) -> str | None:
     """Project name for a path, from the engine rather than a guessed key.
 
@@ -161,13 +184,20 @@ async def probe_c1(tools, project: str) -> dict:
         ),
         "marm_graph_trace",
     )
-    callers = _names(res.get("callers"))
-    found = {c for c in callers if c in C1_EXPECTED_CALLERS}
+    qualified = _qualified_names(res.get("callers"))
+    # Suffix match: the engine prefixes every qualified name with the mangled
+    # project path, which differs per machine and per isolated run.
+    found = {
+        want
+        for want in C1_EXPECTED_CALLERS
+        if any(q == want or q.endswith(f".{want}") for q in qualified)
+    }
     return {
         "metric": "inbound reference recall",
         "symbol": C1_SYMBOL,
-        "caller_count": len(callers),
-        "callers": sorted(set(callers)),
+        "caller_count": len(qualified),
+        "callers": sorted(set(_names(res.get("callers")))),
+        "callers_qualified": sorted(set(qualified)),
         "expected": sorted(C1_EXPECTED_CALLERS),
         "missing_expected": sorted(C1_EXPECTED_CALLERS - found),
         "recall": round(len(found) / len(C1_EXPECTED_CALLERS), 3),
@@ -353,9 +383,16 @@ def _report(r: dict) -> bool:
             print(f"    {issue}")
 
     # An execution error is not a pass and not a measured failure. It exits
-    # non-zero because the run produced no result, not because C1 missed.
-    c1_ok = "execution_error" not in r["C1"] and bool(r["C1"].get("pass"))
-    return c1_ok and (r.get("cleanup") or {}).get("ok", True)
+    # non-zero because the run produced no result, not because a metric missed, and
+    # that holds for every probe: C4 and C6 failing their metric is a finding worth
+    # recording, but C4 or C6 never running means the run is incomplete. Only C1
+    # gates on its metric, per the stop rule.
+    all_ran = all("execution_error" not in r[name] for name in ("C1", "C4", "C6"))
+    return (
+        all_ran
+        and bool(r["C1"].get("pass"))
+        and (r.get("cleanup") or {}).get("ok", True)
+    )
 
 
 def main() -> int:
