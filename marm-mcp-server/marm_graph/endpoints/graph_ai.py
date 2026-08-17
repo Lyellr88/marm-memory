@@ -50,8 +50,10 @@ async def marm_graph_trace(req: GraphTraceRequest) -> dict:
     """Trace call paths / data flow through the graph from a function.
 
     `direction=inbound` finds callers, `outbound` finds callees, `both` for all.
-    `mode=data_flow` follows value propagation; `cross_service` crosses HTTP/async
-    boundaries. Use for impact analysis, dependency tracing, "who calls this".
+    `mode=data_flow` follows value propagation. `cross_service` attempts HTTP/async
+    boundaries but does not currently join a client call to its server handler, so
+    treat an empty result as unknown rather than as "nothing calls this".
+    Use for impact analysis, dependency tracing, "who calls this".
     """
     return await asyncio.to_thread(R.do_trace, get_client(), req)
 
