@@ -3,7 +3,7 @@
 The worker's job is to settle durable queue rows correctly. Most of these
 tests therefore assert on what is left in the queue and in the graph after a
 cycle, not on how many times something was called. Real SQLite throughout;
-extract_entities is monkeypatched at the endpoints module boundary, the same
+extract_entities is monkeypatched on services.concept_build_engine, the same
 convention the other concept tests use, because spaCy's model is not
 installable in this sandbox.
 """
@@ -22,12 +22,15 @@ def worker_env(monkeypatch, tmp_path):
     load_isolated_server(monkeypatch, tmp_path)
     monkeypatch.setenv("MARM_CONCEPT_DB_PATH", str(tmp_path / "marm_index.db"))
     concepts = importlib.import_module("marm_mcp_server.endpoints.concepts")
+    concept_build_engine = importlib.import_module(
+        "marm_mcp_server.services.concept_build_engine"
+    )
     worker_module = importlib.import_module("marm_mcp_server.core.concept_worker")
     queue = importlib.import_module("marm_mcp_server.core.concept_queue")
     memory_module = sys.modules["marm_mcp_server.core.memory"]
 
     monkeypatch.setattr(concepts, "CONCEPTS_AVAILABLE", True)
-    monkeypatch.setattr(concepts, "is_graph_available", lambda: False)
+    monkeypatch.setattr(concept_build_engine, "is_graph_available", lambda: False)
     monkeypatch.setattr(worker_module, "CONCEPTS_AVAILABLE", True)
     monkeypatch.setattr(worker_module, "CONCEPT_AUTO_INDEX", True)
     monkeypatch.setattr(worker_module, "CONCEPT_INDEX_DEBOUNCE_SECONDS", 0.01)
@@ -51,7 +54,10 @@ def _extract_named_after_content(monkeypatch, concepts, failing=()):
             entities=[Entity(content, "concept")], relationship_pairs=[]
         )
 
-    monkeypatch.setattr(concepts, "extract_entities", fake)
+    concept_build_engine = importlib.import_module(
+        "marm_mcp_server.services.concept_build_engine"
+    )
+    monkeypatch.setattr(concept_build_engine, "extract_entities", fake)
 
 
 def _queue_rows(mem):
@@ -252,7 +258,10 @@ def test_losing_the_graph_lock_stops_the_build_at_the_next_memory(
             entities=[Entity(content, "concept")], relationship_pairs=[]
         )
 
-    monkeypatch.setattr(concepts, "extract_entities", fake)
+    concept_build_engine = importlib.import_module(
+        "marm_mcp_server.services.concept_build_engine"
+    )
+    monkeypatch.setattr(concept_build_engine, "extract_entities", fake)
 
     async def scenario():
         for index in range(5):

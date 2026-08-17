@@ -311,7 +311,7 @@ class ConceptIndexWorker:
         Only for deletes. The memory is gone, so no other worker can be
         indexing it and there is nothing here worth keeping.
         """
-        from ..endpoints.concepts import _get_concept_db
+        from ..services.concept_build_engine import _get_concept_db
 
         try:
             await asyncio.to_thread(

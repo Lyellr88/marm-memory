@@ -1,6 +1,15 @@
 # Changelog
 
 <details>
+<summary><strong>August 17th, 2026: Concept Build Endpoint Module Split (v2.39.1)</strong></summary>
+
+### Internal
+
+- Split `endpoints/concepts.py`'s synchronous concept-build engine into `services/concept_build_engine.py`, continuing the v2.30.0 CLI/Console module splits. No behavior change; the extracted module owns the concept-DB singleton, paged/targeted memory-row reads, and the entity/relationship/code-link extraction loop (`_run_build`) that both the manual `marm_concept_build` route and the background indexing worker's `build_for_memory_ids` drive via `asyncio.to_thread`. `endpoints/concepts.py` keeps the FastAPI routes, build-run bookkeeping, and async orchestration as the owner. `concepts.py` drops from 789 to 446 lines.
+
+</details>
+
+<details>
 <summary><strong>August 17th, 2026: Code Graph Engine 0.10.5 and Trace Evidence (v2.39.0)</strong></summary>
 
 ### Fixed: "Who Calls This" Now Answers Correctly On Repositories With A Nested Package
