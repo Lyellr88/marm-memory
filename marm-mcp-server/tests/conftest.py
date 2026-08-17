@@ -4,6 +4,8 @@ import importlib
 import os
 import shutil
 import sys
+import tempfile
+import time
 from pathlib import Path
 
 import pytest
@@ -63,12 +65,42 @@ def _cbm_sandbox(tmp_path_factory) -> Path:
     """
     if os.name != "nt":
         return tmp_path_factory.mktemp("cbm-home")
-    base = os.environ.get("LOCALAPPDATA")
+    # Never pytest's temp tree on Windows, including as a fallback: that is the
+    # location the identity check rejects, so falling back to it would trade a
+    # clear failure for every real-engine test failing at startup instead. The
+    # user profile is owner-private and is the next best root.
+    base = os.environ.get("LOCALAPPDATA") or os.environ.get("USERPROFILE")
     if not base:
-        return tmp_path_factory.mktemp("cbm-home")
-    sandbox = Path(base) / "marm-tests" / f"cbm-home-{os.getpid()}"
-    sandbox.mkdir(parents=True, exist_ok=True)
-    return sandbox
+        base = str(Path.home())
+    root = Path(base) / "marm-tests"
+    root.mkdir(parents=True, exist_ok=True)
+    _sweep_stale_sandboxes(root)
+    # A unique directory rather than one named after the PID. PIDs are reused, and
+    # a run killed before teardown leaves its sandbox behind, so a later run with
+    # the same PID would inherit stale indexes through mkdir(exist_ok=True).
+    return Path(tempfile.mkdtemp(prefix="cbm-home-", dir=root))
+
+
+# Old enough that no live session could own it, short enough that sandboxes do
+# not pile up. Each one holds a graph store, so they are not small.
+_STALE_SANDBOX_AGE_SECONDS = 6 * 60 * 60
+
+
+def _sweep_stale_sandboxes(root: Path) -> None:
+    """Drop sandboxes left behind by earlier runs.
+
+    Teardown cannot be relied on for this: the engine child holds lock files
+    under its home, so a session that is killed, or that ends before the child
+    releases them, leaves the directory on disk. Age-gated rather than
+    unconditional so a concurrently running session's sandbox is never removed.
+    """
+    cutoff = time.time() - _STALE_SANDBOX_AGE_SECONDS
+    for path in root.glob("cbm-home-*"):
+        try:
+            if path.is_dir() and path.stat().st_mtime < cutoff:
+                shutil.rmtree(path, ignore_errors=True)
+        except OSError:
+            pass
 
 
 @pytest.fixture(autouse=True, scope="session")

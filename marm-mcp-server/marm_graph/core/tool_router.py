@@ -207,9 +207,14 @@ def _converted_code_search(res: Any) -> Any:
     """Restore `results` on a search_code reply, including its nested raw_matches."""
     if not isinstance(res, dict):
         return res
-    out = {k: v for k, v in res.items() if k not in ("cols", "rows")}
+    # Strip cols/rows only when they are actually being replaced. Dropping them
+    # first would discard a reply carrying one without the other, which converts
+    # to nothing and would leave neither the original keys nor `results`.
     if _is_columnar(res):
+        out = {k: v for k, v in res.items() if k not in ("cols", "rows")}
         out["results"] = _rows_to_dicts(res, _SEARCH_CODE_RENAMES, name_key="node")
+    else:
+        out = dict(res)
     if _is_columnar(out.get("raw_matches")):
         out["raw_matches"] = _rows_to_dicts(out["raw_matches"])
     return out
