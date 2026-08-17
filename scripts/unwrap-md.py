@@ -18,7 +18,12 @@ import re
 import sys
 from pathlib import Path
 
-FENCE = re.compile(r"^\s*(```|~~~)")
+# The full delimiter run is captured, not just its first three characters, because
+# a fence closes only on the same character at the same length or longer. A
+# four-backtick block quoting a three-backtick one is how this repo's skill files
+# document Markdown, and a plain open/closed toggle ends the outer block early and
+# then treats the rest of it as prose.
+FENCE = re.compile(r"^\s*(`{3,}|~{3,})")
 
 # Lines that start a construct where a newline is significant. Joining one of
 # these into a neighbour changes how it renders.
@@ -29,13 +34,18 @@ BLOCK = re.compile(
     | \d+[.)][ \t]                 # ordered item
     | >                            # blockquote
     | \|                           # table row
-    | (-{3,}|\*{3,}|_{3,})\s*$     # thematic break
     | <                            # html block
     | \[[^\]]+\]:                  # link reference definition
     | \|?[:-]{3,}                  # table delimiter row
     )""",
     re.VERBOSE,
 )
+
+# Three or more of the same marker, optionally separated by spaces, and nothing
+# else. Checked apart from BLOCK because `- - -` and `* * *` also match the bullet
+# pattern, so a break would otherwise be treated as a list item and absorb the
+# lines under it.
+THEMATIC = re.compile(r"^ {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*$")
 
 # A block that owns the wrapped lines beneath it, so those get pulled up into it.
 # Headings, table rows, and rules do not: nothing following them is a
@@ -49,7 +59,7 @@ def _is_prose(line: str) -> bool:
     if line.startswith(("    ", "\t")):
         # Indented code block, or a list continuation. Either way, leave it.
         return False
-    return not BLOCK.match(line)
+    return not BLOCK.match(line) and not THEMATIC.match(line)
 
 
 def _hard_break(line: str) -> bool:
@@ -95,6 +105,11 @@ def _starts_own_line(line: str) -> bool:
     return line.lstrip().startswith("**")
 
 
+def _closes(opening: str, candidate: str) -> bool:
+    """A fence closes only on its own marker, at its own length or longer."""
+    return candidate[0] == opening[0] and len(candidate) >= len(opening)
+
+
 def _split_frontmatter(text: str) -> tuple[str, str]:
     """YAML frontmatter is `key: value` lines that read as prose. Pass it through."""
     if not text.startswith("---\n"):
@@ -110,22 +125,29 @@ def unwrap(text: str, width: int = 80) -> str:
     front, body = _split_frontmatter(text)
     out: list[str] = []
     buf: str | None = None
-    in_fence = False
+    open_fence: str | None = None
 
     for line in body.split("\n"):
-        if FENCE.match(line):
+        fence = FENCE.match(line)
+        if fence and (open_fence is None or _closes(open_fence, fence.group(1))):
             if buf is not None:
                 out.append(buf)
                 buf = None
-            in_fence = not in_fence
+            open_fence = None if open_fence else fence.group(1)
             out.append(line)
             continue
 
+        in_fence = open_fence is not None
         if in_fence or not _is_prose(line):
             if buf is not None:
                 out.append(buf)
                 buf = None
-            if not in_fence and ABSORBING.match(line) and not _hard_break(line):
+            if (
+                not in_fence
+                and ABSORBING.match(line)
+                and not THEMATIC.match(line)
+                and not _hard_break(line)
+            ):
                 # Stays open so its own wrapped continuation lines join into it.
                 # Indent is kept verbatim, which is what holds nested lists together.
                 buf = line.rstrip()
@@ -166,6 +188,12 @@ def main() -> int:
         "--width", type=int, default=80, help="wrap column the file was written at"
     )
     args = ap.parse_args()
+
+    # Below this the fullness test in _was_wrapped is true for every line, so every
+    # prose line reads as wrapped and deliberate breaks get merged. --width 0 joined
+    # three unrelated short lines into one.
+    if args.width <= SLACK * 2:
+        ap.error(f"--width must be greater than {SLACK * 2}, got {args.width}")
 
     changed = 0
     for path in _targets(args.paths):
