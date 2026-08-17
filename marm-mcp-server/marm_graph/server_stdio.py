@@ -114,6 +114,8 @@ async def marm_graph_trace(
     depth: int = 3,
     mode: str = "calls",
     risk_labels: bool = True,
+    include_tests: bool = False,
+    include_evidence: bool = True,
 ) -> dict:
     """Trace call paths / data flow from a function.
 
@@ -121,6 +123,10 @@ async def marm_graph_trace(
     value propagation. cross_service attempts HTTP/async boundaries but does not
     currently join a client call to its server handler, so treat an empty result
     as unknown rather than as "nothing calls this".
+
+    include_tests adds callers in test files. include_evidence reports per-hop
+    `strategy` (lsp | language_rule | heuristic | unresolved) and `confidence`,
+    so a guessed edge is distinguishable from a resolved one.
     """
     req, err = _build(
         GraphTraceRequest,
@@ -130,6 +136,8 @@ async def marm_graph_trace(
         depth=depth,
         mode=mode,
         risk_labels=risk_labels,
+        include_tests=include_tests,
+        include_evidence=include_evidence,
     )
     if err:
         return err

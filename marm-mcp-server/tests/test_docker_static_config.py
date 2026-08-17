@@ -185,3 +185,44 @@ def test_dockerfile_healthcheck_uses_localhost_not_0_0_0_0():
     healthcheck_cmd = _dockerfile_healthcheck_cmd()
     assert "0.0.0.0" not in healthcheck_cmd
     assert "localhost" in healthcheck_cmd or "127.0.0.1" in healthcheck_cmd
+
+
+# ── graph engine pin ────────────────────────────────────────────────
+
+_ENGINE_PIN = re.compile(r"^codebase-memory-mcp==([^\s]+)", re.MULTILINE)
+
+
+def _engine_pins() -> dict[str, str]:
+    """Every file that decides which graph engine actually gets installed."""
+    sources = {
+        "pyproject.toml": PYPROJECT,
+        "requirements.txt": (REPO_ROOT / "requirements.txt").read_text(),
+        "requirements-glama.txt": (REPO_ROOT / "requirements-glama.txt").read_text(),
+    }
+    pins = {}
+    for name, text in sources.items():
+        match = re.search(r'codebase-memory-mcp==([^"\s]+)', text)
+        assert match, f"{name} does not pin codebase-memory-mcp"
+        pins[name] = match.group(1)
+    return pins
+
+
+def test_graph_engine_pin_agrees_across_every_install_path():
+    """A stale requirements file silently installs a different engine than the pin.
+
+    Not cosmetic duplication: `Dockerfile.glama` installs requirements-glama.txt
+    and then the package with --no-deps, and both CI workflows install
+    requirements.txt before `pip install -e . --no-deps`. In both cases
+    pyproject's pin is never resolved, so a requirements file left behind decides
+    the engine version for a published image and for the test run that is
+    supposed to validate it.
+    """
+    pins = _engine_pins()
+    assert len(set(pins.values())) == 1, f"graph engine pins disagree: {pins}"
+
+
+def test_pinned_engine_version_matches_the_schema_contract_marker():
+    """PINNED_CBM_VERSION documents the version the router was validated against."""
+    from marm_graph.config.settings import PINNED_CBM_VERSION
+
+    assert _engine_pins()["pyproject.toml"] == PINNED_CBM_VERSION

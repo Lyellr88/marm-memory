@@ -2,7 +2,10 @@
 
 import importlib
 import os
+import shutil
 import sys
+import tempfile
+import time
 from pathlib import Path
 
 import pytest
@@ -50,6 +53,75 @@ def pytest_collection_modifyitems(items):
                 )
 
 
+def _cbm_sandbox(tmp_path_factory) -> Path:
+    """A directory engine 0.10.5 will accept as its home.
+
+    From 0.10.5 the binary refuses to start when any component of its resolved
+    cache path grants write access to an account it does not trust, reporting
+    "exact executable identity could not be verified". Windows temp roots often
+    carry exactly such an entry, which makes pytest's own temp tree unusable as
+    the engine's home. LOCALAPPDATA is the same place the engine keeps its real
+    cache, so it is permissioned the way the engine expects.
+    """
+    if os.name != "nt":
+        return tmp_path_factory.mktemp("cbm-home")
+    # Never pytest's temp tree on Windows, including as a fallback: that is the
+    # location the identity check rejects, so falling back to it would trade a
+    # clear failure for every real-engine test failing at startup instead. The
+    # user profile is owner-private and is the next best root.
+    base = os.environ.get("LOCALAPPDATA") or os.environ.get("USERPROFILE")
+    if not base:
+        base = str(Path.home())
+    root = Path(base) / "marm-tests"
+    root.mkdir(parents=True, exist_ok=True)
+    _sweep_stale_sandboxes(root)
+    # A unique directory rather than one named after the PID. PIDs are reused, and
+    # a run killed before teardown leaves its sandbox behind, so a later run with
+    # the same PID would inherit stale indexes through mkdir(exist_ok=True).
+    return Path(tempfile.mkdtemp(prefix="cbm-home-", dir=root))
+
+
+# Old enough that no live session could own it, short enough that sandboxes do
+# not pile up. Each one holds a graph store, so they are not small.
+_STALE_SANDBOX_AGE_SECONDS = 6 * 60 * 60
+
+
+def _sandbox_last_active(path: Path) -> float:
+    """Newest mtime anywhere inside the sandbox, not the directory's own.
+
+    A running session writes into `<sandbox>/.cache/codebase-memory-mcp`, and a
+    write that deep does not update the sandbox directory's mtime. Judging by the
+    directory alone reports "untouched since creation" for the entire run, so a
+    session outliving the cutoff would have its home deleted underneath it.
+    """
+    newest = path.stat().st_mtime
+    for child in path.rglob("*"):
+        try:
+            newest = max(newest, child.stat().st_mtime)
+        except OSError:
+            continue
+    return newest
+
+
+def _sweep_stale_sandboxes(root: Path) -> None:
+    """Drop sandboxes left behind by earlier runs.
+
+    Teardown cannot be relied on for this: the engine child holds lock files
+    under its home, so a session that is killed, or that ends before the child
+    releases them, leaves the directory on disk. Gated on the sandbox's most
+    recent internal activity so a concurrent or long-running session keeps its
+    own. Not proof against a live session that has been completely idle for the
+    whole cutoff window, which no test run is.
+    """
+    cutoff = time.time() - _STALE_SANDBOX_AGE_SECONDS
+    for path in root.glob("cbm-home-*"):
+        try:
+            if path.is_dir() and _sandbox_last_active(path) < cutoff:
+                shutil.rmtree(path, ignore_errors=True)
+        except OSError:
+            pass
+
+
 @pytest.fixture(autouse=True, scope="session")
 def isolated_cbm_store(tmp_path_factory):
     """Keep test indexes out of the developer's real code graph.
@@ -61,7 +133,7 @@ def isolated_cbm_store(tmp_path_factory):
     redirect it, so pointing them at a session temp directory isolates the
     store without changing how the child is invoked.
     """
-    sandbox = tmp_path_factory.mktemp("cbm-home")
+    sandbox = _cbm_sandbox(tmp_path_factory)
     previous = {name: os.environ.get(name) for name in ("HOME", "USERPROFILE")}
     for name in previous:
         os.environ[name] = str(sandbox)
@@ -71,6 +143,11 @@ def isolated_cbm_store(tmp_path_factory):
             os.environ.pop(name, None)
         else:
             os.environ[name] = value
+    # pytest cleans its own temp tree; a sandbox placed outside it does not get
+    # that for free. Errors are ignored because the engine daemon can still hold
+    # its lock files at session end.
+    if sandbox.parent.name == "marm-tests":
+        shutil.rmtree(sandbox, ignore_errors=True)
 
 
 def load_isolated_server(monkeypatch, tmp_path, api_key="", write_queue_enabled=False):

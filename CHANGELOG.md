@@ -1,6 +1,38 @@
 # Changelog
 
 <details>
+<summary><strong>August 17th, 2026: Code Graph Engine 0.10.5 and Trace Evidence (v2.39.0)</strong></summary>
+
+### Fixed: "Who Calls This" Now Answers Correctly On Repositories With A Nested Package
+
+- The pinned graph engine could not resolve imports when a project's package directory sat below the repository root, which is one of the most common Python layouts and MARM's own. `marm_graph_trace` answered "who calls this" with an empty list for functions that demonstrably had callers, and an empty list is indistinguishable from "nothing calls this", so the wrong answer looked like a real one. Measured on a 982,240-line tree: 0 of 12 cross-module call probes resolved and 131,550 edges were missing, 27% of the graph.
+- The engine is now pinned to 0.10.5, which fixes the resolver. The same tree resolves 12 of 12 probes and 486,738 edges. On MARM's own repository the two real callers of an internal dispatch function are both returned, where the previous engine returned none.
+- Cold index time roughly doubles on that tree, from 18.3 seconds to 38.8 seconds. That is the resolution work the previous engine skipped rather than a regression, and the faster number was only faster because it was producing an incomplete graph. Query latency is unchanged: symbol search and call tracing stay well under a second on a 149,000-node graph.
+
+### Added: Every Trace Answer Says How It Was Resolved
+
+- `marm_graph_trace` gained `include_evidence`, on by default. Each caller and callee now carries the strategy that found it (`lsp`, `language_rule`, `heuristic`, or `unresolved`) and a confidence score, so an agent can tell a resolved reference from a name-match guess. A confident empty answer and a failed lookup are no longer the same response.
+- `marm_graph_trace` also gained `include_tests`, off by default and matching the engine. Turning it on adds callers in test files, which typically arrive as `heuristic` at low confidence. On a real symbol this widened the answer from 2 callers to 10.
+- Both parameters are available over HTTP and STDIO. Each transport declares its own tool signature, so a field added to the shared request model alone would have been reachable over HTTP and dead over STDIO. A test now compares the wrappers against the model field by field, including defaults, because the previous tests only checked tool names and counts.
+
+### Changed: Graph Responses Are Converted Back To Their Existing Shapes
+
+- Engine 0.10.5 changed its default response encoding from JSON to grouped text, and returns result sets as separate column and row lists rather than as records. MARM converts these back inside the router, so every graph tool returns the same response shape it did before this release. Callers and internal consumers need no changes.
+- This conversion is why the upgrade is not a version bump. Nothing raises on the new encoding: the graph tools would have quietly started returning one blob of prose per call, and concept-to-code linking would have stopped finding anything without logging an error.
+- `marm_graph_architecture` explicitly requests every section. The new engine answers with a summary by default, which silently dropped routes, hotspots, boundaries, layers, clusters, and the file tree from the response.
+- An upstream tool MARM does not call is now recorded as a known extra rather than added to the set of tools required at startup. Requiring a tool nothing calls would let a later upstream rename refuse to start MARM for no reason.
+
+### Upgrade Note
+
+- Existing graphs were built by the old engine and keep its incomplete edges until something re-indexes them. Automatic indexing handles this on its own: watch state is not persisted, so the first poll after the restart this upgrade requires re-indexes every watched project within 30 seconds. **If you have turned automatic graph indexing off, run `marm_graph_index` once by hand,** or traces will keep answering from the old edges with no indication that they are stale.
+- Engine 0.10.5 refuses to start when either its cache directory or the directory MARM was launched from sits inside a folder that grants write access to another account, reporting that the executable's identity could not be verified. The default cache location is fine, but the launch directory matters too: starting MARM from a shared or world-writable directory such as `C:\tmp` is enough to trigger it, even with the cache left at its default. Graph tools then report the backend as unavailable while memory, logging, and recall keep working.
+- Docker users get the new engine baked into the image, so there is no first-run download and nothing to install: pull the image and restart. The identity check above does not trigger inside the container, because the engine's cache sits at `/home/marm/.cache` owned by the unprivileged `marm` user the image runs as, with no write access granted to anyone else. Verified on a built image: the baked binary reports 0.10.5 through the handshake and the graph tools answer with structured responses.
+- pip installs fetch the new engine binary once on first graph use, because it is stored per version. The previous one is left on disk rather than removed, so rolling back does not re-download.
+- Do not pin engine 0.10.4. Upstream reports trees that index in minutes on 0.9.0 failing to index at all on that release.
+
+</details>
+
+<details>
 <summary><strong>August 10th, 2026: Type-Safe Core and Unified Validation (v2.38.0)</strong></summary>
 
 ### Changed: MARM's Entire Server Package Is Now Type-Checked
