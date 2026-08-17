@@ -39,11 +39,13 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import time
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(REPO_ROOT / "marm-mcp-server"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from store_cleanup import drop_project, succeeded  # noqa: E402
 
 # C1. One production caller, verified by hand at server_stdio.py:259. The five
 # test callers are excluded because no caller can ask for them: the engine filters
@@ -86,75 +88,6 @@ def _git_checked(*args: str) -> str:
         if proc.returncode == 0
         else (proc.stderr.strip() or f"exit {proc.returncode}")
     )
-
-
-async def _drop_project(project: str) -> str:
-    """Remove the throwaway project's store. Returns a status for the caller to print.
-
-    Runs under run_exclusive, the same cross-process lease every other engine
-    store mutation takes. Deleting outside the gate can race a concurrent index:
-    a MARM server running on this machine re-indexes watched projects on a 30s
-    cycle, and an isolated run's project joins that watch set the moment it is
-    indexed, so an ungated delete can be undone by the other process.
-
-    Via the engine CLI because marm_graph_index exposes no delete action: its
-    actions are auto/index/status/list plus the auto_* switches.
-
-    Retried and verified rather than fired once. Two tries are still needed with
-    the lease held, which rules the auto-indexer out as the cause, since no other
-    gate-respecting process can index while we hold it. What remains is this run's
-    own engine child writing its store back as it dies. The gate is still correct
-    to take: it is the project rule for every store mutation, and it removes the
-    other process from the picture, which is what made the cause identifiable.
-    """
-    try:
-        from codebase_memory_mcp import _cli
-
-        binary = _cli._bin_path(_cli._version())
-    except Exception as exc:
-        return f"could not resolve engine binary: {exc}"
-
-    def _cli_call(*args: str) -> str:
-        try:
-            proc = subprocess.run(
-                [str(binary), "cli", *args], capture_output=True, timeout=120
-            )
-        except (OSError, subprocess.SubprocessError) as exc:
-            return f"__error__ {exc}"
-        return proc.stdout.decode(errors="replace")
-
-    def _absent() -> bool:
-        return project not in _cli_call("list_projects")
-
-    def _delete_and_verify() -> str:
-        """Delete, then confirm twice with a settle gap between.
-
-        A single check right after the delete is racy and reports success it has
-        not earned: the run's dying engine child writes its store back a moment
-        later, so the project is absent when checked and present by the time the
-        command exits. Observed exactly that, with cleanup reporting "deleted"
-        while the database was still on disk. Two agreeing checks either side of a
-        pause is what distinguishes a real delete from that window.
-        """
-        for attempt in range(5):
-            _cli_call("delete_project", "--project", project)
-            time.sleep(1.0)
-            if _absent():
-                time.sleep(0.75)
-                if _absent():
-                    return (
-                        "deleted"
-                        if attempt == 0
-                        else f"deleted after {attempt + 1} tries"
-                    )
-        return f"still present after 5 tries, remove {project} by hand"
-
-    from marm_mcp_server.core.graph_index_lock import GraphIndexBusy, run_exclusive
-
-    try:
-        return await run_exclusive(f"cga_pilot_cleanup:{project}", _delete_and_verify)
-    except GraphIndexBusy as exc:
-        return f"gate busy ({exc}), remove {project} by hand"
 
 
 def _provenance(isolated: bool, project: str) -> dict:
@@ -357,9 +290,9 @@ async def run(isolate: bool) -> dict:
             from marm_mcp_server.core.graph_supervisor import graph_supervisor
 
             graph_supervisor.stop()
-            status = await _drop_project(project)
+            status = await drop_project(project)
             print(f"cleanup: {status}")
-            if not status.startswith("deleted"):
+            if not succeeded(status):
                 issues.append(f"project {project}: {status}")
         removed = _git_checked("worktree", "remove", "--force", str(work))
         if removed:
