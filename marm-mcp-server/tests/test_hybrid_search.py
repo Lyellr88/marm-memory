@@ -138,7 +138,8 @@ def test_wide_fts_query_keeps_words_that_double_as_content():
 def test_fts_query_mode_rejects_invalid_values(monkeypatch):
     """An unrecognized FTS_QUERY_MODE falls back to the default instead of
     reaching the query builder and producing invalid FTS5 syntax."""
-    from marm_mcp_server.config.settings import FTS_QUERY_MODES, _safe_choice
+    from marm_mcp_server.config.env_parsing import _safe_choice
+    from marm_mcp_server.config.settings import FTS_QUERY_MODES
 
     monkeypatch.setenv("FTS_QUERY_MODE", "nonsense")
     assert _safe_choice("FTS_QUERY_MODE", "or_nostop", FTS_QUERY_MODES) == "or_nostop"
@@ -153,7 +154,7 @@ def test_fts_query_mode_rejects_invalid_values(monkeypatch):
 
 def test_extra_stopwords_parsing(monkeypatch):
     """FTS_EXTRA_STOPWORDS is comma-separated, lowercased, and blank-tolerant."""
-    from marm_mcp_server.config.settings import _csv_frozenset
+    from marm_mcp_server.config.env_parsing import _csv_frozenset
 
     monkeypatch.setenv("FTS_EXTRA_STOPWORDS", " Docker ,, DEPLOY ,")
     assert _csv_frozenset("FTS_EXTRA_STOPWORDS") == {"docker", "deploy"}
@@ -932,7 +933,7 @@ def test_fts_lone_hit_score_clamped_to_unit_range(monkeypatch, capsys):
     constant itself, but it raises ImportError once another test in the suite has
     evicted the module, which is why the clamp lives in a callable helper.
     """
-    from marm_mcp_server.config.settings import _safe_unit_float
+    from marm_mcp_server.config.env_parsing import _safe_unit_float
 
     monkeypatch.setenv("FTS_LONE_HIT_SCORE", "2.5")
     assert _safe_unit_float("FTS_LONE_HIT_SCORE", 1.0) == 1.0
