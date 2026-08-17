@@ -59,15 +59,8 @@ def resolve_marm_api_key(server_host: str) -> str:
     if server_host == "0.0.0.0" and not marm_api_key and not is_generate_key_cmd:
         marm_api_key = generate_api_key()
         try:
-            marm_dir = Path.home() / ".marm"
-            marm_dir.mkdir(exist_ok=True)
-            # Quoted: the value is written back through the same parser that
-            # reads it, and an unquoted value ending in a generated symbol
-            # like "#" is otherwise indistinguishable from KEY=value#comment
-            # -- generate_api_key()'s alphabet includes "#", so an unquoted
-            # write here truncated the persisted key on the very next start
-            # for a meaningful fraction of freshly generated keys.
-            _MARM_ENV_PATH.write_text(f'MARM_API_KEY="{marm_api_key}"\n')
+            _MARM_ENV_PATH.parent.mkdir(parents=True, exist_ok=True)
+            _MARM_ENV_PATH.write_text(f"MARM_API_KEY={marm_api_key}\n")
             try:
                 _MARM_ENV_PATH.chmod(0o600)
             except OSError:

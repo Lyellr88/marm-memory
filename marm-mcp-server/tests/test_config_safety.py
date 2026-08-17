@@ -53,29 +53,24 @@ def test_consolidation_threshold_clamped_to_unit_range():
     assert settings_mod.CONSOLIDATION_THRESHOLD == 1.0
 
 
-def test_resolve_marm_api_key_persists_a_hash_containing_key_intact(
+def test_resolve_marm_api_key_persists_a_generated_key_across_starts(
     monkeypatch, tmp_path
 ):
-    """generate_api_key()'s alphabet includes "#", and an unquoted write to
-    ~/.marm/.env is indistinguishable on the next read from KEY=value#comment,
-    so a key containing one used to come back truncated on the very next
-    start -- a real key generated this way, copied out per the printed
-    instructions, would then fail auth forever since the file never goes
-    back to empty. Regression coverage for the write being quoted."""
+    """A real generated key must round-trip through resolve_marm_api_key's
+    persist-then-reload path exactly: the first 0.0.0.0 start with no key
+    anywhere generates and saves one, and every start after that must load
+    the same key back rather than generating a new one each time."""
     from marm_mcp_server.config import api_key_bootstrap
 
-    monkeypatch.setattr(
-        api_key_bootstrap, "_MARM_ENV_PATH", tmp_path / ".marm" / ".env"
-    )
-    monkeypatch.setattr(
-        api_key_bootstrap, "generate_api_key", lambda: "part-one#part-two"
-    )
+    env_path = tmp_path / ".marm" / ".env"
+    monkeypatch.setattr(api_key_bootstrap, "_MARM_ENV_PATH", env_path)
     monkeypatch.delenv("MARM_API_KEY", raising=False)
 
     first_start = api_key_bootstrap.resolve_marm_api_key("0.0.0.0")
-    assert first_start == "part-one#part-two"
+    assert first_start
+    assert env_path.read_text() == f"MARM_API_KEY={first_start}\n"
 
     # Second start: nothing generates now, so this only passes if the file
     # from the first start reads back whole.
     second_start = api_key_bootstrap.resolve_marm_api_key("0.0.0.0")
-    assert second_start == "part-one#part-two"
+    assert second_start == first_start

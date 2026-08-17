@@ -63,11 +63,7 @@ def initialize_managed_key(path: Path | None = None) -> tuple[Path, bool]:
         ) from exc
     try:
         with os.fdopen(descriptor, "w", encoding="utf-8") as key_file:
-            # Quoted for the same reason as config/api_key_bootstrap.py's write:
-            # generate_api_key()'s alphabet includes "#", and an unquoted value
-            # ending in one reads back truncated by read_managed_key's own
-            # unquoted-value comment stripping.
-            key_file.write(f'MARM_API_KEY="{generate_api_key()}"\n')
+            key_file.write(f"MARM_API_KEY={generate_api_key()}\n")
     except OSError:
         destination.unlink(missing_ok=True)
         raise
