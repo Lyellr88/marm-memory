@@ -3,9 +3,15 @@
 <details>
 <summary><strong>August 17th, 2026: Config Settings Module Split (v2.39.2)</strong></summary>
 
+### Fixed: An Auto-Generated API Key Containing "#" No Longer Gets Truncated on the Next Start
+
+- `generate_api_key()`'s character set includes `#`, and roughly two in five generated keys contain one. The key was written to `~/.marm/.env` unquoted, and the reader treats an unquoted value's trailing `#...` as a comment -- indistinguishable from `KEY=value#comment` -- so a key ending up with a `#` came back truncated on the very next start. The truncated value is non-empty, so nothing regenerates it: a fresh `SERVER_HOST=0.0.0.0` install could auto-generate a key, print it correctly once, and then permanently reject that same key on every request from the second start onward.
+- The write is now quoted. The reader already unquoted a quoted value before this fix, so this is a one-line change with no migration: an existing unquoted file without a `#` still reads correctly, and a truncated key from before this fix is not recovered automatically (it was never the key the user copied out) -- delete `~/.marm/.env` to regenerate.
+- The same unquoted-write pattern existed in `marm-memory key generate`'s managed key file (`services/key_management.py`) and is fixed there too.
+
 ### Internal
 
-- Split `config/settings.py`'s env-var parsing helpers and API-key bootstrap logic into `config/env_parsing.py` and `config/api_key_bootstrap.py`. No behavior change; `settings.py` keeps every setting constant and its validation/clamping as the owner. `env_parsing.py` holds the six pure `_safe_*`/`_csv_frozenset` readers used throughout the file. `api_key_bootstrap.py` holds the MARM_API_KEY resolution sequence (env var, then `~/.marm/.env`, then auto-generate and persist when bound to `0.0.0.0`), now a single `resolve_marm_api_key(server_host)` function taking `SERVER_HOST` as a parameter instead of importing it back from `settings.py`, avoiding a circular import between the two. `settings.py` drops from 684 to 520 lines.
+- Split `config/settings.py`'s env-var parsing helpers and API-key bootstrap logic into `config/env_parsing.py` and `config/api_key_bootstrap.py`. No behavior change beyond the fix above; `settings.py` keeps every setting constant and its validation/clamping as the owner. `env_parsing.py` holds the six pure `_safe_*`/`_csv_frozenset` readers used throughout the file. `api_key_bootstrap.py` holds the MARM_API_KEY resolution sequence (env var, then `~/.marm/.env`, then auto-generate and persist when bound to `0.0.0.0`), now a single `resolve_marm_api_key(server_host)` function taking `SERVER_HOST` as a parameter instead of importing it back from `settings.py`, avoiding a circular import between the two. `settings.py` drops from 684 to 520 lines.
 
 </details>
 

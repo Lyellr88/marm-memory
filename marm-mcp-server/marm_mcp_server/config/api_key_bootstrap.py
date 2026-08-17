@@ -61,7 +61,13 @@ def resolve_marm_api_key(server_host: str) -> str:
         try:
             marm_dir = Path.home() / ".marm"
             marm_dir.mkdir(exist_ok=True)
-            _MARM_ENV_PATH.write_text(f"MARM_API_KEY={marm_api_key}\n")
+            # Quoted: the value is written back through the same parser that
+            # reads it, and an unquoted value ending in a generated symbol
+            # like "#" is otherwise indistinguishable from KEY=value#comment
+            # -- generate_api_key()'s alphabet includes "#", so an unquoted
+            # write here truncated the persisted key on the very next start
+            # for a meaningful fraction of freshly generated keys.
+            _MARM_ENV_PATH.write_text(f'MARM_API_KEY="{marm_api_key}"\n')
             try:
                 _MARM_ENV_PATH.chmod(0o600)
             except OSError:

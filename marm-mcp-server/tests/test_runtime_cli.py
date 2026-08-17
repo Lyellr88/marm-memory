@@ -220,6 +220,25 @@ def test_managed_key_init_reuses_existing_credential(monkeypatch, tmp_path):
     assert active_key_management.read_managed_key(path) == "first-key"
 
 
+def test_managed_key_survives_a_hash_character_round_trip(monkeypatch, tmp_path):
+    """generate_api_key()'s alphabet includes "#". An unquoted write is
+    indistinguishable from KEY=value#comment on the next read, so a key
+    ending up with one there gets silently truncated on the following start.
+    Regression coverage for that write/read pair being quoted."""
+    active_key_management = importlib.import_module(
+        "marm_mcp_server.services.key_management"
+    )
+    path = tmp_path / ".marm" / ".env"
+    monkeypatch.setattr(active_key_management, "managed_key_path", lambda: path)
+    monkeypatch.setattr(
+        active_key_management, "generate_api_key", lambda: "part-one#part-two"
+    )
+
+    active_key_management.initialize_managed_key()
+
+    assert active_key_management.read_managed_key(path) == "part-one#part-two"
+
+
 def test_windows_key_acl_delegates_to_dacl_replacement(monkeypatch, tmp_path):
     from marm_mcp_server.utils import security
 
