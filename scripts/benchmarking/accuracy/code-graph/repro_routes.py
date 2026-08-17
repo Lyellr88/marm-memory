@@ -22,8 +22,8 @@ than no fixture.
     python scripts/benchmarking/accuracy/code-graph/repro_routes.py
     python scripts/benchmarking/accuracy/code-graph/repro_routes.py --keep
 
-Exit: 0 both findings reproduced, 1 cleanup failed, 2 engine missing,
-3 C4 reproduced but the C6 precondition was not met.
+Exit: 0 both findings reproduced, 1 cleanup failed, 2 setup or engine failed,
+3 C4 reproduced but the C6 precondition was not met, 4 C4 did not reproduce.
 """
 
 import argparse
@@ -31,7 +31,6 @@ import asyncio
 import json
 import shutil
 import sqlite3
-import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -43,6 +42,7 @@ from store_cleanup import (
     engine_binary,
     engine_cli,
     gated,
+    git_init,
     report_kept,
     succeeded,
 )
@@ -88,7 +88,7 @@ def _build(repo: Path) -> None:
         ' "include": ["src"]}\n',
         encoding="utf-8",
     )
-    subprocess.run(["git", "init", "-q", str(repo)], capture_output=True, timeout=60)
+    git_init(repo)
 
 
 def _handles_edges(store: Path) -> list[tuple[str, str]]:
@@ -130,10 +130,15 @@ def _run(args, cleanup_failed: list[str]) -> int:
 
     work = Path(tempfile.mkdtemp(prefix="cga-routes-"))
     repo = work / "repro"
-    _build(repo)
-
     project = None
     try:
+        # Inside the cleanup scope: a failed setup used to leave the tree behind.
+        try:
+            _build(repo)
+        except (OSError, RuntimeError) as exc:
+            print(f"SETUP FAILED: {exc}")
+            return 2
+
         # Gated: this writes the shared project list a running MARM is reading.
         raw = asyncio.run(
             gated(
@@ -162,6 +167,10 @@ def _run(args, cleanup_failed: list[str]) -> int:
         print(json.dumps(routes, indent=2))
         filled = [r for r in routes if (r.get("handler") or "").strip()]
         print(f"\nroutes: {len(routes)}   with non-empty handler: {len(filled)}")
+        # C4 reproduces only when routes came back AND none carry a handler. No
+        # routes at all is an indexing problem, not the finding; handlers populated
+        # means it was fixed upstream, which must not read as a successful repro.
+        c4_ready = bool(routes) and not filled
 
         print("\n## HANDLES edges actually in the store")
         edges = _handles_edges(store) if store.exists() else []
@@ -192,12 +201,24 @@ def _run(args, cleanup_failed: list[str]) -> int:
         print(f"\nreached the Python handler: {bool(reached)}")
 
         print("\n## Route node keys")
-        routes = _route_keys(store)
-        for qname in routes:
+        route_keys = _route_keys(store)
+        for qname in route_keys:
             print(f"  {qname}")
 
-        c6_ready = any("__route__ANY__" in q for q in routes)
-        print(f"\nC6 precondition, a client-side route node exists: {c6_ready}")
+        c6_ready = any("__route__ANY__" in q for q in route_keys)
+        print("\n## Reproduction status")
+        print(f"  C4 (routes returned, no handler populated): {c4_ready}")
+        print(f"  C6 (a client-side route node exists):       {c6_ready}")
+
+        if not c4_ready:
+            print(
+                "\n"
+                "C4 NOT REPRODUCED. Either no routes came back, which is an indexing\n"
+                "problem rather than the finding, or a handler was populated, which\n"
+                "means the defect was fixed upstream. Re-check the engine version and\n"
+                "the issue tracker before filing: an earlier draft in this repo was\n"
+                "written against a version that had already fixed it."
+            )
         if not c6_ready:
             print(
                 "\n"
@@ -209,6 +230,8 @@ def _run(args, cleanup_failed: list[str]) -> int:
                 "nodes. Until the recognised client shape is known, C4 above is the\n"
                 "only finding this fixture reproduces."
             )
+        if not c4_ready:
+            return 4
         return 0 if c6_ready else 3
     finally:
         issues: list[str] = []

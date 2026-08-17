@@ -105,9 +105,19 @@ def _starts_own_line(line: str) -> bool:
     return line.lstrip().startswith("**")
 
 
-def _closes(opening: str, candidate: str) -> bool:
-    """A fence closes only on its own marker, at its own length or longer."""
-    return candidate[0] == opening[0] and len(candidate) >= len(opening)
+def _closes(opening: str, candidate: str, rest: str) -> bool:
+    """A fence closes only on its own marker, at its own length or longer, and bare.
+
+    An info string is allowed when opening a fence and not when closing one, so a
+    ```bash line inside a ```markdown block is content rather than the end of it.
+    Without the bare check that inner line closed the outer block and the rest of it
+    was treated as prose.
+    """
+    return (
+        candidate[0] == opening[0]
+        and len(candidate) >= len(opening)
+        and not rest.strip()
+    )
 
 
 def _split_frontmatter(text: str) -> tuple[str, str]:
@@ -129,7 +139,10 @@ def unwrap(text: str, width: int = 80) -> str:
 
     for line in body.split("\n"):
         fence = FENCE.match(line)
-        if fence and (open_fence is None or _closes(open_fence, fence.group(1))):
+        if fence and (
+            open_fence is None
+            or _closes(open_fence, fence.group(1), line[fence.end(1) :])
+        ):
             if buf is not None:
                 out.append(buf)
                 buf = None

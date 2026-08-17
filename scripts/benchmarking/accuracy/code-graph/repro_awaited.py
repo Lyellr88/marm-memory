@@ -28,7 +28,6 @@ import asyncio
 import json
 import shutil
 import sqlite3
-import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -40,6 +39,7 @@ from store_cleanup import (
     engine_binary,
     engine_cli,
     gated,
+    git_init,
     report_kept,
     succeeded,
 )
@@ -258,14 +258,8 @@ def _edges(store: Path) -> set[tuple[str, str]]:
         conn.close()
 
 
-def _run(args, cleanup_failed: list[str]) -> int:
-    binary = engine_binary()
-    if binary is None or not binary.exists():
-        print("engine binary not found; run MARM once to download it")
-        return 2
-
-    work = Path(tempfile.mkdtemp(prefix="cga-repro-"))
-    repo = work / "repro"
+def _build_fixture(args, repo: Path) -> None:
+    """Write the generated package and initialise the repo, reporting the layout."""
     # The package sits at the repo root unless --nest moves it down, which is what
     # separates this layout from MARM's marm-mcp-server/marm_mcp_server/.
     base = repo / args.nest if args.nest else repo
@@ -281,16 +275,32 @@ def _run(args, cleanup_failed: list[str]) -> int:
             '\n[tool.setuptools.packages.find]\nwhere = ["."]\n',
             encoding="utf-8",
         )
-    subprocess.run(["git", "init", "-q", str(repo)], capture_output=True, timeout=60)
+    git_init(repo)
     print(f"layout: pkg at {(base / 'pkg').relative_to(repo).as_posix()}")
     if args.pyproject:
-        print(
-            f"config: pyproject.toml at {(base / 'pyproject.toml').relative_to(repo).as_posix()}"
-        )
+        rel = (base / "pyproject.toml").relative_to(repo).as_posix()
+        print(f"config: pyproject.toml at {rel}")
     print(f"mode: {args.mode}")
 
+
+def _run(args, cleanup_failed: list[str]) -> int:
+    binary = engine_binary()
+    if binary is None or not binary.exists():
+        print("engine binary not found; run MARM once to download it")
+        return 2
+
+    work = Path(tempfile.mkdtemp(prefix="cga-repro-"))
+    repo = work / "repro"
     project = None
     try:
+        # Inside the cleanup scope: --filler writes hundreds of files and a failure
+        # partway used to leave the whole tree behind.
+        try:
+            _build_fixture(args, repo)
+        except (OSError, RuntimeError) as exc:
+            print(f"SETUP FAILED: {exc}")
+            return 2
+
         # Gated: this writes the shared project list a running MARM is reading.
         raw = asyncio.run(
             gated(

@@ -39,7 +39,7 @@ _HERE = Path(__file__).resolve()
 sys.path.insert(0, str(_HERE.parents[3] / "marm-mcp-server"))
 sys.path.insert(0, str(_HERE.parents[1] / "accuracy" / "code-graph"))
 
-from store_cleanup import gated  # noqa: E402
+from store_cleanup import gated, git_init  # noqa: E402
 
 STORE_DIR = Path.home() / ".cache" / "codebase-memory-mcp"
 
@@ -111,7 +111,7 @@ def generate(
         (pkg / f"mod_{i:05d}.py").write_text(src, encoding="utf-8")
         lines += src.count("\n")
 
-    subprocess.run(["git", "init", "-q", str(root)], capture_output=True, timeout=120)
+    git_init(root)
 
     # Each probe carries the two peers its module actually calls, so verification
     # can demand those exact edges. Accepting any entry_* target passes on a wrong
@@ -299,18 +299,24 @@ def main() -> int:
 
     work = Path(tempfile.mkdtemp(prefix="cga-scale-"))
     repo = work / "bigrepo"
-    print("\ngenerating ...")
-    t0 = time.monotonic()
-    modules, lines, probes = generate(repo, args.target_lines, args.nest)
-    gen_s = time.monotonic() - t0
-    src_bytes = sum(f.stat().st_size for f in repo.rglob("*.py"))
-    print(
-        f"  {modules:,} modules   {lines:,} lines   "
-        f"{src_bytes / 1e6:.0f} MB source   in {gen_s:.0f}s"
-    )
-
     project = None
+    # Generation is inside the cleanup scope: it writes thousands of files and can
+    # fail partway, and a failed setup used to leave the whole tree behind.
     try:
+        print("\ngenerating ...")
+        t0 = time.monotonic()
+        try:
+            modules, lines, probes = generate(repo, args.target_lines, args.nest)
+        except (OSError, RuntimeError) as exc:
+            print(f"  SETUP FAILED: {exc}")
+            return 2
+        gen_s = time.monotonic() - t0
+        src_bytes = sum(f.stat().st_size for f in repo.rglob("*.py"))
+        print(
+            f"  {modules:,} modules   {lines:,} lines   "
+            f"{src_bytes / 1e6:.0f} MB source   in {gen_s:.0f}s"
+        )
+
         print("\nindexing (cold) ...")
         # Gated. AGENTS.md: every code-index call takes the graph gate, and this
         # writes the shared project list a running MARM is reading.

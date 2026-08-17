@@ -122,6 +122,27 @@ async def drop_project(project: str) -> str:
         return f"gate busy ({exc}), remove {project} by hand"
 
 
+def git_init(root: Path) -> None:
+    """Initialise a throwaway fixture repo, raising with a reason if it fails.
+
+    The engine reads git state, recording a branch on every project it indexes, so a
+    tree whose init silently failed is not the fixture the run reports on. An
+    unchecked call also hid a missing git executable, which then surfaced as an
+    unexplained difference in the results.
+    """
+    try:
+        proc = subprocess.run(
+            ["git", "init", "-q", str(root)], capture_output=True, timeout=120
+        )
+    except FileNotFoundError as exc:
+        raise RuntimeError("git not found on PATH; the fixture needs a repo") from exc
+    except subprocess.SubprocessError as exc:
+        raise RuntimeError(f"git init failed: {exc}") from exc
+    if proc.returncode:
+        detail = proc.stderr.decode(errors="replace").strip()
+        raise RuntimeError(f"git init failed (exit {proc.returncode}): {detail}")
+
+
 async def gated(purpose: str, fn, *args, **kwargs):
     """Run one engine store mutation under the cross-process gate.
 
