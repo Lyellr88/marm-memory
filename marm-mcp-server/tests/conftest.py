@@ -86,18 +86,37 @@ def _cbm_sandbox(tmp_path_factory) -> Path:
 _STALE_SANDBOX_AGE_SECONDS = 6 * 60 * 60
 
 
+def _sandbox_last_active(path: Path) -> float:
+    """Newest mtime anywhere inside the sandbox, not the directory's own.
+
+    A running session writes into `<sandbox>/.cache/codebase-memory-mcp`, and a
+    write that deep does not update the sandbox directory's mtime. Judging by the
+    directory alone reports "untouched since creation" for the entire run, so a
+    session outliving the cutoff would have its home deleted underneath it.
+    """
+    newest = path.stat().st_mtime
+    for child in path.rglob("*"):
+        try:
+            newest = max(newest, child.stat().st_mtime)
+        except OSError:
+            continue
+    return newest
+
+
 def _sweep_stale_sandboxes(root: Path) -> None:
     """Drop sandboxes left behind by earlier runs.
 
     Teardown cannot be relied on for this: the engine child holds lock files
     under its home, so a session that is killed, or that ends before the child
-    releases them, leaves the directory on disk. Age-gated rather than
-    unconditional so a concurrently running session's sandbox is never removed.
+    releases them, leaves the directory on disk. Gated on the sandbox's most
+    recent internal activity so a concurrent or long-running session keeps its
+    own. Not proof against a live session that has been completely idle for the
+    whole cutoff window, which no test run is.
     """
     cutoff = time.time() - _STALE_SANDBOX_AGE_SECONDS
     for path in root.glob("cbm-home-*"):
         try:
-            if path.is_dir() and path.stat().st_mtime < cutoff:
+            if path.is_dir() and _sandbox_last_active(path) < cutoff:
                 shutil.rmtree(path, ignore_errors=True)
         except OSError:
             pass
