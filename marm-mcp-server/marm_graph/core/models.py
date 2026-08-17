@@ -85,6 +85,16 @@ class GraphTraceRequest(BaseModel):
     risk_labels: bool = Field(
         True, description="Add CRITICAL/HIGH/MEDIUM/LOW risk tiers by hop distance."
     )
+    include_tests: bool = Field(
+        False,
+        description="Include test-file callers. Off by default, matching the engine.",
+    )
+    include_evidence: bool = Field(
+        True,
+        description="Report how each hop resolved (lsp | language_rule | heuristic | "
+        "unresolved) with a confidence score. On by default so an empty or "
+        "low-confidence answer is distinguishable from a confident one.",
+    )
 
 
 class GraphArchitectureRequest(BaseModel):

@@ -39,7 +39,15 @@ logger = structlog.get_logger(__name__)
 # hyphenated (e.g. C-Users-...-marm-graph.marm_graph.core.Cls.method).
 _QN_RE = re.compile(r"^[\w-]+(?:\.[\w-]+){2,}$")
 _REGEX_META = set(".*+?[](){}^$\\|")
-_TRIMMABLE_LIST_KEYS = ("results", "semantic_results", "matches", "paths", "affected")
+_TRIMMABLE_LIST_KEYS = (
+    "results",
+    "semantic_results",
+    "matches",
+    "paths",
+    "affected",
+    "callers",
+    "callees",
+)
 
 
 def safe(fn: Callable[..., dict]) -> Callable[..., dict]:
@@ -68,6 +76,179 @@ def safe(fn: Callable[..., dict]) -> Callable[..., dict]:
 
 
 _CLIP_MARK = " …[marm-graph clipped]"
+
+
+# Engine 0.10.5 returns result sets as columns plus rows instead of a list of
+# dicts. Both converters below are tolerant on purpose: a list passes through
+# untouched so an engine that reverts to list output keeps working, and a missing
+# cols/rows/groups key yields an empty list rather than raising.
+
+# 0.10.5 also shortened the column names, so a plain zip emits `qn`/`in`/`matches`
+# where every downstream reader keys on the 0.9.0 names. The renames are per tool
+# because the same concept has different names between them: search_graph called
+# the path `file_path`, search_code called it `file`.
+_SEARCH_GRAPH_RENAMES = {"qn": "qualified_name", "file": "file_path"}
+_SEARCH_CODE_RENAMES = {
+    "qn": "qualified_name",
+    "matches": "match_lines",
+    "in": "in_degree",
+    "out": "out_degree",
+}
+_ARCHITECTURE_RENAMES = {
+    "languages": {"files": "file_count"},
+    "packages": {"nodes": "node_count"},
+    "entry_points": {"qn": "qualified_name"},
+    "hotspots": {"qn": "qualified_name"},
+    "boundaries": {"calls": "call_count"},
+}
+# Aspects whose 0.9.0 rows carried a short `name` beside the qualified name.
+_ARCHITECTURE_NAMED = {"entry_points", "hotspots"}
+
+# 0.10.5 makes get_architecture a summary by default, dropping routes, hotspots,
+# boundaries, layers, clusters and file_tree. Asking for every aspect restores
+# 0.9.0's key set. 'cycles' is deliberately absent: upstream documents it as
+# opt-in only because it walks the whole call graph.
+_ARCHITECTURE_ASPECTS = ["all"]
+
+
+def _split_lines_span(value: Any) -> dict:
+    """Expand 0.10.5's "321-347" line span back into start_line / end_line."""
+    if isinstance(value, int):
+        return {"start_line": value, "end_line": value}
+    if not isinstance(value, str) or not value.strip():
+        return {}
+    start, _, end = value.partition("-")
+    try:
+        first = int(start)
+    except ValueError:
+        return {}
+    try:
+        last = int(end) if end else first
+    except ValueError:
+        last = first
+    return {"start_line": first, "end_line": last}
+
+
+def _rows_to_dicts(
+    block: Any,
+    renames: Optional[dict] = None,
+    name_key: Optional[str] = None,
+) -> Any:
+    """Flatten a {"cols": [...], "rows": [[...]]} block into a list of dicts."""
+    if isinstance(block, list):
+        return block
+    if not isinstance(block, dict):
+        return []
+    cols = block.get("cols")
+    rows = block.get("rows")
+    if not isinstance(cols, list) or not isinstance(rows, list):
+        return []
+    renames = renames or {}
+    names = [renames.get(col, col) for col in cols]
+    out: list[dict] = []
+    for row in rows:
+        if not isinstance(row, (list, tuple)):
+            continue
+        item = dict(zip(names, row))
+        if "lines" in item:
+            item.update(_split_lines_span(item.pop("lines")))
+        qname = item.get("qualified_name")
+        if name_key and isinstance(qname, str) and qname:
+            item.setdefault(name_key, qname.rsplit(".", 1)[-1])
+        out.append(item)
+    return out
+
+
+def _is_columnar(value: Any) -> bool:
+    return isinstance(value, dict) and "cols" in value and "rows" in value
+
+
+def _groups_to_callers(block: Any) -> Any:
+    """Flatten a grouped trace block, rebuilding each row's qualified_name.
+
+    The prefix lives on the group, not the row, so a row's identity is only
+    complete once the two are joined. Two callers can share `name` and differ
+    only by prefix, which is why the joined `qualified_name` is not optional.
+    """
+    if isinstance(block, list):
+        return block
+    if not isinstance(block, dict):
+        return []
+    cols = block.get("cols")
+    groups = block.get("groups")
+    if not isinstance(cols, list) or not isinstance(groups, list):
+        return []
+    out: list[dict] = []
+    for group in groups:
+        if not isinstance(group, dict):
+            continue
+        prefix = group.get("qn_prefix") or ""
+        for row in group.get("rows") or []:
+            if not isinstance(row, (list, tuple)):
+                continue
+            item = dict(zip(cols, row))
+            name = item.get("name")
+            if name is not None:
+                item["qualified_name"] = f"{prefix}.{name}" if prefix else str(name)
+            out.append(item)
+    return out
+
+
+def _converted_search(res: Any) -> Any:
+    """Restore `results` on a search_graph reply, whichever shape it arrived in."""
+    if not _is_columnar(res):
+        return res
+    out = {k: v for k, v in res.items() if k not in ("cols", "rows")}
+    out["results"] = _rows_to_dicts(res, _SEARCH_GRAPH_RENAMES, name_key="name")
+    return out
+
+
+def _converted_code_search(res: Any) -> Any:
+    """Restore `results` on a search_code reply, including its nested raw_matches."""
+    if not isinstance(res, dict):
+        return res
+    out = {k: v for k, v in res.items() if k not in ("cols", "rows")}
+    if _is_columnar(res):
+        out["results"] = _rows_to_dicts(res, _SEARCH_CODE_RENAMES, name_key="node")
+    if _is_columnar(out.get("raw_matches")):
+        out["raw_matches"] = _rows_to_dicts(out["raw_matches"])
+    return out
+
+
+def _converted_architecture(arch: Any) -> Any:
+    """Flatten every columnar aspect block get_architecture returns."""
+    if not isinstance(arch, dict):
+        return arch
+    out = {}
+    for key, value in arch.items():
+        if _is_columnar(value):
+            out[key] = _rows_to_dicts(
+                value,
+                _ARCHITECTURE_RENAMES.get(key),
+                name_key="name" if key in _ARCHITECTURE_NAMED else None,
+            )
+        else:
+            out[key] = value
+    return out
+
+
+def _converted_trace(res: Any) -> Any:
+    """Restore `callers`/`callees` as lists of dicts on a trace_path reply."""
+    if not isinstance(res, dict):
+        return res
+    for key in ("callers", "callees"):
+        if key in res:
+            res[key] = _groups_to_callers(res[key])
+    return res
+
+
+def _converted_impact(res: Any) -> Any:
+    """Restore `impacted_symbols`, keeping 0.10.5's added totals alongside."""
+    if not isinstance(res, dict) or "impacted" not in res:
+        return res
+    out = dict(res)
+    out["impacted_symbols"] = out.pop("impacted")
+    return out
 
 
 def _bound(data: Any) -> Any:
@@ -334,7 +515,8 @@ def do_lookup(client: CbmClient, req: CodeLookupRequest) -> dict:
         }
         if req.file_pattern:
             args["file_pattern"] = req.file_pattern
-        return _bound(client.call_tool("search_code", args))
+        args["format"] = "json"
+        return _bound(_converted_code_search(client.call_tool("search_code", args)))
 
     # symbol (default): BM25 discovery, or regex name match if the query looks like one
     if any(ch in _REGEX_META for ch in req.query):
@@ -343,7 +525,8 @@ def do_lookup(client: CbmClient, req: CodeLookupRequest) -> dict:
         args = {"project": proj, "query": req.query, "limit": req.limit}
     if req.file_pattern:
         args["file_pattern"] = req.file_pattern
-    return _bound(client.call_tool("search_graph", args))
+    args["format"] = "json"
+    return _bound(_converted_search(client.call_tool("search_graph", args)))
 
 
 # ── marm_graph_trace ────────────────────────────────────────────────
@@ -355,16 +538,21 @@ def do_trace(client: CbmClient, req: GraphTraceRequest) -> dict:
     if err:
         return err
     return _bound(
-        client.call_tool(
-            "trace_path",
-            {
-                "function_name": req.function_name,
-                "project": proj,
-                "direction": req.direction,
-                "depth": req.depth,
-                "mode": req.mode,
-                "risk_labels": req.risk_labels,
-            },
+        _converted_trace(
+            client.call_tool(
+                "trace_path",
+                {
+                    "function_name": req.function_name,
+                    "project": proj,
+                    "direction": req.direction,
+                    "depth": req.depth,
+                    "mode": req.mode,
+                    "risk_labels": req.risk_labels,
+                    "include_tests": req.include_tests,
+                    "include_evidence": req.include_evidence,
+                    "format": "json",
+                },
+            )
         )
     )
 
@@ -377,7 +565,15 @@ def do_architecture(client: CbmClient, req: GraphArchitectureRequest) -> dict:
     proj, err = resolve_project(client, req.project)
     if err:
         return err
-    arch = client.call_tool("get_architecture", {"project": proj})
+    # `format` is accepted by get_architecture but absent from its published
+    # inputSchema, so it can be dropped upstream without that counting as a
+    # breaking change. The isinstance check below is what catches that.
+    arch = _converted_architecture(
+        client.call_tool(
+            "get_architecture",
+            {"project": proj, "format": "json", "aspects": _ARCHITECTURE_ASPECTS},
+        )
+    )
     if isinstance(arch, dict):
         try:
             arch["schema"] = client.call_tool("get_graph_schema", {"project": proj})
@@ -399,7 +595,8 @@ def do_impact(client: CbmClient, req: GraphImpactRequest) -> dict:
         "project": proj,
         "depth": req.depth,
         "base_branch": req.base_branch,
+        "format": "json",
     }
     if req.since:
         args["since"] = req.since
-    return _bound(client.call_tool("detect_changes", args))
+    return _bound(_converted_impact(client.call_tool("detect_changes", args)))

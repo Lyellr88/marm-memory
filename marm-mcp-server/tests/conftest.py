@@ -2,6 +2,7 @@
 
 import importlib
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -50,6 +51,26 @@ def pytest_collection_modifyitems(items):
                 )
 
 
+def _cbm_sandbox(tmp_path_factory) -> Path:
+    """A directory engine 0.10.5 will accept as its home.
+
+    From 0.10.5 the binary refuses to start when any component of its resolved
+    cache path grants write access to an account it does not trust, reporting
+    "exact executable identity could not be verified". Windows temp roots often
+    carry exactly such an entry, which makes pytest's own temp tree unusable as
+    the engine's home. LOCALAPPDATA is the same place the engine keeps its real
+    cache, so it is permissioned the way the engine expects.
+    """
+    if os.name != "nt":
+        return tmp_path_factory.mktemp("cbm-home")
+    base = os.environ.get("LOCALAPPDATA")
+    if not base:
+        return tmp_path_factory.mktemp("cbm-home")
+    sandbox = Path(base) / "marm-tests" / f"cbm-home-{os.getpid()}"
+    sandbox.mkdir(parents=True, exist_ok=True)
+    return sandbox
+
+
 @pytest.fixture(autouse=True, scope="session")
 def isolated_cbm_store(tmp_path_factory):
     """Keep test indexes out of the developer's real code graph.
@@ -61,7 +82,7 @@ def isolated_cbm_store(tmp_path_factory):
     redirect it, so pointing them at a session temp directory isolates the
     store without changing how the child is invoked.
     """
-    sandbox = tmp_path_factory.mktemp("cbm-home")
+    sandbox = _cbm_sandbox(tmp_path_factory)
     previous = {name: os.environ.get(name) for name in ("HOME", "USERPROFILE")}
     for name in previous:
         os.environ[name] = str(sandbox)
@@ -71,6 +92,11 @@ def isolated_cbm_store(tmp_path_factory):
             os.environ.pop(name, None)
         else:
             os.environ[name] = value
+    # pytest cleans its own temp tree; a sandbox placed outside it does not get
+    # that for free. Errors are ignored because the engine daemon can still hold
+    # its lock files at session end.
+    if sandbox.parent.name == "marm-tests":
+        shutil.rmtree(sandbox, ignore_errors=True)
 
 
 def load_isolated_server(monkeypatch, tmp_path, api_key="", write_queue_enabled=False):

@@ -1368,3 +1368,105 @@ def test_is_graceful_teardown_rejects_mixed_exception_group():
     assert _is_graceful_teardown(mixed_group) is False
     assert _is_graceful_teardown(direct) is True
     assert _is_graceful_teardown(unrelated) is False
+
+
+def _wrapper_defaults(fn) -> dict:
+    """Parameter name -> default for a tool wrapper's own signature."""
+    import inspect
+
+    return {
+        name: param.default
+        for name, param in inspect.signature(fn).parameters.items()
+        if param.default is not inspect.Parameter.empty
+    }
+
+
+_TRACE_WRAPPER_MODULES = [
+    "marm_mcp_server.services.stdio_graph_tools",
+    "marm_graph.server_stdio",
+]
+
+
+@pytest.mark.parametrize("module_path", _TRACE_WRAPPER_MODULES)
+def test_stdio_trace_wrapper_matches_the_request_model(module_path):
+    """Each STDIO wrapper declares its own signature, so a model field can be unreachable.
+
+    Both wrappers build GraphTraceRequest by hand instead of accepting it, so a
+    field added to the model alone is reachable over HTTP and dead over STDIO.
+    Defaults are compared too: the same call must not behave differently per
+    transport.
+    """
+    import importlib
+
+    from marm_graph.core.models import GraphTraceRequest
+
+    module = importlib.import_module(module_path)
+    declared = _wrapper_defaults(module.marm_graph_trace)
+    for field in ("include_tests", "include_evidence", "risk_labels", "depth", "mode"):
+        model_default = GraphTraceRequest.model_fields[field].default
+        assert field in declared, f"{module_path} cannot pass {field}"
+        assert declared[field] == model_default, (
+            f"{module_path} defaults {field} to {declared[field]!r}, "
+            f"model says {model_default!r}"
+        )
+
+
+@pytest.mark.parametrize("module_path", _TRACE_WRAPPER_MODULES)
+def test_stdio_trace_docstring_documents_the_evidence_flags(module_path):
+    """That docstring is the parameter documentation an agent reads before calling.
+
+    Both wrappers, not just the embedded one: a parameter present in a signature
+    but missing from the docstring is a parameter no agent will pass.
+    """
+    import importlib
+
+    doc = importlib.import_module(module_path).marm_graph_trace.__doc__ or ""
+    for flag in ("include_tests", "include_evidence"):
+        assert flag in doc, f"{module_path} does not document {flag}"
+
+
+@pytest.mark.parametrize("module_path", _TRACE_WRAPPER_MODULES)
+def test_stdio_trace_wrapper_forwards_non_default_flags(module_path, monkeypatch):
+    """Accepting a parameter is not the same as passing it on.
+
+    The signature check above passes even if a wrapper takes include_tests and
+    then drops it while building the request, because the model default is a
+    valid value. Dropping it on the floor is exactly the bug that existed before
+    this release, so it is asserted against directly: call with the opposite of
+    every default and read the request the router actually received.
+    """
+    import importlib
+
+    module = importlib.import_module(module_path)
+    router = (
+        module.graph_router if hasattr(module, "graph_router") else module.R
+    )  # the two modules import tool_router under different names
+    received = {}
+
+    def fake_do_trace(client, req):
+        received["req"] = req
+        return {"callers": []}
+
+    monkeypatch.setattr(router, "do_trace", fake_do_trace)
+    if hasattr(module, "_acquire_client"):
+
+        async def fake_acquire():
+            return object()
+
+        monkeypatch.setattr(module, "_acquire_client", fake_acquire)
+    else:
+        monkeypatch.setattr(module, "get_client", lambda: object())
+
+    asyncio.run(
+        module.marm_graph_trace(
+            function_name="notebook_dispatch",
+            project="p",
+            include_tests=True,
+            include_evidence=False,
+        )
+    )
+
+    req = received["req"]
+    assert req.include_tests is True, f"{module_path} dropped include_tests"
+    assert req.include_evidence is False, f"{module_path} dropped include_evidence"
+    assert req.function_name == "notebook_dispatch"

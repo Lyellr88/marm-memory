@@ -8,6 +8,10 @@ import json
 import pytest
 from conftest import requires_binary
 
+from marm_graph.core.backend import (
+    _EXPECTED_UPSTREAM_TOOLS,
+    _KNOWN_EXTRA_UPSTREAM_TOOLS,
+)
 from marm_graph.core.cbm_client import (
     CbmClient,
     CbmError,
@@ -223,8 +227,17 @@ def test_handshake_captures_binary_version(client):
 
 @requires_binary
 def test_tools_list_matches_expected_schema(client):
+    """Every required tool is present, and every extra one is a tool we know about.
+
+    Not an equality check against the real binary: upstream adding a tool MARM does
+    not call is forward-compatible, and check_schema treats it that way. Asserting
+    equality here would make each new upstream tool a test failure and pressure
+    someone into declaring it required, which is the one thing that would let an
+    upstream rename refuse to start MARM.
+    """
     names = {t["name"] for t in client.list_tools()}
-    assert names == EXPECTED_TOOLS
+    assert _EXPECTED_UPSTREAM_TOOLS <= names
+    assert not (names - _EXPECTED_UPSTREAM_TOOLS - _KNOWN_EXTRA_UPSTREAM_TOOLS)
 
 
 @requires_binary
@@ -369,3 +382,57 @@ def test_close_is_idempotent_and_stays_closed(monkeypatch):
     with pytest.raises(CbmError):
         client.call_tool("list_projects", {})
     assert spawned == []
+
+
+# ── upstream tool contract ──────────────────────────────────────────
+
+
+def test_check_schema_accepts_a_known_extra_tool_silently():
+    """check_index_coverage arrived in 0.10.5 and MARM does not call it."""
+    from marm_graph.core.backend import check_schema
+
+    check_schema(set(_EXPECTED_UPSTREAM_TOOLS) | {"check_index_coverage"})
+
+
+def test_check_schema_still_warns_on_an_unfamiliar_tool(monkeypatch):
+    """Asserts the warning is issued, not where it lands.
+
+    An earlier version read stdout and passed alone but failed in a full run,
+    because whichever test configured structlog first decided the sink.
+    """
+    from marm_graph.core import backend
+
+    warnings = []
+
+    class Recorder:
+        def warning(self, event, **kw):
+            warnings.append((event, kw))
+
+        def info(self, event, **kw):
+            pass
+
+    monkeypatch.setattr(backend, "logger", Recorder())
+    backend.check_schema(set(_EXPECTED_UPSTREAM_TOOLS) | {"summon_daemon"})
+
+    assert warnings == [("cbm.schema_drift_extra", {"extra": ["summon_daemon"]})]
+
+    warnings.clear()
+    backend.check_schema(set(_EXPECTED_UPSTREAM_TOOLS) | {"check_index_coverage"})
+    assert warnings == []
+
+
+def test_check_schema_refuses_to_start_when_a_required_tool_is_gone():
+    """Guards against a known extra being added to the required set by mistake."""
+    from marm_graph.core.backend import check_schema
+
+    for required in ("trace_path", "search_graph"):
+        with pytest.raises(RuntimeError, match=required):
+            check_schema(set(_EXPECTED_UPSTREAM_TOOLS) - {required})
+
+
+def test_known_extras_are_not_required_to_start():
+    """A tool MARM never calls must never be able to refuse startup."""
+    from marm_graph.core.backend import check_schema
+
+    assert not (_KNOWN_EXTRA_UPSTREAM_TOOLS & _EXPECTED_UPSTREAM_TOOLS)
+    check_schema(set(_EXPECTED_UPSTREAM_TOOLS))

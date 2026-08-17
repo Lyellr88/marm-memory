@@ -42,6 +42,14 @@ _EXPECTED_UPSTREAM_TOOLS = {
     "ingest_traces",
 }
 
+# Upstream tools MARM does not call but has seen. Deliberately not in the set
+# above: a name there is a hard startup requirement, and requiring a tool nothing
+# calls would break MARM the moment upstream renamed it. This only keeps the
+# drift warning meaningful, so it still fires for a genuinely unfamiliar tool.
+_KNOWN_EXTRA_UPSTREAM_TOOLS = {
+    "check_index_coverage",  # added in engine 0.10.5
+}
+
 
 def verify_and_start(client: CbmClient) -> None:
     """Start the child, verify the binary trust boundary, check for schema drift."""
@@ -74,17 +82,17 @@ def verify_and_start(client: CbmClient) -> None:
 def check_schema(names: set[str]) -> None:
     """Fail fast if an expected upstream tool is gone; warn on unexpected extras.
 
-    tools/list is a fixed contract that tool_router maps by hand — a missing tool
+    tools/list is a fixed contract that tool_router maps by hand. A missing tool
     means a hand-written mapping is silently broken, so refuse to start. Extra
     tools are forward-compatible and only worth a warning.
     """
     missing = _EXPECTED_UPSTREAM_TOOLS - names
-    extra = names - _EXPECTED_UPSTREAM_TOOLS
+    extra = names - _EXPECTED_UPSTREAM_TOOLS - _KNOWN_EXTRA_UPSTREAM_TOOLS
     if missing:
         raise RuntimeError(
             f"Upstream schema drift: expected codebase-memory-mcp tools missing "
-            f"from the binary: {sorted(missing)}. The pinned contract changed — "
-            f"review the router mapping before running."
+            f"from the binary: {sorted(missing)}. The pinned contract changed, "
+            f"so review the router mapping before running."
         )
     if extra:
         logger.warning("cbm.schema_drift_extra", extra=sorted(extra))
