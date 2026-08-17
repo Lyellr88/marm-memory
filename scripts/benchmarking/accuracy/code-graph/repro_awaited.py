@@ -265,15 +265,33 @@ def _run(args, cleanup_failed: list[str]) -> int:
 
     work = Path(tempfile.mkdtemp(prefix="cga-repro-"))
     repo = work / "repro"
-    _write_package(repo / "pkg")
+    # The package sits at the repo root unless --nest moves it down, which is what
+    # separates this layout from MARM's marm-mcp-server/marm_mcp_server/.
+    base = repo / args.nest if args.nest else repo
+    _write_package(base / "pkg")
     if args.filler:
-        _write_filler(repo / "pkg", args.filler)
+        _write_filler(base / "pkg", args.filler)
+    # The engine resolves calls through a language server, which has to be told
+    # where the import root is. Without a project file it can only guess, so this
+    # is a variable rather than scaffolding.
+    if args.pyproject:
+        (base / "pyproject.toml").write_text(
+            '[project]\nname = "repro"\nversion = "0.1.0"\n'
+            '\n[tool.setuptools.packages.find]\nwhere = ["."]\n',
+            encoding="utf-8",
+        )
     subprocess.run(["git", "init", "-q", str(repo)], capture_output=True, timeout=60)
+    print(f"layout: pkg at {(base / 'pkg').relative_to(repo).as_posix()}")
+    if args.pyproject:
+        print(
+            f"config: pyproject.toml at {(base / 'pyproject.toml').relative_to(repo).as_posix()}"
+        )
+    print(f"mode: {args.mode}")
 
     project = None
     try:
         raw = engine_cli(
-            binary, "index_repository", "--repo-path", str(repo), "--mode", "moderate"
+            binary, "index_repository", "--repo-path", str(repo), "--mode", args.mode
         )
         indexed = json.loads(raw[raw.find("{") : raw.rfind("}") + 1])
         project = indexed.get("project")
@@ -336,6 +354,24 @@ def main() -> int:
         type=int,
         default=0,
         help="pad the repo with N unrelated modules to test whether scale matters",
+    )
+    ap.add_argument(
+        "--nest",
+        metavar="DIR",
+        default="",
+        help="put the package under DIR instead of at the repo root, so the import "
+        "root is one level down as it is in MARM (try a plain name and a hyphenated one)",
+    )
+    ap.add_argument(
+        "--pyproject",
+        action="store_true",
+        help="write a pyproject.toml beside the package, declaring the import root",
+    )
+    ap.add_argument(
+        "--mode",
+        default="moderate",
+        choices=["fast", "moderate", "full"],
+        help="engine index mode; moderate and fast filter files, full does not",
     )
     args = ap.parse_args()
 
