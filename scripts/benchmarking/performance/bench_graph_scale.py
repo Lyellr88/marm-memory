@@ -25,6 +25,7 @@ versions can be compared in one sitting without touching the project's pin.
 """
 
 import argparse
+import asyncio
 import json
 import shutil
 import sqlite3
@@ -33,6 +34,12 @@ import sys
 import tempfile
 import time
 from pathlib import Path
+
+_HERE = Path(__file__).resolve()
+sys.path.insert(0, str(_HERE.parents[3] / "marm-mcp-server"))
+sys.path.insert(0, str(_HERE.parents[1] / "accuracy" / "code-graph"))
+
+from store_cleanup import gated  # noqa: E402
 
 STORE_DIR = Path.home() / ".cache" / "codebase-memory-mcp"
 
@@ -78,8 +85,10 @@ def _module_source(pkg: str, index: int, peers: tuple[int, int]) -> str:
     return "\n".join(lines) + "\n"
 
 
-def generate(root: Path, target_lines: int, nest: str) -> tuple[int, int, list[str]]:
-    """Write the tree. Returns (modules, lines, probe module names)."""
+def generate(
+    root: Path, target_lines: int, nest: str
+) -> tuple[int, int, list[tuple[int, int, int]]]:
+    """Write the tree. Returns (modules, lines, probes as (index, peer_a, peer_b))."""
     pkg_name = "bigpkg"
     base = root / nest if nest else root
     pkg = base / pkg_name
@@ -94,16 +103,21 @@ def generate(root: Path, target_lines: int, nest: str) -> tuple[int, int, list[s
     modules = max(8, target_lines // per_module)
 
     lines = 0
+    peers_by_index: dict[int, tuple[int, int]] = {}
     for i in range(modules):
         peers = ((i + 1) % modules, (i + 7) % modules)
+        peers_by_index[i] = peers
         src = _module_source(pkg_name, i, peers)
         (pkg / f"mod_{i:05d}.py").write_text(src, encoding="utf-8")
         lines += src.count("\n")
 
     subprocess.run(["git", "init", "-q", str(root)], capture_output=True, timeout=120)
 
+    # Each probe carries the two peers its module actually calls, so verification
+    # can demand those exact edges. Accepting any entry_* target passes on a wrong
+    # edge, which is the failure this whole harness exists to refuse.
     step = max(1, modules // PROBE_COUNT)
-    probes = [f"{i:05d}" for i in range(0, modules, step)][:PROBE_COUNT]
+    probes = [(i, *peers_by_index[i]) for i in range(0, modules, step)][:PROBE_COUNT]
     return modules, lines, probes
 
 
@@ -126,33 +140,48 @@ def _json(raw: str) -> dict:
     return json.loads(raw[raw.find("{") : raw.rfind("}") + 1])
 
 
-def cross_module_edges(store: Path, probes: list[str]) -> tuple[int, int]:
-    """How many probe modules kept the call edge into their first peer."""
+def cross_module_edges(
+    store: Path, probes: list[tuple[int, int, int]]
+) -> tuple[int, int, list[str], str | None]:
+    """Verify each probe's two exact peer edges.
+
+    Returns (probes fully satisfied, probes checked, missing edge descriptions,
+    error). Both peers must be present: a probe module calls exactly entry_<a> and
+    entry_<b>, so demanding those names is the difference between proving the
+    resolver worked and proving it produced some edge.
+    """
     if not store.exists():
-        return 0, len(probes)
+        return 0, len(probes), [], f"no store at {store}"
     conn = sqlite3.connect(str(store))
     try:
-        found = 0
-        for p in probes:
-            caller = f"entry_{p}"
-            row = conn.execute(
-                """SELECT count(*) FROM edges e
-                   JOIN nodes s ON s.id = e.source_id
-                   JOIN nodes t ON t.id = e.target_id
-                   WHERE e.type = 'CALLS' AND s.name = ?
-                     AND t.name LIKE 'entry_%' AND t.name != ?""",
-                (caller, caller),
-            ).fetchone()
-            if row and row[0]:
-                found += 1
-        return found, len(probes)
-    except sqlite3.Error:
-        return -1, len(probes)
+        satisfied = 0
+        missing: list[str] = []
+        for index, peer_a, peer_b in probes:
+            caller = f"entry_{index:05d}"
+            absent = [
+                f"{caller} -> entry_{peer:05d}"
+                for peer in (peer_a, peer_b)
+                if not conn.execute(
+                    """SELECT 1 FROM edges e
+                       JOIN nodes s ON s.id = e.source_id
+                       JOIN nodes t ON t.id = e.target_id
+                       WHERE e.type = 'CALLS' AND s.name = ? AND t.name = ?
+                       LIMIT 1""",
+                    (caller, f"entry_{peer:05d}"),
+                ).fetchone()
+            ]
+            if absent:
+                missing.extend(absent)
+            else:
+                satisfied += 1
+        return satisfied, len(probes), missing, None
+    except sqlite3.Error as exc:
+        return 0, len(probes), [], f"store not readable: {exc}"
     finally:
         conn.close()
 
 
-def drop(binary: Path, project: str) -> str:
+def _delete_and_confirm(binary: Path, project: str) -> str:
     for attempt in range(4):
         cli(binary, "delete_project", "--project", project, timeout=300.0)
         time.sleep(1.0)
@@ -167,7 +196,25 @@ def drop(binary: Path, project: str) -> str:
     return "STILL PRESENT, remove by hand"
 
 
-def report_query_latency(binary: Path, project: str, probes: list[str]) -> None:
+def drop(binary: Path, project: str) -> str:
+    """Delete under the gate, same as every other store mutation.
+
+    A delete landing while a poller is inside index_repository is undone when that
+    index writes the project back, which is why the gate covers deletes too.
+    """
+    from marm_mcp_server.core.graph_index_lock import GraphIndexBusy
+
+    try:
+        return asyncio.run(
+            gated(f"cga_scale_cleanup:{project}", _delete_and_confirm, binary, project)
+        )
+    except GraphIndexBusy as exc:
+        return f"gate busy ({exc}), remove {project} by hand"
+
+
+def report_query_latency(
+    binary: Path, project: str, probes: list[tuple[int, int, int]]
+) -> None:
     """Time queries over one persistent stdio child, which is MARM's real path.
 
     A fresh `cli` invocation per query spawns and tears down a daemon each time,
@@ -188,7 +235,7 @@ def report_query_latency(binary: Path, project: str, probes: list[str]) -> None:
         (
             "trace_path",
             {
-                "function_name": f"entry_{probes[len(probes) // 2]}",
+                "function_name": f"entry_{probes[len(probes) // 2][0]:05d}",
                 "project": project,
                 "direction": "inbound",
                 "depth": 2,
@@ -265,14 +312,20 @@ def main() -> int:
     project = None
     try:
         print("\nindexing (cold) ...")
-        raw, index_s = cli(
-            args.binary,
-            "index_repository",
-            "--repo-path",
-            str(repo),
-            "--mode",
-            args.mode,
-            timeout=args.index_timeout,
+        # Gated. AGENTS.md: every code-index call takes the graph gate, and this
+        # writes the shared project list a running MARM is reading.
+        raw, index_s = asyncio.run(
+            gated(
+                f"cga_scale_index:{repo.name}",
+                cli,
+                args.binary,
+                "index_repository",
+                "--repo-path",
+                str(repo),
+                "--mode",
+                args.mode,
+                timeout=args.index_timeout,
+            )
         )
         if raw.startswith("__"):
             print(f"  INDEX FAILED after {index_s:.0f}s")
@@ -288,17 +341,31 @@ def main() -> int:
         print(f"  indexed in {index_s:.1f}s")
         print(f"  nodes={nodes:,}  edges={edges:,}  skipped={d.get('skipped_count')}")
         print(f"  store={store_mb:,.0f} MB")
-        print(f"  rate={lines / index_s:,.0f} lines/s   {nodes / index_s:,.0f} nodes/s")
 
-        found, total = cross_module_edges(store, probes)
+        # Correctness first, and no performance number before it passes. A rate
+        # earned by skipping resolution is the exact result this harness exists to
+        # refuse: engine 0.9.0 indexed this tree twice as fast as 0.10.5 while
+        # resolving none of these edges.
+        satisfied, total, missing, err = cross_module_edges(store, probes)
         print("\ncorrectness at scale:")
-        if found < 0:
-            print("  cross-module edges: store schema not readable")
+        if err:
+            print(f"  cannot verify: {err}")
         else:
-            print(f"  cross-module call edges present: {found}/{total} probes")
-            if found < total:
-                print("  RESOLVER DEGRADED AT SCALE, throughput figure is not usable")
+            print(f"  probes with both peer call edges: {satisfied}/{total}")
+            for line in missing[:10]:
+                print(f"    MISSING {line}")
+            if len(missing) > 10:
+                print(f"    ... and {len(missing) - 10} more")
 
+        if err or satisfied < total:
+            print(
+                "\nRESOLVER DEGRADED AT SCALE. Throughput and latency are withheld:\n"
+                "  a rate measured on a graph missing its cross-module edges is not a\n"
+                "  performance result. Fix resolution, then re-run for a usable number."
+            )
+            return 1
+
+        print(f"\nrate={lines / index_s:,.0f} lines/s   {nodes / index_s:,.0f} nodes/s")
         report_query_latency(args.binary, project, probes)
         return 0
     finally:

@@ -122,6 +122,23 @@ async def drop_project(project: str) -> str:
         return f"gate busy ({exc}), remove {project} by hand"
 
 
+async def gated(purpose: str, fn, *args, **kwargs):
+    """Run one engine store mutation under the cross-process gate.
+
+    AGENTS.md: every code-index call and every delete_project takes the graph gate.
+    A harness indexing a throwaway project still writes the shared project list a
+    running MARM is reading, so "it is only a temp project" does not exempt it.
+
+    Raises GraphIndexBusy when another index holds the lease. Never waits, matching
+    the gate's contract: a benchmark has something better to do than block, and a
+    run that silently queued behind a 40s index would report that wait as its own
+    index time.
+    """
+    from marm_mcp_server.core.graph_index_lock import run_exclusive
+
+    return await run_exclusive(purpose, fn, *args, **kwargs)
+
+
 def succeeded(status: str) -> bool:
     return status.startswith("deleted")
 

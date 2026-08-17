@@ -13,8 +13,17 @@ Nine lines of Python and eight of TypeScript, one route, one client call. Runs
 against the engine CLI so nothing about MARM is in the picture. Prints the
 verbatim output to paste into an issue.
 
+C4 reproduces here. C6 does not, and the run says so: a direct `fetch` produces no
+client-side Route node, so without one there is nothing to mismatch and the trace
+measures client-call recognition instead of the route-key join. Exit 3 marks that,
+because a fixture that looks like it tests C6 while testing something else is worse
+than no fixture.
+
     python scripts/benchmarking/accuracy/code-graph/repro_routes.py
     python scripts/benchmarking/accuracy/code-graph/repro_routes.py --keep
+
+Exit: 0 both findings reproduced, 1 cleanup failed, 2 engine missing,
+3 C4 reproduced but the C6 precondition was not met.
 """
 
 import argparse
@@ -33,6 +42,7 @@ from store_cleanup import (
     drop_project,
     engine_binary,
     engine_cli,
+    gated,
     report_kept,
     succeeded,
 )
@@ -96,6 +106,22 @@ def _handles_edges(store: Path) -> list[tuple[str, str]]:
         conn.close()
 
 
+def _route_keys(store: Path) -> list[str]:
+    if not store.exists():
+        return []
+    conn = sqlite3.connect(str(store))
+    try:
+        return [
+            row[0]
+            for row in conn.execute(
+                "SELECT qualified_name FROM nodes WHERE label='Route' "
+                "ORDER BY qualified_name"
+            )
+        ]
+    finally:
+        conn.close()
+
+
 def _run(args, cleanup_failed: list[str]) -> int:
     binary = engine_binary()
     if binary is None or not binary.exists():
@@ -108,8 +134,18 @@ def _run(args, cleanup_failed: list[str]) -> int:
 
     project = None
     try:
-        raw = engine_cli(
-            binary, "index_repository", "--repo-path", str(repo), "--mode", "moderate"
+        # Gated: this writes the shared project list a running MARM is reading.
+        raw = asyncio.run(
+            gated(
+                f"cga_routes_index:{repo.name}",
+                engine_cli,
+                binary,
+                "index_repository",
+                "--repo-path",
+                str(repo),
+                "--mode",
+                "moderate",
+            )
         )
         indexed = json.loads(raw[raw.find("{") : raw.rfind("}") + 1])
         project = indexed.get("project")
@@ -156,14 +192,24 @@ def _run(args, cleanup_failed: list[str]) -> int:
         print(f"\nreached the Python handler: {bool(reached)}")
 
         print("\n## Route node keys")
-        if store.exists():
-            conn = sqlite3.connect(str(store))
-            for qname in conn.execute(
-                "SELECT qualified_name FROM nodes WHERE label='Route' ORDER BY qualified_name"
-            ):
-                print(f"  {qname[0]}")
-            conn.close()
-        return 0
+        routes = _route_keys(store)
+        for qname in routes:
+            print(f"  {qname}")
+
+        c6_ready = any("__route__ANY__" in q for q in routes)
+        print(f"\nC6 precondition, a client-side route node exists: {c6_ready}")
+        if not c6_ready:
+            print(
+                "\n"
+                "C6 NOT REPRODUCED. Only server-declared routes were indexed, so the\n"
+                "trace above measures whether the client call was recognised at all,\n"
+                "NOT the __route__ANY__ to __route__GET__ join failure it is meant to\n"
+                "show. A direct fetch() is not detected; the real project's client\n"
+                "calls through a shared request() wrapper and does produce these\n"
+                "nodes. Until the recognised client shape is known, C4 above is the\n"
+                "only finding this fixture reproduces."
+            )
+        return 0 if c6_ready else 3
     finally:
         issues: list[str] = []
         if project and not args.keep:

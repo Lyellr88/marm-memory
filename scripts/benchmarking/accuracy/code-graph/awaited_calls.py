@@ -59,18 +59,17 @@ def _store_for_repo() -> Path | None:
     The engine names each store after the mangled absolute repo path, so any
     literal default only works on the machine that wrote it. Matching on the
     mangled form keeps this runnable from any clone.
+
+    Exact match only. A basename fallback used to accept any store whose name ended
+    in the repository directory name, which selects a sibling checkout's store on a
+    machine holding two clones, then reports that store's metrics under this
+    checkout's commit and branch. Returning nothing is the correct answer: this
+    script indexes no repositories, so a missing store means the caller has not
+    indexed this one yet.
     """
     key = str(REPO_ROOT).replace("\\", "-").replace("/", "-").replace(":", "")
     candidate = STORE_DIR / f"{key}.db"
-    if candidate.exists():
-        return candidate
-    tail = REPO_ROOT.name.lower()
-    matches = [
-        p
-        for p in STORE_DIR.glob("*.db")
-        if p.stem.lower().endswith(tail) and p.stem != "_config"
-    ]
-    return matches[0] if len(matches) == 1 else None
+    return candidate if candidate.exists() else None
 
 
 def _provenance(db: Path) -> dict:

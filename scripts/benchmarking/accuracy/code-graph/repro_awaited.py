@@ -39,6 +39,7 @@ from store_cleanup import (
     drop_project,
     engine_binary,
     engine_cli,
+    gated,
     report_kept,
     succeeded,
 )
@@ -290,8 +291,18 @@ def _run(args, cleanup_failed: list[str]) -> int:
 
     project = None
     try:
-        raw = engine_cli(
-            binary, "index_repository", "--repo-path", str(repo), "--mode", args.mode
+        # Gated: this writes the shared project list a running MARM is reading.
+        raw = asyncio.run(
+            gated(
+                f"cga_repro_index:{repo.name}",
+                engine_cli,
+                binary,
+                "index_repository",
+                "--repo-path",
+                str(repo),
+                "--mode",
+                args.mode,
+            )
         )
         indexed = json.loads(raw[raw.find("{") : raw.rfind("}") + 1])
         project = indexed.get("project")
