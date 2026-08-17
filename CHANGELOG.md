@@ -1,6 +1,15 @@
 # Changelog
 
 <details>
+<summary><strong>August 17th, 2026: Config Settings Module Split (v2.39.2)</strong></summary>
+
+### Internal
+
+- Split `config/settings.py`'s env-var parsing helpers and API-key bootstrap logic into `config/env_parsing.py` and `config/api_key_bootstrap.py`. No behavior change; `settings.py` keeps every setting constant and its validation/clamping as the owner. `env_parsing.py` holds the six pure `_safe_*`/`_csv_frozenset` readers used throughout the file. `api_key_bootstrap.py` holds the MARM_API_KEY resolution sequence (env var, then `~/.marm/.env`, then auto-generate and persist when bound to `0.0.0.0`), now a single `resolve_marm_api_key(server_host)` function taking `SERVER_HOST` as a parameter instead of importing it back from `settings.py`, avoiding a circular import between the two. `settings.py` drops from 684 to 520 lines.
+
+</details>
+
+<details>
 <summary><strong>August 17th, 2026: Code Graph Engine 0.10.5 and Trace Evidence (v2.39.0)</strong></summary>
 
 ### Fixed: "Who Calls This" Now Answers Correctly On Repositories With A Nested Package
