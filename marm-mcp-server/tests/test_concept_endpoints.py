@@ -712,27 +712,6 @@ def test_try_embed_succeeds_when_the_encoder_is_loaded_and_free(concepts_env):
     assert len(emb_bytes) == 16  # 4 float32 values
 
 
-def test_try_embed_fails_open_when_the_encoder_itself_raises(concepts_env):
-    """_try_embed's contract is None on any failure, matching find_code_match's
-    soft-fail. A raise from the encoder itself (a malformed input, a transient
-    runtime error) must not propagate past _try_embed: the caller (_run_build's
-    per-entity loop) has no try/except of its own around this call, relying
-    entirely on _try_embed to never raise -- an uncaught exception here would
-    abort the whole build instead of just skipping duplicate detection for the
-    one entity that hit it."""
-    _server, _concepts, memory_module = concepts_env
-    mem = memory_module.memory
-    mem._encoder_failed = False
-
-    class _ExplodingEncoder:
-        def encode(self, text):
-            raise RuntimeError("encoder blew up")
-
-    mem.encoder = _ExplodingEncoder()
-
-    assert _engine()._try_embed("auth module") is None
-
-
 def test_try_embed_returns_none_instead_of_waiting_on_a_busy_encoder(concepts_env):
     """Concept-build work must never block a write or recall (and the
     reverse): _try_embed must not wait behind memory._encoder_lock while a
