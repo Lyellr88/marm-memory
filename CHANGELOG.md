@@ -1,6 +1,19 @@
 # Changelog
 
 <details>
+<summary><strong>August 18th, 2026: Console Architecture Tab Renders Again (v2.39.3)</strong></summary>
+
+### Fixed: Opening A Project's Architecture Tab In The Console No Longer Breaks The View
+
+- The Console handed the browser the graph engine's counted rows where the interface expects plain type names: `{"label": "Function", "count": 2028}` for node types and `{"type": "CALLS", "count": 6632}` for edge types. React raises on an object child, so the first badge took down the panel and the tab with it. Both lists are now reduced to names before they leave the server, which means the Console you already have starts working with no rebuild or reinstall.
+- The fallback path was broken the same way and more heavily. When the architecture response omits those sections the endpoint falls back to the graph schema, which returns the same counted rows plus a property list for every type, 34 entries for `Function` alone. That path is normalized too, so it is a working fallback rather than a decorative one.
+- This was not caused by the 0.10.5 engine upgrade in v2.39.0, although reviewing that release is what surfaced it. Both engine versions return byte-identical values for the keys this endpoint reads, so the tab has been failing for as long as it has existed.
+- The module table on the same tab still reads "No module summary available." on an indexed project. That is now a deliberate, tested decision rather than a second symptom: the engine aspect that looked like its missing data source turned out to report third-party dependency names and Python builtins with zero coupling on every row, never the project's own packages. Filling the table from that would have replaced an honest empty state with a table of builtins. A real source is being proven separately before the table is wired to anything.
+- The graph tools agents call are untouched and still return the engine's counts, which a test now enforces. The normalization lives at the last hop before the browser precisely so the model-facing surface keeps the data the counts carry.
+
+</details>
+
+<details>
 <summary><strong>August 17th, 2026: Config Settings Module Split (v2.39.2)</strong></summary>
 
 ### Fixed: An Auto-Generated API Key Containing "#" No Longer Gets Truncated on the Next Start

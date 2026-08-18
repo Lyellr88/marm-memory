@@ -63,6 +63,30 @@ def get_project_status(project: str) -> dict:
     }
 
 
+def _type_names(rows: object, key: str) -> list[str]:
+    """Reduce the graph engine's label aspects to the bare names the UI declares.
+
+    The engine reports these as counted rows, `{"label": "Function", "count": 2028}`
+    for nodes and `{"type": "CALLS", "count": 6632}` for edges, and the
+    get_graph_schema fallback adds a `properties` array to each. React raises on an
+    object child, so an unreduced row fails the whole Architecture tab on its first
+    badge rather than rendering oddly.
+    """
+    if not isinstance(rows, list):
+        return []
+    names: list[str] = []
+    for row in rows:
+        if isinstance(row, str):
+            candidate: object = row
+        elif isinstance(row, dict):
+            candidate = row.get(key) or row.get("label") or row.get("type")
+        else:
+            continue
+        if isinstance(candidate, str) and candidate:
+            names.append(candidate)
+    return names
+
+
 @router.get("/api/projects/{project}/architecture")
 def get_project_architecture(project: str) -> dict:
     result = _project_operation("internal/projects/architecture", {"project": project})
@@ -74,13 +98,19 @@ def get_project_architecture(project: str) -> dict:
         "name": project,
         "modules": modules if isinstance(modules, list) else [],
         "schema": {
-            "node_types": result.get("node_labels")
-            or schema.get("node_labels")
-            or schema.get("node_types", []),
-            "edge_types": result.get("edge_types")
-            or schema.get("edge_types")
-            or schema.get("edge_labels")
-            or schema.get("relationship_types", []),
+            "node_types": _type_names(
+                result.get("node_labels")
+                or schema.get("node_labels")
+                or schema.get("node_types", []),
+                "label",
+            ),
+            "edge_types": _type_names(
+                result.get("edge_types")
+                or schema.get("edge_types")
+                or schema.get("edge_labels")
+                or schema.get("relationship_types", []),
+                "type",
+            ),
         },
     }
 
