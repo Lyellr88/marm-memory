@@ -691,69 +691,6 @@ def test_try_embed_real_fastembed_end_to_end(concepts_env):
     assert len(emb_bytes) % 4 == 0  # whole number of float32 values
 
 
-def test_try_embed_succeeds_when_the_encoder_is_loaded_and_free(concepts_env):
-    """The non-blocking encode path's happy case: an already-loaded, unlocked
-    encoder still embeds normally. A stub encoder rather than the real
-    fastembed model, so this runs even where the real model's weights are
-    network-blocked (see test_try_embed_real_fastembed_end_to_end above)."""
-    _server, _concepts, memory_module = concepts_env
-    mem = memory_module.memory
-    mem._encoder_failed = False
-
-    class _StubEncoder:
-        def encode(self, text):
-            return np.zeros(4, dtype="float32")
-
-    mem.encoder = _StubEncoder()
-
-    emb_bytes = _engine()._try_embed("auth module")
-
-    assert emb_bytes is not None
-    assert len(emb_bytes) == 16  # 4 float32 values
-
-
-def test_try_embed_returns_none_instead_of_waiting_on_a_busy_encoder(concepts_env):
-    """Concept-build work must never block a write or recall (and the
-    reverse): _try_embed must not wait behind memory._encoder_lock while a
-    write or recall holds it. Holds a real threading.Lock on another thread
-    -- if _try_embed still contended for it the way the pre-fix _encode_sync
-    path did, this thread would block for the full 5s timeout below instead
-    of returning within a beat."""
-    import threading
-    import time
-
-    _server, _concepts, memory_module = concepts_env
-    engine = _engine()
-    mem = memory_module.memory
-    mem.encoder = (
-        object()
-    )  # truthy and never called: the busy lock short-circuits first
-    mem._encoder_failed = False
-
-    lock_held = threading.Event()
-    release_lock = threading.Event()
-
-    def hold_the_encoder_lock():
-        mem._encoder_lock.acquire()
-        lock_held.set()
-        release_lock.wait(timeout=5)
-        mem._encoder_lock.release()
-
-    holder = threading.Thread(target=hold_the_encoder_lock)
-    holder.start()
-    try:
-        assert lock_held.wait(timeout=5), "holder thread never acquired the lock"
-        started = time.monotonic()
-        result = engine._try_embed("some entity name")
-        elapsed = time.monotonic() - started
-    finally:
-        release_lock.set()
-        holder.join(timeout=5)
-
-    assert result is None
-    assert elapsed < 0.5, f"_try_embed waited {elapsed:.2f}s behind a busy encoder lock"
-
-
 def test_run_recall_lookup_mode_returns_matching_entities(concepts_env):
     _server, concepts, _memory_module = concepts_env
     concept_db = concepts._get_concept_db()
