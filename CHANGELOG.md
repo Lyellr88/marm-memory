@@ -3,9 +3,15 @@
 <details>
 <summary><strong>August 17th, 2026: Concept Build Endpoint Module Split (v2.39.1)</strong></summary>
 
+### Fixed: Concept Builds No Longer Wait Behind a Write or Recall for the Shared Encoder
+
+- `_try_embed`'s optional duplicate-candidate embedding shared the same process-wide, serialized encoder as every memory write and semantic recall (`core/memory.py`'s `_encoder_lock`). A `marm_concept_build` embedding many new entity names -- most exposed on a first `search_all=True` build or a large backlog drain -- could make a concurrent write or recall wait behind it, which this project's own coding guidelines rule out: background graph and concept work must never block a write, a recall, or startup. Pre-existing, not introduced by the module split below; a review of that PR is what surfaced it.
+- `core/memory.py` gained `_try_encode_sync`, a non-blocking counterpart to `_encode_sync`: it returns `None` immediately if the encoder isn't loaded yet or the lock is currently held, rather than waiting. `_try_embed` now uses it instead of the blocking path.
+- Duplicate-candidate detection is auxiliary, so this is a deliberately lossy fix rather than a fully lossless one: an entity whose embed attempt lands during contention simply skips semantic duplicate detection for that build and falls back to exact-name matching, which already runs unconditionally. It is not retried or backfilled later. A fully lossless design would need a retry/backfill mechanism, which is a larger task than this fix.
+
 ### Internal
 
-- Split `endpoints/concepts.py`'s synchronous concept-build engine into `services/concept_build_engine.py`, continuing the v2.30.0 CLI/Console module splits. No behavior change; the extracted module owns the concept-DB singleton, paged/targeted memory-row reads, and the entity/relationship/code-link extraction loop (`_run_build`) that both the manual `marm_concept_build` route and the background indexing worker's `build_for_memory_ids` drive via `asyncio.to_thread`. `endpoints/concepts.py` keeps the FastAPI routes, build-run bookkeeping, and async orchestration as the owner. `concepts.py` drops from 789 to 446 lines.
+- Split `endpoints/concepts.py`'s synchronous concept-build engine into `services/concept_build_engine.py`, continuing the v2.30.0 CLI/Console module splits. No behavior change beyond the fix above; the extracted module owns the concept-DB singleton, paged/targeted memory-row reads, and the entity/relationship/code-link extraction loop (`_run_build`) that both the manual `marm_concept_build` route and the background indexing worker's `build_for_memory_ids` drive via `asyncio.to_thread`. `endpoints/concepts.py` keeps the FastAPI routes, build-run bookkeeping, and async orchestration as the owner. `concepts.py` drops from 789 to 446 lines.
 
 </details>
 

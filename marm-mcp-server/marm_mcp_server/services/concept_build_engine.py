@@ -155,17 +155,20 @@ def _fetch_memory_rows_by_ids(memory_ids: list[str]) -> MemoryPage:
 def _try_embed(name: str) -> Optional[bytes]:
     """Best-effort entity-name embedding for duplicate-candidate detection.
     None on any failure -- fail-open, matching find_code_match's soft-fail
-    contract. This is the first place the concept graph reaches into
-    memory._encoder_lock (core/memory.py:178-181, fully serialized
-    process-wide) -- a large search_all=True build embedding many new
-    entity names now competes for encoder time with concurrent
-    marm_smart_recall/memory-write calls, a new cross-feature coupling
-    that didn't exist before (spaCy extraction was fully independent of
-    the memory-write path)."""
+    contract -- and also None whenever the shared, process-wide encoder
+    (core/memory.py's _encoder_lock) is currently held by a concurrent write
+    or recall, via _try_encode_sync's non-blocking acquire, rather than
+    waiting behind it. Concept-build work must never block a write, a
+    recall, or startup; duplicate-candidate detection is optional, so an
+    entity that misses it under contention still gets exact-name dedupe,
+    just not the semantic one for that build."""
     if not memory._load_encoder_lazily():
         return None
+    vector = memory._try_encode_sync(name)
+    if vector is None:
+        return None
     try:
-        return _embedding_to_bytes(memory._encode_sync(name))
+        return _embedding_to_bytes(vector)
     except Exception as e:
         _safe_print(f"Concept entity embedding failed for {name!r}: {e}")
         return None

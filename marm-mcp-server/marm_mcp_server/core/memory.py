@@ -207,6 +207,22 @@ class MARMMemory:
             assert self.encoder is not None
             return self.encoder.encode(text)
 
+    def _try_encode_sync(self, text: str) -> Optional[np.ndarray]:
+        """Non-blocking counterpart to _encode_sync: None immediately if the
+        encoder isn't loaded yet or the lock is currently held, rather than
+        waiting behind whatever write or recall holds it. For callers where a
+        miss is an acceptable degradation and waiting on the shared,
+        process-wide encoder lock is not -- background graph/concept work
+        must never block a write, a recall, or startup."""
+        if self.encoder is None:
+            return None
+        if not self._encoder_lock.acquire(blocking=False):
+            return None
+        try:
+            return self.encoder.encode(text)
+        finally:
+            self._encoder_lock.release()
+
     def _load_encoder_lazily(self) -> bool:
         """Lazy load the semantic search model only when needed"""
         if self.encoder is not None or self._encoder_failed:
