@@ -5,104 +5,15 @@ import os
 import sys
 from pathlib import Path
 
-from ..utils.security import generate_api_key, restrict_windows_file_to_current_user
-
-
-def _safe_int(env_key: str, default: int) -> int:
-    """Parse an env var as int, falling back to default on malformed input."""
-    raw = os.environ.get(env_key)
-    if raw is None:
-        return default
-    try:
-        return int(raw)
-    except ValueError:
-        print(
-            f"WARNING: {env_key}={raw!r} is not a valid integer, using default {default}",
-            file=sys.stderr,
-        )
-        return default
-
-
-def _safe_float(env_key: str, default: float) -> float:
-    """Parse an env var as float, falling back to default on malformed input."""
-    raw = os.environ.get(env_key)
-    if raw is None:
-        return default
-    try:
-        return float(raw)
-    except ValueError:
-        print(
-            f"WARNING: {env_key}={raw!r} is not a valid number, using default {default}",
-            file=sys.stderr,
-        )
-        return default
-
-
-def _safe_unit_float(env_key: str, default: float) -> float:
-    """Parse an env var as a float clamped to [0, 1], warning when it was out of range.
-
-    Several settings are weights or similarity scores that only mean anything
-    inside the unit interval; this keeps the parse, the clamp, and the warning in
-    one tested place instead of re-deriving them per setting.
-    """
-    raw = _safe_float(env_key, default)
-    clamped = max(0.0, min(1.0, raw))
-    if raw != clamped:
-        print(
-            f"WARNING: {env_key}={raw} out of [0, 1], clamped to {clamped}",
-            file=sys.stderr,
-        )
-    return clamped
-
-
-_TRUE_WORDS = ("1", "true", "yes", "on")
-_FALSE_WORDS = ("0", "false", "no", "off")
-
-
-def _safe_bool(env_key: str, default: bool) -> bool:
-    """Read an on/off env var, accepting the spellings people actually type.
-
-    Comparing against a single literal is what makes a flag lie: a check for
-    != "0" reads CONCEPT_AUTO_INDEX=false as on, which is the opposite of what
-    the user asked for and of what the docs promise.
-    """
-    raw = os.environ.get(env_key)
-    if raw is None:
-        return default
-    value = raw.strip().lower()
-    if value in _TRUE_WORDS:
-        return True
-    if value in _FALSE_WORDS:
-        return False
-    print(
-        f"WARNING: {env_key}={raw!r} is not a true/false value, "
-        f"using default {default}",
-        file=sys.stderr,
-    )
-    return default
-
-
-def _safe_choice(env_key: str, default: str, allowed: tuple[str, ...]) -> str:
-    """Read an env var constrained to a fixed set, falling back on anything else."""
-    raw = os.environ.get(env_key)
-    if raw is None:
-        return default
-    value = raw.strip().lower()
-    if value in allowed:
-        return value
-    print(
-        f"WARNING: {env_key}={raw!r} is not one of {', '.join(allowed)}, "
-        f"using default {default!r}",
-        file=sys.stderr,
-    )
-    return default
-
-
-def _csv_frozenset(env_key: str) -> frozenset[str]:
-    """Parse a comma-separated env var into a lowercased set, dropping blanks."""
-    raw = os.environ.get(env_key, "")
-    return frozenset(part.strip().lower() for part in raw.split(",") if part.strip())
-
+from .api_key_bootstrap import resolve_marm_api_key
+from .env_parsing import (
+    _csv_frozenset,
+    _safe_bool,
+    _safe_choice,
+    _safe_float,
+    _safe_int,
+    _safe_unit_float,
+)
 
 # Setting this to 0 makes the server behave exactly as it does when fastembed is
 # not installed: no model load, no embeddings written, recall served by the
@@ -149,14 +60,6 @@ if not CONCEPTS_AVAILABLE:
         "python -m pip install -U --force-reinstall marm-mcp-server",
         file=sys.stderr,
     )
-
-
-def _file_link(path: Path) -> str:
-    try:
-        uri = path.as_uri()
-        return f"\033]8;;{uri}\033\\{path}\033]8;;\033\\"
-    except Exception:
-        return str(path)
 
 
 def get_marm_db_path() -> str:
@@ -212,7 +115,7 @@ if not (1 <= _raw_port <= 65535):
         f"WARNING: SERVER_PORT={_raw_port} out of [1, 65535], clamped to {SERVER_PORT}",
         file=sys.stderr,
     )
-SERVER_VERSION = "2.39.1"
+SERVER_VERSION = "2.39.2"
 
 GRAPH_ENABLED = os.environ.get("GRAPH_ENABLED", "true").lower() != "false"
 
@@ -614,71 +517,4 @@ if _raw_cibb < 0:
         file=sys.stderr,
     )
 
-MARM_API_KEY = os.environ.get("MARM_API_KEY", "")
-
-_MARM_ENV_PATH = Path.home() / ".marm" / ".env"
-
-
-def _load_key_from_file() -> str:
-    """Read MARM_API_KEY from ~/.marm/.env if present."""
-    try:
-        for raw_line in _MARM_ENV_PATH.read_text().splitlines():
-            line = raw_line.strip()
-            if not line or line.startswith("#"):
-                continue
-            if line.startswith("MARM_API_KEY="):
-                value = line.split("=", 1)[1].strip()
-                if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
-                    value = value[1:-1]
-                else:
-                    value = value.split("#", 1)[0].strip()
-                return value
-    except Exception:
-        pass
-    return ""
-
-
-if SERVER_HOST == "0.0.0.0" and not MARM_API_KEY:
-    _file_key = _load_key_from_file()
-    if _file_key:
-        MARM_API_KEY = _file_key
-
-
-_is_generate_key_cmd = "--generate-key" in sys.argv or sys.argv[1:3] == [
-    "key",
-    "generate",
-]
-
-if SERVER_HOST == "0.0.0.0" and not MARM_API_KEY and not _is_generate_key_cmd:
-    MARM_API_KEY = generate_api_key()
-    try:
-        _marm_dir = Path.home() / ".marm"
-        _marm_dir.mkdir(exist_ok=True)
-        _MARM_ENV_PATH.write_text(f"MARM_API_KEY={MARM_API_KEY}\n")
-        try:
-            _MARM_ENV_PATH.chmod(0o600)
-        except OSError:
-            pass
-        if sys.platform == "win32" and not restrict_windows_file_to_current_user(
-            _MARM_ENV_PATH
-        ):
-            print(
-                f"WARNING: Could not restrict API key file: {_MARM_ENV_PATH}",
-                file=sys.stderr,
-            )
-    except Exception as _e:
-        print(f"WARNING: Could not save API key to {_MARM_ENV_PATH}: {_e}")
-
-    print()
-    print("MARM: SERVER_HOST=0.0.0.0 detected — API key auto-generated (first start).")
-    print(f"Saved to: {_file_link(_MARM_ENV_PATH)}")
-    print()
-    print(
-        "Add this to your MCP client (replace YOUR_KEY with the key from the file above):"
-    )
-    print(
-        '  claude mcp add --transport http marm-memory http://localhost:8001/mcp --header "Authorization: Bearer YOUR_KEY"'
-    )
-    print()
-    print("On subsequent starts the key loads silently from the file above.")
-    print()
+MARM_API_KEY = resolve_marm_api_key(SERVER_HOST)

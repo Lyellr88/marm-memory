@@ -220,6 +220,29 @@ def test_managed_key_init_reuses_existing_credential(monkeypatch, tmp_path):
     assert active_key_management.read_managed_key(path) == "first-key"
 
 
+def test_managed_key_init_persists_a_real_generated_key_intact(monkeypatch, tmp_path):
+    """initialize_managed_key must round-trip whatever generate_api_key()
+    actually produces through the real (unquoted) file write and read, not
+    just a fixed stand-in value. generate_api_key() deliberately excludes
+    "#" from its alphabet -- an unquoted write is indistinguishable from
+    KEY=value#comment on the next read, and that reader has no quoting
+    mechanism to fall back on since the same file is also fed to
+    `docker run --env-file`, which does not strip quotes either."""
+    active_key_management = importlib.import_module(
+        "marm_mcp_server.services.key_management"
+    )
+    path = tmp_path / ".marm" / ".env"
+    monkeypatch.setattr(active_key_management, "managed_key_path", lambda: path)
+
+    _, created = active_key_management.initialize_managed_key()
+
+    assert created is True
+    written = active_key_management.read_managed_key(path)
+    assert written
+    assert "#" not in written
+    assert path.read_text(encoding="utf-8") == f"MARM_API_KEY={written}\n"
+
+
 def test_windows_key_acl_delegates_to_dacl_replacement(monkeypatch, tmp_path):
     from marm_mcp_server.utils import security
 

@@ -8,8 +8,17 @@ from pathlib import Path
 
 
 def generate_api_key(length: int = 40) -> str:
-    """Generate a cryptographically strong API key with mixed character classes."""
-    symbols = "-_+=.~@#%^&*"
+    """Generate a cryptographically strong API key with mixed character classes.
+
+    "#" is deliberately excluded. The key is persisted unquoted to a
+    .env-style file (config/api_key_bootstrap.py, services/key_management.py)
+    and read back by parsers that treat an unquoted value's trailing "#..."
+    as a comment -- including docker run --env-file, which has no quoting
+    or escaping mechanism at all, so quoting the write is not an option
+    either. A "#" in the alphabet meant roughly 2 in 5 generated keys came
+    back truncated on the very next read.
+    """
+    symbols = "-_+=.~@%^&*"
     alphabet = string.ascii_letters + string.digits + symbols
     key = [
         secrets.choice(string.ascii_uppercase),

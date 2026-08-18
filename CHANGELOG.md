@@ -1,6 +1,17 @@
 # Changelog
 
 <details>
+<summary><strong>August 17th, 2026: Config Settings Module Split (v2.39.2)</strong></summary>
+
+### Fixed: An Auto-Generated API Key Containing "#" No Longer Gets Truncated on the Next Start
+
+- `generate_api_key()`'s character set included `#`, and roughly two in five generated keys contained one. The key is written to `~/.marm/.env` unquoted, and the reader treats an unquoted value's trailing `#...` as a comment -- indistinguishable from `KEY=value#comment` -- so a key ending up with a `#` came back truncated on the very next start. The truncated value is non-empty, so nothing regenerates it: a fresh `SERVER_HOST=0.0.0.0` install could auto-generate a key, print it correctly once, and then permanently reject that same key on every request from the second start onward. The same file backs `marm-memory key generate`'s managed key (`services/key_management.py`), which had the identical bug.
+- `#` is now excluded from `generate_api_key()`'s alphabet, rather than quoting the value on write. Quoting was tried first and reverted: the same file is also passed to `docker run --env-file`, which has no quoting or escaping mechanism at all and would have read a quoted value's quote characters as part of the key, breaking Docker auth for every key instead of the ~44% that contained a `#`. Excluding the character at the source fixes every consumer of the file identically, with no format change and no migration -- an existing key file, quoted or not, keeps reading exactly as it does today.
+- A key already truncated by this bug is not recovered automatically, since the truncated value is not distinguishable from a real short key -- delete `~/.marm/.env` (or the managed key file `marm-memory key path` reports) to regenerate.
+
+### Internal
+
+- Split `config/settings.py`'s env-var parsing helpers and API-key bootstrap logic into `config/env_parsing.py` and `config/api_key_bootstrap.py`. No behavior change beyond the fix above; `settings.py` keeps every setting constant and its validation/clamping as the owner. `env_parsing.py` holds the six pure `_safe_*`/`_csv_frozenset` readers used throughout the file. `api_key_bootstrap.py` holds the MARM_API_KEY resolution sequence (env var, then `~/.marm/.env`, then auto-generate and persist when bound to `0.0.0.0`), now a single `resolve_marm_api_key(server_host)` function taking `SERVER_HOST` as a parameter instead of importing it back from `settings.py`, avoiding a circular import between the two. `settings.py` drops from 684 to 520 lines.
 <summary><strong>August 17th, 2026: Concept Build Endpoint Module Split (v2.39.1)</strong></summary>
 
 ### Internal
