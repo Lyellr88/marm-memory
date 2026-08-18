@@ -164,10 +164,10 @@ def _try_embed(name: str) -> Optional[bytes]:
     just not the semantic one for that build."""
     if not memory._load_encoder_lazily():
         return None
-    vector = memory._try_encode_sync(name)
-    if vector is None:
-        return None
     try:
+        vector = memory._try_encode_sync(name)
+        if vector is None:
+            return None
         return _embedding_to_bytes(vector)
     except Exception as e:
         _safe_print(f"Concept entity embedding failed for {name!r}: {e}")
