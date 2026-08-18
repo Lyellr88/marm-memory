@@ -20,8 +20,11 @@ def concepts_env(monkeypatch, tmp_path):
     load_isolated_server(monkeypatch, tmp_path)
     monkeypatch.setenv("MARM_CONCEPT_DB_PATH", str(tmp_path / "marm_index.db"))
     concepts = importlib.import_module("marm_mcp_server.endpoints.concepts")
+    concept_build_engine = importlib.import_module(
+        "marm_mcp_server.services.concept_build_engine"
+    )
     monkeypatch.setattr(concepts, "CONCEPTS_AVAILABLE", True)
-    monkeypatch.setattr(concepts, "is_graph_available", lambda: False)
+    monkeypatch.setattr(concept_build_engine, "is_graph_available", lambda: False)
     memory_module = sys.modules["marm_mcp_server.core.memory"]
     return concepts, memory_module
 
@@ -51,7 +54,10 @@ def _extract(monkeypatch, concepts, by_content):
             relationship_pairs=[],
         )
 
-    monkeypatch.setattr(concepts, "extract_entities", fake)
+    concept_build_engine = importlib.import_module(
+        "marm_mcp_server.services.concept_build_engine"
+    )
+    monkeypatch.setattr(concept_build_engine, "extract_entities", fake)
 
 
 def test_indexes_only_the_requested_ids(concepts_env, monkeypatch):
@@ -209,9 +215,17 @@ def test_the_finished_signal_lands_on_every_exit_path(concepts_env, monkeypatch)
     _seed(memory_module, [("m1", "alpha")])
     _extract(monkeypatch, concepts, {"alpha": ["Alpha"]})
 
+    concept_build_engine = importlib.import_module(
+        "marm_mcp_server.services.concept_build_engine"
+    )
+
     def run(**patch):
+        # _get_concept_db is read by _run_build off concept_build_engine's own
+        # module namespace (that's where _run_build lives); every other key
+        # here is read directly off concepts.py.
         for name, value in patch.items():
-            monkeypatch.setattr(concepts, name, value)
+            target = concept_build_engine if name == "_get_concept_db" else concepts
+            monkeypatch.setattr(target, name, value)
         finished = threading.Event()
         try:
             asyncio.run(concepts.build_for_memory_ids(["m1"], finished=finished))

@@ -2,7 +2,7 @@
 
 _fetch_memory_pages and the concept-DB read/write paths run against real
 SQLite (tmp_path-backed, via conftest.load_isolated_server). extract_entities
-is monkeypatched at the endpoints module boundary for build tests -- spaCy's
+is monkeypatched on services.concept_build_engine for build tests -- spaCy's
 actual model isn't installable in this sandbox (see test_concept_extraction.py),
 and these tests exercise _run_build's write/orchestration logic, not NER
 accuracy, so a fake ExtractionResult at that one boundary is appropriate
@@ -27,6 +27,14 @@ def _fresh_concepts_module(monkeypatch, tmp_path, concept_db_path=None):
     )
     concepts = importlib.import_module("marm_mcp_server.endpoints.concepts")
     return server, concepts
+
+
+def _engine():
+    """The concept-build engine module: is_graph_available, extract_entities,
+    _try_embed, and CONCEPT_BUILD_ROW_CAP are all read as bare names inside
+    _run_build, which lives here rather than in endpoints.concepts, so tests
+    that fake them must patch this module, not concepts."""
+    return importlib.import_module("marm_mcp_server.services.concept_build_engine")
 
 
 def _all_rows(pages):
@@ -323,7 +331,7 @@ def test_fetch_memory_pages_reaches_every_row_beyond_one_page(
     a corpus larger than the cap left its oldest memories permanently
     unreachable to every build."""
     _server, concepts, memory_module = concepts_env
-    monkeypatch.setattr(concepts, "CONCEPT_BUILD_ROW_CAP", 3)
+    monkeypatch.setattr(_engine(), "CONCEPT_BUILD_ROW_CAP", 3)
     _seed_memory(
         memory_module,
         [(f"m{i:02d}", "sess-a", f"content {i}", None) for i in range(10)],
@@ -343,7 +351,7 @@ def test_fetch_memory_pages_no_gaps_when_created_at_ties(concepts_env, monkeypat
     created_at alone would drop or repeat rows at each boundary; the id
     tiebreaker is what prevents it."""
     _server, concepts, memory_module = concepts_env
-    monkeypatch.setattr(concepts, "CONCEPT_BUILD_ROW_CAP", 4)
+    monkeypatch.setattr(_engine(), "CONCEPT_BUILD_ROW_CAP", 4)
     with memory_module.memory.get_connection() as conn:
         for i in range(13):
             conn.execute(
@@ -372,7 +380,7 @@ def test_run_build_writes_entities_and_relationship_for_two_entities(
     from marm_mcp_server.core.concept_extraction import Entity, ExtractionResult
 
     monkeypatch.setattr(
-        concepts,
+        _engine(),
         "extract_entities",
         lambda content: ExtractionResult(
             entities=[
@@ -382,7 +390,7 @@ def test_run_build_writes_entities_and_relationship_for_two_entities(
             relationship_pairs=[("auth module", "rate limiter", "uses")],
         ),
     )
-    monkeypatch.setattr(concepts, "is_graph_available", lambda: False)
+    monkeypatch.setattr(_engine(), "is_graph_available", lambda: False)
 
     rows = [("m1", "auth module talks to the rate limiter", "sess-a", "proj-a")]
     result = concepts._run_build([rows])
@@ -409,7 +417,7 @@ def test_run_build_is_idempotent_on_repeat_runs(concepts_env, monkeypatch):
     from marm_mcp_server.core.concept_extraction import Entity, ExtractionResult
 
     monkeypatch.setattr(
-        concepts,
+        _engine(),
         "extract_entities",
         lambda content: ExtractionResult(
             entities=[
@@ -419,9 +427,9 @@ def test_run_build_is_idempotent_on_repeat_runs(concepts_env, monkeypatch):
             relationship_pairs=[("auth module", "rate limiter", "uses")],
         ),
     )
-    monkeypatch.setattr(concepts, "is_graph_available", lambda: True)
+    monkeypatch.setattr(_engine(), "is_graph_available", lambda: True)
     monkeypatch.setattr(
-        concepts,
+        _engine(),
         "find_code_match",
         lambda name, project: {
             "qualified_name": f"marm_graph.core.{name.replace(' ', '_')}",
@@ -460,15 +468,15 @@ def test_run_recall_does_not_return_duplicate_linked_code_after_repeat_build(
     from marm_mcp_server.core.concept_extraction import Entity, ExtractionResult
 
     monkeypatch.setattr(
-        concepts,
+        _engine(),
         "extract_entities",
         lambda content: ExtractionResult(
             entities=[Entity("CbmClient", "concept")], relationship_pairs=[]
         ),
     )
-    monkeypatch.setattr(concepts, "is_graph_available", lambda: True)
+    monkeypatch.setattr(_engine(), "is_graph_available", lambda: True)
     monkeypatch.setattr(
-        concepts,
+        _engine(),
         "find_code_match",
         lambda name, project: {
             "qualified_name": "marm_graph.core.cbm_client.CbmClient",
@@ -492,13 +500,13 @@ def test_run_build_same_entity_across_two_memories_dedups_in_same_session(
     from marm_mcp_server.core.concept_extraction import Entity, ExtractionResult
 
     monkeypatch.setattr(
-        concepts,
+        _engine(),
         "extract_entities",
         lambda content: ExtractionResult(
             entities=[Entity("auth module", "concept")], relationship_pairs=[]
         ),
     )
-    monkeypatch.setattr(concepts, "is_graph_available", lambda: False)
+    monkeypatch.setattr(_engine(), "is_graph_available", lambda: False)
 
     rows = [
         ("m1", "auth module content one", "sess-a", None),
@@ -520,15 +528,15 @@ def test_run_build_with_graph_unavailable_creates_zero_code_links(
     from marm_mcp_server.core.concept_extraction import Entity, ExtractionResult
 
     monkeypatch.setattr(
-        concepts,
+        _engine(),
         "extract_entities",
         lambda content: ExtractionResult(
             entities=[Entity("CbmClient", "concept")], relationship_pairs=[]
         ),
     )
-    monkeypatch.setattr(concepts, "is_graph_available", lambda: False)
+    monkeypatch.setattr(_engine(), "is_graph_available", lambda: False)
     monkeypatch.setattr(
-        concepts,
+        _engine(),
         "find_code_match",
         lambda *a, **k: pytest.fail("should never be called when graph is unavailable"),
     )
@@ -542,15 +550,15 @@ def test_run_build_links_code_when_graph_available(concepts_env, monkeypatch):
     from marm_mcp_server.core.concept_extraction import Entity, ExtractionResult
 
     monkeypatch.setattr(
-        concepts,
+        _engine(),
         "extract_entities",
         lambda content: ExtractionResult(
             entities=[Entity("CbmClient", "concept")], relationship_pairs=[]
         ),
     )
-    monkeypatch.setattr(concepts, "is_graph_available", lambda: True)
+    monkeypatch.setattr(_engine(), "is_graph_available", lambda: True)
     monkeypatch.setattr(
-        concepts,
+        _engine(),
         "find_code_match",
         lambda name, project: {
             "qualified_name": "marm_graph.core.cbm_client.CbmClient",
@@ -573,13 +581,13 @@ def test_run_build_reports_no_duplicates_when_embedding_unavailable(
     from marm_mcp_server.core.concept_extraction import Entity, ExtractionResult
 
     monkeypatch.setattr(
-        concepts,
+        _engine(),
         "extract_entities",
         lambda content: ExtractionResult(
             entities=[Entity("auth module", "concept")], relationship_pairs=[]
         ),
     )
-    monkeypatch.setattr(concepts, "is_graph_available", lambda: False)
+    monkeypatch.setattr(_engine(), "is_graph_available", lambda: False)
 
     result = concepts._run_build([[("m1", "auth module content", "sess-a", None)]])
     assert result["possible_duplicates"] == []
@@ -599,8 +607,8 @@ def test_run_build_reports_possible_duplicate_when_similar_entity_exists(
         "Auth": np.asarray([1.0, 0.0, 0.0], dtype=np.float32).tobytes(),
         "OAuth": np.asarray([0.99, 0.01, 0.0], dtype=np.float32).tobytes(),
     }
-    monkeypatch.setattr(concepts, "_try_embed", lambda name: fake_vectors[name])
-    monkeypatch.setattr(concepts, "is_graph_available", lambda: False)
+    monkeypatch.setattr(_engine(), "_try_embed", lambda name: fake_vectors[name])
+    monkeypatch.setattr(_engine(), "is_graph_available", lambda: False)
 
     extraction_by_content = {
         "Auth content": ExtractionResult(
@@ -611,7 +619,7 @@ def test_run_build_reports_possible_duplicate_when_similar_entity_exists(
         ),
     }
     monkeypatch.setattr(
-        concepts, "extract_entities", lambda content: extraction_by_content[content]
+        _engine(), "extract_entities", lambda content: extraction_by_content[content]
     )
 
     rows = [
@@ -643,10 +651,10 @@ def test_run_build_caches_embed_calls_across_repeated_entity_names(
         call_count["n"] += 1
         return np.asarray([1.0, 0.0, 0.0], dtype=np.float32).tobytes()
 
-    monkeypatch.setattr(concepts, "_try_embed", _counting_embed)
-    monkeypatch.setattr(concepts, "is_graph_available", lambda: False)
+    monkeypatch.setattr(_engine(), "_try_embed", _counting_embed)
+    monkeypatch.setattr(_engine(), "is_graph_available", lambda: False)
     monkeypatch.setattr(
-        concepts,
+        _engine(),
         "extract_entities",
         lambda content: ExtractionResult(
             entities=[Entity("auth module", "concept")], relationship_pairs=[]
@@ -671,11 +679,11 @@ def test_try_embed_real_fastembed_end_to_end(concepts_env):
     (confirmed: 403 on download), so this dynamically skips rather than
     asserting a specific outcome if loading genuinely isn't possible in the
     current environment."""
-    _server, concepts, memory_module = concepts_env
+    _server, _concepts, memory_module = concepts_env
     memory_module.memory._encoder_failed = False
     memory_module.memory.encoder = None
 
-    emb_bytes = concepts._try_embed("auth module")
+    emb_bytes = _engine()._try_embed("auth module")
     if emb_bytes is None:
         pytest.skip("fastembed model weights not downloadable in this sandbox")
 
@@ -1043,13 +1051,16 @@ def test_get_concept_db_lock_serializes_concurrent_first_calls(
     import threading
 
     _server, concepts, _memory_module = concepts_env
-    concepts._concept_db = None
+    concept_build_engine = importlib.import_module(
+        "marm_mcp_server.services.concept_build_engine"
+    )
+    concept_build_engine._concept_db = None
 
     entered = threading.Event()
     release = threading.Event()
     instances_created = {"count": 0}
 
-    real_concept_db_cls = concepts.ConceptDB
+    real_concept_db_cls = concept_build_engine.ConceptDB
 
     class _SlowConceptDB(real_concept_db_cls):
         def __init__(self, *a, **k):
@@ -1058,7 +1069,7 @@ def test_get_concept_db_lock_serializes_concurrent_first_calls(
             release.wait(timeout=5)
             super().__init__(*a, **k)
 
-    monkeypatch.setattr(concepts, "ConceptDB", _SlowConceptDB)
+    monkeypatch.setattr(concept_build_engine, "ConceptDB", _SlowConceptDB)
 
     results = []
 

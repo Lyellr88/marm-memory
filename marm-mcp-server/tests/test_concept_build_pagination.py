@@ -24,6 +24,10 @@ def concepts_env(monkeypatch, tmp_path):
     return concepts, memory_module
 
 
+def _engine():
+    return importlib.import_module("marm_mcp_server.services.concept_build_engine")
+
+
 def _seed(memory_module, count, session="sess-a"):
     with memory_module.memory.get_connection() as conn:
         conn.executemany(
@@ -37,9 +41,10 @@ def _one_entity_per_memory(monkeypatch, concepts):
     """Name the entity after the content so each memory produces its own."""
     from marm_mcp_server.core.concept_extraction import Entity, ExtractionResult
 
-    monkeypatch.setattr(concepts, "is_graph_available", lambda: False)
+    concept_build_engine = _engine()
+    monkeypatch.setattr(concept_build_engine, "is_graph_available", lambda: False)
     monkeypatch.setattr(
-        concepts,
+        concept_build_engine,
         "extract_entities",
         lambda content: ExtractionResult(
             entities=[Entity(content, "concept")], relationship_pairs=[]
@@ -53,7 +58,7 @@ def test_build_over_1200_memories_reaches_every_row_at_default_cap(
     """The regression this feature exists to fix, at the shipped default of
     500: memory 0 is the oldest of 1,200 and must still be extracted."""
     concepts, memory_module = concepts_env
-    assert concepts.CONCEPT_BUILD_ROW_CAP == 500
+    assert _engine().CONCEPT_BUILD_ROW_CAP == 500
     _seed(memory_module, 1200)
     _one_entity_per_memory(monkeypatch, concepts)
 
@@ -79,7 +84,7 @@ def test_paged_ids_match_an_unpaginated_baseline_exactly(concepts_env, monkeypat
     """Page boundaries must lose nothing and repeat nothing. Compared against
     the same query run as one statement, not against a hand-written list."""
     concepts, memory_module = concepts_env
-    monkeypatch.setattr(concepts, "CONCEPT_BUILD_ROW_CAP", 7)
+    monkeypatch.setattr(_engine(), "CONCEPT_BUILD_ROW_CAP", 7)
     _seed(memory_module, 100)
 
     paged = [
@@ -115,7 +120,7 @@ def test_page_size_of_one_still_terminates_and_reads_everything(
     page a single row, which is the degenerate case where a keyset cursor bug
     would either loop forever or stop after the first page."""
     concepts, memory_module = concepts_env
-    monkeypatch.setattr(concepts, "CONCEPT_BUILD_ROW_CAP", 1)
+    monkeypatch.setattr(_engine(), "CONCEPT_BUILD_ROW_CAP", 1)
     _seed(memory_module, 12)
 
     pages = list(
@@ -131,7 +136,7 @@ def test_memories_written_during_a_build_are_not_reprocessed(concepts_env, monke
     cursor and is skipped, rather than shifting the window and causing a
     repeat. The queue worker re-indexes it separately."""
     concepts, memory_module = concepts_env
-    monkeypatch.setattr(concepts, "CONCEPT_BUILD_ROW_CAP", 4)
+    monkeypatch.setattr(_engine(), "CONCEPT_BUILD_ROW_CAP", 4)
     _seed(memory_module, 8)
 
     seen = []

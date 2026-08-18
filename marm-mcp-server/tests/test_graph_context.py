@@ -288,6 +288,7 @@ def test_console_delete_cleanup_leaves_an_older_graph_needing_rebuild(
 def test_targeted_build_cannot_reset_platformless_graph(monkeypatch, tmp_path):
     from marm_mcp_server.core.models import ConceptBuildRequest
     from marm_mcp_server.endpoints import concepts
+    from marm_mcp_server.services import concept_build_engine
 
     db_path = tmp_path / "legacy.db"
     with sqlite3.connect(db_path) as conn:
@@ -299,9 +300,9 @@ def test_targeted_build_cannot_reset_platformless_graph(monkeypatch, tmp_path):
             );
             """)
     monkeypatch.setenv("MARM_CONCEPT_DB_PATH", str(db_path))
-    if concepts._concept_db is not None:
-        concepts._concept_db.close()
-    concepts._concept_db = None
+    if concept_build_engine._concept_db is not None:
+        concept_build_engine._concept_db.close()
+    concept_build_engine._concept_db = None
 
     with pytest.raises(ValueError, match="rebuild_required"):
         concepts._prepare_build_schema(ConceptBuildRequest(session_name="sess-a"))
