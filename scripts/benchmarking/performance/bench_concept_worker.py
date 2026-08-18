@@ -247,25 +247,25 @@ def remaining_of(mem, queued_ids) -> int:
     return len(pending & queued_ids)
 
 
-def reset_graph(concepts_module):
+def reset_graph(concept_build_engine):
     """Drop the concept database between sweep points.
 
     Without this, entity dedup makes every run after the first cheaper than
     the one before it, and the pause would take credit for work the previous
     run already did.
     """
-    if concepts_module._concept_db is not None:
-        concepts_module._concept_db.close()
-        concepts_module._concept_db = None
+    if concept_build_engine._concept_db is not None:
+        concept_build_engine._concept_db.close()
+        concept_build_engine._concept_db = None
     base = Path(os.environ["MARM_CONCEPT_DB_PATH"])
     for path in (base, Path(str(base) + "-wal"), Path(str(base) + "-shm")):
         if path.exists():
             path.unlink()
 
 
-async def drain_with_pause(mem, pause_ms, worker_module, concepts_module):
+async def drain_with_pause(mem, pause_ms, worker_module, concept_build_engine):
     """Time a full backlog drain while sampling recall throughout."""
-    reset_graph(concepts_module)
+    reset_graph(concept_build_engine)
     with mem.get_connection() as conn:
         conn.execute("DELETE FROM concept_index_queue")
     queued_ids = set(queue_ids(mem))
@@ -295,13 +295,13 @@ async def drain_with_pause(mem, pause_ms, worker_module, concepts_module):
 
 async def run_sweep(mem, pauses):
     import marm_mcp_server.core.concept_worker as worker_module
-    from marm_mcp_server.endpoints import concepts as concepts_module
+    from marm_mcp_server.services import concept_build_engine
 
     # spaCy loads its model on the first extraction, which costs seconds. Left
     # to the sweep, that lands entirely on whichever pause runs first and can
     # make a throttled run look faster than an unthrottled one.
     print("warming up the extractor...")
-    concepts_module.extract_entities("warmup sentence about the write queue")
+    concept_build_engine.extract_entities("warmup sentence about the write queue")
 
     print("Idle recall baseline (no worker running)")
     idle = await measure_recalls(mem, ARGS.iters)
@@ -311,7 +311,7 @@ async def run_sweep(mem, pauses):
     for pause_ms in pauses:
         print(f"draining with a {pause_ms}ms pause between batches...")
         queued, elapsed, samples = await drain_with_pause(
-            mem, pause_ms, worker_module, concepts_module
+            mem, pause_ms, worker_module, concept_build_engine
         )
         rows.append((pause_ms, queued, elapsed, samples))
         print(
