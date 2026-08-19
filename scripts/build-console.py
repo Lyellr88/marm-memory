@@ -19,6 +19,16 @@ first or stale asset hashes accumulate, and `Copy-Item`/`cp` semantics differ:
 copying a directory onto an existing directory nests it, producing
 `static/public/index.html`, which the server does not serve and which reports
 only as a 503 with assets "missing".
+
+The swap is not gapless, and cannot be. Neither `os.rename` nor `os.replace`
+will put a directory over an existing non-empty one, so the old bundle has to
+move aside before the new one moves in, leaving two renames' worth of time where
+the path is absent. A request landing in that window gets the 503. Closing it
+needs symlink indirection, which on Windows wants privileges a build script
+should not ask for, and the tool already tells you to restart the server. What is
+guaranteed instead is that a failure never leaves the path empty: the bundle is
+staged and verified before the swap, and rolled back if the swap or the
+post-swap check fails.
 """
 
 from __future__ import annotations

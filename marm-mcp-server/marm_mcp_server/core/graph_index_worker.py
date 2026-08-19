@@ -79,7 +79,14 @@ def _git(root: str, *args: str) -> Optional[str]:
             text=True,
             timeout=_GIT_TIMEOUT_SECONDS,
             env=_git_env(),
-            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+            # Looked up by name: the attribute only exists on Windows, and naming
+            # it directly fails mypy's attr-defined check when CI runs on Linux
+            # even behind this platform guard.
+            creationflags=(
+                getattr(subprocess, "CREATE_NO_WINDOW", 0)
+                if sys.platform == "win32"
+                else 0
+            ),
         )
     except (OSError, subprocess.SubprocessError) as exc:
         logger.debug("graph_auto_index.git_failed", root=root, error=str(exc))
