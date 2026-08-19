@@ -13,6 +13,7 @@ export function GraphViz({
   onNodeClick,
   focusedId,
   expandingId,
+  suppressBackgroundLinks,
 }: {
   neighborhood: Neighborhood;
   hiddenPredicates: Set<string>;
@@ -20,6 +21,7 @@ export function GraphViz({
   onNodeClick: (node: NeighborhoodNode) => void;
   focusedId: number | null;
   expandingId: number | null;
+  suppressBackgroundLinks: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const fgRef = useRef<any>(null);
@@ -102,7 +104,8 @@ export function GraphViz({
     return map;
   }, [gData]);
 
-  const hoverNeighbors = hoverId !== null ? adjacency.get(hoverId) : null;
+  const activeId = hoverId ?? focusedId;
+  const activeNeighbors = activeId !== null ? adjacency.get(activeId) : null;
   const labelledHubIds = useMemo(() => {
     const maxLabels = gData.nodes.length > 300 ? 8 : 12;
     const labelBudget = Math.min(maxLabels, Math.max(4, Math.ceil(Math.sqrt(gData.nodes.length))));
@@ -184,16 +187,16 @@ export function GraphViz({
   }, [reducedMotion]);
 
   const isDimmed = useCallback((id: number) => {
-    if (hoverId === null) return false;
-    return id !== hoverId && !hoverNeighbors?.has(id);
-  }, [hoverId, hoverNeighbors]);
+    if (activeId === null) return false;
+    return id !== activeId && !activeNeighbors?.has(id);
+  }, [activeId, activeNeighbors]);
 
   const paintNode = useCallback((node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
-    const denseAtlasScale = gData.nodes.length > 300 ? 0.62 : 1;
+    const denseAtlasScale = suppressBackgroundLinks ? 1.25 : gData.nodes.length > 300 ? 0.62 : 1;
     const r = nodeRadius(node.degree) * denseAtlasScale;
     const color = typeColor(node.type);
     const dimmed = isDimmed(node.id);
-    const emphasized = node.id === hoverId || node.id === focusedId || node.isSeed;
+    const emphasized = node.id === activeId || node.isSeed;
 
     ctx.globalAlpha = dimmed ? 0.12 : 1;
 
@@ -246,38 +249,51 @@ export function GraphViz({
       }
     }
     ctx.globalAlpha = 1;
-  }, [hoverId, focusedId, expandingId, isDimmed, labelledHubIds, gData.nodes.length]);
+  }, [activeId, focusedId, expandingId, isDimmed, labelledHubIds, gData.nodes.length, suppressBackgroundLinks]);
 
   const paintPointerArea = useCallback((node: any, color: string, ctx: CanvasRenderingContext2D) => {
-    const denseAtlasScale = gData.nodes.length > 300 ? 0.62 : 1;
+    const denseAtlasScale = suppressBackgroundLinks ? 1.25 : gData.nodes.length > 300 ? 0.62 : 1;
     ctx.fillStyle = color;
     ctx.beginPath();
-    ctx.arc(node.x, node.y, nodeRadius(node.degree) * denseAtlasScale + 5, 0, 2 * Math.PI);
+    ctx.arc(node.x, node.y, nodeRadius(node.degree) * denseAtlasScale + (suppressBackgroundLinks ? 22 : 5), 0, 2 * Math.PI);
     ctx.fill();
-  }, [gData.nodes.length]);
+  }, [gData.nodes.length, suppressBackgroundLinks]);
 
   const linkColor = useCallback((link: any) => {
     const s = typeof link.source === 'object' ? link.source.id : link.source;
     const t = typeof link.target === 'object' ? link.target.id : link.target;
-    if (hoverId !== null) {
-      if (s === hoverId || t === hoverId) return 'rgba(56, 189, 248, 0.55)';
+    if (activeId !== null) {
+      if (s === activeId || t === activeId) return 'rgba(56, 189, 248, 0.55)';
       return 'rgba(148, 163, 184, 0.04)';
     }
     const evidence = Math.min(1, Math.log2((link.weight ?? 1) + 1) / 5);
     return link.predicate === 'co_occurs_with'
       ? `rgba(14, 116, 144, ${0.2 + evidence * 0.12})`
       : `rgba(125, 211, 252, ${0.28 + evidence * 0.2})`;
-  }, [hoverId]);
+  }, [activeId]);
 
   const linkWidth = useCallback((link: any) => {
     const s = typeof link.source === 'object' ? link.source.id : link.source;
     const t = typeof link.target === 'object' ? link.target.id : link.target;
-    if (hoverId !== null && (s === hoverId || t === hoverId)) return 2.2;
+    if (activeId !== null && (s === activeId || t === activeId)) return 2.2;
     const evidenceWidth = Math.min(1.8, Math.log2((link.weight ?? 1) + 1) * 0.3);
     return link.predicate === 'co_occurs_with'
       ? 0.75 + evidenceWidth * 0.45
       : 0.9 + evidenceWidth;
-  }, [hoverId]);
+  }, [activeId]);
+
+  const linkVisible = useCallback((link: any) => {
+    if (!suppressBackgroundLinks) return true;
+    if (activeId === null) return false;
+    const s = typeof link.source === 'object' ? link.source.id : link.source;
+    const t = typeof link.target === 'object' ? link.target.id : link.target;
+    return s === activeId || t === activeId;
+  }, [activeId, suppressBackgroundLinks]);
+
+  const arrowLength = useCallback((link: any) => {
+    if (link.predicate === 'co_occurs_with') return 0;
+    return linkVisible(link) ? 2.6 : 0;
+  }, [linkVisible]);
 
   const togglePause = () => {
     const fg = fgRef.current;
@@ -309,8 +325,9 @@ export function GraphViz({
           nodePointerAreaPaint={paintPointerArea}
           linkColor={linkColor}
           linkWidth={linkWidth}
-          linkCurvature={0.12}
-          linkDirectionalArrowLength={(l: any) => (l.predicate === 'co_occurs_with' ? 0 : 2.6)}
+          linkVisibility={linkVisible}
+          linkCurvature={suppressBackgroundLinks ? 0 : 0.12}
+          linkDirectionalArrowLength={arrowLength}
           linkDirectionalArrowRelPos={1}
           onNodeHover={(node: any) => setHoverId(node ? node.id : null)}
           onNodeClick={(node: any) => {

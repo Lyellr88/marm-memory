@@ -36,9 +36,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
   const navItems = [
     { name: 'Overview', href: '/', icon: Activity },
-    { name: 'Memory', href: '/memory', icon: Database },
-    { name: 'Knowledge', href: '/knowledge', icon: Network },
-    { name: 'Projects', href: '/projects', icon: FolderCode },
+    { name: 'Memories', href: '/memory', icon: Database },
+    { name: 'Knowledge Graph', href: '/knowledge', icon: Network },
+    { name: 'Indexed Projects', href: '/projects', icon: FolderCode },
   ];
 
   return (

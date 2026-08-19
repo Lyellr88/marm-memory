@@ -356,6 +356,7 @@ export function ExplorerTab() {
                 onNodeClick={setFocusedNode}
                 focusedId={focusedNode?.id ?? null}
                 expandingId={expandingId}
+                suppressBackgroundLinks={showFullAtlas && selectedId === null}
               />
               {focusedNode && (
                 <ProvenancePanel
