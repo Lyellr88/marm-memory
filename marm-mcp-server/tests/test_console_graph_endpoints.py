@@ -72,14 +72,28 @@ def test_the_engines_packages_aspect_is_not_used_as_the_module_table(architectur
     assert body["modules"] == []
 
 
-def test_badge_types_reach_the_browser_as_strings(architecture):
-    """The defect itself. A dict here is a render-time crash, not a cosmetic issue."""
+def test_only_the_rendered_field_reaches_the_browser_as_a_string(architecture):
+    """The defect itself. A dict rendered as a child is a crash, not a cosmetic issue.
+
+    The response now carries the engine's count alongside the name, so the guard is
+    no longer "every entry is a string": it is that the one field the UI renders as
+    a child is a string, and that nothing nested (the schema fallback's `properties`
+    array) rides along with it.
+    """
     body = architecture(ARCHITECTURE_0105)
 
-    assert body["schema"]["node_types"] == ["Function", "Variable"]
-    assert body["schema"]["edge_types"] == ["CALLS", "DEFINES"]
-    assert all(isinstance(t, str) for t in body["schema"]["node_types"])
-    assert all(isinstance(t, str) for t in body["schema"]["edge_types"])
+    assert body["schema"]["node_types"] == [
+        {"name": "Function", "count": 2028},
+        {"name": "Variable", "count": 611},
+    ]
+    assert body["schema"]["edge_types"] == [
+        {"name": "CALLS", "count": 6632},
+        {"name": "DEFINES", "count": 5954},
+    ]
+    for entry in body["schema"]["node_types"] + body["schema"]["edge_types"]:
+        assert isinstance(entry["name"], str)
+        assert isinstance(entry.get("count"), int)
+        assert set(entry) <= {"name", "count"}
 
 
 def test_the_schema_fallback_is_normalized_too(architecture):
@@ -93,8 +107,8 @@ def test_the_schema_fallback_is_normalized_too(architecture):
     }
     body = architecture(payload)
 
-    assert body["schema"]["node_types"] == ["Function"]
-    assert body["schema"]["edge_types"] == ["CALLS"]
+    assert body["schema"]["node_types"] == [{"name": "Function", "count": 2028}]
+    assert body["schema"]["edge_types"] == [{"name": "CALLS", "count": 6632}]
 
 
 def test_an_engine_that_returns_plain_strings_passes_through(architecture):
@@ -106,8 +120,8 @@ def test_an_engine_that_returns_plain_strings_passes_through(architecture):
     }
     body = architecture(payload)
 
-    assert body["schema"]["node_types"] == ["Function", "Class"]
-    assert body["schema"]["edge_types"] == ["CALLS"]
+    assert body["schema"]["node_types"] == [{"name": "Function"}, {"name": "Class"}]
+    assert body["schema"]["edge_types"] == [{"name": "CALLS"}]
 
 
 def test_an_empty_index_reports_an_empty_table(architecture):
@@ -131,6 +145,56 @@ def test_a_non_dict_schema_does_not_break_the_response(architecture):
     body = architecture({"packages": [], "schema": "unavailable"})
 
     assert body["schema"] == {"node_types": [], "edge_types": []}
+
+
+def test_the_code_units_endpoint_passes_the_view_through_unchanged(monkeypatch):
+    """The architecture endpoint above reshapes at the last hop because the shared
+    router cannot change. This one owns its response end to end, so a second
+    normalization here would be a place for the two shapes to drift apart."""
+    view_response = {
+        "state": "ready",
+        "total": 238,
+        "shown": 2,
+        "fan_in_is_lower_bound": True,
+        "code_units": [
+            {"unit": "marm_mcp_server/core/memory.py", "fan_in": 33, "fan_out": 9},
+            {"unit": "marm_mcp_server/server.py", "fan_in": 0, "fan_out": 24},
+        ],
+    }
+    seen: dict = {}
+
+    def fake_post(path, payload=None, **kwargs):
+        seen["path"] = path
+        seen["payload"] = payload
+        return view_response
+
+    monkeypatch.setattr(mcp_client, "post", fake_post)
+    with TestClient(app) as client:
+        response = client.get("/api/projects/proj/code-units")
+
+    assert response.status_code == 200
+    assert response.json() == view_response
+    assert seen["path"] == "internal/projects/code-units"
+    assert seen["payload"] == {"project": "proj"}
+
+
+def test_the_code_units_endpoint_does_not_flatten_a_degraded_state(monkeypatch):
+    """An unavailable state must reach the browser as unavailable. Turning it into
+    an empty list is how the old module table said "no data" for its whole life."""
+    unavailable = {
+        "state": "unavailable",
+        "reason": "contract_mismatch",
+        "message": "query_graph did not run the query as written",
+        "total": 0,
+        "shown": 0,
+        "code_units": [],
+    }
+    monkeypatch.setattr(mcp_client, "post", lambda *a, **k: unavailable)
+    with TestClient(app) as client:
+        body = client.get("/api/projects/proj/code-units").json()
+
+    assert body["state"] == "unavailable"
+    assert body["reason"] == "contract_mismatch"
 
 
 def test_normalization_did_not_leak_into_the_agent_facing_tool():

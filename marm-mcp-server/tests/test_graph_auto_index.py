@@ -225,7 +225,9 @@ def test_git_poll_hides_its_windows_child_window(monkeypatch):
     monkeypatch.setattr(
         module.subprocess,
         "run",
-        lambda command, **kwargs: captured.update(command=command, **kwargs) or Completed(),
+        lambda command, **kwargs: (
+            captured.update(command=command, **kwargs) or Completed()
+        ),
     )
 
     assert module._git("C:/repo", "rev-parse", "HEAD") == "ok"

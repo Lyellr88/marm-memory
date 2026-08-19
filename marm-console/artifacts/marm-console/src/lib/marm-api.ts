@@ -36,6 +36,7 @@ import type {
   NotebookInput,
   Overview,
   ProjectArchitecture,
+  CodeUnits,
   ProjectIndexInput,
   ProjectStatus,
   ProjectSummary,
@@ -204,8 +205,8 @@ export function createMarmClient(config: MarmClientConfig) {
       request<ConceptEntity[]>(config, 'GET', '/concepts/search', { query: params }),
     getConcept: (entityId: number) =>
       request<ConceptDetail>(config, 'GET', `/concepts/${entityId}`),
-    getConceptGraph: () =>
-      request<ConceptAtlas>(config, 'GET', '/concepts/graph'),
+    getConceptGraph: (params?: { full?: boolean }) =>
+      request<ConceptAtlas>(config, 'GET', '/concepts/graph', { query: params }),
     getConceptGraphVersion: () =>
       request<ConceptGraphVersion>(config, 'GET', '/concepts/graph/version'),
     getConceptNeighborhood: (
@@ -230,6 +231,8 @@ export function createMarmClient(config: MarmClientConfig) {
       request<ProjectStatus>(config, 'GET', `/projects/${encodeURIComponent(project)}/status`),
     getProjectArchitecture: (project: string) =>
       request<ProjectArchitecture>(config, 'GET', `/projects/${encodeURIComponent(project)}/architecture`),
+    getProjectCodeUnits: (project: string) =>
+      request<CodeUnits>(config, 'GET', `/projects/${encodeURIComponent(project)}/code-units`),
     searchProjectCode: (project: string, data: CodeSearchInput) =>
       request<CodeSearchResult[]>(config, 'POST', `/projects/${encodeURIComponent(project)}/search`, { body: data }),
     traceProject: (project: string, data: TraceInput) =>

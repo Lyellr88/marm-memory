@@ -207,8 +207,7 @@ def init_concept_database(db_path: str, mark_current: bool = True) -> None:
             )
         if "last_progress_at" not in build_run_columns:
             conn.execute(
-                "ALTER TABLE concept_build_runs "
-                "ADD COLUMN last_progress_at TEXT"
+                "ALTER TABLE concept_build_runs ADD COLUMN last_progress_at TEXT"
             )
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_concept_build_runs_created "

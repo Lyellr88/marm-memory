@@ -63,28 +63,38 @@ def get_project_status(project: str) -> dict:
     }
 
 
-def _type_names(rows: object, key: str) -> list[str]:
-    """Reduce the graph engine's label aspects to the bare names the UI declares.
+def _type_entries(rows: object, key: str) -> list[dict]:
+    """Reduce the graph engine's label aspects to the `{name, count}` the UI declares.
 
     The engine reports these as counted rows, `{"label": "Function", "count": 2028}`
     for nodes and `{"type": "CALLS", "count": 6632}` for edges, and the
     get_graph_schema fallback adds a `properties` array to each. React raises on an
-    object child, so an unreduced row fails the whole Architecture tab on its first
-    badge rather than rendering oddly.
+    object child, so a row that reaches a badge unreduced fails the whole
+    Architecture tab on its first badge rather than rendering oddly. Only `name` is
+    ever rendered as a child; `count` is rendered separately or not at all.
+
+    The count is carried rather than dropped because it is the only indication of
+    the graph's scale the tab has, and the engine already paid to compute it.
     """
     if not isinstance(rows, list):
         return []
-    names: list[str] = []
+    entries: list[dict] = []
     for row in rows:
+        count: object = None
         if isinstance(row, str):
             candidate: object = row
         elif isinstance(row, dict):
             candidate = row.get(key) or row.get("label") or row.get("type")
+            count = row.get("count")
         else:
             continue
         if isinstance(candidate, str) and candidate:
-            names.append(candidate)
-    return names
+            entry: dict = {"name": candidate}
+            # bool is an int subclass, and a stray True must not render as a count.
+            if isinstance(count, int) and not isinstance(count, bool):
+                entry["count"] = count
+            entries.append(entry)
+    return entries
 
 
 @router.get("/api/projects/{project}/architecture")
@@ -98,13 +108,13 @@ def get_project_architecture(project: str) -> dict:
         "name": project,
         "modules": modules if isinstance(modules, list) else [],
         "schema": {
-            "node_types": _type_names(
+            "node_types": _type_entries(
                 result.get("node_labels")
                 or schema.get("node_labels")
                 or schema.get("node_types", []),
                 "label",
             ),
-            "edge_types": _type_names(
+            "edge_types": _type_entries(
                 result.get("edge_types")
                 or schema.get("edge_types")
                 or schema.get("edge_labels")
@@ -113,6 +123,17 @@ def get_project_architecture(project: str) -> dict:
             ),
         },
     }
+
+
+@router.get("/api/projects/{project}/code-units")
+def get_project_code_units(project: str) -> dict:
+    """Pass-through. code_graph_view already returns the browser's shape.
+
+    Unlike the architecture endpoint above, no normalization happens here: that
+    one has to reshape at the last hop because the shared router cannot change,
+    and this one owns its response end to end.
+    """
+    return _project_operation("internal/projects/code-units", {"project": project})
 
 
 @router.post("/api/projects/{project}/search")

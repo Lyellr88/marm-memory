@@ -135,6 +135,32 @@ def test_console_project_routes_are_internal_and_degrade_cleanly(monkeypatch, tm
     assert "internal/projects/list" not in {tool.name for tool in server.mcp.tools}
 
 
+def test_code_units_reports_unavailable_rather_than_the_generic_error_shape(
+    monkeypatch, tmp_path
+):
+    """Every other console route answers a dead backend with {"status": "error"},
+    which the Console adapter turns into a 503. That fails the browser query and
+    renders a blank table, so the one state the spec requires to be explicit is
+    the one the user cannot see. This route returns the view's own shape instead.
+    """
+    monkeypatch.setenv("GRAPH_ENABLED", "false")
+    server = load_isolated_server(monkeypatch, tmp_path)
+    client = local_client(server.app)
+
+    response = client.post("/internal/projects/code-units", json={"project": "proj"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["state"] == "unavailable"
+    assert body["reason"] == "graph_unavailable"
+    assert body["code_units"] == []
+    # The adapter only raises 503 on this key, and its absence is the whole point.
+    assert "status" not in body
+    assert "internal/projects/code-units" not in {
+        tool.name for tool in server.mcp.tools
+    }
+
+
 def test_console_index_rejects_invalid_path_before_graph_start(monkeypatch, tmp_path):
     server = load_isolated_server(monkeypatch, tmp_path)
     client = local_client(server.app)

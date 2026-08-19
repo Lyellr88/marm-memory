@@ -18,6 +18,7 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from marm_graph.core import code_graph_view
 from marm_graph.core import tool_router as R
 from marm_graph.core.cbm_client import CbmError
 from marm_graph.core.models import (
@@ -392,6 +393,22 @@ async def console_project_architecture(req: ConsoleProjectRequest) -> dict:
             GraphArchitectureRequest(project=req.project),
         )
     )
+
+
+@router.post("/internal/projects/code-units")
+async def console_project_code_units(req: ConsoleProjectRequest) -> dict:
+    """Console-only. Deliberately not routed through tool_router or a tool.
+
+    The limit stays server-side: no caller chooses it, so nothing from the
+    browser reaches the query layer at all.
+    """
+    client = await asyncio.to_thread(graph_supervisor.get_client)
+    if client is None:
+        # Deliberately not _UNAVAILABLE. That shape is `{"status": "error"}`,
+        # which the Console adapter turns into a 503, failing the query and
+        # leaving the table blank rather than saying the graph is unavailable.
+        return code_graph_view.unavailable("graph_unavailable")
+    return await asyncio.to_thread(code_graph_view.code_units, client, req.project)
 
 
 @router.post("/internal/projects/search")
