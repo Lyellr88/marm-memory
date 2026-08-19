@@ -35,7 +35,11 @@ def _prune_launching_concept_builds() -> None:
 def _stale_build_result(job: dict) -> dict:
     if job.get("status") not in {"queued", "running"}:
         return job
-    timestamp = job.get("started_at") or job.get("created_at")
+    timestamp = (
+        job.get("last_progress_at")
+        or job.get("started_at")
+        or job.get("created_at")
+    )
     if not timestamp:
         return job
     try:
@@ -141,6 +145,7 @@ def build_concepts(payload: ConceptBuildPayload) -> JSONResponse:
                 "scope_value": payload.session_name or payload.project,
                 "status": "queued",
                 "memories_processed": 0,
+                "memories_total": 0,
                 "entities_extracted": 0,
                 "relationships_created": 0,
                 "code_links_created": 0,

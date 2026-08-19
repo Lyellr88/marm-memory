@@ -32,10 +32,10 @@ logger = structlog.get_logger(__name__)
 
 _TABLE = "concept_build_lock"
 
-# A full-corpus rebuild is a long operation and must not have the lock pulled
-# out from under it mid-run. This only decides how long a *crashed* holder
-# blocks the next build, so it is generous on purpose.
-MANUAL_BUILD_LOCK_SECONDS = 3600
+# Bounds only how long a *crashed* holder blocks the next build. The heartbeat
+# renews the lease for as long as a real build runs, so a full-corpus rebuild is
+# unaffected by how short this is.
+MANUAL_BUILD_LOCK_SECONDS = 60
 
 __all__ = [
     "MANUAL_BUILD_LOCK_SECONDS",

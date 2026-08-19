@@ -15,6 +15,33 @@ class _FakeClient:
     pass
 
 
+class _ProjectClient:
+    def __init__(self, projects):
+        self.projects = projects
+
+    def call_tool(self, name, payload):
+        assert name == "list_projects"
+        assert payload == {}
+        return {"projects": self.projects}
+
+
+def test_indexed_project_names_returns_only_named_projects(monkeypatch):
+    monkeypatch.setattr(graph_supervisor, "is_available", lambda: True)
+    monkeypatch.setattr(
+        graph_supervisor,
+        "get_client",
+        lambda: _ProjectClient([{"name": "proj-a"}, {"root_path": "C:/repo"}, "bad"]),
+    )
+
+    assert graph_client.indexed_project_names() == {"proj-a"}
+
+
+def test_indexed_project_names_soft_fails(monkeypatch):
+    monkeypatch.setattr(graph_supervisor, "is_available", lambda: False)
+
+    assert graph_client.indexed_project_names() == set()
+
+
 def test_find_code_match_returns_none_when_graph_unavailable(monkeypatch):
     monkeypatch.setattr(graph_supervisor, "is_available", lambda: False)
     assert graph_client.find_code_match("CbmClient", "proj-a") is None

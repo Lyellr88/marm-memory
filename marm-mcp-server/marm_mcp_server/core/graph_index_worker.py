@@ -20,6 +20,7 @@ exactly the work that was needed.
 import asyncio
 import os
 import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
@@ -78,6 +79,7 @@ def _git(root: str, *args: str) -> Optional[str]:
             text=True,
             timeout=_GIT_TIMEOUT_SECONDS,
             env=_git_env(),
+            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
         )
     except (OSError, subprocess.SubprocessError) as exc:
         logger.debug("graph_auto_index.git_failed", root=root, error=str(exc))

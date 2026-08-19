@@ -4,6 +4,8 @@ Pure envelope-decoding tests run everywhere; transport tests use the real binary
 """
 
 import json
+import threading
+import time
 
 import pytest
 from conftest import requires_binary
@@ -382,6 +384,182 @@ def test_close_is_idempotent_and_stays_closed(monkeypatch):
     with pytest.raises(CbmError):
         client.call_tool("list_projects", {})
     assert spawned == []
+
+
+def test_spawn_hides_the_engine_window_on_windows(monkeypatch):
+    """The runtime is detached, so an unflagged console child opens a window."""
+    from marm_graph.core import cbm_client
+
+    captured = {}
+
+    class FakeProcess:
+        stdout = object()
+        stderr = object()
+
+        def poll(self):
+            return None
+
+        def terminate(self):
+            pass
+
+        def wait(self, timeout=None):
+            return 0
+
+    client = CbmClient(command=["unused"])
+    monkeypatch.setattr(cbm_client.sys, "platform", "win32")
+    monkeypatch.setattr(cbm_client.subprocess, "CREATE_NO_WINDOW", 123, raising=False)
+    monkeypatch.setattr(
+        cbm_client.subprocess,
+        "Popen",
+        lambda command, **kwargs: (
+            captured.update(command=command, **kwargs) or FakeProcess()
+        ),
+    )
+    monkeypatch.setattr(client, "_read_stdout", lambda *_args: None)
+    monkeypatch.setattr(client, "_drain_stderr", lambda *_args: None)
+    monkeypatch.setattr(client, "_handshake", lambda: None)
+
+    client._spawn()
+
+    assert captured["creationflags"] == 123
+    client.close()
+
+
+def test_close_during_spawn_does_not_clear_the_reader_process(monkeypatch):
+    """close() may detach _proc while _spawn() is still finishing setup."""
+    from marm_graph.core import cbm_client
+
+    class FakeProcess:
+        stdout = object()
+        stderr = object()
+        terminated = False
+
+        def poll(self):
+            return None
+
+        def terminate(self):
+            self.terminated = True
+
+        def wait(self, timeout=None):
+            return 0
+
+    class FakeThread:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def start(self):
+            pass
+
+    client = CbmClient(command=["unused"])
+    process = FakeProcess()
+    real_queue = cbm_client.queue.Queue
+
+    def close_while_spawning(*args, **kwargs):
+        client.close()
+        return real_queue(*args, **kwargs)
+
+    monkeypatch.setattr(
+        cbm_client.subprocess, "Popen", lambda *_args, **_kwargs: process
+    )
+    monkeypatch.setattr(cbm_client.queue, "Queue", close_while_spawning)
+    monkeypatch.setattr(cbm_client.threading, "Thread", FakeThread)
+    monkeypatch.setattr(client, "_handshake", lambda: None)
+
+    with pytest.raises(CbmError, match="client closed during spawn"):
+        client._spawn()
+
+    assert process.terminated is True
+    assert client._proc is None
+
+
+def test_close_between_spawn_check_and_assignment_reaps_the_child(monkeypatch):
+    from marm_graph.core import cbm_client
+
+    class FakeProcess:
+        stdout = object()
+        stderr = object()
+        terminated = False
+
+        def poll(self):
+            return None
+
+        def terminate(self):
+            self.terminated = True
+
+        def wait(self, timeout=None):
+            return 0
+
+    class CloseBeforeAssignmentClient(CbmClient):
+        def __setattr__(self, name, value):
+            close_on_proc = getattr(self, "_close_on_proc", None)
+            if name == "_proc" and close_on_proc is not None and value is close_on_proc:
+                object.__setattr__(self, "_close_on_proc", None)
+                self.close()
+            object.__setattr__(self, name, value)
+
+    client = CloseBeforeAssignmentClient(command=["unused"])
+    process = FakeProcess()
+    client._close_on_proc = process
+    monkeypatch.setattr(
+        cbm_client.subprocess, "Popen", lambda *_args, **_kwargs: process
+    )
+
+    with pytest.raises(CbmError, match="client is closed"):
+        client._spawn()
+
+    assert process.terminated is True
+    assert client._proc is None
+
+
+def test_terminate_process_ignores_an_already_exited_child():
+    class FakeProcess:
+        def poll(self):
+            return None
+
+        def terminate(self):
+            raise ProcessLookupError
+
+    CbmClient._terminate_process(FakeProcess())
+
+
+def test_close_does_not_wait_for_an_inflight_call_lock():
+    """Shutdown must be able to terminate the child before a long call times out."""
+    entered = threading.Event()
+    release = threading.Event()
+
+    class FakeProcess:
+        terminated = False
+
+        def poll(self):
+            return None
+
+        def terminate(self):
+            self.terminated = True
+
+        def wait(self, timeout=None):
+            return 0
+
+    client = CbmClient(command=["unused"])
+    process = FakeProcess()
+    client._proc = process
+
+    def hold_call_lock():
+        with client._lock:
+            entered.set()
+            release.wait(timeout=2)
+
+    thread = threading.Thread(target=hold_call_lock)
+    thread.start()
+    assert entered.wait(timeout=1)
+
+    started = time.monotonic()
+    client.close()
+    elapsed = time.monotonic() - started
+    release.set()
+    thread.join(timeout=1)
+
+    assert process.terminated is True
+    assert elapsed < 1
 
 
 # ── upstream tool contract ──────────────────────────────────────────

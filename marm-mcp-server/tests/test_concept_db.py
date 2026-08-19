@@ -10,6 +10,7 @@ import threading
 import numpy as np
 import pytest
 
+from marm_mcp_server.console.concept_store import get_build_run
 from marm_mcp_server.core.concept_db import ConceptDB
 
 
@@ -23,6 +24,40 @@ def test_own_file_created_separately_from_memory_db(tmp_path):
     assert not db_path.exists()
     ConceptDB(db_path=str(db_path))
     assert db_path.exists()
+
+
+def test_legacy_build_runs_without_progress_columns_are_readable(tmp_path):
+    db_path = tmp_path / "legacy.db"
+    with sqlite3.connect(db_path) as connection:
+        connection.execute(
+            """CREATE TABLE concept_build_runs (
+                id TEXT PRIMARY KEY,
+                scope_type TEXT,
+                scope_value TEXT,
+                status TEXT,
+                memories_processed INTEGER,
+                entities_extracted INTEGER,
+                relationships_created INTEGER,
+                code_links_created INTEGER,
+                duplicate_candidates INTEGER,
+                duration_ms INTEGER,
+                error_code TEXT,
+                created_at TEXT,
+                started_at TEXT,
+                finished_at TEXT
+            )"""
+        )
+        connection.execute(
+            """INSERT INTO concept_build_runs VALUES
+            ('run-1', 'all', NULL, 'running', 3, 4, 5, 6, 0, NULL,
+             NULL, '2026-01-01T00:00:00+00:00', NULL, NULL)"""
+        )
+
+    result = get_build_run(db_path, "run-1")
+
+    assert result is not None
+    assert result["memories_total"] == 0
+    assert result["last_progress_at"] is None
 
 
 def test_concept_build_run_persists_lifecycle_fields(concept_db):
@@ -39,6 +74,7 @@ def test_concept_build_run_persists_lifecycle_fields(concept_db):
             "run-1",
             status="success",
             memories_processed=3,
+            memories_total=4,
             entities_extracted=5,
             relationships_created=2,
             code_links_created=1,
@@ -50,24 +86,28 @@ def test_concept_build_run_persists_lifecycle_fields(concept_db):
     with concept_db.get_connection() as conn:
         row = conn.execute(
             """SELECT scope_type, scope_value, status, memories_processed,
+                      memories_total,
                       entities_extracted, relationships_created, code_links_created,
-                      duplicate_candidates, duration_ms, error_code, finished_at
+                      duplicate_candidates, duration_ms, error_code, last_progress_at,
+                      finished_at
                FROM concept_build_runs WHERE id = 'run-1'"""
         ).fetchone()
 
-    assert row == (
+    assert row[:11] == (
         "session",
         "sess-1",
         "success",
         3,
+        4,
         5,
         2,
         1,
         1,
         42,
         None,
-        "2026-07-12T00:00:01+00:00",
     )
+    assert isinstance(row[11], str)
+    assert row[12] == "2026-07-12T00:00:01+00:00"
 
 
 def test_get_or_create_entity_dedups_same_name_session_project(concept_db):

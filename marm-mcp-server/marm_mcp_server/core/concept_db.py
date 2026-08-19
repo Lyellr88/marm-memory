@@ -184,6 +184,7 @@ def init_concept_database(db_path: str, mark_current: bool = True) -> None:
                 scope_value TEXT,
                 status TEXT NOT NULL,
                 memories_processed INTEGER NOT NULL DEFAULT 0,
+                memories_total INTEGER NOT NULL DEFAULT 0,
                 entities_extracted INTEGER NOT NULL DEFAULT 0,
                 relationships_created INTEGER NOT NULL DEFAULT 0,
                 code_links_created INTEGER NOT NULL DEFAULT 0,
@@ -192,9 +193,23 @@ def init_concept_database(db_path: str, mark_current: bool = True) -> None:
                 error_code TEXT,
                 created_at TEXT NOT NULL,
                 started_at TEXT,
+                last_progress_at TEXT,
                 finished_at TEXT
             )
         """)
+        build_run_columns = {
+            row[1] for row in conn.execute("PRAGMA table_info(concept_build_runs)")
+        }
+        if "memories_total" not in build_run_columns:
+            conn.execute(
+                "ALTER TABLE concept_build_runs "
+                "ADD COLUMN memories_total INTEGER NOT NULL DEFAULT 0"
+            )
+        if "last_progress_at" not in build_run_columns:
+            conn.execute(
+                "ALTER TABLE concept_build_runs "
+                "ADD COLUMN last_progress_at TEXT"
+            )
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_concept_build_runs_created "
             "ON concept_build_runs(created_at DESC)"
@@ -325,12 +340,13 @@ class ConceptDB:
         scope_type: str,
         scope_value: Optional[str],
         created_at: str,
+        memories_total: int = 0,
     ) -> None:
         conn.execute(
             """INSERT INTO concept_build_runs
-               (id, scope_type, scope_value, status, created_at)
-               VALUES (?, ?, ?, 'queued', ?)""",
-            (run_id, scope_type, scope_value, created_at),
+               (id, scope_type, scope_value, status, created_at, memories_total)
+               VALUES (?, ?, ?, 'queued', ?, ?)""",
+            (run_id, scope_type, scope_value, created_at, memories_total),
         )
 
     def update_build_run(
@@ -339,6 +355,7 @@ class ConceptDB:
         allowed = {
             "status",
             "memories_processed",
+            "memories_total",
             "entities_extracted",
             "relationships_created",
             "code_links_created",
@@ -346,11 +363,13 @@ class ConceptDB:
             "duration_ms",
             "error_code",
             "started_at",
+            "last_progress_at",
             "finished_at",
         }
         updates = {key: value for key, value in fields.items() if key in allowed}
         if not updates:
             return
+        updates.setdefault("last_progress_at", datetime.now(timezone.utc).isoformat())
         assignments = ", ".join(f"{key} = ?" for key in updates)
         conn.execute(
             f"UPDATE concept_build_runs SET {assignments} WHERE id = ?",

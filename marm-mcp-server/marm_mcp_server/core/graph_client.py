@@ -21,6 +21,26 @@ def is_graph_available() -> bool:
     return graph_supervisor.is_available()
 
 
+def indexed_project_names() -> set[str]:
+    """Return the graph-project names available for exact code linking."""
+    if not graph_supervisor.is_available():
+        return set()
+
+    client = graph_supervisor.get_client()
+    if client is None:
+        return set()
+
+    try:
+        projects = client.call_tool("list_projects", {}).get("projects", [])
+    except Exception:
+        return set()
+    return {
+        project["name"]
+        for project in projects
+        if isinstance(project, dict) and isinstance(project.get("name"), str)
+    }
+
+
 def find_code_match(entity_name: str, project: Optional[str]) -> Optional[dict]:
     """Exact-match lookup of an entity name against marm-graph's indexed
     symbols. Returns {qualified_name, label, file_path} on a match, None on

@@ -198,6 +198,7 @@ export interface ConceptBuildRun {
   scope_value: string | null;
   status: 'queued' | 'running' | 'success' | 'error' | 'degraded';
   memories_processed: number;
+  memories_total: number;
   entities_extracted: number;
   relationships_created: number;
   code_links_created: number;
