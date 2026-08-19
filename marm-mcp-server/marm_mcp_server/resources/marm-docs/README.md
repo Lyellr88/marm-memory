@@ -62,7 +62,7 @@ It brings three things together:
 - 💻 **Code Graph (5 tools)** maps your repository so agents can find symbols, follow code paths, and understand the project without rereading it all. Point it at a repo once and it keeps itself current as you work.
 - 🧩 **Concept Graph (2 tools)** connects people, decisions, errors, and ideas from your stored memories, with links back to relevant code when available. It builds itself as you store memories.
 
-All 14 tools work over HTTP and STDIO. Your agents share the same local memory across sessions instead of starting from scratch each time. The built-in Console lets you see and manage what is saved.
+All 14 tools work over HTTP and STDIO. Your agents share the same local memory across sessions instead of starting from scratch each time. The bundled Console provides a browsable view of **Memories**, the **Knowledge Graph**, and **Indexed Projects**, including progress for graph builds and repository indexing.
 
 ### How It Works
 
@@ -602,7 +602,7 @@ xAI connects from its own infrastructure, so `localhost` will not work. Expose M
 
 </details>
 
-Full platform walkthroughs, key setup, and OS-specific notes: [Windows](docs/INSTALL-WINDOWS.md#client-connections) · [Linux](docs/INSTALL-LINUX.md#client-connections) · [Docker/key mode](docs/INSTALL-DOCKER.md#client-connections) · [Other platforms](docs/INSTALL-PLATFORMS.md)
+Full platform walkthroughs, key setup, and OS-specific notes: [Windows](docs/INSTALL-WINDOWS.md#client-connections) · [macOS](docs/INSTALL-MACOS.md#start-marm-yourself) · [Linux](docs/INSTALL-LINUX.md#client-connections) · [Docker/key mode](docs/INSTALL-DOCKER.md#client-connections) · [Other platforms](docs/INSTALL-PLATFORMS.md)
 
 > Using a client that isn't listed? [Open an issue](https://github.com/Lyellr88/marm-memory/issues/new/choose) and let us know; client adapters are a first-class feature request.
 
@@ -843,7 +843,7 @@ marm-mcp-server projects auto off
 
 An agent can do the same with `marm_graph_index(action="auto_off")`, and `action="auto_status"` reports what is being watched and when each project was last indexed. The switch persists across restarts and beats the `GRAPH_AUTO_INDEX` environment variable.
 
-Under the hood, the engine is [codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp) (MIT), a zero-dependency static binary that parses 158 languages through tree-sitter with Hybrid LSP type resolution for the major ones, indexes an average repository in seconds, and answers structural queries in under a millisecond. MARM pins a specific release, verifies its tool schema on startup, and routes its 14 upstream tools through 5 focused MCP tools so the model surface stays small. The graph backend starts lazily on first graph-tool use, so memory, logging, notebook, and summary tools still start fast. In Docker, the engine binary is baked into the image; local pip installs fetch it on first graph use (~269MB, one time).
+Under the hood, the engine is [codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp) (MIT), a zero-dependency static binary that parses 158 languages through tree-sitter with Hybrid LSP type resolution for the major ones, indexes an average repository in seconds, and answers symbol search and call tracing in well under a second. Measured on a 149,107-node graph over the persistent connection MARM holds: symbol search 146ms, call tracing 67ms, and the full architecture overview 1.23s, which is the one query that is not sub-second. MARM pins a specific release, verifies its tool schema on startup, and routes the upstream tool set through 5 focused MCP tools so the model surface stays small. The graph backend starts lazily on first graph-tool use, so memory, logging, notebook, and summary tools still start fast. In Docker, the engine binary is baked into the image; local pip installs fetch it on first graph use (~269MB, one time).
 
 **Degraded mode:** if the graph engine fails to start (no network for the first-run download, disk full, schema drift) or `GRAPH_ENABLED=false` is set, graph tools return `{"status": "error", "message": "graph backend unavailable"}` while the other 9 tools keep working normally. Graph failures can never take down memory.
 
@@ -870,7 +870,7 @@ How to use it:
 - **Code cross-linking**: when the code graph has indexed the same project, concept entities that match code symbols get linked, connecting "what we decided" to "where it lives in the code."
 - **Bundled extraction runtime**: the spaCy runtime and English extraction model ship with MARM but load only on the first extraction, which now happens on its own shortly after the first memory is stored rather than when you run a build. If a damaged or partial installation makes them unavailable, both concept tools degrade cleanly while core memory remains available; run `marm-memory knowledge status`, then reinstall MARM if needed.
 - **Isolated storage**: the concept graph lives in its own SQLite database (`~/.marm/index/marm_index.db`) with its own connection pool, so concept-graph writes can never block or corrupt the production memory database.
-- **Console atlas**: MARM Console renders the complete atlas up to 750 entities and 6,000 stored relationships. Larger graphs use a deterministic connected sample of up to 600 entities and 4,000 aggregated visual edges, clearly labelled as sampled.
+- **Console atlas**: the Knowledge Graph opens in a compact, deterministic connected sample for fast navigation. Choose **Render all _N_ nodes** when you need the complete atlas. Full-atlas mode keeps background relationship lines hidden until you hover or select a node, so its direct connections remain readable without drawing the whole spiderweb at once.
 
 This fills the cross-session structure gap that flat memory search leaves open: sessions organize memories, but the concept graph *connects* them, so "what depends on the write queue?" is answerable even when the answer spans five sessions from three different agents.
 
@@ -1014,7 +1014,7 @@ It re-splits stale chunks, fills in any lost to an interrupted write, and drops 
 - Check Python version: `python --version` (must be 3.10+)
 - Verify port 8001 isn't in use: `lsof -i :8001` (macOS/Linux) or `netstat -ano | findstr :8001` (Windows)
 - Check for permission errors in home directory (`~/.marm/` must be readable/writable)
-- See platform-specific troubleshooting: [INSTALL-DOCKER.md](docs/INSTALL-DOCKER.md), [INSTALL-WINDOWS.md](docs/INSTALL-WINDOWS.md), [INSTALL-LINUX.md](docs/INSTALL-LINUX.md)
+- See platform-specific troubleshooting: [INSTALL-DOCKER.md](docs/INSTALL-DOCKER.md), [INSTALL-WINDOWS.md](docs/INSTALL-WINDOWS.md), [INSTALL-MACOS.md](docs/INSTALL-MACOS.md), [INSTALL-LINUX.md](docs/INSTALL-LINUX.md)
 
 **STDIO connection fails**
 
