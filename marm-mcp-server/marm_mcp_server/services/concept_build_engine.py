@@ -33,6 +33,48 @@ MemoryPage = list[MemoryRow]
 BuildProgressCallback = Callable[[int, int, int, int], None]
 _PROGRESS_UPDATE_INTERVAL = 25
 
+
+def _report_progress(
+    progress_callback: Optional[BuildProgressCallback],
+    memories_processed: int,
+    entities_extracted: int,
+    relationships_created: int,
+    code_links_created: int,
+) -> None:
+    """Report progress without turning a healthy build into an error."""
+    if progress_callback is None:
+        return
+    try:
+        progress_callback(
+            memories_processed,
+            entities_extracted,
+            relationships_created,
+            code_links_created,
+        )
+    except Exception as e:
+        _safe_print(f"Concept build progress report failed: {e}")
+
+
+def _report_progress_if_due(
+    progress_callback: Optional[BuildProgressCallback],
+    memories_processed: int,
+    entities_extracted: int,
+    relationships_created: int,
+    code_links_created: int,
+    last_progress_reported: int,
+) -> int:
+    if memories_processed - last_progress_reported < _PROGRESS_UPDATE_INTERVAL:
+        return last_progress_reported
+    _report_progress(
+        progress_callback,
+        memories_processed,
+        entities_extracted,
+        relationships_created,
+        code_links_created,
+    )
+    return memories_processed
+
+
 # Shared by the scope path and the targeted path so the two can never drift
 # into indexing different corpora. A compaction source owns its concepts and
 # the generated summary restates them, so extracting both double-counts every
@@ -258,6 +300,14 @@ def _run_build(
                         )
                         if outcomes is not None:
                             outcomes[mem_id] = "failed"
+                        last_progress_reported = _report_progress_if_due(
+                            progress_callback,
+                            memories_processed,
+                            entities_extracted,
+                            relationships_created,
+                            code_links_created,
+                            last_progress_reported,
+                        )
                         continue
 
                     memory_failed = False
@@ -364,28 +414,23 @@ def _run_build(
                             outcomes[mem_id] = "no_entities"
                         else:
                             outcomes[mem_id] = "indexed"
-                    if (
-                        progress_callback is not None
-                        and memories_processed - last_progress_reported
-                        >= _PROGRESS_UPDATE_INTERVAL
-                    ):
-                        progress_callback(
-                            memories_processed,
-                            entities_extracted,
-                            relationships_created,
-                            code_links_created,
-                        )
-                        last_progress_reported = memories_processed
-                if progress_callback is not None:
-                    if last_progress_reported != memories_processed:
-                        progress_callback(
-                            memories_processed,
-                            entities_extracted,
-                            relationships_created,
-                            code_links_created,
-                        )
-                        last_progress_reported = memories_processed
-                        last_progress_reported = memories_processed
+                    last_progress_reported = _report_progress_if_due(
+                        progress_callback,
+                        memories_processed,
+                        entities_extracted,
+                        relationships_created,
+                        code_links_created,
+                        last_progress_reported,
+                    )
+                if last_progress_reported != memories_processed:
+                    _report_progress(
+                        progress_callback,
+                        memories_processed,
+                        entities_extracted,
+                        relationships_created,
+                        code_links_created,
+                    )
+                    last_progress_reported = memories_processed
                 if aborted:
                     break
 

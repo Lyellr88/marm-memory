@@ -10,6 +10,7 @@ import threading
 import numpy as np
 import pytest
 
+from marm_mcp_server.console.concept_store import get_build_run
 from marm_mcp_server.core.concept_db import ConceptDB
 
 
@@ -23,6 +24,40 @@ def test_own_file_created_separately_from_memory_db(tmp_path):
     assert not db_path.exists()
     ConceptDB(db_path=str(db_path))
     assert db_path.exists()
+
+
+def test_legacy_build_runs_without_progress_columns_are_readable(tmp_path):
+    db_path = tmp_path / "legacy.db"
+    with sqlite3.connect(db_path) as connection:
+        connection.execute(
+            """CREATE TABLE concept_build_runs (
+                id TEXT PRIMARY KEY,
+                scope_type TEXT,
+                scope_value TEXT,
+                status TEXT,
+                memories_processed INTEGER,
+                entities_extracted INTEGER,
+                relationships_created INTEGER,
+                code_links_created INTEGER,
+                duplicate_candidates INTEGER,
+                duration_ms INTEGER,
+                error_code TEXT,
+                created_at TEXT,
+                started_at TEXT,
+                finished_at TEXT
+            )"""
+        )
+        connection.execute(
+            """INSERT INTO concept_build_runs VALUES
+            ('run-1', 'all', NULL, 'running', 3, 4, 5, 6, 0, NULL,
+             NULL, '2026-01-01T00:00:00+00:00', NULL, NULL)"""
+        )
+
+    result = get_build_run(db_path, "run-1")
+
+    assert result is not None
+    assert result["memories_total"] == 0
+    assert result["last_progress_at"] is None
 
 
 def test_concept_build_run_persists_lifecycle_fields(concept_db):

@@ -147,10 +147,12 @@ class CbmClient:
             proc = subprocess.Popen(self._command, **popen_kwargs)
         except (OSError, ValueError) as e:
             raise CbmError(f"failed to spawn codebase-memory-mcp: {e}") from e
+        self._proc = proc
         if self._closed:
+            if self._proc is proc:
+                self._proc = None
             self._terminate_process(proc)
             raise CbmError("client is closed")
-        self._proc = proc
 
         # Bind the reader thread to THIS queue instance. If the child is later
         # killed and respawned, the dying old reader must not push its EOF
@@ -242,11 +244,21 @@ class CbmClient:
     def _terminate_process(proc: Optional[subprocess.Popen]) -> None:
         if proc is None or proc.poll() is not None:
             return
-        proc.terminate()
+        try:
+            proc.terminate()
+        except ProcessLookupError:
+            return
         try:
             proc.wait(timeout=5)
         except subprocess.TimeoutExpired:
-            proc.kill()
+            try:
+                proc.kill()
+            except ProcessLookupError:
+                return
+            try:
+                proc.wait(timeout=5)
+            except (ProcessLookupError, subprocess.TimeoutExpired):
+                pass
 
     # ── framing ─────────────────────────────────────────────────────
 

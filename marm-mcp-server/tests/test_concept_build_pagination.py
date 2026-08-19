@@ -153,6 +153,44 @@ def test_progress_updates_once_per_page_with_live_totals(concepts_env, monkeypat
     )
 
 
+def test_failed_extractions_still_report_interval_progress(concepts_env, monkeypatch):
+    concepts, memory_module = concepts_env
+    _seed(memory_module, 25)
+    concept_build_engine = _engine()
+    monkeypatch.setattr(concept_build_engine, "is_graph_available", lambda: False)
+
+    def fail_extraction(_content):
+        raise RuntimeError("bad input")
+
+    monkeypatch.setattr(concept_build_engine, "extract_entities", fail_extraction)
+    progress: list[tuple[int, int, int, int]] = []
+
+    result = concepts._run_build(
+        concepts._fetch_memory_pages(session_name=None, project=None, search_all=True),
+        progress_callback=lambda *counts: progress.append(counts),
+    )
+
+    assert result["memories_processed"] == 25
+    assert progress == [(25, 0, 0, 0)]
+
+
+def test_progress_callback_failure_does_not_abort_build(concepts_env, monkeypatch):
+    concepts, memory_module = concepts_env
+    _seed(memory_module, 5)
+    _one_entity_per_memory(monkeypatch, concepts)
+
+    def fail_progress(*_counts):
+        raise RuntimeError("console disconnected")
+
+    result = concepts._run_build(
+        concepts._fetch_memory_pages(session_name=None, project=None, search_all=True),
+        progress_callback=fail_progress,
+    )
+
+    assert result["memories_processed"] == 5
+    assert result["entities_extracted"] == 5
+
+
 def test_memories_written_during_a_build_are_not_reprocessed(concepts_env, monkeypatch):
     """Descending keyset means a row written mid-build sorts ahead of the
     cursor and is skipped, rather than shifting the window and causing a

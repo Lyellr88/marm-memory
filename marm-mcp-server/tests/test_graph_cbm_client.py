@@ -458,7 +458,9 @@ def test_close_during_spawn_does_not_clear_the_reader_process(monkeypatch):
         client.close()
         return real_queue(*args, **kwargs)
 
-    monkeypatch.setattr(cbm_client.subprocess, "Popen", lambda *_args, **_kwargs: process)
+    monkeypatch.setattr(
+        cbm_client.subprocess, "Popen", lambda *_args, **_kwargs: process
+    )
     monkeypatch.setattr(cbm_client.queue, "Queue", close_while_spawning)
     monkeypatch.setattr(cbm_client.threading, "Thread", FakeThread)
     monkeypatch.setattr(client, "_handshake", lambda: None)
@@ -467,6 +469,56 @@ def test_close_during_spawn_does_not_clear_the_reader_process(monkeypatch):
 
     assert process.terminated is True
     assert client._proc is None
+
+
+def test_close_between_spawn_check_and_assignment_reaps_the_child(monkeypatch):
+    from marm_graph.core import cbm_client
+
+    class FakeProcess:
+        stdout = object()
+        stderr = object()
+        terminated = False
+
+        def poll(self):
+            return None
+
+        def terminate(self):
+            self.terminated = True
+
+        def wait(self, timeout=None):
+            return 0
+
+    class CloseBeforeAssignmentClient(CbmClient):
+        def __setattr__(self, name, value):
+            close_on_proc = getattr(self, "_close_on_proc", None)
+            if name == "_proc" and close_on_proc is not None and value is close_on_proc:
+                object.__setattr__(self, "_close_on_proc", None)
+                self.close()
+            object.__setattr__(self, name, value)
+
+    client = CloseBeforeAssignmentClient(command=["unused"])
+    process = FakeProcess()
+    client._close_on_proc = process
+    monkeypatch.setattr(
+        cbm_client.subprocess, "Popen", lambda *_args, **_kwargs: process
+    )
+
+    with pytest.raises(CbmError, match="client is closed"):
+        client._spawn()
+
+    assert process.terminated is True
+    assert client._proc is None
+
+
+def test_terminate_process_ignores_an_already_exited_child():
+    class FakeProcess:
+        def poll(self):
+            return None
+
+        def terminate(self):
+            raise ProcessLookupError
+
+    CbmClient._terminate_process(FakeProcess())
 
 
 def test_close_does_not_wait_for_an_inflight_call_lock():

@@ -58,12 +58,17 @@ def _schema_status(connection: sqlite3.Connection) -> str:
         return "unavailable"
 
 
-def _build_run_progress_column(connection: sqlite3.Connection) -> str:
+def _build_run_columns(connection: sqlite3.Connection) -> tuple[str, str]:
     columns = {
         row["name"]
         for row in connection.execute("PRAGMA table_info(concept_build_runs)")
     }
-    return "last_progress_at" if "last_progress_at" in columns else "NULL AS last_progress_at"
+    return (
+        "memories_total" if "memories_total" in columns else "0 AS memories_total",
+        "last_progress_at"
+        if "last_progress_at" in columns
+        else "NULL AS last_progress_at",
+    )
 
 
 def graph_version(db_path: Path) -> dict:
@@ -238,10 +243,10 @@ def build_runs(db_path: Path, limit: int = 20) -> list[dict]:
         with closing(connection), connection:
             if _schema_status(connection) != "current":
                 return []
-            progress_column = _build_run_progress_column(connection)
+            memories_total_column, progress_column = _build_run_columns(connection)
             rows = connection.execute(
                 f"""SELECT id, scope_type, scope_value, status, memories_processed,
-                          memories_total,
+                          {memories_total_column},
                           entities_extracted, relationships_created, code_links_created,
                           duplicate_candidates, duration_ms, error_code, created_at,
                           started_at, {progress_column}, finished_at
@@ -260,10 +265,10 @@ def get_build_run(db_path: Path, run_id: str) -> dict | None:
         return None
     try:
         with closing(connection), connection:
-            progress_column = _build_run_progress_column(connection)
+            memories_total_column, progress_column = _build_run_columns(connection)
             row = connection.execute(
                 f"""SELECT id, scope_type, scope_value, status, memories_processed,
-                          memories_total,
+                          {memories_total_column},
                           entities_extracted, relationships_created, code_links_created,
                           duplicate_candidates, duration_ms, error_code, created_at,
                           started_at, {progress_column}, finished_at
