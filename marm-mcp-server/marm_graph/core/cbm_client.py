@@ -168,6 +168,11 @@ class CbmClient:
         self._stderr_reader.start()
 
         self._handshake()
+        if self._closed or self._proc is not proc:
+            if self._proc is proc:
+                self._proc = None
+            self._terminate_process(proc)
+            raise CbmError("client closed during spawn")
 
     def _read_stdout(self, pipe, q: "queue.Queue") -> None:
         """Feed each response line into `q`; push _EOF when the pipe closes.

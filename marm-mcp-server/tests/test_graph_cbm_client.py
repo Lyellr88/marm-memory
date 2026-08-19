@@ -465,7 +465,8 @@ def test_close_during_spawn_does_not_clear_the_reader_process(monkeypatch):
     monkeypatch.setattr(cbm_client.threading, "Thread", FakeThread)
     monkeypatch.setattr(client, "_handshake", lambda: None)
 
-    client._spawn()
+    with pytest.raises(CbmError, match="client closed during spawn"):
+        client._spawn()
 
     assert process.terminated is True
     assert client._proc is None
