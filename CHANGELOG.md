@@ -1,6 +1,18 @@
 # Changelog
 
 <details>
+<summary><strong>August 19th, 2026: Reliable Concept Builds on Windows (v2.39.4)</strong></summary>
+
+### Fixed: Concept Build Progress No Longer Gets Stuck or Falsely Times Out
+
+- The Knowledge Graph build dialog now shows its real progress, elapsed time, and any stored failure reason while a build runs. You can close it to keep the build running in the background, then reopen it to continue watching. Once a build finishes or fails, every close path returns the dialog to the start form for the next build.
+- Long builds now record a progress heartbeat while they work. The Console checks that heartbeat instead of the original start time, so a healthy build no longer turns into a false `stale_run` error merely because it has been running for five minutes.
+- A concept build only asks the code graph for matches when that memory's project is actually indexed. This avoids thousands of guaranteed-miss graph lookups and keeps a large rebuild responsive when memory and code-graph project names do not overlap.
+- Windows no longer flashes a terminal window for the graph engine or the Git checks automatic indexing runs each poll. Graph-client shutdown also remains safe if it races the engine's initial spawn.
+
+</details>
+
+<details>
 <summary><strong>August 18th, 2026: Console Architecture Tab Renders Again (v2.39.3)</strong></summary>
 
 ### Fixed: Opening A Project's Architecture Tab In The Console No Longer Breaks The View

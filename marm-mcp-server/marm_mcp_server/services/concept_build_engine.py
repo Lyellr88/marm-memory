@@ -7,9 +7,8 @@ build_for_memory_ids both drive this same engine, one via a page generator over
 a scope, the other via a targeted batch of memory ids.
 """
 
-import itertools
 import threading
-from collections.abc import Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from typing import Optional
 
 from ..config.settings import (
@@ -18,7 +17,11 @@ from ..config.settings import (
 )
 from ..core.concept_db import ConceptDB, backup_and_reset_concept_database
 from ..core.concept_extraction import extract_entities
-from ..core.graph_client import find_code_match, is_graph_available
+from ..core.graph_client import (
+    find_code_match,
+    indexed_project_names,
+    is_graph_available,
+)
 from ..core.memory import memory
 from ..core.memory_utils import _embedding_to_bytes, _safe_print
 
@@ -27,6 +30,8 @@ _concept_db_lock = threading.Lock()
 
 MemoryRow = tuple[str, str, Optional[str], Optional[str], Optional[str]]
 MemoryPage = list[MemoryRow]
+BuildProgressCallback = Callable[[int, int, int, int], None]
+_PROGRESS_UPDATE_INTERVAL = 25
 
 # Shared by the scope path and the targeted path so the two can never drift
 # into indexing different corpora. A compaction source owns its concepts and
@@ -85,12 +90,30 @@ def _fetch_memory_pages(
     in the DB, making search_all's "explicit opt-in for everything"
     meaningless. Validated before the generator is built so the caller still
     gets the ValueError at call time, not on first iteration."""
+    conditions, params = _build_scope_conditions(session_name, project, search_all)
+
+    return _paged_memory_rows(conditions, params)
+
+
+def count_memory_rows(
+    session_name: Optional[str], project: Optional[str], search_all: bool
+) -> int:
+    """Count the immutable-at-start progress denominator for a manual build."""
+    conditions, params = _build_scope_conditions(session_name, project, search_all)
+    query = f"SELECT COUNT(*) FROM memories WHERE {' AND '.join(conditions)}"
+    with memory.get_connection() as conn:
+        row = conn.execute(query, params).fetchone()
+    return int(row[0]) if row else 0
+
+
+def _build_scope_conditions(
+    session_name: Optional[str], project: Optional[str], search_all: bool
+) -> tuple[list[str], list[str]]:
     if not (session_name or project or search_all):
         raise ValueError(_MISSING_BUILD_SCOPE_MESSAGE)
 
     conditions = list(_BUILD_ROW_FILTERS)
-    params: list = []
-
+    params: list[str] = []
     if not search_all:
         if session_name:
             conditions.append("session_name = ?")
@@ -98,8 +121,7 @@ def _fetch_memory_pages(
         if project:
             conditions.append("project = ?")
             params.append(project)
-
-    return _paged_memory_rows(conditions, params)
+    return conditions, params
 
 
 def _paged_memory_rows(conditions: list[str], params: list) -> Iterator[MemoryPage]:
@@ -176,6 +198,7 @@ def _run_build(
     outcomes: Optional[dict[str, str]] = None,
     abort: Optional[threading.Event] = None,
     finished: Optional[threading.Event] = None,
+    progress_callback: Optional[BuildProgressCallback] = None,
 ) -> dict:
     """Consumes pages lazily so a full-corpus build never holds every row in
     memory at once. The concept connection and embed_cache stay outside the
@@ -216,124 +239,155 @@ def _run_build(
         # none is.
         concept_db = _get_concept_db()
         graph_available = is_graph_available()
+        code_link_projects = indexed_project_names() if graph_available else set()
+        last_progress_reported = 0
         with concept_db.get_connection() as conn:
-            for row in itertools.chain.from_iterable(pages):
-                if abort is not None and abort.is_set():
-                    aborted = True
-                    break
-                mem_id, content, mem_session, mem_project = row[:4]
-                mem_platform = row[4] if len(row) > 4 else None
-                memories_processed += 1
-                try:
-                    result = extract_entities(content)
-                except Exception as e:
-                    _safe_print(f"Concept extraction failed for memory {mem_id}: {e}")
-                    if outcomes is not None:
-                        outcomes[mem_id] = "failed"
-                    continue
-
-                memory_failed = False
-                name_to_id: dict[str, int] = {}
-                for entity in result.entities:
-                    if entity.name not in embed_cache:
-                        embed_cache[entity.name] = _try_embed(entity.name)
-                    emb_bytes = embed_cache[entity.name]
+            for page in pages:
+                for row in page:
+                    if abort is not None and abort.is_set():
+                        aborted = True
+                        break
+                    mem_id, content, mem_session, mem_project = row[:4]
+                    mem_platform = row[4] if len(row) > 4 else None
+                    memories_processed += 1
                     try:
-                        entity_id, was_created = concept_db.get_or_create_entity(
-                            conn,
-                            entity.name,
-                            entity.type,
-                            mem_session,
-                            mem_project,
-                            mem_id,
-                            name_embedding=emb_bytes,
-                            platform=mem_platform,
-                        )
+                        result = extract_entities(content)
                     except Exception as e:
                         _safe_print(
-                            f"Concept entity write failed for memory {mem_id}: {e}"
+                            f"Concept extraction failed for memory {mem_id}: {e}"
                         )
-                        memory_failed = True
+                        if outcomes is not None:
+                            outcomes[mem_id] = "failed"
                         continue
-                    name_to_id[entity.name] = entity_id
-                    entities_extracted += 1
 
-                    if was_created and emb_bytes is not None:
+                    memory_failed = False
+                    name_to_id: dict[str, int] = {}
+                    for entity in result.entities:
+                        if entity.name not in embed_cache:
+                            embed_cache[entity.name] = _try_embed(entity.name)
+                        emb_bytes = embed_cache[entity.name]
                         try:
-                            candidates = concept_db.find_similar_entities(
+                            entity_id, was_created = concept_db.get_or_create_entity(
                                 conn,
-                                emb_bytes,
+                                entity.name,
+                                entity.type,
                                 mem_session,
                                 mem_project,
-                                CONCEPT_DUPLICATE_SIMILARITY_THRESHOLD,
-                                exclude_id=entity_id,
+                                mem_id,
+                                name_embedding=emb_bytes,
                                 platform=mem_platform,
                             )
                         except Exception as e:
-                            _safe_print(f"Concept duplicate-candidate scan failed: {e}")
-                            candidates = []
-                        if candidates:
-                            possible_duplicates.append(
-                                {"entity": entity.name, "candidates": candidates}
+                            _safe_print(
+                                f"Concept entity write failed for memory {mem_id}: {e}"
                             )
+                            memory_failed = True
+                            continue
+                        name_to_id[entity.name] = entity_id
+                        entities_extracted += 1
 
-                for name_a, name_b, predicate in result.relationship_pairs:
-                    id_a = name_to_id.get(name_a)
-                    id_b = name_to_id.get(name_b)
-                    if id_a is None or id_b is None:
-                        continue
-                    try:
-                        if concept_db.store_relationship(
-                            conn,
-                            id_a,
-                            id_b,
-                            predicate,
-                            mem_id,
-                            mem_project,
-                            platform=mem_platform,
-                        ):
-                            relationships_created += 1
-                    except Exception as e:
-                        _safe_print(
-                            f"Concept relationship write failed for memory {mem_id}: {e}"
-                        )
-                        memory_failed = True
+                        if was_created and emb_bytes is not None:
+                            try:
+                                candidates = concept_db.find_similar_entities(
+                                    conn,
+                                    emb_bytes,
+                                    mem_session,
+                                    mem_project,
+                                    CONCEPT_DUPLICATE_SIMILARITY_THRESHOLD,
+                                    exclude_id=entity_id,
+                                    platform=mem_platform,
+                                )
+                            except Exception as e:
+                                _safe_print(
+                                    f"Concept duplicate-candidate scan failed: {e}"
+                                )
+                                candidates = []
+                            if candidates:
+                                possible_duplicates.append(
+                                    {"entity": entity.name, "candidates": candidates}
+                                )
 
-                if graph_available:
-                    for entity in result.entities:
-                        linked_entity_id = name_to_id.get(entity.name)
-                        if linked_entity_id is None:
+                    for name_a, name_b, predicate in result.relationship_pairs:
+                        id_a = name_to_id.get(name_a)
+                        id_b = name_to_id.get(name_b)
+                        if id_a is None or id_b is None:
                             continue
                         try:
-                            match = find_code_match(entity.name, mem_project)
+                            if concept_db.store_relationship(
+                                conn,
+                                id_a,
+                                id_b,
+                                predicate,
+                                mem_id,
+                                mem_project,
+                                platform=mem_platform,
+                            ):
+                                relationships_created += 1
                         except Exception as e:
-                            _safe_print(f"Concept code-link lookup failed: {e}")
-                            continue
-                        if match:
-                            try:
-                                if concept_db.store_code_link(
-                                    conn,
-                                    linked_entity_id,
-                                    match["qualified_name"],
-                                    mem_project or "",
-                                    label=match.get("label"),
-                                    file_path=match.get("file_path"),
-                                ):
-                                    code_links_created += 1
-                            except Exception as e:
-                                _safe_print(f"Concept code-link write failed: {e}")
+                            _safe_print(
+                                f"Concept relationship write failed for memory {mem_id}: {e}"
+                            )
+                            memory_failed = True
 
-                if outcomes is not None:
-                    # Code links are deliberately absent from this decision. The
-                    # graph engine is optional and its lookups already fail open,
-                    # so a missing link is degradation, not a reason to re-extract
-                    # the memory.
-                    if memory_failed:
-                        outcomes[mem_id] = "failed"
-                    elif not result.entities:
-                        outcomes[mem_id] = "no_entities"
-                    else:
-                        outcomes[mem_id] = "indexed"
+                    if mem_project in code_link_projects:
+                        for entity in result.entities:
+                            linked_entity_id = name_to_id.get(entity.name)
+                            if linked_entity_id is None:
+                                continue
+                            try:
+                                match = find_code_match(entity.name, mem_project)
+                            except Exception as e:
+                                _safe_print(f"Concept code-link lookup failed: {e}")
+                                continue
+                            if match:
+                                try:
+                                    if concept_db.store_code_link(
+                                        conn,
+                                        linked_entity_id,
+                                        match["qualified_name"],
+                                        mem_project or "",
+                                        label=match.get("label"),
+                                        file_path=match.get("file_path"),
+                                    ):
+                                        code_links_created += 1
+                                except Exception as e:
+                                    _safe_print(f"Concept code-link write failed: {e}")
+
+                    if outcomes is not None:
+                        # Code links are deliberately absent from this decision. The
+                        # graph engine is optional and its lookups already fail open,
+                        # so a missing link is degradation, not a reason to re-extract
+                        # the memory.
+                        if memory_failed:
+                            outcomes[mem_id] = "failed"
+                        elif not result.entities:
+                            outcomes[mem_id] = "no_entities"
+                        else:
+                            outcomes[mem_id] = "indexed"
+                    if (
+                        progress_callback is not None
+                        and memories_processed - last_progress_reported
+                        >= _PROGRESS_UPDATE_INTERVAL
+                    ):
+                        progress_callback(
+                            memories_processed,
+                            entities_extracted,
+                            relationships_created,
+                            code_links_created,
+                        )
+                        last_progress_reported = memories_processed
+                if progress_callback is not None:
+                    if last_progress_reported != memories_processed:
+                        progress_callback(
+                            memories_processed,
+                            entities_extracted,
+                            relationships_created,
+                            code_links_created,
+                        )
+                        last_progress_reported = memories_processed
+                        last_progress_reported = memories_processed
+                if aborted:
+                    break
 
     finally:
         # However this exits, the thread has stopped writing the graph. The

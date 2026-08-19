@@ -39,6 +39,7 @@ def test_concept_build_run_persists_lifecycle_fields(concept_db):
             "run-1",
             status="success",
             memories_processed=3,
+            memories_total=4,
             entities_extracted=5,
             relationships_created=2,
             code_links_created=1,
@@ -50,24 +51,28 @@ def test_concept_build_run_persists_lifecycle_fields(concept_db):
     with concept_db.get_connection() as conn:
         row = conn.execute(
             """SELECT scope_type, scope_value, status, memories_processed,
+                      memories_total,
                       entities_extracted, relationships_created, code_links_created,
-                      duplicate_candidates, duration_ms, error_code, finished_at
+                      duplicate_candidates, duration_ms, error_code, last_progress_at,
+                      finished_at
                FROM concept_build_runs WHERE id = 'run-1'"""
         ).fetchone()
 
-    assert row == (
+    assert row[:11] == (
         "session",
         "sess-1",
         "success",
         3,
+        4,
         5,
         2,
         1,
         1,
         42,
         None,
-        "2026-07-12T00:00:01+00:00",
     )
+    assert isinstance(row[11], str)
+    assert row[12] == "2026-07-12T00:00:01+00:00"
 
 
 def test_get_or_create_entity_dedups_same_name_session_project(concept_db):

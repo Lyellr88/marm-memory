@@ -235,7 +235,7 @@ def test_full_legacy_build_backs_up_and_resets_graph(concepts_env, monkeypatch):
     monkeypatch.setattr(
         concepts,
         "_run_build",
-        lambda _pages, _outcomes, _abort=None: {
+        lambda _pages, _outcomes, _abort=None, _finished=None, progress_callback=None: {
             "aborted": False,
             "memories_processed": 0,
             "entities_extracted": 0,
@@ -428,6 +428,7 @@ def test_run_build_is_idempotent_on_repeat_runs(concepts_env, monkeypatch):
         ),
     )
     monkeypatch.setattr(_engine(), "is_graph_available", lambda: True)
+    monkeypatch.setattr(_engine(), "indexed_project_names", lambda: {"proj-a"})
     monkeypatch.setattr(
         _engine(),
         "find_code_match",
@@ -475,6 +476,7 @@ def test_run_recall_does_not_return_duplicate_linked_code_after_repeat_build(
         ),
     )
     monkeypatch.setattr(_engine(), "is_graph_available", lambda: True)
+    monkeypatch.setattr(_engine(), "indexed_project_names", lambda: {"proj-a"})
     monkeypatch.setattr(
         _engine(),
         "find_code_match",
@@ -491,6 +493,34 @@ def test_run_recall_does_not_return_duplicate_linked_code_after_repeat_build(
 
     result = concepts._run_recall("CbmClient", session_name=None, limit=10)
     assert len(result["linked_code"]) == 1
+
+
+def test_run_build_skips_code_lookups_for_an_unindexed_memory_project(
+    concepts_env, monkeypatch
+):
+    _server, concepts, _memory_module = concepts_env
+    from marm_mcp_server.core.concept_extraction import Entity, ExtractionResult
+
+    monkeypatch.setattr(
+        _engine(),
+        "extract_entities",
+        lambda content: ExtractionResult(
+            entities=[Entity("CbmClient", "concept")], relationship_pairs=[]
+        ),
+    )
+    monkeypatch.setattr(_engine(), "is_graph_available", lambda: True)
+    monkeypatch.setattr(_engine(), "indexed_project_names", lambda: {"other-project"})
+    monkeypatch.setattr(
+        _engine(),
+        "find_code_match",
+        lambda *_: pytest.fail("unindexed projects must not query the code graph"),
+    )
+
+    result = concepts._run_build(
+        [[("m1", "CbmClient reference", "sess-a", "proj-a")]]
+    )
+
+    assert result["code_links_created"] == 0
 
 
 def test_run_build_same_entity_across_two_memories_dedups_in_same_session(
@@ -557,6 +587,7 @@ def test_run_build_links_code_when_graph_available(concepts_env, monkeypatch):
         ),
     )
     monkeypatch.setattr(_engine(), "is_graph_available", lambda: True)
+    monkeypatch.setattr(_engine(), "indexed_project_names", lambda: {"proj-a"})
     monkeypatch.setattr(
         _engine(),
         "find_code_match",

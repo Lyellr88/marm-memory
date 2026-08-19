@@ -58,6 +58,14 @@ def _schema_status(connection: sqlite3.Connection) -> str:
         return "unavailable"
 
 
+def _build_run_progress_column(connection: sqlite3.Connection) -> str:
+    columns = {
+        row["name"]
+        for row in connection.execute("PRAGMA table_info(concept_build_runs)")
+    }
+    return "last_progress_at" if "last_progress_at" in columns else "NULL AS last_progress_at"
+
+
 def graph_version(db_path: Path) -> dict:
     """A cheap change marker the Console can poll while the Explorer is open.
 
@@ -230,11 +238,13 @@ def build_runs(db_path: Path, limit: int = 20) -> list[dict]:
         with closing(connection), connection:
             if _schema_status(connection) != "current":
                 return []
+            progress_column = _build_run_progress_column(connection)
             rows = connection.execute(
-                """SELECT id, scope_type, scope_value, status, memories_processed,
+                f"""SELECT id, scope_type, scope_value, status, memories_processed,
+                          memories_total,
                           entities_extracted, relationships_created, code_links_created,
                           duplicate_candidates, duration_ms, error_code, created_at,
-                          started_at, finished_at
+                          started_at, {progress_column}, finished_at
                    FROM concept_build_runs
                    ORDER BY created_at DESC LIMIT ?""",
                 (min(max(limit, 1), 50),),
@@ -250,11 +260,13 @@ def get_build_run(db_path: Path, run_id: str) -> dict | None:
         return None
     try:
         with closing(connection), connection:
+            progress_column = _build_run_progress_column(connection)
             row = connection.execute(
-                """SELECT id, scope_type, scope_value, status, memories_processed,
+                f"""SELECT id, scope_type, scope_value, status, memories_processed,
+                          memories_total,
                           entities_extracted, relationships_created, code_links_created,
                           duplicate_candidates, duration_ms, error_code, created_at,
-                          started_at, finished_at
+                          started_at, {progress_column}, finished_at
                    FROM concept_build_runs WHERE id = ?""",
                 (run_id,),
             ).fetchone()
@@ -335,6 +347,7 @@ def _build_run(row: sqlite3.Row) -> dict:
         "scope_value": row["scope_value"],
         "status": row["status"],
         "memories_processed": row["memories_processed"],
+        "memories_total": row["memories_total"],
         "entities_extracted": row["entities_extracted"],
         "relationships_created": row["relationships_created"],
         "code_links_created": row["code_links_created"],
@@ -343,6 +356,7 @@ def _build_run(row: sqlite3.Row) -> dict:
         "error_code": row["error_code"],
         "created_at": row["created_at"],
         "started_at": row["started_at"],
+        "last_progress_at": row["last_progress_at"],
         "finished_at": row["finished_at"],
     }
 

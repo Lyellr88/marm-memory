@@ -24,6 +24,7 @@ import json
 import queue
 import re
 import subprocess
+import sys
 import threading
 from typing import Any, Optional
 
@@ -32,6 +33,7 @@ import structlog
 logger = structlog.get_logger(__name__)
 
 _EOF = object()  # sentinel pushed by the reader thread on child EOF
+_CLOSE_LOCK_WAIT_SECONDS = 0.1
 
 
 def _field_from_truncated(text: str, field: str) -> Optional[str]:
@@ -132,28 +134,34 @@ class CbmClient:
         if self._closed:
             raise CbmError("client is closed")
         logger.info("cbm.spawn", command=self._command, cwd=self._cwd)
+        popen_kwargs: dict[str, Any] = {
+            "stdin": subprocess.PIPE,
+            "stdout": subprocess.PIPE,
+            "stderr": subprocess.PIPE,
+            "cwd": self._cwd,
+            "bufsize": 0,
+        }
+        if sys.platform == "win32":
+            popen_kwargs["creationflags"] = subprocess.CREATE_NO_WINDOW
         try:
-            self._proc = subprocess.Popen(
-                self._command,
-                stdin=subprocess.PIPE,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                cwd=self._cwd,
-                bufsize=0,
-            )
+            proc = subprocess.Popen(self._command, **popen_kwargs)
         except (OSError, ValueError) as e:
             raise CbmError(f"failed to spawn codebase-memory-mcp: {e}") from e
+        if self._closed:
+            self._terminate_process(proc)
+            raise CbmError("client is closed")
+        self._proc = proc
 
         # Bind the reader thread to THIS queue instance. If the child is later
         # killed and respawned, the dying old reader must not push its EOF
         # sentinel into the new queue (which would poison the fresh handshake).
         self._out_q = queue.Queue()
         self._reader = threading.Thread(
-            target=self._read_stdout, args=(self._proc.stdout, self._out_q), daemon=True
+            target=self._read_stdout, args=(proc.stdout, self._out_q), daemon=True
         )
         self._reader.start()
         self._stderr_reader = threading.Thread(
-            target=self._drain_stderr, args=(self._proc.stderr,), daemon=True
+            target=self._drain_stderr, args=(proc.stderr,), daemon=True
         )
         self._stderr_reader.start()
 
@@ -218,24 +226,41 @@ class CbmClient:
                 self._spawn()
 
     def close(self) -> None:
-        with self._lock:
-            self._closed = True
+        self._closed = True
+        if self._lock.acquire(timeout=_CLOSE_LOCK_WAIT_SECONDS):
+            try:
+                proc = self._proc
+                self._proc = None
+            finally:
+                self._lock.release()
+        else:
             proc = self._proc
             self._proc = None
-        if proc and proc.poll() is None:
-            proc.terminate()
-            try:
-                proc.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                proc.kill()
+        self._terminate_process(proc)
+
+    @staticmethod
+    def _terminate_process(proc: Optional[subprocess.Popen]) -> None:
+        if proc is None or proc.poll() is not None:
+            return
+        proc.terminate()
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
 
     # ── framing ─────────────────────────────────────────────────────
 
     def _write(self, obj: dict) -> None:
         line = json.dumps(obj, separators=(",", ":")).encode("utf-8") + b"\n"
+        proc = self._proc
+        if proc is None:
+            raise CbmError("child process is closed")
+        stdin = proc.stdin
+        if stdin is None:
+            raise CbmError("child process stdin is unavailable")
         try:
-            self._proc.stdin.write(line)
-            self._proc.stdin.flush()
+            stdin.write(line)
+            stdin.flush()
         except (BrokenPipeError, OSError) as e:
             raise CbmError(f"write to child failed: {e}") from e
 

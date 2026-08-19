@@ -1,20 +1,35 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useBuildConcepts, useMarmConfig, useFilters, useConceptBuild, useConceptDuplicates } from '@/hooks/use-marm-queries';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, Button, Badge, Dialog, DialogContent, DialogHeader, DialogTitle, Table, TableHeader, TableRow, TableHead, TableBody, TableCell, Select, SelectTrigger, SelectValue, SelectContent, SelectItem, Label } from '@/components/ui/core';
-import { Play, AlertTriangle } from 'lucide-react';
-import type { ConceptBuildInput } from '@/lib/marm-types';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, Button, Badge, Dialog, DialogClose, DialogContent, DialogHeader, DialogTitle, Table, TableHeader, TableRow, TableHead, TableBody, TableCell, Select, SelectTrigger, SelectValue, SelectContent, SelectItem, Label } from '@/components/ui/core';
+import { Play, AlertTriangle, X } from 'lucide-react';
+import type { ConceptBuildInput, ConceptBuildRun } from '@/lib/marm-types';
 
-export function BuildConceptsDialog({ open, onOpenChange }: { open: boolean, onOpenChange: (o: boolean) => void }) {
+type BuildConceptsDialogProps = {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  jobId: string | null;
+  onJobIdChange: (jobId: string | null) => void;
+  onComplete: (job: ConceptBuildRun) => void;
+};
+
+export function BuildConceptsDialog({
+  open,
+  onOpenChange,
+  jobId,
+  onJobIdChange,
+  onComplete,
+}: BuildConceptsDialogProps) {
   const build = useBuildConcepts();
   const { baseUrl } = useMarmConfig();
   const queryClient = useQueryClient();
   const { data: filters } = useFilters();
-  const [jobId, setJobId] = useState<string | null>(null);
   const { data: jobStatus } = useConceptBuild(jobId || '');
   const [scope, setScope] = useState<'session' | 'project' | 'all'>('session');
   const [scopeValue, setScopeValue] = useState('');
   const [confirmAll, setConfirmAll] = useState(false);
+  const [now, setNow] = useState(Date.now());
+  const completedJobId = useRef<string | null>(null);
 
   const handleBuild = () => {
     const input: ConceptBuildInput =
@@ -22,7 +37,7 @@ export function BuildConceptsDialog({ open, onOpenChange }: { open: boolean, onO
       scope === 'project' ? { project: scopeValue } :
       { search_all: true };
     build.mutate(input, {
-      onSuccess: (res) => setJobId(res.job_id)
+      onSuccess: (res) => onJobIdChange(res.job_id)
     });
   };
 
@@ -35,20 +50,62 @@ export function BuildConceptsDialog({ open, onOpenChange }: { open: boolean, onO
     queryClient.invalidateQueries({ queryKey: ['conceptsSearch', baseUrl] });
     queryClient.invalidateQueries({ queryKey: ['conceptsGraph', baseUrl] });
     queryClient.invalidateQueries({ queryKey: ['duplicates', baseUrl] });
-  }, [baseUrl, isRunning, jobStatus, queryClient]);
+    if (completedJobId.current !== jobStatus.id) {
+      completedJobId.current = jobStatus.id;
+      onComplete(jobStatus);
+    }
+  }, [baseUrl, isRunning, jobStatus, onComplete, queryClient]);
 
   useEffect(() => {
     if (!open) {
-      setJobId(null);
       setScope('session');
       setScopeValue('');
       setConfirmAll(false);
     }
   }, [open]);
 
+  useEffect(() => {
+    if (!isRunning) return;
+    setNow(Date.now());
+    const interval = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, [isRunning]);
+
+  const elapsedAt = jobStatus?.started_at || jobStatus?.created_at;
+  const elapsedSeconds = elapsedAt
+    ? Math.max(0, Math.floor((now - new Date(elapsedAt).getTime()) / 1000))
+    : 0;
+  const elapsed = `${Math.floor(elapsedSeconds / 60)}:${String(elapsedSeconds % 60).padStart(2, '0')}`;
+  const memoriesTotal = jobStatus?.memories_total || 0;
+  const memoriesProcessed = jobStatus?.memories_processed || 0;
+  const progress = memoriesTotal > 0
+    ? Math.min(100, Math.round((memoriesProcessed / memoriesTotal) * 100))
+    : 0;
+  const errorMessage = jobStatus?.error_code === 'rebuild_required'
+    ? 'This graph needs one full rebuild after the schema update. Close this dialog, choose All memory (global), confirm it, and let it finish.'
+    : jobStatus?.error_code === 'stale_run'
+      ? 'The build stopped reporting progress. Restart the server before trying the build again.'
+    : jobStatus?.error_code || 'The build stopped before it could finish. Try the build again.';
+
+  const handleDialogOpenChange = (nextOpen: boolean) => {
+    if (!nextOpen && !isRunning) onJobIdChange(null);
+    onOpenChange(nextOpen);
+  };
+
   return (
-    <Dialog open={open} onOpenChange={(o) => { if(!isRunning) onOpenChange(o); }}>
+    <Dialog open={open} onOpenChange={handleDialogOpenChange}>
       <DialogContent>
+        <DialogClose asChild>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="absolute right-4 top-4 h-8 w-8"
+            aria-label="Close build dialog"
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </DialogClose>
         <DialogHeader>
           <DialogTitle>Build Concept Graph</DialogTitle>
         </DialogHeader>
@@ -103,10 +160,34 @@ export function BuildConceptsDialog({ open, onOpenChange }: { open: boolean, onO
                 {jobStatus?.status || 'Starting...'}
               </Badge>
             </div>
+            {isRunning && (
+              <div className="space-y-2">
+                <div className="flex justify-between text-xs text-muted-foreground">
+                  <span>{memoriesTotal > 0 ? `${memoriesProcessed} of ${memoriesTotal} memories` : 'Preparing build...'}</span>
+                  <span>Elapsed {elapsed}</span>
+                </div>
+                <div
+                  className="h-2 overflow-hidden rounded-full bg-muted"
+                  role="progressbar"
+                  aria-label="Concept build progress"
+                  aria-valuemin={0}
+                  aria-valuemax={memoriesTotal || undefined}
+                  aria-valuenow={memoriesTotal ? memoriesProcessed : undefined}
+                >
+                  <div className="h-full bg-primary transition-all" style={{ width: `${progress}%` }} />
+                </div>
+              </div>
+            )}
             {jobStatus?.status === 'degraded' && (
               <div className="p-3 bg-amber-500/10 text-amber-500 border border-amber-500/20 rounded text-sm flex gap-2">
                 <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
                 <p>Degraded mode: {jobStatus.error_code || 'Missing dependencies on server'}</p>
+              </div>
+            )}
+            {jobStatus?.status === 'error' && (
+              <div className="p-3 bg-destructive/10 text-destructive border border-destructive/20 rounded text-sm flex gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                <p>{errorMessage}</p>
               </div>
             )}
             <div className="grid grid-cols-2 gap-4 pt-2">
@@ -119,11 +200,13 @@ export function BuildConceptsDialog({ open, onOpenChange }: { open: boolean, onO
                 <div className="text-xs text-muted-foreground mt-1">Relationships</div>
               </div>
             </div>
-            {!isRunning && (
-              <Button className="w-full mt-4" variant="outline" onClick={() => onOpenChange(false)}>
-                Close
-              </Button>
-            )}
+            <Button
+              className="w-full mt-4"
+              variant="outline"
+              onClick={() => handleDialogOpenChange(false)}
+            >
+              {isRunning ? 'Run in Background' : 'Close'}
+            </Button>
           </div>
         )}
       </DialogContent>

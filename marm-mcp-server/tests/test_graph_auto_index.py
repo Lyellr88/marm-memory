@@ -210,6 +210,28 @@ def test_git_runs_with_a_scrubbed_environment(git_repo, monkeypatch, tmp_path):
     assert git_signature(str(git_repo)) is not None
 
 
+def test_git_poll_hides_its_windows_child_window(monkeypatch):
+    """The poller runs git every cycle, so it must not flash a console window."""
+    from marm_mcp_server.core import graph_index_worker as module
+
+    captured = {}
+
+    class Completed:
+        returncode = 0
+        stdout = "ok\n"
+
+    monkeypatch.setattr(module.sys, "platform", "win32")
+    monkeypatch.setattr(module.subprocess, "CREATE_NO_WINDOW", 123, raising=False)
+    monkeypatch.setattr(
+        module.subprocess,
+        "run",
+        lambda command, **kwargs: captured.update(command=command, **kwargs) or Completed(),
+    )
+
+    assert module._git("C:/repo", "rev-parse", "HEAD") == "ok"
+    assert captured["creationflags"] == 123
+
+
 # ── the indexing gate ───────────────────────────────────────────────
 
 

@@ -38,6 +38,7 @@ from ..services.concept_build_engine import (
     _fetch_memory_pages,
     _get_concept_db,
     _run_build,
+    count_memory_rows,
     reset_and_rebuild_concept_db,
 )
 from ..services.graph_context import get_graph_context, traverse_graph
@@ -79,6 +80,25 @@ def _finish_build_run(run_id: str, **fields: object) -> None:
     concept_db = _get_concept_db()
     with concept_db.get_connection() as conn:
         concept_db.update_build_run(conn, run_id, **fields)
+
+
+def _record_build_progress(
+    run_id: str,
+    memories_processed: int,
+    entities_extracted: int,
+    relationships_created: int,
+    code_links_created: int,
+) -> None:
+    try:
+        _finish_build_run(
+            run_id,
+            memories_processed=memories_processed,
+            entities_extracted=entities_extracted,
+            relationships_created=relationships_created,
+            code_links_created=code_links_created,
+        )
+    except Exception as e:
+        logger.warning("concepts.build_progress_update_error", error=str(e))
 
 
 def _prepare_build_schema(req: ConceptBuildRequest) -> bool:
@@ -250,9 +270,25 @@ async def _marm_concept_build(
             status="running",
             started_at=datetime.now(timezone.utc).isoformat(),
         )
+        memories_total = await asyncio.to_thread(
+            count_memory_rows, req.session_name, req.project, req.search_all
+        )
+        await asyncio.to_thread(
+            _finish_build_run, run_id, memories_total=memories_total
+        )
         pages = _fetch_memory_pages(req.session_name, req.project, req.search_all)
         outcomes: dict[str, str] = {}
-        result = await asyncio.to_thread(_run_build, pages, outcomes, abort)
+        result = await asyncio.to_thread(
+            _run_build,
+            pages,
+            outcomes,
+            abort,
+            progress_callback=lambda processed, entities, relationships, code_links: (
+                _record_build_progress(
+                    run_id, processed, entities, relationships, code_links
+                )
+            ),
+        )
     except ValueError:
         # _fetch_memory_pages raises exactly one ValueError, always this
         # static, safe-to-surface message -- return the known-good literal

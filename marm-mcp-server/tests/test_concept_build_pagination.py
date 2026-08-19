@@ -131,6 +131,28 @@ def test_page_size_of_one_still_terminates_and_reads_everything(
     assert len({page[0][0] for page in pages}) == 12
 
 
+def test_progress_updates_once_per_page_with_live_totals(concepts_env, monkeypatch):
+    concepts, memory_module = concepts_env
+    monkeypatch.setattr(_engine(), "CONCEPT_BUILD_ROW_CAP", 2)
+    _seed(memory_module, 5)
+    _one_entity_per_memory(monkeypatch, concepts)
+
+    progress: list[tuple[int, int, int, int]] = []
+    result = concepts._run_build(
+        concepts._fetch_memory_pages(session_name=None, project=None, search_all=True),
+        progress_callback=lambda *counts: progress.append(counts),
+    )
+
+    assert concepts.count_memory_rows(None, None, True) == 5
+    assert [counts[0] for counts in progress] == [2, 4, 5]
+    assert progress[-1] == (
+        result["memories_processed"],
+        result["entities_extracted"],
+        result["relationships_created"],
+        result["code_links_created"],
+    )
+
+
 def test_memories_written_during_a_build_are_not_reprocessed(concepts_env, monkeypatch):
     """Descending keyset means a row written mid-build sorts ahead of the
     cursor and is skipped, rather than shifting the window and causing a

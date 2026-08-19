@@ -1,11 +1,22 @@
 import { useState } from 'react';
 import { Button, Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/core';
-import { Layers } from 'lucide-react';
+import { Layers, X } from 'lucide-react';
 import { ExplorerTab } from '@/components/knowledge/ExplorerTab';
 import { BuildConceptsDialog, DuplicatesTab } from '@/components/knowledge/BuildAndDuplicates';
+import type { ConceptBuildRun } from '@/lib/marm-types';
 
 export function KnowledgePage() {
   const [buildOpen, setBuildOpen] = useState(false);
+  const [buildJobId, setBuildJobId] = useState<string | null>(null);
+  const [buildNotice, setBuildNotice] = useState<string | null>(null);
+
+  const handleBuildComplete = (job: ConceptBuildRun) => {
+    if (job.status === 'success') {
+      setBuildNotice(`Concept build finished: ${job.entities_extracted} entities and ${job.relationships_created} relationships.`);
+      return;
+    }
+    setBuildNotice(`Concept build ${job.status}${job.error_code ? `: ${job.error_code}` : '.'}`);
+  };
 
   return (
     <div className="p-8 flex flex-col h-full overflow-hidden">
@@ -39,7 +50,22 @@ export function KnowledgePage() {
         </div>
       </Tabs>
 
-      <BuildConceptsDialog open={buildOpen} onOpenChange={setBuildOpen} />
+      {buildNotice && (
+        <div role="status" className="fixed right-6 top-6 z-50 flex max-w-md items-start gap-3 rounded-md border bg-background p-4 shadow-lg">
+          <p className="text-sm">{buildNotice}</p>
+          <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => setBuildNotice(null)} aria-label="Dismiss build notification">
+            <X className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
+
+      <BuildConceptsDialog
+        open={buildOpen}
+        onOpenChange={setBuildOpen}
+        jobId={buildJobId}
+        onJobIdChange={setBuildJobId}
+        onComplete={handleBuildComplete}
+      />
     </div>
   );
 }
