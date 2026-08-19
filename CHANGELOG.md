@@ -1,6 +1,25 @@
 # Changelog
 
 <details>
+<summary><strong>August 19th, 2026: The Console's Architecture Tab Gets A Real Code Structure Table (v2.40.0)</strong></summary>
+
+### Added: See Which Files Your Project Actually Depends On
+
+- The Architecture tab's table has never had data. For the life of that tab it read a key no engine version has ever returned, so it said "No module summary available." on fully indexed projects. It now lists your project's files with how many other files import each one and how many it imports, most connected first, so you can see a codebase's real shape and spot the files a refactor is most likely to break.
+- Each file's numbers come from querying the code graph directly rather than from a pre-computed summary. The obvious shortcut was reverted in v2.39.3 after measuring it: the engine aspect that looked like the table's missing data source reports third-party dependency names and Python builtins with zero coupling on every row, never your own code.
+- An empty table now tells you which kind of empty it is. Nothing indexed yet, indexed but only docs and config, or the code graph is not running each get their own message instead of one ambiguous line. A graph backend that cannot start says so in the table rather than leaving it blank.
+- "Imported by" counts the files that import a file directly, and the tab says plainly that it is a minimum. Package-level imports such as `from package import module` are recorded against the package directory rather than the file they resolve to, so the real number can be higher. Stating that is preferable to publishing a count that quietly under-reports.
+- Files in any language are listed. An earlier draft recognised a fixed list of code extensions, which dropped PowerShell from this repository's own tree and would have reported "no source files found" on projects written in anything the list forgot.
+
+### Internal
+
+- The three graph queries behind the table are constants with no interpolation. Scoping uses the tool's own project argument, so no caller value reaches the query text at all, and an unexpected project name is refused before any call to the engine.
+- Every query's reply is checked against the columns it asked for. `query_graph` answers a query it only partly understands with a well-formed reply that silently drops aliases and aggregation, turning a summary query into a raw dump of every node in the graph with no error reported anywhere. A mismatch is now treated as a failure rather than read as data, which is also how a second instance of the problem was caught during review. Engine transport and tool errors degrade to the same visible state instead of surfacing as a server error.
+- Contract findings behind all of the above are reproducible: `scripts/benchmarking/accuracy/code-graph/probe_code_units.py` re-runs them against a live index and a fixture whose coupling is hand-counted, and fails if the engine's behavior changes.
+
+</details>
+
+<details>
 <summary><strong>August 19th, 2026: Reliable Concept Builds on Windows (v2.39.4)</strong></summary>
 
 ### Fixed: Concept Build Progress No Longer Gets Stuck or Falsely Times Out

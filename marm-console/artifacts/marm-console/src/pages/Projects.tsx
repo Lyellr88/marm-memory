@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useProjects, useIndexProject, useIndexJob, useDeleteProject, useSearchProjectCode, useTraceProject, useProjectImpact, useProjectArchitecture, useMarmConfig } from '@/hooks/use-marm-queries';
+import { useProjects, useIndexProject, useIndexJob, useDeleteProject, useSearchProjectCode, useTraceProject, useProjectImpact, useProjectArchitecture, useProjectCodeUnits, useMarmConfig } from '@/hooks/use-marm-queries';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, Badge, Button, Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Tabs, TabsList, TabsTrigger, TabsContent, Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/core';
 import { FolderCode, HardDrive, RefreshCw, Trash2, SearchCode, GitBranch, Search, Share2, AlertCircle } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
@@ -141,6 +141,7 @@ function ExploreDialog({ project, open, onOpenChange }: { project: ProjectSummar
   const traceCode = useTraceProject();
   const impactCode = useProjectImpact();
   const { data: architecture, isLoading: architectureLoading } = useProjectArchitecture(project?.name || '');
+  const { data: codeUnits, isLoading: codeUnitsLoading } = useProjectCodeUnits(project?.name || '');
 
   // Search
   const [searchQuery, setSearchQuery] = useState('');
@@ -180,24 +181,44 @@ function ExploreDialog({ project, open, onOpenChange }: { project: ProjectSummar
                   <div className="border rounded-md p-4">
                     <p className="text-xs text-muted-foreground uppercase tracking-wider">Node types</p>
                     <div className="mt-3 flex flex-wrap gap-2">
-                      {architecture?.schema.node_types.map((type) => <Badge key={type} variant="secondary">{type}</Badge>)}
+                      {architecture?.schema.node_types.map((type) => <Badge key={type.name} variant="secondary">{type.name}{type.count !== undefined && <span className="ml-1.5 opacity-60 font-mono">{type.count.toLocaleString()}</span>}</Badge>)}
                     </div>
                   </div>
                   <div className="border rounded-md p-4">
                     <p className="text-xs text-muted-foreground uppercase tracking-wider">Edge types</p>
                     <div className="mt-3 flex flex-wrap gap-2">
-                      {architecture?.schema.edge_types.map((type) => <Badge key={type} variant="outline">{type}</Badge>)}
+                      {architecture?.schema.edge_types.map((type) => <Badge key={type.name} variant="outline">{type.name}{type.count !== undefined && <span className="ml-1.5 opacity-60 font-mono">{type.count.toLocaleString()}</span>}</Badge>)}
                     </div>
                   </div>
                 </div>
-                <div className="border rounded-md overflow-hidden">
-                  <Table>
-                    <TableHeader className="bg-muted/80"><TableRow><TableHead>Module</TableHead><TableHead className="text-right">Files</TableHead><TableHead className="text-right">Nodes</TableHead></TableRow></TableHeader>
-                    <TableBody>
-                      {architecture?.modules.length === 0 && <TableRow><TableCell colSpan={3} className="h-24 text-center text-muted-foreground">No module summary available.</TableCell></TableRow>}
-                      {architecture?.modules.map((module) => <TableRow key={module.name}><TableCell className="font-mono text-xs">{module.name}</TableCell><TableCell className="text-right">{module.file_count}</TableCell><TableCell className="text-right">{module.node_count}</TableCell></TableRow>)}
-                    </TableBody>
-                  </Table>
+                <div className="space-y-2">
+                  <div className="flex items-baseline justify-between">
+                    <p className="text-xs text-muted-foreground uppercase tracking-wider">Code structure</p>
+                    {codeUnits?.state === 'ready' && (
+                      <p className="text-xs text-muted-foreground">
+                        {codeUnits.shown < codeUnits.total
+                          ? `Showing ${codeUnits.shown} of ${codeUnits.total} files, most connected first`
+                          : `${codeUnits.total} files, most connected first`}
+                      </p>
+                    )}
+                  </div>
+                  <div className="border rounded-md overflow-hidden">
+                    <Table>
+                      <TableHeader className="bg-muted/80"><TableRow><TableHead>File</TableHead><TableHead className="text-right">Imported by</TableHead><TableHead className="text-right">Imports</TableHead></TableRow></TableHeader>
+                      <TableBody>
+                        {codeUnitsLoading && <TableRow><TableCell colSpan={3} className="h-24 text-center text-muted-foreground">Loading code structure...</TableCell></TableRow>}
+                        {!codeUnitsLoading && codeUnits?.state === 'empty_index' && <TableRow><TableCell colSpan={3} className="h-24 text-center text-muted-foreground">Nothing indexed yet. Index this project to see its structure.</TableCell></TableRow>}
+                        {!codeUnitsLoading && codeUnits?.state === 'indexed_no_summary' && <TableRow><TableCell colSpan={3} className="h-24 text-center text-muted-foreground">Indexed, but everything here looks like docs or config rather than code.</TableCell></TableRow>}
+                        {!codeUnitsLoading && codeUnits?.state === 'unavailable' && <TableRow><TableCell colSpan={3} className="h-24 text-center text-muted-foreground">{codeUnits.reason === 'graph_unavailable' ? 'The code graph is not running, so structure cannot be read.' : 'Code structure is unavailable right now.'}</TableCell></TableRow>}
+                        {!codeUnitsLoading && codeUnits?.state === 'ready' && codeUnits.code_units.map((unit) => <TableRow key={unit.unit}><TableCell className="font-mono text-xs">{unit.unit}</TableCell><TableCell className="text-right">{unit.fan_in}</TableCell><TableCell className="text-right">{unit.fan_out}</TableCell></TableRow>)}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  {codeUnits?.state === 'ready' && codeUnits.fan_in_is_lower_bound && (
+                    <p className="text-xs text-muted-foreground">
+                      "Imported by" counts files that import this one directly. Package-level imports are not attributed to the file they resolve to, so treat it as a minimum.
+                    </p>
+                  )}
                 </div>
               </div>
             )}

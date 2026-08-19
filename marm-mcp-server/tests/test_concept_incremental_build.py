@@ -328,8 +328,11 @@ def test_a_memory_written_during_a_build_keeps_its_queue_row(concepts_env, monke
 
     real_run_build = concepts._run_build
 
-    def build_then_write(pages, outcomes=None, abort=None):
-        result = real_run_build(pages, outcomes, abort)
+    # Forwards whatever it is handed. This stub previously mirrored _run_build's
+    # positional parameters and broke when it gained `progress_callback`, which
+    # tells you nothing about the queue behavior under test.
+    def build_then_write(pages, *args, **kwargs):
+        result = real_run_build(pages, *args, **kwargs)
         _seed(memory_module, [("m2", "written mid build")])
         with memory_module.memory.get_connection() as conn:
             queue.enqueue(conn, "m2", "h2")

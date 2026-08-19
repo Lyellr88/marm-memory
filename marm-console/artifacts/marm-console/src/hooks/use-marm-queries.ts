@@ -20,7 +20,7 @@ export const queryKeys = {
   summary: (baseUrl: string, session: string) => ['summary', baseUrl, session],
   compaction: (baseUrl: string) => ['compaction', baseUrl],
   conceptsSummary: (baseUrl: string) => ['conceptsSummary', baseUrl],
-  conceptsGraph: (baseUrl: string) => ['conceptsGraph', baseUrl],
+  conceptsGraph: (baseUrl: string, full = false) => ['conceptsGraph', baseUrl, full],
   conceptsGraphVersion: (baseUrl: string) => ['conceptsGraphVersion', baseUrl],
   conceptsSearch: (baseUrl: string, params?: ConceptSearchParams) => ['conceptsSearch', baseUrl, params],
   concept: (baseUrl: string, id: number) => ['concept', baseUrl, id],
@@ -31,6 +31,7 @@ export const queryKeys = {
   indexJob: (baseUrl: string, id: string) => ['indexJob', baseUrl, id],
   projectStatus: (baseUrl: string, project: string) => ['projectStatus', baseUrl, project],
   projectArchitecture: (baseUrl: string, project: string) => ['projectArchitecture', baseUrl, project],
+  projectCodeUnits: (baseUrl: string, project: string) => ['projectCodeUnits', baseUrl, project],
 };
 
 // Global config hook
@@ -285,11 +286,11 @@ export function useSearchConcepts(params?: ConceptSearchParams) {
   return useQuery({ queryKey: queryKeys.conceptsSearch(baseUrl, params), queryFn: () => client.searchConcepts(params) });
 }
 
-export function useConceptGraph(enabled = true) {
+export function useConceptGraph(enabled = true, full = false) {
   const { baseUrl, client } = useMarmConfig();
   return useQuery({
-    queryKey: queryKeys.conceptsGraph(baseUrl),
-    queryFn: client.getConceptGraph,
+    queryKey: queryKeys.conceptsGraph(baseUrl, full),
+    queryFn: () => client.getConceptGraph({ full }),
     enabled,
   });
 }
@@ -401,6 +402,11 @@ export function useProjectStatus(project: string) {
 export function useProjectArchitecture(project: string) {
   const { baseUrl, client } = useMarmConfig();
   return useQuery({ queryKey: queryKeys.projectArchitecture(baseUrl, project), queryFn: () => client.getProjectArchitecture(project), enabled: !!project });
+}
+
+export function useProjectCodeUnits(project: string) {
+  const { baseUrl, client } = useMarmConfig();
+  return useQuery({ queryKey: queryKeys.projectCodeUnits(baseUrl, project), queryFn: () => client.getProjectCodeUnits(project), enabled: !!project });
 }
 
 export function useSearchProjectCode() {

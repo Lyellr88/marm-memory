@@ -346,10 +346,35 @@ export interface ProjectStatus {
   error: string | null;
 }
 
+export interface GraphTypeEntry {
+  // Only `name` may be rendered as a child. React raises on an object child, and
+  // an unreduced engine row reaching a badge is what took down this whole tab.
+  name: string;
+  count?: number;
+}
+
 export interface ProjectArchitecture {
   name: string;
-  modules: { name: string; file_count: number; node_count: number }[];
-  schema: { node_types: string[]; edge_types: string[] };
+  schema: { node_types: GraphTypeEntry[]; edge_types: GraphTypeEntry[] };
+}
+
+export interface CodeUnit {
+  unit: string;
+  fan_in: number;
+  fan_out: number;
+}
+
+export interface CodeUnits {
+  // Every empty table has a reason. `indexed_no_summary` means the project is
+  // indexed but holds no source the table recognises, which is not the same as
+  // an empty index or an unreachable graph.
+  state: 'ready' | 'indexed_no_summary' | 'empty_index' | 'unavailable';
+  reason?: string;
+  message?: string;
+  total: number;
+  shown: number;
+  fan_in_is_lower_bound?: boolean;
+  code_units: CodeUnit[];
 }
 
 export type CodeSearchKind = 'auto' | 'symbol' | 'text' | 'snippet';

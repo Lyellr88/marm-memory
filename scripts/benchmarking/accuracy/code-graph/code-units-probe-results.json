@@ -1,0 +1,1850 @@
+{
+  "engine_version": "0.10.5",
+  "fixture": {
+    "project": "C-Users-lyell-AppData-Local-Temp-cga-units-65v8oaev-fixture",
+    "item1_syntax": {
+      "invocation_forms": {
+        "in_use": "stdin",
+        "measured": {
+          "stdin": {
+            "accepted": true,
+            "warnings": [],
+            "deprecated": false,
+            "detail": null
+          },
+          "args-file": {
+            "accepted": true,
+            "warnings": [],
+            "deprecated": false,
+            "detail": null
+          },
+          "raw-json": {
+            "accepted": true,
+            "warnings": [
+              "warning: passing raw JSON to 'cli query_graph' is deprecated and will be removed in a future release; use flags (run 'cli query_graph --help'), --args-file <path>, or piped stdin."
+            ],
+            "deprecated": true,
+            "detail": null
+          }
+        },
+        "help_text_lists": [
+          "--flag value",
+          "--args-file <path>",
+          "piped stdin",
+          "raw-json-args positional"
+        ]
+      },
+      "flag_form_is_prose": {
+        "invocation": "--project <p> --query <q>, no format field reachable",
+        "reply_is_json": false,
+        "reply_head": "rows: 1  (cols: files)\r\n  \"5\"\r\ntotal: 1"
+      },
+      "degradations": {
+        "subscripted function call": {
+          "query": "MATCH (n) RETURN labels(n)[0] AS label, count(*) AS c ORDER BY c DESC",
+          "note": "expected to degrade: subscripted function call",
+          "asked_columns": [
+            "label",
+            "c"
+          ],
+          "got_columns": [
+            "labels(n)"
+          ],
+          "total": 31,
+          "rows": [
+            [
+              "[\"Class\"]"
+            ],
+            [
+              "[\"Project\"]"
+            ],
+            [
+              "[\"File\"]"
+            ],
+            [
+              "[\"Function\"]"
+            ],
+            [
+              "[\"File\"]"
+            ],
+            [
+              "[\"Method\"]"
+            ],
+            [
+              "[\"Function\"]"
+            ],
+            [
+              "[\"File\"]"
+            ],
+            [
+              "[\"Class\"]"
+            ],
+            [
+              "[\"Function\"]"
+            ],
+            [
+              "[\"File\"]"
+            ],
+            [
+              "[\"Method\"]"
+            ],
+            [
+              "... trimmed, 31 rows total"
+            ]
+          ],
+          "degraded": true
+        },
+        "comma-joined MATCH patterns": {
+          "query": "MATCH (f:File), (m:Module) WHERE f.file_path = m.file_path RETURN count(f) AS paths_on_both_labels",
+          "note": "expected to degrade: comma-joined MATCH patterns",
+          "asked_columns": [
+            "paths_on_both_labels"
+          ],
+          "got_columns": [
+            "f.name",
+            "f.qualified_name",
+            "f.label"
+          ],
+          "total": 5,
+          "rows": [
+            [
+              "pyproject.toml",
+              "C-Users-lyell-AppData-Local-Temp-cga-units-65v8oaev-fixture.pyproject.toml.__file__",
+              "File"
+            ],
+            [
+              "alpha.py",
+              "C-Users-lyell-AppData-Local-Temp-cga-units-65v8oaev-fixture.pkg.alpha.py.__file__",
+              "File"
+            ],
+            [
+              "beta.py",
+              "C-Users-lyell-AppData-Local-Temp-cga-units-65v8oaev-fixture.pkg.beta.py.__file__",
+              "File"
+            ],
+            [
+              "gamma.py",
+              "C-Users-lyell-AppData-Local-Temp-cga-units-65v8oaev-fixture.pkg.gamma.py.__file__",
+              "File"
+            ],
+            [
+              "__init__.py",
+              "C-Users-lyell-AppData-Local-Temp-cga-units-65v8oaev-fixture.pkg.__init__.py.__file__",
+              "File"
+            ]
+          ],
+          "degraded": true
+        },
+        "list comprehension in a predicate": {
+          "query": "MATCH ()-[r:IMPORTS]->(b) WHERE NOT b.file_path IN [x IN [] | x] RETURN b.file_path AS unit, count(r) AS c ORDER BY c DESC",
+          "note": "expected to degrade: list comprehension in a predicate",
+          "asked_columns": [
+            "unit",
+            "c"
+          ],
+          "got_columns": [
+            "b.name",
+            "b.qualified_name",
+            "b.label"
+          ],
+          "total": 0,
+          "rows": [],
+          "degraded": true
+        }
+      },
+      "format_flag_published": false,
+      "flags": [
+        "--query",
+        "--project",
+        "--graph",
+        "--max-rows"
+      ],
+      "aggregate_alone": {
+        "query": "MATCH (n:File) RETURN count(n) AS files",
+        "note": "aggregate alone",
+        "asked_columns": [
+          "files"
+        ],
+        "got_columns": [
+          "files"
+        ],
+        "total": 1,
+        "rows": [
+          [
+            "5"
+          ]
+        ],
+        "degraded": false
+      },
+      "property_plus_aggregate": {
+        "query": "MATCH (n:File) RETURN n.file_path AS unit, count(*) AS c",
+        "note": "property + aggregate, the GROUP BY shape fan-in needs",
+        "asked_columns": [
+          "unit",
+          "c"
+        ],
+        "got_columns": [
+          "unit",
+          "c"
+        ],
+        "total": 5,
+        "rows": [
+          [
+            "pyproject.toml",
+            "1"
+          ],
+          [
+            "pkg/alpha.py",
+            "1"
+          ],
+          [
+            "pkg/beta.py",
+            "1"
+          ],
+          [
+            "pkg/gamma.py",
+            "1"
+          ],
+          [
+            "pkg/__init__.py",
+            "1"
+          ]
+        ],
+        "degraded": false
+      },
+      "malformed_query": {
+        "query": "THIS IS NOT CYPHER",
+        "note": "malformed",
+        "error": "level=warn msg=mem.allocator.preloading_completed still_preloading=false detail=allocator_was_still_preloading,_so_arena_creation_and_purging_were_disabled;_process_init_completed_explicitly\r\nlevel=info msg=mem.allocator.owned classes=all\r\nlevel=info msg=mem.init budget_mb=11322 total_ram_mb=32350 source=ram_fraction\r\nexpected token type 0, got 85 at pos 0"
+      }
+    },
+    "item2_identity": {
+      "file_counts": {
+        "query": "MATCH (n:File) RETURN count(n) AS nodes, count(DISTINCT n.file_path) AS distinct_path, count(DISTINCT n.name) AS distinct_name",
+        "note": "File uniqueness",
+        "asked_columns": [
+          "nodes",
+          "distinct_path",
+          "distinct_name"
+        ],
+        "got_columns": [
+          "nodes",
+          "distinct_path",
+          "distinct_name"
+        ],
+        "total": 1,
+        "rows": [
+          [
+            "5",
+            "5",
+            "5"
+          ]
+        ],
+        "degraded": false
+      },
+      "module_counts": {
+        "query": "MATCH (n:Module) RETURN count(n) AS nodes, count(DISTINCT n.file_path) AS distinct_path, count(DISTINCT n.qualified_name) AS distinct_qn",
+        "note": "Module uniqueness",
+        "asked_columns": [
+          "nodes",
+          "distinct_path",
+          "distinct_qn"
+        ],
+        "got_columns": [
+          "nodes",
+          "distinct_path",
+          "distinct_qn"
+        ],
+        "total": 1,
+        "rows": [
+          [
+            "4",
+            "4",
+            "4"
+          ]
+        ],
+        "degraded": false
+      },
+      "file_fields": {
+        "query": "MATCH (f:File) RETURN f.name AS name, f.file_path AS file_path, f.qualified_name AS qualified_name ORDER BY f.file_path LIMIT 4",
+        "note": "File fields verbatim",
+        "asked_columns": [
+          "name",
+          "file_path",
+          "qualified_name"
+        ],
+        "got_columns": [
+          "name",
+          "file_path",
+          "qualified_name"
+        ],
+        "total": 4,
+        "rows": [
+          [
+            "pyproject.toml",
+            "pyproject.toml",
+            "C-Users-lyell-AppData-Local-Temp-cga-units-65v8oaev-fixture.pyproject.toml.__file__"
+          ],
+          [
+            "alpha.py",
+            "pkg/alpha.py",
+            "C-Users-lyell-AppData-Local-Temp-cga-units-65v8oaev-fixture.pkg.alpha.py.__file__"
+          ],
+          [
+            "beta.py",
+            "pkg/beta.py",
+            "C-Users-lyell-AppData-Local-Temp-cga-units-65v8oaev-fixture.pkg.beta.py.__file__"
+          ],
+          [
+            "gamma.py",
+            "pkg/gamma.py",
+            "C-Users-lyell-AppData-Local-Temp-cga-units-65v8oaev-fixture.pkg.gamma.py.__file__"
+          ]
+        ],
+        "degraded": false
+      },
+      "module_fields": {
+        "query": "MATCH (m:Module) RETURN m.name AS name, m.file_path AS file_path, m.qualified_name AS qualified_name ORDER BY m.file_path LIMIT 4",
+        "note": "Module fields verbatim",
+        "asked_columns": [
+          "name",
+          "file_path",
+          "qualified_name"
+        ],
+        "got_columns": [
+          "name",
+          "file_path",
+          "qualified_name"
+        ],
+        "total": 4,
+        "rows": [
+          [
+            "pyproject.toml",
+            "pyproject.toml",
+            "C-Users-lyell-AppData-Local-Temp-cga-units-65v8oaev-fixture.pyproject"
+          ],
+          [
+            "pkg/alpha.py",
+            "pkg/alpha.py",
+            "C-Users-lyell-AppData-Local-Temp-cga-units-65v8oaev-fixture.pkg.alpha"
+          ],
+          [
+            "pkg/beta.py",
+            "pkg/beta.py",
+            "C-Users-lyell-AppData-Local-Temp-cga-units-65v8oaev-fixture.pkg.beta"
+          ],
+          [
+            "pkg/gamma.py",
+            "pkg/gamma.py",
+            "C-Users-lyell-AppData-Local-Temp-cga-units-65v8oaev-fixture.pkg.gamma"
+          ]
+        ],
+        "degraded": false
+      },
+      "file_path_join": {
+        "on_both_labels": 4,
+        "file_only": [
+          "pkg/__init__.py"
+        ],
+        "module_only": [],
+        "file_total": 5,
+        "module_total": 4
+      }
+    },
+    "item3_canonical": {
+      "candidate": "file_path anchored on the File label",
+      "rationale": "unique on File (278/278) and Module (274/274) where name is not (239 distinct names for 278 File nodes), present on every IMPORTS endpoint, and a real relative path rather than an engine-internal key",
+      "anchor_on_file_label": "distinct file_path across every label overcounts, because Folder nodes carry a directory in the same field and config files carry Variable nodes with no File node. The unit set is the File label; IMPORTS targets are attributed back into it by file_path",
+      "distinct_units_all_labels": {
+        "query": "MATCH (n) WHERE n.file_path IS NOT NULL RETURN count(DISTINCT n.file_path) AS units",
+        "note": "distinct file_path across every label",
+        "asked_columns": [
+          "units"
+        ],
+        "got_columns": [
+          "units"
+        ],
+        "total": 1,
+        "rows": [
+          [
+            "8"
+          ]
+        ],
+        "degraded": false
+      },
+      "distinct_units_file_label": {
+        "query": "MATCH (n:File) RETURN count(DISTINCT n.file_path) AS from_file_label",
+        "note": "distinct file_path on File only",
+        "asked_columns": [
+          "from_file_label"
+        ],
+        "got_columns": [
+          "from_file_label"
+        ],
+        "total": 1,
+        "rows": [
+          [
+            "5"
+          ]
+        ],
+        "degraded": false
+      },
+      "files_on_disk": 4
+    },
+    "item4_imports": {
+      "label_pairs": {
+        "query": "MATCH (a)-[r:IMPORTS]->(b) RETURN labels(a) AS src, labels(b) AS dst, count(r) AS edges",
+        "note": "every label pair IMPORTS connects",
+        "asked_columns": [
+          "src",
+          "dst",
+          "edges"
+        ],
+        "got_columns": [
+          "src",
+          "dst",
+          "edges"
+        ],
+        "total": 2,
+        "rows": [
+          [
+            "[\"File\"]",
+            "[\"Module\"]",
+            "3"
+          ],
+          [
+            "[\"File\"]",
+            "[\"Folder\"]",
+            "1"
+          ]
+        ],
+        "degraded": false
+      },
+      "target_coverage": {
+        "query": "MATCH ()-[r:IMPORTS]->(b) RETURN count(r) AS all_edges, count(b.file_path) AS targets_with_file_path",
+        "note": "can every IMPORTS edge be attributed to a target file",
+        "asked_columns": [
+          "all_edges",
+          "targets_with_file_path"
+        ],
+        "got_columns": [
+          "all_edges",
+          "targets_with_file_path"
+        ],
+        "total": 1,
+        "rows": [
+          [
+            "4",
+            "4"
+          ]
+        ],
+        "degraded": false
+      },
+      "fan_in": {
+        "query": "MATCH (a)-[r:IMPORTS]->(b) RETURN b.file_path AS unit, count(r) AS fan_in_edges, count(DISTINCT a.file_path) AS fan_in_files ORDER BY fan_in_files DESC, b.file_path ASC LIMIT 10",
+        "note": "fan-in, raw edges against distinct importing files",
+        "asked_columns": [
+          "unit",
+          "fan_in_edges",
+          "fan_in_files"
+        ],
+        "got_columns": [
+          "unit",
+          "fan_in_edges",
+          "fan_in_files"
+        ],
+        "total": 2,
+        "rows": [
+          [
+            "pkg/alpha.py",
+            "3",
+            "2"
+          ],
+          [
+            "pkg",
+            "1",
+            "1"
+          ]
+        ],
+        "degraded": false
+      },
+      "fan_out": {
+        "query": "MATCH (a)-[r:IMPORTS]->(b) RETURN a.file_path AS unit, count(r) AS fan_out_edges, count(DISTINCT b.file_path) AS fan_out_files ORDER BY fan_out_files DESC, a.file_path ASC LIMIT 10",
+        "note": "fan-out, same distinction",
+        "asked_columns": [
+          "unit",
+          "fan_out_edges",
+          "fan_out_files"
+        ],
+        "got_columns": [
+          "unit",
+          "fan_out_edges",
+          "fan_out_files"
+        ],
+        "total": 2,
+        "rows": [
+          [
+            "pkg/gamma.py",
+            "3",
+            "2"
+          ],
+          [
+            "pkg/beta.py",
+            "1",
+            "1"
+          ]
+        ],
+        "degraded": false
+      },
+      "folder_targets": {
+        "query": "MATCH ()-[r:IMPORTS]->(b:Folder) RETURN count(r) AS edges_to_folders, count(DISTINCT b.file_path) AS distinct_folders",
+        "note": "IMPORTS edges landing on a directory",
+        "asked_columns": [
+          "edges_to_folders",
+          "distinct_folders"
+        ],
+        "got_columns": [
+          "edges_to_folders",
+          "distinct_folders"
+        ],
+        "total": 1,
+        "rows": [
+          [
+            "1",
+            "1"
+          ]
+        ],
+        "degraded": false
+      }
+    },
+    "item5_shape": {
+      "keys": [
+        "columns",
+        "rows",
+        "total"
+      ],
+      "columnar": true,
+      "differs_from_other_calls": "the key is `columns`, not `cols` as in the five get_* calls the router already converts, and there is no has_more",
+      "row_values_are_strings": true,
+      "sample": {
+        "query": "MATCH (n:File) RETURN n.file_path AS unit ORDER BY n.file_path LIMIT 2",
+        "note": "shape sample",
+        "asked_columns": [
+          "unit"
+        ],
+        "got_columns": [
+          "unit"
+        ],
+        "total": 2,
+        "rows": [
+          [
+            "pyproject.toml"
+          ],
+          [
+            "pkg/alpha.py"
+          ]
+        ],
+        "degraded": false
+      }
+    },
+    "item6_distinct": {
+      "distinct_query": {
+        "query": "MATCH ()-[r]->() RETURN DISTINCT type(r) AS edge_type",
+        "note": "DISTINCT type(r), the #1364 shape",
+        "asked_columns": [
+          "edge_type"
+        ],
+        "got_columns": [
+          "edge_type"
+        ],
+        "total": 6,
+        "rows": [
+          [
+            "HAS_BRANCH"
+          ],
+          [
+            "DEFINES"
+          ],
+          [
+            "CALLS"
+          ],
+          [
+            "IMPORTS"
+          ],
+          [
+            "CONTAINS_FILE"
+          ],
+          [
+            "CONTAINS_FOLDER"
+          ]
+        ],
+        "degraded": false
+      },
+      "grouped_query": {
+        "query": "MATCH ()-[r]->() RETURN type(r) AS edge_type, count(r) AS edges ORDER BY edges DESC",
+        "note": "non-DISTINCT group-by cross-check",
+        "asked_columns": [
+          "edge_type",
+          "edges"
+        ],
+        "got_columns": [
+          "edge_type",
+          "edges"
+        ],
+        "total": 6,
+        "rows": [
+          [
+            "DEFINES",
+            "47"
+          ],
+          [
+            "CALLS",
+            "5"
+          ],
+          [
+            "CONTAINS_FILE",
+            "5"
+          ],
+          [
+            "IMPORTS",
+            "4"
+          ],
+          [
+            "HAS_BRANCH",
+            "1"
+          ],
+          [
+            "CONTAINS_FOLDER",
+            "1"
+          ]
+        ],
+        "degraded": false
+      },
+      "edge_total": {
+        "query": "MATCH ()-[r]->() RETURN count(r) AS edges",
+        "note": "edge total",
+        "asked_columns": [
+          "edges"
+        ],
+        "got_columns": [
+          "edges"
+        ],
+        "total": 1,
+        "rows": [
+          [
+            "63"
+          ]
+        ],
+        "degraded": false
+      },
+      "distinct_type_count": 6,
+      "grouped_type_count": 6,
+      "agrees": true,
+      "missing_from_distinct": []
+    },
+    "item7_limits": {
+      "max_rows_cap": {
+        "query": "MATCH (n:File) RETURN n.file_path AS unit ORDER BY n.file_path",
+        "note": "max_rows cap",
+        "asked_columns": [
+          "unit"
+        ],
+        "got_columns": [
+          "unit"
+        ],
+        "total": 5,
+        "rows": [
+          [
+            "pyproject.toml"
+          ],
+          [
+            "pkg/alpha.py"
+          ],
+          [
+            "pkg/beta.py"
+          ],
+          [
+            "pkg/gamma.py"
+          ],
+          [
+            "pkg/__init__.py"
+          ]
+        ],
+        "degraded": false
+      },
+      "query_limit": {
+        "query": "MATCH (n:File) RETURN n.file_path AS unit ORDER BY n.file_path LIMIT 5",
+        "note": "LIMIT in the query",
+        "asked_columns": [
+          "unit"
+        ],
+        "got_columns": [
+          "unit"
+        ],
+        "total": 5,
+        "rows": [
+          [
+            "pyproject.toml"
+          ],
+          [
+            "pkg/alpha.py"
+          ],
+          [
+            "pkg/beta.py"
+          ],
+          [
+            "pkg/gamma.py"
+          ],
+          [
+            "pkg/__init__.py"
+          ]
+        ],
+        "degraded": false
+      },
+      "true_count": {
+        "query": "MATCH (n:File) RETURN count(n) AS files",
+        "note": "true count for comparison",
+        "asked_columns": [
+          "files"
+        ],
+        "got_columns": [
+          "files"
+        ],
+        "total": 1,
+        "rows": [
+          [
+            "5"
+          ]
+        ],
+        "degraded": false
+      },
+      "signals_truncation": false,
+      "ordering_stable": true,
+      "note": "neither form reports the untruncated total, so `total` in the reply is the returned row count and not the population. Phase 2 must issue a separate count query for `total`"
+    },
+    "degraded_queries": [
+      {
+        "query": "MATCH (n) RETURN labels(n)[0] AS label, count(*) AS c ORDER BY c DESC",
+        "asked": [
+          "label",
+          "c"
+        ],
+        "got": [
+          "labels(n)"
+        ]
+      },
+      {
+        "query": "MATCH (f:File), (m:Module) WHERE f.file_path = m.file_path RETURN count(f) AS paths_on_both_labels",
+        "asked": [
+          "paths_on_both_labels"
+        ],
+        "got": [
+          "f.name",
+          "f.qualified_name",
+          "f.label"
+        ]
+      },
+      {
+        "query": "MATCH ()-[r:IMPORTS]->(b) WHERE NOT b.file_path IN [x IN [] | x] RETURN b.file_path AS unit, count(r) AS c ORDER BY c DESC",
+        "asked": [
+          "unit",
+          "c"
+        ],
+        "got": [
+          "b.name",
+          "b.qualified_name",
+          "b.label"
+        ]
+      }
+    ],
+    "errors": [],
+    "engine_warnings": []
+  },
+  "fixture_verification": {
+    "expected_fan_in": {
+      "pkg/alpha.py": 2,
+      "pkg/beta.py": 0,
+      "pkg/gamma.py": 0
+    },
+    "measured_fan_in": {
+      "pkg/alpha.py": 2,
+      "pkg/beta.py": 0,
+      "pkg/gamma.py": 0
+    },
+    "fan_in_matches": true,
+    "expected_fan_out": {
+      "pkg/alpha.py": 0,
+      "pkg/beta.py": 1,
+      "pkg/gamma.py": 2
+    },
+    "measured_fan_out": {
+      "pkg/beta.py": 1,
+      "pkg/gamma.py": 2,
+      "pkg/alpha.py": 0
+    },
+    "fan_out_matches": true,
+    "naive_fan_in": {
+      "pkg/alpha.py": 2,
+      "pkg/beta.py": 1,
+      "pkg/gamma.py": 0
+    },
+    "undercounted_vs_source": {
+      "pkg/beta.py": [
+        1,
+        0
+      ]
+    },
+    "all_edges": {
+      "query": "MATCH (a)-[r:IMPORTS]->(b) RETURN a.file_path AS src, b.file_path AS dst, labels(b) AS target_label ORDER BY a.file_path",
+      "note": "every fixture IMPORTS edge, verbatim",
+      "asked_columns": [
+        "src",
+        "dst",
+        "target_label"
+      ],
+      "got_columns": [
+        "src",
+        "dst",
+        "target_label"
+      ],
+      "total": 4,
+      "rows": [
+        [
+          "pkg/beta.py",
+          "pkg/alpha.py",
+          "[\"Module\"]"
+        ],
+        [
+          "pkg/gamma.py",
+          "pkg",
+          "[\"Folder\"]"
+        ],
+        [
+          "pkg/gamma.py",
+          "pkg/alpha.py",
+          "[\"Module\"]"
+        ],
+        [
+          "pkg/gamma.py",
+          "pkg/alpha.py",
+          "[\"Module\"]"
+        ]
+      ],
+      "degraded": false
+    },
+    "fan_in_query": {
+      "query": "MATCH (a)-[r:IMPORTS]->(b) RETURN b.file_path AS unit, count(DISTINCT a.file_path) AS fan_in_files ORDER BY b.file_path",
+      "note": "fixture fan-in",
+      "asked_columns": [
+        "unit",
+        "fan_in_files"
+      ],
+      "got_columns": [
+        "unit",
+        "fan_in_files"
+      ],
+      "total": 2,
+      "rows": [
+        [
+          "pkg/alpha.py",
+          "2"
+        ],
+        [
+          "pkg",
+          "1"
+        ]
+      ],
+      "degraded": false
+    },
+    "fan_out_query": {
+      "query": "MATCH (a)-[r:IMPORTS]->(b) RETURN a.file_path AS unit, count(DISTINCT b.file_path) AS fan_out_files ORDER BY a.file_path",
+      "note": "fixture fan-out",
+      "asked_columns": [
+        "unit",
+        "fan_out_files"
+      ],
+      "got_columns": [
+        "unit",
+        "fan_out_files"
+      ],
+      "total": 2,
+      "rows": [
+        [
+          "pkg/beta.py",
+          "1"
+        ],
+        [
+          "pkg/gamma.py",
+          "2"
+        ]
+      ],
+      "degraded": false
+    }
+  },
+  "marm": {
+    "project": "C-Users-lyell-Desktop-MARM-Systems",
+    "item1_syntax": {
+      "invocation_forms": {
+        "in_use": "stdin",
+        "measured": {
+          "stdin": {
+            "accepted": true,
+            "warnings": [],
+            "deprecated": false,
+            "detail": null
+          },
+          "args-file": {
+            "accepted": true,
+            "warnings": [],
+            "deprecated": false,
+            "detail": null
+          },
+          "raw-json": {
+            "accepted": true,
+            "warnings": [
+              "warning: passing raw JSON to 'cli query_graph' is deprecated and will be removed in a future release; use flags (run 'cli query_graph --help'), --args-file <path>, or piped stdin."
+            ],
+            "deprecated": true,
+            "detail": null
+          }
+        },
+        "help_text_lists": [
+          "--flag value",
+          "--args-file <path>",
+          "piped stdin",
+          "raw-json-args positional"
+        ]
+      },
+      "flag_form_is_prose": {
+        "invocation": "--project <p> --query <q>, no format field reachable",
+        "reply_is_json": false,
+        "reply_head": "rows: 1  (cols: files)\r\n  \"278\"\r\ntotal: 1"
+      },
+      "degradations": {
+        "subscripted function call": {
+          "query": "MATCH (n) RETURN labels(n)[0] AS label, count(*) AS c ORDER BY c DESC",
+          "note": "expected to degrade: subscripted function call",
+          "asked_columns": [
+            "label",
+            "c"
+          ],
+          "got_columns": [
+            "labels(n)"
+          ],
+          "total": 4202,
+          "rows": [
+            [
+              "[\"Variable\"]"
+            ],
+            [
+              "[\"Variable\"]"
+            ],
+            [
+              "[\"Variable\"]"
+            ],
+            [
+              "[\"Variable\"]"
+            ],
+            [
+              "[\"Variable\"]"
+            ],
+            [
+              "[\"Variable\"]"
+            ],
+            [
+              "[\"Variable\"]"
+            ],
+            [
+              "[\"Section\"]"
+            ],
+            [
+              "[\"Section\"]"
+            ],
+            [
+              "[\"Section\"]"
+            ],
+            [
+              "[\"Section\"]"
+            ],
+            [
+              "[\"Section\"]"
+            ],
+            [
+              "... trimmed, 4202 rows total"
+            ]
+          ],
+          "degraded": true
+        },
+        "comma-joined MATCH patterns": {
+          "query": "MATCH (f:File), (m:Module) WHERE f.file_path = m.file_path RETURN count(f) AS paths_on_both_labels",
+          "note": "expected to degrade: comma-joined MATCH patterns",
+          "asked_columns": [
+            "paths_on_both_labels"
+          ],
+          "got_columns": [
+            "f.name",
+            "f.qualified_name",
+            "f.label"
+          ],
+          "total": 278,
+          "rows": [
+            [
+              ".coderabbit.yaml",
+              "C-Users-lyell-Desktop-MARM-Systems..coderabbit.yaml.__file__",
+              "File"
+            ],
+            [
+              "AGENTS.md",
+              "C-Users-lyell-Desktop-MARM-Systems.AGENTS.md.__file__",
+              "File"
+            ],
+            [
+              "CONTRIBUTING.md",
+              "C-Users-lyell-Desktop-MARM-Systems.CONTRIBUTING.md.__file__",
+              "File"
+            ],
+            [
+              "glama.json",
+              "C-Users-lyell-Desktop-MARM-Systems.glama.json.__file__",
+              "File"
+            ],
+            [
+              "README.md",
+              "C-Users-lyell-Desktop-MARM-Systems.README.md.__file__",
+              "File"
+            ],
+            [
+              "ruff.toml",
+              "C-Users-lyell-Desktop-MARM-Systems.ruff.toml.__file__",
+              "File"
+            ],
+            [
+              "SECURITY.md",
+              "C-Users-lyell-Desktop-MARM-Systems.SECURITY.md.__file__",
+              "File"
+            ],
+            [
+              "THIRD_PARTY_NOTICES.md",
+              "C-Users-lyell-Desktop-MARM-Systems.THIRD_PARTY_NOTICES.md.__file__",
+              "File"
+            ],
+            [
+              "SKILL.md",
+              "C-Users-lyell-Desktop-MARM-Systems.skills.marm-init.SKILL.md.__file__",
+              "File"
+            ],
+            [
+              "docker-build.sh",
+              "C-Users-lyell-Desktop-MARM-Systems.marm-mcp-server.docker-build.sh.__file__",
+              "File"
+            ],
+            [
+              "docker-compose.yml",
+              "C-Users-lyell-Desktop-MARM-Systems.marm-mcp-server.docker-compose.yml.__file__",
+              "File"
+            ],
+            [
+              "Dockerfile",
+              "C-Users-lyell-Desktop-MARM-Systems.marm-mcp-server.Dockerfile.__file__",
+              "File"
+            ],
+            [
+              "... trimmed, 278 rows total"
+            ]
+          ],
+          "degraded": true
+        },
+        "list comprehension in a predicate": {
+          "query": "MATCH ()-[r:IMPORTS]->(b) WHERE NOT b.file_path IN [x IN [] | x] RETURN b.file_path AS unit, count(r) AS c ORDER BY c DESC",
+          "note": "expected to degrade: list comprehension in a predicate",
+          "asked_columns": [
+            "unit",
+            "c"
+          ],
+          "got_columns": [
+            "b.name",
+            "b.qualified_name",
+            "b.label"
+          ],
+          "total": 0,
+          "rows": [],
+          "degraded": true
+        }
+      },
+      "format_flag_published": false,
+      "flags": [
+        "--query",
+        "--project",
+        "--graph",
+        "--max-rows"
+      ],
+      "aggregate_alone": {
+        "query": "MATCH (n:File) RETURN count(n) AS files",
+        "note": "aggregate alone",
+        "asked_columns": [
+          "files"
+        ],
+        "got_columns": [
+          "files"
+        ],
+        "total": 1,
+        "rows": [
+          [
+            "278"
+          ]
+        ],
+        "degraded": false
+      },
+      "property_plus_aggregate": {
+        "query": "MATCH (n:File) RETURN n.file_path AS unit, count(*) AS c",
+        "note": "property + aggregate, the GROUP BY shape fan-in needs",
+        "asked_columns": [
+          "unit",
+          "c"
+        ],
+        "got_columns": [
+          "unit",
+          "c"
+        ],
+        "total": 278,
+        "rows": [
+          [
+            ".coderabbit.yaml",
+            "1"
+          ],
+          [
+            "AGENTS.md",
+            "1"
+          ],
+          [
+            "CONTRIBUTING.md",
+            "1"
+          ],
+          [
+            "glama.json",
+            "1"
+          ],
+          [
+            "README.md",
+            "1"
+          ],
+          [
+            "ruff.toml",
+            "1"
+          ],
+          [
+            "SECURITY.md",
+            "1"
+          ],
+          [
+            "THIRD_PARTY_NOTICES.md",
+            "1"
+          ],
+          [
+            "skills/marm-init/SKILL.md",
+            "1"
+          ],
+          [
+            "marm-mcp-server/docker-build.sh",
+            "1"
+          ],
+          [
+            "marm-mcp-server/docker-compose.yml",
+            "1"
+          ],
+          [
+            "marm-mcp-server/Dockerfile",
+            "1"
+          ],
+          [
+            "... trimmed, 278 rows total"
+          ]
+        ],
+        "degraded": false
+      },
+      "malformed_query": {
+        "query": "THIS IS NOT CYPHER",
+        "note": "malformed",
+        "error": "level=warn msg=mem.allocator.preloading_completed still_preloading=false detail=allocator_was_still_preloading,_so_arena_creation_and_purging_were_disabled;_process_init_completed_explicitly\r\nlevel=info msg=mem.allocator.owned classes=all\r\nlevel=info msg=mem.init budget_mb=11322 total_ram_mb=32350 source=ram_fraction\r\nexpected token type 0, got 85 at pos 0"
+      }
+    },
+    "item2_identity": {
+      "file_counts": {
+        "query": "MATCH (n:File) RETURN count(n) AS nodes, count(DISTINCT n.file_path) AS distinct_path, count(DISTINCT n.name) AS distinct_name",
+        "note": "File uniqueness",
+        "asked_columns": [
+          "nodes",
+          "distinct_path",
+          "distinct_name"
+        ],
+        "got_columns": [
+          "nodes",
+          "distinct_path",
+          "distinct_name"
+        ],
+        "total": 1,
+        "rows": [
+          [
+            "278",
+            "278",
+            "239"
+          ]
+        ],
+        "degraded": false
+      },
+      "module_counts": {
+        "query": "MATCH (n:Module) RETURN count(n) AS nodes, count(DISTINCT n.file_path) AS distinct_path, count(DISTINCT n.qualified_name) AS distinct_qn",
+        "note": "Module uniqueness",
+        "asked_columns": [
+          "nodes",
+          "distinct_path",
+          "distinct_qn"
+        ],
+        "got_columns": [
+          "nodes",
+          "distinct_path",
+          "distinct_qn"
+        ],
+        "total": 1,
+        "rows": [
+          [
+            "274",
+            "274",
+            "274"
+          ]
+        ],
+        "degraded": false
+      },
+      "file_fields": {
+        "query": "MATCH (f:File) RETURN f.name AS name, f.file_path AS file_path, f.qualified_name AS qualified_name ORDER BY f.file_path LIMIT 4",
+        "note": "File fields verbatim",
+        "asked_columns": [
+          "name",
+          "file_path",
+          "qualified_name"
+        ],
+        "got_columns": [
+          "name",
+          "file_path",
+          "qualified_name"
+        ],
+        "total": 4,
+        "rows": [
+          [
+            ".coderabbit.yaml",
+            ".coderabbit.yaml",
+            "C-Users-lyell-Desktop-MARM-Systems..coderabbit.yaml.__file__"
+          ],
+          [
+            "AGENTS.md",
+            "AGENTS.md",
+            "C-Users-lyell-Desktop-MARM-Systems.AGENTS.md.__file__"
+          ],
+          [
+            "CONTRIBUTING.md",
+            "CONTRIBUTING.md",
+            "C-Users-lyell-Desktop-MARM-Systems.CONTRIBUTING.md.__file__"
+          ],
+          [
+            "glama.json",
+            "glama.json",
+            "C-Users-lyell-Desktop-MARM-Systems.glama.json.__file__"
+          ]
+        ],
+        "degraded": false
+      },
+      "module_fields": {
+        "query": "MATCH (m:Module) RETURN m.name AS name, m.file_path AS file_path, m.qualified_name AS qualified_name ORDER BY m.file_path LIMIT 4",
+        "note": "Module fields verbatim",
+        "asked_columns": [
+          "name",
+          "file_path",
+          "qualified_name"
+        ],
+        "got_columns": [
+          "name",
+          "file_path",
+          "qualified_name"
+        ],
+        "total": 4,
+        "rows": [
+          [
+            "marm-mcp-server/marm_mcp_server/resources/marm-docs/README.md",
+            "marm-mcp-server/marm_mcp_server/resources/marm-docs/README.md",
+            "C-Users-lyell-Desktop-MARM-Systems.marm-mcp-server.marm_mcp_server.resources.marm-docs.README"
+          ],
+          [
+            "marm-mcp-server/tests/test_exact_retrieval_lane.py",
+            "marm-mcp-server/tests/test_exact_retrieval_lane.py",
+            "C-Users-lyell-Desktop-MARM-Systems.marm-mcp-server.tests.test_exact_retrieval_lane"
+          ],
+          [
+            "marm-mcp-server/marm_mcp_server/core/memory_db.py",
+            "marm-mcp-server/marm_mcp_server/core/memory_db.py",
+            "C-Users-lyell-Desktop-MARM-Systems.marm-mcp-server.marm_mcp_server.core.memory_db"
+          ],
+          [
+            "CONTRIBUTING.md",
+            "CONTRIBUTING.md",
+            "C-Users-lyell-Desktop-MARM-Systems.CONTRIBUTING"
+          ]
+        ],
+        "degraded": false
+      },
+      "file_path_join": {
+        "on_both_labels": 274,
+        "file_only": [
+          "marm-mcp-server/marm_graph/config/__init__.py",
+          "marm-mcp-server/marm_graph/core/__init__.py",
+          "marm-mcp-server/marm_graph/endpoints/__init__.py",
+          "marm-mcp-server/marm_graph/middleware/__init__.py"
+        ],
+        "module_only": [],
+        "file_total": 278,
+        "module_total": 274
+      }
+    },
+    "item3_canonical": {
+      "candidate": "file_path anchored on the File label",
+      "rationale": "unique on File (278/278) and Module (274/274) where name is not (239 distinct names for 278 File nodes), present on every IMPORTS endpoint, and a real relative path rather than an engine-internal key",
+      "anchor_on_file_label": "distinct file_path across every label overcounts, because Folder nodes carry a directory in the same field and config files carry Variable nodes with no File node. The unit set is the File label; IMPORTS targets are attributed back into it by file_path",
+      "distinct_units_all_labels": {
+        "query": "MATCH (n) WHERE n.file_path IS NOT NULL RETURN count(DISTINCT n.file_path) AS units",
+        "note": "distinct file_path across every label",
+        "asked_columns": [
+          "units"
+        ],
+        "got_columns": [
+          "units"
+        ],
+        "total": 1,
+        "rows": [
+          [
+            "320"
+          ]
+        ],
+        "degraded": false
+      },
+      "distinct_units_file_label": {
+        "query": "MATCH (n:File) RETURN count(DISTINCT n.file_path) AS from_file_label",
+        "note": "distinct file_path on File only",
+        "asked_columns": [
+          "from_file_label"
+        ],
+        "got_columns": [
+          "from_file_label"
+        ],
+        "total": 1,
+        "rows": [
+          [
+            "278"
+          ]
+        ],
+        "degraded": false
+      },
+      "files_on_disk": null
+    },
+    "item4_imports": {
+      "label_pairs": {
+        "query": "MATCH (a)-[r:IMPORTS]->(b) RETURN labels(a) AS src, labels(b) AS dst, count(r) AS edges",
+        "note": "every label pair IMPORTS connects",
+        "asked_columns": [
+          "src",
+          "dst",
+          "edges"
+        ],
+        "got_columns": [
+          "src",
+          "dst",
+          "edges"
+        ],
+        "total": 4,
+        "rows": [
+          [
+            "[\"File\"]",
+            "[\"Module\"]",
+            "377"
+          ],
+          [
+            "[\"File\"]",
+            "[\"Function\"]",
+            "298"
+          ],
+          [
+            "[\"File\"]",
+            "[\"Variable\"]",
+            "180"
+          ],
+          [
+            "[\"File\"]",
+            "[\"Class\"]",
+            "129"
+          ]
+        ],
+        "degraded": false
+      },
+      "target_coverage": {
+        "query": "MATCH ()-[r:IMPORTS]->(b) RETURN count(r) AS all_edges, count(b.file_path) AS targets_with_file_path",
+        "note": "can every IMPORTS edge be attributed to a target file",
+        "asked_columns": [
+          "all_edges",
+          "targets_with_file_path"
+        ],
+        "got_columns": [
+          "all_edges",
+          "targets_with_file_path"
+        ],
+        "total": 1,
+        "rows": [
+          [
+            "984",
+            "984"
+          ]
+        ],
+        "degraded": false
+      },
+      "fan_in": {
+        "query": "MATCH (a)-[r:IMPORTS]->(b) RETURN b.file_path AS unit, count(r) AS fan_in_edges, count(DISTINCT a.file_path) AS fan_in_files ORDER BY fan_in_files DESC, b.file_path ASC LIMIT 10",
+        "note": "fan-in, raw edges against distinct importing files",
+        "asked_columns": [
+          "unit",
+          "fan_in_edges",
+          "fan_in_files"
+        ],
+        "got_columns": [
+          "unit",
+          "fan_in_edges",
+          "fan_in_files"
+        ],
+        "total": 10,
+        "rows": [
+          [
+            "marm-mcp-server/marm_mcp_server/config/settings.py",
+            "109",
+            "37"
+          ],
+          [
+            "marm-mcp-server/marm_mcp_server/core/memory.py",
+            "33",
+            "33"
+          ],
+          [
+            "marm-mcp-server/tests/conftest.py",
+            "37",
+            "24"
+          ],
+          [
+            "marm-mcp-server/marm_mcp_server/core/memory_utils.py",
+            "58",
+            "19"
+          ],
+          [
+            "marm-console/artifacts/marm-console/src/hooks/use-marm-queries.ts",
+            "58",
+            "13"
+          ],
+          [
+            "marm-console/artifacts/marm-console/src/components/ui/core.tsx",
+            "149",
+            "13"
+          ],
+          [
+            "marm-console/artifacts/marm-console/src/lib/marm-types.ts",
+            "72",
+            "12"
+          ],
+          [
+            "marm-console/artifacts/marm-console/src/lib/marm-api.ts",
+            "13",
+            "11"
+          ],
+          [
+            "marm-mcp-server/marm_mcp_server/core/concept_db.py",
+            "20",
+            "11"
+          ],
+          [
+            "marm-mcp-server/marm_mcp_server/core/models.py",
+            "15",
+            "9"
+          ]
+        ],
+        "degraded": false
+      },
+      "fan_out": {
+        "query": "MATCH (a)-[r:IMPORTS]->(b) RETURN a.file_path AS unit, count(r) AS fan_out_edges, count(DISTINCT b.file_path) AS fan_out_files ORDER BY fan_out_files DESC, a.file_path ASC LIMIT 10",
+        "note": "fan-out, same distinction",
+        "asked_columns": [
+          "unit",
+          "fan_out_edges",
+          "fan_out_files"
+        ],
+        "got_columns": [
+          "unit",
+          "fan_out_edges",
+          "fan_out_files"
+        ],
+        "total": 10,
+        "rows": [
+          [
+            "marm-mcp-server/marm_mcp_server/server.py",
+            "27",
+            "24"
+          ],
+          [
+            "marm-mcp-server/marm_mcp_server/server_stdio.py",
+            "19",
+            "10"
+          ],
+          [
+            "marm-mcp-server/marm_mcp_server/core/memory.py",
+            "38",
+            "9"
+          ],
+          [
+            "marm-mcp-server/marm_mcp_server/console/app.py",
+            "8",
+            "8"
+          ],
+          [
+            "marm-console/artifacts/marm-console/src/App.tsx",
+            "7",
+            "7"
+          ],
+          [
+            "marm-mcp-server/marm_mcp_server/cli.py",
+            "17",
+            "7"
+          ],
+          [
+            "marm-mcp-server/marm_mcp_server/endpoints/concepts.py",
+            "19",
+            "7"
+          ],
+          [
+            "marm-mcp-server/marm_mcp_server/endpoints/graph.py",
+            "17",
+            "7"
+          ],
+          [
+            "marm-mcp-server/marm_mcp_server/endpoints/memory.py",
+            "9",
+            "7"
+          ],
+          [
+            "marm-mcp-server/marm_mcp_server/services/stdio_graph_tools.py",
+            "15",
+            "7"
+          ]
+        ],
+        "degraded": false
+      },
+      "folder_targets": {
+        "query": "MATCH ()-[r:IMPORTS]->(b:Folder) RETURN count(r) AS edges_to_folders, count(DISTINCT b.file_path) AS distinct_folders",
+        "note": "IMPORTS edges landing on a directory",
+        "asked_columns": [
+          "edges_to_folders",
+          "distinct_folders"
+        ],
+        "got_columns": [
+          "edges_to_folders",
+          "distinct_folders"
+        ],
+        "total": 0,
+        "rows": [],
+        "degraded": false
+      }
+    },
+    "item5_shape": {
+      "keys": [
+        "columns",
+        "rows",
+        "total"
+      ],
+      "columnar": true,
+      "differs_from_other_calls": "the key is `columns`, not `cols` as in the five get_* calls the router already converts, and there is no has_more",
+      "row_values_are_strings": true,
+      "sample": {
+        "query": "MATCH (n:File) RETURN n.file_path AS unit ORDER BY n.file_path LIMIT 2",
+        "note": "shape sample",
+        "asked_columns": [
+          "unit"
+        ],
+        "got_columns": [
+          "unit"
+        ],
+        "total": 2,
+        "rows": [
+          [
+            ".coderabbit.yaml"
+          ],
+          [
+            "AGENTS.md"
+          ]
+        ],
+        "degraded": false
+      }
+    },
+    "item6_distinct": {
+      "distinct_query": {
+        "query": "MATCH ()-[r]->() RETURN DISTINCT type(r) AS edge_type",
+        "note": "DISTINCT type(r), the #1364 shape",
+        "asked_columns": [
+          "edge_type"
+        ],
+        "got_columns": [
+          "edge_type"
+        ],
+        "total": 23,
+        "rows": [
+          [
+            "DEFINES"
+          ],
+          [
+            "CONTAINS_FILE"
+          ],
+          [
+            "CONTAINS_FOLDER"
+          ],
+          [
+            "USAGE"
+          ],
+          [
+            "CALLS"
+          ],
+          [
+            "IMPORTS"
+          ],
+          [
+            "HAS_BRANCH"
+          ],
+          [
+            "CONFIGURES"
+          ],
+          [
+            "FILE_CHANGES_WITH"
+          ],
+          [
+            "DECORATES"
+          ],
+          [
+            "SEMANTICALLY_RELATED"
+          ],
+          [
+            "DEFINES_METHOD"
+          ],
+          [
+            "... trimmed, 23 rows total"
+          ]
+        ],
+        "degraded": false
+      },
+      "grouped_query": {
+        "query": "MATCH ()-[r]->() RETURN type(r) AS edge_type, count(r) AS edges ORDER BY edges DESC",
+        "note": "non-DISTINCT group-by cross-check",
+        "asked_columns": [
+          "edge_type",
+          "edges"
+        ],
+        "got_columns": [
+          "edge_type",
+          "edges"
+        ],
+        "total": 23,
+        "rows": [
+          [
+            "CALLS",
+            "6781"
+          ],
+          [
+            "DEFINES",
+            "6101"
+          ],
+          [
+            "USAGE",
+            "2806"
+          ],
+          [
+            "TESTS",
+            "2738"
+          ],
+          [
+            "WRITES",
+            "1036"
+          ],
+          [
+            "IMPORTS",
+            "984"
+          ],
+          [
+            "DECORATES",
+            "515"
+          ],
+          [
+            "SEMANTICALLY_RELATED",
+            "382"
+          ],
+          [
+            "CONTAINS_FILE",
+            "278"
+          ],
+          [
+            "DEFINES_METHOD",
+            "205"
+          ],
+          [
+            "FILE_CHANGES_WITH",
+            "161"
+          ],
+          [
+            "HANDLES",
+            "94"
+          ],
+          [
+            "... trimmed, 23 rows total"
+          ]
+        ],
+        "degraded": false
+      },
+      "edge_total": {
+        "query": "MATCH ()-[r]->() RETURN count(r) AS edges",
+        "note": "edge total",
+        "asked_columns": [
+          "edges"
+        ],
+        "got_columns": [
+          "edges"
+        ],
+        "total": 1,
+        "rows": [
+          [
+            "22436"
+          ]
+        ],
+        "degraded": false
+      },
+      "distinct_type_count": 23,
+      "grouped_type_count": 23,
+      "agrees": true,
+      "missing_from_distinct": []
+    },
+    "item7_limits": {
+      "max_rows_cap": {
+        "query": "MATCH (n:File) RETURN n.file_path AS unit ORDER BY n.file_path",
+        "note": "max_rows cap",
+        "asked_columns": [
+          "unit"
+        ],
+        "got_columns": [
+          "unit"
+        ],
+        "total": 5,
+        "rows": [
+          [
+            ".coderabbit.yaml"
+          ],
+          [
+            "AGENTS.md"
+          ],
+          [
+            "CONTRIBUTING.md"
+          ],
+          [
+            "glama.json"
+          ],
+          [
+            "README.md"
+          ]
+        ],
+        "degraded": false
+      },
+      "query_limit": {
+        "query": "MATCH (n:File) RETURN n.file_path AS unit ORDER BY n.file_path LIMIT 5",
+        "note": "LIMIT in the query",
+        "asked_columns": [
+          "unit"
+        ],
+        "got_columns": [
+          "unit"
+        ],
+        "total": 5,
+        "rows": [
+          [
+            ".coderabbit.yaml"
+          ],
+          [
+            "AGENTS.md"
+          ],
+          [
+            "CONTRIBUTING.md"
+          ],
+          [
+            "glama.json"
+          ],
+          [
+            "README.md"
+          ]
+        ],
+        "degraded": false
+      },
+      "true_count": {
+        "query": "MATCH (n:File) RETURN count(n) AS files",
+        "note": "true count for comparison",
+        "asked_columns": [
+          "files"
+        ],
+        "got_columns": [
+          "files"
+        ],
+        "total": 1,
+        "rows": [
+          [
+            "278"
+          ]
+        ],
+        "degraded": false
+      },
+      "signals_truncation": false,
+      "ordering_stable": true,
+      "note": "neither form reports the untruncated total, so `total` in the reply is the returned row count and not the population. Phase 2 must issue a separate count query for `total`"
+    },
+    "degraded_queries": [
+      {
+        "query": "MATCH (n) RETURN labels(n)[0] AS label, count(*) AS c ORDER BY c DESC",
+        "asked": [
+          "label",
+          "c"
+        ],
+        "got": [
+          "labels(n)"
+        ]
+      },
+      {
+        "query": "MATCH (f:File), (m:Module) WHERE f.file_path = m.file_path RETURN count(f) AS paths_on_both_labels",
+        "asked": [
+          "paths_on_both_labels"
+        ],
+        "got": [
+          "f.name",
+          "f.qualified_name",
+          "f.label"
+        ]
+      },
+      {
+        "query": "MATCH ()-[r:IMPORTS]->(b) WHERE NOT b.file_path IN [x IN [] | x] RETURN b.file_path AS unit, count(r) AS c ORDER BY c DESC",
+        "asked": [
+          "unit",
+          "c"
+        ],
+        "got": [
+          "b.name",
+          "b.qualified_name",
+          "b.label"
+        ]
+      }
+    ],
+    "errors": [],
+    "engine_warnings": []
+  },
+  "generated": "2026-08-18"
+}
