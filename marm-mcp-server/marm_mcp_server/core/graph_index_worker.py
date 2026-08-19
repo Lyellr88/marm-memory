@@ -72,6 +72,13 @@ def _git(root: str, *args: str) -> Optional[str]:
     polled repository's own config: honoring it would let any repo MARM watches
     run a program of its choosing on a 30 second timer.
     """
+    # An `if` statement, not a conditional expression: mypy applies its
+    # sys.platform narrowing to statements only, so the expression form reports
+    # CREATE_NO_WINDOW as undefined when the gate runs on Linux. Matches the
+    # spelling cbm_client._spawn already uses.
+    creationflags = 0
+    if sys.platform == "win32":
+        creationflags = subprocess.CREATE_NO_WINDOW
     try:
         proc = subprocess.run(
             ["git", "-c", "core.fsmonitor=false", "-C", root, *args],
@@ -79,14 +86,7 @@ def _git(root: str, *args: str) -> Optional[str]:
             text=True,
             timeout=_GIT_TIMEOUT_SECONDS,
             env=_git_env(),
-            # Looked up by name: the attribute only exists on Windows, and naming
-            # it directly fails mypy's attr-defined check when CI runs on Linux
-            # even behind this platform guard.
-            creationflags=(
-                getattr(subprocess, "CREATE_NO_WINDOW", 0)
-                if sys.platform == "win32"
-                else 0
-            ),
+            creationflags=creationflags,
         )
     except (OSError, subprocess.SubprocessError) as exc:
         logger.debug("graph_auto_index.git_failed", root=root, error=str(exc))
