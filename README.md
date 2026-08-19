@@ -88,7 +88,7 @@ It brings three things together:
 - 💻 **Code Graph (5 tools)** maps your repository so agents can find symbols, follow code paths, and understand the project without rereading it all. Point it at a repo once and it keeps itself current as you work.
 - 🧩 **Concept Graph (2 tools)** connects people, decisions, errors, and ideas from your stored memories, with links back to relevant code when available. It builds itself as you store memories.
 
-All 14 tools work over HTTP and STDIO. Your agents share the same local memory across sessions instead of starting from scratch each time. The built-in Console lets you see and manage what is saved.
+All 14 tools work over HTTP and STDIO. Your agents share the same local memory across sessions instead of starting from scratch each time. The bundled Console App provides a browsable view of **Memories**, the **Knowledge Graph**, and **Indexed Projects**, including progress for graph builds and repository indexing.
 
 ### How It Works
 
@@ -896,7 +896,7 @@ How to use it:
 - **Code cross-linking**: when the code graph has indexed the same project, concept entities that match code symbols get linked, connecting "what we decided" to "where it lives in the code."
 - **Bundled extraction runtime**: the spaCy runtime and English extraction model ship with MARM but load only on the first extraction, which now happens on its own shortly after the first memory is stored rather than when you run a build. If a damaged or partial installation makes them unavailable, both concept tools degrade cleanly while core memory remains available; run `marm-memory knowledge status`, then reinstall MARM if needed.
 - **Isolated storage**: the concept graph lives in its own SQLite database (`~/.marm/index/marm_index.db`) with its own connection pool, so concept-graph writes can never block or corrupt the production memory database.
-- **Console atlas**: MARM Console renders the complete atlas up to 750 entities and 6,000 stored relationships. Larger graphs use a deterministic connected sample of up to 600 entities and 4,000 aggregated visual edges, clearly labelled as sampled.
+- **Console atlas**: the Knowledge Graph opens in a compact, deterministic connected sample for fast navigation. Choose **Render all _N_ nodes** when you need the complete atlas. Full-atlas mode keeps background relationship lines hidden until you hover or select a node, so its direct connections remain readable without drawing the whole spiderweb at once.
 
 This fills the cross-session structure gap that flat memory search leaves open: sessions organize memories, but the concept graph *connects* them, so "what depends on the write queue?" is answerable even when the answer spans five sessions from three different agents.
 
