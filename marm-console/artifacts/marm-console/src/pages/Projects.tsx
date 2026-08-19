@@ -141,7 +141,11 @@ function ExploreDialog({ project, open, onOpenChange }: { project: ProjectSummar
   const traceCode = useTraceProject();
   const impactCode = useProjectImpact();
   const { data: architecture, isLoading: architectureLoading } = useProjectArchitecture(project?.name || '');
-  const { data: codeUnits, isLoading: codeUnitsLoading } = useProjectCodeUnits(project?.name || '');
+  const { data: codeUnits, isLoading: codeUnitsLoading, isError: codeUnitsFailed } = useProjectCodeUnits(project?.name || '');
+  // A failed refetch keeps the last successful data, so isError and state 'ready'
+  // are both true at once. The failure wins: a populated table under "could not
+  // reach the server" is exactly the ambiguous state this table exists to remove.
+  const codeUnitsState = codeUnitsFailed ? 'failed' : codeUnits?.state;
 
   // Search
   const [searchQuery, setSearchQuery] = useState('');
@@ -194,7 +198,7 @@ function ExploreDialog({ project, open, onOpenChange }: { project: ProjectSummar
                 <div className="space-y-2">
                   <div className="flex items-baseline justify-between">
                     <p className="text-xs text-muted-foreground uppercase tracking-wider">Code structure</p>
-                    {codeUnits?.state === 'ready' && (
+                    {codeUnits && codeUnitsState === 'ready' && (
                       <p className="text-xs text-muted-foreground">
                         {codeUnits.shown < codeUnits.total
                           ? `Showing ${codeUnits.shown} of ${codeUnits.total} files, most connected first`
@@ -207,14 +211,15 @@ function ExploreDialog({ project, open, onOpenChange }: { project: ProjectSummar
                       <TableHeader className="bg-muted/80"><TableRow><TableHead>File</TableHead><TableHead className="text-right">Imported by</TableHead><TableHead className="text-right">Imports</TableHead></TableRow></TableHeader>
                       <TableBody>
                         {codeUnitsLoading && <TableRow><TableCell colSpan={3} className="h-24 text-center text-muted-foreground">Loading code structure...</TableCell></TableRow>}
-                        {!codeUnitsLoading && codeUnits?.state === 'empty_index' && <TableRow><TableCell colSpan={3} className="h-24 text-center text-muted-foreground">Nothing indexed yet. Index this project to see its structure.</TableCell></TableRow>}
-                        {!codeUnitsLoading && codeUnits?.state === 'indexed_no_summary' && <TableRow><TableCell colSpan={3} className="h-24 text-center text-muted-foreground">Indexed, but everything here looks like docs or config rather than code.</TableCell></TableRow>}
-                        {!codeUnitsLoading && codeUnits?.state === 'unavailable' && <TableRow><TableCell colSpan={3} className="h-24 text-center text-muted-foreground">{codeUnits.reason === 'graph_unavailable' ? 'The code graph is not running, so structure cannot be read.' : 'Code structure is unavailable right now.'}</TableCell></TableRow>}
-                        {!codeUnitsLoading && codeUnits?.state === 'ready' && codeUnits.code_units.map((unit) => <TableRow key={unit.unit}><TableCell className="font-mono text-xs">{unit.unit}</TableCell><TableCell className="text-right">{unit.fan_in}</TableCell><TableCell className="text-right">{unit.fan_out}</TableCell></TableRow>)}
+                        {!codeUnitsLoading && codeUnitsState === 'failed' && <TableRow><TableCell colSpan={3} className="h-24 text-center text-muted-foreground">Could not reach the server to read code structure.</TableCell></TableRow>}
+                        {!codeUnitsLoading && codeUnitsState === 'empty_index' && <TableRow><TableCell colSpan={3} className="h-24 text-center text-muted-foreground">Nothing indexed yet. Index this project to see its structure.</TableCell></TableRow>}
+                        {!codeUnitsLoading && codeUnitsState === 'indexed_no_summary' && <TableRow><TableCell colSpan={3} className="h-24 text-center text-muted-foreground">Indexed, but everything here looks like docs or config rather than code.</TableCell></TableRow>}
+                        {!codeUnitsLoading && codeUnits && codeUnitsState === 'unavailable' && <TableRow><TableCell colSpan={3} className="h-24 text-center text-muted-foreground">{codeUnits.reason === 'graph_unavailable' ? 'The code graph is not running, so structure cannot be read.' : 'Code structure is unavailable right now.'}</TableCell></TableRow>}
+                        {!codeUnitsLoading && codeUnits && codeUnitsState === 'ready' && codeUnits.code_units.map((unit) => <TableRow key={unit.unit}><TableCell className="font-mono text-xs">{unit.unit}</TableCell><TableCell className="text-right">{unit.fan_in}</TableCell><TableCell className="text-right">{unit.fan_out}</TableCell></TableRow>)}
                       </TableBody>
                     </Table>
                   </div>
-                  {codeUnits?.state === 'ready' && codeUnits.fan_in_is_lower_bound && (
+                  {codeUnits && codeUnitsState === 'ready' && codeUnits.fan_in_is_lower_bound && (
                     <p className="text-xs text-muted-foreground">
                       "Imported by" counts files that import this one directly. Package-level imports are not attributed to the file they resolve to, so treat it as a minimum.
                     </p>

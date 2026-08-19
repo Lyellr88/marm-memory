@@ -35,6 +35,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -489,9 +490,14 @@ def item3_canonical(probe: Probe, disk_files: int | None) -> dict:
     )
     return {
         "candidate": "file_path anchored on the File label",
+        # Cites the measured columns rather than embedding counts. This ran for
+        # both projects, so MARM's numbers were being reported inside the
+        # fixture's own record, contradicting the module docstring and going
+        # stale on every reindex.
         "rationale": (
-            "unique on File (278/278) and Module (274/274) where name is not "
-            "(239 distinct names for 278 File nodes), present on every IMPORTS "
+            "unique per File and Module node in this run: see "
+            "item2_identity.file_counts and module_counts, where distinct_path "
+            "equals nodes and distinct_name does not. Present on every IMPORTS "
             "endpoint, and a real relative path rather than an engine-internal key"
         ),
         "anchor_on_file_label": (
@@ -677,7 +683,9 @@ def _verify_fixture(probe: Probe) -> dict:
     }
 
 
-def _run_project(binary: Path, project: str, disk_files: int | None) -> dict:
+def _run_project(
+    binary: Path, project: str, disk_files: int | None
+) -> tuple[dict, Probe]:
     probe = Probe(binary, project)
     out = {
         "project": project,
@@ -691,7 +699,11 @@ def _run_project(binary: Path, project: str, disk_files: int | None) -> dict:
     }
     out["degraded_queries"] = probe.degraded
     out["errors"] = probe.errors
-    out["engine_warnings"] = sorted(set(probe.warnings))
+    # The live list, not a copy. _verify_fixture runs four more queries on this
+    # probe after this function returns, and a copy taken here would drop any
+    # warning they raise, letting the verdict report PASS on a warning it never
+    # saw. _report dedupes and sorts.
+    out["engine_warnings"] = probe.warnings
     return out, probe
 
 
@@ -860,6 +872,72 @@ def _report(fixture: dict, marm: dict, verify: dict) -> bool:
     return all(checks.values())
 
 
+ARTIFACT_ROW_CAP = 12
+
+
+def _trim_rows(node: object) -> None:
+    """Cap long row lists in place, marking what was dropped.
+
+    The committed artifact is evidence, and a degradation probe that returns one
+    row per node in the graph makes it thousands of lines of noise. Trimming here
+    rather than by hand afterwards is the point: a hand-edited artifact cannot be
+    reproduced by the documented command, so a reader cannot tell an edit from a
+    contract change.
+    """
+    if isinstance(node, dict):
+        rows = node.get("rows")
+        if isinstance(rows, list) and len(rows) > ARTIFACT_ROW_CAP:
+            dropped = len(rows) - ARTIFACT_ROW_CAP
+            node["rows"] = [
+                *rows[:ARTIFACT_ROW_CAP],
+                [f"... trimmed, {dropped} of {node.get('total')} rows not shown"],
+            ]
+        for value in node.values():
+            _trim_rows(value)
+    elif isinstance(node, list):
+        for value in node:
+            _trim_rows(value)
+
+
+FIXTURE_PROJECT_PLACEHOLDER = "<fixture-project>"
+
+
+def _replace_in_strings(node: object, needle: str, replacement: str) -> object:
+    if isinstance(node, dict):
+        return {k: _replace_in_strings(v, needle, replacement) for k, v in node.items()}
+    if isinstance(node, list):
+        return [_replace_in_strings(v, needle, replacement) for v in node]
+    if isinstance(node, str):
+        return node.replace(needle, replacement)
+    return node
+
+
+def _artifact(binary: Path, fixture: dict, verify: dict, marm: dict) -> dict:
+    """The committed-results shape, trimmed and stamped by the writer itself.
+
+    The fixture's project name is a mangled mkdtemp path, so it differs on every
+    run and shows up inside every qualified_name it produced. Substituting a
+    placeholder here leaves `generated` as the only field that changes between
+    runs, which is what makes a rerun diff mean "the engine's answer changed".
+    """
+    payload: dict = {
+        "generated": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "engine_version": str(binary.parent.name),
+        "row_cap": ARTIFACT_ROW_CAP,
+        "fixture_project_placeholder": FIXTURE_PROJECT_PLACEHOLDER,
+        "fixture": fixture,
+        "fixture_verification": verify,
+        "marm": marm,
+    }
+    _trim_rows(payload)
+    token = str(fixture.get("project") or "")
+    if token:
+        payload = dict(
+            _replace_in_strings(payload, token, FIXTURE_PROJECT_PLACEHOLDER)  # type: ignore[arg-type]
+        )
+    return payload
+
+
 def _count_source_files(repo: Path) -> int:
     return sum(1 for p in repo.rglob("*.py") if ".git" not in p.parts)
 
@@ -909,15 +987,7 @@ def _run(args, cleanup_failed: list[str]) -> int:
         ok = _report(fixture_out, marm_out, verify)
         if args.json:
             args.json.write_text(
-                json.dumps(
-                    {
-                        "engine_version": str(binary.parent.name),
-                        "fixture": fixture_out,
-                        "fixture_verification": verify,
-                        "marm": marm_out,
-                    },
-                    indent=2,
-                ),
+                json.dumps(_artifact(binary, fixture_out, verify, marm_out), indent=2),
                 encoding="utf-8",
             )
             print(f"\nraw results: {args.json}")

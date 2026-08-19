@@ -1,7 +1,10 @@
 {
+  "generated": "2026-08-19T08:46:02Z",
   "engine_version": "0.10.5",
+  "row_cap": 12,
+  "fixture_project_placeholder": "<fixture-project>",
   "fixture": {
-    "project": "C-Users-lyell-AppData-Local-Temp-cga-units-65v8oaev-fixture",
+    "project": "<fixture-project>",
     "item1_syntax": {
       "invocation_forms": {
         "in_use": "stdin",
@@ -89,7 +92,7 @@
               "[\"Method\"]"
             ],
             [
-              "... trimmed, 31 rows total"
+              "... trimmed, 19 of 31 rows not shown"
             ]
           ],
           "degraded": true
@@ -109,27 +112,27 @@
           "rows": [
             [
               "pyproject.toml",
-              "C-Users-lyell-AppData-Local-Temp-cga-units-65v8oaev-fixture.pyproject.toml.__file__",
+              "<fixture-project>.pyproject.toml.__file__",
               "File"
             ],
             [
               "alpha.py",
-              "C-Users-lyell-AppData-Local-Temp-cga-units-65v8oaev-fixture.pkg.alpha.py.__file__",
+              "<fixture-project>.pkg.alpha.py.__file__",
               "File"
             ],
             [
               "beta.py",
-              "C-Users-lyell-AppData-Local-Temp-cga-units-65v8oaev-fixture.pkg.beta.py.__file__",
+              "<fixture-project>.pkg.beta.py.__file__",
               "File"
             ],
             [
               "gamma.py",
-              "C-Users-lyell-AppData-Local-Temp-cga-units-65v8oaev-fixture.pkg.gamma.py.__file__",
+              "<fixture-project>.pkg.gamma.py.__file__",
               "File"
             ],
             [
               "__init__.py",
-              "C-Users-lyell-AppData-Local-Temp-cga-units-65v8oaev-fixture.pkg.__init__.py.__file__",
+              "<fixture-project>.pkg.__init__.py.__file__",
               "File"
             ]
           ],
@@ -283,22 +286,22 @@
           [
             "pyproject.toml",
             "pyproject.toml",
-            "C-Users-lyell-AppData-Local-Temp-cga-units-65v8oaev-fixture.pyproject.toml.__file__"
+            "<fixture-project>.pyproject.toml.__file__"
           ],
           [
             "alpha.py",
             "pkg/alpha.py",
-            "C-Users-lyell-AppData-Local-Temp-cga-units-65v8oaev-fixture.pkg.alpha.py.__file__"
+            "<fixture-project>.pkg.alpha.py.__file__"
           ],
           [
             "beta.py",
             "pkg/beta.py",
-            "C-Users-lyell-AppData-Local-Temp-cga-units-65v8oaev-fixture.pkg.beta.py.__file__"
+            "<fixture-project>.pkg.beta.py.__file__"
           ],
           [
             "gamma.py",
             "pkg/gamma.py",
-            "C-Users-lyell-AppData-Local-Temp-cga-units-65v8oaev-fixture.pkg.gamma.py.__file__"
+            "<fixture-project>.pkg.gamma.py.__file__"
           ]
         ],
         "degraded": false
@@ -321,22 +324,22 @@
           [
             "pyproject.toml",
             "pyproject.toml",
-            "C-Users-lyell-AppData-Local-Temp-cga-units-65v8oaev-fixture.pyproject"
+            "<fixture-project>.pyproject"
           ],
           [
             "pkg/alpha.py",
             "pkg/alpha.py",
-            "C-Users-lyell-AppData-Local-Temp-cga-units-65v8oaev-fixture.pkg.alpha"
+            "<fixture-project>.pkg.alpha"
           ],
           [
             "pkg/beta.py",
             "pkg/beta.py",
-            "C-Users-lyell-AppData-Local-Temp-cga-units-65v8oaev-fixture.pkg.beta"
+            "<fixture-project>.pkg.beta"
           ],
           [
             "pkg/gamma.py",
             "pkg/gamma.py",
-            "C-Users-lyell-AppData-Local-Temp-cga-units-65v8oaev-fixture.pkg.gamma"
+            "<fixture-project>.pkg.gamma"
           ]
         ],
         "degraded": false
@@ -353,7 +356,7 @@
     },
     "item3_canonical": {
       "candidate": "file_path anchored on the File label",
-      "rationale": "unique on File (278/278) and Module (274/274) where name is not (239 distinct names for 278 File nodes), present on every IMPORTS endpoint, and a real relative path rather than an engine-internal key",
+      "rationale": "unique per File and Module node in this run: see item2_identity.file_counts and module_counts, where distinct_path equals nodes and distinct_name does not. Present on every IMPORTS endpoint, and a real relative path rather than an engine-internal key",
       "anchor_on_file_label": "distinct file_path across every label overcounts, because Folder nodes carry a directory in the same field and config files carry Variable nodes with no File node. The unit set is the File label; IMPORTS targets are attributed back into it by file_path",
       "distinct_units_all_labels": {
         "query": "MATCH (n) WHERE n.file_path IS NOT NULL RETURN count(DISTINCT n.file_path) AS units",
@@ -918,7 +921,7 @@
       "flag_form_is_prose": {
         "invocation": "--project <p> --query <q>, no format field reachable",
         "reply_is_json": false,
-        "reply_head": "rows: 1  (cols: files)\r\n  \"278\"\r\ntotal: 1"
+        "reply_head": "rows: 1  (cols: files)\r\n  \"281\"\r\ntotal: 1"
       },
       "degradations": {
         "subscripted function call": {
@@ -931,7 +934,7 @@
           "got_columns": [
             "labels(n)"
           ],
-          "total": 4202,
+          "total": 4290,
           "rows": [
             [
               "[\"Variable\"]"
@@ -970,7 +973,7 @@
               "[\"Section\"]"
             ],
             [
-              "... trimmed, 4202 rows total"
+              "... trimmed, 4278 of 4290 rows not shown"
             ]
           ],
           "degraded": true
@@ -986,7 +989,7 @@
             "f.qualified_name",
             "f.label"
           ],
-          "total": 278,
+          "total": 281,
           "rows": [
             [
               ".coderabbit.yaml",
@@ -1049,7 +1052,7 @@
               "File"
             ],
             [
-              "... trimmed, 278 rows total"
+              "... trimmed, 269 of 281 rows not shown"
             ]
           ],
           "degraded": true
@@ -1090,7 +1093,7 @@
         "total": 1,
         "rows": [
           [
-            "278"
+            "281"
           ]
         ],
         "degraded": false
@@ -1106,7 +1109,7 @@
           "unit",
           "c"
         ],
-        "total": 278,
+        "total": 281,
         "rows": [
           [
             ".coderabbit.yaml",
@@ -1157,7 +1160,7 @@
             "1"
           ],
           [
-            "... trimmed, 278 rows total"
+            "... trimmed, 269 of 281 rows not shown"
           ]
         ],
         "degraded": false
@@ -1185,9 +1188,9 @@
         "total": 1,
         "rows": [
           [
-            "278",
-            "278",
-            "239"
+            "281",
+            "281",
+            "242"
           ]
         ],
         "degraded": false
@@ -1208,9 +1211,9 @@
         "total": 1,
         "rows": [
           [
-            "274",
-            "274",
-            "274"
+            "277",
+            "277",
+            "277"
           ]
         ],
         "degraded": false
@@ -1269,30 +1272,30 @@
         "total": 4,
         "rows": [
           [
-            "marm-mcp-server/marm_mcp_server/resources/marm-docs/README.md",
-            "marm-mcp-server/marm_mcp_server/resources/marm-docs/README.md",
-            "C-Users-lyell-Desktop-MARM-Systems.marm-mcp-server.marm_mcp_server.resources.marm-docs.README"
+            "README.md",
+            "README.md",
+            "C-Users-lyell-Desktop-MARM-Systems.README"
           ],
           [
-            "marm-mcp-server/tests/test_exact_retrieval_lane.py",
-            "marm-mcp-server/tests/test_exact_retrieval_lane.py",
-            "C-Users-lyell-Desktop-MARM-Systems.marm-mcp-server.tests.test_exact_retrieval_lane"
+            "marm-mcp-server/tests/test_notebook_service.py",
+            "marm-mcp-server/tests/test_notebook_service.py",
+            "C-Users-lyell-Desktop-MARM-Systems.marm-mcp-server.tests.test_notebook_service"
           ],
           [
-            "marm-mcp-server/marm_mcp_server/core/memory_db.py",
-            "marm-mcp-server/marm_mcp_server/core/memory_db.py",
-            "C-Users-lyell-Desktop-MARM-Systems.marm-mcp-server.marm_mcp_server.core.memory_db"
+            "marm-mcp-server/tests/test_compaction_worker.py",
+            "marm-mcp-server/tests/test_compaction_worker.py",
+            "C-Users-lyell-Desktop-MARM-Systems.marm-mcp-server.tests.test_compaction_worker"
           ],
           [
-            "CONTRIBUTING.md",
-            "CONTRIBUTING.md",
-            "C-Users-lyell-Desktop-MARM-Systems.CONTRIBUTING"
+            "marm-mcp-server/marm_mcp_server/endpoints/memory.py",
+            "marm-mcp-server/marm_mcp_server/endpoints/memory.py",
+            "C-Users-lyell-Desktop-MARM-Systems.marm-mcp-server.marm_mcp_server.endpoints.memory"
           ]
         ],
         "degraded": false
       },
       "file_path_join": {
-        "on_both_labels": 274,
+        "on_both_labels": 277,
         "file_only": [
           "marm-mcp-server/marm_graph/config/__init__.py",
           "marm-mcp-server/marm_graph/core/__init__.py",
@@ -1300,13 +1303,13 @@
           "marm-mcp-server/marm_graph/middleware/__init__.py"
         ],
         "module_only": [],
-        "file_total": 278,
-        "module_total": 274
+        "file_total": 281,
+        "module_total": 277
       }
     },
     "item3_canonical": {
       "candidate": "file_path anchored on the File label",
-      "rationale": "unique on File (278/278) and Module (274/274) where name is not (239 distinct names for 278 File nodes), present on every IMPORTS endpoint, and a real relative path rather than an engine-internal key",
+      "rationale": "unique per File and Module node in this run: see item2_identity.file_counts and module_counts, where distinct_path equals nodes and distinct_name does not. Present on every IMPORTS endpoint, and a real relative path rather than an engine-internal key",
       "anchor_on_file_label": "distinct file_path across every label overcounts, because Folder nodes carry a directory in the same field and config files carry Variable nodes with no File node. The unit set is the File label; IMPORTS targets are attributed back into it by file_path",
       "distinct_units_all_labels": {
         "query": "MATCH (n) WHERE n.file_path IS NOT NULL RETURN count(DISTINCT n.file_path) AS units",
@@ -1320,7 +1323,7 @@
         "total": 1,
         "rows": [
           [
-            "320"
+            "323"
           ]
         ],
         "degraded": false
@@ -1337,7 +1340,7 @@
         "total": 1,
         "rows": [
           [
-            "278"
+            "281"
           ]
         ],
         "degraded": false
@@ -1363,12 +1366,12 @@
           [
             "[\"File\"]",
             "[\"Module\"]",
-            "377"
+            "379"
           ],
           [
             "[\"File\"]",
             "[\"Function\"]",
-            "298"
+            "300"
           ],
           [
             "[\"File\"]",
@@ -1378,7 +1381,7 @@
           [
             "[\"File\"]",
             "[\"Class\"]",
-            "129"
+            "135"
           ]
         ],
         "degraded": false
@@ -1397,8 +1400,8 @@
         "total": 1,
         "rows": [
           [
-            "984",
-            "984"
+            "994",
+            "994"
           ]
         ],
         "degraded": false
@@ -1440,7 +1443,7 @@
           ],
           [
             "marm-console/artifacts/marm-console/src/hooks/use-marm-queries.ts",
-            "58",
+            "59",
             "13"
           ],
           [
@@ -1450,7 +1453,12 @@
           ],
           [
             "marm-console/artifacts/marm-console/src/lib/marm-types.ts",
-            "72",
+            "73",
+            "12"
+          ],
+          [
+            "marm-mcp-server/marm_mcp_server/core/concept_db.py",
+            "21",
             "12"
           ],
           [
@@ -1459,13 +1467,8 @@
             "11"
           ],
           [
-            "marm-mcp-server/marm_mcp_server/core/concept_db.py",
-            "20",
-            "11"
-          ],
-          [
-            "marm-mcp-server/marm_mcp_server/core/models.py",
-            "15",
+            "marm-mcp-server/marm_graph/core/cbm_client.py",
+            "17",
             "9"
           ]
         ],
@@ -1634,7 +1637,7 @@
             "DEFINES_METHOD"
           ],
           [
-            "... trimmed, 23 rows total"
+            "... trimmed, 11 of 23 rows not shown"
           ]
         ],
         "degraded": false
@@ -1654,54 +1657,54 @@
         "rows": [
           [
             "CALLS",
-            "6781"
+            "6898"
           ],
           [
             "DEFINES",
-            "6101"
+            "6218"
           ],
           [
             "USAGE",
-            "2806"
+            "2874"
           ],
           [
             "TESTS",
-            "2738"
+            "2782"
           ],
           [
             "WRITES",
-            "1036"
+            "1067"
           ],
           [
             "IMPORTS",
-            "984"
+            "994"
           ],
           [
             "DECORATES",
-            "515"
+            "519"
           ],
           [
             "SEMANTICALLY_RELATED",
-            "382"
+            "411"
           ],
           [
             "CONTAINS_FILE",
-            "278"
+            "281"
           ],
           [
             "DEFINES_METHOD",
-            "205"
+            "209"
           ],
           [
             "FILE_CHANGES_WITH",
-            "161"
+            "162"
           ],
           [
             "HANDLES",
-            "94"
+            "96"
           ],
           [
-            "... trimmed, 23 rows total"
+            "... trimmed, 11 of 23 rows not shown"
           ]
         ],
         "degraded": false
@@ -1718,7 +1721,7 @@
         "total": 1,
         "rows": [
           [
-            "22436"
+            "22874"
           ]
         ],
         "degraded": false
@@ -1799,7 +1802,7 @@
         "total": 1,
         "rows": [
           [
-            "278"
+            "281"
           ]
         ],
         "degraded": false
@@ -1845,6 +1848,5 @@
     ],
     "errors": [],
     "engine_warnings": []
-  },
-  "generated": "2026-08-18"
+  }
 }

@@ -125,7 +125,7 @@ def main() -> int:
         return fail(f"console app not found at {APP}")
 
     if not args.skip_install:
-        if run(["pnpm", "install", "--frozen-lockfile"], WORKSPACE):
+        if run([_pnpm_command(), "install", "--frozen-lockfile"], WORKSPACE):
             return fail("pnpm install failed")
 
     if run([_pnpm_command(), "build"], WORKSPACE):
@@ -140,15 +140,50 @@ def main() -> int:
             print(f"{RED}  {problem}{RESET}")
         return fail(f"build output at {DIST} is incomplete; nothing was replaced")
 
+    # Staged beside the destination and verified before the swap, so a copy that
+    # fails part way through cannot leave the server with no Console. Verifying
+    # DIST above only proves the source is complete; a full disk or a locked file
+    # can still abort the copy itself, and the symptom is a bare 503.
+    staging = STATIC.parent / f"{STATIC.name}.incoming"
+    previous = STATIC.parent / f"{STATIC.name}.previous"
+    for scratch in (staging, previous):
+        if scratch.exists():
+            shutil.rmtree(scratch)
+
+    try:
+        shutil.copytree(DIST, staging)
+        ok, problems = verify(staging)
+        if not ok:
+            for problem in problems:
+                print(f"{RED}  {problem}{RESET}")
+            shutil.rmtree(staging, ignore_errors=True)
+            return fail("the staged bundle is not servable; nothing was replaced")
+    except OSError as exc:
+        shutil.rmtree(staging, ignore_errors=True)
+        return fail(f"could not stage the bundle ({exc}); nothing was replaced")
+
     if STATIC.exists():
-        shutil.rmtree(STATIC)
-    shutil.copytree(DIST, STATIC)
+        STATIC.rename(previous)
+    try:
+        staging.rename(STATIC)
+    except OSError as exc:
+        if previous.exists() and not STATIC.exists():
+            previous.rename(STATIC)
+        shutil.rmtree(staging, ignore_errors=True)
+        return fail(f"could not swap the bundle into place ({exc}); rolled back")
 
     ok, problems = verify(STATIC)
     if not ok:
         for problem in problems:
             print(f"{RED}  {problem}{RESET}")
-        return fail("the copy did not land correctly")
+        # Roll back rather than leave a half-working Console behind.
+        shutil.rmtree(STATIC, ignore_errors=True)
+        if previous.exists():
+            previous.rename(STATIC)
+            print(f"{YELLOW}  rolled back to the previous bundle{RESET}")
+        return fail("the swapped bundle did not verify")
+
+    shutil.rmtree(previous, ignore_errors=True)
 
     assets = sorted(p.name for p in (STATIC / "assets").iterdir())
     print(f"{GREEN}OK{RESET}  bundled Console replaced at {STATIC}")
