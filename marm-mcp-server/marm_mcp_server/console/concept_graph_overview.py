@@ -15,8 +15,8 @@ SAMPLED_ATLAS_MAX_EDGES = 4000
 SAMPLED_ATLAS_RAW_EDGE_LIMIT = 12000
 
 
-def graph_overview(db_path: Path) -> dict:
-    """Return the complete visual graph when safe, else a connected sample."""
+def graph_overview(db_path: Path, *, force_full: bool = False) -> dict:
+    """Return the complete visual graph when requested, else a safe sample."""
     connection = _connect(db_path)
     if connection is None:
         return {
@@ -58,8 +58,11 @@ def graph_overview(db_path: Path) -> dict:
         ).fetchone()[0]
         mode = (
             "full"
-            if total_nodes <= FULL_ATLAS_MAX_NODES
-            and total_edges <= FULL_ATLAS_MAX_EDGES
+            if force_full
+            or (
+                total_nodes <= FULL_ATLAS_MAX_NODES
+                and total_edges <= FULL_ATLAS_MAX_EDGES
+            )
             else "sampled"
         )
         node_query = """

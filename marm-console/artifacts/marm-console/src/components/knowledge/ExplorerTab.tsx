@@ -103,6 +103,7 @@ export function ExplorerTab() {
   const [debouncedQ, setDebouncedQ] = useState('');
   const { data: searchResults, isLoading: searchLoading } = useSearchConcepts({ q: debouncedQ, limit: 10 });
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [showFullAtlas, setShowFullAtlas] = useState(false);
   const [direction, setDirection] = useState<'both' | 'incoming' | 'outgoing'>('both');
   const {
     data: baseNeighborhood,
@@ -113,7 +114,7 @@ export function ExplorerTab() {
     data: overviewGraph,
     isError: overviewError,
     isLoading: overviewLoading,
-  } = useConceptGraph(selectedId === null);
+  } = useConceptGraph(selectedId === null, showFullAtlas);
   const [graph, setGraph] = useState<Neighborhood | null>(null);
   const [focusedNode, setFocusedNode] = useState<NeighborhoodNode | null>(null);
   const [hiddenPredicates, setHiddenPredicates] = useState<Set<string>>(new Set(DEFAULT_HIDDEN_PREDICATES));
@@ -264,8 +265,28 @@ export function ExplorerTab() {
             <Badge variant="outline" className="h-6 text-[10px] font-mono">
               {overviewGraph.mode === 'full'
                 ? `Full atlas · ${overviewGraph.rendered.nodes} nodes`
-                : `Connected sample · ${overviewGraph.rendered.nodes}/${overviewGraph.total.nodes} nodes`}
+                : `Compact graph · ${overviewGraph.rendered.nodes}/${overviewGraph.total.nodes} nodes`}
             </Badge>
+          )}
+          {selectedId === null && overviewGraph?.truncated && !showFullAtlas && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-6 px-2 text-xs"
+              onClick={() => setShowFullAtlas(true)}
+            >
+              Render all {overviewGraph.total.nodes.toLocaleString()} nodes
+            </Button>
+          )}
+          {selectedId === null && showFullAtlas && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-6 px-2 text-xs"
+              onClick={() => setShowFullAtlas(false)}
+            >
+              Use compact graph
+            </Button>
           )}
           {selectedId !== null && (
             <Select value={direction} onValueChange={(value: 'both' | 'incoming' | 'outgoing') => setDirection(value)}>

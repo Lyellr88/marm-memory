@@ -36,9 +36,7 @@ def _stale_build_result(job: dict) -> dict:
     if job.get("status") not in {"queued", "running"}:
         return job
     timestamp = (
-        job.get("last_progress_at")
-        or job.get("started_at")
-        or job.get("created_at")
+        job.get("last_progress_at") or job.get("started_at") or job.get("created_at")
     )
     if not timestamp:
         return job
@@ -81,8 +79,8 @@ def search_concepts(
 
 
 @router.get("/api/concepts/graph")
-def get_concept_graph() -> dict:
-    return graph_overview(get_concept_db_path())
+def get_concept_graph(full: bool = Query(False)) -> dict:
+    return graph_overview(get_concept_db_path(), force_full=full)
 
 
 @router.get("/api/concepts/graph/version")

@@ -516,9 +516,7 @@ def test_run_build_skips_code_lookups_for_an_unindexed_memory_project(
         lambda *_: pytest.fail("unindexed projects must not query the code graph"),
     )
 
-    result = concepts._run_build(
-        [[("m1", "CbmClient reference", "sess-a", "proj-a")]]
-    )
+    result = concepts._run_build([[("m1", "CbmClient reference", "sess-a", "proj-a")]])
 
     assert result["code_links_created"] == 0
 
