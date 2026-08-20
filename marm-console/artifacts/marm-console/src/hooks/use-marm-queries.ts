@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useMarmClient } from '@/lib/use-marm-client';
 import { useConnection } from '@/lib/marm-connection';
 import type { 
-  MemoryListParams, MemoryInput, MemoryId, LogListParams, NotebookInput,
+  MemoryListParams, MemoryInput, MemoryId, LogListParams, NotebookDeleteRef, NotebookInput,
   CompactionAction, ConceptSearchParams, ConceptBuildInput, 
   ProjectIndexInput, CodeSearchInput, TraceInput, ImpactInput
 } from '@/lib/marm-types';
@@ -179,6 +179,21 @@ export function useDeleteSession() {
   });
 }
 
+export function useBulkDeleteSessions() {
+  const { baseUrl, client } = useMarmConfig();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (names: string[]) => client.bulkDeleteSessions(names),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.sessions(baseUrl) });
+      qc.invalidateQueries({ queryKey: ['logs', baseUrl] });
+      qc.invalidateQueries({ queryKey: ['memories', baseUrl] });
+      qc.invalidateQueries({ queryKey: queryKeys.filters(baseUrl) });
+      qc.invalidateQueries({ queryKey: queryKeys.overview(baseUrl) });
+    },
+  });
+}
+
 export function useDeleteAllSessions() {
   const { baseUrl, client } = useMarmConfig();
   const qc = useQueryClient();
@@ -211,6 +226,20 @@ export function useDeleteLog() {
   return useMutation({
     mutationFn: ({ id, sessionName }: { id: number; sessionName: string }) => client.deleteLog(id, sessionName),
     onSuccess: invalidate,
+  });
+}
+
+export function useBulkDeleteLogs() {
+  const { baseUrl, client } = useMarmConfig();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (logs: Array<{ id: number; session_name: string }>) => client.bulkDeleteLogs(logs),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['logs', baseUrl] });
+      qc.invalidateQueries({ queryKey: ['memories', baseUrl] });
+      qc.invalidateQueries({ queryKey: queryKeys.sessions(baseUrl) });
+      qc.invalidateQueries({ queryKey: queryKeys.overview(baseUrl) });
+    },
   });
 }
 
@@ -254,6 +283,27 @@ export function useDeleteNotebook() {
   return useMutation({
     mutationFn: ({ name, params }: { name: string, params?: { session_name?: string; project?: string; platform?: string } }) => client.deleteNotebookEntry(name, params),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['notebook', baseUrl] })
+  });
+}
+
+export function useGenerateSummary() {
+  const { baseUrl, client } = useMarmConfig();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (session: string) => client.generateSummary(session),
+    onSuccess: (summary) => {
+      qc.setQueryData(queryKeys.summary(baseUrl, summary.session_name), summary);
+      qc.invalidateQueries({ queryKey: queryKeys.sessions(baseUrl) });
+    },
+  });
+}
+
+export function useBulkDeleteNotebook() {
+  const { baseUrl, client } = useMarmConfig();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (entries: NotebookDeleteRef[]) => client.bulkDeleteNotebookEntries(entries),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['notebook', baseUrl] }),
   });
 }
 

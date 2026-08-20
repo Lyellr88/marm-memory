@@ -11,6 +11,8 @@ export interface Overview {
     staged_compaction: number;
     missing_embeddings: number;
     sessions: number;
+    log_entries: number;
+    notebook_entries: number;
     projects: string[];
     platforms: string[];
   };
@@ -163,12 +165,42 @@ export interface NotebookInput {
   platform?: string | null;
 }
 
+export interface NotebookDeleteRef {
+  name: string;
+  session_name: string;
+  project: string | null;
+  platform: string | null;
+}
+
+export interface BulkSessionDeleteResult {
+  status: string;
+  deleted_sessions: number;
+  deleted_count: number;
+  memories_deleted: number;
+  failed_sessions: Array<{ session_name: string; status_code: number; message: string }>;
+}
+
+export interface BulkLogDeleteResult {
+  status: string;
+  deleted_count: number;
+  memories_deleted: number;
+  failed_logs: Array<{ log_id: string; session_name: string; status_code: number; message: string }>;
+}
+
+export interface BulkNotebookDeleteResult {
+  status: string;
+  deleted_entries: number;
+  failed_entries: Array<NotebookDeleteRef & { status_code: number; message: string }>;
+}
+
 export interface SessionSummary {
   session_name: string;
   summary: string;
   entry_count: number;
   is_dirty: boolean;
-  generated_at: string;
+  generated_at: string | null;
+  status?: 'success' | 'empty';
+  message?: string | null;
 }
 
 export type CompactionStatus =

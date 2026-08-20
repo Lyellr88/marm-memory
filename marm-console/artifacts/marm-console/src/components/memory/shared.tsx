@@ -1,5 +1,17 @@
 import type { MemoryDeleteResult } from '@/lib/marm-types';
-import { CheckCircle2, XCircle } from 'lucide-react';
+import { useEffect, useId, useState } from 'react';
+import { AlertTriangle, CheckCircle2, Sparkles, Trash2, XCircle } from 'lucide-react';
+import {
+  Button,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  Input,
+  Label,
+} from '@/components/ui/core';
 
 export type ActionNotice = {
   kind: 'success' | 'warning' | 'error';
@@ -49,9 +61,101 @@ export function ActionNoticePanel({ notice }: { notice: ActionNotice | null }) {
   };
   const Icon = notice.kind === 'success' ? CheckCircle2 : XCircle;
   return (
-    <div className={`flex items-start gap-2 rounded-md border px-3 py-2 text-sm ${styles[notice.kind]}`}>
+    <div
+      role={notice.kind === 'error' ? 'alert' : 'status'}
+      aria-live={notice.kind === 'error' ? 'assertive' : 'polite'}
+      className={`success-pop flex items-start gap-2 rounded-md border px-3 py-2 text-sm ${styles[notice.kind]}`}
+    >
       <Icon className="mt-0.5 h-4 w-4 shrink-0" />
       <span>{notice.message}</span>
     </div>
+  );
+}
+
+export function MemoryEmptyState({
+  title,
+  detail,
+  className = '',
+}: {
+  title: string;
+  detail?: string;
+  className?: string;
+}) {
+  return (
+    <div className={`memory-empty-state relative flex min-h-40 flex-col items-center justify-center overflow-hidden rounded-xl ${className}`}>
+      <div className="memory-empty-field" aria-hidden="true" />
+      <div className="relative z-10 flex h-11 w-11 items-center justify-center rounded-xl border border-primary/20 bg-primary/[0.07] text-primary shadow-[0_0_28px_rgba(var(--primary-rgb),0.08)]">
+        <Sparkles className="h-4.5 w-4.5" />
+      </div>
+      <p className="relative z-10 mt-3 text-sm font-medium text-foreground/90">{title}</p>
+      {detail && <p className="relative z-10 mt-1 max-w-sm text-center text-xs text-muted-foreground">{detail}</p>}
+    </div>
+  );
+}
+
+export function DeleteSelectionDialog({
+  open,
+  onOpenChange,
+  count,
+  itemLabel,
+  description,
+  isPending,
+  onConfirm,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  count: number;
+  itemLabel: string;
+  description: string;
+  isPending: boolean;
+  onConfirm: () => void;
+}) {
+  const [confirmation, setConfirmation] = useState('');
+  const confirmationId = useId();
+
+  useEffect(() => {
+    if (open) setConfirmation('');
+  }, [open]);
+
+  const close = (nextOpen: boolean) => {
+    if (!isPending) onOpenChange(nextOpen);
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={close}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <div className="mb-2 flex h-11 w-11 items-center justify-center rounded-xl border border-destructive/30 bg-destructive/10 text-destructive">
+            <AlertTriangle className="h-5 w-5" />
+          </div>
+          <DialogTitle>Delete {count} {itemLabel}{count === 1 ? '' : 's'}?</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-2 py-2">
+          <Label htmlFor={confirmationId} className="text-xs text-muted-foreground">
+            Type <span className="font-mono font-semibold text-foreground">DELETE</span> to confirm.
+          </Label>
+          <Input
+            id={confirmationId}
+            value={confirmation}
+            onChange={(event) => setConfirmation(event.target.value)}
+            autoComplete="off"
+            className="border-destructive/30 font-mono uppercase focus-visible:ring-destructive"
+            autoFocus
+          />
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => close(false)} disabled={isPending}>Cancel</Button>
+          <Button
+            variant="destructive"
+            onClick={onConfirm}
+            disabled={confirmation !== 'DELETE'}
+            isLoading={isPending}
+          >
+            <Trash2 className="mr-2 h-4 w-4" /> Delete permanently
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -6,7 +6,11 @@ from fastapi import APIRouter, HTTPException
 
 from .. import memory_store
 from ..core import _mcp_tool_mutation, _now_iso, get_memory_db_path
-from ..models import NotebookDeletePayload, NotebookMutationPayload
+from ..models import (
+    NotebookBulkDeletePayload,
+    NotebookDeletePayload,
+    NotebookMutationPayload,
+)
 
 router = APIRouter()
 
@@ -75,4 +79,56 @@ def delete_notebook(name: str, payload: NotebookDeletePayload) -> dict:
     return {
         "name": name,
         "deleted": bool(result.get("deleted", True)),
+    }
+
+
+@router.post("/api/notebook/bulk-delete")
+def delete_selected_notebook_entries(payload: NotebookBulkDeletePayload) -> dict:
+    deleted_entries = 0
+    failed_entries: list[dict] = []
+    unique_entries = {
+        (entry.name, entry.session_name, entry.project, entry.platform): entry
+        for entry in payload.entries
+    }
+    for entry in unique_entries.values():
+        try:
+            result = _mcp_tool_mutation(
+                "marm_delete",
+                {
+                    "type": "notebook",
+                    "target": entry.name,
+                    "session_name": entry.session_name.strip() or "main",
+                    "project": entry.project,
+                    "platform": entry.platform,
+                },
+            )
+        except HTTPException as exc:
+            failed_entries.append(
+                {
+                    "name": entry.name,
+                    "session_name": entry.session_name,
+                    "project": entry.project,
+                    "platform": entry.platform,
+                    "status_code": exc.status_code,
+                    "message": str(exc.detail),
+                }
+            )
+            continue
+        if not result.get("deleted", True):
+            failed_entries.append(
+                {
+                    "name": entry.name,
+                    "session_name": entry.session_name,
+                    "project": entry.project,
+                    "platform": entry.platform,
+                    "status_code": 404,
+                    "message": "Notebook entry not found.",
+                }
+            )
+            continue
+        deleted_entries += 1
+    return {
+        "status": "partial_success" if failed_entries else "success",
+        "deleted_entries": deleted_entries,
+        "failed_entries": failed_entries,
     }

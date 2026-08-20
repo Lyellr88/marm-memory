@@ -1,15 +1,49 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { Link, useLocation } from 'wouter';
 import { useOverview, isAuthError } from '@/hooks/use-marm-queries';
 import { SettingsDialog } from './SettingsDialog';
-import { Settings, Database, Activity, Network, FolderCode, TerminalSquare } from 'lucide-react';
+import { Settings, Database, Activity, Network, FolderCode, TerminalSquare, ChevronRight } from 'lucide-react';
 import { cn } from '@/components/ui/core';
+
+const THEME_STORAGE_KEY = 'marm-console-accent';
+const ACCENT_THEMES = [
+  { id: 'cyan', label: 'Cyan', color: '#20b8f4' },
+  { id: 'emerald', label: 'Emerald', color: '#10b981' },
+  { id: 'violet', label: 'Violet', color: '#a855f7' },
+  { id: 'orange', label: 'Orange', color: '#f97316' },
+  { id: 'blue', label: 'Blue', color: '#3b82f6' },
+  { id: 'slate', label: 'Slate', color: '#94a3b8' },
+] as const;
+
+type AccentTheme = (typeof ACCENT_THEMES)[number]['id'];
+
+function getInitialTheme(): AccentTheme {
+  try {
+    const stored = window.localStorage.getItem(THEME_STORAGE_KEY);
+    if (ACCENT_THEMES.some((theme) => theme.id === stored)) return stored as AccentTheme;
+  } catch {
+    // The default remains available when browser storage is blocked.
+  }
+  return 'cyan';
+}
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
+  const [navigationOpen, setNavigationOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  
+  const [accentTheme, setAccentTheme] = useState<AccentTheme>(getInitialTheme);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
   const { data, error, isFetching } = useOverview();
+
+  useEffect(() => {
+    document.documentElement.dataset.marmTheme = accentTheme;
+    try {
+      window.localStorage.setItem(THEME_STORAGE_KEY, accentTheme);
+    } catch {
+      // Theme selection still applies for the current session.
+    }
+  }, [accentTheme]);
 
   let statusColor = 'bg-gray-500';
   let statusText = 'Disconnected';
@@ -29,7 +63,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
       statusText = 'Unreachable';
     }
   } else if (data) {
-    statusColor = 'bg-primary';
+    statusColor = 'bg-emerald-400';
     statusText = 'Connected';
     statusPulse = true;
   }
@@ -42,61 +76,138 @@ export function Shell({ children }: { children: React.ReactNode }) {
   ];
 
   return (
-    <div className="flex h-screen w-full bg-background text-foreground overflow-hidden">
-      {/* Sidebar */}
-      <div className="w-64 border-r bg-sidebar flex flex-col justify-between shrink-0">
-        <div>
-          <div className="h-14 flex items-center px-6 border-b font-mono font-bold text-primary tracking-tight">
-            <TerminalSquare className="w-5 h-5 mr-2" />
-            MARM CONSOLE
-          </div>
-          <nav className="p-4 space-y-1 text-sm font-medium">
-            {navItems.map((item) => {
-              const active = location === item.href || (item.href !== '/' && location.startsWith(item.href));
-              return (
-                <Link
-                  key={item.name}
-                  href={item.href}
-                  className={cn(
-                    "flex items-center px-3 py-2 rounded-md transition-colors",
-                    active ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                  )}
-                >
-                  <item.icon className="w-4 h-4 mr-3" />
-                  {item.name}
-                </Link>
-              );
-            })}
-          </nav>
-        </div>
-
-        <div className="p-4 border-t border-sidebar-border">
+    <DialogPrimitive.Root open={navigationOpen} onOpenChange={setNavigationOpen}>
+      <div className="flex h-screen w-full overflow-hidden bg-transparent text-foreground">
+        {!navigationOpen && (
           <button
-            onClick={() => setSettingsOpen(true)}
-            className="w-full flex items-center justify-between px-3 py-2 rounded-md hover:bg-muted transition-colors text-sm text-muted-foreground group"
+            ref={menuButtonRef}
+            type="button"
+            aria-label="Open navigation"
+            aria-expanded="false"
+            aria-controls="console-navigation"
+            onClick={() => setNavigationOpen(true)}
+            className="navigation-toggle fixed left-4 top-5 z-[70] flex h-10 w-10 flex-col items-center justify-center gap-[5px] rounded-lg border border-primary/25 bg-sidebar/90 px-2.5 shadow-[0_12px_34px_rgba(0,0,0,0.32)] backdrop-blur-xl transition-[border-color,background-color,box-shadow] duration-200 hover:border-primary/55 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
           >
-            <div className="flex items-center gap-2">
-              <Settings className="w-4 h-4" />
-              <span>Settings</span>
-            </div>
-            <div className="flex items-center gap-1.5" title={statusText}>
-              <div className="relative flex h-2 w-2">
-                {statusPulse && (
-                  <span className={cn("animate-ping absolute inline-flex h-full w-full rounded-full opacity-75", statusColor)}></span>
-                )}
-                <span className={cn("relative inline-flex rounded-full h-2 w-2", statusColor)}></span>
-              </div>
-            </div>
+            <span className="h-0.5 w-full rounded-full bg-primary transition-transform duration-200" />
+            <span className="h-0.5 w-full rounded-full bg-primary transition-[opacity,transform] duration-200" />
+            <span className="h-0.5 w-full rounded-full bg-primary transition-transform duration-200" />
           </button>
-        </div>
+        )}
+
+        <DialogPrimitive.Portal>
+          <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-[#01040a]/55 backdrop-blur-[2px] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
+          <DialogPrimitive.Content
+            id="console-navigation"
+            aria-describedby={undefined}
+            onCloseAutoFocus={(event) => {
+              event.preventDefault();
+              menuButtonRef.current?.focus();
+            }}
+            className="fixed inset-y-0 left-0 z-[60] flex w-[17rem] flex-col justify-between border-r border-sidebar-border bg-sidebar/97 shadow-[24px_0_80px_rgba(0,0,0,0.48)] backdrop-blur-xl duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left focus:outline-none"
+          >
+            <DialogPrimitive.Title className="sr-only">MARM Console navigation</DialogPrimitive.Title>
+            <DialogPrimitive.Close asChild>
+              <button
+                type="button"
+                aria-label="Close navigation"
+                aria-expanded="true"
+                aria-controls="console-navigation"
+                className="navigation-toggle fixed left-4 top-5 z-[70] flex h-10 w-10 flex-col items-center justify-center gap-[5px] rounded-lg border border-primary/55 bg-accent px-2.5 shadow-[0_12px_34px_rgba(0,0,0,0.32)] transition-[border-color,background-color,box-shadow] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60"
+              >
+                <span className="h-0.5 w-full rounded-full bg-primary transition-transform duration-200" />
+                <span className="h-0.5 w-full rounded-full bg-primary transition-[opacity,transform] duration-200" />
+                <span className="h-0.5 w-full rounded-full bg-primary transition-transform duration-200" />
+              </button>
+            </DialogPrimitive.Close>
+            <div>
+              <div className="flex h-20 items-center border-b border-sidebar-border pl-[4.5rem] pr-5">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-primary/30 bg-primary/[0.08] text-primary shadow-[0_0_24px_rgba(var(--primary-rgb),0.1)]">
+                  <TerminalSquare className="h-4 w-4" />
+                </div>
+                <div className="ml-3 min-w-0">
+                  <div className="font-mono text-[13px] font-bold tracking-[-0.02em] text-primary-highlight">MARM CONSOLE</div>
+                  <div className="mt-0.5 text-[9px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">Local intelligence</div>
+                </div>
+              </div>
+
+              <nav className="space-y-1 p-3 text-sm font-medium" aria-label="Primary navigation">
+                {navItems.map((item) => {
+                  const active = location === item.href || (item.href !== '/' && location.startsWith(item.href));
+                  return (
+                    <Link
+                      key={item.name}
+                      href={item.href}
+                      onClick={() => setNavigationOpen(false)}
+                      className={cn(
+                        'group relative flex h-10 items-center rounded-lg border px-3 transition-[color,background-color,border-color,box-shadow] duration-200',
+                        active
+                          ? 'border-primary/25 bg-primary/[0.09] text-primary-highlight shadow-[inset_3px_0_0_var(--primary)]'
+                          : 'border-transparent text-muted-foreground hover:border-border/70 hover:bg-muted/60 hover:text-foreground'
+                      )}
+                    >
+                      <item.icon className={cn('mr-3 h-4 w-4 transition-colors', active ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground')} />
+                      <span className="truncate">{item.name}</span>
+                      <ChevronRight className={cn('ml-auto h-3.5 w-3.5 transition-all', active ? 'opacity-70' : '-translate-x-1 opacity-0 group-hover:translate-x-0 group-hover:opacity-50')} />
+                    </Link>
+                  );
+                })}
+              </nav>
+            </div>
+
+            <div className="border-t border-sidebar-border p-3">
+              <div className="mb-3 px-3 pt-1">
+                <div className="mb-3 flex items-center justify-between text-[10px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">
+                  <span>Accent theme</span>
+                  <span className="font-mono normal-case tracking-normal text-primary-highlight">{ACCENT_THEMES.find((theme) => theme.id === accentTheme)?.label}</span>
+                </div>
+                <div className="flex items-center gap-2" role="group" aria-label="Accent theme">
+                  {ACCENT_THEMES.map((theme) => (
+                    <button
+                      key={theme.id}
+                      type="button"
+                      title={theme.label + ' theme'}
+                      aria-label={theme.label + ' theme'}
+                      aria-pressed={accentTheme === theme.id}
+                      onClick={() => setAccentTheme(theme.id)}
+                      className="theme-swatch h-6 w-6 rounded-full border-2 border-transparent transition-[transform,box-shadow] duration-150 hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+                      style={{ backgroundColor: theme.color, color: theme.color }}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div className="mb-2 flex items-center justify-between px-3 py-2 text-[10px] uppercase tracking-[0.12em] text-muted-foreground">
+                <span>Server</span>
+                <span className="font-mono normal-case tracking-normal">{data?.mcp_status?.latency_ms !== undefined ? data.mcp_status.latency_ms.toFixed(1) + ' ms' : '—'}</span>
+              </div>
+              <button
+                onClick={() => {
+                  setNavigationOpen(false);
+                  setSettingsOpen(true);
+                }}
+                className="group flex w-full items-center justify-between rounded-lg border border-transparent px-3 py-2.5 text-sm text-muted-foreground transition-colors hover:border-border/70 hover:bg-muted/60"
+              >
+                <div className="flex items-center gap-2">
+                  <Settings className="h-4 w-4" />
+                  <span>Settings</span>
+                </div>
+                <div className="flex items-center gap-1.5" title={statusText}>
+                  <span className="font-mono text-[10px] uppercase tracking-wide">{statusText}</span>
+                  <div className="relative flex h-2 w-2">
+                    <span className={cn('relative inline-flex h-2 w-2 rounded-full', statusColor, statusPulse && 'status-pulse')} />
+                  </div>
+                </div>
+              </button>
+            </div>
+          </DialogPrimitive.Content>
+        </DialogPrimitive.Portal>
+
+        <main className="app-main flex h-full flex-1 flex-col overflow-hidden">
+          {children}
+        </main>
+
+        <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
       </div>
-
-      {/* Main Content */}
-      <main className="flex-1 flex flex-col h-full overflow-hidden">
-        {children}
-      </main>
-
-      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
-    </div>
+    </DialogPrimitive.Root>
   );
 }

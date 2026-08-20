@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ConceptBuildPayload(BaseModel):
@@ -72,8 +72,23 @@ class BulkDeletePayload(BaseModel):
     confirm: Literal["DELETE_ALL"]
 
 
+class SessionBulkDeletePayload(BaseModel):
+    session_names: list[str] = Field(min_length=1, max_length=100)
+    confirm: Literal["DELETE"]
+
+
 class LogDeletePayload(BaseModel):
     session_name: str
+    confirm: Literal["DELETE"]
+
+
+class LogDeleteRef(BaseModel):
+    id: str
+    session_name: str
+
+
+class LogBulkDeletePayload(BaseModel):
+    logs: list[LogDeleteRef] = Field(min_length=1, max_length=100)
     confirm: Literal["DELETE"]
 
 
@@ -90,3 +105,15 @@ class NotebookDeletePayload(BaseModel):
     session_name: str = "main"
     project: str | None = None
     platform: str | None = None
+
+
+class NotebookDeleteRef(BaseModel):
+    name: str
+    session_name: str = "main"
+    project: str | None = None
+    platform: str | None = None
+
+
+class NotebookBulkDeletePayload(BaseModel):
+    entries: list[NotebookDeleteRef] = Field(min_length=1, max_length=100)
+    confirm: Literal["DELETE"]

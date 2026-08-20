@@ -1,13 +1,42 @@
-import { useState } from 'react';
-import { useSummary, useSessions, useCreateSession, useDeleteSession, useDeleteAllSessions, useLogs, useFilters, useDeleteLog, useDeleteAllLogs } from '@/hooks/use-marm-queries';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, Badge, Button, Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, Select, SelectTrigger, SelectValue, SelectContent, SelectItem, Table, TableHeader, TableRow, TableHead, TableBody, TableCell, Input } from '@/components/ui/core';
+import { useEffect, useState } from 'react';
+import { useSummary, useGenerateSummary, useSessions, useCreateSession, useBulkDeleteSessions, useLogs, useFilters, useBulkDeleteLogs } from '@/hooks/use-marm-queries';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, Badge, Button, Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, Select, SelectTrigger, SelectValue, SelectContent, SelectItem, Table, TableHeader, TableRow, TableHead, TableBody, TableCell, Input, cn } from '@/components/ui/core';
 import { format } from 'date-fns';
 import { RefreshCw, Eye, Trash2, Plus, Search } from 'lucide-react';
 import type { LogListParams } from '@/lib/marm-types';
-import { type ActionNotice, mutationErrorMessage, ActionNoticePanel } from './shared';
+import { type ActionNotice, mutationErrorMessage, ActionNoticePanel, DeleteSelectionDialog, MemoryEmptyState } from './shared';
 
 function SessionSummaryDialog({ session, open, onOpenChange }: { session: string | null, open: boolean, onOpenChange: (o: boolean) => void }) {
-  const { data, isLoading, isFetching, refetch } = useSummary(session || '');
+  const { data, isLoading, isError, error } = useSummary(session || '');
+  const generateSummary = useGenerateSummary();
+  const [actionNotice, setActionNotice] = useState<ActionNotice | null>(null);
+
+  useEffect(() => {
+    setActionNotice(null);
+  }, [open, session]);
+
+  const handleGenerate = () => {
+    if (!session) return;
+    setActionNotice(null);
+    generateSummary.mutate(session, {
+      onSuccess: (result) => {
+        if (result.status === 'empty') {
+          setActionNotice({
+            kind: 'warning',
+            message: result.message || 'This session has no structured logs to summarize.',
+          });
+          return;
+        }
+        setActionNotice({
+          kind: 'success',
+          message: data?.summary ? 'Session summary refreshed.' : 'Session summary generated.',
+        });
+      },
+      onError: (generateError) => {
+        setActionNotice({ kind: 'error', message: mutationErrorMessage(generateError) });
+      },
+    });
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -18,26 +47,40 @@ function SessionSummaryDialog({ session, open, onOpenChange }: { session: string
         </DialogHeader>
         {isLoading ? (
           <div className="p-8 text-center text-muted-foreground">Loading summary...</div>
+        ) : isError ? (
+          <ActionNoticePanel notice={{ kind: 'error', message: mutationErrorMessage(error) }} />
         ) : (
-          <div className="flex-1 overflow-auto space-y-4">
-            <div className="flex items-center gap-2 flex-wrap">
-              <Badge variant={data?.is_dirty ? 'secondary' : 'default'} className="text-[10px] uppercase">
-                {data?.is_dirty ? 'Stale — recompute pending' : 'Fresh'}
-              </Badge>
-              <span className="text-xs text-muted-foreground">{data?.entry_count} entries summarized</span>
-              {data?.generated_at && (
-                <span className="text-xs text-muted-foreground">· generated {format(new Date(data.generated_at), 'MMM d, HH:mm')}</span>
-              )}
-            </div>
-            <div className="p-4 bg-muted/30 rounded-md text-sm whitespace-pre-wrap font-mono">
-              {data?.summary || 'No summary generated yet.'}
-            </div>
+          <div aria-busy={generateSummary.isPending} className={cn('relative flex-1 overflow-auto space-y-4', generateSummary.isPending && 'summary-scanning')}>
+            {data?.summary ? (
+              <>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Badge variant={data.is_dirty ? 'secondary' : 'default'} className="text-[10px] uppercase">
+                    {data.is_dirty ? 'Stale — refresh available' : 'Fresh'}
+                  </Badge>
+                  <span className="text-xs text-muted-foreground">{data.entry_count} entries summarized</span>
+                  {data.generated_at && (
+                    <span className="text-xs text-muted-foreground">· generated {format(new Date(data.generated_at), 'MMM d, HH:mm')}</span>
+                  )}
+                </div>
+                <div className="p-4 bg-muted/30 rounded-md text-sm whitespace-pre-wrap font-mono">
+                  {data.summary}
+                </div>
+              </>
+            ) : (
+              <div className="rounded-xl border border-dashed border-border bg-muted/20 p-8 text-center">
+                <p className="text-sm font-medium">No summary cached yet</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Generate one from this session&apos;s structured logs.
+                </p>
+              </div>
+            )}
+            <ActionNoticePanel notice={actionNotice} />
           </div>
         )}
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
-          <Button onClick={() => refetch()} isLoading={isFetching}>
-            <RefreshCw className="w-4 h-4 mr-2" /> Regenerate
+          <Button onClick={handleGenerate} isLoading={generateSummary.isPending} disabled={!session || isLoading}>
+            <RefreshCw className="w-4 h-4 mr-2" /> {data?.summary ? 'Refresh Summary' : 'Generate Summary'}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -49,9 +92,30 @@ export function SessionsTab() {
   const { data, isLoading } = useSessions();
   const [summarySession, setSummarySession] = useState<string | null>(null);
   const [actionNotice, setActionNotice] = useState<ActionNotice | null>(null);
+  const [selectedNames, setSelectedNames] = useState<Set<string>>(new Set());
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const createSession = useCreateSession();
-  const deleteSession = useDeleteSession();
-  const deleteAllSessions = useDeleteAllSessions();
+  const bulkDelete = useBulkDeleteSessions();
+
+  useEffect(() => {
+    if (!data) return;
+    const visibleNames = new Set(data.map((session) => session.name));
+    setSelectedNames((previous) => {
+      const next = new Set(Array.from(previous).filter((name) => visibleNames.has(name)));
+      return next.size === previous.size ? previous : next;
+    });
+  }, [data]);
+
+  const allSelected = !!data?.length && data.every((session) => selectedNames.has(session.name));
+
+  const toggleSession = (name: string) => {
+    setSelectedNames((previous) => {
+      const next = new Set(previous);
+      if (next.has(name)) next.delete(name);
+      else next.add(name);
+      return next;
+    });
+  };
 
   const handleCreateSession = () => {
     const name = prompt('Session name');
@@ -62,31 +126,19 @@ export function SessionsTab() {
     });
   };
 
-  const handleDeleteSession = (name: string) => {
-    const typed = prompt(`Type DELETE to delete session '${name}' and its log-backed memories.`);
-    if (typed !== 'DELETE') return;
-    deleteSession.mutate(name, {
+  const confirmDelete = () => {
+    const names = Array.from(selectedNames);
+    if (!names.length) return;
+    bulkDelete.mutate(names, {
       onSuccess: (result) => {
+        const failed = result.failed_sessions.length;
+        setDeleteOpen(false);
+        setSelectedNames(new Set(result.failed_sessions.map((item) => item.session_name)));
         setActionNotice({
-          kind: 'success',
-          message: `Session '${name}' deleted. ${result.deleted_count} log entries and ${result.memories_deleted} semantic log memories removed.`,
-        });
-      },
-      onError: (error) => setActionNotice({ kind: 'error', message: mutationErrorMessage(error) }),
-    });
-  };
-
-  const handleDeleteAllSessions = () => {
-    const typed = prompt('Type DELETE_ALL to delete every session and its log-backed memories.');
-    if (typed !== 'DELETE_ALL') return;
-    deleteAllSessions.mutate(undefined, {
-      onSuccess: (result) => {
-        const failed = result.failed_sessions?.length ?? 0;
-        setActionNotice({
-          kind: failed ? 'error' : 'success',
+          kind: failed ? 'warning' : 'success',
           message: failed
-            ? `${result.deleted_sessions} sessions deleted, ${failed} failed. ${result.deleted_count} log entries and ${result.memories_deleted} semantic log memories removed.`
-            : `${result.deleted_sessions} sessions deleted. ${result.deleted_count} log entries and ${result.memories_deleted} semantic log memories removed.`,
+            ? `${result.deleted_sessions} sessions deleted; ${failed} could not be deleted.`
+            : `${result.deleted_sessions} sessions deleted with ${result.deleted_count} log entries and ${result.memories_deleted} semantic log memories.`,
         });
       },
       onError: (error) => setActionNotice({ kind: 'error', message: mutationErrorMessage(error) }),
@@ -96,31 +148,54 @@ export function SessionsTab() {
   if (isLoading) return <div className="p-8 text-center text-muted-foreground">Loading sessions...</div>;
 
   return (
-    <div className="h-full overflow-auto pb-4 space-y-4">
-      <div className="flex items-center justify-between gap-3">
-        <ActionNoticePanel notice={actionNotice} />
+    <div className="h-full space-y-4 overflow-auto pb-4">
+      <div className="flex items-center justify-between gap-3 rounded-xl border border-card-border bg-card/70 p-2 shadow-[0_12px_34px_rgba(0,0,0,0.14)]">
+        <label className="flex cursor-pointer items-center gap-2 px-2 text-xs text-muted-foreground">
+          <input
+            type="checkbox"
+            checked={allSelected}
+            onChange={() => setSelectedNames(allSelected ? new Set() : new Set(data?.map((session) => session.name)))}
+            className="rounded border-input bg-background"
+          />
+          Select all sessions
+        </label>
         <div className="flex gap-2">
-          <Button
-            size="sm"
-            variant="outline"
-            className="text-destructive hover:text-destructive"
-            onClick={handleDeleteAllSessions}
-            isLoading={deleteAllSessions.isPending}
-          >
-            <Trash2 className="w-4 h-4 mr-2" /> Delete All
-          </Button>
-          <Button size="sm" onClick={handleCreateSession} isLoading={createSession.isPending}>
-            <Plus className="w-4 h-4 mr-2" /> New Session
-          </Button>
+          {selectedNames.size > 0 ? (
+            <Button className="bulk-action-enter" size="sm" variant="destructive" onClick={() => setDeleteOpen(true)}>
+              <Trash2 className="w-4 h-4 mr-2" /> Delete {selectedNames.size}
+            </Button>
+          ) : (
+            <Button size="sm" onClick={handleCreateSession} isLoading={createSession.isPending}>
+              <Plus className="w-4 h-4 mr-2" /> New Session
+            </Button>
+          )}
         </div>
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 content-start">
-        {data?.map(session => (
-          <Card key={session.name} className={session.active ? 'border-primary' : ''}>
+      <ActionNoticePanel notice={actionNotice} />
+      {data?.length ? (
+        <div className="grid content-start grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {data.map(session => (
+          <Card
+            key={session.name}
+            className={cn(
+              'group border-t-2 border-t-border transition-[border-color,transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-[0_20px_50px_rgba(0,0,0,0.24)]',
+              session.active && 'border-primary/35 border-t-primary shadow-[inset_0_1px_0_rgba(var(--primary-rgb),0.12)]',
+              selectedNames.has(session.name) && 'bg-primary/[0.045] ring-1 ring-primary/25'
+            )}
+          >
           <CardHeader className="pb-2">
             <div className="flex justify-between items-start">
               <CardTitle className="font-mono text-base">{session.name}</CardTitle>
-              {session.active && <Badge className="text-[10px]">Active</Badge>}
+              <div className="flex items-center gap-2">
+                {session.active && <Badge className="text-[10px]">Active</Badge>}
+                <input
+                  type="checkbox"
+                  checked={selectedNames.has(session.name)}
+                  onChange={() => toggleSession(session.name)}
+                  aria-label={`Select session ${session.name}`}
+                  className="rounded border-input bg-background"
+                />
+              </div>
             </div>
             <CardDescription className="text-xs">
               Last active: {format(new Date(session.last_accessed_at), 'MMM d, HH:mm')}
@@ -128,12 +203,12 @@ export function SessionsTab() {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-2 gap-2 text-sm mt-2">
-              <div className="p-2 bg-muted/30 rounded flex flex-col items-center justify-center">
-                <span className="text-xl font-bold">{session.memory_count}</span>
+              <div className="flex flex-col items-center justify-center rounded-lg border border-border/60 bg-background/45 p-2">
+                <span className="font-mono text-xl font-semibold">{session.memory_count}</span>
                 <span className="text-xs text-muted-foreground">Memories</span>
               </div>
-              <div className="p-2 bg-muted/30 rounded flex flex-col items-center justify-center">
-                <span className="text-xl font-bold">{session.compaction_count}</span>
+              <div className="flex flex-col items-center justify-center rounded-lg border border-border/60 bg-background/45 p-2">
+                <span className="font-mono text-xl font-semibold">{session.compaction_count}</span>
                 <span className="text-xs text-muted-foreground">Compactions</span>
               </div>
             </div>
@@ -145,25 +220,28 @@ export function SessionsTab() {
                 </div>
               </div>
             )}
-            <div className="grid grid-cols-2 gap-2 mt-4">
-              <Button variant="outline" size="sm" onClick={() => setSummarySession(session.name)}>
+            <div className="mt-4">
+              <Button className="w-full" variant="outline" size="sm" onClick={() => setSummarySession(session.name)}>
                 <Eye className="w-4 h-4 mr-2" /> Summary
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-destructive hover:text-destructive"
-                onClick={() => handleDeleteSession(session.name)}
-                isLoading={deleteSession.isPending}
-              >
-                <Trash2 className="w-4 h-4 mr-2" /> Delete
               </Button>
             </div>
           </CardContent>
           </Card>
-        ))}
-      </div>
+          ))}
+        </div>
+      ) : (
+        <MemoryEmptyState title="No sessions yet" detail="Create a session to begin a new context workspace." className="min-h-64 border border-dashed border-primary/15 bg-card/45" />
+      )}
       <SessionSummaryDialog session={summarySession} open={!!summarySession} onOpenChange={(o) => !o && setSummarySession(null)} />
+      <DeleteSelectionDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        count={selectedNames.size}
+        itemLabel="session"
+        description="Deleting a session also removes its structured logs and semantic log memories. Other stored memories are not deleted."
+        isPending={bulkDelete.isPending}
+        onConfirm={confirmDelete}
+      />
     </div>
   );
 }
@@ -173,31 +251,45 @@ export function LogsTab() {
   const { data, isLoading } = useLogs(params);
   const { data: filters } = useFilters();
   const [actionNotice, setActionNotice] = useState<ActionNotice | null>(null);
-  const deleteLog = useDeleteLog();
-  const deleteAllLogs = useDeleteAllLogs();
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const bulkDelete = useBulkDeleteLogs();
 
-  const handleDeleteLog = (id: number, sessionName: string) => {
-    const typed = prompt(`Type DELETE to delete log entry ${id}.`);
-    if (typed !== 'DELETE') return;
-    deleteLog.mutate({ id, sessionName }, {
-      onSuccess: (result) => {
-        setActionNotice({
-          kind: 'success',
-          message: `Log ${result.log_id} deleted. ${result.memories_deleted} semantic log memories removed.`,
-        });
-      },
-      onError: (error) => setActionNotice({ kind: 'error', message: mutationErrorMessage(error) }),
+  useEffect(() => {
+    if (!data) return;
+    const visibleIds = new Set(data.map((log) => log.id));
+    setSelectedIds((previous) => {
+      const next = new Set(Array.from(previous).filter((id) => visibleIds.has(id)));
+      return next.size === previous.size ? previous : next;
+    });
+  }, [data]);
+
+  const allSelected = !!data?.length && data.every((log) => selectedIds.has(log.id));
+
+  const toggleLog = (id: number) => {
+    setSelectedIds((previous) => {
+      const next = new Set(previous);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
     });
   };
 
-  const handleDeleteAllLogs = () => {
-    const typed = prompt('Type DELETE_ALL to delete every log entry.');
-    if (typed !== 'DELETE_ALL') return;
-    deleteAllLogs.mutate(undefined, {
+  const confirmDelete = () => {
+    const logs = (data ?? [])
+      .filter((log) => selectedIds.has(log.id))
+      .map((log) => ({ id: log.id, session_name: log.session_name }));
+    if (!logs.length) return;
+    bulkDelete.mutate(logs, {
       onSuccess: (result) => {
+        const failedIds = new Set(result.failed_logs.map((item) => Number(item.log_id)));
+        setDeleteOpen(false);
+        setSelectedIds(failedIds);
         setActionNotice({
-          kind: 'success',
-          message: `${result.deleted_count} log entries deleted. ${result.memories_deleted} semantic log memories removed.`,
+          kind: result.failed_logs.length ? 'warning' : 'success',
+          message: result.failed_logs.length
+            ? `${result.deleted_count} logs deleted; ${result.failed_logs.length} could not be deleted.`
+            : `${result.deleted_count} logs and ${result.memories_deleted} semantic log memories deleted.`,
         });
       },
       onError: (error) => setActionNotice({ kind: 'error', message: mutationErrorMessage(error) }),
@@ -205,20 +297,19 @@ export function LogsTab() {
   };
 
   return (
-    <div className="space-y-4 h-full flex flex-col">
-      <ActionNoticePanel notice={actionNotice} />
-      <div className="flex gap-4 items-center shrink-0">
+    <div className="flex h-full flex-col gap-4">
+      <div className="flex shrink-0 items-center gap-3 rounded-xl border border-card-border bg-card/70 p-2 shadow-[0_12px_34px_rgba(0,0,0,0.14)]">
         <div className="relative flex-1">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input 
             placeholder="Search logs..." 
-            className="pl-9 bg-background"
+            className="border-transparent bg-background/65 pl-9 hover:border-primary/25"
             value={params.q || ''}
             onChange={e => setParams(p => ({ ...p, q: e.target.value || undefined }))}
           />
         </div>
         <Select value={params.session || "all"} onValueChange={v => setParams(p => ({ ...p, session: v === "all" ? undefined : v }))}>
-          <SelectTrigger className="w-[180px] bg-background">
+          <SelectTrigger className="w-[180px] border-transparent bg-background/65">
             <SelectValue placeholder="Session" />
           </SelectTrigger>
           <SelectContent>
@@ -226,34 +317,49 @@ export function LogsTab() {
             {filters?.sessions.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
           </SelectContent>
         </Select>
-        <Button
-          variant="outline"
-          className="text-destructive hover:text-destructive"
-          onClick={handleDeleteAllLogs}
-          isLoading={deleteAllLogs.isPending}
-        >
-          <Trash2 className="w-4 h-4 mr-2" /> Delete All
-        </Button>
+        {selectedIds.size > 0 && (
+          <Button className="bulk-action-enter" variant="destructive" onClick={() => setDeleteOpen(true)}>
+            <Trash2 className="w-4 h-4 mr-2" /> Delete {selectedIds.size}
+          </Button>
+        )}
       </div>
+      <ActionNoticePanel notice={actionNotice} />
 
-      <div className="border rounded-md bg-card flex-1 overflow-auto">
+      <div className="min-h-0 flex-1 overflow-auto rounded-xl shadow-[0_18px_50px_rgba(0,0,0,0.16)] [&>div]:min-h-full [&>div]:border-card-border [&>div]:border-t-primary/35">
         <Table>
-          <TableHeader className="sticky top-0 z-10 bg-muted/80 backdrop-blur">
+          <TableHeader className="sticky top-0 z-10 bg-card/95 backdrop-blur-xl">
             <TableRow>
+              <TableHead className="w-[40px] pl-4">
+                <input
+                  type="checkbox"
+                  checked={allSelected}
+                  onChange={() => setSelectedIds(allSelected ? new Set() : new Set(data?.map((log) => log.id)))}
+                  aria-label="Select all visible logs"
+                  className="rounded border-input bg-background"
+                />
+              </TableHead>
               <TableHead>Time</TableHead>
               <TableHead>Topic / Context</TableHead>
               <TableHead>Summary</TableHead>
-              <TableHead className="w-[80px]" />
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
               <TableRow><TableCell colSpan={4} className="h-24 text-center text-muted-foreground">Loading logs...</TableCell></TableRow>
             ) : data?.length === 0 ? (
-              <TableRow><TableCell colSpan={4} className="h-24 text-center text-muted-foreground">No logs found</TableCell></TableRow>
+              <TableRow><TableCell colSpan={4} className="p-4"><MemoryEmptyState title="No logs found" detail="Structured session activity will appear here." /></TableCell></TableRow>
             ) : (
               data?.map(l => (
-                <TableRow key={l.id}>
+                <TableRow key={l.id} className={cn('transition-colors duration-200', selectedIds.has(l.id) && 'bg-blue-400/[0.055] shadow-[inset_3px_0_0_rgba(96,165,250,0.65)]')}>
+                  <TableCell className="w-[40px] pl-4">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(l.id)}
+                      onChange={() => toggleLog(l.id)}
+                      aria-label={`Select log ${l.id}`}
+                      className="rounded border-input bg-background"
+                    />
+                  </TableCell>
                   <TableCell className="w-[100px] font-mono text-xs text-muted-foreground">{format(new Date(l.date), 'MMM d, HH:mm')}</TableCell>
                   <TableCell>
                     <div className="flex gap-2 mb-1">
@@ -262,23 +368,21 @@ export function LogsTab() {
                     </div>
                   </TableCell>
                   <TableCell className="text-sm line-clamp-2">{l.summary || l.entry}</TableCell>
-                  <TableCell className="text-right">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-destructive hover:text-destructive"
-                      onClick={() => handleDeleteLog(l.id, l.session_name)}
-                      isLoading={deleteLog.isPending}
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </TableCell>
                 </TableRow>
               ))
             )}
           </TableBody>
         </Table>
       </div>
+      <DeleteSelectionDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        count={selectedIds.size}
+        itemLabel="log"
+        description="The selected structured logs and their semantic memory copies will be removed permanently."
+        isPending={bulkDelete.isPending}
+        onConfirm={confirmDelete}
+      />
     </div>
   );
 }

@@ -82,6 +82,12 @@ def overview(db_path: Path) -> dict:
             "SELECT COUNT(*) FROM memories WHERE embedding IS NULL"
         ).fetchone()[0]
         sessions = connection.execute("SELECT COUNT(*) FROM sessions").fetchone()[0]
+        log_entries = connection.execute("SELECT COUNT(*) FROM log_entries").fetchone()[
+            0
+        ]
+        notebook_entries = connection.execute(
+            "SELECT COUNT(*) FROM notebook_entries"
+        ).fetchone()[0]
         pending_compaction = connection.execute(
             "SELECT COUNT(*) FROM compaction_staging WHERE status IN ('pending_summary', 'ready')"
         ).fetchone()[0]
@@ -107,6 +113,8 @@ def overview(db_path: Path) -> dict:
         "staged_compaction": staged_compaction,
         "missing_embeddings": missing_embeddings,
         "sessions": sessions,
+        "log_entries": log_entries,
+        "notebook_entries": notebook_entries,
         "projects": projects,
         "platforms": platforms,
     }

@@ -6,6 +6,9 @@
 // error / empty states rather than assuming data exists.
 
 import type {
+  BulkLogDeleteResult,
+  BulkNotebookDeleteResult,
+  BulkSessionDeleteResult,
   CodeSearchInput,
   CodeSearchResult,
   CompactionAction,
@@ -33,6 +36,7 @@ import type {
   MemoryListResponse,
   Neighborhood,
   NotebookEntry,
+  NotebookDeleteRef,
   NotebookInput,
   Overview,
   ProjectArchitecture,
@@ -149,14 +153,12 @@ export function createMarmClient(config: MarmClientConfig) {
         `/sessions/${encodeURIComponent(name)}`,
         { body: { confirm: 'DELETE' } },
       ),
+    bulkDeleteSessions: (names: string[]) =>
+      request<BulkSessionDeleteResult>(config, 'POST', '/sessions/bulk-delete', {
+        body: { session_names: names, confirm: 'DELETE' },
+      }),
     deleteAllSessions: () =>
-      request<{
-        status: string;
-        deleted_sessions: number;
-        deleted_count: number;
-        memories_deleted: number;
-        failed_sessions: Array<{ session_name: string; status_code: number; message: string }>;
-      }>(
+      request<BulkSessionDeleteResult>(
         config,
         'DELETE',
         '/sessions',
@@ -171,6 +173,10 @@ export function createMarmClient(config: MarmClientConfig) {
         `/logs/${encodeURIComponent(String(id))}`,
         { body: { session_name: sessionName, confirm: 'DELETE' } },
       ),
+    bulkDeleteLogs: (logs: Array<{ id: number; session_name: string }>) =>
+      request<BulkLogDeleteResult>(config, 'POST', '/logs/bulk-delete', {
+        body: { logs: logs.map((log) => ({ ...log, id: String(log.id) })), confirm: 'DELETE' },
+      }),
     deleteAllLogs: () =>
       request<{ deleted_count: number; memories_deleted: number }>(
         config,
@@ -191,8 +197,14 @@ export function createMarmClient(config: MarmClientConfig) {
           platform: params?.platform,
         },
       }),
+    bulkDeleteNotebookEntries: (entries: NotebookDeleteRef[]) =>
+      request<BulkNotebookDeleteResult>(config, 'POST', '/notebook/bulk-delete', {
+        body: { entries, confirm: 'DELETE' },
+      }),
     getSummary: (session: string) =>
       request<SessionSummary>(config, 'GET', `/summaries/${encodeURIComponent(session)}`),
+    generateSummary: (session: string) =>
+      request<SessionSummary>(config, 'POST', `/summaries/${encodeURIComponent(session)}/generate`),
 
     // Compaction
     listCompaction: () => request<CompactionCandidate[]>(config, 'GET', '/compaction'),

@@ -6,7 +6,12 @@ from fastapi import APIRouter, HTTPException
 
 from .. import memory_store
 from ..core import _mcp_tool_mutation, get_memory_db_path
-from ..models import BulkDeletePayload, SessionCreatePayload, SessionDeletePayload
+from ..models import (
+    BulkDeletePayload,
+    SessionBulkDeletePayload,
+    SessionCreatePayload,
+    SessionDeletePayload,
+)
 
 router = APIRouter()
 
@@ -42,6 +47,39 @@ def delete_session(session_name: str, payload: SessionDeletePayload) -> dict:
         "session_name": session_name,
         "deleted_count": result.get("deleted_count", 0),
         "memories_deleted": result.get("memories_deleted", 0),
+    }
+
+
+@router.post("/api/sessions/bulk-delete")
+def delete_selected_sessions(payload: SessionBulkDeletePayload) -> dict:
+    deleted_sessions = 0
+    deleted_logs = 0
+    deleted_memories = 0
+    failed_sessions: list[dict] = []
+    for session_name in dict.fromkeys(payload.session_names):
+        try:
+            result = _mcp_tool_mutation(
+                "marm_delete",
+                {"type": "log", "target": session_name},
+            )
+        except HTTPException as exc:
+            failed_sessions.append(
+                {
+                    "session_name": session_name,
+                    "status_code": exc.status_code,
+                    "message": str(exc.detail),
+                }
+            )
+            continue
+        deleted_sessions += 1
+        deleted_logs += int(result.get("deleted_count", 0) or 0)
+        deleted_memories += int(result.get("memories_deleted", 0) or 0)
+    return {
+        "status": "partial_success" if failed_sessions else "success",
+        "deleted_sessions": deleted_sessions,
+        "deleted_count": deleted_logs,
+        "memories_deleted": deleted_memories,
+        "failed_sessions": failed_sessions,
     }
 
 
