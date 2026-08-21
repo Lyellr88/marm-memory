@@ -4,7 +4,10 @@ import { Badge, Button, Input, Textarea, Card, CardContent, cn } from '@/compone
 import { format } from 'date-fns';
 import { Plus, Save, Trash2, RefreshCw, CheckCircle2, Eye, XCircle, BookOpenText } from 'lucide-react';
 import type { NotebookEntry } from '@/lib/marm-types';
-import { type ActionNotice, mutationErrorMessage, ActionNoticePanel, DeleteSelectionDialog, MemoryEmptyState } from './shared';
+import { type ActionNotice, mutationErrorMessage, ActionNoticePanel, DeleteSelectionDialog, MemoryEmptyState, PageControls } from './shared';
+
+const NOTEBOOK_PAGE_SIZE = 20;
+const COMPACTION_PAGE_SIZE = 25;
 
 function notebookKey(entry: Pick<NotebookEntry, 'name' | 'session_name' | 'project' | 'platform'>) {
   return JSON.stringify([entry.name, entry.session_name, entry.project, entry.platform]);
@@ -17,6 +20,7 @@ export function NotebookTab() {
   const [actionNotice, setActionNotice] = useState<ActionNotice | null>(null);
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [page, setPage] = useState(0);
   
   const [editing, setEditing] = useState<NotebookEntry | Partial<NotebookEntry> | null>(null);
   // name/session_name/project/platform form the entry's identity key in the
@@ -25,16 +29,23 @@ export function NotebookTab() {
   // entry and leave the original behind instead of updating it.
   const isExistingEntry = !!editing?.created_at;
 
+  const total = data?.length ?? 0;
+  const pageCount = Math.max(1, Math.ceil(total / NOTEBOOK_PAGE_SIZE));
+  const visibleEntries = data?.slice(page * NOTEBOOK_PAGE_SIZE, (page + 1) * NOTEBOOK_PAGE_SIZE) ?? [];
+
   useEffect(() => {
-    if (!data) return;
-    const visibleKeys = new Set(data.map(notebookKey));
+    if (page >= pageCount) setPage(pageCount - 1);
+  }, [page, pageCount]);
+
+  useEffect(() => {
+    const visibleKeys = new Set(visibleEntries.map(notebookKey));
     setSelectedKeys((previous) => {
       const next = new Set(Array.from(previous).filter((key) => visibleKeys.has(key)));
       return next.size === previous.size ? previous : next;
     });
-  }, [data]);
+  }, [data, page]);
 
-  const allSelected = !!data?.length && data.every((entry) => selectedKeys.has(notebookKey(entry)));
+  const allSelected = !!visibleEntries.length && visibleEntries.every((entry) => selectedKeys.has(notebookKey(entry)));
 
   const toggleEntry = (entry: NotebookEntry) => {
     const key = notebookKey(entry);
@@ -47,7 +58,7 @@ export function NotebookTab() {
   };
 
   const confirmDelete = () => {
-    const entries = (data ?? [])
+    const entries = visibleEntries
       .filter((entry) => selectedKeys.has(notebookKey(entry)))
       .map(({ name, session_name, project, platform }) => ({ name, session_name, project, platform }));
     if (!entries.length) return;
@@ -102,7 +113,7 @@ export function NotebookTab() {
               <input
                 type="checkbox"
                 checked={allSelected}
-                onChange={() => setSelectedKeys(allSelected ? new Set() : new Set(data.map(notebookKey)))}
+                onChange={() => setSelectedKeys(allSelected ? new Set() : new Set(visibleEntries.map(notebookKey)))}
                 className="rounded border-input bg-background"
               />
               Select all
@@ -122,12 +133,12 @@ export function NotebookTab() {
       <ActionNoticePanel notice={actionNotice} />
 
       <div className="grid flex-1 grid-cols-1 gap-4 overflow-hidden lg:grid-cols-4">
-        <div className="overflow-auto rounded-xl border border-card-border border-t-primary/35 bg-card/75 shadow-[0_18px_50px_rgba(0,0,0,0.16)] lg:col-span-1">
-          {data?.length === 0 ? (
+        <div className="flex flex-col overflow-hidden rounded-xl border border-card-border border-t-primary/35 bg-card/75 shadow-[0_18px_50px_rgba(0,0,0,0.16)] lg:col-span-1">
+          {total === 0 ? (
             <MemoryEmptyState title="No notebook entries" detail="Pin durable reference material here." className="min-h-full" />
           ) : (
-            <div className="divide-y">
-              {data?.map(note => (
+            <div className="min-h-0 flex-1 overflow-auto divide-y">
+              {visibleEntries.map(note => (
                 <div
                   key={notebookKey(note)}
                   className={cn(
@@ -153,6 +164,15 @@ export function NotebookTab() {
                 </div>
               ))}
             </div>
+          )}
+          {total > 0 && (
+            <PageControls
+              page={page}
+              pageSize={NOTEBOOK_PAGE_SIZE}
+              total={total}
+              itemLabel="entries"
+              onPageChange={setPage}
+            />
           )}
         </div>
 
@@ -261,6 +281,7 @@ export function CompactionTab() {
   const { data, isLoading } = useCompaction();
   const runAction = useRunCompactionAction();
   const [view, setView] = useState<'active' | 'history'>('active');
+  const [page, setPage] = useState(0);
   const [actionNotice, setActionNotice] = useState<ActionNotice | null>(null);
 
   const handleCompactionAction = (id: string, action: 'stage' | 'apply' | 'discard') => {
@@ -273,10 +294,17 @@ export function CompactionTab() {
     });
   };
 
-  if (isLoading) return <div className="p-8 text-center text-muted-foreground">Loading candidates...</div>;
-
   const pending = data?.filter(c => c.status === 'pending' || c.status === 'staged') || [];
   const history = data?.filter(c => c.status === 'applied' || c.status === 'discarded' || c.status === 'stale' || c.status === 'nudge_exhausted') || [];
+  const candidates = view === 'history' ? history : pending;
+  const pageCount = Math.max(1, Math.ceil(candidates.length / COMPACTION_PAGE_SIZE));
+  const visibleCandidates = candidates.slice(page * COMPACTION_PAGE_SIZE, (page + 1) * COMPACTION_PAGE_SIZE);
+
+  useEffect(() => {
+    if (page >= pageCount) setPage(pageCount - 1);
+  }, [page, pageCount]);
+
+  if (isLoading) return <div className="p-8 text-center text-muted-foreground">Loading candidates...</div>;
 
   return (
     <div className="h-full space-y-4 overflow-auto pb-4">
@@ -286,10 +314,10 @@ export function CompactionTab() {
           <p className="text-sm text-muted-foreground">Review and apply memory summaries</p>
         </div>
         <div className="flex gap-1 border rounded-md p-1 bg-muted/30">
-          <Button size="sm" variant={view === 'active' ? 'secondary' : 'ghost'} onClick={() => setView('active')}>
+          <Button size="sm" variant={view === 'active' ? 'secondary' : 'ghost'} onClick={() => { setView('active'); setPage(0); }}>
             Active ({pending.length})
           </Button>
-          <Button size="sm" variant={view === 'history' ? 'secondary' : 'ghost'} onClick={() => setView('history')}>
+          <Button size="sm" variant={view === 'history' ? 'secondary' : 'ghost'} onClick={() => { setView('history'); setPage(0); }}>
             History ({history.length})
           </Button>
         </div>
@@ -305,7 +333,7 @@ export function CompactionTab() {
           </Card>
         ) : (
           <div className="space-y-2">
-            {history.map(c => <CompactionHistoryRow key={c.id} candidate={c} />)}
+            {visibleCandidates.map(c => <CompactionHistoryRow key={c.id} candidate={c} />)}
           </div>
         )
       ) : pending.length === 0 ? (
@@ -316,7 +344,7 @@ export function CompactionTab() {
         </Card>
       ) : (
         <div className="space-y-4">
-          {pending.map(candidate => (
+          {visibleCandidates.map(candidate => (
             <Card
               key={candidate.id}
               className={cn(
@@ -372,6 +400,15 @@ export function CompactionTab() {
             </Card>
           ))}
         </div>
+      )}
+      {candidates.length > 0 && (
+        <PageControls
+          page={page}
+          pageSize={COMPACTION_PAGE_SIZE}
+          total={candidates.length}
+          itemLabel={view === 'history' ? 'history entries' : 'active candidates'}
+          onPageChange={setPage}
+        />
       )}
     </div>
   );

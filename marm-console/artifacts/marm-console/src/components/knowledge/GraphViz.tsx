@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react';
 import ForceGraph2D from 'react-force-graph-2d';
 import { forceCollide } from 'd3-force';
 import { Badge, Button } from '@/components/ui/core';
@@ -13,7 +13,6 @@ export function GraphViz({
   onNodeClick,
   focusedId,
   expandingId,
-  suppressBackgroundLinks,
 }: {
   neighborhood: Neighborhood;
   hiddenPredicates: Set<string>;
@@ -21,7 +20,6 @@ export function GraphViz({
   onNodeClick: (node: NeighborhoodNode) => void;
   focusedId: number | null;
   expandingId: number | null;
-  suppressBackgroundLinks: boolean;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const fgRef = useRef<any>(null);
@@ -30,6 +28,9 @@ export function GraphViz({
   const [paused, setPaused] = useState(false);
   const pausedRef = useRef(false);
   const didInitialFit = useRef(false);
+  const configuredGraphRef = useRef<unknown>(null);
+  const pendingConfiguredFitRef = useRef(false);
+  const hoverClearTimerRef = useRef<number | null>(null);
   const reducedMotion = useMemo(
     () => window.matchMedia('(prefers-reduced-motion: reduce)').matches,
     []
@@ -47,6 +48,12 @@ export function GraphViz({
     return () => obs.disconnect();
   }, []);
 
+  useEffect(() => () => {
+    if (hoverClearTimerRef.current !== null) {
+      window.clearTimeout(hoverClearTimerRef.current);
+    }
+  }, []);
+
   useEffect(() => {
     const fg = fgRef.current;
     if (!fg || !didInitialFit.current || dimensions.width === 0) return;
@@ -60,6 +67,11 @@ export function GraphViz({
     const visibleEdges = neighborhood.edges.filter(
       e => !hiddenPredicates.has(e.predicate) && visibleNodeIds.has(e.source) && visibleNodeIds.has(e.target)
     );
+    const visibleDegree = new Map<number, number>();
+    visibleEdges.forEach((edge) => {
+      visibleDegree.set(edge.source, (visibleDegree.get(edge.source) ?? 0) + 1);
+      visibleDegree.set(edge.target, (visibleDegree.get(edge.target) ?? 0) + 1);
+    });
     // Focused neighborhoods omit stranded nodes, but the atlas must retain
     // isolated entities returned by its overview contract.
     const connected = new Set<number>();
@@ -75,7 +87,7 @@ export function GraphViz({
           id: n.id,
           name: n.name,
           type: n.type,
-          degree: n.degree ?? n.mention_count,
+          degree: visibleDegree.get(n.id) ?? 0,
           hiddenNeighborCount: n.hidden_neighbor_count,
           isSeed: n.id === neighborhood.seed_id,
         };
@@ -123,9 +135,9 @@ export function GraphViz({
     );
   }, [gData.nodes]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const fg = fgRef.current;
-    if (!fg) return;
+    if (!fg || configuredGraphRef.current === gData) return;
     const nodeCount = Math.max(gData.nodes.length, 1);
     const denseAtlas = nodeCount > 300;
     const chargeDistance = denseAtlas
@@ -168,14 +180,19 @@ export function GraphViz({
         .strength(0.85)
         .iterations(2)
     );
+    configuredGraphRef.current = gData;
     didInitialFit.current = false;
-    if (!pausedRef.current) fg.d3ReheatSimulation();
-  }, [gData]);
+    if (!pausedRef.current) {
+      pendingConfiguredFitRef.current = true;
+      fg.d3ReheatSimulation();
+    }
+  }, [gData, dimensions.width, dimensions.height]);
 
   const handleEngineStop = useCallback(() => {
     const fg = fgRef.current;
     if (!fg) return;
-    if (!didInitialFit.current) {
+    if (pendingConfiguredFitRef.current && !didInitialFit.current) {
+      pendingConfiguredFitRef.current = false;
       didInitialFit.current = true;
       fg.zoomToFit(reducedMotion ? 0 : 500, 24);
       if (reducedMotion) {
@@ -192,7 +209,7 @@ export function GraphViz({
   }, [activeId, activeNeighbors]);
 
   const paintNode = useCallback((node: any, ctx: CanvasRenderingContext2D, globalScale: number) => {
-    const denseAtlasScale = suppressBackgroundLinks ? 1.25 : gData.nodes.length > 300 ? 0.62 : 1;
+    const denseAtlasScale = gData.nodes.length > 300 ? 1.25 : 1;
     const r = nodeRadius(node.degree) * denseAtlasScale;
     const color = typeColor(node.type);
     const dimmed = isDimmed(node.id);
@@ -249,15 +266,35 @@ export function GraphViz({
       }
     }
     ctx.globalAlpha = 1;
-  }, [activeId, focusedId, expandingId, isDimmed, labelledHubIds, gData.nodes.length, suppressBackgroundLinks]);
+  }, [activeId, focusedId, expandingId, isDimmed, labelledHubIds, gData.nodes.length]);
 
-  const paintPointerArea = useCallback((node: any, color: string, ctx: CanvasRenderingContext2D) => {
-    const denseAtlasScale = suppressBackgroundLinks ? 1.25 : gData.nodes.length > 300 ? 0.62 : 1;
+  const paintPointerArea = useCallback((node: any, color: string, ctx: CanvasRenderingContext2D, globalScale: number) => {
+    const denseAtlasScale = gData.nodes.length > 300 ? 1.25 : 1;
+    const nodeHitRadius = nodeRadius(node.degree) * denseAtlasScale;
+    const hitRadius = Math.max(
+      nodeHitRadius + 4,
+      Math.min(72, 15 / Math.max(globalScale, 0.05)),
+    );
     ctx.fillStyle = color;
     ctx.beginPath();
-    ctx.arc(node.x, node.y, nodeRadius(node.degree) * denseAtlasScale + (suppressBackgroundLinks ? 22 : 5), 0, 2 * Math.PI);
+    ctx.arc(node.x, node.y, hitRadius, 0, 2 * Math.PI);
     ctx.fill();
-  }, [gData.nodes.length, suppressBackgroundLinks]);
+  }, [gData.nodes.length]);
+
+  const handleNodeHover = useCallback((node: any) => {
+    if (hoverClearTimerRef.current !== null) {
+      window.clearTimeout(hoverClearTimerRef.current);
+      hoverClearTimerRef.current = null;
+    }
+    if (node) {
+      setHoverId(node.id);
+      return;
+    }
+    hoverClearTimerRef.current = window.setTimeout(() => {
+      setHoverId(null);
+      hoverClearTimerRef.current = null;
+    }, 140);
+  }, []);
 
   const linkColor = useCallback((link: any) => {
     const s = typeof link.source === 'object' ? link.source.id : link.source;
@@ -283,12 +320,11 @@ export function GraphViz({
   }, [activeId]);
 
   const linkVisible = useCallback((link: any) => {
-    if (!suppressBackgroundLinks) return true;
     if (activeId === null) return false;
     const s = typeof link.source === 'object' ? link.source.id : link.source;
     const t = typeof link.target === 'object' ? link.target.id : link.target;
     return s === activeId || t === activeId;
-  }, [activeId, suppressBackgroundLinks]);
+  }, [activeId]);
 
   const arrowLength = useCallback((link: any) => {
     if (link.predicate === 'co_occurs_with') return 0;
@@ -311,7 +347,7 @@ export function GraphViz({
   };
 
   return (
-    <div ref={containerRef} className="w-full h-full bg-[#040810] relative overflow-hidden rounded-md border border-primary/20">
+    <div ref={containerRef} className="knowledge-graph-surface w-full h-full relative overflow-hidden rounded-md border border-primary/25">
       {dimensions.width > 0 && (
         <ForceGraph2D
           ref={fgRef}
@@ -326,18 +362,19 @@ export function GraphViz({
           linkColor={linkColor}
           linkWidth={linkWidth}
           linkVisibility={linkVisible}
-          linkCurvature={suppressBackgroundLinks ? 0 : 0.12}
+          linkCurvature={0}
           linkDirectionalArrowLength={arrowLength}
           linkDirectionalArrowRelPos={1}
-          onNodeHover={(node: any) => setHoverId(node ? node.id : null)}
+          onNodeHover={handleNodeHover}
           onNodeClick={(node: any) => {
             const full = neighborhood.nodes.find((n) => n.id === node.id);
             if (full) onNodeClick(full);
           }}
           onBackgroundClick={() => setHoverId(null)}
           onEngineStop={handleEngineStop}
-          warmupTicks={gData.nodes.length > 300 ? 80 : 30}
+          warmupTicks={0}
           cooldownTicks={gData.nodes.length > 300 ? 320 : 180}
+          cooldownTime={2_400}
         />
       )}
       <div className="absolute top-4 left-4 flex gap-2 pointer-events-none">

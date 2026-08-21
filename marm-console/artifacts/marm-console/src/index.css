@@ -185,6 +185,40 @@ button:not(:disabled), a[href], [role='button']:not([aria-disabled='true']) { cu
 .success-pop { animation: success-pop 420ms cubic-bezier(0.16, 1, 0.3, 1) both; }
 .force-graph-container { background: #060b13; cursor: crosshair; }
 
+.knowledge-graph-surface {
+  background-color: #040810;
+  background-image:
+    radial-gradient(ellipse at 50% 115%, rgba(var(--primary-rgb), 0.10), transparent 48%),
+    radial-gradient(circle at 92% 8%, rgba(var(--primary-rgb), 0.08), transparent 24%),
+    linear-gradient(rgba(var(--primary-rgb), 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(var(--primary-rgb), 0.035) 1px, transparent 1px);
+  background-size: auto, auto, 42px 42px, 42px 42px;
+}
+
+.graph-metrics-rail { position: relative; }
+.graph-metrics-rail::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(110deg, rgba(var(--primary-rgb), 0.075), transparent 45%);
+}
+.graph-metric { position: relative; transition: transform 180ms ease, color 180ms ease; }
+.graph-metric:hover { transform: translateY(-1px); }
+.graph-metric::after {
+  content: '';
+  position: absolute;
+  bottom: -16px;
+  left: 24%;
+  right: 24%;
+  height: 1px;
+  opacity: 0;
+  background: var(--primary);
+  box-shadow: 0 0 12px rgba(var(--primary-rgb), 0.8);
+  transition: opacity 180ms ease;
+}
+.graph-metric:hover::after { opacity: 1; }
+
 .memory-tab {
   --memory-tab-rgb: var(--primary-rgb);
   --memory-tab-color: var(--primary);

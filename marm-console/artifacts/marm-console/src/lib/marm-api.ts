@@ -30,8 +30,8 @@ import type {
   ImpactResult,
   MergeDuplicateInput,
   IndexJob,
-  LogEntry,
   LogListParams,
+  LogListResponse,
   Memory,
   MemoryDeleteResult,
   MemoryId,
@@ -169,7 +169,7 @@ export function createMarmClient(config: MarmClientConfig) {
         { body: { confirm: 'DELETE_ALL' } },
       ),
     listLogs: (params?: LogListParams) =>
-      request<LogEntry[]>(config, 'GET', '/logs', { query: params }),
+      request<LogListResponse>(config, 'GET', '/logs', { query: params }),
     deleteLog: (id: number, sessionName: string) =>
       request<{ log_id: string; session_name: string; deleted_count: number; memories_deleted: number }>(
         config,

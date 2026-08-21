@@ -4,7 +4,9 @@ import { Badge, Button, Input, Select, SelectTrigger, SelectValue, SelectContent
 import { format } from 'date-fns';
 import { BrainCircuit, CircleAlert, FileText, Lightbulb, MessageSquareText, Search, Trash2, Plus, Edit2, Wrench } from 'lucide-react';
 import type { Memory, MemoryId, MemoryListParams } from '@/lib/marm-types';
-import { type ActionNotice, mutationErrorMessage, deleteNotice, ActionNoticePanel, DeleteSelectionDialog, MemoryEmptyState } from './shared';
+import { type ActionNotice, mutationErrorMessage, deleteNotice, ActionNoticePanel, DeleteSelectionDialog, MemoryEmptyState, PageControls } from './shared';
+
+const MEMORY_PAGE_SIZE = 100;
 
 function memoryContext(contextType: string | null) {
   const value = (contextType || 'general').toLowerCase();
@@ -81,8 +83,8 @@ function MemoryRow({
 }
 
 export function MemoriesTab() {
-  const [params, setParams] = useState<MemoryListParams>({ limit: 50 });
-  const { data, isLoading } = useMemories(params);
+  const [params, setParams] = useState<MemoryListParams>({ limit: MEMORY_PAGE_SIZE, offset: 0 });
+  const { data, isLoading, isFetching } = useMemories(params);
   const { data: filters } = useFilters();
   const [selectedMemory, setSelectedMemory] = useState<Memory | null>(null);
   const [freshMemoryId, setFreshMemoryId] = useState<MemoryId | null>(null);
@@ -107,6 +109,20 @@ export function MemoriesTab() {
       return changed ? next : prev;
     });
   }, [data?.items]);
+
+  useEffect(() => {
+    if (!data || !params.offset || params.offset < data.total) return;
+    setParams((previous) => ({
+      ...previous,
+      offset: Math.max(0, Math.floor((data.total - 1) / MEMORY_PAGE_SIZE) * MEMORY_PAGE_SIZE),
+    }));
+  }, [data, params.offset]);
+
+  const updateFilters = (updates: Partial<MemoryListParams>) => {
+    setParams((previous) => ({ ...previous, ...updates, limit: MEMORY_PAGE_SIZE, offset: 0 }));
+  };
+
+  const currentPage = Math.floor((data?.offset ?? params.offset ?? 0) / MEMORY_PAGE_SIZE);
 
   const allVisibleSelected = !!data?.items.length && data.items.every(m => selectedIds.has(m.id));
 
@@ -268,10 +284,10 @@ export function MemoriesTab() {
             placeholder="Search memories..." 
             className="border-transparent bg-background/65 pl-9 hover:border-primary/25"
             value={params.q || ''}
-            onChange={e => setParams(p => ({ ...p, q: e.target.value || undefined }))}
+            onChange={e => updateFilters({ q: e.target.value || undefined })}
           />
         </div>
-        <Select value={params.session || "all"} onValueChange={v => setParams(p => ({ ...p, session: v === "all" ? undefined : v }))}>
+        <Select value={params.session || "all"} onValueChange={v => updateFilters({ session: v === "all" ? undefined : v })}>
           <SelectTrigger className="w-[180px] border-transparent bg-background/65">
             <SelectValue placeholder="Session" />
           </SelectTrigger>
@@ -280,7 +296,7 @@ export function MemoriesTab() {
             {filters?.sessions.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
           </SelectContent>
         </Select>
-        <Select value={params.compaction_role || "all"} onValueChange={v => setParams(p => ({ ...p, compaction_role: v === "all" ? undefined : v as any }))}>
+        <Select value={params.compaction_role || "all"} onValueChange={v => updateFilters({ compaction_role: v === "all" ? undefined : v as any })}>
           <SelectTrigger className="w-[180px] border-transparent bg-background/65">
             <SelectValue placeholder="Compaction Role" />
           </SelectTrigger>
@@ -304,8 +320,9 @@ export function MemoriesTab() {
       </div>
       <ActionNoticePanel notice={actionNotice} />
 
-      <div className="min-h-0 flex-1 overflow-auto rounded-xl shadow-[0_18px_50px_rgba(0,0,0,0.16)] [&>div]:min-h-full [&>div]:border-card-border [&>div]:border-t-primary/35">
-        <Table>
+      <div className="min-h-0 flex flex-1 flex-col overflow-hidden rounded-xl border border-card-border border-t-primary/35 shadow-[0_18px_50px_rgba(0,0,0,0.16)]">
+        <div className="min-h-0 flex-1 overflow-auto">
+          <Table>
           <TableHeader className="sticky top-0 z-10 bg-card/95 backdrop-blur-xl">
             <TableRow>
               <TableHead className="w-[40px] pl-4">
@@ -342,7 +359,18 @@ export function MemoriesTab() {
               ))
             )}
           </TableBody>
-        </Table>
+          </Table>
+        </div>
+        {data && (
+          <PageControls
+            page={currentPage}
+            pageSize={MEMORY_PAGE_SIZE}
+            total={data.total}
+            itemLabel="memories"
+            isFetching={isFetching}
+            onPageChange={(page) => setParams((previous) => ({ ...previous, offset: page * MEMORY_PAGE_SIZE }))}
+          />
+        )}
       </div>
 
       <Dialog open={createMode} onOpenChange={setCreateMode}>

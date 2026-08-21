@@ -1,6 +1,6 @@
 import type { MemoryDeleteResult } from '@/lib/marm-types';
 import { useEffect, useId, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Sparkles, Trash2, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, Sparkles, Trash2, XCircle } from 'lucide-react';
 import {
   Button,
   Dialog,
@@ -89,6 +89,55 @@ export function MemoryEmptyState({
       </div>
       <p className="relative z-10 mt-3 text-sm font-medium text-foreground/90">{title}</p>
       {detail && <p className="relative z-10 mt-1 max-w-sm text-center text-xs text-muted-foreground">{detail}</p>}
+    </div>
+  );
+}
+
+export function PageControls({
+  page,
+  pageSize,
+  total,
+  itemLabel,
+  onPageChange,
+  isFetching = false,
+}: {
+  page: number;
+  pageSize: number;
+  total: number;
+  itemLabel: string;
+  onPageChange: (page: number) => void;
+  isFetching?: boolean;
+}) {
+  const rangeStart = total === 0 ? 0 : page * pageSize + 1;
+  const rangeEnd = Math.min((page + 1) * pageSize, total);
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+
+  return (
+    <div className="flex flex-col gap-3 border-t border-border/70 px-4 py-3 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:px-6">
+      <span>Showing {rangeStart}–{rangeEnd} of {total} {itemLabel}</span>
+      <div className="flex shrink-0 items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={page === 0 || isFetching}
+          onClick={() => onPageChange(page - 1)}
+          aria-label={`Previous ${itemLabel}`}
+        >
+          <ChevronLeft className="mr-1 h-4 w-4" /> Previous
+        </Button>
+        <span className="min-w-24 text-center font-mono text-foreground">
+          Page {page + 1} of {pageCount}
+        </span>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={page + 1 >= pageCount || isFetching}
+          onClick={() => onPageChange(page + 1)}
+          aria-label={`Next ${itemLabel}`}
+        >
+          Next <ChevronRight className="ml-1 h-4 w-4" />
+        </Button>
+      </div>
     </div>
   );
 }

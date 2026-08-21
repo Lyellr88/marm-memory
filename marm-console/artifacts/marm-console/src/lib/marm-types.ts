@@ -147,6 +147,13 @@ export interface LogListParams {
   offset?: number;
 }
 
+export interface LogListResponse {
+  items: LogEntry[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
 export interface NotebookEntry {
   name: string;
   content: string;

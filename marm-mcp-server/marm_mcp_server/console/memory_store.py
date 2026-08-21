@@ -341,8 +341,15 @@ def list_sessions(db_path: Path) -> list[dict]:
 
 
 def list_logs(
-    db_path: Path, *, q: str | None, session: str | None, limit: int
-) -> list[dict]:
+    db_path: Path,
+    *,
+    q: str | None,
+    session: str | None,
+    limit: int,
+    offset: int,
+) -> dict:
+    limit = min(max(limit, 1), 200)
+    offset = max(offset, 0)
     clauses: list[str] = []
     params: list[object] = []
     if session:
@@ -358,12 +365,15 @@ def list_logs(
         params.extend((escaped, escaped, escaped))
     where = " WHERE " + " AND ".join(clauses) if clauses else ""
     with closing(_connect(db_path)) as connection, connection:
+        total = connection.execute(
+            f"SELECT COUNT(*) FROM log_entries{where}", params
+        ).fetchone()[0]
         rows = connection.execute(
             f"""SELECT id, entry_date, topic, summary, full_entry, session_name, project, platform
-                FROM log_entries{where} ORDER BY entry_date DESC LIMIT ?""",
-            [*params, min(max(limit, 1), 200)],
+                FROM log_entries{where} ORDER BY entry_date DESC LIMIT ? OFFSET ?""",
+            [*params, limit, offset],
         ).fetchall()
-    return [
+    items = [
         {
             "id": row["id"],
             "date": row["entry_date"],
@@ -376,6 +386,7 @@ def list_logs(
         }
         for row in rows
     ]
+    return {"items": items, "total": total, "limit": limit, "offset": offset}
 
 
 def list_log_refs(db_path: Path) -> list[dict]:
