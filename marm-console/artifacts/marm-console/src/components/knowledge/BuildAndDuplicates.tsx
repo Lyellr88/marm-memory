@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useBuildConcepts, useMarmConfig, useFilters, useConceptBuild, useConceptDuplicates, useConcept, useDismissConceptDuplicate, useMergeConceptDuplicate, useRemoveConceptEntity } from '@/hooks/use-marm-queries';
+import { useBuildConcepts, useMarmConfig, useFilters, useConceptBuild, useConceptBuilds, useStopConceptBuild, useRetryConceptBuild, useDeleteConceptGraph, useConceptDuplicates, useConcept, useDismissConceptDuplicate, useMergeConceptDuplicate, useRemoveConceptEntity } from '@/hooks/use-marm-queries';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, Button, Badge, Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Table, TableHeader, TableRow, TableHead, TableBody, TableCell, Select, SelectTrigger, SelectValue, SelectContent, SelectItem, Label } from '@/components/ui/core';
-import { Play, AlertTriangle, X, Eye, Merge, ShieldX, Trash2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Play, AlertTriangle, X, Eye, Merge, ShieldX, Trash2, ChevronLeft, ChevronRight, Square, RotateCcw } from 'lucide-react';
 import type { ConceptBuildInput, ConceptBuildRun, ConceptDetail, DuplicateCandidate } from '@/lib/marm-types';
 
 type BuildConceptsDialogProps = {
@@ -25,11 +25,19 @@ export function BuildConceptsDialog({
   const queryClient = useQueryClient();
   const { data: filters } = useFilters();
   const { data: jobStatus } = useConceptBuild(jobId || '');
+  const { data: buildHistory, isLoading: historyLoading } = useConceptBuilds();
+  const stopBuild = useStopConceptBuild();
+  const retryBuild = useRetryConceptBuild();
+  const deleteGraph = useDeleteConceptGraph();
   const [scope, setScope] = useState<'session' | 'project' | 'all'>('session');
   const [scopeValue, setScopeValue] = useState('');
   const [confirmAll, setConfirmAll] = useState(false);
   const [now, setNow] = useState(Date.now());
+  const [tab, setTab] = useState<'start' | 'history'>('start');
+  const [resetOpen, setResetOpen] = useState(false);
+  const [lifecycleError, setLifecycleError] = useState('');
   const completedJobId = useRef<string | null>(null);
+  const wasOpen = useRef(false);
 
   const handleBuild = () => {
     const input: ConceptBuildInput =
@@ -57,12 +65,21 @@ export function BuildConceptsDialog({
   }, [baseUrl, isRunning, jobStatus, onComplete, queryClient]);
 
   useEffect(() => {
+    if (open && !wasOpen.current) {
+      const hasActiveBuild = !!jobId || buildHistory?.some(
+        (buildRun) => buildRun.status === 'queued' || buildRun.status === 'running',
+      );
+      setTab(hasActiveBuild ? 'history' : 'start');
+      setLifecycleError('');
+    }
     if (!open) {
       setScope('session');
       setScopeValue('');
       setConfirmAll(false);
+      setResetOpen(false);
     }
-  }, [open]);
+    wasOpen.current = open;
+  }, [buildHistory, jobId, open]);
 
   useEffect(() => {
     if (!isRunning) return;
@@ -85,7 +102,48 @@ export function BuildConceptsDialog({
     ? 'This graph needs one full rebuild after the schema update. Close this dialog, choose All memory (global), confirm it, and let it finish.'
     : jobStatus?.error_code === 'stale_run'
       ? 'The build stopped reporting progress. Restart the server before trying the build again.'
-    : jobStatus?.error_code || 'The build stopped before it could finish. Try the build again.';
+      : jobStatus?.error_code === 'cancelled_by_user'
+        ? 'The build stopped after its current memory. Its partial scoped extraction remains available.'
+      : jobStatus?.error_code || 'The build stopped before it could finish. Try the build again.';
+
+  const hasActiveBuild = isRunning || buildHistory?.some(
+    (buildRun) => buildRun.status === 'queued' || buildRun.status === 'running',
+  ) || false;
+  const lifecyclePending = stopBuild.isPending || retryBuild.isPending || deleteGraph.isPending;
+
+  const showLifecycleError = (error: unknown, fallback: string) => {
+    setLifecycleError(error instanceof Error ? error.message : fallback);
+  };
+
+  const retryHistoryBuild = (runId: string) => {
+    setLifecycleError('');
+    retryBuild.mutate(runId, {
+      onSuccess: ({ job_id }) => {
+        onJobIdChange(job_id);
+        setTab('start');
+      },
+      onError: (error) => showLifecycleError(error, 'Could not restart this build.'),
+    });
+  };
+
+  const requestBuildStop = (runId: string) => {
+    setLifecycleError('');
+    stopBuild.mutate(runId, {
+      onError: (error) => showLifecycleError(error, 'Could not stop this build.'),
+    });
+  };
+
+  const confirmGraphDeletion = () => {
+    setLifecycleError('');
+    deleteGraph.mutate(undefined, {
+      onSuccess: () => {
+        onJobIdChange(null);
+        setResetOpen(false);
+        setTab('start');
+      },
+      onError: (error) => showLifecycleError(error, 'Could not delete the knowledge graph.'),
+    });
+  };
 
   const handleDialogOpenChange = (nextOpen: boolean) => {
     if (!nextOpen && !isRunning) onJobIdChange(null);
@@ -109,15 +167,42 @@ export function BuildConceptsDialog({
         <DialogHeader>
           <DialogTitle>Build Concept Graph</DialogTitle>
         </DialogHeader>
-        {!jobId ? (
+        <div className="grid grid-cols-2 border-b border-border/70" role="tablist" aria-label="Concept build workspace">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'start'}
+            className={`border-b-2 px-3 py-2 text-sm font-medium transition-colors ${tab === 'start' ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
+            onClick={() => setTab('start')}
+          >
+            Start build
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={tab === 'history'}
+            className={`border-b-2 px-3 py-2 text-sm font-medium transition-colors ${tab === 'history' ? 'border-primary text-foreground' : 'border-transparent text-muted-foreground hover:text-foreground'}`}
+            onClick={() => setTab('history')}
+          >
+            Build history
+          </button>
+        </div>
+
+        {lifecycleError && (
+          <div role="alert" className="mt-4 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+            {lifecycleError}
+          </div>
+        )}
+
+        {tab === 'start' && (!jobId ? (
           <div className="py-4 flex flex-col gap-4">
             <p className="text-sm text-muted-foreground">
               Extract entities and relationships from unstructured memories. Pick exactly one scope.
-              This requires processing time against the LLM backend.
+              This requires processing time against the local concept runtime.
             </p>
             <div className="space-y-2">
               <Label className="text-xs">Scope</Label>
-              <Select value={scope} onValueChange={(v: any) => { setScope(v); setScopeValue(''); setConfirmAll(false); }}>
+              <Select value={scope} onValueChange={(v) => { setScope(v as 'session' | 'project' | 'all'); setScopeValue(''); setConfirmAll(false); }}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="session">Session</SelectItem>
@@ -166,14 +251,7 @@ export function BuildConceptsDialog({
                   <span>{memoriesTotal > 0 ? `${memoriesProcessed} of ${memoriesTotal} memories` : 'Preparing build...'}</span>
                   <span>Elapsed {elapsed}</span>
                 </div>
-                <div
-                  className="h-2 overflow-hidden rounded-full bg-muted"
-                  role="progressbar"
-                  aria-label="Concept build progress"
-                  aria-valuemin={0}
-                  aria-valuemax={memoriesTotal || undefined}
-                  aria-valuenow={memoriesTotal ? memoriesProcessed : undefined}
-                >
+                <div className="h-2 overflow-hidden rounded-full bg-muted" role="progressbar" aria-label="Concept build progress" aria-valuemin={0} aria-valuemax={memoriesTotal || undefined} aria-valuenow={memoriesTotal ? memoriesProcessed : undefined}>
                   <div className="h-full bg-primary transition-all" style={{ width: `${progress}%` }} />
                 </div>
               </div>
@@ -184,7 +262,7 @@ export function BuildConceptsDialog({
                 <p>Degraded mode: {jobStatus.error_code || 'Missing dependencies on server'}</p>
               </div>
             )}
-            {jobStatus?.status === 'error' && (
+            {(jobStatus?.status === 'error' || jobStatus?.status === 'cancelled') && (
               <div className="p-3 bg-destructive/10 text-destructive border border-destructive/20 rounded text-sm flex gap-2">
                 <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
                 <p>{errorMessage}</p>
@@ -200,16 +278,77 @@ export function BuildConceptsDialog({
                 <div className="text-xs text-muted-foreground mt-1">Relationships</div>
               </div>
             </div>
-            <Button
-              className="w-full mt-4"
-              variant="outline"
-              onClick={() => handleDialogOpenChange(false)}
-            >
+            <Button className="w-full mt-4" variant="outline" onClick={() => handleDialogOpenChange(false)}>
               {isRunning ? 'Run in Background' : 'Close'}
             </Button>
           </div>
+        ))}
+
+        {tab === 'history' && (
+          <div className="py-4 space-y-4">
+            <div className="flex items-start justify-between gap-4">
+              <p className="text-sm text-muted-foreground">Build runs persist here after this dialog closes. Stopping a build finishes its current memory safely.</p>
+              <Button variant="destructive" size="sm" disabled={hasActiveBuild || lifecyclePending} onClick={() => setResetOpen(true)}>
+                <Trash2 className="mr-2 h-3.5 w-3.5" /> Delete graph
+              </Button>
+            </div>
+            {hasActiveBuild && <p className="text-xs text-muted-foreground">Stop the active build and wait for it to finish before deleting the graph.</p>}
+            <div className="max-h-[22rem] space-y-2 overflow-y-auto pr-1 [scrollbar-gutter:stable]" role="region" aria-label="Concept build history" tabIndex={0}>
+              {historyLoading ? (
+                <div className="py-10 text-center text-sm text-muted-foreground">Loading build history...</div>
+              ) : buildHistory?.length ? buildHistory.map((buildRun) => {
+                const active = buildRun.status === 'queued' || buildRun.status === 'running';
+                const retryable = buildRun.status === 'error' || buildRun.status === 'degraded' || buildRun.status === 'cancelled';
+                const scopeLabel = buildRun.scope_type === 'all' ? 'All memory' : `${buildRun.scope_type === 'session' ? 'Session' : 'Project'} · ${buildRun.scope_value || 'Unknown'}`;
+                const started = buildRun.started_at || buildRun.created_at;
+                const duration = buildRun.duration_ms != null ? `${Math.max(1, Math.round(buildRun.duration_ms / 1000))}s` : active && started ? `${Math.max(0, Math.floor((now - new Date(started).getTime()) / 1000))}s elapsed` : '—';
+                return (
+                  <article key={buildRun.id} className="rounded-lg border border-border/80 bg-card/60 p-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-medium">{scopeLabel}</div>
+                        <div className="mt-1 font-mono text-xs text-muted-foreground">{buildRun.memories_processed} / {buildRun.memories_total || '—'} memories · {duration}</div>
+                      </div>
+                      <Badge variant={buildRun.status === 'error' ? 'destructive' : buildRun.status === 'degraded' ? 'outline' : 'default'} className="shrink-0 uppercase">{buildRun.status}</Badge>
+                    </div>
+                    {buildRun.error_code && <p className="mt-2 text-xs text-muted-foreground">{buildRun.error_code === 'cancelled_by_user' ? 'Stopped by user; partial scoped extraction remains.' : buildRun.error_code}</p>}
+                    <div className="mt-3 flex items-center justify-between gap-3">
+                      <span className="text-xs text-muted-foreground">{buildRun.entities_extracted} entities · {buildRun.relationships_created} relationships</span>
+                      {active ? (
+                        <Button variant="outline" size="sm" disabled={lifecyclePending || !!buildRun.cancel_requested_at} onClick={() => requestBuildStop(buildRun.id)}>
+                          <Square className="mr-2 h-3.5 w-3.5" /> {buildRun.cancel_requested_at ? 'Stopping...' : 'Stop'}
+                        </Button>
+                      ) : retryable ? (
+                        <Button variant="outline" size="sm" disabled={lifecyclePending} onClick={() => retryHistoryBuild(buildRun.id)}>
+                          <RotateCcw className="mr-2 h-3.5 w-3.5" /> Try again
+                        </Button>
+                      ) : null}
+                    </div>
+                  </article>
+                );
+              }) : (
+                <div className="rounded-lg border border-dashed border-border/80 py-10 text-center text-sm text-muted-foreground">No concept builds yet.</div>
+              )}
+            </div>
+          </div>
         )}
       </DialogContent>
+
+      <Dialog open={resetOpen} onOpenChange={(nextOpen) => !deleteGraph.isPending && setResetOpen(nextOpen)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete the knowledge graph?</DialogTitle>
+            <DialogDescription>This removes the derived concept entities, relationships, code links, and build history. Your memories and indexed code projects are not affected.</DialogDescription>
+          </DialogHeader>
+          <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+            A timestamped backup is retained. Your duplicate-review choices remain, so future builds continue to respect them.
+          </div>
+          <DialogFooter>
+            <Button variant="outline" disabled={deleteGraph.isPending} onClick={() => setResetOpen(false)}>Cancel</Button>
+            <Button variant="destructive" isLoading={deleteGraph.isPending} onClick={confirmGraphDeletion}>Delete graph</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }

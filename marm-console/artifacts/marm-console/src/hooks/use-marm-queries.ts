@@ -28,6 +28,7 @@ export const queryKeys = {
   concept: (baseUrl: string, id: number) => ['concept', baseUrl, id],
   neighborhood: (baseUrl: string, id: number, params?: any) => ['neighborhood', baseUrl, id, params],
   conceptBuild: (baseUrl: string, id: string) => ['conceptBuild', baseUrl, id],
+  conceptBuilds: (baseUrl: string) => ['conceptBuilds', baseUrl],
   duplicates: (baseUrl: string) => ['duplicates', baseUrl],
   projects: (baseUrl: string) => ['projects', baseUrl],
   indexJob: (baseUrl: string, id: string) => ['indexJob', baseUrl, id],
@@ -396,8 +397,12 @@ export function useNeighborhood(id: number, params?: { depth?: number; direction
 }
 
 export function useBuildConcepts() {
-  const { client } = useMarmConfig();
-  return useMutation({ mutationFn: (data: ConceptBuildInput) => client.buildConcepts(data) });
+  const { baseUrl, client } = useMarmConfig();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: ConceptBuildInput) => client.buildConcepts(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.conceptBuilds(baseUrl) }),
+  });
 }
 
 export function useConceptBuild(jobId: string) {
@@ -419,6 +424,53 @@ export function useConceptDuplicates(params?: { offset?: number; limit?: number 
     queryKey: [...queryKeys.duplicates(baseUrl), params],
     queryFn: () => client.getConceptDuplicates(params),
     placeholderData: (previous) => previous,
+  });
+}
+
+export function useConceptBuilds() {
+  const { baseUrl, client } = useMarmConfig();
+  return useQuery({
+    queryKey: queryKeys.conceptBuilds(baseUrl),
+    queryFn: client.listConceptBuilds,
+    refetchInterval: (query) => query.state.data?.some(
+      (build) => build.status === 'queued' || build.status === 'running',
+    ) ? 2000 : false,
+  });
+}
+
+function invalidateConceptBuildLifecycle(qc: QueryClient, baseUrl: string) {
+  qc.invalidateQueries({ queryKey: queryKeys.conceptBuilds(baseUrl) });
+  qc.invalidateQueries({ queryKey: ['conceptBuild', baseUrl] });
+  qc.invalidateQueries({ queryKey: ['conceptsGraph', baseUrl] });
+  qc.invalidateQueries({ queryKey: ['conceptsSearch', baseUrl] });
+  qc.invalidateQueries({ queryKey: queryKeys.conceptsSummary(baseUrl) });
+  qc.invalidateQueries({ queryKey: queryKeys.duplicates(baseUrl) });
+}
+
+export function useStopConceptBuild() {
+  const { baseUrl, client } = useMarmConfig();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (runId: string) => client.stopConceptBuild(runId),
+    onSuccess: () => invalidateConceptBuildLifecycle(qc, baseUrl),
+  });
+}
+
+export function useRetryConceptBuild() {
+  const { baseUrl, client } = useMarmConfig();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (runId: string) => client.retryConceptBuild(runId),
+    onSuccess: () => invalidateConceptBuildLifecycle(qc, baseUrl),
+  });
+}
+
+export function useDeleteConceptGraph() {
+  const { baseUrl, client } = useMarmConfig();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: client.deleteConceptGraph,
+    onSuccess: () => invalidateConceptBuildLifecycle(qc, baseUrl),
   });
 }
 

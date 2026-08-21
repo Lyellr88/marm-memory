@@ -32,6 +32,11 @@
 - The obsolete compact/full graph split is removed. The Explorer renders the full selected scope and suppresses background relationship lines until a node is hovered or selected, keeping large graphs legible and responsive without hiding most of their nodes.
 - Concept builds now preserve scope metadata on their run records, and graph summaries expose the scoped totals the Console needs rather than displaying global counts beside a filtered graph.
 
+### Added: Concept Build Management
+
+- The Build Concepts dialog now includes a build history with scope, progress, completion state, and retry controls. Active builds can be stopped safely after their current memory finishes.
+- Deleting the knowledge graph uses an in-app confirmation and creates a timestamped backup. It clears derived concept data and build history without changing memories or indexed code projects.
+
 ### Developer Tooling
 
 - Added `scripts/tui-launcher.py`, a searchable terminal menu for launching MARM's benchmark, smoke-test, validation, and build scripts without memorizing their paths.

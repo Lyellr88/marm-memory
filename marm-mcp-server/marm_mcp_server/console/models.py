@@ -13,6 +13,10 @@ class ConceptBuildPayload(BaseModel):
     search_all: bool = False
 
 
+class ConceptGraphResetPayload(BaseModel):
+    confirm: Literal["DELETE_GRAPH"]
+
+
 class ProjectIndexPayload(BaseModel):
     repo_path: str
     mode: str = "moderate"

@@ -83,7 +83,7 @@ async function request<T>(
   config: MarmClientConfig,
   method: string,
   path: string,
-  opts?: { query?: object; body?: unknown },
+  opts?: { query?: object; body?: unknown; timeoutMs?: number },
 ): Promise<T> {
   const url = `${config.baseUrl}/api${path}${buildQuery(opts?.query)}`;
   const headers: Record<string, string> = { Accept: 'application/json' };
@@ -91,7 +91,8 @@ async function request<T>(
   if (config.apiKey) headers.Authorization = `Bearer ${config.apiKey}`;
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 30000);
+  const timeoutMs = opts?.timeoutMs ?? 30000;
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   let res: Response;
   try {
     res = await fetch(url, {
@@ -103,7 +104,7 @@ async function request<T>(
     });
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') {
-      throw new MarmApiError(0, 'Request to MARM server timed out after 30s');
+      throw new MarmApiError(0, `Request to MARM server timed out after ${timeoutMs / 1000}s`);
     }
     throw new MarmApiError(0, `Could not reach MARM server at ${config.baseUrl}`);
   } finally {
@@ -232,8 +233,20 @@ export function createMarmClient(config: MarmClientConfig) {
       request<Neighborhood>(config, 'GET', `/concepts/${entityId}/neighborhood`, { query: params }),
     buildConcepts: (data: ConceptBuildInput) =>
       request<{ job_id: string }>(config, 'POST', '/concepts/build', { body: data }),
+    listConceptBuilds: () =>
+      request<ConceptBuildRun[]>(config, 'GET', '/concepts/builds'),
     getConceptBuild: (jobId: string) =>
       request<ConceptBuildRun>(config, 'GET', `/concepts/builds/${jobId}`),
+    stopConceptBuild: (jobId: string) =>
+      request<{ status: 'cancellation_requested'; run_id: string; cancel_requested_at: string }>(
+        config, 'POST', `/concepts/builds/${jobId}/stop`, { body: {} },
+      ),
+    retryConceptBuild: (jobId: string) =>
+      request<{ job_id: string }>(config, 'POST', `/concepts/builds/${jobId}/retry`, { body: {} }),
+    deleteConceptGraph: () =>
+      request<{ status: 'reset'; backup_created: boolean; schema_status: 'rebuild_required' }>(
+        config, 'DELETE', '/concepts/graph', { body: { confirm: 'DELETE_GRAPH' }, timeoutMs: 60000 },
+      ),
     getConceptDuplicates: (params?: { offset?: number; limit?: number }) =>
       request<DuplicateReport>(config, 'GET', `/concepts/duplicates${buildQuery(params)}`),
     dismissConceptDuplicate: (data: DuplicatePairInput) =>

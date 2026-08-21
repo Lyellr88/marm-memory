@@ -235,7 +235,7 @@ export interface ConceptBuildRun {
   id: string;
   scope_type: 'session' | 'project' | 'all';
   scope_value: string | null;
-  status: 'queued' | 'running' | 'success' | 'error' | 'degraded';
+  status: 'queued' | 'running' | 'success' | 'error' | 'degraded' | 'cancelled';
   memories_processed: number;
   memories_total: number;
   entities_extracted: number;
@@ -246,6 +246,9 @@ export interface ConceptBuildRun {
   error_code: string | null;
   created_at: string;
   started_at: string | null;
+  last_progress_at?: string | null;
+  cancel_requested_at: string | null;
+  cancelled_at: string | null;
   finished_at: string | null;
 }
 

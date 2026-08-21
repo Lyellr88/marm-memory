@@ -110,6 +110,46 @@ def test_concept_build_run_persists_lifecycle_fields(concept_db):
     assert row[12] == "2026-07-12T00:00:01+00:00"
 
 
+def test_concept_build_cancellation_request_is_durable(concept_db):
+    with concept_db.get_connection() as conn:
+        concept_db.create_build_run(
+            conn,
+            run_id="run-cancel",
+            scope_type="project",
+            scope_value="proj-a",
+            created_at="2026-07-12T00:00:00+00:00",
+        )
+        concept_db.update_build_run(conn, "run-cancel", status="running")
+
+    with concept_db.get_connection() as conn:
+        requested = concept_db.request_build_cancellation(
+            conn, "run-cancel", "2026-07-12T00:00:01+00:00"
+        )
+
+    assert requested is not None
+    assert requested["cancel_requested_at"] == "2026-07-12T00:00:01+00:00"
+    with concept_db.get_connection() as conn:
+        assert concept_db.is_build_cancellation_requested(conn, "run-cancel") is True
+
+
+def test_terminal_concept_build_cannot_receive_a_new_cancellation_request(concept_db):
+    with concept_db.get_connection() as conn:
+        concept_db.create_build_run(
+            conn,
+            run_id="run-finished",
+            scope_type="all",
+            scope_value=None,
+            created_at="2026-07-12T00:00:00+00:00",
+        )
+        concept_db.update_build_run(conn, "run-finished", status="success")
+        requested = concept_db.request_build_cancellation(
+            conn, "run-finished", "2026-07-12T00:00:01+00:00"
+        )
+
+    assert requested is not None
+    assert requested["cancel_requested_at"] is None
+
+
 def test_get_or_create_entity_dedups_same_name_session_project(concept_db):
     with concept_db.get_connection() as conn:
         id_first, created_first = concept_db.get_or_create_entity(
@@ -454,3 +494,30 @@ def test_find_similar_entities_excludes_self_via_exclude_id(concept_db):
         )
 
     assert candidates == []
+
+
+def test_abandon_unowned_build_runs_leaves_terminal_history(concept_db):
+    with concept_db.get_connection() as conn:
+        concept_db.create_build_run(
+            conn,
+            run_id="orphaned-run",
+            scope_type="all",
+            scope_value=None,
+            created_at="2026-08-21T12:00:00+00:00",
+        )
+        concept_db.update_build_run(conn, "orphaned-run", status="running")
+
+        abandoned = concept_db.abandon_unowned_build_runs(
+            conn, "2026-08-21T12:05:00+00:00"
+        )
+        run = concept_db.get_build_run(conn, "orphaned-run")
+
+    assert abandoned == 1
+    assert run is not None
+    assert run["status"] == "error"
+    with concept_db.get_connection() as conn:
+        row = conn.execute(
+            "SELECT error_code, finished_at FROM concept_build_runs WHERE id = ?",
+            ("orphaned-run",),
+        ).fetchone()
+    assert tuple(row) == ("stale_run", "2026-08-21T12:05:00+00:00")
