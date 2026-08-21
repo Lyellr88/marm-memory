@@ -2,6 +2,7 @@
 """TUI Script Launcher - Navigate and run MARM development scripts."""
 
 import os
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -185,52 +186,77 @@ def draw_menu(
 
 
 def launch_script_in_terminal(script_path: str) -> bool:
-    """Launch a new terminal window with the script command auto-typed."""
+    """Run one listed development script in a new terminal window."""
     scripts_dir = Path(__file__).parent
-    full_path = scripts_dir / script_path
-
-    if not full_path.exists():
+    repo_root = scripts_dir.parent.resolve()
+    known_paths = {
+        path for scripts in SCRIPT_CATEGORIES.values() for _, path in scripts
+    }
+    if script_path not in known_paths:
         return False
 
-    # Determine python command
-    python_cmd = "python" if sys.platform == "win32" else "python3"
+    full_path = (scripts_dir / script_path).resolve()
 
-    # Build the command
-    command = f"{python_cmd} scripts/{script_path}"
+    if not full_path.is_file() or repo_root not in full_path.parents:
+        return False
+
+    command = " ".join(
+        shlex.quote(value) for value in (str(sys.executable), str(full_path))
+    )
+    shell_command = (
+        f"cd {shlex.quote(str(repo_root))} && {command}; exec ${{SHELL:-bash}}"
+    )
+
+    def powershell_quote(value: str) -> str:
+        return "'" + value.replace("'", "''") + "'"
 
     try:
         if sys.platform == "win32":
-            # Windows: Open PowerShell and auto-type the command
-            # Use Start-Process with -ArgumentList to inject the command
-            ps_script = f"""
-$wsh = New-Object -ComObject WScript.Shell
-Start-Process powershell -ArgumentList '-NoExit', '-Command', "cd '{scripts_dir.parent}'"
-Start-Sleep -Milliseconds 500
-$wsh.SendKeys('{command}')
-"""
-            subprocess.Popen(
-                ["powershell", "-Command", ps_script], cwd=scripts_dir.parent
+            ps_command = (
+                f"& {powershell_quote(str(sys.executable))} "
+                f"{powershell_quote(str(full_path))}"
             )
-        else:
-            # Unix/Mac: Open terminal with command pre-filled
-            terminals = [
-                # Linux with gnome-terminal
-                [
-                    "gnome-terminal",
-                    "--",
-                    "bash",
-                    "-c",
-                    f"cd {scripts_dir.parent} && bash -c 'echo {command} && exec bash'",
-                ],
-                # xterm
-                ["xterm", "-e", f"cd {scripts_dir.parent} && exec bash"],
-                # konsole
-                ["konsole", "--workdir", str(scripts_dir.parent)],
-                # macOS
+            subprocess.Popen(
+                ["powershell", "-NoExit", "-Command", ps_command], cwd=repo_root
+            )
+        elif sys.platform == "darwin":
+            subprocess.Popen(
                 [
                     "osascript",
                     "-e",
-                    f'tell app "Terminal" to do script "cd {scripts_dir.parent}"',
+                    "on run argv\n"
+                    'tell application "Terminal" to do script item 1 of argv\n'
+                    "end tell\n"
+                    "end run",
+                    shell_command,
+                ]
+            )
+        else:
+            terminals = [
+                [
+                    "gnome-terminal",
+                    "--working-directory",
+                    str(repo_root),
+                    "--",
+                    "bash",
+                    "-lc",
+                    shell_command,
+                ],
+                [
+                    "xterm",
+                    "-e",
+                    "bash",
+                    "-lc",
+                    shell_command,
+                ],
+                [
+                    "konsole",
+                    "--workdir",
+                    str(repo_root),
+                    "-e",
+                    "bash",
+                    "-lc",
+                    shell_command,
                 ],
             ]
 

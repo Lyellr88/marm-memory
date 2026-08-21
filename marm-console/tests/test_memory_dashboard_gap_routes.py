@@ -6,6 +6,8 @@ import sqlite3
 from fastapi.testclient import TestClient
 from marm_mcp_server.console import app as console_app
 from marm_mcp_server.console import memory_store
+from marm_mcp_server.console.endpoints import sessions
+from marm_mcp_server.console.models import SessionBulkDeletePayload
 
 
 def _memory_db(tmp_path, monkeypatch):
@@ -581,6 +583,34 @@ def test_notebook_mutations_preserve_project_platform_scope(monkeypatch, tmp_pat
             30.0,
         ),
     ]
+
+
+def test_selected_session_deletion_stops_at_the_overall_deadline(monkeypatch):
+    calls = []
+    clock = iter((0.0, 0.0, 61.0))
+    monkeypatch.setattr(sessions.time, "monotonic", lambda: next(clock))
+    monkeypatch.setattr(
+        sessions,
+        "_mcp_tool_mutation",
+        lambda operation, payload, timeout: (
+            calls.append((operation, payload, timeout))
+            or {"deleted_count": 2, "memories_deleted": 1}
+        ),
+    )
+
+    result = sessions.delete_selected_sessions(
+        SessionBulkDeletePayload(
+            session_names=["first", "second", "third"], confirm="DELETE"
+        )
+    )
+
+    assert calls == [("marm_delete", {"type": "log", "target": "first"}, 30.0)]
+    assert result["deleted_sessions"] == 1
+    assert [failure["session_name"] for failure in result["failed_sessions"]] == [
+        "second",
+        "third",
+    ]
+    assert all(failure["status_code"] == 504 for failure in result["failed_sessions"])
 
 
 def test_compaction_stage_finds_candidate_beyond_200_row_window(monkeypatch, tmp_path):

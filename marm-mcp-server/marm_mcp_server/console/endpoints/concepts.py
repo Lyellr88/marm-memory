@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import threading
 import time
 import uuid
@@ -17,7 +16,7 @@ from ...core import concept_review
 from ...core.concept_build_lock import (
     MANUAL_BUILD_LOCK_SECONDS,
     ConceptBuildBusy,
-    concept_build_lock,
+    run_exclusive,
 )
 from .. import concept_store, mcp_client, memory_store
 from ..concept_graph_overview import graph_overview
@@ -132,8 +131,13 @@ def get_concept_duplicates(
 
 async def _run_review_action(purpose: str, action, *args) -> dict:
     try:
-        async with concept_build_lock(purpose, MANUAL_BUILD_LOCK_SECONDS):
-            return await asyncio.to_thread(action, get_concept_db_path(), *args)
+        return await run_exclusive(
+            purpose,
+            action,
+            get_concept_db_path(),
+            *args,
+            ttl_seconds=MANUAL_BUILD_LOCK_SECONDS,
+        )
     except ConceptBuildBusy as exc:
         raise HTTPException(
             status_code=409,

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import time
+
 from fastapi import APIRouter, HTTPException
 
 from .. import memory_store
@@ -14,6 +16,8 @@ from ..models import (
 )
 
 router = APIRouter()
+
+_BULK_DELETE_TIMEOUT_SECONDS = 60.0
 
 
 @router.get("/api/sessions")
@@ -56,11 +60,25 @@ def delete_selected_sessions(payload: SessionBulkDeletePayload) -> dict:
     deleted_logs = 0
     deleted_memories = 0
     failed_sessions: list[dict] = []
-    for session_name in dict.fromkeys(payload.session_names):
+    session_names = list(dict.fromkeys(payload.session_names))
+    deadline = time.monotonic() + _BULK_DELETE_TIMEOUT_SECONDS
+    for index, session_name in enumerate(session_names):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            failed_sessions.extend(
+                {
+                    "session_name": pending_name,
+                    "status_code": 504,
+                    "message": "Bulk deletion timed out before this session was processed.",
+                }
+                for pending_name in session_names[index:]
+            )
+            break
         try:
             result = _mcp_tool_mutation(
                 "marm_delete",
                 {"type": "log", "target": session_name},
+                timeout=min(30.0, remaining),
             )
         except HTTPException as exc:
             failed_sessions.append(

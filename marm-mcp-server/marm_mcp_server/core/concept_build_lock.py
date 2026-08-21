@@ -16,11 +16,12 @@ The mechanics live in lease_lock.py, shared with the code index's own gate. This
 module is the concept-specific binding: the table, the TTL, and the busy error.
 """
 
+import asyncio
 import os
 import threading
 import uuid
-from contextlib import asynccontextmanager
-from typing import AsyncIterator, Optional
+from contextlib import asynccontextmanager, contextmanager
+from typing import Any, AsyncIterator, Callable, Optional, TypeVar
 
 import structlog
 
@@ -31,6 +32,10 @@ from .lease_lock import heartbeat_interval
 logger = structlog.get_logger(__name__)
 
 _TABLE = "concept_build_lock"
+
+T = TypeVar("T")
+
+_inflight: set[asyncio.Task] = set()
 
 # Bounds only how long a *crashed* holder blocks the next build. The heartbeat
 # renews the lease for as long as a real build runs, so a full-corpus rebuild is
@@ -43,9 +48,11 @@ __all__ = [
     "ConceptBuildBusy",
     "concept_build_lock",
     "current_holder",
+    "gate_sync",
     "heartbeat_interval",
     "release",
     "renew",
+    "run_exclusive",
     "try_acquire",
 ]
 
@@ -68,6 +75,78 @@ def release(holder: str) -> bool:
 
 def current_holder() -> Optional[tuple[str, str]]:
     return lease_lock.current_holder(_TABLE)
+
+
+@contextmanager
+def gate_sync(purpose: str, ttl_seconds: int) -> Any:
+    """Hold the concept lease for work running in a plain worker thread."""
+    holder = f"{os.getpid()}:{uuid.uuid4().hex}"
+    if not try_acquire(holder, purpose, ttl_seconds):
+        raise ConceptBuildBusy("another process is writing the concept graph")
+
+    done = threading.Event()
+
+    def _beat() -> None:
+        interval = heartbeat_interval(ttl_seconds)
+        while not done.wait(interval):
+            try:
+                if not renew(holder, ttl_seconds):
+                    logger.error("concept_lock.lost", purpose=purpose)
+                    return
+            except Exception as exc:
+                logger.warning("concept_lock.renew_failed", error=str(exc))
+
+    beat = threading.Thread(target=_beat, daemon=True)
+    beat.start()
+    try:
+        yield holder
+    finally:
+        done.set()
+        try:
+            release(holder)
+        except Exception as exc:
+            logger.warning("concept_lock.release_failed", error=str(exc))
+
+
+def _gated_call(
+    purpose: str,
+    ttl_seconds: int,
+    fn: Callable[..., T],
+    args: tuple,
+    kwargs: dict,
+) -> T:
+    with gate_sync(purpose, ttl_seconds):
+        return fn(*args, **kwargs)
+
+
+async def _owned_call(
+    purpose: str,
+    ttl_seconds: int,
+    fn: Callable[..., T],
+    args: tuple,
+    kwargs: dict,
+) -> T:
+    return await asyncio.to_thread(_gated_call, purpose, ttl_seconds, fn, args, kwargs)
+
+
+def _forget(task: asyncio.Task) -> None:
+    _inflight.discard(task)
+    if not task.cancelled():
+        task.exception()
+
+
+async def run_exclusive(
+    purpose: str,
+    fn: Callable[..., T],
+    *args: Any,
+    ttl_seconds: int,
+    **kwargs: Any,
+) -> T:
+    """Run one concept graph mutation without releasing its lease on cancellation."""
+    task = asyncio.create_task(_owned_call(purpose, ttl_seconds, fn, args, kwargs))
+    _inflight.add(task)
+    task.add_done_callback(_forget)
+    return await asyncio.shield(task)
 
 
 @asynccontextmanager
