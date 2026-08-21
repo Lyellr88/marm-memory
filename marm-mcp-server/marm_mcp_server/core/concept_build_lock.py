@@ -78,13 +78,16 @@ def current_holder() -> Optional[tuple[str, str]]:
 
 
 @contextmanager
-def gate_sync(purpose: str, ttl_seconds: int) -> Any:
+def gate_sync(
+    purpose: str, ttl_seconds: int, lease_lost: threading.Event | None = None
+) -> Any:
     """Hold the concept lease for work running in a plain worker thread."""
     holder = f"{os.getpid()}:{uuid.uuid4().hex}"
     if not try_acquire(holder, purpose, ttl_seconds):
         raise ConceptBuildBusy("another process is writing the concept graph")
 
     done = threading.Event()
+    lost = lease_lost or threading.Event()
 
     def _beat() -> None:
         interval = heartbeat_interval(ttl_seconds)
@@ -92,6 +95,7 @@ def gate_sync(purpose: str, ttl_seconds: int) -> Any:
             try:
                 if not renew(holder, ttl_seconds):
                     logger.error("concept_lock.lost", purpose=purpose)
+                    lost.set()
                     return
             except Exception as exc:
                 logger.warning("concept_lock.renew_failed", error=str(exc))
@@ -114,8 +118,9 @@ def _gated_call(
     fn: Callable[..., T],
     args: tuple,
     kwargs: dict,
+    lease_lost: threading.Event | None,
 ) -> T:
-    with gate_sync(purpose, ttl_seconds):
+    with gate_sync(purpose, ttl_seconds, lease_lost):
         return fn(*args, **kwargs)
 
 
@@ -125,8 +130,11 @@ async def _owned_call(
     fn: Callable[..., T],
     args: tuple,
     kwargs: dict,
+    lease_lost: threading.Event | None,
 ) -> T:
-    return await asyncio.to_thread(_gated_call, purpose, ttl_seconds, fn, args, kwargs)
+    return await asyncio.to_thread(
+        _gated_call, purpose, ttl_seconds, fn, args, kwargs, lease_lost
+    )
 
 
 def _forget(task: asyncio.Task) -> None:
@@ -140,10 +148,13 @@ async def run_exclusive(
     fn: Callable[..., T],
     *args: Any,
     ttl_seconds: int,
+    lease_lost: threading.Event | None = None,
     **kwargs: Any,
 ) -> T:
     """Run one concept graph mutation without releasing its lease on cancellation."""
-    task = asyncio.create_task(_owned_call(purpose, ttl_seconds, fn, args, kwargs))
+    task = asyncio.create_task(
+        _owned_call(purpose, ttl_seconds, fn, args, kwargs, lease_lost)
+    )
     _inflight.add(task)
     task.add_done_callback(_forget)
     return await asyncio.shield(task)

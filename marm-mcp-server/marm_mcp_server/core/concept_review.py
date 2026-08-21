@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
-from typing import Literal
+import sqlite3
+import threading
+from typing import Literal, TypeAlias, cast
 
 from .concept_db import ConceptDB
 
@@ -12,24 +14,46 @@ class ConceptReviewError(ValueError):
     """The requested review action is invalid for the current graph."""
 
 
-def _entity(conn, entity_id: int):
-    return conn.execute(
+class ConceptReviewLeaseLost(ConceptReviewError):
+    """The concept lease expired while applying a review decision."""
+
+
+EntityRow: TypeAlias = tuple[
+    int, str, str, str | None, str | None, str | None, str | None, bytes | None
+]
+
+
+def _ensure_lease(lease_lost: threading.Event | None) -> None:
+    if lease_lost is not None and lease_lost.is_set():
+        raise ConceptReviewLeaseLost("The concept build lease was lost. Try again.")
+
+
+def _entity(conn: sqlite3.Connection, entity_id: int) -> EntityRow | None:
+    row = conn.execute(
         "SELECT id, name, type, session_name, project, platform, "
         "source_memory_ids, name_embedding FROM entities WHERE id = ?",
         (entity_id,),
     ).fetchone()
+    return cast(EntityRow | None, row)
 
 
-def _same_scope(entity_a, entity_b) -> bool:
+def _same_scope(entity_a: EntityRow, entity_b: EntityRow) -> bool:
     return entity_a[3:6] == entity_b[3:6]
 
 
-def dismiss_duplicate(db_path: str, entity_a_id: int, entity_b_id: int) -> dict:
+def dismiss_duplicate(
+    db_path: str,
+    entity_a_id: int,
+    entity_b_id: int,
+    *,
+    lease_lost: threading.Event | None = None,
+) -> dict[str, str]:
     if entity_a_id == entity_b_id:
         raise ConceptReviewError("Choose two different concepts.")
     database = ConceptDB(db_path)
     try:
         with database.get_connection() as conn:
+            _ensure_lease(lease_lost)
             entity_a = _entity(conn, entity_a_id)
             entity_b = _entity(conn, entity_b_id)
             if entity_a is None or entity_b is None:
@@ -39,6 +63,7 @@ def dismiss_duplicate(db_path: str, entity_a_id: int, entity_b_id: int) -> dict:
                     "Duplicate decisions must stay within one scope."
                 )
             name_a, name_b = sorted((str(entity_a[1]), str(entity_b[1])))
+            _ensure_lease(lease_lost)
             conn.execute(
                 "INSERT OR IGNORE INTO concept_duplicate_dismissals "
                 "(name_a, name_b, session_name, project, platform) "
@@ -55,12 +80,15 @@ def merge_entities(
     entity_a_id: int,
     entity_b_id: int,
     keep: Literal["a", "b"],
-) -> dict:
+    *,
+    lease_lost: threading.Event | None = None,
+) -> dict[str, int | str]:
     if entity_a_id == entity_b_id:
         raise ConceptReviewError("Choose two different concepts.")
     database = ConceptDB(db_path)
     try:
         with database.get_connection() as conn:
+            _ensure_lease(lease_lost)
             conn.execute("BEGIN IMMEDIATE")
             entity_a = _entity(conn, entity_a_id)
             entity_b = _entity(conn, entity_b_id)
@@ -78,12 +106,14 @@ def merge_entities(
             winner_sources = json.loads(winner[6] or "[]")
             loser_sources = json.loads(loser[6] or "[]")
             combined_sources = list(dict.fromkeys([*winner_sources, *loser_sources]))
+            _ensure_lease(lease_lost)
             conn.execute(
                 "UPDATE entities SET source_memory_ids = ?, "
                 "name_embedding = COALESCE(name_embedding, ?) WHERE id = ?",
                 (json.dumps(combined_sources), loser[7], winner_id),
             )
 
+            _ensure_lease(lease_lost)
             conn.execute(
                 "INSERT OR IGNORE INTO entity_code_links "
                 "(entity_id, graph_qualified_name, project, confidence, label, "
@@ -92,6 +122,7 @@ def merge_entities(
                 "file_path, created_at FROM entity_code_links WHERE entity_id = ?",
                 (winner_id, loser_id),
             )
+            _ensure_lease(lease_lost)
             conn.execute(
                 "INSERT OR IGNORE INTO relationships "
                 "(source_id, target_id, predicate, memory_id, project, platform, created_at) "
@@ -114,21 +145,25 @@ def merge_entities(
                     winner_id,
                 ),
             )
+            _ensure_lease(lease_lost)
             conn.execute(
                 "DELETE FROM relationships WHERE source_id = ? OR target_id = ?",
                 (loser_id, loser_id),
             )
+            _ensure_lease(lease_lost)
             conn.execute(
                 "DELETE FROM entity_code_links WHERE entity_id = ?", (loser_id,)
             )
 
             scope = (winner[3], winner[4], winner[5])
+            _ensure_lease(lease_lost)
             conn.execute(
                 "UPDATE concept_entity_aliases SET canonical_name = ? "
                 "WHERE canonical_name = ? AND session_name IS ? AND project IS ? "
                 "AND platform IS ?",
                 (winner[1], loser[1], *scope),
             )
+            _ensure_lease(lease_lost)
             conn.execute(
                 "INSERT INTO concept_entity_aliases "
                 "(alias_name, canonical_name, session_name, project, platform) "
@@ -142,6 +177,7 @@ def merge_entities(
                 "AND project IS ? AND platform IS ?",
                 (loser[1], loser[1], *scope),
             )
+            _ensure_lease(lease_lost)
             conn.execute("DELETE FROM entities WHERE id = ?", (loser_id,))
 
         return {
@@ -154,24 +190,33 @@ def merge_entities(
         database.close()
 
 
-def remove_entity(db_path: str, entity_id: int) -> dict:
+def remove_entity(
+    db_path: str,
+    entity_id: int,
+    *,
+    lease_lost: threading.Event | None = None,
+) -> dict[str, int | str]:
     database = ConceptDB(db_path)
     try:
         with database.get_connection() as conn:
+            _ensure_lease(lease_lost)
             conn.execute("BEGIN IMMEDIATE")
             entity = _entity(conn, entity_id)
             if entity is None:
                 raise ConceptReviewError("This concept no longer exists.")
             scope = (entity[3], entity[4], entity[5])
+            _ensure_lease(lease_lost)
             conn.execute(
                 "INSERT OR IGNORE INTO concept_entity_suppressions "
                 "(name, session_name, project, platform) VALUES (?, ?, ?, ?)",
                 (entity[1], *scope),
             )
+            _ensure_lease(lease_lost)
             conn.execute(
                 "DELETE FROM relationships WHERE source_id = ? OR target_id = ?",
                 (entity_id, entity_id),
             )
+            _ensure_lease(lease_lost)
             conn.execute(
                 "DELETE FROM entity_code_links WHERE entity_id = ?", (entity_id,)
             )

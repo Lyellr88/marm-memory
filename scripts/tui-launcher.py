@@ -263,9 +263,10 @@ def launch_script_in_terminal(script_path: str) -> bool:
             for term_cmd in terminals:
                 try:
                     subprocess.Popen(term_cmd)
-                    break
+                    return True
                 except FileNotFoundError:
                     continue
+            return False
 
         return True
 

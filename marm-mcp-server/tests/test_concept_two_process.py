@@ -363,3 +363,34 @@ async def test_cancelling_a_review_action_does_not_release_the_build_lock(shared
             break
         await asyncio.sleep(0.05)
     assert concept_build_lock.current_holder() is None
+
+
+@pytest.mark.asyncio
+async def test_review_action_stops_at_the_next_boundary_after_lease_loss(shared_db):
+    from marm_mcp_server.core import concept_build_lock
+    from marm_mcp_server.core.concept_review import ConceptReviewLeaseLost
+
+    mutations: list[str] = []
+    lease_lost = threading.Event()
+
+    def renew_refused(_holder, _ttl):
+        return False
+
+    def action():
+        mutations.append("before_loss")
+        assert lease_lost.wait(3)
+        if lease_lost.is_set():
+            raise ConceptReviewLeaseLost("lost")
+        mutations.append("after_loss")
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(concept_build_lock, "renew", renew_refused)
+    try:
+        with pytest.raises(ConceptReviewLeaseLost):
+            await concept_build_lock.run_exclusive(
+                "duplicate_merge", action, ttl_seconds=1, lease_lost=lease_lost
+            )
+    finally:
+        monkeypatch.undo()
+
+    assert mutations == ["before_loss"]

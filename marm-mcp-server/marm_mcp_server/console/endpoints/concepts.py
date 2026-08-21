@@ -6,7 +6,7 @@ import threading
 import time
 import uuid
 from datetime import datetime, timezone
-from typing import Literal
+from typing import Any, Callable, Literal
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
@@ -129,14 +129,22 @@ def get_concept_duplicates(
     )
 
 
-async def _run_review_action(purpose: str, action, *args) -> dict:
+async def _run_review_action(
+    purpose: str, action: Callable[..., dict[str, Any]], *args: Any
+) -> dict[str, Any]:
+    lease_lost = threading.Event()
+
+    def protected_action(db_path: str, *action_args: Any) -> dict[str, Any]:
+        return action(db_path, *action_args, lease_lost=lease_lost)
+
     try:
         return await run_exclusive(
             purpose,
-            action,
+            protected_action,
             get_concept_db_path(),
             *args,
             ttl_seconds=MANUAL_BUILD_LOCK_SECONDS,
+            lease_lost=lease_lost,
         )
     except ConceptBuildBusy as exc:
         raise HTTPException(

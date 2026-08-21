@@ -61,6 +61,19 @@ def test_launcher_runs_selected_script_in_xterm_after_gnome_fallback(
     assert str(LAUNCHER_PATH.parent / "find-tools.py") in command[-1]
 
 
+def test_launcher_reports_failure_when_no_linux_terminal_is_available(
+    monkeypatch, launcher_module
+):
+    monkeypatch.setattr(launcher_module.sys, "platform", "linux")
+    monkeypatch.setattr(
+        launcher_module.subprocess,
+        "Popen",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(FileNotFoundError()),
+    )
+
+    assert launcher_module.launch_script_in_terminal("find-tools.py") is False
+
+
 def test_launcher_passes_macos_command_as_an_osascript_argument(
     monkeypatch, launcher_module
 ):
