@@ -312,14 +312,24 @@ def _run_build(
 
                     memory_failed = False
                     name_to_id: dict[str, int] = {}
+                    name_to_canonical: dict[str, str] = {}
                     for entity in result.entities:
-                        if entity.name not in embed_cache:
-                            embed_cache[entity.name] = _try_embed(entity.name)
-                        emb_bytes = embed_cache[entity.name]
                         try:
-                            entity_id, was_created = concept_db.get_or_create_entity(
+                            canonical_name = concept_db.resolve_entity_name(
                                 conn,
                                 entity.name,
+                                mem_session,
+                                mem_project,
+                                mem_platform,
+                            )
+                            if canonical_name is None:
+                                continue
+                            if canonical_name not in embed_cache:
+                                embed_cache[canonical_name] = _try_embed(canonical_name)
+                            emb_bytes = embed_cache[canonical_name]
+                            entity_id, was_created = concept_db.get_or_create_entity(
+                                conn,
+                                canonical_name,
                                 entity.type,
                                 mem_session,
                                 mem_project,
@@ -334,6 +344,7 @@ def _run_build(
                             memory_failed = True
                             continue
                         name_to_id[entity.name] = entity_id
+                        name_to_canonical[entity.name] = canonical_name
                         entities_extracted += 1
 
                         if was_created and emb_bytes is not None:
@@ -354,7 +365,7 @@ def _run_build(
                                 candidates = []
                             if candidates:
                                 possible_duplicates.append(
-                                    {"entity": entity.name, "candidates": candidates}
+                                    {"entity": canonical_name, "candidates": candidates}
                                 )
 
                     for name_a, name_b, predicate in result.relationship_pairs:
@@ -385,7 +396,9 @@ def _run_build(
                             if linked_entity_id is None:
                                 continue
                             try:
-                                match = find_code_match(entity.name, mem_project)
+                                match = find_code_match(
+                                    name_to_canonical[entity.name], mem_project
+                                )
                             except Exception as e:
                                 _safe_print(f"Concept code-link lookup failed: {e}")
                                 continue

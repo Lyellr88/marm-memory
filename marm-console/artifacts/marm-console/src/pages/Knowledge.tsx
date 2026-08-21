@@ -3,15 +3,21 @@ import { Button, Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/u
 import { Layers, X } from 'lucide-react';
 import { ExplorerTab } from '@/components/knowledge/ExplorerTab';
 import { BuildConceptsDialog, DuplicatesTab } from '@/components/knowledge/BuildAndDuplicates';
-import type { ConceptBuildRun } from '@/lib/marm-types';
+import type { ConceptBuildRun, ConceptGraphScope } from '@/lib/marm-types';
 
 export function KnowledgePage() {
   const [buildOpen, setBuildOpen] = useState(false);
   const [buildJobId, setBuildJobId] = useState<string | null>(null);
   const [buildNotice, setBuildNotice] = useState<string | null>(null);
+  const [graphScope, setGraphScope] = useState<ConceptGraphScope>({ type: 'all' });
 
   const handleBuildComplete = (job: ConceptBuildRun) => {
     if (job.status === 'success') {
+      setGraphScope(
+        job.scope_type === 'all'
+          ? { type: 'all' }
+          : { type: job.scope_type, value: job.scope_value || '' },
+      );
       setBuildNotice(`Concept build finished: ${job.entities_extracted} entities and ${job.relationships_created} relationships.`);
       return;
     }
@@ -37,13 +43,13 @@ export function KnowledgePage() {
             Explorer
           </TabsTrigger>
           <TabsTrigger value="duplicates" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent py-3 px-5">
-            Duplicate Review
+            Potential Duplicates
           </TabsTrigger>
         </TabsList>
 
         <div className="flex-1 overflow-hidden min-h-0">
           <TabsContent value="explorer" className="m-0 h-full">
-            <ExplorerTab />
+            <ExplorerTab scope={graphScope} onScopeChange={setGraphScope} />
           </TabsContent>
           <TabsContent value="duplicates" className="m-0 h-full">
             <DuplicatesTab />

@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo } from 'react';
-import { useConceptsSummary, useSearchConcepts, useNeighborhood, useConceptGraph, useConcept, useMarmConfig, useGraphAutoRefresh } from '@/hooks/use-marm-queries';
+import { useConceptsSummary, useSearchConcepts, useNeighborhood, useConceptGraph, useConcept, useMarmConfig, useGraphAutoRefresh, useFilters } from '@/hooks/use-marm-queries';
 import { Card, CardContent, CardHeader, Input, Button, Badge, Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/core';
 import { Search, GitGraph, Network, AlertTriangle, X, ArrowLeft } from 'lucide-react';
-import type { Neighborhood, NeighborhoodNode, ConceptDetail } from '@/lib/marm-types';
+import type { Neighborhood, NeighborhoodNode, ConceptDetail, ConceptGraphParams, ConceptGraphScope } from '@/lib/marm-types';
 import { DEFAULT_HIDDEN_PREDICATES, typeColor, mergeNeighborhoods } from './shared';
 import { GraphViz } from './GraphViz';
 
@@ -93,17 +93,41 @@ function ProvenancePanel({
   );
 }
 
-export function ExplorerTab() {
+type ExplorerTabProps = {
+  scope: ConceptGraphScope;
+  onScopeChange: (scope: ConceptGraphScope) => void;
+};
+
+function scopeSelectValue(scope: ConceptGraphScope) {
+  return scope.type === 'all' ? 'all' : `${scope.type}:${scope.value}`;
+}
+
+function parseScope(value: string): ConceptGraphScope {
+  if (value === 'all') return { type: 'all' };
+  const separator = value.indexOf(':');
+  const type = value.slice(0, separator) as 'project' | 'session';
+  return { type, value: value.slice(separator + 1) };
+}
+
+export function ExplorerTab({ scope, onScopeChange }: ExplorerTabProps) {
   // Background indexing adds nodes with nobody watching. This component only
   // exists while the Explorer tab is showing, so the polling stops with it.
   useGraphAutoRefresh();
   const { data: summary } = useConceptsSummary();
+  const { data: filters } = useFilters();
   const { client } = useMarmConfig();
   const [q, setQ] = useState('');
   const [debouncedQ, setDebouncedQ] = useState('');
-  const { data: searchResults, isLoading: searchLoading } = useSearchConcepts({ q: debouncedQ, limit: 10 });
+  const scopeQuery = useMemo<Pick<ConceptGraphParams, 'project' | 'session'>>(
+    () => scope.type === 'all' ? {} : { [scope.type]: scope.value },
+    [scope],
+  );
+  const { data: searchResults, isLoading: searchLoading } = useSearchConcepts({
+    q: debouncedQ,
+    limit: 10,
+    ...scopeQuery,
+  });
   const [selectedId, setSelectedId] = useState<number | null>(null);
-  const [showFullAtlas, setShowFullAtlas] = useState(false);
   const [direction, setDirection] = useState<'both' | 'incoming' | 'outgoing'>('both');
   const {
     data: baseNeighborhood,
@@ -114,7 +138,7 @@ export function ExplorerTab() {
     data: overviewGraph,
     isError: overviewError,
     isLoading: overviewLoading,
-  } = useConceptGraph(selectedId === null, showFullAtlas);
+  } = useConceptGraph(selectedId === null, { full: true, ...scopeQuery });
   const [graph, setGraph] = useState<Neighborhood | null>(null);
   const [focusedNode, setFocusedNode] = useState<NeighborhoodNode | null>(null);
   const [hiddenPredicates, setHiddenPredicates] = useState<Set<string>>(new Set(DEFAULT_HIDDEN_PREDICATES));
@@ -126,6 +150,11 @@ export function ExplorerTab() {
     const t = setTimeout(() => setDebouncedQ(q), 300);
     return () => clearTimeout(t);
   }, [q]);
+
+  useEffect(() => {
+    setSelectedId(null);
+    setFocusedNode(null);
+  }, [scope]);
 
   // Working graph follows the mode: seed neighborhood or whole-graph overview.
   useEffect(() => {
@@ -180,10 +209,13 @@ export function ExplorerTab() {
     }
   };
 
-  const graphKey = selectedId === null ? 'overview' : `seed-${selectedId}`;
+  const scopeKey = scope.type === 'all' ? 'all' : `${scope.type}-${scope.value}`;
+  const graphKey = selectedId === null ? `overview-${scopeKey}` : `seed-${selectedId}`;
   const isLoading = selectedId === null ? overviewLoading : neighborhoodLoading;
   const loadError = selectedId === null ? overviewError : neighborhoodError;
-  const isEmpty = (summary?.entities ?? 0) === 0;
+  const isEmpty = selectedId === null
+    ? (overviewGraph?.total.nodes ?? summary?.entities ?? 0) === 0
+    : false;
   const rebuildRequired = overviewGraph?.schema_status === 'rebuild_required';
 
   return (
@@ -194,15 +226,15 @@ export function ExplorerTab() {
           <CardContent className="p-4">
             <div className="grid grid-cols-3 gap-2 text-center">
               <div>
-                <div className="text-xl font-bold text-primary">{summary?.entities.toLocaleString() || 0}</div>
+                <div className="text-xl font-bold text-primary">{overviewGraph?.total.nodes.toLocaleString() ?? summary?.entities.toLocaleString() ?? 0}</div>
                 <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Nodes</div>
               </div>
               <div>
-                <div className="text-xl font-bold text-accent-foreground">{summary?.relationships.toLocaleString() || 0}</div>
+                <div className="text-xl font-bold text-accent-foreground">{overviewGraph?.total.edges.toLocaleString() ?? summary?.relationships.toLocaleString() ?? 0}</div>
                 <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Edges</div>
               </div>
               <div>
-                <div className="text-xl font-bold text-muted-foreground">{summary?.code_links.toLocaleString() || 0}</div>
+                <div className="text-xl font-bold text-muted-foreground">{overviewGraph?.total.code_links.toLocaleString() ?? summary?.code_links.toLocaleString() ?? 0}</div>
                 <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Code Links</div>
               </div>
             </div>
@@ -256,36 +288,27 @@ export function ExplorerTab() {
       {/* Right Col: Viz */}
       <div className="lg:col-span-2 flex flex-col gap-3 mb-4 min-h-0">
         <div className="flex flex-wrap items-center gap-2 shrink-0 min-h-[26px]">
+          <Select value={scopeSelectValue(scope)} onValueChange={(value) => onScopeChange(parseScope(value))}>
+            <SelectTrigger className="h-7 w-[220px] text-xs" aria-label="Knowledge graph scope">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All knowledge</SelectItem>
+              {filters?.projects.map((project) => (
+                <SelectItem key={`project:${project}`} value={`project:${project}`}>
+                  Project · {project}
+                </SelectItem>
+              ))}
+              {filters?.sessions.map((session) => (
+                <SelectItem key={`session:${session}`} value={`session:${session}`}>
+                  Session · {session}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           {selectedId !== null && (
             <Button variant="ghost" size="sm" className="h-6 px-2 text-xs" onClick={() => setSelectedId(null)}>
               <ArrowLeft className="w-3 h-3 mr-1" /> Full graph
-            </Button>
-          )}
-          {selectedId === null && overviewGraph && (
-            <Badge variant="outline" className="h-6 text-[10px] font-mono">
-              {overviewGraph.mode === 'full'
-                ? `Full atlas · ${overviewGraph.rendered.nodes} nodes`
-                : `Compact graph · ${overviewGraph.rendered.nodes}/${overviewGraph.total.nodes} nodes`}
-            </Badge>
-          )}
-          {selectedId === null && overviewGraph?.truncated && !showFullAtlas && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-6 px-2 text-xs"
-              onClick={() => setShowFullAtlas(true)}
-            >
-              Render all {overviewGraph.total.nodes.toLocaleString()} nodes
-            </Button>
-          )}
-          {selectedId === null && showFullAtlas && (
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-6 px-2 text-xs"
-              onClick={() => setShowFullAtlas(false)}
-            >
-              Use compact graph
             </Button>
           )}
           {selectedId !== null && (
@@ -356,7 +379,7 @@ export function ExplorerTab() {
                 onNodeClick={setFocusedNode}
                 focusedId={focusedNode?.id ?? null}
                 expandingId={expandingId}
-                suppressBackgroundLinks={showFullAtlas && selectedId === null}
+                suppressBackgroundLinks={selectedId === null}
               />
               {focusedNode && (
                 <ProvenancePanel

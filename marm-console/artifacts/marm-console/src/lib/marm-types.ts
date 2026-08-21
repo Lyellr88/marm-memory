@@ -319,10 +319,21 @@ export interface Neighborhood {
 export interface ConceptAtlas extends Neighborhood {
   mode: 'full' | 'sampled';
   schema_status: 'current' | 'rebuild_required' | 'unavailable';
-  total: { nodes: number; edges: number };
+  total: { nodes: number; edges: number; code_links: number };
   rendered: { nodes: number; edges: number };
   sample_reason: string | null;
 }
+
+export interface ConceptGraphParams {
+  full?: boolean;
+  project?: string;
+  session?: string;
+}
+
+export type ConceptGraphScope =
+  | { type: 'all' }
+  | { type: 'project'; value: string }
+  | { type: 'session'; value: string };
 
 /** Cheap change marker polled while the Explorer is open. The value is opaque:
  *  compare it, do not parse it. */
@@ -335,6 +346,33 @@ export interface DuplicateCandidate {
   entity_a: ConceptEntity;
   entity_b: ConceptEntity;
   similarity: number;
+}
+
+export interface DuplicateReport {
+  items: DuplicateCandidate[];
+  total: number;
+  threshold: number;
+  scanned_entities: number;
+  scan_limit: number;
+  result_limit: number;
+  offset: number;
+  has_more: boolean;
+}
+
+export interface DuplicatePairInput {
+  entity_a_id: number;
+  entity_b_id: number;
+}
+
+export interface MergeDuplicateInput extends DuplicatePairInput {
+  keep: 'a' | 'b';
+}
+
+export interface ConceptReviewResult {
+  status: 'dismissed' | 'merged' | 'removed';
+  kept_entity_id?: number;
+  removed_entity_id?: number;
+  canonical_name?: string;
 }
 
 export interface ConceptBuildInput {

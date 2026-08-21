@@ -18,13 +18,17 @@ import type {
   ConceptAtlas,
   ConceptDetail,
   ConceptEntity,
+  ConceptGraphParams,
   ConceptGraphVersion,
+  ConceptReviewResult,
   ConceptSearchParams,
   ConceptsSummary,
-  DuplicateCandidate,
+  DuplicateReport,
+  DuplicatePairInput,
   Filters,
   ImpactInput,
   ImpactResult,
+  MergeDuplicateInput,
   IndexJob,
   LogEntry,
   LogListParams,
@@ -217,7 +221,7 @@ export function createMarmClient(config: MarmClientConfig) {
       request<ConceptEntity[]>(config, 'GET', '/concepts/search', { query: params }),
     getConcept: (entityId: number) =>
       request<ConceptDetail>(config, 'GET', `/concepts/${entityId}`),
-    getConceptGraph: (params?: { full?: boolean }) =>
+    getConceptGraph: (params?: ConceptGraphParams) =>
       request<ConceptAtlas>(config, 'GET', '/concepts/graph', { query: params }),
     getConceptGraphVersion: () =>
       request<ConceptGraphVersion>(config, 'GET', '/concepts/graph/version'),
@@ -230,8 +234,14 @@ export function createMarmClient(config: MarmClientConfig) {
       request<{ job_id: string }>(config, 'POST', '/concepts/build', { body: data }),
     getConceptBuild: (jobId: string) =>
       request<ConceptBuildRun>(config, 'GET', `/concepts/builds/${jobId}`),
-    getConceptDuplicates: () =>
-      request<DuplicateCandidate[]>(config, 'GET', '/concepts/duplicates'),
+    getConceptDuplicates: (params?: { offset?: number; limit?: number }) =>
+      request<DuplicateReport>(config, 'GET', `/concepts/duplicates${buildQuery(params)}`),
+    dismissConceptDuplicate: (data: DuplicatePairInput) =>
+      request<ConceptReviewResult>(config, 'POST', '/concepts/duplicates/dismiss', { body: data }),
+    mergeConceptDuplicate: (data: MergeDuplicateInput) =>
+      request<ConceptReviewResult>(config, 'POST', '/concepts/duplicates/merge', { body: data }),
+    removeConceptEntity: (entityId: number) =>
+      request<ConceptReviewResult>(config, 'DELETE', `/concepts/entities/${entityId}`),
 
     // Projects / code graph
     listProjects: () => request<ProjectSummary[]>(config, 'GET', '/projects'),

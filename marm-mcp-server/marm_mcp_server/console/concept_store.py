@@ -280,15 +280,21 @@ def get_build_run(db_path: Path, run_id: str) -> dict | None:
     return _build_run(row) if row else None
 
 
-def duplicates(db_path: Path, limit: int = 100, threshold: float = 0.88) -> list[dict]:
+_DUPLICATE_SCAN_LIMIT = 300
+_DUPLICATE_RESULT_LIMIT = 100
+_DUPLICATE_THRESHOLD = 0.88
+
+
+def _duplicate_candidates(db_path: Path, threshold: float) -> tuple[list[dict], int]:
     connection = _connect(db_path)
     if connection is None:
-        return []
+        return [], 0
     try:
         with closing(connection), connection:
             if _schema_status(connection) != "current":
-                return []
-            rows = connection.execute("""
+                return [], 0
+            rows = connection.execute(
+                """
                 SELECT e.id, e.name, e.type, e.session_name, e.project, e.platform,
                        e.source_memory_ids,
                        e.created_at, e.name_embedding,
@@ -297,10 +303,30 @@ def duplicates(db_path: Path, limit: int = 100, threshold: float = 0.88) -> list
                 FROM entities e
                 WHERE e.name_embedding IS NOT NULL
                 ORDER BY degree DESC, e.id
-                LIMIT 300
-                """).fetchall()
+                LIMIT ?
+                """,
+                (_DUPLICATE_SCAN_LIMIT,),
+            ).fetchall()
+            review_tables = {
+                row[0]
+                for row in connection.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'table' "
+                    "AND name = 'concept_duplicate_dismissals'"
+                ).fetchall()
+            }
+            dismissed = (
+                {
+                    (row[0], row[1], row[2], row[3], row[4])
+                    for row in connection.execute(
+                        "SELECT name_a, name_b, session_name, project, platform "
+                        "FROM concept_duplicate_dismissals"
+                    ).fetchall()
+                }
+                if review_tables
+                else set()
+            )
     except sqlite3.OperationalError:
-        return []
+        return [], 0
 
     groups: dict[tuple[str | None, str | None, str | None], list[sqlite3.Row]] = {}
     for row in rows:
@@ -317,6 +343,16 @@ def duplicates(db_path: Path, limit: int = 100, threshold: float = 0.88) -> list
             for entity_b, vector_b in vectors[index + 1 :]:
                 if vector_b is None:
                     continue
+                names = tuple(sorted((str(entity_a["name"]), str(entity_b["name"]))))
+                dismissal_key = (
+                    names[0],
+                    names[1],
+                    entity_a["session_name"],
+                    entity_a["project"],
+                    entity_a["platform"],
+                )
+                if dismissal_key in dismissed:
+                    continue
                 similarity = sum(a * b for a, b in zip(vector_a, vector_b))
                 if similarity >= threshold:
                     candidates.append(
@@ -327,7 +363,38 @@ def duplicates(db_path: Path, limit: int = 100, threshold: float = 0.88) -> list
                         }
                     )
     candidates.sort(key=lambda item: item["similarity"], reverse=True)
-    return candidates[: min(max(limit, 1), 100)]
+    return candidates, len(rows)
+
+
+def duplicates(
+    db_path: Path,
+    limit: int = _DUPLICATE_RESULT_LIMIT,
+    threshold: float = _DUPLICATE_THRESHOLD,
+) -> list[dict]:
+    candidates, _ = _duplicate_candidates(db_path, threshold)
+    return candidates[: min(max(limit, 1), _DUPLICATE_RESULT_LIMIT)]
+
+
+def duplicate_report(
+    db_path: Path,
+    limit: int = _DUPLICATE_RESULT_LIMIT,
+    offset: int = 0,
+    threshold: float = _DUPLICATE_THRESHOLD,
+) -> dict:
+    candidates, scanned_entities = _duplicate_candidates(db_path, threshold)
+    result_limit = min(max(limit, 1), _DUPLICATE_RESULT_LIMIT)
+    result_offset = max(offset, 0)
+    items = candidates[result_offset : result_offset + result_limit]
+    return {
+        "items": items,
+        "total": len(candidates),
+        "threshold": threshold,
+        "scanned_entities": scanned_entities,
+        "scan_limit": _DUPLICATE_SCAN_LIMIT,
+        "result_limit": result_limit,
+        "offset": result_offset,
+        "has_more": result_offset + len(items) < len(candidates),
+    }
 
 
 def _entity(row: sqlite3.Row) -> dict:

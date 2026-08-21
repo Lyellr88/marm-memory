@@ -214,6 +214,54 @@ def init_concept_database(db_path: str, mark_current: bool = True) -> None:
             "ON concept_build_runs(created_at DESC)"
         )
 
+        # Review decisions are user-owned state rather than derived graph data.
+        # They deliberately survive backup_and_reset_concept_database().
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS concept_entity_aliases (
+                alias_name TEXT NOT NULL,
+                canonical_name TEXT NOT NULL,
+                session_name TEXT,
+                project TEXT,
+                platform TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_concept_aliases_scope "
+            "ON concept_entity_aliases(alias_name, COALESCE(session_name, ''), "
+            "COALESCE(project, ''), COALESCE(platform, ''))"
+        )
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS concept_entity_suppressions (
+                name TEXT NOT NULL,
+                session_name TEXT,
+                project TEXT,
+                platform TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_concept_suppressions_scope "
+            "ON concept_entity_suppressions(name, COALESCE(session_name, ''), "
+            "COALESCE(project, ''), COALESCE(platform, ''))"
+        )
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS concept_duplicate_dismissals (
+                name_a TEXT NOT NULL,
+                name_b TEXT NOT NULL,
+                session_name TEXT,
+                project TEXT,
+                platform TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_concept_dismissals_scope "
+            "ON concept_duplicate_dismissals(name_a, name_b, "
+            "COALESCE(session_name, ''), COALESCE(project, ''), "
+            "COALESCE(platform, ''))"
+        )
+
 
 def inspect_concept_schema(db_path: str) -> str:
     """Return missing, current, rebuild_required, or unavailable without DDL."""
@@ -330,6 +378,36 @@ class ConceptDB:
 
     def close(self) -> None:
         self.connection_pool.close_all()
+
+    def resolve_entity_name(
+        self,
+        conn: sqlite3.Connection,
+        name: str,
+        session_name: Optional[str],
+        project: Optional[str],
+        platform: Optional[str],
+    ) -> Optional[str]:
+        """Apply durable review aliases and suppressions for one exact scope."""
+        resolved = name
+        visited: set[str] = set()
+        while resolved not in visited:
+            visited.add(resolved)
+            row = conn.execute(
+                "SELECT canonical_name FROM concept_entity_aliases "
+                "WHERE alias_name = ? AND session_name IS ? AND project IS ? "
+                "AND platform IS ?",
+                (resolved, session_name, project, platform),
+            ).fetchone()
+            if row is None:
+                break
+            resolved = str(row[0])
+
+        suppressed = conn.execute(
+            "SELECT 1 FROM concept_entity_suppressions "
+            "WHERE name = ? AND session_name IS ? AND project IS ? AND platform IS ?",
+            (resolved, session_name, project, platform),
+        ).fetchone()
+        return None if suppressed else resolved
 
     def create_build_run(
         self,

@@ -1,6 +1,27 @@
 # Changelog
 
 <details>
+<summary><strong>August 21st, 2026: Scoped Knowledge Graphs and Duplicate Management (v2.41.0)</strong></summary>
+
+### Added: Review and Resolve Potential Duplicate Concepts
+
+- The Console's Potential Duplicates tab now finds similar concepts within the selected graph scope and shows the evidence behind each match: similarity, mentions, relationships, and the complete source memories for both concepts.
+- Review actions are durable. You can merge either concept into the other, remove either concept, or mark a pair as not duplicated. Merging preserves the surviving concept while moving the other concept's source references, relationships, code links, and aliases into it; the original memories are never rewritten or deleted.
+- Duplicate results now report the total found and support server-backed pagination instead of stopping at the first 100 matches. Each source panel scrolls independently so long memories remain readable without making the review dialog unusable.
+
+### Changed: Graph Scope Is Explicit
+
+- The Knowledge Graph can now be viewed across all knowledge or narrowed to one project or session. Search, counts, and the rendered graph all follow the same selected scope, and completing a scoped build switches the Explorer to that scope automatically.
+- The obsolete compact/full graph split is removed. The Explorer renders the full selected scope and suppresses background relationship lines until a node is hovered or selected, keeping large graphs legible and responsive without hiding most of their nodes.
+- Concept builds now preserve scope metadata on their run records, and graph summaries expose the scoped totals the Console needs rather than displaying global counts beside a filtered graph.
+
+### Developer Tooling
+
+- Added `scripts/tui-launcher.py`, a searchable terminal menu for launching MARM's benchmark, smoke-test, validation, and build scripts without memorizing their paths.
+
+</details>
+
+<details>
 <summary><strong>August 19th, 2026: The Console's Architecture Tab Gets A Real Code Structure Table (v2.40.0)</strong></summary>
 
 ### Added: See Which Files Your Project Actually Depends On
