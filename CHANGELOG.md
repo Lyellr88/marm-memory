@@ -1,7 +1,24 @@
 # Changelog
 
 <details>
-<summary><strong>August 21st, 2026: Scoped Knowledge Graphs and Duplicate Management (v2.41.0)</strong></summary>
+<summary><strong>August 21st, 2026: Console Workspace Revamp and Graph Management (v2.41.0)</strong></summary>
+
+### Changed: A More Focused, Customizable Console
+
+- The Console shell has been redesigned around a collapsible navigation rail. Closing it gives data-heavy pages the full browser width; opening it restores the labeled navigation without covering the page. Page names now describe their actual purpose: Memories, Knowledge Graph, and Indexed Projects.
+- The Console remains intentionally dark but now has selectable accent themes. The chosen cyan, emerald, violet, blue, orange, or slate accent carries through navigation, controls, status treatments, and page details rather than recoloring only one panel.
+- The Overview page has been rebuilt as an operational dashboard. Live server status and latency sit beside memory, concept, indexed-project, and compaction metrics, with recent concept builds and indexed contexts filling the working area instead of leaving most of the page empty.
+- Motion and visual feedback were added where they communicate state: cards enter progressively, successful actions receive restrained confirmation, active controls respond immediately, and reduced-motion preferences remain respected. Decorative graph-wave details fill otherwise empty Overview panels only while their lists are short, then get out of the way as real data grows.
+
+### Changed: Memories Is Now One Consistent Workspace
+
+- The old Raw Memories tab is now Stored Memories, and the workflow order is Stored Memories, Notebook, Logs, Sessions, then Compaction. Each section uses the same themed tabs, panels, empty states, selection feedback, and action placement instead of looking like a separate application.
+- Stored memories, notebook entries, logs, and sessions now share one bulk-delete pattern: select records, review an in-app destructive confirmation, and delete only the chosen items. The Console API gained matching bulk routes for the surfaces that previously only supported scattered per-row or delete-all actions.
+- Memory counts and tab summaries now come from the live Overview contract, making it possible to see the size of each workspace before opening it. Notebook editing, log browsing, session cards, and compaction states received clearer hierarchy and readable empty states without changing their stored data.
+
+### Fixed: Session Summaries Work From the Console
+
+- Session Summary now displays an existing summary when one is available and can generate a missing one through the server adapter. The button previously appeared functional but produced no result, leaving every session summary blank.
 
 ### Added: Review and Resolve Potential Duplicate Concepts
 
