@@ -1,6 +1,44 @@
 # Changelog
 
 <details>
+<summary><strong>August 21st, 2026: Console Workspace Revamp and Graph Management (v2.41.0)</strong></summary>
+
+### Changed: A More Focused, Customizable Console
+
+- The Console shell has been redesigned around a collapsible navigation rail. Closing it gives data-heavy pages the full browser width; opening it restores the labeled navigation without covering the page. Page names now describe their actual purpose: Memories, Knowledge Graph, and Indexed Projects.
+- The Console remains intentionally dark but now has selectable accent themes. The chosen cyan, emerald, violet, blue, orange, or slate accent carries through navigation, controls, status treatments, and page details rather than recoloring only one panel.
+- The Overview page has been rebuilt as an operational dashboard. Live server status and latency sit beside memory, concept, indexed-project, and compaction metrics, with recent concept builds and indexed contexts filling the working area instead of leaving most of the page empty.
+- Motion and visual feedback were added where they communicate state: cards enter progressively, successful actions receive restrained confirmation, active controls respond immediately, and reduced-motion preferences remain respected. Decorative graph-wave details fill otherwise empty Overview panels only while their lists are short, then get out of the way as real data grows.
+
+### Changed: Memories Is Now One Consistent Workspace
+
+- The old Raw Memories tab is now Stored Memories, and the workflow order is Stored Memories, Notebook, Logs, Sessions, then Compaction. Each section uses the same themed tabs, panels, empty states, selection feedback, and action placement instead of looking like a separate application.
+- Stored memories, notebook entries, logs, and sessions now share one bulk-delete pattern: select records, review an in-app destructive confirmation, and delete only the chosen items. The Console API gained matching bulk routes for the surfaces that previously only supported scattered per-row or delete-all actions.
+- Memory counts and tab summaries now come from the live Overview contract, making it possible to see the size of each workspace before opening it. Notebook editing, log browsing, session cards, and compaction states received clearer hierarchy and readable empty states without changing their stored data.
+
+### Fixed: Session Summaries Work From the Console
+
+- Session Summary now displays an existing summary when one is available and can generate a missing one through the server adapter. The button previously appeared functional but produced no result, leaving every session summary blank.
+
+### Added: Review and Resolve Potential Duplicate Concepts
+
+- The Console's Potential Duplicates tab now finds similar concepts within the selected graph scope and shows the evidence behind each match: similarity, mentions, relationships, and the complete source memories for both concepts.
+- Review actions are durable. You can merge either concept into the other, remove either concept, or mark a pair as not duplicated. Merging preserves the surviving concept while moving the other concept's source references, relationships, code links, and aliases into it; the original memories are never rewritten or deleted.
+- Duplicate results now report the total found and support server-backed pagination instead of stopping at the first 100 matches. Each source panel scrolls independently so long memories remain readable without making the review dialog unusable.
+
+### Changed: Graph Scope Is Explicit
+
+- The Knowledge Graph can now be viewed across all knowledge or narrowed to one project or session. Search, counts, and the rendered graph all follow the same selected scope, and completing a scoped build switches the Explorer to that scope automatically.
+- The obsolete compact/full graph split is removed. The Explorer renders the full selected scope and suppresses background relationship lines until a node is hovered or selected, keeping large graphs legible and responsive without hiding most of their nodes.
+- Concept builds now preserve scope metadata on their run records, and graph summaries expose the scoped totals the Console needs rather than displaying global counts beside a filtered graph.
+
+### Developer Tooling
+
+- Added `scripts/tui-launcher.py`, a searchable terminal menu for launching MARM's benchmark, smoke-test, validation, and build scripts without memorizing their paths.
+
+</details>
+
+<details>
 <summary><strong>August 19th, 2026: The Console's Architecture Tab Gets A Real Code Structure Table (v2.40.0)</strong></summary>
 
 ### Added: See Which Files Your Project Actually Depends On

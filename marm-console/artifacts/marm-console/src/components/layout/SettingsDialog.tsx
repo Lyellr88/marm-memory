@@ -24,9 +24,10 @@ export function SettingsDialog({ open, onOpenChange }: { open: boolean, onOpenCh
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="border-t-primary/35">
         <DialogHeader>
-          <DialogTitle>Connection Settings</DialogTitle>
+          <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-primary/80">Local runtime</div>
+          <DialogTitle>Connection settings</DialogTitle>
           <DialogDescription>
             Configure your local MARM backend connection.
           </DialogDescription>

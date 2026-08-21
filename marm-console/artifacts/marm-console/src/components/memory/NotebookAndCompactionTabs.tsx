@@ -1,16 +1,22 @@
-import { useState } from 'react';
-import { useNotebook, useUpsertNotebook, useDeleteNotebook, useCompaction, useRunCompactionAction } from '@/hooks/use-marm-queries';
-import { Badge, Button, Input, Textarea, Card, CardContent } from '@/components/ui/core';
+import { useEffect, useState } from 'react';
+import { useNotebook, useUpsertNotebook, useBulkDeleteNotebook, useCompaction, useRunCompactionAction } from '@/hooks/use-marm-queries';
+import { Badge, Button, Input, Textarea, Card, CardContent, cn } from '@/components/ui/core';
 import { format } from 'date-fns';
-import { Plus, Save, Trash2, RefreshCw, CheckCircle2, Eye, XCircle } from 'lucide-react';
+import { Plus, Save, Trash2, RefreshCw, CheckCircle2, Eye, XCircle, BookOpenText } from 'lucide-react';
 import type { NotebookEntry } from '@/lib/marm-types';
-import { type ActionNotice, mutationErrorMessage, ActionNoticePanel } from './shared';
+import { type ActionNotice, mutationErrorMessage, ActionNoticePanel, DeleteSelectionDialog, MemoryEmptyState } from './shared';
+
+function notebookKey(entry: Pick<NotebookEntry, 'name' | 'session_name' | 'project' | 'platform'>) {
+  return JSON.stringify([entry.name, entry.session_name, entry.project, entry.platform]);
+}
 
 export function NotebookTab() {
   const { data, isLoading } = useNotebook();
   const upsert = useUpsertNotebook();
-  const deleteNote = useDeleteNotebook();
+  const bulkDelete = useBulkDeleteNotebook();
   const [actionNotice, setActionNotice] = useState<ActionNotice | null>(null);
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set());
+  const [deleteOpen, setDeleteOpen] = useState(false);
   
   const [editing, setEditing] = useState<NotebookEntry | Partial<NotebookEntry> | null>(null);
   // name/session_name/project/platform form the entry's identity key in the
@@ -18,6 +24,51 @@ export function NotebookTab() {
   // otherwise saving after editing one of these fields would upsert a new
   // entry and leave the original behind instead of updating it.
   const isExistingEntry = !!editing?.created_at;
+
+  useEffect(() => {
+    if (!data) return;
+    const visibleKeys = new Set(data.map(notebookKey));
+    setSelectedKeys((previous) => {
+      const next = new Set(Array.from(previous).filter((key) => visibleKeys.has(key)));
+      return next.size === previous.size ? previous : next;
+    });
+  }, [data]);
+
+  const allSelected = !!data?.length && data.every((entry) => selectedKeys.has(notebookKey(entry)));
+
+  const toggleEntry = (entry: NotebookEntry) => {
+    const key = notebookKey(entry);
+    setSelectedKeys((previous) => {
+      const next = new Set(previous);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const confirmDelete = () => {
+    const entries = (data ?? [])
+      .filter((entry) => selectedKeys.has(notebookKey(entry)))
+      .map(({ name, session_name, project, platform }) => ({ name, session_name, project, platform }));
+    if (!entries.length) return;
+    bulkDelete.mutate(entries, {
+      onSuccess: (result) => {
+        const failedKeys = new Set(result.failed_entries.map(notebookKey));
+        if (editing && selectedKeys.has(notebookKey(editing as NotebookEntry)) && !failedKeys.has(notebookKey(editing as NotebookEntry))) {
+          setEditing(null);
+        }
+        setSelectedKeys(failedKeys);
+        setDeleteOpen(false);
+        setActionNotice({
+          kind: result.failed_entries.length ? 'warning' : 'success',
+          message: result.failed_entries.length
+            ? `${result.deleted_entries} notebook entries deleted; ${result.failed_entries.length} could not be deleted.`
+            : `${result.deleted_entries} notebook entries deleted.`,
+        });
+      },
+      onError: (error) => setActionNotice({ kind: 'error', message: mutationErrorMessage(error) }),
+    });
+  };
 
   const handleSave = () => {
     if (!editing?.name || !editing?.content) return;
@@ -39,40 +90,73 @@ export function NotebookTab() {
   if (isLoading) return <div className="p-8 text-center text-muted-foreground">Loading notebook...</div>;
 
   return (
-    <div className="h-full flex flex-col gap-4 overflow-hidden pb-4">
-      <div className="flex justify-between items-center shrink-0">
-        <h3 className="text-lg font-medium">Notebook Entries</h3>
-        <Button onClick={() => setEditing({ name: '', content: '' })} size="sm">
-          <Plus className="w-4 h-4 mr-2" /> New Entry
-        </Button>
+    <div className="flex h-full flex-col gap-4 overflow-hidden pb-4">
+      <div className="flex shrink-0 items-center justify-between rounded-xl border border-card-border bg-card/70 p-2 pl-4 shadow-[0_12px_34px_rgba(0,0,0,0.14)]">
+        <div>
+          <h3 className="font-semibold tracking-tight">Notebook entries</h3>
+          <p className="mt-0.5 text-xs text-muted-foreground">Persistent reference material scoped to your work</p>
+        </div>
+        <div className="flex items-center gap-3">
+          {!!data?.length && (
+            <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={allSelected}
+                onChange={() => setSelectedKeys(allSelected ? new Set() : new Set(data.map(notebookKey)))}
+                className="rounded border-input bg-background"
+              />
+              Select all
+            </label>
+          )}
+          {selectedKeys.size > 0 ? (
+            <Button className="bulk-action-enter" variant="destructive" onClick={() => setDeleteOpen(true)} size="sm">
+              <Trash2 className="w-4 h-4 mr-2" /> Delete {selectedKeys.size}
+            </Button>
+          ) : (
+            <Button onClick={() => setEditing({ name: '', content: '' })} size="sm">
+              <Plus className="w-4 h-4 mr-2" /> New Entry
+            </Button>
+          )}
+        </div>
       </div>
       <ActionNoticePanel notice={actionNotice} />
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 flex-1 overflow-hidden">
-        <div className="lg:col-span-1 border rounded-md bg-card overflow-auto">
+      <div className="grid flex-1 grid-cols-1 gap-4 overflow-hidden lg:grid-cols-4">
+        <div className="overflow-auto rounded-xl border border-card-border border-t-primary/35 bg-card/75 shadow-[0_18px_50px_rgba(0,0,0,0.16)] lg:col-span-1">
           {data?.length === 0 ? (
-            <div className="p-6 text-center text-sm text-muted-foreground">No notebook entries</div>
+            <MemoryEmptyState title="No notebook entries" detail="Pin durable reference material here." className="min-h-full" />
           ) : (
             <div className="divide-y">
               {data?.map(note => (
-                <button
-                  key={`${note.name}-${note.session_name}-${note.project}-${note.platform}`}
-                  onClick={() => setEditing(note)}
-                  className="w-full text-left p-4 hover:bg-muted transition-colors"
+                <div
+                  key={notebookKey(note)}
+                  className={cn(
+                    'flex items-start border-l-2 border-l-transparent transition-[color,background-color,border-color,box-shadow] hover:border-l-violet-400 hover:bg-violet-400/[0.04]',
+                    selectedKeys.has(notebookKey(note)) && 'border-l-violet-400 bg-violet-400/[0.055] shadow-[inset_3px_0_0_rgba(192,132,252,0.5)]',
+                  )}
                 >
-                  <div className="font-medium text-sm">{note.name}</div>
-                  <div className="flex gap-1 mt-2">
-                    <Badge variant="secondary" className="text-[10px]">{note.session_name}</Badge>
-                    {note.project && <Badge variant="secondary" className="text-[10px]">{note.project}</Badge>}
-                    {note.platform && <Badge variant="outline" className="text-[10px]">{note.platform}</Badge>}
-                  </div>
-                </button>
+                  <input
+                    type="checkbox"
+                    checked={selectedKeys.has(notebookKey(note))}
+                    onChange={() => toggleEntry(note)}
+                    aria-label={`Select notebook entry ${note.name}`}
+                    className="ml-4 mt-5 rounded border-input bg-background"
+                  />
+                  <button onClick={() => setEditing(note)} className="min-w-0 flex-1 p-4 text-left">
+                    <div className="font-medium text-sm">{note.name}</div>
+                    <div className="flex gap-1 mt-2">
+                      <Badge variant="secondary" className="text-[10px]">{note.session_name}</Badge>
+                      {note.project && <Badge variant="secondary" className="text-[10px]">{note.project}</Badge>}
+                      {note.platform && <Badge variant="outline" className="text-[10px]">{note.platform}</Badge>}
+                    </div>
+                  </button>
+                </div>
               ))}
             </div>
           )}
         </div>
 
-        <div className="lg:col-span-3 border rounded-md bg-card flex flex-col overflow-hidden relative">
+        <div className="relative flex flex-col overflow-hidden rounded-xl border border-card-border border-t-primary/35 bg-card/75 shadow-[0_18px_50px_rgba(0,0,0,0.16)] lg:col-span-3">
           {editing ? (
             <div className="p-6 flex flex-col h-full gap-4">
               <div className="flex gap-4">
@@ -115,37 +199,7 @@ export function NotebookTab() {
                 onChange={e => setEditing(p => ({ ...p!, content: e.target.value }))}
                 className="flex-1 font-mono text-sm resize-none"
               />
-              <div className="flex justify-between items-center pt-2">
-                {editing.created_at ? (
-                  <Button 
-                    variant="destructive" 
-                    size="sm"
-                    onClick={() => {
-                      const typed = prompt(`Type DELETE to delete notebook entry '${editing.name}'.`);
-                      if (typed !== 'DELETE') return;
-                      deleteNote.mutate(
-                        {
-                          name: editing.name!,
-                          params: {
-                            session_name: editing.session_name || undefined,
-                            project: editing.project || undefined,
-                            platform: editing.platform || undefined,
-                          },
-                        },
-                        {
-                          onSuccess: () => {
-                            setActionNotice({ kind: 'success', message: `Notebook entry '${editing.name}' deleted.` });
-                            setEditing(null);
-                          },
-                          onError: (error) => setActionNotice({ kind: 'error', message: mutationErrorMessage(error) }),
-                        },
-                      );
-                    }}
-                    isLoading={deleteNote.isPending}
-                  >
-                    <Trash2 className="w-4 h-4 mr-2" /> Delete
-                  </Button>
-                ) : <div />}
+              <div className="flex justify-end pt-2">
                 <div className="flex gap-2">
                   <Button variant="outline" onClick={() => setEditing(null)}>Cancel</Button>
                   <Button onClick={handleSave} isLoading={upsert.isPending} disabled={!editing.name || !editing.content}>
@@ -155,12 +209,25 @@ export function NotebookTab() {
               </div>
             </div>
           ) : (
-            <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
-              Select an entry to view or edit
+            <div className="flex flex-1 flex-col items-center justify-center text-sm text-muted-foreground">
+              <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl border border-primary/20 bg-primary/[0.06] text-primary">
+                <BookOpenText className="h-5 w-5" />
+              </div>
+              <span>Select an entry to view or edit</span>
+              <span className="mt-1 text-xs text-muted-foreground/70">Notebook content remains available across sessions.</span>
             </div>
           )}
         </div>
       </div>
+      <DeleteSelectionDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        count={selectedKeys.size}
+        itemLabel="notebook entry"
+        description="The selected notebook entries will be removed from their exact session, project, and platform scopes."
+        isPending={bulkDelete.isPending}
+        onConfirm={confirmDelete}
+      />
     </div>
   );
 }
@@ -212,8 +279,8 @@ export function CompactionTab() {
   const history = data?.filter(c => c.status === 'applied' || c.status === 'discarded' || c.status === 'stale' || c.status === 'nudge_exhausted') || [];
 
   return (
-    <div className="space-y-4 h-full overflow-auto pb-4">
-      <div className="flex justify-between items-center mb-6">
+    <div className="h-full space-y-4 overflow-auto pb-4">
+      <div className="flex items-center justify-between rounded-xl border border-card-border bg-card/70 p-3 pl-4 shadow-[0_12px_34px_rgba(0,0,0,0.14)]">
         <div>
           <h3 className="text-lg font-medium">Compaction Pipeline</h3>
           <p className="text-sm text-muted-foreground">Review and apply memory summaries</p>
@@ -231,10 +298,9 @@ export function CompactionTab() {
 
       {view === 'history' ? (
         history.length === 0 ? (
-          <Card className="border-dashed">
-            <CardContent className="flex flex-col items-center justify-center h-48 text-muted-foreground">
-              <RefreshCw className="w-8 h-8 mb-2 opacity-50" />
-              <p>No compaction history yet.</p>
+          <Card className="border-dashed border-amber-400/20 bg-card/55">
+            <CardContent className="p-3">
+              <MemoryEmptyState title="No compaction history yet" detail="Completed summaries will leave an audit trail here." />
             </CardContent>
           </Card>
         ) : (
@@ -243,16 +309,21 @@ export function CompactionTab() {
           </div>
         )
       ) : pending.length === 0 ? (
-        <Card className="border-dashed">
-          <CardContent className="flex flex-col items-center justify-center h-48 text-muted-foreground">
-            <RefreshCw className="w-8 h-8 mb-2 opacity-50" />
-            <p>No pending compactions.</p>
+        <Card className="border-dashed border-amber-400/20 bg-card/55">
+          <CardContent className="p-3">
+            <MemoryEmptyState title="No pending compactions" detail="MARM will surface summaries here when enough related context accumulates." />
           </CardContent>
         </Card>
       ) : (
         <div className="space-y-4">
           {pending.map(candidate => (
-            <Card key={candidate.id} className="overflow-hidden">
+            <Card
+              key={candidate.id}
+              className={cn(
+                'overflow-hidden border-t-2 border-t-amber-400/40',
+                runAction.isPending && runAction.variables?.id === candidate.id && runAction.variables.action === 'apply' && 'compaction-collapse',
+              )}
+            >
               <div className="flex flex-col md:flex-row">
                 <div className="flex-1 p-6 border-b md:border-b-0 md:border-r bg-muted/10">
                   <div className="flex justify-between items-center mb-4">

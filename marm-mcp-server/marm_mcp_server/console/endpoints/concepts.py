@@ -6,10 +6,18 @@ import threading
 import time
 import uuid
 from datetime import datetime, timezone
+from typing import Any, Callable, Literal
 
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
+from ...core import concept_review
+from ...core.concept_build_lock import (
+    MANUAL_BUILD_LOCK_SECONDS,
+    ConceptBuildBusy,
+    run_exclusive,
+)
 from .. import concept_store, mcp_client, memory_store
 from ..concept_graph_overview import graph_overview
 from ..concept_neighborhood import neighborhood
@@ -22,6 +30,15 @@ _CONCEPT_BUILD_STALE_SECONDS = 300
 _CONCEPT_BUILD_LAUNCH_TTL_SECONDS = 300
 _launching_concept_builds: dict[str, tuple[dict, float]] = {}
 _launching_concept_builds_lock = threading.Lock()
+
+
+class DuplicatePairPayload(BaseModel):
+    entity_a_id: int
+    entity_b_id: int
+
+
+class MergeDuplicatePayload(DuplicatePairPayload):
+    keep: Literal["a", "b"]
 
 
 def _prune_launching_concept_builds() -> None:
@@ -79,8 +96,19 @@ def search_concepts(
 
 
 @router.get("/api/concepts/graph")
-def get_concept_graph(full: bool = Query(False)) -> dict:
-    return graph_overview(get_concept_db_path(), force_full=full)
+def get_concept_graph(
+    full: bool = Query(False),
+    project: str | None = None,
+    session: str | None = None,
+) -> dict:
+    if project is not None and session is not None:
+        raise HTTPException(
+            status_code=422,
+            detail="Choose either a project or session scope, not both.",
+        )
+    return graph_overview(
+        get_concept_db_path(), force_full=full, project=project, session=session
+    )
 
 
 @router.get("/api/concepts/graph/version")
@@ -89,6 +117,70 @@ def get_concept_graph_version() -> dict:
     without a reload. Deliberately cheap: the atlas is only refetched when
     this value moves."""
     return concept_store.graph_version(get_concept_db_path())
+
+
+@router.get("/api/concepts/duplicates")
+def get_concept_duplicates(
+    offset: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=100),
+) -> dict:
+    return concept_store.duplicate_report(
+        get_concept_db_path(), offset=offset, limit=limit
+    )
+
+
+async def _run_review_action(
+    purpose: str, action: Callable[..., dict[str, Any]], *args: Any
+) -> dict[str, Any]:
+    lease_lost = threading.Event()
+
+    def protected_action(db_path: str, *action_args: Any) -> dict[str, Any]:
+        return action(db_path, *action_args, lease_lost=lease_lost)
+
+    try:
+        return await run_exclusive(
+            purpose,
+            protected_action,
+            get_concept_db_path(),
+            *args,
+            ttl_seconds=MANUAL_BUILD_LOCK_SECONDS,
+            lease_lost=lease_lost,
+        )
+    except ConceptBuildBusy as exc:
+        raise HTTPException(
+            status_code=409,
+            detail="A concept build is running. Try again after it finishes.",
+        ) from exc
+    except concept_review.ConceptReviewError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.post("/api/concepts/duplicates/dismiss")
+async def dismiss_concept_duplicate(payload: DuplicatePairPayload) -> dict:
+    return await _run_review_action(
+        "duplicate_dismiss",
+        concept_review.dismiss_duplicate,
+        payload.entity_a_id,
+        payload.entity_b_id,
+    )
+
+
+@router.post("/api/concepts/duplicates/merge")
+async def merge_concept_duplicate(payload: MergeDuplicatePayload) -> dict:
+    return await _run_review_action(
+        "duplicate_merge",
+        concept_review.merge_entities,
+        payload.entity_a_id,
+        payload.entity_b_id,
+        payload.keep,
+    )
+
+
+@router.delete("/api/concepts/entities/{entity_id}")
+async def remove_concept_entity(entity_id: int) -> dict:
+    return await _run_review_action(
+        "entity_remove", concept_review.remove_entity, entity_id
+    )
 
 
 @router.get("/api/concepts/{entity_id}")
@@ -197,8 +289,3 @@ def get_concept_build(job_id: str) -> dict:
     if job is None:
         raise HTTPException(status_code=404, detail="Concept build not found")
     return _stale_build_result(job)
-
-
-@router.get("/api/concepts/duplicates")
-def get_concept_duplicates() -> list[dict]:
-    return concept_store.duplicates(get_concept_db_path())

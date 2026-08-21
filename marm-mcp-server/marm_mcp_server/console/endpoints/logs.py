@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 from .. import memory_store
 from ..core import _mcp_tool_mutation, get_memory_db_path
-from ..models import BulkDeletePayload, LogDeletePayload
+from ..models import BulkDeletePayload, LogBulkDeletePayload, LogDeletePayload
 
 router = APIRouter()
 
@@ -43,6 +43,52 @@ def delete_log(log_id: str, payload: LogDeletePayload) -> dict:
         "session_name": payload.session_name,
         "deleted_count": deleted_count,
         "memories_deleted": result.get("memories_deleted", 0),
+    }
+
+
+@router.post("/api/logs/bulk-delete")
+def delete_selected_logs(payload: LogBulkDeletePayload) -> dict:
+    deleted_logs = 0
+    deleted_memories = 0
+    failed_logs: list[dict] = []
+    unique_logs = {(log.id, log.session_name): log for log in payload.logs}
+    for log in unique_logs.values():
+        try:
+            result = _mcp_tool_mutation(
+                "marm_delete",
+                {
+                    "type": "log",
+                    "target": log.id,
+                    "session_name": log.session_name,
+                },
+            )
+        except HTTPException as exc:
+            failed_logs.append(
+                {
+                    "log_id": log.id,
+                    "session_name": log.session_name,
+                    "status_code": exc.status_code,
+                    "message": str(exc.detail),
+                }
+            )
+            continue
+        if not result.get("deleted_count", 0):
+            failed_logs.append(
+                {
+                    "log_id": log.id,
+                    "session_name": log.session_name,
+                    "status_code": 404,
+                    "message": "Log entry not found.",
+                }
+            )
+            continue
+        deleted_logs += int(result.get("deleted_count", 0) or 0)
+        deleted_memories += int(result.get("memories_deleted", 0) or 0)
+    return {
+        "status": "partial_success" if failed_logs else "success",
+        "deleted_count": deleted_logs,
+        "memories_deleted": deleted_memories,
+        "failed_logs": failed_logs,
     }
 
 

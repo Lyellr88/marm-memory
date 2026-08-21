@@ -411,11 +411,12 @@ export function ProjectsPage() {
   const [exploreTarget, setExploreTarget] = useState<ProjectSummary | null>(null);
 
   return (
-    <div className="p-8 flex flex-col h-full overflow-hidden">
-      <div className="flex justify-between items-center mb-8 shrink-0">
+    <div className="page-enter p-7 xl:p-8 flex flex-col h-full overflow-hidden">
+      <div className="flex justify-between items-center mb-6 shrink-0">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Codebase Intelligence</h1>
-          <p className="text-muted-foreground text-sm mt-1">Indexed local repositories and AST graphs</p>
+          <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-primary/80">Code intelligence</div>
+          <h1 className="text-[1.8rem] font-semibold tracking-[-0.045em]">Indexed Projects</h1>
+          <p className="text-muted-foreground text-sm mt-1">Local repositories, structural search, traces, and impact analysis.</p>
         </div>
         <Button onClick={() => setIndexOpen(true)}>
           <FolderCode className="w-4 h-4 mr-2" /> Index Repository
@@ -435,7 +436,7 @@ export function ProjectsPage() {
         ) : (
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
             {projects?.map(proj => (
-              <Card key={proj.name} className="flex flex-col">
+              <Card key={proj.name} className="group flex flex-col transition-[border-color,transform] duration-200 hover:-translate-y-0.5 hover:border-primary/25">
                 <CardHeader className="flex flex-row items-start justify-between pb-2">
                   <div>
                     <CardTitle className="font-mono text-lg flex items-center gap-2">

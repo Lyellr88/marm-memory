@@ -8,6 +8,8 @@ from array import array
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from fastapi.testclient import TestClient
+from marm_mcp_server.console import app as console_app
 from marm_mcp_server.console import (
     concept_graph_overview,
     concept_neighborhood,
@@ -89,18 +91,30 @@ def make_db(tmp_path: Path) -> Path:
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL
         );
-        INSERT INTO concept_schema_metadata (key, value)
-        VALUES ('schema_version', '2');
         """
+    )
+    conn.execute(
+        "INSERT INTO concept_schema_metadata (key, value) VALUES (?, ?)",
+        ("schema_version", concept_store._CURRENT_CONCEPT_SCHEMA_VERSION),
     )
     conn.commit()
     conn.close()
     return db_path
 
 
-def add_entity(db_path: Path, name: str, type_: str = "concept") -> int:
+def add_entity(
+    db_path: Path,
+    name: str,
+    type_: str = "concept",
+    *,
+    session: str | None = None,
+    project: str | None = None,
+) -> int:
     conn = sqlite3.connect(db_path)
-    cur = conn.execute("INSERT INTO entities (name, type) VALUES (?, ?)", (name, type_))
+    cur = conn.execute(
+        "INSERT INTO entities (name, type, session_name, project) VALUES (?, ?, ?, ?)",
+        (name, type_, session, project),
+    )
     conn.commit()
     conn.close()
     return cur.lastrowid
@@ -236,11 +250,105 @@ def test_graph_overview_returns_complete_graph_under_budget(tmp_path):
     assert "isolated" in {n["name"] for n in result["nodes"]}
     by_id = {n["id"]: n for n in result["nodes"]}
     assert by_id[hub]["hidden_neighbor_count"] == 0
-    assert result["total"] == {"nodes": 22, "edges": 20}
+    assert result["total"] == {"nodes": 22, "edges": 20, "code_links": 0}
     assert result["rendered"] == {"nodes": 22, "edges": 20}
     for edge in result["edges"]:
         assert edge["source"] in node_ids
         assert edge["target"] in node_ids
+
+
+def test_graph_overview_filters_the_canonical_graph_by_one_scope(tmp_path):
+    db = make_db(tmp_path)
+    project_a = [
+        add_entity(db, f"project-a-{index}", project="project-a") for index in range(2)
+    ]
+    project_b = [
+        add_entity(db, f"project-b-{index}", project="project-b") for index in range(2)
+    ]
+    add_edge(db, *project_a, "uses")
+    add_edge(db, *project_b, "uses")
+    with sqlite3.connect(db) as conn:
+        conn.executemany(
+            """INSERT INTO entity_code_links
+               (entity_id, graph_qualified_name, project)
+               VALUES (?, ?, ?)""",
+            [
+                (project_a[0], "project_a.symbol", "project-a"),
+                (project_b[0], "project_b.symbol", "project-b"),
+            ],
+        )
+
+    result = concept_graph_overview.graph_overview(
+        db, force_full=True, project="project-a"
+    )
+
+    assert {node["name"] for node in result["nodes"]} == {
+        "project-a-0",
+        "project-a-1",
+    }
+    assert result["total"] == {"nodes": 2, "edges": 1, "code_links": 1}
+    assert result["rendered"] == {"nodes": 2, "edges": 1}
+
+
+def test_duplicate_candidates_route_is_not_captured_as_an_entity_id(monkeypatch):
+    expected = {
+        "items": [
+            {
+                "entity_a": {"id": 1, "name": "MARM", "type": "product"},
+                "entity_b": {"id": 2, "name": "MARM Memory", "type": "product"},
+                "similarity": 0.97,
+            }
+        ],
+        "total": 1,
+        "threshold": 0.88,
+        "scanned_entities": 2,
+        "scan_limit": 300,
+        "result_limit": 100,
+        "offset": 0,
+        "has_more": False,
+    }
+    monkeypatch.setattr(
+        concepts_endpoint.concept_store,
+        "duplicate_report",
+        lambda _path, **_params: expected,
+    )
+
+    with TestClient(console_app.app) as client:
+        response = client.get("/api/concepts/duplicates")
+
+    assert response.status_code == 200
+    assert response.json() == expected
+
+
+def test_duplicate_review_routes_return_action_results(monkeypatch):
+    async def fake_action(purpose, action, *args):
+        return {"purpose": purpose, "args": list(args)}
+
+    monkeypatch.setattr(concepts_endpoint, "_run_review_action", fake_action)
+
+    with TestClient(console_app.app) as client:
+        dismissed = client.post(
+            "/api/concepts/duplicates/dismiss",
+            json={"entity_a_id": 1, "entity_b_id": 2},
+        )
+        merged = client.post(
+            "/api/concepts/duplicates/merge",
+            json={"entity_a_id": 1, "entity_b_id": 2, "keep": "b"},
+        )
+        removed = client.delete("/api/concepts/entities/2")
+
+    assert dismissed.status_code == 200
+    assert dismissed.json() == {
+        "purpose": "duplicate_dismiss",
+        "args": [1, 2],
+    }
+    assert merged.status_code == 200
+    assert merged.json() == {
+        "purpose": "duplicate_merge",
+        "args": [1, 2, "b"],
+    }
+    assert removed.status_code == 200
+    assert removed.json() == {"purpose": "entity_remove", "args": [2]}
 
 
 def test_graph_overview_is_deterministic_across_calls(tmp_path):
@@ -399,6 +507,43 @@ def test_build_runs_and_duplicate_candidates_are_readable(tmp_path):
         first,
         second,
     }
+
+
+def test_dismissed_duplicate_candidate_stays_hidden(tmp_path):
+    db = make_db(tmp_path)
+    first = add_entity(db, "first", session="sess-a")
+    second = add_entity(db, "second", session="sess-a")
+    set_embedding(db, first, 1.0, 0.0)
+    set_embedding(db, second, 0.99, 0.01)
+    with sqlite3.connect(db) as conn:
+        conn.execute(
+            "CREATE TABLE concept_duplicate_dismissals ("
+            "name_a TEXT, name_b TEXT, session_name TEXT, project TEXT, platform TEXT)"
+        )
+        conn.execute(
+            "INSERT INTO concept_duplicate_dismissals "
+            "(name_a, name_b, session_name) VALUES ('first', 'second', 'sess-a')"
+        )
+
+    assert concept_store.duplicates(db, threshold=0.9) == []
+
+
+def test_duplicate_report_exposes_threshold_and_total(tmp_path):
+    db = make_db(tmp_path)
+    for index in range(3):
+        entity_id = add_entity(db, f"entity-{index}", session="sess-a")
+        set_embedding(db, entity_id, 1.0, 0.0)
+
+    report = concept_store.duplicate_report(db, limit=1, offset=1, threshold=0.9)
+
+    assert len(report["items"]) == 1
+    assert report["total"] == 3
+    assert report["threshold"] == 0.9
+    assert report["scanned_entities"] == 3
+    assert report["scan_limit"] == 300
+    assert report["result_limit"] == 1
+    assert report["offset"] == 1
+    assert report["has_more"] is True
 
 
 def test_stale_build_result_stops_console_polling():

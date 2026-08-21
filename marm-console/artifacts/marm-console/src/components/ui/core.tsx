@@ -19,11 +19,11 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   ({ className, variant = 'default', size = 'default', isLoading, children, disabled, ...props }, ref) => {
     const variants = {
-      default: 'bg-primary text-primary-foreground hover:bg-primary/90 shadow',
-      destructive: 'bg-destructive text-destructive-foreground hover:bg-destructive/90 shadow',
-      outline: 'border border-border bg-transparent hover:bg-muted text-foreground',
-      secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
-      ghost: 'hover:bg-muted text-foreground',
+      default: 'border border-primary/70 bg-primary text-primary-foreground shadow-[0_8px_24px_rgba(var(--primary-rgb),0.12)] hover:bg-primary/90 hover:shadow-[0_10px_30px_rgba(var(--primary-rgb),0.2)]',
+      destructive: 'border border-destructive/70 bg-destructive text-destructive-foreground hover:bg-destructive/90',
+      outline: 'border border-border bg-card/70 hover:border-primary/35 hover:bg-accent/70 text-foreground',
+      secondary: 'border border-border bg-secondary text-secondary-foreground hover:border-primary/25 hover:bg-accent',
+      ghost: 'hover:bg-accent/70 text-foreground',
       link: 'text-primary underline-offset-4 hover:underline',
     };
     const sizes = {
@@ -37,7 +37,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         ref={ref}
         disabled={disabled || isLoading}
         className={cn(
-          'inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50',
+          'inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium transition-[color,background-color,border-color,box-shadow,transform] duration-200 hover:-translate-y-px active:translate-y-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 disabled:pointer-events-none disabled:opacity-50 disabled:shadow-none',
           variants[variant],
           sizes[size],
           className
@@ -59,7 +59,7 @@ export const Input = forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTML
       <input
         type={type}
         className={cn(
-          'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50',
+          'flex h-9 w-full rounded-md border border-input bg-background/70 px-3 py-1 text-sm transition-[border-color,box-shadow,background-color] file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground/75 hover:border-primary/35 focus-visible:border-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/15 disabled:cursor-not-allowed disabled:opacity-50',
           className
         )}
         ref={ref}
@@ -76,7 +76,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, React.TextareaHTMLAttrib
     return (
       <textarea
         className={cn(
-          'flex min-h-[60px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 font-mono',
+          'flex min-h-[60px] w-full rounded-md border border-input bg-background/70 px-3 py-2 text-sm placeholder:text-muted-foreground/75 hover:border-primary/35 focus-visible:border-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/15 disabled:cursor-not-allowed disabled:opacity-50 font-mono',
           className
         )}
         ref={ref}
@@ -102,8 +102,8 @@ Label.displayName = 'Label';
 // --- Badge ---
 export function Badge({ className, variant = 'default', ...props }: React.HTMLAttributes<HTMLDivElement> & { variant?: 'default' | 'secondary' | 'destructive' | 'outline' }) {
   const variants = {
-    default: 'border-transparent bg-primary text-primary-foreground hover:bg-primary/80',
-    secondary: 'border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80',
+    default: 'border-primary/30 bg-primary/12 text-primary-highlight',
+    secondary: 'border-border bg-secondary text-secondary-foreground',
     destructive: 'border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80',
     outline: 'text-foreground',
   };
@@ -114,13 +114,13 @@ export function Badge({ className, variant = 'default', ...props }: React.HTMLAt
 
 // --- Card ---
 export function Card({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn('rounded-lg border bg-card text-card-foreground shadow-sm', className)} {...props} />;
+  return <div className={cn('rounded-xl border border-card-border bg-card/90 text-card-foreground shadow-[0_16px_40px_rgba(0,0,0,0.18)]', className)} {...props} />;
 }
 export function CardHeader({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return <div className={cn('flex flex-col space-y-1.5 p-6', className)} {...props} />;
 }
 export function CardTitle({ className, ...props }: React.HTMLAttributes<HTMLHeadingElement>) {
-  return <h3 className={cn('font-semibold leading-none tracking-tight', className)} {...props} />;
+  return <h3 className={cn('font-semibold leading-none tracking-[-0.015em]', className)} {...props} />;
 }
 export function CardDescription({ className, ...props }: React.HTMLAttributes<HTMLParagraphElement>) {
   return <p className={cn('text-sm text-muted-foreground', className)} {...props} />;
@@ -151,7 +151,7 @@ export const DialogClose = DialogPrimitive.Close;
 export const DialogOverlay = forwardRef<React.ElementRef<typeof DialogPrimitive.Overlay>, React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay>>(({ className, ...props }, ref) => (
   <DialogPrimitive.Overlay
     ref={ref}
-    className={cn('fixed inset-0 z-50 bg-black/80 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0', className)}
+    className={cn('fixed inset-0 z-50 bg-[#01040a]/82 backdrop-blur-sm data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0', className)}
     {...props}
   />
 ));
@@ -163,7 +163,7 @@ export const DialogContent = forwardRef<React.ElementRef<typeof DialogPrimitive.
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        'fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 border bg-background p-6 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:rounded-lg',
+        'fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 overflow-hidden rounded-xl border border-popover-border bg-popover p-6 shadow-[0_32px_90px_rgba(0,0,0,0.65),0_0_0_1px_rgba(var(--primary-rgb),0.06)] duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
         className
       )}
       {...props}
@@ -196,7 +196,7 @@ export const SelectTrigger = forwardRef<React.ElementRef<typeof SelectPrimitive.
   <SelectPrimitive.Trigger
     ref={ref}
     className={cn(
-      'flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1',
+      'flex h-9 w-full items-center justify-between whitespace-nowrap rounded-md border border-input bg-background/70 px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground hover:border-primary/35 focus:border-primary/60 focus:outline-none focus:ring-2 focus:ring-primary/15 disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1',
       className
     )}
     {...props}
@@ -251,14 +251,14 @@ SelectItem.displayName = SelectPrimitive.Item.displayName;
 // --- Tabs ---
 export const Tabs = TabsPrimitive.Root;
 export const TabsList = forwardRef<React.ElementRef<typeof TabsPrimitive.List>, React.ComponentPropsWithoutRef<typeof TabsPrimitive.List>>(({ className, ...props }, ref) => (
-  <TabsPrimitive.List ref={ref} className={cn('inline-flex h-9 items-center justify-center rounded-lg bg-muted p-1 text-muted-foreground', className)} {...props} />
+  <TabsPrimitive.List ref={ref} className={cn('inline-flex h-9 items-center justify-center rounded-lg border border-border/80 bg-card/75 p-1 text-muted-foreground', className)} {...props} />
 ));
 TabsList.displayName = TabsPrimitive.List.displayName;
 export const TabsTrigger = forwardRef<React.ElementRef<typeof TabsPrimitive.Trigger>, React.ComponentPropsWithoutRef<typeof TabsPrimitive.Trigger>>(({ className, ...props }, ref) => (
   <TabsPrimitive.Trigger
     ref={ref}
     className={cn(
-      'inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow',
+      'inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium ring-offset-background transition-[color,background-color,border-color,box-shadow] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-accent data-[state=active]:text-primary-highlight',
       className
     )}
     {...props}
@@ -272,13 +272,13 @@ TabsContent.displayName = TabsPrimitive.Content.displayName;
 
 // --- Table ---
 export const Table = forwardRef<HTMLTableElement, React.HTMLAttributes<HTMLTableElement>>(({ className, ...props }, ref) => (
-  <div className="relative w-full overflow-auto border rounded-md">
+  <div className="relative w-full overflow-auto rounded-lg border border-border/90 bg-background/55">
     <table ref={ref} className={cn('w-full caption-bottom text-sm', className)} {...props} />
   </div>
 ));
 Table.displayName = 'Table';
 export const TableHeader = forwardRef<HTMLTableSectionElement, React.HTMLAttributes<HTMLTableSectionElement>>(({ className, ...props }, ref) => (
-  <thead ref={ref} className={cn('[&_tr]:border-b bg-muted/50', className)} {...props} />
+  <thead ref={ref} className={cn('[&_tr]:border-b bg-muted/85', className)} {...props} />
 ));
 TableHeader.displayName = 'TableHeader';
 export const TableBody = forwardRef<HTMLTableSectionElement, React.HTMLAttributes<HTMLTableSectionElement>>(({ className, ...props }, ref) => (
@@ -286,7 +286,7 @@ export const TableBody = forwardRef<HTMLTableSectionElement, React.HTMLAttribute
 ));
 TableBody.displayName = 'TableBody';
 export const TableRow = forwardRef<HTMLTableRowElement, React.HTMLAttributes<HTMLTableRowElement>>(({ className, ...props }, ref) => (
-  <tr ref={ref} className={cn('border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted', className)} {...props} />
+  <tr ref={ref} className={cn('border-b border-border/70 transition-colors hover:bg-primary/[0.035] data-[state=selected]:bg-accent', className)} {...props} />
 ));
 TableRow.displayName = 'TableRow';
 export const TableHead = forwardRef<HTMLTableCellElement, React.ThHTMLAttributes<HTMLTableCellElement>>(({ className, ...props }, ref) => (

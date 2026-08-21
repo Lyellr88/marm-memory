@@ -2,13 +2,22 @@
 
 from __future__ import annotations
 
+import time
+
 from fastapi import APIRouter, HTTPException
 
 from .. import memory_store
 from ..core import _mcp_tool_mutation, get_memory_db_path
-from ..models import BulkDeletePayload, SessionCreatePayload, SessionDeletePayload
+from ..models import (
+    BulkDeletePayload,
+    SessionBulkDeletePayload,
+    SessionCreatePayload,
+    SessionDeletePayload,
+)
 
 router = APIRouter()
+
+_BULK_DELETE_TIMEOUT_SECONDS = 60.0
 
 
 @router.get("/api/sessions")
@@ -42,6 +51,53 @@ def delete_session(session_name: str, payload: SessionDeletePayload) -> dict:
         "session_name": session_name,
         "deleted_count": result.get("deleted_count", 0),
         "memories_deleted": result.get("memories_deleted", 0),
+    }
+
+
+@router.post("/api/sessions/bulk-delete")
+def delete_selected_sessions(payload: SessionBulkDeletePayload) -> dict:
+    deleted_sessions = 0
+    deleted_logs = 0
+    deleted_memories = 0
+    failed_sessions: list[dict] = []
+    session_names = list(dict.fromkeys(payload.session_names))
+    deadline = time.monotonic() + _BULK_DELETE_TIMEOUT_SECONDS
+    for index, session_name in enumerate(session_names):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            failed_sessions.extend(
+                {
+                    "session_name": pending_name,
+                    "status_code": 504,
+                    "message": "Bulk deletion timed out before this session was processed.",
+                }
+                for pending_name in session_names[index:]
+            )
+            break
+        try:
+            result = _mcp_tool_mutation(
+                "marm_delete",
+                {"type": "log", "target": session_name},
+                timeout=min(30.0, remaining),
+            )
+        except HTTPException as exc:
+            failed_sessions.append(
+                {
+                    "session_name": session_name,
+                    "status_code": exc.status_code,
+                    "message": str(exc.detail),
+                }
+            )
+            continue
+        deleted_sessions += 1
+        deleted_logs += int(result.get("deleted_count", 0) or 0)
+        deleted_memories += int(result.get("memories_deleted", 0) or 0)
+    return {
+        "status": "partial_success" if failed_sessions else "success",
+        "deleted_sessions": deleted_sessions,
+        "deleted_count": deleted_logs,
+        "memories_deleted": deleted_memories,
+        "failed_sessions": failed_sessions,
     }
 
 

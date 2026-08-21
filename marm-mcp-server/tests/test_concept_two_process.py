@@ -13,6 +13,7 @@ import sqlite3
 import subprocess
 import sys
 import textwrap
+import threading
 from pathlib import Path
 
 import pytest
@@ -321,3 +322,75 @@ def test_releasing_after_expiry_does_not_steal_the_new_holders_lock(shared_db):
 
     assert concept_build_lock.release("slow-worker") is False
     assert concept_build_lock.current_holder()[0] == "manual_build"
+
+
+@pytest.mark.asyncio
+async def test_cancelling_a_review_action_does_not_release_the_build_lock(shared_db):
+    from marm_mcp_server.core import concept_build_lock
+
+    entered = threading.Event()
+    may_finish = threading.Event()
+    exited = threading.Event()
+
+    def blocking_action():
+        entered.set()
+        may_finish.wait(10)
+        exited.set()
+        return {"status": "success"}
+
+    caller = asyncio.create_task(
+        concept_build_lock.run_exclusive(
+            "duplicate_merge", blocking_action, ttl_seconds=60
+        )
+    )
+    await asyncio.to_thread(entered.wait, 5)
+
+    caller.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await caller
+
+    assert not exited.is_set()
+    assert concept_build_lock.current_holder() is not None
+    with pytest.raises(concept_build_lock.ConceptBuildBusy):
+        await concept_build_lock.run_exclusive(
+            "manual_build", lambda: {}, ttl_seconds=60
+        )
+
+    may_finish.set()
+    await asyncio.to_thread(exited.wait, 5)
+    for _ in range(100):
+        if concept_build_lock.current_holder() is None:
+            break
+        await asyncio.sleep(0.05)
+    assert concept_build_lock.current_holder() is None
+
+
+@pytest.mark.asyncio
+async def test_review_action_stops_at_the_next_boundary_after_lease_loss(shared_db):
+    from marm_mcp_server.core import concept_build_lock
+    from marm_mcp_server.core.concept_review import ConceptReviewLeaseLost
+
+    mutations: list[str] = []
+    lease_lost = threading.Event()
+
+    def renew_refused(_holder, _ttl):
+        return False
+
+    def action():
+        mutations.append("before_loss")
+        assert lease_lost.wait(3)
+        if lease_lost.is_set():
+            raise ConceptReviewLeaseLost("lost")
+        mutations.append("after_loss")
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(concept_build_lock, "renew", renew_refused)
+    try:
+        with pytest.raises(ConceptReviewLeaseLost):
+            await concept_build_lock.run_exclusive(
+                "duplicate_merge", action, ttl_seconds=1, lease_lost=lease_lost
+            )
+    finally:
+        monkeypatch.undo()
+
+    assert mutations == ["before_loss"]

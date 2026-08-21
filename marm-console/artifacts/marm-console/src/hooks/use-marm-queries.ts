@@ -1,11 +1,13 @@
 import { useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import type { QueryClient } from '@tanstack/react-query';
 import { useMarmClient } from '@/lib/use-marm-client';
 import { useConnection } from '@/lib/marm-connection';
 import type { 
-  MemoryListParams, MemoryInput, MemoryId, LogListParams, NotebookInput,
-  CompactionAction, ConceptSearchParams, ConceptBuildInput, 
-  ProjectIndexInput, CodeSearchInput, TraceInput, ImpactInput
+  MemoryListParams, MemoryInput, MemoryId, LogListParams, NotebookDeleteRef, NotebookInput,
+  CompactionAction, ConceptSearchParams, ConceptBuildInput, ConceptGraphParams,
+  ProjectIndexInput, CodeSearchInput, TraceInput, ImpactInput, DuplicatePairInput,
+  MergeDuplicateInput
 } from '@/lib/marm-types';
 import { MarmApiError } from '@/lib/marm-api';
 
@@ -20,7 +22,7 @@ export const queryKeys = {
   summary: (baseUrl: string, session: string) => ['summary', baseUrl, session],
   compaction: (baseUrl: string) => ['compaction', baseUrl],
   conceptsSummary: (baseUrl: string) => ['conceptsSummary', baseUrl],
-  conceptsGraph: (baseUrl: string, full = false) => ['conceptsGraph', baseUrl, full],
+  conceptsGraph: (baseUrl: string, params?: ConceptGraphParams) => ['conceptsGraph', baseUrl, params],
   conceptsGraphVersion: (baseUrl: string) => ['conceptsGraphVersion', baseUrl],
   conceptsSearch: (baseUrl: string, params?: ConceptSearchParams) => ['conceptsSearch', baseUrl, params],
   concept: (baseUrl: string, id: number) => ['concept', baseUrl, id],
@@ -179,6 +181,21 @@ export function useDeleteSession() {
   });
 }
 
+export function useBulkDeleteSessions() {
+  const { baseUrl, client } = useMarmConfig();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (names: string[]) => client.bulkDeleteSessions(names),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.sessions(baseUrl) });
+      qc.invalidateQueries({ queryKey: ['logs', baseUrl] });
+      qc.invalidateQueries({ queryKey: ['memories', baseUrl] });
+      qc.invalidateQueries({ queryKey: queryKeys.filters(baseUrl) });
+      qc.invalidateQueries({ queryKey: queryKeys.overview(baseUrl) });
+    },
+  });
+}
+
 export function useDeleteAllSessions() {
   const { baseUrl, client } = useMarmConfig();
   const qc = useQueryClient();
@@ -211,6 +228,20 @@ export function useDeleteLog() {
   return useMutation({
     mutationFn: ({ id, sessionName }: { id: number; sessionName: string }) => client.deleteLog(id, sessionName),
     onSuccess: invalidate,
+  });
+}
+
+export function useBulkDeleteLogs() {
+  const { baseUrl, client } = useMarmConfig();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (logs: Array<{ id: number; session_name: string }>) => client.bulkDeleteLogs(logs),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['logs', baseUrl] });
+      qc.invalidateQueries({ queryKey: ['memories', baseUrl] });
+      qc.invalidateQueries({ queryKey: queryKeys.sessions(baseUrl) });
+      qc.invalidateQueries({ queryKey: queryKeys.overview(baseUrl) });
+    },
   });
 }
 
@@ -257,6 +288,27 @@ export function useDeleteNotebook() {
   });
 }
 
+export function useGenerateSummary() {
+  const { baseUrl, client } = useMarmConfig();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (session: string) => client.generateSummary(session),
+    onSuccess: (summary) => {
+      qc.setQueryData(queryKeys.summary(baseUrl, summary.session_name), summary);
+      qc.invalidateQueries({ queryKey: queryKeys.sessions(baseUrl) });
+    },
+  });
+}
+
+export function useBulkDeleteNotebook() {
+  const { baseUrl, client } = useMarmConfig();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (entries: NotebookDeleteRef[]) => client.bulkDeleteNotebookEntries(entries),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['notebook', baseUrl] }),
+  });
+}
+
 // --- Compaction ---
 export function useCompaction() {
   const { baseUrl, client } = useMarmConfig();
@@ -286,11 +338,11 @@ export function useSearchConcepts(params?: ConceptSearchParams) {
   return useQuery({ queryKey: queryKeys.conceptsSearch(baseUrl, params), queryFn: () => client.searchConcepts(params) });
 }
 
-export function useConceptGraph(enabled = true, full = false) {
+export function useConceptGraph(enabled = true, params?: ConceptGraphParams) {
   const { baseUrl, client } = useMarmConfig();
   return useQuery({
-    queryKey: queryKeys.conceptsGraph(baseUrl, full),
-    queryFn: () => client.getConceptGraph({ full }),
+    queryKey: queryKeys.conceptsGraph(baseUrl, params),
+    queryFn: () => client.getConceptGraph(params),
     enabled,
   });
 }
@@ -361,9 +413,47 @@ export function useConceptBuild(jobId: string) {
   });
 }
 
-export function useConceptDuplicates() {
+export function useConceptDuplicates(params?: { offset?: number; limit?: number }) {
   const { baseUrl, client } = useMarmConfig();
-  return useQuery({ queryKey: queryKeys.duplicates(baseUrl), queryFn: client.getConceptDuplicates });
+  return useQuery({
+    queryKey: [...queryKeys.duplicates(baseUrl), params],
+    queryFn: () => client.getConceptDuplicates(params),
+    placeholderData: (previous) => previous,
+  });
+}
+
+function invalidateConceptReview(qc: QueryClient, baseUrl: string) {
+  qc.invalidateQueries({ queryKey: queryKeys.duplicates(baseUrl) });
+  qc.invalidateQueries({ queryKey: ['conceptsGraph', baseUrl] });
+  qc.invalidateQueries({ queryKey: ['conceptsSearch', baseUrl] });
+  qc.invalidateQueries({ queryKey: queryKeys.conceptsSummary(baseUrl) });
+}
+
+export function useDismissConceptDuplicate() {
+  const { baseUrl, client } = useMarmConfig();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: DuplicatePairInput) => client.dismissConceptDuplicate(data),
+    onSuccess: () => invalidateConceptReview(qc, baseUrl),
+  });
+}
+
+export function useMergeConceptDuplicate() {
+  const { baseUrl, client } = useMarmConfig();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: MergeDuplicateInput) => client.mergeConceptDuplicate(data),
+    onSuccess: () => invalidateConceptReview(qc, baseUrl),
+  });
+}
+
+export function useRemoveConceptEntity() {
+  const { baseUrl, client } = useMarmConfig();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (entityId: number) => client.removeConceptEntity(entityId),
+    onSuccess: () => invalidateConceptReview(qc, baseUrl),
+  });
 }
 
 // --- Projects ---

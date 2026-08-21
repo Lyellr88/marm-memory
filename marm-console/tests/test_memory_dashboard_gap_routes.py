@@ -6,6 +6,8 @@ import sqlite3
 from fastapi.testclient import TestClient
 from marm_mcp_server.console import app as console_app
 from marm_mcp_server.console import memory_store
+from marm_mcp_server.console.endpoints import sessions
+from marm_mcp_server.console.models import SessionBulkDeletePayload
 
 
 def _memory_db(tmp_path, monkeypatch):
@@ -26,7 +28,9 @@ def _memory_db(tmp_path, monkeypatch):
                 session_name TEXT NOT NULL,
                 content TEXT NOT NULL,
                 project TEXT,
-                platform TEXT
+                platform TEXT,
+                embedding BLOB,
+                compaction_role TEXT
             );
 
             CREATE TABLE log_entries (
@@ -63,6 +67,74 @@ def _memory_db(tmp_path, monkeypatch):
             """
         )
     return db_path
+
+
+def test_memory_overview_reports_navigation_counts(tmp_path, monkeypatch):
+    db_path = _memory_db(tmp_path, monkeypatch)
+    with sqlite3.connect(db_path) as conn:
+        conn.execute(
+            "INSERT INTO sessions (session_name, marm_active) VALUES ('main', 1)"
+        )
+        conn.execute(
+            """INSERT INTO memories
+               (id, session_name, content, embedding, compaction_role)
+               VALUES ('mem-1', 'main', 'Remember this', X'00', 'none')"""
+        )
+        conn.execute(
+            """INSERT INTO log_entries
+               (id, session_name, entry_date, topic, summary, full_entry)
+               VALUES ('log-1', 'main', '2026-08-20', 'decision', 'Ship it', 'Ship it')"""
+        )
+        conn.execute(
+            """INSERT INTO notebook_entries
+               (name, data, session_name, project, platform)
+               VALUES ('release', 'Checklist', 'main', '', '')"""
+        )
+
+    result = memory_store.overview(db_path)
+
+    assert result["active_memories"] == 1
+    assert result["sessions"] == 1
+    assert result["log_entries"] == 1
+    assert result["notebook_entries"] == 1
+
+
+def test_summary_generation_invokes_marm_summary_and_returns_cache(monkeypatch):
+    calls = []
+
+    def fake_get(
+        operation: str, *, query: dict | None = None, timeout: float = 10.0
+    ) -> dict:
+        calls.append((operation, query, timeout))
+        return {"status": "success", "message": "Summary generated."}
+
+    monkeypatch.setattr(console_app.mcp_client, "get", fake_get)
+    monkeypatch.setattr(
+        memory_store,
+        "get_summary",
+        lambda db_path, session_name: {
+            "session_name": session_name,
+            "summary": "Decisions and next steps.",
+            "entry_count": 4,
+            "is_dirty": False,
+            "generated_at": "2026-08-20T04:00:00+00:00",
+        },
+    )
+
+    with TestClient(console_app.app) as client:
+        response = client.post("/api/summaries/main/generate")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "session_name": "main",
+        "summary": "Decisions and next steps.",
+        "entry_count": 4,
+        "is_dirty": False,
+        "generated_at": "2026-08-20T04:00:00+00:00",
+        "status": "success",
+        "message": "Summary generated.",
+    }
+    assert calls == [("marm_summary", {"session_name": "main"}, 30.0)]
 
 
 def test_session_log_notebook_and_compaction_mutations_proxy_to_marm(monkeypatch):
@@ -287,6 +359,86 @@ def test_session_log_notebook_and_compaction_mutations_proxy_to_marm(monkeypatch
     ]
 
 
+def test_selected_delete_routes_preserve_each_record_identity(monkeypatch):
+    calls = []
+
+    def fake_post(operation: str, payload: dict, *, timeout: float = 10.0) -> dict:
+        calls.append((operation, payload, timeout))
+        return {
+            "status": "success",
+            "deleted_count": 1,
+            "memories_deleted": 1,
+            "deleted": True,
+        }
+
+    monkeypatch.setattr(console_app.mcp_client, "post", fake_post)
+
+    with TestClient(console_app.app) as client:
+        sessions = client.post(
+            "/api/sessions/bulk-delete",
+            json={"session_names": ["alpha", "beta"], "confirm": "DELETE"},
+        )
+        logs = client.post(
+            "/api/logs/bulk-delete",
+            json={
+                "logs": [
+                    {"id": "17", "session_name": "alpha"},
+                    {"id": "18", "session_name": "beta"},
+                ],
+                "confirm": "DELETE",
+            },
+        )
+        notebook = client.post(
+            "/api/notebook/bulk-delete",
+            json={
+                "entries": [
+                    {
+                        "name": "shared",
+                        "session_name": "main",
+                        "project": None,
+                        "platform": None,
+                    },
+                    {
+                        "name": "shared",
+                        "session_name": "main",
+                        "project": "marm-console",
+                        "platform": "codex",
+                    },
+                ],
+                "confirm": "DELETE",
+            },
+        )
+
+    assert sessions.status_code == 200
+    assert sessions.json()["deleted_sessions"] == 2
+    assert logs.status_code == 200
+    assert logs.json()["deleted_count"] == 2
+    assert notebook.status_code == 200
+    assert notebook.json()["deleted_entries"] == 2
+    assert [
+        payload for operation, payload, _ in calls if operation == "marm_delete"
+    ] == [
+        {"type": "log", "target": "alpha"},
+        {"type": "log", "target": "beta"},
+        {"type": "log", "target": "17", "session_name": "alpha"},
+        {"type": "log", "target": "18", "session_name": "beta"},
+        {
+            "type": "notebook",
+            "target": "shared",
+            "session_name": "main",
+            "project": None,
+            "platform": None,
+        },
+        {
+            "type": "notebook",
+            "target": "shared",
+            "session_name": "main",
+            "project": "marm-console",
+            "platform": "codex",
+        },
+    ]
+
+
 def test_log_delete_returns_404_when_marm_deletes_nothing(monkeypatch):
     monkeypatch.setattr(
         console_app.mcp_client,
@@ -431,6 +583,34 @@ def test_notebook_mutations_preserve_project_platform_scope(monkeypatch, tmp_pat
             30.0,
         ),
     ]
+
+
+def test_selected_session_deletion_stops_at_the_overall_deadline(monkeypatch):
+    calls = []
+    clock = iter((0.0, 0.0, 61.0))
+    monkeypatch.setattr(sessions.time, "monotonic", lambda: next(clock))
+    monkeypatch.setattr(
+        sessions,
+        "_mcp_tool_mutation",
+        lambda operation, payload, timeout: (
+            calls.append((operation, payload, timeout))
+            or {"deleted_count": 2, "memories_deleted": 1}
+        ),
+    )
+
+    result = sessions.delete_selected_sessions(
+        SessionBulkDeletePayload(
+            session_names=["first", "second", "third"], confirm="DELETE"
+        )
+    )
+
+    assert calls == [("marm_delete", {"type": "log", "target": "first"}, 30.0)]
+    assert result["deleted_sessions"] == 1
+    assert [failure["session_name"] for failure in result["failed_sessions"]] == [
+        "second",
+        "third",
+    ]
+    assert all(failure["status_code"] == 504 for failure in result["failed_sessions"])
 
 
 def test_compaction_stage_finds_candidate_beyond_200_row_window(monkeypatch, tmp_path):

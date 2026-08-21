@@ -15,14 +15,38 @@ SAMPLED_ATLAS_MAX_EDGES = 4000
 SAMPLED_ATLAS_RAW_EDGE_LIMIT = 12000
 
 
-def graph_overview(db_path: Path, *, force_full: bool = False) -> dict:
+def graph_overview(
+    db_path: Path,
+    *,
+    force_full: bool = False,
+    project: str | None = None,
+    session: str | None = None,
+) -> dict:
     """Return the complete visual graph when requested, else a safe sample."""
+    if project is not None and session is not None:
+        raise ValueError("Choose either a project or session scope, not both.")
+
+    scope_column = "project" if project is not None else "session_name"
+    scope_value = project if project is not None else session
+    entity_scope = f" WHERE e.{scope_column} = ?" if scope_value is not None else ""
+    entity_scope_params = (scope_value,) if scope_value is not None else ()
+    relationship_scope = ""
+    relationship_scope_params: tuple[str, ...] = ()
+    if scope_value is not None:
+        relationship_scope = f"""
+            JOIN entities source_entity ON source_entity.id = r.source_id
+            JOIN entities target_entity ON target_entity.id = r.target_id
+            WHERE source_entity.{scope_column} = ?
+              AND target_entity.{scope_column} = ?
+        """
+        relationship_scope_params = (scope_value, scope_value)
+
     connection = _connect(db_path)
     if connection is None:
         return {
             "mode": "full",
             "schema_status": "unavailable",
-            "total": {"nodes": 0, "edges": 0},
+            "total": {"nodes": 0, "edges": 0, "code_links": 0},
             "rendered": {"nodes": 0, "edges": 0},
             "sample_reason": None,
             "seed_id": None,
@@ -40,7 +64,7 @@ def graph_overview(db_path: Path, *, force_full: bool = False) -> dict:
             return {
                 "mode": "full",
                 "schema_status": schema_status,
-                "total": {"nodes": 0, "edges": 0},
+                "total": {"nodes": 0, "edges": 0, "code_links": 0},
                 "rendered": {"nodes": 0, "edges": 0},
                 "sample_reason": "platform-aware concept rebuild required",
                 "seed_id": None,
@@ -52,9 +76,21 @@ def graph_overview(db_path: Path, *, force_full: bool = False) -> dict:
                 },
                 "truncated": False,
             }
-        total_nodes = connection.execute("SELECT COUNT(*) FROM entities").fetchone()[0]
+        total_nodes = connection.execute(
+            f"SELECT COUNT(*) FROM entities e{entity_scope}", entity_scope_params
+        ).fetchone()[0]
         total_edges = connection.execute(
-            "SELECT COUNT(*) FROM relationships"
+            f"SELECT COUNT(*) FROM relationships r{relationship_scope}",
+            relationship_scope_params,
+        ).fetchone()[0]
+        code_link_scope = (
+            f" WHERE e.{scope_column} = ?" if scope_value is not None else ""
+        )
+        total_code_links = connection.execute(
+            f"""SELECT COUNT(*)
+                FROM entity_code_links link
+                JOIN entities e ON e.id = link.entity_id{code_link_scope}""",
+            entity_scope_params,
         ).fetchone()[0]
         mode = (
             "full"
@@ -65,27 +101,35 @@ def graph_overview(db_path: Path, *, force_full: bool = False) -> dict:
             )
             else "sampled"
         )
-        node_query = """
+        node_query = (
+            """
             SELECT e.id, e.name, e.type, e.session_name, e.project, e.platform,
                    e.source_memory_ids, e.created_at,
                    (SELECT COUNT(*) FROM relationships r WHERE r.source_id = e.id OR r.target_id = e.id) AS degree
             FROM entities e
         """
+            + entity_scope
+        )
         if mode == "full":
-            node_rows = connection.execute(node_query + " ORDER BY e.id").fetchall()
+            node_rows = connection.execute(
+                node_query + " ORDER BY e.id", entity_scope_params
+            ).fetchall()
             raw_edges = connection.execute(
-                """SELECT id, source_id, target_id, predicate, memory_id
-                   FROM relationships ORDER BY id"""
+                f"""SELECT r.id, r.source_id, r.target_id, r.predicate, r.memory_id
+                    FROM relationships r{relationship_scope}
+                    ORDER BY r.id""",
+                relationship_scope_params,
             ).fetchall()
         else:
             node_rows = connection.execute(
                 node_query + " ORDER BY degree DESC, e.id LIMIT ?",
-                (SAMPLED_ATLAS_MAX_NODES,),
+                (*entity_scope_params, SAMPLED_ATLAS_MAX_NODES),
             ).fetchall()
             raw_edges = connection.execute(
                 """WITH candidates AS (
                        SELECT e.id
                        FROM entities e
+                       {entity_scope}
                        ORDER BY (
                            SELECT COUNT(*) FROM relationships r
                            WHERE r.source_id = e.id OR r.target_id = e.id
@@ -97,8 +141,12 @@ def graph_overview(db_path: Path, *, force_full: bool = False) -> dict:
                    WHERE source_id IN (SELECT id FROM candidates)
                      AND target_id IN (SELECT id FROM candidates)
                    ORDER BY id
-                   LIMIT ?""",
-                (SAMPLED_ATLAS_MAX_NODES, SAMPLED_ATLAS_RAW_EDGE_LIMIT),
+                   LIMIT ?""".format(entity_scope=entity_scope),
+                (
+                    *entity_scope_params,
+                    SAMPLED_ATLAS_MAX_NODES,
+                    SAMPLED_ATLAS_RAW_EDGE_LIMIT,
+                ),
             ).fetchall()
 
     edge_groups: dict[tuple[int, int, str], dict] = {}
@@ -210,7 +258,11 @@ def graph_overview(db_path: Path, *, force_full: bool = False) -> dict:
     return {
         "mode": mode,
         "schema_status": schema_status,
-        "total": {"nodes": total_nodes, "edges": total_edges},
+        "total": {
+            "nodes": total_nodes,
+            "edges": total_edges,
+            "code_links": total_code_links,
+        },
         "rendered": {"nodes": len(selected_nodes), "edges": len(selected_edges)},
         "sample_reason": sample_reason,
         "seed_id": None,

@@ -6,6 +6,7 @@ import json
 import os
 import time
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 
@@ -94,15 +95,16 @@ def delete(
     return request(operation, payload, method="DELETE", timeout=timeout)
 
 
-def get(operation: str, *, timeout: float = 10.0) -> dict:
+def get(operation: str, *, query: dict | None = None, timeout: float = 10.0) -> dict:
     base_url = os.environ.get("MARM_MCP_URL", "http://127.0.0.1:8001").rstrip("/")
     headers = {"Accept": "application/json"}
     api_key = _api_key()
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
-    request = Request(
-        f"{base_url}/{operation.lstrip('/')}", headers=headers, method="GET"
-    )
+    url = f"{base_url}/{operation.lstrip('/')}"
+    if query:
+        url = f"{url}?{urlencode(query)}"
+    request = Request(url, headers=headers, method="GET")
     try:
         with urlopen(request, timeout=timeout) as response:
             result = json.load(response)

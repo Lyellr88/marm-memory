@@ -6,7 +6,7 @@ from typing import Literal
 
 from fastapi import APIRouter, HTTPException
 
-from .. import memory_store
+from .. import mcp_client, memory_store
 from ..core import _mcp_tool_mutation, get_memory_db_path
 
 router = APIRouter()
@@ -18,6 +18,34 @@ def get_session_summary(session_name: str) -> dict:
         return memory_store.get_summary(get_memory_db_path(), session_name)
     except memory_store.MemoryStoreUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@router.post("/api/summaries/{session_name}/generate")
+def generate_session_summary(session_name: str) -> dict:
+    try:
+        result = mcp_client.get(
+            "marm_summary",
+            query={"session_name": session_name},
+            timeout=30.0,
+        )
+    except mcp_client.McpRequestError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    except mcp_client.McpUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    if result.get("status") == "error":
+        raise HTTPException(
+            status_code=503,
+            detail=result.get("message", "Session summary generation failed."),
+        )
+    try:
+        summary = memory_store.get_summary(get_memory_db_path(), session_name)
+    except memory_store.MemoryStoreUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {
+        **summary,
+        "status": result.get("status", "success"),
+        "message": result.get("message"),
+    }
 
 
 @router.get("/api/compaction")

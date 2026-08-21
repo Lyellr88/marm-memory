@@ -6,6 +6,9 @@
 // error / empty states rather than assuming data exists.
 
 import type {
+  BulkLogDeleteResult,
+  BulkNotebookDeleteResult,
+  BulkSessionDeleteResult,
   CodeSearchInput,
   CodeSearchResult,
   CompactionAction,
@@ -15,13 +18,17 @@ import type {
   ConceptAtlas,
   ConceptDetail,
   ConceptEntity,
+  ConceptGraphParams,
   ConceptGraphVersion,
+  ConceptReviewResult,
   ConceptSearchParams,
   ConceptsSummary,
-  DuplicateCandidate,
+  DuplicateReport,
+  DuplicatePairInput,
   Filters,
   ImpactInput,
   ImpactResult,
+  MergeDuplicateInput,
   IndexJob,
   LogEntry,
   LogListParams,
@@ -33,6 +40,7 @@ import type {
   MemoryListResponse,
   Neighborhood,
   NotebookEntry,
+  NotebookDeleteRef,
   NotebookInput,
   Overview,
   ProjectArchitecture,
@@ -149,14 +157,12 @@ export function createMarmClient(config: MarmClientConfig) {
         `/sessions/${encodeURIComponent(name)}`,
         { body: { confirm: 'DELETE' } },
       ),
+    bulkDeleteSessions: (names: string[]) =>
+      request<BulkSessionDeleteResult>(config, 'POST', '/sessions/bulk-delete', {
+        body: { session_names: names, confirm: 'DELETE' },
+      }),
     deleteAllSessions: () =>
-      request<{
-        status: string;
-        deleted_sessions: number;
-        deleted_count: number;
-        memories_deleted: number;
-        failed_sessions: Array<{ session_name: string; status_code: number; message: string }>;
-      }>(
+      request<BulkSessionDeleteResult>(
         config,
         'DELETE',
         '/sessions',
@@ -171,6 +177,10 @@ export function createMarmClient(config: MarmClientConfig) {
         `/logs/${encodeURIComponent(String(id))}`,
         { body: { session_name: sessionName, confirm: 'DELETE' } },
       ),
+    bulkDeleteLogs: (logs: Array<{ id: number; session_name: string }>) =>
+      request<BulkLogDeleteResult>(config, 'POST', '/logs/bulk-delete', {
+        body: { logs: logs.map((log) => ({ ...log, id: String(log.id) })), confirm: 'DELETE' },
+      }),
     deleteAllLogs: () =>
       request<{ deleted_count: number; memories_deleted: number }>(
         config,
@@ -191,8 +201,14 @@ export function createMarmClient(config: MarmClientConfig) {
           platform: params?.platform,
         },
       }),
+    bulkDeleteNotebookEntries: (entries: NotebookDeleteRef[]) =>
+      request<BulkNotebookDeleteResult>(config, 'POST', '/notebook/bulk-delete', {
+        body: { entries, confirm: 'DELETE' },
+      }),
     getSummary: (session: string) =>
       request<SessionSummary>(config, 'GET', `/summaries/${encodeURIComponent(session)}`),
+    generateSummary: (session: string) =>
+      request<SessionSummary>(config, 'POST', `/summaries/${encodeURIComponent(session)}/generate`),
 
     // Compaction
     listCompaction: () => request<CompactionCandidate[]>(config, 'GET', '/compaction'),
@@ -205,7 +221,7 @@ export function createMarmClient(config: MarmClientConfig) {
       request<ConceptEntity[]>(config, 'GET', '/concepts/search', { query: params }),
     getConcept: (entityId: number) =>
       request<ConceptDetail>(config, 'GET', `/concepts/${entityId}`),
-    getConceptGraph: (params?: { full?: boolean }) =>
+    getConceptGraph: (params?: ConceptGraphParams) =>
       request<ConceptAtlas>(config, 'GET', '/concepts/graph', { query: params }),
     getConceptGraphVersion: () =>
       request<ConceptGraphVersion>(config, 'GET', '/concepts/graph/version'),
@@ -218,8 +234,14 @@ export function createMarmClient(config: MarmClientConfig) {
       request<{ job_id: string }>(config, 'POST', '/concepts/build', { body: data }),
     getConceptBuild: (jobId: string) =>
       request<ConceptBuildRun>(config, 'GET', `/concepts/builds/${jobId}`),
-    getConceptDuplicates: () =>
-      request<DuplicateCandidate[]>(config, 'GET', '/concepts/duplicates'),
+    getConceptDuplicates: (params?: { offset?: number; limit?: number }) =>
+      request<DuplicateReport>(config, 'GET', `/concepts/duplicates${buildQuery(params)}`),
+    dismissConceptDuplicate: (data: DuplicatePairInput) =>
+      request<ConceptReviewResult>(config, 'POST', '/concepts/duplicates/dismiss', { body: data }),
+    mergeConceptDuplicate: (data: MergeDuplicateInput) =>
+      request<ConceptReviewResult>(config, 'POST', '/concepts/duplicates/merge', { body: data }),
+    removeConceptEntity: (entityId: number) =>
+      request<ConceptReviewResult>(config, 'DELETE', `/concepts/entities/${entityId}`),
 
     // Projects / code graph
     listProjects: () => request<ProjectSummary[]>(config, 'GET', '/projects'),
