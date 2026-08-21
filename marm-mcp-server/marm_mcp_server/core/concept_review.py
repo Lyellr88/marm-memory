@@ -220,6 +220,7 @@ def remove_entity(
             conn.execute(
                 "DELETE FROM entity_code_links WHERE entity_id = ?", (entity_id,)
             )
+            _ensure_lease(lease_lost)
             conn.execute("DELETE FROM entities WHERE id = ?", (entity_id,))
         return {"status": "removed", "removed_entity_id": entity_id}
     finally:

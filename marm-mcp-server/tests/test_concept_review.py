@@ -1,5 +1,8 @@
 import json
 import sqlite3
+import threading
+
+import pytest
 
 from marm_mcp_server.core import concept_review
 from marm_mcp_server.core.concept_db import (
@@ -80,6 +83,31 @@ def test_remove_suppresses_entity_across_rebuild(tmp_path):
             is None
         )
     database.close()
+
+
+def test_remove_rolls_back_when_lease_is_lost_before_entity_deletion(tmp_path):
+    db_path = str(tmp_path / "concept.db")
+    winner, _, _ = _seed_pair(db_path)
+
+    class LeaseLostAtFinalBoundary(threading.Event):
+        def __init__(self) -> None:
+            super().__init__()
+            self.checks = 0
+
+        def is_set(self) -> bool:
+            self.checks += 1
+            return self.checks == 5
+
+    with pytest.raises(concept_review.ConceptReviewLeaseLost):
+        concept_review.remove_entity(
+            db_path, winner, lease_lost=LeaseLostAtFinalBoundary()
+        )
+
+    with sqlite3.connect(db_path) as conn:
+        assert conn.execute("SELECT 1 FROM entities WHERE id = ?", (winner,)).fetchone()
+        assert (
+            conn.execute("SELECT 1 FROM concept_entity_suppressions").fetchone() is None
+        )
 
 
 def test_dismissal_is_idempotent_and_survives_rebuild(tmp_path):

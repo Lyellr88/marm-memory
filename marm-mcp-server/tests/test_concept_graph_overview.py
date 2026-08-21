@@ -33,10 +33,12 @@ def test_full_atlas_is_only_returned_when_explicitly_requested(tmp_path):
 def test_graph_endpoint_forwards_the_explicit_full_request(monkeypatch):
     from marm_mcp_server.console.endpoints import concepts
 
-    seen: dict[str, bool] = {}
+    seen: dict[str, bool | None] = {}
 
-    def fake_graph_overview(_path, *, force_full=False):
+    def fake_graph_overview(_path, *, force_full=False, project=None, session=None):
         seen["force_full"] = force_full
+        seen["project"] = project
+        seen["session"] = session
         return {"mode": "full", "nodes": [], "edges": []}
 
     monkeypatch.setattr(concepts, "graph_overview", fake_graph_overview)
@@ -44,4 +46,4 @@ def test_graph_endpoint_forwards_the_explicit_full_request(monkeypatch):
         response = client.get("/api/concepts/graph?full=true")
 
     assert response.status_code == 200
-    assert seen == {"force_full": True}
+    assert seen == {"force_full": True, "project": None, "session": None}
