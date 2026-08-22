@@ -11,6 +11,7 @@ vi.mock('@/hooks/use-marm-queries', () => ({
   useBuildConcepts: () => ({ isPending: false, mutate: vi.fn() }),
   useMarmConfig: () => ({ baseUrl: '/api' }),
   useFilters: () => ({ data: { sessions: [], projects: [] } }),
+  useConceptsSummary: () => ({ data: { entities: 4, relationships: 2, code_links: 1, schema_status: 'current' } }),
   useConceptBuild: () => ({ data: undefined }),
   useConceptBuilds: () => ({
     data: [{
@@ -47,7 +48,7 @@ afterEach(() => {
 });
 
 describe('BuildConceptsDialog', () => {
-  it('lets a cancelled build be retried and requires a nested confirmation to delete the graph', async () => {
+  it('keeps build controls and recent runs together, with a nested reset confirmation', async () => {
     const user = userEvent.setup();
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
@@ -63,15 +64,15 @@ describe('BuildConceptsDialog', () => {
       </QueryClientProvider>,
     );
 
-    await user.click(screen.getByRole('tab', { name: 'Build history' }));
-
+    expect(screen.getByRole('heading', { name: 'Build from memory' })).toBeTruthy();
+    expect(screen.getByRole('heading', { name: 'Recent runs' })).toBeTruthy();
     expect(screen.getByText('Stopped by user; partial scoped extraction remains.')).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Try again' }));
     expect(retryBuild).toHaveBeenCalledWith('cancelled-run', expect.any(Object));
 
-    await user.click(screen.getByRole('button', { name: 'Delete graph' }));
-    const confirmation = screen.getByRole('dialog', { name: 'Delete the knowledge graph?' });
-    await user.click(within(confirmation).getByRole('button', { name: 'Delete graph' }));
+    await user.click(screen.getByRole('button', { name: 'Reset graph' }));
+    const confirmation = screen.getByRole('dialog', { name: 'Reset the concept graph?' });
+    await user.click(within(confirmation).getByRole('button', { name: 'Reset graph' }));
     expect(deleteGraph).toHaveBeenCalledWith(undefined, expect.any(Object));
   });
 });

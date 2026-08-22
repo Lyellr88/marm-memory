@@ -14,10 +14,12 @@ the project's own packages. That is why nothing maps them onto the module table.
 """
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from marm_mcp_server.console import mcp_client
 from marm_mcp_server.console.app import app
+from marm_mcp_server.console.endpoints.projects import router as projects_router
 
 ARCHITECTURE_0105 = {
     "project": "proj",
@@ -216,3 +218,67 @@ def test_normalization_did_not_leak_into_the_agent_facing_tool():
 
     assert result["node_labels"][0] == {"label": "Function", "count": 2028}
     assert result["edge_types"][0] == {"type": "CALLS", "count": 6632}
+
+
+def test_project_intelligence_routes_preserve_the_console_contract(monkeypatch):
+    """These are Console-only routes; each must reach its internal adapter intact."""
+    responses = {
+        "internal/projects/coverage": {
+            "signal": "best_effort",
+            "metadata": {"generation_matches": True},
+            "scopes": [{"total": 0, "entries": []}],
+        },
+        "internal/projects/query": {"columns": ["name"], "rows": [["main"]]},
+        "internal/projects/adr": {"content": "# Decisions"},
+        "internal/projects/adr/update": {"status": "success"},
+        "internal/projects/runtime-traces": {"status": "success", "ingested": 1},
+    }
+    calls: list[tuple[str, dict]] = []
+
+    def fake_post(path, payload=None, **kwargs):
+        calls.append((path, payload))
+        return responses[path]
+
+    monkeypatch.setattr(mcp_client, "post", fake_post)
+    contract_app = FastAPI()
+    contract_app.include_router(projects_router)
+    with TestClient(contract_app) as client:
+        coverage = client.get("/api/projects/proj/coverage")
+        query = client.post(
+            "/api/projects/proj/query",
+            json={"query": "MATCH (n) RETURN n.name", "max_rows": 25},
+        )
+        adr = client.get("/api/projects/proj/adr")
+        update = client.put("/api/projects/proj/adr", json={"content": "# Decisions"})
+        traces = client.post(
+            "/api/projects/proj/runtime-traces",
+            json={"traces": [{"caller": "app.main", "callee": "db.save", "count": 3}]},
+        )
+
+    assert coverage.status_code == query.status_code == adr.status_code == 200
+    assert update.status_code == traces.status_code == 200
+    assert coverage.json()["signal"] == "best_effort"
+    assert query.json()["rows"] == [["main"]]
+    assert adr.json()["content"] == "# Decisions"
+    assert update.json()["status"] == traces.json()["status"] == "success"
+    assert calls == [
+        ("internal/projects/coverage", {"project": "proj"}),
+        (
+            "internal/projects/query",
+            {
+                "project": "proj",
+                "query": "MATCH (n) RETURN n.name",
+                "graph": "code",
+                "max_rows": 25,
+            },
+        ),
+        ("internal/projects/adr", {"project": "proj"}),
+        ("internal/projects/adr/update", {"project": "proj", "content": "# Decisions"}),
+        (
+            "internal/projects/runtime-traces",
+            {
+                "project": "proj",
+                "traces": [{"caller": "app.main", "callee": "db.save", "count": 3}],
+            },
+        ),
+    ]

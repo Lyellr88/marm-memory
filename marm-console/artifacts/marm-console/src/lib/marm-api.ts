@@ -29,6 +29,8 @@ import type {
   ImpactInput,
   ImpactResult,
   MergeDuplicateInput,
+  GraphQueryInput,
+  GraphQueryResult,
   IndexJob,
   LogListParams,
   LogListResponse,
@@ -44,10 +46,14 @@ import type {
   NotebookInput,
   Overview,
   ProjectArchitecture,
+  ProjectAdr,
+  ProjectCoverage,
   CodeUnits,
   ProjectIndexInput,
   ProjectStatus,
   ProjectSummary,
+  RuntimeSettings,
+  RuntimeTrace,
   Session,
   SessionSummary,
   TraceInput,
@@ -256,6 +262,13 @@ export function createMarmClient(config: MarmClientConfig) {
     removeConceptEntity: (entityId: number) =>
       request<ConceptReviewResult>(config, 'DELETE', `/concepts/entities/${entityId}`),
 
+    // Runtime settings
+    getRuntimeSettings: () => request<RuntimeSettings>(config, 'GET', '/settings/runtime'),
+    updateRuntimeAutomation: (scope: 'graph' | 'concept', enabled: boolean) =>
+      request<{ status: string; scope: 'graph' | 'concept'; enabled: boolean; effective: string }>(
+        config, 'PUT', '/settings/automation', { body: { scope, enabled } },
+      ),
+
     // Projects / code graph
     listProjects: () => request<ProjectSummary[]>(config, 'GET', '/projects'),
     indexProject: (data: ProjectIndexInput) =>
@@ -264,6 +277,16 @@ export function createMarmClient(config: MarmClientConfig) {
       request<IndexJob>(config, 'GET', `/projects/jobs/${jobId}`),
     getProjectStatus: (project: string) =>
       request<ProjectStatus>(config, 'GET', `/projects/${encodeURIComponent(project)}/status`),
+    getProjectCoverage: (project: string) =>
+      request<ProjectCoverage>(config, 'GET', `/projects/${encodeURIComponent(project)}/coverage`),
+    queryProjectGraph: (project: string, data: GraphQueryInput) =>
+      request<GraphQueryResult>(config, 'POST', `/projects/${encodeURIComponent(project)}/query`, { body: data }),
+    getProjectAdr: (project: string) =>
+      request<ProjectAdr>(config, 'GET', `/projects/${encodeURIComponent(project)}/adr`),
+    updateProjectAdr: (project: string, content: string) =>
+      request<ProjectAdr>(config, 'PUT', `/projects/${encodeURIComponent(project)}/adr`, { body: { content } }),
+    ingestProjectRuntimeTraces: (project: string, traces: RuntimeTrace[]) =>
+      request<{ status: string; ingested?: number }>(config, 'POST', `/projects/${encodeURIComponent(project)}/runtime-traces`, { body: { traces } }),
     getProjectArchitecture: (project: string) =>
       request<ProjectArchitecture>(config, 'GET', `/projects/${encodeURIComponent(project)}/architecture`),
     getProjectCodeUnits: (project: string) =>

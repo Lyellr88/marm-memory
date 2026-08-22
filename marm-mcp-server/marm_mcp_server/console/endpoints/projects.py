@@ -6,9 +6,12 @@ from fastapi import APIRouter, HTTPException
 
 from .. import mcp_client
 from ..models import (
+    ProjectAdrPayload,
     ProjectDeletePayload,
+    ProjectGraphQueryPayload,
     ProjectImpactPayload,
     ProjectIndexPayload,
+    ProjectRuntimeTracesPayload,
     ProjectSearchPayload,
     ProjectTracePayload,
 )
@@ -61,6 +64,39 @@ def get_project_status(project: str) -> dict:
         "last_indexed_at": result.get("last_indexed_at"),
         "error": result.get("error"),
     }
+
+
+@router.get("/api/projects/{project}/coverage")
+def get_project_coverage(project: str) -> dict:
+    return _project_operation("internal/projects/coverage", {"project": project})
+
+
+@router.post("/api/projects/{project}/query")
+def query_project_graph(project: str, payload: ProjectGraphQueryPayload) -> dict:
+    return _project_operation(
+        "internal/projects/query", {"project": project, **payload.model_dump()}
+    )
+
+
+@router.get("/api/projects/{project}/adr")
+def get_project_adr(project: str) -> dict:
+    return _project_operation("internal/projects/adr", {"project": project})
+
+
+@router.put("/api/projects/{project}/adr")
+def update_project_adr(project: str, payload: ProjectAdrPayload) -> dict:
+    return _project_operation(
+        "internal/projects/adr/update", {"project": project, **payload.model_dump()}
+    )
+
+
+@router.post("/api/projects/{project}/runtime-traces")
+def ingest_project_runtime_traces(
+    project: str, payload: ProjectRuntimeTracesPayload
+) -> dict:
+    return _project_operation(
+        "internal/projects/runtime-traces", {"project": project, **payload.model_dump()}
+    )
 
 
 def _type_entries(rows: object, key: str) -> list[dict]:

@@ -30,6 +30,7 @@ export const queryKeys = {
   conceptBuild: (baseUrl: string, id: string) => ['conceptBuild', baseUrl, id],
   conceptBuilds: (baseUrl: string) => ['conceptBuilds', baseUrl],
   duplicates: (baseUrl: string) => ['duplicates', baseUrl],
+  runtimeSettings: (baseUrl: string) => ['runtimeSettings', baseUrl],
   projects: (baseUrl: string) => ['projects', baseUrl],
   indexJob: (baseUrl: string, id: string) => ['indexJob', baseUrl, id],
   projectStatus: (baseUrl: string, project: string) => ['projectStatus', baseUrl, project],
@@ -179,6 +180,27 @@ export function useDeleteSession() {
   return useMutation({
     mutationFn: (name: string) => client.deleteSession(name),
     onSuccess: invalidate,
+  });
+}
+
+export function useRuntimeSettings(enabled = true) {
+  const { baseUrl, client } = useMarmConfig();
+  return useQuery({
+    queryKey: queryKeys.runtimeSettings(baseUrl),
+    queryFn: client.getRuntimeSettings,
+    enabled,
+    refetchInterval: enabled ? 5000 : false,
+    retry: false,
+  });
+}
+
+export function useUpdateRuntimeAutomation() {
+  const { baseUrl, client } = useMarmConfig();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ scope, enabled }: { scope: 'graph' | 'concept'; enabled: boolean }) =>
+      client.updateRuntimeAutomation(scope, enabled),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.runtimeSettings(baseUrl) }),
   });
 }
 
@@ -541,6 +563,11 @@ export function useProjectStatus(project: string) {
   return useQuery({ queryKey: queryKeys.projectStatus(baseUrl, project), queryFn: () => client.getProjectStatus(project), enabled: !!project });
 }
 
+export function useProjectCoverage(project: string) {
+  const { baseUrl, client } = useMarmConfig();
+  return useQuery({ queryKey: ['project-coverage', baseUrl, project], queryFn: () => client.getProjectCoverage(project), enabled: !!project });
+}
+
 export function useProjectArchitecture(project: string) {
   const { baseUrl, client } = useMarmConfig();
   return useQuery({ queryKey: queryKeys.projectArchitecture(baseUrl, project), queryFn: () => client.getProjectArchitecture(project), enabled: !!project });
@@ -564,6 +591,30 @@ export function useTraceProject() {
 export function useProjectImpact() {
   const { client } = useMarmConfig();
   return useMutation({ mutationFn: ({ project, data }: { project: string, data: ImpactInput }) => client.projectImpact(project, data) });
+}
+
+export function useProjectGraphQuery() {
+  const { client } = useMarmConfig();
+  return useMutation({ mutationFn: ({ project, data }: { project: string, data: import('@/lib/marm-types').GraphQueryInput }) => client.queryProjectGraph(project, data) });
+}
+
+export function useProjectAdr(project: string) {
+  const { baseUrl, client } = useMarmConfig();
+  return useQuery({ queryKey: ['project-adr', baseUrl, project], queryFn: () => client.getProjectAdr(project), enabled: !!project });
+}
+
+export function useUpdateProjectAdr() {
+  const { baseUrl, client } = useMarmConfig();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ project, content }: { project: string, content: string }) => client.updateProjectAdr(project, content),
+    onSuccess: (_data, variables) => qc.invalidateQueries({ queryKey: ['project-adr', baseUrl, variables.project] }),
+  });
+}
+
+export function useIngestProjectRuntimeTraces() {
+  const { client } = useMarmConfig();
+  return useMutation({ mutationFn: ({ project, traces }: { project: string, traces: import('@/lib/marm-types').RuntimeTrace[] }) => client.ingestProjectRuntimeTraces(project, traces) });
 }
 
 export function useDeleteProject() {

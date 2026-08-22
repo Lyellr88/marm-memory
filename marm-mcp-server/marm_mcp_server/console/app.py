@@ -33,6 +33,7 @@ from .endpoints import (
     overview,
     projects,
     sessions,
+    settings,
 )
 
 
@@ -146,6 +147,7 @@ app.include_router(notebook.router)
 app.include_router(compaction.router)
 app.include_router(concepts.router)
 app.include_router(projects.router)
+app.include_router(settings.router)
 
 
 @app.post("/api/auth/bootstrap", include_in_schema=False)

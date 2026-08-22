@@ -1,10 +1,10 @@
 # MARM Console
 
-MARM Console is the standalone local web app for [marm-memory](https://github.com/Lyellr88/marm-memory). It gives you a browser-based view of the memory system your agents use: memory health, sessions, scoped memory records, extracted knowledge, and indexed code projects.
+MARM Console is the standalone local web app for [marm-memory](https://github.com/Lyellr88/marm-memory). It gives you a browser-based control plane for the memory system your agents use: operational health, memories and sessions, extracted knowledge, and indexed code projects.
 
 Console runs locally. It does not send your memory database to a hosted service and does not add MCP tools to `marm-mcp-server`.
 
-> Status: active development. The backend provides live Overview, filters, memory browsing, safe memory create/edit/delete, knowledge graph reads, and project intelligence routes. The production UI is bundled with `marm-mcp-server`; contributor development remains in this directory.
+> Status: active development. The backend provides live memory, knowledge, project-intelligence, and runtime-settings routes. The production UI is bundled with `marm-mcp-server`; contributor development remains in this directory.
 
 ## What It Is
 
@@ -13,6 +13,16 @@ MARM Console is a separate localhost application that reads the same local MARM 
 - `marm-mcp-server` remains the agent-facing MCP server, normally on port `8001`.
 - MARM Console owns the human-facing REST API on port `8002`.
 - The browser frontend runs separately during development and calls the Console API.
+
+## Workspaces
+
+- **Overview** shows local runtime reachability, latency, memory and concept health, indexed-project context, and compaction activity.
+- **Memories** manages stored memories, notebook entries, logs, sessions, and compaction candidates. Destructive bulk actions require an explicit in-app confirmation.
+- **Knowledge Graph** explores extracted entities and relationships by project or session, reviews potential duplicates with provenance, and manages concept builds without changing source memories.
+- **Indexed Projects** indexes an existing local repository, shows graph size and health, and opens a code-graph workspace for architecture, code search, symbol tracing, impact analysis, coverage, bounded read-only graph queries, architecture decisions, and runtime trace ingestion.
+- **Settings** manages the Console connection and reports runtime, write-queue, automatic-indexing, storage/model, and project-watch health. Its automatic-indexing controls use MARM's existing durable runtime flags.
+
+Console currently indexes existing local directories. GitHub URL cloning, private-repository credentials, and remote polling are planned separately and are not accepted as repository paths.
 
 ## Run Console
 
@@ -39,38 +49,25 @@ For development, run one command from this directory:
 
 The launcher creates the local Python environment, installs missing frontend dependencies, starts the Console API on `127.0.0.1:8002`, and starts the frontend dev server. It stops the API when you stop the frontend.
 
-## Manual Development Setup
+## Development Configuration
+
+`run-dev.ps1` creates `.venv` when needed, installs MARM from the sibling
+`marm-mcp-server` checkout, installs frontend dependencies, starts the Console
+API with `marm_mcp_server.console.cli --serve`, and stops that API when the Vite
+development server exits.
+
+The Console adapter reaches MARM MCP at `http://127.0.0.1:8001` by default. Set
+`MARM_MCP_URL` when the runtime is elsewhere. When the MCP server requires
+bearer authentication, start the Console with the same `MARM_API_KEY`.
+
+To run the frontend by itself after dependencies are installed:
 
 ```powershell
 cd marm-console
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r server\requirements.txt
-python -m server
-```
-
-The API starts at `http://127.0.0.1:8002`.
-
-Set `MARM_DB_PATH` before starting when your memory database is not at the default location:
-
-```powershell
-$env:MARM_DB_PATH = "D:\data\marm_memory.db"
-python -m server
-```
-
-The Console checks the MARM MCP server at `http://127.0.0.1:8001` by default. Set
-`MARM_MCP_URL` when it runs elsewhere. When the MCP server requires bearer auth,
-start the Console with the same `MARM_API_KEY`.
-
-In a second terminal, start the frontend:
-
-```powershell
-cd marm-console
-pnpm install
 pnpm --filter @workspace/marm-console dev
 ```
 
-Open the Vite URL shown in the terminal. The frontend defaults to the Console API at `http://127.0.0.1:8002`.
+The frontend defaults to the Console API at `http://127.0.0.1:8002`.
 
 ## Current API
 
@@ -85,13 +82,15 @@ Open the Vite URL shown in the terminal. The frontend defaults to the Console AP
 | `PUT /api/memories/{id}` | Replace editable memory fields through the MARM write queue |
 | `DELETE /api/memories/{id}` | Delete one memory with typed confirmation |
 | `POST /api/memories/bulk-delete` | Delete an explicit bounded memory ID list |
-| `GET /api/sessions` | Session activity and counts |
-| `GET /api/logs` | Recent log records |
-| `GET /api/notebook` | Notebook records |
-| `GET /api/summaries/{session}` | Cached session summary |
-| `GET /api/compaction` | Compaction pipeline history |
-| `GET /api/concepts/*` | Read-only concept graph summary, search, and neighborhood data |
-| `GET /api/projects` | Indexed project list placeholder |
+| `GET`, `POST`, `DELETE /api/sessions` | Session activity, creation, and deletion; selected-session bulk deletion is also available |
+| `GET`, `DELETE /api/logs` | Recent log records and confirmed deletion; selected-log bulk deletion is also available |
+| `GET`, `POST`, `DELETE /api/notebook` | Notebook records and confirmed write/delete actions; selected-entry bulk deletion is also available |
+| `GET /api/summaries/{session}`; `POST /api/summaries/{session}/generate` | Cached session summary and summary generation |
+| `GET /api/compaction` | Compaction pipeline history and per-candidate actions |
+| `/api/concepts/*` | Concept summary, graph, search, neighborhood, duplicate review, build lifecycle, and graph reset routes |
+| `/api/projects/*` | Local-repository indexing, job status, project health, delete, architecture, code search, trace, impact, coverage, graph query, decisions, and runtime trace routes |
+| `GET /api/settings/runtime` | Runtime, queue, graph, storage, embedding, automation, and watch-health diagnostics |
+| `PUT /api/settings/automation` | Enable or pause durable automatic code or concept indexing |
 
 `GET /api/memories` supports `q`, `session`, `project`, `platform`, `context_type`, `compaction_role`, `limit`, and `offset` query parameters. Results are capped at 200 records per request.
 
@@ -101,12 +100,11 @@ Open the Vite URL shown in the terminal. The frontend defaults to the Console AP
 - Treat the archived dashboard source as read-only reference material.
 - The Console must degrade cleanly when MARM data has not been initialized or optional knowledge/code graph data is unavailable.
 
-## Roadmap
+## Near-Term Direction
 
-The implementation path is:
-
-1. Adapt concept builds and duplicate review through the existing MARM runtime.
-2. Adapt project indexing, status, architecture, code search, trace, impact, and guarded deletion through marm-graph.
-3. Continue polishing the production frontend while preserving the bundled, Node-free release path.
+- Keep the packaged, Node-free release path aligned with the production Console frontend.
+- Add durable index-run history only when the backend can restore real run state across reloads and restarts.
+- Design GitHub repository indexing as a managed public checkout workflow before adding remote access or credentials.
+- Expand MCP controls only where the server has a real, safe operation to expose.
 
 MARM Console is designed to become the local control plane for marm-memory, while leaving the MCP server focused on agent workflows.
