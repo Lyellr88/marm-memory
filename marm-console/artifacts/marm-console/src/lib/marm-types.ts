@@ -127,7 +127,7 @@ export interface Session {
 }
 
 export interface LogEntry {
-  id: number;
+  id: string;
   date: string;
   topic: string | null;
   summary: string | null;
@@ -145,6 +145,58 @@ export interface LogListParams {
   topic?: string;
   limit?: number;
   offset?: number;
+}
+
+export interface RuntimeAutomationState {
+  enabled: boolean;
+  source: 'environment' | 'saved_override' | string;
+  environment_default: boolean;
+  suppressed_projects?: string[];
+  unindexable_projects?: string[];
+}
+
+export interface RuntimeSettings {
+  status: string;
+  service: string;
+  runtime_id: string | null;
+  pid: number;
+  version: string;
+  profile: string;
+  write_queue: {
+    enabled: boolean;
+    running: boolean;
+    depth: number;
+    capacity: number;
+    stopping: boolean;
+  };
+  graph: { state?: string; [key: string]: unknown };
+  automation: {
+    graph: RuntimeAutomationState;
+    concept: RuntimeAutomationState;
+  };
+  knowledge: {
+    state: string;
+    schema: string;
+    index_queue: { pending: number | null; parked: number | null };
+  };
+  storage: {
+    memory: { path?: string; exists: boolean; size_bytes?: number; [key: string]: unknown };
+    concept: { path?: string; exists: boolean; size_bytes?: number; [key: string]: unknown };
+  };
+  embedding: {
+    model: string;
+    marker: string | null;
+    compatible: boolean;
+    incompatible_vectors: number;
+    errors: string[];
+  };
+}
+
+export interface LogListResponse {
+  items: LogEntry[];
+  total: number;
+  limit: number;
+  offset: number;
 }
 
 export interface NotebookEntry {
@@ -228,7 +280,7 @@ export interface ConceptBuildRun {
   id: string;
   scope_type: 'session' | 'project' | 'all';
   scope_value: string | null;
-  status: 'queued' | 'running' | 'success' | 'error' | 'degraded';
+  status: 'queued' | 'running' | 'success' | 'error' | 'degraded' | 'cancelled';
   memories_processed: number;
   memories_total: number;
   entities_extracted: number;
@@ -239,6 +291,9 @@ export interface ConceptBuildRun {
   error_code: string | null;
   created_at: string;
   started_at: string | null;
+  last_progress_at?: string | null;
+  cancel_requested_at: string | null;
+  cancelled_at: string | null;
   finished_at: string | null;
 }
 
@@ -404,6 +459,7 @@ export interface IndexJob {
   phase: string | null;
   error: string | null;
   created_at: string;
+  started_at?: string | null;
   finished_at: string | null;
 }
 
@@ -414,6 +470,57 @@ export interface ProjectStatus {
   edges: number;
   last_indexed_at: string | null;
   error: string | null;
+}
+
+export interface ProjectCoverageEntry {
+  path: string;
+  kind: string;
+  detail?: string;
+}
+
+export interface ProjectCoverage {
+  signal: 'best_effort' | string;
+  indexed_at?: string | null;
+  metadata?: {
+    generation_matches?: boolean;
+    index_mode?: IndexMode | string;
+    recording_status?: string;
+  };
+  scopes: Array<{
+    total: number;
+    has_more?: boolean;
+    entries: ProjectCoverageEntry[];
+    status?: string;
+  }>;
+  caveat?: string;
+}
+
+export interface GraphQueryInput {
+  query: string;
+  graph?: 'code' | 'missed';
+  max_rows?: number;
+}
+
+export interface GraphQueryResult {
+  status?: string;
+  message?: string;
+  columns?: string[];
+  rows?: unknown[][];
+  total?: number;
+  [key: string]: unknown;
+}
+
+export interface ProjectAdr {
+  content?: string;
+  status?: string;
+  message?: string;
+  [key: string]: unknown;
+}
+
+export interface RuntimeTrace {
+  caller: string;
+  callee: string;
+  count: number;
 }
 
 export interface GraphTypeEntry {

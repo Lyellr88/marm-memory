@@ -28,7 +28,9 @@ export const queryKeys = {
   concept: (baseUrl: string, id: number) => ['concept', baseUrl, id],
   neighborhood: (baseUrl: string, id: number, params?: any) => ['neighborhood', baseUrl, id, params],
   conceptBuild: (baseUrl: string, id: string) => ['conceptBuild', baseUrl, id],
+  conceptBuilds: (baseUrl: string) => ['conceptBuilds', baseUrl],
   duplicates: (baseUrl: string) => ['duplicates', baseUrl],
+  runtimeSettings: (baseUrl: string) => ['runtimeSettings', baseUrl],
   projects: (baseUrl: string) => ['projects', baseUrl],
   indexJob: (baseUrl: string, id: string) => ['indexJob', baseUrl, id],
   projectStatus: (baseUrl: string, project: string) => ['projectStatus', baseUrl, project],
@@ -181,6 +183,27 @@ export function useDeleteSession() {
   });
 }
 
+export function useRuntimeSettings(enabled = true) {
+  const { baseUrl, client } = useMarmConfig();
+  return useQuery({
+    queryKey: queryKeys.runtimeSettings(baseUrl),
+    queryFn: client.getRuntimeSettings,
+    enabled,
+    refetchInterval: enabled ? 5000 : false,
+    retry: false,
+  });
+}
+
+export function useUpdateRuntimeAutomation() {
+  const { baseUrl, client } = useMarmConfig();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ scope, enabled }: { scope: 'graph' | 'concept'; enabled: boolean }) =>
+      client.updateRuntimeAutomation(scope, enabled),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.runtimeSettings(baseUrl) }),
+  });
+}
+
 export function useBulkDeleteSessions() {
   const { baseUrl, client } = useMarmConfig();
   const qc = useQueryClient();
@@ -226,7 +249,7 @@ export function useDeleteLog() {
     qc.invalidateQueries({ queryKey: queryKeys.overview(baseUrl) });
   };
   return useMutation({
-    mutationFn: ({ id, sessionName }: { id: number; sessionName: string }) => client.deleteLog(id, sessionName),
+    mutationFn: ({ id, sessionName }: { id: string; sessionName: string }) => client.deleteLog(id, sessionName),
     onSuccess: invalidate,
   });
 }
@@ -235,7 +258,7 @@ export function useBulkDeleteLogs() {
   const { baseUrl, client } = useMarmConfig();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (logs: Array<{ id: number; session_name: string }>) => client.bulkDeleteLogs(logs),
+    mutationFn: (logs: Array<{ id: string; session_name: string }>) => client.bulkDeleteLogs(logs),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['logs', baseUrl] });
       qc.invalidateQueries({ queryKey: ['memories', baseUrl] });
@@ -396,8 +419,12 @@ export function useNeighborhood(id: number, params?: { depth?: number; direction
 }
 
 export function useBuildConcepts() {
-  const { client } = useMarmConfig();
-  return useMutation({ mutationFn: (data: ConceptBuildInput) => client.buildConcepts(data) });
+  const { baseUrl, client } = useMarmConfig();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: ConceptBuildInput) => client.buildConcepts(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.conceptBuilds(baseUrl) }),
+  });
 }
 
 export function useConceptBuild(jobId: string) {
@@ -419,6 +446,53 @@ export function useConceptDuplicates(params?: { offset?: number; limit?: number 
     queryKey: [...queryKeys.duplicates(baseUrl), params],
     queryFn: () => client.getConceptDuplicates(params),
     placeholderData: (previous) => previous,
+  });
+}
+
+export function useConceptBuilds() {
+  const { baseUrl, client } = useMarmConfig();
+  return useQuery({
+    queryKey: queryKeys.conceptBuilds(baseUrl),
+    queryFn: client.listConceptBuilds,
+    refetchInterval: (query) => query.state.data?.some(
+      (build) => build.status === 'queued' || build.status === 'running',
+    ) ? 2000 : false,
+  });
+}
+
+function invalidateConceptBuildLifecycle(qc: QueryClient, baseUrl: string) {
+  qc.invalidateQueries({ queryKey: queryKeys.conceptBuilds(baseUrl) });
+  qc.invalidateQueries({ queryKey: ['conceptBuild', baseUrl] });
+  qc.invalidateQueries({ queryKey: ['conceptsGraph', baseUrl] });
+  qc.invalidateQueries({ queryKey: ['conceptsSearch', baseUrl] });
+  qc.invalidateQueries({ queryKey: queryKeys.conceptsSummary(baseUrl) });
+  qc.invalidateQueries({ queryKey: queryKeys.duplicates(baseUrl) });
+}
+
+export function useStopConceptBuild() {
+  const { baseUrl, client } = useMarmConfig();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (runId: string) => client.stopConceptBuild(runId),
+    onSuccess: () => invalidateConceptBuildLifecycle(qc, baseUrl),
+  });
+}
+
+export function useRetryConceptBuild() {
+  const { baseUrl, client } = useMarmConfig();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (runId: string) => client.retryConceptBuild(runId),
+    onSuccess: () => invalidateConceptBuildLifecycle(qc, baseUrl),
+  });
+}
+
+export function useDeleteConceptGraph() {
+  const { baseUrl, client } = useMarmConfig();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: client.deleteConceptGraph,
+    onSuccess: () => invalidateConceptBuildLifecycle(qc, baseUrl),
   });
 }
 
@@ -489,6 +563,11 @@ export function useProjectStatus(project: string) {
   return useQuery({ queryKey: queryKeys.projectStatus(baseUrl, project), queryFn: () => client.getProjectStatus(project), enabled: !!project });
 }
 
+export function useProjectCoverage(project: string) {
+  const { baseUrl, client } = useMarmConfig();
+  return useQuery({ queryKey: ['project-coverage', baseUrl, project], queryFn: () => client.getProjectCoverage(project), enabled: !!project });
+}
+
 export function useProjectArchitecture(project: string) {
   const { baseUrl, client } = useMarmConfig();
   return useQuery({ queryKey: queryKeys.projectArchitecture(baseUrl, project), queryFn: () => client.getProjectArchitecture(project), enabled: !!project });
@@ -512,6 +591,30 @@ export function useTraceProject() {
 export function useProjectImpact() {
   const { client } = useMarmConfig();
   return useMutation({ mutationFn: ({ project, data }: { project: string, data: ImpactInput }) => client.projectImpact(project, data) });
+}
+
+export function useProjectGraphQuery() {
+  const { client } = useMarmConfig();
+  return useMutation({ mutationFn: ({ project, data }: { project: string, data: import('@/lib/marm-types').GraphQueryInput }) => client.queryProjectGraph(project, data) });
+}
+
+export function useProjectAdr(project: string) {
+  const { baseUrl, client } = useMarmConfig();
+  return useQuery({ queryKey: ['project-adr', baseUrl, project], queryFn: () => client.getProjectAdr(project), enabled: !!project });
+}
+
+export function useUpdateProjectAdr() {
+  const { baseUrl, client } = useMarmConfig();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ project, content }: { project: string, content: string }) => client.updateProjectAdr(project, content),
+    onSuccess: (_data, variables) => qc.invalidateQueries({ queryKey: ['project-adr', baseUrl, variables.project] }),
+  });
+}
+
+export function useIngestProjectRuntimeTraces() {
+  const { client } = useMarmConfig();
+  return useMutation({ mutationFn: ({ project, traces }: { project: string, traces: import('@/lib/marm-types').RuntimeTrace[] }) => client.ingestProjectRuntimeTraces(project, traces) });
 }
 
 export function useDeleteProject() {

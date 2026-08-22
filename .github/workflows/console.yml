@@ -75,6 +75,11 @@ jobs:
         working-directory: marm-console
         run: pnpm typecheck
 
+      - name: Test
+        if: steps.scope.outputs.run == 'true'
+        working-directory: marm-console
+        run: pnpm --filter @workspace/marm-console test
+
       # The step that catches peer-dependency breakage. A plugin major that
       # outruns its host (plugin-react 6 needs vite 8) installs and typechecks
       # clean, then fails loading vite.config.ts.

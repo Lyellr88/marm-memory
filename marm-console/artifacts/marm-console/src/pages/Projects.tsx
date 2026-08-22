@@ -1,17 +1,32 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useProjects, useIndexProject, useIndexJob, useDeleteProject, useSearchProjectCode, useTraceProject, useProjectImpact, useProjectArchitecture, useProjectCodeUnits, useMarmConfig } from '@/hooks/use-marm-queries';
+import { useProjects, useIndexProject, useIndexJob, useDeleteProject, useSearchProjectCode, useTraceProject, useProjectImpact, useProjectArchitecture, useProjectCodeUnits, useProjectCoverage, useProjectGraphQuery, useProjectAdr, useUpdateProjectAdr, useIngestProjectRuntimeTraces, useMarmConfig } from '@/hooks/use-marm-queries';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, Badge, Button, Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Tabs, TabsList, TabsTrigger, TabsContent, Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/core';
-import { FolderCode, HardDrive, RefreshCw, Trash2, SearchCode, GitBranch, Search, Share2, AlertCircle } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
-import type { IndexMode, ProjectIndexInput, ProjectSummary, CodeSearchKind, TraceDirection, TraceMode } from '@/lib/marm-types';
+import { Activity, BookOpen, CheckCircle2, CircleAlert, Clock3, Code2, FileWarning, FolderCode, HardDrive, Network, Play, RefreshCw, Save, Search, SearchCode, Trash2, Upload, XCircle } from 'lucide-react';
+import type { IndexMode, ProjectSummary, CodeSearchKind, RuntimeTrace, TraceDirection, TraceMode } from '@/lib/marm-types';
 
-function IndexDialog({ open, onOpenChange }: { open: boolean, onOpenChange: (o: boolean) => void }) {
+const INDEX_MODES: Array<{ value: IndexMode; label: string; description: string }> = [
+  { value: 'fast', label: 'Fast', description: 'Signatures and imports' },
+  { value: 'moderate', label: 'Moderate', description: 'Includes types' },
+  { value: 'full', label: 'Full', description: 'Deep body analysis' },
+];
+
+function formatElapsed(timestamp: string | null | undefined) {
+  if (!timestamp) return 'Starting…';
+  const elapsed = Math.max(0, Math.floor((Date.now() - new Date(timestamp).getTime()) / 1000));
+  return elapsed < 60 ? `${elapsed}s elapsed` : `${Math.floor(elapsed / 60)}m ${elapsed % 60}s elapsed`;
+}
+
+function IndexWorkspace({ repoPath, setRepoPath, mode, setMode, jobId, setJobId }: {
+  repoPath: string;
+  setRepoPath: (value: string) => void;
+  mode: IndexMode;
+  setMode: (value: IndexMode) => void;
+  jobId: string | null;
+  setJobId: (value: string | null) => void;
+}) {
   const indexProj = useIndexProject();
-  const [repoPath, setRepoPath] = useState('');
-  const [mode, setMode] = useState<IndexMode>('fast');
-  const [jobId, setJobId] = useState<string | null>(null);
-  const { data: jobStatus } = useIndexJob(jobId || '');
+  const { data: jobStatus, error: jobError, isError: jobFailed, refetch: refetchJob } = useIndexJob(jobId || '');
   const { baseUrl } = useMarmConfig();
   const queryClient = useQueryClient();
 
@@ -24,68 +39,65 @@ function IndexDialog({ open, onOpenChange }: { open: boolean, onOpenChange: (o: 
     );
   };
 
-  // Until the first poll returns, the job counts as running — the dialog
-  // must not offer Done/close before a real terminal status is known.
   const isSettled = !!jobStatus && jobStatus.status !== 'queued' && jobStatus.status !== 'running';
-  const isRunning = !!jobId && !isSettled;
+  const isRunning = !!jobId && !isSettled && !jobFailed;
 
   useEffect(() => {
-    if (jobStatus?.status === 'success') {
+    if (jobStatus && jobStatus.status !== 'queued' && jobStatus.status !== 'running') {
       queryClient.invalidateQueries({ queryKey: ['projects', baseUrl] });
     }
   }, [baseUrl, jobStatus?.status, queryClient]);
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!isRunning) onOpenChange(o); }}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Index Local Repository</DialogTitle>
-          <DialogDescription>
-            Point MARM to a local codebase to build an architectural graph. The path must be absolute and accessible to the server.
-          </DialogDescription>
-        </DialogHeader>
-        
-        {!jobId ? (
-          <form onSubmit={handleSubmit} className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Repository Path</Label>
-              <Input placeholder="/Users/dev/workspace/my-app" value={repoPath} onChange={e => setRepoPath(e.target.value)} required className="font-mono text-xs" />
+    <section id="index-workspace" className="project-index-workspace grid gap-5 rounded-2xl border border-primary/20 bg-card/80 p-5 shadow-[0_18px_50px_-30px_hsl(var(--primary)/0.7)] lg:grid-cols-[minmax(0,1fr)_19rem]">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold"><FolderCode className="h-4 w-4 text-primary" /> Index a repository</h2>
+          <p className="text-sm text-muted-foreground">Build a local structural graph for code search, tracing, impact, and architecture review.</p>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="repository-path">Repository path</Label>
+          <Input id="repository-path" placeholder="C:\\work\\my-app" value={repoPath} onChange={e => setRepoPath(e.target.value)} required className="font-mono text-xs" disabled={isRunning} />
+        </div>
+        <div className="grid gap-2 sm:grid-cols-3">
+          {INDEX_MODES.map((option) => (
+            <button key={option.value} type="button" onClick={() => setMode(option.value)} disabled={isRunning} className={`rounded-xl border p-3 text-left transition-all ${mode === option.value ? 'border-primary bg-primary/10 shadow-sm' : 'border-border bg-background/40 hover:border-primary/35 hover:bg-muted/50'}`}>
+              <span className="block text-sm font-semibold">{option.label}</span>
+              <span className="mt-1 block text-xs leading-snug text-muted-foreground">{option.description}</span>
+            </button>
+          ))}
+        </div>
+        {indexProj.error && <p className="rounded-lg bg-destructive/10 p-3 text-xs text-destructive">{indexProj.error.message}</p>}
+        <Button type="submit" className="min-w-40" isLoading={indexProj.isPending} disabled={isRunning || !repoPath.trim()}><Play className="mr-2 h-4 w-4" /> Start {mode} index</Button>
+      </form>
+
+      <div className={`rounded-xl border p-4 ${isRunning ? 'border-primary/35 bg-primary/[0.06] status-pulse' : jobStatus?.status === 'success' ? 'border-emerald-500/30 bg-emerald-500/[0.06] success-pop' : jobStatus?.status === 'error' || jobFailed ? 'border-destructive/35 bg-destructive/[0.06]' : 'border-border bg-background/40'}`}>
+        {jobId ? (
+          <div className="flex h-full flex-col">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">{isRunning ? 'Live index' : 'Latest index'}</p>
+                <p className="mt-1 font-semibold capitalize">{jobFailed ? 'Status unavailable' : jobStatus?.status || 'Preparing job'}</p>
+              </div>
+              {isRunning ? <RefreshCw className="h-5 w-5 animate-spin text-primary" /> : jobStatus?.status === 'success' ? <CheckCircle2 className="h-5 w-5 text-emerald-400" /> : <XCircle className="h-5 w-5 text-destructive" />}
             </div>
-            <div className="space-y-2">
-              <Label>Index Mode</Label>
-              <Select value={mode} onValueChange={(v: IndexMode) => setMode(v)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="fast">Fast (Signatures & Imports)</SelectItem>
-                  <SelectItem value="moderate">Moderate (Includes Types)</SelectItem>
-                  <SelectItem value="full">Full (Deep Body Analysis)</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="mt-5 space-y-2 text-sm">
+              <p className="font-mono text-xs text-muted-foreground">{jobStatus?.phase || 'Queued'}</p>
+              <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><Clock3 className="h-3.5 w-3.5" /> {formatElapsed(jobStatus?.started_at || jobStatus?.created_at)}</p>
+              {jobStatus?.project && <p className="truncate font-mono text-xs text-muted-foreground" title={jobStatus.project}>{jobStatus.project}</p>}
+              {jobStatus?.error && <p className="rounded-md bg-destructive/10 p-2 text-xs text-destructive">{jobStatus.error}</p>}
+              {jobFailed && <p className="rounded-md bg-destructive/10 p-2 text-xs text-destructive">{jobError instanceof Error ? jobError.message : 'Could not read the indexing status.'}</p>}
             </div>
-            {indexProj.error && (
-              <p className="text-xs text-destructive p-2 bg-destructive/10 rounded">{indexProj.error.message}</p>
-            )}
-            <DialogFooter className="mt-6">
-              <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
-              <Button type="submit" isLoading={indexProj.isPending}>Start Indexing</Button>
-            </DialogFooter>
-          </form>
+            {jobFailed ? <div className="mt-auto flex gap-2"><Button variant="outline" size="sm" onClick={() => refetchJob()}>Retry status</Button><Button variant="ghost" size="sm" onClick={() => setJobId(null)}>Clear status</Button></div> : isSettled && <Button variant="ghost" size="sm" className="mt-auto self-start" onClick={() => setJobId(null)}>Clear status</Button>}
+          </div>
         ) : (
-          <div className="py-8 text-center space-y-4">
-            <RefreshCw className={`w-12 h-12 mx-auto ${isRunning ? 'animate-spin text-primary' : jobStatus?.status === 'error' ? 'text-destructive' : 'text-emerald-500'}`} />
-            <h3 className="font-semibold text-lg capitalize">{jobStatus?.status || 'Initializing...'}</h3>
-            {jobStatus?.phase && <p className="text-sm font-mono text-muted-foreground">{jobStatus.phase}</p>}
-            {jobStatus?.error && <p className="text-xs text-destructive p-2 bg-destructive/10 rounded">{jobStatus.error}</p>}
-            
-            {isSettled && (
-              <Button className="mt-4" onClick={() => onOpenChange(false)}>Done</Button>
-            )}
+          <div className="flex h-full flex-col justify-between">
+            <div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Ready to build</p><p className="mt-2 text-sm text-muted-foreground">Choose a depth, enter an absolute local path, and keep working while the graph builds.</p></div>
+            <p className="mt-5 text-xs text-muted-foreground">Indexing never changes your source files.</p>
           </div>
         )}
-      </DialogContent>
-    </Dialog>
+      </div>
+    </section>
   );
 }
 
@@ -136,12 +148,17 @@ function DeleteDialog({ project, open, onOpenChange }: { project: ProjectSummary
   );
 }
 
-function ExploreDialog({ project, open, onOpenChange }: { project: ProjectSummary | null, open: boolean, onOpenChange: (o: boolean) => void }) {
+export function ExploreDialog({ project, open, onOpenChange }: { project: ProjectSummary | null, open: boolean, onOpenChange: (o: boolean) => void }) {
   const searchCode = useSearchProjectCode();
   const traceCode = useTraceProject();
   const impactCode = useProjectImpact();
+  const graphQuery = useProjectGraphQuery();
+  const updateAdr = useUpdateProjectAdr();
+  const ingestRuntimeTraces = useIngestProjectRuntimeTraces();
   const { data: architecture, isLoading: architectureLoading } = useProjectArchitecture(project?.name || '');
   const { data: codeUnits, isLoading: codeUnitsLoading, isError: codeUnitsFailed } = useProjectCodeUnits(project?.name || '');
+  const { data: coverage, isLoading: coverageLoading, isError: coverageFailed } = useProjectCoverage(project?.name || '');
+  const { data: adr, isLoading: adrLoading } = useProjectAdr(project?.name || '');
   // A failed refetch keeps the last successful data, so isError and state 'ready'
   // are both true at once. The failure wins: a populated table under "could not
   // reach the server" is exactly the ambiguous state this table exists to remove.
@@ -158,25 +175,65 @@ function ExploreDialog({ project, open, onOpenChange }: { project: ProjectSummar
 
   // Impact
   const [impactBranch, setImpactBranch] = useState('main');
+  const [graphQueryText, setGraphQueryText] = useState('MATCH (f:Function) RETURN f.qualified_name LIMIT 25');
+  const [adrDraft, setAdrDraft] = useState('');
+  const [runtimeCaller, setRuntimeCaller] = useState('');
+  const [runtimeCallee, setRuntimeCallee] = useState('');
+  const [runtimeCount, setRuntimeCount] = useState('1');
+  const [activeTab, setActiveTab] = useState('search');
+
+  useEffect(() => setAdrDraft(''), [project?.name]);
+
+  useEffect(() => {
+    searchCode.reset();
+    traceCode.reset();
+    impactCode.reset();
+    graphQuery.reset();
+    updateAdr.reset();
+    ingestRuntimeTraces.reset();
+  }, [project?.name]);
+
+  useEffect(() => {
+    if (typeof adr?.content === 'string') setAdrDraft(adr.content);
+  }, [adr?.content]);
+
+  useEffect(() => setActiveTab('search'), [project?.name]);
+
+  const parsedRuntimeCount = Number(runtimeCount);
+  const runtimeCountValid = /^\d+$/.test(runtimeCount.trim())
+    && Number.isInteger(parsedRuntimeCount)
+    && parsedRuntimeCount >= 1
+    && parsedRuntimeCount <= 1_000_000;
 
   if (!project) return null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[85vh] flex flex-col">
-        <DialogHeader>
-          <DialogTitle>Explore: {project.name}</DialogTitle>
+      <DialogContent className="project-explorer-dialog !flex !flex-col h-[42rem] max-h-[85vh] max-w-5xl !gap-0 overflow-hidden !p-0">
+        <DialogHeader className="project-explorer-header shrink-0 px-6 pb-5 pt-6">
+          <div className="flex min-w-0 items-start gap-3 pr-8">
+            <div className="project-explorer-mark"><Network className="h-4 w-4" /></div>
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-primary/80">Code graph explorer</p>
+              <DialogTitle className="mt-1 truncate text-lg">{project.name}</DialogTitle>
+              <DialogDescription className="mt-1 truncate font-mono text-xs" title={project.root_path}>{project.root_path}</DialogDescription>
+            </div>
+          </div>
         </DialogHeader>
 
-        <Tabs defaultValue="search" className="flex-1 flex flex-col overflow-hidden">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="architecture">Architecture</TabsTrigger>
-            <TabsTrigger value="search">Code Search</TabsTrigger>
-            <TabsTrigger value="trace">Trace Symbol</TabsTrigger>
-            <TabsTrigger value="impact">Impact Analysis</TabsTrigger>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex min-h-0 flex-1 flex-col overflow-hidden px-6 pb-6">
+          <TabsList className="project-explorer-tabs grid h-auto w-full shrink-0 grid-cols-2 gap-1.5 rounded-xl border border-border/70 bg-muted/20 p-1.5 sm:grid-cols-4">
+            <TabsTrigger value="architecture" className="project-explorer-tab"><Network className="h-3.5 w-3.5" /><span>Architecture</span></TabsTrigger>
+            <TabsTrigger value="search" className="project-explorer-tab"><SearchCode className="h-3.5 w-3.5" /><span>Code search</span></TabsTrigger>
+            <TabsTrigger value="trace" className="project-explorer-tab"><Activity className="h-3.5 w-3.5" /><span>Trace symbol</span></TabsTrigger>
+            <TabsTrigger value="impact" className="project-explorer-tab"><CircleAlert className="h-3.5 w-3.5" /><span>Impact</span></TabsTrigger>
+            <TabsTrigger value="coverage" className="project-explorer-tab"><FileWarning className="h-3.5 w-3.5" /><span>Coverage</span></TabsTrigger>
+            <TabsTrigger value="query" className="project-explorer-tab"><Code2 className="h-3.5 w-3.5" /><span>Graph query</span></TabsTrigger>
+            <TabsTrigger value="adr" className="project-explorer-tab"><BookOpen className="h-3.5 w-3.5" /><span>Decisions</span></TabsTrigger>
+            <TabsTrigger value="runtime" className="project-explorer-tab"><Upload className="h-3.5 w-3.5" /><span>Runtime traces</span></TabsTrigger>
           </TabsList>
 
-          <TabsContent value="architecture" className="flex-1 overflow-auto pt-4">
+          <TabsContent value="architecture" className="project-explorer-panel mt-0 min-h-0 flex-1 overflow-y-auto pt-5">
             {architectureLoading ? (
               <div className="p-8 text-center text-sm text-muted-foreground">Loading architecture...</div>
             ) : (
@@ -229,7 +286,7 @@ function ExploreDialog({ project, open, onOpenChange }: { project: ProjectSummar
             )}
           </TabsContent>
           
-          <TabsContent value="search" className="flex-1 overflow-hidden flex flex-col gap-4 pt-4">
+          <TabsContent value="search" className="project-explorer-panel mt-0 flex min-h-0 flex-1 flex-col gap-4 overflow-hidden pt-5">
             <div className="flex gap-2">
               <Input 
                 placeholder="Search query..." 
@@ -288,7 +345,7 @@ function ExploreDialog({ project, open, onOpenChange }: { project: ProjectSummar
             </div>
           </TabsContent>
           
-          <TabsContent value="trace" className="flex-1 overflow-hidden flex flex-col gap-4 pt-4">
+          <TabsContent value="trace" className="project-explorer-panel mt-0 flex min-h-0 flex-1 flex-col gap-4 overflow-hidden pt-5">
             <div className="flex gap-2">
               <Input 
                 placeholder="Symbol name..." 
@@ -351,7 +408,7 @@ function ExploreDialog({ project, open, onOpenChange }: { project: ProjectSummar
             </div>
           </TabsContent>
 
-          <TabsContent value="impact" className="flex-1 overflow-hidden flex flex-col gap-4 pt-4">
+          <TabsContent value="impact" className="project-explorer-panel mt-0 flex min-h-0 flex-1 flex-col gap-4 overflow-hidden pt-5">
              <div className="flex gap-2">
               <Input 
                 placeholder="Base branch (e.g. main)" 
@@ -398,6 +455,57 @@ function ExploreDialog({ project, open, onOpenChange }: { project: ProjectSummar
               </Table>
             </div>
           </TabsContent>
+
+          <TabsContent value="coverage" className="project-explorer-panel mt-0 min-h-0 flex-1 overflow-y-auto pt-5">
+            {coverageLoading ? <div className="p-8 text-center text-sm text-muted-foreground">Reading recorded coverage…</div> : coverageFailed ? <div className="rounded-lg bg-destructive/10 p-4 text-sm text-destructive">Coverage is unavailable right now.</div> : (
+              <div className="space-y-4">
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-lg border bg-muted/20 p-3"><p className="text-xs text-muted-foreground">Signal</p><p className="mt-1 text-sm font-semibold">Best effort</p></div>
+                  <div className="rounded-lg border bg-muted/20 p-3"><p className="text-xs text-muted-foreground">Index mode</p><p className="mt-1 text-sm font-semibold capitalize">{coverage?.metadata?.index_mode || 'Unknown'}</p></div>
+                  <div className="rounded-lg border bg-muted/20 p-3"><p className="text-xs text-muted-foreground">Metadata</p><p className="mt-1 text-sm font-semibold">{coverage?.metadata?.generation_matches ? 'Current' : 'Check freshness'}</p></div>
+                </div>
+                <div className="rounded-lg border overflow-hidden">
+                  <div className="border-b bg-muted/40 px-4 py-3"><p className="text-sm font-semibold">Recorded exclusions and gaps</p><p className="mt-0.5 text-xs text-muted-foreground">These are detected signals, not proof that unlisted source is complete.</p></div>
+                  {(coverage?.scopes[0]?.entries.length ?? 0) === 0 ? <p className="p-5 text-sm text-muted-foreground">No recorded gaps in this scope.</p> : <div className="divide-y">{coverage?.scopes[0]?.entries.map((entry) => <div key={`${entry.kind}-${entry.path}`} className="flex items-start gap-3 px-4 py-3"><FileWarning className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" /><div><p className="font-mono text-xs">{entry.path}</p><p className="mt-0.5 text-xs text-muted-foreground">{entry.kind}{entry.detail ? ` · ${entry.detail}` : ''}</p></div></div>)}</div>}
+                </div>
+                {coverage?.caveat && <p className="text-xs text-muted-foreground">{coverage.caveat}</p>}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="query" className="project-explorer-panel mt-0 min-h-0 flex-1 overflow-y-auto pt-5">
+            <div className="space-y-3">
+              <div><p className="text-sm font-semibold">Read-only graph query</p><p className="mt-1 text-xs text-muted-foreground">Use Cypher for bounded investigation. Write clauses are rejected before reaching the engine.</p></div>
+              <textarea value={graphQueryText} onChange={event => setGraphQueryText(event.target.value)} className="min-h-28 w-full rounded-md border bg-background p-3 font-mono text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+              <Button onClick={() => graphQuery.mutate({ project: project.name, data: { query: graphQueryText, max_rows: 100 } })} disabled={!graphQueryText.trim()} isLoading={graphQuery.isPending}><Code2 className="mr-2 h-4 w-4" /> Run query</Button>
+              {graphQuery.error && <p className="rounded-lg bg-destructive/10 p-3 text-xs text-destructive">{graphQuery.error.message}</p>}
+              {graphQuery.data && <pre className="max-h-72 overflow-auto rounded-lg border bg-muted/30 p-3 text-xs leading-relaxed">{JSON.stringify(graphQuery.data, null, 2)}</pre>}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="adr" className="project-explorer-panel mt-0 min-h-0 flex-1 overflow-y-auto pt-5">
+            <div className="space-y-3">
+              <div><p className="text-sm font-semibold">Architecture decisions</p><p className="mt-1 text-xs text-muted-foreground">This is the project’s engine-backed ADR document. Saving replaces the current document.</p></div>
+              {adrLoading ? <p className="text-sm text-muted-foreground">Loading decisions…</p> : <textarea value={adrDraft} onChange={event => setAdrDraft(event.target.value)} placeholder="# Architecture decisions" className="min-h-64 w-full rounded-md border bg-background p-3 font-mono text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring" />}
+              {updateAdr.error && <p className="rounded-lg bg-destructive/10 p-3 text-xs text-destructive">{updateAdr.error.message}</p>}
+              <Button onClick={() => updateAdr.mutate({ project: project.name, content: adrDraft })} disabled={adrLoading || !adrDraft.trim()} isLoading={updateAdr.isPending}><Save className="mr-2 h-4 w-4" /> Save decisions</Button>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="runtime" className="project-explorer-panel mt-0 min-h-0 flex-1 overflow-y-auto pt-5">
+            <div className="space-y-4">
+              <div><p className="text-sm font-semibold">Runtime trace edge</p><p className="mt-1 text-xs text-muted-foreground">Add observed caller → callee frequency to supplement static structure. Use qualified names from this project.</p></div>
+              <div className="grid gap-3 sm:grid-cols-[1fr_1fr_7rem]">
+                <Input value={runtimeCaller} onChange={event => setRuntimeCaller(event.target.value)} placeholder="caller.qualified_name" className="font-mono text-xs" />
+                <Input value={runtimeCallee} onChange={event => setRuntimeCallee(event.target.value)} placeholder="callee.qualified_name" className="font-mono text-xs" />
+                <Input value={runtimeCount} onChange={event => setRuntimeCount(event.target.value)} inputMode="numeric" placeholder="Count" />
+              </div>
+              {!runtimeCountValid && <p className="text-xs text-destructive">Count must be a whole number from 1 to 1,000,000.</p>}
+              {ingestRuntimeTraces.error && <p className="rounded-lg bg-destructive/10 p-3 text-xs text-destructive">{ingestRuntimeTraces.error.message}</p>}
+              {ingestRuntimeTraces.data?.status === 'success' && <p className="rounded-lg bg-emerald-500/10 p-3 text-xs text-emerald-300">Runtime edge added to the graph.</p>}
+              <Button onClick={() => ingestRuntimeTraces.mutate({ project: project.name, traces: [{ caller: runtimeCaller, callee: runtimeCallee, count: parsedRuntimeCount } satisfies RuntimeTrace] })} disabled={!runtimeCaller.trim() || !runtimeCallee.trim() || !runtimeCountValid} isLoading={ingestRuntimeTraces.isPending}><Upload className="mr-2 h-4 w-4" /> Ingest trace</Button>
+            </div>
+          </TabsContent>
         </Tabs>
       </DialogContent>
     </Dialog>
@@ -406,85 +514,63 @@ function ExploreDialog({ project, open, onOpenChange }: { project: ProjectSummar
 
 export function ProjectsPage() {
   const { data: projects, isLoading } = useProjects();
-  const [indexOpen, setIndexOpen] = useState(false);
+  const [repoPath, setRepoPath] = useState('');
+  const [mode, setMode] = useState<IndexMode>('moderate');
+  const [jobId, setJobId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ProjectSummary | null>(null);
   const [exploreTarget, setExploreTarget] = useState<ProjectSummary | null>(null);
+  const metrics = useMemo(() => {
+    const rows = projects || [];
+    return {
+      repositories: rows.length,
+      nodes: rows.reduce((total, project) => total + (project.nodes || 0), 0),
+      edges: rows.reduce((total, project) => total + (project.edges || 0), 0),
+      attention: rows.filter((project) => project.status === 'error' || project.status === 'indexing').length,
+    };
+  }, [projects]);
+
+  const prepareReindex = (project: ProjectSummary) => {
+    setRepoPath(project.root_path);
+    setMode('moderate');
+    setJobId(null);
+    document.getElementById('index-workspace')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    window.setTimeout(() => document.getElementById('repository-path')?.focus(), 350);
+  };
 
   return (
-    <div className="page-enter p-7 xl:p-8 flex flex-col h-full overflow-hidden">
-      <div className="flex justify-between items-center mb-6 shrink-0">
+    <div className="page-enter h-full overflow-auto p-7 xl:p-8">
+      <div className="mb-6 flex items-center justify-between gap-5">
         <div>
           <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-primary/80">Code intelligence</div>
           <h1 className="text-[1.8rem] font-semibold tracking-[-0.045em]">Indexed Projects</h1>
-          <p className="text-muted-foreground text-sm mt-1">Local repositories, structural search, traces, and impact analysis.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Build, inspect, and evolve local code graphs from one workspace.</p>
         </div>
-        <Button onClick={() => setIndexOpen(true)}>
-          <FolderCode className="w-4 h-4 mr-2" /> Index Repository
-        </Button>
       </div>
 
-      <div className="flex-1 overflow-auto">
-        {isLoading ? (
-          <div className="text-center p-12 text-muted-foreground">Loading projects...</div>
-        ) : projects?.length === 0 ? (
-          <div className="border border-dashed rounded-lg p-12 text-center flex flex-col items-center">
-            <SearchCode className="w-12 h-12 text-muted-foreground mb-4 opacity-50" />
-            <h3 className="text-lg font-medium mb-2">No projects indexed</h3>
-            <p className="text-muted-foreground max-w-sm mb-6">Index a local repository to give your agents structural awareness of the codebase.</p>
-            <Button variant="outline" onClick={() => setIndexOpen(true)}>Index First Repo</Button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-            {projects?.map(proj => (
-              <Card key={proj.name} className="group flex flex-col transition-[border-color,transform] duration-200 hover:-translate-y-0.5 hover:border-primary/25">
-                <CardHeader className="flex flex-row items-start justify-between pb-2">
-                  <div>
-                    <CardTitle className="font-mono text-lg flex items-center gap-2">
-                      {proj.name}
-                      <Badge variant={proj.status === 'ready' ? 'default' : proj.status === 'indexing' ? 'secondary' : 'destructive'} className="text-[10px] ml-2">
-                        {proj.status}
-                      </Badge>
-                    </CardTitle>
-                    <CardDescription className="font-mono text-xs mt-1 truncate max-w-sm" title={proj.root_path}>
-                      {proj.root_path}
-                    </CardDescription>
-                  </div>
-                  <div className="flex gap-2 shrink-0">
-                    <Button variant="outline" size="sm" onClick={() => setExploreTarget(proj)}>
-                      Explore
-                    </Button>
-                    <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive shrink-0" onClick={() => setDeleteTarget(proj)}>
-                      <Trash2 className="w-4 h-4" />
-                    </Button>
-                  </div>
-                </CardHeader>
-                <CardContent className="mt-4 flex-1">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-muted/30 p-4 rounded-md border border-border/50">
-                      <div className="flex items-center gap-2 mb-1">
-                        <HardDrive className="w-4 h-4 text-primary" />
-                        <span className="text-sm font-medium">Nodes</span>
-                      </div>
-                      <div className="text-2xl font-mono">{proj.nodes.toLocaleString()}</div>
-                      <div className="text-[10px] text-muted-foreground uppercase tracking-widest mt-1">Files & Symbols</div>
-                    </div>
-                    <div className="bg-muted/30 p-4 rounded-md border border-border/50">
-                      <div className="flex items-center gap-2 mb-1">
-                        <GitBranch className="w-4 h-4 text-accent-foreground" />
-                        <span className="text-sm font-medium">Edges</span>
-                      </div>
-                      <div className="text-2xl font-mono">{proj.edges.toLocaleString()}</div>
-                      <div className="text-[10px] text-muted-foreground uppercase tracking-widest mt-1">Imports & Calls</div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {[
+          { label: 'Indexed repositories', value: metrics.repositories, icon: FolderCode, tone: 'text-primary' },
+          { label: 'Graph nodes', value: metrics.nodes.toLocaleString(), icon: HardDrive, tone: 'text-cyan-400' },
+          { label: 'Graph edges', value: metrics.edges.toLocaleString(), icon: Network, tone: 'text-violet-400' },
+          { label: 'Needs attention', value: metrics.attention, icon: CircleAlert, tone: metrics.attention ? 'text-amber-400' : 'text-emerald-400' },
+        ].map((metric, index) => <Card key={metric.label} className="metric-enter overflow-hidden border-border/70" style={{ animationDelay: `${index * 55}ms` }}><CardContent className="relative p-4"><metric.icon className={`absolute right-4 top-4 h-5 w-5 ${metric.tone}`} /><p className="text-xs text-muted-foreground">{metric.label}</p><p className="mt-2 text-2xl font-semibold tracking-tight">{metric.value}</p></CardContent></Card>)}
       </div>
 
-      <IndexDialog open={indexOpen} onOpenChange={setIndexOpen} />
+      <div className="mt-6">
+        <IndexWorkspace repoPath={repoPath} setRepoPath={setRepoPath} mode={mode} setMode={setMode} jobId={jobId} setJobId={setJobId} />
+      </div>
+
+      <section className="mt-8 pb-8">
+        <div className="mb-4 flex items-center justify-between"><div><h2 className="text-lg font-semibold">Projects</h2><p className="mt-0.5 text-sm text-muted-foreground">Open an explorer for the graph, coverage, decisions, and runtime evidence.</p></div><Badge variant="outline" className="font-mono text-[10px]">{metrics.repositories} total</Badge></div>
+        {isLoading ? <div className="p-12 text-center text-muted-foreground">Loading projects…</div> : projects?.length === 0 ? (
+          <div className="flex flex-col items-center rounded-xl border border-dashed p-12 text-center"><SearchCode className="mb-4 h-10 w-10 text-muted-foreground/60" /><h3 className="text-lg font-medium">Your first code graph starts here</h3><p className="mt-2 max-w-sm text-sm text-muted-foreground">Enter an absolute repository path above to give MARM structural awareness of a codebase.</p></div>
+        ) : <div className="grid gap-4 xl:grid-cols-2">{projects?.map((proj, index) => {
+          const status = proj.status || 'ready';
+          const statusTone = status === 'ready' ? 'bg-emerald-500/10 text-emerald-300 border-emerald-500/25' : status === 'indexing' ? 'bg-primary/10 text-primary border-primary/25' : 'bg-destructive/10 text-destructive border-destructive/25';
+          return <Card key={proj.name} className="project-card group metric-enter overflow-hidden border-border/70" style={{ animationDelay: `${index * 45}ms` }}><CardHeader className="flex flex-row items-start justify-between gap-4 pb-3"><div className="min-w-0"><div className="flex items-center gap-2"><CardTitle className="truncate font-mono text-base">{proj.name}</CardTitle><Badge variant="outline" className={`shrink-0 border text-[10px] capitalize ${statusTone}`}>{status === 'indexing' && <RefreshCw className="mr-1 h-3 w-3 animate-spin" />}{status}</Badge></div><CardDescription className="mt-2 truncate font-mono text-xs" title={proj.root_path}>{proj.root_path}</CardDescription></div><div className="flex shrink-0 gap-1"><Button variant="outline" size="sm" onClick={() => setExploreTarget(proj)}>Explore</Button><Button variant="ghost" size="icon" title="Prepare reindex" onClick={() => prepareReindex(proj)}><RefreshCw className="h-4 w-4" /></Button><Button variant="ghost" size="icon" className="text-muted-foreground hover:text-destructive" title="Delete project graph" onClick={() => setDeleteTarget(proj)}><Trash2 className="h-4 w-4" /></Button></div></CardHeader><CardContent><div className="grid grid-cols-2 gap-3"><div className="rounded-lg border border-border/60 bg-muted/20 p-3"><p className="text-xs text-muted-foreground">Nodes</p><p className="mt-1 font-mono text-xl font-semibold">{proj.nodes.toLocaleString()}</p><p className="mt-1 text-[10px] uppercase tracking-wider text-muted-foreground">Files & symbols</p></div><div className="rounded-lg border border-border/60 bg-muted/20 p-3"><p className="text-xs text-muted-foreground">Edges</p><p className="mt-1 font-mono text-xl font-semibold">{proj.edges.toLocaleString()}</p><p className="mt-1 text-[10px] uppercase tracking-wider text-muted-foreground">Calls & imports</p></div></div></CardContent></Card>;
+        })}</div>}
+      </section>
+
       <DeleteDialog project={deleteTarget} open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)} />
       <ExploreDialog project={exploreTarget} open={!!exploreTarget} onOpenChange={(o) => !o && setExploreTarget(null)} />
     </div>

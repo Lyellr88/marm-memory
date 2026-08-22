@@ -80,6 +80,24 @@ def test_build_over_1200_memories_reaches_every_row_at_default_cap(
     assert oldest == 1
 
 
+def test_build_stops_at_a_safe_memory_boundary_when_cancelled(
+    concepts_env, monkeypatch
+):
+    concepts, memory_module = concepts_env
+    _seed(memory_module, 3)
+    _one_entity_per_memory(monkeypatch, concepts)
+    checks = iter((False, True))
+
+    result = concepts._run_build(
+        concepts._fetch_memory_pages(session_name=None, project=None, search_all=True),
+        cancel_requested=lambda: next(checks),
+    )
+
+    assert result["aborted"] is False
+    assert result["cancelled"] is True
+    assert result["memories_processed"] == 1
+
+
 def test_paged_ids_match_an_unpaginated_baseline_exactly(concepts_env, monkeypatch):
     """Page boundaries must lose nothing and repeat nothing. Compared against
     the same query run as one statement, not against a hand-written list."""

@@ -58,7 +58,7 @@ def _schema_status(connection: sqlite3.Connection) -> str:
         return "unavailable"
 
 
-def _build_run_columns(connection: sqlite3.Connection) -> tuple[str, str]:
+def _build_run_columns(connection: sqlite3.Connection) -> tuple[str, str, str, str]:
     columns = {
         row["name"]
         for row in connection.execute("PRAGMA table_info(concept_build_runs)")
@@ -68,6 +68,10 @@ def _build_run_columns(connection: sqlite3.Connection) -> tuple[str, str]:
         "last_progress_at"
         if "last_progress_at" in columns
         else "NULL AS last_progress_at",
+        "cancel_requested_at"
+        if "cancel_requested_at" in columns
+        else "NULL AS cancel_requested_at",
+        "cancelled_at" if "cancelled_at" in columns else "NULL AS cancelled_at",
     )
 
 
@@ -241,18 +245,22 @@ def build_runs(db_path: Path, limit: int = 20) -> list[dict]:
         return []
     try:
         with closing(connection), connection:
-            if _schema_status(connection) != "current":
-                return []
-            memories_total_column, progress_column = _build_run_columns(connection)
+            (
+                memories_total_column,
+                progress_column,
+                cancel_requested_column,
+                cancelled_column,
+            ) = _build_run_columns(connection)
             rows = connection.execute(
                 f"""SELECT id, scope_type, scope_value, status, memories_processed,
                           {memories_total_column},
                           entities_extracted, relationships_created, code_links_created,
                           duplicate_candidates, duration_ms, error_code, created_at,
-                          started_at, {progress_column}, finished_at
+                          started_at, {progress_column}, {cancel_requested_column},
+                          {cancelled_column}, finished_at
                    FROM concept_build_runs
                    ORDER BY created_at DESC LIMIT ?""",
-                (min(max(limit, 1), 50),),
+                (min(max(limit, 1), 100),),
             ).fetchall()
     except sqlite3.OperationalError:
         return []
@@ -265,13 +273,19 @@ def get_build_run(db_path: Path, run_id: str) -> dict | None:
         return None
     try:
         with closing(connection), connection:
-            memories_total_column, progress_column = _build_run_columns(connection)
+            (
+                memories_total_column,
+                progress_column,
+                cancel_requested_column,
+                cancelled_column,
+            ) = _build_run_columns(connection)
             row = connection.execute(
                 f"""SELECT id, scope_type, scope_value, status, memories_processed,
                           {memories_total_column},
                           entities_extracted, relationships_created, code_links_created,
                           duplicate_candidates, duration_ms, error_code, created_at,
-                          started_at, {progress_column}, finished_at
+                          started_at, {progress_column}, {cancel_requested_column},
+                          {cancelled_column}, finished_at
                    FROM concept_build_runs WHERE id = ?""",
                 (run_id,),
             ).fetchone()
@@ -429,6 +443,8 @@ def _build_run(row: sqlite3.Row) -> dict:
         "created_at": row["created_at"],
         "started_at": row["started_at"],
         "last_progress_at": row["last_progress_at"],
+        "cancel_requested_at": row["cancel_requested_at"],
+        "cancelled_at": row["cancelled_at"],
         "finished_at": row["finished_at"],
     }
 

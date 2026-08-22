@@ -16,10 +16,11 @@ def get_logs(
     q: str | None = None,
     session: str | None = None,
     limit: int = Query(50, ge=1, le=200),
-) -> list[dict]:
+    offset: int = Query(0, ge=0),
+) -> dict:
     try:
         return memory_store.list_logs(
-            get_memory_db_path(), q=q, session=session, limit=limit
+            get_memory_db_path(), q=q, session=session, limit=limit, offset=offset
         )
     except memory_store.MemoryStoreUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc

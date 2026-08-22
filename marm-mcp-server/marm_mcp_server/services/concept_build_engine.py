@@ -109,7 +109,7 @@ def _get_concept_db() -> ConceptDB:
     return _concept_db
 
 
-def reset_and_rebuild_concept_db(db_path: str) -> None:
+def reset_and_rebuild_concept_db(db_path: str) -> str:
     """Close the cached ConceptDB singleton and reset the on-disk database,
     atomically under the singleton's own lock so a concurrent _get_concept_db()
     call cannot reopen a connection to the file mid-reset."""
@@ -118,7 +118,7 @@ def reset_and_rebuild_concept_db(db_path: str) -> None:
         if _concept_db is not None:
             _concept_db.close()
             _concept_db = None
-        backup_and_reset_concept_database(db_path)
+        return backup_and_reset_concept_database(db_path)
 
 
 def _fetch_memory_pages(
@@ -241,6 +241,7 @@ def _run_build(
     abort: Optional[threading.Event] = None,
     finished: Optional[threading.Event] = None,
     progress_callback: Optional[BuildProgressCallback] = None,
+    cancel_requested: Optional[Callable[[], bool]] = None,
 ) -> dict:
     """Consumes pages lazily so a full-corpus build never holds every row in
     memory at once. The concept connection and embed_cache stay outside the
@@ -260,6 +261,7 @@ def _run_build(
     The result carries `aborted` so the caller settles nothing."""
     memories_processed = 0
     aborted = False
+    cancelled = False
     entities_extracted = 0
     relationships_created = 0
     code_links_created = 0
@@ -288,6 +290,9 @@ def _run_build(
                 for row in page:
                     if abort is not None and abort.is_set():
                         aborted = True
+                        break
+                    if cancel_requested is not None and cancel_requested():
+                        cancelled = True
                         break
                     mem_id, content, mem_session, mem_project = row[:4]
                     mem_platform = row[4] if len(row) > 4 else None
@@ -444,7 +449,7 @@ def _run_build(
                         code_links_created,
                     )
                     last_progress_reported = memories_processed
-                if aborted:
+                if aborted or cancelled:
                     break
 
     finally:
@@ -456,6 +461,7 @@ def _run_build(
 
     return {
         "aborted": aborted,
+        "cancelled": cancelled,
         "memories_processed": memories_processed,
         "entities_extracted": entities_extracted,
         "relationships_created": relationships_created,

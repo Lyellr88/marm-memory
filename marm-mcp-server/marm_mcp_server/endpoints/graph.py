@@ -9,6 +9,7 @@ marm_graph's tool_router, matching marm_graph's own asyncio.to_thread pattern.
 
 import asyncio
 import os
+import re
 import threading
 import uuid
 from datetime import datetime, timezone
@@ -20,7 +21,7 @@ from pydantic import BaseModel, Field
 
 from marm_graph.core import code_graph_view
 from marm_graph.core import tool_router as R
-from marm_graph.core.cbm_client import CbmError
+from marm_graph.core.cbm_client import CbmError, CbmToolError
 from marm_graph.core.models import (
     CodeLookupRequest,
     GraphArchitectureRequest,
@@ -72,6 +73,35 @@ class ConsoleDeleteProjectRequest(BaseModel):
     confirm: bool = False
 
 
+class ConsoleGraphQueryRequest(BaseModel):
+    project: str = Field(..., min_length=1, max_length=512)
+    query: str = Field(..., min_length=1, max_length=12000)
+    graph: Literal["code", "missed"] = "code"
+    max_rows: int = Field(100, ge=1, le=1000)
+
+
+class ConsoleAdrUpdateRequest(BaseModel):
+    project: str = Field(..., min_length=1, max_length=512)
+    content: str = Field(..., min_length=1, max_length=200000)
+
+
+class ConsoleRuntimeTrace(BaseModel):
+    caller: str = Field(..., min_length=1, max_length=2048)
+    callee: str = Field(..., min_length=1, max_length=2048)
+    count: int = Field(..., ge=1, le=1000000)
+
+
+class ConsoleRuntimeTracesRequest(BaseModel):
+    project: str = Field(..., min_length=1, max_length=512)
+    traces: list[ConsoleRuntimeTrace] = Field(..., min_length=1, max_length=500)
+
+
+_GRAPH_WRITE_CLAUSE = re.compile(
+    r"\b(CREATE|MERGE|DELETE|DETACH|SET|REMOVE|DROP|LOAD\s+CSV|FOREACH)\b",
+    re.IGNORECASE,
+)
+
+
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
@@ -93,6 +123,33 @@ def _console_graph_result(result: dict) -> dict:
             "message": "Graph operation failed.",
         }
     return result
+
+
+async def _console_engine_call(
+    tool: str, arguments: dict, *, mutates_store: bool = False
+) -> dict:
+    """Call an engine-only Console operation without leaking backend details."""
+    client = await asyncio.to_thread(graph_supervisor.get_client)
+    if client is None:
+        return dict(_UNAVAILABLE)
+    try:
+        if mutates_store:
+            result = await run_exclusive(
+                f"console_{tool}", client.call_tool, tool, arguments
+            )
+        else:
+            result = await asyncio.to_thread(client.call_tool, tool, arguments)
+    except GraphIndexBusy as busy:
+        return {
+            "status": "error",
+            "error_code": "index_in_progress",
+            "message": str(busy),
+        }
+    except (CbmError, CbmToolError):
+        return dict(_UNAVAILABLE)
+    return _console_graph_result(
+        result if isinstance(result, dict) else {"result": result}
+    )
 
 
 def _validated_repo_path(raw_path: str) -> str:
@@ -378,6 +435,65 @@ async def console_project_status(req: ConsoleProjectRequest) -> dict:
             client,
             GraphIndexRequest(project=req.project, action="status"),
         )
+    )
+
+
+@router.post("/internal/projects/coverage")
+async def console_project_coverage(req: ConsoleProjectRequest) -> dict:
+    """Return a bounded root-scope coverage report for the Console.
+
+    Coverage is intentionally best-effort and only signals recorded gaps; the
+    browser labels it accordingly rather than treating it as proof of completeness.
+    """
+    return await _console_engine_call(
+        "check_index_coverage",
+        {"project": req.project, "scopes": ["."], "scope_limit": 30},
+    )
+
+
+@router.post("/internal/projects/query")
+async def console_project_query(req: ConsoleGraphQueryRequest) -> dict:
+    if _GRAPH_WRITE_CLAUSE.search(req.query):
+        return {
+            "status": "rejected",
+            "message": "Graph queries are read-only. Write clauses are not permitted.",
+        }
+    return await _console_engine_call(
+        "query_graph",
+        {
+            "project": req.project,
+            "query": req.query,
+            "graph": req.graph,
+            "max_rows": req.max_rows,
+        },
+    )
+
+
+@router.post("/internal/projects/adr")
+async def console_project_adr(req: ConsoleProjectRequest) -> dict:
+    return await _console_engine_call(
+        "manage_adr", {"project": req.project, "mode": "get"}
+    )
+
+
+@router.post("/internal/projects/adr/update")
+async def console_project_adr_update(req: ConsoleAdrUpdateRequest) -> dict:
+    return await _console_engine_call(
+        "manage_adr",
+        {"project": req.project, "mode": "update", "content": req.content},
+        mutates_store=True,
+    )
+
+
+@router.post("/internal/projects/runtime-traces")
+async def console_project_runtime_traces(req: ConsoleRuntimeTracesRequest) -> dict:
+    return await _console_engine_call(
+        "ingest_traces",
+        {
+            "project": req.project,
+            "traces": [trace.model_dump() for trace in req.traces],
+        },
+        mutates_store=True,
     )
 
 

@@ -1,6 +1,34 @@
 # Changelog
 
 <details>
+<summary><strong>August 22nd, 2026: Indexed Projects Workspace and Runtime Controls (v2.41.1)</strong></summary>
+
+### Changed: Indexing Is Now a First-Class Projects Workspace
+
+- Indexed Projects now keeps repository indexing on the page rather than behind a small dialog. It shows repository, node, edge, and attention metrics alongside an always-available index form with clear fast, moderate, and full analysis modes.
+- An active index presents its actual phase and elapsed time in the same workspace. Completed and failed states receive a restrained acknowledgement rather than leaving the page looking unchanged.
+- Project cards now make their health, root path, graph size, Explore action, reindex handoff, and deletion action easier to read. Reindexing deliberately pre-fills the workspace so its mode remains a user choice.
+
+### Added: Deeper Code Graph Exploration In The Console
+
+- Project Explore now presents a stable code-graph workspace with a full-width, two-row tool selector and a fixed working area. Switching architecture, code search, symbol tracing, impact analysis, coverage, graph query, decisions, or runtime traces no longer resizes the dialog around the current panel.
+- The Console now exposes existing graph-engine capabilities through its private adapter: bounded coverage inspection, read-only graph queries, architecture-decision documents, and runtime trace ingestion. Query write clauses are rejected before reaching the graph engine; graph mutations retain the existing cross-process index lease.
+- The Concept Graph Manager received the same operational visual language: consolidated build controls, clearer active and recent run treatment, and subtle state feedback. Its lifecycle behavior remains the one introduced in v2.41.0; this release refines the presentation rather than duplicating those controls.
+
+### Added: Runtime Settings That Reflect MARM's Actual State
+
+- Settings is now a persistent control-center workspace for connection details, runtime and write-queue health, automatic indexing, data/model diagnostics, and project-watch health.
+- Automatic code re-indexing and concept extraction can now be enabled or paused from the Console. These are the existing database-backed runtime flags, so both worker processes observe the saved override on their next cycle; the UI also states whether a value comes from that override or the environment default.
+- Storage and embedding diagnostics are read-only, and blocked project watches explain why they are suppressed or unindexable. Settings does not add unsafe server lifecycle controls or duplicate graph-reset actions that belong with their respective graphs.
+
+### Internal And Future Design
+
+- Added Console response-contract coverage for the new project intelligence and runtime settings routes, plus a focused Projects workspace test.
+- Recorded the next indexing layers separately: durable index lifecycle/history and public GitHub repository indexing through a MARM-managed checkout cache. GitHub support is intentionally deferred until URL validation, managed-clone cleanup, refresh semantics, and credential handling receive their own implementation design.
+
+</details>
+
+<details>
 <summary><strong>August 21st, 2026: Console Workspace Revamp and Graph Management (v2.41.0)</strong></summary>
 
 ### Changed: A More Focused, Customizable Console
@@ -31,6 +59,11 @@
 - The Knowledge Graph can now be viewed across all knowledge or narrowed to one project or session. Search, counts, and the rendered graph all follow the same selected scope, and completing a scoped build switches the Explorer to that scope automatically.
 - The obsolete compact/full graph split is removed. The Explorer renders the full selected scope and suppresses background relationship lines until a node is hovered or selected, keeping large graphs legible and responsive without hiding most of their nodes.
 - Concept builds now preserve scope metadata on their run records, and graph summaries expose the scoped totals the Console needs rather than displaying global counts beside a filtered graph.
+
+### Added: Concept Build Management
+
+- The Build Concepts dialog now includes a build history with scope, progress, completion state, and retry controls. Active builds can be stopped safely after their current memory finishes.
+- Deleting the knowledge graph uses an in-app confirmation and creates a timestamped backup. It clears derived concept data and build history without changing memories or indexed code projects.
 
 ### Developer Tooling
 

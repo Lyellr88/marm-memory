@@ -18,6 +18,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 from conftest import load_isolated_server
+from fastapi import HTTPException
 
 
 def _fresh_concepts_module(monkeypatch, tmp_path, concept_db_path=None):
@@ -85,6 +86,29 @@ def test_fetch_memory_pages_requires_explicit_scope(concepts_env):
     _server, concepts, _memory_module = concepts_env
     with pytest.raises(ValueError, match="session_name, project, or search_all"):
         concepts._fetch_memory_pages(session_name=None, project=None, search_all=False)
+
+
+def test_stop_concept_build_returns_conflict_after_success_wins(
+    concepts_env, monkeypatch
+):
+    _server, concepts, _memory_module = concepts_env
+    monkeypatch.setattr(
+        concepts,
+        "_request_build_cancellation",
+        lambda _run_id: (
+            {
+                "id": "run-finished",
+                "status": "success",
+                "cancel_requested_at": None,
+            },
+            False,
+        ),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(concepts.stop_concept_build("run-finished"))
+
+    assert exc_info.value.status_code == 409
 
 
 def test_promoted_doc_mirror_reachable_by_matching_scoped_build(monkeypatch, tmp_path):
@@ -235,8 +259,9 @@ def test_full_legacy_build_backs_up_and_resets_graph(concepts_env, monkeypatch):
     monkeypatch.setattr(
         concepts,
         "_run_build",
-        lambda _pages, _outcomes, _abort=None, _finished=None, progress_callback=None: {
+        lambda _pages, _outcomes, _abort=None, _finished=None, progress_callback=None, cancel_requested=None: {
             "aborted": False,
+            "cancelled": False,
             "memories_processed": 0,
             "entities_extracted": 0,
             "relationships_created": 0,
@@ -273,6 +298,68 @@ def test_full_legacy_build_backs_up_and_resets_graph(concepts_env, monkeypatch):
             ("full-rebuild-run",),
         ).fetchone()
     assert run[0] == "success"
+
+
+def test_cancelled_full_rebuild_remains_rebuild_required(concepts_env, monkeypatch):
+    _server, concepts, _memory_module = concepts_env
+    from marm_mcp_server.core.models import ConceptBuildRequest
+
+    concept_db = concepts._get_concept_db()
+    with concept_db.get_connection() as conn:
+        conn.execute(
+            "UPDATE concept_schema_metadata SET value = '1' WHERE key = 'schema_version'"
+        )
+
+    monkeypatch.setattr(concepts, "CONCEPTS_AVAILABLE", True)
+    monkeypatch.setattr(
+        concepts,
+        "_run_build",
+        lambda *_args, **_kwargs: {
+            "aborted": False,
+            "cancelled": True,
+            "memories_processed": 0,
+            "entities_extracted": 0,
+            "relationships_created": 0,
+            "code_links_created": 0,
+            "possible_duplicates": [],
+        },
+    )
+
+    result = asyncio.run(
+        concepts.marm_concept_build(
+            ConceptBuildRequest(search_all=True, run_id="cancelled-full-rebuild")
+        )
+    )
+
+    assert result["status"] == "cancelled"
+    assert concepts.inspect_concept_schema(concept_db.db_path) == "rebuild_required"
+
+
+def test_reset_conflicts_with_live_build_and_preserves_graph(concepts_env):
+    _server, concepts, _memory_module = concepts_env
+    from marm_mcp_server.core.concept_build_lock import (
+        MANUAL_BUILD_LOCK_SECONDS,
+        concept_build_lock,
+    )
+
+    concept_db = concepts._get_concept_db()
+    with concept_db.get_connection() as conn:
+        concept_db.get_or_create_entity(
+            conn, "existing graph", "concept", "sess-a", None, "m1"
+        )
+
+    async def reset_while_building():
+        async with concept_build_lock("test_live_build", MANUAL_BUILD_LOCK_SECONDS):
+            return await concepts.reset_concept_graph(
+                concepts.ConceptGraphResetRequest(confirm="DELETE_GRAPH")
+            )
+
+    with pytest.raises(HTTPException) as raised:
+        asyncio.run(reset_while_building())
+
+    assert raised.value.status_code == 409
+    with concept_db.get_connection() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM entities").fetchone()[0] == 1
 
 
 def test_fetch_memory_pages_excludes_marm_system_session(concepts_env):

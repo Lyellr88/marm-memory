@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useConceptsSummary, useSearchConcepts, useNeighborhood, useConceptGraph, useConcept, useMarmConfig, useGraphAutoRefresh, useFilters } from '@/hooks/use-marm-queries';
 import { Card, CardContent, CardHeader, Input, Button, Badge, Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/core';
-import { Search, GitGraph, Network, AlertTriangle, X, ArrowLeft } from 'lucide-react';
+import { Search, GitGraph, Network, AlertTriangle, X, ArrowLeft, Braces, Waypoints } from 'lucide-react';
 import type { Neighborhood, NeighborhoodNode, ConceptDetail, ConceptGraphParams, ConceptGraphScope } from '@/lib/marm-types';
 import { DEFAULT_HIDDEN_PREDICATES, typeColor, mergeNeighborhoods } from './shared';
 import { GraphViz } from './GraphViz';
@@ -222,20 +222,29 @@ export function ExplorerTab({ scope, onScopeChange }: ExplorerTabProps) {
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 flex-1 min-h-0 h-full">
       {/* Left Col: Search & Summary */}
       <div className="flex flex-col gap-6 overflow-hidden h-full pb-4">
-        <Card className="shrink-0 bg-card/50">
+        <Card className="graph-metrics-rail shrink-0 overflow-hidden border-card-border border-t-primary/45 bg-card/80 shadow-[0_18px_44px_rgba(0,0,0,0.18)]">
           <CardContent className="p-4">
-            <div className="grid grid-cols-3 gap-2 text-center">
-              <div>
-                <div className="text-xl font-bold text-primary">{overviewGraph?.total.nodes.toLocaleString() ?? summary?.entities.toLocaleString() ?? 0}</div>
-                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Nodes</div>
+            <div className="grid grid-cols-3 divide-x divide-border/70 text-center">
+              <div className="graph-metric group">
+                <div className="flex items-center justify-center gap-1.5 text-primary/75">
+                  <Network className="h-3.5 w-3.5" />
+                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Nodes</span>
+                </div>
+                <div className="mt-1 text-xl font-bold text-primary">{overviewGraph?.total.nodes.toLocaleString() ?? summary?.entities.toLocaleString() ?? 0}</div>
               </div>
-              <div>
-                <div className="text-xl font-bold text-accent-foreground">{overviewGraph?.total.edges.toLocaleString() ?? summary?.relationships.toLocaleString() ?? 0}</div>
-                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Edges</div>
+              <div className="graph-metric group">
+                <div className="flex items-center justify-center gap-1.5 text-primary/75">
+                  <Waypoints className="h-3.5 w-3.5" />
+                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Edges</span>
+                </div>
+                <div className="mt-1 text-xl font-bold text-accent-foreground">{overviewGraph?.total.edges.toLocaleString() ?? summary?.relationships.toLocaleString() ?? 0}</div>
               </div>
-              <div>
-                <div className="text-xl font-bold text-muted-foreground">{overviewGraph?.total.code_links.toLocaleString() ?? summary?.code_links.toLocaleString() ?? 0}</div>
-                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Code Links</div>
+              <div className="graph-metric group">
+                <div className="flex items-center justify-center gap-1.5 text-primary/75">
+                  <Braces className="h-3.5 w-3.5" />
+                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Code links</span>
+                </div>
+                <div className="mt-1 text-xl font-bold text-muted-foreground">{overviewGraph?.total.code_links.toLocaleString() ?? summary?.code_links.toLocaleString() ?? 0}</div>
               </div>
             </div>
           </CardContent>
@@ -379,7 +388,6 @@ export function ExplorerTab({ scope, onScopeChange }: ExplorerTabProps) {
                 onNodeClick={setFocusedNode}
                 focusedId={focusedNode?.id ?? null}
                 expandingId={expandingId}
-                suppressBackgroundLinks={selectedId === null}
               />
               {focusedNode && (
                 <ProvenancePanel

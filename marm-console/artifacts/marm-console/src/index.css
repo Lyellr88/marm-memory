@@ -185,6 +185,186 @@ button:not(:disabled), a[href], [role='button']:not([aria-disabled='true']) { cu
 .success-pop { animation: success-pop 420ms cubic-bezier(0.16, 1, 0.3, 1) both; }
 .force-graph-container { background: #060b13; cursor: crosshair; }
 
+.knowledge-graph-surface {
+  background-color: #040810;
+  background-image:
+    radial-gradient(ellipse at 50% 115%, rgba(var(--primary-rgb), 0.10), transparent 48%),
+    radial-gradient(circle at 92% 8%, rgba(var(--primary-rgb), 0.08), transparent 24%),
+    linear-gradient(rgba(var(--primary-rgb), 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(var(--primary-rgb), 0.035) 1px, transparent 1px);
+  background-size: auto, auto, 42px 42px, 42px 42px;
+}
+
+.graph-metrics-rail { position: relative; }
+.graph-metrics-rail::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(110deg, rgba(var(--primary-rgb), 0.075), transparent 45%);
+}
+.graph-metric { position: relative; transition: transform 180ms ease, color 180ms ease; }
+.graph-metric:hover { transform: translateY(-1px); }
+.graph-metric::after {
+  content: '';
+  position: absolute;
+  bottom: -16px;
+  left: 24%;
+  right: 24%;
+  height: 1px;
+  opacity: 0;
+  background: var(--primary);
+  box-shadow: 0 0 12px rgba(var(--primary-rgb), 0.8);
+  transition: opacity 180ms ease;
+}
+.graph-metric:hover::after { opacity: 1; }
+
+.concept-manager-dialog {
+  background:
+    radial-gradient(ellipse at 92% -12%, rgba(var(--primary-rgb), 0.12), transparent 26rem),
+    linear-gradient(180deg, rgba(9, 19, 33, 0.98), var(--popover));
+}
+.concept-manager-header { position: relative; overflow: hidden; }
+.concept-manager-header::after {
+  content: '';
+  position: absolute;
+  right: 3rem;
+  bottom: -1px;
+  left: 1.5rem;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(var(--primary-rgb), 0.6), transparent 72%);
+  box-shadow: 0 0 16px rgba(var(--primary-rgb), 0.4);
+}
+.concept-manager-panel {
+  transition: border-color 200ms ease, background-color 200ms ease, transform 200ms ease, box-shadow 200ms ease;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.018);
+}
+.concept-manager-panel:hover {
+  border-color: rgba(var(--primary-rgb), 0.25);
+  box-shadow: inset 0 1px 0 rgba(var(--primary-rgb), 0.09), 0 14px 30px rgba(0,0,0,0.12);
+}
+.concept-build-live::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(115deg, rgba(var(--primary-rgb), 0.08), transparent 55%);
+  animation: concept-live-breathe 2.8s ease-in-out infinite alternate;
+}
+.concept-run-card {
+  transition: border-color 180ms ease, background-color 180ms ease, transform 180ms ease, box-shadow 180ms ease;
+}
+.concept-run-card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(var(--primary-rgb), 0.28);
+  box-shadow: 0 10px 24px rgba(0,0,0,0.14);
+}
+.concept-run-new { animation: concept-run-new 620ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+.concept-run-success { animation: concept-run-success 980ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+.project-explorer-dialog {
+  background:
+    radial-gradient(ellipse at 86% -18%, rgba(var(--primary-rgb), 0.14), transparent 29rem),
+    linear-gradient(180deg, rgba(9, 19, 33, 0.99), var(--popover));
+  box-shadow: 0 32px 90px rgba(0, 0, 0, 0.62), 0 0 0 1px rgba(var(--primary-rgb), 0.10);
+}
+.project-explorer-header {
+  position: relative;
+  border-bottom: 1px solid rgba(var(--primary-rgb), 0.13);
+  background: linear-gradient(90deg, rgba(var(--primary-rgb), 0.07), transparent 58%);
+}
+.project-explorer-header::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 1.5rem;
+  width: 12rem;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(var(--primary-rgb), 0.8), transparent);
+  box-shadow: 0 0 14px rgba(var(--primary-rgb), 0.5);
+}
+.project-explorer-mark {
+  display: flex;
+  width: 2rem;
+  height: 2rem;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(var(--primary-rgb), 0.27);
+  border-radius: 0.65rem;
+  color: var(--primary);
+  background: rgba(var(--primary-rgb), 0.10);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 0 20px rgba(var(--primary-rgb), 0.10);
+}
+.project-explorer-tabs { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.025); }
+.project-explorer-tab {
+  display: flex;
+  min-height: 2.35rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  border: 1px solid transparent;
+  border-radius: 0.6rem;
+  color: hsl(var(--muted-foreground));
+  transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease, transform 180ms ease, box-shadow 180ms ease;
+}
+.project-explorer-tab:hover {
+  border-color: rgba(var(--primary-rgb), 0.18);
+  color: hsl(var(--foreground));
+  background: rgba(var(--primary-rgb), 0.06);
+}
+.project-explorer-tab[data-state='active'] {
+  border-color: rgba(var(--primary-rgb), 0.30);
+  color: var(--primary);
+  background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.20), rgba(var(--primary-rgb), 0.08));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 7px 18px rgba(var(--primary-rgb), 0.10);
+}
+.project-explorer-tab[data-state='active'] svg { filter: drop-shadow(0 0 5px rgba(var(--primary-rgb), 0.5)); }
+.project-explorer-panel[data-state='active'] { animation: project-explorer-panel-in 220ms cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+.settings-dialog {
+  background:
+    radial-gradient(ellipse at 88% -20%, rgba(var(--primary-rgb), 0.13), transparent 30rem),
+    linear-gradient(180deg, rgba(9, 19, 33, 0.99), var(--popover));
+  box-shadow: 0 32px 90px rgba(0, 0, 0, 0.62), 0 0 0 1px rgba(var(--primary-rgb), 0.10);
+}
+.settings-dialog-header { background: linear-gradient(90deg, rgba(var(--primary-rgb), 0.07), transparent 58%); }
+.settings-dialog-mark {
+  display: flex;
+  width: 2rem;
+  height: 2rem;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(var(--primary-rgb), 0.27);
+  border-radius: 0.65rem;
+  color: var(--primary);
+  background: rgba(var(--primary-rgb), 0.10);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 0 20px rgba(var(--primary-rgb), 0.10);
+}
+.settings-dialog-nav-item {
+  display: flex;
+  width: 100%;
+  min-height: 2.35rem;
+  align-items: center;
+  gap: 0.6rem;
+  border: 1px solid transparent;
+  border-radius: 0.6rem;
+  padding: 0 0.7rem;
+  color: hsl(var(--muted-foreground));
+  font-size: 0.8rem;
+  font-weight: 500;
+  text-align: left;
+  transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease, box-shadow 180ms ease;
+}
+.settings-dialog-nav-item:hover { border-color: rgba(var(--primary-rgb), 0.18); color: hsl(var(--foreground)); background: rgba(var(--primary-rgb), 0.06); }
+.settings-dialog-nav-item[data-active='true'] {
+  border-color: rgba(var(--primary-rgb), 0.30);
+  color: var(--primary);
+  background: linear-gradient(135deg, rgba(var(--primary-rgb), 0.20), rgba(var(--primary-rgb), 0.08));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 7px 18px rgba(var(--primary-rgb), 0.10);
+}
+
 .memory-tab {
   --memory-tab-rgb: var(--primary-rgb);
   --memory-tab-color: var(--primary);
@@ -246,6 +426,10 @@ button:not(:disabled), a[href], [role='button']:not([aria-disabled='true']) { cu
 @keyframes success-pop { 0% { opacity: 0; transform: translateY(-6px) scale(0.98); } 60% { transform: translateY(0) scale(1.01); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
 @keyframes bulk-action-enter { from { opacity: 0; transform: translateX(8px) scale(0.97); } to { opacity: 1; transform: translateX(0) scale(1); } }
 @keyframes memory-new { 0% { background-color: rgba(var(--primary-rgb), 0.22); box-shadow: inset 4px 0 0 var(--primary), 0 0 30px rgba(var(--primary-rgb), 0.12); } 100% { background-color: transparent; box-shadow: inset 0 0 0 rgba(var(--primary-rgb), 0); } }
+@keyframes concept-live-breathe { from { opacity: 0.45; } to { opacity: 1; } }
+@keyframes concept-run-new { 0% { opacity: 0; transform: translateY(8px) scale(0.985); } 72% { transform: translateY(-1px) scale(1.005); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes concept-run-success { 0% { background-color: rgba(52, 211, 153, 0.16); box-shadow: inset 3px 0 0 rgba(52, 211, 153, 0.9), 0 0 28px rgba(52, 211, 153, 0.12); } 100% { background-color: transparent; box-shadow: inset 0 0 0 rgba(52, 211, 153, 0); } }
+@keyframes project-explorer-panel-in { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes summary-scan { from { transform: translateY(-100%); } to { transform: translateY(100%); } }
 @keyframes compaction-collapse { from { transform: scale(1); box-shadow: 0 0 0 rgba(251, 191, 36, 0); } to { transform: scale(0.992); box-shadow: 0 0 26px rgba(251, 191, 36, 0.09); } }
 

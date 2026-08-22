@@ -1,8 +1,10 @@
 import logging
 import os
 from datetime import datetime, timezone
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 
 from ..config import settings
 from ..config.settings import (
@@ -10,14 +12,40 @@ from ..config.settings import (
     SEMANTIC_SEARCH_AVAILABLE,
     SERVER_VERSION,
 )
+from ..core import runtime_flags
 from ..core.graph_supervisor import graph_supervisor
 from ..core.memory import memory
 from ..core.shutdown_manager import shutdown_manager
 from ..services.documentation import reload_marm_documentation
+from ..services.runtime_status import knowledge_status, maintenance_status
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="", tags=["System"])
+
+
+class RuntimeAutomationRequest(BaseModel):
+    scope: Literal["graph", "concept"]
+    enabled: bool
+
+
+def _automation_status() -> dict:
+    graph_key = runtime_flags.AUTO_INDEX_GRAPH
+    concept_key = runtime_flags.AUTO_INDEX_CONCEPT
+    return {
+        "graph": {
+            "enabled": runtime_flags.get_bool(graph_key, settings.GRAPH_AUTO_INDEX),
+            "source": runtime_flags.source(graph_key),
+            "environment_default": settings.GRAPH_AUTO_INDEX,
+            "suppressed_projects": runtime_flags.suppressed_watches(),
+            "unindexable_projects": runtime_flags.unindexable_watches(),
+        },
+        "concept": {
+            "enabled": runtime_flags.get_bool(concept_key, settings.CONCEPT_AUTO_INDEX),
+            "source": runtime_flags.source(concept_key),
+            "environment_default": settings.CONCEPT_AUTO_INDEX,
+        },
+    }
 
 
 @router.get("/health", include_in_schema=False)
@@ -33,9 +61,9 @@ async def health_check() -> dict:
             "version": SERVER_VERSION,
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "database": "connected",
-            "semantic_search": "available"
-            if SEMANTIC_SEARCH_AVAILABLE
-            else "text_only",
+            "semantic_search": (
+                "available" if SEMANTIC_SEARCH_AVAILABLE else "text_only"
+            ),
             "concept_extraction": "available" if CONCEPTS_AVAILABLE else "unavailable",
         }
     except Exception as e:
@@ -100,6 +128,49 @@ async def runtime_status() -> dict:
             "stopping": queue._stopping if queue else False,
         },
         "graph": graph_supervisor.snapshot(),
+    }
+
+
+@router.get("/internal/runtime/settings", include_in_schema=False)
+async def runtime_settings() -> dict:
+    """Console-only diagnostics and durable automatic-indexing controls.
+
+    The values are deliberately derived from the same database-backed runtime
+    flags the workers read every cycle. This is not a second configuration path.
+    """
+    runtime = await runtime_status()
+    knowledge = knowledge_status()
+    maintenance = maintenance_status()
+    return {
+        **runtime,
+        "automation": _automation_status(),
+        "knowledge": {
+            "state": knowledge["state"],
+            "schema": knowledge["schema"],
+            "index_queue": knowledge["index_queue"],
+        },
+        "storage": {
+            "memory": maintenance["memory_database"],
+            "concept": knowledge["database"],
+        },
+        "embedding": maintenance["embedding"],
+    }
+
+
+@router.put("/internal/runtime/settings/automation", include_in_schema=False)
+async def update_runtime_automation(req: RuntimeAutomationRequest) -> dict:
+    key = (
+        runtime_flags.AUTO_INDEX_GRAPH
+        if req.scope == "graph"
+        else runtime_flags.AUTO_INDEX_CONCEPT
+    )
+    runtime_flags.set_bool(key, req.enabled)
+    return {
+        "status": "success",
+        "scope": req.scope,
+        "enabled": req.enabled,
+        "effective": "next cycle",
+        "automation": _automation_status(),
     }
 
 

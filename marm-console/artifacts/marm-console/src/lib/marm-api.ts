@@ -29,9 +29,11 @@ import type {
   ImpactInput,
   ImpactResult,
   MergeDuplicateInput,
+  GraphQueryInput,
+  GraphQueryResult,
   IndexJob,
-  LogEntry,
   LogListParams,
+  LogListResponse,
   Memory,
   MemoryDeleteResult,
   MemoryId,
@@ -44,10 +46,14 @@ import type {
   NotebookInput,
   Overview,
   ProjectArchitecture,
+  ProjectAdr,
+  ProjectCoverage,
   CodeUnits,
   ProjectIndexInput,
   ProjectStatus,
   ProjectSummary,
+  RuntimeSettings,
+  RuntimeTrace,
   Session,
   SessionSummary,
   TraceInput,
@@ -83,7 +89,7 @@ async function request<T>(
   config: MarmClientConfig,
   method: string,
   path: string,
-  opts?: { query?: object; body?: unknown },
+  opts?: { query?: object; body?: unknown; timeoutMs?: number },
 ): Promise<T> {
   const url = `${config.baseUrl}/api${path}${buildQuery(opts?.query)}`;
   const headers: Record<string, string> = { Accept: 'application/json' };
@@ -91,38 +97,40 @@ async function request<T>(
   if (config.apiKey) headers.Authorization = `Bearer ${config.apiKey}`;
 
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 30000);
-  let res: Response;
+  const timeoutMs = opts?.timeoutMs ?? 30000;
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    res = await fetch(url, {
+    const res = await fetch(url, {
       method,
       headers,
       body: opts?.body !== undefined ? JSON.stringify(opts.body) : undefined,
       signal: controller.signal,
       credentials: 'same-origin',
     });
-  } catch (err) {
-    if (err instanceof DOMException && err.name === 'AbortError') {
-      throw new MarmApiError(0, 'Request to MARM server timed out after 30s');
+
+    if (!res.ok) {
+      let message = res.statusText;
+      try {
+        const data = await res.json();
+        message = data?.error ?? data?.detail ?? message;
+      } catch (err) {
+        if (controller.signal.aborted) throw err;
+        // Ignore a malformed error body and retain the response status text.
+      }
+      throw new MarmApiError(res.status, message || `Request failed (${res.status})`);
     }
+
+    if (res.status === 204) return undefined as T;
+    return (await res.json()) as T;
+  } catch (err) {
+    if (controller.signal.aborted || (err instanceof DOMException && err.name === 'AbortError')) {
+      throw new MarmApiError(0, `Request to MARM server timed out after ${timeoutMs / 1000}s`);
+    }
+    if (err instanceof MarmApiError) throw err;
     throw new MarmApiError(0, `Could not reach MARM server at ${config.baseUrl}`);
   } finally {
     clearTimeout(timer);
   }
-
-  if (!res.ok) {
-    let message = res.statusText;
-    try {
-      const data = await res.json();
-      message = data?.error ?? data?.detail ?? message;
-    } catch {
-      // ignore body parse errors
-    }
-    throw new MarmApiError(res.status, message || `Request failed (${res.status})`);
-  }
-
-  if (res.status === 204) return undefined as T;
-  return (await res.json()) as T;
 }
 
 export function createMarmClient(config: MarmClientConfig) {
@@ -169,17 +177,17 @@ export function createMarmClient(config: MarmClientConfig) {
         { body: { confirm: 'DELETE_ALL' } },
       ),
     listLogs: (params?: LogListParams) =>
-      request<LogEntry[]>(config, 'GET', '/logs', { query: params }),
-    deleteLog: (id: number, sessionName: string) =>
+      request<LogListResponse>(config, 'GET', '/logs', { query: params }),
+    deleteLog: (id: string, sessionName: string) =>
       request<{ log_id: string; session_name: string; deleted_count: number; memories_deleted: number }>(
         config,
         'DELETE',
-        `/logs/${encodeURIComponent(String(id))}`,
+        `/logs/${encodeURIComponent(id)}`,
         { body: { session_name: sessionName, confirm: 'DELETE' } },
       ),
-    bulkDeleteLogs: (logs: Array<{ id: number; session_name: string }>) =>
+    bulkDeleteLogs: (logs: Array<{ id: string; session_name: string }>) =>
       request<BulkLogDeleteResult>(config, 'POST', '/logs/bulk-delete', {
-        body: { logs: logs.map((log) => ({ ...log, id: String(log.id) })), confirm: 'DELETE' },
+        body: { logs, confirm: 'DELETE' },
       }),
     deleteAllLogs: () =>
       request<{ deleted_count: number; memories_deleted: number }>(
@@ -232,8 +240,20 @@ export function createMarmClient(config: MarmClientConfig) {
       request<Neighborhood>(config, 'GET', `/concepts/${entityId}/neighborhood`, { query: params }),
     buildConcepts: (data: ConceptBuildInput) =>
       request<{ job_id: string }>(config, 'POST', '/concepts/build', { body: data }),
+    listConceptBuilds: () =>
+      request<ConceptBuildRun[]>(config, 'GET', '/concepts/builds'),
     getConceptBuild: (jobId: string) =>
       request<ConceptBuildRun>(config, 'GET', `/concepts/builds/${jobId}`),
+    stopConceptBuild: (jobId: string) =>
+      request<{ status: 'cancellation_requested'; run_id: string; cancel_requested_at: string }>(
+        config, 'POST', `/concepts/builds/${jobId}/stop`, { body: {} },
+      ),
+    retryConceptBuild: (jobId: string) =>
+      request<{ job_id: string }>(config, 'POST', `/concepts/builds/${jobId}/retry`, { body: {} }),
+    deleteConceptGraph: () =>
+      request<{ status: 'reset'; backup_created: boolean; schema_status: 'rebuild_required' }>(
+        config, 'DELETE', '/concepts/graph', { body: { confirm: 'DELETE_GRAPH' }, timeoutMs: 60000 },
+      ),
     getConceptDuplicates: (params?: { offset?: number; limit?: number }) =>
       request<DuplicateReport>(config, 'GET', `/concepts/duplicates${buildQuery(params)}`),
     dismissConceptDuplicate: (data: DuplicatePairInput) =>
@@ -243,6 +263,13 @@ export function createMarmClient(config: MarmClientConfig) {
     removeConceptEntity: (entityId: number) =>
       request<ConceptReviewResult>(config, 'DELETE', `/concepts/entities/${entityId}`),
 
+    // Runtime settings
+    getRuntimeSettings: () => request<RuntimeSettings>(config, 'GET', '/settings/runtime'),
+    updateRuntimeAutomation: (scope: 'graph' | 'concept', enabled: boolean) =>
+      request<{ status: string; scope: 'graph' | 'concept'; enabled: boolean; effective: string }>(
+        config, 'PUT', '/settings/automation', { body: { scope, enabled } },
+      ),
+
     // Projects / code graph
     listProjects: () => request<ProjectSummary[]>(config, 'GET', '/projects'),
     indexProject: (data: ProjectIndexInput) =>
@@ -251,6 +278,16 @@ export function createMarmClient(config: MarmClientConfig) {
       request<IndexJob>(config, 'GET', `/projects/jobs/${jobId}`),
     getProjectStatus: (project: string) =>
       request<ProjectStatus>(config, 'GET', `/projects/${encodeURIComponent(project)}/status`),
+    getProjectCoverage: (project: string) =>
+      request<ProjectCoverage>(config, 'GET', `/projects/${encodeURIComponent(project)}/coverage`),
+    queryProjectGraph: (project: string, data: GraphQueryInput) =>
+      request<GraphQueryResult>(config, 'POST', `/projects/${encodeURIComponent(project)}/query`, { body: data }),
+    getProjectAdr: (project: string) =>
+      request<ProjectAdr>(config, 'GET', `/projects/${encodeURIComponent(project)}/adr`),
+    updateProjectAdr: (project: string, content: string) =>
+      request<ProjectAdr>(config, 'PUT', `/projects/${encodeURIComponent(project)}/adr`, { body: { content } }),
+    ingestProjectRuntimeTraces: (project: string, traces: RuntimeTrace[]) =>
+      request<{ status: string; ingested?: number }>(config, 'POST', `/projects/${encodeURIComponent(project)}/runtime-traces`, { body: { traces } }),
     getProjectArchitecture: (project: string) =>
       request<ProjectArchitecture>(config, 'GET', `/projects/${encodeURIComponent(project)}/architecture`),
     getProjectCodeUnits: (project: string) =>

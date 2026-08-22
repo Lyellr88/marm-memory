@@ -4,7 +4,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, Badge, Butto
 import { format } from 'date-fns';
 import { RefreshCw, Eye, Trash2, Plus, Search } from 'lucide-react';
 import type { LogListParams } from '@/lib/marm-types';
-import { type ActionNotice, mutationErrorMessage, ActionNoticePanel, DeleteSelectionDialog, MemoryEmptyState } from './shared';
+import { type ActionNotice, mutationErrorMessage, ActionNoticePanel, DeleteSelectionDialog, MemoryEmptyState, PageControls } from './shared';
+
+const SESSION_PAGE_SIZE = 15;
+const LOG_PAGE_SIZE = 100;
 
 function SessionSummaryDialog({ session, open, onOpenChange }: { session: string | null, open: boolean, onOpenChange: (o: boolean) => void }) {
   const { data, isLoading, isError, error } = useSummary(session || '');
@@ -90,6 +93,7 @@ function SessionSummaryDialog({ session, open, onOpenChange }: { session: string
 
 export function SessionsTab() {
   const { data, isLoading } = useSessions();
+  const [page, setPage] = useState(0);
   const [summarySession, setSummarySession] = useState<string | null>(null);
   const [actionNotice, setActionNotice] = useState<ActionNotice | null>(null);
   const [selectedNames, setSelectedNames] = useState<Set<string>>(new Set());
@@ -97,16 +101,23 @@ export function SessionsTab() {
   const createSession = useCreateSession();
   const bulkDelete = useBulkDeleteSessions();
 
+  const total = data?.length ?? 0;
+  const pageCount = Math.max(1, Math.ceil(total / SESSION_PAGE_SIZE));
+  const visibleSessions = data?.slice(page * SESSION_PAGE_SIZE, (page + 1) * SESSION_PAGE_SIZE) ?? [];
+
   useEffect(() => {
-    if (!data) return;
-    const visibleNames = new Set(data.map((session) => session.name));
+    if (page >= pageCount) setPage(pageCount - 1);
+  }, [page, pageCount]);
+
+  useEffect(() => {
+    const visibleNames = new Set(visibleSessions.map((session) => session.name));
     setSelectedNames((previous) => {
       const next = new Set(Array.from(previous).filter((name) => visibleNames.has(name)));
       return next.size === previous.size ? previous : next;
     });
-  }, [data]);
+  }, [visibleSessions]);
 
-  const allSelected = !!data?.length && data.every((session) => selectedNames.has(session.name));
+  const allSelected = !!visibleSessions.length && visibleSessions.every((session) => selectedNames.has(session.name));
 
   const toggleSession = (name: string) => {
     setSelectedNames((previous) => {
@@ -154,7 +165,7 @@ export function SessionsTab() {
           <input
             type="checkbox"
             checked={allSelected}
-            onChange={() => setSelectedNames(allSelected ? new Set() : new Set(data?.map((session) => session.name)))}
+            onChange={() => setSelectedNames(allSelected ? new Set() : new Set(visibleSessions.map((session) => session.name)))}
             className="rounded border-input bg-background"
           />
           Select all sessions
@@ -172,9 +183,9 @@ export function SessionsTab() {
         </div>
       </div>
       <ActionNoticePanel notice={actionNotice} />
-      {data?.length ? (
+      {total ? (
         <div className="grid content-start grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {data.map(session => (
+          {visibleSessions.map(session => (
           <Card
             key={session.name}
             className={cn(
@@ -232,6 +243,15 @@ export function SessionsTab() {
       ) : (
         <MemoryEmptyState title="No sessions yet" detail="Create a session to begin a new context workspace." className="min-h-64 border border-dashed border-primary/15 bg-card/45" />
       )}
+      {total > 0 && (
+        <PageControls
+          page={page}
+          pageSize={SESSION_PAGE_SIZE}
+          total={total}
+          itemLabel="sessions"
+          onPageChange={setPage}
+        />
+      )}
       <SessionSummaryDialog session={summarySession} open={!!summarySession} onOpenChange={(o) => !o && setSummarySession(null)} />
       <DeleteSelectionDialog
         open={deleteOpen}
@@ -247,26 +267,39 @@ export function SessionsTab() {
 }
 
 export function LogsTab() {
-  const [params, setParams] = useState<LogListParams>({ limit: 50 });
-  const { data, isLoading } = useLogs(params);
+  const [params, setParams] = useState<LogListParams>({ limit: LOG_PAGE_SIZE, offset: 0 });
+  const { data, isLoading, isFetching } = useLogs(params);
   const { data: filters } = useFilters();
   const [actionNotice, setActionNotice] = useState<ActionNotice | null>(null);
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleteOpen, setDeleteOpen] = useState(false);
   const bulkDelete = useBulkDeleteLogs();
 
   useEffect(() => {
-    if (!data) return;
-    const visibleIds = new Set(data.map((log) => log.id));
+    const visibleIds = new Set(data?.items.map((log) => log.id));
     setSelectedIds((previous) => {
       const next = new Set(Array.from(previous).filter((id) => visibleIds.has(id)));
       return next.size === previous.size ? previous : next;
     });
-  }, [data]);
+  }, [data?.items]);
 
-  const allSelected = !!data?.length && data.every((log) => selectedIds.has(log.id));
+  useEffect(() => {
+    if (!data || !params.offset || params.offset < data.total) return;
+    setParams((previous) => ({
+      ...previous,
+      offset: Math.max(0, Math.floor((data.total - 1) / LOG_PAGE_SIZE) * LOG_PAGE_SIZE),
+    }));
+  }, [data, params.offset]);
 
-  const toggleLog = (id: number) => {
+  const updateFilters = (updates: Partial<LogListParams>) => {
+    setParams((previous) => ({ ...previous, ...updates, limit: LOG_PAGE_SIZE, offset: 0 }));
+  };
+
+  const currentPage = Math.floor((data?.offset ?? params.offset ?? 0) / LOG_PAGE_SIZE);
+
+  const allSelected = !!data?.items.length && data.items.every((log) => selectedIds.has(log.id));
+
+  const toggleLog = (id: string) => {
     setSelectedIds((previous) => {
       const next = new Set(previous);
       if (next.has(id)) next.delete(id);
@@ -276,13 +309,13 @@ export function LogsTab() {
   };
 
   const confirmDelete = () => {
-    const logs = (data ?? [])
+    const logs = (data?.items ?? [])
       .filter((log) => selectedIds.has(log.id))
       .map((log) => ({ id: log.id, session_name: log.session_name }));
     if (!logs.length) return;
     bulkDelete.mutate(logs, {
       onSuccess: (result) => {
-        const failedIds = new Set(result.failed_logs.map((item) => Number(item.log_id)));
+        const failedIds = new Set(result.failed_logs.map((item) => item.log_id));
         setDeleteOpen(false);
         setSelectedIds(failedIds);
         setActionNotice({
@@ -305,10 +338,10 @@ export function LogsTab() {
             placeholder="Search logs..." 
             className="border-transparent bg-background/65 pl-9 hover:border-primary/25"
             value={params.q || ''}
-            onChange={e => setParams(p => ({ ...p, q: e.target.value || undefined }))}
+            onChange={e => updateFilters({ q: e.target.value || undefined })}
           />
         </div>
-        <Select value={params.session || "all"} onValueChange={v => setParams(p => ({ ...p, session: v === "all" ? undefined : v }))}>
+        <Select value={params.session || "all"} onValueChange={v => updateFilters({ session: v === "all" ? undefined : v })}>
           <SelectTrigger className="w-[180px] border-transparent bg-background/65">
             <SelectValue placeholder="Session" />
           </SelectTrigger>
@@ -325,15 +358,16 @@ export function LogsTab() {
       </div>
       <ActionNoticePanel notice={actionNotice} />
 
-      <div className="min-h-0 flex-1 overflow-auto rounded-xl shadow-[0_18px_50px_rgba(0,0,0,0.16)] [&>div]:min-h-full [&>div]:border-card-border [&>div]:border-t-primary/35">
-        <Table>
+      <div className="min-h-0 flex flex-1 flex-col overflow-hidden rounded-xl border border-card-border border-t-primary/35 shadow-[0_18px_50px_rgba(0,0,0,0.16)]">
+        <div className="min-h-0 flex-1 overflow-auto">
+          <Table>
           <TableHeader className="sticky top-0 z-10 bg-card/95 backdrop-blur-xl">
             <TableRow>
               <TableHead className="w-[40px] pl-4">
                 <input
                   type="checkbox"
                   checked={allSelected}
-                  onChange={() => setSelectedIds(allSelected ? new Set() : new Set(data?.map((log) => log.id)))}
+                  onChange={() => setSelectedIds(allSelected ? new Set() : new Set(data?.items.map((log) => log.id)))}
                   aria-label="Select all visible logs"
                   className="rounded border-input bg-background"
                 />
@@ -346,10 +380,10 @@ export function LogsTab() {
           <TableBody>
             {isLoading ? (
               <TableRow><TableCell colSpan={4} className="h-24 text-center text-muted-foreground">Loading logs...</TableCell></TableRow>
-            ) : data?.length === 0 ? (
+            ) : data?.items.length === 0 ? (
               <TableRow><TableCell colSpan={4} className="p-4"><MemoryEmptyState title="No logs found" detail="Structured session activity will appear here." /></TableCell></TableRow>
             ) : (
-              data?.map(l => (
+              data?.items.map(l => (
                 <TableRow key={l.id} className={cn('transition-colors duration-200', selectedIds.has(l.id) && 'bg-blue-400/[0.055] shadow-[inset_3px_0_0_rgba(96,165,250,0.65)]')}>
                   <TableCell className="w-[40px] pl-4">
                     <input
@@ -372,7 +406,18 @@ export function LogsTab() {
               ))
             )}
           </TableBody>
-        </Table>
+          </Table>
+        </div>
+        {data && (
+          <PageControls
+            page={currentPage}
+            pageSize={LOG_PAGE_SIZE}
+            total={data.total}
+            itemLabel="logs"
+            isFetching={isFetching}
+            onPageChange={(page) => setParams((previous) => ({ ...previous, offset: page * LOG_PAGE_SIZE }))}
+          />
+        )}
       </div>
       <DeleteSelectionDialog
         open={deleteOpen}

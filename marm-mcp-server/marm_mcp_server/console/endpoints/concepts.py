@@ -18,11 +18,12 @@ from ...core.concept_build_lock import (
     ConceptBuildBusy,
     run_exclusive,
 )
+from ...core.concept_db import inspect_concept_schema
 from .. import concept_store, mcp_client, memory_store
 from ..concept_graph_overview import graph_overview
 from ..concept_neighborhood import neighborhood
 from ..core import _concepts_payload, _now_iso, get_concept_db_path, get_memory_db_path
-from ..models import ConceptBuildPayload
+from ..models import ConceptBuildPayload, ConceptGraphResetPayload
 
 router = APIRouter()
 
@@ -183,7 +184,7 @@ async def remove_concept_entity(entity_id: int) -> dict:
     )
 
 
-@router.get("/api/concepts/{entity_id}")
+@router.get("/api/concepts/{entity_id:int}")
 def get_concept(entity_id: int) -> dict:
     entity = concept_store.get_entity(get_concept_db_path(), entity_id)
     if entity is None:
@@ -222,6 +223,10 @@ def build_concepts(payload: ConceptBuildPayload) -> JSONResponse:
         raise HTTPException(
             status_code=422, detail="Choose a session, project, or all memory scope."
         )
+    return _launch_concept_build(payload)
+
+
+def _launch_concept_build(payload: ConceptBuildPayload) -> JSONResponse:
     job_id = str(uuid.uuid4())
     _prune_launching_concept_builds()
     scope_type = (
@@ -244,6 +249,9 @@ def build_concepts(payload: ConceptBuildPayload) -> JSONResponse:
                 "error_code": None,
                 "created_at": _now_iso(),
                 "started_at": None,
+                "last_progress_at": None,
+                "cancel_requested_at": None,
+                "cancelled_at": None,
                 "finished_at": None,
             },
             time.monotonic(),
@@ -289,3 +297,73 @@ def get_concept_build(job_id: str) -> dict:
     if job is None:
         raise HTTPException(status_code=404, detail="Concept build not found")
     return _stale_build_result(job)
+
+
+@router.get("/api/concepts/builds")
+def list_concept_builds() -> list[dict]:
+    _prune_launching_concept_builds()
+    persisted = concept_store.build_runs(get_concept_db_path(), limit=100)
+    persisted_ids = {run["id"] for run in persisted}
+    with _launching_concept_builds_lock:
+        launches = [
+            dict(launch)
+            for job_id, (launch, _) in _launching_concept_builds.items()
+            if job_id not in persisted_ids
+        ]
+    return [
+        _stale_build_result(job)
+        for job in sorted(
+            [*persisted, *launches],
+            key=lambda job: str(job.get("created_at") or ""),
+            reverse=True,
+        )
+    ]
+
+
+@router.post("/api/concepts/builds/{run_id}/stop")
+def stop_concept_build(run_id: str) -> dict:
+    try:
+        return mcp_client.post(f"internal/concepts/builds/{run_id}/stop", {})
+    except mcp_client.McpRequestError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    except mcp_client.McpUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@router.post("/api/concepts/builds/{run_id}/retry")
+def retry_concept_build(run_id: str) -> JSONResponse:
+    build_run = concept_store.get_build_run(get_concept_db_path(), run_id)
+    if build_run is None:
+        raise HTTPException(status_code=404, detail="Concept build not found")
+    if build_run["status"] not in {"error", "degraded", "cancelled"}:
+        raise HTTPException(
+            status_code=409,
+            detail="Only failed, degraded, or cancelled concept builds can be retried.",
+        )
+    if (
+        build_run["scope_type"] != "all"
+        and inspect_concept_schema(str(get_concept_db_path())) == "rebuild_required"
+    ):
+        raise HTTPException(
+            status_code=409,
+            detail="This graph needs an All memory (global) rebuild before scoped builds can run.",
+        )
+    scope_type = build_run["scope_type"]
+    payload = ConceptBuildPayload(
+        session_name=build_run["scope_value"] if scope_type == "session" else None,
+        project=build_run["scope_value"] if scope_type == "project" else None,
+        search_all=scope_type == "all",
+    )
+    return _launch_concept_build(payload)
+
+
+@router.delete("/api/concepts/graph")
+def delete_concept_graph(payload: ConceptGraphResetPayload) -> dict:
+    try:
+        return mcp_client.delete(
+            "internal/concepts/graph", payload.model_dump(), timeout=60.0
+        )
+    except mcp_client.McpRequestError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    except mcp_client.McpUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
