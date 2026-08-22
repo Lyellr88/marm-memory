@@ -127,7 +127,7 @@ export interface Session {
 }
 
 export interface LogEntry {
-  id: number;
+  id: string;
   date: string;
   topic: string | null;
   summary: string | null;

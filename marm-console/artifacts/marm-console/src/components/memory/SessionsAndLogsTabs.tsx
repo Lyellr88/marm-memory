@@ -271,7 +271,7 @@ export function LogsTab() {
   const { data, isLoading, isFetching } = useLogs(params);
   const { data: filters } = useFilters();
   const [actionNotice, setActionNotice] = useState<ActionNotice | null>(null);
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [deleteOpen, setDeleteOpen] = useState(false);
   const bulkDelete = useBulkDeleteLogs();
 
@@ -299,7 +299,7 @@ export function LogsTab() {
 
   const allSelected = !!data?.items.length && data.items.every((log) => selectedIds.has(log.id));
 
-  const toggleLog = (id: number) => {
+  const toggleLog = (id: string) => {
     setSelectedIds((previous) => {
       const next = new Set(previous);
       if (next.has(id)) next.delete(id);
@@ -315,7 +315,7 @@ export function LogsTab() {
     if (!logs.length) return;
     bulkDelete.mutate(logs, {
       onSuccess: (result) => {
-        const failedIds = new Set(result.failed_logs.map((item) => Number(item.log_id)));
+        const failedIds = new Set(result.failed_logs.map((item) => item.log_id));
         setDeleteOpen(false);
         setSelectedIds(failedIds);
         setActionNotice({

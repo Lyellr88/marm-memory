@@ -249,7 +249,7 @@ export function useDeleteLog() {
     qc.invalidateQueries({ queryKey: queryKeys.overview(baseUrl) });
   };
   return useMutation({
-    mutationFn: ({ id, sessionName }: { id: number; sessionName: string }) => client.deleteLog(id, sessionName),
+    mutationFn: ({ id, sessionName }: { id: string; sessionName: string }) => client.deleteLog(id, sessionName),
     onSuccess: invalidate,
   });
 }
@@ -258,7 +258,7 @@ export function useBulkDeleteLogs() {
   const { baseUrl, client } = useMarmConfig();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (logs: Array<{ id: number; session_name: string }>) => client.bulkDeleteLogs(logs),
+    mutationFn: (logs: Array<{ id: string; session_name: string }>) => client.bulkDeleteLogs(logs),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['logs', baseUrl] });
       qc.invalidateQueries({ queryKey: ['memories', baseUrl] });

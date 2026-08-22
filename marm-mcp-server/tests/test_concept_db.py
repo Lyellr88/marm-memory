@@ -122,11 +122,12 @@ def test_concept_build_cancellation_request_is_durable(concept_db):
         concept_db.update_build_run(conn, "run-cancel", status="running")
 
     with concept_db.get_connection() as conn:
-        requested = concept_db.request_build_cancellation(
+        requested, changed = concept_db.request_build_cancellation(
             conn, "run-cancel", "2026-07-12T00:00:01+00:00"
         )
 
     assert requested is not None
+    assert changed is True
     assert requested["cancel_requested_at"] == "2026-07-12T00:00:01+00:00"
     with concept_db.get_connection() as conn:
         assert concept_db.is_build_cancellation_requested(conn, "run-cancel") is True
@@ -142,12 +143,47 @@ def test_terminal_concept_build_cannot_receive_a_new_cancellation_request(concep
             created_at="2026-07-12T00:00:00+00:00",
         )
         concept_db.update_build_run(conn, "run-finished", status="success")
-        requested = concept_db.request_build_cancellation(
+        requested, changed = concept_db.request_build_cancellation(
             conn, "run-finished", "2026-07-12T00:00:01+00:00"
         )
 
     assert requested is not None
+    assert changed is False
     assert requested["cancel_requested_at"] is None
+
+
+def test_success_transition_yields_to_a_persisted_cancellation_request(concept_db):
+    with concept_db.get_connection() as conn:
+        concept_db.create_build_run(
+            conn,
+            run_id="run-race",
+            scope_type="all",
+            scope_value=None,
+            created_at="2026-07-12T00:00:00+00:00",
+        )
+        concept_db.update_build_run(conn, "run-race", status="running")
+        requested, changed = concept_db.request_build_cancellation(
+            conn, "run-race", "2026-07-12T00:00:01+00:00"
+        )
+        completed = concept_db.update_build_run(
+            conn,
+            "run-race",
+            only_statuses=("running",),
+            require_cancellation=False,
+            status="success",
+        )
+        cancelled = concept_db.update_build_run(
+            conn,
+            "run-race",
+            only_statuses=("running",),
+            require_cancellation=True,
+            status="cancelled",
+        )
+
+    assert requested is not None
+    assert changed is True
+    assert completed is False
+    assert cancelled is True
 
 
 def test_get_or_create_entity_dedups_same_name_session_project(concept_db):

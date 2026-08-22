@@ -88,6 +88,27 @@ def test_fetch_memory_pages_requires_explicit_scope(concepts_env):
         concepts._fetch_memory_pages(session_name=None, project=None, search_all=False)
 
 
+def test_stop_concept_build_returns_conflict_after_success_wins(concepts_env, monkeypatch):
+    _server, concepts, _memory_module = concepts_env
+    monkeypatch.setattr(
+        concepts,
+        "_request_build_cancellation",
+        lambda _run_id: (
+            {
+                "id": "run-finished",
+                "status": "success",
+                "cancel_requested_at": None,
+            },
+            False,
+        ),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        asyncio.run(concepts.stop_concept_build("run-finished"))
+
+    assert exc_info.value.status_code == 409
+
+
 def test_promoted_doc_mirror_reachable_by_matching_scoped_build(monkeypatch, tmp_path):
     """notebook-scratch-and-docs-db.md's Testing Checklist: a promoted
     doc's memories mirror must be picked up by a marm_concept_build call

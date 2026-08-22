@@ -1,11 +1,21 @@
 """Console response contracts for concept-build lifecycle controls."""
 
+import pytest
 from fastapi.testclient import TestClient
 
 from marm_mcp_server.console import mcp_client
 from marm_mcp_server.console.app import app
 from marm_mcp_server.console.endpoints import concepts
 from marm_mcp_server.core.concept_db import ConceptDB
+
+
+@pytest.fixture(autouse=True)
+def clear_launching_concept_builds():
+    with concepts._launching_concept_builds_lock:
+        concepts._launching_concept_builds.clear()
+    yield
+    with concepts._launching_concept_builds_lock:
+        concepts._launching_concept_builds.clear()
 
 
 def _seed_build(db_path, *, run_id="run-1", status="cancelled", scope="project"):

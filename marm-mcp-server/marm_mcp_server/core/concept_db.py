@@ -435,8 +435,14 @@ class ConceptDB:
         )
 
     def update_build_run(
-        self, conn: sqlite3.Connection, run_id: str, **fields: object
-    ) -> None:
+        self,
+        conn: sqlite3.Connection,
+        run_id: str,
+        *,
+        only_statuses: tuple[str, ...] | None = None,
+        require_cancellation: bool | None = None,
+        **fields: object,
+    ) -> bool:
         allowed = {
             "status",
             "memories_processed",
@@ -455,13 +461,24 @@ class ConceptDB:
         }
         updates = {key: value for key, value in fields.items() if key in allowed}
         if not updates:
-            return
+            return False
         updates.setdefault("last_progress_at", datetime.now(timezone.utc).isoformat())
         assignments = ", ".join(f"{key} = ?" for key in updates)
-        conn.execute(
-            f"UPDATE concept_build_runs SET {assignments} WHERE id = ?",
-            [*updates.values(), run_id],
+        conditions = ["id = ?"]
+        params: list[object] = [*updates.values(), run_id]
+        if only_statuses:
+            placeholders = ", ".join("?" for _ in only_statuses)
+            conditions.append(f"status IN ({placeholders})")
+            params.extend(only_statuses)
+        if require_cancellation is True:
+            conditions.append("cancel_requested_at IS NOT NULL")
+        elif require_cancellation is False:
+            conditions.append("cancel_requested_at IS NULL")
+        result = conn.execute(
+            f"UPDATE concept_build_runs SET {assignments} WHERE {' AND '.join(conditions)}",
+            params,
         )
+        return result.rowcount > 0
 
     def get_build_run(self, conn: sqlite3.Connection, run_id: str) -> dict | None:
         row = conn.execute(
@@ -483,21 +500,14 @@ class ConceptDB:
 
     def request_build_cancellation(
         self, conn: sqlite3.Connection, run_id: str, requested_at: str
-    ) -> dict | None:
-        build_run = self.get_build_run(conn, run_id)
-        if build_run is None:
-            return None
-        if build_run["status"] in {"queued", "running"}:
-            conn.execute(
-                """UPDATE concept_build_runs
-                   SET cancel_requested_at = COALESCE(cancel_requested_at, ?)
-                   WHERE id = ?""",
-                (requested_at, run_id),
-            )
-            build_run["cancel_requested_at"] = (
-                build_run["cancel_requested_at"] or requested_at
-            )
-        return build_run
+    ) -> tuple[dict | None, bool]:
+        result = conn.execute(
+            """UPDATE concept_build_runs
+               SET cancel_requested_at = COALESCE(cancel_requested_at, ?)
+               WHERE id = ? AND status IN ('queued', 'running')""",
+            (requested_at, run_id),
+        )
+        return self.get_build_run(conn, run_id), result.rowcount > 0
 
     def is_build_cancellation_requested(
         self, conn: sqlite3.Connection, run_id: str

@@ -147,7 +147,7 @@ function DeleteDialog({ project, open, onOpenChange }: { project: ProjectSummary
   );
 }
 
-function ExploreDialog({ project, open, onOpenChange }: { project: ProjectSummary | null, open: boolean, onOpenChange: (o: boolean) => void }) {
+export function ExploreDialog({ project, open, onOpenChange }: { project: ProjectSummary | null, open: boolean, onOpenChange: (o: boolean) => void }) {
   const searchCode = useSearchProjectCode();
   const traceCode = useTraceProject();
   const impactCode = useProjectImpact();
@@ -181,9 +181,11 @@ function ExploreDialog({ project, open, onOpenChange }: { project: ProjectSummar
   const [runtimeCount, setRuntimeCount] = useState('1');
   const [activeTab, setActiveTab] = useState('search');
 
+  useEffect(() => setAdrDraft(''), [project?.name]);
+
   useEffect(() => {
     if (typeof adr?.content === 'string') setAdrDraft(adr.content);
-  }, [adr?.content, project?.name]);
+  }, [adr?.content]);
 
   useEffect(() => setActiveTab('search'), [project?.name]);
 
@@ -470,7 +472,7 @@ function ExploreDialog({ project, open, onOpenChange }: { project: ProjectSummar
               <div><p className="text-sm font-semibold">Architecture decisions</p><p className="mt-1 text-xs text-muted-foreground">This is the project’s engine-backed ADR document. Saving replaces the current document.</p></div>
               {adrLoading ? <p className="text-sm text-muted-foreground">Loading decisions…</p> : <textarea value={adrDraft} onChange={event => setAdrDraft(event.target.value)} placeholder="# Architecture decisions" className="min-h-64 w-full rounded-md border bg-background p-3 font-mono text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring" />}
               {updateAdr.error && <p className="rounded-lg bg-destructive/10 p-3 text-xs text-destructive">{updateAdr.error.message}</p>}
-              <Button onClick={() => updateAdr.mutate({ project: project.name, content: adrDraft })} disabled={!adrDraft.trim()} isLoading={updateAdr.isPending}><Save className="mr-2 h-4 w-4" /> Save decisions</Button>
+              <Button onClick={() => updateAdr.mutate({ project: project.name, content: adrDraft })} disabled={adrLoading || !adrDraft.trim()} isLoading={updateAdr.isPending}><Save className="mr-2 h-4 w-4" /> Save decisions</Button>
             </div>
           </TabsContent>
 

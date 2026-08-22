@@ -177,16 +177,16 @@ export function createMarmClient(config: MarmClientConfig) {
       ),
     listLogs: (params?: LogListParams) =>
       request<LogListResponse>(config, 'GET', '/logs', { query: params }),
-    deleteLog: (id: number, sessionName: string) =>
+    deleteLog: (id: string, sessionName: string) =>
       request<{ log_id: string; session_name: string; deleted_count: number; memories_deleted: number }>(
         config,
         'DELETE',
-        `/logs/${encodeURIComponent(String(id))}`,
+        `/logs/${encodeURIComponent(id)}`,
         { body: { session_name: sessionName, confirm: 'DELETE' } },
       ),
-    bulkDeleteLogs: (logs: Array<{ id: number; session_name: string }>) =>
+    bulkDeleteLogs: (logs: Array<{ id: string; session_name: string }>) =>
       request<BulkLogDeleteResult>(config, 'POST', '/logs/bulk-delete', {
-        body: { logs: logs.map((log) => ({ ...log, id: String(log.id) })), confirm: 'DELETE' },
+        body: { logs, confirm: 'DELETE' },
       }),
     deleteAllLogs: () =>
       request<{ deleted_count: number; memories_deleted: number }>(

@@ -82,10 +82,22 @@ def _create_build_run(req: ConceptBuildRequest, run_id: str, created_at: str) ->
         )
 
 
-def _finish_build_run(run_id: str, **fields: object) -> None:
+def _finish_build_run(
+    run_id: str,
+    *,
+    only_statuses: tuple[str, ...] | None = None,
+    require_cancellation: bool | None = None,
+    **fields: object,
+) -> bool:
     concept_db = _get_concept_db()
     with concept_db.get_connection() as conn:
-        concept_db.update_build_run(conn, run_id, **fields)
+        return concept_db.update_build_run(
+            conn,
+            run_id,
+            only_statuses=only_statuses,
+            require_cancellation=require_cancellation,
+            **fields,
+        )
 
 
 def _record_build_progress(
@@ -117,7 +129,7 @@ def _is_build_cancellation_requested(run_id: str) -> bool:
         return False
 
 
-def _request_build_cancellation(run_id: str) -> dict | None:
+def _request_build_cancellation(run_id: str) -> tuple[dict | None, bool]:
     concept_db = _get_concept_db()
     with concept_db.get_connection() as conn:
         return concept_db.request_build_cancellation(
@@ -409,9 +421,11 @@ async def _marm_concept_build(
             "build_run_id": run_id,
         }
     await _retire_queued_tasks(outcomes, created_at)
-    await asyncio.to_thread(
+    completed = await asyncio.to_thread(
         _finish_build_run,
         run_id,
+        only_statuses=("running",),
+        require_cancellation=False,
         status="success",
         memories_processed=result["memories_processed"],
         entities_extracted=result["entities_extracted"],
@@ -421,6 +435,37 @@ async def _marm_concept_build(
         duration_ms=result["duration_ms"],
         finished_at=datetime.now(timezone.utc).isoformat(),
     )
+    if not completed:
+        cancelled_at = datetime.now(timezone.utc).isoformat()
+        cancelled = await asyncio.to_thread(
+            _finish_build_run,
+            run_id,
+            only_statuses=("queued", "running"),
+            require_cancellation=True,
+            status="cancelled",
+            error_code="cancelled_by_user",
+            memories_processed=result["memories_processed"],
+            entities_extracted=result["entities_extracted"],
+            relationships_created=result["relationships_created"],
+            code_links_created=result["code_links_created"],
+            duration_ms=result["duration_ms"],
+            cancelled_at=cancelled_at,
+            finished_at=cancelled_at,
+        )
+        if cancelled:
+            return {
+                "status": "cancelled",
+                "error_code": "cancelled_by_user",
+                "message": "The concept build was stopped after its current memory.",
+                "memories_processed": result["memories_processed"],
+                "build_run_id": run_id,
+            }
+        return {
+            "status": "error",
+            "error_code": "build_state_conflict",
+            "message": "The concept build finished in another MARM process.",
+            "build_run_id": run_id,
+        }
     result.pop("aborted", None)
     result.pop("cancelled", None)
     if graph_rebuilt:
@@ -439,10 +484,12 @@ async def _marm_concept_build(
 
 @router.post("/internal/concepts/builds/{run_id}/stop")
 async def stop_concept_build(run_id: str) -> dict:
-    build_run = await asyncio.to_thread(_request_build_cancellation, run_id)
+    build_run, cancellation_requested = await asyncio.to_thread(
+        _request_build_cancellation, run_id
+    )
     if build_run is None:
         raise HTTPException(status_code=404, detail="Concept build not found")
-    if build_run["status"] not in {"queued", "running"}:
+    if not cancellation_requested:
         raise HTTPException(
             status_code=409,
             detail="Only queued or running concept builds can be stopped.",
