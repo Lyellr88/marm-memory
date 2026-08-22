@@ -28,6 +28,10 @@ from collections import Counter
 
 BASELINE = 0
 
+# A cold cache over the package runs in well under a minute. Anything past this
+# is wedged, not slow.
+TIMEOUT_SECONDS = 600
+
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 PACKAGE_DIR = REPO_ROOT / "marm-mcp-server"
 
@@ -44,12 +48,23 @@ _IN_CI = os.environ.get("GITHUB_ACTIONS") == "true"
 
 
 def run_mypy() -> tuple[str, int]:
-    proc = subprocess.run(
-        [sys.executable, "-m", "mypy", TARGET],
-        cwd=PACKAGE_DIR,
-        capture_output=True,
-        text=True,
-    )
+    # Output is captured rather than streamed, so without this line the script
+    # prints nothing at all until mypy returns and reads as a hang.
+    print(f"running mypy on {TARGET}", file=sys.stderr, flush=True)
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-m", "mypy", TARGET],
+            cwd=PACKAGE_DIR,
+            capture_output=True,
+            text=True,
+            timeout=TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as expired:
+        partial = (expired.stdout or "") + (expired.stderr or "")
+        return (
+            f"{partial}\nmypy did not finish within {TIMEOUT_SECONDS}s and was killed.",
+            2,
+        )
     return proc.stdout + proc.stderr, proc.returncode
 
 
@@ -104,8 +119,17 @@ def main() -> int:
         print(output.rstrip() or "(no output)", file=sys.stderr)
         return 2
 
-    if "is not installed" in output or "Cannot find implementation" in output:
+    unresolved = list(
+        dict.fromkeys(
+            line.strip()
+            for line in output.splitlines()
+            if "is not installed" in line or "Cannot find implementation" in line
+        )
+    )
+    if unresolved:
         print("mypy could not resolve the project's dependencies.", file=sys.stderr)
+        for line in unresolved:
+            print(f"  {line}", file=sys.stderr)
         print(
             "Install them first:  pip install -r marm-mcp-server/requirements.txt",
             file=sys.stderr,
