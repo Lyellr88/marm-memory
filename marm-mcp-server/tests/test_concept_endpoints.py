@@ -88,7 +88,9 @@ def test_fetch_memory_pages_requires_explicit_scope(concepts_env):
         concepts._fetch_memory_pages(session_name=None, project=None, search_all=False)
 
 
-def test_stop_concept_build_returns_conflict_after_success_wins(concepts_env, monkeypatch):
+def test_stop_concept_build_returns_conflict_after_success_wins(
+    concepts_env, monkeypatch
+):
     _server, concepts, _memory_module = concepts_env
     monkeypatch.setattr(
         concepts,
