@@ -29,9 +29,7 @@ def test_console_logs_return_a_bounded_page_with_total(monkeypatch, tmp_path):
 
     monkeypatch.setattr(logs, "get_memory_db_path", lambda: db_path)
     with TestClient(app) as client:
-        response = client.get(
-            "/api/logs?session=console-pagination&limit=1&offset=1"
-        )
+        response = client.get("/api/logs?session=console-pagination&limit=1&offset=1")
 
     assert response.status_code == 200
     page = response.json()
