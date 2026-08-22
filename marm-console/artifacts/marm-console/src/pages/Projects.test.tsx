@@ -9,6 +9,16 @@ const adrState = vi.hoisted(() => ({
   secondContent: undefined as string | undefined,
 }));
 
+const mutationState = vi.hoisted(() => ({
+  searchReset: vi.fn(),
+  traceReset: vi.fn(),
+  impactReset: vi.fn(),
+  graphQueryReset: vi.fn(),
+  updateAdrReset: vi.fn(),
+  ingestTraceReset: vi.fn(),
+  ingestTraceMutate: vi.fn(),
+}));
+
 vi.mock('@/hooks/use-marm-queries', () => ({
   useProjects: () => ({
     data: [{
@@ -21,15 +31,15 @@ vi.mock('@/hooks/use-marm-queries', () => ({
     isLoading: false,
   }),
   useIndexProject: () => ({ isPending: false, mutate: vi.fn() }),
-  useIndexJob: () => ({ data: undefined }),
+  useIndexJob: () => ({ data: undefined, error: null, isError: false, refetch: vi.fn() }),
   useDeleteProject: () => ({ isPending: false, mutate: vi.fn() }),
-  useSearchProjectCode: () => ({ isPending: false, mutate: vi.fn() }),
-  useTraceProject: () => ({ isPending: false, mutate: vi.fn() }),
-  useProjectImpact: () => ({ isPending: false, mutate: vi.fn() }),
+  useSearchProjectCode: () => ({ isPending: false, mutate: vi.fn(), reset: mutationState.searchReset }),
+  useTraceProject: () => ({ isPending: false, mutate: vi.fn(), reset: mutationState.traceReset }),
+  useProjectImpact: () => ({ isPending: false, mutate: vi.fn(), reset: mutationState.impactReset }),
   useProjectArchitecture: () => ({ data: undefined, isLoading: false }),
   useProjectCodeUnits: () => ({ data: undefined, isLoading: false, isError: false }),
   useProjectCoverage: () => ({ data: undefined, isLoading: false, isError: false }),
-  useProjectGraphQuery: () => ({ isPending: false, mutate: vi.fn() }),
+  useProjectGraphQuery: () => ({ isPending: false, mutate: vi.fn(), reset: mutationState.graphQueryReset }),
   useProjectAdr: (project: string) => ({
     data: project === 'marm-systems'
       ? { content: '# First project decisions' }
@@ -38,8 +48,8 @@ vi.mock('@/hooks/use-marm-queries', () => ({
         : { content: adrState.secondContent },
     isLoading: project === 'second-project' && adrState.secondLoading,
   }),
-  useUpdateProjectAdr: () => ({ isPending: false, mutate: vi.fn() }),
-  useIngestProjectRuntimeTraces: () => ({ isPending: false, mutate: vi.fn() }),
+  useUpdateProjectAdr: () => ({ isPending: false, mutate: vi.fn(), reset: mutationState.updateAdrReset }),
+  useIngestProjectRuntimeTraces: () => ({ isPending: false, mutate: mutationState.ingestTraceMutate, reset: mutationState.ingestTraceReset }),
   useMarmConfig: () => ({ baseUrl: 'http://127.0.0.1:8002' }),
 }));
 
@@ -47,6 +57,7 @@ describe('ProjectsPage', () => {
   afterEach(() => {
     adrState.secondLoading = true;
     adrState.secondContent = undefined;
+    vi.clearAllMocks();
     cleanup();
   });
 
@@ -112,5 +123,45 @@ describe('ProjectsPage', () => {
     await waitFor(() => {
       expect((screen.getByPlaceholderText('# Architecture decisions') as HTMLTextAreaElement).value).toBe('');
     });
+  });
+
+  it('resets mutation observers when switching projects', () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const firstProject = {
+      name: 'marm-systems', root_path: 'C:/work/marm-systems', nodes: 4500, edges: 23913, status: 'ready',
+    } as const;
+    const secondProject = { ...firstProject, name: 'second-project', root_path: 'C:/work/second-project' };
+    const renderDialog = (project: typeof firstProject | typeof secondProject) => (
+      <QueryClientProvider client={queryClient}>
+        <ExploreDialog project={project} open onOpenChange={() => {}} />
+      </QueryClientProvider>
+    );
+    const view = render(renderDialog(firstProject));
+
+    view.rerender(renderDialog(secondProject));
+
+    expect(mutationState.graphQueryReset).toHaveBeenCalledTimes(2);
+    expect(mutationState.updateAdrReset).toHaveBeenCalledTimes(2);
+    expect(mutationState.ingestTraceReset).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects invalid runtime trace counts before submitting', async () => {
+    const user = userEvent.setup();
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const project = {
+      name: 'marm-systems', root_path: 'C:/work/marm-systems', nodes: 4500, edges: 23913, status: 'ready',
+    } as const;
+    render(<QueryClientProvider client={queryClient}><ExploreDialog project={project} open onOpenChange={() => {}} /></QueryClientProvider>);
+
+    await user.click(screen.getByRole('tab', { name: 'Runtime traces' }));
+    await user.type(screen.getByPlaceholderText('caller.qualified_name'), 'source.fn');
+    await user.type(screen.getByPlaceholderText('callee.qualified_name'), 'target.fn');
+    const count = screen.getByPlaceholderText('Count');
+    await user.clear(count);
+    await user.type(count, '1.5');
+
+    expect(screen.getByText('Count must be a whole number from 1 to 1,000,000.')).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Ingest trace' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(mutationState.ingestTraceMutate).not.toHaveBeenCalled();
   });
 });

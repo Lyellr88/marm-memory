@@ -26,7 +26,7 @@ function IndexWorkspace({ repoPath, setRepoPath, mode, setMode, jobId, setJobId 
   setJobId: (value: string | null) => void;
 }) {
   const indexProj = useIndexProject();
-  const { data: jobStatus } = useIndexJob(jobId || '');
+  const { data: jobStatus, error: jobError, isError: jobFailed, refetch: refetchJob } = useIndexJob(jobId || '');
   const { baseUrl } = useMarmConfig();
   const queryClient = useQueryClient();
 
@@ -40,10 +40,10 @@ function IndexWorkspace({ repoPath, setRepoPath, mode, setMode, jobId, setJobId 
   };
 
   const isSettled = !!jobStatus && jobStatus.status !== 'queued' && jobStatus.status !== 'running';
-  const isRunning = !!jobId && !isSettled;
+  const isRunning = !!jobId && !isSettled && !jobFailed;
 
   useEffect(() => {
-    if (jobStatus?.status === 'success') {
+    if (jobStatus && jobStatus.status !== 'queued' && jobStatus.status !== 'running') {
       queryClient.invalidateQueries({ queryKey: ['projects', baseUrl] });
     }
   }, [baseUrl, jobStatus?.status, queryClient]);
@@ -71,13 +71,13 @@ function IndexWorkspace({ repoPath, setRepoPath, mode, setMode, jobId, setJobId 
         <Button type="submit" className="min-w-40" isLoading={indexProj.isPending} disabled={isRunning || !repoPath.trim()}><Play className="mr-2 h-4 w-4" /> Start {mode} index</Button>
       </form>
 
-      <div className={`rounded-xl border p-4 ${isRunning ? 'border-primary/35 bg-primary/[0.06] status-pulse' : jobStatus?.status === 'success' ? 'border-emerald-500/30 bg-emerald-500/[0.06] success-pop' : jobStatus?.status === 'error' ? 'border-destructive/35 bg-destructive/[0.06]' : 'border-border bg-background/40'}`}>
+      <div className={`rounded-xl border p-4 ${isRunning ? 'border-primary/35 bg-primary/[0.06] status-pulse' : jobStatus?.status === 'success' ? 'border-emerald-500/30 bg-emerald-500/[0.06] success-pop' : jobStatus?.status === 'error' || jobFailed ? 'border-destructive/35 bg-destructive/[0.06]' : 'border-border bg-background/40'}`}>
         {jobId ? (
           <div className="flex h-full flex-col">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">{isRunning ? 'Live index' : 'Latest index'}</p>
-                <p className="mt-1 font-semibold capitalize">{jobStatus?.status || 'Preparing job'}</p>
+                <p className="mt-1 font-semibold capitalize">{jobFailed ? 'Status unavailable' : jobStatus?.status || 'Preparing job'}</p>
               </div>
               {isRunning ? <RefreshCw className="h-5 w-5 animate-spin text-primary" /> : jobStatus?.status === 'success' ? <CheckCircle2 className="h-5 w-5 text-emerald-400" /> : <XCircle className="h-5 w-5 text-destructive" />}
             </div>
@@ -86,8 +86,9 @@ function IndexWorkspace({ repoPath, setRepoPath, mode, setMode, jobId, setJobId 
               <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><Clock3 className="h-3.5 w-3.5" /> {formatElapsed(jobStatus?.started_at || jobStatus?.created_at)}</p>
               {jobStatus?.project && <p className="truncate font-mono text-xs text-muted-foreground" title={jobStatus.project}>{jobStatus.project}</p>}
               {jobStatus?.error && <p className="rounded-md bg-destructive/10 p-2 text-xs text-destructive">{jobStatus.error}</p>}
+              {jobFailed && <p className="rounded-md bg-destructive/10 p-2 text-xs text-destructive">{jobError instanceof Error ? jobError.message : 'Could not read the indexing status.'}</p>}
             </div>
-            {isSettled && <Button variant="ghost" size="sm" className="mt-auto self-start" onClick={() => setJobId(null)}>Clear status</Button>}
+            {jobFailed ? <div className="mt-auto flex gap-2"><Button variant="outline" size="sm" onClick={() => refetchJob()}>Retry status</Button><Button variant="ghost" size="sm" onClick={() => setJobId(null)}>Clear status</Button></div> : isSettled && <Button variant="ghost" size="sm" className="mt-auto self-start" onClick={() => setJobId(null)}>Clear status</Button>}
           </div>
         ) : (
           <div className="flex h-full flex-col justify-between">
@@ -184,10 +185,25 @@ export function ExploreDialog({ project, open, onOpenChange }: { project: Projec
   useEffect(() => setAdrDraft(''), [project?.name]);
 
   useEffect(() => {
+    searchCode.reset();
+    traceCode.reset();
+    impactCode.reset();
+    graphQuery.reset();
+    updateAdr.reset();
+    ingestRuntimeTraces.reset();
+  }, [project?.name]);
+
+  useEffect(() => {
     if (typeof adr?.content === 'string') setAdrDraft(adr.content);
   }, [adr?.content]);
 
   useEffect(() => setActiveTab('search'), [project?.name]);
+
+  const parsedRuntimeCount = Number(runtimeCount);
+  const runtimeCountValid = /^\d+$/.test(runtimeCount.trim())
+    && Number.isInteger(parsedRuntimeCount)
+    && parsedRuntimeCount >= 1
+    && parsedRuntimeCount <= 1_000_000;
 
   if (!project) return null;
 
@@ -484,9 +500,10 @@ export function ExploreDialog({ project, open, onOpenChange }: { project: Projec
                 <Input value={runtimeCallee} onChange={event => setRuntimeCallee(event.target.value)} placeholder="callee.qualified_name" className="font-mono text-xs" />
                 <Input value={runtimeCount} onChange={event => setRuntimeCount(event.target.value)} inputMode="numeric" placeholder="Count" />
               </div>
+              {!runtimeCountValid && <p className="text-xs text-destructive">Count must be a whole number from 1 to 1,000,000.</p>}
               {ingestRuntimeTraces.error && <p className="rounded-lg bg-destructive/10 p-3 text-xs text-destructive">{ingestRuntimeTraces.error.message}</p>}
               {ingestRuntimeTraces.data?.status === 'success' && <p className="rounded-lg bg-emerald-500/10 p-3 text-xs text-emerald-300">Runtime edge added to the graph.</p>}
-              <Button onClick={() => ingestRuntimeTraces.mutate({ project: project.name, traces: [{ caller: runtimeCaller, callee: runtimeCallee, count: Number(runtimeCount) || 1 } satisfies RuntimeTrace] })} disabled={!runtimeCaller.trim() || !runtimeCallee.trim()} isLoading={ingestRuntimeTraces.isPending}><Upload className="mr-2 h-4 w-4" /> Ingest trace</Button>
+              <Button onClick={() => ingestRuntimeTraces.mutate({ project: project.name, traces: [{ caller: runtimeCaller, callee: runtimeCallee, count: parsedRuntimeCount } satisfies RuntimeTrace] })} disabled={!runtimeCaller.trim() || !runtimeCallee.trim() || !runtimeCountValid} isLoading={ingestRuntimeTraces.isPending}><Upload className="mr-2 h-4 w-4" /> Ingest trace</Button>
             </div>
           </TabsContent>
         </Tabs>

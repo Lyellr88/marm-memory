@@ -99,37 +99,38 @@ async function request<T>(
   const controller = new AbortController();
   const timeoutMs = opts?.timeoutMs ?? 30000;
   const timer = setTimeout(() => controller.abort(), timeoutMs);
-  let res: Response;
   try {
-    res = await fetch(url, {
+    const res = await fetch(url, {
       method,
       headers,
       body: opts?.body !== undefined ? JSON.stringify(opts.body) : undefined,
       signal: controller.signal,
       credentials: 'same-origin',
     });
+
+    if (!res.ok) {
+      let message = res.statusText;
+      try {
+        const data = await res.json();
+        message = data?.error ?? data?.detail ?? message;
+      } catch (err) {
+        if (controller.signal.aborted) throw err;
+        // Ignore a malformed error body and retain the response status text.
+      }
+      throw new MarmApiError(res.status, message || `Request failed (${res.status})`);
+    }
+
+    if (res.status === 204) return undefined as T;
+    return (await res.json()) as T;
   } catch (err) {
-    if (err instanceof DOMException && err.name === 'AbortError') {
+    if (controller.signal.aborted || (err instanceof DOMException && err.name === 'AbortError')) {
       throw new MarmApiError(0, `Request to MARM server timed out after ${timeoutMs / 1000}s`);
     }
+    if (err instanceof MarmApiError) throw err;
     throw new MarmApiError(0, `Could not reach MARM server at ${config.baseUrl}`);
   } finally {
     clearTimeout(timer);
   }
-
-  if (!res.ok) {
-    let message = res.statusText;
-    try {
-      const data = await res.json();
-      message = data?.error ?? data?.detail ?? message;
-    } catch {
-      // ignore body parse errors
-    }
-    throw new MarmApiError(res.status, message || `Request failed (${res.status})`);
-  }
-
-  if (res.status === 204) return undefined as T;
-  return (await res.json()) as T;
 }
 
 export function createMarmClient(config: MarmClientConfig) {
