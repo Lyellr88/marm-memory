@@ -1,16 +1,36 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Button, Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/core';
 import { Layers, X } from 'lucide-react';
 import { ExplorerTab } from '@/components/knowledge/ExplorerTab';
 import { BuildConceptsDialog, DuplicatesTab } from '@/components/knowledge/BuildAndDuplicates';
 import { CodeExplorerTab } from '@/components/code/CodeExplorerTab';
+import { queryKeys, useMarmConfig, useProjects } from '@/hooks/use-marm-queries';
 import type { ConceptBuildRun, ConceptGraphScope } from '@/lib/marm-types';
+
+function useDefaultCodeGraphPreload() {
+  const queryClient = useQueryClient();
+  const { baseUrl, client } = useMarmConfig();
+  const { data: projects } = useProjects();
+
+  useEffect(() => {
+    const project = projects?.[0];
+    if (!project) return;
+    void queryClient.prefetchQuery({
+      queryKey: queryKeys.projectGraph(baseUrl, project.name),
+      queryFn: () => client.getProjectGraph(project.name),
+      staleTime: Infinity,
+    });
+  }, [baseUrl, client, projects, queryClient]);
+}
 
 export function KnowledgePage() {
   const [buildOpen, setBuildOpen] = useState(false);
   const [buildJobId, setBuildJobId] = useState<string | null>(null);
   const [buildNotice, setBuildNotice] = useState<string | null>(null);
   const [graphScope, setGraphScope] = useState<ConceptGraphScope>({ type: 'all' });
+
+  useDefaultCodeGraphPreload();
 
   const handleBuildComplete = (job: ConceptBuildRun) => {
     if (job.status === 'success') {

@@ -8,6 +8,11 @@
 - Knowledge Graph now separates its three graph workflows into **Memory Explorer**, **Code Explorer**, and **Potential Duplicates**. Code Explorer lets you choose any indexed repository and inspect its code structure without requiring stored memories or concept extraction first.
 - Code Explorer renders a bounded file/import topology with graph totals, visible counts, filtering, file focus, direct import/importer expansion, and clear unavailable or sparse-index states. Large repositories stay bounded while still showing what portion of the indexed graph is visible.
 
+### Changed: A More Legible Code Topology
+
+- Code Explorer now preloads the default indexed repository when Knowledge Graph opens, then retains its bounded snapshot until indexing explicitly refreshes it. The workspace mirrors Memory Explorer with a metrics rail, searchable file list, full graph surface, and in-canvas file detail.
+- The topology settles before its initial fit, uses directory-color groups, compact node sizing, collision spacing, and focus-on-demand labels. This keeps dense import hubs readable without representing code imports as memory relationships.
+
 ### Changed: Safer, Clearer Project Investigation
 
 - The browser-entered read-only graph query was removed. Project Explore now uses its guided Investigate surface for search, tracing, architecture, impact, coverage, decisions, and runtime evidence; visual code-graph work belongs in Knowledge Graph → Code Explorer.

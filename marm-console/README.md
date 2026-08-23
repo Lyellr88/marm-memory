@@ -18,8 +18,8 @@ MARM Console is a separate localhost application that reads the same local MARM 
 
 - **Overview** shows local runtime reachability, latency, memory and concept health, indexed-project context, and compaction activity.
 - **Memories** manages stored memories, notebook entries, logs, sessions, and compaction candidates. Destructive bulk actions require an explicit in-app confirmation.
-- **Knowledge Graph** explores extracted entities and relationships by project or session, reviews potential duplicates with provenance, and manages concept builds without changing source memories.
-- **Indexed Projects** indexes an existing local repository, shows graph size and health, and opens a code-graph workspace for architecture, code search, symbol tracing, impact analysis, coverage, bounded read-only graph queries, architecture decisions, and runtime trace ingestion.
+- **Knowledge Graph** provides separate Memory and Code Explorers: inspect extracted entities and relationships by project or session, review potential duplicates with provenance, manage concept builds, and explore a bounded file-import topology for an indexed repository. The Code Explorer remains independent of memory-derived concepts.
+- **Indexed Projects** indexes an existing local repository, shows graph size and health, and provides project intelligence for architecture, code search, symbol tracing, impact analysis, coverage, architecture decisions, and runtime trace ingestion.
 - **Settings** manages the Console connection and reports runtime, write-queue, automatic-indexing, storage/model, and project-watch health. Its automatic-indexing controls use MARM's existing durable runtime flags.
 
 Console currently indexes existing local directories. GitHub URL cloning, private-repository credentials, and remote polling are planned separately and are not accepted as repository paths.
@@ -88,7 +88,7 @@ The frontend defaults to the Console API at `http://127.0.0.1:8002`.
 | `GET /api/summaries/{session}`; `POST /api/summaries/{session}/generate` | Cached session summary and summary generation |
 | `GET /api/compaction` | Compaction pipeline history and per-candidate actions |
 | `/api/concepts/*` | Concept summary, graph, search, neighborhood, duplicate review, build lifecycle, and graph reset routes |
-| `/api/projects/*` | Local-repository indexing, job status, project health, delete, architecture, code search, trace, impact, coverage, graph query, decisions, and runtime trace routes |
+| `/api/projects/*` | Local-repository indexing, job status, project health, delete, architecture, bounded graph snapshots and file neighborhoods, code search, trace, impact, coverage, decisions, and runtime trace routes |
 | `GET /api/settings/runtime` | Runtime, queue, graph, storage, embedding, automation, and watch-health diagnostics |
 | `PUT /api/settings/automation` | Enable or pause durable automatic code or concept indexing |
 

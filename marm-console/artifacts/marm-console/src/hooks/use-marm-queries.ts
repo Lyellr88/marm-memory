@@ -586,6 +586,10 @@ export function useProjectGraph(project: string, enabled = true) {
     queryKey: queryKeys.projectGraph(baseUrl, project),
     queryFn: () => client.getProjectGraph(project),
     enabled: !!project && enabled,
+    // The bounded snapshot is immutable until MARM indexes the project again.
+    // Index completion explicitly invalidates this key, so avoid rereading the
+    // same graph whenever its tab remounts during one Console session.
+    staleTime: Infinity,
   });
 }
 
