@@ -43,7 +43,7 @@ from .cbm_client import CbmClient, CbmError, CbmToolError
 
 logger = structlog.get_logger(__name__)
 
-# Ordered so the caller can render "showing N of TOTAL".
+# Every graph read stays bounded independently of the Console response limit.
 DEFAULT_LIMIT = 50
 MAX_LIMIT = 500
 GRAPH_NODE_LIMIT = 80
@@ -104,20 +104,18 @@ class CodeGraphViewError(RuntimeError):
 # result with the requested columns intact. The alias guard below cannot catch it,
 # and the table reads as `empty_index` on a fully indexed project, which is the
 # same silent-wrong-answer this whole view was written to stop.
-_UNITS_QUERY = "MATCH (f:File) RETURN f.file_path AS unit ORDER BY f.file_path"
+_UNITS_QUERY = (
+    f"MATCH (f:File) RETURN f.file_path AS unit ORDER BY f.file_path LIMIT {MAX_LIMIT}"
+)
 _FAN_IN_QUERY = (
     "MATCH (a)-[r:IMPORTS]->(b) "
     "RETURN b.file_path AS unit, count(DISTINCT a.file_path) AS fan_in "
-    "ORDER BY b.file_path"
+    f"ORDER BY fan_in DESC, unit LIMIT {MAX_LIMIT}"
 )
 _FAN_OUT_QUERY = (
     "MATCH (a)-[r:IMPORTS]->(b) "
     "RETURN a.file_path AS unit, count(DISTINCT b.file_path) AS fan_out "
-    "ORDER BY a.file_path"
-)
-_IMPORT_EDGES_QUERY = (
-    "MATCH (a:File)-[r:IMPORTS]->(b) "
-    "RETURN a.file_path AS source, b.file_path AS target ORDER BY a.file_path"
+    f"ORDER BY fan_out DESC, unit LIMIT {MAX_LIMIT}"
 )
 _IMPORT_EDGE_TOTAL_QUERY = "MATCH (a:File)-[r:IMPORTS]->(b) RETURN count(r) AS total"
 
@@ -179,6 +177,19 @@ def _as_int(value: object) -> int:
         return 0
 
 
+def _import_edges_query(paths: list[str]) -> str:
+    """Return the fixed edge template narrowed to the visible file identities."""
+    if not paths or not all(_FILE_PATH_RE.fullmatch(path) for path in paths):
+        raise ValueError("import edge paths must be validated file identities")
+    literals = ", ".join(f"'{path}'" for path in paths)
+    return (
+        "MATCH (a:File)-[r:IMPORTS]->(b) "
+        f"WHERE a.file_path IN [{literals}] AND b.file_path IN [{literals}] "
+        "RETURN a.file_path AS source, b.file_path AS target "
+        f"ORDER BY a.file_path, b.file_path LIMIT {GRAPH_EDGE_LIMIT}"
+    )
+
+
 def is_code_unit(path: str) -> bool:
     return not path.lower().endswith(NON_CODE_SUFFIXES)
 
@@ -223,7 +234,7 @@ def code_units(
     project: Optional[str],
     limit: int = DEFAULT_LIMIT,
 ) -> dict:
-    """Files in the graph with their import coupling, strongest first.
+    """Bounded candidates in the graph with their import coupling, strongest first.
 
     Returns one of four states so an empty table is never ambiguous:
     `ready`, `indexed_no_summary`, `empty_index`, `unavailable`.
@@ -247,11 +258,32 @@ def code_units(
         logger.warning("code_graph_view.backend", project=project, error=str(exc))
         return unavailable("graph_unavailable", str(exc))
 
-    paths = [
-        str(row.get("unit"))
-        for row in units
-        if row.get("unit") and is_code_unit(str(row.get("unit")))
-    ]
+    inbound = {str(r.get("unit")): _as_int(r.get("fan_in")) for r in fan_in}
+    outbound = {str(r.get("unit")): _as_int(r.get("fan_out")) for r in fan_out}
+    paths: list[str] = []
+    seen: set[str] = set()
+
+    def add_path(value: object) -> None:
+        path = str(value or "")
+        if path and path not in seen and is_code_unit(path):
+            paths.append(path)
+            seen.add(path)
+
+    # These are already ranked by the engine. They must seed the candidate set;
+    # an alphabetical File page cannot decide which code belongs in a graph view.
+    for result in (fan_in, fan_out):
+        for row in result:
+            add_path(row.get("unit"))
+
+    # Files without imports never occur in either fan query. Include a bounded
+    # alphabetical tail solely for those isolated entry points and leaves.
+    for row in units:
+        path = str(row.get("unit") or "")
+        if len(paths) >= MAX_LIMIT:
+            break
+        if inbound.get(path, 0) == 0 and outbound.get(path, 0) == 0:
+            add_path(path)
+
     if not paths:
         # Nothing indexed at all reads differently from indexed-but-no-code, and
         # the caller has to be able to tell the user which one happened.
@@ -263,9 +295,6 @@ def code_units(
             "code_units": [],
         }
 
-    inbound = {str(r.get("unit")): _as_int(r.get("fan_in")) for r in fan_in}
-    outbound = {str(r.get("unit")): _as_int(r.get("fan_out")) for r in fan_out}
-
     # Ranked as typed tuples before becoming dicts: sorting on dict values leaves
     # the counts inferred as object, which the sort key cannot add.
     ranked: list[tuple[str, int, int]] = sorted(
@@ -276,11 +305,16 @@ def code_units(
     rows = [
         {"unit": path, "fan_in": fin, "fan_out": fout} for path, fin, fout in ranked
     ]
+    sampled = len(rows) > MAX_LIMIT or any(
+        len(result) == MAX_LIMIT for result in (units, fan_in, fan_out)
+    )
+    rows = rows[:MAX_LIMIT]
 
     return {
         "state": "ready",
         "total": len(rows),
         "shown": min(bounded, len(rows)),
+        "sampled": sampled,
         "fan_in_is_lower_bound": True,
         "code_units": rows[:bounded],
     }
@@ -312,10 +346,16 @@ def code_graph(client: CbmClient, project: Optional[str]) -> dict:
             "edges": [],
         }
 
+    visible_units = units["code_units"][:GRAPH_NODE_LIMIT]
+    visible_paths = {row["unit"] for row in visible_units}
+
     assert project is not None
+    edge_paths = sorted(path for path in visible_paths if _FILE_PATH_RE.fullmatch(path))
     try:
-        edge_rows = _query(
-            client, _IMPORT_EDGES_QUERY, project, max_rows=GRAPH_EDGE_LIMIT
+        edge_rows = (
+            _query(client, _import_edges_query(edge_paths), project)
+            if edge_paths
+            else []
         )
         total_rows = _query(client, _IMPORT_EDGE_TOTAL_QUERY, project)
     except CodeGraphViewError as exc:
@@ -324,8 +364,6 @@ def code_graph(client: CbmClient, project: Optional[str]) -> dict:
         return graph_unavailable("graph_unavailable", str(exc))
 
     total_import_edges = _as_int(total_rows[0].get("total")) if total_rows else 0
-    visible_units = units["code_units"][:GRAPH_NODE_LIMIT]
-    visible_paths = {row["unit"] for row in visible_units}
     nodes = [
         {
             "id": row["unit"],
@@ -352,6 +390,7 @@ def code_graph(client: CbmClient, project: Optional[str]) -> dict:
         "total": {"code_units": units["total"], "import_edges": total_import_edges},
         "rendered": {"code_units": len(nodes), "import_edges": len(edges)},
         "truncated": units["total"] > len(nodes) or total_import_edges > len(edges),
+        "sampled": bool(units.get("sampled")),
         "sample_reason": (
             "The canvas shows the most connected code files and their visible import links. "
             "Totals include the full indexed import graph."

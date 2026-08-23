@@ -28,6 +28,6 @@ export function CodeExplorerTab() {
         <Select value={projectName} onValueChange={setProjectName}><SelectTrigger className="w-full sm:w-[21rem]"><SelectValue placeholder="Select indexed repository" /></SelectTrigger><SelectContent>{projects.map((item) => <SelectItem key={item.name} value={item.name}>{item.name}</SelectItem>)}</SelectContent></Select>
       </CardContent>
     </Card>
-    {project && <CodeGraphExplorer project={project} graph={graph} isLoading={graphLoading} isError={graphFailed} />}
+    {project && <CodeGraphExplorer key={project.name} project={project} graph={graph} isLoading={graphLoading} isError={graphFailed} />}
   </div>;
 }

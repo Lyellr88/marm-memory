@@ -537,6 +537,7 @@ export interface CodeUnits {
   message?: string;
   total: number;
   shown: number;
+  sampled?: boolean;
   fan_in_is_lower_bound?: boolean;
   code_units: CodeUnit[];
 }
@@ -564,6 +565,7 @@ export interface CodeGraphSnapshot {
   total: { code_units: number; import_edges: number };
   rendered: { code_units: number; import_edges: number };
   truncated: boolean;
+  sampled?: boolean;
   sample_reason?: string;
   nodes: CodeGraphNode[];
   edges: CodeGraphEdge[];

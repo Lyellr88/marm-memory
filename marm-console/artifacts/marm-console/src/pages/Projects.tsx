@@ -264,9 +264,11 @@ export function ExploreDialog({ project, open, onOpenChange }: { project: Projec
                     <p className="text-xs text-muted-foreground uppercase tracking-wider">Code structure</p>
                     {codeUnits && codeUnitsState === 'ready' && (
                       <p className="text-xs text-muted-foreground">
-                        {codeUnits.shown < codeUnits.total
-                          ? `Showing ${codeUnits.shown} of ${codeUnits.total} files, most connected first`
-                          : `${codeUnits.total} files, most connected first`}
+                        {codeUnits.sampled
+                          ? `Showing ${codeUnits.shown} of ${codeUnits.total} ranked candidates, most connected first`
+                          : codeUnits.shown < codeUnits.total
+                            ? `Showing ${codeUnits.shown} of ${codeUnits.total} files, most connected first`
+                            : `${codeUnits.total} files, most connected first`}
                       </p>
                     )}
                   </div>

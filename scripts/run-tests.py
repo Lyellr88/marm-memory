@@ -204,7 +204,9 @@ def main() -> int:
         return 1
     pnpm = pnpm_executable()
     if pnpm is None:
-        print(f"{RED}pnpm is required for Console checks but was not found on PATH.{RESET}")
+        print(
+            f"{RED}pnpm is required for Console checks but was not found on PATH.{RESET}"
+        )
         return 1
 
     if args.docker:

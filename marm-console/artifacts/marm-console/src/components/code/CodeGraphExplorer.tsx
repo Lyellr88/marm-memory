@@ -48,7 +48,7 @@ export function CodeGraphExplorer({
   return <div className="flex min-h-0 flex-1 flex-col gap-4">
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
       <Metric label="Indexed graph" value={`${project.nodes.toLocaleString()} nodes`} detail={`${project.edges.toLocaleString()} relationships`} />
-      <Metric label="Code files" value={graph.total.code_units.toLocaleString()} detail={`${graph.rendered.code_units.toLocaleString()} rendered`} tone="cyan" />
+      <Metric label={graph.sampled ? 'Code-file sample' : 'Code files'} value={graph.total.code_units.toLocaleString()} detail={`${graph.rendered.code_units.toLocaleString()} rendered`} tone="cyan" />
       <Metric label="Import edges" value={graph.total.import_edges.toLocaleString()} detail={`${graph.rendered.import_edges.toLocaleString()} visible`} tone="violet" />
       <Metric label="Layer" value="Code Graph" detail="Independent of memories" tone="emerald" />
     </div>

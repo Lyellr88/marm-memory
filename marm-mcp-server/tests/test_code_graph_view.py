@@ -225,6 +225,52 @@ def test_total_reports_the_population_and_shown_reports_the_slice():
     assert len(result["code_units"]) == 1
 
 
+def test_code_unit_candidates_are_ranked_and_limited_by_the_engine():
+    client = FakeClient()
+
+    V.code_units(client, PROJECT)
+
+    queries = [args["query"] for _, args in client.calls]
+    assert all(f"LIMIT {V.MAX_LIMIT}" in query for query in queries)
+    assert any("ORDER BY fan_in DESC, unit" in query for query in queries)
+    assert any("ORDER BY fan_out DESC, unit" in query for query in queries)
+    assert all("max_rows" not in args for _, args in client.calls)
+
+
+def test_ranked_fan_candidates_are_not_lost_to_the_alphabetical_file_page():
+    alphabetical_page = {
+        "columns": ["unit"],
+        "rows": [[f"src/a{index:04d}.py"] for index in range(V.MAX_LIMIT)],
+        "total": V.MAX_LIMIT,
+    }
+    hub = "src/zzz_hub.py"
+    client = FakeClient(
+        replies={
+            "f.file_path AS unit": alphabetical_page,
+            "AS fan_in": {
+                "columns": ["unit", "fan_in"],
+                "rows": [[hub, "480"]],
+                "total": 1,
+            },
+            "AS fan_out": {
+                "columns": ["unit", "fan_out"],
+                "rows": [[hub, "460"]],
+                "total": 1,
+            },
+        }
+    )
+
+    result = V.code_units(client, PROJECT, limit=3)
+
+    assert result["sampled"] is True
+    assert result["total"] == V.MAX_LIMIT
+    assert result["code_units"][0] == {
+        "unit": hub,
+        "fan_in": 480,
+        "fan_out": 460,
+    }
+
+
 def test_the_limit_is_bounded_at_both_ends():
     assert V.code_units(FakeClient(), PROJECT, limit=0)["shown"] == 1
     huge = V.code_units(FakeClient(), PROJECT, limit=10_000)
@@ -361,7 +407,11 @@ def test_code_graph_returns_a_bounded_file_import_snapshot():
     imports_call = next(
         args for name, args in client.calls if "AS source" in args.get("query", "")
     )
-    assert imports_call["max_rows"] == V.GRAPH_EDGE_LIMIT
+    query = imports_call["query"]
+    assert "WHERE a.file_path IN [" in query
+    assert "AND b.file_path IN [" in query
+    assert f"LIMIT {V.GRAPH_EDGE_LIMIT}" in query
+    assert "max_rows" not in imports_call
 
 
 def test_code_graph_unavailable_state_keeps_its_visualization_shape():
@@ -438,3 +488,8 @@ def test_code_graph_neighborhood_rejects_backslash_before_engine_call():
 
     assert result["reason"] == "invalid_node"
     assert client.calls == []
+
+
+def test_import_edge_query_rejects_unvalidated_paths():
+    with pytest.raises(ValueError, match="validated file identities"):
+        V._import_edges_query(["src/unsafe'path.py"])
