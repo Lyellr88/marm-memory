@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 from .. import mcp_client
 from ..models import (
     ProjectAdrPayload,
     ProjectDeletePayload,
-    ProjectGraphQueryPayload,
     ProjectImpactPayload,
     ProjectIndexPayload,
     ProjectRuntimeTracesPayload,
@@ -69,13 +68,6 @@ def get_project_status(project: str) -> dict:
 @router.get("/api/projects/{project}/coverage")
 def get_project_coverage(project: str) -> dict:
     return _project_operation("internal/projects/coverage", {"project": project})
-
-
-@router.post("/api/projects/{project}/query")
-def query_project_graph(project: str, payload: ProjectGraphQueryPayload) -> dict:
-    return _project_operation(
-        "internal/projects/query", {"project": project, **payload.model_dump()}
-    )
 
 
 @router.get("/api/projects/{project}/adr")
@@ -140,23 +132,30 @@ def get_project_architecture(project: str) -> dict:
     schema = result.get("schema", {})
     if not isinstance(schema, dict):
         schema = {}
+    node_types = _type_entries(
+        result.get("node_labels")
+        or schema.get("node_labels")
+        or schema.get("node_types", []),
+        "label",
+    )
+    edge_types = _type_entries(
+        result.get("edge_types")
+        or schema.get("edge_types")
+        or schema.get("edge_labels")
+        or schema.get("relationship_types", []),
+        "type",
+    )
+    has_summary = bool(node_types or edge_types)
     return {
         "name": project,
         "modules": modules if isinstance(modules, list) else [],
+        "state": "ready" if has_summary else "indexed_no_summary",
+        "message": None
+        if has_summary
+        else "The graph engine returned no architecture summary.",
         "schema": {
-            "node_types": _type_entries(
-                result.get("node_labels")
-                or schema.get("node_labels")
-                or schema.get("node_types", []),
-                "label",
-            ),
-            "edge_types": _type_entries(
-                result.get("edge_types")
-                or schema.get("edge_types")
-                or schema.get("edge_labels")
-                or schema.get("relationship_types", []),
-                "type",
-            ),
+            "node_types": node_types,
+            "edge_types": edge_types,
         },
     }
 
@@ -170,6 +169,24 @@ def get_project_code_units(project: str) -> dict:
     and this one owns its response end to end.
     """
     return _project_operation("internal/projects/code-units", {"project": project})
+
+
+@router.get("/api/projects/{project}/graph")
+def get_project_graph(project: str) -> dict:
+    return _project_operation("internal/projects/graph", {"project": project})
+
+
+@router.get("/api/projects/{project}/graph/neighborhood")
+def get_project_graph_neighborhood(
+    project: str,
+    node_id: str = Query(
+        ..., min_length=1, max_length=1024, pattern=r"^[A-Za-z0-9._/\\@+()\[\] -]+$"
+    ),
+) -> dict:
+    return _project_operation(
+        "internal/projects/graph/neighborhood",
+        {"project": project, "node_id": node_id},
+    )
 
 
 @router.post("/api/projects/{project}/search")

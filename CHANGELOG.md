@@ -1,6 +1,25 @@
 # Changelog
 
 <details>
+<summary><strong>August 23rd, 2026: Code Explorer in Knowledge Graph (v2.42.0)</strong></summary>
+
+### Added: A Separate Code Explorer
+
+- Knowledge Graph now separates its three graph workflows into **Memory Explorer**, **Code Explorer**, and **Potential Duplicates**. Code Explorer lets you choose any indexed repository and inspect its code structure without requiring stored memories or concept extraction first.
+- Code Explorer renders a bounded file/import topology with graph totals, visible counts, filtering, file focus, direct import/importer expansion, and clear unavailable or sparse-index states. Large repositories stay bounded while still showing what portion of the indexed graph is visible.
+
+### Changed: Safer, Clearer Project Investigation
+
+- The browser-entered read-only graph query was removed. Project Explore now uses its guided Investigate surface for search, tracing, architecture, impact, coverage, decisions, and runtime evidence; visual code-graph work belongs in Knowledge Graph → Code Explorer.
+- Architecture now distinguishes backend failure, an index with no graph nodes, and an indexed project whose engine architecture summary is sparse, rather than presenting a blank panel.
+
+### Internal
+
+- Code Graph views use fixed, bounded server-owned query templates. Repository indexing and deletion clear both graph-overview and expanded-neighborhood Console caches, and the graph renderer keeps the cached edge data immutable while the force layout runs.
+
+</details>
+
+<details>
 <summary><strong>August 22nd, 2026: Indexed Projects Workspace and Runtime Controls (v2.41.1)</strong></summary>
 
 ### Changed: Indexing Is Now a First-Class Projects Workspace

@@ -225,6 +225,52 @@ def test_total_reports_the_population_and_shown_reports_the_slice():
     assert len(result["code_units"]) == 1
 
 
+def test_code_unit_candidates_are_ranked_and_limited_by_the_engine():
+    client = FakeClient()
+
+    V.code_units(client, PROJECT)
+
+    queries = [args["query"] for _, args in client.calls]
+    assert all(f"LIMIT {V.MAX_LIMIT}" in query for query in queries)
+    assert any("ORDER BY fan_in DESC, unit" in query for query in queries)
+    assert any("ORDER BY fan_out DESC, unit" in query for query in queries)
+    assert all("max_rows" not in args for _, args in client.calls)
+
+
+def test_ranked_fan_candidates_are_not_lost_to_the_alphabetical_file_page():
+    alphabetical_page = {
+        "columns": ["unit"],
+        "rows": [[f"src/a{index:04d}.py"] for index in range(V.MAX_LIMIT)],
+        "total": V.MAX_LIMIT,
+    }
+    hub = "src/zzz_hub.py"
+    client = FakeClient(
+        replies={
+            "f.file_path AS unit": alphabetical_page,
+            "AS fan_in": {
+                "columns": ["unit", "fan_in"],
+                "rows": [[hub, "480"]],
+                "total": 1,
+            },
+            "AS fan_out": {
+                "columns": ["unit", "fan_out"],
+                "rows": [[hub, "460"]],
+                "total": 1,
+            },
+        }
+    )
+
+    result = V.code_units(client, PROJECT, limit=3)
+
+    assert result["sampled"] is True
+    assert result["total"] == V.MAX_LIMIT
+    assert result["code_units"][0] == {
+        "unit": hub,
+        "fan_in": 480,
+        "fan_out": 460,
+    }
+
+
 def test_the_limit_is_bounded_at_both_ends():
     assert V.code_units(FakeClient(), PROJECT, limit=0)["shown"] == 1
     huge = V.code_units(FakeClient(), PROJECT, limit=10_000)
@@ -316,3 +362,175 @@ def test_the_response_admits_fan_in_is_a_lower_bound():
     """`from package import module` attributes to a Folder node, never to the
     imported file, so the number is a floor and the UI must not claim otherwise."""
     assert V.code_units(FakeClient(), PROJECT)["fan_in_is_lower_bound"] is True
+
+
+def test_code_graph_returns_a_bounded_file_import_snapshot():
+    client = FakeClient(
+        replies={
+            "f.file_path AS unit": UNITS_REPLY,
+            "count(DISTINCT a.file_path) AS fan_in": FAN_IN_REPLY,
+            "count(DISTINCT b.file_path) AS fan_out": FAN_OUT_REPLY,
+            "a.file_path AS source": {
+                "columns": ["source", "target", "import_count"],
+                "rows": [
+                    [
+                        "marm-mcp-server/marm_mcp_server/core/memory.py",
+                        "marm-mcp-server/marm_mcp_server/config/settings.py",
+                        "2",
+                    ],
+                    [
+                        "marm-mcp-server/marm_mcp_server/core/memory.py",
+                        "marm-mcp-server/marm_mcp_server/config/settings.py",
+                        "2",
+                    ],
+                    ["marm-mcp-server/marm_mcp_server/server.py", "README.md", "1"],
+                ],
+                "total": 3,
+            },
+            "count(r) AS total": {"columns": ["total"], "rows": [["984"]], "total": 1},
+        }
+    )
+
+    result = V.code_graph(client, PROJECT)
+
+    assert result["state"] == "ready"
+    assert result["total"] == {"code_units": 3, "import_edges": 984}
+    assert result["rendered"] == {"code_units": 3, "import_edges": 1}
+    assert result["truncated"] is True
+    assert result["nodes"][0]["id"].endswith("memory.py")
+    assert result["edges"] == [
+        {
+            "source": "marm-mcp-server/marm_mcp_server/core/memory.py",
+            "target": "marm-mcp-server/marm_mcp_server/config/settings.py",
+            "relation": "imports",
+            "count": 4,
+        }
+    ]
+    imports_call = next(
+        args for name, args in client.calls if "AS source" in args.get("query", "")
+    )
+    query = imports_call["query"]
+    assert "WHERE a.file_path IN [" in query
+    assert "AND b.file_path IN [" in query
+    assert "count(r) AS import_count" in query
+    assert f"LIMIT {V.GRAPH_EDGE_LIMIT}" in query
+    assert "max_rows" not in imports_call
+
+
+def test_code_graph_limits_aggregated_pairs_not_raw_import_statements():
+    memory = "marm-mcp-server/marm_mcp_server/core/memory.py"
+    settings = "marm-mcp-server/marm_mcp_server/config/settings.py"
+    server = "marm-mcp-server/marm_mcp_server/server.py"
+    client = FakeClient(
+        replies={
+            "f.file_path AS unit": UNITS_REPLY,
+            "count(DISTINCT a.file_path) AS fan_in": FAN_IN_REPLY,
+            "count(DISTINCT b.file_path) AS fan_out": FAN_OUT_REPLY,
+            "a.file_path AS source": {
+                "columns": ["source", "target", "import_count"],
+                "rows": [
+                    [memory, settings, str(V.GRAPH_EDGE_LIMIT + 1)],
+                    [server, memory, "1"],
+                ],
+                "total": 2,
+            },
+            "count(r) AS total": {
+                "columns": ["total"],
+                "rows": [[str(V.GRAPH_EDGE_LIMIT + 2)]],
+                "total": 1,
+            },
+        }
+    )
+
+    result = V.code_graph(client, PROJECT)
+
+    assert result["edges"] == [
+        {
+            "source": memory,
+            "target": settings,
+            "relation": "imports",
+            "count": V.GRAPH_EDGE_LIMIT + 1,
+        },
+        {"source": server, "target": memory, "relation": "imports", "count": 1},
+    ]
+
+
+def test_code_graph_unavailable_state_keeps_its_visualization_shape():
+    result = V.code_graph(FakeClient(), "has spaces and quotes '")
+
+    assert result == {
+        "state": "unavailable",
+        "reason": "invalid_project",
+        "total": {"code_units": 0, "import_edges": 0},
+        "rendered": {"code_units": 0, "import_edges": 0},
+        "truncated": False,
+        "nodes": [],
+        "edges": [],
+    }
+
+
+def test_code_graph_neighborhood_uses_only_bounded_server_owned_templates():
+    node_id = "marm-mcp-server/marm_mcp_server/core/memory.py"
+    client = FakeClient(
+        replies={
+            f"WHERE a.file_path = '{node_id}' RETURN a.file_path AS source": {
+                "columns": ["source", "target"],
+                "rows": [
+                    [node_id, "marm-mcp-server/marm_mcp_server/config/settings.py"]
+                ],
+                "total": 1,
+            },
+            f"WHERE b.file_path = '{node_id}' RETURN a.file_path AS source": {
+                "columns": ["source", "target"],
+                "rows": [["marm-mcp-server/marm_mcp_server/server.py", node_id]],
+                "total": 1,
+            },
+            f"WHERE a.file_path = '{node_id}' RETURN count(r) AS total": {
+                "columns": ["total"],
+                "rows": [["1"]],
+                "total": 1,
+            },
+            f"WHERE b.file_path = '{node_id}' RETURN count(r) AS total": {
+                "columns": ["total"],
+                "rows": [["1"]],
+                "total": 1,
+            },
+        }
+    )
+
+    result = V.code_graph_neighborhood(client, PROJECT, node_id)
+
+    assert result["state"] == "ready"
+    assert result["seed_id"] == node_id
+    assert result["total_imports"] == result["rendered_imports"] == 2
+    assert {node["id"] for node in result["nodes"]} == {
+        node_id,
+        "marm-mcp-server/marm_mcp_server/config/settings.py",
+        "marm-mcp-server/marm_mcp_server/server.py",
+    }
+    assert all(
+        args["max_rows"] == V.NEIGHBORHOOD_EDGE_LIMIT for _, args in client.calls[:2]
+    )
+
+
+def test_code_graph_neighborhood_rejects_query_shaped_node_ids_before_engine_call():
+    client = FakeClient()
+
+    result = V.code_graph_neighborhood(client, PROJECT, "x' RETURN n; MATCH (n)")
+
+    assert result["reason"] == "invalid_node"
+    assert client.calls == []
+
+
+def test_code_graph_neighborhood_rejects_backslash_before_engine_call():
+    client = FakeClient()
+
+    result = V.code_graph_neighborhood(client, PROJECT, r"path\\")
+
+    assert result["reason"] == "invalid_node"
+    assert client.calls == []
+
+
+def test_import_edge_query_rejects_unvalidated_paths():
+    with pytest.raises(ValueError, match="validated file identities"):
+        V._import_edges_query(["src/unsafe'path.py"])

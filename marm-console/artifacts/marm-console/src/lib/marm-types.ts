@@ -495,21 +495,6 @@ export interface ProjectCoverage {
   caveat?: string;
 }
 
-export interface GraphQueryInput {
-  query: string;
-  graph?: 'code' | 'missed';
-  max_rows?: number;
-}
-
-export interface GraphQueryResult {
-  status?: string;
-  message?: string;
-  columns?: string[];
-  rows?: unknown[][];
-  total?: number;
-  [key: string]: unknown;
-}
-
 export interface ProjectAdr {
   content?: string;
   status?: string;
@@ -532,6 +517,8 @@ export interface GraphTypeEntry {
 
 export interface ProjectArchitecture {
   name: string;
+  state: 'ready' | 'indexed_no_summary';
+  message?: string | null;
   schema: { node_types: GraphTypeEntry[]; edge_types: GraphTypeEntry[] };
 }
 
@@ -550,8 +537,50 @@ export interface CodeUnits {
   message?: string;
   total: number;
   shown: number;
+  sampled?: boolean;
   fan_in_is_lower_bound?: boolean;
   code_units: CodeUnit[];
+}
+
+export interface CodeGraphNode {
+  id: string;
+  label: string;
+  path: string;
+  kind: 'file';
+  fan_in: number | null;
+  fan_out: number | null;
+}
+
+export interface CodeGraphEdge {
+  source: string;
+  target: string;
+  relation: 'imports';
+  count: number;
+}
+
+export interface CodeGraphSnapshot {
+  state: 'ready' | 'indexed_no_summary' | 'empty_index' | 'unavailable';
+  reason?: string;
+  message?: string;
+  total: { code_units: number; import_edges: number };
+  rendered: { code_units: number; import_edges: number };
+  truncated: boolean;
+  sampled?: boolean;
+  sample_reason?: string;
+  nodes: CodeGraphNode[];
+  edges: CodeGraphEdge[];
+}
+
+export interface CodeGraphNeighborhood {
+  state: 'ready' | 'unavailable';
+  reason?: string;
+  message?: string;
+  seed_id?: string;
+  total_imports?: number;
+  rendered_imports?: number;
+  truncated?: boolean;
+  nodes: CodeGraphNode[];
+  edges: CodeGraphEdge[];
 }
 
 export type CodeSearchKind = 'auto' | 'symbol' | 'text' | 'snippet';

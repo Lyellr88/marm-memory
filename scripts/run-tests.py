@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -18,6 +19,9 @@ RESET = "\033[0m"
 ROOT = Path(__file__).resolve().parent.parent
 SERVER_ROOT = ROOT / "marm-mcp-server"
 TESTS_ROOT = SERVER_ROOT / "tests"
+CONSOLE_ROOT = ROOT / "marm-console"
+CONSOLE_TESTS_ROOT = CONSOLE_ROOT / "tests"
+CONSOLE_APP_ROOT = CONSOLE_ROOT / "artifacts" / "marm-console"
 BASE_TEMP = Path(r"C:\tmp\marm-pytest") if os.name == "nt" else Path("/tmp/marm-pytest")
 # Outside the repo, and shallow. Inside it, pytest's per-test temp paths ran ~100
 # characters deep before the test even started, and the graph engine names each
@@ -108,6 +112,29 @@ def run_pytest_all(args: argparse.Namespace) -> bool:
     return run_step("Pytest suite", command, SERVER_ROOT, env=environment)
 
 
+def run_console_route_tests(args: argparse.Namespace) -> bool:
+    command = pytest_base_command(args)
+    command.append("tests")
+    return run_step("Console route contracts", command, CONSOLE_ROOT, env=pytest_env())
+
+
+def pnpm_executable() -> str | None:
+    # PowerShell can resolve the extensionless npm shim, but subprocess on
+    # Windows needs the runnable .cmd file.
+    return shutil.which("pnpm.cmd") or shutil.which("pnpm")
+
+
+def run_console_frontend_checks(pnpm: str) -> bool:
+    for name, command in (
+        ("Console typecheck", [pnpm, "typecheck"]),
+        ("Console Vitest suite", [pnpm, "test"]),
+        ("Console production build", [pnpm, "build"]),
+    ):
+        if not run_step(name, command, CONSOLE_APP_ROOT):
+            return False
+    return True
+
+
 def run_compile_check(cwd: Path, *targets: str) -> bool:
     return run_step(
         "Python compile check",
@@ -118,7 +145,7 @@ def run_compile_check(cwd: Path, *targets: str) -> bool:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run MARM MCP tests with Docker and slow checks opt-in."
+        description="Run MARM server and Console tests with Docker and slow checks opt-in."
     )
     parser.add_argument(
         "--fast",
@@ -172,6 +199,15 @@ def main() -> int:
     if not SERVER_ROOT.exists():
         print(f"{RED}MCP server folder not found: {SERVER_ROOT}{RESET}")
         return 1
+    if not CONSOLE_TESTS_ROOT.exists() or not CONSOLE_APP_ROOT.exists():
+        print(f"{RED}Console test workspace not found under: {CONSOLE_ROOT}{RESET}")
+        return 1
+    pnpm = pnpm_executable()
+    if pnpm is None:
+        print(
+            f"{RED}pnpm is required for Console checks but was not found on PATH.{RESET}"
+        )
+        return 1
 
     if args.docker:
         if not docker_available():
@@ -203,6 +239,10 @@ def main() -> int:
 
     ok = run_pytest_all(args)
     if not ok:
+        print(f"\n{RED}Test runner failed.{RESET}")
+        return 1
+
+    if not run_console_route_tests(args) or not run_console_frontend_checks(pnpm):
         print(f"\n{RED}Test runner failed.{RESET}")
         return 1
 
