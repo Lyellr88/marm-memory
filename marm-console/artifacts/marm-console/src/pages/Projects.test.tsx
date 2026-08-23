@@ -39,7 +39,6 @@ vi.mock('@/hooks/use-marm-queries', () => ({
   useProjectArchitecture: () => ({ data: undefined, isLoading: false }),
   useProjectCodeUnits: () => ({ data: undefined, isLoading: false, isError: false }),
   useProjectCoverage: () => ({ data: undefined, isLoading: false, isError: false }),
-  useProjectGraphQuery: () => ({ isPending: false, mutate: vi.fn(), reset: mutationState.graphQueryReset }),
   useProjectAdr: (project: string) => ({
     data: project === 'marm-systems'
       ? { content: '# First project decisions' }
@@ -81,7 +80,7 @@ describe('ProjectsPage', () => {
     await user.click(screen.getByRole('button', { name: 'Explore' }));
 
     expect(screen.getByText('Code graph explorer')).toBeTruthy();
-    expect(screen.getByRole('tab', { name: 'Code search' })).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Investigate' })).toBeTruthy();
     expect(screen.getByRole('tab', { name: 'Runtime traces' })).toBeTruthy();
   });
 
@@ -140,7 +139,6 @@ describe('ProjectsPage', () => {
 
     view.rerender(renderDialog(secondProject));
 
-    expect(mutationState.graphQueryReset).toHaveBeenCalledTimes(2);
     expect(mutationState.updateAdrReset).toHaveBeenCalledTimes(2);
     expect(mutationState.ingestTraceReset).toHaveBeenCalledTimes(2);
   });

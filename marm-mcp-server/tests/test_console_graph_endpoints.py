@@ -199,6 +199,34 @@ def test_the_code_units_endpoint_does_not_flatten_a_degraded_state(monkeypatch):
     assert body["reason"] == "contract_mismatch"
 
 
+def test_the_code_graph_endpoint_passes_the_bounded_snapshot_through(monkeypatch):
+    snapshot = {
+        "state": "ready",
+        "total": {"code_units": 238, "import_edges": 950},
+        "rendered": {"code_units": 80, "import_edges": 124},
+        "truncated": True,
+        "sample_reason": "bounded",
+        "nodes": [
+            {
+                "id": "src/main.py",
+                "label": "main.py",
+                "path": "src/main.py",
+                "kind": "file",
+                "fan_in": 3,
+                "fan_out": 4,
+            }
+        ],
+        "edges": [],
+    }
+    monkeypatch.setattr(mcp_client, "post", lambda *a, **k: snapshot)
+
+    with TestClient(app) as client:
+        response = client.get("/api/projects/proj/graph")
+
+    assert response.status_code == 200
+    assert response.json() == snapshot
+
+
 def test_normalization_did_not_leak_into_the_agent_facing_tool():
     """The counts are the useful part for a model, and `tool_router` is shared.
     Reducing labels there to satisfy one UI table would strip data from every
@@ -228,7 +256,23 @@ def test_project_intelligence_routes_preserve_the_console_contract(monkeypatch):
             "metadata": {"generation_matches": True},
             "scopes": [{"total": 0, "entries": []}],
         },
-        "internal/projects/query": {"columns": ["name"], "rows": [["main"]]},
+        "internal/projects/graph": {
+            "state": "ready",
+            "total": {"code_units": 3, "import_edges": 5},
+            "rendered": {"code_units": 3, "import_edges": 2},
+            "truncated": True,
+            "nodes": [],
+            "edges": [],
+        },
+        "internal/projects/graph/neighborhood": {
+            "state": "ready",
+            "seed_id": "src/main.py",
+            "total_imports": 1,
+            "rendered_imports": 1,
+            "truncated": False,
+            "nodes": [],
+            "edges": [],
+        },
         "internal/projects/adr": {"content": "# Decisions"},
         "internal/projects/adr/update": {"status": "success"},
         "internal/projects/runtime-traces": {"status": "success", "ingested": 1},
@@ -244,9 +288,9 @@ def test_project_intelligence_routes_preserve_the_console_contract(monkeypatch):
     contract_app.include_router(projects_router)
     with TestClient(contract_app) as client:
         coverage = client.get("/api/projects/proj/coverage")
-        query = client.post(
-            "/api/projects/proj/query",
-            json={"query": "MATCH (n) RETURN n.name", "max_rows": 25},
+        graph = client.get("/api/projects/proj/graph")
+        neighborhood = client.get(
+            "/api/projects/proj/graph/neighborhood?node_id=src/main.py"
         )
         adr = client.get("/api/projects/proj/adr")
         update = client.put("/api/projects/proj/adr", json={"content": "# Decisions"})
@@ -255,22 +299,25 @@ def test_project_intelligence_routes_preserve_the_console_contract(monkeypatch):
             json={"traces": [{"caller": "app.main", "callee": "db.save", "count": 3}]},
         )
 
-    assert coverage.status_code == query.status_code == adr.status_code == 200
+    assert (
+        coverage.status_code
+        == graph.status_code
+        == neighborhood.status_code
+        == adr.status_code
+        == 200
+    )
     assert update.status_code == traces.status_code == 200
     assert coverage.json()["signal"] == "best_effort"
-    assert query.json()["rows"] == [["main"]]
+    assert graph.json()["rendered"] == {"code_units": 3, "import_edges": 2}
+    assert neighborhood.json()["seed_id"] == "src/main.py"
     assert adr.json()["content"] == "# Decisions"
     assert update.json()["status"] == traces.json()["status"] == "success"
     assert calls == [
         ("internal/projects/coverage", {"project": "proj"}),
+        ("internal/projects/graph", {"project": "proj"}),
         (
-            "internal/projects/query",
-            {
-                "project": "proj",
-                "query": "MATCH (n) RETURN n.name",
-                "graph": "code",
-                "max_rows": 25,
-            },
+            "internal/projects/graph/neighborhood",
+            {"project": "proj", "node_id": "src/main.py"},
         ),
         ("internal/projects/adr", {"project": "proj"}),
         ("internal/projects/adr/update", {"project": "proj", "content": "# Decisions"}),

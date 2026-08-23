@@ -9,7 +9,6 @@ marm_graph's tool_router, matching marm_graph's own asyncio.to_thread pattern.
 
 import asyncio
 import os
-import re
 import threading
 import uuid
 from datetime import datetime, timezone
@@ -59,6 +58,15 @@ class ConsoleProjectRequest(BaseModel):
     project: str = Field(..., min_length=1, max_length=512)
 
 
+class ConsoleGraphNeighborhoodRequest(ConsoleProjectRequest):
+    node_id: str = Field(
+        ...,
+        min_length=1,
+        max_length=1024,
+        pattern=r"^[A-Za-z0-9._/\\@+()\[\] -]+$",
+    )
+
+
 class ConsoleTraceRequest(BaseModel):
     project: str = Field(..., min_length=1, max_length=512)
     symbol: str = Field(..., min_length=1, max_length=1024)
@@ -71,13 +79,6 @@ class ConsoleDeleteProjectRequest(BaseModel):
     project: str = Field(..., min_length=1, max_length=512)
     name: str = Field(..., min_length=1, max_length=512)
     confirm: bool = False
-
-
-class ConsoleGraphQueryRequest(BaseModel):
-    project: str = Field(..., min_length=1, max_length=512)
-    query: str = Field(..., min_length=1, max_length=12000)
-    graph: Literal["code", "missed"] = "code"
-    max_rows: int = Field(100, ge=1, le=1000)
 
 
 class ConsoleAdrUpdateRequest(BaseModel):
@@ -94,12 +95,6 @@ class ConsoleRuntimeTrace(BaseModel):
 class ConsoleRuntimeTracesRequest(BaseModel):
     project: str = Field(..., min_length=1, max_length=512)
     traces: list[ConsoleRuntimeTrace] = Field(..., min_length=1, max_length=500)
-
-
-_GRAPH_WRITE_CLAUSE = re.compile(
-    r"\b(CREATE|MERGE|DELETE|DETACH|SET|REMOVE|DROP|LOAD\s+CSV|FOREACH)\b",
-    re.IGNORECASE,
-)
 
 
 def _now_iso() -> str:
@@ -451,24 +446,6 @@ async def console_project_coverage(req: ConsoleProjectRequest) -> dict:
     )
 
 
-@router.post("/internal/projects/query")
-async def console_project_query(req: ConsoleGraphQueryRequest) -> dict:
-    if _GRAPH_WRITE_CLAUSE.search(req.query):
-        return {
-            "status": "rejected",
-            "message": "Graph queries are read-only. Write clauses are not permitted.",
-        }
-    return await _console_engine_call(
-        "query_graph",
-        {
-            "project": req.project,
-            "query": req.query,
-            "graph": req.graph,
-            "max_rows": req.max_rows,
-        },
-    )
-
-
 @router.post("/internal/projects/adr")
 async def console_project_adr(req: ConsoleProjectRequest) -> dict:
     return await _console_engine_call(
@@ -525,6 +502,36 @@ async def console_project_code_units(req: ConsoleProjectRequest) -> dict:
         # leaving the table blank rather than saying the graph is unavailable.
         return code_graph_view.unavailable("graph_unavailable")
     return await asyncio.to_thread(code_graph_view.code_units, client, req.project)
+
+
+@router.post("/internal/projects/graph")
+async def console_project_graph(req: ConsoleProjectRequest) -> dict:
+    """Return the Console's bounded file/import graph snapshot.
+
+    This stays outside the MCP tool surface. The view owns fixed engine queries,
+    so callers select a project but never submit graph query text.
+    """
+    client = await asyncio.to_thread(graph_supervisor.get_client)
+    if client is None:
+        return code_graph_view.graph_unavailable("graph_unavailable")
+    return await asyncio.to_thread(code_graph_view.code_graph, client, req.project)
+
+
+@router.post("/internal/projects/graph/neighborhood")
+async def console_project_graph_neighborhood(
+    req: ConsoleGraphNeighborhoodRequest,
+) -> dict:
+    client = await asyncio.to_thread(graph_supervisor.get_client)
+    if client is None:
+        return {
+            "state": "unavailable",
+            "reason": "graph_unavailable",
+            "nodes": [],
+            "edges": [],
+        }
+    return await asyncio.to_thread(
+        code_graph_view.code_graph_neighborhood, client, req.project, req.node_id
+    )
 
 
 @router.post("/internal/projects/search")

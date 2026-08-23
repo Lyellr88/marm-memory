@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useProjects, useIndexProject, useIndexJob, useDeleteProject, useSearchProjectCode, useTraceProject, useProjectImpact, useProjectArchitecture, useProjectCodeUnits, useProjectCoverage, useProjectGraphQuery, useProjectAdr, useUpdateProjectAdr, useIngestProjectRuntimeTraces, useMarmConfig } from '@/hooks/use-marm-queries';
+import { useProjects, useIndexProject, useIndexJob, useDeleteProject, useSearchProjectCode, useTraceProject, useProjectImpact, useProjectArchitecture, useProjectCodeUnits, useProjectCoverage, useProjectAdr, useUpdateProjectAdr, useIngestProjectRuntimeTraces, useMarmConfig } from '@/hooks/use-marm-queries';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, Badge, Button, Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Tabs, TabsList, TabsTrigger, TabsContent, Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/core';
-import { Activity, BookOpen, CheckCircle2, CircleAlert, Clock3, Code2, FileWarning, FolderCode, HardDrive, Network, Play, RefreshCw, Save, Search, SearchCode, Trash2, Upload, XCircle } from 'lucide-react';
+import { Activity, BookOpen, CheckCircle2, CircleAlert, Clock3, FileWarning, FolderCode, HardDrive, Network, Play, RefreshCw, Save, Search, SearchCode, Trash2, Upload, XCircle } from 'lucide-react';
 import type { IndexMode, ProjectSummary, CodeSearchKind, RuntimeTrace, TraceDirection, TraceMode } from '@/lib/marm-types';
 
 const INDEX_MODES: Array<{ value: IndexMode; label: string; description: string }> = [
@@ -45,8 +45,12 @@ function IndexWorkspace({ repoPath, setRepoPath, mode, setMode, jobId, setJobId 
   useEffect(() => {
     if (jobStatus && jobStatus.status !== 'queued' && jobStatus.status !== 'running') {
       queryClient.invalidateQueries({ queryKey: ['projects', baseUrl] });
+      if (jobStatus.project) {
+        queryClient.invalidateQueries({ queryKey: ['projectGraph', baseUrl, jobStatus.project] });
+        queryClient.invalidateQueries({ queryKey: ['projectGraphNeighborhood', baseUrl, jobStatus.project] });
+      }
     }
-  }, [baseUrl, jobStatus?.status, queryClient]);
+  }, [baseUrl, jobStatus?.project, jobStatus?.status, queryClient]);
 
   return (
     <section id="index-workspace" className="project-index-workspace grid gap-5 rounded-2xl border border-primary/20 bg-card/80 p-5 shadow-[0_18px_50px_-30px_hsl(var(--primary)/0.7)] lg:grid-cols-[minmax(0,1fr)_19rem]">
@@ -149,13 +153,13 @@ function DeleteDialog({ project, open, onOpenChange }: { project: ProjectSummary
 }
 
 export function ExploreDialog({ project, open, onOpenChange }: { project: ProjectSummary | null, open: boolean, onOpenChange: (o: boolean) => void }) {
+  const [activeTab, setActiveTab] = useState('search');
   const searchCode = useSearchProjectCode();
   const traceCode = useTraceProject();
   const impactCode = useProjectImpact();
-  const graphQuery = useProjectGraphQuery();
   const updateAdr = useUpdateProjectAdr();
   const ingestRuntimeTraces = useIngestProjectRuntimeTraces();
-  const { data: architecture, isLoading: architectureLoading } = useProjectArchitecture(project?.name || '');
+  const { data: architecture, isLoading: architectureLoading, isError: architectureFailed } = useProjectArchitecture(project?.name || '');
   const { data: codeUnits, isLoading: codeUnitsLoading, isError: codeUnitsFailed } = useProjectCodeUnits(project?.name || '');
   const { data: coverage, isLoading: coverageLoading, isError: coverageFailed } = useProjectCoverage(project?.name || '');
   const { data: adr, isLoading: adrLoading } = useProjectAdr(project?.name || '');
@@ -175,12 +179,10 @@ export function ExploreDialog({ project, open, onOpenChange }: { project: Projec
 
   // Impact
   const [impactBranch, setImpactBranch] = useState('main');
-  const [graphQueryText, setGraphQueryText] = useState('MATCH (f:Function) RETURN f.qualified_name LIMIT 25');
   const [adrDraft, setAdrDraft] = useState('');
   const [runtimeCaller, setRuntimeCaller] = useState('');
   const [runtimeCallee, setRuntimeCallee] = useState('');
   const [runtimeCount, setRuntimeCount] = useState('1');
-  const [activeTab, setActiveTab] = useState('search');
 
   useEffect(() => setAdrDraft(''), [project?.name]);
 
@@ -188,7 +190,6 @@ export function ExploreDialog({ project, open, onOpenChange }: { project: Projec
     searchCode.reset();
     traceCode.reset();
     impactCode.reset();
-    graphQuery.reset();
     updateAdr.reset();
     ingestRuntimeTraces.reset();
   }, [project?.name]);
@@ -228,7 +229,7 @@ export function ExploreDialog({ project, open, onOpenChange }: { project: Projec
             <TabsTrigger value="trace" className="project-explorer-tab"><Activity className="h-3.5 w-3.5" /><span>Trace symbol</span></TabsTrigger>
             <TabsTrigger value="impact" className="project-explorer-tab"><CircleAlert className="h-3.5 w-3.5" /><span>Impact</span></TabsTrigger>
             <TabsTrigger value="coverage" className="project-explorer-tab"><FileWarning className="h-3.5 w-3.5" /><span>Coverage</span></TabsTrigger>
-            <TabsTrigger value="query" className="project-explorer-tab"><Code2 className="h-3.5 w-3.5" /><span>Graph query</span></TabsTrigger>
+            <TabsTrigger value="investigate" className="project-explorer-tab"><SearchCode className="h-3.5 w-3.5" /><span>Investigate</span></TabsTrigger>
             <TabsTrigger value="adr" className="project-explorer-tab"><BookOpen className="h-3.5 w-3.5" /><span>Decisions</span></TabsTrigger>
             <TabsTrigger value="runtime" className="project-explorer-tab"><Upload className="h-3.5 w-3.5" /><span>Runtime traces</span></TabsTrigger>
           </TabsList>
@@ -236,6 +237,12 @@ export function ExploreDialog({ project, open, onOpenChange }: { project: Projec
           <TabsContent value="architecture" className="project-explorer-panel mt-0 min-h-0 flex-1 overflow-y-auto pt-5">
             {architectureLoading ? (
               <div className="p-8 text-center text-sm text-muted-foreground">Loading architecture...</div>
+            ) : architectureFailed ? (
+              <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-7 text-sm text-muted-foreground"><p className="font-medium text-foreground">Architecture is unavailable</p><p className="mt-1">The index still exists, but the graph backend could not provide its architecture summary. Open Knowledge → Code Explorer after the backend is available.</p></div>
+            ) : project.nodes === 0 ? (
+              <div className="rounded-xl border border-dashed p-7 text-sm text-muted-foreground"><p className="font-medium text-foreground">This repository has no indexed graph nodes yet.</p><p className="mt-1">Run indexing again after selecting the repository path to populate its code structure.</p></div>
+            ) : architecture?.state === 'indexed_no_summary' ? (
+              <div className="rounded-xl border border-dashed p-7 text-sm text-muted-foreground"><p className="font-medium text-foreground">Index exists, but its architecture summary is sparse.</p><p className="mt-1">Knowledge → Code Explorer can still show the proven file/import topology. The index currently records {project.nodes.toLocaleString()} nodes and {project.edges.toLocaleString()} relationships.</p></div>
             ) : (
               <div className="space-y-5">
                 <div className="grid grid-cols-2 gap-4">
@@ -285,7 +292,7 @@ export function ExploreDialog({ project, open, onOpenChange }: { project: Projec
               </div>
             )}
           </TabsContent>
-          
+
           <TabsContent value="search" className="project-explorer-panel mt-0 flex min-h-0 flex-1 flex-col gap-4 overflow-hidden pt-5">
             <div className="flex gap-2">
               <Input 
@@ -473,13 +480,16 @@ export function ExploreDialog({ project, open, onOpenChange }: { project: Projec
             )}
           </TabsContent>
 
-          <TabsContent value="query" className="project-explorer-panel mt-0 min-h-0 flex-1 overflow-y-auto pt-5">
-            <div className="space-y-3">
-              <div><p className="text-sm font-semibold">Read-only graph query</p><p className="mt-1 text-xs text-muted-foreground">Use Cypher for bounded investigation. Write clauses are rejected before reaching the engine.</p></div>
-              <textarea value={graphQueryText} onChange={event => setGraphQueryText(event.target.value)} className="min-h-28 w-full rounded-md border bg-background p-3 font-mono text-xs outline-none focus-visible:ring-2 focus-visible:ring-ring" />
-              <Button onClick={() => graphQuery.mutate({ project: project.name, data: { query: graphQueryText, max_rows: 100 } })} disabled={!graphQueryText.trim()} isLoading={graphQuery.isPending}><Code2 className="mr-2 h-4 w-4" /> Run query</Button>
-              {graphQuery.error && <p className="rounded-lg bg-destructive/10 p-3 text-xs text-destructive">{graphQuery.error.message}</p>}
-              {graphQuery.data && <pre className="max-h-72 overflow-auto rounded-lg border bg-muted/30 p-3 text-xs leading-relaxed">{JSON.stringify(graphQuery.data, null, 2)}</pre>}
+          <TabsContent value="investigate" className="project-explorer-panel mt-0 min-h-0 flex-1 overflow-y-auto pt-5">
+            <div className="grid gap-3 sm:grid-cols-2">
+              {[
+                { title: 'Find a symbol', detail: 'Search names, code, or snippets within this indexed repository.', tab: 'search' },
+                { title: 'Trace callers and dependencies', detail: 'Follow a qualified symbol through bounded call or data-flow paths.', tab: 'trace' },
+                { title: 'Review architecture and structure', detail: 'Inspect indexed node types, relationships, and connected source files.', tab: 'architecture' },
+                { title: 'Estimate change impact', detail: 'Compare a branch or revision to identify affected symbols.', tab: 'impact' },
+                { title: 'Check indexed coverage', detail: 'Review recorded exclusions and freshness signals.', tab: 'coverage' },
+                { title: 'Add runtime evidence', detail: 'Record observed caller → callee frequency alongside static structure.', tab: 'runtime' },
+              ].map((item) => <button key={item.tab} type="button" onClick={() => setActiveTab(item.tab)} className="rounded-xl border border-border/70 bg-muted/20 p-4 text-left transition-colors hover:border-primary/40 hover:bg-primary/5"><p className="text-sm font-semibold">{item.title}</p><p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">{item.detail}</p><span className="mt-3 inline-block text-xs font-medium text-primary">Open tool →</span></button>)}
             </div>
           </TabsContent>
 

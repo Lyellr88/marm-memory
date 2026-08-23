@@ -36,6 +36,8 @@ export const queryKeys = {
   projectStatus: (baseUrl: string, project: string) => ['projectStatus', baseUrl, project],
   projectArchitecture: (baseUrl: string, project: string) => ['projectArchitecture', baseUrl, project],
   projectCodeUnits: (baseUrl: string, project: string) => ['projectCodeUnits', baseUrl, project],
+  projectGraph: (baseUrl: string, project: string) => ['projectGraph', baseUrl, project],
+  projectGraphNeighborhood: (baseUrl: string, project: string, nodeId: string) => ['projectGraphNeighborhood', baseUrl, project, nodeId],
 };
 
 // Global config hook
@@ -578,6 +580,24 @@ export function useProjectCodeUnits(project: string) {
   return useQuery({ queryKey: queryKeys.projectCodeUnits(baseUrl, project), queryFn: () => client.getProjectCodeUnits(project), enabled: !!project });
 }
 
+export function useProjectGraph(project: string, enabled = true) {
+  const { baseUrl, client } = useMarmConfig();
+  return useQuery({
+    queryKey: queryKeys.projectGraph(baseUrl, project),
+    queryFn: () => client.getProjectGraph(project),
+    enabled: !!project && enabled,
+  });
+}
+
+export function useProjectGraphNeighborhood(project: string, nodeId: string | null, enabled = true) {
+  const { baseUrl, client } = useMarmConfig();
+  return useQuery({
+    queryKey: queryKeys.projectGraphNeighborhood(baseUrl, project, nodeId || ''),
+    queryFn: () => client.getProjectGraphNeighborhood(project, nodeId || ''),
+    enabled: !!project && !!nodeId && enabled,
+  });
+}
+
 export function useSearchProjectCode() {
   const { client } = useMarmConfig();
   return useMutation({ mutationFn: ({ project, data }: { project: string, data: CodeSearchInput }) => client.searchProjectCode(project, data) });
@@ -591,11 +611,6 @@ export function useTraceProject() {
 export function useProjectImpact() {
   const { client } = useMarmConfig();
   return useMutation({ mutationFn: ({ project, data }: { project: string, data: ImpactInput }) => client.projectImpact(project, data) });
-}
-
-export function useProjectGraphQuery() {
-  const { client } = useMarmConfig();
-  return useMutation({ mutationFn: ({ project, data }: { project: string, data: import('@/lib/marm-types').GraphQueryInput }) => client.queryProjectGraph(project, data) });
 }
 
 export function useProjectAdr(project: string) {
@@ -622,6 +637,10 @@ export function useDeleteProject() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ project, name }: { project: string, name: string }) => client.deleteProject(project, name),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['projects', baseUrl] })
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: ['projects', baseUrl] });
+      qc.removeQueries({ queryKey: queryKeys.projectGraph(baseUrl, variables.project) });
+      qc.removeQueries({ queryKey: ['projectGraphNeighborhood', baseUrl, variables.project] });
+    }
   });
 }

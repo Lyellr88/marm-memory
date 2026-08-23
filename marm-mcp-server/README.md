@@ -7,7 +7,7 @@ mcp-name: io.github.Lyellr88/marm-mcp-server
      width="900"
      height="250">
 </picture>
-<h1 align="center">MARM Memory v2.41.1 — Give your AI Agents a permanent memory in 60 seconds</h1>
+<h1 align="center">marm-memory v2.42.0 - Give your AI Agents a permanent memory in 60 seconds</h1>
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/Lyellr88/marm-memory/blob/MARM-main/LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
@@ -90,7 +90,7 @@ It brings three things together:
 - 💻 **Code Graph (5 tools)** maps your repository so agents can find symbols, follow code paths, and understand the project without rereading it all. Point it at a repo once and it keeps itself current as you work.
 - 🧩 **Concept Graph (2 tools)** connects people, decisions, errors, and ideas from your stored memories, with links back to relevant code when available. It builds itself as you store memories.
 
-All 14 tools work over HTTP and STDIO. Your agents share the same local memory across sessions instead of starting from scratch each time. The bundled Console provides a browsable view of **Memories**, the **Knowledge Graph**, and **Indexed Projects**, including progress for graph builds and repository indexing.
+All 14 tools work over HTTP and STDIO. Your agents share the same local memory across sessions instead of starting from scratch each time. The bundled Console App provides a browsable view of **Memories**, the **Knowledge Graph**, and **Indexed Projects**, including progress for graph builds and repository indexing. Indexing a repository creates its independent Code Graph, which you can explore from Knowledge Graph → Code Explorer even before storing any memories.
 
 ### How It Works
 

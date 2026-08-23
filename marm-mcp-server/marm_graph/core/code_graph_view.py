@@ -46,6 +46,9 @@ logger = structlog.get_logger(__name__)
 # Ordered so the caller can render "showing N of TOTAL".
 DEFAULT_LIMIT = 50
 MAX_LIMIT = 500
+GRAPH_NODE_LIMIT = 80
+GRAPH_EDGE_LIMIT = 1_000
+NEIGHBORHOOD_EDGE_LIMIT = 200
 
 # Non-code the File label also covers: README.md, pyproject.toml, every yaml in
 # the tree. Excluding these is what separates a code structure from a file list.
@@ -86,6 +89,7 @@ NON_CODE_SUFFIXES = (
 # query, so nothing from a caller reaches the query text. This validates the
 # argument itself against the shape the engine generates, a mangled absolute path.
 _PROJECT_RE = re.compile(r"^[A-Za-z0-9._\-]{1,512}$")
+_FILE_PATH_RE = re.compile(r"^[A-Za-z0-9._/@+()\[\] -]{1,1024}$")
 
 
 class CodeGraphViewError(RuntimeError):
@@ -111,6 +115,11 @@ _FAN_OUT_QUERY = (
     "RETURN a.file_path AS unit, count(DISTINCT b.file_path) AS fan_out "
     "ORDER BY a.file_path"
 )
+_IMPORT_EDGES_QUERY = (
+    "MATCH (a:File)-[r:IMPORTS]->(b) "
+    "RETURN a.file_path AS source, b.file_path AS target ORDER BY a.file_path"
+)
+_IMPORT_EDGE_TOTAL_QUERY = "MATCH (a:File)-[r:IMPORTS]->(b) RETURN count(r) AS total"
 
 
 def _aliases(query: str) -> list[str]:
@@ -120,7 +129,13 @@ def _aliases(query: str) -> list[str]:
     return [part.strip().rsplit(" AS ", 1)[-1].strip() for part in tail.split(",")]
 
 
-def _query(client: CbmClient, query: str, project: str) -> list[dict[str, Any]]:
+def _query(
+    client: CbmClient,
+    query: str,
+    project: str,
+    *,
+    max_rows: int | None = None,
+) -> list[dict[str, Any]]:
     """Run one fixed template and flatten it, or raise.
 
     The alias check is the whole reason this wrapper exists. `query_graph` reports
@@ -128,10 +143,10 @@ def _query(client: CbmClient, query: str, project: str) -> list[dict[str, Any]]:
     against the aliases requested is the only signal that the answer is the one
     asked for.
     """
-    reply = client.call_tool(
-        "query_graph",
-        {"project": project, "query": query, "format": "json"},
-    )
+    arguments: dict[str, Any] = {"project": project, "query": query, "format": "json"}
+    if max_rows is not None:
+        arguments["max_rows"] = max_rows
+    reply = client.call_tool("query_graph", arguments)
     if not isinstance(reply, dict):
         raise CodeGraphViewError(f"query_graph returned {type(reply).__name__}")
 
@@ -182,6 +197,21 @@ def unavailable(reason: str, message: str | None = None) -> dict:
         "total": 0,
         "shown": 0,
         "code_units": [],
+    }
+    if message:
+        body["message"] = message
+    return body
+
+
+def graph_unavailable(reason: str, message: str | None = None) -> dict:
+    body = {
+        "state": "unavailable",
+        "reason": reason,
+        "total": {"code_units": 0, "import_edges": 0},
+        "rendered": {"code_units": 0, "import_edges": 0},
+        "truncated": False,
+        "nodes": [],
+        "edges": [],
     }
     if message:
         body["message"] = message
@@ -253,4 +283,184 @@ def code_units(
         "shown": min(bounded, len(rows)),
         "fan_in_is_lower_bound": True,
         "code_units": rows[:bounded],
+    }
+
+
+def code_graph(client: CbmClient, project: Optional[str]) -> dict:
+    """Return a bounded file/import snapshot for the Console canvas.
+
+    The engine's stable, proven projection is a File node plus IMPORTS edges.
+    It is deliberately not presented as every raw graph node: symbol-level
+    topology needs its own query contract before it can safely be rendered.
+    """
+    units = code_units(client, project, limit=MAX_LIMIT)
+    state = units["state"]
+    if state != "ready":
+        if state == "unavailable":
+            return graph_unavailable(
+                str(units.get("reason") or "graph_unavailable"),
+                units.get("message"),
+            )
+        return {
+            "state": state,
+            "reason": units.get("reason"),
+            "message": units.get("message"),
+            "total": {"code_units": units["total"], "import_edges": 0},
+            "rendered": {"code_units": 0, "import_edges": 0},
+            "truncated": False,
+            "nodes": [],
+            "edges": [],
+        }
+
+    assert project is not None
+    try:
+        edge_rows = _query(
+            client, _IMPORT_EDGES_QUERY, project, max_rows=GRAPH_EDGE_LIMIT
+        )
+        total_rows = _query(client, _IMPORT_EDGE_TOTAL_QUERY, project)
+    except CodeGraphViewError as exc:
+        return graph_unavailable("contract_mismatch", str(exc))
+    except (CbmToolError, CbmError) as exc:
+        return graph_unavailable("graph_unavailable", str(exc))
+
+    total_import_edges = _as_int(total_rows[0].get("total")) if total_rows else 0
+    visible_units = units["code_units"][:GRAPH_NODE_LIMIT]
+    visible_paths = {row["unit"] for row in visible_units}
+    nodes = [
+        {
+            "id": row["unit"],
+            "label": row["unit"].rsplit("/", 1)[-1],
+            "path": row["unit"],
+            "kind": "file",
+            "fan_in": row["fan_in"],
+            "fan_out": row["fan_out"],
+        }
+        for row in visible_units
+    ]
+    counts: dict[tuple[str, str], int] = {}
+    for row in edge_rows:
+        source, target = str(row.get("source") or ""), str(row.get("target") or "")
+        if source in visible_paths and target in visible_paths and source != target:
+            key = (source, target)
+            counts[key] = counts.get(key, 0) + 1
+    edges = [
+        {"source": source, "target": target, "relation": "imports", "count": count}
+        for (source, target), count in sorted(counts.items())
+    ]
+    return {
+        "state": "ready",
+        "total": {"code_units": units["total"], "import_edges": total_import_edges},
+        "rendered": {"code_units": len(nodes), "import_edges": len(edges)},
+        "truncated": units["total"] > len(nodes) or total_import_edges > len(edges),
+        "sample_reason": (
+            "The canvas shows the most connected code files and their visible import links. "
+            "Totals include the full indexed import graph."
+        ),
+        "nodes": nodes,
+        "edges": edges,
+    }
+
+
+def code_graph_neighborhood(
+    client: CbmClient, project: Optional[str], node_id: str
+) -> dict:
+    """Return the bounded import neighborhood for one file path.
+
+    The only dynamic fragment is a strictly validated file path inside a
+    server-owned equality template. Browser input can select a stable graph
+    identity, but cannot alter labels, clauses, or the query's row budget.
+    """
+    if not project or not _PROJECT_RE.match(project):
+        return {
+            "state": "unavailable",
+            "reason": "invalid_project",
+            "nodes": [],
+            "edges": [],
+        }
+    if not _FILE_PATH_RE.match(node_id):
+        return {
+            "state": "unavailable",
+            "reason": "invalid_node",
+            "nodes": [],
+            "edges": [],
+        }
+
+    literal = f"'{node_id}'"
+    outbound_query = (
+        "MATCH (a:File)-[r:IMPORTS]->(b) "
+        f"WHERE a.file_path = {literal} "
+        "RETURN a.file_path AS source, b.file_path AS target ORDER BY b.file_path"
+    )
+    inbound_query = (
+        "MATCH (a:File)-[r:IMPORTS]->(b) "
+        f"WHERE b.file_path = {literal} "
+        "RETURN a.file_path AS source, b.file_path AS target ORDER BY a.file_path"
+    )
+    outbound_total_query = (
+        "MATCH (a:File)-[r:IMPORTS]->(b) "
+        f"WHERE a.file_path = {literal} RETURN count(r) AS total"
+    )
+    inbound_total_query = (
+        "MATCH (a:File)-[r:IMPORTS]->(b) "
+        f"WHERE b.file_path = {literal} RETURN count(r) AS total"
+    )
+    try:
+        outbound = _query(
+            client, outbound_query, project, max_rows=NEIGHBORHOOD_EDGE_LIMIT
+        )
+        inbound = _query(
+            client, inbound_query, project, max_rows=NEIGHBORHOOD_EDGE_LIMIT
+        )
+        outbound_total = _query(client, outbound_total_query, project)
+        inbound_total = _query(client, inbound_total_query, project)
+    except CodeGraphViewError as exc:
+        return {
+            "state": "unavailable",
+            "reason": "contract_mismatch",
+            "message": str(exc),
+            "nodes": [],
+            "edges": [],
+        }
+    except (CbmToolError, CbmError) as exc:
+        return {
+            "state": "unavailable",
+            "reason": "graph_unavailable",
+            "message": str(exc),
+            "nodes": [],
+            "edges": [],
+        }
+
+    counts: dict[tuple[str, str], int] = {}
+    for row in [*outbound, *inbound]:
+        source, target = str(row.get("source") or ""), str(row.get("target") or "")
+        if source and target and source != target:
+            key = (source, target)
+            counts[key] = counts.get(key, 0) + 1
+    paths = {node_id}
+    for source, target in counts:
+        paths.update((source, target))
+    rendered_imports = sum(counts.values())
+    total_imports = _as_int(outbound_total[0].get("total")) if outbound_total else 0
+    total_imports += _as_int(inbound_total[0].get("total")) if inbound_total else 0
+    return {
+        "state": "ready",
+        "seed_id": node_id,
+        "total_imports": total_imports,
+        "rendered_imports": rendered_imports,
+        "truncated": total_imports > rendered_imports,
+        "nodes": [
+            {
+                "id": path,
+                "label": path.rsplit("/", 1)[-1],
+                "path": path,
+                "kind": "file",
+                "fan_in": None,
+                "fan_out": None,
+            }
+            for path in sorted(paths)
+        ],
+        "edges": [
+            {"source": source, "target": target, "relation": "imports", "count": count}
+            for (source, target), count in sorted(counts.items())
+        ],
     }

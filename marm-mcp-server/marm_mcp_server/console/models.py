@@ -46,12 +46,6 @@ class ProjectDeletePayload(BaseModel):
     confirm: bool = False
 
 
-class ProjectGraphQueryPayload(BaseModel):
-    query: str = Field(min_length=1, max_length=12000)
-    graph: Literal["code", "missed"] = "code"
-    max_rows: int = Field(100, ge=1, le=1000)
-
-
 class ProjectAdrPayload(BaseModel):
     content: str = Field(min_length=1, max_length=200000)
 

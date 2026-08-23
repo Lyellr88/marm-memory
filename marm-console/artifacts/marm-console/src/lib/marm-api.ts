@@ -29,8 +29,6 @@ import type {
   ImpactInput,
   ImpactResult,
   MergeDuplicateInput,
-  GraphQueryInput,
-  GraphQueryResult,
   IndexJob,
   LogListParams,
   LogListResponse,
@@ -48,6 +46,8 @@ import type {
   ProjectArchitecture,
   ProjectAdr,
   ProjectCoverage,
+  CodeGraphSnapshot,
+  CodeGraphNeighborhood,
   CodeUnits,
   ProjectIndexInput,
   ProjectStatus,
@@ -280,8 +280,6 @@ export function createMarmClient(config: MarmClientConfig) {
       request<ProjectStatus>(config, 'GET', `/projects/${encodeURIComponent(project)}/status`),
     getProjectCoverage: (project: string) =>
       request<ProjectCoverage>(config, 'GET', `/projects/${encodeURIComponent(project)}/coverage`),
-    queryProjectGraph: (project: string, data: GraphQueryInput) =>
-      request<GraphQueryResult>(config, 'POST', `/projects/${encodeURIComponent(project)}/query`, { body: data }),
     getProjectAdr: (project: string) =>
       request<ProjectAdr>(config, 'GET', `/projects/${encodeURIComponent(project)}/adr`),
     updateProjectAdr: (project: string, content: string) =>
@@ -292,6 +290,10 @@ export function createMarmClient(config: MarmClientConfig) {
       request<ProjectArchitecture>(config, 'GET', `/projects/${encodeURIComponent(project)}/architecture`),
     getProjectCodeUnits: (project: string) =>
       request<CodeUnits>(config, 'GET', `/projects/${encodeURIComponent(project)}/code-units`),
+    getProjectGraph: (project: string) =>
+      request<CodeGraphSnapshot>(config, 'GET', `/projects/${encodeURIComponent(project)}/graph`),
+    getProjectGraphNeighborhood: (project: string, nodeId: string) =>
+      request<CodeGraphNeighborhood>(config, 'GET', `/projects/${encodeURIComponent(project)}/graph/neighborhood`, { query: { node_id: nodeId } }),
     searchProjectCode: (project: string, data: CodeSearchInput) =>
       request<CodeSearchResult[]>(config, 'POST', `/projects/${encodeURIComponent(project)}/search`, { body: data }),
     traceProject: (project: string, data: TraceInput) =>
