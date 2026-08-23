@@ -185,7 +185,7 @@ def _import_edges_query(paths: list[str]) -> str:
     return (
         "MATCH (a:File)-[r:IMPORTS]->(b) "
         f"WHERE a.file_path IN [{literals}] AND b.file_path IN [{literals}] "
-        "RETURN a.file_path AS source, b.file_path AS target "
+        "RETURN a.file_path AS source, b.file_path AS target, count(r) AS import_count "
         f"ORDER BY a.file_path, b.file_path LIMIT {GRAPH_EDGE_LIMIT}"
     )
 
@@ -380,7 +380,7 @@ def code_graph(client: CbmClient, project: Optional[str]) -> dict:
         source, target = str(row.get("source") or ""), str(row.get("target") or "")
         if source in visible_paths and target in visible_paths and source != target:
             key = (source, target)
-            counts[key] = counts.get(key, 0) + 1
+            counts[key] = counts.get(key, 0) + _as_int(row.get("import_count"))
     edges = [
         {"source": source, "target": target, "relation": "imports", "count": count}
         for (source, target), count in sorted(counts.items())
@@ -392,8 +392,8 @@ def code_graph(client: CbmClient, project: Optional[str]) -> dict:
         "truncated": units["total"] > len(nodes) or total_import_edges > len(edges),
         "sampled": bool(units.get("sampled")),
         "sample_reason": (
-            "The canvas shows the most connected code files and their visible import links. "
-            "Totals include the full indexed import graph."
+            "The canvas shows the most connected code files and their visible import pairs. "
+            "The total counts import statements, including repeated pairs."
         ),
         "nodes": nodes,
         "edges": edges,

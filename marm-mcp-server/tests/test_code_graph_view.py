@@ -371,17 +371,19 @@ def test_code_graph_returns_a_bounded_file_import_snapshot():
             "count(DISTINCT a.file_path) AS fan_in": FAN_IN_REPLY,
             "count(DISTINCT b.file_path) AS fan_out": FAN_OUT_REPLY,
             "a.file_path AS source": {
-                "columns": ["source", "target"],
+                "columns": ["source", "target", "import_count"],
                 "rows": [
                     [
                         "marm-mcp-server/marm_mcp_server/core/memory.py",
                         "marm-mcp-server/marm_mcp_server/config/settings.py",
+                        "2",
                     ],
                     [
                         "marm-mcp-server/marm_mcp_server/core/memory.py",
                         "marm-mcp-server/marm_mcp_server/config/settings.py",
+                        "2",
                     ],
-                    ["marm-mcp-server/marm_mcp_server/server.py", "README.md"],
+                    ["marm-mcp-server/marm_mcp_server/server.py", "README.md", "1"],
                 ],
                 "total": 3,
             },
@@ -401,7 +403,7 @@ def test_code_graph_returns_a_bounded_file_import_snapshot():
             "source": "marm-mcp-server/marm_mcp_server/core/memory.py",
             "target": "marm-mcp-server/marm_mcp_server/config/settings.py",
             "relation": "imports",
-            "count": 2,
+            "count": 4,
         }
     ]
     imports_call = next(
@@ -410,8 +412,47 @@ def test_code_graph_returns_a_bounded_file_import_snapshot():
     query = imports_call["query"]
     assert "WHERE a.file_path IN [" in query
     assert "AND b.file_path IN [" in query
+    assert "count(r) AS import_count" in query
     assert f"LIMIT {V.GRAPH_EDGE_LIMIT}" in query
     assert "max_rows" not in imports_call
+
+
+def test_code_graph_limits_aggregated_pairs_not_raw_import_statements():
+    memory = "marm-mcp-server/marm_mcp_server/core/memory.py"
+    settings = "marm-mcp-server/marm_mcp_server/config/settings.py"
+    server = "marm-mcp-server/marm_mcp_server/server.py"
+    client = FakeClient(
+        replies={
+            "f.file_path AS unit": UNITS_REPLY,
+            "count(DISTINCT a.file_path) AS fan_in": FAN_IN_REPLY,
+            "count(DISTINCT b.file_path) AS fan_out": FAN_OUT_REPLY,
+            "a.file_path AS source": {
+                "columns": ["source", "target", "import_count"],
+                "rows": [
+                    [memory, settings, str(V.GRAPH_EDGE_LIMIT + 1)],
+                    [server, memory, "1"],
+                ],
+                "total": 2,
+            },
+            "count(r) AS total": {
+                "columns": ["total"],
+                "rows": [[str(V.GRAPH_EDGE_LIMIT + 2)]],
+                "total": 1,
+            },
+        }
+    )
+
+    result = V.code_graph(client, PROJECT)
+
+    assert result["edges"] == [
+        {
+            "source": memory,
+            "target": settings,
+            "relation": "imports",
+            "count": V.GRAPH_EDGE_LIMIT + 1,
+        },
+        {"source": server, "target": memory, "relation": "imports", "count": 1},
+    ]
 
 
 def test_code_graph_unavailable_state_keeps_its_visualization_shape():

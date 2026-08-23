@@ -19,7 +19,16 @@ const mutationState = vi.hoisted(() => ({
   ingestTraceMutate: vi.fn(),
 }));
 
+const indexState = vi.hoisted(() => ({
+  job: undefined as { status: string; project: string; phase: string } | undefined,
+  mutate: vi.fn(),
+}));
+
 vi.mock('@/hooks/use-marm-queries', () => ({
+  queryKeys: {
+    projectArchitecture: (baseUrl: string, project: string) => ['projectArchitecture', baseUrl, project],
+    projectCodeUnits: (baseUrl: string, project: string) => ['projectCodeUnits', baseUrl, project],
+  },
   useProjects: () => ({
     data: [{
       name: 'marm-systems',
@@ -30,8 +39,14 @@ vi.mock('@/hooks/use-marm-queries', () => ({
     }],
     isLoading: false,
   }),
-  useIndexProject: () => ({ isPending: false, mutate: vi.fn() }),
-  useIndexJob: () => ({ data: undefined, error: null, isError: false, refetch: vi.fn() }),
+  useIndexProject: () => ({
+    isPending: false,
+    mutate: (input: unknown, options: { onSuccess?: (result: { job_id: string }) => void }) => {
+      indexState.mutate(input);
+      options.onSuccess?.({ job_id: 'index-job' });
+    },
+  }),
+  useIndexJob: (jobId: string) => ({ data: jobId ? indexState.job : undefined, error: null, isError: false, refetch: vi.fn() }),
   useDeleteProject: () => ({ isPending: false, mutate: vi.fn() }),
   useSearchProjectCode: () => ({ isPending: false, mutate: vi.fn(), reset: mutationState.searchReset }),
   useTraceProject: () => ({ isPending: false, mutate: vi.fn(), reset: mutationState.traceReset }),
@@ -56,6 +71,7 @@ describe('ProjectsPage', () => {
   afterEach(() => {
     adrState.secondLoading = true;
     adrState.secondContent = undefined;
+    indexState.job = undefined;
     vi.clearAllMocks();
     cleanup();
   });
@@ -82,6 +98,27 @@ describe('ProjectsPage', () => {
     expect(screen.getByText('Code graph explorer')).toBeTruthy();
     expect(screen.getByRole('tab', { name: 'Investigate' })).toBeTruthy();
     expect(screen.getByRole('tab', { name: 'Runtime traces' })).toBeTruthy();
+  });
+
+  it('refreshes open explorer architecture and code structure after indexing completes', async () => {
+    const user = userEvent.setup();
+    indexState.job = { status: 'running', project: 'marm-systems', phase: 'indexing' };
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidate = vi.spyOn(queryClient, 'invalidateQueries');
+    const view = render(<QueryClientProvider client={queryClient}><ProjectsPage /></QueryClientProvider>);
+
+    await user.type(screen.getByLabelText('Repository path'), 'C:/work/marm-systems');
+    await user.click(screen.getByRole('button', { name: 'Start moderate index' }));
+    await user.click(screen.getByRole('button', { name: 'Explore' }));
+
+    indexState.job = { status: 'success', project: 'marm-systems', phase: 'complete' };
+    view.rerender(<QueryClientProvider client={queryClient}><ProjectsPage /></QueryClientProvider>);
+
+    await waitFor(() => {
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: ['projectArchitecture', 'http://127.0.0.1:8002', 'marm-systems'] });
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: ['projectCodeUnits', 'http://127.0.0.1:8002', 'marm-systems'] });
+    });
+    expect(screen.getByText('Code graph explorer')).toBeTruthy();
   });
 
   it('clears decisions while the next project ADR is still loading', async () => {

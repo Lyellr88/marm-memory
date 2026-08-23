@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useProjects, useIndexProject, useIndexJob, useDeleteProject, useSearchProjectCode, useTraceProject, useProjectImpact, useProjectArchitecture, useProjectCodeUnits, useProjectCoverage, useProjectAdr, useUpdateProjectAdr, useIngestProjectRuntimeTraces, useMarmConfig } from '@/hooks/use-marm-queries';
+import { queryKeys, useProjects, useIndexProject, useIndexJob, useDeleteProject, useSearchProjectCode, useTraceProject, useProjectImpact, useProjectArchitecture, useProjectCodeUnits, useProjectCoverage, useProjectAdr, useUpdateProjectAdr, useIngestProjectRuntimeTraces, useMarmConfig } from '@/hooks/use-marm-queries';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, Badge, Button, Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, Input, Label, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Tabs, TabsList, TabsTrigger, TabsContent, Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/core';
 import { Activity, BookOpen, CheckCircle2, CircleAlert, Clock3, FileWarning, FolderCode, HardDrive, Network, Play, RefreshCw, Save, Search, SearchCode, Trash2, Upload, XCircle } from 'lucide-react';
 import type { IndexMode, ProjectSummary, CodeSearchKind, RuntimeTrace, TraceDirection, TraceMode } from '@/lib/marm-types';
@@ -48,6 +48,8 @@ function IndexWorkspace({ repoPath, setRepoPath, mode, setMode, jobId, setJobId 
       if (jobStatus.project) {
         queryClient.invalidateQueries({ queryKey: ['projectGraph', baseUrl, jobStatus.project] });
         queryClient.invalidateQueries({ queryKey: ['projectGraphNeighborhood', baseUrl, jobStatus.project] });
+        queryClient.invalidateQueries({ queryKey: queryKeys.projectArchitecture(baseUrl, jobStatus.project) });
+        queryClient.invalidateQueries({ queryKey: queryKeys.projectCodeUnits(baseUrl, jobStatus.project) });
       }
     }
   }, [baseUrl, jobStatus?.project, jobStatus?.status, queryClient]);
