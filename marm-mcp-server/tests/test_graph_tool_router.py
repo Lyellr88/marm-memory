@@ -229,9 +229,10 @@ def test_search_graph_name_pattern_groups_become_result_dicts():
         {
             "name": "store_memory",
             "label": "Method",
-            "lines": "274-281",
             "in": 84,
             "out": 1,
+            "start_line": 274,
+            "end_line": 281,
             "qualified_name": "pkg.mod.MARM.store_memory",
             "file_path": "pkg/mod.py",
         }
