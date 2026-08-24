@@ -100,6 +100,8 @@ def _git(root: str, *args: str) -> Optional[str]:
             ["git", "-c", "core.fsmonitor=false", "-C", root, *args],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="surrogateescape",
             timeout=_GIT_TIMEOUT_SECONDS,
             env=_git_env(),
             creationflags=creationflags,
@@ -150,6 +152,9 @@ def git_source_state(root: str) -> Optional[tuple[str, str]]:
     else:
         unborn = False
 
+    # --no-ext-diff/--no-textconv: same threat model as core.fsmonitor above --
+    # a repo's own .gitattributes plus its config can point either at an
+    # arbitrary command, and MARM watches repos it does not control.
     diff_output: str
     if unborn:
         # `--cached` diffs the index against the empty tree, which git
@@ -159,15 +164,15 @@ def git_source_state(root: str) -> Optional[tuple[str, str]]:
         # "untracked" for the ls-files fingerprint below either. A second,
         # plain `git diff` (working tree against the index) is what a born
         # repo gets for free from `git diff HEAD` comparing straight to HEAD.
-        diff_cached = _git(root, "diff", "--cached")
+        diff_cached = _git(root, "diff", "--no-ext-diff", "--no-textconv", "--cached")
         if diff_cached is None:
             return None
-        diff_unstaged = _git(root, "diff")
+        diff_unstaged = _git(root, "diff", "--no-ext-diff", "--no-textconv")
         if diff_unstaged is None:
             return None
         diff_output = diff_cached + "\x1e" + diff_unstaged
     else:
-        diff_head = _git(root, "diff", "HEAD")
+        diff_head = _git(root, "diff", "--no-ext-diff", "--no-textconv", "HEAD")
         if diff_head is None:
             return None
         diff_output = diff_head
