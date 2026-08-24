@@ -411,6 +411,36 @@ def init_database(db_path: str) -> None:
             " ON concept_index_queue(state, leased_until, enqueued_at)"
         )
 
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS code_project_bindings (
+                graph_project    TEXT PRIMARY KEY,
+                memory_project   TEXT NOT NULL UNIQUE,
+                root_path        TEXT NOT NULL,
+                source           TEXT NOT NULL CHECK (source IN ('auto', 'user')),
+                created_at       TEXT NOT NULL,
+                updated_at       TEXT NOT NULL,
+                last_verified_at TEXT NOT NULL
+            )
+            """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS code_link_refresh_queue (
+                graph_project    TEXT PRIMARY KEY,
+                memory_project   TEXT NOT NULL,
+                root_path        TEXT NOT NULL,
+                cursor_entity_id INTEGER NOT NULL DEFAULT 0,
+                enqueued_at      TEXT NOT NULL,
+                state            TEXT NOT NULL DEFAULT 'pending',
+                lease_token      TEXT,
+                leased_until     TEXT,
+                attempts         INTEGER NOT NULL DEFAULT 0,
+                last_error       TEXT
+            )
+            """)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_code_link_refresh_ready"
+            " ON code_link_refresh_queue(state, leased_until, enqueued_at)"
+        )
+
         # One row, held by whoever is currently writing the concept graph.
         # asyncio locks cannot reach across processes, and HTTP and STDIO are
         # two processes: without this, a full rebuild can drop the graph tables

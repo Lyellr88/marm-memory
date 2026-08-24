@@ -10,6 +10,7 @@ from ..models import (
     ProjectDeletePayload,
     ProjectImpactPayload,
     ProjectIndexPayload,
+    ProjectMemoryBindingPayload,
     ProjectRuntimeTracesPayload,
     ProjectSearchPayload,
     ProjectTracePayload,
@@ -186,6 +187,26 @@ def get_project_graph_neighborhood(
     return _project_operation(
         "internal/projects/graph/neighborhood",
         {"project": project, "node_id": node_id},
+    )
+
+
+@router.get("/api/projects/{project}/memory-linking")
+def get_project_memory_linking(project: str) -> dict:
+    return _project_operation("internal/projects/memory-linking", {"project": project})
+
+
+@router.get("/api/projects/{project}/memory-links")
+def get_project_memory_links(project: str) -> dict:
+    return _project_operation("internal/projects/memory-links", {"project": project})
+
+
+@router.put("/api/projects/{project}/memory-linking")
+def confirm_project_memory_linking(
+    project: str, payload: ProjectMemoryBindingPayload
+) -> dict:
+    return _project_operation(
+        "internal/projects/memory-linking/confirm",
+        {"project": project, **payload.model_dump()},
     )
 
 

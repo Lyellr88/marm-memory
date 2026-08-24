@@ -40,7 +40,7 @@ from ..config.settings import (
     GRAPH_AUTO_INDEX_MODE,
     GRAPH_AUTO_INDEX_PROJECT_TTL,
 )
-from . import runtime_flags
+from . import code_link_queue, code_project_bindings, runtime_flags
 from .graph_index_lock import GraphIndexBusy, run_exclusive
 from .graph_supervisor import graph_supervisor
 
@@ -143,7 +143,7 @@ def index_repository(client: "CbmClient", req: GraphIndexRequest) -> dict:
     One function rather than a rule at four call sites, because the rule is
     invisible at the call site and there is nothing to notice when it is skipped.
     """
-    result = R.do_index(client, req)
+    result: dict = R.do_index(client, req)
     root = req.repo_path
     if not root:
         return result
@@ -158,6 +158,23 @@ def index_repository(client: "CbmClient", req: GraphIndexRequest) -> dict:
     # A success is the proof that both blocks are stale: the root is reachable,
     # and the user asked for it by indexing.
     runtime_flags.clear_index_blocks(root)
+    graph_project = result.get("project")
+    if isinstance(graph_project, str) and graph_project:
+        try:
+            binding_state, binding = code_project_bindings.auto_bind(
+                graph_project, root
+            )
+            result["memory_linking"] = {"state": binding_state}
+            if binding is not None:
+                code_link_queue.enqueue_refresh(
+                    binding.graph_project,
+                    binding.memory_project,
+                    binding.root_path,
+                )
+                result["memory_linking"]["memory_project"] = binding.memory_project
+                result["memory_linking"]["refresh_queued"] = True
+        except Exception as exc:
+            logger.warning("code_linking.enqueue_failed", error=str(exc))
     return result
 
 

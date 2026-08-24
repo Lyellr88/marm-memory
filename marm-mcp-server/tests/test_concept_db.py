@@ -26,6 +26,77 @@ def test_own_file_created_separately_from_memory_db(tmp_path):
     assert db_path.exists()
 
 
+def test_code_links_upsert_evidence_and_reconcile_stale_exact_links(concept_db):
+    with concept_db.get_connection() as conn:
+        entity_id, _ = concept_db.get_or_create_entity(
+            conn, "Config", "concept", None, "memory-scope", "memory-1"
+        )
+        assert concept_db.store_code_link(
+            conn,
+            entity_id,
+            "old.Config",
+            "graph-project",
+            file_path="old.py",
+        )
+        result = concept_db.reconcile_code_link(
+            conn,
+            entity_id,
+            "graph-project",
+            {
+                "status": "matched",
+                "qualified_name": "new.Config",
+                "label": "class",
+                "file_path": "new.py",
+            },
+        )
+        rows = conn.execute(
+            "SELECT graph_qualified_name, file_path, link_method, resolved_at, "
+            "last_verified_at FROM entity_code_links WHERE entity_id = ?",
+            (entity_id,),
+        ).fetchall()
+
+    assert result == "created"
+    assert len(rows) == 1
+    assert rows[0][0:3] == ("new.Config", "new.py", "exact_symbol")
+    assert rows[0][3] and rows[0][4]
+
+
+def test_code_link_refresh_keeps_the_original_resolution_time(concept_db):
+    with concept_db.get_connection() as conn:
+        entity_id, _ = concept_db.get_or_create_entity(
+            conn, "Alpha", "concept", None, "memory-project", "memory-1"
+        )
+        concept_db.store_code_link(
+            conn,
+            entity_id,
+            "module.Alpha",
+            "graph-project",
+            label="Alpha",
+        )
+        conn.execute(
+            "UPDATE entity_code_links SET resolved_at = 'first-resolution', "
+            "last_verified_at = 'first-verification' "
+            "WHERE entity_id = ? AND graph_qualified_name = ?",
+            (entity_id, "module.Alpha"),
+        )
+        concept_db.store_code_link(
+            conn,
+            entity_id,
+            "module.Alpha",
+            "graph-project",
+            label="Alpha refreshed",
+        )
+        row = conn.execute(
+            "SELECT resolved_at, last_verified_at, label FROM entity_code_links "
+            "WHERE entity_id = ? AND graph_qualified_name = ?",
+            (entity_id, "module.Alpha"),
+        ).fetchone()
+
+    assert row[0] == "first-resolution"
+    assert row[1] != "first-verification"
+    assert row[2] == "Alpha refreshed"
+
+
 def test_legacy_build_runs_without_progress_columns_are_readable(tmp_path):
     db_path = tmp_path / "legacy.db"
     with sqlite3.connect(db_path) as connection:

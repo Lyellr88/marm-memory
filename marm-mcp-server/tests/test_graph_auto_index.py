@@ -1152,6 +1152,9 @@ async def test_the_running_worker_refreshes_a_repo_on_its_own(
     project = indexed["project"]
 
     monkeypatch.setattr(module, "GRAPH_AUTO_INDEX_INTERVAL", 1)
+    from marm_mcp_server.core import runtime_flags
+
+    watched_root = runtime_flags.canonical_root(str(git_repo))
     worker = module.GraphIndexWorker()
     try:
         worker.start()
@@ -1160,21 +1163,32 @@ async def test_the_running_worker_refreshes_a_repo_on_its_own(
         # First cycle enrolls the repo and re-indexes it once, because this
         # process has no remembered signature for it yet.
         deadline = time.monotonic() + 30
-        while time.monotonic() < deadline and worker._indexed < 1:
+        state = None
+        while time.monotonic() < deadline:
+            state = next(
+                (
+                    candidate
+                    for root, candidate in worker._watched.items()
+                    if runtime_flags.canonical_root(root) == watched_root
+                ),
+                None,
+            )
+            if state is not None and state.last_indexed is not None:
+                break
             await asyncio.sleep(0.5)
-        assert worker._indexed >= 1, "the worker never indexed the enrolled repo"
+        assert state is not None and state.last_indexed is not None, (
+            "the worker never indexed the enrolled repo"
+        )
         # Keyed by whatever list_projects reported, which is not necessarily
         # this platform's spelling of the same directory.
-        from marm_mcp_server.core import runtime_flags
-
-        assert runtime_flags.canonical_root(str(git_repo)) in {
+        assert watched_root in {
             runtime_flags.canonical_root(root) for root in worker._watched
         }
 
         # A clean repo with an unchanged HEAD must then go quiet.
-        settled = worker._indexed
+        settled = state.last_indexed
         await asyncio.sleep(3)
-        assert worker._indexed == settled, (
+        assert state.last_indexed == settled, (
             "a clean, unchanged repo must not be re-indexed every cycle"
         )
     finally:

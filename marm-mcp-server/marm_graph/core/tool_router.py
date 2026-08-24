@@ -163,7 +163,7 @@ def _is_columnar(value: Any) -> bool:
     return isinstance(value, dict) and "cols" in value and "rows" in value
 
 
-def _groups_to_callers(block: Any) -> Any:
+def _groups_to_callers(block: Any, renames: Optional[dict] = None) -> Any:
     """Flatten a grouped trace block, rebuilding each row's qualified_name.
 
     The prefix lives on the group, not the row, so a row's identity is only
@@ -178,24 +178,35 @@ def _groups_to_callers(block: Any) -> Any:
     groups = block.get("groups")
     if not isinstance(cols, list) or not isinstance(groups, list):
         return []
+    renames = renames or {}
+    names = [renames.get(col, col) for col in cols]
     out: list[dict] = []
     for group in groups:
         if not isinstance(group, dict):
             continue
         prefix = group.get("qn_prefix") or ""
+        file_path = group.get("file")
         for row in group.get("rows") or []:
             if not isinstance(row, (list, tuple)):
                 continue
-            item = dict(zip(cols, row))
+            item = dict(zip(names, row))
+            if "lines" in item:
+                item.update(_split_lines_span(item.pop("lines")))
             name = item.get("name")
             if name is not None:
                 item["qualified_name"] = f"{prefix}.{name}" if prefix else str(name)
+            if isinstance(file_path, str) and file_path:
+                item["file_path"] = file_path
             out.append(item)
     return out
 
 
 def _converted_search(res: Any) -> Any:
     """Restore `results` on a search_graph reply, whichever shape it arrived in."""
+    if isinstance(res, dict) and isinstance(res.get("groups"), list):
+        out = {k: v for k, v in res.items() if k not in ("cols", "groups")}
+        out["results"] = _groups_to_callers(res, _SEARCH_GRAPH_RENAMES)
+        return out
     if not _is_columnar(res):
         return res
     out = {k: v for k, v in res.items() if k not in ("cols", "rows")}

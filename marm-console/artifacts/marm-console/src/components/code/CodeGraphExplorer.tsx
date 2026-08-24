@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Braces, FileCode2, GitFork, Network, Search, Waypoints, X } from 'lucide-react';
+import { Braces, CheckCircle2, FileCode2, GitFork, Link2, Network, Search, Waypoints, X } from 'lucide-react';
 import { Badge, Button, Card, CardContent, CardHeader, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/core';
 import type { CodeGraphNeighborhood, CodeGraphSnapshot, ProjectSummary } from '@/lib/marm-types';
-import { useProjectGraphNeighborhood } from '@/hooks/use-marm-queries';
+import { useConfirmProjectMemoryLinking, useProjectGraphNeighborhood, useProjectMemoryLinking, useProjectMemoryLinks } from '@/hooks/use-marm-queries';
 import { CodeGraphViz } from './CodeGraphViz';
 
 export function CodeGraphExplorer({
@@ -24,7 +24,11 @@ export function CodeGraphExplorer({
 }) {
   const [filter, setFilter] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [showMemoryEvidence, setShowMemoryEvidence] = useState(false);
   const neighborhood = useProjectGraphNeighborhood(project.name, selectedId);
+  const linking = useProjectMemoryLinking(project.name);
+  const refreshPending = linking.data?.refresh?.state === 'pending' || linking.data?.refresh?.state === 'leased';
+  const memoryLinks = useProjectMemoryLinks(project.name, refreshPending);
   const expandedGraph = useMemo(() => {
     if (!graph || neighborhood.data?.state !== 'ready') return graph;
     const nodes = new Map(graph.nodes.map((node) => [node.id, node]));
@@ -45,6 +49,18 @@ export function CodeGraphExplorer({
     };
   }, [graph, neighborhood.data]);
   const selected = useMemo(() => expandedGraph?.nodes.find((node) => node.id === selectedId) || null, [expandedGraph?.nodes, selectedId]);
+  const linkedFileIds = useMemo(() => {
+    const byPath = new Map((expandedGraph?.nodes || []).map((node) => [node.path.replace(/\\/g, '/'), node.id]));
+    return new Set((memoryLinks.data?.links || []).flatMap((link) => {
+      const nodeId = byPath.get(link.file_path.replace(/\\/g, '/'));
+      return nodeId ? [nodeId] : [];
+    }));
+  }, [expandedGraph?.nodes, memoryLinks.data?.links]);
+  const selectedMemoryLinks = useMemo(() => {
+    if (!selected) return [];
+    const selectedPath = selected.path.replace(/\\/g, '/');
+    return (memoryLinks.data?.links || []).filter((link) => link.file_path.replace(/\\/g, '/') === selectedPath);
+  }, [memoryLinks.data?.links, selected]);
   const visibleFiles = useMemo(() => {
     const normalized = filter.trim().toLowerCase();
     return [...(expandedGraph?.nodes || [])]
@@ -107,13 +123,36 @@ export function CodeGraphExplorer({
         <ProjectPicker project={project} projects={projects} projectName={projectName} onProjectChange={onProjectChange} />
         <Badge variant="outline" className="border-cyan-400/25 bg-cyan-400/5 text-cyan-200"><FileCode2 className="mr-1 h-3 w-3" /> File imports</Badge>
         <Badge variant="outline" className="border-border bg-muted/40 text-muted-foreground">{readyGraph.truncated ? 'Bounded view' : 'Complete view'}</Badge>
+        <MemoryLinkStatus project={project.name} linking={linking} />
+        <Button size="sm" variant={showMemoryEvidence ? 'secondary' : 'ghost'} className="h-7 text-[10px]" onClick={() => setShowMemoryEvidence((current) => !current)}><Link2 className="mr-1 h-3 w-3" /> {showMemoryEvidence ? `Memory evidence · ${linkedFileIds.size}` : 'Show memory evidence'}</Button>
       </div>
       <div className="relative flex min-h-[28rem] flex-1 overflow-hidden rounded-lg border bg-card shadow-inner">
-        <CodeGraphViz graph={expandedGraph || readyGraph} filter={filter} selectedId={selectedId} onNodeClick={setSelectedId} />
-        {selected && <FileFocusPanel selected={selected} neighborhood={neighborhood.data} isLoading={neighborhood.isLoading} onClose={() => setSelectedId(null)} />}
+        <CodeGraphViz graph={expandedGraph || readyGraph} filter={filter} selectedId={selectedId} linkedNodeIds={showMemoryEvidence ? linkedFileIds : undefined} onNodeClick={setSelectedId} />
+        {selected && <FileFocusPanel selected={selected} neighborhood={neighborhood.data} memoryLinks={showMemoryEvidence ? selectedMemoryLinks : []} isLoading={neighborhood.isLoading} onClose={() => setSelectedId(null)} />}
       </div>
       {readyGraph.sample_reason && <p className="shrink-0 px-1 text-[11px] leading-relaxed text-muted-foreground">{readyGraph.sample_reason}</p>}
     </section>
+  </div>;
+}
+
+function MemoryLinkStatus({ project, linking }: { project: string; linking: ReturnType<typeof useProjectMemoryLinking> }) {
+  const confirm = useConfirmProjectMemoryLinking();
+  const [memoryProject, setMemoryProject] = useState('');
+
+  useEffect(() => {
+    setMemoryProject(linking.data?.candidates[0] || '');
+  }, [linking.data?.candidates]);
+
+  if (linking.isLoading) return <Badge variant="outline" className="border-border bg-muted/40 text-muted-foreground"><Link2 className="mr-1 h-3 w-3" /> Checking memory links</Badge>;
+  if (linking.data?.state === 'bound' && linking.data.binding) {
+    const refresh = linking.data.refresh?.state;
+    return <Badge variant="outline" className="border-emerald-400/25 bg-emerald-400/5 text-emerald-200" title={`Bound to memory scope ${linking.data.binding.memory_project}`}><CheckCircle2 className="mr-1 h-3 w-3" /> {linking.data.linked_entities} memory links{refresh ? ` · ${refresh}` : ''}</Badge>;
+  }
+  if (!linking.data?.candidates.length) return <Badge variant="outline" className="border-border bg-muted/40 text-muted-foreground"><Link2 className="mr-1 h-3 w-3" /> No memory scope</Badge>;
+  return <div className="flex items-center gap-1 rounded-md border border-amber-400/25 bg-amber-400/5 p-0.5">
+    <Link2 className="ml-1 h-3 w-3 text-amber-300" />
+    <Select value={memoryProject} onValueChange={setMemoryProject}><SelectTrigger className="h-6 w-40 border-0 bg-transparent text-[10px]"><SelectValue placeholder="Choose memory scope" /></SelectTrigger><SelectContent>{linking.data.candidates.map((candidate) => <SelectItem key={candidate} value={candidate}>{candidate}</SelectItem>)}</SelectContent></Select>
+    <Button size="sm" variant="ghost" className="h-6 px-2 text-[10px]" disabled={!memoryProject} isLoading={confirm.isPending} onClick={() => confirm.mutate({ project, memoryProject })}>Bind</Button>
   </div>;
 }
 
@@ -125,10 +164,10 @@ function ProjectPicker({ project, projects, projectName, onProjectChange }: Pick
   return <Select value={projectName} onValueChange={onProjectChange}><SelectTrigger className="h-7 w-[min(100%,24rem)] text-xs" aria-label={`Indexed repository: ${project.name}`}><SelectValue placeholder="Select indexed repository" /></SelectTrigger><SelectContent>{projects.map((item) => <SelectItem key={item.name} value={item.name}>{item.name}</SelectItem>)}</SelectContent></Select>;
 }
 
-function FileFocusPanel({ selected, neighborhood, isLoading, onClose }: { selected: CodeGraphSnapshot['nodes'][number]; neighborhood: CodeGraphNeighborhood | undefined; isLoading: boolean; onClose: () => void }) {
+function FileFocusPanel({ selected, neighborhood, memoryLinks, isLoading, onClose }: { selected: CodeGraphSnapshot['nodes'][number]; neighborhood: CodeGraphNeighborhood | undefined; memoryLinks: { entity_id: number; entity_name: string; entity_type: string; link_method: string }[]; isLoading: boolean; onClose: () => void }) {
   return <aside className="absolute right-0 top-0 z-10 flex h-full w-72 flex-col border-l bg-card/95 shadow-xl backdrop-blur">
     <div className="flex shrink-0 items-start justify-between gap-2 border-b p-4"><div className="flex min-w-0 items-center gap-2"><span className="h-2.5 w-2.5 shrink-0 rounded-full bg-cyan-400" /><div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-cyan-300">File focus</p><p className="truncate font-mono text-sm font-medium">{selected.label}</p></div></div><Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" title="Clear file focus" onClick={onClose}><X className="h-4 w-4" /></Button></div>
-    <div className="flex-1 space-y-4 overflow-auto p-4 text-sm"><p className="break-all font-mono text-xs text-muted-foreground">{selected.path}</p><div className="grid grid-cols-2 gap-2 text-xs"><FocusMetric label="Imported by" value={selected.fan_in === null ? 'Not sampled' : String(selected.fan_in)} /><FocusMetric label="Imports" value={selected.fan_out === null ? 'Not sampled' : String(selected.fan_out)} /></div><div className="rounded-lg border border-dashed p-3 text-xs leading-relaxed text-muted-foreground"><GitFork className="mb-2 h-4 w-4 text-cyan-300" />{isLoading ? 'Loading its bounded direct imports and importers…' : neighborhood?.state === 'unavailable' ? 'A wider neighborhood is unavailable; the initial graph remains available.' : neighborhood?.truncated ? `Showing ${neighborhood.rendered_imports} of ${neighborhood.total_imports} import statements around this file.` : 'Highlighted links include this file’s direct import neighborhood.'}</div></div>
+    <div className="flex-1 space-y-4 overflow-auto p-4 text-sm"><p className="break-all font-mono text-xs text-muted-foreground">{selected.path}</p><div className="grid grid-cols-2 gap-2 text-xs"><FocusMetric label="Imported by" value={selected.fan_in === null ? 'Not sampled' : String(selected.fan_in)} /><FocusMetric label="Imports" value={selected.fan_out === null ? 'Not sampled' : String(selected.fan_out)} /></div><div className="rounded-lg border border-dashed p-3 text-xs leading-relaxed text-muted-foreground"><GitFork className="mb-2 h-4 w-4 text-cyan-300" />{isLoading ? 'Loading its bounded direct imports and importers…' : neighborhood?.state === 'unavailable' ? 'A wider neighborhood is unavailable; the initial graph remains available.' : neighborhood?.truncated ? `Showing ${neighborhood.rendered_imports} of ${neighborhood.total_imports} import statements around this file.` : 'Highlighted links include this file’s direct import neighborhood.'}</div>{memoryLinks.length > 0 && <div className="rounded-lg border border-fuchsia-400/25 bg-fuchsia-400/5 p-3"><p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-fuchsia-200">Memory evidence</p><p className="mt-1 text-xs text-muted-foreground">Exact-symbol links, separate from imports.</p><div className="mt-2 space-y-1">{memoryLinks.map((link) => <div key={link.entity_id} className="rounded bg-background/50 px-2 py-1.5"><p className="truncate font-mono text-xs">{link.entity_name}</p><p className="text-[10px] text-fuchsia-200/80">{link.link_method === 'exact_symbol' ? 'Verified exact symbol' : 'Legacy exact symbol'}</p></div>)}</div></div>}</div>
     <div className="shrink-0 border-t p-4"><Button className="w-full" size="sm" variant="outline" onClick={onClose}>Return to full topology</Button></div>
   </aside>;
 }

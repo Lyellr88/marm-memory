@@ -131,6 +131,32 @@ def add_edge(db_path: Path, source: int, target: int, predicate: str) -> int:
     return cur.lastrowid
 
 
+def test_legacy_code_links_remain_readable_before_writer_migration(tmp_path) -> None:
+    db = make_db(tmp_path)
+    entity_id = add_entity(db, "Legacy entity")
+    with sqlite3.connect(db) as connection:
+        connection.execute(
+            "INSERT INTO entity_code_links (entity_id, graph_qualified_name, project) "
+            "VALUES (?, 'legacy.module.symbol', 'legacy-project')",
+            (entity_id,),
+        )
+
+    entity = concept_store.get_entity(db, entity_id)
+
+    assert entity is not None
+    assert entity["linked_code"] == [
+        {
+            "qualified_name": "legacy.module.symbol",
+            "file_path": "",
+            "link_method": "legacy_exact_symbol",
+            "last_verified_at": None,
+        }
+    ]
+    graph = concept_neighborhood.neighborhood(db, entity_id)
+    assert graph is not None
+    assert graph["nodes"][0]["linked_code"] == entity["linked_code"]
+
+
 def set_embedding(db_path: Path, entity_id: int, *values: float) -> None:
     vector = array("f", values)
     conn = sqlite3.connect(db_path)

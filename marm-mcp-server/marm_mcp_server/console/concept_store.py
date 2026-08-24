@@ -75,6 +75,22 @@ def _build_run_columns(connection: sqlite3.Connection) -> tuple[str, str, str, s
     )
 
 
+def _code_link_evidence_columns(connection: sqlite3.Connection) -> tuple[str, str]:
+    """Read link evidence without requiring the writer to have migrated first."""
+    columns = {
+        row["name"]
+        for row in connection.execute("PRAGMA table_info(entity_code_links)")
+    }
+    return (
+        "link_method"
+        if "link_method" in columns
+        else "'legacy_exact_symbol' AS link_method",
+        "last_verified_at"
+        if "last_verified_at" in columns
+        else "NULL AS last_verified_at",
+    )
+
+
 def graph_version(db_path: Path) -> dict:
     """A cheap change marker the Console can poll while the Explorer is open.
 
@@ -216,10 +232,11 @@ def get_entity(db_path: Path, entity_id: int) -> dict | None:
         ).fetchone()
         if row is None:
             return None
+        link_method, last_verified_at = _code_link_evidence_columns(connection)
         links = connection.execute(
-            """SELECT graph_qualified_name, file_path
-               FROM entity_code_links WHERE entity_id = ?
-               ORDER BY graph_qualified_name LIMIT 50""",
+            f"""SELECT graph_qualified_name, file_path, {link_method}, {last_verified_at}
+                FROM entity_code_links WHERE entity_id = ?
+                ORDER BY graph_qualified_name LIMIT 50""",
             (entity_id,),
         ).fetchall()
     try:
@@ -233,6 +250,8 @@ def get_entity(db_path: Path, entity_id: int) -> dict | None:
             {
                 "qualified_name": link["graph_qualified_name"],
                 "file_path": link["file_path"] or "",
+                "link_method": link["link_method"],
+                "last_verified_at": link["last_verified_at"],
             }
             for link in links
         ],

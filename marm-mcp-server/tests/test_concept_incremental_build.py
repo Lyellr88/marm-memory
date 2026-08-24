@@ -20,11 +20,7 @@ def concepts_env(monkeypatch, tmp_path):
     load_isolated_server(monkeypatch, tmp_path)
     monkeypatch.setenv("MARM_CONCEPT_DB_PATH", str(tmp_path / "marm_index.db"))
     concepts = importlib.import_module("marm_mcp_server.endpoints.concepts")
-    concept_build_engine = importlib.import_module(
-        "marm_mcp_server.services.concept_build_engine"
-    )
     monkeypatch.setattr(concepts, "CONCEPTS_AVAILABLE", True)
-    monkeypatch.setattr(concept_build_engine, "is_graph_available", lambda: False)
     memory_module = sys.modules["marm_mcp_server.core.memory"]
     return concepts, memory_module
 

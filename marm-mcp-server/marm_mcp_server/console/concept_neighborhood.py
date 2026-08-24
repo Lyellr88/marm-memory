@@ -6,7 +6,12 @@ import sqlite3
 from contextlib import closing
 from pathlib import Path
 
-from .concept_store import _connect, _entity, _schema_status
+from .concept_store import (
+    _code_link_evidence_columns,
+    _connect,
+    _entity,
+    _schema_status,
+)
 
 
 def neighborhood(
@@ -89,8 +94,9 @@ def neighborhood(
             """,
             list(ids),
         ).fetchall()
+        link_method, last_verified_at = _code_link_evidence_columns(connection)
         links = connection.execute(
-            f"""SELECT entity_id, graph_qualified_name, file_path
+            f"""SELECT entity_id, graph_qualified_name, file_path, {link_method}, {last_verified_at}
                 FROM entity_code_links WHERE entity_id IN ({placeholders}) LIMIT 200""",
             list(ids),
         ).fetchall()
@@ -100,6 +106,8 @@ def neighborhood(
             {
                 "qualified_name": link["graph_qualified_name"],
                 "file_path": link["file_path"] or "",
+                "link_method": link["link_method"],
+                "last_verified_at": link["last_verified_at"],
             }
         )
     # A node's edges already in this response, so hidden = degree - included.

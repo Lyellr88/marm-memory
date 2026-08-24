@@ -14,6 +14,7 @@ import importlib
 import sqlite3
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -31,11 +32,21 @@ def _fresh_concepts_module(monkeypatch, tmp_path, concept_db_path=None):
 
 
 def _engine():
-    """The concept-build engine module: is_graph_available, extract_entities,
+    """The concept-build engine module: extract_entities,
     _try_embed, and CONCEPT_BUILD_ROW_CAP are all read as bare names inside
     _run_build, which lives here rather than in endpoints.concepts, so tests
     that fake them must patch this module, not concepts."""
     return importlib.import_module("marm_mcp_server.services.concept_build_engine")
+
+
+def _bind_memory_scope(monkeypatch, project: str) -> None:
+    monkeypatch.setattr(
+        _engine(),
+        "get_by_memory_project",
+        lambda scope: (
+            SimpleNamespace(graph_project=project) if scope == project else None
+        ),
+    )
 
 
 def _all_rows(pages):
@@ -477,8 +488,6 @@ def test_run_build_writes_entities_and_relationship_for_two_entities(
             relationship_pairs=[("auth module", "rate limiter", "uses")],
         ),
     )
-    monkeypatch.setattr(_engine(), "is_graph_available", lambda: False)
-
     rows = [("m1", "auth module talks to the rate limiter", "sess-a", "proj-a")]
     result = concepts._run_build([rows])
 
@@ -514,12 +523,12 @@ def test_run_build_is_idempotent_on_repeat_runs(concepts_env, monkeypatch):
             relationship_pairs=[("auth module", "rate limiter", "uses")],
         ),
     )
-    monkeypatch.setattr(_engine(), "is_graph_available", lambda: True)
-    monkeypatch.setattr(_engine(), "indexed_project_names", lambda: {"proj-a"})
+    _bind_memory_scope(monkeypatch, "proj-a")
     monkeypatch.setattr(
         _engine(),
         "find_code_match",
         lambda name, project: {
+            "status": "matched",
             "qualified_name": f"marm_graph.core.{name.replace(' ', '_')}",
             "label": "class",
             "file_path": "x.py",
@@ -562,12 +571,12 @@ def test_run_recall_does_not_return_duplicate_linked_code_after_repeat_build(
             entities=[Entity("CbmClient", "concept")], relationship_pairs=[]
         ),
     )
-    monkeypatch.setattr(_engine(), "is_graph_available", lambda: True)
-    monkeypatch.setattr(_engine(), "indexed_project_names", lambda: {"proj-a"})
+    _bind_memory_scope(monkeypatch, "proj-a")
     monkeypatch.setattr(
         _engine(),
         "find_code_match",
         lambda name, project: {
+            "status": "matched",
             "qualified_name": "marm_graph.core.cbm_client.CbmClient",
             "label": "class",
             "file_path": "marm_graph/core/cbm_client.py",
@@ -595,8 +604,6 @@ def test_run_build_skips_code_lookups_for_an_unindexed_memory_project(
             entities=[Entity("CbmClient", "concept")], relationship_pairs=[]
         ),
     )
-    monkeypatch.setattr(_engine(), "is_graph_available", lambda: True)
-    monkeypatch.setattr(_engine(), "indexed_project_names", lambda: {"other-project"})
     monkeypatch.setattr(
         _engine(),
         "find_code_match",
@@ -621,8 +628,6 @@ def test_run_build_same_entity_across_two_memories_dedups_in_same_session(
             entities=[Entity("auth module", "concept")], relationship_pairs=[]
         ),
     )
-    monkeypatch.setattr(_engine(), "is_graph_available", lambda: False)
-
     rows = [
         ("m1", "auth module content one", "sess-a", None),
         ("m2", "auth module content two", "sess-a", None),
@@ -649,7 +654,6 @@ def test_run_build_with_graph_unavailable_creates_zero_code_links(
             entities=[Entity("CbmClient", "concept")], relationship_pairs=[]
         ),
     )
-    monkeypatch.setattr(_engine(), "is_graph_available", lambda: False)
     monkeypatch.setattr(
         _engine(),
         "find_code_match",
@@ -671,12 +675,12 @@ def test_run_build_links_code_when_graph_available(concepts_env, monkeypatch):
             entities=[Entity("CbmClient", "concept")], relationship_pairs=[]
         ),
     )
-    monkeypatch.setattr(_engine(), "is_graph_available", lambda: True)
-    monkeypatch.setattr(_engine(), "indexed_project_names", lambda: {"proj-a"})
+    _bind_memory_scope(monkeypatch, "proj-a")
     monkeypatch.setattr(
         _engine(),
         "find_code_match",
         lambda name, project: {
+            "status": "matched",
             "qualified_name": "marm_graph.core.cbm_client.CbmClient",
             "label": "class",
             "file_path": "marm_graph/core/cbm_client.py",
@@ -685,6 +689,38 @@ def test_run_build_links_code_when_graph_available(concepts_env, monkeypatch):
 
     result = concepts._run_build([[("m1", "CbmClient reference", "sess-a", "proj-a")]])
     assert result["code_links_created"] == 1
+
+
+def test_run_build_removes_stale_exact_link_after_an_authoritative_no_match(
+    concepts_env, monkeypatch
+):
+    _server, concepts, _memory_module = concepts_env
+    from marm_mcp_server.core.concept_extraction import Entity, ExtractionResult
+
+    monkeypatch.setattr(
+        _engine(),
+        "extract_entities",
+        lambda content: ExtractionResult(
+            entities=[Entity("CbmClient", "concept")], relationship_pairs=[]
+        ),
+    )
+    _bind_memory_scope(monkeypatch, "proj-a")
+    rows = [[("m1", "CbmClient reference", "sess-a", "proj-a")]]
+    monkeypatch.setattr(
+        _engine(),
+        "find_code_match",
+        lambda *_: {"status": "matched", "qualified_name": "module.CbmClient"},
+    )
+    concepts._run_build(rows)
+    monkeypatch.setattr(_engine(), "find_code_match", lambda *_: {"status": "no_match"})
+
+    result = concepts._run_build(rows)
+    concept_db = concepts._get_concept_db()
+    with concept_db.get_connection() as conn:
+        remaining = conn.execute("SELECT COUNT(*) FROM entity_code_links").fetchone()[0]
+
+    assert result["code_links_created"] == 0
+    assert remaining == 0
 
 
 def test_run_build_reports_no_duplicates_when_embedding_unavailable(
@@ -703,8 +739,6 @@ def test_run_build_reports_no_duplicates_when_embedding_unavailable(
             entities=[Entity("auth module", "concept")], relationship_pairs=[]
         ),
     )
-    monkeypatch.setattr(_engine(), "is_graph_available", lambda: False)
-
     result = concepts._run_build([[("m1", "auth module content", "sess-a", None)]])
     assert result["possible_duplicates"] == []
 
@@ -724,7 +758,6 @@ def test_run_build_reports_possible_duplicate_when_similar_entity_exists(
         "OAuth": np.asarray([0.99, 0.01, 0.0], dtype=np.float32).tobytes(),
     }
     monkeypatch.setattr(_engine(), "_try_embed", lambda name: fake_vectors[name])
-    monkeypatch.setattr(_engine(), "is_graph_available", lambda: False)
 
     extraction_by_content = {
         "Auth content": ExtractionResult(
@@ -768,7 +801,6 @@ def test_run_build_caches_embed_calls_across_repeated_entity_names(
         return np.asarray([1.0, 0.0, 0.0], dtype=np.float32).tobytes()
 
     monkeypatch.setattr(_engine(), "_try_embed", _counting_embed)
-    monkeypatch.setattr(_engine(), "is_graph_available", lambda: False)
     monkeypatch.setattr(
         _engine(),
         "extract_entities",

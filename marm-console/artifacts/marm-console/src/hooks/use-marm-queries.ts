@@ -38,6 +38,8 @@ export const queryKeys = {
   projectCodeUnits: (baseUrl: string, project: string) => ['projectCodeUnits', baseUrl, project],
   projectGraph: (baseUrl: string, project: string) => ['projectGraph', baseUrl, project],
   projectGraphNeighborhood: (baseUrl: string, project: string, nodeId: string) => ['projectGraphNeighborhood', baseUrl, project, nodeId],
+  projectMemoryLinking: (baseUrl: string, project: string) => ['projectMemoryLinking', baseUrl, project],
+  projectMemoryLinks: (baseUrl: string, project: string) => ['projectMemoryLinks', baseUrl, project],
 };
 
 // Global config hook
@@ -599,6 +601,43 @@ export function useProjectGraphNeighborhood(project: string, nodeId: string | nu
     queryKey: queryKeys.projectGraphNeighborhood(baseUrl, project, nodeId || ''),
     queryFn: () => client.getProjectGraphNeighborhood(project, nodeId || ''),
     enabled: !!project && !!nodeId && enabled,
+  });
+}
+
+export function useProjectMemoryLinking(project: string) {
+  const { baseUrl, client } = useMarmConfig();
+  return useQuery({
+    queryKey: queryKeys.projectMemoryLinking(baseUrl, project),
+    queryFn: () => client.getProjectMemoryLinking(project),
+    enabled: !!project,
+    refetchInterval: (query) => {
+      const state = query.state.data?.refresh?.state;
+      return state === 'pending' || state === 'leased' ? 3000 : false;
+    },
+  });
+}
+
+export function useProjectMemoryLinks(project: string, refreshPending = false) {
+  const { baseUrl, client } = useMarmConfig();
+  return useQuery({
+    queryKey: queryKeys.projectMemoryLinks(baseUrl, project),
+    queryFn: () => client.getProjectMemoryLinks(project),
+    enabled: !!project,
+    refetchInterval: refreshPending ? 3000 : false,
+  });
+}
+
+export function useConfirmProjectMemoryLinking() {
+  const { baseUrl, client } = useMarmConfig();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ project, memoryProject }: { project: string; memoryProject: string }) =>
+      client.confirmProjectMemoryLinking(project, memoryProject),
+    onSuccess: (_data, variables) => {
+      qc.invalidateQueries({ queryKey: queryKeys.projectMemoryLinking(baseUrl, variables.project) });
+      qc.invalidateQueries({ queryKey: queryKeys.projectMemoryLinks(baseUrl, variables.project) });
+      qc.invalidateQueries({ queryKey: queryKeys.conceptsGraph(baseUrl) });
+    },
   });
 }
 
