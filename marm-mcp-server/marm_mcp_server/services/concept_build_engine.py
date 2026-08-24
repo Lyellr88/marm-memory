@@ -409,7 +409,7 @@ def _run_build(
                             except Exception as e:
                                 _safe_print(f"Concept code-link lookup failed: {e}")
                                 continue
-                            if match.get("status") == "matched":
+                            if match.get("status") in {"matched", "no_match"}:
                                 try:
                                     reconciliation = concept_db.reconcile_code_link(
                                         conn,

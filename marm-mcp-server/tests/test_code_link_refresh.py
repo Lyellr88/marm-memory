@@ -128,6 +128,39 @@ def test_refresh_preserves_existing_links_when_the_graph_is_unavailable(
     assert status["last_error"] == "unavailable"
 
 
+def test_refresh_continues_after_an_ambiguous_entity(refresh_env, monkeypatch):
+    from marm_mcp_server.core import code_link_queue, graph_client
+
+    concept_db = refresh_env["concept_db"]
+    _bind(refresh_env["memory"], "graph-project", "memory-project")
+    ambiguous_id = _entity(concept_db, "Config", "memory-project")
+    unique_id = _entity(concept_db, "Alpha", "memory-project")
+    task = _enqueue_task("graph-project", "memory-project")
+    monkeypatch.setattr(
+        graph_client,
+        "find_code_match",
+        lambda name, _project: (
+            {"status": "ambiguous", "candidates": ["one.Config", "two.Config"]}
+            if name == "Config"
+            else {
+                "status": "matched",
+                "qualified_name": "module.Alpha",
+                "file_path": "module.py",
+            }
+        ),
+    )
+
+    asyncio.run(refresh_env["worker"]._refresh_code_links(task, threading.Event()))
+
+    with concept_db.get_connection() as conn:
+        linked_ids = {
+            row[0] for row in conn.execute("SELECT entity_id FROM entity_code_links")
+        }
+    assert linked_ids == {unique_id}
+    assert ambiguous_id not in linked_ids
+    assert code_link_queue.status("graph-project") is None
+
+
 def test_refresh_cannot_alter_entities_outside_its_bound_memory_scope(
     refresh_env, monkeypatch
 ):

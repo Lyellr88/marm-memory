@@ -52,6 +52,21 @@ def test_auto_binding_refuses_multiple_matching_memory_scopes(isolated_memory):
     assert binding is None
 
 
+def test_user_binding_refuses_to_retarget_an_existing_graph_project(isolated_memory):
+    from marm_mcp_server.core import code_project_bindings
+
+    _scope(isolated_memory, "memory-a")
+    _scope(isolated_memory, "memory-b")
+    code_project_bindings.set_user_binding("graph", "memory-a", "/work/a")
+
+    with pytest.raises(ValueError, match="graph_project_already_bound"):
+        code_project_bindings.set_user_binding("graph", "memory-b", "/work/b")
+
+    binding = code_project_bindings.get_by_graph_project("graph")
+    assert binding is not None
+    assert binding.memory_project == "memory-a"
+
+
 def test_reenqueue_preserves_claimed_work_and_rejects_stale_completion(isolated_memory):
     from marm_mcp_server.core import code_link_queue
 
@@ -68,6 +83,20 @@ def test_reenqueue_preserves_claimed_work_and_rejects_stale_completion(isolated_
     reclaimed = code_link_queue.claim()[0]
     assert reclaimed.graph_project == "graph"
     assert reclaimed.enqueued_at != task.enqueued_at
+
+
+def test_reenqueue_after_failure_clears_the_retry_lease(isolated_memory):
+    from marm_mcp_server.core import code_link_queue
+
+    code_link_queue.enqueue_refresh("graph", "memory", "/work/memory")
+    task = code_link_queue.claim()[0]
+    assert code_link_queue.fail(task, "unavailable") is True
+
+    code_link_queue.enqueue_refresh("graph", "memory", "/work/memory")
+    retried = code_link_queue.claim()
+
+    assert len(retried) == 1
+    assert retried[0].graph_project == "graph"
 
 
 def test_refresh_queue_drop_removes_pending_work(isolated_memory):

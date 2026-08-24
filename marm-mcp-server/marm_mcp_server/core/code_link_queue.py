@@ -51,6 +51,7 @@ def enqueue(
             enqueued_at = excluded.enqueued_at,
             state = CASE WHEN code_link_refresh_queue.state = 'leased' THEN 'leased' ELSE 'pending' END,
             attempts = CASE WHEN code_link_refresh_queue.state = 'leased' THEN code_link_refresh_queue.attempts ELSE 0 END,
+            leased_until = CASE WHEN code_link_refresh_queue.state = 'leased' THEN code_link_refresh_queue.leased_until ELSE NULL END,
             last_error = NULL
         """,
         (graph_project, memory_project, root_path, now),

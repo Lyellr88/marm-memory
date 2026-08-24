@@ -691,6 +691,38 @@ def test_run_build_links_code_when_graph_available(concepts_env, monkeypatch):
     assert result["code_links_created"] == 1
 
 
+def test_run_build_removes_stale_exact_link_after_an_authoritative_no_match(
+    concepts_env, monkeypatch
+):
+    _server, concepts, _memory_module = concepts_env
+    from marm_mcp_server.core.concept_extraction import Entity, ExtractionResult
+
+    monkeypatch.setattr(
+        _engine(),
+        "extract_entities",
+        lambda content: ExtractionResult(
+            entities=[Entity("CbmClient", "concept")], relationship_pairs=[]
+        ),
+    )
+    _bind_memory_scope(monkeypatch, "proj-a")
+    rows = [[("m1", "CbmClient reference", "sess-a", "proj-a")]]
+    monkeypatch.setattr(
+        _engine(),
+        "find_code_match",
+        lambda *_: {"status": "matched", "qualified_name": "module.CbmClient"},
+    )
+    concepts._run_build(rows)
+    monkeypatch.setattr(_engine(), "find_code_match", lambda *_: {"status": "no_match"})
+
+    result = concepts._run_build(rows)
+    concept_db = concepts._get_concept_db()
+    with concept_db.get_connection() as conn:
+        remaining = conn.execute("SELECT COUNT(*) FROM entity_code_links").fetchone()[0]
+
+    assert result["code_links_created"] == 0
+    assert remaining == 0
+
+
 def test_run_build_reports_no_duplicates_when_embedding_unavailable(
     concepts_env, monkeypatch
 ):

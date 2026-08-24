@@ -339,9 +339,11 @@ class ConceptIndexWorker:
                 outcome = await asyncio.to_thread(
                     find_code_match, name, task.graph_project
                 )
-                if outcome.get("status") in {"unavailable", "ambiguous"}:
-                    retry_reason = str(outcome.get("status"))
+                if outcome.get("status") == "unavailable":
+                    retry_reason = "unavailable"
                     break
+                if outcome.get("status") == "ambiguous":
+                    continue
                 concept_db.reconcile_code_link(
                     conn, entity_id, task.graph_project, outcome
                 )

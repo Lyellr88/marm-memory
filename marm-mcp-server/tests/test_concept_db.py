@@ -74,7 +74,8 @@ def test_code_link_refresh_keeps_the_original_resolution_time(concept_db):
             label="Alpha",
         )
         conn.execute(
-            "UPDATE entity_code_links SET resolved_at = 'first-resolution' "
+            "UPDATE entity_code_links SET resolved_at = 'first-resolution', "
+            "last_verified_at = 'first-verification' "
             "WHERE entity_id = ? AND graph_qualified_name = ?",
             (entity_id, "module.Alpha"),
         )
@@ -92,7 +93,7 @@ def test_code_link_refresh_keeps_the_original_resolution_time(concept_db):
         ).fetchone()
 
     assert row[0] == "first-resolution"
-    assert row[1] is not None
+    assert row[1] != "first-verification"
     assert row[2] == "Alpha refreshed"
 
 

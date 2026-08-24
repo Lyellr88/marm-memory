@@ -148,11 +148,7 @@ def test_find_code_match_matches_on_explicit_name_field(monkeypatch):
     assert match["qualified_name"] == "some.deeply.nested.qn"
 
 
-def test_find_code_match_finds_exact_match_ranked_below_top_bm25_result(monkeypatch):
-    """symbol kind is BM25 discovery, not an exact-name lookup -- a
-    higher-relevance non-exact row can legitimately outrank the true exact
-    match. limit must be wide enough that the exact match is still in the
-    returned set for the filter loop to find."""
+def test_find_code_match_filters_exact_results(monkeypatch):
     monkeypatch.setattr(graph_supervisor, "is_available", lambda: True)
     monkeypatch.setattr(graph_supervisor, "get_client", lambda: _FakeClient())
     monkeypatch.setattr(
@@ -182,18 +178,49 @@ def test_find_code_match_finds_exact_match_ranked_below_top_bm25_result(monkeypa
     }
 
 
-def test_find_code_match_requests_more_than_top_result(monkeypatch):
+def test_find_code_match_requests_a_bounded_exact_name_pattern(monkeypatch):
     monkeypatch.setattr(graph_supervisor, "is_available", lambda: True)
     monkeypatch.setattr(graph_supervisor, "get_client", lambda: _FakeClient())
     captured = {}
 
     def _capture(client, req):
         captured["limit"] = req.limit
+        captured["query"] = req.query
         return {"results": []}
 
     monkeypatch.setattr(graph_client.R, "do_lookup", _capture)
     graph_client.find_code_match("CbmClient", "proj-a")
-    assert captured["limit"] > 1
+    assert captured == {"limit": 200, "query": "^CbmClient$"}
+
+
+def test_find_code_match_refuses_a_truncated_exact_lookup(monkeypatch):
+    monkeypatch.setattr(graph_supervisor, "is_available", lambda: True)
+    monkeypatch.setattr(graph_supervisor, "get_client", lambda: _FakeClient())
+    monkeypatch.setattr(
+        graph_client.R,
+        "do_lookup",
+        lambda client, req: {
+            "has_more": True,
+            "results": [{"qualified_name": "one.CbmClient", "name": "CbmClient"}],
+        },
+    )
+
+    assert graph_client.find_code_match("CbmClient", "proj-a") == {
+        "status": "ambiguous",
+        "candidates": ["one.CbmClient"],
+    }
+
+
+def test_find_code_match_treats_a_malformed_result_list_as_unavailable(monkeypatch):
+    monkeypatch.setattr(graph_supervisor, "is_available", lambda: True)
+    monkeypatch.setattr(graph_supervisor, "get_client", lambda: _FakeClient())
+    monkeypatch.setattr(
+        graph_client.R, "do_lookup", lambda client, req: {"results": {"bad": "shape"}}
+    )
+
+    assert graph_client.find_code_match("CbmClient", "proj-a") == {
+        "status": "unavailable"
+    }
 
 
 def test_find_code_match_refuses_ambiguous_exact_symbols(monkeypatch):

@@ -26,7 +26,9 @@ export function CodeGraphExplorer({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showMemoryEvidence, setShowMemoryEvidence] = useState(false);
   const neighborhood = useProjectGraphNeighborhood(project.name, selectedId);
-  const memoryLinks = useProjectMemoryLinks(project.name);
+  const linking = useProjectMemoryLinking(project.name);
+  const refreshPending = linking.data?.refresh?.state === 'pending' || linking.data?.refresh?.state === 'leased';
+  const memoryLinks = useProjectMemoryLinks(project.name, refreshPending);
   const expandedGraph = useMemo(() => {
     if (!graph || neighborhood.data?.state !== 'ready') return graph;
     const nodes = new Map(graph.nodes.map((node) => [node.id, node]));
@@ -121,7 +123,7 @@ export function CodeGraphExplorer({
         <ProjectPicker project={project} projects={projects} projectName={projectName} onProjectChange={onProjectChange} />
         <Badge variant="outline" className="border-cyan-400/25 bg-cyan-400/5 text-cyan-200"><FileCode2 className="mr-1 h-3 w-3" /> File imports</Badge>
         <Badge variant="outline" className="border-border bg-muted/40 text-muted-foreground">{readyGraph.truncated ? 'Bounded view' : 'Complete view'}</Badge>
-        <MemoryLinkStatus project={project.name} />
+        <MemoryLinkStatus project={project.name} linking={linking} />
         <Button size="sm" variant={showMemoryEvidence ? 'secondary' : 'ghost'} className="h-7 text-[10px]" onClick={() => setShowMemoryEvidence((current) => !current)}><Link2 className="mr-1 h-3 w-3" /> {showMemoryEvidence ? `Memory evidence · ${linkedFileIds.size}` : 'Show memory evidence'}</Button>
       </div>
       <div className="relative flex min-h-[28rem] flex-1 overflow-hidden rounded-lg border bg-card shadow-inner">
@@ -133,8 +135,7 @@ export function CodeGraphExplorer({
   </div>;
 }
 
-function MemoryLinkStatus({ project }: { project: string }) {
-  const linking = useProjectMemoryLinking(project);
+function MemoryLinkStatus({ project, linking }: { project: string; linking: ReturnType<typeof useProjectMemoryLinking> }) {
   const confirm = useConfirmProjectMemoryLinking();
   const [memoryProject, setMemoryProject] = useState('');
 

@@ -610,15 +610,20 @@ export function useProjectMemoryLinking(project: string) {
     queryKey: queryKeys.projectMemoryLinking(baseUrl, project),
     queryFn: () => client.getProjectMemoryLinking(project),
     enabled: !!project,
+    refetchInterval: (query) => {
+      const state = query.state.data?.refresh?.state;
+      return state === 'pending' || state === 'leased' ? 3000 : false;
+    },
   });
 }
 
-export function useProjectMemoryLinks(project: string) {
+export function useProjectMemoryLinks(project: string, refreshPending = false) {
   const { baseUrl, client } = useMarmConfig();
   return useQuery({
     queryKey: queryKeys.projectMemoryLinks(baseUrl, project),
     queryFn: () => client.getProjectMemoryLinks(project),
     enabled: !!project,
+    refetchInterval: refreshPending ? 3000 : false,
   });
 }
 

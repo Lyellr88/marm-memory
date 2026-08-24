@@ -9,6 +9,7 @@ in-process path instead of building an HTTP client. Resolution stays fail-open:
 an unavailable graph is explicit evidence the caller must preserve, never an exception.
 """
 
+import re
 from typing import Any, Optional
 
 from marm_graph.core import tool_router as R
@@ -54,16 +55,10 @@ def find_code_match(entity_name: str, project: Optional[str]) -> dict[str, Any]:
         result = R.do_lookup(
             client,
             CodeLookupRequest(
-                # symbol kind is BM25 discovery (tool_router.py's search_graph
-                # branch), not an exact-name lookup -- limit=1 would truncate
-                # to the top-ranked row before the exact-match filter below
-                # ever runs, dropping real matches that BM25 didn't rank
-                # first. Widen the candidate window, filter for exact match
-                # across all of them.
-                query=entity_name,
+                query=f"^{re.escape(entity_name)}$",
                 project=project,
                 kind="symbol",
-                limit=10,
+                limit=200,
             ),
         )
     except Exception:
@@ -76,7 +71,9 @@ def find_code_match(entity_name: str, project: Optional[str]) -> dict[str, Any]:
     ):
         return {"status": "unavailable"}
 
-    results = result.get("results") or []
+    results = result.get("results")
+    if not isinstance(results, list):
+        return {"status": "unavailable"}
     matches: dict[str, dict[str, Any]] = {}
     for row in results:
         if not isinstance(row, dict):
@@ -96,7 +93,7 @@ def find_code_match(entity_name: str, project: Optional[str]) -> dict[str, Any]:
             }
     if not matches:
         return {"status": "no_match"}
-    if len(matches) != 1:
+    if result.get("has_more") is True or len(matches) != 1:
         return {
             "status": "ambiguous",
             "candidates": sorted(matches),

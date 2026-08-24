@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import PurePath, PureWindowsPath
@@ -127,7 +128,7 @@ def auto_bind(
                 "updated_at, last_verified_at) VALUES (?, ?, ?, 'auto', ?, ?, ?)",
                 (graph_project, memory_project, root_path, now, now, now),
             )
-        except Exception:
+        except sqlite3.IntegrityError:
             return "conflict", None
     return "bound", get_by_graph_project(graph_project)
 
@@ -137,6 +138,9 @@ def set_user_binding(
 ) -> CodeProjectBinding:
     if memory_project not in memory_project_scopes():
         raise ValueError("memory_project_not_found")
+    current = get_by_graph_project(graph_project)
+    if current is not None and current.memory_project != memory_project:
+        raise ValueError("graph_project_already_bound")
     existing = get_by_memory_project(memory_project)
     if existing is not None and existing.graph_project != graph_project:
         raise ValueError("memory_project_already_bound")
