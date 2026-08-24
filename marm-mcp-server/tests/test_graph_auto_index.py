@@ -36,6 +36,28 @@ def shared_db(monkeypatch, tmp_path):
     return memory_module.memory, tmp_path / "marm_memory.db"
 
 
+@pytest.fixture(autouse=True)
+def _stop_leaked_watchers(monkeypatch):
+    """Every GraphIndexWorker built below may start a real watchdog Observer
+    thread: _tick enrolls any watch_mode == "disabled" state on its own, and
+    that is the default for a state constructed directly rather than through
+    _refresh_projects. Track every instance built during the test and stop
+    its watcher afterward, rather than relying on each test to remember to."""
+    from marm_mcp_server.core import graph_index_worker as module
+
+    built: list = []
+    original_init = module.GraphIndexWorker.__init__
+
+    def tracking_init(self, *args, **kwargs):
+        built.append(self)
+        original_init(self, *args, **kwargs)
+
+    monkeypatch.setattr(module.GraphIndexWorker, "__init__", tracking_init)
+    yield
+    for worker in built:
+        worker._watcher.stop()
+
+
 def _git(cwd, *args):
     subprocess.run(
         ["git", *args],
@@ -1137,6 +1159,93 @@ def test_a_vanished_root_is_dropped_and_the_loop_survives(shared_db, tmp_path):
     assert missing.failed is True
 
 
+def test_a_failed_root_does_not_pin_the_coordinator_at_a_zero_second_wake(
+    shared_db, tmp_path
+):
+    """A failed root never reaches _evaluate again, so its reconcile_deadline
+    never advances past the -inf it starts at. Left in _next_wake_delay's
+    aggregation, that -inf would win the min() forever and spin the
+    coordinator at 0.0 with no sleep between ticks."""
+    from marm_mcp_server.core.graph_index_worker import GraphIndexWorker, _Watched
+
+    worker = GraphIndexWorker()
+    missing = _Watched(str(tmp_path / "does-not-exist"))
+    asyncio.run(worker._evaluate(missing))
+    assert missing.failed is True
+
+    worker._watched[missing.root] = missing
+    worker._ticked_once = True
+    assert worker._next_wake_delay() > 0.0, (
+        "a failed root must not pin the coordinator's wake delay at 0.0"
+    )
+
+
+def test_a_blocked_root_does_not_pin_the_coordinator_either(shared_db, tmp_path):
+    """The other never-evaluated path: runtime_flags.index_block keeps
+    skipping _evaluate for a suppressed or unindexable root, so its
+    reconcile_deadline also stays at -inf forever. _tick() must still
+    re-check the block on every real tick -- that is how a manual index
+    clearing it is noticed without a restart -- so the fix must live in
+    _next_wake_delay's aggregation, not in the state itself."""
+    from marm_mcp_server.core import runtime_flags
+    from marm_mcp_server.core.graph_index_worker import GraphIndexWorker, _Watched
+
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    root = str(plain)
+    runtime_flags.mark_unindexable(root, "windows_path_too_long")
+
+    worker = GraphIndexWorker()
+    state = _Watched(root)
+    worker._watched[state.root] = state
+    worker._ticked_once = True
+    assert state.reconcile_deadline == float("-inf"), (
+        "never evaluated: the block always skips it before _evaluate runs"
+    )
+    assert worker._next_wake_delay() > 0.0, (
+        "a permanently blocked root must not pin the coordinator's wake delay at 0.0"
+    )
+
+
+def test_a_blocked_root_with_an_elapsed_debounce_deadline_still_does_not_pin_the_coordinator(
+    shared_db, tmp_path, monkeypatch
+):
+    """_on_watch_event sets debounce_deadline independent of the block -- the
+    watch stays live on a blocked root, since _enroll_watch does not consult
+    index_block. Once that deadline elapses it is just as sharp an -inf as
+    reconcile_deadline once elapsed, so leaving it in _tick's index_block skip
+    path reopens the exact loop the reconcile_deadline fix closed, just
+    through the other deadline."""
+    from marm_mcp_server.core import graph_index_worker as module
+    from marm_mcp_server.core import runtime_flags
+
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    root = str(plain)
+    runtime_flags.mark_unindexable(root, "windows_path_too_long")
+
+    worker = module.GraphIndexWorker()
+    state = module._Watched(root)
+    # Stands in for a real watcher event firing on this blocked root: the
+    # deadline it leaves behind has nothing to do with whether the block
+    # is still active.
+    state.debounce_deadline = time.monotonic() - 1
+    worker._watched[state.root] = state
+    worker._projects_loaded_at = time.monotonic()
+    monkeypatch.setattr(
+        module.graph_supervisor, "snapshot", lambda: {"available": True}
+    )
+
+    asyncio.run(worker._tick())
+    assert state.debounce_deadline is None, (
+        "a consumed debounce event on a blocked root must not linger in the past"
+    )
+    assert worker._next_wake_delay() > 0.0, (
+        "an elapsed debounce deadline on a blocked root must not pin the "
+        "coordinator's wake delay at 0.0 either"
+    )
+
+
 # ── the standalone package ──────────────────────────────────────────
 
 
@@ -1709,6 +1818,40 @@ async def test_an_event_during_an_in_flight_index_leaves_exactly_one_pending_pas
     assert state.debounce_deadline is not None, (
         "exactly one catch-up must be scheduled, not zero and not a busy loop"
     )
+
+
+def test_read_only_watchdog_events_are_not_forwarded(shared_db):
+    """Linux's inotify backend also emits "opened" and "closed_no_write" for a
+    plain read, with no content change. Forwarding those would make a non-git
+    root -- which has no signature check and reindexes unconditionally on any
+    trigger -- re-index itself every debounce window from nothing but reads
+    under the watched root, including the graph engine's own reads while
+    indexing it."""
+    from watchdog.events import (
+        FileClosedNoWriteEvent,
+        FileCreatedEvent,
+        FileModifiedEvent,
+        FileOpenedEvent,
+    )
+
+    from marm_mcp_server.core.graph_index_watcher import _RootHandler
+
+    class _ImmediateLoop:
+        def call_soon_threadsafe(self, callback, *args):
+            callback(*args)
+
+    seen = []
+    handler = _RootHandler(
+        "/some/root", _ImmediateLoop(), lambda root: seen.append(root)
+    )
+
+    handler.on_any_event(FileOpenedEvent("/some/root/a.py"))
+    handler.on_any_event(FileClosedNoWriteEvent("/some/root/a.py"))
+    assert seen == [], "read-only events must not wake the coordinator"
+
+    handler.on_any_event(FileModifiedEvent("/some/root/a.py"))
+    handler.on_any_event(FileCreatedEvent("/some/root/b.py"))
+    assert seen == ["/some/root", "/some/root"], "real changes must still be forwarded"
 
 
 def test_a_watch_failure_for_one_root_falls_back_to_reconcile(

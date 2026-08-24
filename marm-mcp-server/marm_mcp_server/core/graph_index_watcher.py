@@ -11,13 +11,36 @@ import asyncio
 from typing import Callable, Optional
 
 import structlog
-from watchdog.events import FileSystemEvent, FileSystemEventHandler
+from watchdog.events import (
+    EVENT_TYPE_CLOSED,
+    EVENT_TYPE_CREATED,
+    EVENT_TYPE_DELETED,
+    EVENT_TYPE_MODIFIED,
+    EVENT_TYPE_MOVED,
+    FileSystemEvent,
+    FileSystemEventHandler,
+)
 from watchdog.observers import Observer
 from watchdog.observers.api import BaseObserver, ObservedWatch
 
 logger = structlog.get_logger(__name__)
 
 Callback = Callable[[str], None]
+
+# Linux's inotify backend also emits "opened" and "closed_no_write" for a
+# plain read, with no content change. Forwarding those would make the graph
+# engine's own read of source files while indexing re-trigger itself: a
+# non-git root has no signature check, so any watcher wake reindexes it
+# unconditionally (see _evaluate in graph_index_worker.py).
+_CHANGE_EVENT_TYPES = frozenset(
+    {
+        EVENT_TYPE_CREATED,
+        EVENT_TYPE_MODIFIED,
+        EVENT_TYPE_DELETED,
+        EVENT_TYPE_MOVED,
+        EVENT_TYPE_CLOSED,
+    }
+)
 
 
 class _RootHandler(FileSystemEventHandler):
@@ -34,6 +57,8 @@ class _RootHandler(FileSystemEventHandler):
         # Runs on watchdog's own thread. call_soon_threadsafe is the only safe
         # way to reach the owning loop from here; touching worker state
         # directly from this thread would race the coordinator's own reads.
+        if event.event_type not in _CHANGE_EVENT_TYPES:
+            return
         try:
             self._loop.call_soon_threadsafe(self._callback, self._root)
         except RuntimeError:

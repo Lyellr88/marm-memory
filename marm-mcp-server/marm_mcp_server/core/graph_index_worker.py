@@ -432,10 +432,31 @@ class GraphIndexWorker:
         if not self._watched:
             return min(_IDLE_POLL_SECONDS, GRAPH_AUTO_INDEX_PROJECT_TTL)
         now = time.monotonic()
-        deadlines = [state.reconcile_deadline for state in self._watched.values()]
+        # A failed root never reaches _evaluate again, so its deadline is
+        # never advanced past the -inf it starts at. Left in this list, one
+        # such root would pin the whole coordinator's sleep at 0.0 forever.
+        live = [state for state in self._watched.values() if not state.failed]
+        if not live:
+            return min(_IDLE_POLL_SECONDS, GRAPH_AUTO_INDEX_PROJECT_TTL)
+        # A root that runtime_flags.index_block keeps skipping (suppressed,
+        # marked unindexable, or an unreadable flag DB) also never reaches
+        # _evaluate, so it stays at -inf too -- but _tick() must still
+        # re-check it on every real tick, which is how a manual index
+        # clearing the block is noticed without a restart. So an -inf
+        # deadline only bounds how long the coordinator may sleep past it
+        # (the idle-poll floor below); it must not become a literal 0.0
+        # wake, or the coordinator spins forever re-reading the same block.
+        idle_floor = now + min(_IDLE_POLL_SECONDS, GRAPH_AUTO_INDEX_PROJECT_TTL)
+        never_evaluated = float("-inf")
+        deadlines = [
+            idle_floor
+            if state.reconcile_deadline == never_evaluated
+            else state.reconcile_deadline
+            for state in live
+        ]
         deadlines.extend(
             state.debounce_deadline
-            for state in self._watched.values()
+            for state in live
             if state.debounce_deadline is not None
         )
         return max(0.0, min(deadlines) - now)
@@ -552,6 +573,15 @@ class GraphIndexWorker:
             # until this read, and the watch set is only reloaded once per TTL,
             # so anything keyed to that reload lags by up to the TTL.
             if await asyncio.to_thread(runtime_flags.index_block, state.root):
+                # _on_watch_event sets debounce_deadline independent of the
+                # block -- the watch stays live on a blocked root -- so a
+                # consumed one must not linger here once past. Left in
+                # place it is just as sharp an -inf as reconcile_deadline
+                # once elapsed: _next_wake_delay's min(deadlines) would pick
+                # it up and pin the coordinator at 0.0 again. reconcile_deadline
+                # itself stays untouched: it is still -inf, which is exactly
+                # what keeps this root's block re-checked on every real tick.
+                state.debounce_deadline = None
                 continue
             try:
                 await self._evaluate(state)
