@@ -232,3 +232,87 @@ def _keys_with_prefix(prefix: str) -> list[str]:
 
 def suppressed_watches() -> list[str]:
     return _keys_with_prefix(_SUPPRESS_PREFIX)
+
+
+# ── Durable watch state ────────────────────────────────────────────
+# The event-driven graph worker's baseline: what a root looked like at its last
+# successful index. Lives in its own table (graph_watch_state), not the generic
+# key/value one above, because it is a row of related fields rather than a
+# single flag. Keyed through canonical_root() for the same reason the
+# suppressions are: the engine and MARM do not always spell the same directory
+# the same way.
+
+
+def get_watch_state(root_path: str) -> Optional[dict]:
+    """Durable baseline for a root, or None if never recorded or unreadable.
+
+    Never raises and never fabricates a baseline: a database that cannot be
+    read must read as "unknown", not as "nothing has changed since the last
+    index", or a restart could skip a re-index a project genuinely needs.
+    """
+    root = canonical_root(root_path)
+    try:
+        with _connection() as conn:
+            row = conn.execute(
+                "SELECT source_kind, last_source_state, last_indexed,"
+                " last_index_reason, watch_status"
+                " FROM graph_watch_state WHERE root_path = ?",
+                (root,),
+            ).fetchone()
+    except Exception as exc:
+        logger.warning(
+            "runtime_flags.watch_state_read_failed", root=root, error=str(exc)
+        )
+        return None
+    if row is None:
+        return None
+    return {
+        "source_kind": row[0],
+        "last_source_state": row[1],
+        "last_indexed": row[2],
+        "last_index_reason": row[3],
+        "watch_status": row[4],
+    }
+
+
+def save_watch_state(
+    root_path: str,
+    *,
+    source_kind: str,
+    last_source_state: Optional[str],
+    last_indexed: str,
+    last_index_reason: str,
+    watch_status: str,
+) -> None:
+    root = canonical_root(root_path)
+    with _connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            conn.execute(
+                """
+                INSERT INTO graph_watch_state
+                    (root_path, source_kind, last_source_state, last_indexed,
+                     last_index_reason, watch_status, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(root_path) DO UPDATE SET
+                    source_kind = excluded.source_kind,
+                    last_source_state = excluded.last_source_state,
+                    last_indexed = excluded.last_indexed,
+                    last_index_reason = excluded.last_index_reason,
+                    watch_status = excluded.watch_status,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    root,
+                    source_kind,
+                    last_source_state,
+                    last_indexed,
+                    last_index_reason,
+                    watch_status,
+                    _now(),
+                ),
+            )
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise

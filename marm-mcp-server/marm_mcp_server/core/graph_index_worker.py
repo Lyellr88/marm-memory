@@ -1,23 +1,30 @@
-"""Background poller that keeps indexed code graphs current.
+"""Event-driven worker that keeps indexed code graphs current.
 
 A graph is otherwise only as fresh as the last manual `marm_graph_index` call,
-and a stale graph does not fail loudly: it answers confidently from deleted code.
+and a stale graph does not fail loudly: it answers confidently from deleted
+code. A filesystem watcher (graph_index_watcher.py) wakes this worker after a
+real change instead of it polling blind on a fixed interval; a reconciliation
+pass on GRAPH_AUTO_INDEX_RECONCILE_SECONDS covers a missed watcher event, a
+filesystem that cannot be watched, and is the only trigger a non-git root has.
 
-Detection is a git signature computed outside the engine, so an idle cycle costs
-no engine lock. It is deliberately NOT the engine's own `detect_changes`, which
-reports the dirty working tree relative to HEAD rather than drift between the
-repo and the index: commit your work and it reports clean while the graph still
-lacks every symbol in that commit. See docs/current/graph-auto-index.md.
+Detection for a git root is a signature computed outside the engine, so an
+idle wake costs no engine lock. It is deliberately NOT the engine's own
+`detect_changes`, which reports the dirty working tree relative to HEAD rather
+than drift between the repo and the index: commit your work and it reports
+clean while the graph still lacks every symbol in that commit.
 
-While a repo is dirty the signature is useless, because `git status --porcelain`
-names which files changed and not what is in them, so the second and every later
-edit to one file produce byte-identical output. A dirty repo is therefore
-re-indexed every cycle instead. `index_repository` is incremental, so an
-unchanged dirty repo costs a few hundred milliseconds and a changed one does
-exactly the work that was needed.
+The signature has to be sensitive to what changed, not just that something
+did: `git status --porcelain` names which files changed and not what is in
+them, so a second edit to an already-dirty file produces byte-identical
+status output. git_source_state hashes the actual diff against HEAD plus a
+fingerprint of non-ignored untracked content instead, so two different edits
+to the same file produce two different signatures.
+
+See docs/current/index/graph/event-driven-graph-auto-indexing.md.
 """
 
 import asyncio
+import hashlib
 import os
 import subprocess
 import sys
@@ -35,13 +42,14 @@ from marm_graph.core.models import GraphIndexRequest
 
 from ..config.settings import (
     GRAPH_AUTO_INDEX,
-    GRAPH_AUTO_INDEX_FULL_INTERVAL,
-    GRAPH_AUTO_INDEX_INTERVAL,
+    GRAPH_AUTO_INDEX_DEBOUNCE_SECONDS,
     GRAPH_AUTO_INDEX_MODE,
     GRAPH_AUTO_INDEX_PROJECT_TTL,
+    GRAPH_AUTO_INDEX_RECONCILE_SECONDS,
 )
 from . import code_link_queue, code_project_bindings, runtime_flags
 from .graph_index_lock import GraphIndexBusy, run_exclusive
+from .graph_index_watcher import GraphIndexWatcher
 from .graph_supervisor import graph_supervisor
 
 logger = structlog.get_logger(__name__)
@@ -51,6 +59,12 @@ _GIT_TIMEOUT_SECONDS = 15
 # Stands in for HEAD in a repository with no commits yet.
 _UNBORN_HEAD = ""
 
+# How often a disabled worker re-checks the on/off flag, and how long a fresh
+# worker with nothing watched yet waits before looking again. Not
+# user-configurable: it only governs noticing a cross-process auto_on or a
+# newly-listed project, never indexing cadence.
+_IDLE_POLL_SECONDS = 15.0
+
 
 def _git_env() -> dict[str, str]:
     """A scrubbed environment for a git call on a user-chosen repository.
@@ -58,7 +72,9 @@ def _git_env() -> dict[str, str]:
     Inherited GIT_* variables belong to whatever launched the server, not to the
     repo being polled, and GIT_DIR or GIT_WORK_TREE would point our -C somewhere
     else entirely. GIT_OPTIONAL_LOCKS=0 keeps a status check from taking
-    .git/index.lock and rewriting the index on a timer.
+    .git/index.lock and rewriting the index -- which matters even more now than
+    it used to: a watcher would see that rewrite as a change and re-trigger the
+    very check that caused it.
     """
     env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
     env["GIT_OPTIONAL_LOCKS"] = "0"
@@ -70,7 +86,7 @@ def _git(root: str, *args: str) -> Optional[str]:
 
     core.fsmonitor names a program git will execute, and it is read from the
     polled repository's own config: honoring it would let any repo MARM watches
-    run a program of its choosing on a 30 second timer.
+    run a program of its choosing whenever this fires.
     """
     # An `if` statement, not a conditional expression: mypy applies its
     # sys.platform narrowing to statements only, so the expression form reports
@@ -84,6 +100,8 @@ def _git(root: str, *args: str) -> Optional[str]:
             ["git", "-c", "core.fsmonitor=false", "-C", root, *args],
             capture_output=True,
             text=True,
+            encoding="utf-8",
+            errors="surrogateescape",
             timeout=_GIT_TIMEOUT_SECONDS,
             env=_git_env(),
             creationflags=creationflags,
@@ -100,34 +118,106 @@ def is_git_repo(root: str) -> bool:
     return (Path(root) / ".git").exists()
 
 
-def git_signature(root: str) -> Optional[tuple[str, bool]]:
-    """(HEAD, dirty) for the repo AT `root`, or None if git could not answer.
+def git_source_state(root: str) -> Optional[tuple[str, str]]:
+    """(HEAD, content_hash) for the repo AT `root`, or None if git could not answer.
+
+    content_hash is sensitive to the bytes that changed, not just which paths
+    are dirty. It combines the diff against HEAD -- covers staged and unstaged
+    changes to tracked files in one command -- with a content hash of every
+    non-ignored untracked path, so a second edit to an already-dirty file, or
+    a same-length edit to an untracked one, produces a new signature. Nothing
+    here is logged; only the digest is ever kept.
 
     A None result must be treated as "no change". Re-indexing on a git error
-    would turn a broken repo into a re-index on every single cycle.
+    would turn a broken repo into a re-index on every single evaluation.
 
     The `.git` check is not redundant with the caller's. Git's repository
     discovery walks upward from `-C`, so on a directory that is not itself a
-    repo this would report an ancestor's HEAD and dirty state: an indexed
-    subdirectory of some other repo would then re-index whenever anything
-    anywhere in that parent changed.
+    repo this would report an ancestor's state: an indexed subdirectory of some
+    other repo would then re-index whenever anything anywhere in that parent
+    changed.
     """
     if not is_git_repo(root):
         return None
     head = _git(root, "rev-parse", "HEAD")
     if head is None:
         # A repository with no commits yet. `rev-parse HEAD` fails on an unborn
-        # HEAD, and _poll_one has already classified this as git, so returning
-        # None here meant such a repo returned early on every cycle and was
-        # never refreshed at all. A stable sentinel puts it on the dirty lane
-        # instead, which is the only signal it has until its first commit.
+        # HEAD; the sentinel keeps such a repo on the same signature path as
+        # any other instead of falling out of change detection until its first
+        # commit.
         if _git(root, "rev-parse", "--is-inside-work-tree") != "true":
             return None
         head = _UNBORN_HEAD
-    status = _git(root, "status", "--porcelain")
-    if status is None:
+        unborn = True
+    else:
+        unborn = False
+
+    # --no-ext-diff/--no-textconv: same threat model as core.fsmonitor above --
+    # a repo's own .gitattributes plus its config can point either at an
+    # arbitrary command, and MARM watches repos it does not control.
+    diff_output: str
+    if unborn:
+        # `--cached` diffs the index against the empty tree, which git
+        # supports directly -- there is no HEAD commit to diff against. On
+        # its own this misses an unstaged edit to a file already staged: it
+        # reads the index, not the working tree, and that file is no longer
+        # "untracked" for the ls-files fingerprint below either. A second,
+        # plain `git diff` (working tree against the index) is what a born
+        # repo gets for free from `git diff HEAD` comparing straight to HEAD.
+        diff_cached = _git(root, "diff", "--no-ext-diff", "--no-textconv", "--cached")
+        if diff_cached is None:
+            return None
+        diff_unstaged = _git(root, "diff", "--no-ext-diff", "--no-textconv")
+        if diff_unstaged is None:
+            return None
+        diff_output = diff_cached + "\x1e" + diff_unstaged
+    else:
+        diff_head = _git(root, "diff", "--no-ext-diff", "--no-textconv", "HEAD")
+        if diff_head is None:
+            return None
+        diff_output = diff_head
+
+    # `-z` NUL-terminates so a path with unusual characters is not quoted;
+    # quoting would make the reported string diverge from the real filesystem
+    # path and break the read below.
+    untracked_raw = _git(root, "ls-files", "--others", "--exclude-standard", "-z")
+    if untracked_raw is None:
         return None
-    return (head, bool(status))
+    fingerprints = []
+    for path in untracked_raw.split("\x00"):
+        if not path:
+            continue
+        # Content, not size/mtime: a same-length edit landing on an unchanged
+        # mtime -- a coarse filesystem clock, a tool that restores timestamps
+        # -- would otherwise fingerprint identically to the version before it,
+        # which is exactly the staleness class the diff above already fixed
+        # for tracked files.
+        full_path = os.path.join(root, path)
+        try:
+            if os.path.islink(full_path):
+                # A symlink's own content is its target text, exactly how
+                # git itself stores a tracked one: never open it, which would
+                # follow the link outside the repo, onto a device or pipe
+                # that reads forever, or onto an arbitrarily large file.
+                target_text = os.readlink(full_path)
+                digest = hashlib.sha256(
+                    target_text.encode("utf-8", "surrogateescape")
+                ).hexdigest()
+            else:
+                hasher = hashlib.sha256()
+                with open(full_path, "rb") as fh:
+                    for chunk in iter(lambda: fh.read(1 << 20), b""):
+                        hasher.update(chunk)
+                digest = hasher.hexdigest()
+        except OSError:
+            continue
+        fingerprints.append(f"{path}:{digest}")
+
+    digest_input = "\x1f".join([diff_output, *sorted(fingerprints)])
+    content_hash = hashlib.sha256(
+        digest_input.encode("utf-8", "surrogateescape")
+    ).hexdigest()
+    return (head, content_hash)
 
 
 def index_repository(client: "CbmClient", req: GraphIndexRequest) -> dict:
@@ -179,32 +269,53 @@ def index_repository(client: "CbmClient", req: GraphIndexRequest) -> dict:
 
 
 class _Watched:
-    """Per-project poll state. Disposable: losing it costs one extra re-index."""
+    """Per-project watch state. Disposable in memory: the durable baseline
+    lives in graph_watch_state, so losing this costs at most one extra
+    re-index rather than a wrong "unchanged" verdict."""
 
     __slots__ = (
+        "content_hash",
+        "debounce_deadline",
+        "evaluated_generation",
         "failed",
-        "last_full",
+        "generation",
+        "git_head",
+        "is_git",
+        "last_index_reason",
         "last_indexed",
+        "reconcile_deadline",
         "retry_after",
         "root",
-        "signature",
+        "watch_mode",
     )
 
     def __init__(self, root: str) -> None:
         self.root = root
-        self.signature: Optional[tuple[str, bool]] = None
-        # -inf, not 0.0: this is compared as `monotonic() - last_full < interval`,
-        # and monotonic() counts from boot. At 0.0 a never-indexed project reads as
-        # "indexed at boot", so on a machine up for less than the interval its
-        # first index waited the interval out instead of running immediately.
-        self.last_full: float = float("-inf")
+        self.is_git = is_git_repo(root)
+        self.git_head: Optional[str] = None
+        self.content_hash: Optional[str] = None
         self.last_indexed: Optional[str] = None
+        self.last_index_reason: Optional[str] = None
         # Set after a failure so the next attempt waits out a backoff instead of
-        # retrying on the next cycle. Cleared by a success.
+        # retrying on the next evaluation. Cleared by a success.
         self.retry_after: float = 0.0
         # Terminal for this session: a failure that cannot resolve itself, so
         # retrying only costs the engine gate.
         self.failed = False
+        # Bumped by the watcher callback; compared against evaluated_generation
+        # to answer "is a debounced event or catch-up pass still waiting".
+        self.generation = 0
+        self.evaluated_generation = 0
+        self.debounce_deadline: Optional[float] = None
+        # -inf, not 0.0: this is compared as `monotonic() >= reconcile_deadline`,
+        # and monotonic() counts from boot. At 0.0 a never-evaluated project
+        # reads as due immediately on most machines, but not on one that has
+        # been up longer than the reconcile interval, where it would wait a
+        # full interval before its first check.
+        self.reconcile_deadline: float = float("-inf")
+        # Placeholder; _enroll_watch sets the real value immediately after
+        # construction, before this is ever read externally.
+        self.watch_mode = "disabled"
 
 
 class GraphIndexWorker:
@@ -214,8 +325,18 @@ class GraphIndexWorker:
     def __init__(self) -> None:
         self._task: Optional[asyncio.Task] = None
         self._stop = asyncio.Event()
+        self._wake = asyncio.Event()
+        self._watcher = GraphIndexWatcher()
         self._watched: dict[str, _Watched] = {}
         self._projects_loaded_at: Optional[float] = None
+        # True the moment _tick is entered even once, regardless of outcome.
+        # _next_wake_delay uses this, not _projects_loaded_at, to decide
+        # whether an immediate first tick is still owed: the engine can stay
+        # unavailable forever (binary not downloaded, no graph tool ever
+        # called), in which case _refresh_projects never runs and
+        # _projects_loaded_at never gets set -- checking that instead would
+        # wake with a 0.0 delay on every single iteration forever.
+        self._ticked_once = False
         self._cycles = 0
         self._indexed = 0
 
@@ -225,7 +346,7 @@ class GraphIndexWorker:
 
     @staticmethod
     def enabled() -> bool:
-        """Re-read on every cycle, never cached. An off switch that needed a
+        """Re-read on every wake, never cached. An off switch that needed a
         restart would not be an off switch."""
         return runtime_flags.get_bool(runtime_flags.AUTO_INDEX_GRAPH, GRAPH_AUTO_INDEX)
 
@@ -246,47 +367,49 @@ class GraphIndexWorker:
             return False
 
     def start(self) -> None:
-        """Never raises. A poller that cannot run leaves graphs as stale as they
-        are today, which is recoverable; breaking startup is not."""
+        """Never raises. A worker that cannot run leaves graphs as stale as
+        they are today, which is recoverable; breaking startup is not."""
         if self.running:
             return
         if not self.enabled():
-            # The loop still starts and each cycle re-checks the flag. That is
-            # what lets `projects auto on` work without a restart: the CLI writes
-            # the switch to the database from another process and cannot create a
-            # task in this one. An idle cycle is one indexed SELECT.
+            # The loop still starts and re-checks the flag on every wake. That
+            # is what lets `projects auto on` work without a restart: the CLI
+            # writes the switch to the database from another process and
+            # cannot create a task in this one. An idle wake costs one
+            # indexed SELECT.
             logger.info("graph_auto_index.idle", reason="auto_index_off")
         try:
             self._stop.clear()
             self._task = asyncio.get_running_loop().create_task(self._run())
             logger.info(
                 "graph_auto_index.started",
-                interval_seconds=GRAPH_AUTO_INDEX_INTERVAL,
+                debounce_seconds=GRAPH_AUTO_INDEX_DEBOUNCE_SECONDS,
+                reconcile_seconds=GRAPH_AUTO_INDEX_RECONCILE_SECONDS,
                 mode=GRAPH_AUTO_INDEX_MODE,
             )
         except RuntimeError as exc:
             logger.warning("graph_auto_index.start_failed", error=str(exc))
 
     async def stop(self) -> None:
-        """Stop scheduling and return.
+        """Stop scheduling, tear down any active filesystem watches, and return.
 
         Deliberately does not wait for an in-flight index and deliberately does
         not release its lease. The index call owns its own lease through
-        run_exclusive and finishes on its own; there is no durable task to protect
-        here, and the next cycle recomputes the signature from scratch anyway.
+        run_exclusive and finishes on its own; there is no durable task to
+        protect here, and the next start recomputes everything from scratch.
         """
         self._stop.set()
         task = self._task
         self._task = None
-        if task is None or task.done():
-            return
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
-        except Exception as exc:
-            logger.warning("graph_auto_index.stop_error", error=str(exc))
+        if task is not None and not task.done():
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            except Exception as exc:
+                logger.warning("graph_auto_index.stop_error", error=str(exc))
+        self._watcher.stop()
         logger.info(
             "graph_auto_index.stopped", cycles=self._cycles, indexed=self._indexed
         )
@@ -294,10 +417,11 @@ class GraphIndexWorker:
     async def _run(self) -> None:
         primed = False
         while not self._stop.is_set():
-            await self._wait(GRAPH_AUTO_INDEX_INTERVAL)
-            if self._stop.is_set():
+            delay = self._next_wake_delay()
+            if await self._wait(delay):
                 return
             if not self.enabled():
+                self._deactivate()
                 continue
             if not primed:
                 # Once, and only after the flag says yes: priming spawns the
@@ -306,19 +430,93 @@ class GraphIndexWorker:
                 await self._prime_engine()
             self._cycles += 1
             try:
-                await self._cycle()
+                await self._tick()
             except Exception as exc:
-                # One bad cycle must never end the loop. Nothing here is
-                # durable, so the next signature check recovers whatever
-                # this one missed.
+                # One bad tick must never end the loop. Nothing here is
+                # durable beyond graph_watch_state, so the next evaluation
+                # recovers whatever this one missed.
                 logger.warning("graph_auto_index.cycle_failed", error=str(exc))
+
+    def _next_wake_delay(self) -> float:
+        """Seconds until the next thing needing attention: a debounce
+        deadline, a reconcile deadline, or -- while disabled or with nothing
+        watched yet -- a short idle poll, so a cross-process auto_on or a
+        freshly-listed project is noticed promptly instead of after a full
+        reconcile wait."""
+        if not self.enabled():
+            return min(_IDLE_POLL_SECONDS, GRAPH_AUTO_INDEX_PROJECT_TTL)
+        if not self._ticked_once:
+            # Enabled and never ticked yet -- discover projects immediately
+            # rather than waiting out an idle poll on a freshly started
+            # worker. Gated on _ticked_once rather than _projects_loaded_at:
+            # the latter never gets set while the engine is unavailable, and
+            # this must fire at most once regardless of whether the engine
+            # ever becomes available, or an unavailable engine busy-loops
+            # this at 0.0 forever.
+            return 0.0
+        if not self._watched:
+            return min(_IDLE_POLL_SECONDS, GRAPH_AUTO_INDEX_PROJECT_TTL)
+        now = time.monotonic()
+        # A failed root never reaches _evaluate again, so its deadline is
+        # never advanced past the -inf it starts at. Left in this list, one
+        # such root would pin the whole coordinator's sleep at 0.0 forever.
+        live = [state for state in self._watched.values() if not state.failed]
+        if not live:
+            return min(_IDLE_POLL_SECONDS, GRAPH_AUTO_INDEX_PROJECT_TTL)
+        # A root that runtime_flags.index_block keeps skipping (suppressed,
+        # marked unindexable, or an unreadable flag DB) also never reaches
+        # _evaluate, so it stays at -inf too -- but _tick() must still
+        # re-check it on every real tick, which is how a manual index
+        # clearing the block is noticed without a restart. So an -inf
+        # deadline only bounds how long the coordinator may sleep past it
+        # (the idle-poll floor below); it must not become a literal 0.0
+        # wake, or the coordinator spins forever re-reading the same block.
+        idle_floor = now + min(_IDLE_POLL_SECONDS, GRAPH_AUTO_INDEX_PROJECT_TTL)
+        never_evaluated = float("-inf")
+        deadlines = [
+            idle_floor
+            if state.reconcile_deadline == never_evaluated
+            else state.reconcile_deadline
+            for state in live
+        ]
+        deadlines.extend(
+            state.debounce_deadline
+            for state in live
+            if state.debounce_deadline is not None
+        )
+        return max(0.0, min(deadlines) - now)
+
+    async def _wait(self, seconds: float) -> bool:
+        """Sleep until `seconds` elapse, a wake is requested, or stopped.
+        Returns whether a stop arrived."""
+        stop_wait = asyncio.ensure_future(self._stop.wait())
+        wake_wait = asyncio.ensure_future(self._wake.wait())
+        try:
+            await asyncio.wait(
+                {stop_wait, wake_wait},
+                timeout=max(0.0, seconds),
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+        finally:
+            for task in (stop_wait, wake_wait):
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(stop_wait, wake_wait, return_exceptions=True)
+        self._wake.clear()
+        return self._stop.is_set()
+
+    def wake(self) -> None:
+        """Wake the coordinator promptly instead of waiting out its current
+        sleep. Only reaches a coordinator in this process; a flag flipped
+        from another process is still picked up on the next idle poll."""
+        self._wake.set()
 
     async def _prime_engine(self) -> None:
         """Start the engine once, off the lifespan path, if it is already on disk.
 
         _ensure_started() is synchronous and can spend CBM_STARTUP_TIMEOUT (60s)
         spawning and handshaking, so it must never run inline in lifespan and
-        never inside a poll cycle.
+        never inside a scheduling tick.
         """
         if not self.binary_present():
             logger.info("graph_auto_index.dormant", reason="engine_binary_absent")
@@ -328,39 +526,104 @@ class GraphIndexWorker:
         except Exception as exc:
             logger.warning("graph_auto_index.prime_failed", error=str(exc))
 
-    async def _wait(self, seconds: float) -> bool:
-        """Sleep unless stopped first. Returns whether a stop arrived."""
-        try:
-            await asyncio.wait_for(self._stop.wait(), timeout=seconds)
-            return True
-        except (asyncio.TimeoutError, TimeoutError):
-            return False
+    def _deactivate(self) -> None:
+        """Stop all filesystem watching without forgetting per-project
+        history, so `auto_status` still shows the last known state while
+        off. Re-enrolled by _tick the moment auto-index is turned back on."""
+        self._watcher.stop()
+        for state in self._watched.values():
+            if state.watch_mode != "disabled":
+                state.watch_mode = "disabled"
+                state.debounce_deadline = None
 
-    async def _cycle(self) -> None:
+    def _recover_dead_watcher(self) -> None:
+        """The one shared observer thread died after successfully starting --
+        not a setup failure, which watch() already handles per root by
+        falling back to reconcile_fallback. One Observer backs every root, so
+        all of them lose event delivery at once here; reconciliation still
+        protects correctness, but freshness silently degrades to it until
+        something notices. Rebuild a fresh observer and re-enroll exactly the
+        roots that were relying on the dead one, leaving alone any root
+        already on reconcile_fallback for its own reason (a permission
+        error, a watch-count limit) rather than retrying that every tick.
+        """
+        affected = [
+            state
+            for state in self._watched.values()
+            if state.watch_mode in ("git_events", "filesystem_events")
+        ]
+        logger.warning(
+            "graph_index_watcher.observer_died", affected_roots=len(affected)
+        )
+        self._watcher.stop()
+        for state in affected:
+            self._enroll_watch(state)
+
+    async def _tick(self) -> None:
+        # Set before any early return, including the engine-unavailable one
+        # below: this is what stops _next_wake_delay from busy-looping at
+        # 0.0 when the engine never becomes available.
+        self._ticked_once = True
+        # Guarded here too, not only in _run: off must mean off before
+        # anything reads engine state, even for a caller that reaches this
+        # directly instead of through the coordination loop.
         if not self.enabled():
             return
         # snapshot(), never is_available(): the latter calls _ensure_started()
-        # and would spawn the engine from inside a poll cycle.
+        # and would spawn the engine from inside a scheduling tick.
         if not graph_supervisor.snapshot()["available"]:
             return
 
         await self._refresh_projects()
+        if self._watched and not self._watcher.healthy():
+            self._recover_dead_watcher()
+        for state in self._watched.values():
+            if state.watch_mode == "disabled":
+                self._enroll_watch(state)
+
+        now = time.monotonic()
         for state in list(self._watched.values()):
             if self._stop.is_set():
                 return
             if state.failed:
                 # In-process and genuinely terminal: the root is gone.
                 continue
-            # Read per cycle rather than cached in the state. A delete or a
+            due = now >= state.reconcile_deadline or (
+                state.debounce_deadline is not None and now >= state.debounce_deadline
+            )
+            if not due:
+                continue
+            # Read per tick rather than cached in the state. A delete or a
             # successful manual index in the OTHER transport is invisible here
             # until this read, and the watch set is only reloaded once per TTL,
-            # so anything keyed to that reload lags by up to five minutes.
+            # so anything keyed to that reload lags by up to the TTL.
             if await asyncio.to_thread(runtime_flags.index_block, state.root):
+                # _on_watch_event sets debounce_deadline independent of the
+                # block -- the watch stays live on a blocked root -- so a
+                # consumed one (already due when `now` was captured, above)
+                # must not linger here once past: left in place it is just as
+                # sharp an -inf as reconcile_deadline once elapsed, and
+                # _next_wake_delay's min(deadlines) would pick it up and pin
+                # the coordinator at 0.0 again. But index_block is a real
+                # await, and a fresh event can land on this exact state while
+                # it runs -- clearing unconditionally would drop that one too,
+                # and for a root indexed before it became blocked,
+                # reconcile_deadline is a real future timestamp rather than
+                # -inf, so nothing else would notice the loss until the next
+                # reconcile pass, minutes later. Only a deadline already due
+                # for `now` is safe to drop; one set during the await is
+                # strictly later than `now` and must survive.
+                if (
+                    state.debounce_deadline is not None
+                    and state.debounce_deadline <= now
+                ):
+                    state.debounce_deadline = None
                 continue
             try:
-                await self._poll_one(state)
+                await self._evaluate(state)
             except GraphIndexBusy:
-                # Someone else is indexing. Skip; the next cycle recomputes.
+                # Someone else is indexing. The deadlines _evaluate already
+                # reset mean the next wake tries again.
                 continue
             except Exception as exc:
                 logger.warning(
@@ -371,13 +634,13 @@ class GraphIndexWorker:
         """Reload the watch set when its TTL expires.
 
         list_projects costs ~265ms and holds the engine lock, so this is cached
-        rather than called every cycle.
+        rather than called every tick.
 
         Freshness is the load timestamp alone, never whether the watch set came
         back non-empty. An empty result is a real answer: a fresh install with no
         projects, or an install where every project is suppressed. Treating empty
-        as "not loaded yet" put list_projects back on every 30s cycle for exactly
-        the users who have no indexing to do.
+        as "not loaded yet" would put list_projects back on every tick for
+        exactly the users who have no indexing to do.
         """
         now = time.monotonic()
         if (
@@ -408,55 +671,116 @@ class GraphIndexWorker:
                 continue
             if runtime_flags.is_watch_suppressed(root):
                 continue
-            self._watched[root] = _Watched(root)
+            state = _Watched(root)
+            # Seed from the durable baseline so a restart, or the other
+            # transport enrolling this root first, does not read as "never
+            # indexed" and force a redundant re-index.
+            durable = await asyncio.to_thread(runtime_flags.get_watch_state, root)
+            if durable is not None:
+                state.last_indexed = durable.get("last_indexed")
+                state.last_index_reason = durable.get("last_index_reason")
+                stored = durable.get("last_source_state") or ""
+                if durable.get("source_kind") == "git" and ":" in stored:
+                    state.git_head, state.content_hash = stored.split(":", 1)
+            self._watched[root] = state
+            self._enroll_watch(state)
         for root in list(self._watched):
             if root not in roots or runtime_flags.is_watch_suppressed(root):
-                self._watched.pop(root, None)
+                self._detach(root)
 
-    async def _poll_one(self, state: _Watched) -> None:
+    def _enroll_watch(self, state: _Watched) -> None:
+        ok = self._watcher.watch(state.root, self._on_watch_event)
+        if ok:
+            state.watch_mode = "git_events" if state.is_git else "filesystem_events"
+        elif self._watcher.available:
+            state.watch_mode = "reconcile_fallback"
+        else:
+            state.watch_mode = "unavailable"
+
+    def _on_watch_event(self, root: str) -> None:
+        """The watcher's callback, invoked on this process's event loop via
+        call_soon_threadsafe. Bumps a counter, pushes the debounce deadline
+        out, and wakes the coordinator. All judgment -- whether the change is
+        real, whether to re-index -- happens in _evaluate, on a later tick.
+
+        The wake is not optional: the coordinator may already be sleeping
+        toward a reconcile deadline minutes away, computed before this event
+        existed. Without waking it, the event sits recorded but unexamined
+        until that old deadline arrives, which is worse than the fixed poll
+        this design replaced.
+        """
+        state = self._watched.get(root)
+        if state is None:
+            return
+        state.generation += 1
+        state.debounce_deadline = time.monotonic() + GRAPH_AUTO_INDEX_DEBOUNCE_SECONDS
+        self.wake()
+
+    async def _evaluate(self, state: _Watched) -> None:
         root = state.root
         if not os.path.isdir(root):
-            # Moved or deleted. index_repository would error on every cycle.
+            # Moved or deleted. index_repository would error on every attempt.
             logger.info("graph_auto_index.root_missing", root=root)
             state.failed = True
+            self._watcher.unwatch(root)
             return
 
-        if not is_git_repo(root):
-            # No cheap signature exists, so the only option is an unconditional
-            # re-index. That holds the engine lock, so it gets the slow lane.
-            if time.monotonic() - state.last_full < GRAPH_AUTO_INDEX_FULL_INTERVAL:
-                return
-            await self._reindex(state, reason="non_git_interval")
-            return
+        generation_at_start = state.generation
+        state.debounce_deadline = None
 
-        signature = await asyncio.to_thread(git_signature, root)
-        if signature is None:
-            return
+        reason: Optional[str] = None
+        # Candidate baseline: computed now, but must not land on `state`
+        # until an index built from it actually succeeds. Recording it early
+        # made a losing cross-process lease refusal look like "nothing to
+        # do" forever afterward, because the next evaluation would compare
+        # the real repo against a baseline this process never indexed.
+        candidate_git_state: Optional[tuple[str, str]] = None
+        if state.is_git:
+            result = await asyncio.to_thread(git_source_state, root)
+            if result is not None:
+                candidate_git_state = result
+                head, content_hash = result
+                previous_head = state.git_head
+                previous_hash = state.content_hash
+                first_observation = previous_head is None
+                changed = first_observation or (previous_head, previous_hash) != (
+                    head,
+                    content_hash,
+                )
+                if changed:
+                    # New information, so it is retried at once regardless of
+                    # any pending backoff.
+                    reason = (
+                        "head_moved"
+                        if not first_observation and head != previous_head
+                        else "worktree_changed"
+                    )
+                elif state.retry_after and time.monotonic() >= state.retry_after:
+                    # Nothing new, but a previous failure's backoff expired.
+                    reason = "reconcile"
+        else:
+            # No cheap signature exists for a non-git root, so any trigger --
+            # a debounced event or the reconcile deadline -- means reindex.
+            reason = (
+                "filesystem_changed"
+                if state.watch_mode != "reconcile_fallback"
+                else "reconcile"
+            )
 
-        previous = state.signature
-        state.signature = signature
-        _, dirty = signature
-        changed = previous is None or previous != signature
+        state.evaluated_generation = generation_at_start
+        state.reconcile_deadline = time.monotonic() + GRAPH_AUTO_INDEX_RECONCILE_SECONDS
 
-        # A repo that changed carries new information, so it is retried at once.
-        # Otherwise a failure waits out its backoff: the signature is recorded
-        # before the index runs, so without this a failed index would either never
-        # be retried (clean repo) or be retried every single cycle (dirty repo).
-        if state.retry_after and not changed and time.monotonic() < state.retry_after:
-            return
+        if reason is not None:
+            await self._reindex(
+                state, reason=reason, candidate_git_state=candidate_git_state
+            )
 
-        if dirty:
-            await self._reindex(state, reason="dirty")
-        elif changed and previous is not None and previous[1]:
-            # Was dirty last cycle, clean now with the same HEAD: the edits were
-            # reverted or stashed, and the graph still holds what they contained.
-            await self._reindex(state, reason="went_clean")
-        elif changed:
-            await self._reindex(state, reason="head_moved")
-        elif state.retry_after:
-            await self._reindex(state, reason="retry_after_failure")
-
-    async def _reindex(self, state: _Watched, reason: str) -> None:
+    async def _reindex(
+        self,
+        state: _Watched,
+        reason: str,
+        candidate_git_state: Optional[tuple[str, str]] = None,
+    ) -> None:
         client = graph_supervisor.get_client()
         if client is None:
             return
@@ -469,11 +793,18 @@ class GraphIndexWorker:
                 action="index", repo_path=state.root, mode=GRAPH_AUTO_INDEX_MODE
             ),
         )
+        # A result came back -- success or failure -- so the repo state this
+        # process just observed was genuinely acted on and becomes the new
+        # comparison baseline either way; that is what makes the backoff
+        # below mean anything; without it, a chronically failing repo whose
+        # baseline never advances would always look like the first
+        # observation and retry immediately, bypassing the backoff entirely.
+        # Only GraphIndexBusy, raised by run_exclusive above before any
+        # result exists, must leave the old baseline in place: that attempt
+        # never happened, so this process has no information to advance on.
+        if candidate_git_state is not None:
+            state.git_head, state.content_hash = candidate_git_state
         elapsed_ms = int((time.monotonic() - started) * 1000)
-        # Recorded on failure too. A non-git project's only gate is this timer, so
-        # leaving it at its old value on error made a failing one retry on the fast
-        # interval and take the engine gate every cycle.
-        state.last_full = time.monotonic()
         if result.get("status") == "error":
             if result.get("error_code") == "windows_path_too_long":
                 # Marked by index_repository, inside the gate.
@@ -484,18 +815,19 @@ class GraphIndexWorker:
                     hint=result.get("hint"),
                 )
                 return
-            state.retry_after = time.monotonic() + GRAPH_AUTO_INDEX_FULL_INTERVAL
+            state.retry_after = time.monotonic() + GRAPH_AUTO_INDEX_RECONCILE_SECONDS
             logger.warning(
                 "graph_auto_index.index_failed",
                 root=state.root,
                 reason=reason,
                 message=result.get("message"),
-                retry_in_seconds=GRAPH_AUTO_INDEX_FULL_INTERVAL,
+                retry_in_seconds=GRAPH_AUTO_INDEX_RECONCILE_SECONDS,
             )
             return
         state.retry_after = 0.0
         self._indexed += 1
         state.last_indexed = _iso_now()
+        state.last_index_reason = reason
         logger.info(
             "graph_auto_index.reindexed",
             root=state.root,
@@ -503,9 +835,32 @@ class GraphIndexWorker:
             reason=reason,
             duration_ms=elapsed_ms,
         )
+        try:
+            await asyncio.to_thread(
+                runtime_flags.save_watch_state,
+                state.root,
+                source_kind="git" if state.is_git else "non_git",
+                last_source_state=(
+                    f"{state.git_head}:{state.content_hash}" if state.is_git else None
+                ),
+                last_indexed=state.last_indexed,
+                last_index_reason=reason,
+                watch_status=state.watch_mode,
+            )
+        except Exception as exc:
+            logger.warning(
+                "graph_auto_index.watch_state_save_failed",
+                root=state.root,
+                error=str(exc),
+            )
+
+    def _detach(self, root: str) -> None:
+        self._watcher.unwatch(root)
+        self._watched.pop(root, None)
 
     def drop_watch(self, root: str) -> None:
-        """Forget a root immediately, ahead of the next cache refresh.
+        """Forget a root immediately, ahead of the next cache refresh, and
+        stop watching it at the OS level.
 
         Only covers this process. The durable suppression in runtime_flags is
         what stops the other transport's poller, and what survives a restart.
@@ -517,14 +872,15 @@ class GraphIndexWorker:
         for key in [
             key for key in self._watched if runtime_flags.canonical_root(key) == target
         ]:
-            self._watched.pop(key, None)
+            self._detach(key)
 
     def status(self) -> dict:
         return {
             "enabled": self.enabled(),
             "flag_source": runtime_flags.source(runtime_flags.AUTO_INDEX_GRAPH),
             "running": self.running,
-            "interval_seconds": GRAPH_AUTO_INDEX_INTERVAL,
+            "debounce_seconds": GRAPH_AUTO_INDEX_DEBOUNCE_SECONDS,
+            "reconcile_seconds": GRAPH_AUTO_INDEX_RECONCILE_SECONDS,
             "cycles": self._cycles,
             "indexed": self._indexed,
             "engine_binary_present": self.binary_present(),
@@ -532,7 +888,15 @@ class GraphIndexWorker:
                 {
                     "root_path": state.root,
                     "last_indexed": state.last_indexed,
+                    "last_index_reason": state.last_index_reason,
                     "dropped": state.failed,
+                    "watch_mode": state.watch_mode,
+                    "last_source_state": (
+                        f"{state.git_head}:{state.content_hash}"
+                        if state.git_head is not None
+                        else None
+                    ),
+                    "pending": state.generation != state.evaluated_generation,
                 }
                 for state in self._watched.values()
             ],
@@ -568,13 +932,16 @@ def auto_action(action: str) -> dict:
     runtime_flags.set_bool(runtime_flags.AUTO_INDEX_GRAPH, turning_on)
     if turning_on:
         graph_index_worker.start()
+    # Either direction needs this: on must not wait out an idle poll to start
+    # watching, and off must not leave observers running -- detached only in
+    # _deactivate, reached only on the coordinator's next wake -- for however
+    # long its current sleep happens to be.
+    graph_index_worker.wake()
     return {
         "status": "success",
         "auto_index": {
             "enabled": turning_on,
             "flag_source": runtime_flags.source(runtime_flags.AUTO_INDEX_GRAPH),
-            # The loop reads the flag per cycle, so turning it off takes effect
-            # on the next one without a restart.
             "effective": "next cycle" if not turning_on else "now",
         },
     }

@@ -5,7 +5,7 @@
      width="900"
      height="250">
 </picture>
-<h1 align="center">marm-memory v2.43.0 - Give your AI Agents a permanent memory in 60 seconds</h1>
+<h1 align="center">marm-memory v2.44.0 - Give your AI Agents a permanent memory in 60 seconds</h1>
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/Lyellr88/marm-memory/blob/MARM-main/LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
@@ -861,7 +861,7 @@ Use marm_graph_trace for call paths, marm_graph_architecture for an overview, an
 
 The recommended agent workflow: index once, then `marm_code_lookup` before broad file reads, `marm_graph_trace` when callers/callees or data-flow context matters, `marm_graph_architecture` for orientation, and `marm_graph_impact` before risky refactors. One graph query replaces dozens of grep/read cycles, which is where the token savings come from.
 
-Once a repository is indexed, MARM keeps it current on its own. A background poller notices when the repo has changed and re-indexes it, so there is no need to re-index by hand after a commit. While you have uncommitted work it refreshes every cycle, since no cheap check can see repeated edits to a file that is already modified. To index only on request instead:
+Once a repository is indexed, MARM keeps it current on its own. A filesystem watcher notices a save, a commit, a branch switch, or a merge and re-indexes shortly after, debounced so a burst of changes becomes one pass rather than one per file. A periodic reconciliation pass catches anything a watcher event missed and is the only trigger for a directory that is not a git repo. To index only on request instead:
 
 ```text
 marm-mcp-server projects auto off
@@ -934,9 +934,9 @@ The bundled graph engine runs as a supervised child process, not an import:
 - **Envelope care**: responses are scanned for the first JSON-parseable content item rather than assuming index 0, because the upstream binary can prepend an update notice. Tool errors arrive as `result.isError`, not JSON-RPC errors, and are converted to clean `{"status": "error"}` dicts with the upstream's own remediation hint attached.
 - **Serialization**: one lock guards each write+read round trip on the single stdin pipe; async callers go through `asyncio.to_thread` so the event loop never blocks on subprocess IO.
 - **Crash recovery**: stderr is drained on a background thread, child EOF/crash is detected, and the process is transparently respawned on the next call. Timeouts are deliberately *not* treated as crashes; a long index run may still be working, and killing it would destroy in-flight work.
-- **Supervision**: a lazy singleton supervisor owns the client for the process lifetime. Startup is triggered by the first graph-tool call or by the auto-index poller if the engine binary is already downloaded, never raises into the MCP layer, and verifies the pinned binary's tool schema so upstream drift is caught at startup instead of mid-call.
-- **Auto re-indexing is git-signature polled, not filesystem watched**: a background task compares each indexed repo's `HEAD` and dirty state, computed by running `git` outside the engine so an idle check costs no engine lock. A commit triggers a re-index. While the tree is dirty the repo is re-indexed every cycle, because `git status` reports which files changed and not what is in them, so repeated edits to one already-modified file produce byte-identical output that no cheaper fingerprint can distinguish. Git runs with `core.fsmonitor` disabled and a scrubbed environment, since that setting names a program git would otherwise execute from a watched repository on a timer.
-- **One gate for every store mutation**: manual indexes on all three surfaces, the poller, and project deletion all pass through a single leased row in the memory database. HTTP and STDIO are separate processes with separate engine children over one shared engine store, so an in-process lock cannot span them. The lease is released when the engine call actually returns rather than when its caller stops waiting: a cancelled request cannot hand the store to another process while the engine is still writing to it.
+- **Supervision**: a lazy singleton supervisor owns the client for the process lifetime. Startup is triggered by the first graph-tool call or by the auto-index worker if the engine binary is already downloaded, never raises into the MCP layer, and verifies the pinned binary's tool schema so upstream drift is caught at startup instead of mid-call.
+- **Auto re-indexing is filesystem watched, with a git content signature and a reconciliation fallback**: a bundled watcher wakes the worker on a save, commit, branch switch, or merge; matching events are debounced so a burst becomes one re-index. For a git repository, the trigger is confirmed by hashing the diff against `HEAD` plus a fingerprint of non-ignored untracked files, computed outside the engine so an idle check costs no engine lock and two different edits to the same already-modified file are told apart instead of read as identical. A periodic reconciliation pass catches a missed watcher event, covers a filesystem that cannot be watched, and is the only trigger for a directory that is not a git repo. Git runs with `core.fsmonitor` disabled and a scrubbed environment, since that setting names a program git would otherwise execute from a watched repository.
+- **One gate for every store mutation**: manual indexes on all three surfaces, the auto-index worker, and project deletion all pass through a single leased row in the memory database. HTTP and STDIO are separate processes with separate engine children over one shared engine store, so an in-process lock cannot span them. The lease is released when the engine call actually returns rather than when its caller stops waiting: a cancelled request cannot hand the store to another process while the engine is still writing to it.
 
 ### Security & rate limiting
 
@@ -992,8 +992,8 @@ Packaged docs are indexed into the `marm_system` memory namespace on startup and
 | `COMPACTION_STAGING_TTL_HOURS` | `168` | How long staged summaries wait before expiring |
 | `GRAPH_ENABLED` | `true` | Kill switch for the 5 code-graph tools |
 | `GRAPH_AUTO_INDEX` | `true` | Automatic re-indexing of repos already in the code graph. A saved switch from `projects auto off` or `marm_graph_index(action="auto_off")` overrides this, so a value set here cannot re-enable what a user turned off |
-| `GRAPH_AUTO_INDEX_INTERVAL` | `30` | Seconds between git-signature checks per repo. Minimum 5 |
-| `GRAPH_AUTO_INDEX_FULL_INTERVAL` | `300` | Seconds between re-indexes for a directory that is not a git repo, where no cheap change check exists. Minimum 60 |
+| `GRAPH_AUTO_INDEX_DEBOUNCE_SECONDS` | `2` | Quiet period after a watcher event before a repo is evaluated, so a burst of saves becomes one re-index. Minimum 0.5 |
+| `GRAPH_AUTO_INDEX_RECONCILE_SECONDS` | `300` | Fallback pass that catches a missed watcher event, covers a filesystem that cannot be watched, and is the only trigger for a directory that is not a git repo. Minimum 60. Replaces the deprecated `GRAPH_AUTO_INDEX_FULL_INTERVAL`, whose value carries over automatically if this is unset. `GRAPH_AUTO_INDEX_INTERVAL` (the old fixed poll) is deprecated and no longer read for anything but a warning |
 | `GRAPH_AUTO_INDEX_MODE` | `moderate` | Index depth for automatic re-indexes: `full`, `moderate`, or `fast`. Anything else warns and falls back |
 | `GRAPH_AUTO_INDEX_LEASE_SECONDS` | `120` | How long the indexing gate stays owned once nothing is renewing it. A running index renews its own lease, so this bounds how long a *killed* process blocks indexing, not how long an index may take |
 | `GRAPH_AUTO_INDEX_PROJECT_TTL` | `300` | How long the list of watched projects is trusted before it is re-read from the engine |
@@ -1093,7 +1093,7 @@ It re-splits stale chunks, fills in any lost to an interrupted write, and drops 
 
 - Run `marm-memory projects auto status`. `enabled: false` means automatic re-indexing is switched off; `source: override` means a saved switch is what turned it off, not the environment.
 - The repo has to be indexed once before it is watched. `marm-memory projects list` shows what is enrolled.
-- Give it the interval (30 seconds by default) plus index time. A commit is picked up on the next check.
+- Give it the debounce window (2 seconds by default) plus index time. If nothing happens after that, the reconciliation pass (5 minutes by default) is the backstop.
 - A project deleted from the Console stays suppressed on purpose, so a stale watch list cannot recreate it. Indexing it explicitly re-enrolls it.
 - Automatic indexing needs the graph engine, which stays dormant until the engine binary has been downloaded. Any graph tool call downloads it once.
 
