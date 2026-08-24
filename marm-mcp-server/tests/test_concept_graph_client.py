@@ -7,6 +7,8 @@ graph_client's own dispatch/soft-fail logic, not marm-graph's real search
 quality, so a fake at this specific boundary is appropriate.
 """
 
+from conftest import requires_binary
+
 from marm_mcp_server.core import graph_client
 from marm_mcp_server.core.graph_supervisor import graph_supervisor
 
@@ -221,6 +223,20 @@ def test_find_code_match_treats_a_malformed_result_list_as_unavailable(monkeypat
     assert graph_client.find_code_match("CbmClient", "proj-a") == {
         "status": "unavailable"
     }
+
+
+@requires_binary
+def test_find_code_match_resolves_an_exact_symbol_against_the_live_engine(
+    monkeypatch, client, project
+):
+    monkeypatch.setattr(graph_supervisor, "is_available", lambda: True)
+    monkeypatch.setattr(graph_supervisor, "get_client", lambda: client)
+
+    match = graph_client.find_code_match("do_lookup", project)
+
+    assert match["status"] == "matched", match
+    assert match["qualified_name"].endswith(".do_lookup")
+    assert match["file_path"].endswith("tool_router.py")
 
 
 def test_find_code_match_refuses_ambiguous_exact_symbols(monkeypatch):

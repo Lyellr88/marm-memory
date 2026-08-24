@@ -88,6 +88,20 @@ SEARCH_GRAPH_0105 = {
     "has_more": False,
 }
 
+SEARCH_GRAPH_NAME_PATTERN_0105 = {
+    "total": 1,
+    "count": 1,
+    "cols": ["name", "label", "lines", "in", "out"],
+    "groups": [
+        {
+            "qn_prefix": "pkg.mod.MARM",
+            "file": "pkg/mod.py",
+            "rows": [["store_memory", "Method", "274-281", 84, 1]],
+        }
+    ],
+    "has_more": False,
+}
+
 SEARCH_CODE_0105 = {
     "cols": ["qn", "label", "file", "lines", "matches", "in", "out"],
     "rows": [["pkg.mod.call_tool", "Method", "pkg/mod.py", "291-302", [296], 16, 1]],
@@ -203,6 +217,25 @@ def test_search_graph_rows_become_result_dicts():
     assert row["label"] == "Function"
     assert (row["start_line"], row["end_line"]) == (321, 347)
     assert row["name"] == "notebook_dispatch"
+
+
+def test_search_graph_name_pattern_groups_become_result_dicts():
+    client = RecordingClient(search_graph=SEARCH_GRAPH_NAME_PATTERN_0105)
+    out = R.do_lookup(client, CodeLookupRequest(query="^store_memory$", kind="symbol"))
+
+    assert "groups" not in out
+    assert out["total"] == 1 and out["has_more"] is False
+    assert out["results"] == [
+        {
+            "name": "store_memory",
+            "label": "Method",
+            "lines": "274-281",
+            "in": 84,
+            "out": 1,
+            "qualified_name": "pkg.mod.MARM.store_memory",
+            "file_path": "pkg/mod.py",
+        }
+    ]
 
 
 def test_search_code_rows_keep_the_0_9_key_names():
@@ -328,6 +361,24 @@ def test_do_index_status_and_list(client, project):
 def test_do_lookup_symbol_discovery(client, project):
     out = R.do_lookup(client, CodeLookupRequest(query="CbmClient", project=project))
     assert out["results"] and out.get("total", 0) >= 1
+
+
+@requires_binary
+def test_do_lookup_exact_name_pattern_normalizes_grouped_results(client, project):
+    out = R.do_lookup(
+        client,
+        CodeLookupRequest(
+            query="^do_lookup$", project=project, kind="symbol", limit=200
+        ),
+    )
+
+    assert out.get("has_more") is False, out
+    assert any(
+        row.get("name") == "do_lookup"
+        and row.get("qualified_name", "").endswith(".do_lookup")
+        and row.get("file_path", "").endswith("tool_router.py")
+        for row in out.get("results", [])
+    ), out
 
 
 @requires_binary

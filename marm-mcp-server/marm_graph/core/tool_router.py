@@ -183,6 +183,7 @@ def _groups_to_callers(block: Any) -> Any:
         if not isinstance(group, dict):
             continue
         prefix = group.get("qn_prefix") or ""
+        file_path = group.get("file")
         for row in group.get("rows") or []:
             if not isinstance(row, (list, tuple)):
                 continue
@@ -190,12 +191,18 @@ def _groups_to_callers(block: Any) -> Any:
             name = item.get("name")
             if name is not None:
                 item["qualified_name"] = f"{prefix}.{name}" if prefix else str(name)
+            if isinstance(file_path, str) and file_path:
+                item["file_path"] = file_path
             out.append(item)
     return out
 
 
 def _converted_search(res: Any) -> Any:
     """Restore `results` on a search_graph reply, whichever shape it arrived in."""
+    if isinstance(res, dict) and isinstance(res.get("groups"), list):
+        out = {k: v for k, v in res.items() if k not in ("cols", "groups")}
+        out["results"] = _groups_to_callers(res)
+        return out
     if not _is_columnar(res):
         return res
     out = {k: v for k, v in res.items() if k not in ("cols", "rows")}
