@@ -121,10 +121,10 @@ def git_source_state(root: str) -> Optional[tuple[str, str]]:
 
     content_hash is sensitive to the bytes that changed, not just which paths
     are dirty. It combines the diff against HEAD -- covers staged and unstaged
-    changes to tracked files in one command -- with a size/mtime fingerprint of
-    every non-ignored untracked path, so a second edit to an already-dirty file,
-    or a new byte in an untracked one, produces a new signature. Nothing here is
-    logged; only the digest is ever kept.
+    changes to tracked files in one command -- with a content hash of every
+    non-ignored untracked path, so a second edit to an already-dirty file, or
+    a same-length edit to an untracked one, produces a new signature. Nothing
+    here is logged; only the digest is ever kept.
 
     A None result must be treated as "no change". Re-indexing on a git error
     would turn a broken repo into a re-index on every single evaluation.
@@ -174,7 +174,7 @@ def git_source_state(root: str) -> Optional[tuple[str, str]]:
 
     # `-z` NUL-terminates so a path with unusual characters is not quoted;
     # quoting would make the reported string diverge from the real filesystem
-    # path and break the stat() below.
+    # path and break the read below.
     untracked_raw = _git(root, "ls-files", "--others", "--exclude-standard", "-z")
     if untracked_raw is None:
         return None
@@ -182,11 +182,31 @@ def git_source_state(root: str) -> Optional[tuple[str, str]]:
     for path in untracked_raw.split("\x00"):
         if not path:
             continue
+        # Content, not size/mtime: a same-length edit landing on an unchanged
+        # mtime -- a coarse filesystem clock, a tool that restores timestamps
+        # -- would otherwise fingerprint identically to the version before it,
+        # which is exactly the staleness class the diff above already fixed
+        # for tracked files.
+        full_path = os.path.join(root, path)
         try:
-            st = os.stat(os.path.join(root, path))
+            if os.path.islink(full_path):
+                # A symlink's own content is its target text, exactly how
+                # git itself stores a tracked one: never open it, which would
+                # follow the link outside the repo, onto a device or pipe
+                # that reads forever, or onto an arbitrarily large file.
+                target_text = os.readlink(full_path)
+                digest = hashlib.sha256(
+                    target_text.encode("utf-8", "surrogateescape")
+                ).hexdigest()
+            else:
+                hasher = hashlib.sha256()
+                with open(full_path, "rb") as fh:
+                    for chunk in iter(lambda: fh.read(1 << 20), b""):
+                        hasher.update(chunk)
+                digest = hasher.hexdigest()
         except OSError:
             continue
-        fingerprints.append(f"{path}:{st.st_size}:{st.st_mtime_ns}")
+        fingerprints.append(f"{path}:{digest}")
 
     digest_input = "\x1f".join([diff_output, *sorted(fingerprints)])
     content_hash = hashlib.sha256(
@@ -575,13 +595,24 @@ class GraphIndexWorker:
             if await asyncio.to_thread(runtime_flags.index_block, state.root):
                 # _on_watch_event sets debounce_deadline independent of the
                 # block -- the watch stays live on a blocked root -- so a
-                # consumed one must not linger here once past. Left in
-                # place it is just as sharp an -inf as reconcile_deadline
-                # once elapsed: _next_wake_delay's min(deadlines) would pick
-                # it up and pin the coordinator at 0.0 again. reconcile_deadline
-                # itself stays untouched: it is still -inf, which is exactly
-                # what keeps this root's block re-checked on every real tick.
-                state.debounce_deadline = None
+                # consumed one (already due when `now` was captured, above)
+                # must not linger here once past: left in place it is just as
+                # sharp an -inf as reconcile_deadline once elapsed, and
+                # _next_wake_delay's min(deadlines) would pick it up and pin
+                # the coordinator at 0.0 again. But index_block is a real
+                # await, and a fresh event can land on this exact state while
+                # it runs -- clearing unconditionally would drop that one too,
+                # and for a root indexed before it became blocked,
+                # reconcile_deadline is a real future timestamp rather than
+                # -inf, so nothing else would notice the loss until the next
+                # reconcile pass, minutes later. Only a deadline already due
+                # for `now` is safe to drop; one set during the await is
+                # strictly later than `now` and must survive.
+                if (
+                    state.debounce_deadline is not None
+                    and state.debounce_deadline <= now
+                ):
+                    state.debounce_deadline = None
                 continue
             try:
                 await self._evaluate(state)

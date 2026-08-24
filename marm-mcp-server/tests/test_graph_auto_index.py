@@ -194,6 +194,70 @@ def test_staged_unstaged_and_untracked_changes_all_move_the_signature(git_repo):
     assert untracked != clean, "a new untracked file must move the signature too"
 
 
+def test_a_same_length_edit_to_an_untracked_file_moves_the_signature_even_with_a_restored_mtime(
+    git_repo,
+):
+    """The untracked-file fingerprint used to be path:size:mtime, not content.
+    A same-length edit landing on an mtime restored to its original value --
+    a coarse filesystem clock, a tool that preserves timestamps -- would
+    fingerprint identically to the version before it: exactly the staleness
+    class the content-hash diff above already fixed for tracked files."""
+    from marm_mcp_server.core.graph_index_worker import git_source_state
+
+    target = git_repo / "src" / "untracked.py"
+    target.write_text("value = 1\n")
+    original_stat = target.stat()
+    before = git_source_state(str(git_repo))[1]
+
+    target.write_text("value = 2\n")  # same byte length as the original
+    os.utime(target, (original_stat.st_atime, original_stat.st_mtime))
+    after = git_source_state(str(git_repo))[1]
+
+    assert after != before, (
+        "a content change must move the signature even when size and mtime "
+        "are unchanged"
+    )
+
+
+def test_a_same_length_untracked_edit_with_a_restored_mtime_is_not_skipped_by_the_worker(
+    shared_db, git_repo, monkeypatch
+):
+    """The signature moving is necessary but not sufficient: prove the worker
+    itself acts on it. A state seeded with the pre-edit baseline, exactly what
+    an already-running worker would have recorded from its last evaluation,
+    must still trigger a reindex through _evaluate after this exact edit."""
+    from marm_mcp_server.core import graph_index_worker as module
+
+    target = git_repo / "src" / "untracked.py"
+    target.write_text("value = 1\n")
+    original_stat = target.stat()
+    baseline = module.git_source_state(str(git_repo))
+    assert baseline is not None
+
+    target.write_text("value = 2\n")  # same byte length as the original
+    os.utime(target, (original_stat.st_atime, original_stat.st_mtime))
+
+    attempts = []
+
+    async def counting_gate(purpose, fn, *args, **kwargs):
+        attempts.append(purpose)
+        return {"status": "success", "project": "p"}
+
+    monkeypatch.setattr(module, "run_exclusive", counting_gate)
+    monkeypatch.setattr(
+        module.graph_supervisor, "get_client", lambda: object(), raising=False
+    )
+
+    state = module._Watched(str(git_repo))
+    state.git_head, state.content_hash = baseline
+
+    asyncio.run(module.GraphIndexWorker()._evaluate(state))
+    assert len(attempts) == 1, (
+        "a same-length untracked edit with a restored mtime must still "
+        "trigger a reindex, not be skipped as unchanged"
+    )
+
+
 def test_an_ignored_file_does_not_move_the_signature(git_repo):
     """The engine remains the ignore-policy owner; this signature must not
     react to churn in build output or dependency directories."""
@@ -1243,6 +1307,50 @@ def test_a_blocked_root_with_an_elapsed_debounce_deadline_still_does_not_pin_the
     assert worker._next_wake_delay() > 0.0, (
         "an elapsed debounce deadline on a blocked root must not pin the "
         "coordinator's wake delay at 0.0 either"
+    )
+
+
+def test_a_fresh_debounce_event_during_the_block_check_survives(
+    shared_db, tmp_path, monkeypatch
+):
+    """index_block runs behind a real await (asyncio.to_thread), and a
+    watcher event can land on this exact root while it is in flight. This
+    root was indexed once already, so reconcile_deadline is a genuine future
+    timestamp rather than -inf: clobbering the fresh debounce_deadline
+    unconditionally would leave nothing to make it due again until the far-off
+    reconcile pass, minutes later, silently losing the change."""
+    from marm_mcp_server.core import graph_index_worker as module
+    from marm_mcp_server.core import runtime_flags
+
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    root = str(plain)
+    runtime_flags.mark_unindexable(root, "windows_path_too_long")
+
+    worker = module.GraphIndexWorker()
+    state = module._Watched(root)
+    state.reconcile_deadline = time.monotonic() + 300
+    # The already-elapsed deadline that makes this tick's due-check true.
+    state.debounce_deadline = time.monotonic() - 1
+    worker._watched[state.root] = state
+    worker._projects_loaded_at = time.monotonic()
+    monkeypatch.setattr(
+        module.graph_supervisor, "snapshot", lambda: {"available": True}
+    )
+
+    fresh_deadline = time.monotonic() + 999
+
+    def blocked_with_a_concurrent_event(root_path):
+        # Stands in for a real watcher event landing on this root while
+        # index_block's await is in flight.
+        state.debounce_deadline = fresh_deadline
+        return "unindexable"
+
+    monkeypatch.setattr(runtime_flags, "index_block", blocked_with_a_concurrent_event)
+
+    asyncio.run(worker._tick())
+    assert state.debounce_deadline == fresh_deadline, (
+        "a debounce deadline set while the block check was in flight must survive"
     )
 
 
