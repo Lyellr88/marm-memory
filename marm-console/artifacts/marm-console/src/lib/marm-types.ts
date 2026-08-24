@@ -330,7 +330,14 @@ export interface ConceptSourceMemory {
 export interface ConceptDetail extends ConceptEntity {
   source_memory_ids: string[];
   source_memories: ConceptSourceMemory[];
-  linked_code: { qualified_name: string; file_path: string }[];
+  linked_code: ConceptCodeLink[];
+}
+
+export interface ConceptCodeLink {
+  qualified_name: string;
+  file_path: string;
+  link_method: string;
+  last_verified_at: string | null;
 }
 
 export interface ConceptSearchParams {
@@ -350,7 +357,7 @@ export interface NeighborhoodNode {
   mention_count: number;
   degree: number;
   hidden_neighbor_count: number;
-  linked_code: { qualified_name: string; file_path: string }[];
+  linked_code: ConceptCodeLink[];
 }
 
 export interface NeighborhoodEdge {
@@ -377,6 +384,37 @@ export interface ConceptAtlas extends Neighborhood {
   total: { nodes: number; edges: number; code_links: number };
   rendered: { nodes: number; edges: number };
   sample_reason: string | null;
+}
+
+export interface ProjectMemoryLinking {
+  state: 'bound' | 'unbound' | 'ambiguous' | 'conflict';
+  binding: {
+    graph_project: string;
+    memory_project: string;
+    root_path: string;
+    source: 'auto' | 'user';
+    created_at: string;
+    updated_at: string;
+    last_verified_at: string;
+  } | null;
+  candidates: string[];
+  refresh: {
+    state: 'pending' | 'leased' | 'parked';
+    attempts: number;
+    last_error: string | null;
+    enqueued_at: string;
+  } | null;
+  linked_entities: number;
+}
+
+export interface ProjectMemoryCodeLink {
+  qualified_name: string;
+  file_path: string;
+  link_method: string;
+  last_verified_at: string | null;
+  entity_id: number;
+  entity_name: string;
+  entity_type: string;
 }
 
 export interface ConceptGraphParams {

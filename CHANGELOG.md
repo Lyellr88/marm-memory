@@ -1,6 +1,26 @@
 # Changelog
 
 <details>
+<summary><strong>August 23rd, 2026: Evidence-Based Memory ↔ Code Links (v2.43.0)</strong></summary>
+
+### Added: Trustworthy Links Between MARM's Two Graphs
+
+- Memory entities and indexed code now remain independent graph layers connected only by explicit evidence. MARM creates an automatic link only after an unambiguous memory-scope-to-repository binding and a unique exact symbol match; missing, ambiguous, and unavailable results never become guessed relationships.
+- Successful code indexing records safe project bindings and queues a durable, coalesced low-priority refresh. Existing entities can therefore gain or re-verify code evidence after a repository is indexed or re-indexed, without re-running extraction or delaying new memory processing.
+- Link evidence now preserves the resolution method, first-resolution time, latest verification time, symbol, and file path. Code-project deletion removes only its own bindings, pending refresh work, and evidence links.
+
+### Changed: Code and Knowledge Graphs Explain Their Relationship
+
+- Knowledge Graph entity details identify verified exact-symbol links, while Code Explorer can show optional memory evidence on linked files. This overlay is visually separate from native code imports and concept relationships.
+- Code-link refresh failures preserve the last known evidence and retry later. The Console remains readable against an older concept database before the MCP server has applied its additive migration.
+
+### Internal
+
+- Added real-SQLite coverage for project binding, refresh coalescing, scoped reconciliation, failure preservation, queue priority, legacy Console reads, and stable resolution timestamps. The public MCP surface remains at 14 tools.
+
+</details>
+
+<details>
 <summary><strong>August 23rd, 2026: Code Explorer in Knowledge Graph (v2.42.0)</strong></summary>
 
 ### Added: A Separate Code Explorer

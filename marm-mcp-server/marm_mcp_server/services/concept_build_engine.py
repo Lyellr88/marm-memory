@@ -15,13 +15,10 @@ from ..config.settings import (
     CONCEPT_BUILD_ROW_CAP,
     CONCEPT_DUPLICATE_SIMILARITY_THRESHOLD,
 )
+from ..core.code_project_bindings import CodeProjectBinding, get_by_memory_project
 from ..core.concept_db import ConceptDB, backup_and_reset_concept_database
 from ..core.concept_extraction import extract_entities
-from ..core.graph_client import (
-    find_code_match,
-    indexed_project_names,
-    is_graph_available,
-)
+from ..core.graph_client import find_code_match
 from ..core.memory import memory
 from ..core.memory_utils import _embedding_to_bytes, _safe_print
 
@@ -282,8 +279,7 @@ def _run_build(
         # whole grace period and then reporting a build still running when
         # none is.
         concept_db = _get_concept_db()
-        graph_available = is_graph_available()
-        code_link_projects = indexed_project_names() if graph_available else set()
+        bindings: dict[str, CodeProjectBinding | None] = {}
         last_progress_reported = 0
         with concept_db.get_connection() as conn:
             for page in pages:
@@ -395,28 +391,33 @@ def _run_build(
                             )
                             memory_failed = True
 
-                    if mem_project in code_link_projects:
+                    binding = None
+                    if mem_project:
+                        if mem_project not in bindings:
+                            bindings[mem_project] = get_by_memory_project(mem_project)
+                        binding = bindings[mem_project]
+                    if binding is not None:
                         for entity in result.entities:
                             linked_entity_id = name_to_id.get(entity.name)
                             if linked_entity_id is None:
                                 continue
                             try:
                                 match = find_code_match(
-                                    name_to_canonical[entity.name], mem_project
+                                    name_to_canonical[entity.name],
+                                    binding.graph_project,
                                 )
                             except Exception as e:
                                 _safe_print(f"Concept code-link lookup failed: {e}")
                                 continue
-                            if match:
+                            if match.get("status") == "matched":
                                 try:
-                                    if concept_db.store_code_link(
+                                    reconciliation = concept_db.reconcile_code_link(
                                         conn,
                                         linked_entity_id,
-                                        match["qualified_name"],
-                                        mem_project or "",
-                                        label=match.get("label"),
-                                        file_path=match.get("file_path"),
-                                    ):
+                                        binding.graph_project,
+                                        match,
+                                    )
+                                    if reconciliation == "created":
                                         code_links_created += 1
                                 except Exception as e:
                                     _safe_print(f"Concept code-link write failed: {e}")

@@ -56,6 +56,7 @@ function ProvenancePanel({
                 <div key={i} className="font-mono text-xs p-2 bg-muted/30 rounded">
                   <div className="truncate">{c.qualified_name}</div>
                   <div className="text-muted-foreground truncate">{c.file_path}</div>
+                  <div className="mt-1 flex items-center gap-1.5 font-sans text-[10px] text-cyan-300/80"><Braces className="h-3 w-3" /> {c.link_method === 'exact_symbol' ? 'Verified exact symbol' : 'Legacy exact symbol'}{c.last_verified_at ? ` · ${new Date(c.last_verified_at).toLocaleDateString()}` : ''}</div>
                 </div>
               ))}
             </div>

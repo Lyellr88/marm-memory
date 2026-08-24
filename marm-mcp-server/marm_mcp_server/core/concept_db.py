@@ -119,10 +119,35 @@ def init_concept_database(db_path: str, mark_current: bool = True) -> None:
                 confidence REAL DEFAULT 1.0,
                 label TEXT,
                 file_path TEXT,
+                link_method TEXT NOT NULL DEFAULT 'legacy_exact_symbol',
+                resolved_at TEXT,
+                last_verified_at TEXT,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY(entity_id) REFERENCES entities(id)
             )
         """)
+        existing_link_cols = {
+            row[1] for row in conn.execute("PRAGMA table_info(entity_code_links)")
+        }
+        if "link_method" not in existing_link_cols:
+            conn.execute(
+                "ALTER TABLE entity_code_links ADD COLUMN link_method TEXT NOT NULL "
+                "DEFAULT 'legacy_exact_symbol'"
+            )
+        if "resolved_at" not in existing_link_cols:
+            conn.execute("ALTER TABLE entity_code_links ADD COLUMN resolved_at TEXT")
+        if "last_verified_at" not in existing_link_cols:
+            conn.execute(
+                "ALTER TABLE entity_code_links ADD COLUMN last_verified_at TEXT"
+            )
+        conn.execute(
+            "UPDATE entity_code_links SET resolved_at = created_at "
+            "WHERE resolved_at IS NULL"
+        )
+        conn.execute(
+            "UPDATE entity_code_links SET last_verified_at = created_at "
+            "WHERE last_verified_at IS NULL"
+        )
 
         conn.execute("CREATE INDEX IF NOT EXISTS idx_entities_name ON entities(name)")
         conn.execute(
@@ -133,6 +158,9 @@ def init_concept_database(db_path: str, mark_current: bool = True) -> None:
         )
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_code_links_entity ON entity_code_links(entity_id)"
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_code_links_project ON entity_code_links(project)"
         )
         # Without these, re-running marm_concept_build on the same corpus (the
         # documented expected usage) re-inserts every relationship/code-link
@@ -706,6 +734,7 @@ class ConceptDB:
         confidence: float = 1.0,
         label: Optional[str] = None,
         file_path: Optional[str] = None,
+        link_method: str = "exact_symbol",
     ) -> bool:
         """label/file_path are denormalized from marm-graph's response at build
         time (not in the original spec schema) so marm_concept_recall's
@@ -714,13 +743,127 @@ class ConceptDB:
         otherwise implied without actually storing the data for it. Returns
         True only if a row was actually inserted (False on a dedup-index
         conflict from a repeat build), so callers can count real writes."""
-        cursor = conn.execute(
-            "INSERT OR IGNORE INTO entity_code_links "
-            "(entity_id, graph_qualified_name, project, confidence, label, file_path) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (entity_id, graph_qualified_name, project, confidence, label, file_path),
+        existing = conn.execute(
+            "SELECT 1 FROM entity_code_links WHERE entity_id = ? "
+            "AND graph_qualified_name = ?",
+            (entity_id, graph_qualified_name),
+        ).fetchone()
+        now = datetime.now(timezone.utc).isoformat()
+        conn.execute(
+            "INSERT INTO entity_code_links "
+            "(entity_id, graph_qualified_name, project, confidence, label, file_path, "
+            "link_method, resolved_at, last_verified_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(entity_id, graph_qualified_name) DO UPDATE SET "
+            "project = excluded.project, confidence = excluded.confidence, "
+            "label = excluded.label, file_path = excluded.file_path, "
+            "link_method = excluded.link_method, "
+            "resolved_at = COALESCE(entity_code_links.resolved_at, excluded.resolved_at), "
+            "last_verified_at = excluded.last_verified_at",
+            (
+                entity_id,
+                graph_qualified_name,
+                project,
+                confidence,
+                label,
+                file_path,
+                link_method,
+                now,
+                now,
+            ),
         )
-        return cursor.rowcount > 0
+        return existing is None
+
+    def entities_for_project(
+        self,
+        conn: sqlite3.Connection,
+        project: str,
+        after_id: int,
+        limit: int,
+    ) -> list[tuple[int, str]]:
+        return [
+            (int(row[0]), str(row[1]))
+            for row in conn.execute(
+                "SELECT id, name FROM entities WHERE project = ? AND id > ? "
+                "ORDER BY id LIMIT ?",
+                (project, after_id, limit),
+            ).fetchall()
+        ]
+
+    def reconcile_code_link(
+        self,
+        conn: sqlite3.Connection,
+        entity_id: int,
+        project: str,
+        outcome: dict,
+    ) -> str:
+        """Persist only authoritative resolutions for one entity/project pair."""
+        status = outcome.get("status")
+        if status == "matched":
+            qualified_name = outcome.get("qualified_name")
+            if not isinstance(qualified_name, str) or not qualified_name:
+                return "unavailable"
+            created = self.store_code_link(
+                conn,
+                entity_id,
+                qualified_name,
+                project,
+                label=outcome.get("label"),
+                file_path=outcome.get("file_path"),
+                link_method="exact_symbol",
+            )
+            conn.execute(
+                "DELETE FROM entity_code_links WHERE entity_id = ? AND project = ? "
+                "AND link_method = 'exact_symbol' AND graph_qualified_name != ?",
+                (entity_id, project, qualified_name),
+            )
+            return "created" if created else "refreshed"
+        if status == "no_match":
+            conn.execute(
+                "DELETE FROM entity_code_links WHERE entity_id = ? AND project = ? "
+                "AND link_method = 'exact_symbol'",
+                (entity_id, project),
+            )
+            return "removed"
+        return "retry"
+
+    def cleanup_graph_project_links(self, project: str) -> int:
+        with self.get_connection() as conn:
+            cursor = conn.execute(
+                "DELETE FROM entity_code_links WHERE project = ?", (project,)
+            )
+        return max(int(cursor.rowcount), 0)
+
+    def graph_project_link_count(self, project: str) -> int:
+        with self.get_connection() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) FROM entity_code_links WHERE project = ?", (project,)
+            ).fetchone()
+        return int(row[0]) if row is not None else 0
+
+    def code_links_for_graph_project(
+        self, project: str, limit: int = 200
+    ) -> list[dict]:
+        with self.get_connection() as conn:
+            rows = conn.execute(
+                "SELECT l.graph_qualified_name, l.file_path, l.link_method, "
+                "l.last_verified_at, e.id, e.name, e.type FROM entity_code_links l "
+                "JOIN entities e ON e.id = l.entity_id WHERE l.project = ? "
+                "ORDER BY l.last_verified_at DESC, l.graph_qualified_name LIMIT ?",
+                (project, max(1, min(limit, 200))),
+            ).fetchall()
+        return [
+            {
+                "qualified_name": row[0],
+                "file_path": row[1] or "",
+                "link_method": row[2],
+                "last_verified_at": row[3],
+                "entity_id": int(row[4]),
+                "entity_name": row[5],
+                "entity_type": row[6],
+            }
+            for row in rows
+        ]
 
     def cleanup_deleted_memory_provenance(self, memory_ids: list[str]) -> dict:
         """Remove concept provenance for deleted memory rows.

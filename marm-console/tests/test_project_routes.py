@@ -31,6 +31,49 @@ def test_project_routes_map_graph_results(monkeypatch):
                     "edge_types": ["IMPORTS", "CALLS"],
                 },
             },
+            "internal/projects/memory-linking": {
+                "state": "bound",
+                "binding": {
+                    "graph_project": "marm-memory",
+                    "memory_project": "marm-memory",
+                    "root_path": "C:/repos/marm-memory",
+                    "source": "auto",
+                    "created_at": "2026-08-23T00:00:00+00:00",
+                    "updated_at": "2026-08-23T00:00:00+00:00",
+                    "last_verified_at": "2026-08-23T00:00:00+00:00",
+                },
+                "candidates": [],
+                "refresh": {"state": "pending", "attempts": 0, "last_error": None},
+                "linked_entities": 4,
+            },
+            "internal/projects/memory-linking/confirm": {
+                "state": "bound",
+                "binding": {
+                    "graph_project": "marm-memory",
+                    "memory_project": "marm-memory",
+                    "root_path": "C:/repos/marm-memory",
+                    "source": "user",
+                    "created_at": "2026-08-23T00:00:00+00:00",
+                    "updated_at": "2026-08-23T00:00:00+00:00",
+                    "last_verified_at": "2026-08-23T00:00:00+00:00",
+                },
+                "candidates": [],
+                "refresh": {"state": "pending", "attempts": 0, "last_error": None},
+                "linked_entities": 4,
+            },
+            "internal/projects/memory-links": {
+                "links": [
+                    {
+                        "qualified_name": "marm.core.run",
+                        "file_path": "core.py",
+                        "link_method": "exact_symbol",
+                        "last_verified_at": "2026-08-23T00:00:00+00:00",
+                        "entity_id": 7,
+                        "entity_name": "run",
+                        "entity_type": "concept",
+                    }
+                ]
+            },
             "internal/projects/search": {
                 "results": [
                     {
@@ -91,6 +134,21 @@ def test_project_routes_map_graph_results(monkeypatch):
             {"name": "IMPORTS"},
             {"name": "CALLS"},
         ]
+
+        linking = client.get("/api/projects/marm-memory/memory-linking")
+        assert linking.status_code == 200
+        assert linking.json()["binding"]["source"] == "auto"
+
+        confirmed = client.put(
+            "/api/projects/marm-memory/memory-linking",
+            json={"memory_project": "marm-memory"},
+        )
+        assert confirmed.status_code == 200
+        assert confirmed.json()["binding"]["source"] == "user"
+
+        memory_links = client.get("/api/projects/marm-memory/memory-links")
+        assert memory_links.status_code == 200
+        assert memory_links.json()["links"][0]["entity_name"] == "run"
 
         search = client.post("/api/projects/marm-memory/search", json={"query": "run"})
         assert search.status_code == 200

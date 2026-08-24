@@ -42,15 +42,19 @@ def test_indexed_project_names_soft_fails(monkeypatch):
     assert graph_client.indexed_project_names() == set()
 
 
-def test_find_code_match_returns_none_when_graph_unavailable(monkeypatch):
+def test_find_code_match_reports_unavailable_when_graph_unavailable(monkeypatch):
     monkeypatch.setattr(graph_supervisor, "is_available", lambda: False)
-    assert graph_client.find_code_match("CbmClient", "proj-a") is None
+    assert graph_client.find_code_match("CbmClient", "proj-a") == {
+        "status": "unavailable"
+    }
 
 
-def test_find_code_match_returns_none_when_client_is_none(monkeypatch):
+def test_find_code_match_reports_unavailable_when_client_is_none(monkeypatch):
     monkeypatch.setattr(graph_supervisor, "is_available", lambda: True)
     monkeypatch.setattr(graph_supervisor, "get_client", lambda: None)
-    assert graph_client.find_code_match("CbmClient", "proj-a") is None
+    assert graph_client.find_code_match("CbmClient", "proj-a") == {
+        "status": "unavailable"
+    }
 
 
 def test_find_code_match_soft_fails_on_no_project_status(monkeypatch):
@@ -61,7 +65,7 @@ def test_find_code_match_soft_fails_on_no_project_status(monkeypatch):
         "do_lookup",
         lambda client, req: {"status": "no_project", "message": "..."},
     )
-    assert graph_client.find_code_match("CbmClient", None) is None
+    assert graph_client.find_code_match("CbmClient", None) == {"status": "unavailable"}
 
 
 def test_find_code_match_soft_fails_on_exception(monkeypatch):
@@ -72,10 +76,12 @@ def test_find_code_match_soft_fails_on_exception(monkeypatch):
         raise RuntimeError("subprocess died")
 
     monkeypatch.setattr(graph_client.R, "do_lookup", _raise)
-    assert graph_client.find_code_match("CbmClient", "proj-a") is None
+    assert graph_client.find_code_match("CbmClient", "proj-a") == {
+        "status": "unavailable"
+    }
 
 
-def test_find_code_match_returns_none_when_no_exact_name_match(monkeypatch):
+def test_find_code_match_reports_no_match_when_no_exact_name_match(monkeypatch):
     monkeypatch.setattr(graph_supervisor, "is_available", lambda: True)
     monkeypatch.setattr(graph_supervisor, "get_client", lambda: _FakeClient())
     monkeypatch.setattr(
@@ -90,7 +96,7 @@ def test_find_code_match_returns_none_when_no_exact_name_match(monkeypatch):
             ]
         },
     )
-    assert graph_client.find_code_match("CbmClient", "proj-a") is None
+    assert graph_client.find_code_match("CbmClient", "proj-a") == {"status": "no_match"}
 
 
 def test_find_code_match_matches_on_qualified_name_short_segment(monkeypatch):
@@ -113,6 +119,7 @@ def test_find_code_match_matches_on_qualified_name_short_segment(monkeypatch):
     )
     match = graph_client.find_code_match("CbmClient", "proj-a")
     assert match == {
+        "status": "matched",
         "qualified_name": "marm_graph.core.cbm_client.CbmClient",
         "label": "class",
         "file_path": "marm_graph/core/cbm_client.py",
@@ -137,6 +144,7 @@ def test_find_code_match_matches_on_explicit_name_field(monkeypatch):
         },
     )
     match = graph_client.find_code_match("CbmClient", "proj-a")
+    assert match["status"] == "matched"
     assert match["qualified_name"] == "some.deeply.nested.qn"
 
 
@@ -167,6 +175,7 @@ def test_find_code_match_finds_exact_match_ranked_below_top_bm25_result(monkeypa
     )
     match = graph_client.find_code_match("auth", "proj-a")
     assert match == {
+        "status": "matched",
         "qualified_name": "marm_graph.core.auth.auth",
         "label": "function",
         "file_path": "marm_graph/core/auth.py",
@@ -185,3 +194,23 @@ def test_find_code_match_requests_more_than_top_result(monkeypatch):
     monkeypatch.setattr(graph_client.R, "do_lookup", _capture)
     graph_client.find_code_match("CbmClient", "proj-a")
     assert captured["limit"] > 1
+
+
+def test_find_code_match_refuses_ambiguous_exact_symbols(monkeypatch):
+    monkeypatch.setattr(graph_supervisor, "is_available", lambda: True)
+    monkeypatch.setattr(graph_supervisor, "get_client", lambda: _FakeClient())
+    monkeypatch.setattr(
+        graph_client.R,
+        "do_lookup",
+        lambda client, req: {
+            "results": [
+                {"qualified_name": "one.Config", "name": "Config"},
+                {"qualified_name": "two.Config", "name": "Config"},
+            ]
+        },
+    )
+
+    assert graph_client.find_code_match("Config", "proj-a") == {
+        "status": "ambiguous",
+        "candidates": ["one.Config", "two.Config"],
+    }

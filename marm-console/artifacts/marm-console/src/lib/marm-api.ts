@@ -23,6 +23,8 @@ import type {
   ConceptReviewResult,
   ConceptSearchParams,
   ConceptsSummary,
+  ProjectMemoryCodeLink,
+  ProjectMemoryLinking,
   DuplicateReport,
   DuplicatePairInput,
   Filters,
@@ -294,6 +296,12 @@ export function createMarmClient(config: MarmClientConfig) {
       request<CodeGraphSnapshot>(config, 'GET', `/projects/${encodeURIComponent(project)}/graph`),
     getProjectGraphNeighborhood: (project: string, nodeId: string) =>
       request<CodeGraphNeighborhood>(config, 'GET', `/projects/${encodeURIComponent(project)}/graph/neighborhood`, { query: { node_id: nodeId } }),
+    getProjectMemoryLinking: (project: string) =>
+      request<ProjectMemoryLinking>(config, 'GET', `/projects/${encodeURIComponent(project)}/memory-linking`),
+    getProjectMemoryLinks: (project: string) =>
+      request<{ links: ProjectMemoryCodeLink[] }>(config, 'GET', `/projects/${encodeURIComponent(project)}/memory-links`),
+    confirmProjectMemoryLinking: (project: string, memoryProject: string) =>
+      request<ProjectMemoryLinking>(config, 'PUT', `/projects/${encodeURIComponent(project)}/memory-linking`, { body: { memory_project: memoryProject } }),
     searchProjectCode: (project: string, data: CodeSearchInput) =>
       request<CodeSearchResult[]>(config, 'POST', `/projects/${encodeURIComponent(project)}/search`, { body: data }),
     traceProject: (project: string, data: TraceInput) =>

@@ -25,7 +25,7 @@ from ..config.settings import (
     CONCEPT_INDEX_LEASE_SECONDS,
     CONCEPTS_AVAILABLE,
 )
-from . import concept_queue
+from . import code_link_queue, concept_queue
 from .concept_build_lock import BuildLease, ConceptBuildBusy, concept_build_lock
 
 logger = structlog.get_logger(__name__)
@@ -195,21 +195,28 @@ class ConceptIndexWorker:
                     tasks = await asyncio.to_thread(
                         concept_queue.claim, CONCEPT_INDEX_BATCH_SIZE
                     )
-                    if not tasks:
-                        return
-                    # The task leases run on the same clock as the build lock,
-                    # so a batch that outlives the TTL would be reclaimed and
-                    # extracted a second time by another process.
-                    build_finished = threading.Event()
-                    self._build_finished = build_finished
-                    try:
-                        async with concept_queue.keep_claimed(
-                            tasks, CONCEPT_INDEX_LEASE_SECONDS
+                    if tasks:
+                        # The task leases run on the same clock as the build lock,
+                        # so a batch that outlives the TTL would be reclaimed and
+                        # extracted a second time by another process.
+                        build_finished = threading.Event()
+                        self._build_finished = build_finished
+                        try:
+                            async with concept_queue.keep_claimed(
+                                tasks, CONCEPT_INDEX_LEASE_SECONDS
+                            ):
+                                await self._process(tasks, lease.lost, build_finished)
+                        finally:
+                            self._active_lease = None
+                            self._build_finished = None
+                    else:
+                        refreshes = await asyncio.to_thread(code_link_queue.claim, 1)
+                        if not refreshes:
+                            return
+                        async with code_link_queue.keep_claimed(
+                            refreshes, CONCEPT_INDEX_LEASE_SECONDS
                         ):
-                            await self._process(tasks, lease.lost, build_finished)
-                    finally:
-                        self._active_lease = None
-                        self._build_finished = None
+                            await self._refresh_code_links(refreshes[0], lease.lost)
                     if lease.lost.is_set():
                         return
             except ConceptBuildBusy:
@@ -298,6 +305,56 @@ class ConceptIndexWorker:
                     "extraction_failed",
                 )
 
+    async def _refresh_code_links(
+        self,
+        task: code_link_queue.ClaimedRefresh,
+        abort: threading.Event,
+    ) -> None:
+        """Re-resolve one bounded entity page without re-running extraction."""
+        from ..services.concept_build_engine import _get_concept_db
+        from .code_project_bindings import get_by_graph_project
+        from .graph_client import find_code_match
+
+        binding = await asyncio.to_thread(get_by_graph_project, task.graph_project)
+        if (
+            binding is None
+            or binding.memory_project != task.memory_project
+            or binding.root_path != task.root_path
+        ):
+            await asyncio.to_thread(code_link_queue.complete, task)
+            return
+
+        concept_db = _get_concept_db()
+        retry_reason: str | None = None
+        with concept_db.get_connection() as conn:
+            entities = concept_db.entities_for_project(
+                conn,
+                task.memory_project,
+                task.cursor_entity_id,
+                CONCEPT_INDEX_BATCH_SIZE,
+            )
+            for entity_id, name in entities:
+                if abort.is_set():
+                    return
+                outcome = await asyncio.to_thread(
+                    find_code_match, name, task.graph_project
+                )
+                if outcome.get("status") in {"unavailable", "ambiguous"}:
+                    retry_reason = str(outcome.get("status"))
+                    break
+                concept_db.reconcile_code_link(
+                    conn, entity_id, task.graph_project, outcome
+                )
+
+        if abort.is_set():
+            return
+        if retry_reason is not None:
+            await asyncio.to_thread(code_link_queue.fail, task, retry_reason)
+        elif len(entities) == CONCEPT_INDEX_BATCH_SIZE:
+            await asyncio.to_thread(code_link_queue.advance, task, entities[-1][0])
+        else:
+            await asyncio.to_thread(code_link_queue.complete, task)
+
     async def _retract(self, task: concept_queue.ClaimedTask, reason: str) -> None:
         """Undo provenance for a memory that was deleted while its extraction
         was in flight.
@@ -331,6 +388,7 @@ class ConceptIndexWorker:
             "enabled": self.enabled(),
             "cycles": self._cycles,
             "memories_indexed": self._indexed,
+            "code_link_refresh": code_link_queue.counts(),
         }
 
 

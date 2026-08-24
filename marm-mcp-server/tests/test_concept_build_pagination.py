@@ -42,7 +42,6 @@ def _one_entity_per_memory(monkeypatch, concepts):
     from marm_mcp_server.core.concept_extraction import Entity, ExtractionResult
 
     concept_build_engine = _engine()
-    monkeypatch.setattr(concept_build_engine, "is_graph_available", lambda: False)
     monkeypatch.setattr(
         concept_build_engine,
         "extract_entities",
@@ -175,7 +174,6 @@ def test_failed_extractions_still_report_interval_progress(concepts_env, monkeyp
     concepts, memory_module = concepts_env
     _seed(memory_module, 25)
     concept_build_engine = _engine()
-    monkeypatch.setattr(concept_build_engine, "is_graph_available", lambda: False)
 
     def fail_extraction(_content):
         raise RuntimeError("bad input")

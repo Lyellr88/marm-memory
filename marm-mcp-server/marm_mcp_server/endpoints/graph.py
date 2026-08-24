@@ -29,7 +29,7 @@ from marm_graph.core.models import (
     GraphTraceRequest,
 )
 
-from ..core import runtime_flags
+from ..core import code_link_queue, code_project_bindings, runtime_flags
 from ..core.concept_db import ConceptDB, get_concept_db_path
 from ..core.graph_index_lock import GraphIndexBusy, gate_sync, run_exclusive
 from ..core.graph_index_worker import (
@@ -56,6 +56,10 @@ class ConsoleIndexRequest(BaseModel):
 
 class ConsoleProjectRequest(BaseModel):
     project: str = Field(..., min_length=1, max_length=512)
+
+
+class ConsoleMemoryBindingRequest(ConsoleProjectRequest):
+    memory_project: str = Field(..., min_length=1, max_length=512)
 
 
 class ConsoleGraphNeighborhoodRequest(ConsoleProjectRequest):
@@ -249,6 +253,11 @@ def _resolve_and_delete(project: str) -> tuple[str | None, str | None, dict]:
     failed = isinstance(result, dict) and result.get("status") == "error"
     if failed:
         return root_path, None, result
+    try:
+        _cleanup_project_code_links(project)
+    except Exception:
+        if isinstance(result, dict):
+            result["code_link_cleanup"] = "failed"
     if not root_path:
         return None, "unresolved_root", result
     try:
@@ -261,12 +270,11 @@ def _resolve_and_delete(project: str) -> tuple[str | None, str | None, dict]:
 
 
 def _cleanup_project_code_links(project: str) -> None:
+    code_link_queue.drop_project(project)
+    code_project_bindings.drop_graph_project(project)
     db_path = get_concept_db_path()
-    if not os.path.exists(db_path):
-        return
-    concept_db = ConceptDB(db_path)
-    with concept_db.get_connection() as conn:
-        conn.execute("DELETE FROM entity_code_links WHERE project = ?", (project,))
+    if os.path.exists(db_path):
+        ConceptDB(db_path).cleanup_graph_project_links(project)
 
 
 @router.post("/marm_graph_index", operation_id="marm_graph_index")
@@ -534,6 +542,93 @@ async def console_project_graph_neighborhood(
     )
 
 
+def _memory_linking_status(project: str, root_path: str | None) -> dict:
+    try:
+        binding = code_project_bindings.get_by_graph_project(project)
+        queue = code_link_queue.status(project)
+    except Exception:
+        return {
+            "state": "unbound",
+            "binding": None,
+            "candidates": [],
+            "refresh": None,
+            "linked_entities": 0,
+        }
+    linked_entities = 0
+    db_path = get_concept_db_path()
+    if os.path.exists(db_path):
+        try:
+            linked_entities = ConceptDB(db_path).graph_project_link_count(project)
+        except Exception:
+            linked_entities = 0
+    if binding is None:
+        try:
+            candidates = code_project_bindings.matching_memory_project_scopes(
+                project, root_path
+            )
+        except Exception:
+            candidates = []
+        return {
+            "state": "ambiguous" if len(candidates) > 1 else "unbound",
+            "binding": None,
+            "candidates": candidates,
+            "refresh": queue,
+            "linked_entities": linked_entities,
+        }
+    return {
+        "state": "bound",
+        "binding": binding.as_dict(),
+        "candidates": [],
+        "refresh": queue,
+        "linked_entities": linked_entities,
+    }
+
+
+@router.post("/internal/projects/memory-linking")
+async def console_project_memory_linking(req: ConsoleProjectRequest) -> dict:
+    root_path = await asyncio.to_thread(_project_root_path, req.project)
+    return await asyncio.to_thread(_memory_linking_status, req.project, root_path)
+
+
+@router.post("/internal/projects/memory-links")
+async def console_project_memory_links(req: ConsoleProjectRequest) -> dict:
+    db_path = get_concept_db_path()
+    if not os.path.exists(db_path):
+        return {"links": []}
+    try:
+        links = await asyncio.to_thread(
+            ConceptDB(db_path).code_links_for_graph_project, req.project
+        )
+    except Exception:
+        links = []
+    return {"links": links}
+
+
+@router.post("/internal/projects/memory-linking/confirm")
+async def console_confirm_project_memory_linking(
+    req: ConsoleMemoryBindingRequest,
+) -> dict:
+    root_path = await asyncio.to_thread(_project_root_path, req.project)
+    if not root_path:
+        raise HTTPException(status_code=404, detail="Indexed project not found.")
+    try:
+        binding = await asyncio.to_thread(
+            code_project_bindings.set_user_binding,
+            req.project,
+            req.memory_project,
+            root_path,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    await asyncio.to_thread(
+        code_link_queue.enqueue_refresh,
+        binding.graph_project,
+        binding.memory_project,
+        binding.root_path,
+    )
+    return await asyncio.to_thread(_memory_linking_status, req.project, root_path)
+
+
 @router.post("/internal/projects/search")
 async def console_project_search(req: CodeLookupRequest) -> dict:
     client = await asyncio.to_thread(graph_supervisor.get_client)
@@ -609,8 +704,4 @@ async def console_delete_project(req: ConsoleDeleteProjectRequest) -> dict:
             # transport's poller can re-index this root from its cached watch
             # set, and the symptom is a deleted project reappearing minutes later.
             result["watch_suppression"] = suppression_issue
-        try:
-            await asyncio.to_thread(_cleanup_project_code_links, req.project)
-        except Exception:
-            result["code_link_cleanup"] = "failed"
     return result

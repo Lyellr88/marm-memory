@@ -62,11 +62,13 @@ export function CodeGraphViz({
   graph,
   filter,
   selectedId,
+  linkedNodeIds,
   onNodeClick,
 }: {
   graph: CodeGraphSnapshot;
   filter: string;
   selectedId: string | null;
+  linkedNodeIds?: Set<string>;
   onNodeClick: (nodeId: string) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -133,6 +135,7 @@ export function CodeGraphViz({
     const activeId = selectedId || hoverId;
     const selected = node.id === selectedId;
     const hovered = node.id === hoverId;
+    const memoryLinked = linkedNodeIds?.has(node.id);
     const dimmed = !!activeId && !neighbours.has(node.id);
     const radius = Math.max(3.5, Math.min(8.5, 3.2 + Math.log2((node.degree || 0) + 1) * 1.25));
     ctx.globalAlpha = dimmed ? 0.14 : 1;
@@ -144,6 +147,13 @@ export function CodeGraphViz({
     ctx.arc(node.x, node.y, radius, 0, 2 * Math.PI);
     ctx.fillStyle = selected || hovered ? '#e0f2fe' : node.color;
     ctx.fill();
+    if (memoryLinked) {
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, radius + 2.5, 0, 2 * Math.PI);
+      ctx.strokeStyle = '#f472b6';
+      ctx.lineWidth = 1.4 / scale;
+      ctx.stroke();
+    }
     if (selected || hovered) {
       ctx.beginPath();
       ctx.arc(node.x, node.y, radius + 2, 0, 2 * Math.PI);
@@ -163,7 +173,7 @@ export function CodeGraphViz({
       ctx.fillText(node.label, node.x, node.y + radius + 2 / scale);
     }
     ctx.globalAlpha = 1;
-  }, [hoverId, neighbours, selectedId]);
+  }, [hoverId, linkedNodeIds, neighbours, selectedId]);
 
   const linkColor = useCallback((edge: any) => {
     const source = typeof edge.source === 'object' ? edge.source.id : edge.source;
@@ -214,6 +224,7 @@ export function CodeGraphViz({
         <p className="mt-0.5 text-xs text-muted-foreground">{graphData.nodes.length} files · {graphData.links.length} import links</p>
       </div>
       {folderLegend.length > 1 && <div className="pointer-events-none absolute right-3 top-3 flex max-w-[52%] flex-wrap justify-end gap-1.5 rounded-lg border border-border/70 bg-background/75 px-2 py-1.5 backdrop-blur">{folderLegend.map(([group, info]) => <span key={group} className="flex max-w-28 items-center gap-1 truncate font-mono text-[10px] text-muted-foreground"><span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: info.color }} />{group}</span>)}</div>}
+      {linkedNodeIds && <div className="pointer-events-none absolute right-3 top-11 rounded-lg border border-fuchsia-400/25 bg-background/75 px-2 py-1.5 text-[10px] text-fuchsia-200 backdrop-blur"><span className="mr-1 inline-block h-1.5 w-1.5 rounded-full border border-fuchsia-300" /> Exact memory evidence</div>}
       <div className="absolute bottom-3 left-3 flex gap-1.5">
         <Button variant="secondary" size="icon" className="h-7 w-7 border border-border/70 bg-background/80" onClick={() => zoom(1.35)} title="Zoom in"><ZoomIn className="h-3.5 w-3.5" /></Button>
         <Button variant="secondary" size="icon" className="h-7 w-7 border border-border/70 bg-background/80" onClick={() => zoom(1 / 1.35)} title="Zoom out"><ZoomOut className="h-3.5 w-3.5" /></Button>

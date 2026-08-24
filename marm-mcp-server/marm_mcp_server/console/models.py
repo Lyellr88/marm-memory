@@ -22,6 +22,10 @@ class ProjectIndexPayload(BaseModel):
     mode: str = "moderate"
 
 
+class ProjectMemoryBindingPayload(BaseModel):
+    memory_project: str = Field(min_length=1, max_length=512)
+
+
 class ProjectSearchPayload(BaseModel):
     query: str
     kind: str = "auto"
