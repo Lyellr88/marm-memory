@@ -479,6 +479,23 @@ def init_database(db_path: str) -> None:
             )
             """)
 
+        # The event-driven graph worker's durable baseline, one row per watched
+        # root. Without this a restart (or the other transport starting up) has
+        # no memory of the last successful index and re-indexes every project
+        # once just because its in-memory state was recreated. last_source_state
+        # is opaque -- a digest, never source text or a diff.
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS graph_watch_state (
+                root_path         TEXT PRIMARY KEY,
+                source_kind       TEXT NOT NULL,
+                last_source_state TEXT,
+                last_indexed      TEXT,
+                last_index_reason TEXT,
+                watch_status      TEXT NOT NULL DEFAULT 'unknown',
+                updated_at        TEXT NOT NULL
+            )
+            """)
+
         conn.execute("DROP TABLE IF EXISTS session_summary_chunks")
 
         conn.execute("""

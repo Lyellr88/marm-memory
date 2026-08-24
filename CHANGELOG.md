@@ -1,6 +1,28 @@
 # Changelog
 
 <details>
+<summary><strong>August 24th, 2026: Event-Driven Code Graph Auto-Indexing (v2.44.0)</strong></summary>
+
+### Added: Code Graph Auto-Indexing Is Now Event-Driven
+
+- MARM now indexes a changed repository within seconds of a save, commit, branch switch, or merge instead of on a fixed poll. A bundled filesystem watcher wakes the worker on the actual change, debounced so a burst of edits becomes one re-index instead of one per file.
+- A git repository's re-index trigger is now content-sensitive: the signature hashes the diff against `HEAD` plus a fingerprint of non-ignored untracked files, so two different edits to an already-modified file are recognized as two different changes instead of being read as identical.
+- A periodic reconciliation pass catches a missed watcher event, covers a filesystem that cannot be watched, and remains the only trigger for a directory that is not a git repo. A watcher thread that dies after starting is now detected and automatically rebuilt on the next cycle.
+
+### Changed: Restart-Safe, Cross-Process-Safe Scheduling
+
+- The last successful index state now survives a restart in a durable table, so a freshly started process, or the other transport enrolling a project first, does not blindly re-index everything just because its in-memory state was recreated.
+- A worker refused the cross-process indexing lease no longer records the repository state as current; the change is retried at the next reconciliation pass instead of being silently forgotten.
+- `GRAPH_AUTO_INDEX_DEBOUNCE_SECONDS` and `GRAPH_AUTO_INDEX_RECONCILE_SECONDS` replace the fixed 30-second poll interval. The deprecated `GRAPH_AUTO_INDEX_INTERVAL` and `GRAPH_AUTO_INDEX_FULL_INTERVAL` environment variables still work as compatibility inputs; the latter's value carries over automatically.
+
+### Internal
+
+- New `graph_index_watcher.py` adapter around the bundled `watchdog` dependency, and a `graph_watch_state` table added to the memory database for the durable baseline.
+- Added 20 tests covering debounce coalescing, in-flight catch-up passes, watcher fallback and recovery, cross-process lease-loss safety, and restart-baseline persistence.
+
+</details>
+
+<details>
 <summary><strong>August 23rd, 2026: Evidence-Based Memory ↔ Code Links (v2.43.0)</strong></summary>
 
 ### Added: Trustworthy Links Between MARM's Two Graphs

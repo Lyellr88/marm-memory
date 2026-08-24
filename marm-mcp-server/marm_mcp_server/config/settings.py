@@ -115,7 +115,7 @@ if not (1 <= _raw_port <= 65535):
         f"WARNING: SERVER_PORT={_raw_port} out of [1, 65535], clamped to {SERVER_PORT}",
         file=sys.stderr,
     )
-SERVER_VERSION = "2.43.0"
+SERVER_VERSION = "2.44.0"
 
 GRAPH_ENABLED = os.environ.get("GRAPH_ENABLED", "true").lower() != "false"
 
@@ -282,26 +282,56 @@ if _raw_cima < 1:
 # A saved override in runtime_flags beats this; see core/runtime_flags.py.
 GRAPH_AUTO_INDEX = _safe_bool("GRAPH_AUTO_INDEX", True)
 
-# Git-signature cycle. 30s rather than the engine's own 5s base: a git signature
-# costs ~100ms per project on Windows, where process spawn dominates, and a code
-# graph does not need sub-minute freshness.
-_raw_gaii = _safe_int("GRAPH_AUTO_INDEX_INTERVAL", 30)
-GRAPH_AUTO_INDEX_INTERVAL = max(5, _raw_gaii)
-if _raw_gaii < 5:
+# How long the worker waits after the last relevant filesystem/git event before
+# it evaluates source state. Coalesces a burst of saves, a rebase touching many
+# files, or an IDE's multi-file write into one re-index instead of several.
+_raw_gads = _safe_float("GRAPH_AUTO_INDEX_DEBOUNCE_SECONDS", 2.0)
+GRAPH_AUTO_INDEX_DEBOUNCE_SECONDS = max(0.5, _raw_gads)
+if _raw_gads < 0.5:
     print(
-        f"WARNING: GRAPH_AUTO_INDEX_INTERVAL={_raw_gaii} below minimum 5, "
-        f"clamped to {GRAPH_AUTO_INDEX_INTERVAL}",
+        f"WARNING: GRAPH_AUTO_INDEX_DEBOUNCE_SECONDS={_raw_gads} below minimum 0.5, "
+        f"clamped to {GRAPH_AUTO_INDEX_DEBOUNCE_SECONDS}",
         file=sys.stderr,
     )
 
-# Non-git projects have no cheap signature, so their only option is an
-# unconditional re-index. That holds the engine lock, so it gets a slow lane.
-_raw_gaifi = _safe_int("GRAPH_AUTO_INDEX_FULL_INTERVAL", 300)
-GRAPH_AUTO_INDEX_FULL_INTERVAL = max(60, _raw_gaifi)
-if _raw_gaifi < 60:
+# The fallback pass: catches a missed watcher event, covers a filesystem that
+# cannot be watched, and is the only trigger for a non-git root. Not the primary
+# schedule any more -- that is watcher events, debounced above.
+_raw_gars = _safe_int("GRAPH_AUTO_INDEX_RECONCILE_SECONDS", 300)
+GRAPH_AUTO_INDEX_RECONCILE_SECONDS = max(60, _raw_gars)
+if _raw_gars < 60:
     print(
-        f"WARNING: GRAPH_AUTO_INDEX_FULL_INTERVAL={_raw_gaifi} below minimum 60, "
-        f"clamped to {GRAPH_AUTO_INDEX_FULL_INTERVAL}",
+        f"WARNING: GRAPH_AUTO_INDEX_RECONCILE_SECONDS={_raw_gars} below minimum 60, "
+        f"clamped to {GRAPH_AUTO_INDEX_RECONCILE_SECONDS}",
+        file=sys.stderr,
+    )
+
+# Names from the fixed-poll scheduler this replaces. Auto-indexing is
+# event-driven now, so GRAPH_AUTO_INDEX_INTERVAL has nothing left to control --
+# read only to warn instead of erroring on an existing environment.
+# GRAPH_AUTO_INDEX_FULL_INTERVAL's role (the slow re-index cadence) survives as
+# GRAPH_AUTO_INDEX_RECONCILE_SECONDS, so an explicit legacy value carries over
+# instead of silently changing cadence, as long as the new name was not also set.
+if "GRAPH_AUTO_INDEX_INTERVAL" in os.environ:
+    print(
+        "WARNING: GRAPH_AUTO_INDEX_INTERVAL is deprecated and no longer read. "
+        "Auto-indexing is event-driven; set GRAPH_AUTO_INDEX_DEBOUNCE_SECONDS "
+        "instead. This variable will be removed in a future release.",
+        file=sys.stderr,
+    )
+if (
+    "GRAPH_AUTO_INDEX_FULL_INTERVAL" in os.environ
+    and "GRAPH_AUTO_INDEX_RECONCILE_SECONDS" not in os.environ
+):
+    _raw_legacy_full = _safe_int(
+        "GRAPH_AUTO_INDEX_FULL_INTERVAL", GRAPH_AUTO_INDEX_RECONCILE_SECONDS
+    )
+    GRAPH_AUTO_INDEX_RECONCILE_SECONDS = max(60, _raw_legacy_full)
+    print(
+        "WARNING: GRAPH_AUTO_INDEX_FULL_INTERVAL is deprecated, renamed to "
+        "GRAPH_AUTO_INDEX_RECONCILE_SECONDS. Using its value "
+        f"({GRAPH_AUTO_INDEX_RECONCILE_SECONDS}s) for now; update the "
+        "environment variable name before it is removed.",
         file=sys.stderr,
     )
 

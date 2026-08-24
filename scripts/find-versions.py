@@ -105,8 +105,22 @@ def read_text(path: Path) -> str:
 
 def discover_docs() -> list[Path]:
     paths: list[Path] = []
-    # Root-level .md files
-    paths.extend(sorted(PROJECT_ROOT.glob("*.md"), key=lambda p: str(p).lower()))
+    # Root-level .md files. CONTRIBUTORS.md is excluded for the same reason
+    # CHANGELOG.md is: it intentionally records historical "fixed in vX.Y.Z"
+    # credits that must stay pinned to the release that actually shipped the
+    # fix. Every line links github.com/.../marm-memory, which trips the
+    # "marm" replace-cue on its own, so without this exclusion every sync
+    # run silently rewrites those citations to whatever version is current.
+    paths.extend(
+        sorted(
+            (
+                p
+                for p in PROJECT_ROOT.glob("*.md")
+                if p.name.lower() != "contributors.md"
+            ),
+            key=lambda p: str(p).lower(),
+        )
+    )
     # docs/*.md
     if DOC_ROOT.exists():
         paths.extend(sorted(DOC_ROOT.glob("*.md"), key=lambda p: str(p).lower()))
