@@ -1,13 +1,3 @@
-"""
-MARM MCP Server - Memory Accurate Response Mode for Model Context Protocol
-
-This server integrates all modular components of the MARM protocol into a single
-FastAPI application, compliant with the MCP protocol via FastApiMCP.
-
-Author: Lyell - marm-memory
-Version: 2.44.0
-"""
-
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -125,8 +115,6 @@ app.include_router(graph_router)
 app.include_router(concepts_router)
 
 
-# Explicit whitelist as defense-in-depth: marm-graph/internal routes must not
-# appear in FastApiMCP's OpenAPI-derived tool list unless intentionally exposed.
 MCP_TOOL_OPERATIONS = [
     "marm_smart_recall",
     "marm_log_entry",
@@ -148,8 +136,6 @@ mcp = FastApiMCP(app, include_operations=MCP_TOOL_OPERATIONS)
 mcp.mount_http()
 
 
-# Preserve direct imports from server.py while the installed CLI resolves
-# through cli.py and the MCP server entry point continues to use create_server.
 from .cli import create_server, main  # noqa: E402,F401
 
 if __name__ == "__main__":

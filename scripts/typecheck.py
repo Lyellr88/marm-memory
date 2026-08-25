@@ -1,20 +1,4 @@
 #!/usr/bin/env python3
-"""Run mypy on the checked scope and gate on the error baseline.
-
-This fails when the count goes *up*, not when it is nonzero. Lower BASELINE as
-errors are fixed; that edit is the record of progress.
-
-At 0. The last two were endpoints/graph.py's Optional get_client() race, cleared
-by making the supervisor hand out a client only while it still owns one rather
-than by annotating around it.
-
-Runs in python.yml and publish-mcp.yml as well as locally. BASELINE is specific
-to a mypy version and to its stub versions, so all three places pin the same
-ones (pyproject.toml's dev extra included); upgrading either is a re-baseline.
-
-    python scripts/typecheck.py            summary + gate
-    python scripts/typecheck.py --raw      full mypy output, no gate
-"""
 
 from __future__ import annotations
 
@@ -28,18 +12,12 @@ from collections import Counter
 
 BASELINE = 0
 
-# A cold cache over the package runs in well under a minute. Anything past this
-# is wedged, not slow.
 TIMEOUT_SECONDS = 600
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 PACKAGE_DIR = REPO_ROOT / "marm-mcp-server"
 
-# The whole package, not just core/. Checking core/ alone hid both ends of the
-# same defect: an implicit-Optional parameter counted once inside core/ while
-# every caller honestly passing None to it went unreported. It also let new
-# errors land freely in endpoints/, services/, and console/.
-TARGET = "marm_mcp_server/"
+TARGETS = ["marm_mcp_server/", "marm_graph/"]
 
 _ERROR_LINE = re.compile(
     r"^(?P<path>.*?\.py):\d+: error: .*?(?:\[(?P<code>[a-z-]+)\])?$"
@@ -48,12 +26,10 @@ _IN_CI = os.environ.get("GITHUB_ACTIONS") == "true"
 
 
 def run_mypy() -> tuple[str, int]:
-    # Output is captured rather than streamed, so without this line the script
-    # prints nothing at all until mypy returns and reads as a hang.
-    print(f"running mypy on {TARGET}", file=sys.stderr, flush=True)
+    print(f"running mypy on {' '.join(TARGETS)}", file=sys.stderr, flush=True)
     try:
         proc = subprocess.run(
-            [sys.executable, "-m", "mypy", TARGET],
+            [sys.executable, "-m", "mypy", *TARGETS],
             cwd=PACKAGE_DIR,
             capture_output=True,
             text=True,
@@ -107,10 +83,6 @@ def main() -> int:
 
     by_file, by_code, total = parse(output)
 
-    # mypy exits 0 clean, 1 with diagnostics, 2+ on a fatal/usage error. A
-    # non-zero exit that produced no diagnostics means it never got as far as
-    # type checking (not installed, bad config, crash), and counting that as
-    # zero errors would report the backlog as cleared and pass the gate.
     if returncode >= 2 or (returncode != 0 and total == 0):
         print(
             f"mypy failed without reporting diagnostics (exit {returncode}).",
@@ -136,7 +108,7 @@ def main() -> int:
         )
         return 2
 
-    print(f"mypy: {TARGET}  ({total} errors, baseline {BASELINE})\n")
+    print(f"mypy: {' '.join(TARGETS)}  ({total} errors, baseline {BASELINE})\n")
 
     if by_code:
         print("by kind")
@@ -149,7 +121,8 @@ def main() -> int:
             print(f"  {count:5d}  {name}")
         checked = {
             _relative(str(path.relative_to(PACKAGE_DIR)))
-            for path in (PACKAGE_DIR / TARGET).rglob("*.py")
+            for target in TARGETS
+            for path in (PACKAGE_DIR / target).rglob("*.py")
             if "__pycache__" not in path.parts
         }
         print(f"\nclean: {len(checked - set(by_file))} of {len(checked)} files")

@@ -1,15 +1,3 @@
-"""Regression tests for where usage analytics actually get written.
-
-endpoints/memory.py's track_endpoint_usage used to carry its own copy of the
-usage_events insert, opening a bare relative "marm_usage_analytics.db". That
-ignored both MARM_ANALYTICS_DB_PATH and the Docker /app/data path, so the file
-followed whatever directory the server was launched from while track_usage()
-wrote the same table at the configured location. Two writers, two files.
-
-ANALYTICS_DB_PATH is bound at import time, so each test re-imports the modules
-with the environment already pointed somewhere temporary.
-"""
-
 import importlib
 import os
 import sqlite3
@@ -122,7 +110,7 @@ def test_default_analytics_path_is_under_the_marm_home(monkeypatch, tmp_path):
     fake_home = tmp_path / "home"
     fake_home.mkdir()
     monkeypatch.setenv("HOME", str(fake_home))
-    monkeypatch.setenv("USERPROFILE", str(fake_home))  # Path.home() on Windows
+    monkeypatch.setenv("USERPROFILE", str(fake_home))
 
     launch_dir = tmp_path / "launch"
     launch_dir.mkdir()

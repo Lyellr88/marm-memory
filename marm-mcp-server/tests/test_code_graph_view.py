@@ -1,16 +1,3 @@
-"""Tests for the Console code-units view.
-
-Every payload here is verbatim `query_graph` output from engine 0.10.5, captured
-by scripts/benchmarking/accuracy/code-graph/probe_code_units.py. That matters more
-than usual: this module exists because the engine answers a partly-understood
-query with a well-formed reply that is not the answer, so a fabricated payload
-would test the happy path the real engine does not always take.
-
-The degradation shapes are real too. `["labels(n)"]` is what a subscripted
-function call returns, and `["f.name", "f.qualified_name", "f.label"]` is what a
-comma-joined MATCH returns, both with rows attached and no error anywhere.
-"""
-
 import pytest
 
 from marm_graph.core import code_graph_view as V
@@ -47,7 +34,6 @@ FAN_OUT_REPLY = {
     "total": 3,
 }
 
-# Verbatim degraded replies. Well-formed, no error, wrong answer.
 DEGRADED_SUBSCRIPT = {
     "columns": ["labels(n)"],
     "rows": [['["Variable"]'], ['["Section"]']],
@@ -91,7 +77,6 @@ def test_units_are_ranked_by_total_coupling_with_a_stable_tie_break():
 
     assert result["state"] == "ready"
     units = [row["unit"] for row in result["code_units"]]
-    # memory.py 33+9=42, settings.py 37+2=39, server.py 0+24=24.
     assert units == [
         "marm-mcp-server/marm_mcp_server/core/memory.py",
         "marm-mcp-server/marm_mcp_server/config/settings.py",
@@ -155,7 +140,6 @@ def test_the_project_never_reaches_the_query_string():
     client = FakeClient()
     V.code_units(client, "'; MATCH (n) DETACH DELETE n; --")
 
-    # Refused before any call is made.
     assert client.calls == []
 
 
@@ -352,7 +336,6 @@ def test_the_unavailable_helper_matches_the_shape_the_browser_renders():
         "shown": 0,
         "code_units": [],
     }
-    # The keys the browser reads on every response, whatever the state.
     shared = {"state", "total", "shown", "code_units"}
     assert shared <= set(body)
     assert shared <= set(V.code_units(FakeClient(), PROJECT))

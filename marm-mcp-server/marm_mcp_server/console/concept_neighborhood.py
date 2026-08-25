@@ -1,5 +1,3 @@
-"""Bounded BFS traversal around a single entity in the concept graph."""
-
 from __future__ import annotations
 
 import sqlite3
@@ -54,8 +52,6 @@ def neighborhood(
             if predicate:
                 edge_scope += " AND predicate = ?"
                 params.append(predicate)
-            # Deterministic order, typed predicates ahead of co-occurrence,
-            # so truncation always drops the lowest-value edges first.
             rows = connection.execute(
                 f"""SELECT id, source_id, target_id, predicate, memory_id
                     FROM relationships
@@ -72,8 +68,6 @@ def neighborhood(
                     if endpoint not in visited:
                         next_frontier.add(endpoint)
             frontier = next_frontier
-        # Enforce the 200-node limit: keep edges (in ranked order) only while
-        # their endpoints fit; edges between already-included nodes always fit.
         ids = {entity_id}
         edge_rows = []
         nodes_truncated = False
@@ -110,7 +104,6 @@ def neighborhood(
                 "last_verified_at": link["last_verified_at"],
             }
         )
-    # A node's edges already in this response, so hidden = degree - included.
     included_edge_count: dict[int, int] = {}
     for edge in edge_rows:
         for endpoint in (edge["source_id"], edge["target_id"]):

@@ -1,37 +1,3 @@
-"""Fixed graph queries for the Console, kept off the agent tool surface.
-
-The Architecture tab's table read `modules`, then `module_summary`. No engine
-version has ever returned either, so it showed "No module summary available." on
-fully indexed projects for the life of the tab. Mapping the engine's `packages`
-aspect onto it was tried and reverted: that aspect returns Python builtins and
-dependency names with `fan_in` and `fan_out` zero on every row.
-
-So this asks the graph directly. Everything here is a Console view, which is why
-it is not in tool_router: that module is shared with the agent tool surface and
-its response shapes are asserted by tests.
-
-Three findings from the Phase 1 contract probe are load-bearing, and none of them
-are obvious from reading a query:
-
-`query_graph` silently degrades a query it only partly understands. A subscripted
-function call, a comma-joined MATCH, or a list comprehension each come back as a
-name/qualified_name/label projection of raw nodes, aggregation dropped, with no
-error and well-formed JSON. So every reply is checked against the aliases its
-query asked for, and a mismatch raises rather than being read as data.
-
-`IMPORTS` has four target labels, not one. `File -> Module` is 377 of 984 edges
-on MARM; Function, Variable and Class carry the rest. Aggregating the obvious pair
-silently loses 62% of the graph.
-
-Edges are import statements, not dependencies. `from x import a, b` is two edges,
-and on MARM raw counts invert the ranking against distinct importers. Coupling is
-counted as DISTINCT files, which makes fan-in a lower bound rather than exact:
-`from package import module` attributes to a Folder node for the directory and
-never to the imported file, so a repo written that way under-reports.
-
-Reference: docs/current/indexing/console-code-units.md
-"""
-
 from __future__ import annotations
 
 import re
@@ -43,21 +9,12 @@ from .cbm_client import CbmClient, CbmError, CbmToolError
 
 logger = structlog.get_logger(__name__)
 
-# Every graph read stays bounded independently of the Console response limit.
 DEFAULT_LIMIT = 50
 MAX_LIMIT = 500
 GRAPH_NODE_LIMIT = 80
 GRAPH_EDGE_LIMIT = 1_000
 NEIGHBORHOOD_EDGE_LIMIT = 200
 
-# Non-code the File label also covers: README.md, pyproject.toml, every yaml in
-# the tree. Excluding these is what separates a code structure from a file list.
-#
-# Deliberately a denylist. An allowlist of code extensions has to keep pace with
-# an engine that parses 158 languages, and anything it misses is reported as "no
-# source files found" on a project full of source. The first draft was an
-# allowlist and it dropped .ps1 from MARM's own tree. Getting this wrong should
-# mean an odd row appears, never that real code silently vanishes.
 NON_CODE_SUFFIXES = (
     ".md",
     ".markdown",
@@ -85,9 +42,6 @@ NON_CODE_SUFFIXES = (
     ".pdf",
 )
 
-# The project is passed as its own tool argument and is never interpolated into a
-# query, so nothing from a caller reaches the query text. This validates the
-# argument itself against the shape the engine generates, a mangled absolute path.
 _PROJECT_RE = re.compile(r"^[A-Za-z0-9._\-]{1,512}$")
 _FILE_PATH_RE = re.compile(r"^[A-Za-z0-9._/@+()\[\] -]{1,1024}$")
 
@@ -96,14 +50,6 @@ class CodeGraphViewError(RuntimeError):
     """The graph answered, but not with what was asked for."""
 
 
-# Constant templates with no interpolation at all. Scoping is the tool's own
-# `project` argument, which is what actually restricts the result set.
-#
-# Do not add `WHERE f.project = ...`. The property exists and is an empty string
-# on every node, so that clause matches nothing and returns a well-formed empty
-# result with the requested columns intact. The alias guard below cannot catch it,
-# and the table reads as `empty_index` on a fully indexed project, which is the
-# same silent-wrong-answer this whole view was written to stop.
 _UNITS_QUERY = (
     f"MATCH (f:File) RETURN f.file_path AS unit ORDER BY f.file_path LIMIT {MAX_LIMIT}"
 )
@@ -154,8 +100,6 @@ def _query(
 
     asked = _aliases(query)
     if columns != asked:
-        # Degradation, not an empty result. Reading these rows as data is how a
-        # 4,000-row node dump becomes a code-units table.
         logger.warning(
             "code_graph_view.degraded", asked=asked, got=columns, query=query
         )
@@ -252,9 +196,6 @@ def code_units(
         logger.warning("code_graph_view.contract", project=project, error=str(exc))
         return unavailable("contract_mismatch", str(exc))
     except (CbmToolError, CbmError) as exc:
-        # A dead child or an upstream tool error is a Console state, not a 500.
-        # call_tool documents both, and tool_router wraps them for every other
-        # caller through its own decorator, which this module does not use.
         logger.warning("code_graph_view.backend", project=project, error=str(exc))
         return unavailable("graph_unavailable", str(exc))
 
@@ -269,14 +210,10 @@ def code_units(
             paths.append(path)
             seen.add(path)
 
-    # These are already ranked by the engine. They must seed the candidate set;
-    # an alphabetical File page cannot decide which code belongs in a graph view.
     for result in (fan_in, fan_out):
         for row in result:
             add_path(row.get("unit"))
 
-    # Files without imports never occur in either fan query. Include a bounded
-    # alphabetical tail solely for those isolated entry points and leaves.
     for row in units:
         path = str(row.get("unit") or "")
         if len(paths) >= MAX_LIMIT:
@@ -285,8 +222,6 @@ def code_units(
             add_path(path)
 
     if not paths:
-        # Nothing indexed at all reads differently from indexed-but-no-code, and
-        # the caller has to be able to tell the user which one happened.
         state = "empty_index" if not units else "indexed_no_summary"
         return {
             "state": state,
@@ -295,11 +230,8 @@ def code_units(
             "code_units": [],
         }
 
-    # Ranked as typed tuples before becoming dicts: sorting on dict values leaves
-    # the counts inferred as object, which the sort key cannot add.
     ranked: list[tuple[str, int, int]] = sorted(
         ((path, inbound.get(path, 0), outbound.get(path, 0)) for path in paths),
-        # Coupling first, then path, so two identical requests order identically.
         key=lambda row: (-(row[1] + row[2]), row[0]),
     )
     rows = [

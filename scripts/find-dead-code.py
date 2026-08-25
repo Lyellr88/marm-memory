@@ -1,9 +1,4 @@
 #!/usr/bin/env python3
-"""Find potentially dead code in shipped MARM Python packages.
-
-This is a static heuristic scanner, not a deletion oracle. It is meant to
-surface files/functions worth reviewing by a human or code-review agent.
-"""
 
 import re
 import sys
@@ -20,9 +15,6 @@ RESET = "\033[0m"
 REPO_ROOT = Path(__file__).parent.parent
 SERVER_ROOT = REPO_ROOT / "marm-mcp-server"
 CONSOLE_ROOT = REPO_ROOT / "marm-console"
-# Console's Python moved into marm_mcp_server/console when it was bundled into
-# the wheel, so it is covered by the marm_mcp_server entry. marm-console/ is
-# now frontend-only.
 PACKAGE_DIRS = [
     SERVER_ROOT / "marm_mcp_server",
     SERVER_ROOT / "marm_graph",
@@ -38,6 +30,8 @@ SKIP_FUNC_NAMES = {
     "lifespan",
     "check_dependencies",
     "run_server_with_shutdown",
+    "on_any_event",
+    "format_help",
 }
 
 CHECK = "+"
@@ -138,17 +132,12 @@ def module_is_referenced(module_path: str, all_source: str) -> bool:
     stem = re.escape(module_path.split(".")[-1])
     if re.search(rf"from\s+\.+\s+import\s+[^\n#]*\b{stem}\b", all_source):
         return True
-    # Parenthesized imports put each name on its own line, so the single-line
-    # patterns above miss every sibling module imported as a group.
     return (
         re.search(rf"from\s+[.\w]+\s+import\s+\([^)]*\b{stem}\b", all_source, re.DOTALL)
         is not None
     )
 
 
-# ---------------------------------------------------------------------------
-# Check 1: Orphaned modules — never imported by anything in shipped packages
-# ---------------------------------------------------------------------------
 def check_orphaned_modules() -> int:
     print(f"{YELLOW}1. Checking for orphaned modules...{RESET}")
     print(
@@ -190,41 +179,46 @@ def check_orphaned_modules() -> int:
     return len(orphaned)
 
 
-# ---------------------------------------------------------------------------
-# Check 2: Unregistered routers — endpoint files with a router not in server.py
-# ---------------------------------------------------------------------------
+ROUTER_TARGETS = [
+    (SERVER_PACKAGE / "endpoints", SERVER_FILE),
+    (SERVER_ROOT / "marm_graph" / "endpoints", SERVER_ROOT / "marm_graph" / "server.py"),
+]
+
+
 def check_unregistered_routers() -> int:
     print(f"{YELLOW}2. Checking for unregistered routers...{RESET}")
     print(
-        f"{GRAY}   Meaning: endpoint files that appear to define a FastAPI router but whose{RESET}"
+        f"{GRAY}   Meaning: endpoint files that appear to define a FastAPI router but are{RESET}"
     )
     print(
-        f"{GRAY}   expected <name>_router alias is not referenced in server.py.{RESET}"
+        f"{GRAY}   never imported (as <name>_router or endpoints.<name>) in their server.py.{RESET}"
     )
-
-    endpoints_dir = SERVER_PACKAGE / "endpoints"
-    server_src = read(SERVER_FILE) if SERVER_FILE.exists() else ""
 
     unregistered = []
 
-    for f in sorted(endpoints_dir.glob("*.py")):
-        if f.name in ("__init__.py",):
+    for endpoints_dir, server_file in ROUTER_TARGETS:
+        if not endpoints_dir.exists():
             continue
-        src = read(f)
-        if "APIRouter" not in src and "router" not in src:
-            continue
+        server_src = read(server_file) if server_file.exists() else ""
 
-        stem = f.stem  # e.g. "memory"
-        router_var = f"{stem}_router"
+        for f in sorted(endpoints_dir.glob("*.py")):
+            if f.name in ("__init__.py",):
+                continue
+            src = read(f)
+            if "APIRouter" not in src and "router" not in src:
+                continue
 
-        if router_var not in server_src:
-            unregistered.append((stem, str(f)))
+            stem = f.stem
+            registered = f"{stem}_router" in server_src or f"endpoints.{stem}" in server_src
+
+            if not registered:
+                unregistered.append((stem, str(f)))
 
     if unregistered:
         print(f"{RED}  Found {len(unregistered)} unregistered router(s):{RESET}")
         for stem, path in unregistered:
             print(
-                f"    {RED}{FAIL}{RESET} {stem}_router not in server.py  ({display_path(path)})"
+                f"    {RED}{FAIL}{RESET} {stem} not registered in its server.py  ({display_path(path)})"
             )
         print(f"    {CYAN}Review checklist:{RESET}")
         print(
@@ -241,9 +235,6 @@ def check_unregistered_routers() -> int:
     return len(unregistered)
 
 
-# ---------------------------------------------------------------------------
-# Check 3: Unused functions — defined but only appear once across all files
-# ---------------------------------------------------------------------------
 def check_unused_functions() -> int:
     print(f"{YELLOW}3. Checking for unused functions...{RESET}")
     print(
@@ -257,7 +248,6 @@ def check_unused_functions() -> int:
     files = all_py_files()
     all_source = "\n".join(read(f) for f in files)
 
-    # name → list of (file, lineno)
     definitions: dict[str, list[tuple[str, int]]] = defaultdict(list)
 
     def_pattern = re.compile(r"^\s*(?:async\s+)?def\s+(\w+)\s*\(", re.MULTILINE)
@@ -270,9 +260,6 @@ def check_unused_functions() -> int:
             if name.startswith(SKIP_FUNC_PREFIXES) or name in SKIP_FUNC_NAMES:
                 continue
             lineno = src[: m.start()].count("\n") + 1
-            # FastAPI/MCP route handlers are referenced by decorators, not by
-            # ordinary function-name calls. Suppress those to keep the report
-            # focused on reviewable candidates.
             index = lineno - 2
             decorated = False
             while index >= 0 and lines[index].strip():
@@ -287,12 +274,10 @@ def check_unused_functions() -> int:
     unused = []
     for name, defs in definitions.items():
         count = len(re.findall(rf"\b{re.escape(name)}\b", all_source))
-        # count == len(defs) means only the definitions themselves match
         if count <= len(defs):
             unused.append((name, defs))
 
     if unused:
-        # Cap display at 15 — noisy otherwise
         display = unused[:15]
         print(f"{YELLOW}  Found {len(unused)} potentially unused function(s):{RESET}")
         for name, defs in display:
@@ -315,9 +300,6 @@ def check_unused_functions() -> int:
     return len(unused)
 
 
-# ---------------------------------------------------------------------------
-# Summary
-# ---------------------------------------------------------------------------
 def main() -> int:
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")

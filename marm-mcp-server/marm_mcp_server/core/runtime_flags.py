@@ -1,15 +1,3 @@
-"""Persisted runtime overrides, read through to the environment.
-
-Two things need to outlive a process and be visible to both transports: the
-auto-index on/off switches, and the suppressions written when a project is
-deleted so a poller cannot resurrect it from a stale cache.
-
-Precedence is deliberate and one way round: a saved override beats the
-environment variable. Otherwise a GRAPH_AUTO_INDEX=true baked into a Dockerfile
-would silently re-enable something the user turned off, on every restart, with
-nothing to show why. `source()` exists so status output can say which one won.
-"""
-
 import os
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -120,13 +108,6 @@ def source(key: str) -> str:
     return "environment" if saved is None else "override"
 
 
-# ── Watch suppressions ─────────────────────────────────────────────
-# A deleted project must not be re-indexed by a poller still holding it in a
-# cached watch set, and a delete issued by another MCP client sharing the engine
-# store never notifies MARM at all. The tombstone is durable for that reason,
-# and an explicit manual index is what clears it.
-
-
 def canonical_root(root_path: str) -> str:
     """One spelling per directory, so a tombstone can actually be found again.
 
@@ -154,25 +135,8 @@ def is_watch_suppressed(root_path: str) -> bool:
     return True if not readable else value == _TRUE
 
 
-# ── Unindexable roots ──────────────────────────────────────────────
-# A repository the engine cannot index for a reason that will not change by
-# itself, currently only a Windows path length that overflows MAX_PATH. Retrying
-# costs the engine gate every cycle and tells the user nothing new.
-#
-# Durable rather than per-process because the recovery signal cannot be the path.
-# The remedy the error suggests, enabling Win32 long paths, fixes the cause while
-# leaving the path identical, and it fixes it for both transports at once.
-
-
 def mark_unindexable(root_path: str, reason: str) -> None:
     set_(_UNINDEXABLE_PREFIX + canonical_root(root_path), reason)
-
-
-def is_unindexable(root_path: str) -> bool:
-    """Fails closed for the same reason as the tombstone: skipping a cycle costs
-    one stale graph, guessing wrong costs the engine gate on a doomed index."""
-    readable, value = _read(_UNINDEXABLE_PREFIX + canonical_root(root_path))
-    return True if not readable else value is not None
 
 
 def unindexable_watches() -> list[str]:
@@ -232,15 +196,6 @@ def _keys_with_prefix(prefix: str) -> list[str]:
 
 def suppressed_watches() -> list[str]:
     return _keys_with_prefix(_SUPPRESS_PREFIX)
-
-
-# ── Durable watch state ────────────────────────────────────────────
-# The event-driven graph worker's baseline: what a root looked like at its last
-# successful index. Lives in its own table (graph_watch_state), not the generic
-# key/value one above, because it is a row of related fields rather than a
-# single flag. Keyed through canonical_root() for the same reason the
-# suppressions are: the engine and MARM do not always spell the same directory
-# the same way.
 
 
 def get_watch_state(root_path: str) -> Optional[dict]:

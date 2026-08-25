@@ -1,36 +1,3 @@
-"""The single gate every mutation of the engine's project store passes through.
-
-There are four callers of the engine's `index_repository`: the HTTP tool, the
-Console's async job, the STDIO tool, and the auto-index worker, plus the Console's
-`delete_project`. `_project_job_lock` in endpoints/graph.py is a threading.Lock, so
-it serializes the Console's jobs inside one interpreter and nothing across
-processes. HTTP and STDIO are two processes with two engine children over one
-shared engine store, so without this a worker in one can index the same
-repository a request in the other is indexing, or delete one it is building.
-
-The lease is the same primitive the concept graph uses (lease_lock.py), bound to
-its own table: making concept extraction and code indexing mutually exclusive
-would serialize two unrelated stores for no reason.
-
-## Why this is not an `async with`
-
-The engine call runs through `asyncio.to_thread`, and cancelling that await
-cancels only the await. The thread keeps running and keeps writing. A lease
-released by a `finally` tied to the awaiting task would therefore be handed to
-another process while the engine is still mid-write, which is precisely the
-collision the lease exists to prevent.
-
-The concept build can be asked to stop cooperatively, because it loops over
-memories and can check a flag between them. One `index_repository` call is a
-single opaque round trip into the engine child: there is no safe point to
-interrupt it. So acquire, call, and release all happen inside one worker thread,
-where nothing can unwind them early: a bare thread cannot be cancelled, so the
-release is reached exactly when the engine call returns. The event loop only
-waits for that thread, and a caller walking away from the wait, or the loop
-itself being torn down mid-index, leaves the lease held until the engine is
-actually done.
-"""
-
 import asyncio
 import os
 import threading
@@ -49,8 +16,6 @@ T = TypeVar("T")
 
 _TABLE = "graph_index_lock"
 
-# Tasks that own a lease right now. Held only so an orphaned index (its caller
-# cancelled, or the worker stopped) is not garbage collected mid-flight.
 _inflight: set[asyncio.Task] = set()
 
 
@@ -156,9 +121,6 @@ async def _owned_call(
 
 def _forget(task: asyncio.Task) -> None:
     _inflight.discard(task)
-    # Mark any exception retrieved. A caller that was cancelled while shielded
-    # never awaits the result, and an unretrieved exception would surface as a
-    # spurious "exception was never retrieved" at loop teardown.
     if not task.cancelled():
         task.exception()
 

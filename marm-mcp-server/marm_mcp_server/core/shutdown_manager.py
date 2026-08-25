@@ -68,9 +68,6 @@ class ShutdownManager:
         except Exception:
             logger.exception("Failed to cancel pending compaction scans")
 
-        # Before the write queue stops and the pools begin closing: the worker
-        # produces concept writes and reads the memory DB, and stopping it only
-        # signals, it does not wait for an in-flight extraction.
         try:
             await concept_worker.stop()
         except Exception:
@@ -82,10 +79,6 @@ class ShutdownManager:
         except Exception:
             logger.exception("Failed to drain serialized write queue")
 
-        # Must follow the write-queue stop: draining the queue runs the remaining
-        # writes, and a long one spawns a chunk task, so a drain taken before this
-        # point can miss tasks that do not exist yet. Must precede the pool close:
-        # a chunk task holding BEGIN IMMEDIATE would otherwise race teardown.
         try:
             await drain_chunk_writes(memory, CHUNK_DRAIN_TIMEOUT_SECONDS, logger.info)
         except Exception:

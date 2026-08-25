@@ -1,5 +1,3 @@
-"""Consolidation worker — hash dedup (Layer 1) and semantic merge (Layer 2)."""
-
 import hashlib
 import logging
 import sqlite3
@@ -23,7 +21,6 @@ class _Unset:
 
 _UNSET = _Unset()
 
-# Enough rows to absorb reordering by the lexical and recency signals.
 _DUPLICATE_CANDIDATES = 5
 
 
@@ -91,7 +88,6 @@ async def find_semantic_duplicate(
         scoped_platform = (
             MARM_PLATFORM or None if isinstance(platform, _Unset) else platform
         )
-        # exact_mode="semantic" because the exact lane produces no cosine.
         results = await memory.recall_similar(
             content,
             session=session_name,

@@ -1,5 +1,3 @@
-"""Managed launcher for the bundled MARM Console host."""
-
 from __future__ import annotations
 
 import argparse
@@ -96,7 +94,6 @@ def run_console(
         bound_log_file(log_path)
         flags = 0
         kwargs: dict[str, Any] = {}
-        # sys.platform, not os.name: mypy narrows platform on the former only.
         if sys.platform == "win32":
             flags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
         else:

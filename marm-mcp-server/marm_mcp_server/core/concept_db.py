@@ -1,12 +1,3 @@
-"""Schema, connection pool, and DB-state helpers for the concept graph.
-
-Own SQLite file (~/.marm/index/marm_index.db), own SQLiteConnectionPool
-instance — reuses memory_db.py's pool/context-manager classes (generic,
-already parameterized by db_path) but never shares memory.py's pool
-instance. Concept graph writes must never be able to block or corrupt the
-production-critical memories table's WAL.
-"""
-
 import json
 import os
 import sqlite3
@@ -21,9 +12,6 @@ from .memory_db import ConnectionContext, SQLiteConnectionPool
 from .memory_utils import _safe_print
 
 MAX_CONCEPT_DB_CONNECTIONS = 3
-# 3: builds index compaction sources instead of the generated summary. Graphs
-# built under 2 hold summary-derived entities the current rule would never
-# produce, and provenance cannot retract them selectively.
 CONCEPT_SCHEMA_VERSION = 3
 _SCHEMA_VERSION_KEY = "schema_version"
 
@@ -69,8 +57,6 @@ def init_concept_database(db_path: str, mark_current: bool = True) -> None:
                 "platform" not in entity_columns
                 or "platform" not in relationship_columns
             ):
-                # Historical graph rows cannot be assigned a trustworthy platform.
-                # Leave the derived database untouched until an explicit full rebuild.
                 return
 
         conn.execute("""
@@ -87,9 +73,6 @@ def init_concept_database(db_path: str, mark_current: bool = True) -> None:
             )
         """)
 
-        # Additive column, guarded rather than assumed -- CREATE TABLE IF NOT
-        # EXISTS above is a no-op against a pre-existing local DB from testing
-        # this branch before this column existed.
         existing_entity_cols = {
             row[1] for row in conn.execute("PRAGMA table_info(entities)")
         }
@@ -162,12 +145,6 @@ def init_concept_database(db_path: str, mark_current: bool = True) -> None:
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_code_links_project ON entity_code_links(project)"
         )
-        # Without these, re-running marm_concept_build on the same corpus (the
-        # documented expected usage) re-inserts every relationship/code-link
-        # row, and an entity mentioned in N memories gets N duplicate code
-        # links -- both surface directly in marm_concept_recall's response.
-        # INSERT OR IGNORE (see store_relationship/store_code_link) relies on
-        # these to make builds idempotent.
         conn.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_relationships_dedup "
             "ON relationships(source_id, target_id, predicate, memory_id, "
@@ -178,12 +155,6 @@ def init_concept_database(db_path: str, mark_current: bool = True) -> None:
             "ON entity_code_links(entity_id, graph_qualified_name)"
         )
 
-        # entities' table-level scoped UNIQUE doesn't
-        # actually dedupe when session_name/project are NULL -- SQLite treats
-        # NULL as distinct from NULL in UNIQUE constraints, so two concurrent
-        # get_or_create_entity calls for the same (name, NULL, NULL) can both
-        # insert. This COALESCE-normalized index closes that gap and is what
-        # get_or_create_entity's INSERT OR IGNORE relies on for atomicity.
         conn.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_entities_dedup "
             "ON entities(name, COALESCE(session_name, ''), COALESCE(project, ''), "
@@ -195,10 +166,6 @@ def init_concept_database(db_path: str, mark_current: bool = True) -> None:
                 value TEXT NOT NULL
             )
         """)
-        # Only stamp a database that had no graph before this call. init runs
-        # on every ConceptDB(...) construction, including the one a console
-        # memory delete makes, so an unconditional write here would mark a
-        # stale graph as current and its rebuild would never fire.
         if mark_current and "entities" not in existing_tables:
             conn.execute(
                 "INSERT INTO concept_schema_metadata (key, value) VALUES (?, ?) "
@@ -250,8 +217,6 @@ def init_concept_database(db_path: str, mark_current: bool = True) -> None:
             "ON concept_build_runs(created_at DESC)"
         )
 
-        # Review decisions are user-owned state rather than derived graph data.
-        # They deliberately survive backup_and_reset_concept_database().
         conn.execute("""
             CREATE TABLE IF NOT EXISTS concept_entity_aliases (
                 alias_name TEXT NOT NULL,
@@ -356,11 +321,6 @@ def backup_and_reset_concept_database(db_path: str) -> str:
         backup.close()
         source.close()
 
-    # The version marker is deliberately NOT written here. Stamping it at
-    # reset time means a rebuild that dies partway leaves an empty or partial
-    # graph reporting `current`, so nothing ever prompts for the rebuild again
-    # and the corpus is silently missing from the graph. mark_schema_current()
-    # is called by the build once it has actually finished.
     reset = sqlite3.connect(db_path, timeout=20.0)
     try:
         reset.execute("PRAGMA foreign_keys=OFF")

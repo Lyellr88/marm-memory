@@ -1,5 +1,3 @@
-"""Detects unsupported multi-process HTTP launches and warns."""
-
 import os
 
 import structlog

@@ -1,6 +1,3 @@
-"""Per-call lifecycle wrapper for MARM STDIO tools: logging, session
-init, protocol/compaction injection."""
-
 import asyncio
 import functools
 import json
@@ -18,8 +15,6 @@ _STDIO_LITE_INTERVAL = 30
 _protocol_delivery_lock = asyncio.Lock()
 
 
-# Deliberately signature-erasing: the wrapper introspects kwargs by name
-# (session_name, query, limit), which a ParamSpec types as object.
 def _log_tool_call(
     fn: Callable[..., Awaitable[Any]],
 ) -> Callable[..., Awaitable[Any]]:
@@ -90,17 +85,10 @@ def _log_tool_call(
                         lite_content = await read_protocol_lite_file()
                         if lite_content:
                             result["marm_protocol_lite"] = lite_content
-                            # Lite does not block compaction — protocol_injected stays False
                     except Exception as e:
                         _stdio_log.warning("lite protocol injection failed: %s", e)
 
             if not protocol_injected:
-                # fn may have switched or created the active session (e.g.
-                # create_log_entry_stdio without an explicit session_name
-                # writes to memory.active_log_session), which makes the
-                # pre-call session_name snapshot above stale. Only override
-                # it when the caller didn't explicitly pass one -- explicit
-                # caller intent is always respected as-is.
                 compaction_session = session_name
                 if not kwargs.get("session_name"):
                     compaction_session = memory.active_log_session

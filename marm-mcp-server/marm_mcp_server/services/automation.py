@@ -1,5 +1,3 @@
-"""Automation event handlers for MARM MCP Server."""
-
 from ..core.events import events
 from ..core.memory import memory
 

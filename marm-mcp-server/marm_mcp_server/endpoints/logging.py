@@ -1,5 +1,3 @@
-"""Logging endpoints for MARM MCP Server."""
-
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Query

@@ -1,11 +1,3 @@
-"""Settings parsing and lifecycle wiring for the concept indexing worker.
-
-The worker itself is covered in test_concept_worker.py. What is covered here
-is everything around it that a unit test of the worker cannot see: whether the
-documented env spellings actually take effect, and whether the two servers
-really start and stop it.
-"""
-
 import importlib
 import sqlite3
 import sys

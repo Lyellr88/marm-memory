@@ -1,5 +1,3 @@
-"""Tests for compaction Layer 3 — V4 write-queue integration and scheduled auto-apply."""
-
 import asyncio
 import json
 import uuid
@@ -18,8 +16,6 @@ from marm_mcp_server.endpoints.compaction import (
     marm_compaction,
 )
 from marm_mcp_server.services.compaction_apply import apply_compaction_write
-
-# --- helpers (mirrored from v2 test file) ---
 
 
 def _make_embedding(dim: int = 384) -> bytes:
@@ -112,9 +108,6 @@ def _get_memory_compaction_role(mem: MARMMemory, mem_id: str) -> str | None:
     return row[0] if row else None
 
 
-# --- fixtures ---
-
-
 @pytest.fixture
 def mem(tmp_path):
     m = MARMMemory(db_path=str(tmp_path / "test.db"))
@@ -132,9 +125,6 @@ def patch_global_memory(mem, monkeypatch):
     """
     monkeypatch.setitem(marm_apply_compaction.__globals__, "memory", mem)
     yield
-
-
-# --- write queue unit tests ---
 
 
 def test_callable_write_request_fields():
@@ -217,9 +207,6 @@ async def test_write_queue_put_callable_rejected_when_stopping(mem):
         await queue.stop()
 
 
-# --- apply via write queue ---
-
-
 @pytest.mark.asyncio
 async def test_apply_compaction_routes_through_write_queue(mem):
     """marm_apply_compaction enqueues write via write queue when queue is running."""
@@ -247,7 +234,6 @@ async def test_apply_compaction_routes_through_write_queue(mem):
     assert "summary_memory_id" in result
     assert _get_staging_status(mem, candidate_id) == "applied"
 
-    # Source rows should be marked compacted
     for mem_id in source_ids:
         assert _get_memory_compaction_role(mem, mem_id) == "source"
 
@@ -294,7 +280,6 @@ async def test_apply_compaction_direct_when_no_queue(mem):
         mem, session, source_ids, status="summary_staged", snapshot=snapshot
     )
 
-    # Ensure no queue is active
     mem._write_queue = None
 
     result = await marm_apply_compaction(
@@ -303,9 +288,6 @@ async def test_apply_compaction_direct_when_no_queue(mem):
 
     assert result["status"] == "applied"
     assert _get_staging_status(mem, candidate_id) == "applied"
-
-
-# --- apply_compaction_write unit ---
 
 
 @pytest.mark.asyncio
@@ -340,7 +322,6 @@ async def test_apply_compaction_write_inserts_summary_and_marks_sources(mem):
 
     summary_id = await apply_compaction_write(mem, candidate_id)
 
-    # Summary row exists with correct role
     with mem.get_connection() as conn:
         summary_row = conn.execute(
             "SELECT id, compaction_role, content FROM memories WHERE id = ?",
@@ -350,15 +331,10 @@ async def test_apply_compaction_write_inserts_summary_and_marks_sources(mem):
     assert summary_row[1] == "summary"
     assert summary_row[2] == "Test summary."
 
-    # Source rows updated
     for mem_id in source_ids:
         assert _get_memory_compaction_role(mem, mem_id) == "source"
 
-    # Staging row marked applied
     assert _get_staging_status(mem, candidate_id) == "applied"
-
-
-# --- auto-apply scheduled job ---
 
 
 @pytest.mark.asyncio
@@ -397,7 +373,6 @@ async def test_auto_apply_skips_expired_candidates(mem):
     source_ids = [m[0] for m in ids_and_hashes]
     snapshot = {m[0]: m[1] for m in ids_and_hashes}
 
-    # Insert expired staging row (expires_at in the past)
     cid = _insert_staging_row(
         mem,
         session,
@@ -409,7 +384,6 @@ async def test_auto_apply_skips_expired_candidates(mem):
 
     result = await auto_apply_staged_summaries()
 
-    # Expired row is fetched, apply rejects it, and it appears in skipped
     assert len(result["applied"]) == 0
     assert len(result["skipped"]) == 1
     assert result["skipped"][0]["candidate_id"] == cid
@@ -424,7 +398,6 @@ async def test_auto_apply_skips_stale_snapshot_candidate(mem):
     ids_and_hashes = [_insert_memory_row(mem, session, f"m{i}") for i in range(3)]
     source_ids = [m[0] for m in ids_and_hashes]
 
-    # Snapshot with wrong hashes — will fail validation inside marm_apply_compaction
     bad_snapshot = dict.fromkeys(source_ids, "wrong-hash")
     cid = _insert_staging_row(
         mem, session, source_ids, status="summary_staged", snapshot=bad_snapshot
@@ -466,7 +439,6 @@ async def test_auto_apply_mixed_valid_and_stale(mem):
     """auto_apply_staged_summaries applies valid candidates and skips stale ones."""
     session = "auto-apply-mixed-session"
 
-    # Valid candidate
     good_ids_hashes = [_insert_memory_row(mem, session, f"good m{i}") for i in range(3)]
     good_source_ids = [m[0] for m in good_ids_hashes]
     good_snapshot = {m[0]: m[1] for m in good_ids_hashes}
@@ -474,7 +446,6 @@ async def test_auto_apply_mixed_valid_and_stale(mem):
         mem, session, good_source_ids, status="summary_staged", snapshot=good_snapshot
     )
 
-    # Stale candidate (bad snapshot)
     bad_ids_hashes = [_insert_memory_row(mem, session, f"bad m{i}") for i in range(3)]
     bad_source_ids = [m[0] for m in bad_ids_hashes]
     bad_snapshot = dict.fromkeys(bad_source_ids, "wrong-hash")
@@ -519,9 +490,6 @@ async def test_auto_apply_routes_through_write_queue(mem):
 
     assert cid in result["applied"]
     assert _get_staging_status(mem, cid) == "applied"
-
-
-# --- scheduler registration ---
 
 
 def test_auto_apply_disabled_by_default(monkeypatch):

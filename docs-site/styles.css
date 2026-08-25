@@ -46,7 +46,6 @@ body {
   overflow-x: hidden;
 }
 
-/* Dot grid - modern subtle */
 body::after {
   content: '';
   position: fixed;
@@ -72,7 +71,6 @@ body::after {
   transition: transform var(--t) var(--ease), box-shadow var(--t) var(--ease);
 }
 
-/* Brand block */
 .sidebar-brand {
   height: var(--sidebar-brand-h);
   border-bottom: 1px solid var(--border);
@@ -125,7 +123,6 @@ body::after {
   font-weight: 500;
 }
 
-/* Nav scrollable area */
 #sidebar-nav {
   flex: 1;
   overflow-y: auto;
@@ -137,7 +134,6 @@ body::after {
 #sidebar-nav::-webkit-scrollbar { width: 3px; }
 #sidebar-nav::-webkit-scrollbar-thumb { background: var(--border-light); border-radius: 2px; }
 
-/* Group labels */
 .nav-group { margin-top: 18px; }
 
 .nav-group-label {
@@ -152,7 +148,6 @@ body::after {
   user-select: none;
 }
 
-/* Nav items */
 .nav-item {
   display: flex;
   align-items: center;
@@ -344,7 +339,6 @@ body::after {
   line-height: 1.5;
 }
 
-/* Sidebar footer */
 .sidebar-footer {
   padding: 16px 20px;
   border-top: 1px solid var(--border);
@@ -394,7 +388,6 @@ body::after {
 
 #content { max-width: 1100px; }
 
-/* Loading */
 .loading-state {
   display: flex;
   align-items: center;
@@ -428,7 +421,6 @@ body::after {
 
 /* ---- Markdown Typography --------------------------------- */
 
-/* h1 */
 #content h1 {
   font-family: 'JetBrains Mono', monospace;
   font-size: 31px;
@@ -442,7 +434,6 @@ body::after {
   scroll-margin-top: 28px;
 }
 
-/* h2 */
 #content h2 {
   font-family: 'JetBrains Mono', monospace;
   font-size: 21px;
@@ -467,7 +458,6 @@ body::after {
   flex-shrink: 0;
 }
 
-/* h3 */
 #content h3 {
   font-family: 'JetBrains Mono', monospace;
   font-size: 12.5px;
@@ -479,7 +469,6 @@ body::after {
   scroll-margin-top: 28px;
 }
 
-/* h4 */
 #content h4 {
   font-size: 17px;
   font-weight: 600;
@@ -488,7 +477,6 @@ body::after {
   scroll-margin-top: 28px;
 }
 
-/* h5, h6 */
 #content h5, #content h6 {
   font-size: 16px;
   font-weight: 600;
@@ -496,7 +484,6 @@ body::after {
   margin: 20px 0 8px;
 }
 
-/* Paragraphs */
 #content p {
   margin: 0 0 16px;
   font-size: 17px;
@@ -504,14 +491,12 @@ body::after {
   color: var(--text);
 }
 
-/* Lead paragraph (right after h1) */
 #content h1 + p {
   font-size: 18.5px;
   color: #8fb8aa;
   line-height: 1.8;
 }
 
-/* Links */
 #content a {
   color: var(--accent);
   text-decoration: none;
@@ -520,13 +505,11 @@ body::after {
 }
 #content a:hover { border-bottom-color: var(--accent); }
 
-/* Strong */
 #content strong {
   font-weight: 600;
   color: var(--text-bright);
 }
 
-/* Lists */
 #content ul, #content ol {
   margin: 0 0 16px;
   padding-left: 22px;
@@ -585,7 +568,6 @@ body::after {
   color: var(--text-bright);
 }
 
-/* Inline code */
 #content code {
   font-family: 'JetBrains Mono', monospace;
   font-size: 14px;
@@ -596,7 +578,6 @@ body::after {
   border: 1px solid var(--border-light);
 }
 
-/* Code blocks */
 #content pre {
   position: relative;
   margin: 22px 0;
@@ -617,7 +598,6 @@ body::after {
   overflow-x: auto;
 }
 
-/* Copy button */
 .code-copy-btn {
   position: absolute;
   top: 8px;
@@ -647,7 +627,6 @@ body::after {
   border-color: var(--accent-border);
 }
 
-/* Tables */
 #content table {
   width: 100%;
   border-collapse: collapse;
@@ -685,7 +664,6 @@ body::after {
 #content tbody tr:nth-child(even) td { background: rgba(255, 255, 255, 0.02); }
 #content tbody tr:hover td { background: var(--bg-hover); transition: background var(--t); }
 
-/* Blockquote (plain, not alert) */
 #content blockquote {
   border-left: 2px solid var(--accent-border);
   margin: 22px 0;
@@ -697,7 +675,6 @@ body::after {
 
 #content blockquote p { margin: 0; font-size: 16px; }
 
-/* GitHub Alerts */
 .gh-alert {
   margin: 22px 0;
   padding: 14px 18px;
@@ -733,7 +710,6 @@ body::after {
 .gh-alert-caution   { border-color: rgba(248, 81, 73, 0.28); }
 .gh-alert-caution   .gh-alert-header { color: #f85149; }
 
-/* Details / Summary (README uses these extensively) */
 #content details {
   margin: 16px 0;
   border: 1px solid var(--border);
@@ -777,20 +753,17 @@ body::after {
 
 #content details > pre { margin: 0; border-radius: 0; border: none; border-top: 1px solid var(--border); }
 
-/* HR */
 #content hr {
   border: none;
   border-top: 1px solid var(--border);
   margin: 44px 0;
 }
 
-/* Images */
 #content img {
   max-width: 100%;
   border-radius: var(--radius);
 }
 
-/* Badge images (inline in paragraphs) */
 #content p img {
   border: none;
   border-radius: 3px;
@@ -798,10 +771,8 @@ body::after {
   margin: 1px 2px;
 }
 
-/* hljs override */
 .hljs { background: var(--bg-code) !important; }
 
-/* Error state */
 .error-state {
   padding: 48px 0;
   font-family: 'JetBrains Mono', monospace;
@@ -851,7 +822,6 @@ body::after {
 #menu-toggle.open span:nth-child(2) { opacity: 0; width: 0; }
 #menu-toggle.open span:nth-child(3) { transform: rotate(-45deg) translate(4.5px, -4.5px); }
 
-/* Mobile overlay */
 #mobile-overlay {
   display: none;
   position: fixed;

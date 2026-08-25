@@ -1,13 +1,4 @@
 #!/usr/bin/env python3
-"""Find and optionally sync MARM version references.
-
-The target version is derived from the first entry in CHANGELOG.md.
-Changelog files are never modified because they intentionally contain many
-historical version numbers.
-
-Console is not tracked here. It ships inside the marm-mcp-server wheel and
-shares that version, so it has no independent version surface to sync.
-"""
 
 from __future__ import annotations
 

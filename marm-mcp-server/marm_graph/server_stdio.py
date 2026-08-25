@@ -1,16 +1,6 @@
-"""marm-graph — STDIO transport (official MCP SDK).
-
-Runs over stdin/stdout. No port, no API key, no HTTP listener. Intended for local
-single-client use (Docker STDIO, direct CLI). Mirrors marm-mcp-server's stdio shim:
-stdout is reserved for the protocol, so all prints are redirected to stderr.
-
-  python -m marm_graph.server_stdio
-"""
-
 import builtins
 import sys
 
-# Reserve stdout for the JSON-RPC protocol — redirect stray prints to stderr.
 _real_print = builtins.print
 builtins.print = lambda *args, **kwargs: _real_print(
     *args, **{**kwargs, "file": sys.stderr}
@@ -177,7 +167,7 @@ def main() -> None:
     _log.info("marm-graph stdio starting")
     try:
         get_client().start()
-    except Exception as e:  # surface but don't crash before mcp.run
+    except Exception as e:
         _log.warning("backend start deferred: %s", e)
     try:
         mcp.run()

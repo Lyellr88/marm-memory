@@ -1,8 +1,3 @@
-"""Real-SQLite tests for core/concept_db.py -- own file, own pool, schema
-behavior. No mocks: every assertion reads back actual rows written through
-ConceptDB's real connection pool.
-"""
-
 import json
 import sqlite3
 import threading
@@ -327,7 +322,7 @@ def test_get_or_create_entity_concurrent_appends_lose_no_memory_id(concept_db):
     assert count == 1
     source_ids = json.loads(row[0])
     assert set(source_ids) == {"seed", *[f"mem-{i}" for i in range(n_workers)]}
-    assert len(source_ids) == n_workers + 1  # no dupes, nothing dropped
+    assert len(source_ids) == n_workers + 1
 
 
 def test_get_or_create_entity_dedups_when_session_and_project_are_both_null(
@@ -468,9 +463,6 @@ def test_concept_pool_is_independent_instance(concept_db, tmp_path):
     assert concept_db.db_path != marm_memory.connection_pool.db_path
 
 
-# ── Goal 3: entity resolution via embedding similarity ──────────────
-
-
 def _vec(*values) -> bytes:
     """3-dim float32 vector -> bytes, matching _embedding_to_bytes's layout."""
     return np.asarray(values, dtype=np.float32).tobytes()
@@ -489,7 +481,6 @@ def test_get_or_create_entity_stores_embedding_only_on_insert(concept_db):
         )
         assert created is True
 
-        # Re-mention with a different embedding -- must not overwrite.
         same_id, created_again = concept_db.get_or_create_entity(
             conn,
             "auth module",
@@ -522,7 +513,7 @@ def test_find_similar_entities_returns_candidates_above_threshold(concept_db):
         )
         candidates = concept_db.find_similar_entities(
             conn,
-            _vec(0.99, 0.01, 0.0),  # near-identical direction
+            _vec(0.99, 0.01, 0.0),
             "sess-1",
             None,
             threshold=0.9,
@@ -547,7 +538,7 @@ def test_find_similar_entities_excludes_below_threshold(concept_db):
         )
         candidates = concept_db.find_similar_entities(
             conn,
-            _vec(0.0, 1.0, 0.0),  # orthogonal -- similarity 0.0
+            _vec(0.0, 1.0, 0.0),
             "sess-1",
             None,
             threshold=0.9,
@@ -567,8 +558,6 @@ def test_find_similar_entities_scoped_to_session_and_project(concept_db):
             "mem-1",
             name_embedding=_vec(1.0, 0.0, 0.0),
         )
-        # Same near-identical embedding, but a different session -- must not
-        # be treated as a cross-session duplicate candidate.
         candidates = concept_db.find_similar_entities(
             conn,
             _vec(0.99, 0.01, 0.0),
@@ -593,7 +582,7 @@ def test_find_similar_entities_excludes_self_via_exclude_id(concept_db):
         )
         candidates = concept_db.find_similar_entities(
             conn,
-            _vec(1.0, 0.0, 0.0),  # identical vector to itself
+            _vec(1.0, 0.0, 0.0),
             "sess-1",
             None,
             threshold=0.9,

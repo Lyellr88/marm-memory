@@ -1,9 +1,3 @@
-"""Tests for protocol-lite reinjection feature.
-
-Verifies: full protocol on first MCP tool call, lite protocol every 30 calls,
-coexistence with compaction, dict eviction, and STDIO counter behavior.
-"""
-
 import asyncio
 import importlib
 import json
@@ -12,10 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 from conftest import load_isolated_server
 
-_NOW = time.monotonic()  # snapshot for consistent test priming
-
-
-# ── Helpers ─────────────────────────────────────────────────────────
+_NOW = time.monotonic()
 
 
 def _tool_call_body(session_name="default"):
@@ -82,9 +73,6 @@ async def _one_call(server, session="default"):
     )
 
 
-# ── First Injection ──────────────────────────────────────────────────
-
-
 def test_first_call_injects_full_protocol(monkeypatch, tmp_path):
     """First tool call injects PROTOCOL.md with MARM SESSION INIT prefix."""
     server = load_isolated_server(monkeypatch, tmp_path)
@@ -110,19 +98,14 @@ def test_calls_after_first_do_not_inject_full(monkeypatch, tmp_path):
     protocol_delivery_state._protocol_delivered_sessions.clear()
     protocol_delivery_state._protocol_call_counts.clear()
 
-    # First call gets full protocol
     r1 = asyncio.run(_one_call(server))
     assert "[MARM SESSION INIT]" in _injected_text(r1)
 
-    # Next 10 calls: no injection
     for _ in range(10):
         resp = asyncio.run(_one_call(server))
         text = _injected_text(resp)
         assert "[MARM SESSION INIT]" not in text
         assert "[MARM PROTOCOL REFRESH]" not in text
-
-
-# ── Lite Reinjection ──────────────────────────────────────────────────
 
 
 def test_lite_injects_at_interval(monkeypatch, tmp_path):
@@ -134,7 +117,6 @@ def test_lite_injects_at_interval(monkeypatch, tmp_path):
     protocol_delivery_state._protocol_delivered_sessions.clear()
     protocol_delivery_state._protocol_call_counts.clear()
 
-    # Prime the counter: 29 prior calls, session already delivered
     protocol_delivery_state._protocol_call_counts["default"] = 29
     protocol_delivery_state._protocol_delivered_sessions["default"] = _NOW
 
@@ -155,7 +137,6 @@ def test_lite_not_injected_before_interval(monkeypatch, tmp_path):
     protocol_delivery_state._protocol_delivered_sessions.clear()
     protocol_delivery_state._protocol_call_counts.clear()
 
-    # Counter at 15 — not a multiple of 30
     protocol_delivery_state._protocol_call_counts["default"] = 15
 
     resp = asyncio.run(_one_call(server))
@@ -175,17 +156,10 @@ def test_lite_leaves_protocol_injected_false(monkeypatch, tmp_path):
     protocol_delivery_state._protocol_call_counts["default"] = 29
     protocol_delivery_state._protocol_delivered_sessions["default"] = _NOW
 
-    # Verify: on interval hit, lite text is injected AND protocol_injected stays False
     resp = asyncio.run(_one_call(server))
     text = _injected_text(resp)
 
     assert "[MARM PROTOCOL REFRESH]" in text
-    # The lite injection doesn't block compaction — verified by the
-    # server code where protocol_injected stays False for lite.
-    # Compaction injection is tested independently in test_compaction_*.py.
-
-
-# ── Per-Session Counters ──────────────────────────────────────────────
 
 
 def test_different_sessions_independent_counters(monkeypatch, tmp_path):
@@ -200,19 +174,14 @@ def test_different_sessions_independent_counters(monkeypatch, tmp_path):
     protocol_delivery_state._protocol_call_counts["session-a"] = 29
     protocol_delivery_state._protocol_delivered_sessions["session-a"] = _NOW
 
-    # Session B (no prior calls, not in delivered)
     r_b = asyncio.run(_one_call(server, session="session-b"))
     t_b = _injected_text(r_b)
     assert "[MARM SESSION INIT]" in t_b
     assert "[MARM PROTOCOL REFRESH]" not in t_b
 
-    # Session A (29 prior, now 30th)
     r_a = asyncio.run(_one_call(server, session="session-a"))
     t_a = _injected_text(r_a)
     assert "[MARM PROTOCOL REFRESH]" in t_a
-
-
-# ── Eviction ──────────────────────────────────────────────────────────
 
 
 def test_prune_removes_stale_sessions(monkeypatch, tmp_path):
@@ -227,7 +196,6 @@ def test_prune_removes_stale_sessions(monkeypatch, tmp_path):
     protocol_delivery_state._protocol_call_counts["stale-session"] = 15
     assert "stale-session" in protocol_delivery_state._protocol_call_counts
 
-    # Trigger prune via a tool call on a different session
     asyncio.run(_one_call(server, session="real"))
 
     assert "stale-session" not in protocol_delivery_state._protocol_call_counts
@@ -249,9 +217,6 @@ def test_hard_cap_limits_call_counts(monkeypatch, tmp_path):
 
     protocol_delivery_state._prune_call_counts()
     assert len(protocol_delivery_state._protocol_call_counts) <= 4096
-
-
-# ── STDIO Transport ──────────────────────────────────────────────────
 
 
 def test_stdio_lite_injected_on_interval(monkeypatch, tmp_path):
@@ -283,18 +248,15 @@ def test_stdio_lite_injected_on_interval(monkeypatch, tmp_path):
 
     wrapped = stdio._log_tool_call(dummy_tool)
 
-    # First call: full protocol
     r1 = asyncio.run(wrapped(session_name="main"))
     assert "marm_protocol" in r1
     assert r1["marm_protocol"].startswith("# MARM MCP Protocol")
 
-    # Calls 2-29: no injection
     for _ in range(28):
         r = asyncio.run(wrapped(session_name="main"))
         assert "marm_protocol" not in r
         assert "marm_protocol_lite" not in r
 
-    # Call 30: lite injection
     r30 = asyncio.run(wrapped(session_name="main"))
     assert "marm_protocol_lite" in r30
     assert "MARM Protocol - Quick Reference" in r30["marm_protocol_lite"]
@@ -324,7 +286,6 @@ def test_stdio_lite_and_compaction_coexist(monkeypatch, tmp_path):
     monkeypatch.setattr(lifecycle, "ensure_marm_started", noop)
     monkeypatch.setattr(lifecycle, "maybe_auto_refresh", noop)
 
-    # Return a known compaction string instead of None
     monkeypatch.setattr(
         lifecycle,
         "claim_pending_compaction_prompt",
@@ -333,13 +294,10 @@ def test_stdio_lite_and_compaction_coexist(monkeypatch, tmp_path):
 
     wrapped = stdio._log_tool_call(dummy_tool)
 
-    # 29 warm calls (lite should NOT fire, compaction on non-lite calls fires)
     for _ in range(29):
         r = asyncio.run(wrapped(session_name="main"))
-        # Compaction may fire on calls 2-29; lite must not
         assert "marm_protocol_lite" not in r
 
-    # Call 30: both lite and compaction
     r30 = asyncio.run(wrapped(session_name="main"))
     assert "marm_protocol_lite" in r30
     assert "COMPACTION_NUDGE_CONTENT" in str(r30), (

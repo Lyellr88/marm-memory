@@ -1,11 +1,3 @@
-"""Code graph auto-indexing: change detection, the indexing gate, and the switch.
-
-Real git repositories and a real SQLite memory database throughout. The engine
-itself is stubbed only where a test is about MARM's logic rather than the
-engine's, and those stubs stand in for one call with a known response shape;
-the end-to-end path is covered by the @requires_binary test at the bottom.
-"""
-
 import asyncio
 import json
 import os
@@ -24,7 +16,10 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 
-# ── fixtures ────────────────────────────────────────────────────────
+def _is_unindexable(root: str) -> bool:
+    from marm_mcp_server.core import runtime_flags
+
+    return runtime_flags.index_block(root) is not None
 
 
 @pytest.fixture
@@ -68,13 +63,6 @@ def _git(cwd, *args):
     )
 
 
-# Deliberately not under tmp_path. The graph engine names each project's
-# database after the repository's full path with the separators replaced, so a
-# deep pytest temp directory produces a filename that overflows Windows MAX_PATH
-# and the engine's indexing worker exits non-zero. Measured: a repo 140
-# characters deep yields a 283-character database path against a 260 limit, and
-# the test then fails for a reason unrelated to what it tests. pytest's temp
-# depth is set by the invocation, so it cannot be relied on here.
 SHORT_TMP = Path(r"C:\tmp\marm-pytest") if os.name == "nt" else Path("/tmp/marm-pytest")
 
 
@@ -91,7 +79,6 @@ def git_repo():
     try:
         yield root
     finally:
-        # .git holds read-only pack files on Windows, which rmtree refuses.
         shutil.rmtree(root, onerror=_force_remove)
 
 
@@ -129,9 +116,6 @@ def _run_in_second_process(db_path: Path, body: str) -> dict:
     pytest.fail(f"second process printed no result:\n{completed.stdout}")
 
 
-# ── change detection ────────────────────────────────────────────────
-
-
 def test_signature_moves_on_commit_and_on_edit(git_repo):
     """The two changes a code graph must notice. detect_changes sees only the
     second one, which is why the worker does not use it."""
@@ -162,7 +146,6 @@ def test_two_different_edits_to_the_same_dirty_file_produce_different_signatures
 
     hashes = []
     for index in range(3):
-        # Never the committed body, or one iteration is legitimately clean.
         (git_repo / "src" / "a.py").write_text(f"def g_one():\n    return 10{index}\n")
         hashes.append(git_source_state(str(git_repo))[1])
 
@@ -209,7 +192,7 @@ def test_a_same_length_edit_to_an_untracked_file_moves_the_signature_even_with_a
     original_stat = target.stat()
     before = git_source_state(str(git_repo))[1]
 
-    target.write_text("value = 2\n")  # same byte length as the original
+    target.write_text("value = 2\n")
     os.utime(target, (original_stat.st_atime, original_stat.st_mtime))
     after = git_source_state(str(git_repo))[1]
 
@@ -234,7 +217,7 @@ def test_a_same_length_untracked_edit_with_a_restored_mtime_is_not_skipped_by_th
     baseline = module.git_source_state(str(git_repo))
     assert baseline is not None
 
-    target.write_text("value = 2\n")  # same byte length as the original
+    target.write_text("value = 2\n")
     os.utime(target, (original_stat.st_atime, original_stat.st_mtime))
 
     attempts = []
@@ -321,7 +304,6 @@ def test_a_non_repo_never_reports_an_ancestor_repos_signature(git_repo):
     assert is_git_repo(str(nested)) is False
     assert git_source_state(str(nested)) is None
 
-    # And the same for a plain directory whose parent is a repo.
     (git_repo / "src" / "a.py").write_text("def g_one():\n    return 42\n")
     assert git_source_state(str(nested)) is None
 
@@ -382,9 +364,6 @@ def test_git_poll_hides_its_windows_child_window(monkeypatch):
 
     assert module._git("C:/repo", "rev-parse", "HEAD") == "ok"
     assert captured["creationflags"] == 123
-
-
-# ── the indexing gate ───────────────────────────────────────────────
 
 
 def test_a_second_process_cannot_take_the_index_gate(shared_db):
@@ -490,7 +469,6 @@ async def test_cancelling_the_caller_does_not_release_the_gate(shared_db):
     with pytest.raises(asyncio.CancelledError):
         await caller
 
-    # The engine call is still running, so the gate must still be held.
     assert not exited.is_set()
     assert graph_index_lock.current_holder() is not None
     with pytest.raises(graph_index_lock.GraphIndexBusy):
@@ -505,7 +483,6 @@ async def test_cancelling_the_caller_does_not_release_the_gate(shared_db):
     assert graph_index_lock.current_holder() is None, (
         "the gate must be released once the engine call returns"
     )
-    # And it is genuinely reusable afterwards.
     assert (
         await graph_index_lock.run_exclusive("manual_index:http", lambda: {"ok": 1})
     )["ok"] == 1
@@ -528,7 +505,7 @@ async def test_the_gate_outlives_its_own_ttl_while_work_continues(shared_db):
         graph_index_lock.run_exclusive("auto_index", slow_index, ttl_seconds=1)
     )
     await asyncio.to_thread(entered.wait, 5)
-    await asyncio.sleep(2.5)  # well past the 1s TTL, heartbeat should have renewed
+    await asyncio.sleep(2.5)
 
     assert graph_index_lock.try_acquire("other", "manual_index:http", 60) is False
 
@@ -562,9 +539,6 @@ async def test_worker_stop_neither_releases_the_gate_nor_waits_for_the_index(sha
 
     may_finish.set()
     await indexing
-
-
-# ── the switch ──────────────────────────────────────────────────────
 
 
 def test_a_saved_override_beats_the_environment(shared_db, monkeypatch):
@@ -662,9 +636,6 @@ def test_concept_auto_index_honors_the_same_override(shared_db):
     assert concept_worker.enabled() is False
 
 
-# ── unwatching ──────────────────────────────────────────────────────
-
-
 def test_a_suppressed_root_is_dropped_from_the_watch_set(shared_db, monkeypatch):
     """A delete must survive the project cache. Re-indexing a root inside the
     TTL window recreates the project the user just deleted."""
@@ -692,7 +663,6 @@ def test_a_suppressed_root_is_dropped_from_the_watch_set(shared_db, monkeypatch)
     asyncio.run(worker._refresh_projects())
     assert set(worker._watched) == {"/repo/keep"}
 
-    # An explicit manual index re-enrolls it.
     runtime_flags.unsuppress_watch("/repo/gone")
     worker._projects_loaded_at = None
     asyncio.run(worker._refresh_projects())
@@ -726,11 +696,9 @@ def test_a_non_git_project_reindexes_only_when_due(shared_db, tmp_path, monkeypa
     asyncio.run(worker._tick())
     assert reindexed == ["filesystem_changed"]
 
-    # Immediately again: not due, so nothing.
     asyncio.run(worker._tick())
     assert reindexed == ["filesystem_changed"]
 
-    # Past the reconcile deadline it fires once more.
     state.reconcile_deadline = time.monotonic() - 1
     asyncio.run(worker._tick())
     assert reindexed == ["filesystem_changed", "filesystem_changed"]
@@ -863,7 +831,6 @@ async def test_a_delete_cannot_run_while_an_index_holds_the_gate(shared_db):
     assert "delete_project" not in called, (
         "delete_project must not reach the engine mid-index"
     )
-    # Refused before the gate, so the root lookup is not spent either.
     assert called == []
 
 
@@ -909,9 +876,6 @@ def test_an_empty_project_list_is_still_a_cached_answer(shared_db, monkeypatch):
     assert calls == ["list"], "an empty result must be cached like any other"
 
 
-# ── failure handling ────────────────────────────────────────────────
-
-
 def _tool_error(payload):
     from marm_graph.core.cbm_client import CbmToolError
 
@@ -926,9 +890,6 @@ def test_a_deep_repo_path_is_reported_as_a_path_limit_not_a_bad_file():
     from marm_graph.core import tool_router
     from marm_graph.core.models import GraphIndexRequest
 
-    # Grown against the predictor rather than hardcoded: how deep a repo has to
-    # be before it overflows depends on the length of this machine's home
-    # directory, which is where the engine keeps its store.
     deep = "C:\\deep"
     while (
         tool_router._predicted_store_path_length(deep) < tool_router._WINDOWS_PATH_LIMIT
@@ -1053,23 +1014,18 @@ def test_a_failed_index_on_a_clean_repo_retries_after_a_backoff(
     assert len(attempts) == 1
     assert state.retry_after > 0
 
-    # Nothing changed and neither deadline has arrived.
     asyncio.run(worker._tick())
     assert len(attempts) == 1
 
-    # The reconcile deadline arrives, but the backoff has not: still nothing.
     state.reconcile_deadline = time.monotonic() - 1
     asyncio.run(worker._tick())
     assert len(attempts) == 1
 
-    # The backoff itself has now elapsed too.
     state.retry_after = time.monotonic() - 1
     state.reconcile_deadline = time.monotonic() - 1
     asyncio.run(worker._tick())
     assert len(attempts) == 2
 
-    # A commit is new information: retried the moment something notices it,
-    # regardless of an unexpired backoff.
     state.retry_after = time.monotonic() + 10_000
     state.debounce_deadline = time.monotonic() - 1
     (git_repo / "src" / "b.py").write_text("def g_two():\n    return 2\n")
@@ -1088,8 +1044,6 @@ def test_an_unindexable_path_is_not_retried_at_all(shared_db, tmp_path, monkeypa
     plain.mkdir()
     attempts = []
 
-    # Stubbed at the engine boundary, so the real index_repository still runs:
-    # it owns the marker write, and stubbing the gate instead would skip it.
     monkeypatch.setattr(
         module.R,
         "do_index",
@@ -1109,15 +1063,12 @@ def test_an_unindexable_path_is_not_retried_at_all(shared_db, tmp_path, monkeypa
         module.graph_supervisor, "get_client", lambda: object(), raising=False
     )
 
-    from marm_mcp_server.core import runtime_flags
-
     worker = module.GraphIndexWorker()
     state = module._Watched(str(plain))
     asyncio.run(worker._evaluate(state))
     assert len(attempts) == 1
-    assert runtime_flags.is_unindexable(str(plain)) is True
+    assert _is_unindexable(str(plain)) is True
 
-    # Even past the reconcile deadline, and even through a whole tick.
     state.reconcile_deadline = time.monotonic() - 1
     worker._watched[state.root] = state
     worker._projects_loaded_at = time.monotonic()
@@ -1145,8 +1096,6 @@ def test_a_successful_manual_index_re_enables_a_previously_unindexable_root(
 
     attempts = []
 
-    # Stubbed at the engine boundary: index_repository owns the clear, so a
-    # stubbed gate would never exercise the recovery this test is about.
     monkeypatch.setattr(
         module.R, "do_index", lambda client, req: {"status": "success", "project": "p"}
     )
@@ -1170,7 +1119,6 @@ def test_a_successful_manual_index_re_enables_a_previously_unindexable_root(
     asyncio.run(worker._tick())
     assert attempts == [], "the marker must keep the worker off it"
 
-    # A manual index succeeds, which is the proof the root is indexable again.
     monkeypatch.setattr(endpoint, "run_exclusive", counting_gate)
     monkeypatch.setattr(
         endpoint.graph_supervisor, "get_client", lambda: object(), raising=False
@@ -1181,7 +1129,7 @@ def test_a_successful_manual_index_re_enables_a_previously_unindexable_root(
             endpoint.GraphIndexRequest(action="index", repo_path=root)
         )
     )
-    assert runtime_flags.is_unindexable(root) is False
+    assert _is_unindexable(root) is False
 
     before = len(attempts)
     asyncio.run(worker._tick())
@@ -1205,7 +1153,7 @@ def test_the_unindexable_marker_is_visible_to_the_other_transport(shared_db, tmp
         f"""
         from marm_mcp_server.core import runtime_flags
         result = {{
-            "blocked": runtime_flags.is_unindexable({str(plain)!r}),
+            "blocked": runtime_flags.index_block({str(plain)!r}) is not None,
             "listed": runtime_flags.unindexable_watches(),
         }}
         """,
@@ -1290,9 +1238,6 @@ def test_a_blocked_root_with_an_elapsed_debounce_deadline_still_does_not_pin_the
 
     worker = module.GraphIndexWorker()
     state = module._Watched(root)
-    # Stands in for a real watcher event firing on this blocked root: the
-    # deadline it leaves behind has nothing to do with whether the block
-    # is still active.
     state.debounce_deadline = time.monotonic() - 1
     worker._watched[state.root] = state
     worker._projects_loaded_at = time.monotonic()
@@ -1330,7 +1275,6 @@ def test_a_fresh_debounce_event_during_the_block_check_survives(
     worker = module.GraphIndexWorker()
     state = module._Watched(root)
     state.reconcile_deadline = time.monotonic() + 300
-    # The already-elapsed deadline that makes this tick's due-check true.
     state.debounce_deadline = time.monotonic() - 1
     worker._watched[state.root] = state
     worker._projects_loaded_at = time.monotonic()
@@ -1341,8 +1285,6 @@ def test_a_fresh_debounce_event_during_the_block_check_survives(
     fresh_deadline = time.monotonic() + 999
 
     def blocked_with_a_concurrent_event(root_path):
-        # Stands in for a real watcher event landing on this root while
-        # index_block's await is in flight.
         state.debounce_deadline = fresh_deadline
         return "unindexable"
 
@@ -1352,9 +1294,6 @@ def test_a_fresh_debounce_event_during_the_block_check_survives(
     assert state.debounce_deadline == fresh_deadline, (
         "a debounce deadline set while the block check was in flight must survive"
     )
-
-
-# ── the standalone package ──────────────────────────────────────────
 
 
 def test_standalone_marm_graph_rejects_the_marm_only_actions():
@@ -1375,9 +1314,6 @@ def test_standalone_stdio_schema_does_not_advertise_the_marm_only_actions():
     """marm-graph cannot perform them, so its own tool schema must not offer them."""
     source = (REPO_ROOT / "marm_graph" / "server_stdio.py").read_text(encoding="utf-8")
     assert "auto_on" not in source
-
-
-# ── end to end ──────────────────────────────────────────────────────
 
 
 @pytest.mark.asyncio
@@ -1403,8 +1339,6 @@ async def test_a_commit_is_picked_up_by_one_poll_cycle(shared_db, git_repo):
         client,
         GraphIndexRequest(action="index", repo_path=str(git_repo), mode="fast"),
     )
-    # Surface the engine's own message. A bare status comparison fails as
-    # "assert 'error' != 'error'", which says nothing about why.
     assert indexed.get("status") != "error", f"engine refused to index: {indexed}"
     project = indexed["project"]
 
@@ -1414,7 +1348,6 @@ async def test_a_commit_is_picked_up_by_one_poll_cycle(shared_db, git_repo):
 
     worker = module.GraphIndexWorker()
     state = module._Watched(str(git_repo))
-    # The state as it was at index time, before the commit moved HEAD.
     state.git_head = indexed.get("head") or "pre-commit"
     state.content_hash = "pre-commit"
     await worker._evaluate(state)
@@ -1455,8 +1388,6 @@ async def test_the_running_worker_refreshes_a_repo_on_its_own(
         client,
         GraphIndexRequest(action="index", repo_path=str(git_repo), mode="fast"),
     )
-    # Surface the engine's own message. A bare status comparison fails as
-    # "assert 'error' != 'error'", which says nothing about why.
     assert indexed.get("status") != "error", f"engine refused to index: {indexed}"
     project = indexed["project"]
 
@@ -1468,8 +1399,6 @@ async def test_the_running_worker_refreshes_a_repo_on_its_own(
         worker.start()
         assert worker.running is True
 
-        # First cycle enrolls the repo and re-indexes it once, because this
-        # process has no remembered signature for it yet.
         deadline = time.monotonic() + 30
         state = None
         while time.monotonic() < deadline:
@@ -1487,13 +1416,10 @@ async def test_the_running_worker_refreshes_a_repo_on_its_own(
         assert state is not None and state.last_indexed is not None, (
             "the worker never indexed the enrolled repo"
         )
-        # Keyed by whatever list_projects reported, which is not necessarily
-        # this platform's spelling of the same directory.
         assert watched_root in {
             runtime_flags.canonical_root(root) for root in worker._watched
         }
 
-        # A clean repo with an unchanged HEAD must then go quiet.
         settled = state.last_indexed
         await asyncio.sleep(3)
         assert state.last_indexed == settled, (
@@ -1505,9 +1431,6 @@ async def test_the_running_worker_refreshes_a_repo_on_its_own(
         await asyncio.to_thread(
             client.call_tool, "delete_project", {"project": project}
         )
-
-
-# ── review follow-up: cross-process blocks and lease lifetime ────────
 
 
 @pytest.mark.asyncio
@@ -1539,15 +1462,12 @@ async def test_a_deleted_project_is_skipped_before_the_watch_cache_expires(
 
     worker = module.GraphIndexWorker()
     worker._watched[root] = module._Watched(root)
-    # Loaded and not due to reload: exactly the window the bug lived in.
     worker._projects_loaded_at = time.monotonic()
 
     await worker._tick()
     assert len(attempts) == 1
 
     runtime_flags.suppress_watch(root)
-    # Force due-ness so the tombstone is proven to be what stops it, not
-    # merely that the reconcile deadline had not arrived yet.
     worker._watched[root].reconcile_deadline = time.monotonic() - 1
     await worker._tick()
     assert len(attempts) == 1, "the tombstone must stop it with no cache reload"
@@ -1631,7 +1551,7 @@ def test_an_unreadable_flag_database_never_authorizes_background_work(
 
     assert runtime_flags.get_bool(runtime_flags.AUTO_INDEX_GRAPH, True) is False
     assert runtime_flags.is_watch_suppressed("/repo/x") is True
-    assert runtime_flags.is_unindexable("/repo/x") is True
+    assert _is_unindexable("/repo/x") is True
     assert runtime_flags.index_block("/repo/x") == "unreadable"
     assert runtime_flags.source(runtime_flags.AUTO_INDEX_GRAPH) == "unknown"
 
@@ -1696,7 +1616,6 @@ async def test_block_state_is_settled_inside_the_gate_by_every_index_path(
     from marm_graph.core.models import GraphIndexRequest
     from marm_mcp_server.core import graph_index_lock as lock
     from marm_mcp_server.core import graph_index_worker as module
-    from marm_mcp_server.core import runtime_flags
 
     root = "/repo/contested"
     observed = {}
@@ -1704,10 +1623,9 @@ async def test_block_state_is_settled_inside_the_gate_by_every_index_path(
     def observe(label):
         observed[label] = {
             "held": lock.current_holder() is not None,
-            "unindexable": runtime_flags.is_unindexable(root),
+            "unindexable": _is_unindexable(root),
         }
 
-    # The automatic side: a path-limit failure must be durable before release.
     monkeypatch.setattr(
         module.R,
         "do_index",
@@ -1731,8 +1649,6 @@ async def test_block_state_is_settled_inside_the_gate_by_every_index_path(
     )
     assert observed["after_failure"] == {"held": True, "unindexable": True}
 
-    # The manual side: the clear must land before its own release, or the write
-    # above could arrive afterwards and undo a recovery that already happened.
     monkeypatch.setattr(
         module.R, "do_index", lambda client, req: {"status": "success", "project": "p"}
     )
@@ -1760,7 +1676,6 @@ async def test_an_automatic_failure_cannot_overwrite_a_manual_recovery(shared_db
     from marm_graph.core.models import GraphIndexRequest
     from marm_mcp_server.core import graph_index_lock as lock
     from marm_mcp_server.core import graph_index_worker as module
-    from marm_mcp_server.core import runtime_flags
 
     root = "/repo/recovered"
     entered = threading.Event()
@@ -1788,7 +1703,6 @@ async def test_an_automatic_failure_cannot_overwrite_a_manual_recovery(shared_db
         )
         await asyncio.to_thread(entered.wait, 10)
 
-        # The manual index arrives while the automatic one still holds the gate.
         try:
             await lock.run_exclusive(
                 "manual_index:test",
@@ -1802,9 +1716,8 @@ async def test_an_automatic_failure_cannot_overwrite_a_manual_recovery(shared_db
         release.set()
         await automatic
         assert refused == [True], "the gate must refuse the overlapping manual index"
-        assert runtime_flags.is_unindexable(root) is True
+        assert _is_unindexable(root) is True
 
-        # Once the gate frees, the manual index succeeds and its clear is final.
         module.R.do_index = lambda client, req: {"status": "success", "project": "p"}
         await lock.run_exclusive(
             "manual_index:test",
@@ -1812,12 +1725,9 @@ async def test_an_automatic_failure_cannot_overwrite_a_manual_recovery(shared_db
             object(),
             GraphIndexRequest(action="index", repo_path=root),
         )
-        assert runtime_flags.is_unindexable(root) is False
+        assert _is_unindexable(root) is False
     finally:
         module.R.do_index = original
-
-
-# ── event-driven scheduling ───────────────────────────────────────────
 
 
 def test_a_burst_of_watcher_events_coalesces_into_one_debounce_deadline(
@@ -1860,7 +1770,7 @@ def test_a_burst_of_events_produces_one_reindex_not_several(
     plain.mkdir()
     worker = module.GraphIndexWorker()
     state = module._Watched(str(plain))
-    state.reconcile_deadline = time.monotonic() + 1000  # isolate the debounce path
+    state.reconcile_deadline = time.monotonic() + 1000
     worker._watched[state.root] = state
     worker._projects_loaded_at = time.monotonic()
 
@@ -1913,7 +1823,6 @@ async def test_an_event_during_an_in_flight_index_leaves_exactly_one_pending_pas
     evaluation = asyncio.create_task(worker._evaluate(state))
     await asyncio.wait_for(entered.wait(), timeout=5)
 
-    # A second event lands while the index is still in flight.
     worker._on_watch_event(state.root)
     assert state.generation != state.evaluated_generation
 
@@ -2046,7 +1955,7 @@ async def test_disabling_detaches_watches_and_the_next_tick_reactivates_them(
     assert state.debounce_deadline is None
 
     worker._projects_loaded_at = time.monotonic()
-    state.reconcile_deadline = time.monotonic() + 1000  # do not also trigger a reindex
+    state.reconcile_deadline = time.monotonic() + 1000
     monkeypatch.setattr(
         module.graph_supervisor, "snapshot", lambda: {"available": True}
     )
@@ -2110,7 +2019,6 @@ def test_watch_state_round_trips_through_the_database(shared_db):
         "watch_status": "git_events",
     }
 
-    # A second save overwrites rather than duplicating.
     runtime_flags.save_watch_state(
         root,
         source_kind="git",
@@ -2121,7 +2029,6 @@ def test_watch_state_round_trips_through_the_database(shared_db):
     )
     assert runtime_flags.get_watch_state(root)["last_source_state"] == "new111:new222"
 
-    # Keyed canonically, same as suppressions and unindexable markers.
     other_spelling = "C:\\repo\\round-trip" if os.name == "nt" else "/repo/round-trip/"
     assert (
         runtime_flags.get_watch_state(other_spelling)["last_index_reason"]
@@ -2165,7 +2072,7 @@ async def test_a_restart_does_not_reindex_an_unchanged_project(
     async def record(target, reason, candidate_git_state=None):
         reindexed.append(reason)
 
-    worker = module.GraphIndexWorker()  # a fresh instance, standing in for a restart
+    worker = module.GraphIndexWorker()
     monkeypatch.setattr(worker, "_reindex", record)
 
     await worker._tick()
@@ -2232,9 +2139,6 @@ async def test_stop_leaves_no_live_observer_thread(shared_db, tmp_path):
     assert not observer.is_alive(), "stop() must tear down the observer thread"
 
 
-# ── PR review follow-up: coordinator wake-up and lease-loss safety ────
-
-
 def test_the_worker_does_not_busy_loop_when_the_engine_stays_unavailable(
     shared_db, monkeypatch
 ):
@@ -2273,7 +2177,7 @@ async def test_a_watcher_event_wakes_a_sleeping_coordinator(shared_db, tmp_path)
     plain.mkdir()
     worker = module.GraphIndexWorker()
     state = module._Watched(str(plain))
-    state.reconcile_deadline = time.monotonic() + 1000  # asleep for a long time
+    state.reconcile_deadline = time.monotonic() + 1000
     worker._watched[state.root] = state
 
     started = time.monotonic()
@@ -2313,7 +2217,7 @@ def test_an_unborn_repo_sees_an_unstaged_edit_to_an_already_staged_file(tmp_path
 
     staged_only = git_source_state(str(root))[1]
 
-    (root / "a.py").write_text("x = 2\n")  # unstaged edit on top of the staged one
+    (root / "a.py").write_text("x = 2\n")
     with_unstaged_edit = git_source_state(str(root))[1]
 
     assert with_unstaged_edit != staged_only
@@ -2346,11 +2250,10 @@ async def test_a_refused_lease_does_not_advance_the_in_memory_baseline(
         module.graph_supervisor, "snapshot", lambda: {"available": True}
     )
 
-    await worker._tick()  # the first evaluation: refused
+    await worker._tick()
     assert state.git_head is None, "a refused lease must not advance the baseline"
     assert state.content_hash is None
 
-    # The next evaluation must still see this as unindexed and try again.
     state.reconcile_deadline = time.monotonic() - 1
     attempts = []
 
@@ -2385,16 +2288,12 @@ async def test_a_dead_observer_thread_is_detected_and_recovered(
     dead_observer = worker._watcher._observer
     assert worker._watcher.healthy() is True
 
-    # Simulate a crash: the thread stops on its own, without going through
-    # GraphIndexWatcher.stop(), so the worker has no idea yet.
     dead_observer.stop()
     dead_observer.join(timeout=5)
     assert not dead_observer.is_alive()
     assert worker._watcher.healthy() is False
 
-    state.reconcile_deadline = (
-        time.monotonic() + 1000
-    )  # isolate recovery from a reindex
+    state.reconcile_deadline = time.monotonic() + 1000
     worker._projects_loaded_at = time.monotonic()
     monkeypatch.setattr(
         module.graph_supervisor, "snapshot", lambda: {"available": True}
@@ -2410,8 +2309,6 @@ async def test_a_dead_observer_thread_is_detected_and_recovered(
             "the affected root must be re-enrolled"
         )
     finally:
-        # _tick's recovery starts a real, fresh observer thread; leaving it
-        # running would outlive the test.
         await worker.stop()
 
 

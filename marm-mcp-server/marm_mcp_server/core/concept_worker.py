@@ -1,16 +1,3 @@
-"""Background worker that turns stored memories into concept graph nodes.
-
-Runs in-process on both transports. It owns no state that matters: every task
-is a durable row in concept_index_queue, so a killed worker loses nothing and
-teardown only has to stop it, never wait for it. That is the opposite of the
-chunk drain in memory_utils, which must finish because its work exists only
-in RAM.
-
-Failure here degrades the graph and never the memory. Extraction problems
-retry, a poison memory parks after CONCEPT_INDEX_MAX_ATTEMPTS, and no path
-from this module can block a write or a recall.
-"""
-
 import asyncio
 import threading
 from typing import Optional
@@ -30,8 +17,6 @@ from .concept_build_lock import BuildLease, ConceptBuildBusy, concept_build_lock
 
 logger = structlog.get_logger(__name__)
 
-# How long stop() waits for an aborted extraction to actually stop before
-# releasing the graph anyway. Short on purpose: teardown must stay bounded.
 ABORT_GRACE_SECONDS = 2.0
 
 
@@ -68,16 +53,8 @@ class ConceptIndexWorker:
         if self.running:
             return
         if not self.enabled():
-            # The loop still starts, and each cycle re-checks the flag and does
-            # nothing. That costs one indexed SELECT per debounce interval and
-            # is what lets `knowledge auto on` take effect without a restart:
-            # the switch is written to the database by a separate process, which
-            # cannot start a task in this one.
             logger.info("concept_worker.idle", reason="auto_index_off")
         if not CONCEPTS_AVAILABLE:
-            # Dormant, not spinning. Claiming tasks we cannot extract would
-            # burn the attempt budget and park every memory written while the
-            # extraction runtime is missing.
             logger.info("concept_worker.dormant", reason="concepts_unavailable")
             return
         try:
@@ -110,16 +87,6 @@ class ConceptIndexWorker:
         self._stop.set()
 
         if in_flight is not None and not in_flight.is_set():
-            # Bounded, and it has to be. Cancelling below unwinds the lock and
-            # releases it, but the extraction thread cannot be cancelled and
-            # keeps writing until it notices the flag above. Releasing the graph
-            # while that is true lets another process rebuild underneath it.
-            #
-            # Waiting the whole extraction out would put spaCy back on the
-            # teardown path, which v2.35.0 deliberately bounded, so this waits
-            # only for the flag to land and then proceeds regardless. Past the
-            # grace period the worst case is stray entities or a logged write
-            # failure in a graph another process now owns, not corruption.
             try:
                 await asyncio.wait_for(
                     asyncio.to_thread(in_flight.wait, ABORT_GRACE_SECONDS),
@@ -152,16 +119,11 @@ class ConceptIndexWorker:
             if self._stop.is_set():
                 return
             if not self.enabled():
-                # Re-read per cycle, not once at start(): the flag can be
-                # turned off at runtime and an off switch that needed a restart
-                # would not be an off switch. Tasks stay queued and durable.
                 continue
             self._cycles += 1
             try:
                 await self._drain()
             except Exception as exc:
-                # One bad cycle must never end the loop. The queue is durable,
-                # so the next cycle retries whatever was left.
                 logger.warning("concept_worker.cycle_failed", error=str(exc))
 
     async def _wait(self, seconds: float) -> bool:
@@ -189,16 +151,11 @@ class ConceptIndexWorker:
                 async with concept_build_lock(
                     "auto_index", CONCEPT_INDEX_LEASE_SECONDS
                 ) as lease:
-                    # Published so stop() can signal a build that is already
-                    # running in a thread it cannot cancel.
                     self._active_lease = lease
                     tasks = await asyncio.to_thread(
                         concept_queue.claim, CONCEPT_INDEX_BATCH_SIZE
                     )
                     if tasks:
-                        # The task leases run on the same clock as the build lock,
-                        # so a batch that outlives the TTL would be reclaimed and
-                        # extracted a second time by another process.
                         build_finished = threading.Event()
                         self._build_finished = build_finished
                         try:
@@ -223,8 +180,6 @@ class ConceptIndexWorker:
                 logger.info("concept_worker.deferred", reason="graph_busy")
                 return
 
-            # After the lock is released, so the pause also hands a waiting
-            # manual build a clean window rather than only yielding CPU.
             if CONCEPT_INDEX_BATCH_PAUSE_MS and await self._wait(
                 CONCEPT_INDEX_BATCH_PAUSE_MS / 1000
             ):
@@ -244,10 +199,6 @@ class ConceptIndexWorker:
         )
 
         if abort is not None and abort.is_set():
-            # The graph belongs to another process now and this batch stopped
-            # partway. Settling any of it would either delete a task whose
-            # extraction never ran or spend an attempt on a memory that never
-            # failed. Leave every lease to expire and be retried.
             logger.error("concept_worker.batch_abandoned", tasks=len(tasks))
             return
 
@@ -260,26 +211,9 @@ class ConceptIndexWorker:
                     concept_queue.drop, task.memory_id, task.lease_token
                 )
                 continue
-            # A NULL stored hash cannot be compared, and treating it as a
-            # mismatch is worse than not checking: the task is never settled
-            # and never counted as a failure, so the worker re-extracts that
-            # memory forever without ever writing it or giving up. Rows
-            # predating the content_hash column are exactly this case.
             if live[task.memory_id] is not None and (
                 live[task.memory_id] != task.content_hash
             ):
-                # Content changed under us. The write that changed it already
-                # re-queued the memory, so leave that row alone and let the
-                # next cycle index the current content.
-                #
-                # Deliberately no retraction here. cleanup_deleted_memory_
-                # provenance removes ALL provenance for a memory id, not just
-                # what this build wrote, so retracting would also erase what a
-                # worker in the other process may have already written for the
-                # new content, leaving the graph empty for this memory with no
-                # queue row left to repair it. The cost of not retracting is
-                # entities from the previous text lingering, which is the
-                # staleness this feature already documents.
                 logger.info("concept_worker.superseded", memory_id=task.memory_id)
                 continue
 

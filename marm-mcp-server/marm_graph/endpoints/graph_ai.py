@@ -1,11 +1,3 @@
-"""The 5 AI-facing MCP tools.
-
-Only these operation_ids are whitelisted into the FastApiMCP surface (see
-server.py). Their docstrings become the tool descriptions the AI reads. Each
-delegates to tool_router, running the blocking subprocess round-trip off the
-event loop via asyncio.to_thread.
-"""
-
 import asyncio
 
 from fastapi import APIRouter

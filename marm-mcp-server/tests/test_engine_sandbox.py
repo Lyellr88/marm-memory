@@ -1,9 +1,3 @@
-"""Tests for the graph engine's test-sandbox lifecycle in conftest.
-
-The sandbox is the engine's HOME for a test session, so a sweep that removes the
-wrong directory deletes a running session's graph store rather than leaking disk.
-"""
-
 import os
 import time
 

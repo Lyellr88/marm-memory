@@ -1,5 +1,3 @@
-"""Connection pooling, schema DDL, and DB-state helpers for the MARM memory system."""
-
 import queue
 import sqlite3
 import threading
@@ -53,8 +51,6 @@ class SQLiteConnectionPool:
         except queue.Empty:
             with self.lock:
                 if self.created_connections < self.max_connections:
-                    # Return directly — never touch the queue so no other
-                    # thread waiting on pool.get() can steal this connection.
                     return self._create_connection()
 
             return self.pool.get(block=True, timeout=10)
@@ -216,10 +212,7 @@ def init_database(db_path: str) -> None:
             conn.execute(
                 "ALTER TABLE notebook_entries ADD COLUMN session_name TEXT DEFAULT NULL"
             )
-            # Legacy rows predate the session dimension entirely -- migrate
-            # them to "main" (notebook_dispatch's own default) rather than
-            # leaving them at NULL, which would strand them as a scope no
-            # add/use/show/save caller can ever reach again by default.
+
             conn.execute(
                 "UPDATE notebook_entries SET session_name = 'main' WHERE session_name IS NULL"
             )
@@ -254,10 +247,6 @@ def init_database(db_path: str) -> None:
                 FROM notebook_entries_old
             """)
             conn.execute("DROP TABLE notebook_entries_old")
-        # Replaces the prior 3-column (name, project, platform) unique index --
-        # DROP is required because SQLite has no CREATE OR REPLACE INDEX, and
-        # the old index would otherwise keep enforcing the narrower identity
-        # forever alongside this one.
         conn.execute("DROP INDEX IF EXISTS idx_notebook_entries_scope_unique")
         conn.execute(
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_notebook_entries_scope_unique "
@@ -356,22 +345,6 @@ def init_database(db_path: str) -> None:
             "CREATE INDEX IF NOT EXISTS idx_memory_chunks_memory_id"
             " ON memory_chunks(memory_id)"
         )
-        # Two writes for the same memory_id with identical content share the
-        # same expected_content_hash (_write_chunks' own staleness guard
-        # can't tell them apart), so back-to-back resaves with unchanged
-        # content -- a real, supported action for a promoted doc -- could
-        # otherwise both pass the staleness check and both INSERT a full
-        # set of chunk rows, doubling storage with no way to tell the
-        # duplicates apart. This index plus _write_chunks' INSERT OR REPLACE
-        # makes concurrent identical-content chunk writes idempotent instead.
-        #
-        # A database that already has duplicate (memory_id, chunk_index)
-        # rows from before this index existed (the exact race above,
-        # pre-fix) would fail CREATE UNIQUE INDEX outright and the server
-        # could never start again. Collapse existing duplicates first --
-        # keep the highest id (most recent write) per pair, drop the rest
-        # -- but only do this scan once: guard it behind the index not
-        # existing yet, so every other startup is a cheap no-op.
         existing_indexes = {
             row[0]
             for row in conn.execute(
@@ -390,9 +363,6 @@ def init_database(db_path: str) -> None:
             " ON memory_chunks(memory_id, chunk_index)"
         )
 
-        # Durable outbox for concept indexing. Lives in the memory DB, not the
-        # concept DB, so the enqueue can join the same transaction as the
-        # memories INSERT and a memory can never exist without its task.
         conn.execute("""
             CREATE TABLE IF NOT EXISTS concept_index_queue (
                 memory_id    TEXT PRIMARY KEY,
@@ -441,10 +411,6 @@ def init_database(db_path: str) -> None:
             " ON code_link_refresh_queue(state, leased_until, enqueued_at)"
         )
 
-        # One row, held by whoever is currently writing the concept graph.
-        # asyncio locks cannot reach across processes, and HTTP and STDIO are
-        # two processes: without this, a full rebuild can drop the graph tables
-        # while the other process's worker is writing to them.
         conn.execute("""
             CREATE TABLE IF NOT EXISTS concept_build_lock (
                 id         INTEGER PRIMARY KEY CHECK (id = 1),
@@ -455,9 +421,6 @@ def init_database(db_path: str) -> None:
             )
             """)
 
-        # Same shape and purpose as concept_build_lock, for the code index. A
-        # separate row rather than a shared one: making concept extraction and
-        # code indexing mutually exclusive would serialize two unrelated stores.
         conn.execute("""
             CREATE TABLE IF NOT EXISTS graph_index_lock (
                 id         INTEGER PRIMARY KEY CHECK (id = 1),
@@ -468,9 +431,6 @@ def init_database(db_path: str) -> None:
             )
             """)
 
-        # Runtime overrides that must outlive the process and be visible to both
-        # transports: auto-index on/off switches and per-project watch
-        # suppressions written when a project is deleted.
         conn.execute("""
             CREATE TABLE IF NOT EXISTS runtime_flags (
                 key        TEXT PRIMARY KEY,
@@ -479,11 +439,6 @@ def init_database(db_path: str) -> None:
             )
             """)
 
-        # The event-driven graph worker's durable baseline, one row per watched
-        # root. Without this a restart (or the other transport starting up) has
-        # no memory of the last successful index and re-indexes every project
-        # once just because its in-memory state was recreated. last_source_state
-        # is opaque -- a digest, never source text or a diff.
         conn.execute("""
             CREATE TABLE IF NOT EXISTS graph_watch_state (
                 root_path         TEXT PRIMARY KEY,

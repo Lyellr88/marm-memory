@@ -1,5 +1,3 @@
-"""Direct unit tests for the pure formatting helpers in services/cli_output.py."""
-
 from marm_mcp_server.services.cli_output import _format_size, _queue_state
 
 
@@ -20,7 +18,6 @@ def test_format_size_converts_to_mb():
 
 
 def test_format_size_caps_at_gb_for_very_large_values():
-    # 3 TB worth of bytes must still render as GB, not overflow the unit list.
     huge = 3 * 1024 * 1024 * 1024 * 1024
     result = _format_size(huge)
     assert result.endswith(" GB")

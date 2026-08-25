@@ -1,5 +1,3 @@
-"""Per-session MCP protocol-delivery tracking (TTL + max-sessions eviction)."""
-
 import asyncio
 import time
 from collections import OrderedDict
@@ -20,12 +18,10 @@ def _prune_call_counts() -> None:
     _protocol_delivered_sessions (aged out by TTL or max-sessions cap).
     Also enforces hard cap when count grows too large.
     """
-    # Prune sessions not in delivered set
     delivered = set(_protocol_delivered_sessions)
     stale = [k for k in _protocol_call_counts if k not in delivered]
     for k in stale:
         _protocol_call_counts.pop(k, None)
-    # Hard cap as safety net
     if len(_protocol_call_counts) > _PROTOCOL_CALL_COUNTS_MAX_SESSIONS:
         excess = list(_protocol_call_counts.keys())[
             :-_PROTOCOL_CALL_COUNTS_MAX_SESSIONS

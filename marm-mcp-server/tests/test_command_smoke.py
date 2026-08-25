@@ -1,5 +1,3 @@
-"""Local smoke coverage for the complete marm-memory command surface."""
-
 from __future__ import annotations
 
 import argparse
@@ -27,8 +25,6 @@ PRODUCT_ENTRYPOINT = (
     "main()\n"
 )
 
-# This is deliberately static. A parser-derived list would approve a newly added
-# command without requiring an explicit smoke decision.
 COMMAND_HELP_PATHS = (
     ("start",),
     ("http",),
@@ -56,6 +52,8 @@ COMMAND_HELP_PATHS = (
     ("maintenance", "embeddings", "migrate"),
     ("maintenance", "chunks"),
     ("maintenance", "chunks", "rechunk"),
+    ("maintenance", "compaction"),
+    ("maintenance", "compaction", "dry-run"),
     ("key",),
     ("key", "generate"),
     ("key", "init"),

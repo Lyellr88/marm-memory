@@ -1,15 +1,3 @@
-"""
-MARM MCP Server - STDIO Transport
-Memory Accurate Response Mode for Model Context Protocol
-
-Runs via the official MCP SDK over standard input/output. No port, no API key, no HTTP listener.
-Intended for local single-client use (e.g. Docker STDIO, direct CLI invocation).
-
-Usage:
-  python -m marm_mcp_server.server_stdio
-  docker run -i --rm -v ~/.marm:/home/marm/.marm lyellr88/marm-mcp-server:latest python -m marm_mcp_server.server_stdio
-"""
-
 import builtins
 import sys
 
@@ -72,28 +60,14 @@ async def _stdio_lifespan(_server: FastMCP) -> AsyncIterator[None]:
     try:
         yield
     finally:
-        # anyio cancellation is level-triggered: inside a cancelled scope every
-        # await raises immediately, so an unshielded teardown here is skipped in
-        # exactly the case that matters, a session that died with writes pending.
-        # Shielded, and bounded so a stuck encoder cannot hold the shield open.
         with (
             anyio.CancelScope(shield=True),
             anyio.move_on_after(CHUNK_DRAIN_TIMEOUT_SECONDS * 2),
         ):
-            # Draining the queue runs the writes still in it, which is what
-            # creates the chunk tasks the next call waits on. Same order as
-            # graceful_shutdown(); STDIO starts the queue lazily on first write
-            # and otherwise never stops it.
-            # Signals and returns. Its tasks are durable rows, so an
-            # interrupted extraction costs nothing and the next session picks
-            # it up; awaiting one here would put spaCy on the teardown path.
             try:
                 await concept_worker.stop()
             except Exception as exc:
                 _stdio_log.warning("concept worker stop failed: %s", exc)
-            # Stops scheduling only. An in-flight index owns its own lease and
-            # releases it when the engine call returns, so there is nothing to
-            # wait for here.
             try:
                 await graph_index_worker.stop()
             except Exception as exc:
@@ -348,15 +322,6 @@ async def marm_compaction(
         return {"status": "error", "message": f"Compaction operation failed: {e!s}"}
 
 
-# marm_graph_*/marm_concept_* tools (Option 2 of
-# docs/current/server-stdio-module-split.md) -- re-imported here so
-# `server_stdio.marm_graph_index` etc. still resolve for existing callers.
-# stdio_graph_tools.py deliberately has no @mcp.tool() decorators of its
-# own (CodeRabbit PR #90: import-order-dependent registration would let
-# any future caller that imports that module before this one silently
-# register these 7 tools first). register_graph_tools() explicitly
-# registers them onto `mcp` here, after the 7 core tools above, so
-# tools/list order is deterministic regardless of import order.
 from .services.stdio_graph_tools import (  # noqa: E402,F401
     marm_code_lookup,
     marm_concept_build,

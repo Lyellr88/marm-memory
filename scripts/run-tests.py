@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Run local MARM MCP tests with fast defaults and explicit Docker opt-in."""
 
 from __future__ import annotations
 
@@ -23,12 +22,6 @@ CONSOLE_ROOT = ROOT / "marm-console"
 CONSOLE_TESTS_ROOT = CONSOLE_ROOT / "tests"
 CONSOLE_APP_ROOT = CONSOLE_ROOT / "artifacts" / "marm-console"
 BASE_TEMP = Path(r"C:\tmp\marm-pytest") if os.name == "nt" else Path("/tmp/marm-pytest")
-# Outside the repo, and shallow. Inside it, pytest's per-test temp paths ran ~100
-# characters deep before the test even started, and the graph engine names each
-# project's database after the repository's full path: a test repo at that depth
-# produced a 283-character database path against Windows' 260 limit, and the
-# engine's indexing worker exited non-zero. A sibling of BASE_TEMP rather than a
-# child, so a concurrent --clean-temp run cannot delete this tree mid-run.
 FAST_TEMP_ROOT = BASE_TEMP.parent / "marm-pytest-fast"
 DOCKER_IMAGE = "lyellr88/marm-mcp-server:latest"
 
@@ -82,8 +75,6 @@ def docker_available() -> bool:
 def pytest_base_command(args: argparse.Namespace) -> list[str]:
     command = [sys.executable, "-m", "pytest", "-q", "--tb=short"]
     if not args.project_addopts:
-        # pyproject.toml sets --basetemp=.pytest_tmp globally. Fast local runs
-        # intentionally bypass that cleanup cost unless --clean-temp/--full is used.
         command.extend(["-o", "addopts="])
     if not args.show_warnings:
         command.append("--disable-warnings")
@@ -119,8 +110,6 @@ def run_console_route_tests(args: argparse.Namespace) -> bool:
 
 
 def pnpm_executable() -> str | None:
-    # PowerShell can resolve the extensionless npm shim, but subprocess on
-    # Windows needs the runnable .cmd file.
     return shutil.which("pnpm.cmd") or shutil.which("pnpm")
 
 

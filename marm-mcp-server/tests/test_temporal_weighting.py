@@ -6,8 +6,6 @@ import pytest
 import marm_mcp_server.core.memory_recall as memory_recall_module
 from marm_mcp_server.core.memory import MARMMemory, _temporal_score
 
-# --- _temporal_score unit tests ---
-
 
 def test_temporal_score_brand_new_is_close_to_1():
     ts = datetime.now(timezone.utc).isoformat()
@@ -31,7 +29,6 @@ def test_temporal_score_bad_timestamp_returns_neutral():
 
 
 def test_temporal_score_naive_timestamp_treated_as_utc():
-    # Build from UTC, then strip tzinfo to model a legacy naive timestamp.
     ts = datetime.now(timezone.utc).replace(tzinfo=None).isoformat()
     assert _temporal_score(ts, 30) > 0.99
 
@@ -43,9 +40,6 @@ def test_temporal_score_monotonically_decreases_with_age():
         for d in [0, 7, 30, 90, 365]
     ]
     assert scores == sorted(scores, reverse=True)
-
-
-# --- recall_similar temporal re-ranking ---
 
 
 @pytest.mark.asyncio
@@ -62,7 +56,7 @@ async def test_newer_memory_ranks_above_equally_similar_older_one(tmp_path):
     unit_vec = np.ones(384, dtype=np.float32)
     unit_vec /= np.linalg.norm(unit_vec)
 
-    _ = mem  # triggers init_database via __init__
+    _ = mem
 
     def _insert(ts):
         mid = str(uuid.uuid4())
@@ -113,7 +107,7 @@ async def test_temporal_weight_zero_means_fts_winner_ranks_first_despite_age(
     unit_vec = np.ones(384, dtype=np.float32)
     unit_vec /= np.linalg.norm(unit_vec)
 
-    _ = mem  # triggers init_database via __init__
+    _ = mem
 
     def _insert(ts, content):
         mid = str(uuid.uuid4())
@@ -130,12 +124,10 @@ async def test_temporal_weight_zero_means_fts_winner_ranks_first_despite_age(
             )
         return mid
 
-    # Give the older memory the lexical advantage below.
     old_id = _insert(
         (base - timedelta(days=90)).isoformat(),
         "zephyr unique keyword only here",
     )
-    # The newer memory has identical vector similarity.
     new_id = _insert(
         base.isoformat(), "unrelated content about something else entirely"
     )
@@ -168,7 +160,7 @@ async def test_text_search_fallback_applies_temporal_but_exact_lane_does_not(tmp
     import uuid
 
     mem = MARMMemory(str(tmp_path / "memory.db"))
-    mem._encoder_failed = True  # forces the text-search fallback path
+    mem._encoder_failed = True
 
     base = datetime.now(timezone.utc)
 
@@ -190,7 +182,6 @@ async def test_text_search_fallback_applies_temporal_but_exact_lane_does_not(tmp
     old_id = _insert((base - timedelta(days=120)).isoformat())
     new_id = _insert(base.isoformat())
 
-    # Natural-language query -> auto lane -> encoder unavailable -> temporal fallback
     semantic = await mem.recall_similar(
         "temporal keyword content", session="fallback-temporal", limit=5
     )
@@ -203,7 +194,6 @@ async def test_text_search_fallback_applies_temporal_but_exact_lane_does_not(tmp
         "semantic_fallback_fts"
     }
 
-    # Exact lane preserves lexical scores rather than applying temporal decay.
     exact = await mem.recall_similar(
         "temporal keyword content",
         session="fallback-temporal",
@@ -225,7 +215,7 @@ async def test_temporal_fallback_promotes_newer_result_outside_bm25_limit(tmp_pa
     import uuid
 
     mem = MARMMemory(str(tmp_path / "memory.db"))
-    mem._encoder_failed = True  # forces the text-search fallback path
+    mem._encoder_failed = True
 
     base = datetime.now(timezone.utc)
 
@@ -244,8 +234,6 @@ async def test_temporal_fallback_promotes_newer_result_outside_bm25_limit(tmp_pa
             )
         return mid
 
-    # Identical content -> identical BM25. Old is inserted first, so it is the
-    # single row a limit=1 BM25 fetch would return; new sits just outside it.
     _insert((base - timedelta(days=120)).isoformat())
     new_id = _insert(base.isoformat())
 

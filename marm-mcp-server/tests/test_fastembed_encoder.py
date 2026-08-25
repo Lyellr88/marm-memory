@@ -1,13 +1,3 @@
-"""Unit tests for _FastEmbedEncoder, the adapter that lets fastembed serve
-the .encode(text) shape every caller (and scripts/bench_hotpath.py) already
-expects from SentenceTransformer.
-
-These tests target what's actually ours to get wrong: whether the adapter calls
-fastembed's real API correctly and preserves SentenceTransformer's
-single-string-vs-list-of-strings polymorphism, which is what
-scripts/bench_hotpath.py:80 depends on.
-"""
-
 import numpy as np
 import pytest
 

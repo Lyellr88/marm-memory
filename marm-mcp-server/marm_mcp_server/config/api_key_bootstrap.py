@@ -1,10 +1,3 @@
-"""Resolve MARM_API_KEY at server startup: env var, then ~/.marm/.env, then
-auto-generate and persist one when the server is bound to 0.0.0.0 with no key
-set anywhere. Kept as a single function taking server_host as a parameter
-(rather than importing SERVER_HOST back from config.settings) so settings.py
-can call it without a circular import.
-"""
-
 import os
 import sys
 from pathlib import Path

@@ -1,5 +1,3 @@
-"""Smart recall logic for MARM MCP Server."""
-
 import asyncio
 
 from ..core.memory import memory

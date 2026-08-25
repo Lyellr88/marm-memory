@@ -1,5 +1,3 @@
-"""Tests for compaction Layer 3 — V2 staging and V3 apply."""
-
 import json
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -15,8 +13,6 @@ from marm_mcp_server.core.compaction import (
     persist_candidates_to_staging,
 )
 from marm_mcp_server.core.memory import MARMMemory
-
-# --- helpers ---
 
 
 def _make_similar_embeddings(
@@ -111,9 +107,6 @@ def _get_staging_row(mem: MARMMemory, row_id: str) -> dict | None:
     }
 
 
-# --- _compute_candidate_hash ---
-
-
 def test_candidate_hash_is_order_independent():
     ids = ["a", "b", "c"]
     assert _compute_candidate_hash(ids) == _compute_candidate_hash(["c", "a", "b"])
@@ -121,9 +114,6 @@ def test_candidate_hash_is_order_independent():
 
 def test_candidate_hash_differs_for_different_ids():
     assert _compute_candidate_hash(["a", "b"]) != _compute_candidate_hash(["a", "c"])
-
-
-# --- persist_candidates_to_staging ---
 
 
 def test_persist_inserts_new_candidates(tmp_path):
@@ -162,7 +152,7 @@ def test_persist_skips_duplicate_hash_when_pending(tmp_path):
     ]
 
     persist_candidates_to_staging(mem, candidates)
-    persist_candidates_to_staging(mem, candidates)  # second call = no-op
+    persist_candidates_to_staging(mem, candidates)
 
     with mem.get_connection() as conn:
         count = conn.execute("SELECT COUNT(*) FROM compaction_staging").fetchone()[0]
@@ -208,10 +198,7 @@ def test_persist_allows_reinsertion_after_applied(tmp_path):
 
     with mem.get_connection() as conn:
         count = conn.execute("SELECT COUNT(*) FROM compaction_staging").fetchone()[0]
-    assert count == 2  # original applied + new pending_summary
-
-
-# --- mark_stale_candidates ---
+    assert count == 2
 
 
 def test_mark_stale_expires_past_expiry(tmp_path):
@@ -237,11 +224,9 @@ def test_mark_stale_detects_content_hash_change(tmp_path):
         for i in range(3)
     ]
 
-    # Snapshot uses original hashes
     snap = {ids[i]: f"original-{i}" for i in range(3)}
     row_id = _insert_staging_row(mem, "sess", ids, snapshot=snap)
 
-    # Simulate content change on first source row
     with mem.get_connection() as conn:
         conn.execute(
             "UPDATE memories SET content_hash = 'changed-hash' WHERE id = ?", (ids[0],)
@@ -263,7 +248,6 @@ def test_mark_stale_detects_already_compacted_source(tmp_path):
     snap = {ids[i]: f"h{i}" for i in range(3)}
     row_id = _insert_staging_row(mem, "sess", ids, snapshot=snap)
 
-    # Mark first source as already compacted
     with mem.get_connection() as conn:
         conn.execute(
             "UPDATE memories SET compaction_role = 'source' WHERE id = ?", (ids[0],)
@@ -282,7 +266,6 @@ def test_mark_stale_detects_missing_source(tmp_path):
     snap = {mem_id: f"hash-{mem_id}" for mem_id in ids}
     row_id = _insert_staging_row(mem, "sess", ids, snapshot=snap)
 
-    # Delete a source row
     with mem.get_connection() as conn:
         conn.execute("DELETE FROM memories WHERE id = ?", (ids[0],))
 
@@ -307,9 +290,6 @@ def test_mark_stale_leaves_valid_candidate_unchanged(tmp_path):
     assert _get_staging_row(mem, row_id)["status"] == "pending_summary"
 
 
-# --- endpoint function tests (calling async functions directly) ---
-
-
 @pytest.mark.asyncio
 async def test_get_candidates_excludes_expired(monkeypatch, tmp_path):
     import marm_mcp_server.endpoints.compaction as ep
@@ -321,7 +301,6 @@ async def test_get_candidates_excludes_expired(monkeypatch, tmp_path):
     ids = [_insert_memory_row(mem, "sess", f"c{i}", similar[i]) for i in range(3)]
     snap = {mem_id: f"hash-{mem_id}" for mem_id in ids}
 
-    # expired candidate
     _insert_staging_row(mem, "sess", ids, expires_hours=-1, snapshot=snap)
 
     result = await ep.marm_get_compaction_candidates()
@@ -383,10 +362,8 @@ async def test_get_candidates_returns_pending_with_prompt(monkeypatch, tmp_path)
     assert cand["session_name"] == "sess"
     assert sorted(cand["source_memory_ids"]) == sorted(ids)
     assert "prompt" in cand
-    assert "{memories}" not in cand["prompt"]  # placeholder was filled in
-    assert (
-        "preview of" in cand["prompt"]
-    )  # staged preview text appears in filled prompt
+    assert "{memories}" not in cand["prompt"]
+    assert "preview of" in cand["prompt"]
     assert result["prompt_template"] is not None
 
 
@@ -714,7 +691,6 @@ async def test_stage_summaries_rejects_already_compacted_source(monkeypatch, tmp
     ids = [_insert_memory_row(mem, "sess", f"c{i}", similar[i]) for i in range(3)]
     row_id = _insert_staging_row(mem, "sess", ids)
 
-    # Mark first source as already compacted
     with mem.get_connection() as conn:
         conn.execute(
             "UPDATE memories SET compaction_role = 'source' WHERE id = ?", (ids[0],)
@@ -795,7 +771,7 @@ async def test_apply_discard_no_write_to_memories(monkeypatch, tmp_path):
 
     with mem.get_connection() as conn:
         count_after = conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
-    assert count_after == count_before  # no write
+    assert count_after == count_before
 
 
 @pytest.mark.asyncio
@@ -830,7 +806,7 @@ async def test_apply_action_inserts_summary_and_marks_sources(monkeypatch, tmp_p
     from marm_mcp_server.core.models import ApplyCompactionRequest
 
     mem = MARMMemory(str(tmp_path / "memory.db"))
-    mem._encoder_failed = True  # skip embedding generation
+    mem._encoder_failed = True
     monkeypatch.setattr(ep, "memory", mem)
 
     similar = _make_similar_embeddings(3)
@@ -855,12 +831,10 @@ async def test_apply_action_inserts_summary_and_marks_sources(monkeypatch, tmp_p
     assert result["status"] == "applied"
     summary_id = result["summary_memory_id"]
 
-    # Staging row updated
     assert _get_staging_row(mem, row_id)["status"] == "applied"
     assert _get_staging_row(mem, row_id)["reviewed_at"] is not None
 
     with mem.get_connection() as conn:
-        # Summary row exists
         summary_row = conn.execute(
             "SELECT compaction_role, content, metadata FROM memories WHERE id = ?",
             (summary_id,),
@@ -872,7 +846,6 @@ async def test_apply_action_inserts_summary_and_marks_sources(monkeypatch, tmp_p
         assert meta["compaction_role"] == "summary"
         assert sorted(meta["source_memory_ids"]) == sorted(ids)
 
-        # Source rows updated
         for mem_id in ids:
             src_row = conn.execute(
                 "SELECT compaction_role, compacted_into FROM memories WHERE id = ?",
@@ -881,7 +854,6 @@ async def test_apply_action_inserts_summary_and_marks_sources(monkeypatch, tmp_p
             assert src_row[0] == "source"
             assert src_row[1] == summary_id
 
-        # Source rows still exist — not deleted
         remaining = conn.execute(
             f"SELECT COUNT(*) FROM memories WHERE id IN ({','.join('?' * len(ids))})",
             ids,
@@ -966,12 +938,12 @@ async def test_apply_is_idempotent(monkeypatch, tmp_path):
     r2 = await ep.marm_apply_compaction(
         ApplyCompactionRequest(candidate_id=row_id, action="apply")
     )
-    assert r2["status"] == "applied"  # idempotent — returns success
+    assert r2["status"] == "applied"
 
     with mem.get_connection() as conn:
         count_after_second = conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
 
-    assert count_after_first == count_after_second  # no second write
+    assert count_after_first == count_after_second
 
 
 @pytest.mark.asyncio
@@ -1017,7 +989,6 @@ async def test_apply_rejects_already_compacted_source(monkeypatch, tmp_path):
         snapshot=snap,
     )
 
-    # Compacted between staging and apply
     with mem.get_connection() as conn:
         conn.execute(
             "UPDATE memories SET compaction_role = 'source' WHERE id = ?", (ids[0],)
@@ -1054,7 +1025,6 @@ async def test_apply_marks_stale_on_snapshot_mismatch(monkeypatch, tmp_path):
         snapshot=snap,
     )
 
-    # Content changed after staging
     with mem.get_connection() as conn:
         conn.execute(
             "UPDATE memories SET content_hash = 'changed' WHERE id = ?", (ids[1],)
@@ -1161,7 +1131,6 @@ async def test_apply_marks_stale_when_source_missing(monkeypatch, tmp_path):
         snapshot=snap,
     )
 
-    # Delete one source row after staging
     with mem.get_connection() as conn:
         conn.execute("DELETE FROM memories WHERE id = ?", (ids[0],))
 
@@ -1199,7 +1168,6 @@ async def test_apply_marks_stale_when_source_already_compacted_at_apply(
         snapshot=snap,
     )
 
-    # Compact one source between staging and apply
     with mem.get_connection() as conn:
         conn.execute(
             "UPDATE memories SET compaction_role = 'source' WHERE id = ?", (ids[1],)
@@ -1227,9 +1195,6 @@ async def test_apply_not_found_returns_error(monkeypatch, tmp_path):
     )
     assert result["status"] == "error"
     assert "not found" in result["reason"]
-
-
-# --- compaction nudge claim ---
 
 
 def test_claim_pending_compaction_prompt_increments_nudge_count(monkeypatch, tmp_path):

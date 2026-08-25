@@ -1,5 +1,3 @@
-"""Vector scoring and DB fetch-and-score operations for the MARM memory system."""
-
 import sqlite3
 from typing import Any, Protocol, Sequence
 
@@ -35,54 +33,6 @@ def _normalize_bm25(
     return [(max_s - s) / span for s in raw_scores]
 
 
-def _score_embedding_rows(
-    rows: Sequence[sqlite3.Row], query_embedding: np.ndarray, limit: int
-) -> tuple[list[tuple[sqlite3.Row, float]], int]:
-    """Score embedding rows in one NumPy batch instead of a Python cosine loop."""
-    if limit <= 0:
-        return [], 0
-
-    query_vec = np.asarray(query_embedding, dtype=np.float32)
-    expected_dim = query_vec.shape[0]
-    query_norm = np.linalg.norm(query_vec)
-    if query_norm == 0:
-        return [], 0
-    normalized_query = query_vec / query_norm
-
-    vectors = []
-    kept_rows = []
-    dim_skipped = 0
-
-    for row in rows:
-        try:
-            vector = np.frombuffer(row[3], dtype=np.float32)
-        except Exception:
-            continue
-        if vector.shape[0] != expected_dim:
-            dim_skipped += 1
-            continue
-        vectors.append(vector)
-        kept_rows.append(row)
-
-    if not vectors:
-        return [], dim_skipped
-
-    matrix = np.vstack(vectors).astype(np.float32, copy=False)
-    norms = np.linalg.norm(matrix, axis=1, keepdims=True)
-    matrix = matrix / (norms + 1e-12)
-    scores = matrix @ normalized_query
-
-    top_count = min(limit, scores.shape[0])
-    if top_count == 0:
-        return [], dim_skipped
-
-    top_indices = np.argpartition(scores, -top_count)[-top_count:]
-    top_indices = top_indices[np.argsort(scores[top_indices])[::-1]]
-    return [
-        (kept_rows[index], float(scores[index])) for index in top_indices
-    ], dim_skipped
-
-
 def _score_chunk_aware(
     memories: Sequence[_Row],
     chunks_by_id: dict[str, list],
@@ -105,8 +55,6 @@ def _score_chunk_aware(
 
     for mem_index, mem in enumerate(memories):
         chunk_embs = chunks_by_id.get(mem["id"])
-        # Chunked memories score max-over-chunks; unchunked fall back to the
-        # parent embedding. A memory never mixes both.
         candidate_embs = chunk_embs if chunk_embs else [mem["embedding"]]
 
         for emb_bytes in candidate_embs:
@@ -131,7 +79,6 @@ def _score_chunk_aware(
     matrix = np.vstack(vectors).astype(np.float32, copy=False)
     scores = matrix @ normalized_query
 
-    # Collapse to one score per memory (max over its chunk rows).
     owner_arr = np.asarray(owners)
     best_scores = np.full(len(memories), -np.inf, dtype=np.float32)
     np.maximum.at(best_scores, owner_arr, scores)
@@ -277,11 +224,6 @@ def _fetch_fts_candidate_ids(
         if platform is not None:
             base += " AND m.platform = ?"
             params.append(platform)
-        # m.id breaks BM25 ties so the LIMIT cutoff is reproducible. Measured on
-        # the LoCoMo corpus: 53.7% of queries have a tie straddling the 50-row
-        # boundary, and without a tiebreak SQLite's row order there varied
-        # between processes -- identical configs scored up to 0.5pp apart, which
-        # is larger than several of the effects this pool is used to measure.
         base += " ORDER BY bm25(memories_fts), m.id LIMIT ?"
         params.append(limit)
         rows = conn.execute(base, params).fetchall()

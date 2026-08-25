@@ -1,5 +1,3 @@
-"""Documentation loading service for MARM MCP Server."""
-
 import asyncio
 import hashlib
 import os
@@ -122,14 +120,6 @@ async def _index_doc(doc: Dict) -> bool:
                     return True
                 print(f"[DOCS] {fname} memory row missing, re-indexing")
 
-        # Audited under the SQLite write-atomicity hardening effort
-        # (docs/current/sqlite-write-atomicity-hardening.md): no BEGIN
-        # IMMEDIATE needed here. Exactly one of the two branches below
-        # runs per call, and each is a single statement -- a lone
-        # statement is already atomic under SQLite regardless of
-        # isolation_level, so there's no multi-statement sequence to
-        # protect. store_memory_queued below intentionally stays outside
-        # any transaction (it awaits and does its own internal locking).
         with memory.get_connection() as conn:
             if row and row[1]:
                 conn.execute("DELETE FROM memories WHERE id = ?", (row[1],))

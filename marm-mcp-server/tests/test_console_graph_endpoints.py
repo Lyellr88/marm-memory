@@ -1,18 +1,3 @@
-"""Tests for the Console's architecture endpoint contract.
-
-The browser is the only consumer that enforces this contract, and it enforces it
-by throwing: React raises on an object child, so a counted `{"label": ..., "count":
-...}` row reaching a badge takes down the whole Architecture tab. Nothing on the
-server noticed for as long as the tab has existed. These tests put the contract
-where a test run can see it.
-
-Label and schema rows below are verbatim `get_architecture` output from engine
-0.10.5, trimmed to the keys this endpoint reads. The `packages` rows are verbatim
-too, and deliberately so: they are what the aspect really returns, third-party
-dependency names and Python builtins with zero coupling on every row, rather than
-the project's own packages. That is why nothing maps them onto the module table.
-"""
-
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient

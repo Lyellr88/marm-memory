@@ -1,7 +1,3 @@
-"""Regression test for a CodeRabbit-flagged task-orchestration bug in
-cli.py::run_server_with_shutdown (PR #89, refactor/server-py-split).
-"""
-
 import asyncio
 
 import pytest

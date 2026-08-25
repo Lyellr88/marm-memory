@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Report source files in MARM server and Console packages that exceed a threshold."""
 
 import argparse
 import sys
@@ -24,16 +23,17 @@ SCAN_DIRS = [
 ]
 TEST_DIRS = [
     ("marm-mcp-server/tests", ROOT / "marm-mcp-server" / "tests"),
+    ("marm-console/tests", ROOT / "marm-console" / "tests"),
 ]
 EXTENSIONS = {".py", ".toml", ".md", ".txt", ".json", ".ts", ".tsx", ".css"}
 
-# Build artifacts, not source: the bundled spaCy pipeline and the compiled
-# Console frontend. Both are generated at release time and their size says
-# nothing about code worth refactoring.
 GENERATED_DIRS = {"models", "static", "__pycache__"}
+EXCLUDED_NAMES = {"README.md"}
 
 
 def is_generated(path: Path, base: Path) -> bool:
+    if path.name in EXCLUDED_NAMES:
+        return True
     return any(part in GENERATED_DIRS for part in path.relative_to(base).parts[:-1])
 
 

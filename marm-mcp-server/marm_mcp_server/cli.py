@@ -1,5 +1,3 @@
-"""Compatibility server entry point and canonical marm-memory product CLI."""
-
 from __future__ import annotations
 
 import argparse
@@ -16,6 +14,9 @@ import structlog
 import uvicorn
 
 if TYPE_CHECKING:
+    import sqlite3
+    from contextlib import AbstractContextManager
+
     from fastapi import FastAPI
 
 from .config import settings
@@ -240,6 +241,47 @@ def _migrate_embeddings() -> int:
     return 0
 
 
+class _ReadOnlyMemory:
+    """Minimal get_connection() shim so a dry-run scan never opens MARMMemory,
+    whose constructor runs schema DDL (DROP/CREATE INDEX) on every call."""
+
+    def __init__(self, db_path: str) -> None:
+        self._uri = f"{Path(db_path).resolve().as_uri()}?mode=ro"
+
+    def get_connection(self) -> AbstractContextManager[sqlite3.Connection]:
+        import sqlite3
+        from contextlib import closing
+
+        return closing(sqlite3.connect(self._uri, uri=True))
+
+
+def _compaction_dry_run(session_name: str, as_json: bool) -> int:
+    if not Path(DEFAULT_DB_PATH).exists():
+        print("No MARM memory database exists; nothing to scan.")
+        return 0
+    from .core.compaction import run_compaction_dry_run
+
+    result = run_compaction_dry_run(_ReadOnlyMemory(DEFAULT_DB_PATH), session_name)
+    if as_json:
+        _print_payload(result, as_json=True)
+        return 0
+    candidates = result["candidates"]
+    if not candidates:
+        print(f"No compaction candidates found for session '{session_name}'.")
+        return 0
+    print(f"{len(candidates)} compaction candidate(s) for session '{session_name}':")
+    for candidate in candidates:
+        print(
+            f"  {len(candidate['source_memory_ids'])} memories, "
+            f"avg similarity {candidate['avg_similarity']}"
+        )
+    if result["report_path"]:
+        print(f"Report written to {result['report_path']}")
+    else:
+        print("Report could not be written; see error above.", file=sys.stderr)
+    return 0
+
+
 def _rechunk() -> int:
     print("Stop every MARM HTTP and STDIO process before re-chunking.")
     print("STDIO processes cannot be detected reliably and must be stopped manually.")
@@ -393,6 +435,8 @@ def _dispatch_product(args: argparse.Namespace) -> int:
             return 0
         if args.maintenance_command == "chunks":
             return _rechunk()
+        if args.maintenance_command == "compaction":
+            return _compaction_dry_run(args.session, args.as_json)
         return _migrate_embeddings()
     if args.command == "key":
         if args.key_command == "generate":

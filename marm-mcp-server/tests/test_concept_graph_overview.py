@@ -1,5 +1,3 @@
-"""Tests for the Console's safe and explicitly requested concept atlases."""
-
 from fastapi.testclient import TestClient
 
 from marm_mcp_server.console import concept_graph_overview

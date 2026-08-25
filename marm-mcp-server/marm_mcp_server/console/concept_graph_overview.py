@@ -1,5 +1,3 @@
-"""Full-vs-sampled visual graph atlas for the concept graph console tab."""
-
 from __future__ import annotations
 
 from collections import deque

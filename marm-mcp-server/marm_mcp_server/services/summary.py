@@ -1,5 +1,3 @@
-"""Session summary generation for MARM MCP Server."""
-
 import os
 from datetime import datetime, timezone
 

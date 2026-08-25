@@ -1,10 +1,3 @@
-"""Stopped-server backfill that brings memory_chunks in line with current config.
-
-Repairs three states: chunk rows split under superseded size constants, memories
-over threshold with no chunk rows at all (a lost fire-and-forget write), and
-memories now under threshold that still carry chunks.
-"""
-
 from __future__ import annotations
 
 import sqlite3
@@ -152,8 +145,6 @@ def rechunk_memories(
         str(memory_path), str(concept_db_path or get_default_concept_db_path())
     )
     if state.marker_incompatible or state.incompatible:
-        # New chunk vectors would land at a different dimension than the parent
-        # rows, and _score_chunk_aware silently drops mismatched dimensions.
         raise RechunkRefused(
             "The stored vectors do not match the configured embedding model. "
             "Run 'marm-mcp-server --migrate-embeddings' first."
@@ -177,8 +168,6 @@ def rechunk_memories(
         for item in work:
             embeddings: list[bytes] = []
             if item["desired"]:
-                # needs_encoder is any(item["desired"]), so this branch is only
-                # reachable once the encoder is loaded.
                 assert encoder is not None
                 embeddings = [
                     _embedding_to_bytes(vector)

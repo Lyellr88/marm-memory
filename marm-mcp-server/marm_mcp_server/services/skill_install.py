@@ -1,5 +1,3 @@
-"""Install the bundled marm-init skill into agent skill folders."""
-
 from __future__ import annotations
 
 import argparse

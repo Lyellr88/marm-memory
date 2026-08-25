@@ -1,5 +1,3 @@
-"""Bounded, read-only concept context for smart and explicit recall."""
-
 from __future__ import annotations
 
 import json

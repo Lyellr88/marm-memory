@@ -1,5 +1,3 @@
-"""Response size limiting utilities for MCP compliance."""
-
 import json
 import sys
 from typing import Any, Dict, List, Tuple

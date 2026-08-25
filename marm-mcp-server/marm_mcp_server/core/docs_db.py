@@ -1,13 +1,3 @@
-"""Schema, connection pool, and DB-state helpers for the permanent docs store.
-
-Own SQLite file (~/.marm/docs/marm_docs.db), own SQLiteConnectionPool
-instance -- reuses memory_db.py's pool/context-manager classes (generic,
-already parameterized by db_path) but never shares memory.py's pool
-instance. Docs writes must never be able to block or corrupt the
-production-critical memories table's WAL. Mirrors core/concept_db.py's
-shape.
-"""
-
 import os
 import sqlite3
 from dataclasses import dataclass

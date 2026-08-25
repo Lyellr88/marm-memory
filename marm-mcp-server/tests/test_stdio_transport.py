@@ -22,37 +22,18 @@ def _isolated_stdio(monkeypatch, tmp_path):
     mem._encoder_failed = True
     monkeypatch.setattr(stdio, "memory", mem)
     monkeypatch.setattr(notebook_service, "memory", mem)
-    # marm_log_entry/marm_log_show/marm_delete's shared bodies now live in
-    # services.log_entry (log-entry-dedup.md) with their own `memory`
-    # binding -- without this, their writes (including the queued
-    # semantic-memory store) silently hit the real production singleton
-    # instead of this test's isolated instance, which can also hang
-    # waiting on a write queue that was never started in-process.
     monkeypatch.setattr(log_entry, "memory", mem)
-    # _log_tool_call re-resolves the compaction-claim session from
-    # memory.active_log_session when the caller omits session_name (PR #88
-    # CodeRabbit finding) -- without patching lifecycle's own binding too,
-    # that read hits the real production singleton's state instead of this
-    # test's isolated instance.
     monkeypatch.setattr(lifecycle, "memory", mem)
 
     async def _noop(*args, **kwargs):
         return None
 
-    # ensure_marm_started/maybe_auto_refresh/claim_pending_compaction_prompt
-    # and the protocol-delivery state now live in core.stdio_tool_lifecycle
-    # (server-stdio-module-split.md Task 2) -- _log_tool_call resolves these
-    # from its own module's globals, not server_stdio's.
     monkeypatch.setattr(lifecycle, "ensure_marm_started", _noop)
     monkeypatch.setattr(lifecycle, "maybe_auto_refresh", _noop)
     monkeypatch.setattr(
         lifecycle, "claim_pending_compaction_prompt", lambda *args, **kwargs: None
     )
     lifecycle._protocol_delivered = True
-    # _protocol_call_count is also module-global and leaks across tests --
-    # if it lands on a multiple of _STDIO_LITE_INTERVAL, _log_tool_call
-    # injects marm_protocol_lite unexpectedly, breaking exact-dict
-    # assertions in tests that don't expect it.
     lifecycle._protocol_call_count = 0
     return stdio
 
@@ -172,9 +153,6 @@ def test_stdio_handles_mcp_initialize_and_exposes_tools(tmp_path):
         proc.stdin.write(stdin_data)
         proc.stdin.flush()
 
-        # Keep stdin open until tools/list responds. Closing it immediately
-        # lets the server's normal EOF teardown win a race with its pending
-        # response on slower runners.
         while 2 not in responses:
             line = proc.stdout.readline()
             if not line:
@@ -241,11 +219,6 @@ def test_stdio_handles_mcp_initialize_and_exposes_tools(tmp_path):
     assert "marm_concept_recall" in tool_names
     assert len(tools) == 14
 
-    # tools/list order is a public transport detail, not an implementation
-    # choice -- server-stdio-module-split.md's Option 2 extraction moved
-    # marm_graph_*/marm_concept_* into their own module registered via a
-    # separate import, which silently reversed this order once (core tools
-    # registered after graph/concept tools instead of before).
     ordered_names = [t["name"] for t in tools]
     assert ordered_names == [
         "marm_smart_recall",
@@ -475,7 +448,6 @@ def test_stdio_log_entry_without_session_uses_active_session(monkeypatch, tmp_pa
             ("main",),
         ).fetchone()[0]
 
-    # 2 entries: session_start marker + the actual log entry
     assert project_count == 2, (
         f"Expected 2 entries in '{expected_session}'; got {project_count}"
     )
@@ -595,10 +567,6 @@ def test_stdio_inprocess_client_wraps_notebook_delete_and_log_results(
         f"stdio log entry did not dual-write a semantic memory: {entry_body}"
     )
 
-    # marm_log_show through the real MCP tool surface -- not exercised
-    # anywhere else in this file (PR #88 review finding). Two entries are
-    # expected: the "Session: envelope-session" switch itself writes a
-    # session_start marker entry, plus the envelope-routing entry below.
     log_show_body = json.loads(log_show_result.content[0].text)
     assert log_show_body["status"] == "success"
     assert log_show_body["session_name"] == resolved_session
@@ -609,8 +577,6 @@ def test_stdio_inprocess_client_wraps_notebook_delete_and_log_results(
 
 
 def test_stdio_graph_tool_returns_unavailable_when_backend_down(monkeypatch, tmp_path):
-    # get_client, not is_available: the tools acquire the client and gate on it
-    # being None, so that one read is what decides availability now.
     stdio = _isolated_stdio(monkeypatch, tmp_path)
     monkeypatch.setattr(stdio.graph_supervisor, "get_client", lambda: None)
 
@@ -637,7 +603,7 @@ def test_stdio_graph_unavailable_response_is_not_shared_mutable_state(
     monkeypatch.setattr(stdio.graph_supervisor, "get_client", lambda: None)
 
     first = asyncio.run(stdio.marm_graph_index(repo_path="/tmp/some-repo"))
-    assert "marm_protocol" in first  # confirms injection actually happened
+    assert "marm_protocol" in first
 
     second = asyncio.run(stdio.marm_graph_index(repo_path="/tmp/some-repo"))
 
@@ -668,10 +634,6 @@ def test_stdio_inprocess_client_wraps_graph_index_happy_path(monkeypatch, tmp_pa
         captured["req"] = req
         return {"status": "success", "project": "marm-memory"}
 
-    # marm_graph_index's body now lives in services.stdio_graph_tools
-    # (Option 2 of server-stdio-module-split.md) -- server_stdio no longer
-    # imports graph_router at all, so patching it must target the module
-    # that actually owns the reference.
     monkeypatch.setattr(stdio_graph_tools.graph_router, "do_index", _fake_do_index)
 
     async def run():
@@ -688,9 +650,6 @@ def test_stdio_inprocess_client_wraps_graph_index_happy_path(monkeypatch, tmp_pa
     assert payload["status"] == "success"
     assert payload["project"] == "marm-memory"
 
-    # Proves the wrapper reused graph_supervisor's client and built the same
-    # Pydantic request model the HTTP endpoint uses, rather than duplicating
-    # HTTP endpoint logic by hand.
     assert captured["client"] == "fake-client"
     assert captured["req"].repo_path == "/tmp/some-repo"
 
@@ -717,9 +676,6 @@ def test_stdio_concept_recall_passes_through_to_run_recall(monkeypatch, tmp_path
         )
         return {"entities": [], "related_entities": [], "linked_code": []}
 
-    # marm_concept_recall's body now lives in services.stdio_graph_tools
-    # (Option 2 of server-stdio-module-split.md) -- it resolves _run_recall
-    # from that module's own globals, not server_stdio's.
     monkeypatch.setattr(stdio_graph_tools, "_run_recall", _fake_run_recall)
 
     result = asyncio.run(
@@ -797,10 +753,6 @@ def test_stdio_concept_build_uses_same_endpoint_logic(monkeypatch, tmp_path):
         captured.update(request.model_dump())
         return {"status": "success", "build_run_id": request.run_id}
 
-    # marm_concept_build's body now lives in services.stdio_graph_tools
-    # (Option 2 of server-stdio-module-split.md) -- it resolves
-    # _marm_concept_build_endpoint from that module's own globals, not
-    # server_stdio's.
     monkeypatch.setattr(
         stdio_graph_tools, "_marm_concept_build_endpoint", _fake_endpoint
     )
@@ -848,7 +800,7 @@ def test_stop_graph_supervisor_safely_swallows_errors(monkeypatch):
 
     monkeypatch.setattr(stdio.graph_supervisor, "stop", _boom)
 
-    stdio._stop_graph_supervisor_safely()  # must not raise
+    stdio._stop_graph_supervisor_safely()
 
 
 def _base_rpc_stdin():
@@ -923,8 +875,6 @@ def test_stdio_log_records_tool_call_and_ok_status(tmp_path):
                 },
             }
         )
-        # Drain call — keeps stdin open until doc loading and the tool response are
-        # both written before EOF. Single-tool-call sessions race with STDIO shutdown.
         + message(
             {
                 "jsonrpc": "2.0",
@@ -1006,8 +956,6 @@ def test_stdio_debug_mode_logs_session_name_not_content(tmp_path):
                 },
             }
         )
-        # Drain call — keeps stdin open until doc loading and the tool response are
-        # both written before EOF. Single-tool-call sessions race with STDIO shutdown.
         + message(
             {
                 "jsonrpc": "2.0",
@@ -1089,8 +1037,6 @@ def test_stdio_log_does_not_contain_stored_memory_content(tmp_path):
                 },
             }
         )
-        # Drain call — keeps stdin open until doc loading and the tool response are
-        # both written before EOF. Single-tool-call sessions race with STDIO shutdown.
         + message(
             {
                 "jsonrpc": "2.0",
@@ -1239,7 +1185,6 @@ def test_stdio_log_entry_persists(tmp_path):
         if "id" in msg:
             responses[msg["id"]] = msg
 
-    # log_entry (id=2) may arrive after drain calls; always verify via DB.
     if 2 in responses:
         log_result = json.loads(responses[2]["result"]["content"][0]["text"])
         assert log_result["status"] == "success"
@@ -1438,9 +1383,7 @@ def test_stdio_trace_wrapper_forwards_non_default_flags(module_path, monkeypatch
     import importlib
 
     module = importlib.import_module(module_path)
-    router = (
-        module.graph_router if hasattr(module, "graph_router") else module.R
-    )  # the two modules import tool_router under different names
+    router = module.graph_router if hasattr(module, "graph_router") else module.R
     received = {}
 
     def fake_do_trace(client, req):

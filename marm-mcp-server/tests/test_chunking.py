@@ -1,5 +1,3 @@
-"""Tests for embedding chunking feature (memory_chunks sidecar table)."""
-
 import sqlite3
 import uuid
 from datetime import datetime, timezone
@@ -19,9 +17,8 @@ from marm_mcp_server.core.memory import (
     _chunk_text,
     _score_chunk_aware,
 )
+from marm_mcp_server.core.memory_ops import _update_memory
 from marm_mcp_server.core.memory_utils import _split_evenly
-
-# --- _chunk_text unit tests ---
 
 
 def _mem_chunk(text: str) -> list[str]:
@@ -60,10 +57,6 @@ def test_chunk_text_covers_all_words():
 
 
 def test_chunk_text_doc_profile_uses_larger_threshold_and_target():
-    # A word count between the memory and doc thresholds must chunk under
-    # the memory profile but stay a single unchunked unit under the doc
-    # profile -- proves the two profiles are genuinely independent, not
-    # just cosmetically different constants.
     n = MEMORY_CHUNK_THRESHOLD_WORDS + 50
     words = [f"w{i}" for i in range(n)]
     text = " ".join(words)
@@ -92,8 +85,6 @@ def test_chunk_text_even_split_avoids_tiny_trailing_fragment():
 
     assert len(chunks) == 2
     sizes = [len(c.split()) for c in chunks]
-    # Overlap padding means sizes won't be exactly equal, but neither
-    # chunk should be a tiny fragment relative to the other.
     assert min(sizes) / max(sizes) > 0.5
 
 
@@ -129,9 +120,6 @@ def test_split_evenly_covers_all_indices_with_no_gaps_or_overlap():
     assert covered == list(range(97))
 
 
-# --- _score_chunk_aware unit tests ---
-
-
 def _make_unit_vec(dim: int = DEFAULT_SEMANTIC_DIM) -> np.ndarray:
     v = np.ones(dim, dtype=np.float32)
     return v / np.linalg.norm(v)
@@ -162,7 +150,6 @@ def test_score_chunk_aware_uses_parent_embedding_when_no_chunks():
 
 def test_score_chunk_aware_uses_chunk_embeddings_over_parent():
     unit_vec = _make_unit_vec()
-    # Parent embedding is zero (would score 0), chunk embedding is unit (scores 1.0)
     zero_bytes = np.zeros(DEFAULT_SEMANTIC_DIM, dtype=np.float32).tobytes()
     mem_id = str(uuid.uuid4())
     row = _make_sqlite_row(mem_id, zero_bytes)
@@ -174,7 +161,6 @@ def test_score_chunk_aware_uses_chunk_embeddings_over_parent():
 
 def test_score_chunk_aware_takes_max_over_chunks():
     query = _make_unit_vec()
-    # One chunk aligned with query (score ~1.0), one orthogonal (score ~0)
     ortho = np.zeros(DEFAULT_SEMANTIC_DIM, dtype=np.float32)
     ortho[0] = 1.0
     mem_id = str(uuid.uuid4())
@@ -182,7 +168,6 @@ def test_score_chunk_aware_takes_max_over_chunks():
     chunks_by_id = {mem_id: [query.tobytes(), ortho.tobytes()]}
     results, _ = _score_chunk_aware([row], chunks_by_id, query)
     assert len(results) == 1
-    # MAX should be close to 1.0 (from the aligned chunk), not 0.5 (average)
     assert results[0][1] > 0.9
 
 
@@ -190,7 +175,6 @@ def test_score_chunk_aware_deduplicates_to_one_result_per_memory():
     unit_vec = _make_unit_vec()
     mem_id = str(uuid.uuid4())
     row = _make_sqlite_row(mem_id, unit_vec.tobytes())
-    # Even if multiple chunks exist, only one result per memory
     chunks_by_id = {
         mem_id: [unit_vec.tobytes(), unit_vec.tobytes(), unit_vec.tobytes()]
     }
@@ -252,9 +236,6 @@ def test_score_chunk_aware_batched_path_excludes_wrong_dim_parent():
 
     assert results == []
     assert skipped == 1
-
-
-# --- DB schema tests ---
 
 
 @pytest.mark.asyncio
@@ -352,9 +333,6 @@ async def test_encoder_unavailable_long_content_no_crash_no_chunks(tmp_path):
             "SELECT COUNT(*) FROM memory_chunks WHERE memory_id = ?", (mid,)
         ).fetchone()[0]
     assert count == 0
-
-
-# --- Scoring integration tests (real embeddings if available) ---
 
 
 @pytest.mark.asyncio
@@ -458,14 +436,13 @@ async def test_merge_path_deletes_stale_chunks(tmp_path):
             )
         conn.commit()
 
-    await mem.update_memory(mid, "new merged content")
+    await _update_memory(mem, mid, "new merged content")
 
     with sqlite3.connect(db_path) as conn:
         remaining = conn.execute(
             "SELECT chunk_text FROM memory_chunks WHERE memory_id = ?", (mid,)
         ).fetchall()
 
-    # All stale chunks must be gone (encoder is disabled so no new chunks written)
     stale = [r[0] for r in remaining if r[0] == "stale chunk"]
     assert stale == []
 
@@ -501,9 +478,6 @@ async def test_write_chunks_same_content_hash_twice_does_not_duplicate_rows(tmp_
         )
         conn.commit()
 
-    # Two writes for the same memory_id with identical content and hash --
-    # mirrors a resave landing while the prior save's fire-and-forget chunk
-    # write is still in flight.
     await _write_chunks(mem, db_path, mid, chunks, content_hash)
     await _write_chunks(mem, db_path, mid, chunks, content_hash)
 
@@ -538,10 +512,6 @@ def test_init_database_collapses_preexisting_duplicate_chunks_before_indexing(
     mid = str(uuid.uuid4())
     ts = datetime.now(timezone.utc).isoformat()
     with sqlite3.connect(db_path) as conn:
-        # Simulate the pre-fix database state directly: drop the dedup
-        # index this init_database() call already created, then seed
-        # duplicate (memory_id, chunk_index) rows as the old race would
-        # have produced.
         conn.execute("DROP INDEX IF EXISTS idx_memory_chunks_dedup")
         conn.execute(
             "INSERT INTO memories (id, session_name, content, timestamp, context_type, metadata)"
@@ -559,7 +529,6 @@ def test_init_database_collapses_preexisting_duplicate_chunks_before_indexing(
         )
         conn.commit()
 
-    # Must not raise sqlite3.IntegrityError ("UNIQUE constraint failed").
     init_database(str(db_path))
 
     with sqlite3.connect(db_path) as conn:
@@ -576,6 +545,4 @@ def test_init_database_collapses_preexisting_duplicate_chunks_before_indexing(
         ).fetchall()
 
     assert "idx_memory_chunks_dedup" in indexes
-    # One row per chunk_index, and the survivor is the higher-id (most
-    # recently inserted) row for the duplicated index.
     assert rows == [(0, "current duplicate"), (1, "only copy")]

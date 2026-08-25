@@ -192,7 +192,6 @@ def test_neighborhood_enforces_200_node_limit(tmp_path):
     assert len(result["nodes"]) <= 200
     assert hub in {n["id"] for n in result["nodes"]}
     assert result["truncated"] is True
-    # Every returned edge must connect nodes that are actually in the response
     node_ids = {n["id"] for n in result["nodes"]}
     for edge in result["edges"]:
         assert edge["source"] in node_ids
@@ -202,8 +201,6 @@ def test_neighborhood_enforces_200_node_limit(tmp_path):
 def test_neighborhood_truncation_prefers_typed_edges_over_co_occurrence(tmp_path):
     db = make_db(tmp_path)
     hub = add_entity(db, "hub")
-    # co_occurs_with edges get the LOWER relationship ids on purpose: only the
-    # predicate ranking, not insertion order, can keep the typed edges alive.
     co_spokes = [add_entity(db, f"co-{i}") for i in range(150)]
     for spoke in co_spokes:
         add_edge(db, hub, spoke, "co_occurs_with")
@@ -236,7 +233,6 @@ def test_neighborhood_depth_is_bounded_traversal(tmp_path):
     assert {n["id"] for n in depth1["nodes"]} == {a, b}
     assert {n["id"] for n in depth2["nodes"]} == {a, b, c}
     assert {n["id"] for n in depth3["nodes"]} == {a, b, c, d}
-    # depth is clamped to [1, 3]
     clamped = concept_neighborhood.neighborhood(db, a, depth=99)
     assert {n["id"] for n in clamped["nodes"]} == {a, b, c, d}
 
@@ -246,7 +242,6 @@ def test_neighborhood_hidden_neighbor_count_reflects_real_degree(tmp_path):
     a = add_entity(db, "a")
     b = add_entity(db, "b")
     add_edge(db, a, b, "uses")
-    # b has 5 more neighbors that a depth-1 query from a will not include
     for i in range(5):
         other = add_entity(db, f"other-{i}")
         add_edge(db, b, other, "uses")

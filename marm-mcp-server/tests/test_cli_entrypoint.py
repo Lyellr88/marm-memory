@@ -8,7 +8,7 @@ import time
 
 try:
     import tomllib
-except ModuleNotFoundError:  # Python 3.10
+except ModuleNotFoundError:
     import tomli as tomllib
 
 import pytest
@@ -187,6 +187,61 @@ def test_maintenance_chunks_rechunk_reaches_the_same_entry_point(monkeypatch):
 
     assert exc_info.value.code == 0
     assert calls == ["rechunk"]
+
+
+def test_maintenance_compaction_dry_run_reaches_the_same_entry_point(monkeypatch):
+    cli = importlib.import_module("marm_mcp_server.cli")
+    calls = []
+    monkeypatch.setattr(
+        cli,
+        "_compaction_dry_run",
+        lambda session_name, as_json: calls.append((session_name, as_json)) or 0,
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "marm-memory",
+            "maintenance",
+            "compaction",
+            "dry-run",
+            "--session",
+            "my-session",
+            "--json",
+        ],
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main()
+
+    assert exc_info.value.code == 0
+    assert calls == [("my-session", True)]
+
+
+def test_compaction_dry_run_never_constructs_marm_memory(monkeypatch, tmp_path):
+    """Regression guard for the read-only dry-run path: MARMMemory's constructor
+    runs schema DDL (DROP/CREATE INDEX) on every call, so a dry-run scan must
+    never touch it. If this test ever fails, _compaction_dry_run has regressed
+    back to MARMMemory(DEFAULT_DB_PATH)."""
+    import asyncio
+
+    from marm_mcp_server.core.memory import MARMMemory
+
+    db_path = tmp_path / "memory.db"
+    seed_memory = MARMMemory(str(db_path))
+    seed_memory._encoder_failed = True
+    asyncio.run(seed_memory.store_memory("some content", "sess"))
+
+    cli = importlib.import_module("marm_mcp_server.cli")
+    monkeypatch.setattr(cli, "DEFAULT_DB_PATH", str(db_path))
+    monkeypatch.setenv("MARM_RUNTIME_DIR", str(tmp_path / "runtime"))
+
+    def _forbidden(*args, **kwargs):
+        raise AssertionError("dry run must not construct MARMMemory")
+
+    monkeypatch.setattr(MARMMemory, "__init__", _forbidden)
+
+    assert cli._compaction_dry_run("sess", True) == 0
 
 
 def test_import_marm_mcp_server_succeeds_with_clean_stdout(tmp_path):

@@ -1,5 +1,3 @@
-"""Persistent local API-key operations for the product CLI."""
-
 from __future__ import annotations
 
 import os

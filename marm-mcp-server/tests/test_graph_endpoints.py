@@ -1,10 +1,3 @@
-"""HTTP-surface tests for the embedded marm-graph tools.
-
-Covers the pip-packaging-unification spec's core guarantee: a broken/disabled
-graph backend degrades to a clean error response and never affects the 7 core
-memory tools, and startup never touches the graph backend until it is used.
-"""
-
 import asyncio
 import threading
 import time
@@ -154,7 +147,6 @@ def test_code_units_reports_unavailable_rather_than_the_generic_error_shape(
     assert body["state"] == "unavailable"
     assert body["reason"] == "graph_unavailable"
     assert body["code_units"] == []
-    # The adapter only raises 503 on this key, and its absence is the whole point.
     assert "status" not in body
     assert "internal/projects/code-units" not in {
         tool.name for tool in server.mcp.tools
@@ -205,11 +197,6 @@ def test_console_index_releases_single_flight_lock_when_thread_cannot_start(
     )
     assert retry.status_code == 202
 
-    # The 202 above proves the start-failure path released the lock. Draining the
-    # job then proves the worker's own finally released it too, and keeps the
-    # daemon thread from outliving this test: tmp_path is deleted at teardown, so
-    # an abandoned index fails against a missing directory and surfaces as a
-    # child-process error under whichever unrelated test happens to be running.
     job = _drain_index_job(client, retry.json()["job_id"])
     assert job["status"] in {"success", "error"}
     assert graph._project_job_lock.acquire(blocking=False)
@@ -269,8 +256,6 @@ def test_cold_graph_startup_does_not_block_concurrent_core_requests(
             graph_task = asyncio.create_task(
                 ac.post("/marm_graph_index", json={"action": "list"})
             )
-            # Wait for the fake client to actually reach the blocking call
-            # (not a fixed sleep) -- deterministic, no flakiness under load.
             assert await asyncio.to_thread(entered.wait, 5), (
                 "graph task never reached the blocking call"
             )

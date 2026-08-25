@@ -1,5 +1,3 @@
-"""Event-driven automation system for MARM MCP Server."""
-
 import asyncio
 import logging
 from typing import Callable, Dict, List

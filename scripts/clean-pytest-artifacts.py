@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Clean local pytest artifacts that can break Docker build context loading."""
 
 from __future__ import annotations
 

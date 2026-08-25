@@ -1,5 +1,3 @@
-"""Pydantic request models for MARM Console's REST API."""
-
 from __future__ import annotations
 
 from typing import Literal

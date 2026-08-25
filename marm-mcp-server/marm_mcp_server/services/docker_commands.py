@@ -1,5 +1,3 @@
-"""Safe Docker command planning and execution for the product CLI."""
-
 from __future__ import annotations
 
 import json

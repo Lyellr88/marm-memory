@@ -1,10 +1,3 @@
-"""marm-graph HTTP server.
-
-FastAPI + FastApiMCP. The MCP surface is whitelisted to exactly the 5 AI tools;
-the UI router is REST-only and never mounted into MCP. Mirrors marm-mcp-server's
-lifespan / router-registration / mount shape.
-"""
-
 import sys
 from contextlib import asynccontextmanager
 
@@ -24,9 +17,6 @@ from .middleware.auth import auth_middleware
 
 logger = structlog.get_logger(__name__)
 
-# Back-compat aliases: tests call server._check_schema / server._EXPECTED_UPSTREAM_TOOLS
-# directly. The public names now live in core/backend.py (shared with
-# marm-mcp-server's graph_supervisor).
 _check_schema = backend.check_schema
 _EXPECTED_UPSTREAM_TOOLS = backend._EXPECTED_UPSTREAM_TOOLS
 
@@ -44,12 +34,6 @@ async def lifespan(app: FastAPI):
     try:
         backend.verify_and_start(get_client())
     except Exception:
-        # verify_and_start can spawn the child (client.start()) then fail
-        # later (schema drift, list_tools failure) -- without this, that
-        # started-but-unverified child is orphaned since reset_client() below
-        # is only reached on the normal post-yield shutdown path. Standalone
-        # marm-graph still fails fast on purpose; this only adds cleanup
-        # before re-raising, it doesn't change that behavior.
         reset_client()
         raise
     yield

@@ -1,19 +1,11 @@
-"""Request models for marm-graph's tool surface.
-
-These Pydantic models define the input schemas the AI sees for the 5 super-tools
-(via FastApiMCP) and the shapes the UI-only REST endpoints accept. Responses are
-plain dicts (matching marm-mcp-server's convention).
-"""
-
 from __future__ import annotations
 
 from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
 
+
 # ── AI-facing super-tools ───────────────────────────────────────────
-
-
 class GraphIndexRequest(BaseModel):
     """marm_graph_index — index a repo, or check status / list known projects."""
 
@@ -28,11 +20,6 @@ class GraphIndexRequest(BaseModel):
         "moderate",
         description="Index depth: full | moderate | fast. moderate is a good default.",
     )
-    # auto_on/auto_off/auto_status control marm-mcp-server's auto-index poller
-    # and are only implemented there; standalone marm-graph rejects them. They
-    # live in this shared model because FastAPI validates the request body into
-    # it before the host's endpoint body runs, so a narrower literal here would
-    # make them unreachable. Never a bare "auto", which already means "infer".
     action: Literal[
         "auto", "index", "status", "list", "auto_on", "auto_off", "auto_status"
     ] = Field(
@@ -119,8 +106,6 @@ class GraphImpactRequest(BaseModel):
 
 
 # ── UI-only REST models ─────────────────────────────────────────────
-
-
 class DeleteProjectRequest(BaseModel):
     project: str = Field(..., description="Project to delete (irreversible).")
     confirm: bool = Field(

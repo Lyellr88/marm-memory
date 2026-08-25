@@ -1,8 +1,3 @@
-"""Tests for the codebase-memory-mcp subprocess client.
-
-Pure envelope-decoding tests run everywhere; transport tests use the real binary.
-"""
-
 import json
 import threading
 import time
@@ -37,9 +32,6 @@ EXPECTED_TOOLS = {
     "manage_adr",
     "ingest_traces",
 }
-
-
-# ── pure: envelope decoding (no subprocess) ─────────────────────────
 
 
 def test_unwrap_json_payload():
@@ -81,7 +73,7 @@ def test_unwrap_recovers_hint_from_truncated_error_payload():
         '"C-Users-lyell-Desktop],"count":45}'
     )
     with pytest.raises(json.JSONDecodeError):
-        json.loads(text)  # the payload really is unparseable
+        json.loads(text)
 
     result = {"content": [{"type": "text", "text": text}], "isError": True}
     with pytest.raises(CbmToolError) as ei:
@@ -136,9 +128,6 @@ def test_unwrap_falls_back_to_last_text_when_nothing_is_json():
     with pytest.raises(CbmToolError) as ei:
         CbmClient._unwrap("no_such_tool", result)
     assert "unknown tool: no_such_tool" in str(ei.value)
-
-
-# ── pure: tools/list pagination (scripted wire, no subprocess) ──────
 
 
 def _paginating_client(pages, monkeypatch):
@@ -217,13 +206,9 @@ def test_list_tools_refuses_a_repeating_cursor(monkeypatch):
         client.list_tools()
 
 
-# ── transport: real binary ──────────────────────────────────────────
-
-
 @requires_binary
 def test_handshake_captures_binary_version(client):
     assert client.server_name == "codebase-memory-mcp"
-    # The binary self-reports its own version (distinct from the pinned pip one).
     assert client.server_version and client.server_version[0].isdigit()
 
 
@@ -258,7 +243,7 @@ def test_call_tool_unknown_raises(client):
 def test_call_tool_missing_arg_raises_with_hint(client):
     with pytest.raises(CbmToolError) as ei:
         client.call_tool("index_status", {})
-    assert ei.value.hint  # binary supplies a remediation hint
+    assert ei.value.hint
 
 
 @requires_binary
@@ -285,7 +270,7 @@ def test_timeout_does_not_kill_child(binary, monkeypatch):
         with pytest.raises(CbmTimeoutError):
             c.call_tool("list_projects", {})
         assert c._proc is not None and c._proc.pid == pid_before
-        assert c._proc.poll() is None  # still alive, not killed
+        assert c._proc.poll() is None
 
         monkeypatch.setattr(c, "_send_recv", original_send_recv)
         payload = c.call_tool("list_projects", {})
@@ -302,14 +287,11 @@ def test_crash_recovery_respawns(binary):
         old_pid = c._proc.pid
         c._proc.kill()
         c._proc.wait()
-        payload = c.call_tool("list_projects", {})  # must transparently respawn
+        payload = c.call_tool("list_projects", {})
         assert c._proc.pid != old_pid
         assert isinstance(payload, dict) and "projects" in payload
     finally:
         c.close()
-
-
-# ── close() is terminal (no subprocess) ─────────────────────────────
 
 
 def _popen_recorder(monkeypatch):
@@ -560,9 +542,6 @@ def test_close_does_not_wait_for_an_inflight_call_lock():
 
     assert process.terminated is True
     assert elapsed < 1
-
-
-# ── upstream tool contract ──────────────────────────────────────────
 
 
 def test_check_schema_accepts_a_known_extra_tool_silently():

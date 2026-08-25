@@ -1,5 +1,3 @@
-"""Write orchestration paths for the MARM memory system (store, merge, replace)."""
-
 import asyncio
 import json
 import uuid
@@ -53,7 +51,7 @@ async def _update_memory(mem: "MARMMemory", memory_id: str, new_content: str) ->
     if row is None:
         return False
     existing_content, metadata_json = row
-    original_existing_content = existing_content  # unsliced, for the re-check below
+    original_existing_content = existing_content
     metadata = json.loads(metadata_json) if metadata_json else {}
     _MAX = 10000
     _MARKER = "\n[merged] "
@@ -121,15 +119,7 @@ async def _update_memory(mem: "MARMMemory", memory_id: str, new_content: str) ->
                         memory_id,
                     ),
                 )
-            # Folded into the same transaction as the content update --
-            # a chunk-delete failure must not leave stale chunks that
-            # disagree with the (already committed) merged content, and
-            # vice versa.
             conn.execute("DELETE FROM memory_chunks WHERE memory_id = ?", (memory_id,))
-            # The merge reuses this memory_id with new content, so the queue
-            # row is upserted onto the recomputed hash. Keyed on the id alone
-            # it would read as already indexed and the merged text would never
-            # reach the graph.
             enqueue_concept_index(conn, memory_id, merged_hash)
             conn.execute("COMMIT")
         except Exception:
@@ -219,11 +209,6 @@ async def _store_memory(
             if merged:
                 mem._on_memory_written(session)
                 return existing_id
-            # existing_id's row was deleted or changed concurrently between
-            # the duplicate check above and _update_memory's write-lock
-            # re-verification -- the merge never happened. Fall through and
-            # store sanitized_content as a new memory instead of silently
-            # dropping it and reporting existing_id as if it succeeded.
 
     memory_id = str(uuid.uuid4())
     timestamp = datetime.now(timezone.utc).isoformat()
@@ -270,9 +255,6 @@ async def _store_memory(
             ),
         )
 
-        # Same transaction as the INSERT above, on purpose. A memory that
-        # exists without an indexing task is a memory the graph never learns
-        # about, and nothing later would notice the gap.
         enqueue_concept_index(conn, memory_id, content_hash)
 
         conn.execute(
@@ -361,8 +343,6 @@ async def _replace_memory(
             (session, timestamp),
         )
         conn.execute("DELETE FROM memory_chunks WHERE memory_id = ?", (memory_id,))
-        # A console edit replaces the content wholesale, so the graph holds
-        # entities from text that no longer exists until this is re-indexed.
         enqueue_concept_index(conn, memory_id, content_hash)
     chunks = _chunk_text(
         sanitized_content,
@@ -444,18 +424,6 @@ async def _store_doc_mirror(
             if existing_memory_id:
                 replaced = _replace_in_place(existing_memory_id)
 
-            # Keyed on the id having missed, not on the caller having none:
-            # docs.memory_id is written second, so a failure between the two
-            # writes leaves a mirror orphaned rather than absent, and a deleted
-            # linked row can still leave an older duplicate behind. Either way an
-            # INSERT here would add a mirror to a doc that already has one, so
-            # the doc_id in metadata resolves it instead. Inside the transaction
-            # so the resolve cannot race the write.
-            #
-            # Ordered by id, not timestamp: the write below mutates timestamp, so
-            # ordering on it made each save pick whichever duplicate it had not
-            # just touched. On a doc with two mirrors and a link that keeps
-            # failing, saves alternated between them forever. id never changes.
             if not replaced and metadata.get("doc_id") is not None:
                 orphan = conn.execute(
                     """
@@ -516,8 +484,6 @@ async def _store_doc_mirror(
                 (session, timestamp),
             )
             conn.execute("DELETE FROM memory_chunks WHERE memory_id = ?", (memory_id,))
-            # A promoted doc's mirror row is an ordinary memory to the graph,
-            # and a resave changes its content in place.
             enqueue_concept_index(conn, memory_id, content_hash)
             conn.execute("COMMIT")
         except Exception:

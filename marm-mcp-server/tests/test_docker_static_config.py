@@ -1,16 +1,3 @@
-"""Static Docker/Compose config validation -- no Docker daemon required.
-
-Unlike test_docker_transports.py's container-level tests (which skip
-whenever a daemon or pre-built image isn't available -- true in this
-sandbox, and structurally true in CI's validate-and-test job too, since it
-runs before publish-docker-server ever builds the image), these tests read
-the actual Dockerfile/docker-compose.yml/.dockerignore/Dockerfile.glama
-content directly and always run. They catch the class of bug that doesn't
-need a running container to exist: drifted labels, mismatched healthchecks
-between Dockerfile and docker-compose.yml, a port that no longer matches
-settings.py's default, etc.
-"""
-
 import re
 from pathlib import Path
 
@@ -32,9 +19,6 @@ def _pyproject_version() -> str:
 
 
 def _dockerfile_healthcheck_cmd() -> str:
-    # [^\n]+ (not DOTALL-affected) stops the capture at the CMD line's own
-    # newline -- a bare .+ with DOTALL applied to the whole pattern would
-    # swallow everything to the end of the file, including LABELs/ENV/etc.
     match = re.search(r"HEALTHCHECK.*?\n\s*CMD\s+([^\n]+)", DOCKERFILE, re.DOTALL)
     assert match, "Dockerfile has no HEALTHCHECK CMD"
     return match.group(1).strip()
@@ -66,7 +50,6 @@ def test_dockerfile_runs_as_non_root_user():
     assert re.search(r"^USER\s+marm\s*$", DOCKERFILE, re.MULTILINE), (
         "final image must drop to a non-root user before ENTRYPOINT"
     )
-    # USER must appear before ENTRYPOINT, not just anywhere in the file.
     user_pos = DOCKERFILE.index("USER marm")
     entrypoint_pos = DOCKERFILE.index("ENTRYPOINT")
     assert user_pos < entrypoint_pos
@@ -186,8 +169,6 @@ def test_dockerfile_healthcheck_uses_localhost_not_0_0_0_0():
     assert "0.0.0.0" not in healthcheck_cmd
     assert "localhost" in healthcheck_cmd or "127.0.0.1" in healthcheck_cmd
 
-
-# ── graph engine pin ────────────────────────────────────────────────
 
 _ENGINE_PIN = re.compile(r"^codebase-memory-mcp==([^\s]+)", re.MULTILINE)
 

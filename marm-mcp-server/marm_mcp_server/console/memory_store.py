@@ -1,5 +1,3 @@
-"""Read-only SQLite queries used by MARM Console's initial overview."""
-
 from __future__ import annotations
 
 import json

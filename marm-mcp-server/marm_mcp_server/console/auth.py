@@ -1,5 +1,3 @@
-"""Local-only bootstrap and browser-session support for MARM Console."""
-
 from __future__ import annotations
 
 import json

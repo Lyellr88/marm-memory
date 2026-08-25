@@ -1,5 +1,3 @@
-"""Deep coverage for `marm-memory init` skill installation."""
-
 from __future__ import annotations
 
 import argparse
@@ -87,7 +85,6 @@ def test_global_flags_install_into_home_and_skip_project(tmp_path, monkeypatch):
     assert code == 0
     assert _read(home, ".claude") == skill_install._bundled_skill_text()
     assert _read(home, ".codex") == skill_install._bundled_skill_text()
-    # Global mode must not touch the project, even when it holds an agent dir.
     assert not (project / ".gemini" / SKILL_REL).exists()
     assert not (home / ".gemini").exists()
 
@@ -108,7 +105,7 @@ def test_fail_open_when_a_target_is_unwritable(tmp_path, monkeypatch):
 
     code = skill_install.install_skill(_args())
 
-    assert code == 0  # one success is enough to exit clean
+    assert code == 0
     assert _read(tmp_path, ".claude") == skill_install._bundled_skill_text()
 
 

@@ -1,5 +1,3 @@
-"""Durable project binding and refresh-queue coverage."""
-
 import sys
 from datetime import datetime, timedelta, timezone
 

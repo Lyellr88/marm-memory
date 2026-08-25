@@ -1,5 +1,3 @@
-"""Logging filters for MARM MCP Server."""
-
 import logging
 
 

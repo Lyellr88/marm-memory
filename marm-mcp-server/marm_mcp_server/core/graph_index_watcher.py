@@ -1,12 +1,3 @@
-"""Cross-platform filesystem watcher adapter for the graph auto-index worker.
-
-Pure delivery: reports "something changed under this root" to the owning event
-loop. It has no opinion about git, source state, durable baselines, or whether
-a change matters -- that judgment belongs to GraphIndexWorker. This module must
-never import graph_supervisor, tool_router, runtime_flags, or a database class;
-doing so would make it a second indexing worker instead of a delivery mechanism.
-"""
-
 import asyncio
 from typing import Callable, Optional
 
@@ -27,11 +18,6 @@ logger = structlog.get_logger(__name__)
 
 Callback = Callable[[str], None]
 
-# Linux's inotify backend also emits "opened" and "closed_no_write" for a
-# plain read, with no content change. Forwarding those would make the graph
-# engine's own read of source files while indexing re-trigger itself: a
-# non-git root has no signature check, so any watcher wake reindexes it
-# unconditionally (see _evaluate in graph_index_worker.py).
 _CHANGE_EVENT_TYPES = frozenset(
     {
         EVENT_TYPE_CREATED,
@@ -54,15 +40,11 @@ class _RootHandler(FileSystemEventHandler):
         self._callback = callback
 
     def on_any_event(self, event: FileSystemEvent) -> None:
-        # Runs on watchdog's own thread. call_soon_threadsafe is the only safe
-        # way to reach the owning loop from here; touching worker state
-        # directly from this thread would race the coordinator's own reads.
         if event.event_type not in _CHANGE_EVENT_TYPES:
             return
         try:
             self._loop.call_soon_threadsafe(self._callback, self._root)
         except RuntimeError:
-            # The loop is already closed (a shutdown race). Nothing to notify.
             pass
 
 

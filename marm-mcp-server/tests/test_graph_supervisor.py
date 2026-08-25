@@ -1,17 +1,3 @@
-"""Unit tests for graph_supervisor's lazy-start / degrade-to-error control flow.
-
-Uses a lightweight CbmClient double (same start()/list_tools()/close() surface)
-instead of the real subprocess: this is testing the supervisor's own exception
-handling and lazy-start bookkeeping, not codebase-memory-mcp's IPC. Real-binary
-transport behavior is already covered by marm-graph's own requires_binary suite.
-
-Fetches the graph_supervisor module fresh inside each test (rather than a
-module-level import) because other test files' load_isolated_server() helper
-deletes and reimports marm_mcp_server.* between tests — a stale module-level
-binding here would patch a different module object than the one a freshly
-constructed GraphSupervisor actually reads from.
-"""
-
 import importlib
 import threading
 
@@ -115,7 +101,7 @@ def test_schema_drift_degrades_to_unavailable_not_crash(monkeypatch):
     supervisor = gs.GraphSupervisor()
     assert supervisor.is_available() is False
     assert supervisor.get_client() is None
-    assert fake.started is True  # confirms this is the started-then-failed path
+    assert fake.started is True
     assert fake.closed is True
 
 
@@ -141,12 +127,12 @@ def test_start_is_lazy_and_idempotent(monkeypatch):
     monkeypatch.setattr(gs, "CbmClient", _make)
 
     supervisor = gs.GraphSupervisor()
-    assert calls == []  # nothing spawned just from constructing the supervisor
+    assert calls == []
 
     supervisor.is_available()
     supervisor.is_available()
     supervisor.get_client()
-    assert len(calls) == 1  # only one CbmClient built despite 3 calls
+    assert len(calls) == 1
 
 
 def test_concurrent_calls_during_inflight_startup_all_wait_for_the_result(
@@ -184,12 +170,9 @@ def test_concurrent_calls_during_inflight_startup_all_wait_for_the_result(
     first.start()
     assert entered.wait(timeout=5), "first caller never reached the blocking call"
 
-    # A second caller starts while the first is still blocked inside start().
     second = threading.Thread(target=_caller)
     second.start()
 
-    # It must still be blocked (on the lock), not already returned with a
-    # premature False -- this is the actual regression check.
     second.join(timeout=0.2)
     assert second.is_alive(), "second caller returned before startup resolved"
 
@@ -274,7 +257,7 @@ def test_stop_resets_state_even_if_close_raises(monkeypatch):
     with pytest.raises(RuntimeError, match="child already dead"):
         supervisor.stop()
 
-    assert fake.closed is True  # close() was attempted
+    assert fake.closed is True
     assert supervisor._client is None
     assert supervisor._available is False
     assert not supervisor._ready.is_set()
@@ -315,7 +298,6 @@ def test_stop_during_inflight_startup_waits_and_leaves_consistent_state(
     stopper = threading.Thread(target=supervisor.stop)
     stopper.start()
 
-    # stop() must block on the same lock as _ensure_started(), not interleave
     stopper.join(timeout=0.2)
     assert stopper.is_alive(), "stop() proceeded before startup resolved"
 
@@ -323,8 +305,8 @@ def test_stop_during_inflight_startup_waits_and_leaves_consistent_state(
     starter.join(timeout=5)
     stopper.join(timeout=5)
 
-    assert fake.started is True  # the in-flight startup actually completed
-    assert fake.closed is True  # ...then stop() tore it down
+    assert fake.started is True
+    assert fake.closed is True
     assert supervisor._client is None
     assert supervisor._available is False
 
@@ -334,7 +316,7 @@ def test_stop_on_never_started_supervisor_is_a_no_op(monkeypatch):
     gs = _fresh_gs()
     monkeypatch.setattr(gs.mcp_settings, "GRAPH_ENABLED", False)
     supervisor = gs.GraphSupervisor()
-    supervisor.stop()  # must not raise
+    supervisor.stop()
     assert supervisor.is_available() is False
 
 

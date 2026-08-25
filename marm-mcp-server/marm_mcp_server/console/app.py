@@ -1,10 +1,3 @@
-"""Standalone localhost API host for MARM Console.
-
-The Console is intentionally separate from marm-mcp-server. It reads the
-local MARM stores through its own bounded REST surface and never extends the
-public MCP tool list.
-"""
-
 from __future__ import annotations
 
 import logging

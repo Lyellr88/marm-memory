@@ -1,5 +1,3 @@
-"""Tests for the 5-tool intent router."""
-
 import subprocess
 
 import pytest
@@ -14,8 +12,6 @@ from marm_graph.core.models import (
     GraphTraceRequest,
 )
 
-# ── pure logic ──────────────────────────────────────────────────────
-
 
 def test_qn_regex_matches_hyphenated_project_prefix():
     qn = "C-Users-lyell-Desktop-x.marm_graph.core.cbm_client.CbmClient.__init__"
@@ -25,11 +21,10 @@ def test_qn_regex_matches_hyphenated_project_prefix():
 def test_qn_regex_rejects_bare_symbol_and_natural_language():
     assert not R._QN_RE.match("CbmClient")
     assert not R._QN_RE.match("update user settings")
-    assert not R._QN_RE.match("CbmClient.call_tool")  # only 1 dot -> discovery
+    assert not R._QN_RE.match("CbmClient.call_tool")
 
 
 def test_bound_trims_oversized_result_list():
-    # ~1.5MB of results, comfortably over the 1MB default cap.
     big = {"results": [{"x": "y" * 300} for _ in range(5000)]}
     bounded = R._bound(dict(big))
     assert bounded.get("_marm_graph_truncated") is True
@@ -42,8 +37,6 @@ def test_bound_passes_small_response_untouched():
 
 
 def test_bound_clips_oversized_non_list_response():
-    # A single huge string with no trimmable list key (e.g. a giant snippet).
-    # Stage-1 list trimming can't help here, so the hard ceiling must still hold.
     out = R._bound({"qualified_name": "x", "code": "z" * 2_000_000})
     assert out.get("_marm_graph_truncated") is True
     assert R._size(out) <= R.MAX_RESPONSE_BYTES
@@ -51,8 +44,6 @@ def test_bound_clips_oversized_non_list_response():
 
 
 def test_bound_clips_oversized_non_trimmable_list():
-    # A huge list under a key that is NOT in _TRIMMABLE_LIST_KEYS: stage 1 skips
-    # it, stage 2 clips the strings inside it. Guarantee must still hold.
     out = R._bound({"node_labels": [{"label": "L" * 2000} for _ in range(1000)]})
     assert out.get("_marm_graph_truncated") is True
     assert R._size(out) <= R.MAX_RESPONSE_BYTES
@@ -66,19 +57,6 @@ def test_safe_converts_backend_error(monkeypatch):
     out = boom(None, None)
     assert out["status"] == "error" and "unavailable" in out["message"]
 
-
-# ── engine 0.10.5 columnar conversion ───────────────────────────────
-#
-# The payloads below are representative samples taken from engine 0.10.5, not a
-# complete upstream contract: column names and nesting are exactly as captured,
-# while row counts are reduced and the architecture fixture carries 5 of its 13
-# aspects. Do not read them as the full response shape.
-#
-# They are replayed rather than re-fetched because these tests assert on the
-# arguments MARM sends, which the real binary cannot report, and because the
-# failure being guarded against is silent: a missing format:"json" returns prose
-# in a dict and raises nothing. The same paths are still exercised end to end
-# against the real binary further down.
 
 SEARCH_GRAPH_0105 = {
     "total": 1,
@@ -109,9 +87,6 @@ SEARCH_CODE_0105 = {
     "total_results": 1,
 }
 
-# Two callers sharing a name, differing only by group prefix. This is the real
-# notebook_dispatch case that produced two withdrawn recall figures when keyed
-# on name alone.
 TRACE_0105 = {
     "function": "notebook_dispatch",
     "direction": "inbound",
@@ -244,7 +219,6 @@ def test_search_code_rows_keep_the_0_9_key_names():
     out = R.do_lookup(client, CodeLookupRequest(query="x", kind="text"))
 
     row = out["results"][0]
-    # search_code called the path `file`, where search_graph called it `file_path`.
     assert row["file"] == "pkg/mod.py"
     assert row["qualified_name"] == "pkg.mod.call_tool"
     assert row["match_lines"] == [296]
@@ -288,12 +262,7 @@ def test_architecture_asks_for_every_aspect_and_flattens_each():
     out = R.do_architecture(client, GraphArchitectureRequest())
 
     assert client.args_for("get_architecture")["aspects"] == ["all"]
-    # {label, count} rows are the deliberate target, matching engine 0.9.0 and the
-    # counts agents rely on. The Console wants bare type-name strings instead, and
-    # that belongs in the Console endpoint: normalizing here would strip the counts
-    # from every agent to satisfy one UI table. See console-architecture-view spec.
     assert out["node_labels"] == [{"label": "Function", "count": 53}]
-    # Column names drifted inside the aspects too, not just at the top level.
     assert out["languages"] == [{"language": "Python", "file_count": 17}]
     assert out["packages"][0]["node_count"] == 3
     assert out["boundaries"][0]["call_count"] == 12
@@ -334,9 +303,6 @@ def test_bound_trims_converted_caller_lists():
     assert out.get("_marm_graph_truncated") is True
     assert len(out["callers"]) < 5000
     assert R._size(out) <= R.MAX_RESPONSE_BYTES
-
-
-# ── integration ─────────────────────────────────────────────────────
 
 
 def test_resolve_project_autopicks_single():
@@ -398,7 +364,6 @@ def test_do_lookup_snippet_auto_routes_on_qualified_name(client, project):
     assert qn, discovery
 
     out = R.do_lookup(client, CodeLookupRequest(query=qn, project=project))
-    # get_code_snippet returns node metadata w/ file location, not a results list
     assert "qualified_name" in out or "file_path" in out
 
 
@@ -422,10 +387,6 @@ def test_do_trace_returns_structured_result(client, project):
     assert out.get("function") == "call_tool"
     assert out.get("direction") == "inbound"
     assert isinstance(out.get("callers"), list)
-    # Engine 0.9.0 answered this with an empty list because it could not resolve
-    # imports when the package root sat below the repository root. That is the
-    # defect 0.10.5 fixes, so an empty answer here is now a regression rather
-    # than an acceptable outcome.
     assert out["callers"], "no callers resolved; check the engine version"
     first = out["callers"][0]
     assert first["qualified_name"].endswith("." + first["name"])
@@ -503,8 +464,6 @@ def test_do_architecture_folds_in_schema(client, project):
     out = R.do_architecture(client, GraphArchitectureRequest(project=project))
     assert isinstance(out.get("node_labels"), list)
     assert "schema" in out
-    # 0.10.5 answers with a summary unless every aspect is requested, and these
-    # six are the ones it drops. They are part of 0.9.0's response contract.
     for aspect in (
         "routes",
         "hotspots",
@@ -519,8 +478,6 @@ def test_do_architecture_folds_in_schema(client, project):
 @requires_binary
 def test_do_impact_returns_dict(client, project):
     out = R.do_impact(client, GraphImpactRequest(project=project))
-    # isinstance(dict) alone also passes for an error dict ({"status": "error", ...})
-    # since that's a dict too — assert it's not an error response, distinctly.
     assert out.get("status") != "error"
     assert isinstance(out, dict)
 

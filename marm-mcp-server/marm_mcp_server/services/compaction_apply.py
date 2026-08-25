@@ -1,5 +1,3 @@
-"""Apply staged compaction summaries inside an atomic DB transaction."""
-
 import asyncio
 import json
 import uuid

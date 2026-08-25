@@ -1,5 +1,3 @@
-"""High-level local workflows used by the marm-memory product CLI."""
-
 from __future__ import annotations
 
 import argparse

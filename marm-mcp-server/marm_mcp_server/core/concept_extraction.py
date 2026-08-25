@@ -1,5 +1,3 @@
-"""spaCy-based entity/relationship extraction for the concept graph."""
-
 import threading
 from typing import TYPE_CHECKING, NamedTuple, Optional
 
@@ -9,12 +7,8 @@ if TYPE_CHECKING:
     from spacy.language import Language
     from spacy.tokens import Span, Token
 
-# spaCy's raw NER labels we keep as-is (lowercased) rather than remapping —
-# these are already meaningful entity types for MARM's content.
 _KEPT_NER_LABELS = {"PERSON", "ORG", "GPE", "PRODUCT", "EVENT", "WORK_OF_ART", "LAW"}
 
-# Keyword triggers for the taxonomy rule layer, checked against the sentence
-# a noun chunk belongs to. Order matters — first match wins.
 _TYPE_TRIGGERS = [
     ("error", ("error", "bug", "exception", "failure", "crash", "traceback")),
     ("decision", ("decided", "decision", "chose", "chose to", "opted", "agreed to")),
@@ -22,9 +16,6 @@ _TYPE_TRIGGERS = [
     ("tool", ("library", "package", "framework", "tool", "dependency", "sdk")),
 ]
 
-# Keyword triggers for the pairwise predicate classifier -- matched against
-# the lemma of the lowest-common-ancestor verb between two entity spans in
-# the same sentence. Same ordered, first-match-wins shape as _TYPE_TRIGGERS.
 _PREDICATE_TRIGGERS = [
     ("fixes", ("fix", "resolve", "patch")),
     ("implements", ("implement", "build", "create", "add")),
@@ -37,11 +28,6 @@ _PREDICATE_TRIGGERS = [
 
 _MIN_CHUNK_TOKENS = 1
 _STOPWORD_ONLY_SKIP = True
-# Co-occurrence pairing is O(n^2) in entities-per-memory; a memory with many
-# distinct entities (long/dense content) would otherwise generate hundreds of
-# relationship rows from one extraction pass. Cap the pairing set, not
-# extraction itself — all entities are still stored, only relationship-pair
-# generation is bounded.
 _MAX_ENTITIES_FOR_PAIRING = 25
 
 
@@ -181,8 +167,8 @@ def extract_entities(content: str) -> ExtractionResult:
         return ExtractionResult(entities=[], relationship_pairs=[])
 
     doc = nlp(content)
-    seen_names: dict[str, str] = {}  # name -> type, first classification wins
-    seen_spans: dict[str, "Span"] = {}  # name -> span, first occurrence wins
+    seen_names: dict[str, str] = {}
+    seen_spans: dict[str, "Span"] = {}
 
     for ent in doc.ents:
         name = ent.text.strip()

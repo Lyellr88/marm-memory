@@ -1,5 +1,3 @@
-"""Regression tests for the release-time spaCy model bundler."""
-
 import importlib.util
 import zipfile
 from pathlib import Path

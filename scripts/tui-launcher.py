@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""TUI Script Launcher - Navigate and run MARM development scripts."""
 
 import os
 import shlex
@@ -8,7 +7,6 @@ import sys
 from pathlib import Path
 from typing import List, Tuple
 
-# Try importing curses, fall back to simple menu on Windows if unavailable
 try:
     import curses
 
@@ -16,7 +14,6 @@ try:
 except (ImportError, ModuleNotFoundError):
     HAS_CURSES = False
 
-# Script categories and their files
 SCRIPT_CATEGORIES = {
     "Benchmarking - Accuracy": [
         (
@@ -80,9 +77,7 @@ def get_flattened_menu() -> List[Tuple[str, str, str]]:
     """Flatten categories into (category, name, path) tuples with category headers."""
     items = []
     for category, scripts in SCRIPT_CATEGORIES.items():
-        # Add category header as a special item (empty path marks it as header)
         items.append((category, f"[{category}]", ""))
-        # Add scripts under this category
         for name, path in scripts:
             items.append((category, name, path))
     return items
@@ -94,10 +89,8 @@ def get_collapsed_menu(
     """Filter menu items based on collapsed categories."""
     filtered = []
     for category, name, path in all_items:
-        # Always show category headers
         if path == "":
             filtered.append((category, name, path))
-        # Show items only if category is not collapsed
         elif category not in collapsed_categories:
             filtered.append((category, name, path))
     return filtered
@@ -114,30 +107,24 @@ def draw_menu(
     stdscr.clear()
     height, width = stdscr.getmaxyx()
 
-    # Header
     header = "MARM Script Launcher"
     stdscr.attron(curses.A_BOLD)
     stdscr.addstr(0, (width - len(header)) // 2, header)
     stdscr.attroff(curses.A_BOLD)
 
-    # Search bar
     search_line = 2
     stdscr.addstr(search_line, 2, "Search: ")
     stdscr.addstr(search_line, 10, search_query)
     stdscr.addstr(search_line, 10 + len(search_query), "_" if search_query else "")
 
-    # Controls
     controls = "↑↓: Navigate | Space: Collapse | Enter: Launch | /: Search | q: Quit"
     stdscr.addstr(height - 1, 2, controls[: width - 4], curses.A_DIM)
 
-    # Calculate visible window
     menu_start = 4
     menu_height = height - menu_start - 2
 
-    # Scroll window
     scroll_offset = max(0, current_idx - menu_height // 2)
 
-    # Draw menu items
     y_pos = menu_start
 
     for idx, (category, name, path) in enumerate(filtered_items):
@@ -147,18 +134,14 @@ def draw_menu(
         if idx < scroll_offset:
             continue
 
-        # Check if this is a category header (empty path)
         is_category_header = path == ""
 
-        # Highlight current item (applies to both headers and scripts)
         if idx == current_idx:
             stdscr.attron(curses.color_pair(1))
 
         if is_category_header:
-            # Category header with collapse indicator
             collapsed = category in collapsed_categories
             indicator = "▶" if collapsed else "▼"
-            # Bold for category, but highlight overrides color if selected
             if idx != current_idx:
                 stdscr.attron(curses.color_pair(3) | curses.A_BOLD)
             else:
@@ -170,7 +153,6 @@ def draw_menu(
             else:
                 stdscr.attroff(curses.A_BOLD)
         else:
-            # Regular script item (indented)
             prefix = "  "
             display_text = f"{prefix}{name}"
             if len(display_text) > width - 4:
@@ -277,17 +259,14 @@ def launch_script_in_terminal(script_path: str) -> bool:
 
 def main(stdscr):
     """Main TUI loop with collapsible categories."""
-    # Initialize colors
-    curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_CYAN)  # Selected
-    curses.init_pair(2, curses.COLOR_GREEN, curses.COLOR_BLACK)  # Success
-    curses.init_pair(3, curses.COLOR_YELLOW, curses.COLOR_BLACK)  # Category
+    curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_CYAN)
+    curses.init_pair(2, curses.COLOR_GREEN, curses.COLOR_BLACK)
+    curses.init_pair(3, curses.COLOR_YELLOW, curses.COLOR_BLACK)
 
-    # Hide cursor
     curses.curs_set(0)
 
-    # Get all menu items
     all_items = get_flattened_menu()
-    collapsed_categories = set()  # Track collapsed categories
+    collapsed_categories = set()
     filtered_items = get_collapsed_menu(all_items, collapsed_categories)
     current_idx = 0
     search_query = ""
@@ -304,14 +283,13 @@ def main(stdscr):
 
         key = stdscr.getch()
 
-        # Search mode
         if key == ord("/"):
             search_mode = True
             search_query = ""
             continue
 
         if search_mode:
-            if key == 27:  # ESC
+            if key == 27:
                 search_mode = False
                 search_query = ""
                 filtered_items = get_collapsed_menu(all_items, collapsed_categories)
@@ -328,9 +306,9 @@ def main(stdscr):
                 else:
                     filtered_items = get_collapsed_menu(all_items, collapsed_categories)
                 current_idx = 0
-            elif key == 10:  # Enter - exit search mode
+            elif key == 10:
                 search_mode = False
-            elif 32 <= key <= 126:  # Printable characters
+            elif 32 <= key <= 126:
                 search_query += chr(key)
                 filtered_items = [
                     item
@@ -341,23 +319,19 @@ def main(stdscr):
                 current_idx = 0
             continue
 
-        # Navigation
         if key == curses.KEY_UP:
             current_idx = max(0, current_idx - 1)
         elif key == curses.KEY_DOWN:
             current_idx = min(len(filtered_items) - 1, current_idx + 1)
-        elif key == ord(" "):  # Space - collapse/expand category
+        elif key == ord(" "):
             if filtered_items:
                 category, _name, path = filtered_items[current_idx]
-                # Only toggle if we're on a category header
                 if path == "":
                     if category in collapsed_categories:
                         collapsed_categories.remove(category)
                     else:
                         collapsed_categories.add(category)
-                    # Rebuild filtered items
                     filtered_items = get_collapsed_menu(all_items, collapsed_categories)
-                    # Apply search filter if active
                     if search_query:
                         filtered_items = [
                             item
@@ -365,19 +339,17 @@ def main(stdscr):
                             if search_query.lower() in item[1].lower()
                             or search_query.lower() in item[2].lower()
                         ]
-        elif key == ord("q") or key == 27:  # q or ESC to quit
+        elif key == ord("q") or key == 27:
             if search_query:
                 search_query = ""
                 filtered_items = get_collapsed_menu(all_items, collapsed_categories)
                 current_idx = 0
             else:
                 break
-        elif key == 10:  # Enter - launch script
+        elif key == 10:
             if filtered_items:
                 _category, _name, path = filtered_items[current_idx]
-                # Only launch if it's not a category header
                 if path != "":
-                    # Launch terminal and continue (no blocking)
                     launch_script_in_terminal(path)
 
 
@@ -386,7 +358,6 @@ def simple_menu():
     all_items = get_flattened_menu()
 
     while True:
-        # Clear screen
         os.system("cls" if sys.platform == "win32" else "clear")
 
         print("=" * 70)
@@ -394,15 +365,14 @@ def simple_menu():
         print("=" * 70)
         print()
 
-        # Display items with category headers
         item_number = 0
-        numbered_scripts = []  # Only scripts, not headers
+        numbered_scripts = []
 
         for category, name, path in all_items:
-            if path == "":  # Category header
+            if path == "":
                 print(f"\n[{category}]")
                 print("-" * 70)
-            else:  # Script item
+            else:
                 item_number += 1
                 print(f"  {item_number:2d}. {name}")
                 numbered_scripts.append((item_number, category, name, path))
@@ -425,7 +395,7 @@ def simple_menu():
                         item
                         for item in all_items
                         if item[2] != ""
-                        and (  # Skip category headers
+                        and (
                             search_query in item[1].lower()
                             or search_query in item[2].lower()
                         )
@@ -436,7 +406,6 @@ def simple_menu():
                         input("Press Enter to continue...")
                         continue
 
-                    # Show filtered results
                     os.system("cls" if sys.platform == "win32" else "clear")
                     print(f"\nSearch results for: {search_query}\n")
 
@@ -451,17 +420,14 @@ def simple_menu():
                         sub_idx = int(sub_choice)
                         if 1 <= sub_idx <= len(filtered):
                             _, name, path = filtered[sub_idx - 1]
-                            # Launch terminal and continue (no blocking)
                             launch_script_in_terminal(path)
 
                 continue
 
             if choice.isdigit():
                 num = int(choice)
-                # Find the script by number (skip headers)
                 for item_num, _category, _name, path in numbered_scripts:
                     if item_num == num:
-                        # Launch terminal and continue (no blocking)
                         launch_script_in_terminal(path)
                         break
                 else:

@@ -1,5 +1,3 @@
-"""IP-based rate limiting for MARM MCP Server (no authentication required)."""
-
 import threading
 import time
 from collections import defaultdict, deque
@@ -17,7 +15,7 @@ class IPRateLimiter:
 
     def __init__(self) -> None:
         self.request_buckets: Dict[str, deque] = defaultdict(lambda: deque())
-        self.blocked_ips: Dict[str, float] = {}  # IP -> unblock_timestamp
+        self.blocked_ips: Dict[str, float] = {}
 
         self.cleanup_lock = threading.Lock()
         self.last_cleanup = time.time()
@@ -101,7 +99,7 @@ class IPRateLimiter:
             for ip in expired_blocks:
                 del self.blocked_ips[ip]
 
-            cutoff_time = current_time - 3600  # 1 hour
+            cutoff_time = current_time - 3600
             ips_to_remove = []
 
             for ip, bucket in self.request_buckets.items():

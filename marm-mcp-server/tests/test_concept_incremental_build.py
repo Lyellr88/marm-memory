@@ -1,12 +1,3 @@
-"""Tests for the targeted per-memory build path the indexing worker calls.
-
-build_for_memory_ids is what makes automation possible, and the whole point
-of it is the outcome it reports. A build that swallows a failure and returns
-success would make the worker delete a task it promised to retry, silently
-and permanently, so these tests care more about the outcome map than about
-how many entities landed.
-"""
-
 import asyncio
 import importlib
 import sys
@@ -216,9 +207,6 @@ def test_the_finished_signal_lands_on_every_exit_path(concepts_env, monkeypatch)
     )
 
     def run(**patch):
-        # _get_concept_db is read by _run_build off concept_build_engine's own
-        # module namespace (that's where _run_build lives); every other key
-        # here is read directly off concepts.py.
         for name, value in patch.items():
             target = concept_build_engine if name == "_get_concept_db" else concepts
             monkeypatch.setattr(target, name, value)
@@ -229,18 +217,14 @@ def test_the_finished_signal_lands_on_every_exit_path(concepts_env, monkeypatch)
             pass
         return finished.is_set()
 
-    # Normal completion.
     assert run() is True
 
-    # Empty batch, which returns before any build happens.
     finished = threading.Event()
     asyncio.run(concepts.build_for_memory_ids([], finished=finished))
     assert finished.is_set() is True
 
-    # Extraction runtime missing: refused before the lock is taken.
     assert run(CONCEPTS_AVAILABLE=False) is True
 
-    # Setup failure inside the build itself, past the refusals.
     monkeypatch.setattr(concepts, "CONCEPTS_AVAILABLE", True)
 
     def explode():
@@ -324,9 +308,6 @@ def test_a_memory_written_during_a_build_keeps_its_queue_row(concepts_env, monke
 
     real_run_build = concepts._run_build
 
-    # Forwards whatever it is handed. This stub previously mirrored _run_build's
-    # positional parameters and broke when it gained `progress_callback`, which
-    # tells you nothing about the queue behavior under test.
     def build_then_write(pages, *args, **kwargs):
         result = real_run_build(pages, *args, **kwargs)
         _seed(memory_module, [("m2", "written mid build")])

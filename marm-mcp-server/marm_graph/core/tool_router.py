@@ -1,17 +1,3 @@
-"""Intent routing for the 5 AI super-tools.
-
-Each `do_*` function maps one marm-graph tool onto one or more upstream
-codebase-memory-mcp tools, resolving the project name and bounding response size.
-Upstream tool/transport failures are converted to `{"status": "error", ...}`
-dicts so tools return clean JSON rather than raising through the MCP layer.
-
-Grounded in observed payloads (see protocol-proof.md §5 and scratchpad probes):
-  - index_repository returns the auto-derived project name
-  - list_projects entries carry .name / .root_path / .nodes / .edges
-  - search_graph(query=) is BM25; search_graph(name_pattern=) is regex
-  - search_code(pattern=) is grep + graph enrichment
-"""
-
 from __future__ import annotations
 
 import functools
@@ -34,9 +20,6 @@ from .models import (
 
 logger = structlog.get_logger(__name__)
 
-# A dotted identifier path with >=3 segments (>=2 dots) and no spaces reads as a
-# qualified_name. Segments allow '-' because the auto-derived project prefix is
-# hyphenated (e.g. C-Users-...-marm-graph.marm_graph.core.Cls.method).
 _QN_RE = re.compile(r"^[\w-]+(?:\.[\w-]+){2,}$")
 _REGEX_META = set(".*+?[](){}^$\\|")
 _TRIMMABLE_LIST_KEYS = (
@@ -77,16 +60,6 @@ def safe(fn: Callable[..., dict]) -> Callable[..., dict]:
 
 _CLIP_MARK = " …[marm-graph clipped]"
 
-
-# Engine 0.10.5 returns result sets as columns plus rows instead of a list of
-# dicts. Both converters below are tolerant on purpose: a list passes through
-# untouched so an engine that reverts to list output keeps working, and a missing
-# cols/rows/groups key yields an empty list rather than raising.
-
-# 0.10.5 also shortened the column names, so a plain zip emits `qn`/`in`/`matches`
-# where every downstream reader keys on the 0.9.0 names. The renames are per tool
-# because the same concept has different names between them: search_graph called
-# the path `file_path`, search_code called it `file`.
 _SEARCH_GRAPH_RENAMES = {"qn": "qualified_name", "file": "file_path"}
 _SEARCH_CODE_RENAMES = {
     "qn": "qualified_name",
@@ -101,13 +74,8 @@ _ARCHITECTURE_RENAMES = {
     "hotspots": {"qn": "qualified_name"},
     "boundaries": {"calls": "call_count"},
 }
-# Aspects whose 0.9.0 rows carried a short `name` beside the qualified name.
 _ARCHITECTURE_NAMED = {"entry_points", "hotspots"}
 
-# 0.10.5 makes get_architecture a summary by default, dropping routes, hotspots,
-# boundaries, layers, clusters and file_tree. Asking for every aspect restores
-# 0.9.0's key set. 'cycles' is deliberately absent: upstream documents it as
-# opt-in only because it walks the whole call graph.
 _ARCHITECTURE_ASPECTS = ["all"]
 
 
@@ -218,9 +186,6 @@ def _converted_code_search(res: Any) -> Any:
     """Restore `results` on a search_code reply, including its nested raw_matches."""
     if not isinstance(res, dict):
         return res
-    # Strip cols/rows only when they are actually being replaced. Dropping them
-    # first would discard a reply carrying one without the other, which converts
-    # to nothing and would leave neither the original keys nor `results`.
     if _is_columnar(res):
         out = {k: v for k, v in res.items() if k not in ("cols", "rows")}
         out["results"] = _rows_to_dicts(res, _SEARCH_CODE_RENAMES, name_key="node")
@@ -281,7 +246,6 @@ def _bound(data: Any) -> Any:
     if _size(data) <= MAX_RESPONSE_BYTES:
         return data
 
-    # 1) structural trim first — keeps the response shape the caller expects.
     trimmed_key = None
     for key in _TRIMMABLE_LIST_KEYS:
         lst = data.get(key)
@@ -292,13 +256,10 @@ def _bound(data: Any) -> Any:
             lst = lst[: max(1, len(lst) // 2)]
             data[key] = lst
         if len(lst) < original_len:
-            trimmed_key = key  # only credit a key that was actually shortened
+            trimmed_key = key
         if _size(data) <= MAX_RESPONSE_BYTES:
             break
 
-    # Mark + reason are set BEFORE the size checks below so their own bytes are
-    # inside the budget being fit (otherwise they can push a just-fit payload
-    # back over the cap).
     data["_marm_graph_truncated"] = True
     if trimmed_key:
         data["_truncation_reason"] = (
@@ -308,8 +269,6 @@ def _bound(data: Any) -> Any:
     if _size(data) <= MAX_RESPONSE_BYTES:
         return data
 
-    # 2) no trimmable list got us under the cap (e.g. one huge snippet or
-    #    schema). Clip the largest string leaves until the envelope fits.
     data["_truncation_reason"] = (
         f"Response exceeded {MAX_RESPONSE_BYTES} bytes; oversized text was "
         f"clipped. Request a narrower slice."
@@ -317,7 +276,6 @@ def _bound(data: Any) -> Any:
     if _clip_to_fit(data):
         return data
 
-    # 3) still over (deep non-string bloat): drop the body for a bounded notice.
     return {
         "status": "too_large",
         "_marm_graph_truncated": True,
@@ -396,9 +354,6 @@ def resolve_project(
 
 
 # ── marm_graph_index ────────────────────────────────────────────────
-
-# Legacy Win32 path ceiling. The margin exists because the prediction below is a
-# reconstruction of somebody else's naming scheme, not a reading of it.
 _WINDOWS_PATH_LIMIT = 260
 _WINDOWS_PATH_MARGIN = 12
 
@@ -458,10 +413,6 @@ def do_index(client: CbmClient, req: GraphIndexRequest) -> dict:
     if action == "auto":
         action = "index" if req.repo_path else ("status" if req.project else "list")
 
-    # Rejected here, not implemented: the auto-index poller and its persisted
-    # flag belong to marm-mcp-server, and this package must not read that
-    # server's database. Without this guard these actions fall through to the
-    # index branch and answer "repo_path is required", which is misleading.
     if action in ("auto_on", "auto_off", "auto_status"):
         return {
             "status": "error",
@@ -481,7 +432,6 @@ def do_index(client: CbmClient, req: GraphIndexRequest) -> dict:
             return err
         return _bound(client.call_tool("index_status", {"project": proj}))
 
-    # index
     if not req.repo_path:
         return {
             "status": "error",
@@ -494,8 +444,6 @@ def do_index(client: CbmClient, req: GraphIndexRequest) -> dict:
             )
         )
     except CbmToolError as exc:
-        # Caught here rather than left to @safe, which is outside this function
-        # and cannot see which request produced the error.
         diagnosed = _windows_path_limit_error(req.repo_path, exc)
         if diagnosed is not None:
             return diagnosed
@@ -503,8 +451,6 @@ def do_index(client: CbmClient, req: GraphIndexRequest) -> dict:
 
 
 # ── marm_code_lookup ────────────────────────────────────────────────
-
-
 @safe
 def do_lookup(client: CbmClient, req: CodeLookupRequest) -> dict:
     proj, err = resolve_project(client, req.project)
@@ -534,7 +480,6 @@ def do_lookup(client: CbmClient, req: CodeLookupRequest) -> dict:
         args["format"] = "json"
         return _bound(_converted_code_search(client.call_tool("search_code", args)))
 
-    # symbol (default): BM25 discovery, or regex name match if the query looks like one
     if any(ch in _REGEX_META for ch in req.query):
         args = {"project": proj, "name_pattern": req.query, "limit": req.limit}
     else:
@@ -546,8 +491,6 @@ def do_lookup(client: CbmClient, req: CodeLookupRequest) -> dict:
 
 
 # ── marm_graph_trace ────────────────────────────────────────────────
-
-
 @safe
 def do_trace(client: CbmClient, req: GraphTraceRequest) -> dict:
     proj, err = resolve_project(client, req.project)
@@ -574,16 +517,11 @@ def do_trace(client: CbmClient, req: GraphTraceRequest) -> dict:
 
 
 # ── marm_graph_architecture ─────────────────────────────────────────
-
-
 @safe
 def do_architecture(client: CbmClient, req: GraphArchitectureRequest) -> dict:
     proj, err = resolve_project(client, req.project)
     if err:
         return err
-    # `format` is accepted by get_architecture but absent from its published
-    # inputSchema, so it can be dropped upstream without that counting as a
-    # breaking change. The isinstance check below is what catches that.
     arch = _converted_architecture(
         client.call_tool(
             "get_architecture",
@@ -594,14 +532,12 @@ def do_architecture(client: CbmClient, req: GraphArchitectureRequest) -> dict:
         try:
             arch["schema"] = client.call_tool("get_graph_schema", {"project": proj})
         except (CbmToolError, CbmError):
-            pass  # schema is a nice-to-have fold-in, not essential
+            pass
         return _bound(arch)
     return _bound({"architecture": arch})
 
 
 # ── marm_graph_impact ───────────────────────────────────────────────
-
-
 @safe
 def do_impact(client: CbmClient, req: GraphImpactRequest) -> dict:
     proj, err = resolve_project(client, req.project)

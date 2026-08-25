@@ -1,14 +1,3 @@
-"""Tests for endpoints/concepts.py's build/recall orchestration.
-
-_fetch_memory_pages and the concept-DB read/write paths run against real
-SQLite (tmp_path-backed, via conftest.load_isolated_server). extract_entities
-is monkeypatched on services.concept_build_engine for build tests -- spaCy's
-actual model isn't installable in this sandbox (see test_concept_extraction.py),
-and these tests exercise _run_build's write/orchestration logic, not NER
-accuracy, so a fake ExtractionResult at that one boundary is appropriate
-(testing-philosophy.md: mock only where it doesn't weaken what's being tested).
-"""
-
 import asyncio
 import importlib
 import sqlite3
@@ -29,6 +18,21 @@ def _fresh_concepts_module(monkeypatch, tmp_path, concept_db_path=None):
     )
     concepts = importlib.import_module("marm_mcp_server.endpoints.concepts")
     return server, concepts
+
+
+def _traverse(conn, seed_ids, depth, direction, limit):
+    graph_context = importlib.import_module("marm_mcp_server.services.graph_context")
+    results, _, _ = graph_context.traverse_graph(
+        conn,
+        seed_ids,
+        depth=depth,
+        direction=direction,
+        limit=limit,
+        session_name=None,
+        project=None,
+        platform=None,
+    )
+    return results
 
 
 def _engine():
@@ -540,8 +544,7 @@ def test_run_build_is_idempotent_on_repeat_runs(concepts_env, monkeypatch):
     second = concepts._run_build([rows])
 
     assert first["relationships_created"] == 1
-    assert first["code_links_created"] == 2  # one per entity
-    # Second run re-processes the same memory but every row already exists.
+    assert first["code_links_created"] == 2
     assert second["relationships_created"] == 0
     assert second["code_links_created"] == 0
 
@@ -585,7 +588,7 @@ def test_run_recall_does_not_return_duplicate_linked_code_after_repeat_build(
 
     rows = [("m1", "CbmClient reference", "sess-a", "proj-a")]
     concepts._run_build([rows])
-    concepts._run_build([rows])  # repeat build, same corpus
+    concepts._run_build([rows])
 
     result = concepts._run_recall("CbmClient", session_name=None, limit=10)
     assert len(result["linked_code"]) == 1
@@ -633,12 +636,12 @@ def test_run_build_same_entity_across_two_memories_dedups_in_same_session(
         ("m2", "auth module content two", "sess-a", None),
     ]
     result = concepts._run_build([rows])
-    assert result["entities_extracted"] == 2  # two mentions processed
+    assert result["entities_extracted"] == 2
 
     concept_db = concepts._get_concept_db()
     with concept_db.get_connection() as conn:
         entity_count = conn.execute("SELECT COUNT(*) FROM entities").fetchone()[0]
-    assert entity_count == 1  # but one distinct entity row
+    assert entity_count == 1
 
 
 def test_run_build_with_graph_unavailable_creates_zero_code_links(
@@ -816,8 +819,8 @@ def test_run_build_caches_embed_calls_across_repeated_entity_names(
     ]
     result = concepts._run_build([rows])
 
-    assert result["entities_extracted"] == 3  # three mentions processed
-    assert call_count["n"] == 1  # but the name was only ever embedded once
+    assert result["entities_extracted"] == 3
+    assert call_count["n"] == 1
 
 
 def test_try_embed_real_fastembed_end_to_end(concepts_env):
@@ -836,7 +839,7 @@ def test_try_embed_real_fastembed_end_to_end(concepts_env):
         pytest.skip("fastembed model weights not downloadable in this sandbox")
 
     assert isinstance(emb_bytes, bytes)
-    assert len(emb_bytes) % 4 == 0  # whole number of float32 values
+    assert len(emb_bytes) % 4 == 0
 
 
 def test_run_recall_lookup_mode_returns_matching_entities(concepts_env):
@@ -907,9 +910,6 @@ def test_run_recall_project_scoping_excludes_other_projects(concepts_env):
     assert scoped["entities"][0]["name"] == "config"
 
 
-# ── Goal 2: multi-hop traversal ──────────────────────────────────────
-
-
 def _build_chain_graph(concept_db, conn):
     """A -> B -> C, plus a D -> A back-edge to make a genuine cycle
     (A -> B -> C, D -> A) without any entity pointing directly at itself."""
@@ -936,12 +936,12 @@ def test_traverse_depth_1_reproduces_one_hop_behavior(concepts_env):
     concept_db = concepts._get_concept_db()
     with concept_db.get_connection() as conn:
         id_a, _id_b, _id_c, _id_d = _build_chain_graph(concept_db, conn)
-        results = concepts._traverse(conn, [id_a], depth=1, direction="both", limit=10)
+        results = _traverse(conn, [id_a], depth=1, direction="both", limit=10)
 
     names = {r["name"] for r in results}
-    assert names == {"B", "D"}  # A's direct neighbors only, not C
+    assert names == {"B", "D"}
     assert all(r["hop"] == 1 for r in results)
-    assert all("path" not in r for r in results)  # depth=1: no path field
+    assert all("path" not in r for r in results)
 
 
 def test_traverse_emits_direct_edges_between_two_seeds(concepts_env):
@@ -963,7 +963,7 @@ def test_traverse_emits_direct_edges_between_two_seeds(concepts_env):
         )
         concept_db.store_relationship(conn, id_module, id_service, "uses", "m1", None)
 
-        results = concepts._traverse(
+        results = _traverse(
             conn, [id_module, id_service], depth=1, direction="both", limit=10
         )
 
@@ -995,10 +995,10 @@ def test_traverse_multi_hop_finds_second_degree_neighbor(concepts_env):
     concept_db = concepts._get_concept_db()
     with concept_db.get_connection() as conn:
         id_a, _id_b, _id_c, _id_d = _build_chain_graph(concept_db, conn)
-        results = concepts._traverse(conn, [id_a], depth=2, direction="both", limit=10)
+        results = _traverse(conn, [id_a], depth=2, direction="both", limit=10)
 
     by_name = {r["name"]: r for r in results}
-    assert "C" in by_name  # only reachable at hop 2 (A -> B -> C)
+    assert "C" in by_name
     assert by_name["C"]["hop"] == 2
     assert by_name["B"]["hop"] == 1
     assert by_name["C"]["path"] == [
@@ -1028,12 +1028,10 @@ def test_traverse_handles_cycles_without_infinite_loop_or_duplicates(concepts_en
         concept_db.store_relationship(conn, id_b, id_c, "uses", "m1", None)
         concept_db.store_relationship(conn, id_c, id_a, "uses", "m1", None)
 
-        results = concepts._traverse(
-            conn, [id_a], depth=5, direction="outgoing", limit=100
-        )
+        results = _traverse(conn, [id_a], depth=5, direction="outgoing", limit=100)
 
     names = [r["name"] for r in results]
-    assert names.count("A") == 0  # seed itself never re-appears as a result
+    assert names.count("A") == 0
     assert names.count("B") == 1
     assert names.count("C") == 1
 
@@ -1043,12 +1041,10 @@ def test_traverse_direction_outgoing_only_excludes_incoming(concepts_env):
     concept_db = concepts._get_concept_db()
     with concept_db.get_connection() as conn:
         id_a, _id_b, _id_c, _id_d = _build_chain_graph(concept_db, conn)
-        results = concepts._traverse(
-            conn, [id_a], depth=1, direction="outgoing", limit=10
-        )
+        results = _traverse(conn, [id_a], depth=1, direction="outgoing", limit=10)
 
     names = {r["name"] for r in results}
-    assert names == {"B"}  # D -> A is incoming, excluded
+    assert names == {"B"}
 
 
 def test_traverse_direction_incoming_only_excludes_outgoing(concepts_env):
@@ -1056,12 +1052,10 @@ def test_traverse_direction_incoming_only_excludes_outgoing(concepts_env):
     concept_db = concepts._get_concept_db()
     with concept_db.get_connection() as conn:
         id_a, _id_b, _id_c, _id_d = _build_chain_graph(concept_db, conn)
-        results = concepts._traverse(
-            conn, [id_a], depth=1, direction="incoming", limit=10
-        )
+        results = _traverse(conn, [id_a], depth=1, direction="incoming", limit=10)
 
     names = {r["name"] for r in results}
-    assert names == {"D"}  # A -> B is outgoing, excluded
+    assert names == {"D"}
 
 
 def test_traverse_respects_limit_across_whole_traversal(concepts_env):
@@ -1069,7 +1063,7 @@ def test_traverse_respects_limit_across_whole_traversal(concepts_env):
     concept_db = concepts._get_concept_db()
     with concept_db.get_connection() as conn:
         id_a, _id_b, _id_c, _id_d = _build_chain_graph(concept_db, conn)
-        results = concepts._traverse(conn, [id_a], depth=5, direction="both", limit=1)
+        results = _traverse(conn, [id_a], depth=5, direction="both", limit=1)
 
     assert len(results) == 1
 

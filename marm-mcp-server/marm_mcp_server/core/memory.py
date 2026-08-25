@@ -1,5 +1,3 @@
-"""Advanced memory system with semantic search and MARM protocol support."""
-
 import importlib.util
 import json
 import threading
@@ -33,9 +31,8 @@ from .memory_ops import (
     _replace_memory,
     _store_doc_mirror,
     _store_memory,
-    _update_memory,
 )
-from .memory_recall import RecallResult, _recall_similar, _recall_text_search
+from .memory_recall import RecallResult, _recall_similar
 from .memory_scoring import _score_chunk_aware  # noqa: F401
 from .memory_utils import (  # noqa: F401
     DOC_CHUNK_OVERLAP_WORDS,
@@ -109,9 +106,6 @@ class MARMMemory:
         self._write_queue: WriteQueue | None = None
         self._session_write_counts: dict = {}
         self._pending_compaction_scans: dict = {}
-        # In-flight chunk encode/write tasks, keyed on nothing: several memories
-        # can be chunking at once. Shutdown drains this so a clean exit does not
-        # drop chunk rows.
         self._pending_chunk_writes: set = set()
 
     def restore_active_session(self) -> None:
@@ -202,8 +196,6 @@ class MARMMemory:
     def _encode_sync(self, text: str) -> np.ndarray:
         """Encode text with the shared encoder, serialized to prevent concurrent-use hangs."""
         with self._encoder_lock:
-            # Every caller gates on _load_encoder_lazily(), which returns
-            # `self.encoder is not None`. mypy cannot carry that through a bool.
             assert self.encoder is not None
             return self.encoder.encode(text)
 
@@ -267,9 +259,6 @@ class MARMMemory:
             return "book"
         else:
             return "general"
-
-    async def update_memory(self, memory_id: str, new_content: str) -> bool:
-        return await _update_memory(self, memory_id, new_content)
 
     async def store_memory(
         self,
@@ -465,18 +454,6 @@ class MARMMemory:
             project,
             platform,
             with_cosine=with_cosine,
-        )
-
-    async def recall_text_search(
-        self,
-        query: str,
-        session: str | None = None,
-        limit: int = 5,
-        project: str | None = None,
-        platform: str | None = None,
-    ) -> List[Dict]:
-        return await _recall_text_search(
-            self, query, session, limit, project=project, platform=platform
         )
 
 

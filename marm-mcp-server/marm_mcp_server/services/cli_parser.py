@@ -1,5 +1,3 @@
-"""Argument parser construction for the product and compatibility CLIs."""
-
 from __future__ import annotations
 
 import argparse
@@ -155,6 +153,11 @@ def _product_parser() -> argparse.ArgumentParser:
     chunks = maintenance_sub.add_parser("chunks")
     chunks_sub = chunks.add_subparsers(dest="chunks_command", required=True)
     chunks_sub.add_parser("rechunk")
+    compaction = maintenance_sub.add_parser("compaction")
+    compaction_sub = compaction.add_subparsers(dest="compaction_command", required=True)
+    compaction_dry_run = compaction_sub.add_parser("dry-run")
+    compaction_dry_run.add_argument("--session", required=True)
+    compaction_dry_run.add_argument("--json", action="store_true", dest="as_json")
 
     key = subparsers.add_parser("key", help="Manage local bearer authentication")
     key_sub = key.add_subparsers(dest="key_command", required=True)
