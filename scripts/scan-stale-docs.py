@@ -35,6 +35,7 @@ REF_STOPLIST = {
     ".cursor/mcp.json",
     ".gemini/settings.json",
     ".qwen/settings.json",
+    ".vscode/mcp.json",
     "settings.json",
     "claude_desktop_config.json",
 }

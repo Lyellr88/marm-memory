@@ -75,17 +75,6 @@ pip install marm-mcp-server
 marm-memory start
 ```
 
-### **Option 3: From source with install.sh** 🔧 **(Advanced)**
-
-```bash
-git clone https://github.com/Lyellr88/marm-memory.git
-cd marm-memory/marm-mcp-server
-chmod +x install.sh
-./install.sh
-source marm-env/bin/activate
-python3 -m marm_mcp_server
-```
-
 ### **Multi-Agent / Swarm Mode**
 
 For shared HTTP servers running multiple AI agents, use a preset flag:
@@ -395,7 +384,6 @@ sudo lsof -i :8001
 ### **Common Linux Issues**
 
 - **Port 8001 busy**: Kill process: `sudo lsof -ti:8001 | xargs kill -9`
-- **Permission denied**: Use `sudo` or check file permissions: `chmod +x install.sh`
 - **Python not found**: Install Python 3.10+: `sudo apt install python3 python3-pip`
 - **Module import errors**: Reinstall the package: `pip install marm-mcp-server`
 

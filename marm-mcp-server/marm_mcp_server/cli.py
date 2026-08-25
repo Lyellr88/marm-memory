@@ -257,7 +257,10 @@ class _ReadOnlyMemory:
 
 def _compaction_dry_run(session_name: str, as_json: bool) -> int:
     if not Path(DEFAULT_DB_PATH).exists():
-        print("No MARM memory database exists; nothing to scan.")
+        if as_json:
+            _print_payload({"candidates": [], "report_path": None}, as_json=True)
+        else:
+            print("No MARM memory database exists; nothing to scan.")
         return 0
     from .core.compaction import run_compaction_dry_run
 
