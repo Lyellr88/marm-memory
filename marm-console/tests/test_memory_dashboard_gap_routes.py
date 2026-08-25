@@ -624,8 +624,6 @@ def test_compaction_stage_finds_candidate_beyond_200_row_window(monkeypatch, tmp
                 json.dumps([f"m{i}"]),
                 f"Summary {i}",
                 None,
-                # zero-padded so DESC text ordering matches insertion order;
-                # cand-0 is the oldest and falls outside a 200-row DESC window.
                 f"2026-01-01T00:00:00.{i:04d}Z",
             )
             for i in range(205)
@@ -669,8 +667,6 @@ def test_bulk_log_delete_continues_after_per_log_failure(monkeypatch, tmp_path):
             VALUES (?, ?, ?, ?, ?, ?)
             """,
             [
-                # distinct entry_date values so ORDER BY entry_date DESC
-                # gives a deterministic, assertable processing order.
                 (
                     "log-a",
                     "main",

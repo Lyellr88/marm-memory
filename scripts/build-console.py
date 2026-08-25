@@ -1,35 +1,4 @@
 #!/usr/bin/env python3
-"""Build the Console frontend and replace the bundled copy the server serves.
-
-Only needed to refresh the packaged Console that `marm-memory console` serves on
-port 8002. For iterating on frontend code, do not use this: run the dev server,
-which hot-reloads and points itself at the backend on 8002 automatically.
-
-    cd marm-console/artifacts/marm-console
-    pnpm dev                                   # http://127.0.0.1:5173
-
-Publishing does not need this either; publish-mcp.yml builds and copies the same
-way on every tag.
-
-    python scripts/build-console.py
-    python scripts/build-console.py --check     # verify the bundle, build nothing
-
-Exists because doing it by hand has two traps. The destination must be removed
-first or stale asset hashes accumulate, and `Copy-Item`/`cp` semantics differ:
-copying a directory onto an existing directory nests it, producing
-`static/public/index.html`, which the server does not serve and which reports
-only as a 503 with assets "missing".
-
-The swap is not gapless, and cannot be. Neither `os.rename` nor `os.replace`
-will put a directory over an existing non-empty one, so the old bundle has to
-move aside before the new one moves in, leaving two renames' worth of time where
-the path is absent. A request landing in that window gets the 503. Closing it
-needs symlink indirection, which on Windows wants privileges a build script
-should not ask for, and the tool already tells you to restart the server. What is
-guaranteed instead is that a failure never leaves the path empty: the bundle is
-staged and verified before the swap, and rolled back if the swap or the
-post-swap check fails.
-"""
 
 from __future__ import annotations
 
@@ -141,19 +110,12 @@ def main() -> int:
     if run([_pnpm_command(), "build"], WORKSPACE):
         return fail("pnpm build failed; the bundled Console was left untouched")
 
-    # Verified before anything is deleted. Removing the destination first and then
-    # discovering the build produced nothing leaves no Console at all, which is
-    # exactly how this went wrong by hand.
     ok, problems = verify(DIST)
     if not ok:
         for problem in problems:
             print(f"{RED}  {problem}{RESET}")
         return fail(f"build output at {DIST} is incomplete; nothing was replaced")
 
-    # Staged beside the destination and verified before the swap, so a copy that
-    # fails part way through cannot leave the server with no Console. Verifying
-    # DIST above only proves the source is complete; a full disk or a locked file
-    # can still abort the copy itself, and the symptom is a bare 503.
     staging = STATIC.parent / f"{STATIC.name}.incoming"
     previous = STATIC.parent / f"{STATIC.name}.previous"
     for scratch in (staging, previous):
@@ -186,7 +148,6 @@ def main() -> int:
     if not ok:
         for problem in problems:
             print(f"{RED}  {problem}{RESET}")
-        # Roll back rather than leave a half-working Console behind.
         shutil.rmtree(STATIC, ignore_errors=True)
         if previous.exists():
             previous.rename(STATIC)

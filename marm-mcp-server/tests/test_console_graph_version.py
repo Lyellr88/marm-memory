@@ -1,10 +1,3 @@
-"""Tests for the graph change marker the Console Explorer polls.
-
-Without this the Explorer reads the graph once and background indexing is
-invisible until a reload, which would make the automation pointless from the
-user's side.
-"""
-
 import sqlite3
 
 import pytest

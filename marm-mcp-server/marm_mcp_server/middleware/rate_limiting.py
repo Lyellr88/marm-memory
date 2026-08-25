@@ -1,5 +1,3 @@
-"""Rate limiting middleware for FastAPI."""
-
 import time
 
 from fastapi import Request

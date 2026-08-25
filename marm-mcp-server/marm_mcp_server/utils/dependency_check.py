@@ -1,5 +1,3 @@
-"""Reusable dependency checks for legacy and product CLI diagnostics."""
-
 from __future__ import annotations
 
 import importlib.util

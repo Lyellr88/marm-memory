@@ -1,12 +1,3 @@
-"""Two real processes over one memory database.
-
-Every other queue test runs sequential calls in one interpreter, which
-exercises the SQL but not the thing the lease and the build lock exist for:
-an HTTP server and a STDIO session are separate processes, and neither
-asyncio.Lock nor a Python-level set reaches across that boundary. These tests
-spawn a genuine second interpreter against the same database file.
-"""
-
 import asyncio
 import json
 import sqlite3
@@ -207,13 +198,8 @@ async def test_work_outliving_its_ttl_keeps_both_locks(shared_db):
         tasks = concept_queue.claim(10)
         assert len(tasks) == 1
         async with concept_queue.keep_claimed(tasks, ttl):
-            # Three times the lease. Without renewal both are long expired.
             await asyncio.sleep(ttl * 3)
 
-            # Through a thread, because subprocess.run is synchronous: called
-            # directly it blocks the event loop for the child's whole startup,
-            # which is exactly when the heartbeat needs to be renewing. That
-            # would make the test fail for the opposite of the real reason.
             other = await asyncio.to_thread(
                 _run_in_second_process,
                 db_path,

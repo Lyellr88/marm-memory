@@ -65,24 +65,15 @@ def _cbm_sandbox(tmp_path_factory) -> Path:
     """
     if os.name != "nt":
         return tmp_path_factory.mktemp("cbm-home")
-    # Never pytest's temp tree on Windows, including as a fallback: that is the
-    # location the identity check rejects, so falling back to it would trade a
-    # clear failure for every real-engine test failing at startup instead. The
-    # user profile is owner-private and is the next best root.
     base = os.environ.get("LOCALAPPDATA") or os.environ.get("USERPROFILE")
     if not base:
         base = str(Path.home())
     root = Path(base) / "marm-tests"
     root.mkdir(parents=True, exist_ok=True)
     _sweep_stale_sandboxes(root)
-    # A unique directory rather than one named after the PID. PIDs are reused, and
-    # a run killed before teardown leaves its sandbox behind, so a later run with
-    # the same PID would inherit stale indexes through mkdir(exist_ok=True).
     return Path(tempfile.mkdtemp(prefix="cbm-home-", dir=root))
 
 
-# Old enough that no live session could own it, short enough that sandboxes do
-# not pile up. Each one holds a graph store, so they are not small.
 _STALE_SANDBOX_AGE_SECONDS = 6 * 60 * 60
 
 
@@ -143,9 +134,6 @@ def isolated_cbm_store(tmp_path_factory):
             os.environ.pop(name, None)
         else:
             os.environ[name] = value
-    # pytest cleans its own temp tree; a sandbox placed outside it does not get
-    # that for free. Errors are ignored because the engine daemon can still hold
-    # its lock files at session end.
     if sandbox.parent.name == "marm-tests":
         shutil.rmtree(sandbox, ignore_errors=True)
 

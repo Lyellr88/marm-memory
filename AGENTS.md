@@ -76,7 +76,7 @@ Semver: MAJOR = breaking (schema renames, parameter removals), MINOR = new tools
 
 - **Never commit without an explicit user request.** The user reviews all changes first.
 - Dev setup: `cd marm-mcp-server && pip install -e ".[dev]" && python scripts/bundle-concept-model.py`
-- Benchmarks live in `scripts/benchmarking/`: `preformance/bench_hotpath.py` for hot-path performance, `accuracy/locomo/run_eval.py` for LoCoMo retrieval accuracy. Do not publish performance claims neither script can back.
+- Benchmarks live in `scripts/benchmarking/`: `performance/bench_hotpath.py` for hot-path performance, `accuracy/locomo/run_eval.py` for LoCoMo retrieval accuracy. Do not publish performance claims neither script can back.
 
 ## Current Stats (v2.39.0)
 

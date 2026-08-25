@@ -1,5 +1,3 @@
-"""Managed local HTTP runtime lifecycle for the marm-memory CLI."""
-
 from __future__ import annotations
 
 import json
@@ -308,9 +306,6 @@ def start_background(
     env["MARM_RUNTIME_PROFILE"] = profile
     creationflags = 0
     kwargs: dict[str, Any] = {}
-    # sys.platform, not os.name: mypy narrows platform on the former only, so
-    # with os.name it checks this branch on Linux, where these two flags do not
-    # exist. Equivalent at runtime.
     if sys.platform == "win32":
         creationflags = (
             subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS
@@ -373,9 +368,7 @@ def stop_runtime(
             if os.name == "nt":
                 psutil.Process(int(state["pid"])).kill()
             else:
-                # Unreachable on Windows, where signal.SIGKILL does not exist and
-                # mypy resolves the stdlib against.
-                os.kill(int(state["pid"]), signal.SIGKILL)  # type: ignore[attr-defined]
+                os.kill(int(state["pid"]), getattr(signal, "SIGKILL", 9))
     clear_state(runtime_id)
     return True
 

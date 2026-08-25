@@ -1,55 +1,29 @@
 #!/usr/bin/env python3
-"""Join hard-wrapped paragraph lines in Markdown back into single lines.
-
-Usage:
-    python scripts/unwrap-md.py docs/current/some-spec.md
-    python scripts/unwrap-md.py --dry-run docs/current/*.md
-    python scripts/unwrap-md.py docs/current            # recurses for *.md
-
-A bare `re.sub(r'(?<!\n)\n(?!\n)', ' ', text)` destroys Markdown: it flattens
-every table into one row, joins list items together, merges headings into the
-following sentence, and silently eats trailing-two-space hard breaks, which
-this repo's .claude/rules files use deliberately. Only lines that are plain
-prose on both sides are joined here.
-"""
 
 import argparse
 import re
 import sys
 from pathlib import Path
 
-# The full delimiter run is captured, not just its first three characters, because
-# a fence closes only on the same character at the same length or longer. A
-# four-backtick block quoting a three-backtick one is how this repo's skill files
-# document Markdown, and a plain open/closed toggle ends the outer block early and
-# then treats the rest of it as prose.
 FENCE = re.compile(r"^\s*(`{3,}|~{3,})")
 
-# Lines that start a construct where a newline is significant. Joining one of
-# these into a neighbour changes how it renders.
+
 BLOCK = re.compile(
     r"""^\s*(
-      \#{1,6}\s                    # heading
-    | [-*+][ \t]                   # bullet
-    | \d+[.)][ \t]                 # ordered item
-    | >                            # blockquote
-    | \|                           # table row
-    | <                            # html block
-    | \[[^\]]+\]:                  # link reference definition
-    | \|?[:-]{3,}                  # table delimiter row
+      \#{1,6}\s
+    | [-*+][ \t]
+    | \d+[.)][ \t]
+    | >
+    | \|
+    | <
+    | \[[^\]]+\]:
+    | \|?[:-]{3,}
     )""",
     re.VERBOSE,
 )
 
-# Three or more of the same marker, optionally separated by spaces, and nothing
-# else. Checked apart from BLOCK because `- - -` and `* * *` also match the bullet
-# pattern, so a break would otherwise be treated as a list item and absorb the
-# lines under it.
 THEMATIC = re.compile(r"^ {0,3}([-*_])(?:[ \t]*\1){2,}[ \t]*$")
 
-# A block that owns the wrapped lines beneath it, so those get pulled up into it.
-# Headings, table rows, and rules do not: nothing following them is a
-# continuation, and joining would move text into the wrong construct.
 ABSORBING = re.compile(r"^\s*([-*+][ \t]|\d+[.)][ \t]|>)")
 
 
@@ -57,7 +31,6 @@ def _is_prose(line: str) -> bool:
     if not line.strip():
         return False
     if line.startswith(("    ", "\t")):
-        # Indented code block, or a list continuation. Either way, leave it.
         return False
     return not BLOCK.match(line) and not THEMATIC.match(line)
 
@@ -67,9 +40,6 @@ def _hard_break(line: str) -> bool:
     return line.endswith("  ") or line.rstrip().endswith("\\")
 
 
-# How far under `width` a line can stop and still count as full. Wrapping done by
-# hand or by a model is not perfectly greedy, so an exact "would the next word
-# have fit" test misses real wraps that stopped a few characters early.
 SLACK = 10
 
 
@@ -161,8 +131,6 @@ def unwrap(text: str, width: int = 80) -> str:
                 and not THEMATIC.match(line)
                 and not _hard_break(line)
             ):
-                # Stays open so its own wrapped continuation lines join into it.
-                # Indent is kept verbatim, which is what holds nested lists together.
                 buf = line.rstrip()
             else:
                 out.append(line)
@@ -174,7 +142,6 @@ def unwrap(text: str, width: int = 80) -> str:
         ):
             out.append(buf)
             buf = None
-        # rstrip, not strip, when opening: an indented prose block keeps its indent.
         buf = line.rstrip() if buf is None else f"{buf} {stripped}"
         if _hard_break(line):
             out.append(buf + "  " if line.endswith("  ") else buf)
@@ -202,9 +169,6 @@ def main() -> int:
     )
     args = ap.parse_args()
 
-    # Below this the fullness test in _was_wrapped is true for every line, so every
-    # prose line reads as wrapped and deliberate breaks get merged. --width 0 joined
-    # three unrelated short lines into one.
     if args.width <= SLACK * 2:
         ap.error(f"--width must be greater than {SLACK * 2}, got {args.width}")
 

@@ -1,5 +1,3 @@
-"""Read-only status aggregation for local runtime diagnostics."""
-
 from __future__ import annotations
 
 import importlib.util
@@ -271,9 +269,6 @@ def doctor_status() -> dict[str, Any]:
         "ok": all(item["ok"] for item in checks if not item.get("optional")),
         "checks": checks,
         "status": status,
-        # Informational, not pass/fail: these tune recall rather than gate health.
-        # Surfaced because HYBRID_SEARCH_TEXT_WEIGHT and FTS_QUERY_MODE change
-        # retrieval behavior in ways that are otherwise invisible when debugging.
         "retrieval": {
             "semantic_search_available": SEMANTIC_SEARCH_AVAILABLE,
             "fts_query_mode": FTS_QUERY_MODE,

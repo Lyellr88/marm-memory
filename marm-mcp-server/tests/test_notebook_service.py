@@ -134,8 +134,6 @@ async def test_dispatch_use_silently_skips_nonexistent_entries(notebook_svc):
 @pytest.mark.asyncio
 async def test_dispatch_scopes_active_entries_by_session(notebook_svc):
     dispatch, memory = notebook_svc
-    # A scratchpad is session-local (locked decision): each entry must be
-    # added under the same session it will later be use'd from.
     await dispatch(
         action="add", name="alpha_rule", data="alpha instructions", session_name="alpha"
     )
@@ -223,9 +221,6 @@ async def test_memory_remove_active_notebook_entry_scopes_to_one_session(noteboo
     assert memory.get_active_notebook_entries("beta")[0]["name"] == "shared_rule"
 
 
-# --- Session-scoped scratch storage (add/use/show) ---
-
-
 @pytest.mark.asyncio
 async def test_add_same_name_project_platform_different_sessions_do_not_collide(
     notebook_svc,
@@ -280,9 +275,6 @@ async def test_add_writes_no_embedding(notebook_svc, tmp_path):
             "SELECT embedding FROM notebook_entries WHERE name = 'no-embed'"
         ).fetchone()[0]
     assert embedding is None
-
-
-# --- action='save' ---
 
 
 @pytest.mark.asyncio
@@ -461,8 +453,6 @@ async def test_save_mirror_write_failure_still_saves_doc_as_pending(
     assert result["status"] == "success"
     assert result["mirror_status"] == "pending"
     assert result["doc_id"] is not None
-    # The other pending cause: no mirror row was written, so there is no id to
-    # report. This half is released behavior and must not start naming a row.
     assert result["memory_id"] is None
 
     with sqlite3.connect(str(tmp_path / "nb-docs.db")) as conn:
@@ -503,9 +493,6 @@ async def test_save_preserves_session_project_platform_on_mirror(
     assert row == ("proj-session", "marm", "claude-code")
 
 
-# --- action='save' mirror link failure and repair ---
-
-
 @pytest.mark.asyncio
 async def test_save_reports_pending_when_docs_memory_id_link_fails(
     notebook_svc, tmp_path, monkeypatch
@@ -528,7 +515,6 @@ async def test_save_reports_pending_when_docs_memory_id_link_fails(
     assert result["status"] == "success"
     assert result["mirror_status"] == "pending"
 
-    # Docs row committed, but not yet pointing at the mirror.
     with sqlite3.connect(str(tmp_path / "nb-docs.db")) as conn:
         row = conn.execute(
             "SELECT content, memory_id FROM docs WHERE name = 'link-fail'"
@@ -536,15 +522,12 @@ async def test_save_reports_pending_when_docs_memory_id_link_fails(
     assert row[0] == "durable content"
     assert row[1] is None
 
-    # The mirror itself exists, orphaned from the docs row.
     with sqlite3.connect(str(tmp_path / "nb-test.db")) as conn:
         mirrors = conn.execute(
             "SELECT id, content FROM memories WHERE context_type = 'doc'"
         ).fetchall()
     assert len(mirrors) == 1
     assert mirrors[0][1] == "durable content"
-    # Names the row that exists, not the link that was never written. Reporting
-    # docs.memory_id here would hand back NULL while a real mirror sits orphaned.
     assert result["memory_id"] == mirrors[0][0]
 
 
@@ -580,7 +563,6 @@ async def test_save_after_failed_link_repairs_instead_of_duplicating_mirror(
 
     assert second["mirror_status"] == "synced"
     assert second["doc_id"] == first["doc_id"]
-    # Same row reused, not a new one.
     assert second["memory_id"] == orphan_id
 
     with sqlite3.connect(str(tmp_path / "nb-test.db")) as conn:
@@ -661,8 +643,6 @@ async def test_repeated_saves_converge_on_one_of_two_duplicate_mirrors(
     first = await dispatch(action="save", name="tie", data="version one")
     db = str(tmp_path / "nb-test.db")
 
-    # Two duplicates sharing one doc_id and one timestamp, as rows cloned by the
-    # pre-fix double-insert would be. The linked row goes, so neither is linked.
     clones = [str(uuid.uuid4()) for _ in range(2)]
     with sqlite3.connect(db) as conn:
         for clone_id in clones:
@@ -680,16 +660,11 @@ async def test_repeated_saves_converge_on_one_of_two_duplicate_mirrors(
         conn.execute("DELETE FROM memories WHERE id = ?", (first["memory_id"],))
         conn.commit()
 
-    # The link never succeeds, so every save arrives with a stale docs.memory_id
-    # and has to re-resolve. Without that, the first save repairs the link and
-    # later saves never reach the resolve at all, which hides the instability.
     def boom(self, conn, doc_id, memory_id):
         raise sqlite3.OperationalError("docs db is locked")
 
     monkeypatch.setattr(DocsDB, "set_memory_id", boom)
 
-    # Asserted against the rows themselves: a pending save reports the doc's old
-    # link as memory_id, not the row it wrote, so the response cannot show this.
     written = []
     for n in range(2, 6):
         await dispatch(action="save", name="tie", data=f"version {n}")
@@ -709,6 +684,5 @@ async def test_repeated_saves_converge_on_one_of_two_duplicate_mirrors(
             ).fetchall()
         )
     assert rows[written[0]] == "version 5"
-    # The skipped duplicate is left alone, never half-updated.
     other = next(c for c in clones if c != written[0])
     assert rows[other] == "version one"

@@ -1,5 +1,3 @@
-"""Tests for server-side extractive compaction summarization."""
-
 import json
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -15,9 +13,6 @@ centroid_extract_summary = compaction_summarize.centroid_extract_summary
 process_nudge_exhausted_candidates = (
     compaction_summarize.process_nudge_exhausted_candidates
 )
-
-
-# --- helpers ---
 
 
 def _make_vec(seed: int = 0, dim: int = 384) -> np.ndarray:
@@ -82,9 +77,6 @@ def _get_staging_row(mem: MARMMemory, row_id: str):
         ).fetchone()
 
 
-# --- centroid_extract_summary ---
-
-
 class TestCentroidExtractSummary:
     def test_returns_top_n_results(self):
         memories = [(f"memory {i}", _make_vec(seed=i).tobytes()) for i in range(10)]
@@ -129,14 +121,12 @@ class TestCentroidExtractSummary:
         ]
         result = centroid_extract_summary(memories, top_n=3, dedup_threshold=0.85)
         parts = result.split("\n\n")
-        # Only one from the near-identical cluster survives dedup
         near_count = sum(1 for p in parts if p.startswith("near-"))
         assert near_count == 1
         assert len(parts) == 3
 
     def test_prefers_central_memories_over_outlier(self):
         dim = 384
-        # Tight cluster along axis 0
         cluster = []
         for seed in range(5):
             rng = np.random.default_rng(seed=seed)
@@ -150,7 +140,6 @@ class TestCentroidExtractSummary:
         outlier[1] = 1.0
         memories = [*cluster, ("outlier", outlier.tobytes())]
 
-        # top_n=1 with no dedup: the single highest-ranked memory must be from the cluster
         result = centroid_extract_summary(memories, top_n=1, dedup_threshold=1.0)
         assert result != "outlier"
 
@@ -167,8 +156,8 @@ class TestCentroidExtractSummary:
         """A vector with a mismatched dimension is skipped and its content still appears."""
         wrong_dim = np.ones(128, dtype=np.float32).tobytes()
         memories = [
-            ("good-embedding", _make_vec(seed=0).tobytes()),  # 384-dim
-            ("bad-dimension", wrong_dim),  # 128-dim
+            ("good-embedding", _make_vec(seed=0).tobytes()),
+            ("bad-dimension", wrong_dim),
         ]
         result = centroid_extract_summary(memories, top_n=5)
         assert "good-embedding" in result
@@ -188,19 +177,15 @@ class TestCentroidExtractSummary:
         wrong_dim = np.ones(128, dtype=np.float32).tobytes()
         memories = [
             ("bad-first", wrong_dim),
-            ("good-A", _make_vec(seed=1).tobytes()),  # 384-dim
-            ("good-B", _make_vec(seed=2).tobytes()),  # 384-dim
-            ("good-C", _make_vec(seed=3).tobytes()),  # 384-dim
+            ("good-A", _make_vec(seed=1).tobytes()),
+            ("good-B", _make_vec(seed=2).tobytes()),
+            ("good-C", _make_vec(seed=3).tobytes()),
         ]
         result = centroid_extract_summary(memories, top_n=3, dedup_threshold=1.0)
         parts = result.split("\n\n")
-        # All three good vectors should be available; bad-first is demoted
         good_count = sum(1 for p in parts if p.startswith("good-"))
         assert good_count == 3
         assert "bad-first" not in parts
-
-
-# --- process_nudge_exhausted_candidates ---
 
 
 @pytest.fixture
@@ -367,7 +352,6 @@ async def test_does_not_touch_other_statuses(mem, monkeypatch):
         _insert_memory(mem, session, f"mem {i}", _make_vec(seed=i)) for i in range(2)
     ]
 
-    # Insert a nudge_exhausted (eligible) and a summary_staged (should not be touched)
     exhausted_id = _insert_nudge_exhausted(mem, session, ids)
     now = datetime.now(timezone.utc)
     staged_id = str(uuid.uuid4())

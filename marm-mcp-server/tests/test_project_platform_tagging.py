@@ -1,13 +1,3 @@
-"""Tests for project/platform schema additions.
-
-Covers:
-- Memory write tagging (project and platform columns populated)
-- Scoped recall excludes rows from other projects/platforms
-- Consolidation dedup does not cross project/platform boundaries
-- HTTP marm_smart_recall schema accepts and filters by project/platform
-- Log entry write tagging and include_logs filtering
-"""
-
 import json
 import sqlite3
 import uuid
@@ -17,10 +7,7 @@ import pytest
 from conftest import load_isolated_server, local_client
 
 from marm_mcp_server.core.memory import MARMMemory
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
+from marm_mcp_server.core.memory_recall import _recall_text_search
 
 
 def _direct_insert_memory(
@@ -127,11 +114,6 @@ def _patch_memory_write_scope(monkeypatch, project, platform) -> None:
     monkeypatch.setitem(semantic_globals, "MARM_PLATFORM", platform)
 
 
-# ---------------------------------------------------------------------------
-# 1. Write tagging — memory
-# ---------------------------------------------------------------------------
-
-
 @pytest.mark.asyncio
 async def test_memory_insert_tags_project_and_platform(monkeypatch, tmp_path):
     _patch_memory_write_scope(monkeypatch, "test-project", "claude-code")
@@ -170,11 +152,6 @@ async def test_memory_insert_null_tags_when_no_project_or_platform(
     assert row[1] is None
 
 
-# ---------------------------------------------------------------------------
-# 2. Scoped recall
-# ---------------------------------------------------------------------------
-
-
 @pytest.mark.asyncio
 async def test_recall_project_filter_excludes_other_projects(monkeypatch, tmp_path):
     mem = MARMMemory(str(tmp_path / "memory.db"))
@@ -186,8 +163,8 @@ async def test_recall_project_filter_excludes_other_projects(monkeypatch, tmp_pa
         )
         _direct_insert_memory(conn, "session-a", "beta content", project="project-beta")
 
-    results = await mem.recall_text_search(
-        "content", session=None, limit=10, project="project-alpha"
+    results = await _recall_text_search(
+        mem, "content", session=None, limit=10, project="project-alpha"
     )
 
     assert len(results) == 1
@@ -206,8 +183,8 @@ async def test_recall_platform_filter_excludes_other_platforms(monkeypatch, tmp_
         )
         _direct_insert_memory(conn, "session-a", "cursor memory", platform="cursor")
 
-    results = await mem.recall_text_search(
-        "memory", session=None, limit=10, platform="claude-code"
+    results = await _recall_text_search(
+        mem, "memory", session=None, limit=10, platform="claude-code"
     )
 
     assert len(results) == 1
@@ -227,7 +204,7 @@ async def test_recall_unfiltered_returns_all_projects(monkeypatch, tmp_path):
         _direct_insert_memory(conn, "session-a", "beta content", project="project-beta")
         _direct_insert_memory(conn, "session-a", "untagged content", project=None)
 
-    results = await mem.recall_text_search("content", session=None, limit=10)
+    results = await _recall_text_search(mem, "content", session=None, limit=10)
 
     assert len(results) == 3
 
@@ -248,11 +225,10 @@ async def test_recall_project_and_platform_combined_filter(monkeypatch, tmp_path
             conn, "s", "wrong project", project="proj-b", platform="claude-code"
         )
 
-    results = await mem.recall_text_search(
-        "match", session=None, limit=10, project="proj-a", platform="claude-code"
+    results = await _recall_text_search(
+        mem, "match", session=None, limit=10, project="proj-a", platform="claude-code"
     )
 
-    # Only the first row matches both filters
     assert len(results) == 1
     assert results[0]["content"] == "match"
 
@@ -288,11 +264,6 @@ async def test_exact_recall_project_filter_respected(tmp_path):
     assert results[0]["project"] == "proj-a"
 
 
-# ---------------------------------------------------------------------------
-# 3. Consolidation does not cross project/platform boundaries
-# ---------------------------------------------------------------------------
-
-
 @pytest.mark.asyncio
 async def test_exact_dedup_does_not_cross_project_boundary(monkeypatch, tmp_path):
     store_globals = MARMMemory.store_memory.__globals__["_store_memory"].__globals__
@@ -306,7 +277,6 @@ async def test_exact_dedup_does_not_cross_project_boundary(monkeypatch, tmp_path
     _patch_memory_write_scope(monkeypatch, "project-b", "claude-code")
     id_b = await mem.store_memory("identical content", "session-x")
 
-    # Different projects — must not deduplicate
     assert id_a != id_b
 
     with mem.get_connection() as conn:
@@ -328,7 +298,6 @@ async def test_exact_dedup_does_not_cross_platform_boundary(monkeypatch, tmp_pat
     _patch_memory_write_scope(monkeypatch, "proj-x", "cursor")
     id_b = await mem.store_memory("shared content", "session-x")
 
-    # Same project but different platform — must not deduplicate
     assert id_a != id_b
 
     with mem.get_connection() as conn:
@@ -351,18 +320,12 @@ async def test_exact_dedup_still_works_within_same_project_and_platform(
     id_a = await mem.store_memory("deduplicated content", "session-x")
     id_b = await mem.store_memory("deduplicated content", "session-x")
 
-    # Same project + platform + session — must deduplicate
     assert id_a == id_b
 
     with mem.get_connection() as conn:
         count = conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
 
     assert count == 1
-
-
-# ---------------------------------------------------------------------------
-# 4. HTTP — schema and filtering
-# ---------------------------------------------------------------------------
 
 
 def test_http_smart_recall_accepts_project_and_platform_fields(monkeypatch, tmp_path):
@@ -491,11 +454,6 @@ async def test_scoped_smart_recall_filters_system_fallback(monkeypatch, tmp_path
     assert "system_results" not in result
 
 
-# ---------------------------------------------------------------------------
-# 5. Log entry tagging and include_logs filtering
-# ---------------------------------------------------------------------------
-
-
 def test_log_entry_tags_project_and_platform_on_write(monkeypatch, tmp_path):
     monkeypatch.setenv("MARM_PROJECT", "log-proj")
     monkeypatch.setenv("MARM_PLATFORM", "claude-code")
@@ -594,11 +552,6 @@ def test_include_logs_results_contain_project_and_platform_fields(
     assert r["platform"] == "vscode"
 
 
-# ---------------------------------------------------------------------------
-# 6. FTS and embedding-level scoring function filters
-# ---------------------------------------------------------------------------
-
-
 def _direct_insert_memory_with_embedding(
     conn, session: str, content: str, project=None, platform=None
 ):
@@ -691,11 +644,6 @@ def test_embedding_rows_filter_respects_project(tmp_path):
     assert len(results_all) == 2
 
 
-# ---------------------------------------------------------------------------
-# 7. Semantic consolidation isolation
-# ---------------------------------------------------------------------------
-
-
 @pytest.mark.asyncio
 async def test_semantic_dedup_passes_project_and_platform_to_recall(
     monkeypatch, tmp_path
@@ -746,7 +694,6 @@ async def test_semantic_dedup_does_not_match_across_project_boundary(
     mem._load_encoder_lazily = lambda: True
     mem._encode_sync = lambda _text: fake_vec
 
-    # Scoped to proj-b — no match
     monkeypatch.setattr(cons, "MARM_PROJECT", "proj-b")
     monkeypatch.setattr(cons, "MARM_PLATFORM", "claude-code")
     result_b = await find_semantic_duplicate(
@@ -754,18 +701,12 @@ async def test_semantic_dedup_does_not_match_across_project_boundary(
     )
     assert result_b is None
 
-    # Scoped to proj-a — finds the row
     monkeypatch.setattr(cons, "MARM_PROJECT", "proj-a")
     monkeypatch.setattr(cons, "MARM_PLATFORM", "claude-code")
     result_a = await find_semantic_duplicate(
         mem, "machine learning deployment", "session-a", 0.5
     )
     assert result_a is not None
-
-
-# ---------------------------------------------------------------------------
-# 8. Compaction scope preservation
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
@@ -816,11 +757,6 @@ async def test_compaction_rejects_mixed_project_or_platform_sources(tmp_path):
 
     with pytest.raises(RuntimeError, match="multiple project/platform scopes"):
         await apply_compaction_write(mem, candidate_id)
-
-
-# ---------------------------------------------------------------------------
-# 9. Notebook tagging
-# ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio

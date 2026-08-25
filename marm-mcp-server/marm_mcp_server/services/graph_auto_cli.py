@@ -1,12 +1,3 @@
-"""`projects auto` and `knowledge auto`: the on/off switches for both indexers.
-
-Writes the override straight to the memory database rather than posting to the
-running server. Both workers re-read the flag every cycle, so this takes effect
-on the next one, and it works whether or not a server is up. `status` reaches for
-the live worker detail on top of that, and degrades to the stored flag alone when
-nothing is listening.
-"""
-
 from typing import Callable, Optional
 
 from ..config import settings

@@ -20,7 +20,6 @@ const DOCS = [
   { id: 'contributors',      path: './CONTRIBUTORS.md',           label: 'Contributors' },
 ];
 
-// Curated section labels keep top navigation focused on useful destinations.
 const PAGE_NAV_ITEMS = {
   readme: [
     ['Why MARM Memory', 'Why MARM'],
@@ -281,14 +280,12 @@ async function loadDoc(id) {
     contentEl.innerHTML = html;
     contentEl.classList.add('loaded');
 
-    // Reset scroll position
     window.scrollTo({ top: 0, behavior: 'instant' });
 
     applyCodeBlocks(contentEl);
     applyTableOfContents(contentEl);
     buildPageNav(contentEl, doc.id);
 
-    // Page title from first h1
     const h1 = contentEl.querySelector('h1');
     document.title = h1
       ? `${h1.textContent.replace(/[◈⬡◎▣◇⌂?]/g, '').trim()} — MARM Docs`

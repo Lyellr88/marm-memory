@@ -1,5 +1,3 @@
-"""Durable user decisions for concept duplicate review."""
-
 from __future__ import annotations
 
 import json

@@ -1,5 +1,3 @@
-"""Notebook endpoints for MARM MCP Server."""
-
 from fastapi import APIRouter
 
 from ..core.models import NotebookRequest

@@ -1,5 +1,3 @@
-"""Bounded managed-runtime log display for the product CLI."""
-
 from __future__ import annotations
 
 import time

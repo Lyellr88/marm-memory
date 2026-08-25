@@ -1,5 +1,3 @@
-"""Durable translation between memory scopes and code-graph projects."""
-
 from __future__ import annotations
 
 import sqlite3

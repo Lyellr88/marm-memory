@@ -1,5 +1,3 @@
-"""Tests for consolidation Layer 2 — semantic near-duplicate merge."""
-
 import json
 
 import numpy as np
@@ -7,8 +5,7 @@ import pytest
 
 from marm_mcp_server.core.consolidation import find_semantic_duplicate
 from marm_mcp_server.core.memory import MARMMemory
-
-# --- update_memory direct tests ---
+from marm_mcp_server.core.memory_ops import _update_memory
 
 
 @pytest.mark.asyncio
@@ -17,7 +14,7 @@ async def test_update_memory_appends_content(tmp_path):
     mem._encoder_failed = True
 
     memory_id = await mem.store_memory("original content", "session-a")
-    await mem.update_memory(memory_id, "additional content")
+    await _update_memory(mem, memory_id, "additional content")
 
     with mem.get_connection() as conn:
         row = conn.execute(
@@ -34,8 +31,8 @@ async def test_update_memory_records_merge_history_in_metadata(tmp_path):
     mem._encoder_failed = True
 
     memory_id = await mem.store_memory("original content", "session-a")
-    await mem.update_memory(memory_id, "first merge")
-    await mem.update_memory(memory_id, "second merge")
+    await _update_memory(mem, memory_id, "first merge")
+    await _update_memory(mem, memory_id, "second merge")
 
     with mem.get_connection() as conn:
         row = conn.execute(
@@ -53,9 +50,7 @@ async def test_update_memory_records_merge_history_in_metadata(tmp_path):
 @pytest.mark.asyncio
 async def test_update_memory_is_silent_for_missing_id(tmp_path):
     mem = MARMMemory(str(tmp_path / "memory.db"))
-    # Should not raise -- returns False (no write happened) rather than
-    # raising or silently pretending the merge landed.
-    result = await mem.update_memory("nonexistent-id", "some content")
+    result = await _update_memory(mem, "nonexistent-id", "some content")
     assert result is False
 
 
@@ -71,7 +66,7 @@ async def test_update_memory_recomputes_content_hash(tmp_path):
             "SELECT content_hash FROM memories WHERE id = ?", (memory_id,)
         ).fetchone()[0]
 
-    await mem.update_memory(memory_id, "additional content")
+    await _update_memory(mem, memory_id, "additional content")
 
     with mem.get_connection() as conn:
         updated_hash = conn.execute(
@@ -86,7 +81,6 @@ async def test_update_memory_recomputes_content_hash(tmp_path):
 async def test_update_memory_clears_stale_embedding_when_encoder_unavailable(tmp_path):
     mem = MARMMemory(str(tmp_path / "memory.db"))
 
-    # Seed a row with a fake embedding so we can verify the stale vector is cleared.
     import uuid
     from datetime import datetime, timezone
 
@@ -108,7 +102,7 @@ async def test_update_memory_clears_stale_embedding_when_encoder_unavailable(tmp
         )
 
     mem._encoder_failed = True
-    await mem.update_memory(memory_id, "additional content")
+    await _update_memory(mem, memory_id, "additional content")
 
     with mem.get_connection() as conn:
         row = conn.execute(
@@ -116,9 +110,6 @@ async def test_update_memory_clears_stale_embedding_when_encoder_unavailable(tmp
         ).fetchone()
 
     assert row[0] is None
-
-
-# --- find_semantic_duplicate unit tests ---
 
 
 @pytest.mark.asyncio
@@ -151,7 +142,6 @@ async def test_find_semantic_duplicate_returns_id_when_similarity_above_threshol
 
     assert result == "existing-id"
     assert len(monkeypatched_recall_called) == 1
-    # The threshold is a cosine threshold, so the raw value has to be requested.
     assert recall_kwargs.get("with_cosine") is True
 
 
@@ -162,9 +152,6 @@ async def test_find_semantic_duplicate_returns_none_when_similarity_below_thresh
     mem = MARMMemory(str(tmp_path / "memory.db"))
 
     async def mock_recall(query, session=None, limit=5, query_vec=None, **kwargs):
-        # High fused score, low cosine: the row ranks first but is not a
-        # duplicate. Only the cosine may decide, or an unrelated memory gets
-        # merged away.
         return [
             {
                 "id": "existing-id",
@@ -205,9 +192,6 @@ async def test_find_semantic_duplicate_returns_none_when_encoder_unavailable(tmp
     result = await find_semantic_duplicate(mem, "content", "session-a", 0.92)
 
     assert result is None
-
-
-# --- store_memory Layer 2 integration tests ---
 
 
 @pytest.mark.asyncio
@@ -298,8 +282,6 @@ async def test_semantic_merge_falls_through_to_new_row_if_target_deleted_concurr
     async def mock_semantic_dup(
         memory, content, session_name, threshold, query_vec=None
     ):
-        # Simulate a concurrent delete landing between the duplicate check
-        # and _update_memory's own pre-read -- e.g. a racing marm_delete.
         with mem.get_connection() as conn:
             conn.execute("DELETE FROM memories WHERE id = ?", (first_id,))
             conn.commit()
@@ -361,7 +343,7 @@ async def test_encoder_failure_skips_layer2_and_stores_normally(monkeypatch, tmp
 
     monkeypatch.setattr(memory_ops_module, "CONSOLIDATION_ENABLED", True)
     mem = MARMMemory(str(tmp_path / "memory.db"))
-    mem._encoder_failed = True  # encoder unavailable — Layer 2 must not block write
+    mem._encoder_failed = True
 
     first_id = await mem.store_memory("fixed the authentication bug", "session-a")
     second_id = await mem.store_memory("auth error resolved in login flow", "session-a")
@@ -378,7 +360,6 @@ async def test_encoder_failure_skips_layer2_and_stores_normally(monkeypatch, tmp
 
 @pytest.mark.asyncio
 async def test_find_semantic_duplicate_passes_correct_session_to_recall(tmp_path):
-    # Verifies recall_similar is called with the write's session_name, not a different session.
     mem = MARMMemory(str(tmp_path / "memory.db"))
 
     sessions_seen = []
@@ -407,7 +388,6 @@ async def test_similar_content_in_different_session_stores_as_new_row(
 
     first_id = await mem.store_memory("fixed the authentication bug", "session-a")
 
-    # find_semantic_duplicate is session-scoped; no match exists in session-b
     async def mock_no_cross_session_match(
         memory, content, session_name, threshold, query_vec=None
     ):

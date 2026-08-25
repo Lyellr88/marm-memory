@@ -1,14 +1,3 @@
-"""Shared log-entry/notebook data operations used by both transports.
-
-endpoints/logging.py (HTTP) and services/stdio_entry_tools.py (STDIO) call
-into these three functions instead of each carrying their own copy of the
-session-switch detection, SQL, and dual-write-to-semantic-memory logic.
-Each transport wrapper supplies its own log_info/log_warning callables so
-HTTP keeps its print()-to-stdout convention and STDIO keeps its
-_stdio_log-to-stderr-and-file convention -- this module has no opinion on
-logging destination, only on what to log.
-"""
-
 import re
 import sqlite3
 import uuid
@@ -33,7 +22,6 @@ async def create_log_entry(
     try:
         formatted_entry = entry.strip()
 
-        # Session-switch detection
         for prefix in _SESSION_PREFIXES:
             if formatted_entry.startswith(prefix):
                 base_name = formatted_entry[len(prefix) :].strip()
@@ -88,12 +76,6 @@ async def create_log_entry(
                         conn.execute("ROLLBACK")
                         raise
                 memory.active_log_session = new_session
-                # The session row and marker entry above are already durably
-                # committed -- an event-publish failure must not turn that
-                # into a client-visible error (same principle as the
-                # semantic-store try/except below: a retry on a false
-                # "error" response would create a duplicate session_start
-                # marker).
                 try:
                     await events.emit("session_created", {"session": new_session})
                 except Exception as event_error:
@@ -104,7 +86,6 @@ async def create_log_entry(
                     "session_name": new_session,
                 }
 
-        # Resolve session — explicit > active > dated fallback
         if session_name:
             session = session_name
         elif memory.active_log_session != "main":
@@ -132,7 +113,6 @@ async def create_log_entry(
                     raise
             memory.active_log_session = session
 
-        # Chunk boundary check
         with memory.get_connection() as conn:
             row = conn.execute(
                 "SELECT last_accessed FROM sessions WHERE session_name = ?", (session,)
@@ -201,8 +181,6 @@ async def create_log_entry(
                 conn.execute("ROLLBACK")
                 raise
 
-        # Dual-write into semantic memory so marm_smart_recall can find it;
-        # a store failure must never fail the log write itself.
         memory_id = None
         try:
             memory_id = await memory.store_memory_queued(
@@ -215,10 +193,6 @@ async def create_log_entry(
                 f"Semantic store failed for log entry {entry_id}: {store_error}"
             )
 
-        # Same reasoning as the session_created emit above -- the log_entries
-        # row (and the semantic memory, if the dual-write above succeeded)
-        # are already committed, so an event-publish failure here must not
-        # turn an already-durable write into a client-visible error.
         try:
             await events.emit(
                 "log_entry_created",
@@ -239,9 +213,6 @@ async def create_log_entry(
             "formatted_entry": formatted_entry,
         }
     except sqlite3.Error as e:
-        # Never return str(e) to the client -- can leak SQLite paths/schema
-        # (same CWE-209 class as the marm_concept_recall fix). Log
-        # server-side via the caller's injected logger instead.
         log_warning(f"Database error creating log entry: {e}")
         return {
             "status": "error",
@@ -326,7 +297,6 @@ async def delete_log_or_notebook_entry(
                 if session_name:
                     conn.execute("BEGIN IMMEDIATE")
                     try:
-                        # Dual-written semantic memories must not outlive their log entries
                         rows = conn.execute(
                             "SELECT id FROM log_entries WHERE session_name = ? AND (id = ? OR topic = ?)",
                             (session_name, target, target),
@@ -369,9 +339,6 @@ async def delete_log_or_notebook_entry(
                             "DELETE FROM log_entries WHERE session_name = ?", (target,)
                         )
                         deleted = cursor.rowcount
-                        # Guarded like every other session_summary_cache touch in
-                        # this module -- a missing/locked cache row must not
-                        # abort the rest of the whole-session delete.
                         try:
                             conn.execute(
                                 "DELETE FROM session_summary_cache WHERE session_name = ?",
@@ -388,10 +355,6 @@ async def delete_log_or_notebook_entry(
                     except Exception:
                         conn.execute("ROLLBACK")
                         raise
-                # Flip the runtime pointer only after the delete durably
-                # commits -- otherwise a failed commit leaves the process
-                # thinking the active session is "main" while the target
-                # session's rows are still intact in the DB.
                 if not session_name and memory.active_log_session == target:
                     memory.active_log_session = "main"
                 return {
@@ -400,11 +363,7 @@ async def delete_log_or_notebook_entry(
                     "deleted_count": deleted,
                     "memories_deleted": memories_deleted,
                 }
-            else:  # type == "notebook"
-                # Scratchpads are session-local (see NotebookRequest/notebook_dispatch's
-                # own "main" default) -- deletion must be scoped the same way, or a
-                # bare name-only delete could remove a same-named entry from an
-                # unrelated session's scratchpad.
+            else:
                 notebook_session = (session_name or "main").strip() or "main"
                 conn.execute("BEGIN IMMEDIATE")
                 try:
@@ -418,11 +377,6 @@ async def delete_log_or_notebook_entry(
                         )
                         deleted = cursor.rowcount
                     else:
-                        # The (name, session_name, project, platform) identity lets
-                        # the same name coexist across multiple project/platform
-                        # scopes within one session -- an unscoped delete-by-name
-                        # must not silently wipe all of them at once. Refuse and
-                        # ask the caller to disambiguate when more than one exists.
                         matches = conn.execute(
                             "SELECT project, platform FROM notebook_entries "
                             "WHERE name = ? AND session_name = ?",

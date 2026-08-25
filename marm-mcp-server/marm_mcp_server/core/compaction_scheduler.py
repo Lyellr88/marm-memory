@@ -1,5 +1,3 @@
-"""Starts the compaction maintenance APScheduler job."""
-
 from typing import TYPE_CHECKING
 
 import structlog

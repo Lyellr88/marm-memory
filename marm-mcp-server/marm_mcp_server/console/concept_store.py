@@ -1,5 +1,3 @@
-"""Bounded read queries for MARM's isolated concept graph database."""
-
 from __future__ import annotations
 
 import json
@@ -11,9 +9,6 @@ from pathlib import Path
 
 from ..core.concept_db import CONCEPT_SCHEMA_VERSION
 
-# Read from the writer's own constant rather than restated here. As a literal
-# it silently disagreed on the next bump, and the Console would have called
-# every freshly rebuilt graph stale.
 _CURRENT_CONCEPT_SCHEMA_VERSION = str(CONCEPT_SCHEMA_VERSION)
 
 

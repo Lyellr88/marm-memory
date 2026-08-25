@@ -1,5 +1,3 @@
-"""Response contracts for the Console's runtime settings façade."""
-
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 

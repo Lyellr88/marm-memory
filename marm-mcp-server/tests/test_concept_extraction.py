@@ -1,11 +1,3 @@
-"""Tests for core/concept_extraction.py.
-
-The taxonomy rule layer (_classify_chunk) is pure and tested directly with
-real inputs -- no mocks needed. Full NER-based extraction is skipped only when
-the installed environment is missing spaCy; the English pipeline data itself is
-bundled in the MARM distribution.
-"""
-
 import importlib.util
 
 import pytest
@@ -61,7 +53,7 @@ class _FakeToken:
         self.i = i
         self.pos_ = pos_
         self.lemma_ = lemma_
-        self.head = head if head is not None else self  # self-loop = sentence root
+        self.head = head if head is not None else self
 
 
 class _FakeSpan:
@@ -157,11 +149,7 @@ def test_extract_entities_real_typed_predicate():
     assert any(pred == "fixes" for pred in predicates.values())
 
 
-# ── _classify_predicate and its helpers (pure, fake spaCy stand-ins) ────
-
-
 def test_lowest_common_ancestor_finds_shared_verb_root():
-    # "The team fixed the auth bug": team <- fixed -> bug (fixed is root)
     fixed = _FakeToken(2, pos_="VERB", lemma_="fix")
     team = _FakeToken(1, pos_="NOUN", head=fixed)
     bug = _FakeToken(5, pos_="NOUN", head=fixed)
@@ -169,7 +157,6 @@ def test_lowest_common_ancestor_finds_shared_verb_root():
 
 
 def test_lowest_common_ancestor_walks_multi_level_chains():
-    # root <- mid <- leaf_a, root <- leaf_b
     root = _FakeToken(0, pos_="VERB", lemma_="run")
     mid = _FakeToken(1, pos_="NOUN", head=root)
     leaf_a = _FakeToken(2, pos_="NOUN", head=mid)
@@ -189,8 +176,7 @@ def test_nearest_verb_ancestor_walks_up_to_find_verb():
 
 
 def test_nearest_verb_ancestor_returns_none_when_no_verb_in_chain():
-    # A bare noun-phrase list root with no verb anywhere in its own chain.
-    redis = _FakeToken(0, pos_="PROPN", lemma_="Redis")  # self-loop root
+    redis = _FakeToken(0, pos_="PROPN", lemma_="Redis")
     assert _nearest_verb_ancestor(redis) is None
 
 
@@ -204,7 +190,6 @@ def test_classify_predicate_detects_fixes_via_dependency_parse():
 
 
 def test_classify_predicate_returns_related_to_when_no_verb_link():
-    # "Redis, Postgres, and Kafka" -- Kafka.head = Redis (conj), no verb.
     redis = _FakeToken(0, pos_="PROPN", lemma_="Redis")
     kafka = _FakeToken(4, pos_="PROPN", lemma_="Kafka", head=redis)
     span_a = _FakeSpan(root=redis)
@@ -219,9 +204,6 @@ def test_classify_predicate_returns_related_to_when_verb_not_in_trigger_list():
     span_a = _FakeSpan(root=a)
     span_b = _FakeSpan(root=b)
     assert _classify_predicate(span_a, span_b) == "related_to"
-
-
-# ── _same_sentence ───────────────────────────────────────────────────
 
 
 def test_same_sentence_true_for_matching_sent_starts():

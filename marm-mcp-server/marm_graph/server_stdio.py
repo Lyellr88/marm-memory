@@ -1,16 +1,6 @@
-"""marm-graph — STDIO transport (official MCP SDK).
-
-Runs over stdin/stdout. No port, no API key, no HTTP listener. Intended for local
-single-client use (Docker STDIO, direct CLI). Mirrors marm-mcp-server's stdio shim:
-stdout is reserved for the protocol, so all prints are redirected to stderr.
-
-  python -m marm_graph.server_stdio
-"""
-
 import builtins
 import sys
 
-# Reserve stdout for the JSON-RPC protocol — redirect stray prints to stderr.
 _real_print = builtins.print
 builtins.print = lambda *args, **kwargs: _real_print(
     *args, **{**kwargs, "file": sys.stderr}
@@ -19,12 +9,12 @@ builtins.print = lambda *args, **kwargs: _real_print(
 import asyncio  # noqa: E402
 import logging  # noqa: E402
 import os  # noqa: E402
-from typing import Optional  # noqa: E402
+from typing import Any, Optional, TypeVar  # noqa: E402
 
 os.environ.setdefault("SERVER_HOST", "127.0.0.1")
 
 from mcp.server.fastmcp import FastMCP  # noqa: E402
-from pydantic import ValidationError  # noqa: E402
+from pydantic import BaseModel, ValidationError  # noqa: E402
 
 from .core import tool_router as R  # noqa: E402
 from .core.deps import get_client, reset_client  # noqa: E402
@@ -41,8 +31,10 @@ _log = logging.getLogger("marm.graph.stdio")
 
 mcp = FastMCP("marm-graph")
 
+_T = TypeVar("_T", bound=BaseModel)
 
-def _build(model_cls, **kwargs):
+
+def _build(model_cls: type[_T], **kwargs: Any) -> tuple[Optional[_T], Optional[dict]]:
     """Construct a request model, converting a bad enum/type into the same
     {"status": "error"} shape tool_router.safe() uses for backend failures,
     instead of letting pydantic's ValidationError raise through the tool call
@@ -177,7 +169,7 @@ def main() -> None:
     _log.info("marm-graph stdio starting")
     try:
         get_client().start()
-    except Exception as e:  # surface but don't crash before mcp.run
+    except Exception as e:
         _log.warning("backend start deferred: %s", e)
     try:
         mcp.run()

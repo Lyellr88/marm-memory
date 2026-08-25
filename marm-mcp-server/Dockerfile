@@ -16,13 +16,6 @@ RUN python scripts/bundle-concept-model.py && \
     pip install --no-cache-dir --upgrade "wheel>=0.46.2" && \
     pip install --no-cache-dir --user ".[docker-image]"
 
-# Bake the pinned codebase-memory-mcp static binary into the image NOW, not at
-# runtime. The archive is downloaded directly from the upstream release,
-# verified against checksums.txt, and only then copied into the final image.
-# codebase-memory-mcp is a direct dependency of this package, and curl is
-# already installed above for this stage. This entire builder stage is
-# discarded except for what's explicitly COPY --from=builder'd below, so there
-# is nothing to purge here.
 RUN set -eux; \
     VERSION="$(python -c 'from codebase_memory_mcp import _cli; print(_cli._version())')"; \
     OS_NAME="$(python -c 'from codebase_memory_mcp import _cli; print(_cli._os_name())')"; \
@@ -53,10 +46,6 @@ COPY --from=builder /usr/local/bin/codebase-memory-mcp-bin /usr/local/bin/codeba
 RUN mkdir -p /app/data && chown marm:marm /app/data
 
 COPY --chown=marm:marm . .
-# The runtime imports from /app (PYTHONPATH below), but the bundled model is
-# gitignored and absent from a clean build context. Copy the builder's
-# generated model into /app so concept extraction works regardless of whether
-# the context carried it.
 COPY --from=builder --chown=marm:marm \
     /app/marm_mcp_server/models /app/marm_mcp_server/models
 RUN mkdir -p /licenses \
@@ -73,7 +62,7 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 
 LABEL org.opencontainers.image.title="MARM Universal MCP Server"
 LABEL org.opencontainers.image.description="Production-ready Universal MCP Server with advanced AI memory capabilities, semantic search, and professional-grade architecture"
-LABEL org.opencontainers.image.version="2.44.0"
+LABEL org.opencontainers.image.version="2.44.1"
 LABEL org.opencontainers.image.authors="Ryan Lyell - marm-memory"
 LABEL org.opencontainers.image.url="https://marmsystems.com"
 LABEL org.opencontainers.image.source="https://github.com/Lyellr88/marm-memory"

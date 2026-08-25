@@ -1,5 +1,3 @@
-"""Shared helpers and chunking utilities for the MARM memory system."""
-
 import asyncio
 import html
 import math
@@ -107,24 +105,6 @@ def _safe_fts_query(query: str) -> str | None:
     return " ".join(f'"{t}"' for t in tokens)
 
 
-# English function words dropped by the or_nostop query mode.
-#
-# Deliberately limited to words that are ubiquitous *and* carry no content sense,
-# because the FTS5 tokenizer is case-insensitive ("porter ascii", see
-# core/memory_db.py) so a query term cannot be distinguished from its capitalized
-# proper-noun twin. Each word is therefore all-or-nothing: listing it loses the
-# proper-noun sense entirely, omitting it keeps the function-word sense in play.
-#
-# Words with a real content sense are intentionally absent -- month and name
-# collisions ("May", "Will"), acronyms ("US"), content verbs ("won", "get",
-# "need", "know"), and contraction fragments that double as words ("don", "won").
-# Omitting them costs little: BM25 already discounts frequent terms by inverse
-# document frequency, so a mid-frequency word ranks low on its own rather than
-# swamping the candidate pool.
-#
-# Scoped to the default English embedding model; non-English queries keep every
-# token and simply OR them, which is less precise but never an error.
-# FTS_EXTRA_STOPWORDS extends this per deployment.
 _FTS_BASE_STOPWORDS = frozenset(
     """
     a an the this that these those there here
@@ -168,23 +148,13 @@ def _wide_fts_query(query: str) -> str | None:
 
     if FTS_QUERY_MODE == "or_nostop":
         kept = [t for t in tokens if t.lower() not in _FTS_STOPWORDS]
-        # An all-stopword query ("what is the") has nothing worth matching;
-        # returning None routes it to pure semantic recall rather than OR-ing
-        # filler words against every memory in the store.
         if not kept:
             return None
         tokens = kept
 
-    # Quoting each token is a safety control, not formatting: it stops user input
-    # from being parsed as FTS5 syntax (NEAR, *, ^, column filters).
     return " OR ".join(f'"{t}"' for t in tokens)
 
 
-# Sized for jina-embeddings-v2-small-en's 8,192-token window (config/settings.py's
-# DEFAULT_SEMANTIC_MODEL) -- roughly 30x the 256-token window the old 150-word
-# chunks were tuned for. Starting points to tune from real usage, not
-# validated-forever constants -- same framing as this codebase's other
-# embedding-adjacent thresholds (CONCEPT_DUPLICATE_SIMILARITY_THRESHOLD).
 MEMORY_CHUNK_THRESHOLD_WORDS = 500
 MEMORY_CHUNK_TARGET_WORDS = 250
 MEMORY_CHUNK_OVERLAP_WORDS = 50
@@ -231,7 +201,7 @@ def _chunk_text(
     n = len(words)
     if n <= threshold:
         return []
-    num_chunks = max(1, -(-n // target_size))  # ceil division
+    num_chunks = max(1, -(-n // target_size))
     spans = _split_evenly(words, num_chunks)
     chunks = []
     for start, end in spans:
@@ -306,9 +276,6 @@ async def _write_chunks(
             "SELECT content_hash FROM memories WHERE id = ?", (memory_id,)
         ).fetchone()
         if current_hash is None or current_hash[0] != expected_content_hash:
-            # Release the BEGIN IMMEDIATE write lock here rather than leaving it
-            # to conn.close(); shutdown now waits on these tasks, so a held lock
-            # sits on the teardown path.
             conn.execute("ROLLBACK")
             _safe_print(
                 f"Chunk write aborted for memory {memory_id}: content changed before insert"
@@ -357,25 +324,18 @@ def sanitize_content(content: str) -> str:
     return sanitized
 
 
-# ---------------------------------------------------------------------------
-# Exact-query detection
-# ---------------------------------------------------------------------------
-
-# Patterns that strongly suggest a syntax-heavy, exact-lookup query.
 _EXACT_PATTERNS = [
-    re.compile(r"[A-Z][A-Z0-9_]{2,}"),  # UPPER_SNAKE_CASE constants / env vars
-    re.compile(
-        r"[\w./\-]+\.(py|js|ts|json|yaml|yml|toml|cfg|ini|sh|md|env|conf)\b"
-    ),  # file paths
-    re.compile(r"--[\w\-]+=?"),  # CLI flags  --flag or --flag=value
-    re.compile(r"/[\w./\-]{3,}"),  # Unix paths  /home/user/...
-    re.compile(r"[A-Za-z_]\w*\("),  # function calls  my_func(
-    re.compile(r"\b\w+\.\w+\.\w+\b"),  # dotted namespaces  a.b.c
-    re.compile(r"[A-Za-z_]\w*:[A-Za-z_/\d]"),  # key:value or namespace:item
-    re.compile(r"\b(?:GET|POST|PUT|PATCH|DELETE|HEAD)\s+/"),  # HTTP verbs + path
-    re.compile(r"https?://\S+"),  # URLs
-    re.compile(r'["`][^"`]{1,80}["`]'),  # backtick or double-quoted strings
-    re.compile(r"\b\w+_[A-Z][A-Z0-9_]*\b"),  # mixed_CASE config keys  e.g. server_HOST
+    re.compile(r"[A-Z][A-Z0-9_]{2,}"),
+    re.compile(r"[\w./\-]+\.(py|js|ts|json|yaml|yml|toml|cfg|ini|sh|md|env|conf)\b"),
+    re.compile(r"--[\w\-]+=?"),
+    re.compile(r"/[\w./\-]{3,}"),
+    re.compile(r"[A-Za-z_]\w*\("),
+    re.compile(r"\b\w+\.\w+\.\w+\b"),
+    re.compile(r"[A-Za-z_]\w*:[A-Za-z_/\d]"),
+    re.compile(r"\b(?:GET|POST|PUT|PATCH|DELETE|HEAD)\s+/"),
+    re.compile(r"https?://\S+"),
+    re.compile(r'["`][^"`]{1,80}["`]'),
+    re.compile(r"\b\w+_[A-Z][A-Z0-9_]*\b"),
 ]
 
 
@@ -388,6 +348,5 @@ def _is_exact_query(query: str) -> bool:
     """
     word_count = len(query.split())
     if word_count > 12:
-        # Long natural-language sentences are almost never exact lookups.
         return False
     return any(pat.search(query) for pat in _EXACT_PATTERNS)

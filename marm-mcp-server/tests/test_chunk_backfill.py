@@ -1,11 +1,3 @@
-"""The --rechunk backfill: re-split, fill, delete, and refuse.
-
-Chunk sizing constants changed after rows were already written, and
-migrate_embeddings re-embeds chunk_text in place, so stale boundaries survive
-every migration. These tests cover each repair case plus the guards that keep the
-backfill from writing mixed-dimension vectors or racing a live server.
-"""
-
 import sqlite3
 
 import numpy as np

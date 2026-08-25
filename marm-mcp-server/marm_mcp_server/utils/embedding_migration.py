@@ -1,5 +1,3 @@
-"""Resumable, stopped-server migration for persisted embedding vectors."""
-
 from __future__ import annotations
 
 import sqlite3
@@ -18,9 +16,6 @@ from .embedding_state import (
     write_embedding_model_marker,
 )
 
-# notebook_entries.embedding is retired -- scratch writes no longer populate
-# it (services/notebook.py's _add). Promoted docs are covered through their
-# memories mirror ("memories" below), not a separate embedding path here.
 _MEMORY_TABLES = (
     ("memories", "content", "embedding"),
     ("memory_chunks", "chunk_text", "embedding"),
@@ -59,12 +54,6 @@ def _load_encoder() -> _Encoder:
     return TextEmbedding(model_name=DEFAULT_SEMANTIC_MODEL)
 
 
-# Every text in a batch is padded to the longest one, so attention memory tracks
-# row count times that longest length, not the sum of lengths. A fixed batch of 100
-# real rows requested a 35 GB buffer and crashed the migration. Measured failure
-# boundary on this metric was 227,000 for token-dense text and 333,600 for prose;
-# this keeps a 2x margin under the lower one. Long batches buy no speed anyway,
-# since encode time is linear in row count.
 MAX_BATCH_PADDED_CHARACTERS = 100_000
 
 

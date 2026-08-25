@@ -1,5 +1,3 @@
-"""Tests for config safety: clamping, warnings, and safe parsing."""
-
 import importlib
 import os
 import sys
@@ -36,7 +34,7 @@ def test_rate_limit_rpm_negative_clamped_to_zero():
 def test_malformed_int_env_falls_back_to_default():
     """Malformed int env var should fall back to default, not crash."""
     settings_mod = _reload_settings_with_env({"COMPACTION_TRIGGER_COUNT": "abc"})
-    assert settings_mod.COMPACTION_TRIGGER_COUNT == 5  # default
+    assert settings_mod.COMPACTION_TRIGGER_COUNT == 5
 
 
 def test_malformed_float_env_falls_back_to_default():
@@ -44,7 +42,7 @@ def test_malformed_float_env_falls_back_to_default():
     settings_mod = _reload_settings_with_env(
         {"CONSOLIDATION_THRESHOLD": "not_a_number"}
     )
-    assert settings_mod.CONSOLIDATION_THRESHOLD == 0.92  # default
+    assert settings_mod.CONSOLIDATION_THRESHOLD == 0.92
 
 
 def test_consolidation_threshold_clamped_to_unit_range():
@@ -70,7 +68,5 @@ def test_resolve_marm_api_key_persists_a_generated_key_across_starts(
     assert first_start
     assert env_path.read_text() == f"MARM_API_KEY={first_start}\n"
 
-    # Second start: nothing generates now, so this only passes if the file
-    # from the first start reads back whole.
     second_start = api_key_bootstrap.resolve_marm_api_key("0.0.0.0")
     assert second_start == first_start

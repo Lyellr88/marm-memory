@@ -1,27 +1,20 @@
-"""Authentication middleware for marm-graph.
-
-Same two-mode gate as marm-mcp-server: loopback-only when no key is set, Bearer
-required when a key is set. This is what makes "UI-only" REST endpoints actually
-safe on the wire — they are HTTP-facing, so they go through this gate too.
-"""
-
 import secrets
 
-from fastapi import Request
+from fastapi import Request, Response
 from fastapi.responses import JSONResponse
+from starlette.middleware.base import RequestResponseEndpoint
 
 from ..config.settings import MARM_GRAPH_API_KEY
 
 PUBLIC_PATHS = {"/health"}
-# Root/docs/openapi are only public in loopback-only mode (no key configured).
-# Once MARM_GRAPH_API_KEY is set, they're gated like everything else instead
-# of leaking the route/schema surface on a locked-down deployment.
 _DOCS_PATHS = {"/", "/docs", "/redoc", "/openapi.json"}
 _DOCS_PREFIXES = ("/openapi",)
 _LOOPBACK = ("127.0.0.1", "::1", "localhost")
 
 
-async def auth_middleware(request: Request, call_next):
+async def auth_middleware(
+    request: Request, call_next: RequestResponseEndpoint
+) -> Response:
     path = request.url.path
     is_docs_path = path in _DOCS_PATHS or path.startswith(_DOCS_PREFIXES)
 
@@ -46,9 +39,6 @@ async def auth_middleware(request: Request, call_next):
 
     auth_header = request.headers.get("Authorization", "")
     token = auth_header[7:] if auth_header.startswith("Bearer ") else ""
-    # Compare as bytes, not str -- compare_digest raises TypeError on
-    # non-ASCII str, so a malformed/unicode Authorization header would 500
-    # instead of cleanly 401ing. bytes has no such restriction.
     if not secrets.compare_digest(token.encode(), MARM_GRAPH_API_KEY.encode()):
         return JSONResponse(
             status_code=401,

@@ -1,11 +1,7 @@
-"""Tests for consolidation Layer 1 — content hash dedup."""
-
 import pytest
 
 from marm_mcp_server.core.consolidation import compute_content_hash
 from marm_mcp_server.core.memory import MARMMemory
-
-# --- compute_content_hash unit tests ---
 
 
 def test_compute_content_hash_normalizes_case():
@@ -34,9 +30,6 @@ def test_compute_content_hash_returns_sha256_hex_string():
     result = compute_content_hash("any content")
     assert len(result) == 64
     assert all(c in "0123456789abcdef" for c in result)
-
-
-# --- Layer 1 integration tests against real SQLite ---
 
 
 @pytest.mark.asyncio
@@ -115,7 +108,6 @@ async def test_content_hash_column_populated_on_all_writes_regardless_of_consoli
     from marm_mcp_server.core import memory_ops as memory_ops_module
 
     monkeypatch.setattr(memory_ops_module, "CONSOLIDATION_ENABLED", False)
-    # Even with consolidation disabled, hash is still stored on every write.
     mem = MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
 
@@ -133,9 +125,6 @@ async def test_content_hash_column_populated_on_all_writes_regardless_of_consoli
 
 @pytest.mark.asyncio
 async def test_hash_collision_stores_as_new_row_not_false_dedup(monkeypatch, tmp_path):
-    # Simulate a SHA-256 collision: two different contents producing the same hash.
-    # Both should store as separate rows because find_exact_duplicate compares
-    # normalized content after the hash match — different content means no dedup.
     from marm_mcp_server.core import memory_ops as memory_ops_module
 
     monkeypatch.setattr(memory_ops_module, "CONSOLIDATION_ENABLED", True)
@@ -164,7 +153,6 @@ async def test_consolidation_disabled_stores_duplicates_normally(monkeypatch, tm
     from marm_mcp_server.core import memory_ops as memory_ops_module
 
     monkeypatch.setattr(memory_ops_module, "CONSOLIDATION_ENABLED", False)
-    # With consolidation disabled, identical writes always insert new rows.
     mem = MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
 
@@ -183,8 +171,6 @@ async def test_consolidation_disabled_stores_duplicates_normally(monkeypatch, tm
 
 @pytest.mark.asyncio
 async def test_concurrent_identical_writes_produce_one_row(monkeypatch, tmp_path):
-    # Regression: check-then-insert race — two concurrent writes of the same content must
-    # not bypass Layer 1 dedup and insert duplicate rows. BEGIN IMMEDIATE closes the gap.
     import asyncio
 
     from marm_mcp_server.core import memory as memory_module
@@ -211,9 +197,6 @@ async def test_concurrent_identical_writes_produce_one_row(monkeypatch, tmp_path
 
 @pytest.mark.asyncio
 async def test_race_window_sealed_by_begin_immediate(monkeypatch, tmp_path):
-    # Stronger concurrency regression: park both coroutines after the soft preflight
-    # check and before BEGIN IMMEDIATE, then release them together. The under-lock
-    # re-check must still collapse the duplicate write to a single row.
     import asyncio
 
     from marm_mcp_server.core import memory as memory_module

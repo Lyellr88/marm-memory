@@ -1,5 +1,3 @@
-"""Human-readable status/doctor/maintenance rendering for the product CLI."""
-
 from __future__ import annotations
 
 import json

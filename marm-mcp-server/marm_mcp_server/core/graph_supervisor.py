@@ -1,12 +1,3 @@
-"""Singleton supervisor for the embedded marm-graph code-structure engine.
-
-Owns one marm_graph CbmClient for the process lifetime. Startup is lazy — the
-first graph-tool call triggers it, not FastAPI lifespan — and never raises:
-any failure (no network for the first-run binary download, disk full, schema
-drift, GRAPH_ENABLED=false, ...) leaves is_available() False so core memory
-tools are never affected. Mirrors marm-graph's own core/deps.py singleton.
-"""
-
 import threading
 from typing import Optional
 
@@ -28,16 +19,7 @@ class GraphSupervisor:
         self._lock = threading.Lock()
         self._state_lock = threading.Lock()
         self._state = "not_started"
-        # Set only once a startup attempt is FULLY resolved (success, failure,
-        # or disabled) -- never set early. A plain "start attempted" flag set
-        # before verify_and_start() completes would let a concurrent caller
-        # skip the lock entirely and read _available while it's still False
-        # but startup is genuinely still in progress. Callers during an
-        # in-flight startup must block on _lock, not race past it.
         self._ready = threading.Event()
-        # stop() is terminal. It clears _ready so a later call would otherwise
-        # re-enter startup and spawn a child the supervisor never adopts, since
-        # stop() runs at process teardown and nothing sets this back.
         self._stopped = False
 
     def _ensure_started(self) -> None:
@@ -45,10 +27,6 @@ class GraphSupervisor:
         if self._ready.is_set() or self._stopped:
             return
         with self._lock:
-            # _stopped again, not just _ready: the check above happens outside
-            # the lock, so a caller can pass it, block here while stop() runs to
-            # completion, and then find _ready cleared and start a child that the
-            # supervisor will never adopt or close.
             if self._ready.is_set() or self._stopped:
                 return
             try:
@@ -74,7 +52,7 @@ class GraphSupervisor:
                     try:
                         client.close()
                     except Exception:
-                        pass  # best-effort; the primary failure is already logged
+                        pass
                     with self._state_lock:
                         self._state = "error"
                     return
@@ -102,7 +80,7 @@ class GraphSupervisor:
             if not _cli._bin_path(_cli._version()).exists():
                 logger.info("MARM: downloading graph engine (~269MB, one-time)...")
         except Exception:
-            pass  # best-effort; must never block startup
+            pass
 
     def is_available(self) -> bool:
         self._ensure_started()

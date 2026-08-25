@@ -1,12 +1,3 @@
-"""Tests for core/graph_client.py's soft-fail in-process link into marm-graph.
-
-Uses a fake CbmClient + monkeypatched tool_router.do_lookup rather than the
-real 269MB codebase-memory-mcp binary (unavailable in this sandbox, same
-constraint as marm_graph's own @requires_binary tests) -- these tests exercise
-graph_client's own dispatch/soft-fail logic, not marm-graph's real search
-quality, so a fake at this specific boundary is appropriate.
-"""
-
 from conftest import requires_binary
 
 from marm_mcp_server.core import graph_client
@@ -15,33 +6,6 @@ from marm_mcp_server.core.graph_supervisor import graph_supervisor
 
 class _FakeClient:
     pass
-
-
-class _ProjectClient:
-    def __init__(self, projects):
-        self.projects = projects
-
-    def call_tool(self, name, payload):
-        assert name == "list_projects"
-        assert payload == {}
-        return {"projects": self.projects}
-
-
-def test_indexed_project_names_returns_only_named_projects(monkeypatch):
-    monkeypatch.setattr(graph_supervisor, "is_available", lambda: True)
-    monkeypatch.setattr(
-        graph_supervisor,
-        "get_client",
-        lambda: _ProjectClient([{"name": "proj-a"}, {"root_path": "C:/repo"}, "bad"]),
-    )
-
-    assert graph_client.indexed_project_names() == {"proj-a"}
-
-
-def test_indexed_project_names_soft_fails(monkeypatch):
-    monkeypatch.setattr(graph_supervisor, "is_available", lambda: False)
-
-    assert graph_client.indexed_project_names() == set()
 
 
 def test_find_code_match_reports_unavailable_when_graph_unavailable(monkeypatch):

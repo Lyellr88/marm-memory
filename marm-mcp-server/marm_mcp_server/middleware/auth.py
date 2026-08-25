@@ -1,5 +1,3 @@
-"""Authentication middleware for MARM MCP Server."""
-
 from fastapi import Request
 from fastapi.responses import JSONResponse, Response
 from starlette.middleware.base import RequestResponseEndpoint

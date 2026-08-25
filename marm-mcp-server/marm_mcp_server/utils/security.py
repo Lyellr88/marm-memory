@@ -1,5 +1,3 @@
-"""Cryptographic utilities — no imports from settings, no side effects."""
-
 import ctypes
 import secrets
 import string
@@ -154,8 +152,6 @@ def _set_windows_owner_only_dacl(path: Path) -> bool:
             ):
                 return False
             try:
-                # restype is DWORD, so ctypes hands back an int; naming it keeps
-                # that contract visible instead of leaking ctypes' untyped call.
                 status: int = advapi32.SetNamedSecurityInfoW(
                     str(path),
                     se_file_object,

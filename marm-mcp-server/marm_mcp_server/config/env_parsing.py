@@ -1,11 +1,3 @@
-"""Env-var parsing helpers shared by every setting in config/settings.py.
-
-Each function reads one env var, validates it, and falls back to a documented
-default with a stderr warning on malformed input -- so a typo in an operator's
-environment degrades to a known-good value instead of crashing the server or
-silently doing something unintended.
-"""
-
 import os
 import sys
 

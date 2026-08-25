@@ -1,11 +1,3 @@
-"""STDIO log-entry/notebook tool wrappers.
-
-Thin transport-specific glue over services/log_entry.py's shared
-business logic -- supplies STDIO's own logger (stderr +
-~/.marm/logs/marm-stdio.log via _stdio_log) and STDIO's own
-invalid-type error shape for marm_delete (a dict, not an HTTPException).
-"""
-
 from typing import Optional
 
 from ..core.stdio_logging import _stdio_log

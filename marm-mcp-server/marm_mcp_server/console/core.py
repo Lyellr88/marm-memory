@@ -1,10 +1,3 @@
-"""Cross-domain helpers shared by 2+ endpoint modules.
-
-Domain-local helpers (used by only one endpoints/*.py file) stay in
-that file instead -- this module is only for genuine cross-cutting
-concerns, matching marm_mcp_server's core/ convention.
-"""
-
 from __future__ import annotations
 
 import os

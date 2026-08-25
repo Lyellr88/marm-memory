@@ -1,5 +1,3 @@
-"""End-to-end coverage for bounded memory-to-code link refreshes."""
-
 import asyncio
 import importlib
 import sys

@@ -1,48 +1,21 @@
-# One lint contract for every Python tree in the repo: marm-mcp-server/,
-# scripts/, and marm-console/tests/.
-#
-# It lives at the root because ruff resolves config per file by walking up from
-# that file, and only marm-mcp-server/ had any. Everything else inherited ruff's
-# unconfigured default, which is neither chosen nor stable: 0.15.16 enabled 59
-# rules by default and 0.16.2 enables 413, so `ruff check` at the root went from
-# clean to 111 findings in scripts/ with no code change. Selecting explicitly is
-# what makes the scope a decision rather than a side effect of the installed
-# version. The version stays pinned as well, because new rules still land inside
-# a selected family between releases (RUF036 did exactly that in 0.16.2).
+# Root-level so it covers marm-mcp-server/, scripts/, and marm-console/tests/ alike.
 
 target-version = "py310"
 line-length = 88
 
 [lint]
-# E/F/B/RUF were the original four. The rest were added after measuring the cost
-# of each family across all three trees; the ones left out are not oversights:
-# S (143), BLE (146), PL (324), UP (259), and T20 (604) are each their own
-# project. T20 in particular would be wrong here, since build and smoke scripts
-# print by design.
 select = ["E", "F", "B", "RUF", "W", "I", "C4", "ASYNC", "DTZ", "A"]
 ignore = [
-    "E501",    # line too long — ruff format handles what it can
-    "RUF013",  # implicit Optional — existing signatures, defer to type refactor pass
-    "B905",    # zip() without strict= — pre-existing bench/test pattern
-    # The shadowed name is the published contract: marm_delete(type=...) is an
-    # MCP tool parameter and /api/concepts/search?type= is an HTTP query
-    # parameter, so renaming either is a breaking schema change, not a cleanup.
-    # A001 and A003 stay on.
-    "A002",
-    # Both remedies are trio/anyio.Path, and this is a plain asyncio codebase.
-    # The calls they flag are a bundled PROTOCOL.md read and one os.path.isdir
-    # per project per poll cycle, so the fix would add a thread hop and change
-    # startup behavior to save nothing measurable. ASYNC110 stays on: an actual
-    # busy-wait loop in server code is worth failing over.
-    "ASYNC230",
-    "ASYNC240",
+    "E501",    # ruff format handles what it can
+    "RUF013",  # implicit Optional, pre-existing signatures
+    "B905",    # zip() without strict=, pre-existing bench/test pattern
+    "A002",    # type= is a published MCP/HTTP param name, not renameable
+    "ASYNC230", # trio/anyio-only remedy, not worth a thread hop here
+    "ASYNC240", # same
 ]
 
 [lint.per-file-ignores]
-# Polling a worker's observable state with sleep is how these tests wait for a
-# background loop to act. The rule's remedy, an asyncio.Event, would require the
-# code under test to signal the test, which is the coupling the polling avoids.
-"**/tests/**" = ["ASYNC110"]
+"**/tests/**" = ["ASYNC110"]  # tests poll worker state by design
 
 [format]
 quote-style = "double"

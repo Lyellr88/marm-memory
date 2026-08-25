@@ -1,5 +1,3 @@
-"""Shared notebook action dispatcher for MARM MCP Server."""
-
 import threading
 from datetime import datetime, timezone
 from typing import Awaitable, Callable, Optional
@@ -244,14 +242,6 @@ async def _save(
     mirror_memory_id: str | None = None
 
     if not was_created and doc_row.memory_id:
-        # Before the replacement is written, not after. Cleanup strips every
-        # trace of a memory id, so running it once the new content is already
-        # queued can delete entities the worker has written for that content,
-        # with the queue row settled and nothing left to re-index it.
-        #
-        # Keyed on the previous id too, not the one store_doc_mirror returns.
-        # A mirror whose row was deleted out from under it is repaired with a
-        # fresh id, and it is the old id that carries the stale provenance.
         from ..endpoints.memory import _cleanup_deleted_concepts_async
 
         try:
@@ -283,10 +273,6 @@ async def _save(
             with docs_db.get_connection() as conn:
                 docs_db.set_memory_id(conn, doc_row.id, mirror_memory_id)
         except Exception as e:
-            # The mirror row is written but the docs row does not point at it.
-            # Reported as pending rather than raised, for the same reason a failed
-            # mirror write is: the durable save already succeeded. store_doc_mirror
-            # resolves the orphan by doc_id, so the repair costs no duplicate.
             _safe_print(f"Doc mirror id link failed for doc {doc_row.id}: {e}")
             mirror_status = "pending"
 
@@ -296,11 +282,6 @@ async def _save(
         "status": "success",
         "message": f"📄 Doc '{name}' {verb}{promoted_note}",
         "doc_id": doc_row.id,
-        # Keyed on a mirror row existing, not on the link being recorded. Both
-        # pending causes used to report the doc's old link, which was right while
-        # pending only meant the mirror write itself failed. Now that a written
-        # mirror can go unlinked, that answer names a dangling or absent row while
-        # a real mirror exists; mirror_status already says the link is not saved.
         "memory_id": mirror_memory_id
         if mirror_memory_id is not None
         else doc_row.memory_id,

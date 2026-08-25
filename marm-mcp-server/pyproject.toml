@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "marm-mcp-server"
-version = "2.44.0"
+version = "2.44.1"
 description = "Local-first 3-in-1 AI memory layer & MCP server for Claude Code, Codex, Grok, Gemini, VS Code and Cursor. Fuses session history, codebase indexing & concept graphs in SQLite. Enables zero-cloud, privacy-first context & instant recall also works with multi-agent swarms."
 readme = "README.md"
 license = "Apache-2.0"
@@ -61,8 +61,6 @@ marm-mcp-stdio = "marm_mcp_server.server_stdio:main"
 
 [project.optional-dependencies]
 docker-image = []
-# Kept so existing ``pip install marm-mcp-server[concepts]`` commands remain
-# valid. Concept extraction is now bundled with the base distribution.
 concepts = []
 dev = [
     "pytest>=7.0.0",
@@ -71,18 +69,8 @@ dev = [
     "build>=1.2.2",
     "jsonschema>=4.0.0",
     "requests>=2.31.0",
-    # Pinned, not floored, unlike everything above: these three decide whether
-    # a gate passes by absolute output rather than by pass/fail, so a floor lets
-    # a developer check against a different checker than CI does. mypy and its
-    # stubs set the error count scripts/typecheck.py compares to BASELINE, and
-    # ruff promotes rules between minor releases (0.16.2 graduated RUF036 and
-    # failed a PR whose code had not changed). Upgrading any of them is a
-    # deliberate re-baseline: bump here and in every workflow that pins them.
     "mypy==2.1.0",
     "types-psutil==7.2.2.20260518",
-    # ruff owns both lint and format. black/isort/flake8 were removed rather
-    # than satisfied: black disagreed with ruff format on 13 files, and flake8
-    # only reported E501 against its own 79-char default while this uses 88.
     "ruff==0.16.2",
     "tomli>=2.0.0; python_version < '3.11'",
 ]
@@ -101,15 +89,9 @@ python_version = "3.10"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
-# Without this, Pydantic models read as plain classes and every optional field
-# looks like a required constructor argument.
 plugins = ["pydantic.mypy"]
 follow_imports = "silent"
 
-# Third-party packages that ship no py.typed marker and have no stubs on PyPI.
-# Listed one library at a time on purpose: a global ignore_missing_imports would
-# also swallow a mistyped or deleted MARM import, which is the one import error
-# worth catching. psutil is deliberately absent, since types-psutil covers it.
 [[tool.mypy.overrides]]
 module = [
     "codebase_memory_mcp.*",
@@ -134,13 +116,7 @@ markers = [
 ]
 
 [tool.ruff]
-# The contract itself lives in the repo root's ruff.toml so that this package,
-# scripts/, and marm-console/tests/ cannot drift apart. Kept as an extend rather
-# than deleted outright: CI lints from inside this directory, and a pyproject
-# with no [tool.ruff] is skipped during config discovery, which makes the
-# inherited settings invisible from here.
 extend = "../ruff.toml"
 
-# MCP Server Configuration
 [project.entry-points."mcp.servers"]
 marm = "server:create_server"

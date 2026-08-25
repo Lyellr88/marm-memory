@@ -1,13 +1,5 @@
-"""Utility helper functions for MARM MCP Server."""
-
 from pathlib import Path
 
-# The single home for MARM's shipped documentation. It lives inside the package
-# so one path works for every install type -- pip wheel, Docker image, and dev
-# checkout alike. Both this module and services/documentation.py resolve docs
-# through DOCS_DIR; do not reintroduce a second copy outside the package, since
-# a copy at the repo root is not included in the wheel and silently resolves to
-# nothing once installed.
 DOCS_DIR = Path(__file__).resolve().parent.parent / "resources" / "marm-docs"
 
 

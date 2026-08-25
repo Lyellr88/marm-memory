@@ -1,21 +1,4 @@
 #!/usr/bin/env python3
-"""Decide whether a console dependency PR is safe to merge.
-
-Green CI does not answer this. The Ruff job never reads package.json or the
-lockfile, and the console build only runs on a release tag, so a broken
-dependency stays invisible until a tag is already cut.
-
-Builds the PR in a throwaway git worktree, so the working tree, the current
-branch, and marm-console/node_modules are untouched. Compares the emitted asset
-filenames against the base branch: those names are content hashes, so identical
-names mean an identical bundle.
-
-    python scripts/check-console-pr.py 137          one PR
-    python scripts/check-console-pr.py 135 136 137  several
-    python scripts/check-console-pr.py --ref MARM-main   a branch instead
-
-Needs node, pnpm, and gh on PATH. Exits non-zero if any target fails.
-"""
 
 from __future__ import annotations
 
@@ -37,9 +20,6 @@ _created_refs: list[str] = []
 def run(
     cmd: list[str], cwd: Path, timeout: int = 900
 ) -> subprocess.CompletedProcess[str]:
-    # Resolved rather than passed bare: pnpm is a .cmd shim on Windows, which
-    # CreateProcess cannot launch by name without a shell. Resolving keeps
-    # shell=False instead of reaching for shell=True.
     resolved = shutil.which(cmd[0]) or cmd[0]
     return subprocess.run(
         [resolved, *cmd[1:]],
@@ -65,8 +45,6 @@ def fetch_pr(number: str) -> tuple[str, str, bool]:
     PR. Falls back to the head when no merge ref exists, which is GitHub's way
     of saying the PR does not merge cleanly.
     """
-    # Under refs/console-check/ rather than refs/heads/: a branch there would
-    # collide with a developer's own branch of that name, which cleanup deletes.
     local = f"refs/console-check/pr{number}"
     for ref, suffix, mergeable in (
         (f"refs/pull/{number}/merge", "merged", True),
@@ -166,8 +144,6 @@ def main() -> int:
         print(f"FAIL  missing required tools: {', '.join(missing)}")
         return 2
 
-    # Checked, not fired and forgotten: silently reusing a stale origin/MARM-main
-    # makes base drift show up as a bundle difference the PR did not cause.
     fetched = run(["git", "fetch", "--quiet", "origin", "MARM-main"], REPO_ROOT, 120)
     if fetched.returncode != 0:
         print(f"FAIL  could not fetch {BASE_REF}:\n      {fetched.stderr.strip()}")
@@ -191,8 +167,6 @@ def main() -> int:
             print(f"baseline: {BASE_REF}")
             ok, detail, baseline = check(BASE_REF, "baseline", workdir)
             if not ok:
-                # Every later verdict would be meaningless: a failure could be
-                # the base branch rather than the PR.
                 print(f"\nFAIL  baseline {BASE_REF} does not build.\n{detail}")
                 print(
                     "Fix the base branch first; PR verdicts cannot be trusted until then."
@@ -212,8 +186,6 @@ def main() -> int:
                     changed = sorted(produced ^ baseline)
                     detail += "\n      bundle changed: " + ", ".join(changed[:6])
             if ok and not mergeable:
-                # A clean build of the head says nothing about a PR GitHub cannot
-                # merge, so the verdict has to override the build result.
                 ok = False
                 detail += "\n      no merge ref: GitHub cannot merge this PR cleanly"
             results.append((label, ok, detail))

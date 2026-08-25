@@ -1,5 +1,3 @@
-"""Recall orchestration paths for the MARM memory system (exact, semantic, text-search)."""
-
 import asyncio
 import json
 from datetime import datetime, timezone
@@ -34,7 +32,6 @@ from .memory_utils import (
 if TYPE_CHECKING:
     from .memory import MARMMemory
 
-# include_scan_metadata=True swaps the plain list for a (list, metadata) pair.
 RecallResult = Union[List[Dict], Tuple[List[Dict], dict]]
 
 
@@ -65,7 +62,6 @@ async def _recall_exact(
     """
     _recall_debug(f"exact path: terms={len(query.split())}, session={session}")
 
-    # --- attempt FTS5 first ---
     fts_results = await _recall_text_search(
         mem,
         query,
@@ -81,7 +77,6 @@ async def _recall_exact(
         _recall_debug(f"exact_fts: {len(fts_results)} results")
         return fts_results
 
-    # --- FTS returned nothing: fall back to LIKE scan ---
     _recall_debug("exact_fts returned 0 results → LIKE fallback")
     try:
         with mem.get_connection() as conn:
@@ -185,7 +180,6 @@ async def _recall_similar(
             }
         return results
 
-    # --- Exact lane ---
     use_exact = (exact_mode == "exact") or (
         exact_mode == "auto" and _is_exact_query(query)
     )
@@ -238,11 +232,6 @@ async def _recall_similar(
                     project,
                     platform,
                 )
-                # Structured so a benchmark run can count how many queries
-                # actually produce candidates -- the metric that exposed this
-                # lane as dormant (0 of 400 LoCoMo questions pre-v2.31.0).
-                # Deliberately records only shape, never the search terms, so
-                # enabling recall debugging cannot leak memory content.
                 _recall_debug(
                     f"fts_candidates={len(candidates)} "
                     f"terms={fts_query.count(' OR ') + 1 if ' OR ' in fts_query else 1} "
@@ -292,12 +281,8 @@ async def _recall_similar(
                 f"recall_similar: skipped {dim_skipped} memories with wrong embedding dimension (expected {len(query_embedding)})"
             )
 
-        # Lexical fusion only applies on the FTS filter->rerank path, where every
-        # scored row has a BM25 score. The semantic fallback scan has no lexical
-        # signal, so it keeps the pure semantic+temporal blend.
         apply_bm25 = not use_semantic_fallback and bool(bm25_by_id)
 
-        # One instant for the whole set, so equal timestamps score equally.
         scored_at = datetime.now(timezone.utc)
 
         combined: dict[str, tuple] = {}
@@ -383,7 +368,6 @@ async def _recall_text_search(
         f"builder={'wide' if apply_temporal else 'strict'}"
     )
 
-    # None on the exact lane, which never reaches _temporal_score.
     scored_at = datetime.now(timezone.utc) if apply_temporal else None
 
     def _blend_temporal(base_sim: float, timestamp: str) -> float:
@@ -392,20 +376,8 @@ async def _recall_text_search(
         t_score = _temporal_score(timestamp, TEMPORAL_HALF_LIFE_DAYS, scored_at)
         return (1 - TEMPORAL_WEIGHT) * base_sim + TEMPORAL_WEIGHT * t_score
 
-    # apply_temporal is already this function's lane discriminator: True from the
-    # two semantic-fallback call sites, False from _recall_exact. The exact lane
-    # must never widen, so it stays on the strict builder.
-    #
-    # Under strict AND this lane was effectively dead: a natural-language question
-    # matched nothing, the LIKE fallback then searched for the whole question as a
-    # substring and also matched nothing. Measured at 0.1% any-hit on LoCoMo with
-    # the encoder disabled, against 55.4% using the wide builder. FTS_QUERY_MODE=and
-    # remains the escape hatch for anyone who wants strict matching everywhere.
     fts_query = _wide_fts_query(query) if apply_temporal else _safe_fts_query(query)
     if fts_query is not None:
-        # Temporal re-ranking must see beyond the top-`limit` BM25 rows, or a
-        # newer result ranked just outside the cutoff could never be promoted.
-        # The exact lane keeps the requested limit (pure BM25 order).
         fetch_limit = max(limit, FTS_CANDIDATE_LIMIT) if apply_temporal else limit
         try:
             fts_rows = await asyncio.to_thread(

@@ -1,5 +1,3 @@
-"""Docker parser registration and dispatch for the marm-memory product CLI."""
-
 from __future__ import annotations
 
 import argparse

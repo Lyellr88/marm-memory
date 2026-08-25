@@ -1,5 +1,3 @@
-"""Lease-backed, coalescing queue for code-link refresh work."""
-
 from __future__ import annotations
 
 import sqlite3

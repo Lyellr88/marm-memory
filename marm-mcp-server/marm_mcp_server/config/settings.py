@@ -1,5 +1,3 @@
-"""Configuration settings for MARM MCP Server."""
-
 import importlib.util
 import os
 import sys
@@ -15,11 +13,6 @@ from .env_parsing import (
     _safe_unit_float,
 )
 
-# Setting this to 0 makes the server behave exactly as it does when fastembed is
-# not installed: no model load, no embeddings written, recall served by the
-# keyword/text lane. Two uses: exercising the degraded path without uninstalling
-# the dependency (there is no other way to benchmark or verify it), and letting a
-# low-memory host skip loading the model at all.
 SEMANTIC_SEARCH_ENABLED = os.environ.get("SEMANTIC_SEARCH_ENABLED", "1") == "1"
 _FASTEMBED_INSTALLED = importlib.util.find_spec("fastembed") is not None
 SEMANTIC_SEARCH_AVAILABLE = SEMANTIC_SEARCH_ENABLED and _FASTEMBED_INSTALLED
@@ -42,8 +35,6 @@ if not SCHEDULER_AVAILABLE:
     )
 
 CONCEPT_MODEL_PATH = Path(__file__).resolve().parents[1] / "models" / "en_core_web_sm"
-# Same two files scripts/bundle-concept-model.py verifies after extraction, so a
-# partial install cannot report ready here and then fail on the first build.
 CONCEPT_MODEL_AVAILABLE = all(
     (CONCEPT_MODEL_PATH / required).is_file()
     for required in ("config.cfg", "ner/model")
@@ -52,9 +43,6 @@ CONCEPTS_AVAILABLE = (
     importlib.util.find_spec("spacy") is not None and CONCEPT_MODEL_AVAILABLE
 )
 if not CONCEPTS_AVAILABLE:
-    # stderr, not stdout -- STDIO transport's stdout must stay JSON-RPC clean
-    # (see core/memory_utils.py's _safe_print), and this module is imported
-    # on every server start including the STDIO entrypoint.
     print(
         "WARNING: Concept graph extraction not available. Reinstall: "
         "python -m pip install -U --force-reinstall marm-mcp-server",
@@ -93,10 +81,6 @@ def get_analytics_db_path() -> str:
     if os.path.exists("/app/data"):
         return "/app/data/marm_usage_analytics.db"
 
-    # ~/.marm, matching get_marm_db_path above. A bare relative name resolved
-    # against whatever directory the server was started from, so the file
-    # followed the launch location instead of the install and landed in the
-    # user's repo often enough to earn a .gitignore entry.
     marm_dir = Path.home() / ".marm"
     marm_dir.mkdir(exist_ok=True)
     return str(marm_dir / "marm_usage_analytics.db")
@@ -115,7 +99,7 @@ if not (1 <= _raw_port <= 65535):
         f"WARNING: SERVER_PORT={_raw_port} out of [1, 65535], clamped to {SERVER_PORT}",
         file=sys.stderr,
     )
-SERVER_VERSION = "2.44.0"
+SERVER_VERSION = "2.44.1"
 
 GRAPH_ENABLED = os.environ.get("GRAPH_ENABLED", "true").lower() != "false"
 
@@ -155,7 +139,6 @@ def _detect_platform() -> str:
 MARM_PLATFORM = _detect_platform()
 
 _raw_rpm = _safe_int("MARM_RATE_LIMIT_RPM", 80)
-# 0 = disable rate limiting; negative values clamped to 0
 MARM_RATE_LIMIT_RPM = max(0, _raw_rpm)
 if _raw_rpm < 0:
     print(
@@ -189,10 +172,6 @@ if _raw_mqs < 1:
         file=sys.stderr,
     )
 
-# Shutdown waits this long for in-flight chunk encodes. A memory maxes out at 7
-# chunks (10,000-char content cap), which encodes in about 1s, so the default
-# leaves room for several concurrent writes. Anything still pending is recovered
-# by `marm-mcp-server --rechunk`, so the wait is allowed to expire.
 _raw_cdt = _safe_int("CHUNK_DRAIN_TIMEOUT_SECONDS", 5)
 CHUNK_DRAIN_TIMEOUT_SECONDS = max(0, _raw_cdt)
 if _raw_cdt < 0:
@@ -209,8 +188,6 @@ if _raw_rsl < 1:
         file=sys.stderr,
     )
 
-# Page size for concept builds, not a truncation limit. Lowering it makes a
-# build read more, smaller pages; it no longer makes the build skip rows.
 _raw_cbc = _safe_int("CONCEPT_BUILD_ROW_CAP", 500)
 CONCEPT_BUILD_ROW_CAP = max(1, _raw_cbc)
 if _raw_cbc < 1:
@@ -221,8 +198,6 @@ if _raw_cbc < 1:
 
 CONCEPT_AUTO_INDEX = _safe_bool("CONCEPT_AUTO_INDEX", True)
 
-# Quiet period after the most recent write before the worker starts draining.
-# An agent storing a burst of memories produces one drain, not one per write.
 _raw_cids = _safe_int("CONCEPT_INDEX_DEBOUNCE_SECONDS", 30)
 CONCEPT_INDEX_DEBOUNCE_SECONDS = max(1, _raw_cids)
 if _raw_cids < 1:
@@ -232,10 +207,6 @@ if _raw_cids < 1:
         file=sys.stderr,
     )
 
-# Upper bound as well as lower: a claimed batch becomes one IN (...) clause in
-# three queries, and a batch past SQLite's variable ceiling would fail the same
-# way on every cycle forever. 500 memories of spaCy extraction per batch is
-# already far beyond anything useful.
 CONCEPT_INDEX_BATCH_SIZE_MAX = 500
 _raw_cibs = _safe_int("CONCEPT_INDEX_BATCH_SIZE", 20)
 CONCEPT_INDEX_BATCH_SIZE = max(1, min(CONCEPT_INDEX_BATCH_SIZE_MAX, _raw_cibs))
@@ -246,9 +217,6 @@ if not (1 <= _raw_cibs <= CONCEPT_INDEX_BATCH_SIZE_MAX):
         file=sys.stderr,
     )
 
-# Pause between batches while draining a backlog. Extraction is CPU-bound and
-# competes with recall for cores, so a worker at full throttle measurably slows
-# interactive work; this trades drain duration for that latency. 0 disables it.
 _raw_cibp = _safe_int("CONCEPT_INDEX_BATCH_PAUSE_MS", 250)
 CONCEPT_INDEX_BATCH_PAUSE_MS = max(0, min(10_000, _raw_cibp))
 if not (0 <= _raw_cibp <= 10_000):
@@ -258,8 +226,6 @@ if not (0 <= _raw_cibp <= 10_000):
         file=sys.stderr,
     )
 
-# How long a claimed task stays owned. A process killed mid-extraction leaves
-# its tasks claimable again after this, without burning an attempt.
 _raw_cils = _safe_int("CONCEPT_INDEX_LEASE_SECONDS", 300)
 CONCEPT_INDEX_LEASE_SECONDS = max(1, _raw_cils)
 if _raw_cils < 1:
@@ -278,13 +244,8 @@ if _raw_cima < 1:
         file=sys.stderr,
     )
 
-# ── Code graph auto-indexing ───────────────────────────────────────
-# A saved override in runtime_flags beats this; see core/runtime_flags.py.
 GRAPH_AUTO_INDEX = _safe_bool("GRAPH_AUTO_INDEX", True)
 
-# How long the worker waits after the last relevant filesystem/git event before
-# it evaluates source state. Coalesces a burst of saves, a rebase touching many
-# files, or an IDE's multi-file write into one re-index instead of several.
 _raw_gads = _safe_float("GRAPH_AUTO_INDEX_DEBOUNCE_SECONDS", 2.0)
 GRAPH_AUTO_INDEX_DEBOUNCE_SECONDS = max(0.5, _raw_gads)
 if _raw_gads < 0.5:
@@ -294,9 +255,6 @@ if _raw_gads < 0.5:
         file=sys.stderr,
     )
 
-# The fallback pass: catches a missed watcher event, covers a filesystem that
-# cannot be watched, and is the only trigger for a non-git root. Not the primary
-# schedule any more -- that is watcher events, debounced above.
 _raw_gars = _safe_int("GRAPH_AUTO_INDEX_RECONCILE_SECONDS", 300)
 GRAPH_AUTO_INDEX_RECONCILE_SECONDS = max(60, _raw_gars)
 if _raw_gars < 60:
@@ -306,12 +264,6 @@ if _raw_gars < 60:
         file=sys.stderr,
     )
 
-# Names from the fixed-poll scheduler this replaces. Auto-indexing is
-# event-driven now, so GRAPH_AUTO_INDEX_INTERVAL has nothing left to control --
-# read only to warn instead of erroring on an existing environment.
-# GRAPH_AUTO_INDEX_FULL_INTERVAL's role (the slow re-index cadence) survives as
-# GRAPH_AUTO_INDEX_RECONCILE_SECONDS, so an explicit legacy value carries over
-# instead of silently changing cadence, as long as the new name was not also set.
 if "GRAPH_AUTO_INDEX_INTERVAL" in os.environ:
     print(
         "WARNING: GRAPH_AUTO_INDEX_INTERVAL is deprecated and no longer read. "
@@ -335,15 +287,10 @@ if (
         file=sys.stderr,
     )
 
-# Validated here, not at use: an unrecognized mode fails GraphIndexRequest's
-# Literal deep inside the poll cycle, which logs a project failure every cycle
-# forever and never indexes anything.
 GRAPH_AUTO_INDEX_MODE = _safe_choice(
     "GRAPH_AUTO_INDEX_MODE", "moderate", ("full", "moderate", "fast")
 )
 
-# Heartbeat-renewed, so this bounds a crashed holder rather than a long index.
-# Kept short because a dead event loop leaves the lease to expire on its own.
 _raw_gails = _safe_int("GRAPH_AUTO_INDEX_LEASE_SECONDS", 120)
 GRAPH_AUTO_INDEX_LEASE_SECONDS = max(1, _raw_gails)
 if _raw_gails < 1:
@@ -353,8 +300,6 @@ if _raw_gails < 1:
         file=sys.stderr,
     )
 
-# list_projects costs ~265ms and holds the engine lock, so the watch set is
-# cached rather than refreshed every cycle.
 _raw_gaipt = _safe_int("GRAPH_AUTO_INDEX_PROJECT_TTL", 300)
 GRAPH_AUTO_INDEX_PROJECT_TTL = max(10, _raw_gaipt)
 if _raw_gaipt < 10:
@@ -364,13 +309,6 @@ if _raw_gaipt < 10:
         file=sys.stderr,
     )
 
-# Starting point to tune from real usage, not a validated-forever constant --
-# fastembed's model is tuned for sentence-length input; behavior on single-
-# word/short-phrase entity names is less validated than on the full-memory-
-# content strings this encoder already handles elsewhere. Same band as this
-# codebase's two existing analogous "is this basically the same thing"
-# embedding thresholds (CONSOLIDATION_THRESHOLD=0.92, COMPACTION_SIMILARITY_
-# THRESHOLD=0.88).
 _raw_cdst = _safe_float("CONCEPT_DUPLICATE_SIMILARITY_THRESHOLD", 0.90)
 CONCEPT_DUPLICATE_SIMILARITY_THRESHOLD = max(0.0, min(1.0, _raw_cdst))
 if not (0.0 <= _raw_cdst <= 1.0):
@@ -380,14 +318,6 @@ if not (0.0 <= _raw_cdst <= 1.0):
         file=sys.stderr,
     )
 
-# 0.05 is swept, not guessed -- do not "restore" it to the old 0.35.
-# Until v2.31.0 widened candidate generation this weight never applied to
-# natural-language recall, so it had never been validated. Swept in v2.32.0 over
-# 0.00-0.50 on LoCoMo (1,977 questions, 5,882 memories, deterministic pool):
-# any-hit peaks in a broad 0.04-0.08 plateau at 62.0-62.5%, against 57.4% at 0.0
-# and 57.6% at the old 0.35. High weights collapse single-hop accuracy (56.9% at
-# 0.05 -> 47.3% at 0.35). 0.05 is the plateau centre rather than the argmax, so
-# the default is not fitted to one corpus.
 _raw_hsw = _safe_float("HYBRID_SEARCH_TEXT_WEIGHT", 0.05)
 _raw_tw = _safe_float("TEMPORAL_WEIGHT", 0.1)
 _raw_hld = _safe_float("TEMPORAL_HALF_LIFE_DAYS", 30)
@@ -410,15 +340,6 @@ if _raw_hld < 1.0:
         file=sys.stderr,
     )
 
-# Raised 50 -> 200 in v2.32.0. v2.31.0 made this knob load-bearing for the first
-# time (99.4% of LoCoMo queries saturated the old 50) and its cost was a 5.6pp
-# multi-hop regression, since a keyword-filtered pool can drop a required memory
-# that shares no wording with the question. Swept over 50/100/200/500: 200
-# recovers multi-hop to 39.3% (from 34.8% at 50, matching the pre-v2.31.0
-# baseline) and lifts single-hop 1.1pp with adversarial precision unchanged, for
-# roughly 3ms more per recall. 500 buys another 1.1pp of multi-hop but starts
-# giving back the adversarial gain, because a pool that large stops acting as a
-# precision gate.
 _raw_fcl = _safe_int("FTS_CANDIDATE_LIMIT", 200)
 FTS_CANDIDATE_LIMIT = max(1, _raw_fcl)
 if _raw_fcl < 1:
@@ -427,30 +348,11 @@ if _raw_fcl < 1:
         file=sys.stderr,
     )
 
-# How the semantic lane builds its FTS5 MATCH string. The exact/lexical lane is
-# unaffected and always uses strict AND.
-#   or_nostop : drop stopwords, then OR the rest (default)
-#   or        : OR every token, stopwords included
-#   and       : strict AND, the pre-v2.31.0 behavior
 FTS_QUERY_MODES = ("or_nostop", "or", "and")
 FTS_QUERY_MODE = _safe_choice("FTS_QUERY_MODE", "or_nostop", FTS_QUERY_MODES)
 
-# Extra stopwords appended to the built-in English list used by or_nostop.
-# Additive only -- it cannot remove built-ins. Comma-separated, case-insensitive.
 FTS_EXTRA_STOPWORDS = _csv_frozenset("FTS_EXTRA_STOPWORDS")
 
-# Lexical score given to a degenerate candidate set (one row, or every row tied on
-# BM25), where per-query min-max has no spread to normalize against. Applies to
-# both lanes that match on a wide OR: the semantic lane, and since v2.33.0 the
-# semantic-fallback lane. The exact lane always uses 1.0, because its strict AND
-# means a lone hit contained every query term.
-#
-# Stays at 1.0: swept over 0.0/0.3/0.5/1.0 in v2.32.0 with no measurable effect,
-# because on a corpus of any size the wide OR fills the candidate pool. An offline
-# diagnostic found one degenerate set across 1,982 FTS calls (a call count, not the
-# benchmark's 1,977 scored questions); 1,964 of those calls saturated the pool.
-# Exposed for small stores, where a query matching a single memory is common and
-# awarding it a perfect lexical score may not be wanted.
 FTS_LONE_HIT_SCORE = _safe_unit_float("FTS_LONE_HIT_SCORE", 1.0)
 
 CONSOLIDATION_ENABLED = os.environ.get("CONSOLIDATION_ENABLED", "0") == "1"

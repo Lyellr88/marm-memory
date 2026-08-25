@@ -1,12 +1,12 @@
-"""MCP protocol/compaction injection middleware for MARM MCP Server."""
-
 import asyncio
 import json
+from typing import cast
 
 import structlog
 from fastapi import Request
 from fastapi.responses import JSONResponse, Response
 from starlette.middleware.base import RequestResponseEndpoint
+from starlette.responses import StreamingResponse
 
 from ..config import settings
 from ..core.compaction import claim_pending_compaction_prompt
@@ -91,7 +91,6 @@ async def _mcp_tool_call_tracker(
         else:
             _compaction_session = None
 
-        # Move counter and pruning under lock to prevent races
         async with _protocol_delivery_lock:
             _protocol_call_counts[_protocol_session] = (
                 _protocol_call_counts.get(_protocol_session, 0) + 1
@@ -99,15 +98,12 @@ async def _mcp_tool_call_tracker(
             call_count = _protocol_call_counts[_protocol_session]
             _prune_call_counts()
 
-            # Skip body mutation if protocol already delivered, compaction off,
-            # and we're not at the lite reinjection interval.
             if (
                 _protocol_session_delivered(_protocol_session)
                 and not settings.COMPACTION_ENABLED
             ):
                 if call_count % _PROTOCOL_LITE_INTERVAL != 0:
                     return response
-                # Fall through to inject lite protocol below.
 
         try:
             content_type = response.headers.get("content-type", "") or ""
@@ -122,10 +118,8 @@ async def _mcp_tool_call_tracker(
 
         body_bytes = b""
         try:
-            # BaseHTTPMiddleware hands back a private _StreamingResponse, which
-            # carries body_iterator while the declared Response type does not.
-            async for chunk in response.body_iterator:  # type: ignore[attr-defined]
-                body_bytes += chunk
+            async for chunk in cast(StreamingResponse, response).body_iterator:
+                body_bytes += chunk.encode("utf-8") if isinstance(chunk, str) else chunk
             data = json.loads(body_bytes)
             result = data.get("result", {})
             content = result.get("content")
@@ -162,8 +156,6 @@ async def _mcp_tool_call_tracker(
                                 "text": f"[MARM PROTOCOL REFRESH]\n\n{lite_content}",
                             }
                         )
-                        # Lite does not set protocol_injected=True — allows
-                        # compaction to coexist on the same call.
 
             if not protocol_injected:
                 compaction_block = await asyncio.to_thread(

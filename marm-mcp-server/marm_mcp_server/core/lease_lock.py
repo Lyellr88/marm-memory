@@ -1,16 +1,3 @@
-"""Cross-process mutual exclusion on a leased row in the memory database.
-
-Extracted verbatim from concept_build_lock.py, which is shipped and reviewed
-concurrency code, and parameterized by table so the code index can reuse it
-without a second copy. Two callers, two tables, one implementation:
-concept_build_lock guards the concept database, graph_index_lock guards the code
-index.
-
-A lease rather than a plain lock: it expires so a killed process cannot wedge
-the subsystem forever, and it is heartbeat-renewed so the TTL bounds how long a
-*crashed* holder blocks others rather than how long real work is allowed to take.
-"""
-
 import threading
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, NamedTuple, Optional
@@ -19,10 +6,6 @@ import structlog
 
 logger = structlog.get_logger(__name__)
 
-# Table names are interpolated into SQL, so they may only come from this map.
-# The values are structlog event prefixes, pinned per table rather than derived:
-# the concept lock's events shipped as "concept_lock.*" and renaming them would
-# break anything already watching for them.
 _LOG_NAMES = {
     "concept_build_lock": "concept_lock",
     "graph_index_lock": "graph_index_lock",
@@ -173,20 +156,11 @@ def keep_alive(
         while True:
             await asyncio.sleep(interval)
             try:
-                # A renewal that keeps failing is indistinguishable from one
-                # that was refused: either way the lease runs out on its own
-                # clock and someone else can take the resource. Give up at the
-                # TTL rather than logging warnings while still writing.
                 if loop.time() - last_renewed >= ttl_seconds:
                     logger.error(f"{log_name}.lost", purpose=purpose, reason="stale")
                     lease.lost.set()
                     return
                 if not await asyncio.to_thread(renew_fn, lease.holder, ttl_seconds):
-                    # Only reachable if this process was stalled for longer
-                    # than the whole TTL. Another process owns the resource
-                    # now, so raise the flag: the work cannot be killed from
-                    # here, but it can be asked to stop at its next safe point
-                    # instead of writing alongside the new owner.
                     logger.error(f"{log_name}.lost", purpose=purpose)
                     lease.lost.set()
                     return

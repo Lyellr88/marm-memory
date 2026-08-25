@@ -1,5 +1,3 @@
-"""Small localhost adapter for invoking existing MARM HTTP operations."""
-
 from __future__ import annotations
 
 import json

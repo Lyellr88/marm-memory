@@ -3,6 +3,8 @@ import asyncio
 import pytest
 
 from marm_mcp_server.core.memory import MARMMemory, sanitize_content
+from marm_mcp_server.core.memory_ops import _update_memory
+from marm_mcp_server.core.memory_recall import _recall_text_search
 
 
 def test_sanitize_content_removes_script_tags_and_event_handlers():
@@ -70,7 +72,9 @@ async def test_memory_store_writes_sanitized_classified_rows_to_sqlite(tmp_path)
     assert "function bug fix" in row[1]
     assert row[2] == "code"
 
-    results = await memory.recall_text_search("sqlite", session="unit-real-db", limit=3)
+    results = await _recall_text_search(
+        memory, "sqlite", session="unit-real-db", limit=3
+    )
     assert len(results) == 1
     assert results[0]["id"] == memory_id
 
@@ -187,10 +191,12 @@ async def test_memory_recall_respects_session_scope_and_search_all(tmp_path):
         "beta deployment decision uses stdio transport", "beta"
     )
 
-    alpha_results = await memory.recall_text_search(
-        "deployment", session="alpha", limit=10
+    alpha_results = await _recall_text_search(
+        memory, "deployment", session="alpha", limit=10
     )
-    all_results = await memory.recall_text_search("deployment", session=None, limit=10)
+    all_results = await _recall_text_search(
+        memory, "deployment", session=None, limit=10
+    )
 
     assert [result["id"] for result in alpha_results] == [alpha_id]
     assert {result["id"] for result in all_results} == {alpha_id, beta_id}
@@ -212,12 +218,9 @@ async def test_auto_classification_covers_primary_context_types(tmp_path):
 
 
 def test_close_all_drains_connection_pool(tmp_path):
-    # Regression: graceful_shutdown must close pooled SQLite connections so
-    # Docker/HTTP restarts and local dev restarts don't leak open file handles.
     db_path = tmp_path / "memory.db"
     memory = MARMMemory(str(db_path))
 
-    # Acquire then return a connection so the pool has at least one entry
     with memory.get_connection():
         pass
 
@@ -498,7 +501,7 @@ async def test_update_memory_merge_cap_never_exceeds_10000_chars(tmp_path):
         )
 
     big_new = "B" * 10000
-    await memory.update_memory(memory_id, big_new)
+    await _update_memory(memory, memory_id, big_new)
 
     with memory.get_connection() as conn:
         row = conn.execute(

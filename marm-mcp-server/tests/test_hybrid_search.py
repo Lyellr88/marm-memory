@@ -13,8 +13,7 @@ from marm_mcp_server.core.memory import (
     MARMMemory,
     _safe_fts_query,
 )
-
-# --- _safe_fts_query ---
+from marm_mcp_server.core.memory_recall import _recall_text_search
 
 
 def test_safe_fts_query_returns_none_for_empty_string():
@@ -48,15 +47,8 @@ def test_safe_fts_query_strips_surrounding_quotes():
 
 
 def test_safe_fts_query_preserves_underscore_tokens():
-    # Underscores are \w — kept as-is so FTS5 porter tokenizer can split them
     result = _safe_fts_query("COMPACTION_TRIGGER_COUNT")
     assert result == '"COMPACTION_TRIGGER_COUNT"'
-
-
-# --- _wide_fts_query (semantic lane) ---
-#
-# The strict builder above is the exact/lexical lane and must stay unchanged; the
-# assertions in this block cover the widened semantic-lane builder only.
 
 
 def _wide(query, mode="or_nostop", stopwords=None):
@@ -71,12 +63,10 @@ def _wide(query, mode="or_nostop", stopwords=None):
 
 
 def test_wide_fts_query_ors_tokens_and_drops_stopwords():
-    # The regression this fix exists for: six AND-ed tokens matched nothing.
     assert _wide("What pet does the speaker have?") == '"pet" OR "speaker"'
 
 
 def test_wide_fts_query_quotes_every_token_to_neutralize_fts5_operators():
-    # Quoting is a safety control: unquoted NEAR/OR/* would be parsed as syntax.
     result = _wide("config NEAR value", stopwords=set())
     assert result == '"config" OR "NEAR" OR "value"'
 
@@ -86,13 +76,11 @@ def test_wide_fts_query_drops_stopwords_case_insensitively():
 
 
 def test_wide_fts_query_returns_none_when_only_stopwords_remain():
-    # Routes to pure semantic recall instead of OR-ing filler against every row.
     assert _wide("what is the") is None
     assert _wide("how do you do it") is None
 
 
 def test_wide_fts_query_returns_none_for_empty_and_punctuation():
-    # Parity with _safe_fts_query so callers' fail-open path is unchanged.
     assert _wide("") is None
     assert _wide("---") is None
     assert _wide("@#$%") is None
@@ -144,7 +132,6 @@ def test_fts_query_mode_rejects_invalid_values(monkeypatch):
     monkeypatch.setenv("FTS_QUERY_MODE", "nonsense")
     assert _safe_choice("FTS_QUERY_MODE", "or_nostop", FTS_QUERY_MODES) == "or_nostop"
 
-    # Valid values pass through, case- and whitespace-insensitively.
     monkeypatch.setenv("FTS_QUERY_MODE", "  AND  ")
     assert _safe_choice("FTS_QUERY_MODE", "or_nostop", FTS_QUERY_MODES) == "and"
 
@@ -188,9 +175,6 @@ def test_fts_candidate_limit_default_is_the_swept_value():
     if "FTS_CANDIDATE_LIMIT" in os.environ:
         pytest.skip("environment pins FTS_CANDIDATE_LIMIT; default not observable")
     assert settings.FTS_CANDIDATE_LIMIT == 200
-
-
-# --- FTS5 schema ---
 
 
 @pytest.mark.asyncio
@@ -239,14 +223,12 @@ async def test_fts5_backfill_repopulates_after_index_cleared(tmp_path):
     m1._encoder_failed = True
     await m1.store_memory("backfill target content", session="backfill-test")
 
-    # Verify FTS finds the memory before clearing
     with sqlite3.connect(db_path) as conn:
         before = conn.execute(
             "SELECT COUNT(*) FROM memories_fts WHERE memories_fts MATCH '\"backfill\"'"
         ).fetchone()[0]
     assert before >= 1
 
-    # Properly clear the FTS index for a content table
     with sqlite3.connect(db_path) as conn:
         conn.execute("INSERT INTO memories_fts(memories_fts) VALUES('delete-all')")
         gone = conn.execute(
@@ -254,7 +236,6 @@ async def test_fts5_backfill_repopulates_after_index_cleared(tmp_path):
         ).fetchone()[0]
     assert gone == 0
 
-    # Re-init via new instance — backfill runs and should re-populate FTS
     m2 = MARMMemory(db_path)
     m2._encoder_failed = True
 
@@ -266,9 +247,6 @@ async def test_fts5_backfill_repopulates_after_index_cleared(tmp_path):
     assert count >= 1
 
 
-# --- recall_text_search ---
-
-
 @pytest.mark.asyncio
 async def test_recall_text_search_returns_bm25_score_not_hardcoded_0_8(tmp_path):
     memory = MARMMemory(str(tmp_path / "memory.db"))
@@ -276,7 +254,7 @@ async def test_recall_text_search_returns_bm25_score_not_hardcoded_0_8(tmp_path)
 
     await memory.store_memory("docker run port mapping deployment", session="s1")
 
-    results = await memory.recall_text_search("docker", session="s1", limit=5)
+    results = await _recall_text_search(memory, "docker", session="s1", limit=5)
 
     assert len(results) == 1
     assert results[0]["similarity"] != 0.8
@@ -289,7 +267,7 @@ async def test_recall_text_search_single_exact_hit_scores_1_0(tmp_path):
 
     await memory.store_memory("unique canary phrase for scoring", session="single-hit")
 
-    results = await memory.recall_text_search("unique", session="single-hit", limit=5)
+    results = await _recall_text_search(memory, "unique", session="single-hit", limit=5)
 
     assert len(results) == 1
     assert results[0]["similarity"] == pytest.approx(1.0)
@@ -302,13 +280,11 @@ async def test_recall_text_search_falls_back_to_like_for_punctuation_only_query(
     memory = MARMMemory(str(tmp_path / "memory.db"))
     memory._encoder_failed = True
 
-    # Content contains literal dashes — LIKE '%---%' will match it
     mem_id = await memory.store_memory(
         "content with --- dashes inside", session="fallback-test"
     )
 
-    # _safe_fts_query("---") returns None — LIKE path must run and return the row
-    results = await memory.recall_text_search("---", session="fallback-test", limit=5)
+    results = await _recall_text_search(memory, "---", session="fallback-test", limit=5)
 
     assert len(results) >= 1
     assert any(r["id"] == mem_id for r in results)
@@ -355,8 +331,8 @@ async def test_recall_text_search_falls_back_to_like_when_fts5_raises(
         memory_recall_module, "_fetch_and_score_fts_rows", raise_operational_error
     )
 
-    results = await memory.recall_text_search(
-        "fts error fallback", session="fts-err", limit=5
+    results = await _recall_text_search(
+        memory, "fts error fallback", session="fts-err", limit=5
     )
 
     assert len(results) >= 1
@@ -373,13 +349,10 @@ async def test_recall_text_search_session_filter_excludes_other_sessions(tmp_pat
     await memory.store_memory("shared keyword content", session="alpha")
     await memory.store_memory("shared keyword content", session="beta")
 
-    results = await memory.recall_text_search("keyword", session="alpha", limit=5)
+    results = await _recall_text_search(memory, "keyword", session="alpha", limit=5)
 
     assert results
     assert all(r["session_name"] == "alpha" for r in results)
-
-
-# --- recall_similar filter->rerank ---
 
 
 def _insert_with_embedding(conn, session: str, content: str, vec: np.ndarray) -> str:
@@ -539,7 +512,6 @@ async def test_recall_similar_falls_back_when_fts_candidates_have_no_embeddings(
             conn, "embed-fallback", "semantic content here", vec
         )
 
-    # Return a non-existent ID so ID-bounded fetch finds nothing scoreable
     monkeypatch.setattr(
         memory_recall_module,
         "_fetch_fts_candidate_ids",
@@ -573,16 +545,13 @@ async def test_recall_similar_falls_back_when_fts_candidates_are_all_wrong_dimen
     wrong_vec /= np.linalg.norm(wrong_vec)
 
     with mem.get_connection() as conn:
-        # Wrong-dim row: FTS will be forced to return this ID
         wrong_id = _insert_with_embedding(
             conn, "dim-fallback", "dimension mismatch content", wrong_vec
         )
-        # Correct-dim row: semantic fallback should find this
         correct_id = _insert_with_embedding(
             conn, "dim-fallback", "dimension correct content", correct_vec
         )
 
-    # Force FTS to return only the wrong-dimension ID
     monkeypatch.setattr(
         memory_recall_module, "_fetch_fts_candidate_ids", lambda *_: [(wrong_id, 1.0)]
     )
@@ -777,13 +746,8 @@ async def test_recall_similar_fuses_bm25_into_ranking(monkeypatch, tmp_path):
         strong_id = _insert_with_embedding(conn, "fuse", "docker deployment", vec)
         weak_id = _insert_with_embedding(conn, "fuse", "docker sidebar", vec)
 
-    # The shipped 0.05 weight is deliberately small. This test covers the fusion
-    # mechanism itself, so it pins a larger non-zero weight rather than depending
-    # on the shipped default.
     monkeypatch.setattr(memory_recall_module, "HYBRID_SEARCH_TEXT_WEIGHT", 0.35)
 
-    # Identical embeddings -> identical vec_score. Only the BM25 term differs,
-    # so any ordering must come from lexical fusion.
     monkeypatch.setattr(
         memory_recall_module,
         "_fetch_fts_candidate_ids",
@@ -809,7 +773,6 @@ def test_normalize_bm25_maps_more_negative_to_higher_score():
     assert _normalize_bm25([-5.0, -3.0, -1.0]) == [1.0, 0.5, 0.0]
     assert _normalize_bm25([-2.0]) == [1.0]
     assert _normalize_bm25([]) == []
-    # All-equal scores collapse to 1.0 so a lone lexical hit keeps full weight.
     assert _normalize_bm25([-2.0, -2.0]) == [1.0, 1.0]
 
 
@@ -826,7 +789,6 @@ def test_normalize_bm25_lone_hit_score_covers_both_degenerate_shapes():
     assert _normalize_bm25([-2.0], lone_hit_score=0.3) == [0.3]
     assert _normalize_bm25([-2.0, -2.0, -2.0], lone_hit_score=0.3) == [0.3, 0.3, 0.3]
     assert _normalize_bm25([], lone_hit_score=0.3) == []
-    # Zero is a real choice (ignore the lexical signal entirely), not "unset".
     assert _normalize_bm25([-2.0], lone_hit_score=0.0) == [0.0]
 
 
@@ -943,15 +905,12 @@ def test_fts_lone_hit_score_clamped_to_unit_range(monkeypatch, capsys):
     assert _safe_unit_float("FTS_LONE_HIT_SCORE", 1.0) == 0.0
     assert "out of [0, 1], clamped to 0.0" in capsys.readouterr().err
 
-    # Unparseable input falls back to the default and must not be reported as a
-    # clamp, which would be a misleading diagnostic.
     monkeypatch.setenv("FTS_LONE_HIT_SCORE", "not-a-number")
     assert _safe_unit_float("FTS_LONE_HIT_SCORE", 1.0) == 1.0
     err = capsys.readouterr().err
     assert "not a valid number" in err
     assert "clamped" not in err
 
-    # In-range values pass through silently.
     monkeypatch.setenv("FTS_LONE_HIT_SCORE", "0.3")
     assert _safe_unit_float("FTS_LONE_HIT_SCORE", 1.0) == 0.3
     assert capsys.readouterr().err == ""
@@ -1029,9 +988,7 @@ def test_fetch_fts_candidate_ids_returns_normalized_bm25_from_real_index(tmp_pat
     memory._encoder_failed = True
 
     with memory.get_connection() as conn:
-        # Tight match: the query term is essentially the whole document.
         tight_id = _insert_with_embedding(conn, "norm", "python", vec)
-        # Diluted match: the query term is buried among many others.
         loose_id = _insert_with_embedding(
             conn,
             "norm",
@@ -1126,9 +1083,6 @@ def test_wide_builder_respects_session_scope(tmp_path):
     assert len(unscoped) == 2
 
 
-# --- Phase 3: semantic-fallback lane (v2.33.0) ---
-
-
 def _fallback_corpus(tmp_path):
     """A store whose memories share no single word with the question below.
 
@@ -1136,7 +1090,6 @@ def _fallback_corpus(tmp_path):
     lane dead; the wide builder matches on individual content words.
     """
     memory = MARMMemory(str(tmp_path / "memory.db"))
-    # Exactly what _load_encoder_lazily() returning False produces at runtime.
     memory._encoder_failed = True
 
     vec = np.ones(384, dtype=np.float32)
@@ -1299,9 +1252,6 @@ async def test_fallback_lane_surfaces_the_configured_lone_hit_score(
     lowered = await memory.recall_similar(FALLBACK_QUESTION, session="fb", limit=5)
 
     assert len(lowered) == 1
-    # A plain `<` would pass without the fix: recency decays between the two calls,
-    # so the later score is always fractionally lower. Only a gap this size can come
-    # from the 1.0 -> 0.25 change surviving the temporal blend.
     assert default[0]["similarity"] - lowered[0]["similarity"] > 0.5, (
         "FTS_LONE_HIT_SCORE did not reach the fallback lane"
     )
@@ -1361,9 +1311,6 @@ print("OK")
     assert "OK" in proc.stdout
 
 
-# --- temporal scoring uses one reference instant per recall ---
-
-
 def _stub_tied_cosines(monkeypatch, module, id_order):
     """Force exactly equal cosine scores, returned in a chosen fetch order.
 
@@ -1389,23 +1336,17 @@ def test_temporal_score_accepts_a_reference_time_and_stays_backward_compatible()
 
     aged = (datetime.now(_timezone.utc) - timedelta(days=30)).isoformat()
 
-    # Omitted: still the documented half-life behavior.
     assert _temporal_score(aged, 30) == pytest.approx(0.5, abs=1e-4)
 
-    # Supplied: repeated scoring against one instant is bit-identical, which is
-    # the property the recall paths depend on.
     now = datetime.now(_timezone.utc)
     assert _temporal_score(aged, 30, now) == _temporal_score(aged, 30, now)
 
-    # Closed form, not a second live clock read: at a 30-day half-life the score
-    # moves ~1.3e-7 per second, so that comparison would be a stopwatch race.
     fixed = datetime.fromisoformat("2026-01-31T00:00:00+00:00")
     sixty_days_before = datetime.fromisoformat("2025-12-02T00:00:00+00:00")
     assert _temporal_score(sixty_days_before.isoformat(), 30, fixed) == pytest.approx(
         0.25, abs=1e-9
     )
 
-    # Unparseable input keeps its neutral score with or without a reference.
     assert _temporal_score("not a timestamp", 30) == 0.5
     assert _temporal_score("not a timestamp", 30, now) == 0.5
 
@@ -1459,7 +1400,6 @@ async def test_semantic_lane_scores_equal_timestamps_against_one_reference(
     memory._encoder_failed = True
     ids, vec = _shared_timestamp_pool(memory, "tsnap", 8)
 
-    # Temporal must stay on: it is the term under test.
     assert memory_recall_module.TEMPORAL_WEIGHT > 0
 
     _stub_tied_cosines(monkeypatch, memory_recall_module, sorted(ids))
@@ -1478,7 +1418,6 @@ async def test_semantic_lane_scores_equal_timestamps_against_one_reference(
     assert len(scores) == 1, (
         f"equal timestamps produced {len(scores)} distinct scores: {sorted(scores)}"
     )
-    # A real recency score, not a degenerate 0.0 or 1.0 that would tie anyway.
     assert 0.0 < results[0]["similarity"] < 1.0
 
 
@@ -1488,7 +1427,6 @@ async def test_keyword_fallback_scores_equal_timestamps_against_one_reference(
 ):
     """The encoder-off lane blends temporal too, so it needs the same snapshot."""
     memory = MARMMemory(str(tmp_path / "memory.db"))
-    # Exactly what _load_encoder_lazily() returning False produces at runtime.
     memory._encoder_failed = True
     ids, _vec = _shared_timestamp_pool(memory, "tsnapfb", 8)
 
@@ -1524,12 +1462,7 @@ async def test_exact_lane_still_skips_temporal_scoring_entirely(tmp_path):
 
     assert results
     assert all(r["retrieval_mode"].startswith("exact_") for r in results)
-    # Un-blended BM25: the sole match of a degenerate set keeps FTS_LONE_HIT_SCORE
-    # rather than being pulled below 1.0 by a recency term.
     assert results[0]["similarity"] == pytest.approx(1.0)
-
-
-# --- consolidation thresholds on raw cosine, not the fused ranking score ---
 
 
 def _vector_with_cosine(query_vec, target_cos, dim=384):
@@ -1544,8 +1477,6 @@ def _vector_with_cosine(query_vec, target_cos, dim=384):
     return (out / np.linalg.norm(out)).astype(np.float32)
 
 
-# Fused score lands ~0.927, over the 0.92 threshold, while the true cosine is
-# under it. Usable window is cos in [0.910, 0.920).
 _TRAP_COSINE = 0.915
 
 
@@ -1576,15 +1507,11 @@ async def test_consolidation_thresholds_on_cosine_not_the_fused_score(
     from marm_mcp_server.core.consolidation import find_semantic_duplicate
 
     memory, module, query, lone = _near_miss_store(tmp_path)
-    # Top lexical score, which is what a real single-row match produces via
-    # FTS_LONE_HIT_SCORE. Temporal is left at its shipped weight: the trap
-    # depends on it, and pinning it to 0 would test a config nobody runs.
     monkeypatch.setattr(module, "_fetch_fts_candidate_ids", lambda *_: [(lone, 1.0)])
 
     ranked = await memory.recall_similar(
         "anything", session="dedup", limit=5, query_vec=query.copy(), with_cosine=True
     )
-    # Arm the trap, so this test cannot pass on a harmless fixture.
     assert ranked[0]["similarity"] >= 0.92, (
         f"fused score {ranked[0]['similarity']:.5f} does not clear the threshold, "
         "so the old code would not have merged and there is nothing to catch"
@@ -1655,7 +1582,6 @@ async def test_with_cosine_is_opt_in_and_reports_the_unfused_score(
         "anything", session="cos", limit=5, query_vec=query.copy(), with_cosine=True
     )
     assert opted_in[0]["cosine"] == pytest.approx(_TRAP_COSINE, abs=1e-4)
-    # The two must not be the same number, or the key is reporting the blend.
     assert opted_in[0]["cosine"] != pytest.approx(opted_in[0]["similarity"], abs=1e-3)
 
 
@@ -1679,8 +1605,6 @@ async def test_consolidation_declines_when_no_cosine_is_available(
     monkeypatch.setattr(memory_recall_module, "_fetch_and_score_by_ids", boom)
     monkeypatch.setattr(memory_recall_module, "_fetch_and_score_embedding_rows", boom)
 
-    # Arm the trap: the degraded path really does return the row, with a score
-    # that would clear the threshold if "similarity" were trusted.
     degraded = await memory.recall_similar(
         "I adopted a golden retriever puppy last spring",
         session="fb",
@@ -1723,7 +1647,6 @@ async def test_consolidation_reaches_cosine_for_syntax_heavy_content(tmp_path):
     with memory.get_connection() as conn:
         twin = _insert_with_embedding(conn, "syntax", content, vec)
 
-    # Prove the premise: under "auto" this content bypasses cosine entirely.
     routed = await memory.recall_similar(
         content, session="syntax", limit=5, query_vec=vec.copy(), with_cosine=True
     )
@@ -1774,8 +1697,6 @@ async def test_consolidation_looks_past_the_top_fused_row(monkeypatch, tmp_path)
         lambda *_: [(near_miss, 1.0), (duplicate, 0.0)],
     )
 
-    # Arm the trap: confirm the near-miss really does outrank the duplicate, and
-    # that it alone would not clear the threshold.
     ranked = await memory.recall_similar(
         "anything",
         session="past-top",

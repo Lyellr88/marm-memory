@@ -1,5 +1,3 @@
-"""STDIO transport logging setup for MARM MCP Server."""
-
 import logging
 import os
 import pathlib

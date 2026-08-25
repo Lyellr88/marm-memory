@@ -1,10 +1,3 @@
-"""Tests for the durable concept indexing outbox.
-
-Everything here runs against real SQLite through the real write paths. The
-queue's whole reason to exist is that a task survives things an in-memory set
-would not, so mocking the database out would test nothing worth testing.
-"""
-
 import asyncio
 import importlib
 import sys
@@ -12,6 +5,8 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 from conftest import load_isolated_server
+
+from marm_mcp_server.core.memory_ops import _update_memory
 
 
 @pytest.fixture
@@ -88,7 +83,7 @@ def test_merge_requeues_with_the_new_hash_and_resets_attempts(queue_env):
             (memory_id,),
         )
 
-    assert asyncio.run(mem.update_memory(memory_id, "additional content")) is True
+    assert asyncio.run(_update_memory(mem, memory_id, "additional content")) is True
 
     rows = _rows(mem)
     assert len(rows) == 1

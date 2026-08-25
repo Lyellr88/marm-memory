@@ -1,18 +1,3 @@
-"""Durable outbox for concept indexing.
-
-The queue lives in the memory database so `enqueue` can run inside the same
-transaction as the memories INSERT: a memory cannot be stored without its
-indexing task, and a rolled-back write leaves no orphan task. Concepts still
-live in their own database; only the task list is here.
-
-Claiming is lease-based rather than lock-based. `_concept_build_lock` in
-endpoints/concepts.py is an asyncio.Lock and therefore in-process only, while
-an HTTP server and a STDIO session are two processes sharing one memory DB.
-The lease in this table is the only thing that stops both from claiming the
-same task, and it is also what makes a killed worker recoverable: an expired
-lease is reclaimed rather than failed, so a crash costs no attempts.
-"""
-
 import sqlite3
 import uuid
 from collections.abc import AsyncIterator, Iterable
@@ -26,8 +11,6 @@ from ..config.settings import (
     CONCEPT_INDEX_MAX_ATTEMPTS,
 )
 
-# SQLite's default parameter ceiling is 999. A full-corpus build settles far
-# more ids than that in one call.
 _DELETE_CHUNK = 500
 
 

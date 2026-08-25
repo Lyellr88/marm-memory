@@ -1,18 +1,3 @@
-"""STDIO graph/concept-graph MCP tool bodies: marm_graph_index,
-marm_code_lookup, marm_graph_trace, marm_graph_architecture,
-marm_graph_impact, marm_concept_build, marm_concept_recall.
-
-Deliberately not decorated with @mcp.tool() here -- registration is import
-order-dependent by construction (whichever module's decorators execute
-first wins), so importing this module anywhere before server_stdio.py
-(e.g. a future test's top-level import, a script, a REPL session) would
-silently register these 7 tools ahead of the 7 core ones defined in
-server_stdio.py, reversing tools/list order. register_graph_tools() below
-is called explicitly from server_stdio.py's own bootstrap instead, after
-the core tools are already registered, so order is deterministic
-regardless of import order.
-"""
-
 import asyncio
 from typing import TYPE_CHECKING, Literal, Optional
 
@@ -100,8 +85,6 @@ async def marm_graph_index(
     Returns: graph index/status/list response, or a graph-unavailable error if the
     graph backend is disabled or failed to start
     """
-    # Ahead of _acquire_client(), which refuses when the engine is down and
-    # starts it as a side effect. The off switch must work in either state.
     if action in AUTO_ACTIONS:
         return await asyncio.to_thread(auto_action, action)
     client = await _acquire_client()
@@ -112,9 +95,6 @@ async def marm_graph_index(
     )
     if action == "index" or (action == "auto" and repo_path):
         try:
-            # index_repository, not do_index: the tombstone and the path-limit
-            # marker are settled inside the gate, where they cannot race the
-            # other transport's poller writing the opposite answer.
             return await run_exclusive(
                 "manual_index:stdio",
                 index_repository,
@@ -347,10 +327,6 @@ async def marm_concept_recall(
     Returns: entities, related_entities, linked_code
     """
     try:
-        # Validate through the same pydantic model the HTTP endpoint uses --
-        # limit (1-100) and depth (1-5) are plain ints on this signature, so
-        # without this, an out-of-range STDIO call (e.g. limit=-1) would reach
-        # SQLite as a raw LIMIT/BFS bound instead of being rejected.
         req = ConceptRecallRequest(
             query=query,
             session_name=session_name,
@@ -372,11 +348,6 @@ async def marm_concept_recall(
             return await asyncio.to_thread(_run_recall, *args)
         return await asyncio.to_thread(_run_recall, *args, req.platform)
     except Exception as e:
-        # _run_recall failures can include SQLite paths/schema details --
-        # log server-side (the HTTP endpoint's own try/except does this via
-        # its "concepts.recall_error" log, but this STDIO wrapper calls
-        # _run_recall directly and bypasses that), return a fixed message
-        # to the client. Matches marm_concept_build's existing contract.
         _stdio_log.warning("concept recall failed: %s", e)
         return {"status": "error", "message": "Concept recall failed."}
 

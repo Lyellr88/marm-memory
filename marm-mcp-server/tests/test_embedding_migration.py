@@ -48,9 +48,6 @@ def _seed_databases(memory_path, concept_path):
             "VALUES ('m1', 0, 'chunk text', ?)",
             (_vector(384),),
         )
-        # notebook_entries.embedding is retired and deliberately outside
-        # migration scope -- inserted here so the tests below can assert
-        # it's left untouched, not to be counted as a migrated row.
         conn.execute(
             "INSERT INTO notebook_entries (name, data, embedding) "
             "VALUES ('n1', 'notebook text', ?)",
@@ -318,13 +315,6 @@ def test_concept_similarity_logs_mixed_dimension_skips(tmp_path, capsys):
     assert "--migrate-embeddings" in capsys.readouterr().err
 
 
-# --- Batch memory bounding ---
-#
-# Attention memory scales with the longest text in a batch, so a fixed row count
-# is not a safe unit of work: 100 real rows once requested a 35 GB buffer and
-# crashed the migration outright.
-
-
 def _padded_size(batch: list[str]) -> int:
     """What the encoder actually allocates: rows times the longest row."""
     return len(batch) * max(len(text) for text in batch)
@@ -379,7 +369,7 @@ def test_migration_splits_long_rows_into_memory_safe_encode_calls(tmp_path):
     memory_path = tmp_path / "memory.db"
     concept_path = tmp_path / "concepts.db"
     init_database(str(memory_path))
-    long_content = "word " * 2_000  # 10,000 characters, the sanitize_content cap
+    long_content = "word " * 2_000
     with sqlite3.connect(memory_path) as conn:
         for index in range(40):
             conn.execute(

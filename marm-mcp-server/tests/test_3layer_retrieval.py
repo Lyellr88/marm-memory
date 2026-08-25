@@ -9,8 +9,6 @@ from marm_mcp_server.core.memory import MARMMemory
 from marm_mcp_server.core.models import SmartRecallRequest
 from marm_mcp_server.services.recall import _apply_detail_level, smart_recall
 
-# --- _apply_detail_level ---
-
 
 def test_apply_detail_level_1_truncates_long_content():
     content = "a" * 300
@@ -43,9 +41,6 @@ def test_apply_detail_level_at_exact_limit_not_truncated():
     assert _apply_detail_level(content2, 2) == content2
 
 
-# --- SmartRecallRequest model ---
-
-
 def test_smart_recall_request_default_detail_is_1():
     req = SmartRecallRequest(query="test")
     assert req.detail == 1
@@ -67,15 +62,12 @@ def test_smart_recall_request_rejects_detail_above_3():
         SmartRecallRequest(query="test", detail=4)
 
 
-# --- smart_recall service ---
-
-
 @pytest.mark.asyncio
 async def test_smart_recall_detail_1_caps_content_at_200_chars(tmp_path):
     mem = MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
 
-    long_content = "word " * 120  # ~600 chars
+    long_content = "word " * 120
     await mem.store_memory(long_content, session="d1-test")
 
     original = recall_mod.memory
@@ -87,7 +79,7 @@ async def test_smart_recall_detail_1_caps_content_at_200_chars(tmp_path):
 
     assert result["status"] == "success"
     for r in result["results"]:
-        assert len(r["content"]) <= 201  # 200 chars + ellipsis
+        assert len(r["content"]) <= 201
 
 
 @pytest.mark.asyncio
@@ -171,12 +163,8 @@ async def test_smart_recall_default_detail_is_1_without_explicit_arg(tmp_path):
         assert len(r["content"]) <= 201
 
 
-# --- no-result paths ---
-
-
 @pytest.mark.asyncio
 async def test_no_results_envelope_includes_detail_level(tmp_path):
-    # Session has no memories — triggers no_results path
     mem = MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
 
@@ -196,17 +184,15 @@ async def test_no_results_envelope_includes_detail_level(tmp_path):
 
 @pytest.mark.asyncio
 async def test_no_results_system_fallback_respects_detail_cap(tmp_path):
-    # Store a long memory in marm_system so the system fallback fires and returns results
     mem = MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
 
-    long_content = "system fallback word " * 30  # ~630 chars
+    long_content = "system fallback word " * 30
     await mem.store_memory(long_content, session="marm_system")
 
     original = recall_mod.memory
     recall_mod.memory = mem
     try:
-        # Query a different session so primary recall hits no_results
         result = await smart_recall(
             "system fallback word",
             session_name="other-session",
@@ -223,24 +209,19 @@ async def test_no_results_system_fallback_respects_detail_cap(tmp_path):
     system_hits = result.get("system_results", [])
     assert len(system_hits) >= 1
     for r in system_hits:
-        assert len(r["content"]) <= 201  # detail=1 cap enforced
-
-
-# --- HTTP endpoint parity ---
+        assert len(r["content"]) <= 201
 
 
 def test_http_no_result_system_fallback_respects_detail_cap(monkeypatch, tmp_path):
     server = load_isolated_server(monkeypatch, tmp_path)
     client = local_client(server.app)
 
-    # Seed a long memory into marm_system so the HTTP fallback has something to return
     import asyncio
 
-    long_content = "http system fallback word " * 25  # ~650 chars
+    long_content = "http system fallback word " * 25
     memory_module = importlib.import_module("marm_mcp_server.core.memory")
     asyncio.run(memory_module.memory.store_memory_queued(long_content, "marm_system"))
 
-    # Query a session with no memories — triggers the no-result marm_system fallback
     resp = client.post(
         "/marm_smart_recall",
         json={

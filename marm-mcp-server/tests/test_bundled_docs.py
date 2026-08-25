@@ -1,14 +1,3 @@
-"""Guards for the marm-docs bundled inside the package.
-
-These docs live in exactly one place, `marm_mcp_server/resources/marm-docs/`, so
-a single path works for pip wheels, the Docker image, and dev checkouts. Before
-v2.31.0 a second copy sat at the repo root; it was never included in the wheel,
-so every path pointing at it resolved to nothing once installed -- the doc
-indexer silently indexed zero docs and `read_protocol_file()` returned
-"PROTOCOL.md file not found" on every pip install. These tests pin both
-behaviors to the packaged location.
-"""
-
 from __future__ import annotations
 
 import asyncio

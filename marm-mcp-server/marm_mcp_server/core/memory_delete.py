@@ -1,5 +1,3 @@
-"""Memory deletion and compaction-lineage cleanup for the MARM memory system."""
-
 import json
 import sqlite3
 from datetime import datetime, timezone
@@ -9,11 +7,6 @@ from .concept_queue import dequeue as dequeue_concept_index
 
 if TYPE_CHECKING:
     from .memory import MARMMemory
-
-
-async def _delete_memory(mem: "MARMMemory", memory_id: str) -> bool:
-    result = await _delete_memories(mem, [memory_id])
-    return bool(result["deleted_ids"])
 
 
 def _delete_impact(conn: sqlite3.Connection, memory_id: str) -> dict:
@@ -173,9 +166,6 @@ async def _delete_memories(mem: "MARMMemory", memory_ids: list[str]) -> dict:
         )
         for memory_id in existing_ids:
             conn.execute("DELETE FROM memory_chunks WHERE memory_id = ?", (memory_id,))
-        # Same transaction as the delete. A task left behind points at a
-        # memory that no longer exists, and the worker would keep claiming it
-        # until it burned the attempt budget and parked it.
         dequeue_concept_index(conn, existing_ids)
         delete_cursor = conn.execute(
             f"DELETE FROM memories WHERE id IN ({placeholders})",

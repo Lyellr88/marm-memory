@@ -1,15 +1,4 @@
-"""Concept graph endpoints — marm_concept_build, marm_concept_recall.
-
-Orchestration layer: build reads memory rows directly (never through
-marm_smart_recall's ranked/limited recall path — see marm-index-spec.md's
-"Build reads the memory DB layer directly" section), runs spaCy extraction,
-writes to the concept graph's own SQLite file, and soft-links against
-marm-graph. Recall reads the concept graph tables and infers lookup vs
-related-to intent from query shape.
-"""
-
 import asyncio
-import sqlite3
 import threading
 import time
 import uuid
@@ -43,7 +32,7 @@ from ..services.concept_build_engine import (
     count_memory_rows,
     reset_and_rebuild_concept_db,
 )
-from ..services.graph_context import get_graph_context, traverse_graph
+from ..services.graph_context import get_graph_context
 
 logger = structlog.get_logger(__name__)
 
@@ -140,8 +129,6 @@ def _request_build_cancellation(run_id: str) -> tuple[dict | None, bool]:
 def _reset_concept_graph() -> str:
     concept_db = _get_concept_db()
     with concept_db.get_connection() as conn:
-        # run_exclusive() has already acquired the cross-process build lease.
-        # Any queued/running row now belongs to a process that died or lost it.
         concept_db.abandon_unowned_build_runs(
             conn, datetime.now(timezone.utc).isoformat()
         )
@@ -161,26 +148,6 @@ def _prepare_build_schema(req: ConceptBuildRequest) -> bool:
 
     reset_and_rebuild_concept_db(db_path)
     return True
-
-
-def _traverse(
-    conn: sqlite3.Connection,
-    seed_ids: list[int],
-    depth: int,
-    direction: str,
-    limit: int,
-) -> list[dict]:
-    results, _, _ = traverse_graph(
-        conn,
-        seed_ids,
-        depth=depth,
-        direction=direction,
-        limit=limit,
-        session_name=None,
-        project=None,
-        platform=None,
-    )
-    return results
 
 
 def _run_recall(
@@ -219,9 +186,6 @@ async def marm_concept_build(req: ConceptBuildRequest) -> dict:
     marm-graph code symbols when available. Call this before marm_concept_recall
     — there's no data until a build has run at least once.
     """
-    # Cross-process lock outside the in-process one, in both writers, so the
-    # pair can never be taken in opposite orders. A rebuild drops the graph
-    # tables, and the other transport's worker must not be writing into them.
     try:
         async with concept_build_lock(
             "manual_build", MANUAL_BUILD_LOCK_SECONDS
@@ -338,11 +302,6 @@ async def _marm_concept_build(
             cancel_requested=lambda: _is_build_cancellation_requested(run_id),
         )
     except ValueError:
-        # _fetch_memory_pages raises exactly one ValueError, always this
-        # static, safe-to-surface message -- return the known-good literal
-        # rather than str(e), so the response never carries a live exception
-        # object (CodeQL: exception-info-exposure) even if this branch is
-        # ever reached by a different ValueError in the future.
         await asyncio.to_thread(
             _finish_build_run,
             run_id,
@@ -356,10 +315,6 @@ async def _marm_concept_build(
             "build_run_id": run_id,
         }
     except Exception as e:
-        # HTTP-facing route body -- log server-side via structured logging
-        # rather than interpolating exception text into a plain print/f-string
-        # (CodeQL: exception-info-exposure). The client only ever gets the
-        # generic message below.
         logger.warning("concepts.build_error", error=str(e))
         await asyncio.to_thread(
             _finish_build_run,
@@ -376,9 +331,6 @@ async def _marm_concept_build(
 
     result["duration_ms"] = int((time.monotonic() - start) * 1000)
     if result["aborted"]:
-        # Another process owns the graph now. The partial work stays, since
-        # extraction is idempotent, but nothing here may be reported as done
-        # and no queue row may be retired against it.
         await asyncio.to_thread(
             _finish_build_run,
             run_id,
@@ -469,10 +421,6 @@ async def _marm_concept_build(
     result.pop("aborted", None)
     result.pop("cancelled", None)
     if graph_rebuilt:
-        # Only now, with the corpus actually extracted. The reset deliberately
-        # leaves no version marker, so a rebuild that died partway is still
-        # reported as rebuild_required and gets retried instead of passing for
-        # a graph that was never populated.
         try:
             await asyncio.to_thread(mark_schema_current, get_concept_db_path())
         except Exception as e:
@@ -545,7 +493,6 @@ async def _retire_queued_tasks(outcomes: dict[str, str], build_started_at: str) 
         if retired:
             logger.info("concepts.queue_retired", tasks=retired)
     except Exception as e:
-        # Leaving rows queued only costs a redundant re-extraction later.
         logger.warning("concepts.queue_retire_failed", error=str(e))
 
 
@@ -589,9 +536,6 @@ async def build_for_memory_ids(
                 _build_for_memory_ids_sync, memory_ids, abort, finished
             )
     finally:
-        # Idempotent: _run_build already sets this the moment the extraction
-        # thread stops, which is earlier and more precise. This only covers the
-        # paths that never reach it.
         if finished is not None:
             finished.set()
 

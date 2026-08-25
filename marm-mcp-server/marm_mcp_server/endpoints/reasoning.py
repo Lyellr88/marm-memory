@@ -1,5 +1,3 @@
-"""Reasoning endpoints for MARM MCP Server."""
-
 from fastapi import APIRouter, Query
 
 from ..services.summary import generate_session_summary

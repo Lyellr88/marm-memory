@@ -1,12 +1,8 @@
-"""Tests for the flat session_summary_cache layer."""
-
 import importlib
 import sqlite3
 import uuid
 
 from conftest import load_isolated_server, local_client
-
-# --- helpers ---
 
 
 def _insert_log_entry(
@@ -30,9 +26,6 @@ def _cache_row(db_path, session):
         ).fetchone()
 
 
-# --- schema ---
-
-
 def test_db_init_creates_session_summary_cache(monkeypatch, tmp_path):
     load_isolated_server(monkeypatch, tmp_path)
     db_path = str(tmp_path / "marm_memory.db")
@@ -45,9 +38,6 @@ def test_db_init_creates_session_summary_cache(monkeypatch, tmp_path):
         }
     assert "session_summary_cache" in tables
     assert "session_summary_chunks" not in tables
-
-
-# --- cache population ---
 
 
 def test_first_summary_builds_cache_row(monkeypatch, tmp_path):
@@ -65,7 +55,7 @@ def test_first_summary_builds_cache_row(monkeypatch, tmp_path):
 
     row = _cache_row(db_path, "s1")
     assert row is not None
-    assert row[2] == 0  # dirty = false
+    assert row[2] == 0
     assert "docker stdio" in row[0]
 
 
@@ -78,7 +68,6 @@ def test_second_summary_uses_clean_cache(monkeypatch, tmp_path):
 
     client.get("/marm_summary", params={"session_name": "s2"})
 
-    # Overwrite the cached text to a sentinel — if cache is used, sentinel appears in response
     with sqlite3.connect(db_path) as conn:
         conn.execute(
             "UPDATE session_summary_cache SET summary_text = 'CACHED_SENTINEL', dirty = 0 WHERE session_name = ?",
@@ -90,9 +79,6 @@ def test_second_summary_uses_clean_cache(monkeypatch, tmp_path):
     assert "CACHED_SENTINEL" in resp.json()["summary"]
 
 
-# --- dirty marking ---
-
-
 def test_log_entry_marks_cache_dirty(monkeypatch, tmp_path):
     server = load_isolated_server(monkeypatch, tmp_path)
     client = local_client(server.app)
@@ -100,14 +86,13 @@ def test_log_entry_marks_cache_dirty(monkeypatch, tmp_path):
 
     _insert_log_entry(db_path, "s3", "first entry")
     client.get("/marm_summary", params={"session_name": "s3"})
-    assert _cache_row(db_path, "s3")[2] == 0  # clean after summary
-
+    assert _cache_row(db_path, "s3")[2] == 0
     client.post(
         "/marm_log_entry",
         json={"session_name": "s3", "entry": "2026-01-02-work-second entry"},
     )
 
-    assert _cache_row(db_path, "s3")[2] == 1  # dirty after new log
+    assert _cache_row(db_path, "s3")[2] == 1
 
 
 def test_dirty_cache_rebuilds_with_new_entry(monkeypatch, tmp_path):
@@ -126,10 +111,7 @@ def test_dirty_cache_rebuilds_with_new_entry(monkeypatch, tmp_path):
     resp = client.get("/marm_summary", params={"session_name": "s4"})
     assert resp.status_code == 200
     assert "new entry added" in resp.json()["summary"]
-    assert _cache_row(db_path, "s4")[2] == 0  # dirty reset to false
-
-
-# --- delete interactions ---
+    assert _cache_row(db_path, "s4")[2] == 0
 
 
 def test_single_entry_delete_marks_cache_dirty(monkeypatch, tmp_path):
@@ -190,9 +172,6 @@ def test_full_session_delete_survives_missing_summary_cache_table(
     assert remaining == 0
 
 
-# --- disposable mode ---
-
-
 def test_disposable_mode_deletes_clean_cache_after_summary(monkeypatch, tmp_path):
     monkeypatch.setenv("MARM_SUMMARY_CACHE_DISPOSABLE", "1")
     server = load_isolated_server(monkeypatch, tmp_path)
@@ -208,17 +187,11 @@ def test_disposable_mode_deletes_clean_cache_after_summary(monkeypatch, tmp_path
     assert _cache_row(db_path, "s7") is None
 
 
-# --- truncation ---
-
-
 def test_oversized_summary_trims_to_content_limit(monkeypatch, tmp_path):
     server = load_isolated_server(monkeypatch, tmp_path)
     client = local_client(server.app)
     db_path = str(tmp_path / "marm_memory.db")
 
-    # Patch CONTENT_LIMIT to a tiny value so any real summary triggers truncation.
-    # _build_summary_text caps individual entries at 200 chars, so a huge DB value
-    # would never exceed the real 1MB limit on its own.
     response_limiter = importlib.import_module("marm_mcp_server.core.response_limiter")
     monkeypatch.setattr(response_limiter.MCPResponseLimiter, "CONTENT_LIMIT", 300)
 
@@ -238,9 +211,6 @@ def test_oversized_summary_trims_to_content_limit(monkeypatch, tmp_path):
     )
 
 
-# --- stale cache guard ---
-
-
 def test_cache_with_mismatched_entry_count_forces_rebuild(monkeypatch, tmp_path):
     server = load_isolated_server(monkeypatch, tmp_path)
     client = local_client(server.app)
@@ -249,9 +219,7 @@ def test_cache_with_mismatched_entry_count_forces_rebuild(monkeypatch, tmp_path)
     _insert_log_entry(db_path, "s9", "entry one")
     client.get("/marm_summary", params={"session_name": "s9"})
 
-    # Simulate a missed dirty mark: insert directly without going through the endpoint
     _insert_log_entry(db_path, "s9", "entry two silently added")
-    # cache still shows entry_count=1 and dirty=0
 
     resp = client.get("/marm_summary", params={"session_name": "s9"})
     assert "entry two silently added" in resp.json()["summary"]

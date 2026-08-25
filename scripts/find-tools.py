@@ -1,11 +1,4 @@
 #!/usr/bin/env python3
-"""Audit canonical MCP tool-list surfaces.
-
-Default mode is intentionally narrow: it only reports files that are expected
-to carry the full public MCP tool list or an explicit public tool count.
-
-Use --mentions when you need the noisy "where is this tool mentioned?" view.
-"""
 
 from __future__ import annotations
 
@@ -40,9 +33,6 @@ CANONICAL_TOOLS = [
     "marm_concept_recall",
 ]
 
-# These are the surfaces that should stay synchronized with the full public
-# tool list. Files that only mention one or two tools intentionally stay out of
-# the default report.
 FULL_LIST_FILES = {
     "README.md",
     "docs/PROTOCOL.md",

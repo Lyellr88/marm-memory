@@ -67,14 +67,12 @@ def test_log_entry_without_session_name_uses_active_session(monkeypatch, tmp_pat
     assert switch.status_code == 200
     assert switch.json()["session_name"] == expected_session
 
-    # No session_name — should land in the active dated session, not "main"
     entry = client.post(
         "/marm_log_entry", json={"entry": "2026-05-20-setup-initial scaffolding done"}
     )
     assert entry.status_code == 200
 
     in_project = client.get("/marm_log_show", params={"session_name": expected_session})
-    # 2 entries: session_start marker + the actual log entry
     assert in_project.json()["total_entries"] == 2
 
     in_main = client.get("/marm_log_show", params={"session_name": "main"})
@@ -469,7 +467,6 @@ def test_smart_recall_with_include_logs_and_system_info(monkeypatch, tmp_path):
     assert no_results.status_code == 200
     assert no_results.json()["status"] == "no_results"
 
-    # Write a log entry so include_logs=True has something real to return
     client.post(
         "/marm_log_entry",
         json={
@@ -478,7 +475,6 @@ def test_smart_recall_with_include_logs_and_system_info(monkeypatch, tmp_path):
         },
     )
 
-    # include_logs=True must return the log entry we just wrote
     recall_with_logs = client.post(
         "/marm_smart_recall",
         json={
@@ -499,7 +495,6 @@ def test_smart_recall_with_include_logs_and_system_info(monkeypatch, tmp_path):
         f"Expected qwen in log topics, got: {log_topics}"
     )
 
-    # seeded memory + the dual-written log entry memory
     memory_module = importlib.import_module("marm_mcp_server.core.memory")
     with memory_module.memory.get_connection() as conn:
         count = conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0]
@@ -609,7 +604,6 @@ def test_marm_start_loads_docs_once_not_on_repeated_calls(monkeypatch, tmp_path)
             "SELECT COUNT(*) FROM memories WHERE session_name = 'marm_system'"
         ).fetchone()[0]
 
-    # Reset the in-memory flag to simulate a second startup without clearing doc_index
     doc_module._docs_loaded = False
     client.post("/marm_start", json={"session_name": "s2"})
 
@@ -629,7 +623,6 @@ def test_doc_loader_reindexes_when_memory_row_deleted(monkeypatch, tmp_path):
     memory_module = importlib.import_module("marm_mcp_server.core.memory")
     client = local_client(server.app)
 
-    # First load — populates doc_index with memory_id
     client.post("/marm_start", json={"session_name": "s1"})
     assert doc_module.docs_are_loaded()
 
@@ -640,12 +633,10 @@ def test_doc_loader_reindexes_when_memory_row_deleted(monkeypatch, tmp_path):
         "doc_index should have a memory_id after first load"
     )
 
-    # Delete the memory row externally (simulates manual cleanup)
     with memory_module.memory.get_connection() as conn:
         conn.execute("DELETE FROM memories WHERE id = ?", (memory_id[0],))
         conn.commit()
 
-    # Reset flag and reload — loader should detect missing memory and re-index
     doc_module._docs_loaded = False
     client.post("/marm_start", json={"session_name": "s2"})
 
@@ -680,7 +671,6 @@ def test_legacy_system_notebook_entries_cleaned_on_load(monkeypatch, tmp_path):
     doc_module = importlib.import_module("marm_mcp_server.services.documentation")
     memory_module = importlib.import_module("marm_mcp_server.core.memory")
 
-    # Pre-populate stale system notebook entries as an old MARM version would have
     legacy_names = ["marm_protocol", "marm_commands_summary", "mcp_integration_guide"]
     with memory_module.memory.get_connection() as conn:
         for name in legacy_names:
@@ -709,7 +699,6 @@ def test_marm_reload_docs_indexes_documentation(monkeypatch, tmp_path):
     memory_module = importlib.import_module("marm_mcp_server.core.memory")
     client = local_client(server.app)
 
-    # Force docs loaded flag so reload has something to reset
     doc_module._docs_loaded = True
 
     response = client.post("/marm_reload_docs")
@@ -803,11 +792,9 @@ def test_marm_delete_session_resets_active_log_session(monkeypatch, tmp_path):
     assert deleted.status_code == 200
     assert deleted.json()["status"] == "success"
 
-    # Session rows gone
     shown = client.get("/marm_log_show", params={"session_name": "project-a"})
     assert shown.json().get("total_entries", 0) == 0
 
-    # Next log entry without session_name must NOT re-land in project-a
     client.post(
         "/marm_log_entry",
         json={"entry": "2026-05-20-follow-up-should not go to project-a"},
@@ -876,8 +863,6 @@ def test_http_mcp_tools_call_body_triggers_doc_loading(monkeypatch, tmp_path):
 
     assert not doc_module.docs_are_loaded()
 
-    # POST /mcp with "tools/call" in body fires the middleware doc-load path
-    # before the handler; response status doesn't matter for this assertion
     client.post(
         "/mcp",
         content=b'{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{}}',
@@ -1173,7 +1158,6 @@ def test_http_mcp_tool_response_orders_protocol_before_compaction(
         async def body_iter():
             yield body
 
-        # Call 1: protocol is injected, compaction is suppressed on this call
         resp1 = MagicMock()
         resp1.status_code = 200
         resp1.headers = MagicMock()
@@ -1182,7 +1166,6 @@ def test_http_mcp_tool_response_orders_protocol_before_compaction(
         call1 = AsyncMock(return_value=resp1)
         r1 = await protocol_injection._mcp_tool_call_tracker(req, call1)
 
-        # Call 2: protocol already delivered, compaction fires
         resp2 = MagicMock()
         resp2.status_code = 200
         resp2.headers = MagicMock()
@@ -1247,7 +1230,6 @@ def test_http_protocol_injected_on_first_mcp_tool_call_not_on_second(
         resp.headers = MagicMock()
         resp.headers.items.return_value = [("x-request-id", "1")]
         resp.body_iterator = _iter()
-        # Explicit bytes so json.loads works when middleware returns mock unchanged (second call)
         resp.body = body
         return resp
 
@@ -1494,7 +1476,6 @@ def test_delete_log_cascades_dual_written_memories(monkeypatch, tmp_path):
 
     memory_module = importlib.import_module("marm_mcp_server.core.memory")
 
-    # Branch 1: delete one entry by id — only its memory goes away
     resp = client.post(
         "/marm_delete",
         json={"type": "log", "session_name": "cascade", "target": first["entry_id"]},
@@ -1513,7 +1494,6 @@ def test_delete_log_cascades_dual_written_memories(monkeypatch, tmp_path):
     assert first["memory_id"] not in remaining
     assert second["memory_id"] in remaining
 
-    # Branch 2: delete the whole session — remaining dual-written memory goes too
     resp = client.post("/marm_delete", json={"type": "log", "target": "cascade"})
     assert resp.status_code == 200
     body = resp.json()

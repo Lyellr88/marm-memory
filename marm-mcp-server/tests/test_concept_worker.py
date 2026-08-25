@@ -1,13 +1,3 @@
-"""Tests for the background concept indexing worker.
-
-The worker's job is to settle durable queue rows correctly. Most of these
-tests therefore assert on what is left in the queue and in the graph after a
-cycle, not on how many times something was called. Real SQLite throughout;
-extract_entities is monkeypatched on services.concept_build_engine, the same
-convention the other concept tests use, because spaCy's model is not
-installable in this sandbox.
-"""
-
 import asyncio
 import importlib
 import sys
@@ -15,6 +5,8 @@ import time
 
 import pytest
 from conftest import load_isolated_server
+
+from marm_mcp_server.core.memory_ops import _update_memory
 
 
 @pytest.fixture
@@ -30,8 +22,6 @@ def worker_env(monkeypatch, tmp_path):
     monkeypatch.setattr(worker_module, "CONCEPTS_AVAILABLE", True)
     monkeypatch.setattr(worker_module, "CONCEPT_AUTO_INDEX", True)
     monkeypatch.setattr(worker_module, "CONCEPT_INDEX_DEBOUNCE_SECONDS", 0.01)
-    # The shipped pause is a latency tradeoff, not behavior. Off here so it
-    # does not add seconds to every drain test; covered on its own below.
     monkeypatch.setattr(worker_module, "CONCEPT_INDEX_BATCH_PAUSE_MS", 0)
 
     worker = worker_module.ConceptIndexWorker()
@@ -104,8 +94,6 @@ def test_a_backlog_drains_continuously_instead_of_one_batch_per_interval(
     async def scenario():
         for index in range(50):
             await mem.store_memory(f"memory number {index}", "s1")
-        # One cycle only. Reaching all 50 proves the drain loops rather than
-        # returning to the (30 second) wait after its first batch.
         await worker._drain()
 
     asyncio.run(scenario())
@@ -180,12 +168,10 @@ def test_a_memory_merged_mid_extraction_is_reindexed_not_settled(
 
         async def build_then_merge(memory_ids, abort=None, finished=None):
             outcomes = await real_build(memory_ids, abort=abort)
-            await mem.update_memory(memory_id, "appended content")
+            await _update_memory(mem, memory_id, "appended content")
             return outcomes
 
         monkeypatch.setattr(concepts, "build_for_memory_ids", build_then_merge)
-        # One batch, not a full drain: the assertion is about what the worker
-        # does with a result that arrived after the memory moved on.
         tasks = await asyncio.to_thread(queue.claim, 10)
         await worker._process(tasks)
         return memory_id
@@ -214,13 +200,10 @@ def test_a_superseded_result_does_not_wipe_another_workers_fresh_provenance(
         memory_id = await mem.store_memory("original content", "s1")
         stale = await asyncio.to_thread(queue.claim, 10)
 
-        # Stand in for the rewrite plus worker B: the memory now holds new
-        # content and its entities are already in the graph.
-        await mem.update_memory(memory_id, "appended content")
+        await _update_memory(mem, memory_id, "appended content")
         fresh = await asyncio.to_thread(queue.claim, 10)
         await worker._process(fresh)
 
-        # Worker A only now returns, holding a result for text that is gone.
         await worker._process(stale)
         return memory_id
 
@@ -249,7 +232,7 @@ def test_losing_the_graph_lock_stops_the_build_at_the_next_memory(
 
     def fake(content):
         seen.append(content)
-        lost.set()  # the lock goes at the first memory
+        lost.set()
         return ExtractionResult(
             entities=[Entity(content, "concept")], relationship_pairs=[]
         )
@@ -461,15 +444,9 @@ def test_stop_holds_the_graph_until_the_extraction_thread_stops(
     still_running.set()
 
     async def slow_build(memory_ids, abort=None, finished=None):
-        # Stands in for a thread that notices the abort and then takes a
-        # moment to unwind, which is when the lock must still be held.
         def work():
             abort.wait(5)
             time.sleep(0.4)
-            # Clear before signalling, not after. finished is what releases
-            # stop(), so setting it first leaves a window where the lock is
-            # released while this still reads as running, and the test fails
-            # on its own ordering rather than on the code under test.
             still_running.clear()
             if finished is not None:
                 finished.set()
@@ -558,7 +535,6 @@ def test_a_graph_awaiting_rebuild_does_not_get_incremental_writes(
                 "UPDATE concept_schema_metadata SET value = '1' "
                 "WHERE key = 'schema_version'"
             )
-        # The loop swallows the refusal so it can retry after a rebuild.
         worker.start()
         await asyncio.sleep(0.1)
         await worker.stop()
@@ -588,7 +564,6 @@ def test_the_inter_batch_pause_actually_pauses(worker_env, monkeypatch):
     elapsed = asyncio.run(scenario())
 
     assert _queue_rows(mem) == []
-    # Four batches, so at least three pauses land between them.
     assert elapsed >= 0.36, f"drain took {elapsed:.3f}s, the pause did not apply"
 
 

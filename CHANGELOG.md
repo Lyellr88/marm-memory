@@ -1,6 +1,30 @@
 # Changelog
 
 <details>
+<summary><strong>August 25th, 2026: Compaction Dry-Run, Dead-Code Cleanup, and Comment Hygiene (v2.44.1)</strong></summary>
+
+### Added: A Real Compaction Dry-Run Command
+
+- `marm-memory maintenance compaction dry-run --session <name> [--json]` finds compaction candidates for a session and writes a JSON report, with no database mutation. The scan runs against a genuinely read-only SQLite connection instead of constructing the full memory manager, whose constructor performs schema maintenance on every call.
+- The report now writes to the managed `~/.marm/runtime/compaction-reports` directory instead of a path relative to the current working directory, and a write failure is reported honestly (`report_path: null`) instead of a false success message.
+
+### Fixed: Confirmed-Dead Code Removed, Not Just Flagged
+
+- Removed five functions with zero live callers, each verified against actual call sites before deletion rather than trusting a static scan alone: a superseded single-delete path, a superseded scoring function, a superseded index-block reader, a superseded graph-traversal wrapper, and an entirely orphaned availability check.
+- Removed two unwired public API methods on the memory manager (a content-replace wrapper and a standalone keyword-search wrapper); the equivalent capability is already reachable through `marm_smart_recall`'s `exact_mode="exact"` lane.
+
+### Internal
+
+- Comment and docstring pass across `marm_mcp_server`, `marm_graph`, and their tests, tightened to the project's one-line why-comment convention.
+- `scripts/typecheck.py` now also checks `marm_graph/`, previously unchecked. Turning it on surfaced 26 pre-existing type errors across 8 files; all are now fixed and the combined gate runs clean at zero for both packages.
+- A malformed JSON-RPC result from the codebase-memory-mcp child (a list, string, or null instead of an object) is caught and raised again as a `CbmError`, restoring behavior that a type-narrowing pass on `cbm_client.py` had accidentally weakened to a silent empty-payload success during this same pass. Added a regression test for the non-dict-result case.
+- `scripts/find-dead-code.py` now checks router registration in `marm_graph/endpoints/`, not just the main server, and no longer flags framework-invoked overrides (`on_any_event`, `format_help`) as unused.
+- `scripts/check-file-length.py --tests` now also scans `marm-console/tests`; `README.md` files are excluded from the length check.
+- Added `scripts/scan-stale-docs.py` for dead file-reference/link detection and a per-doc-section git-staleness report.
+
+</details>
+
+<details>
 <summary><strong>August 24th, 2026: Event-Driven Code Graph Auto-Indexing (v2.44.0)</strong></summary>
 
 ### Added: Code Graph Auto-Indexing Is Now Event-Driven

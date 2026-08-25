@@ -1,10 +1,3 @@
-"""Shared CbmClient singleton.
-
-One long-lived child process serves the whole server (many indexed projects,
-one subprocess — matching the binary's own cached-project model). Lifespan
-starts and closes it; endpoints fetch it via get_client().
-"""
-
 from __future__ import annotations
 
 from typing import Optional

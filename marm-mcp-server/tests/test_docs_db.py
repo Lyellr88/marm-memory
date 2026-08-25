@@ -1,5 +1,3 @@
-"""Tests for core/docs_db.py -- the permanent docs store."""
-
 import contextlib
 import sqlite3
 
@@ -50,10 +48,6 @@ def test_get_docs_db_path_default_uses_home_docs_subdir(tmp_path, monkeypatch):
     from pathlib import Path
 
     monkeypatch.delenv("MARM_DOCS_DB_PATH", raising=False)
-    # Patch Path.home() directly rather than the HOME env var -- HOME is
-    # POSIX-only (Windows resolves Path.home() via USERPROFILE instead),
-    # so an env-var-based override silently no-ops on Windows and leaves
-    # this test asserting against the real, unrelated user home directory.
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
     resolved = get_docs_db_path()
@@ -133,8 +127,6 @@ def test_save_doc_resave_updates_content_and_preserves_memory_id(tmp_path):
     assert was_created is False
     assert second.id == first.id
     assert second.content == "version two"
-    # memory_id must survive a resave untouched -- it only changes via an
-    # explicit set_memory_id call after a real mirror sync succeeds.
     assert second.memory_id == "mem-123"
 
 

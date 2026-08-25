@@ -1,5 +1,3 @@
-"""Terminal-aware root help rendering for the marm-memory product CLI."""
-
 from __future__ import annotations
 
 import shutil

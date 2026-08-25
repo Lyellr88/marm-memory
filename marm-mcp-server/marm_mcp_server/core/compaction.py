@@ -1,18 +1,28 @@
-"""Compaction worker — Layer 3 cluster detection and dry-run reporting (V1), staging (V2)."""
-
 import asyncio
 import hashlib
 import json
+import re
 import sqlite3
+import sys
 import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, ContextManager, Protocol
+
+from .runtime_manager import runtime_dir
 
 if TYPE_CHECKING:
     from .memory import MARMMemory
 
 from ..config import settings
+
+
+class _ConnectionSource(Protocol):
+    """What find_compaction_candidates and run_compaction_dry_run actually need:
+    a MARMMemory, or any read-only stand-in shaped the same way."""
+
+    def get_connection(self) -> ContextManager[Any]: ...
+
 
 COMPACTION_PROMPT_TEMPLATE = (
     "You are summarizing a cluster of related memories from a MARM memory session.\n\n"
@@ -59,7 +69,7 @@ def _connected_components(n: int, edges: list) -> list:
     return list(groups.values())
 
 
-def find_compaction_candidates(memory: "MARMMemory", session_name: str) -> list:
+def find_compaction_candidates(memory: _ConnectionSource, session_name: str) -> list:
     """Query session memories, group by similarity, return candidate clusters.
 
     Returns empty list if no qualifying embedded clusters are found.
@@ -148,32 +158,38 @@ def find_compaction_candidates(memory: "MARMMemory", session_name: str) -> list:
 
 
 def _write_report(candidates: list, session_name: str) -> "Path | None":
-    """Write candidates to a JSON report file. Returns the path, or None if no candidates."""
+    """Write candidates to a JSON report file. Returns the path, or None if no candidates
+    or the write failed."""
     if not candidates:
         return None
-    timestamp_str = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    safe_session = session_name.replace("/", "_").replace("\\", "_")
-    report_dir = Path.cwd() / "scripts" / "out" / "compaction"
-    report_dir.mkdir(parents=True, exist_ok=True)
-    report_path = report_dir / f"compaction-report-{safe_session}-{timestamp_str}.json"
     serializable = {
         "candidates": [
             {k: v for k, v in c.items() if k != "embedding"} for c in candidates
         ]
     }
     try:
+        timestamp_str = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        safe_session = re.sub(r"[^A-Za-z0-9_-]", "_", session_name) or "session"
+        report_dir = runtime_dir() / "compaction-reports"
+        report_dir.mkdir(parents=True, exist_ok=True)
+        report_path = (
+            report_dir / f"compaction-report-{safe_session}-{timestamp_str}.json"
+        )
         report_path.write_text(json.dumps(serializable, indent=2))
         return report_path
     except Exception as e:
-        print(f"[compaction] failed to write report: {e}")
+        print(f"[compaction] failed to write report: {e}", file=sys.stderr)
         return None
 
 
-def run_compaction_dry_run(memory: "MARMMemory", session_name: str) -> dict:
+def run_compaction_dry_run(memory: _ConnectionSource, session_name: str) -> dict:
     """Find compaction candidates and write a JSON report. No DB mutations."""
     candidates = find_compaction_candidates(memory, session_name)
-    _write_report(candidates, session_name)
-    return {"candidates": candidates}
+    report_path = _write_report(candidates, session_name)
+    return {
+        "candidates": candidates,
+        "report_path": str(report_path) if report_path else None,
+    }
 
 
 def _compute_candidate_hash(source_memory_ids: list) -> str:

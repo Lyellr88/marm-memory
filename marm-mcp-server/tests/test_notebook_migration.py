@@ -1,5 +1,3 @@
-"""Tests for notebook_entries' session_name migration (core/memory_db.py)."""
-
 import sqlite3
 
 from marm_mcp_server.core.memory_db import init_database
@@ -20,8 +18,6 @@ def test_legacy_rows_without_session_name_migrate_to_main(tmp_path):
     again -- not NULL, which would strand them as an unreachable scope for
     every add/use/show/save caller (all of which default to 'main')."""
     db_path = tmp_path / "memory.db"
-    # Simulate a pre-session_name schema by creating the table by hand,
-    # then seeding rows exactly as the old code would have.
     with sqlite3.connect(db_path) as conn:
         conn.execute("""
             CREATE TABLE notebook_entries (

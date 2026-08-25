@@ -1,5 +1,3 @@
-"""Installer detection and registry checks for the product CLI."""
-
 from __future__ import annotations
 
 import importlib.metadata

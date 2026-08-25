@@ -1,5 +1,3 @@
-"""Server-side extractive compaction summarization using embedding centroid."""
-
 import asyncio
 import json
 import sqlite3

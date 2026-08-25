@@ -1,5 +1,3 @@
-"""Tests for compaction Layer 3 — write-count trigger, cluster detection, dry-run report."""
-
 import asyncio
 import json
 import uuid
@@ -13,8 +11,6 @@ from marm_mcp_server.core.compaction import (
     run_compaction_dry_run,
 )
 from marm_mcp_server.core.memory import MARMMemory
-
-# --- Embedding helpers ---
 
 
 def _make_embedding(direction: int, dim: int = 384) -> bytes:
@@ -74,9 +70,6 @@ def _insert_memory_row(
     return mem_id
 
 
-# --- find_compaction_candidates ---
-
-
 def test_existing_embeddings_can_compact_when_encoder_unavailable(
     monkeypatch, tmp_path
 ):
@@ -108,7 +101,7 @@ def test_cluster_below_min_size_not_reported(monkeypatch, tmp_path):
     monkeypatch.setattr(s, "COMPACTION_SIMILARITY_THRESHOLD", 0.88)
     monkeypatch.setattr(s, "COMPACTION_MIN_AGE_HOURS", 0)
 
-    similar = _make_similar_embeddings(2)  # only 2 — below min size of 3
+    similar = _make_similar_embeddings(2)
     for i, emb in enumerate(similar):
         _insert_memory_row(mem, "sess", f"content {i}", emb, age_hours=48)
 
@@ -128,9 +121,7 @@ def test_young_memories_excluded_from_candidates(monkeypatch, tmp_path):
 
     similar = _make_similar_embeddings(3)
     for i, emb in enumerate(similar):
-        _insert_memory_row(
-            mem, "sess", f"content {i}", emb, age_hours=12
-        )  # only 12h old
+        _insert_memory_row(mem, "sess", f"content {i}", emb, age_hours=12)
 
     result = find_compaction_candidates(mem, "sess")
     assert result == []
@@ -183,7 +174,6 @@ def test_cross_session_memories_never_grouped(monkeypatch, tmp_path):
     monkeypatch.setattr(s, "COMPACTION_MIN_AGE_HOURS", 0)
 
     similar = _make_similar_embeddings(6)
-    # 3 in session-a, 3 in session-b — all similar to each other
     for i, emb in enumerate(similar[:3]):
         _insert_memory_row(mem, "session-a", f"content {i}", emb)
     for i, emb in enumerate(similar[3:]):
@@ -192,7 +182,6 @@ def test_cross_session_memories_never_grouped(monkeypatch, tmp_path):
     result_a = find_compaction_candidates(mem, "session-a")
     result_b = find_compaction_candidates(mem, "session-b")
 
-    # Each session should only return its own cluster, never mixing sessions
     for candidate in result_a:
         assert candidate["session_name"] == "session-a"
     for candidate in result_b:
@@ -223,9 +212,6 @@ def test_qualifying_cluster_reported_with_correct_shape(monkeypatch, tmp_path):
     assert candidate["avg_similarity"] >= 0.88
     assert candidate["suggested_summary"] is None
     assert len(candidate["preview"]) == 3
-
-
-# --- run_compaction_dry_run ---
 
 
 def test_dry_run_does_not_mutate_db(monkeypatch, tmp_path):
@@ -261,7 +247,7 @@ def test_dry_run_does_not_mutate_db(monkeypatch, tmp_path):
 
 
 def test_dry_run_writes_report_file(monkeypatch, tmp_path):
-    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("MARM_RUNTIME_DIR", str(tmp_path / "runtime"))
 
     mem = MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = False
@@ -276,11 +262,12 @@ def test_dry_run_writes_report_file(monkeypatch, tmp_path):
     for i, emb in enumerate(similar):
         _insert_memory_row(mem, "my-session", f"content {i}", emb)
 
-    run_compaction_dry_run(mem, "my-session")
+    result = run_compaction_dry_run(mem, "my-session")
 
-    report_dir = tmp_path / "scripts" / "out" / "compaction"
+    report_dir = tmp_path / "runtime" / "compaction-reports"
     reports = list(report_dir.glob("compaction-report-my-session-*.json"))
     assert len(reports) == 1
+    assert result["report_path"] == str(reports[0])
 
     data = json.loads(reports[0].read_text())
     assert "candidates" in data
@@ -299,19 +286,42 @@ def test_dry_run_uses_existing_embeddings_when_encoder_unavailable(tmp_path):
     assert len(report["candidates"]) == 1
 
 
-def test_dry_run_no_file_written_when_no_candidates(monkeypatch, tmp_path):
-    monkeypatch.chdir(tmp_path)
+def test_dry_run_report_dir_creation_failure_returns_none_not_crash(
+    monkeypatch, tmp_path
+):
+    """A locked or unwritable MARM_RUNTIME_DIR must degrade to report_path: None,
+    not raise -- the dry run itself already succeeded and must still report that."""
+    runtime_root = tmp_path / "runtime"
+    monkeypatch.setenv("MARM_RUNTIME_DIR", str(runtime_root))
+    # A plain file where compaction-reports/ needs to be a directory makes
+    # mkdir(parents=True) raise.
+    runtime_root.mkdir(parents=True)
+    (runtime_root / "compaction-reports").write_text("not a directory")
 
     mem = MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
 
-    run_compaction_dry_run(mem, "sess")
+    similar = _make_similar_embeddings(3)
+    for i, emb in enumerate(similar):
+        _insert_memory_row(mem, "sess", f"content {i}", emb)
 
-    report_dir = tmp_path / "scripts" / "out" / "compaction"
+    result = run_compaction_dry_run(mem, "sess")
+
+    assert len(result["candidates"]) == 1
+    assert result["report_path"] is None
+
+
+def test_dry_run_no_file_written_when_no_candidates(monkeypatch, tmp_path):
+    monkeypatch.setenv("MARM_RUNTIME_DIR", str(tmp_path / "runtime"))
+
+    mem = MARMMemory(str(tmp_path / "memory.db"))
+    mem._encoder_failed = True
+
+    result = run_compaction_dry_run(mem, "sess")
+
+    report_dir = tmp_path / "runtime" / "compaction-reports"
     assert not report_dir.exists()
-
-
-# --- Write counter ---
+    assert result["report_path"] is None
 
 
 @pytest.mark.asyncio
@@ -346,7 +356,6 @@ async def test_write_counter_does_not_increment_on_layer1_skip(monkeypatch, tmp_
     await mem.store_memory("exact duplicate content", "sess-l1")
     count_after_first = mem._session_write_counts.get("sess-l1", 0)
 
-    # Second write is an exact duplicate — Layer 1 skips it, counter must not increment
     await mem.store_memory("exact duplicate content", "sess-l1")
     assert mem._session_write_counts.get("sess-l1", 0) == count_after_first
 
@@ -376,9 +385,6 @@ async def test_write_counter_increments_on_layer2_merge(monkeypatch, tmp_path):
     await mem.store_memory("similar content about the auth fix", "sess-l2")
 
     assert mem._session_write_counts.get("sess-l2", 0) == count_after_first + 1
-
-
-# --- Trigger threshold ---
 
 
 @pytest.mark.asyncio
@@ -436,9 +442,6 @@ async def test_counter_threshold_set_to_20_for_custom_preset():
         memory_module.COMPACTION_TRIGGER_COUNT = original
 
 
-# --- Trigger scheduling ---
-
-
 @pytest.mark.asyncio
 async def test_counter_resets_and_scan_scheduled_on_threshold(monkeypatch, tmp_path):
     import marm_mcp_server.config.settings as s
@@ -446,9 +449,7 @@ async def test_counter_resets_and_scan_scheduled_on_threshold(monkeypatch, tmp_p
 
     monkeypatch.setattr(memory_module, "COMPACTION_ENABLED", True)
     monkeypatch.setattr(memory_module, "COMPACTION_TRIGGER_COUNT", 3)
-    monkeypatch.setattr(
-        s, "COMPACTION_ACTIVE_SESSION_GRACE_MINUTES", 60
-    )  # won't fire in test
+    monkeypatch.setattr(s, "COMPACTION_ACTIVE_SESSION_GRACE_MINUTES", 60)
 
     mem = memory_module.MARMMemory(str(tmp_path / "memory.db"))
     mem._encoder_failed = True
@@ -459,9 +460,7 @@ async def test_counter_resets_and_scan_scheduled_on_threshold(monkeypatch, tmp_p
 
     await mem.store_memory("write 3", "sess-trigger")
 
-    # Counter resets to 0 after threshold
     assert mem._session_write_counts.get("sess-trigger") == 0
-    # A pending scan task was scheduled
     assert "sess-trigger" in mem._pending_compaction_scans
     task = mem._pending_compaction_scans["sess-trigger"]
     assert not task.done()
@@ -486,9 +485,8 @@ async def test_new_write_cancels_pending_scan(monkeypatch, tmp_path):
     first_task = mem._pending_compaction_scans.get("sess-cancel")
     assert first_task is not None and not first_task.done()
 
-    # New write arrives before the scan fires — must cancel the pending task
     await mem.store_memory("write 3", "sess-cancel")
-    await asyncio.sleep(0)  # yield so the event loop can process the cancellation
+    await asyncio.sleep(0)
 
     assert first_task.cancelled()
 

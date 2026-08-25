@@ -1,5 +1,3 @@
-"""Serialized write queue for MARM memory writes."""
-
 import asyncio
 import inspect
 from dataclasses import dataclass
@@ -72,8 +70,6 @@ class WriteQueue:
         )
         return await future
 
-    # Split by awaitability rather than one `Awaitable[T] | T` parameter: that
-    # union left T ambiguous and mypy solved it as Never at the call sites.
     @overload
     async def put_callable(
         self, func: Callable[..., Awaitable[T]], *args: Any, **kwargs: Any

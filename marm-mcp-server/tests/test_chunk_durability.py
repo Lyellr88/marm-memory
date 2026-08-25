@@ -1,11 +1,3 @@
-"""Chunk-write task tracking and the bounded shutdown drain.
-
-Chunk rows are written by a background task that used to be created and dropped,
-so a server exit between the memory write and the chunk write lost them silently.
-These tests cover the tracking set, the drain that waits on it, and the abort
-paths that must not leave a write lock held while shutdown waits.
-"""
-
 import asyncio
 import sqlite3
 import uuid
@@ -205,15 +197,10 @@ async def test_shutdown_catches_a_chunk_write_spawned_by_the_queue_drain(
         shutdown_module.graph_supervisor, "stop", lambda: None, raising=False
     )
 
-    # Force the queue on rather than asserting the ambient setting: with
-    # WRITE_QUEUE_ENABLED=0 start_write_queue returns immediately and this test
-    # would fail for a configuration reason instead of a code defect.
     monkeypatch.setattr(memory_module, "WRITE_QUEUE_ENABLED", True)
     await mem.start_write_queue()
     assert mem._write_queue is not None
 
-    # Enqueue without awaiting the future, so the write is still pending when
-    # shutdown starts. Awaiting mem.store_memory() here would defeat the point.
     future = asyncio.get_running_loop().create_future()
     await mem._write_queue.queue.put(
         MemoryWriteRequest(_long_content(), "test", "general", None, future)
@@ -365,8 +352,6 @@ async def test_write_chunks_abort_releases_the_write_lock(monkeypatch, tmp_path)
 
     assert _chunk_rows(db_path, memory_id) == [], "stale write should insert nothing"
 
-    # A held write lock surfaces here: an immediate transaction from another
-    # connection is what shutdown effectively attempts next.
     other = sqlite3.connect(db_path, timeout=0.5)
     try:
         other.execute("BEGIN IMMEDIATE")

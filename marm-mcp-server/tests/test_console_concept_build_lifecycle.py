@@ -1,5 +1,3 @@
-"""Console response contracts for concept-build lifecycle controls."""
-
 import pytest
 from fastapi.testclient import TestClient
 

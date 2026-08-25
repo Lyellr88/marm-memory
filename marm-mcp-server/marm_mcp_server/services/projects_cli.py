@@ -1,5 +1,3 @@
-"""Code-index project commands for the marm-memory product CLI."""
-
 from __future__ import annotations
 
 import argparse

@@ -1,12 +1,3 @@
-"""Synchronous concept-build engine: fetch memory rows and extract entities,
-relationships, and code links into the concept graph.
-
-Runs entirely off the event loop via asyncio.to_thread from endpoints/concepts.py
--- the manual marm_concept_build route and the background indexing worker's
-build_for_memory_ids both drive this same engine, one via a page generator over
-a scope, the other via a targeted batch of memory ids.
-"""
-
 import threading
 from collections.abc import Callable, Iterable, Iterator
 from typing import Optional
@@ -72,11 +63,6 @@ def _report_progress_if_due(
     return memories_processed
 
 
-# Shared by the scope path and the targeted path so the two can never drift
-# into indexing different corpora. A compaction source owns its concepts and
-# the generated summary restates them, so extracting both double-counts every
-# entity in a compacted session. Recall makes the opposite choice on purpose:
-# it wants the summary, the graph wants the originals.
 _BUILD_ROW_FILTERS = (
     "session_name != 'marm_system'",
     "content IS NOT NULL",
@@ -263,21 +249,9 @@ def _run_build(
     relationships_created = 0
     code_links_created = 0
     possible_duplicates: list[dict] = []
-    # Memoized per build, not per call: get_or_create_entity only ever
-    # stores the embedding on the INSERT branch (re-mentions ignore it), so
-    # without this cache, a name repeated across many memories in one
-    # search_all=True build re-runs the (process-wide, encoder-lock-
-    # serialized) encode for a result that's thrown away every time but the
-    # first. Same input text always produces the same embedding, so caching
-    # is always safe.
     embed_cache: dict[str, Optional[bytes]] = {}
 
     try:
-        # Setup belongs inside the try. _get_concept_db() opens a database and
-        # runs DDL, so it can fail, and a failure that skipped the finally
-        # below would leave the caller's shutdown handshake waiting out its
-        # whole grace period and then reporting a build still running when
-        # none is.
         concept_db = _get_concept_db()
         bindings: dict[str, CodeProjectBinding | None] = {}
         last_progress_reported = 0
@@ -423,10 +397,6 @@ def _run_build(
                                     _safe_print(f"Concept code-link write failed: {e}")
 
                     if outcomes is not None:
-                        # Code links are deliberately absent from this decision. The
-                        # graph engine is optional and its lookups already fail open,
-                        # so a missing link is degradation, not a reason to re-extract
-                        # the memory.
                         if memory_failed:
                             outcomes[mem_id] = "failed"
                         elif not result.entities:
@@ -454,9 +424,6 @@ def _run_build(
                     break
 
     finally:
-        # However this exits, the thread has stopped writing the graph. The
-        # caller cannot observe that any other way: cancelling the await
-        # around asyncio.to_thread does not stop the thread.
         if finished is not None:
             finished.set()
 
@@ -480,8 +447,6 @@ def _build_for_memory_ids_sync(
     outcomes: dict[str, str] = {}
     result = _run_build([rows], outcomes=outcomes, abort=abort, finished=finished)
     if result["aborted"]:
-        # Half the batch may be unprocessed and the rest is no longer ours to
-        # settle. Report nothing: every task stays queued and is retried.
         return {}
     for memory_id in memory_ids:
         outcomes.setdefault(memory_id, "vanished")

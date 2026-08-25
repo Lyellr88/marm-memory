@@ -1,15 +1,3 @@
-"""Rollback regression coverage for the SQLite write-atomicity hardening
-effort (docs/current/sqlite-write-atomicity-hardening.md).
-
-Every test here forces a specific SQL statement inside an already-wrapped
-BEGIN IMMEDIATE/COMMIT/ROLLBACK block to fail, then asserts the *earlier*
-statement(s) in that same block did not durably apply -- proving the
-transaction boundary is real, not just present. A test that only checks
-the happy path does not prove rollback (see the spec's own Testing
-Checklist). Coordinator-owned per the spec's Test Ownership section --
-packet agents did not add tests here.
-"""
-
 import asyncio
 import contextlib
 import sqlite3
@@ -19,8 +7,6 @@ from datetime import datetime, timezone
 import pytest
 from conftest import load_isolated_server, local_client
 from fastapi.testclient import TestClient
-
-# --- shared failure-injection helpers ---
 
 
 class _FailOnStatement:
@@ -91,9 +77,6 @@ def _record_statements(monkeypatch, mem, events, label_map):
     monkeypatch.setattr(mem, "get_connection", _patched)
 
 
-# --- Packet A: services/log_entry.py ---
-
-
 def test_create_log_entry_rollback_no_partial_row_on_second_statement_failure(
     monkeypatch, tmp_path
 ):
@@ -104,16 +87,8 @@ def test_create_log_entry_rollback_no_partial_row_on_second_statement_failure(
     server = load_isolated_server(monkeypatch, tmp_path)
     client = local_client(server.app)
 
-    # load_isolated_server wipes and re-imports the whole marm_mcp_server
-    # package tree, so service modules must be imported *after* it runs --
-    # importing earlier would capture a stale module the live app no
-    # longer uses, and the patch below would silently target nothing.
     import marm_mcp_server.services.log_entry as log_entry
 
-    # Seed the target session first so create_log_entry's explicit
-    # session_name path is used (skips the session-switch and
-    # dated-fallback blocks, which also do "INSERT INTO sessions" --
-    # without this, the trigger could fire on the wrong block).
     client.post(
         "/marm_log_entry",
         json={"session_name": "atomicity-a1", "entry": "2026-01-01-seed-first entry"},
@@ -209,9 +184,6 @@ def test_marm_start_rollback_keeps_previous_active_session(monkeypatch, tmp_path
     _fail_on(monkeypatch, session_endpoint.memory, "INSERT OR REPLACE INTO sessions")
 
     second = client.post("/marm_start", json={"session_name": "atomicity-a3-new"})
-    # marm_start's error contract differs from marm_log_entry/marm_delete's
-    # 200-with-error-dict shape: its except blocks raise HTTPException(500)
-    # rather than returning a dict.
     assert second.status_code == 500
 
     with sqlite3.connect(db_path) as conn:
@@ -303,10 +275,6 @@ def test_dated_fallback_rollback_keeps_previous_active_session(monkeypatch, tmp_
 
     import marm_mcp_server.services.log_entry as log_entry
 
-    # First occurrence of "INSERT INTO sessions" in this call path is the
-    # dated-fallback block's own insert (the later per-entry upsert further
-    # down in create_log_entry is a second, distinct occurrence that never
-    # gets reached once this one raises).
     _fail_on(monkeypatch, log_entry.memory, "INSERT INTO sessions")
 
     resp = client.post(
@@ -431,9 +399,6 @@ def test_notebook_delete_rollback_keeps_entry_on_commit_failure(monkeypatch, tmp
     assert row[0] == "must survive rollback"
 
 
-# --- Packet B: services/notebook.py, services/documentation.py ---
-
-
 def test_notebook_add_rollback_no_partial_update(monkeypatch, tmp_path):
     """_add's update-then-conditional-insert is an UPDATE-XOR-INSERT
     upsert -- only one of the two statements ever actually writes data
@@ -518,9 +483,6 @@ def test_legacy_docs_cleanup_rollback_keeps_legacy_entries(monkeypatch, tmp_path
         "legacy notebook row was deleted despite the marker insert failing"
     )
     assert marker == 0, "cleanup marker was written despite the transaction failing"
-
-
-# --- Packet C: core/memory_ops.py ---
 
 
 def test_update_memory_computes_embedding_before_acquiring_lock(monkeypatch, tmp_path):
@@ -649,12 +611,6 @@ def test_console_replace_memory_rollback_regression(monkeypatch, tmp_path):
 
         _fail_on(monkeypatch, memory_module.memory, "UPDATE compaction_staging")
 
-        # console_replace_memory's endpoint only catches RuntimeError, and
-        # TestClient re-raises unhandled server exceptions by default
-        # (rather than turning them into a 500 response) -- the forced
-        # sqlite3.OperationalError propagates all the way out here. The
-        # point of this test is the DB-level rollback, not this
-        # endpoint's error-response contract.
         with pytest.raises(sqlite3.OperationalError):
             client.put(
                 f"/internal/memories/{memory_id}",
@@ -741,7 +697,7 @@ def test_stage_compaction_summaries_processes_candidates_independently(
                 "pending_summary",
                 "hash-expired",
                 "{}",
-                "2020-01-01T00:00:00+00:00",  # already past
+                "2020-01-01T00:00:00+00:00",
                 "2026-01-01T00:00:00+00:00",
                 "2026-01-01T00:00:00+00:00",
             ),

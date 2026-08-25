@@ -1,4 +1,4 @@
-"""Dump the real MCP tool schema the LLM sees, via the mounted /mcp endpoint."""
+#!/usr/bin/env python3
 
 import json
 import os

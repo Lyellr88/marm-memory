@@ -1,23 +1,3 @@
-"""Subprocess client for the codebase-memory-mcp static binary.
-
-Speaks newline-delimited JSON-RPC 2.0 over the child's stdio, per the verified
-protocol in docs/current/graph-index/graph/protocol-proof.md:
-
-  - framing      : write compact JSON + "\n"; read one line, strip "\r\n", parse
-  - handshake    : initialize -> capture serverInfo.version -> notifications/initialized
-  - envelope     : result.content[] items carry the real payload (JSON-or-string) in
-                   .text; scan for the first JSON-parseable item, don't assume index 0
-                   (an update notice can be prepended, see mcp.c:5298-5302); errors are
-                   signalled by result.isError == true, NOT a JSON-RPC error
-  - serialization: one stdin pipe -> a single lock guards each write+read round-trip
-  - isolation    : stderr is drained on a background thread; child crash/EOF is
-                   detected and the process transparently respawned on the next call
-
-The client is synchronous and thread-safe. Async callers invoke it through
-asyncio.to_thread (matching marm-mcp-server's idiom), so the event loop never
-blocks on subprocess IO.
-"""
-
 from __future__ import annotations
 
 import json
@@ -26,13 +6,13 @@ import re
 import subprocess
 import sys
 import threading
-from typing import Any, Optional
+from typing import IO, Any, Optional, cast
 
 import structlog
 
 logger = structlog.get_logger(__name__)
 
-_EOF = object()  # sentinel pushed by the reader thread on child EOF
+_EOF = object()
 _CLOSE_LOCK_WAIT_SECONDS = 0.1
 
 
@@ -47,7 +27,7 @@ def _field_from_truncated(text: str, field: str) -> Optional[str]:
     if match is None:
         return None
     try:
-        return json.loads(f'"{match.group(1)}"')
+        return cast(str, json.loads(f'"{match.group(1)}"'))
     except json.JSONDecodeError:
         return None
 
@@ -110,27 +90,16 @@ class CbmClient:
         self._reader: Optional[threading.Thread] = None
         self._stderr_reader: Optional[threading.Thread] = None
         self._next_id = 0
-        # close() is terminal. Without this, close() only clears _proc, which
-        # makes _alive() False rather than making the instance unusable, and the
-        # respawn in _call_tool_locked then starts a child that whoever owns this
-        # client has already disowned.
         self._closed = False
 
-        # Populated at handshake; the true schema-contract version (binary's, not pip's).
         self.server_version: Optional[str] = None
         self.server_name: Optional[str] = None
 
     # ── process lifecycle ───────────────────────────────────────────
-
     def _alive(self) -> bool:
         return self._proc is not None and self._proc.poll() is None
 
     def _spawn(self) -> None:
-        # Here rather than in each caller: four paths reach this (start,
-        # list_tools, _call_tool_locked, _force_respawn), each gated on
-        # _alive(), which reads _proc and so cannot tell a closed client from a
-        # never-started one. Guarding one caller leaves the rest able to start a
-        # process whoever closed this client will never see or shut down.
         if self._closed:
             raise CbmError("client is closed")
         logger.info("cbm.spawn", command=self._command, cwd=self._cwd)
@@ -154,9 +123,6 @@ class CbmClient:
             self._terminate_process(proc)
             raise CbmError("client is closed")
 
-        # Bind the reader thread to THIS queue instance. If the child is later
-        # killed and respawned, the dying old reader must not push its EOF
-        # sentinel into the new queue (which would poison the fresh handshake).
         self._out_q = queue.Queue()
         self._reader = threading.Thread(
             target=self._read_stdout, args=(proc.stdout, self._out_q), daemon=True
@@ -174,7 +140,7 @@ class CbmClient:
             self._terminate_process(proc)
             raise CbmError("client closed during spawn")
 
-    def _read_stdout(self, pipe, q: "queue.Queue") -> None:
+    def _read_stdout(self, pipe: IO[bytes], q: "queue.Queue") -> None:
         """Feed each response line into `q`; push _EOF when the pipe closes.
 
         `q` is passed in (not read from self) so a respawn's new queue is never
@@ -188,7 +154,7 @@ class CbmClient:
         finally:
             q.put(_EOF)
 
-    def _drain_stderr(self, pipe) -> None:
+    def _drain_stderr(self, pipe: IO[bytes]) -> None:
         """Continuously drain stderr so a full pipe buffer can't deadlock the child.
 
         The binary logs operational lines here (e.g. mem.init); route to debug.
@@ -223,7 +189,6 @@ class CbmClient:
             server_version=self.server_version,
             protocol=init_result.get("protocolVersion") if init_result else None,
         )
-        # notifications/initialized — no id, no response expected.
         self._write({"jsonrpc": "2.0", "method": "notifications/initialized"})
 
     def start(self) -> None:
@@ -266,7 +231,6 @@ class CbmClient:
                 pass
 
     # ── framing ─────────────────────────────────────────────────────
-
     def _write(self, obj: dict) -> None:
         line = json.dumps(obj, separators=(",", ":")).encode("utf-8") + b"\n"
         proc = self._proc
@@ -314,9 +278,12 @@ class CbmClient:
                 logger.warning("cbm.id_mismatch", got=msg.get("id"), expected=expect_id)
                 continue
             if "error" in msg:
-                err = msg["error"]
-                raise CbmError(f"JSON-RPC error: {err}")
-            return msg.get("result", {})
+                rpc_error = msg["error"]
+                raise CbmError(f"JSON-RPC error: {rpc_error}")
+            result = msg.get("result", {})
+            if not isinstance(result, dict):
+                raise CbmError(f"JSON-RPC result must be an object, got {result!r}")
+            return result
 
     def _send_recv(self, method: str, params: dict, timeout: float) -> dict:
         """One serialized request/response round-trip. Assumes lock held OR called
@@ -329,7 +296,6 @@ class CbmClient:
         return self._read_response(req_id, timeout)
 
     # ── public API ──────────────────────────────────────────────────
-
     def call_tool(
         self, name: str, arguments: dict, timeout: Optional[float] = None
     ) -> Any:
@@ -351,10 +317,8 @@ class CbmClient:
                 "tools/call", {"name": name, "arguments": arguments}, timeout
             )
         except CbmTimeoutError:
-            # Don't kill: the child may still be working. Surface as-is.
             raise
         except CbmError:
-            # Child likely died mid-call: respawn once and retry.
             logger.warning("cbm.call_failed_retry", tool=name)
             self._force_respawn()
             result = self._send_recv(
@@ -420,9 +384,6 @@ class CbmClient:
                 params = {} if cursor is None else {"cursor": cursor}
                 result = self._send_recv("tools/list", params, timeout)
                 tools.extend(result.get("tools", []))
-                # Absent means done. A cursor is opaque and may be any JSON
-                # scalar, so test for None rather than truthiness -- a literal
-                # 0 or "" is a real cursor, not a terminator.
                 cursor = result.get("nextCursor")
                 if cursor is None:
                     return tools

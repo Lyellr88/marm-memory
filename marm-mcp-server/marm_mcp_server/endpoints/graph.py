@@ -1,12 +1,3 @@
-"""The 5 marm-graph AI tools, registered directly on marm-mcp-server.
-
-Same operation_ids and request models as marm-graph's own endpoints/graph_ai.py
-(imported from marm_graph.core.models), so existing agent prompts/docs referencing
-these tool names keep working unchanged. Each route checks graph_supervisor
-availability (triggering lazy startup on first call) before delegating to
-marm_graph's tool_router, matching marm_graph's own asyncio.to_thread pattern.
-"""
-
 import asyncio
 import os
 import threading
@@ -178,8 +169,6 @@ def _run_project_index(job_id: str, repo_path: str, mode: str) -> None:
             )
             return
         job["phase"] = "indexing"
-        # _project_job_lock only serializes this interpreter's jobs; the lease
-        # is what keeps this off the same repo as the other transport's poller.
         try:
             with gate_sync("manual_index:console"):
                 result = index_repository(
@@ -245,10 +234,6 @@ def _resolve_and_delete(project: str) -> tuple[str | None, str | None, dict]:
     try:
         result = client.call_tool("delete_project", {"project": project})
     except CbmError as exc:
-        # call_tool directly, not through tool_router.safe, which is what turns a
-        # CbmError into an error payload. Unmapped it leaves this route as a 500,
-        # and a client closed under a concurrent teardown now raises rather than
-        # respawning, so this is reachable where it previously was not.
         return None, None, {"status": "error", "message": f"delete failed: {exc}"}
     failed = isinstance(result, dict) and result.get("status") == "error"
     if failed:
@@ -263,8 +248,6 @@ def _resolve_and_delete(project: str) -> tuple[str | None, str | None, dict]:
     try:
         runtime_flags.suppress_watch(root_path)
     except Exception:
-        # Never raised past here. The project is already gone, so failing the
-        # request would report a delete that did happen as a failure.
         return root_path, "failed", result
     return root_path, None, result
 
@@ -285,9 +268,6 @@ async def marm_graph_index(req: GraphIndexRequest) -> dict:
     other tool). Omit it to list indexed projects, or pass `project` to check
     index status. Call this first — all other graph tools need an indexed project.
     """
-    # Ahead of the availability gate below, which both refuses when the engine
-    # is down and starts the engine as a side effect. Turning auto-index off
-    # must work in either state.
     if req.action in AUTO_ACTIONS:
         return await asyncio.to_thread(auto_action, req.action)
     client = await asyncio.to_thread(graph_supervisor.get_client)
@@ -295,9 +275,6 @@ async def marm_graph_index(req: GraphIndexRequest) -> dict:
         return _UNAVAILABLE
     if req.action == "index" or (req.action == "auto" and req.repo_path):
         try:
-            # index_repository, not R.do_index: the tombstone and the path-limit
-            # marker are settled inside the gate, where they cannot race the
-            # other transport's poller writing the opposite answer.
             return await run_exclusive(
                 "manual_index:http",
                 index_repository,
@@ -369,7 +346,6 @@ async def marm_graph_impact(req: GraphImpactRequest) -> dict:
     return await asyncio.to_thread(R.do_impact, client, req)
 
 
-# Console-only routes. They are intentionally not FastApiMCP operations.
 @router.post("/internal/projects/list")
 async def console_list_projects() -> dict:
     client = await asyncio.to_thread(graph_supervisor.get_client)
@@ -505,9 +481,6 @@ async def console_project_code_units(req: ConsoleProjectRequest) -> dict:
     """
     client = await asyncio.to_thread(graph_supervisor.get_client)
     if client is None:
-        # Deliberately not _UNAVAILABLE. That shape is `{"status": "error"}`,
-        # which the Console adapter turns into a 503, failing the query and
-        # leaving the table blank rather than saying the graph is unavailable.
         return code_graph_view.unavailable("graph_unavailable")
     return await asyncio.to_thread(code_graph_view.code_units, client, req.project)
 
@@ -674,13 +647,6 @@ async def console_delete_project(req: ConsoleDeleteProjectRequest) -> dict:
     client = await asyncio.to_thread(graph_supervisor.get_client)
     if client is None:
         return _UNAVAILABLE
-    # Under the same gate as indexing. A delete that lands while a poller is
-    # inside index_repository on the same project is silently undone: that index
-    # finishes afterwards and writes the project back, so the user sees a deleted
-    # project reappear while the suppression stops it ever updating again.
-    #
-    # Root resolution is inside the gate too. It is a 265ms engine call, so doing
-    # it first would spend it only to discard the answer when the gate refuses.
     try:
         root_path, suppression_issue, result = await run_exclusive(
             f"delete_project:{req.project}", _resolve_and_delete, req.project
@@ -696,12 +662,7 @@ async def console_delete_project(req: ConsoleDeleteProjectRequest) -> dict:
     )
     if result.get("status") != "error":
         if root_path:
-            # The tombstone is already written, under the gate. This only drops
-            # the local watch entry ahead of its next refresh.
             graph_index_worker.drop_watch(root_path)
         if suppression_issue:
-            # Reported rather than swallowed: with no tombstone the other
-            # transport's poller can re-index this root from its cached watch
-            # set, and the symptom is a deleted project reappearing minutes later.
             result["watch_suppression"] = suppression_issue
     return result
