@@ -1,7 +1,8 @@
 import secrets
 
-from fastapi import Request
+from fastapi import Request, Response
 from fastapi.responses import JSONResponse
+from starlette.middleware.base import RequestResponseEndpoint
 
 from ..config.settings import MARM_GRAPH_API_KEY
 
@@ -11,7 +12,9 @@ _DOCS_PREFIXES = ("/openapi",)
 _LOOPBACK = ("127.0.0.1", "::1", "localhost")
 
 
-async def auth_middleware(request: Request, call_next):
+async def auth_middleware(
+    request: Request, call_next: RequestResponseEndpoint
+) -> Response:
     path = request.url.path
     is_docs_path = path in _DOCS_PATHS or path.startswith(_DOCS_PREFIXES)
 

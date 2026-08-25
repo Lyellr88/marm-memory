@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: lyellr88/marm-mcp-server:2.44.0
+    image: lyellr88/marm-mcp-server:2.44.1
     container_name: marm-mcp-server
     restart: unless-stopped
     
@@ -16,7 +16,7 @@ services:
     environment:
       - SERVER_HOST=0.0.0.0
       - SERVER_PORT=8001
-      - SERVER_VERSION=2.44.0
+      - SERVER_VERSION=2.44.1
       
       - ENVIRONMENT=production
       - LOG_LEVEL=INFO

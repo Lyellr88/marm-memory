@@ -181,7 +181,10 @@ def check_orphaned_modules() -> int:
 
 ROUTER_TARGETS = [
     (SERVER_PACKAGE / "endpoints", SERVER_FILE),
-    (SERVER_ROOT / "marm_graph" / "endpoints", SERVER_ROOT / "marm_graph" / "server.py"),
+    (
+        SERVER_ROOT / "marm_graph" / "endpoints",
+        SERVER_ROOT / "marm_graph" / "server.py",
+    ),
 ]
 
 
@@ -209,7 +212,9 @@ def check_unregistered_routers() -> int:
                 continue
 
             stem = f.stem
-            registered = f"{stem}_router" in server_src or f"endpoints.{stem}" in server_src
+            registered = (
+                f"{stem}_router" in server_src or f"endpoints.{stem}" in server_src
+            )
 
             if not registered:
                 unregistered.append((stem, str(f)))

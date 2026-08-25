@@ -47,6 +47,18 @@ def test_unwrap_plain_string_payload():
     assert "just text" in str(ei.value)
 
 
+def test_read_response_raises_on_non_dict_result():
+    """A malformed result (list/str/null instead of an object) must fail loudly
+    through the normal CbmError/retry path, not silently return an empty dict
+    that _unwrap then reads as a successful empty payload."""
+    client = CbmClient(["fake"])
+    client._out_q.put(
+        json.dumps({"jsonrpc": "2.0", "id": 1, "result": []}).encode() + b"\n"
+    )
+    with pytest.raises(CbmError, match="must be an object"):
+        client._read_response(1, timeout=1.0)
+
+
 def test_unwrap_error_with_hint():
     result = {
         "content": [{"type": "text", "text": '{"error": "bad", "hint": "do this"}'}],

@@ -1,4 +1,5 @@
 import sys
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 import structlog
@@ -24,7 +25,7 @@ _LOOPBACK = ("127.0.0.1", "::1", "localhost")
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     logger.info(
         "marm-graph starting",
         version=settings.SERVER_VERSION,

@@ -23,6 +23,7 @@ class _ConnectionSource(Protocol):
 
     def get_connection(self) -> ContextManager[Any]: ...
 
+
 COMPACTION_PROMPT_TEMPLATE = (
     "You are summarizing a cluster of related memories from a MARM memory session.\n\n"
     "Rules:\n"
@@ -171,7 +172,9 @@ def _write_report(candidates: list, session_name: str) -> "Path | None":
         safe_session = re.sub(r"[^A-Za-z0-9_-]", "_", session_name) or "session"
         report_dir = runtime_dir() / "compaction-reports"
         report_dir.mkdir(parents=True, exist_ok=True)
-        report_path = report_dir / f"compaction-report-{safe_session}-{timestamp_str}.json"
+        report_path = (
+            report_dir / f"compaction-report-{safe_session}-{timestamp_str}.json"
+        )
         report_path.write_text(json.dumps(serializable, indent=2))
         return report_path
     except Exception as e:

@@ -1,5 +1,6 @@
 import asyncio
 import re
+from typing import Any
 
 import structlog
 from fastapi import APIRouter
@@ -87,7 +88,7 @@ async def ui_delete_project(req: DeleteProjectRequest) -> dict:
 
 @router.post("/ui/manage_adr", operation_id="ui_manage_adr")
 async def ui_manage_adr(req: ManageAdrRequest) -> dict:
-    args = {"project": req.project, "mode": req.mode}
+    args: dict[str, Any] = {"project": req.project, "mode": req.mode}
     if req.content is not None:
         args["content"] = req.content
     if req.sections is not None:

@@ -6,7 +6,7 @@ import re
 import subprocess
 import sys
 import threading
-from typing import Any, Optional
+from typing import IO, Any, Optional, cast
 
 import structlog
 
@@ -27,7 +27,7 @@ def _field_from_truncated(text: str, field: str) -> Optional[str]:
     if match is None:
         return None
     try:
-        return json.loads(f'"{match.group(1)}"')
+        return cast(str, json.loads(f'"{match.group(1)}"'))
     except json.JSONDecodeError:
         return None
 
@@ -140,7 +140,7 @@ class CbmClient:
             self._terminate_process(proc)
             raise CbmError("client closed during spawn")
 
-    def _read_stdout(self, pipe, q: "queue.Queue") -> None:
+    def _read_stdout(self, pipe: IO[bytes], q: "queue.Queue") -> None:
         """Feed each response line into `q`; push _EOF when the pipe closes.
 
         `q` is passed in (not read from self) so a respawn's new queue is never
@@ -154,7 +154,7 @@ class CbmClient:
         finally:
             q.put(_EOF)
 
-    def _drain_stderr(self, pipe) -> None:
+    def _drain_stderr(self, pipe: IO[bytes]) -> None:
         """Continuously drain stderr so a full pipe buffer can't deadlock the child.
 
         The binary logs operational lines here (e.g. mem.init); route to debug.
@@ -278,9 +278,12 @@ class CbmClient:
                 logger.warning("cbm.id_mismatch", got=msg.get("id"), expected=expect_id)
                 continue
             if "error" in msg:
-                err = msg["error"]
-                raise CbmError(f"JSON-RPC error: {err}")
-            return msg.get("result", {})
+                rpc_error = msg["error"]
+                raise CbmError(f"JSON-RPC error: {rpc_error}")
+            result = msg.get("result", {})
+            if not isinstance(result, dict):
+                raise CbmError(f"JSON-RPC result must be an object, got {result!r}")
+            return result
 
     def _send_recv(self, method: str, params: dict, timeout: float) -> dict:
         """One serialized request/response round-trip. Assumes lock held OR called

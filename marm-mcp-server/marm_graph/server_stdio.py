@@ -9,12 +9,12 @@ builtins.print = lambda *args, **kwargs: _real_print(
 import asyncio  # noqa: E402
 import logging  # noqa: E402
 import os  # noqa: E402
-from typing import Optional  # noqa: E402
+from typing import Any, Optional, TypeVar  # noqa: E402
 
 os.environ.setdefault("SERVER_HOST", "127.0.0.1")
 
 from mcp.server.fastmcp import FastMCP  # noqa: E402
-from pydantic import ValidationError  # noqa: E402
+from pydantic import BaseModel, ValidationError  # noqa: E402
 
 from .core import tool_router as R  # noqa: E402
 from .core.deps import get_client, reset_client  # noqa: E402
@@ -31,8 +31,10 @@ _log = logging.getLogger("marm.graph.stdio")
 
 mcp = FastMCP("marm-graph")
 
+_T = TypeVar("_T", bound=BaseModel)
 
-def _build(model_cls, **kwargs):
+
+def _build(model_cls: type[_T], **kwargs: Any) -> tuple[Optional[_T], Optional[dict]]:
     """Construct a request model, converting a bad enum/type into the same
     {"status": "error"} shape tool_router.safe() uses for backend failures,
     instead of letting pydantic's ValidationError raise through the tool call

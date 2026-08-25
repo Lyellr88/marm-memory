@@ -37,7 +37,7 @@ def safe(fn: Callable[..., dict]) -> Callable[..., dict]:
     """Convert upstream failures into status dicts instead of exceptions."""
 
     @functools.wraps(fn)
-    def wrapper(*args, **kwargs) -> dict:
+    def wrapper(*args: Any, **kwargs: Any) -> dict:
         try:
             return fn(*args, **kwargs)
         except CbmToolError as e:
@@ -232,7 +232,7 @@ def _converted_impact(res: Any) -> Any:
     return out
 
 
-def _bound(data: Any) -> Any:
+def _bound(data: Any) -> dict[str, Any]:
     """Guarantee a response stays under MAX_RESPONSE_BYTES.
 
     Three stages, escalating only as needed:
@@ -241,40 +241,39 @@ def _bound(data: Any) -> Any:
          that have no trimmable list)
       3. last-resort bounded notice if the payload still cannot be fit
     """
-    if not isinstance(data, dict):
-        data = {"result": data}
-    if _size(data) <= MAX_RESPONSE_BYTES:
-        return data
+    bounded: dict[str, Any] = data if isinstance(data, dict) else {"result": data}
+    if _size(bounded) <= MAX_RESPONSE_BYTES:
+        return bounded
 
     trimmed_key = None
     for key in _TRIMMABLE_LIST_KEYS:
-        lst = data.get(key)
+        lst = bounded.get(key)
         if not isinstance(lst, list) or not lst:
             continue
         original_len = len(lst)
-        while len(lst) > 1 and _size(data) > MAX_RESPONSE_BYTES:
+        while len(lst) > 1 and _size(bounded) > MAX_RESPONSE_BYTES:
             lst = lst[: max(1, len(lst) // 2)]
-            data[key] = lst
+            bounded[key] = lst
         if len(lst) < original_len:
             trimmed_key = key
-        if _size(data) <= MAX_RESPONSE_BYTES:
+        if _size(bounded) <= MAX_RESPONSE_BYTES:
             break
 
-    data["_marm_graph_truncated"] = True
+    bounded["_marm_graph_truncated"] = True
     if trimmed_key:
-        data["_truncation_reason"] = (
+        bounded["_truncation_reason"] = (
             f"Response exceeded {MAX_RESPONSE_BYTES} bytes; '{trimmed_key}' "
             f"trimmed. Narrow the query or use pagination."
         )
-    if _size(data) <= MAX_RESPONSE_BYTES:
-        return data
+    if _size(bounded) <= MAX_RESPONSE_BYTES:
+        return bounded
 
-    data["_truncation_reason"] = (
+    bounded["_truncation_reason"] = (
         f"Response exceeded {MAX_RESPONSE_BYTES} bytes; oversized text was "
         f"clipped. Request a narrower slice."
     )
-    if _clip_to_fit(data):
-        return data
+    if _clip_to_fit(bounded):
+        return bounded
 
     return {
         "status": "too_large",
@@ -283,7 +282,7 @@ def _bound(data: Any) -> Any:
             f"Response exceeded {MAX_RESPONSE_BYTES} bytes and could not be "
             f"bounded structurally. Narrow the query."
         ),
-        "keys": list(data.keys()),
+        "keys": list(bounded.keys()),
     }
 
 
