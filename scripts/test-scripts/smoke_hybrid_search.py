@@ -38,9 +38,11 @@ from marm_mcp_server.config.settings import (  # noqa: E402
 from marm_mcp_server.core import memory as memory_module  # noqa: E402
 from marm_mcp_server.core.memory import (  # noqa: E402
     MARMMemory,
+    _safe_fts_query,
+)
+from marm_mcp_server.core.memory_scoring import (  # noqa: E402
     _fetch_and_score_embedding_rows,
     _fetch_and_score_fts_rows,
-    _safe_fts_query,
 )
 
 
