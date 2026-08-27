@@ -1,6 +1,24 @@
 # Changelog
 
 <details>
+<summary><strong>August 27th, 2026: marm-init Setup Correctness (v2.44.3)</strong></summary>
+
+### Fixed: Setup Paths That Reported Success Without Earning It
+
+Four defects in the `marm-init` skill, three of them found by an outside tester running a real install. Each one came from a step validating itself without validating the combination the user had assembled.
+
+- Remote plus STDIO was accepted, wired a local pipe, and reported setup complete, so a user targeting a VPS was told they were connected while the client had launched a local child process. Step 3 now refuses the combination and routes to HTTP or back to the server-location question. Step 6 previously verified HTTP setups only, which is why that path could claim success with no evidence behind it; STDIO now confirms the entry point resolves and the config entry was written, and remote HTTP checks the real host rather than loopback.
+- The Docker install path ran `docker pull` alone, which never puts the `marm-memory` CLI on the host, while every Docker instruction that followed called it. The first action of the runtime step failed with command not found. Step 00 now records whether the helper CLI is present and offers to add it, and the runtime step carries a raw `docker run` block for anyone staying Docker only.
+- The setup protocol was fetched from an unpinned branch ref and then adopted as the agent's operating instructions. It now prefers the copy that ships with the installed engine, then a repo checkout, and falls back to the network only when no local copy exists, saying so when it does.
+- The server-location step promised to collect the host address later and never asked, leaving every connect command pointing at `localhost`. It now asks immediately and substitutes the answer.
+
+### Fixed: Skill Metadata Understated the Tool Surface
+
+- The skill frontmatter advertised a 7-tool surface and had not been updated since the concept knowledge graph and per-repository code indexing shipped. It now reads 14 and names both. This text renders on marketplace listings, so the count was public.
+
+</details>
+
+<details>
 <summary><strong>August 27th, 2026: Raw Exception Text Removed From Status Responses (v2.44.2)</strong></summary>
 
 ### Fixed: Raw Exception Text No Longer Reaches Status Responses
