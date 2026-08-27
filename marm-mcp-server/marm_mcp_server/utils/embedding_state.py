@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import sqlite3
 from contextlib import closing
@@ -13,6 +14,8 @@ from ..config.settings import (
     DEFAULT_SEMANTIC_DIM,
     DEFAULT_SEMANTIC_MODEL,
 )
+
+logger = logging.getLogger(__name__)
 
 EMBEDDING_MODEL_SETTING = "embedding_model"
 _MEMORY_TABLES = (
@@ -124,12 +127,14 @@ def inspect_embedding_state(
     errors = []
     try:
         tables.extend(_inspect_tables(memory_path, "memory", _MEMORY_TABLES))
-    except (OSError, sqlite3.Error) as exc:
-        errors.append(f"memory database inspection failed: {exc}")
+    except (OSError, sqlite3.Error):
+        logger.warning("Memory database inspection failed", exc_info=True)
+        errors.append("Memory database inspection failed.")
     try:
         tables.extend(_inspect_tables(concept_path, "concept", _CONCEPT_TABLES))
-    except (OSError, sqlite3.Error) as exc:
-        errors.append(f"concept database inspection failed: {exc}")
+    except (OSError, sqlite3.Error):
+        logger.warning("Concept database inspection failed", exc_info=True)
+        errors.append("Concept database inspection failed.")
 
     marker = None
     if memory_path.exists():
@@ -141,8 +146,9 @@ def inspect_embedding_state(
                         (EMBEDDING_MODEL_SETTING,),
                     ).fetchone()
                     marker = row[0] if row else None
-        except (OSError, sqlite3.Error) as exc:
-            message = f"memory model marker inspection failed: {exc}"
+        except (OSError, sqlite3.Error):
+            logger.warning("Memory model marker inspection failed", exc_info=True)
+            message = "Memory model marker inspection failed."
             if message not in errors:
                 errors.append(message)
     return EmbeddingState(marker=marker, tables=tuple(tables), errors=tuple(errors))
