@@ -14,6 +14,7 @@ from ..config.settings import (
     DEFAULT_SEMANTIC_DIM,
     DEFAULT_SEMANTIC_MODEL,
 )
+from .logging_filters import log_warning_throttled
 
 logger = logging.getLogger(__name__)
 
@@ -128,12 +129,16 @@ def inspect_embedding_state(
     try:
         tables.extend(_inspect_tables(memory_path, "memory", _MEMORY_TABLES))
     except (OSError, sqlite3.Error):
-        logger.warning("Memory database inspection failed", exc_info=True)
+        log_warning_throttled(
+            logger, "embedding_memory_inspect", "Memory database inspection failed"
+        )
         errors.append("Memory database inspection failed.")
     try:
         tables.extend(_inspect_tables(concept_path, "concept", _CONCEPT_TABLES))
     except (OSError, sqlite3.Error):
-        logger.warning("Concept database inspection failed", exc_info=True)
+        log_warning_throttled(
+            logger, "embedding_concept_inspect", "Concept database inspection failed"
+        )
         errors.append("Concept database inspection failed.")
 
     marker = None
@@ -147,7 +152,11 @@ def inspect_embedding_state(
                     ).fetchone()
                     marker = row[0] if row else None
         except (OSError, sqlite3.Error):
-            logger.warning("Memory model marker inspection failed", exc_info=True)
+            log_warning_throttled(
+                logger,
+                "embedding_marker_inspect",
+                "Memory model marker inspection failed",
+            )
             message = "Memory model marker inspection failed."
             if message not in errors:
                 errors.append(message)

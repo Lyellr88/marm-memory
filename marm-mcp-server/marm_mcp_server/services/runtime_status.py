@@ -31,6 +31,7 @@ from ..config.settings import (
 from ..core.concept_db import inspect_concept_schema
 from ..core.runtime_manager import inspect_runtime
 from ..utils.embedding_state import get_default_concept_db_path, inspect_embedding_state
+from ..utils.logging_filters import log_warning_throttled
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +58,9 @@ def _memory_status(path: Path) -> dict[str, Any]:
                 "WHERE status IN ('pending_summary', 'summary_staged')"
             ).fetchone()[0]
     except (OSError, sqlite3.Error):
-        logger.warning("Memory database status read failed", exc_info=True)
+        log_warning_throttled(
+            logger, "memory_status", "Memory database status read failed"
+        )
         result["error"] = "Could not read the memory database."
     try:
         result["size_bytes"] = path.stat().st_size
