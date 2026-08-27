@@ -29,7 +29,7 @@
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "catalog:",
     "clsx": "catalog:",
-    "date-fns": "^3.6.0",
+    "date-fns": "^4.4.0",
     "jsdom": "^30.0.1",
     "lucide-react": "catalog:",
     "react": "catalog:",
