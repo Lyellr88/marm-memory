@@ -1,4 +1,19 @@
 import logging
+import time
+
+_THROTTLE_SECONDS = 300.0
+_last_logged: dict[str, float] = {}
+
+
+def log_warning_throttled(logger: logging.Logger, key: str, message: str) -> None:
+    """The console polls the status endpoints every 5s, so an unreadable database
+    would otherwise write a traceback every cycle for as long as it stays broken."""
+    now = time.monotonic()
+    last = _last_logged.get(key)
+    if last is not None and now - last < _THROTTLE_SECONDS:
+        return
+    _last_logged[key] = now
+    logger.warning(message, exc_info=True)
 
 
 class _SuppressProactorWindowsNoise(logging.Filter):

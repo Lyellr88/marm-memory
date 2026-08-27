@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import logging
 import os
 import socket
 import sqlite3
@@ -30,6 +31,9 @@ from ..config.settings import (
 from ..core.concept_db import inspect_concept_schema
 from ..core.runtime_manager import inspect_runtime
 from ..utils.embedding_state import get_default_concept_db_path, inspect_embedding_state
+from ..utils.logging_filters import log_warning_throttled
+
+logger = logging.getLogger(__name__)
 
 
 def _read_only(path: Path) -> sqlite3.Connection:
@@ -53,8 +57,11 @@ def _memory_status(path: Path) -> dict[str, Any]:
                 "SELECT COUNT(*) FROM compaction_staging "
                 "WHERE status IN ('pending_summary', 'summary_staged')"
             ).fetchone()[0]
-    except (OSError, sqlite3.Error) as exc:
-        result["error"] = str(exc)
+    except (OSError, sqlite3.Error):
+        log_warning_throttled(
+            logger, "memory_status", "Memory database status read failed"
+        )
+        result["error"] = "Could not read the memory database."
     try:
         result["size_bytes"] = path.stat().st_size
     except OSError:

@@ -26,7 +26,7 @@ jobs:
       # changed, while the developer's 0.15.16 reported the file clean.
       # Keep local ruff on this version.
       - name: Install Ruff
-        run: pip install ruff==0.16.2
+        run: pip install ruff==0.16.4
 
       # From the repo root, not marm-mcp-server. scripts/ and marm-console/tests
       # were never linted by CI, so their result depended on whichever ruff a

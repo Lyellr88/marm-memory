@@ -1,6 +1,16 @@
 # Changelog
 
 <details>
+<summary><strong>August 27th, 2026: Raw Exception Text Removed From Status Responses (v2.44.2)</strong></summary>
+
+### Fixed: Raw Exception Text No Longer Reaches Status Responses
+
+- Database read failures in the runtime status and embedding-state inspectors returned the raw exception message, which reached the console and CLI status payloads and could carry local filesystem paths and SQLite internals (CodeQL `py/stack-trace-exposure`). The exception is now logged with its traceback, which it previously was not, and the payload carries a fixed human-readable message instead.
+- Those tracebacks are logged at most once per five minutes per failure. The console polls the status endpoint every five seconds while the Settings dialog is open, so an unreadable database would otherwise have written three tracebacks per request, burying other events in the runtime log for as long as the fault lasted.
+
+</details>
+
+<details>
 <summary><strong>August 25th, 2026: Compaction Dry-Run, Dead-Code Cleanup, and Comment Hygiene (v2.44.1)</strong></summary>
 
 ### Added: A Real Compaction Dry-Run Command
