@@ -1,5 +1,6 @@
 import importlib
 import os
+import stat
 import sys
 from unittest import mock
 
@@ -62,12 +63,13 @@ def test_resolve_marm_api_key_persists_a_generated_key_across_starts(
 
     env_path = tmp_path / ".marm" / ".env"
     monkeypatch.setattr(api_key_bootstrap, "_MARM_ENV_PATH", env_path)
-    monkeypatch.setattr(api_key_bootstrap, "_protect_key_file", lambda path: True)
     monkeypatch.delenv("MARM_API_KEY", raising=False)
 
     first_start = api_key_bootstrap.resolve_marm_api_key("0.0.0.0")
     assert first_start
     assert env_path.read_text() == f"MARM_API_KEY={first_start}\n"
+    if os.name != "nt":
+        assert stat.S_IMODE(env_path.stat().st_mode) & 0o077 == 0
 
     second_start = api_key_bootstrap.resolve_marm_api_key("0.0.0.0")
     assert second_start == first_start
@@ -81,6 +83,40 @@ def test_resolve_marm_api_key_removes_file_when_protection_fails(
     env_path = tmp_path / ".marm" / ".env"
     monkeypatch.setattr(api_key_bootstrap, "_MARM_ENV_PATH", env_path)
     monkeypatch.setattr(api_key_bootstrap, "_protect_key_file", lambda path: False)
+    monkeypatch.delenv("MARM_API_KEY", raising=False)
+    printed = []
+    real_print = print
+
+    def record_print(*args, **kwargs):
+        printed.append(args)
+        real_print(*args, **kwargs)
+
+    monkeypatch.setattr("builtins.print", record_print)
+
+    generated_key = api_key_bootstrap.resolve_marm_api_key("0.0.0.0")
+
+    assert generated_key
+    assert not env_path.exists()
+    output = capsys.readouterr()
+    warning = output.err
+    assert "kept in memory only" in warning
+    assert "will not survive a restart" in warning
+    assert "Set MARM_API_KEY explicitly in the environment" in warning
+    assert ("Set MARM_API_KEY explicitly and restart to connect.",) in printed
+
+
+def test_resolve_marm_api_key_removes_file_when_protection_raises(
+    monkeypatch, tmp_path, capsys
+):
+    from marm_mcp_server.config import api_key_bootstrap
+
+    env_path = tmp_path / ".marm" / ".env"
+    monkeypatch.setattr(api_key_bootstrap, "_MARM_ENV_PATH", env_path)
+
+    def fail_protection(path):
+        raise RuntimeError("ctypes blew up")
+
+    monkeypatch.setattr(api_key_bootstrap, "_protect_key_file", fail_protection)
     monkeypatch.delenv("MARM_API_KEY", raising=False)
 
     generated_key = api_key_bootstrap.resolve_marm_api_key("0.0.0.0")

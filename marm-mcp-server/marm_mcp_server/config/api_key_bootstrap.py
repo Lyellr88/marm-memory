@@ -56,7 +56,11 @@ def resolve_marm_api_key(server_host: str) -> str:
         try:
             _MARM_ENV_PATH.parent.mkdir(parents=True, exist_ok=True)
             _MARM_ENV_PATH.write_text(f"MARM_API_KEY={marm_api_key}\n")
-            if _protect_key_file(_MARM_ENV_PATH):
+            try:
+                key_protected = _protect_key_file(_MARM_ENV_PATH)
+            except Exception:
+                key_protected = False
+            if key_protected:
                 key_persisted = True
             else:
                 try:
@@ -96,6 +100,8 @@ def resolve_marm_api_key(server_host: str) -> str:
             )
             print()
             print("On subsequent starts the key loads silently from the file above.")
+        else:
+            print("Set MARM_API_KEY explicitly and restart to connect.")
         print()
 
     return marm_api_key
