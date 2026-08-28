@@ -1,6 +1,42 @@
 # Changelog
 
 <details>
+<summary><strong>August 28th, 2026: Supply Chain Checks, Setup Verification, and Typed Endpoint Responses (v2.44.5)</strong></summary>
+
+### Added: Dependency and Build Surface Review on Pull Requests
+
+Every pull request into `MARM-main` now runs two supply chain checks alongside the existing lint, typecheck, and test gates.
+
+- Dependency review fails a pull request that introduces a package with a known vulnerability at moderate severity or above. Development dependencies are covered as well as runtime ones, since a build-time package executes on the runner with a repository token and is not a lower-risk surface than a shipped one.
+- A second job flags any change to the files that control the build, the published artifact, or CI itself, and warns separately when a pull request edits the workflows that review it. This one is advisory and never fails a run; it exists so a reviewer sees the change rather than scrolling past it.
+
+### Fixed: Setup Verification That Could Not Detect a Wrong Key
+
+The `marm-init` skill finished a Docker HTTP setup by checking `/health`, then reported success. That route is public in every mode and returns the same result whether the key is correct, wrong, or absent, so the single most likely thing to be misconfigured was the one thing the check could not see. Reported and fixed by [@NIKHILSHIRKE56](https://github.com/NIKHILSHIRKE56).
+
+- On any path where a key is required, setup now asserts an unauthenticated request to a protected route returns 401, which proves the server is reachable and that authentication is actually armed, using no credential at all. The authenticated check is handed to the user to run in their own terminal, so the key still never enters the setup conversation.
+- Keyless loopback servers keep the `/health` check. This is required rather than cosmetic: with no key configured the auth middleware admits localhost, so asserting 401 there would fail a correctly configured setup.
+- The handoff text no longer explains its limits in terms of `/health` being public, since keyed paths no longer use it.
+
+### Added: Response Schemas on `marm_log_entry` and `marm_delete`
+
+The first two of 83 endpoint functions now declare real response models instead of returning a bare `dict`. Contributed by [@erfou11](https://github.com/erfou11).
+
+- The OpenAPI document describes these payloads instead of an untyped object, so a renamed response field is caught by the schema rather than shipping silently.
+- The models reject undeclared fields rather than dropping them. FastAPI's default is to filter a field the model does not declare, which would truncate a response with no signal; a response carrying an undeclared field now fails visibly instead.
+- Payload parity was verified in both directions before merge. Every success, session-switch, not-found, and error shape is preserved, and the 14 MCP tool descriptions and input schemas are unchanged, which is the risk that comes with attaching a response model to a tool surface.
+
+### Changed: Release Notes Group by Label
+
+Generated release notes now sort pull requests into Security, Features, Fixes, Dependencies, Documentation, and CI and tooling by label, rather than listing everything in one block.
+
+### Upgrade Note
+
+The `marm-init` skill version moved to 6. Agents with an older copy installed will report that the skill is out of date on next invocation; re-run `marm-memory init` to refresh it. No server-side action is required.
+
+</details>
+
+<details>
 <summary><strong>August 28th, 2026: Log Recall Lane Repaired (v2.44.4)</strong></summary>
 
 ### Fixed: The Log Lane in `marm_smart_recall` Never Matched Anything
