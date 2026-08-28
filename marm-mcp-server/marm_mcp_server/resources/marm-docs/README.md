@@ -1,4 +1,4 @@
-# MARM Memory v2.44.3 - Give your AI Agents a permanent memory in 60 seconds
+# MARM Memory v2.44.4 - Give your AI Agents a permanent memory in 60 seconds
 
 ## Table of Contents
 
@@ -132,7 +132,7 @@ Docker commands are documented separately below because they require explicit da
 
 MARM is tuned for fast recall first, even as memory grows and long memories are chunked behind the scenes.
 
-These measurements use the fastembed-backed `jinaai/jina-embeddings-v2-small-en` encoder and a throwaway local SQLite database. Every timed path calls the shipped `MARMMemory` code, not a benchmark-local reimplementation. Sections 1-4 are timings from a single run of [`scripts/benchmarking/performance/bench_hotpath.py`](scripts/benchmarking/performance/bench_hotpath.py) on local hardware; absolute milliseconds vary by machine, so treat the scaling shape as the signal. Section 5 is a separate accuracy benchmark ([`run_eval.py`](scripts/benchmarking/accuracy/locomo/run_eval.py)) and reports two runs, for the reason given there.
+These measurements use the fastembed-backed `jinaai/jina-embeddings-v2-small-en` encoder and a throwaway local SQLite database. Every timed path calls the shipped `MARMMemory` code, not a benchmark-local reimplementation. Sections 1-4 are timings from a single run of [`scripts/benchmarking/performance/bench_hotpath.py`](scripts/benchmarking/performance/bench_hotpath.py) on local hardware; absolute milliseconds vary by machine, so treat the scaling shape as the signal. Section 5 is a separate accuracy benchmark ([`run_eval.py`](scripts/benchmarking/accuracy/locomo/run_eval.py)) measuring retrieval rather than speed, and its latest row is a controlled before and after, explained there.
 
 ### 1. Retrieval Latency Scaling
 
@@ -178,15 +178,18 @@ The full scan grows roughly linearly with $N$ while hybrid recall grows far more
 
 ### 5. LoCoMo Retrieval Accuracy
 
-All 10 LoCoMo conversations are ingested through `marm_log_entry` (5,882 memories), then top-5 `marm_smart_recall` results are scored against 1,977 evidence-annotated questions. No answer-generation model or LLM judge is used.
+All 10 LoCoMo conversations are ingested through `marm_log_entry` (5,882 memories), then top-5 `marm_smart_recall` results are scored against 1,977 evidence-annotated questions. No answer-generation model or LLM judge is involved, so this measures whether the right memory is retrieved, not whether an agent answers correctly with it.
 
 | Configuration | Any evidence hit | All evidence hit | Mean evidence recall |
 | :--- | :--- | :--- | :--- |
 | MiniLM baseline | 37.5% | 29.5% | not published |
 | Jina v2 Small (v2.29.0) | 53.0% | 43.4% | 47.6% |
-| **Recent (v2.33.1)** | **62.9 - 63.5%** | **53.1 - 53.5%** | **57.4 - 57.9%** |
+| v2.33.1 through v2.44.3 | 62.9 - 63.5% | 53.1 - 53.5% | 57.4 - 57.9% |
+| **v2.44.4 (log lane fix)** | **69.1 - 69.6%** | **58.2 - 58.6%** | **63.0 - 63.5%** |
 
-Performance gains are isolated to the blended retrieval pipeline and localized vector space, ensuring high multi-hop recall accuracy without relying on cloud-hosted LLM judges. Reproduce the full benchmark using [`scripts/benchmarking/accuracy/locomo/run_eval.py`](scripts/benchmarking/accuracy/locomo/run_eval.py).
+The last row is a controlled comparison, same build and data with the log lane as the only variable. That lane previously substring-matched the whole query against log topics and summaries, so a natural-language question never matched and it scored 0.0% on all 1,977 questions. It now tokenizes the query and reaches 53.3% on its own. Ranges rather than single figures because the semantic lane varies about half a point between runs, so a sub-point difference is not a result.
+
+Multi-hop remains the weakest category at 44.9%, and single-hop evidence recall is 36.6% against a 66.2% any-hit rate, so the lane often surfaces some of a question's evidence rather than all of it. Reproduce with [`run_eval.py`](scripts/benchmarking/accuracy/locomo/run_eval.py).
 
 ### 6. vs Competitors: Architecture
 

@@ -155,6 +155,22 @@ def _wide_fts_query(query: str) -> str | None:
     return " OR ".join(f'"{t}"' for t in tokens)
 
 
+def log_search_terms(query: str, limit: int = 12) -> list[str]:
+    """Tokens for the log lane's LIKE search, stopwords dropped.
+
+    The lane has no FTS index, so it substring-matched the whole query and a
+    natural-language question could only hit if it appeared verbatim in a topic
+    or summary. Falls back to the raw tokens when every one is a stopword, and
+    to an empty list when nothing is searchable, so callers keep a fail-open
+    path consistent with the FTS helpers above.
+    """
+    tokens = re.findall(r"\w+", query)
+    if not tokens:
+        return []
+    kept = [t for t in tokens if t.lower() not in _FTS_STOPWORDS]
+    return (kept or tokens)[:limit]
+
+
 MEMORY_CHUNK_THRESHOLD_WORDS = 500
 MEMORY_CHUNK_TARGET_WORDS = 250
 MEMORY_CHUNK_OVERLAP_WORDS = 50

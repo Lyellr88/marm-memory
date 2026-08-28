@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from ..core.concept_db import ConceptDB, get_concept_db_path
 from ..core.memory import memory
+from ..core.memory_utils import log_search_terms
 from ..core.models import SmartRecallRequest
 from ..core.response_limiter import MCPResponseLimiter
 from ..services.analytics import track_usage
@@ -198,13 +199,21 @@ async def marm_smart_recall(request: SmartRecallRequest, http_request: Request) 
 
         log_results = []
         if request.include_logs:
+            terms = log_search_terms(request.query) or [request.query]
+            likes = [f"%{t}%" for t in terms]
+            match_expr = " + ".join(
+                ["(CASE WHEN topic LIKE ? OR summary LIKE ? THEN 1 ELSE 0 END)"]
+                * len(terms)
+            )
+            where_expr = " OR ".join(["topic LIKE ? OR summary LIKE ?"] * len(terms))
             with memory.get_connection() as conn:
-                log_base = """
-                    SELECT id, session_name, topic, summary, entry_date, project, platform
+                log_base = f"""
+                    SELECT id, session_name, topic, summary, entry_date, project, platform,
+                           ({match_expr}) AS match_count
                     FROM log_entries
-                    WHERE (topic LIKE ? OR summary LIKE ?)
+                    WHERE ({where_expr})
                 """
-                log_params: list = [f"%{request.query}%", f"%{request.query}%"]
+                log_params: list = [x for like in likes for x in (like, like)] * 2
                 if not request.search_all:
                     log_base += " AND session_name = ?"
                     log_params.append(request.session_name)
@@ -214,7 +223,7 @@ async def marm_smart_recall(request: SmartRecallRequest, http_request: Request) 
                 if request.platform is not None:
                     log_base += " AND platform = ?"
                     log_params.append(request.platform)
-                log_base += " ORDER BY entry_date DESC LIMIT ?"
+                log_base += " ORDER BY match_count DESC, entry_date DESC LIMIT ?"
                 log_params.append(request.limit)
                 log_results = [
                     {
