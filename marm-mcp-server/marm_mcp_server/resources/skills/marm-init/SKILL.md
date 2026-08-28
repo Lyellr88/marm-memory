@@ -47,7 +47,9 @@ Ask: "I could not find the MARM core engine on your machine. How do you want to 
   - pip: run `pip install marm-mcp-server`. Confirm success, for example  `marm-mcp-server --version` resolves. Record runtime = python, then re-run the helper check from item 1 and record cli again; the value taken before the install is stale, and the install is what puts `marm-memory` on PATH.
   - Docker: run `docker pull lyellr88/marm-mcp-server:latest`. Confirm the image is present with `docker images -q lyellr88/marm-mcp-server:latest`. Record runtime = docker, then run step 5 below before advancing.
 
-  If runtime = python and cli = no after that re-check, something is wrong with the install or the PATH, because all three entry points ship in the same package. Every local Python instruction in Step 4 calls `marm-memory`, so do not continue past it. Surface what `command -v marm-memory` returned and stop.
+  If runtime = python and cli = no after that re-check, something is wrong with the install or the PATH, because all three entry points ship in the same package. Say so, and show what `command -v marm-memory` returned. Do not stop outright, because one Python path does not need the helper at all:
+  - STDIO with local Python needs only `marm-mcp-stdio`, which is what the runtime check already found. Continue, and verify that entry point directly in Step 6.
+  - Both local Python HTTP paths call `marm-memory` (`fast-start-http`, `key generate`, `start`). Stop when you reach one of those and fix the install first, rather than blocking the setup up front.
 
 5. Helper CLI question. Run this whenever runtime = docker and item 1 recorded cli = no, whether you reached it by detecting an existing image or by installing one. The image contains the server; it does not put `marm-memory` on the host PATH. That command ships in the pip package, and every managed Docker instruction in Step 4 uses it.
 
@@ -63,10 +65,11 @@ If the install fails, surface the actual error and stop. Do not proceed to setup
 
 Do this before talking to the user.
 
-1. Read the full MARM protocol, preferring a local copy. You will operate under this text, so a copy that shipped with the engine you just verified is more trustworthy than a live branch fetch. Try in this order:
+1. Read the full MARM protocol from the engine Step 00 just verified. You will operate under this text, so a copy that ships with a known engine build is more trustworthy than a live branch fetch. Try in this order and stop at the first that succeeds:
   - installed package, resolve the path with `python -c "import marm_mcp_server, pathlib; print(pathlib.Path(marm_mcp_server.__file__).parent / 'resources' / 'marm-docs' / 'PROTOCOL.md')"` and read the file it prints
   - local repo checkout `docs/PROTOCOL.md`
-  - network, last resort only: `https://raw.githubusercontent.com/Lyellr88/marm-memory/MARM-main/docs/PROTOCOL.md`. This is an unpinned branch ref, so use it only when no local copy exists (a standalone marketplace install on a Docker-only host), and say once: "No local protocol copy found, loading it from the MARM-main branch."
+  - the Docker image, when runtime = docker and no pip package is installed: `docker run --rm --entrypoint cat lyellr88/marm-mcp-server:latest /app/marm_mcp_server/resources/marm-docs/PROTOCOL.md`. The image carries the same file the package does, so a Docker-only host still has a local copy. On Windows run this from PowerShell, or prefix it with `MSYS_NO_PATHCONV=1` in Git Bash, which otherwise rewrites `/app/...` into a Windows path and reports the file missing.
+  - network, and you should never reach it: `https://raw.githubusercontent.com/Lyellr88/marm-memory/MARM-main/docs/PROTOCOL.md`. Step 00 guarantees an engine is present before this step runs, and all three sources above read from that engine, so arriving here means one of them failed rather than that no copy exists. Retry the matching local source before fetching. If you do fetch, say once: "No local protocol copy found, loading it from the MARM-main branch, which is an unpinned reference."
 
 2. Freshness check: read the `version:` field in this file's frontmatter and compare it against the `version:` in the source copy at `metadata.source`. If the source version is higher, tell the user once: "Your MARM init skill is out of date. Re-run `marm-memory init` to refresh it." Then continue with the version you have.
 
@@ -189,9 +192,13 @@ Use this when Step 00 recorded cli = no. Do not issue `marm-memory` here. Write 
 
 Substitute the user's real home directory for `<home>`. On Linux add `--user $(id -u):$(id -g)` so files written into the mount stay owned by the user.
 
-Verify by running the entry point, not by checking that an image exists: `docker run --rm --entrypoint marm-mcp-stdio lyellr88/marm-mcp-server:latest --help`. Omit `-i` so stdin is closed and the probe returns instead of waiting for a client.
+Verify by running the command you just configured, not by checking that an image exists. Take the line above, drop `-i`, and bound it:
 
-Expect a full startup and shutdown, not a help screen. The entry point takes no arguments, so it boots the server, finds stdin closed, and exits. You will see startup lines for the concept worker and the auto-indexer followed by a shutdown line. That is a pass, and it is stronger evidence than a help screen would be because the whole stack imported and started. Judge it by the exit code, which must be 0. `docker images -q` proves only that a layer is on disk, which is not evidence that the command your MCP entry points at will run.
+    timeout 90 docker run --rm --mount type=bind,src=<home>/.marm,dst=/home/marm/.marm -e HOME=/home/marm -e XDG_CACHE_HOME=/home/marm/.marm/cache --entrypoint marm-mcp-stdio lyellr88/marm-mcp-server:latest
+
+Keep the mount, both env vars, and the Linux `--user` flag exactly as configured. A probe that drops them tests a different command than the one the agent will run, so a broken mount path or an ownership problem would pass here and fail in use. Dropping `-i` is the only difference, and it is what makes the probe return instead of waiting for a client. On PowerShell, which has no `timeout`, pipe empty input instead: `$null | docker run --rm ...`.
+
+Expect a full startup and shutdown, not a help screen. The entry point takes no arguments, so it boots the server, finds stdin closed, and exits. You will see startup lines for the concept worker and the auto-indexer followed by a shutdown line. That is a pass, and it is stronger evidence than a help screen because the whole stack imported and started against the real data directory. Judge it by the exit code, which must be 0. `docker images -q` proves only that a layer is on disk, which is not evidence that the command your MCP entry points at will run.
 
 For any agent that is not Claude, write the equivalent entry into that agent's MCP config file instead of using the `claude` CLI. Same transport, same address or command. Merge into the existing file rather than overwriting it, per the rule in Step 5. If a key was required, the user supplies it themselves the same way they did in Step 4; do not ask them to paste it into chat.
 
@@ -229,7 +236,7 @@ If no, skip.
   - HTTP, Docker, cli = no: use the raw `docker run` from Step 4. Do not issue `marm-memory`.
 2. Verify before claiming success. Never report setup complete on an unverified path.
   - HTTP: `http://localhost:8001/health` should return ok. For a remote server use the full Step 2 authority over https, `https://<host>:<port>/health`, not `localhost`; a passing loopback check proves nothing about the remote host. `/health` is a public route in every mode, so it confirms the server is listening and says nothing about whether the key is correct.
-  - STDIO: run the entry point itself and require exit 0, `marm-mcp-stdio --help` for local Python or `docker run --rm --entrypoint marm-mcp-stdio lyellr88/marm-mcp-server:latest --help` for Docker, and confirm the MCP config entry you wrote is present. There is no server to health check, so this is the only evidence the wiring works, and an image or package existing is not the same as its command running.
+  - STDIO: run the exact command you configured and require exit 0, then confirm the MCP config entry you wrote is present. Local Python: `timeout 90 marm-mcp-stdio < /dev/null` (PowerShell: `$null | marm-mcp-stdio`). Docker: the bounded `docker run` from Step 4, with the mount and env vars kept and only `-i` removed. Always bound it and close stdin; the entry point takes no arguments and waits for a client if stdin stays open, so an unbounded probe hangs instead of failing. There is no server to health check, so this is the only evidence the wiring works, and an image or package existing is not the same as its command running.
 3. Hand off, and say only what you actually verified.
 
 On a path with no key (local STDIO, or loopback HTTP): "Setup complete. Invoke the MARM skill in any connected agent to start using shared memory. Restart your terminal so the MARM connection is picked up. If you want to start your own server later, just ask."
