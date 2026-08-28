@@ -77,7 +77,7 @@ Semver: MAJOR = breaking (schema renames, parameter removals), MINOR = new tools
 - Dev setup: `cd marm-mcp-server && pip install -e ".[dev]" && python scripts/bundle-concept-model.py`
 - Benchmarks live in `scripts/benchmarking/`: `performance/bench_hotpath.py` for hot-path performance, `accuracy/locomo/run_eval.py` for LoCoMo retrieval accuracy. Do not publish performance claims neither script can back.
 
-## Current Stats (v2.39.0)
+## Current Stats
 
 - 14 MCP tools over HTTP + STDIO
 - 3 isolated SQLite databases (memory + concept graph + analytics), no shared pools. The code graph engine owns its own store outside all three
