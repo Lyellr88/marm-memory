@@ -124,7 +124,10 @@ Ask: "Docker or local Python?"
 You now have enough to act. Run the matching block.
 
 **Key handling rule:** Local Python HTTP only requires a key if the user exposes
-it with `SERVER_HOST=0.0.0.0` (remote/network access). Docker HTTP uses MARM's managed key file (`~/.marm/.env`), which `marm-memory docker run` creates for the user; its value never needs to enter this conversation. Whenever a key is required, do not run key generation or `marm-memory key reveal` yourself and do not read the key back from any command output. Have the user handle the value in their own terminal instead. Once the server is running, verify that auth is armed by sending an unauthenticated request to a protected MCP route (e.g., `curl -s -o /dev/null -w "%{http_code}" http://localhost:8001/mcp`) and asserting it returns a `401`. Then, instruct the user to verify their key works end-to-end by running an authenticated curl in their own terminal. Do not ask them to paste the key into the chat.
+it with `SERVER_HOST=0.0.0.0` (remote/network access). Docker HTTP uses MARM's managed key file (`~/.marm/.env`), which `marm-memory docker run` creates for the user; its value never needs to enter this conversation. Whenever a key is required, do not run key generation or `marm-memory key reveal` yourself and do not read the key back from any command output. Have the user handle the value in their own terminal instead. Once the server is running:
+- **If a MARM_API_KEY is configured (Docker/Remote):** Prove auth is armed by asserting a 401 on a protected route (e.g., `curl -s -o /dev/null -w "%{http_code}" http://localhost:8001/mcp`). Then ask the user to verify their key works by running an authenticated curl in their own terminal.
+- **If using fast-start-http locally:** Verify via a standard loopback check (`curl http://localhost:8001/health`), as the auth middleware permits localhost requests without a key.
+Do not ask them to paste the key into the chat.
 
 **Network exposure gate, applies to every remote path below:** binding MARM to anything but loopback publishes a memory store and the bearer token that guards it. Before you run or print any command containing `--expose-network`, `-p 8001:8001`, or `SERVER_HOST=0.0.0.0` aimed at a remote host, state these three things and get an explicit yes:
 1. The port has to be firewalled to the machines that need it. Otherwise every memory in the store is readable by anyone who can reach it.
@@ -235,7 +238,9 @@ If no, skip.
   - HTTP, Docker, cli = yes: `marm-memory docker run`, keeping `--expose-network` if the user chose remote access in Step 2 and cleared the exposure gate.
   - HTTP, Docker, cli = no: use the raw `docker run` from Step 4. Do not issue `marm-memory`.
 2. Verify before claiming success. Never report setup complete on an unverified path.
-  - HTTP: `http://localhost:8001/health` should return ok. For a remote server use the full Step 2 authority over https, `https://<host>:<port>/health`, not `localhost`; a passing loopback check proves nothing about the remote host. `/health` is a public route in every mode, so it confirms the server is listening and says nothing about whether the key is correct.
+  - HTTP: Verify based on the configuration:
+    - **If a MARM_API_KEY is configured:** Prove auth is armed by asserting a 401 on a protected route (e.g., `curl -s -o /dev/null -w "%{http_code}" http://localhost:8001/mcp` or against their remote `<host>:<port>`). Then ask the user to manually run an authenticated curl in their terminal.
+    - **If using fast-start-http locally:** Verify via a standard loopback check (`http://localhost:8001/health`), as the auth middleware permits localhost requests without a key.
   - STDIO: run the exact command you configured and require exit 0, then confirm the MCP config entry you wrote is present. Local Python: `timeout 90 marm-mcp-stdio < /dev/null` (PowerShell: `$null | marm-mcp-stdio`). Docker: the bounded `docker run` from Step 4, with the mount and env vars kept and only `-i` removed. Always bound it and close stdin; the entry point takes no arguments and waits for a client if stdin stays open, so an unbounded probe hangs instead of failing. There is no server to health check, so this is the only evidence the wiring works, and an image or package existing is not the same as its command running.
 3. Hand off, and say only what you actually verified.
 
