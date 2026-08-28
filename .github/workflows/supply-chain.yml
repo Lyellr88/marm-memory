@@ -1,0 +1,71 @@
+name: Supply Chain CI
+
+# CodeQL reads first-party source and GitGuardian reads for secrets. Neither
+# looks at what a pull request adds to the dependency set, so a typosquatted or
+# malicious package reaches users through the tag publish untouched.
+on:
+  pull_request:
+    branches: [ MARM-main ]
+
+# No `paths:` filter, for the same reason python.yml has none: a path-filtered
+# workflow never starts on an unrelated PR, so a required status check would sit
+# at "waiting to be reported" and block that PR permanently.
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: supply-chain-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  dependency-review:
+    name: Dependency review
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Compares the base and head dependency graphs and fails on a newly
+      # introduced advisory. Only new dependencies are judged, so a pre-existing
+      # advisory in the tree does not block unrelated work.
+      - name: Review new dependencies
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: moderate
+          comment-summary-in-pr: on-failure
+
+  sensitive-paths:
+    name: Sensitive path review
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Advisory only. These paths decide what gets built, published, and run in
+      # CI, so a change to one deserves a different read than a docs change. It
+      # never fails the build: a legitimate release PR touches most of them.
+      - name: Flag changes to build and release surfaces
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          changed=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
+          watched=$(printf '%s\n' "$changed" | grep -E \
+            '^\.github/|Dockerfile|docker-compose\.yml|pyproject\.toml|server\.json|requirements.*\.txt|package\.json|package-lock\.json|pnpm-lock\.yaml' || true)
+          if [ -z "$watched" ]; then
+            echo "No build or release surfaces touched."
+            exit 0
+          fi
+          echo "::warning title=Sensitive paths changed::This PR edits files that control the build, the published artifact, or CI itself. Review these by hand."
+          while read -r f; do
+            if [ -n "$f" ]; then
+              echo "::warning file=$f::Build or release surface changed, review by hand"
+            fi
+          done <<< "$watched"
+          if printf '%s\n' "$watched" | grep -q '^\.github/workflows/'; then
+            echo "::warning title=Workflow files changed::A pull request that edits its own CI can weaken the checks reviewing it. Confirm the change is intended."
+          fi
+          exit 0
