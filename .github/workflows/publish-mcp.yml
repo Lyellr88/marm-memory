@@ -345,11 +345,26 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Create the release with notes grouped by label
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Build the release notes
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
         run: |
-          gh release create "${{ github.ref_name }}" --verify-tag --title "${{ github.ref_name }}" --generate-notes
+          # Fails the job when the tag has no changelog entry, rather than publishing an empty release.
+          python scripts/release-notes.py "$TAG" > notes.md
+          echo >> notes.md
+          gh api "repos/${{ github.repository }}/releases/generate-notes" -f tag_name="$TAG" --jq .body >> notes.md
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: gh release create "$TAG" --verify-tag --title "$TAG" --notes-file notes.md
 
   notify-success:
     needs: [publish-docker-server, publish-pypi, publish-mcp-registry, publish-glama]
