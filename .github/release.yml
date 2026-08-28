@@ -30,8 +30,13 @@ changelog:
     - title: "CI and tooling"
       labels:
         - ci
+        - workflow
         - chore
 
     - title: "Other"
       labels:
+        - python
+        - javascript
+        - good first issue
+        - help wanted
         - "*"

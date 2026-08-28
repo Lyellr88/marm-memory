@@ -28,7 +28,9 @@ The first two of 83 endpoint functions now declare real response models instead 
 
 ### Changed: Release Notes Group by Label
 
-Generated release notes now sort pull requests into Security, Features, Fixes, Dependencies, Documentation, and CI and tooling by label, rather than listing everything in one block.
+Generated release notes now sort pull requests into Security, Features, Fixes, Dependencies, Documentation, and CI and tooling by label, rather than listing everything in one block. Every label the repository defines is mapped, so nothing falls through unmatched.
+
+Pushing a version tag also creates the GitHub release itself now, after the package, image, and registry jobs succeed. Publishing previously left no release page behind.
 
 ### Upgrade Note
 

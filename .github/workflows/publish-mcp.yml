@@ -331,6 +331,26 @@ jobs:
           cache-from: type=gha,scope=marm-glama
           cache-to: type=gha,scope=marm-glama,mode=max
 
+  publish-github-release:
+    needs: [publish-docker-server, publish-pypi, publish-mcp-registry, publish-glama]
+    runs-on: ubuntu-latest
+    # workflow_dispatch runs on a branch ref, where there is no tag to release.
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Create the release with notes grouped by label
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "${{ github.ref_name }}" --verify-tag --title "${{ github.ref_name }}" --generate-notes
+
   notify-success:
     needs: [publish-docker-server, publish-pypi, publish-mcp-registry, publish-glama]
     runs-on: ubuntu-latest
