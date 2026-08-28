@@ -50,9 +50,8 @@ Then run `python scripts/find-tools.py`; every surface must report OK.
 2. `marm-mcp-server/server.json` (three occurrences, including the Docker identifier)
 3. `marm-mcp-server/marm_mcp_server/__init__.py` (`__version__` and docstring)
 4. `marm-mcp-server/marm_mcp_server/config/settings.py` (`SERVER_VERSION`)
-5. `marm-mcp-server/marm_mcp_server/server.py` docstring
-6. `marm-mcp-server/Dockerfile` version label and `docker-compose.yml`
-7. The h1 in `README.md`, `marm-mcp-server/README.md`, and `marm-mcp-server/marm_mcp_server/resources/marm-docs/README.md` (each maintained separately), plus the version headers in `docs/INSTALL-*.md`
+5. `marm-mcp-server/Dockerfile` version label and `docker-compose.yml`
+6. The h1 in `README.md`, `marm-mcp-server/README.md`, and `marm-mcp-server/marm_mcp_server/resources/marm-docs/README.md` (each maintained separately), plus the version headers in `docs/INSTALL-*.md`
 
 Semver: MAJOR = breaking (schema renames, parameter removals), MINOR = new tools/parameters/features, PATCH = fixes and doc updates.
 

@@ -1,7 +1,7 @@
 ---
 name: marm-init
 description: Guided MARM MCP setup. Invoke after running `marm-memory init` on the CLI to configure MARM memory across your agent. Drives transport choice, runtime choice, MCP config writing, multi-agent linking, and server start. Works on Claude, Codex, Gemini, Qwen, Cursor, VS Code, and other MCP-capable agents.
-version: 4
+version: 5
 metadata:
   description: A local-first, privacy-centric memory infrastructure layer for MCP clients. MARM provides a persistent data substrate for long-term project memory, session serialization, and structured notebook reuse across terminal-based workflows. Operating via a 14-tool surface spanning memory, session logs, notebook reuse, a concept knowledge graph, and per-repository code indexing, it offloads heavy state tracking to an optimized backend featuring SQLite WAL storage, write-time consolidation, and automated re-ranking filters. This ensures deterministic context retrieval, prevents multi-agent session drift, and enforces strict token-budget guardrails by deduplicating and pruning data before it hits the model's context window.
   source: https://raw.githubusercontent.com/Lyellr88/marm-memory/MARM-main/skills/marm-init/SKILL.md
@@ -29,12 +29,13 @@ Failure mode to avoid: dumping install docs and leaving the user to do the work 
 
 Run this first, before anything else. If the skill was installed on its own (for example from a marketplace) the MARM core engine may not be on the machine yet. Confirm it is present, or install it, before continuing.
 
-1. Scan the host for the core engine:
-  - CLI entry points on PATH. Unix: `command -v marm-memory || command -v marm-mcp-server || command -v marm-mcp-stdio`. PowerShell: `Get-Command marm-memory, marm-mcp-server, marm-mcp-stdio -ErrorAction SilentlyContinue`.
-  - Docker image present locally: `docker images -q lyellr88/marm-mcp-server`.
+1. Scan the host and record two separate things. Do not collapse them into one check; they fail independently.
+  - Runtime. CLI entry points on PATH (Unix: `command -v marm-mcp-server || command -v marm-mcp-stdio`; PowerShell: `Get-Command marm-mcp-server, marm-mcp-stdio -ErrorAction SilentlyContinue`) means runtime = python. A local image (`docker images -q lyellr88/marm-mcp-server`) means runtime = docker. If both are present, prefer python.
+  - Helper CLI. Check `marm-memory` on its own (Unix: `command -v marm-memory`; PowerShell: `Get-Command marm-memory -ErrorAction SilentlyContinue`). Present: record cli = yes. Absent: record cli = no. Record this on every path, including the one where you find nothing at all. Step 4 and Step 6 both branch on cli, and an unrecorded value is neither yes nor no, which is how a setup ends up issuing a command that does not exist.
 
 2. Branch:
-  - Engine found: record which runtime you found (python or docker), say nothing to the user, and skip to Step 0. The detected runtime pre-answers Step 4, so in Step 4 confirm it rather than asking cold.
+  - Engine found, cli = yes: say nothing to the user and skip to Step 0. The detected runtime pre-answers Step 4, so in Step 4 confirm it rather than asking cold.
+  - Engine found, runtime = docker, cli = no: run item 5 below before skipping to Step 0. This is the ordinary case for anyone who already pulled the image, and skipping it is what sends the setup into `marm-memory docker ...` commands the host does not have.
   - Nothing found: stop and run the install prompt below.
 
 3. Install prompt (only when nothing was found):
@@ -46,11 +47,11 @@ Ask: "I could not find the MARM core engine on your machine. How do you want to 
   - pip: run `pip install marm-mcp-server`. Confirm success, for example  `marm-mcp-server --version` resolves. Record runtime = python.
   - Docker: run `docker pull lyellr88/marm-mcp-server:latest`. Confirm the image is present with `docker images -q lyellr88/marm-mcp-server`. Record runtime = docker, then run step 5 below before advancing.
 
-5. Docker only, record whether the helper CLI exists. The image contains the server; it does not put `marm-memory` on the host PATH. That command ships in the pip package, and every Docker instruction in Step 4 uses it. Check with `command -v marm-memory` (PowerShell: `Get-Command marm-memory -ErrorAction SilentlyContinue`).
-  - Present: record cli = yes. Step 4 uses the `marm-memory docker ...` commands.
-  - Absent: ask once. "The Docker image runs the server, but the `marm-memory` helper command lives in the Python package. Install the helper too, or stay Docker only and use raw docker commands?"
-    - Install helper: `pip install marm-mcp-server`. The server still runs in the container; this only adds the host command. Record cli = yes.
-    - Docker only: record cli = no. Step 4 uses the raw-docker block, and you must not issue any `marm-memory` command for the rest of this setup.
+5. Helper CLI question. Run this whenever runtime = docker and item 1 recorded cli = no, whether you reached it by detecting an existing image or by installing one. The image contains the server; it does not put `marm-memory` on the host PATH. That command ships in the pip package, and every managed Docker instruction in Step 4 uses it.
+
+  Ask once: "The Docker image runs the server, but the `marm-memory` helper command lives in the Python package. Install the helper too, or stay Docker only and use raw docker commands?"
+  - Install helper: `pip install marm-mcp-server`. The server still runs in the container; this only adds the host command. Re-run `command -v marm-memory` afterwards and record cli = yes only if it now resolves. If it does not, record cli = no and continue; a failed install is not a helper.
+  - Docker only: cli stays no. Step 4 uses the raw-docker blocks, and you must not issue any `marm-memory` command for the rest of this setup.
 
 If the install fails, surface the actual error and stop. Do not proceed to setup against a missing engine.
 
@@ -87,7 +88,11 @@ Ask: "Run MARM locally, or connect to a server you own (VPS or homelab)?"
   - Local: runs on this machine, zero infra
   - Remote: runs on a host the user controls, reachable over their network
 
-If remote, ask immediately and record it: "What address will agents reach that server on (hostname or IP, and port if it is not 8001)?" Do not defer this. Every connect command in Step 4 needs it, and the default text in those commands is `localhost`, which silently produces a working-looking local setup instead of a remote one. Record it as the host address and substitute it everywhere Step 4 prints `localhost`.
+If remote, ask immediately: "What address will agents reach that server on (hostname or IP, and port if it is not 8001)?" Do not defer this. Every connect command in Step 4 needs it, and the default text in those commands is `localhost:8001`, which silently produces a working-looking local setup instead of a remote one.
+
+Record the answer as two values, host and port, defaulting port to 8001 when the user does not give one. Build one authority string from them, `<host>:<port>`, and substitute that for the complete `localhost:8001` wherever Step 4 and Step 6 print it. Substituting the host on its own is wrong: an answer of `host.example:9443` would turn `http://localhost:8001/mcp` into `http://host.example:9443:8001/mcp`.
+
+Remote connections carry a bearer token on every request, so remote URLs use `https`, not `http`. Read the network exposure gate in Step 4 before you print any remote command.
 
 ---
 
@@ -109,12 +114,19 @@ If Step 00 already detected or installed a runtime, confirm it instead of asking
 
 Ask: "Docker or local Python?"
   - Docker: isolated, easiest to keep updated.
-  - Local Python: runs direct, good if Python is already set up. The package installs two entry points: `marm-mcp-server` (HTTP) and `marm-mcp-stdio` (STDIO).
+  - Local Python: runs direct, good if Python is already set up. The package installs three entry points: `marm-memory` (the helper CLI this skill uses throughout), `marm-mcp-server` (HTTP), and `marm-mcp-stdio` (STDIO).
 
 You now have enough to act. Run the matching block.
 
 **Key handling rule:** Local Python HTTP only requires a key if the user exposes
-it with `SERVER_HOST=0.0.0.0` (remote/network access). Docker HTTP uses MARM's managed key file (`~/.marm/.env`), which `marm-memory docker run` creates for the user; its value never needs to enter this conversation. Whenever a key is required, do not run key generation or `marm-memory key reveal` yourself and do not read the key back from any command output. Have the user handle the value in their own terminal instead. Once the server is running, verify with an unauthenticated check (`curl http://localhost:8001/health`, no key needed) rather than asking them to paste the key back to you.
+it with `SERVER_HOST=0.0.0.0` (remote/network access). Docker HTTP uses MARM's managed key file (`~/.marm/.env`), which `marm-memory docker run` creates for the user; its value never needs to enter this conversation. Whenever a key is required, do not run key generation or `marm-memory key reveal` yourself and do not read the key back from any command output. Have the user handle the value in their own terminal instead. Once the server is running, verify with an unauthenticated check (`curl http://localhost:8001/health`, no key needed) rather than asking them to paste the key back to you. `/health` is a public route, so it proves the server is listening and nothing about the key; say that plainly instead of implying the credential was checked.
+
+**Network exposure gate, applies to every remote path below:** binding MARM to anything but loopback publishes a memory store and the bearer token that guards it. Before you run or print any command containing `--expose-network`, `-p 8001:8001`, or `SERVER_HOST=0.0.0.0` aimed at a remote host, state these three things and get an explicit yes:
+1. The port has to be firewalled to the machines that need it. Otherwise every memory in the store is readable by anyone who can reach it.
+2. A TLS proxy has to terminate in front of MARM. The server speaks plain HTTP, so without one the bearer token crosses the network in clear text on every request.
+3. MARM does neither of these. It binds the port and stops there.
+
+If the user does not have a proxy in place yet, bind loopback and stop, rather than exposing the port and promising to secure it later. Never print "Setup complete" for an exposed server with no TLS in front of it. Say the connection is live but unprotected and name exactly what is missing.
 
 ### HTTP + Local Python, local-only (no key) -- the fast path, recommend this for single-machine use
 
@@ -135,9 +147,9 @@ Because fast-start-http already started the server and the Console, Step 6 has n
 Only applies if the user asked for remote/network access in Step 2. Give them these steps to run themselves; do not execute steps 1 or 2 on their behalf:
 1. Generate a key: `marm-memory key generate`
 2. Start with their own key: `MARM_API_KEY=<paste-your-key> SERVER_HOST=0.0.0.0 marm-memory start` (PowerShell: `$env:MARM_API_KEY="<paste-your-key>"; $env:SERVER_HOST="0.0.0.0"; marm-memory start`)
-3. Connect their client with their own key, substituting the Step 2 host address for `localhost` when the server is not on this machine: `claude mcp add --transport http marm-memory http://localhost:8001/mcp --header "Authorization: Bearer <paste-your-key>"`
+3. Connect their client with their own key. For a remote server substitute the Step 2 authority for the whole `localhost:8001` and use `https`: `claude mcp add --transport http marm-memory http://localhost:8001/mcp --header "Authorization: Bearer <paste-your-key>"`
 
-Verify with `curl http://localhost:8001/health` once they confirm it's running. Do not ask them to paste the key into the chat.
+Verify once they confirm it is running, against the machine the server is actually on: `curl http://localhost:8001/health` locally, or `curl https://<host>:<port>/health` for a remote server. A loopback check from your side proves nothing about their host. Do not ask them to paste the key into the chat.
 
 ### HTTP + Docker (managed, key handled for you)
 
@@ -146,7 +158,7 @@ Verify with `curl http://localhost:8001/health` once they confirm it's running. 
 2. Connect the client. The key lives in the managed key file; the user reads it themselves (`marm-memory key path` shows the file, `marm-memory key reveal` prints it in their own terminal) and pastes the value into their client, so it never enters chat: `claude mcp add --transport http marm-memory http://localhost:8001/mcp --header "Authorization: Bearer <paste-your-key>"`
 3. Optional, code-graph tools: the container only sees host paths that are mounted, and `marm-memory docker run` refuses to alter an existing container. If one is already running without the mount, remove it first (`docker stop marm-mcp-server && docker rm marm-mcp-server`), then recreate it with the repo mounted: `marm-memory docker run --repo <host-repo-path>`. Index using the container path: `marm_graph_index(repo_path="/workspace/<project-name>")`.
 
-Verify with `curl http://localhost:8001/health` and `marm-memory docker status`. Do not ask them to paste the key into the chat.
+Verify with `marm-memory docker status` plus a health check against the machine the container is on: `curl http://localhost:8001/health` locally, or `curl https://<host>:<port>/health` for a remote server. Note what this does and does not prove: `/health` is a public route, so a passing check means the container is listening, not that the key is right. Do not ask them to paste the key into the chat.
 
 #### Docker with no helper CLI (cli = no from Step 00)
 
@@ -157,18 +169,25 @@ Use this block instead of the one above when Step 00 recorded cli = no. Do not i
     docker run -d --name marm-mcp-server -p 127.0.0.1:8001:8001 -e SERVER_HOST=0.0.0.0 -e MARM_API_KEY=<paste-your-key> -v ~/.marm:/home/marm/.marm --restart unless-stopped lyellr88/marm-mcp-server:latest
 
    For remote access, publish on all interfaces instead (`-p 8001:8001`) and tell them to put a firewall and TLS proxy in front of it.
-3. Connect the client with their own key, using the host address from Step 2 in place of `localhost` when the server is remote: `claude mcp add --transport http marm-memory http://localhost:8001/mcp --header "Authorization: Bearer <paste-your-key>"`
+3. Connect the client with their own key. For a remote server substitute the Step 2 authority for the whole `localhost:8001` and use `https`: `claude mcp add --transport http marm-memory http://localhost:8001/mcp --header "Authorization: Bearer <paste-your-key>"`
 
-Verify with `curl http://localhost:8001/health` and `docker ps --filter name=marm-mcp-server`. Full reference: https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-DOCKER.md
+Verify with `docker ps --filter name=marm-mcp-server` plus a health check against the machine the container is on: `curl http://localhost:8001/health` locally, or `curl https://<host>:<port>/health` for a remote server. Full reference: https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-DOCKER.md
 
 ### STDIO + Local Python (no key)
 Local machine only. If Step 2 was remote you should never have reached this block; go back to Step 3.
 Connect this agent to the STDIO entry point. No key needed: `claude mcp add marm-memory -- marm-mcp-stdio`
 
-### STDIO + Docker (no key)
-Print the exact client command and wire it into the agent's MCP config: `marm-memory docker stdio-command --client <agent>`
+### STDIO + Docker (no key), cli = yes
+Print the exact client command and wire it into the agent's MCP config yourself: `marm-memory docker stdio-command`. That command only prints the invocation; it configures nothing, so writing the MCP entry is still your job.
 
-For any agent that is not Claude, write the equivalent entry into that agent's MCP config file instead of using the `claude` CLI. Same transport, same address or command. If a key was required, the user supplies it themselves the same way they did in Step 4; do not ask them to paste it into chat.
+#### STDIO + Docker, no helper CLI (cli = no from Step 00)
+Use this when Step 00 recorded cli = no. Do not issue `marm-memory` here. Write this as the agent's STDIO command, which is what `marm-memory docker stdio-command` would have printed:
+
+    docker run -i --rm --mount type=bind,src=<home>/.marm,dst=/home/marm/.marm -e HOME=/home/marm -e XDG_CACHE_HOME=/home/marm/.marm/cache --entrypoint marm-mcp-stdio lyellr88/marm-mcp-server:latest
+
+Substitute the user's real home directory for `<home>`. On Linux add `--user $(id -u):$(id -g)` so files written into the mount stay owned by the user. Verify with `docker images -q lyellr88/marm-mcp-server`; there is no server to health check.
+
+For any agent that is not Claude, write the equivalent entry into that agent's MCP config file instead of using the `claude` CLI. Same transport, same address or command. Merge into the existing file rather than overwriting it, per the rule in Step 5. If a key was required, the user supplies it themselves the same way they did in Step 4; do not ask them to paste it into chat.
 
 ---
 
@@ -178,6 +197,8 @@ Ask: "Want to connect MARM to your other agents? MARM is shared memory across pl
 
 If yes:
   - Use the same transport for every agent. If a key was required, the user provides it themselves for each additional client the same way they did in Step 4; do not ask them to paste it into chat.
+  - **Merge, never overwrite.** These config files hold the user's other MCP servers. Read the existing file first, add the MARM entry to what is already there, and write the merged result back. A fresh write over an existing file silently deletes every other server the user had. If the file exists but you cannot parse it, stop and show it to the user rather than replacing it. If it does not exist, create it with MARM as the only entry.
+  - **Read back before you claim it.** After writing, re-read the file and confirm both the MARM entry and every server that was there before are present. Do not report an agent as wired up without that read-back.
   - Use these docs to find the exact connection instructions for each client:
 
 **CLI clients**: [Claude Code](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-WINDOWS.md#claude-code-recommended) · [Codex](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-WINDOWS.md#codex-cli) · [Gemini CLI](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-WINDOWS.md#gemini-cli) · [Qwen CLI](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-WINDOWS.md#qwen-code) · [Linux variants](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-LINUX.md#client-connections) · [Docker/key](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-DOCKER.md#client-connections)
@@ -186,7 +207,7 @@ If yes:
 
 **Remote/API platforms**: [xAI / Grok Remote MCP](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-DOCKER.md#xai--grok-remote-mcp) · [Platform integration](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-PLATFORMS.md)
 
-- Report which agents you wired up and which you could not find.
+- Report which agents you wired up, which you could not find, and for each config you wrote, the other MCP servers you preserved in it.
 
 If no, skip.
 
@@ -198,9 +219,10 @@ If no, skip.
   - STDIO (local or Docker): nothing to start; the client launches `marm-mcp-stdio` (or the Docker STDIO command) on demand. Skip to the handoff.
   - HTTP, local Python, loopback: `marm-memory fast-start-http` (skip if a fast-start-http path already started it).
   - HTTP, local Python, exposed: the user starts this themselves with their key and `SERVER_HOST=0.0.0.0` (Step 4). Do not auto-run `fast-start-http` here; it binds loopback without their key. Just verify once they confirm it is up.
-  - HTTP, Docker: `marm-memory docker run`, keeping `--expose-network` if the user chose remote access in Step 2. If Step 00 recorded cli = no, use the raw `docker run` from Step 4 instead.
+  - HTTP, Docker, cli = yes: `marm-memory docker run`, keeping `--expose-network` if the user chose remote access in Step 2 and cleared the exposure gate.
+  - HTTP, Docker, cli = no: use the raw `docker run` from Step 4. Do not issue `marm-memory`.
 2. Verify before claiming success. Never report setup complete on an unverified path.
-  - HTTP: `http://localhost:8001/health` should return ok. For a remote server, check the Step 2 host address, not `localhost`; a passing loopback check proves nothing about the remote host.
+  - HTTP: `http://localhost:8001/health` should return ok. For a remote server use the full Step 2 authority over https, `https://<host>:<port>/health`, not `localhost`; a passing loopback check proves nothing about the remote host. `/health` is a public route in every mode, so it confirms the server is listening and says nothing about whether the key is correct.
   - STDIO: confirm the entry point actually resolves (`marm-mcp-stdio --help`, or `docker images -q lyellr88/marm-mcp-server` for Docker STDIO) and that the MCP config entry you wrote is present. There is no server to health check, so this is the only evidence the wiring works.
 3. Hand off with this message, adapted to what actually happened:
 
@@ -212,8 +234,8 @@ Setup is done. The executor contract above is now closed. Operate under the MARM
 
 ## Edge cases
 
-- Cross-platform paths: Claude alone has several possible config locations by install method. Check all known paths in Step 5, and accept a user-provided path if the scan misses one.
+- Cross-platform paths: Claude alone has several possible config locations by install method. Claude is wired in Step 4, so check all known paths there, and accept a user-provided path if the scan misses one.
 - Stale skill file: handled by the Step 0 freshness check. If the source version is higher, tell the user to re-run `marm-memory init`.
-- Remote server: Step 2 collects the host address up front and Step 4 substitutes it for `localhost`. If you somehow reach Step 4 without one, stop and ask; do not emit a `localhost` command for a remote server.
-- Docker without the helper CLI: `docker pull` installs the image, not the `marm-memory` command. Step 00 records cli = yes or no, and Step 4 has a matching block for each. Never mix them.
+- Remote server: Step 2 collects host and port up front, and Step 4 substitutes the full `<host>:<port>` authority for `localhost:8001` over https. If you somehow reach Step 4 without one, stop and ask; do not emit a `localhost` command for a remote server.
+- Docker without the helper CLI: `docker pull` installs the image, not the `marm-memory` command. Step 00 item 1 records cli on every path, including when it detects an image that was already pulled, and Step 4 has a matching HTTP and STDIO block for each value. Never mix them.
 - Non-Claude agents: the `claude mcp add` commands are examples. Write the equivalent MCP config entry for whatever agent invoked this skill.

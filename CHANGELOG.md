@@ -5,16 +5,31 @@
 
 ### Fixed: Setup Paths That Reported Success Without Earning It
 
-Four defects in the `marm-init` skill, three of them found by an outside tester running a real install. Each one came from a step validating itself without validating the combination the user had assembled.
+Defects in the `marm-init` skill, most of them found by an outside tester running real installs across two rounds of review. Each one came from a step validating itself without validating the combination the user had assembled.
 
 - Remote plus STDIO was accepted, wired a local pipe, and reported setup complete, so a user targeting a VPS was told they were connected while the client had launched a local child process. Step 3 now refuses the combination and routes to HTTP or back to the server-location question. Step 6 previously verified HTTP setups only, which is why that path could claim success with no evidence behind it; STDIO now confirms the entry point resolves and the config entry was written, and remote HTTP checks the real host rather than loopback.
-- The Docker install path ran `docker pull` alone, which never puts the `marm-memory` CLI on the host, while every Docker instruction that followed called it. The first action of the runtime step failed with command not found. Step 00 now records whether the helper CLI is present and offers to add it, and the runtime step carries a raw `docker run` block for anyone staying Docker only.
+- The Docker install path ran `docker pull` alone, which never puts the `marm-memory` CLI on the host, while every Docker instruction that followed called it. The first action of the runtime step failed with command not found. The pre-flight now records whether the helper CLI is present, checking for it independently of the runtime rather than as part of the same lookup, and does so on every path including the one that detects an image already pulled. That detection path was the common case for anyone upgrading or retrying, and it previously skipped the check entirely and carried the original failure straight back into the runtime step.
+- Docker without the helper CLI had no STDIO route at all. The only Docker STDIO instruction called `marm-memory`, which that setup is explicitly forbidden from using, so a user who chose Docker only and then took the recommended transport reached a dead end. There is now a raw `docker run` STDIO command alongside the raw HTTP block, matching what the helper would have printed.
 - The setup protocol was fetched from an unpinned branch ref and then adopted as the agent's operating instructions. It now prefers the copy that ships with the installed engine, then a repo checkout, and falls back to the network only when no local copy exists, saying so when it does.
-- The server-location step promised to collect the host address later and never asked, leaving every connect command pointing at `localhost`. It now asks immediately and substitutes the answer.
+- The server-location step promised to collect the host address later and never asked, leaving every connect command pointing at `localhost`. It now asks immediately, records host and port as separate values, and substitutes the complete `host:port` authority. Substituting the host alone turned an answer like `host.example:9443` into `http://host.example:9443:8001/mcp`.
+- Verification curled `localhost` regardless of where the server actually ran, so a remote deployment was confirmed by checking the wrong machine. Every verification step now names which host to check. The skill also states what a health check does and does not prove: `/health` is a public route in every mode, so it confirms the server is listening and says nothing about whether the API key is correct.
+
+### Fixed: Multi-Agent Linking Could Delete Other MCP Servers
+
+- The multi-agent step wrote MCP configuration for Codex, Gemini, Qwen, VS Code, and Cursor with no instruction to read the existing file first. An agent that wrote rather than merged removed every other MCP server the user had configured, then reported which agents it had wired up. Writing now requires reading and merging into the existing file, refusing to replace a file it cannot parse, and reading the result back before any agent is reported as connected. That report now also names the servers preserved in each config.
+
+### Added: A Gate Before Exposing MARM to the Network
+
+- Network exposure carried a firewall and TLS recommendation as prose with nothing enforcing it, so a setup could bind the memory store to every interface, send a bearer token over plain HTTP, and print "Setup complete". Exposing a port now requires stating three things and getting an explicit yes, and an exposed server with no TLS in front of it can no longer be reported as complete. Remote connection URLs use `https`.
 
 ### Fixed: Skill Metadata Understated the Tool Surface
 
 - The skill frontmatter advertised a 7-tool surface and had not been updated since the concept knowledge graph and per-repository code indexing shipped. It now reads 14 and names both. This text renders on marketplace listings, so the count was public.
+- The runtime step described the package as installing two entry points when it installs three. The omitted one was `marm-memory`, the helper CLI every Docker instruction in the skill depends on.
+
+### Changed: Version Surfaces Reduced From Fifteen to Fourteen
+
+- `server.py` no longer counts as a release version surface. Its module docstring carried a hardcoded version until a comment-hygiene pass removed the docstring, and the release audit had reported a missing version on every bump since. Nothing read that string except the audit script itself, while `server.py` already imports the live `SERVER_VERSION`, so the requirement is dropped from `AGENTS.md` and `scripts/find-versions.py` rather than reinstated. The remaining fourteen surfaces each have a real consumer.
 
 </details>
 
