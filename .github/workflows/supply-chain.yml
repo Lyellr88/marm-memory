@@ -1,0 +1,65 @@
+name: Supply Chain CI
+
+on:
+  pull_request:
+    branches: [ MARM-main ]
+
+# No `paths:` filter, for the reason given in python.yml.
+permissions:
+  contents: read
+
+concurrency:
+  group: supply-chain-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  dependency-review:
+    name: Dependency review
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Review new dependencies
+        uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: moderate
+          # Dev dependencies run on the runner with a repository token, so the runtime-only default is too narrow.
+          fail-on-scopes: runtime, development, unknown
+          comment-summary-in-pr: on-failure
+
+  sensitive-paths:
+    name: Sensitive path review
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Flag changes to build and release surfaces
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # Three dots: comparing the two tips blames the PR for base commits once MARM-main moves ahead.
+          changed=$(git diff --name-only "$BASE_SHA...$HEAD_SHA")
+          watched=$(printf '%s\n' "$changed" | grep -E \
+            '^\.github/|Dockerfile|docker-compose\.yml|pyproject\.toml|server\.json|requirements.*\.txt|package\.json|package-lock\.json|pnpm-lock\.yaml' || true)
+          if [ -z "$watched" ]; then
+            echo "No build or release surfaces touched."
+            exit 0
+          fi
+          echo "::warning title=Sensitive paths changed::This PR edits files that control the build, the published artifact, or CI itself. Review these by hand."
+          while read -r f; do
+            if [ -n "$f" ]; then
+              echo "::warning file=$f::Build or release surface changed, review by hand"
+            fi
+          done <<< "$watched"
+          if printf '%s\n' "$watched" | grep -q '^\.github/workflows/'; then
+            echo "::warning title=Workflow files changed::A pull request that edits its own CI can weaken the checks reviewing it. Confirm the change is intended."
+          fi
+          exit 0
