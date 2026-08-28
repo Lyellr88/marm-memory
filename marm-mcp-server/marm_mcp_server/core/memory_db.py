@@ -301,6 +301,11 @@ def init_database(db_path: str) -> None:
             "ON compaction_staging(candidate_hash)"
         )
 
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_log_entries_session "
+            "ON log_entries(session_name, entry_date)"
+        )
+
         conn.execute("""
             CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts
                 USING fts5(content, content='memories', content_rowid='rowid',

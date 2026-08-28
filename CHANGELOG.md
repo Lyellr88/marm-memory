@@ -1,6 +1,25 @@
 # Changelog
 
 <details>
+<summary><strong>August 28th, 2026: Log Recall Lane Repaired (v2.44.4)</strong></summary>
+
+### Fixed: The Log Lane in `marm_smart_recall` Never Matched Anything
+
+`marm_smart_recall` answers from two lanes and returns the union: a semantic lane over stored memories, and a log lane over session log entries. The log lane substring-matched the entire query against each log's topic and summary, so a question like "When did Caroline go to the support group?" could only match if that exact sentence appeared verbatim in stored text. It never did. Measured against the LoCoMo benchmark, the lane scored 0.0% on all 1,977 questions in every category. It had effectively never worked while being offered to every connected agent.
+
+- The lane now tokenizes the query, drops stopwords using the set the semantic lane already uses, matches any term, and ranks results by how many distinct terms each entry matched. The same defect was found and fixed in the semantic lane in v2.31.0; the log lane was missed at the time.
+- Retrieval improves across the board. In a controlled comparison holding the build, database, ingest, and questions fixed with the log lane as the only variable, overall any-evidence-hit went from 63.5% to 69.1 - 69.6% and mean evidence recall from 57.9% to 63.0 - 63.5%. The log lane alone went from 0.0% to 53.3%. Every question category gained between 5.7 and 6.8 points.
+- Response shape is unchanged. `log_results` entries carry the same fields, and the match count used for ranking stays in SQL rather than entering the payload, so HTTP and STDIO remain identical.
+
+### Added: Index Behind the Log Lane
+
+- Tokenizing took the lane from two SQL predicates to as many as 24 against a table whose only index was its primary key, which cost roughly 12ms per recall. A composite index on `log_entries(session_name, entry_date)` brings the session-scoped path to 1.45ms, about 3x faster than the broken lane it replaced. The benchmark's own recall phase over 1,977 queries dropped from 203.3s to 181.1s.
+- The index is created in `init_db()` as an additive `CREATE INDEX IF NOT EXISTS`, verified against an already-populated database. Existing installs pick it up on next start with no migration step and no manual action.
+- Retrieval results are identical with and without it, in all five categories, as expected for an index that changes only how quickly the same rows are found.
+
+</details>
+
+<details>
 <summary><strong>August 27th, 2026: marm-init Setup Correctness (v2.44.3)</strong></summary>
 
 ### Fixed: Setup Paths That Reported Success Without Earning It

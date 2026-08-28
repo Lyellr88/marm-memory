@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from ..core.concept_db import ConceptDB, get_concept_db_path
 from ..core.memory import memory
+from ..core.memory_utils import build_log_search
 from ..core.models import SmartRecallRequest
 from ..core.response_limiter import MCPResponseLimiter
 from ..services.analytics import track_usage
@@ -198,24 +199,15 @@ async def marm_smart_recall(request: SmartRecallRequest, http_request: Request) 
 
         log_results = []
         if request.include_logs:
+            log_base, log_params = build_log_search(
+                request.query,
+                session_name=request.session_name,
+                search_all=request.search_all,
+                project=request.project,
+                platform=request.platform,
+                limit=request.limit,
+            )
             with memory.get_connection() as conn:
-                log_base = """
-                    SELECT id, session_name, topic, summary, entry_date, project, platform
-                    FROM log_entries
-                    WHERE (topic LIKE ? OR summary LIKE ?)
-                """
-                log_params: list = [f"%{request.query}%", f"%{request.query}%"]
-                if not request.search_all:
-                    log_base += " AND session_name = ?"
-                    log_params.append(request.session_name)
-                if request.project is not None:
-                    log_base += " AND project = ?"
-                    log_params.append(request.project)
-                if request.platform is not None:
-                    log_base += " AND platform = ?"
-                    log_params.append(request.platform)
-                log_base += " ORDER BY entry_date DESC LIMIT ?"
-                log_params.append(request.limit)
                 log_results = [
                     {
                         "id": r[0],

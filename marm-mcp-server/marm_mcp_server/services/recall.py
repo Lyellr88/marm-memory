@@ -1,6 +1,7 @@
 import asyncio
 
 from ..core.memory import memory
+from ..core.memory_utils import build_log_search
 from ..core.response_limiter import MCPResponseLimiter
 from .graph_context import attach_graph_context, get_graph_context
 
@@ -32,24 +33,15 @@ async def smart_recall(
 
         log_results = []
         if include_logs:
+            log_base, log_params = build_log_search(
+                query,
+                session_name=session_name,
+                search_all=search_all,
+                project=project,
+                platform=platform,
+                limit=limit,
+            )
             with memory.get_connection() as conn:
-                log_base = """
-                    SELECT id, session_name, topic, summary, entry_date, project, platform
-                    FROM log_entries
-                    WHERE (topic LIKE ? OR summary LIKE ?)
-                """
-                log_params: list = [f"%{query}%", f"%{query}%"]
-                if not search_all:
-                    log_base += " AND session_name = ?"
-                    log_params.append(session_name)
-                if project is not None:
-                    log_base += " AND project = ?"
-                    log_params.append(project)
-                if platform is not None:
-                    log_base += " AND platform = ?"
-                    log_params.append(platform)
-                log_base += " ORDER BY entry_date DESC LIMIT ?"
-                log_params.append(limit)
                 log_rows = conn.execute(log_base, log_params).fetchall()
             log_results = [
                 {
