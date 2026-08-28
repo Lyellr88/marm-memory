@@ -125,7 +125,7 @@ You now have enough to act. Run the matching block.
 
 **Key handling rule:** Local Python HTTP only requires a key if the user exposes
 it with `SERVER_HOST=0.0.0.0` (remote/network access). Docker HTTP uses MARM's managed key file (`~/.marm/.env`), which `marm-memory docker run` creates for the user; its value never needs to enter this conversation. Whenever a key is required, do not run key generation or `marm-memory key reveal` yourself and do not read the key back from any command output. Have the user handle the value in their own terminal instead. Once the server is running:
-- **If a MARM_API_KEY is configured (Docker/Remote):** Prove auth is armed by asserting a 401 on a protected route (e.g., `curl -s -o /dev/null -w "%{http_code}" http://localhost:8001/mcp`). Then ask the user to verify their key works by running an authenticated curl in their own terminal.
+- **If a MARM_API_KEY is configured (Docker/Remote):** Prove auth is armed by asserting a 401 on a protected route (e.g., `curl -s -o /dev/null -w "%{http_code}" http://localhost:8001/marm_log_show`). Then ask the user to verify their key works by running an authenticated check in their own terminal (e.g., `curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer <paste-your-key>" http://localhost:8001/marm_log_show`, expecting 200). Use `https://<host>:<port>` for remote servers.
 - **If using fast-start-http locally:** Verify via a standard loopback check (`curl http://localhost:8001/health`), as the auth middleware permits localhost requests without a key.
 Do not ask them to paste the key into the chat.
 
@@ -157,7 +157,7 @@ Only applies if the user asked for remote/network access in Step 2. Give them th
 2. Start with their own key: `MARM_API_KEY=<paste-your-key> SERVER_HOST=0.0.0.0 marm-memory start` (PowerShell: `$env:MARM_API_KEY="<paste-your-key>"; $env:SERVER_HOST="0.0.0.0"; marm-memory start`)
 3. Connect their client with their own key. For a remote server substitute the Step 2 authority for the whole `localhost:8001` and use `https`: `claude mcp add --transport http marm-memory http://localhost:8001/mcp --header "Authorization: Bearer <paste-your-key>"`
 
-Verify once they confirm it is running. First, prove auth is armed by asserting a 401 on a protected route: `curl -s -o /dev/null -w "%{http_code}" http://localhost:8001/mcp` (or against their remote `<host>:<port>`). Then, ask the user to manually run an authenticated curl in their own terminal to prove their key works. A loopback check from your side proves nothing about their host. Do not ask them to paste the key into the chat.
+Verify once they confirm it is running. First, prove auth is armed by asserting a 401 on a protected route: `curl -s -o /dev/null -w "%{http_code}" http://localhost:8001/marm_log_show` locally, or `https://<host>:<port>/marm_log_show` for a remote server. Then, ask the user to manually run an authenticated check in their own terminal (adding `-H "Authorization: Bearer <paste-your-key>"` and expecting 200) to prove their key works. A loopback check from your side proves nothing about their host. Do not ask them to paste the key into the chat.
 
 ### HTTP + Docker (managed, key handled for you)
 
@@ -166,7 +166,7 @@ Verify once they confirm it is running. First, prove auth is armed by asserting 
 2. Connect the client. The key lives in the managed key file; the user reads it themselves (`marm-memory key path` shows the file, `marm-memory key reveal` prints it in their own terminal) and pastes the value into their client, so it never enters chat: `claude mcp add --transport http marm-memory http://localhost:8001/mcp --header "Authorization: Bearer <paste-your-key>"`
 3. Optional, code-graph tools: the container only sees host paths that are mounted, and `marm-memory docker run` refuses to alter an existing container. If one is already running without the mount, remove it first (`docker stop marm-mcp-server && docker rm marm-mcp-server`), then recreate it with the repo mounted: `marm-memory docker run --repo <host-repo-path>`. Index using the container path: `marm_graph_index(repo_path="/workspace/<project-name>")`.
 
-Verify with `marm-memory docker status`. Then, prove auth is armed by asserting a 401 on a protected route: `curl -s -o /dev/null -w "%{http_code}" http://localhost:8001/mcp` (locally or remote). Finally, instruct the user to manually run an authenticated request in their terminal to prove their specific key. Do not ask them to paste the key into the chat.
+Verify with `marm-memory docker status`. Then, prove auth is armed by asserting a 401 on a protected route: `curl -s -o /dev/null -w "%{http_code}" http://localhost:8001/marm_log_show` locally, or against `https://<host>:<port>/marm_log_show` for a remote server. Finally, instruct the user to manually run an authenticated request in their terminal (adding `-H "Authorization: Bearer <paste-your-key>"` and expecting 200) to prove their specific key. Do not ask them to paste the key into the chat.
 
 #### Docker with no helper CLI (cli = no from Step 00)
 
@@ -179,7 +179,7 @@ Use this block instead of the one above when Step 00 recorded cli = no. Do not i
    For remote access, publish on all interfaces instead (`-p 8001:8001`) and tell them to put a firewall and TLS proxy in front of it.
 3. Connect the client with their own key. For a remote server substitute the Step 2 authority for the whole `localhost:8001` and use `https`: `claude mcp add --transport http marm-memory http://localhost:8001/mcp --header "Authorization: Bearer <paste-your-key>"`
 
-Verify with `docker ps --filter name=marm-mcp-server`. Then, assert a 401 on a protected route (e.g., `http://localhost:8001/mcp`) to prove auth is armed. Finally, instruct the user to run an authenticated check in their own terminal to prove their key works. Full reference: https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-DOCKER.md
+Verify with `docker ps --filter name=marm-mcp-server`. Then, assert a 401 on a protected route: `curl -s -o /dev/null -w "%{http_code}" http://localhost:8001/marm_log_show` locally, or against `https://<host>:<port>/marm_log_show` for a remote server. Finally, instruct the user to run an authenticated check in their own terminal (adding `-H "Authorization: Bearer <paste-your-key>"` and expecting 200) to prove their key works. Full reference: https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-DOCKER.md
 
 ### STDIO + Local Python (no key)
 Local machine only. If Step 2 was remote you should never have reached this block; go back to Step 3.
@@ -239,14 +239,14 @@ If no, skip.
   - HTTP, Docker, cli = no: use the raw `docker run` from Step 4. Do not issue `marm-memory`.
 2. Verify before claiming success. Never report setup complete on an unverified path.
   - HTTP: Verify based on the configuration:
-    - **If a MARM_API_KEY is configured:** Prove auth is armed by asserting a 401 on a protected route (e.g., `curl -s -o /dev/null -w "%{http_code}" http://localhost:8001/mcp` or against their remote `<host>:<port>`). Then ask the user to manually run an authenticated curl in their terminal.
+    - **If a MARM_API_KEY is configured:** Prove auth is armed by asserting a 401 on a protected route: `curl -s -o /dev/null -w "%{http_code}" http://localhost:8001/marm_log_show` locally, or `https://<host>:<port>/marm_log_show` for a remote server. Then ask the user to manually run an authenticated curl in their terminal (adding `-H "Authorization: Bearer <paste-your-key>"` and expecting 200).
     - **If using fast-start-http locally:** Verify via a standard loopback check (`http://localhost:8001/health`), as the auth middleware permits localhost requests without a key.
   - STDIO: run the exact command you configured and require exit 0, then confirm the MCP config entry you wrote is present. Local Python: `timeout 90 marm-mcp-stdio < /dev/null` (PowerShell: `$null | marm-mcp-stdio`). Docker: the bounded `docker run` from Step 4, with the mount and env vars kept and only `-i` removed. Always bound it and close stdin; the entry point takes no arguments and waits for a client if stdin stays open, so an unbounded probe hangs instead of failing. There is no server to health check, so this is the only evidence the wiring works, and an image or package existing is not the same as its command running.
 3. Hand off, and say only what you actually verified.
 
 On a path with no key (local STDIO, or loopback HTTP): "Setup complete. Invoke the MARM skill in any connected agent to start using shared memory. Restart your terminal so the MARM connection is picked up. If you want to start your own server later, just ask."
 
-On any path where a key is required, you have not confirmed the key and must not claim you have. `/health` is public, so it proves reachability only, and you are correctly forbidden from testing the credential yourself. Say instead: "MARM is running and reachable, and I've written the client entry. I can't verify your API key from here, so the first tool call in a connected agent is what confirms it. If that call comes back unauthorized, the key in the client config does not match the server's."
+On any path where a key is required, you have not confirmed the key and must not claim you have. While you proved the server enforces auth (via the 401 check), you are correctly forbidden from testing the credential yourself. Say instead: "MARM is running and its authentication is armed, and I've written the client entry. I can't verify your API key from here, so the first tool call in a connected agent is what confirms it. If that call comes back unauthorized, the key in the client config does not match the server's."
 
 Setup is done. The executor contract above is now closed. Operate under the MARM protocol you loaded in Step 0.
 
