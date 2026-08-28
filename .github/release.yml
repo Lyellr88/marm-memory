@@ -1,0 +1,37 @@
+changelog:
+  exclude:
+    labels:
+      - duplicate
+      - invalid
+      - question
+      - wontfix
+
+  categories:
+    - title: "Security"
+      labels:
+        - security
+
+    - title: "Features"
+      labels:
+        - enhancement
+
+    - title: "Fixes"
+      labels:
+        - bug
+
+    - title: "Dependencies"
+      labels:
+        - dependencies
+
+    - title: "Documentation"
+      labels:
+        - documentation
+
+    - title: "CI and tooling"
+      labels:
+        - ci
+        - chore
+
+    - title: "Other"
+      labels:
+        - "*"
