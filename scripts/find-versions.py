@@ -20,7 +20,6 @@ CHANGELOG = PROJECT_ROOT / "CHANGELOG.md"
 
 CRITICAL_FILES = [
     SERVER_ROOT / "marm_mcp_server" / "__init__.py",
-    SERVER_ROOT / "marm_mcp_server" / "server.py",
     SERVER_ROOT / "marm_mcp_server" / "config" / "settings.py",
     SERVER_ROOT / "pyproject.toml",
     SERVER_ROOT / "server.json",

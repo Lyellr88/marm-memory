@@ -14,12 +14,12 @@ Features:
 - Production-grade performance
 
 Author: Ryan Lyell - marm-memory
-Version: 2.44.2
+Version: 2.44.3
 """
 
 from typing import Any
 
-__version__ = "2.44.2"
+__version__ = "2.44.3"
 __author__ = "Ryan Lyell"
 __email__ = "ryanlyell@marmemory.com"
 
