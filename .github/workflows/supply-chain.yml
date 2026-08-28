@@ -1,15 +1,10 @@
 name: Supply Chain CI
 
-# CodeQL reads first-party source and GitGuardian reads for secrets. Neither
-# looks at what a pull request adds to the dependency set, so a typosquatted or
-# malicious package reaches users through the tag publish untouched.
 on:
   pull_request:
     branches: [ MARM-main ]
 
-# No `paths:` filter, for the same reason python.yml has none: a path-filtered
-# workflow never starts on an unrelated PR, so a required status check would sit
-# at "waiting to be reported" and block that PR permanently.
+# No `paths:` filter, for the reason given in python.yml.
 permissions:
   contents: read
 
@@ -21,7 +16,6 @@ jobs:
   dependency-review:
     name: Dependency review
     runs-on: ubuntu-latest
-    # Only this job writes, and only to post the failure summary.
     permissions:
       contents: read
       pull-requests: write
@@ -29,16 +23,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Compares the base and head dependency graphs and fails on a newly
-      # introduced advisory. Only new dependencies are judged, so a pre-existing
-      # advisory in the tree does not block unrelated work.
       - name: Review new dependencies
         uses: actions/dependency-review-action@v4
         with:
           fail-on-severity: moderate
-          # Defaults to runtime alone. Dev dependencies execute on the runner
-          # with a repository token during CI and inside the Docker build, so
-          # they are in scope for this gate.
+          # Dev dependencies run on the runner with a repository token, so the runtime-only default is too narrow.
           fail-on-scopes: runtime, development, unknown
           comment-summary-in-pr: on-failure
 
@@ -51,24 +40,12 @@ jobs:
         with:
           fetch-depth: 0
 
-      # Advisory only. These paths decide what gets built, published, and run in
-      # CI, so a change to one deserves a different read than a docs change. It
-      # never fails the build: a legitimate release PR touches most of them.
-      #
-      # A review aid, not a control. This workflow runs from the pull request's
-      # own revision, so a PR can edit the detector below and silence itself.
-      # Reading it from the base would mean pull_request_target, which hands a
-      # write token to untrusted code and is a worse trade. What actually stops
-      # a hostile change is branch protection, required review, and requiring
-      # approval before a fork's workflows run at all.
       - name: Flag changes to build and release surfaces
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
-          # Three dots, so the comparison starts at the merge base. Comparing
-          # the two tips blames the PR for base-branch commits it never made
-          # once MARM-main moves ahead of the branch.
+          # Three dots: comparing the two tips blames the PR for base commits once MARM-main moves ahead.
           changed=$(git diff --name-only "$BASE_SHA...$HEAD_SHA")
           watched=$(printf '%s\n' "$changed" | grep -E \
             '^\.github/|Dockerfile|docker-compose\.yml|pyproject\.toml|server\.json|requirements.*\.txt|package\.json|package-lock\.json|pnpm-lock\.yaml' || true)
