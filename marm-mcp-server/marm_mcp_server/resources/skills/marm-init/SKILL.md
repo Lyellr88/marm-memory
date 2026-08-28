@@ -166,7 +166,7 @@ Verify once they confirm it is running. First, prove auth is armed by asserting 
 2. Connect the client. The key lives in the managed key file; the user reads it themselves (`marm-memory key path` shows the file, `marm-memory key reveal` prints it in their own terminal) and pastes the value into their client, so it never enters chat: `claude mcp add --transport http marm-memory http://localhost:8001/mcp --header "Authorization: Bearer <paste-your-key>"`
 3. Optional, code-graph tools: the container only sees host paths that are mounted, and `marm-memory docker run` refuses to alter an existing container. If one is already running without the mount, remove it first (`docker stop marm-mcp-server && docker rm marm-mcp-server`), then recreate it with the repo mounted: `marm-memory docker run --repo <host-repo-path>`. Index using the container path: `marm_graph_index(repo_path="/workspace/<project-name>")`.
 
-VVerify with `marm-memory docker status`. Then, prove auth is armed by asserting a 401 on a protected route: `curl -s -o /dev/null -w "%{http_code}" http://localhost:8001/mcp` (locally or remote). Finally, instruct the user to manually run an authenticated request in their terminal to prove their specific key. Do not ask them to paste the key into the chat.
+Verify with `marm-memory docker status`. Then, prove auth is armed by asserting a 401 on a protected route: `curl -s -o /dev/null -w "%{http_code}" http://localhost:8001/mcp` (locally or remote). Finally, instruct the user to manually run an authenticated request in their terminal to prove their specific key. Do not ask them to paste the key into the chat.
 
 #### Docker with no helper CLI (cli = no from Step 00)
 
