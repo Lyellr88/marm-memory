@@ -168,7 +168,53 @@ def log_search_terms(query: str, limit: int = 12) -> list[str]:
     if not tokens:
         return []
     kept = [t for t in tokens if t.lower() not in _FTS_STOPWORDS]
-    return (kept or tokens)[:limit]
+    seen: set[str] = set()
+    unique: list[str] = []
+    for token in kept or tokens:
+        folded = token.lower()
+        if folded not in seen:
+            seen.add(folded)
+            unique.append(token)
+    return unique[:limit]
+
+
+def build_log_search(
+    query: str,
+    *,
+    session_name: str | None,
+    search_all: bool,
+    project: str | None,
+    platform: str | None,
+    limit: int,
+) -> tuple[str, list]:
+    """Build the log lane's query once, so HTTP and STDIO cannot drift apart.
+
+    Both transports had their own copy of this SQL, and repairing only the HTTP
+    copy left STDIO returning nothing for natural-language queries.
+    """
+    terms = log_search_terms(query) or [query]
+    likes = [f"%{term}%" for term in terms]
+    match_expr = " + ".join(
+        ["(CASE WHEN topic LIKE ? OR summary LIKE ? THEN 1 ELSE 0 END)"] * len(terms)
+    )
+    where_expr = " OR ".join(["topic LIKE ? OR summary LIKE ?"] * len(terms))
+    sql = (
+        "SELECT id, session_name, topic, summary, entry_date, project, platform, "
+        f"({match_expr}) AS match_count FROM log_entries WHERE ({where_expr})"
+    )
+    params: list = [value for like in likes for value in (like, like)] * 2
+    if not search_all:
+        sql += " AND session_name = ?"
+        params.append(session_name)
+    if project is not None:
+        sql += " AND project = ?"
+        params.append(project)
+    if platform is not None:
+        sql += " AND platform = ?"
+        params.append(platform)
+    sql += " ORDER BY match_count DESC, entry_date DESC LIMIT ?"
+    params.append(limit)
+    return sql, params
 
 
 MEMORY_CHUNK_THRESHOLD_WORDS = 500
