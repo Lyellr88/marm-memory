@@ -160,7 +160,7 @@ Docker commands are documented separately below because they require explicit da
 
 MARM is tuned for fast recall first, even as memory grows and long memories are chunked behind the scenes.
 
-These measurements use the fastembed-backed `jinaai/jina-embeddings-v2-small-en` encoder and a throwaway local SQLite database. Every timed path calls the shipped `MARMMemory` code, not a benchmark-local reimplementation. Sections 1-4 are timings from a single run of [`scripts/benchmarking/performance/bench_hotpath.py`](scripts/benchmarking/performance/bench_hotpath.py) on local hardware; absolute milliseconds vary by machine, so treat the scaling shape as the signal. Section 5 is a separate accuracy benchmark ([`run_eval.py`](scripts/benchmarking/accuracy/locomo/run_eval.py)) measuring retrieval rather than speed, and its latest row is a controlled before and after, explained there.
+These measurements use the fastembed-backed `jinaai/jina-embeddings-v2-small-en` encoder and a throwaway local SQLite database. Every timed path calls the shipped `MARMMemory` code, not a benchmark-local reimplementation. Sections 1-4 are timings from a single run of [`scripts/benchmarking/performance/bench_hotpath.py`](https://github.com/Lyellr88/marm-memory/blob/MARM-main/scripts/benchmarking/performance/bench_hotpath.py) on local hardware; absolute milliseconds vary by machine, so treat the scaling shape as the signal. Section 5 is a separate accuracy benchmark ([`run_eval.py`](https://github.com/Lyellr88/marm-memory/blob/MARM-main/scripts/benchmarking/accuracy/locomo/run_eval.py)) measuring retrieval rather than speed, and its latest row is a controlled before and after, explained there.
 
 ### 1. Retrieval Latency Scaling
 
@@ -217,7 +217,7 @@ All 10 LoCoMo conversations are ingested through `marm_log_entry` (5,882 memorie
 
 The last row is a controlled comparison, same build and data with the log lane as the only variable. That lane previously substring-matched the whole query against log topics and summaries, so a natural-language question never matched and it scored 0.0% on all 1,977 questions. It now tokenizes the query and reaches 53.3% on its own. Ranges rather than single figures because the semantic lane varies about half a point between runs, so a sub-point difference is not a result.
 
-Multi-hop remains the weakest category at 44.9%, and single-hop evidence recall is 36.6% against a 66.2% any-hit rate, so the lane often surfaces some of a question's evidence rather than all of it. Reproduce with [`run_eval.py`](scripts/benchmarking/accuracy/locomo/run_eval.py).
+Multi-hop remains the weakest category at 44.9%, and single-hop evidence recall is 36.6% against a 66.2% any-hit rate, so the lane often surfaces some of a question's evidence rather than all of it. Reproduce with [`run_eval.py`](https://github.com/Lyellr88/marm-memory/blob/MARM-main/scripts/benchmarking/accuracy/locomo/run_eval.py).
 
 ### 6. vs Competitors: Architecture
 
@@ -458,7 +458,7 @@ docker run --rm -i \
 
 - Docker HTTP requires a key; Docker STDIO does not.
 - If you get `401`, verify key match and client restart after env var changes.
-- For full key setup, rotation, and troubleshooting: [INSTALL-DOCKER.md](docs/INSTALL-DOCKER.md)
+- For full key setup, rotation, and troubleshooting: [INSTALL-DOCKER.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-DOCKER.md)
 
 </details>
 
@@ -633,7 +633,7 @@ xAI connects from its own infrastructure, so `localhost` will not work. Expose M
 
 </details>
 
-Full platform walkthroughs, key setup, and OS-specific notes: [Windows](docs/INSTALL-WINDOWS.md#client-connections) · [macOS](docs/INSTALL-MACOS.md#start-marm-yourself) · [Linux](docs/INSTALL-LINUX.md#client-connections) · [Docker/key mode](docs/INSTALL-DOCKER.md#client-connections) · [Other platforms](docs/INSTALL-PLATFORMS.md)
+Full platform walkthroughs, key setup, and OS-specific notes: [Windows](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-WINDOWS.md#client-connections) · [macOS](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-MACOS.md#start-marm-yourself) · [Linux](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-LINUX.md#client-connections) · [Docker/key mode](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-DOCKER.md#client-connections) · [Other platforms](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-PLATFORMS.md)
 
 > Using a client that isn't listed? [Open an issue](https://github.com/Lyellr88/marm-memory/issues/new/choose) and let us know; client adapters are a first-class feature request.
 
@@ -1045,7 +1045,7 @@ It re-splits stale chunks, fills in any lost to an interrupted write, and drops 
 - Check Python version: `python --version` (must be 3.10+)
 - Verify port 8001 isn't in use: `lsof -i :8001` (macOS/Linux) or `netstat -ano | findstr :8001` (Windows)
 - Check for permission errors in home directory (`~/.marm/` must be readable/writable)
-- See platform-specific troubleshooting: [INSTALL-DOCKER.md](docs/INSTALL-DOCKER.md), [INSTALL-WINDOWS.md](docs/INSTALL-WINDOWS.md), [INSTALL-MACOS.md](docs/INSTALL-MACOS.md), [INSTALL-LINUX.md](docs/INSTALL-LINUX.md)
+- See platform-specific troubleshooting: [INSTALL-DOCKER.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-DOCKER.md), [INSTALL-WINDOWS.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-WINDOWS.md), [INSTALL-MACOS.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-MACOS.md), [INSTALL-LINUX.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-LINUX.md)
 
 **STDIO connection fails**
 
@@ -1190,7 +1190,7 @@ It re-splits stale chunks, fills in any lost to an interrupted write, and drops 
 
 </details>
 
-For memory behavior, transports, supported clients, compaction, and backup questions, see the [FAQ](docs/FAQ.md).
+For memory behavior, transports, supported clients, compaction, and backup questions, see the [FAQ](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/FAQ.md).
 
 ## Star History
 
@@ -1224,7 +1224,7 @@ Good places to help:
 
 ## License & Usage Notice
 
-Copyright © 2026 Ryan A. Lyell. MARM is released under the [Apache 2.0 License](LICENSE) (see [NOTICE](NOTICE) for the copyright statement), and forks, experiments, and integrations are welcome. MARM also wraps third-party open-source components such as `codebase-memory-mcp` under MIT; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for attribution. If you build on it, please make unofficial versions easy to distinguish from releases published by the [official MARM repository](https://github.com/Lyellr88/marm-memory) so users know what they are installing.
+Copyright © 2026 Ryan A. Lyell. MARM is released under the [Apache 2.0 License](https://github.com/Lyellr88/marm-memory/blob/MARM-main/LICENSE) (see [NOTICE](https://github.com/Lyellr88/marm-memory/blob/MARM-main/NOTICE) for the copyright statement), and forks, experiments, and integrations are welcome. MARM also wraps third-party open-source components such as `codebase-memory-mcp` under MIT; see [THIRD_PARTY_NOTICES.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/THIRD_PARTY_NOTICES.md) for attribution. If you build on it, please make unofficial versions easy to distinguish from releases published by the [official MARM repository](https://github.com/Lyellr88/marm-memory) so users know what they are installing.
 
 ## Project Documentation
 
