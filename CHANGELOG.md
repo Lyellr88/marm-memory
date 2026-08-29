@@ -1,6 +1,39 @@
 # Changelog
 
 <details>
+<summary><strong>August 29th, 2026: Key File Safety, Graph Job Schemas, and Working PyPI Links (v2.45.0)</strong></summary>
+
+### Fixed: An Unsecurable API Key File No Longer Stays on Disk
+
+Two code paths write `~/.marm/.env`, and they disagreed about what to do when file permission hardening failed. Server startup swallowed a `chmod` failure and continued with a readable plaintext bearer token on disk, while the CLI treated the same failure as fatal. Fixed by [@quangshuynh](https://github.com/quangshuynh).
+
+- Startup now reuses the same helper the CLI uses rather than keeping a second copy of the hardening logic. When protection cannot be verified the file is removed and the generated key stays in memory for that process only, so nothing readable is left behind and a `chmod` failure still never blocks a server from starting on `0.0.0.0`.
+- If the removal itself fails, startup reports the path and states that the insecure file remains, rather than claiming the credential is memory-only.
+- The interactive CLI is deliberately unchanged and still fails loudly. Interactive setup can afford to refuse; unattended startup cannot.
+- The "Saved to" line and the client setup instructions now print only when the key was actually persisted securely. A memory-only start says to set `MARM_API_KEY` explicitly and restart.
+
+### Added: Response Schemas on the Graph Index Job Endpoints
+
+Two more endpoints declare real response models instead of returning a bare `dict`. Contributed by [@erfou11](https://github.com/erfou11).
+
+- The project index route and its job status route now describe their payloads in the OpenAPI document. The job route models queued, running, success, and error as four separate shapes under one union, so each state's required fields stay required instead of collapsing to optional.
+- Undeclared fields fail visibly rather than being dropped without a signal, the same contract the log endpoints took in v2.44.5.
+- Payload parity was verified against every state the indexing worker can produce, including the two that exist only in the window between a job finishing and its timestamps being written. All 14 MCP tool descriptions and input schemas are unchanged.
+
+### Fixed: Dead Links on the PyPI Project Page
+
+The README published to PyPI carried 17 links written relative to the repository root, a position neither surface that renders that file ever occupies. Reported and fixed by [@tonydzi](https://github.com/tonydzi).
+
+- On PyPI they resolved against the project page, and on GitHub against the file's own directory, so every install guide, FAQ, license, and benchmark pointer returned a 404. The platform walkthroughs and the key setup pointer a first-time reader is most likely to click were among them.
+- All 17 now use absolute URLs, matching the form the file's own documentation section already used. Link text is unchanged.
+
+### Upgrade Note
+
+No action required. On a machine where `~/.marm/.env` cannot be secured, that file is now removed at startup instead of being left readable, and the server reports that the key is available in memory only until `MARM_API_KEY` is set explicitly.
+
+</details>
+
+<details>
 <summary><strong>August 28th, 2026: Supply Chain Checks, Setup Verification, and Typed Endpoint Responses (v2.44.5)</strong></summary>
 
 ### Added: Dependency and Build Surface Review on Pull Requests

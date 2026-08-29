@@ -1,4 +1,14 @@
 #!/usr/bin/env python3
+"""Scan repo docs for dead file references and dead markdown links.
+
+Known limitation: resolve_ref accepts a link that resolves from the repository
+root or matches anything in the file index, not only from the linking document's
+own directory. So a link that is dead for an actual reader still passes when the
+target happens to exist somewhere in the repo. marm-mcp-server/README.md carried
+17 such links for the life of the file, live on PyPI, while this scanner reported
+clean (fixed in PR #180). A clean run is not evidence for any doc that renders
+outside the repository.
+"""
 
 from __future__ import annotations
 

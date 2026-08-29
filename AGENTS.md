@@ -36,7 +36,7 @@ Then run `python scripts/find-tools.py`; every surface must report OK.
 **README variants:**
 
 - Root `README.md` is the single source of truth.
-- `marm-mcp-server/README.md` is the PyPI variant (adds the `mcp-name:` header and two image divs) and is maintained separately.
+- `marm-mcp-server/README.md` is the PyPI variant (adds the `mcp-name:` header and two image divs) and is maintained separately. Every link in it is an absolute `https://github.com/Lyellr88/marm-memory/blob/MARM-main/...` URL, because neither PyPI nor GitHub resolves this file's relative paths from the repository root. Do not copy link targets into it from the root README.
 - `marm-mcp-server/marm_mcp_server/resources/marm-docs/README.md` is the text-only agent-facing subset (badges, demo, and footer sections stripped) and is maintained separately. Everything under `resources/marm-docs/` is the only copy that ships in the wheel, and it is what the server indexes and serves; a copy outside the package is not packaged and resolves to nothing once installed.
 - `FAQ.md`, `PROTOCOL.md`, and `PROTOCOL-LITE.md` are **plain copies**, not variants: root `docs/` is the source and the packaged copy should match it. After editing any of the three in `docs/`, resync with:
 
