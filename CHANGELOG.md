@@ -27,9 +27,15 @@ The README published to PyPI carried 17 links written relative to the repository
 - On PyPI they resolved against the project page, and on GitHub against the file's own directory, so every install guide, FAQ, license, and benchmark pointer returned a 404. The platform walkthroughs and the key setup pointer a first-time reader is most likely to click were among them.
 - All 17 now use absolute URLs, matching the form the file's own documentation section already used. Link text is unchanged.
 
+### Changed: `marm-init` Skill Metadata for Registry Discovery
+
+The setup skill now carries a short indexing block naming its primary function, target workflows, and keywords, and its execution protocol sits under its own heading. Setup behavior is unchanged.
+
 ### Upgrade Note
 
-No action required. On a machine where `~/.marm/.env` cannot be secured, that file is now removed at startup instead of being left readable, and the server reports that the key is available in memory only until `MARM_API_KEY` is set explicitly.
+The `marm-init` skill version moved to 7. Agents with an older copy installed will report that the skill is out of date on next invocation; re-run `marm-memory init` to refresh it.
+
+Nothing else requires action. On a machine where `~/.marm/.env` cannot be secured, that file is now removed at startup instead of being left readable, and the server reports that the key is available in memory only until `MARM_API_KEY` is set explicitly.
 
 </details>
 

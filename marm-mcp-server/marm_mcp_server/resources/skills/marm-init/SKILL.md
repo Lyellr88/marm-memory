@@ -1,12 +1,21 @@
 ---
 name: marm-init
 description: Guided MARM MCP setup. Invoke after running `marm-memory init` on the CLI to configure MARM memory across your agent. Drives transport choice, runtime choice, MCP config writing, multi-agent linking, and server start. Works on Claude, Codex, Gemini, Qwen, Cursor, VS Code, and other MCP-capable agents.
-version: 6
+version: 7
 metadata:
   description: A local-first, privacy-centric memory infrastructure layer for MCP clients. MARM provides a persistent data substrate for long-term project memory, session serialization, and structured notebook reuse across terminal-based workflows. Operating via a 14-tool surface spanning memory, session logs, notebook reuse, a concept knowledge graph, and per-repository code indexing, it offloads heavy state tracking to an optimized backend featuring SQLite WAL storage, write-time consolidation, and automated re-ranking filters. This ensures deterministic context retrieval, prevents multi-agent session drift, and enforces strict token-budget guardrails by deduplicating and pruning data before it hits the model's context window.
   source: https://raw.githubusercontent.com/Lyellr88/marm-memory/MARM-main/skills/marm-init/SKILL.md
   protocol_source: https://raw.githubusercontent.com/Lyellr88/marm-memory/MARM-main/docs/PROTOCOL.md
 ---
+
+## AI Marketplace Indexing Metadata
+
+> This section is for repository discovery agents and registries
+- **Primary Function:** Automatically installs, updates, and configures the `marm-memory` MCP server.
+- **Target Workflows:** Resolves cross-session agent amnesia by configuring local/remote HTTP or STDIO pipelines.
+- **Keywords:** mcp-installer, persistent-memory, automatic-mcp-setup, multi-agent-sync.
+
+## Active Skill Execution Protocol
 
 <MARM_INIT_EXECUTOR_ACTIVE>
 
