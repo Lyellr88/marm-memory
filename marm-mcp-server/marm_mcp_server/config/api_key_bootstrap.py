@@ -2,7 +2,8 @@ import os
 import sys
 from pathlib import Path
 
-from ..utils.security import generate_api_key, restrict_windows_file_to_current_user
+from ..services.key_management import _protect_key_file
+from ..utils.security import generate_api_key
 
 _MARM_ENV_PATH = Path.home() / ".marm" / ".env"
 
@@ -51,20 +52,36 @@ def resolve_marm_api_key(server_host: str) -> str:
 
     if server_host == "0.0.0.0" and not marm_api_key and not is_generate_key_cmd:
         marm_api_key = generate_api_key()
+        key_persisted = False
         try:
             _MARM_ENV_PATH.parent.mkdir(parents=True, exist_ok=True)
             _MARM_ENV_PATH.write_text(f"MARM_API_KEY={marm_api_key}\n")
             try:
-                _MARM_ENV_PATH.chmod(0o600)
-            except OSError:
-                pass
-            if sys.platform == "win32" and not restrict_windows_file_to_current_user(
-                _MARM_ENV_PATH
-            ):
-                print(
-                    f"WARNING: Could not restrict API key file: {_MARM_ENV_PATH}",
-                    file=sys.stderr,
-                )
+                key_protected = _protect_key_file(_MARM_ENV_PATH)
+            except Exception:
+                key_protected = False
+            if key_protected:
+                key_persisted = True
+            else:
+                try:
+                    _MARM_ENV_PATH.unlink(missing_ok=True)
+                except OSError as e:
+                    print(
+                        "WARNING: API key file protection failed and the insecure "
+                        f"file could not be removed: {_MARM_ENV_PATH}: {e}. Remove "
+                        "it immediately. The generated API key remains active in "
+                        "memory for this process only; do not rely on the insecure "
+                        "file surviving a restart. Set MARM_API_KEY explicitly in "
+                        "the environment.",
+                        file=sys.stderr,
+                    )
+                else:
+                    print(
+                        "WARNING: API key file protection failed. The API key is being "
+                        "kept in memory only and will not survive a restart. Set "
+                        "MARM_API_KEY explicitly in the environment.",
+                        file=sys.stderr,
+                    )
         except Exception as e:
             print(f"WARNING: Could not save API key to {_MARM_ENV_PATH}: {e}")
 
@@ -72,16 +89,19 @@ def resolve_marm_api_key(server_host: str) -> str:
         print(
             "MARM: SERVER_HOST=0.0.0.0 detected — API key auto-generated (first start)."
         )
-        print(f"Saved to: {_file_link(_MARM_ENV_PATH)}")
-        print()
-        print(
-            "Add this to your MCP client (replace YOUR_KEY with the key from the file above):"
-        )
-        print(
-            '  claude mcp add --transport http marm-memory http://localhost:8001/mcp --header "Authorization: Bearer YOUR_KEY"'
-        )
-        print()
-        print("On subsequent starts the key loads silently from the file above.")
+        if key_persisted:
+            print(f"Saved to: {_file_link(_MARM_ENV_PATH)}")
+            print()
+            print(
+                "Add this to your MCP client (replace YOUR_KEY with the key from the file above):"
+            )
+            print(
+                '  claude mcp add --transport http marm-memory http://localhost:8001/mcp --header "Authorization: Bearer YOUR_KEY"'
+            )
+            print()
+            print("On subsequent starts the key loads silently from the file above.")
+        else:
+            print("Set MARM_API_KEY explicitly and restart to connect.")
         print()
 
     return marm_api_key
