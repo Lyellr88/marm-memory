@@ -125,6 +125,178 @@ def test_marm_delete_response_payloads_are_unchanged(monkeypatch, tmp_path):
         assert response.json() == payload
 
 
+def test_console_project_index_and_queued_job_payloads_are_unchanged(
+    monkeypatch, tmp_path
+):
+    server = load_isolated_server(monkeypatch, tmp_path)
+    graph_endpoint = importlib.import_module("marm_mcp_server.endpoints.graph")
+    client = local_client(server.app)
+    job_id = "job-payload-parity"
+    created_at = "2026-08-28T10:00:00+00:00"
+
+    class DormantThread:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def start(self):
+            pass
+
+    monkeypatch.setattr(graph_endpoint.threading, "Thread", DormantThread)
+    monkeypatch.setattr(graph_endpoint.uuid, "uuid4", lambda: job_id)
+    monkeypatch.setattr(graph_endpoint, "_now_iso", lambda: created_at)
+
+    expected_job = {
+        "job_id": job_id,
+        "status": "queued",
+        "project": None,
+        "phase": "queued",
+        "error": None,
+        "created_at": created_at,
+        "started_at": None,
+        "finished_at": None,
+    }
+    try:
+        created = client.post(
+            "/internal/projects/index",
+            json={"repo_path": str(tmp_path), "mode": "fast"},
+        )
+        queued = client.get(f"/internal/projects/jobs/{job_id}")
+
+        assert created.status_code == 202
+        assert created.json() == {"job_id": job_id}
+        assert queued.status_code == 200
+        assert queued.json() == expected_job
+    finally:
+        graph_endpoint._project_jobs.clear()
+        if graph_endpoint._project_job_lock.locked():
+            graph_endpoint._project_job_lock.release()
+
+
+def test_console_project_job_state_payloads_are_unchanged(monkeypatch, tmp_path):
+    server = load_isolated_server(monkeypatch, tmp_path)
+    graph_endpoint = importlib.import_module("marm_mcp_server.endpoints.graph")
+    client = local_client(server.app)
+    payloads = [
+        {
+            "job_id": "job-running-starting",
+            "status": "running",
+            "project": None,
+            "phase": "starting",
+            "error": None,
+            "created_at": "2026-08-28T10:00:00+00:00",
+            "started_at": "2026-08-28T10:00:01+00:00",
+            "finished_at": None,
+        },
+        {
+            "job_id": "job-running-indexing",
+            "status": "running",
+            "project": None,
+            "phase": "indexing",
+            "error": None,
+            "created_at": "2026-08-28T10:00:00+00:00",
+            "started_at": "2026-08-28T10:00:01+00:00",
+            "finished_at": None,
+        },
+        {
+            "job_id": "job-success",
+            "status": "success",
+            "project": "marm-memory",
+            "phase": "complete",
+            "error": None,
+            "created_at": "2026-08-28T10:00:00+00:00",
+            "started_at": "2026-08-28T10:00:01+00:00",
+            "finished_at": "2026-08-28T10:00:02+00:00",
+        },
+        {
+            "job_id": "job-success-before-finally",
+            "status": "success",
+            "project": None,
+            "phase": "complete",
+            "error": None,
+            "created_at": "2026-08-28T10:00:00+00:00",
+            "started_at": "2026-08-28T10:00:01+00:00",
+            "finished_at": None,
+        },
+        {
+            "job_id": "job-unavailable",
+            "status": "error",
+            "project": None,
+            "phase": "unavailable",
+            "error": "Graph backend unavailable.",
+            "created_at": "2026-08-28T10:00:00+00:00",
+            "started_at": "2026-08-28T10:00:01+00:00",
+            "finished_at": "2026-08-28T10:00:02+00:00",
+        },
+        {
+            "job_id": "job-busy-before-finally",
+            "status": "error",
+            "project": None,
+            "phase": "busy",
+            "error": "Graph index already in progress.",
+            "created_at": "2026-08-28T10:00:00+00:00",
+            "started_at": "2026-08-28T10:00:01+00:00",
+            "finished_at": None,
+        },
+        {
+            "job_id": "job-failed",
+            "status": "error",
+            "project": None,
+            "phase": "failed",
+            "error": "Repository indexing failed.",
+            "created_at": "2026-08-28T10:00:00+00:00",
+            "started_at": "2026-08-28T10:00:01+00:00",
+            "finished_at": "2026-08-28T10:00:02+00:00",
+        },
+    ]
+
+    try:
+        for payload in payloads:
+            stored = dict(payload)
+            if payload["finished_at"] is not None:
+                stored["_finished_timestamp"] = graph_endpoint.datetime.now(
+                    graph_endpoint.timezone.utc
+                ).timestamp()
+            graph_endpoint._project_jobs.clear()
+            graph_endpoint._project_jobs[payload["job_id"]] = stored
+
+            response = client.get(f"/internal/projects/jobs/{payload['job_id']}")
+
+            assert response.status_code == 200
+            assert response.json() == payload
+    finally:
+        graph_endpoint._project_jobs.clear()
+
+
+def test_console_project_job_rejects_undeclared_fields(monkeypatch, tmp_path):
+    """Expose job schema drift as a client-facing 500 instead of filtering it."""
+    server = load_isolated_server(monkeypatch, tmp_path)
+    graph_endpoint = importlib.import_module("marm_mcp_server.endpoints.graph")
+    client = TestClient(
+        server.app,
+        client=("127.0.0.1", 50000),
+        raise_server_exceptions=False,
+    )
+    job_id = "job-with-undeclared-field"
+    graph_endpoint._project_jobs[job_id] = {
+        "job_id": job_id,
+        "status": "queued",
+        "project": None,
+        "phase": "queued",
+        "error": None,
+        "created_at": "2026-08-28T10:00:00+00:00",
+        "started_at": None,
+        "finished_at": None,
+        "worker_detail": "must not disappear",
+    }
+
+    try:
+        response = client.get(f"/internal/projects/jobs/{job_id}")
+    finally:
+        graph_endpoint._project_jobs.clear()
+
+    assert response.status_code == 500
+
+
 def test_response_models_reject_undeclared_fields(monkeypatch, tmp_path):
     """Fail loudly instead of silently filtering a new service response field."""
     server = load_isolated_server(monkeypatch, tmp_path)
@@ -211,4 +383,23 @@ def test_response_models_preserve_mcp_tool_metadata(monkeypatch, tmp_path):
         "#/components/schemas/LogDeleteResponse",
         "#/components/schemas/NotebookDeleteResponse",
         "#/components/schemas/LoggingErrorResponse",
+    }
+
+    index_response_schema = openapi["paths"]["/internal/projects/index"]["post"][
+        "responses"
+    ]["202"]["content"]["application/json"]["schema"]
+    assert index_response_schema == {
+        "$ref": "#/components/schemas/ConsoleProjectIndexResponse"
+    }
+    job_response_refs = {
+        item["$ref"]
+        for item in openapi["paths"]["/internal/projects/jobs/{job_id}"]["get"][
+            "responses"
+        ]["200"]["content"]["application/json"]["schema"]["anyOf"]
+    }
+    assert job_response_refs == {
+        "#/components/schemas/ConsoleProjectJobQueuedResponse",
+        "#/components/schemas/ConsoleProjectJobRunningResponse",
+        "#/components/schemas/ConsoleProjectJobSuccessResponse",
+        "#/components/schemas/ConsoleProjectJobErrorResponse",
     }

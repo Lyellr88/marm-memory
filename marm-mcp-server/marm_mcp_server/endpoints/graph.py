@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from marm_graph.core import code_graph_view
 from marm_graph.core import tool_router as R
@@ -90,6 +90,66 @@ class ConsoleRuntimeTrace(BaseModel):
 class ConsoleRuntimeTracesRequest(BaseModel):
     project: str = Field(..., min_length=1, max_length=512)
     traces: list[ConsoleRuntimeTrace] = Field(..., min_length=1, max_length=500)
+
+
+class _ResponseModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class ConsoleProjectIndexResponse(_ResponseModel):
+    job_id: str
+
+
+class _ConsoleProjectJobResponse(_ResponseModel):
+    job_id: str
+    status: str
+    project: str | None
+    phase: str | None
+    error: str | None
+    created_at: str
+    started_at: str | None
+    finished_at: str | None
+
+
+class ConsoleProjectJobQueuedResponse(_ConsoleProjectJobResponse):
+    status: Literal["queued"]
+    project: None
+    phase: Literal["queued"]
+    error: None
+    started_at: None
+    finished_at: None
+
+
+class ConsoleProjectJobRunningResponse(_ConsoleProjectJobResponse):
+    status: Literal["running"]
+    project: None
+    phase: Literal["starting", "indexing"]
+    error: None
+    started_at: str
+    finished_at: None
+
+
+class ConsoleProjectJobSuccessResponse(_ConsoleProjectJobResponse):
+    status: Literal["success"]
+    phase: Literal["complete"]
+    error: None
+    started_at: str
+
+
+class ConsoleProjectJobErrorResponse(_ConsoleProjectJobResponse):
+    status: Literal["error"]
+    project: None
+    phase: Literal["unavailable", "busy", "failed"]
+    error: str
+    started_at: str
+
+
+ConsoleProjectJobResponse = (
+    ConsoleProjectJobQueuedResponse
+    | ConsoleProjectJobRunningResponse
+    | ConsoleProjectJobSuccessResponse
+    | ConsoleProjectJobErrorResponse
+)
 
 
 def _now_iso() -> str:
@@ -360,7 +420,11 @@ async def console_list_projects() -> dict:
     )
 
 
-@router.post("/internal/projects/index", status_code=202)
+@router.post(
+    "/internal/projects/index",
+    status_code=202,
+    response_model=ConsoleProjectIndexResponse,
+)
 async def console_index_project(req: ConsoleIndexRequest) -> dict:
     repo_path = _validated_repo_path(req.repo_path)
     if not _project_job_lock.acquire(blocking=False):
@@ -393,7 +457,9 @@ async def console_index_project(req: ConsoleIndexRequest) -> dict:
     return {"job_id": job_id}
 
 
-@router.get("/internal/projects/jobs/{job_id}")
+@router.get(
+    "/internal/projects/jobs/{job_id}", response_model=ConsoleProjectJobResponse
+)
 async def console_project_job(job_id: str) -> dict:
     _prune_project_jobs()
     with _project_jobs_lock:
