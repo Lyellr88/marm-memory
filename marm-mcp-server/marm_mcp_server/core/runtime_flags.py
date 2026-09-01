@@ -8,6 +8,8 @@ logger = structlog.get_logger(__name__)
 
 AUTO_INDEX_GRAPH = "auto_index.graph"
 AUTO_INDEX_CONCEPT = "auto_index.concept"
+RUNTIME_PROFILE = "runtime.profile"
+RUNTIME_RATE_LIMIT_RPM = "runtime.rate_limit_rpm"
 
 _SUPPRESS_PREFIX = "watch_suppressed."
 _UNINDEXABLE_PREFIX = "unindexable."
@@ -271,3 +273,24 @@ def save_watch_state(
         except Exception:
             conn.execute("ROLLBACK")
             raise
+
+
+def saved_runtime_preset() -> tuple[Optional[str], Optional[int]]:
+    """Profile and RPM override a Console change persisted, for the next boot to apply."""
+    profile = get(RUNTIME_PROFILE)
+    raw_rpm = get(RUNTIME_RATE_LIMIT_RPM)
+    rpm: Optional[int] = None
+    if raw_rpm is not None:
+        try:
+            rpm = max(0, int(raw_rpm))
+        except ValueError:
+            logger.warning("Ignoring unreadable saved rate limit", value=raw_rpm)
+    return profile, rpm
+
+
+def save_runtime_preset(profile: str, rate_limit_rpm: Optional[int]) -> None:
+    set_(RUNTIME_PROFILE, profile)
+    if rate_limit_rpm is None:
+        clear(RUNTIME_RATE_LIMIT_RPM)
+    else:
+        set_(RUNTIME_RATE_LIMIT_RPM, str(max(0, rate_limit_rpm)))

@@ -50,12 +50,17 @@ def fast_start_http(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
 
+    from ..cli import resolve_runtime_preset
+
+    resolved_profile, resolved_rpm = resolve_runtime_preset(
+        args.profile, args.rate_limit_rpm
+    )
     reused_runtime = current["state"] == "ready"
     runtime = (
         current
         if reused_runtime
         else runtime_manager.start_background(
-            profile=args.profile, rate_limit_rpm=args.rate_limit_rpm
+            profile=resolved_profile, rate_limit_rpm=resolved_rpm
         )
     )
     metadata = runtime.get("metadata", {})
@@ -91,7 +96,7 @@ def fast_start_http(args: argparse.Namespace) -> int:
     if runtime_profile is None and reused_runtime:
         print("Profile: unknown (run `marm-memory status`)")
     else:
-        print(f"Profile: {runtime_profile or args.profile}")
+        print(f"Profile: {runtime_profile or resolved_profile}")
     print(
         "Authentication: managed key"
         if settings.MARM_API_KEY

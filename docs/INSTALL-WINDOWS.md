@@ -287,7 +287,7 @@ Invoke-WebRequest -Uri http://localhost:8001/health
 {
   "status": "healthy",
   "service": "MARM MCP Server",
-  "version": "2.45.0",
+  "version": "2.46.0",
   "timestamp": "2026-01-01T00:00:00+00:00",
   "database": "connected",
   "semantic_search": "available"

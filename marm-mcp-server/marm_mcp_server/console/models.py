@@ -67,6 +67,15 @@ class RuntimeAutomationPayload(BaseModel):
     enabled: bool
 
 
+class RuntimeProfilePayload(BaseModel):
+    profile: Literal["standard", "swarm", "swarm-max", "trusted"]
+    rate_limit_rpm: int | None = None
+
+
+class CompactionDryRunPayload(BaseModel):
+    session_name: str
+
+
 class MemoryMutationPayload(BaseModel):
     content: str
     session_name: str

@@ -99,7 +99,7 @@ if not (1 <= _raw_port <= 65535):
         f"WARNING: SERVER_PORT={_raw_port} out of [1, 65535], clamped to {SERVER_PORT}",
         file=sys.stderr,
     )
-SERVER_VERSION = "2.45.0"
+SERVER_VERSION = "2.46.0"
 
 GRAPH_ENABLED = os.environ.get("GRAPH_ENABLED", "true").lower() != "false"
 
@@ -140,6 +140,8 @@ MARM_PLATFORM = _detect_platform()
 
 _raw_rpm = _safe_int("MARM_RATE_LIMIT_RPM", 80)
 MARM_RATE_LIMIT_RPM = max(0, _raw_rpm)
+# apply_runtime_preset mutates MARM_RATE_LIMIT_RPM, so the boot value needs its own name.
+MARM_RATE_LIMIT_RPM_DEFAULT = MARM_RATE_LIMIT_RPM
 if _raw_rpm < 0:
     print(
         f"WARNING: MARM_RATE_LIMIT_RPM={_raw_rpm} below minimum 0, clamped to {MARM_RATE_LIMIT_RPM}",

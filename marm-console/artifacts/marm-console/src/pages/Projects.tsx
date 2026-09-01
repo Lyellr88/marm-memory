@@ -55,7 +55,7 @@ function IndexWorkspace({ repoPath, setRepoPath, mode, setMode, jobId, setJobId 
   }, [baseUrl, jobStatus?.project, jobStatus?.status, queryClient]);
 
   return (
-    <section id="index-workspace" className="project-index-workspace grid gap-5 rounded-2xl border border-primary/20 bg-card/80 p-5 shadow-[0_18px_50px_-30px_hsl(var(--primary)/0.7)] lg:grid-cols-[minmax(0,1fr)_19rem]">
+    <section id="index-workspace" className="project-index-workspace grid gap-5 rounded-2xl border border-primary/20 bg-card/80 p-5 shadow-[0_18px_50px_-30px_rgba(var(--primary-rgb),0.7)] lg:grid-cols-[minmax(0,1fr)_19rem]">
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold"><FolderCode className="h-4 w-4 text-primary" /> Index a repository</h2>

@@ -7,7 +7,7 @@ import type {
   MemoryListParams, MemoryInput, MemoryId, LogListParams, NotebookDeleteRef, NotebookInput,
   CompactionAction, ConceptSearchParams, ConceptBuildInput, ConceptGraphParams,
   ProjectIndexInput, CodeSearchInput, TraceInput, ImpactInput, DuplicatePairInput,
-  MergeDuplicateInput
+  MergeDuplicateInput, RuntimeProfile
 } from '@/lib/marm-types';
 import { MarmApiError } from '@/lib/marm-api';
 
@@ -205,6 +205,103 @@ export function useUpdateRuntimeAutomation() {
     mutationFn: ({ scope, enabled }: { scope: 'graph' | 'concept'; enabled: boolean }) =>
       client.updateRuntimeAutomation(scope, enabled),
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.runtimeSettings(baseUrl) }),
+  });
+}
+
+export function useUpdateRuntimeProfile() {
+  const { baseUrl, client } = useMarmConfig();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ profile, rateLimitRpm }: { profile: RuntimeProfile; rateLimitRpm?: number | null }) =>
+      client.updateRuntimeProfile(profile, rateLimitRpm),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.runtimeSettings(baseUrl) }),
+  });
+}
+
+export function useMaintenance(enabled = true) {
+  const { baseUrl, client } = useMarmConfig();
+  return useQuery({ queryKey: ['maintenance', baseUrl], queryFn: client.getMaintenance, enabled, retry: false });
+}
+
+export function useDoctor(enabled = true) {
+  const { baseUrl, client } = useMarmConfig();
+  return useQuery({ queryKey: ['doctor', baseUrl], queryFn: client.getDoctor, enabled, retry: false });
+}
+
+export function useRuntimeLogs(lines: number, enabled = true) {
+  const { baseUrl, client } = useMarmConfig();
+  return useQuery({
+    queryKey: ['runtime-logs', baseUrl, lines],
+    queryFn: () => client.getRuntimeLogs(lines),
+    enabled,
+    retry: false,
+    refetchInterval: enabled ? 5000 : false,
+  });
+}
+
+export function useUpgradeCheck(enabled = false) {
+  const { baseUrl, client } = useMarmConfig();
+  return useQuery({ queryKey: ['upgrade-check', baseUrl], queryFn: client.getUpgradeCheck, enabled, retry: false });
+}
+
+export function useBackups(enabled = true) {
+  const { baseUrl, client } = useMarmConfig();
+  return useQuery({ queryKey: ['backups', baseUrl], queryFn: client.getBackups, enabled, retry: false });
+}
+
+export function useCreateBackup() {
+  const { baseUrl, client } = useMarmConfig();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: client.createBackup,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['backups', baseUrl] }),
+  });
+}
+
+export function useDeleteBackup() {
+  const { baseUrl, client } = useMarmConfig();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) => client.deleteBackup(name),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['backups', baseUrl] }),
+  });
+}
+
+export function useStartReloadDocs() {
+  const { client } = useMarmConfig();
+  return useMutation({ mutationFn: client.startReloadDocs });
+}
+
+export function useReloadDocsJob(jobId: string | null) {
+  const { baseUrl, client } = useMarmConfig();
+  return useQuery({
+    queryKey: ['reload-docs', baseUrl, jobId],
+    queryFn: () => client.getReloadDocs(jobId as string),
+    enabled: Boolean(jobId),
+    retry: false,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status === 'queued' || status === 'running' ? 1000 : false;
+    },
+  });
+}
+
+export function useStartCompactionDryRun() {
+  const { client } = useMarmConfig();
+  return useMutation({ mutationFn: (sessionName: string) => client.startCompactionDryRun(sessionName) });
+}
+
+export function useCompactionDryRunJob(jobId: string | null) {
+  const { baseUrl, client } = useMarmConfig();
+  return useQuery({
+    queryKey: ['compaction-dry-run', baseUrl, jobId],
+    queryFn: () => client.getCompactionDryRun(jobId as string),
+    enabled: Boolean(jobId),
+    retry: false,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status === 'queued' || status === 'running' ? 1000 : false;
+    },
   });
 }
 

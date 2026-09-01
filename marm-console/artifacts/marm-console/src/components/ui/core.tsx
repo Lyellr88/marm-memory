@@ -105,16 +105,16 @@ export function Badge({ className, variant = 'default', ...props }: React.HTMLAt
     default: 'border-primary/30 bg-primary/12 text-primary-highlight',
     secondary: 'border-border bg-secondary text-secondary-foreground',
     destructive: 'border-transparent bg-destructive text-destructive-foreground hover:bg-destructive/80',
-    outline: 'text-foreground',
+    outline: 'border-border/70 text-muted-foreground',
   };
   return (
-    <div className={cn('inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2', variants[variant], className)} {...props} />
+    <div className={cn('inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2', variants[variant], className)} {...props} />
   );
 }
 
 // --- Card ---
 export function Card({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn('rounded-xl border border-card-border bg-card/90 text-card-foreground shadow-[0_16px_40px_rgba(0,0,0,0.18)]', className)} {...props} />;
+  return <div className={cn('rounded-xl border border-card-border/70 bg-card/75 text-card-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_16px_40px_rgba(0,0,0,0.18)] backdrop-blur-md', className)} {...props} />;
 }
 export function CardHeader({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return <div className={cn('flex flex-col space-y-1.5 p-6', className)} {...props} />;
@@ -163,7 +163,7 @@ export const DialogContent = forwardRef<React.ElementRef<typeof DialogPrimitive.
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        'fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 overflow-hidden rounded-xl border border-popover-border bg-popover p-6 shadow-[0_32px_90px_rgba(0,0,0,0.65),0_0_0_1px_rgba(var(--primary-rgb),0.06)] duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
+        'fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 overflow-hidden rounded-2xl border border-popover-border bg-popover p-6 shadow-[inset_0_1px_0_rgba(255,255,255,0.05),0_32px_90px_rgba(0,0,0,0.65),0_0_0_1px_rgba(var(--primary-rgb),0.06)] duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
         className
       )}
       {...props}

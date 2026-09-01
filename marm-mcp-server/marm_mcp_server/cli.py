@@ -106,7 +106,7 @@ def apply_runtime_preset(
 
     if rate_limit_rpm is not None and rate_limit_rpm < 0:
         raise ValueError("--rate-limit-rpm must be 0 or greater")
-    rpm = settings.MARM_RATE_LIMIT_RPM
+    rpm = settings.MARM_RATE_LIMIT_RPM_DEFAULT
     mode = "default"
     write_queue_enabled = settings.WRITE_QUEUE_ENABLED
     if swarm:
@@ -146,8 +146,37 @@ def _profile_flags(profile: str) -> dict[str, bool]:
     }
 
 
+def reconcile_profile_and_rpm(
+    profile: str, rate_limit_rpm: int | None
+) -> tuple[str, int | None]:
+    """apply_runtime_preset lets trusted overwrite an explicit rpm, so never pair the two."""
+    if rate_limit_rpm is not None and profile == "trusted":
+        return "standard", rate_limit_rpm
+    return profile, rate_limit_rpm
+
+
+def resolve_runtime_preset(
+    profile: str | None, rate_limit_rpm: int | None
+) -> tuple[str, int | None]:
+    """An explicit CLI flag wins; otherwise a Console-saved preset survives the restart."""
+    if profile is not None:
+        return profile, rate_limit_rpm
+    from .core import runtime_flags
+
+    try:
+        saved_profile, saved_rpm = runtime_flags.saved_runtime_preset()
+    except Exception:
+        logger.warning("Could not read the saved runtime preset", exc_info=True)
+        return "standard", rate_limit_rpm
+    resolved = saved_profile or "standard"
+    effective_rpm = rate_limit_rpm if rate_limit_rpm is not None else saved_rpm
+    if rate_limit_rpm is None:
+        return resolved, effective_rpm
+    return reconcile_profile_and_rpm(resolved, effective_rpm)
+
+
 def _run_foreground(
-    *, profile: str, rate_limit_rpm: int | None, runtime_id: str | None = None
+    *, profile: str | None, rate_limit_rpm: int | None, runtime_id: str | None = None
 ) -> None:
     from .core.runtime_manager import (
         clear_state,
@@ -158,6 +187,7 @@ def _run_foreground(
     )
 
     identity = runtime_id or str(uuid.uuid4())
+    profile, rate_limit_rpm = resolve_runtime_preset(profile, rate_limit_rpm)
     os.environ["MARM_RUNTIME_ID"] = identity
     os.environ["MARM_RUNTIME_PROFILE"] = profile
     runtime_config = apply_runtime_preset(
@@ -354,8 +384,11 @@ def _dispatch_product(args: argparse.Namespace) -> int:
                 runtime_id=args.runtime_id,
             )
             return 0
+        background_profile, background_rpm = resolve_runtime_preset(
+            args.profile, args.rate_limit_rpm
+        )
         result = runtime_manager.start_background(
-            profile=args.profile, rate_limit_rpm=args.rate_limit_rpm
+            profile=background_profile, rate_limit_rpm=background_rpm
         )
         state = result.get("metadata", {})
         print(
