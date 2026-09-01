@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from typing import Any
+
 from fastapi import APIRouter, HTTPException
 
 from .. import mcp_client
@@ -48,7 +51,8 @@ def update_runtime_profile(payload: RuntimeProfilePayload) -> dict:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
-def _proxy(fn, *args, **kwargs) -> dict:
+def _proxy(fn: Callable[..., dict], *args: Any, **kwargs: Any) -> dict:
+    # McpRequestError subclasses McpUnavailable, so it has to be caught first.
     try:
         return fn(*args, **kwargs)
     except mcp_client.McpRequestError as exc:

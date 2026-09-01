@@ -7,7 +7,7 @@ import uuid
 from collections import deque
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -287,18 +287,12 @@ class CompactionDryRunRequest(BaseModel):
 @router.get("/internal/runtime/maintenance", include_in_schema=False)
 async def runtime_maintenance() -> dict:
     """Which maintenance work the Console may run, and which the CLI must own."""
-    from ..cli import _http_server_is_running
-
-    # migrate and rechunk rewrite rows the live pool holds open, so they refuse
-    # while an HTTP server answers, which is exactly the case when the Console asks.
-    server_live = _http_server_is_running()
+    # Answering this request is itself the proof, so never probe /health from the
+    # loop that serves it: the blocking call cannot answer itself and times out.
+    server_live = True
     blocked = {
         "runnable": False,
-        "reason": (
-            "Requires every MARM HTTP and STDIO process to be stopped first."
-            if server_live
-            else "Runs from the CLI so it can confirm no STDIO process is attached."
-        ),
+        "reason": "Requires every MARM HTTP and STDIO process to be stopped first.",
     }
     return {
         "status": "success",
@@ -344,51 +338,64 @@ def _public_job(job: dict) -> dict:
     return {key: value for key, value in job.items() if not key.startswith("_")}
 
 
+def _update_job(job_id: str, **fields: Any) -> None:
+    """Workers run off the event loop, so every mutation takes the same lock as reads."""
+    with _dry_run_jobs_lock:
+        job = _dry_run_jobs.get(job_id)
+        if job is not None:
+            job.update(fields)
+
+
+def _finish_job(job_id: str, **fields: Any) -> None:
+    _update_job(
+        job_id,
+        **fields,
+        finished_at=_now_iso(),
+        _finished_timestamp=datetime.now(timezone.utc).timestamp(),
+    )
+
+
 def _run_compaction_dry_run_job(job_id: str, session_name: str) -> None:
     from ..cli import DEFAULT_DB_PATH, _ReadOnlyMemory
     from ..core.compaction import run_compaction_dry_run
 
     with _dry_run_jobs_lock:
-        job = _dry_run_jobs.get(job_id)
-    if job is None:
-        return
-    job.update(status="running", started_at=_now_iso())
+        if job_id not in _dry_run_jobs:
+            return
+    _update_job(job_id, status="running", started_at=_now_iso())
+    outcome: dict[str, Any]
     try:
         if not Path(DEFAULT_DB_PATH).exists():
-            job.update(status="success", candidates=[], report_path=None)
+            outcome = {"status": "success", "candidates": [], "report_path": None}
         else:
             result = run_compaction_dry_run(
                 _ReadOnlyMemory(DEFAULT_DB_PATH), session_name
             )
-            job.update(
-                status="success",
-                candidates=result.get("candidates", []),
-                report_path=result.get("report_path"),
-            )
+            outcome = {
+                "status": "success",
+                "candidates": result.get("candidates", []),
+                "report_path": result.get("report_path"),
+            }
     except Exception as exc:
         logger.error("Compaction dry run failed", exc_info=True)
-        job.update(status="error", error=str(exc))
-    finally:
-        job["finished_at"] = _now_iso()
-        job["_finished_timestamp"] = datetime.now(timezone.utc).timestamp()
+        outcome = {"status": "error", "error": str(exc)}
+    _finish_job(job_id, **outcome)
 
 
 async def _run_reload_docs_job(job_id: str) -> None:
     """Must stay on the server loop: the write queue resolves its futures there."""
     with _dry_run_jobs_lock:
-        job = _dry_run_jobs.get(job_id)
-    if job is None:
-        return
-    job.update(status="running", started_at=_now_iso())
+        if job_id not in _dry_run_jobs:
+            return
+    _update_job(job_id, status="running", started_at=_now_iso())
+    outcome: dict[str, Any]
     try:
         await reload_marm_documentation()
-        job.update(status="success", message="Documentation reloaded.")
+        outcome = {"status": "success", "message": "Documentation reloaded."}
     except Exception as exc:
         logger.error("Documentation reload failed", exc_info=True)
-        job.update(status="error", error=str(exc))
-    finally:
-        job["finished_at"] = _now_iso()
-        job["_finished_timestamp"] = datetime.now(timezone.utc).timestamp()
+        outcome = {"status": "error", "error": str(exc)}
+    _finish_job(job_id, **outcome)
 
 
 @router.post(
@@ -523,7 +530,8 @@ async def runtime_upgrade_check() -> dict:
 
     installation = inspect_installation()
     try:
-        release = check_latest_release()
+        # urlopen with a 5s timeout: off the loop, or every other request waits on PyPI.
+        release = await asyncio.to_thread(check_latest_release)
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     return {

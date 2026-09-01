@@ -428,11 +428,14 @@ def test_an_explicit_rate_limit_survives_every_other_saved_profile(
     assert applied["rate_limit_rpm"] == 99
 
 
-def test_an_explicit_trusted_flag_keeps_its_existing_cli_meaning(restore_profile):
-    """Typing both --profile trusted and --rate-limit-rpm is contradictory; trusted still wins."""
+def test_an_explicit_trusted_flag_also_yields_to_an_explicit_rate_limit(
+    restore_profile,
+):
+    """The CLI and the Console must agree: a typed limit is never silently dropped."""
     cli = _mod("marm_mcp_server.cli")
 
-    assert cli.resolve_runtime_preset("trusted", 99) == ("trusted", 99)
+    assert cli.resolve_runtime_preset("trusted", 99) == ("standard", 99)
+    assert cli.resolve_runtime_preset("trusted", None) == ("trusted", None)
 
 
 def test_console_custom_rpm_is_not_swallowed_by_a_trusted_profile(restore_profile):
@@ -461,3 +464,113 @@ def test_polling_an_unknown_reload_job_is_a_404():
         asyncio.run(system_module().runtime_reload_docs_status("no-such-job"))
 
     assert excinfo.value.status_code == 404
+
+
+def test_restart_prefers_a_saved_preset_over_stale_runtime_metadata(restore_profile):
+    """restart passes the state file explicitly, which would bypass the saved override."""
+    cli = _mod("marm_mcp_server.cli")
+    profile("swarm-max")
+
+    resolved = cli.resolve_restart_preset(
+        {"profile": "standard", "rate_limit_rpm": None}
+    )
+
+    assert resolved == ("swarm-max", None)
+
+
+def test_restart_falls_back_to_runtime_metadata_when_nothing_was_saved(restore_profile):
+    """A runtime started with an explicit --profile must not be downgraded on restart."""
+    cli = _mod("marm_mcp_server.cli")
+    flags = _mod("marm_mcp_server.core.runtime_flags")
+    flags.clear(flags.RUNTIME_PROFILE)
+    flags.clear(flags.RUNTIME_RATE_LIMIT_RPM)
+
+    resolved = cli.resolve_restart_preset({"profile": "swarm", "rate_limit_rpm": None})
+
+    assert resolved == ("swarm", None)
+
+
+def test_saving_a_preset_replaces_both_keys_together(restore_profile):
+    """A half-applied preset boots a new profile with a stale custom limit."""
+    flags = _mod("marm_mcp_server.core.runtime_flags")
+
+    profile("standard", 45)
+    assert flags.saved_runtime_preset() == ("standard", 45)
+
+    profile("trusted")
+    assert flags.saved_runtime_preset() == ("trusted", None)
+
+
+def test_maintenance_never_probes_the_server_that_is_answering(monkeypatch):
+    """A synchronous /health probe from this loop cannot answer itself and times out."""
+    cli = _mod("marm_mcp_server.cli")
+
+    def explode() -> bool:
+        raise AssertionError("the maintenance route probed its own server")
+
+    monkeypatch.setattr(cli, "_http_server_is_running", explode)
+
+    payload = asyncio.run(system_module().runtime_maintenance())
+
+    assert payload["http_server_running"] is True
+    assert payload["actions"]["embeddings_migrate"]["runnable"] is False
+
+
+def test_the_release_check_does_not_block_the_event_loop(monkeypatch):
+    """urlopen has a 5s timeout; on the loop it stalls every other request."""
+    system = system_module()
+    package_management = _mod("marm_mcp_server.services.package_management")
+    calling_threads = []
+
+    def slow_check() -> dict:
+        calling_threads.append(threading.current_thread().name)
+        return {
+            "installed_version": "2.46.0",
+            "latest_version": "2.46.0",
+            "state": "current",
+            "installer": "pip",
+            "editable": "false",
+        }
+
+    monkeypatch.setattr(package_management, "check_latest_release", slow_check)
+
+    async def call_and_report() -> tuple[dict, str]:
+        result = await system.runtime_upgrade_check()
+        return result, threading.current_thread().name
+
+    payload, handler_thread = asyncio.run(call_and_report())
+
+    assert payload["state"] == "current"
+    assert calling_threads and calling_threads[0] != handler_thread
+
+
+def test_concurrent_polling_survives_a_worker_finishing_the_job():
+    """Workers mutate the job dict off the loop while the status route iterates it."""
+    system = system_module()
+    errors: list[str] = []
+
+    def poll(job_id: str, stop: threading.Event) -> None:
+        while not stop.is_set():
+            try:
+                asyncio.run(system.runtime_compaction_dry_run_status(job_id))
+            except RuntimeError as exc:
+                errors.append(str(exc))
+                stop.set()
+                return
+            except HTTPException:
+                return
+
+    for _ in range(20):
+        started = asyncio.run(
+            system.runtime_compaction_dry_run(
+                system.CompactionDryRunRequest(session_name="does-not-exist")
+            )
+        )
+        stop = threading.Event()
+        poller = threading.Thread(target=poll, args=(started["job_id"], stop))
+        poller.start()
+        time.sleep(0.03)
+        stop.set()
+        poller.join(timeout=2)
+
+    assert errors == []

@@ -160,7 +160,7 @@ def resolve_runtime_preset(
 ) -> tuple[str, int | None]:
     """An explicit CLI flag wins; otherwise a Console-saved preset survives the restart."""
     if profile is not None:
-        return profile, rate_limit_rpm
+        return reconcile_profile_and_rpm(profile, rate_limit_rpm)
     from .core import runtime_flags
 
     try:
@@ -173,6 +173,20 @@ def resolve_runtime_preset(
     if rate_limit_rpm is None:
         return resolved, effective_rpm
     return reconcile_profile_and_rpm(resolved, effective_rpm)
+
+
+def resolve_restart_preset(state: dict) -> tuple[str, int | None]:
+    """A saved Console change is newer than the metadata written at the last start."""
+    from .core import runtime_flags
+
+    try:
+        saved_profile, saved_rpm = runtime_flags.saved_runtime_preset()
+    except Exception:
+        logger.warning("Could not read the saved runtime preset", exc_info=True)
+        saved_profile, saved_rpm = None, None
+    if saved_profile:
+        return reconcile_profile_and_rpm(saved_profile, saved_rpm)
+    return state.get("profile", "standard"), state.get("rate_limit_rpm")
 
 
 def _run_foreground(
@@ -410,8 +424,7 @@ def _dispatch_product(args: argparse.Namespace) -> int:
         return 0
     if args.command == "restart":
         current = runtime_manager.read_state() or {}
-        profile = current.get("profile", "standard")
-        rpm = current.get("rate_limit_rpm")
+        profile, rpm = resolve_restart_preset(current)
         runtime_manager.stop_runtime(force=args.force, stop_console_process=False)
         runtime_manager.start_background(profile=profile, rate_limit_rpm=rpm)
         print("MARM runtime restarted. A running Console was left available.")
