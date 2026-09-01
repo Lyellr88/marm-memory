@@ -1,6 +1,53 @@
 # Changelog
 
 <details>
+<summary><strong>September 1st, 2026: A System Tab for the Console, and Rate-Limit Fixes It Uncovered (v2.46.0)</strong></summary>
+
+### Added: System Tab in MARM Console
+
+Runtime health, controls, maintenance, diagnostics, and database snapshots now have a page of their own instead of living in a settings dialog. Settings keeps only the connection fields.
+
+- **Health** reports what the runtime is doing right now: state, write-queue depth against capacity, graph engine, both database paths and sizes, and the embedding model. Three values are new: the live rate limit with its mode, whether semantic search is on, and the embedding dimension.
+- **Controls** applies a rate-limit profile (standard, swarm at 200, swarm-max at 600, trusted for unlimited) or a direct requests-per-minute override. Changes take effect immediately and persist to the runtime flag database, so a restart keeps them. An explicit `--profile` flag on the command line always wins over a saved one.
+- **Maintenance** runs a compaction dry run and reloads bundled documentation, both as queued jobs the page polls. Re-embedding and re-chunking are shown with the exact command instead of a button, because both refuse to run while a server is answering and could never succeed from here.
+- **Lifecycle** shows environment checks, the managed runtime log with a selectable tail, and a PyPI release check that prints the correct upgrade command for the detected install type. Stopping and restarting stay in the terminal.
+- **Backup** takes point-in-time snapshots with `VACUUM INTO`, which runs online and needs no downtime, then lists and deletes them. Snapshot names are validated before any filesystem access. Restoring is not offered: replacing the file under a live connection pool is unsafe, and the supported path is stop, replace, start.
+
+### Fixed: A Rate Limit of Zero Could Not Be Undone
+
+Applying the trusted profile set the request limit to zero, and every later switch back to standard silently kept it there, leaving the server unthrottled with no way back short of a restart.
+
+- The preset builder read its baseline from the same value it overwrites, so the standard profile inherited whatever was applied last rather than the configured default. The boot-time default is now captured separately and never mutated.
+- The reported environment default was reading that same drifting value, so the console could not have shown the drift either.
+
+### Fixed: A Typed Rate Limit Was Discarded When Trusted Was Active
+
+Trusted means unlimited, and it was applied after any explicit limit, so a typed value was silently dropped. Entering 99 requests per minute left throttling off entirely.
+
+- A typed limit now takes precedence over an inherited trusted profile on both the command line and in the console, and the reconciled profile is what gets saved, so the discard cannot replay on the next start.
+- Passing `--profile trusted` together with a limit keeps its existing meaning: the explicit profile still wins.
+
+### Fixed: Semantic Search Reported a Model That Was Never Loaded
+
+Health read the flag that means "the embedding library is importable", not the encoder itself, which loads lazily on first recall and can fail.
+
+- A fresh runtime showed the model as loaded before anything had loaded it, and a failed load kept showing it as loaded, hiding the quiet fall back to keyword search that this display exists to surface.
+- The runtime now reports the encoder's real state: loaded, loading, failed, or not loaded yet.
+
+### Fixed: Documentation Reload Could Hang the Runtime
+
+The console reload path stored each document through the write queue from its own event loop, while the queue resolves its completion futures on the server loop.
+
+- Any document that had actually changed would wait forever. The path that appeared to work only did so because unchanged documents return before reaching the queue.
+- The reload now runs on the loop that owns the queue. The `marm_reload_docs` tool that agents call is unchanged.
+
+### Upgrade Note
+
+No action required. Runtime profiles selected in the console are saved from this version onward; profiles chosen with a command-line flag behave as before.
+
+</details>
+
+<details>
 <summary><strong>August 29th, 2026: Key File Safety, Graph Job Schemas, and Working PyPI Links (v2.45.0)</strong></summary>
 
 ### Fixed: An Unsecurable API Key File No Longer Stays on Disk

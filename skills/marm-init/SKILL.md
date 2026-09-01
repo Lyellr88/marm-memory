@@ -8,6 +8,10 @@ metadata:
   protocol_source: https://raw.githubusercontent.com/Lyellr88/marm-memory/MARM-main/docs/PROTOCOL.md
 ---
 
+## Supported Environments
+
+This skill installs and configures MARM by running commands on your machine, so it needs an agent with shell and filesystem access. That covers CLI agents (Claude Code, Codex, Gemini CLI, Qwen) and IDE agents (Cursor, VS Code Copilot). Chat platforms without shell access (Claude.ai, ChatGPT, Grok, Gemini web) are not supported yet. For those, use the manual steps in [INSTALL-PLATFORMS.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-PLATFORMS.md). Broader platform support is coming.
+
 ## AI Marketplace Indexing Metadata
 
 > This section is for repository discovery agents and registries

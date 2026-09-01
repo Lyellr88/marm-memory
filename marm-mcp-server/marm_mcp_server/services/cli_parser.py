@@ -10,7 +10,8 @@ def _add_profile_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
         "--profile",
         choices=("standard", "swarm", "swarm-max", "trusted"),
-        default="standard",
+        default=None,
+        help="Rate-limit preset. Omitted means a Console-saved profile, else standard.",
     )
     parser.add_argument(
         "--rate-limit-rpm",
@@ -21,6 +22,8 @@ def _add_profile_arguments(parser: argparse.ArgumentParser) -> None:
 
 def _add_docker_run_arguments(parser: argparse.ArgumentParser) -> None:
     _add_profile_arguments(parser)
+    # A container is configured at run time and must not inherit a host-saved preset.
+    parser.set_defaults(profile="standard")
     parser.add_argument("--port", type=int, default=8001)
     parser.add_argument("--data-dir", type=Path, default=Path.home() / ".marm")
     parser.add_argument("--name", default="marm-mcp-server")

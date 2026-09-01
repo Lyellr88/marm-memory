@@ -1,7 +1,13 @@
+import asyncio
 import logging
 import os
+import sqlite3
+import threading
+import uuid
+from collections import deque
 from datetime import datetime, timezone
-from typing import Literal
+from pathlib import Path
+from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -10,11 +16,13 @@ from ..config import settings
 from ..config.settings import (
     CONCEPTS_AVAILABLE,
     SEMANTIC_SEARCH_AVAILABLE,
+    SEMANTIC_SEARCH_ENABLED,
     SERVER_VERSION,
 )
 from ..core import runtime_flags
 from ..core.graph_supervisor import graph_supervisor
 from ..core.memory import memory
+from ..core.rate_limiter import rate_limiter
 from ..core.shutdown_manager import shutdown_manager
 from ..services.documentation import reload_marm_documentation
 from ..services.runtime_status import knowledge_status, maintenance_status
@@ -27,6 +35,35 @@ router = APIRouter(prefix="", tags=["System"])
 class RuntimeAutomationRequest(BaseModel):
     scope: Literal["graph", "concept"]
     enabled: bool
+
+
+class RuntimeProfileRequest(BaseModel):
+    profile: Literal["standard", "swarm", "swarm-max", "trusted"]
+    rate_limit_rpm: int | None = None
+
+
+def _model_state() -> str:
+    # The encoder loads lazily on first recall, so importability is not the same as loaded.
+    if memory.encoder is not None:
+        return "loaded"
+    if memory._encoder_failed:
+        return "failed"
+    if memory._encoder_loading:
+        return "loading"
+    return "not_loaded"
+
+
+def _rate_limit_status() -> dict:
+    # Read the live limiter, not the env default: configure() can change it without a restart.
+    limits = rate_limiter.limits["default"]
+    requests = limits["requests"]
+    return {
+        "requests_per_minute": requests,
+        "window_seconds": limits["window"],
+        "block_seconds": limits["block_duration"],
+        "enforced": requests > 0,
+        "environment_default": settings.MARM_RATE_LIMIT_RPM_DEFAULT,
+    }
 
 
 def _automation_status() -> dict:
@@ -154,6 +191,12 @@ async def runtime_settings() -> dict:
             "concept": knowledge["database"],
         },
         "embedding": maintenance["embedding"],
+        "rate_limit": _rate_limit_status(),
+        "search": {
+            "semantic_enabled": SEMANTIC_SEARCH_ENABLED,
+            "semantic_available": SEMANTIC_SEARCH_AVAILABLE,
+            "model_state": _model_state(),
+        },
     }
 
 
@@ -171,6 +214,41 @@ async def update_runtime_automation(req: RuntimeAutomationRequest) -> dict:
         "enabled": req.enabled,
         "effective": "next cycle",
         "automation": _automation_status(),
+    }
+
+
+@router.put("/internal/runtime/settings/profile", include_in_schema=False)
+async def update_runtime_profile(req: RuntimeProfileRequest) -> dict:
+    from ..cli import _profile_flags, apply_runtime_preset, reconcile_profile_and_rpm
+
+    if req.rate_limit_rpm is not None and req.rate_limit_rpm < 0:
+        raise HTTPException(
+            status_code=422, detail="rate_limit_rpm must be 0 or greater"
+        )
+    profile, rate_limit_rpm = reconcile_profile_and_rpm(req.profile, req.rate_limit_rpm)
+    try:
+        applied = apply_runtime_preset(
+            **_profile_flags(profile), rate_limit_rpm=rate_limit_rpm
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    # runtime_status reads the profile back out of the environment, so it has to move too.
+    os.environ["MARM_RUNTIME_PROFILE"] = profile
+    persistence = "saved"
+    try:
+        runtime_flags.save_runtime_preset(profile, rate_limit_rpm)
+    except Exception:
+        logger.warning("Could not persist the runtime preset", exc_info=True)
+        persistence = "until_restart"
+    return {
+        "status": "success",
+        "profile": profile,
+        "requested_profile": req.profile,
+        "mode": applied["mode"],
+        "persistence": persistence,
+        "rate_limit": _rate_limit_status(),
+        "write_queue_enabled": applied["write_queue_enabled"],
     }
 
 
@@ -200,3 +278,306 @@ async def marm_reload_docs() -> dict:
         raise HTTPException(
             status_code=500, detail=f"Failed to reload documentation: {e!s}"
         ) from e
+
+
+class CompactionDryRunRequest(BaseModel):
+    session_name: str
+
+
+@router.get("/internal/runtime/maintenance", include_in_schema=False)
+async def runtime_maintenance() -> dict:
+    """Which maintenance work the Console may run, and which the CLI must own."""
+    # Answering this request is itself the proof, so never probe /health from the
+    # loop that serves it: the blocking call cannot answer itself and times out.
+    server_live = True
+    blocked = {
+        "runnable": False,
+        "reason": "Requires every MARM HTTP and STDIO process to be stopped first.",
+    }
+    return {
+        "status": "success",
+        "http_server_running": server_live,
+        "actions": {
+            "compaction_dry_run": {
+                "runnable": True,
+                "command": "marm-memory maintenance compaction dry-run --session <name>",
+            },
+            "reload_docs": {"runnable": True, "command": None},
+            "embeddings_migrate": {
+                **blocked,
+                "command": "marm-memory maintenance embeddings migrate",
+            },
+            "chunks_rechunk": {
+                **blocked,
+                "command": "marm-memory maintenance chunks rechunk",
+            },
+        },
+    }
+
+
+_dry_run_jobs: dict[str, dict] = {}
+_dry_run_jobs_lock = threading.Lock()
+_DRY_RUN_JOB_TTL_SECONDS = 3600
+_reload_docs_tasks: set[asyncio.Task] = set()
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _prune_dry_run_jobs() -> None:
+    cutoff = datetime.now(timezone.utc).timestamp() - _DRY_RUN_JOB_TTL_SECONDS
+    with _dry_run_jobs_lock:
+        for job_id, job in list(_dry_run_jobs.items()):
+            finished_at = job.get("_finished_timestamp")
+            if finished_at is not None and finished_at < cutoff:
+                _dry_run_jobs.pop(job_id, None)
+
+
+def _public_job(job: dict) -> dict:
+    return {key: value for key, value in job.items() if not key.startswith("_")}
+
+
+def _update_job(job_id: str, **fields: Any) -> None:
+    """Workers run off the event loop, so every mutation takes the same lock as reads."""
+    with _dry_run_jobs_lock:
+        job = _dry_run_jobs.get(job_id)
+        if job is not None:
+            job.update(fields)
+
+
+def _finish_job(job_id: str, **fields: Any) -> None:
+    _update_job(
+        job_id,
+        **fields,
+        finished_at=_now_iso(),
+        _finished_timestamp=datetime.now(timezone.utc).timestamp(),
+    )
+
+
+def _run_compaction_dry_run_job(job_id: str, session_name: str) -> None:
+    from ..cli import DEFAULT_DB_PATH, _ReadOnlyMemory
+    from ..core.compaction import run_compaction_dry_run
+
+    with _dry_run_jobs_lock:
+        if job_id not in _dry_run_jobs:
+            return
+    _update_job(job_id, status="running", started_at=_now_iso())
+    outcome: dict[str, Any]
+    try:
+        if not Path(DEFAULT_DB_PATH).exists():
+            outcome = {"status": "success", "candidates": [], "report_path": None}
+        else:
+            result = run_compaction_dry_run(
+                _ReadOnlyMemory(DEFAULT_DB_PATH), session_name
+            )
+            outcome = {
+                "status": "success",
+                "candidates": result.get("candidates", []),
+                "report_path": result.get("report_path"),
+            }
+    except Exception as exc:
+        logger.error("Compaction dry run failed", exc_info=True)
+        outcome = {"status": "error", "error": str(exc)}
+    _finish_job(job_id, **outcome)
+
+
+async def _run_reload_docs_job(job_id: str) -> None:
+    """Must stay on the server loop: the write queue resolves its futures there."""
+    with _dry_run_jobs_lock:
+        if job_id not in _dry_run_jobs:
+            return
+    _update_job(job_id, status="running", started_at=_now_iso())
+    outcome: dict[str, Any]
+    try:
+        await reload_marm_documentation()
+        outcome = {"status": "success", "message": "Documentation reloaded."}
+    except Exception as exc:
+        logger.error("Documentation reload failed", exc_info=True)
+        outcome = {"status": "error", "error": str(exc)}
+    _finish_job(job_id, **outcome)
+
+
+@router.post(
+    "/internal/runtime/maintenance/reload-docs",
+    include_in_schema=False,
+    status_code=202,
+)
+async def runtime_reload_docs() -> dict:
+    _prune_dry_run_jobs()
+    job_id = str(uuid.uuid4())
+    with _dry_run_jobs_lock:
+        _dry_run_jobs[job_id] = {
+            "job_id": job_id,
+            "kind": "reload_docs",
+            "status": "queued",
+            "message": None,
+            "error": None,
+            "created_at": _now_iso(),
+            "started_at": None,
+            "finished_at": None,
+        }
+    try:
+        task = asyncio.create_task(_run_reload_docs_job(job_id))
+    except RuntimeError as exc:
+        with _dry_run_jobs_lock:
+            _dry_run_jobs.pop(job_id, None)
+        raise HTTPException(
+            status_code=500, detail="Could not start the reload."
+        ) from exc
+    # asyncio holds only a weak reference to a running task.
+    _reload_docs_tasks.add(task)
+    task.add_done_callback(_reload_docs_tasks.discard)
+    with _dry_run_jobs_lock:
+        return _public_job(_dry_run_jobs[job_id])
+
+
+@router.get(
+    "/internal/runtime/maintenance/reload-docs/{job_id}", include_in_schema=False
+)
+async def runtime_reload_docs_status(job_id: str) -> dict:
+    _prune_dry_run_jobs()
+    with _dry_run_jobs_lock:
+        job = _dry_run_jobs.get(job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="No such reload.")
+        return _public_job(job)
+
+
+@router.post(
+    "/internal/runtime/maintenance/compaction-dry-run",
+    include_in_schema=False,
+    status_code=202,
+)
+async def runtime_compaction_dry_run(req: CompactionDryRunRequest) -> dict:
+    """Queued rather than inline: the scan cost grows with the square of session size."""
+    _prune_dry_run_jobs()
+    job_id = str(uuid.uuid4())
+    with _dry_run_jobs_lock:
+        _dry_run_jobs[job_id] = {
+            "job_id": job_id,
+            "status": "queued",
+            "session_name": req.session_name,
+            "candidates": [],
+            "report_path": None,
+            "error": None,
+            "created_at": _now_iso(),
+            "started_at": None,
+            "finished_at": None,
+        }
+    worker = threading.Thread(
+        target=_run_compaction_dry_run_job,
+        args=(job_id, req.session_name),
+        daemon=True,
+    )
+    try:
+        worker.start()
+    except Exception as exc:
+        with _dry_run_jobs_lock:
+            _dry_run_jobs.pop(job_id, None)
+        raise HTTPException(
+            status_code=500, detail="Could not start the scan."
+        ) from exc
+    with _dry_run_jobs_lock:
+        return _public_job(_dry_run_jobs[job_id])
+
+
+@router.get(
+    "/internal/runtime/maintenance/compaction-dry-run/{job_id}",
+    include_in_schema=False,
+)
+async def runtime_compaction_dry_run_status(job_id: str) -> dict:
+    _prune_dry_run_jobs()
+    with _dry_run_jobs_lock:
+        job = _dry_run_jobs.get(job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="No such scan.")
+        return _public_job(job)
+
+
+@router.get("/internal/runtime/doctor", include_in_schema=False)
+async def runtime_doctor() -> dict:
+    from ..services.runtime_status import doctor_status
+
+    return {"status": "success", **doctor_status()}
+
+
+@router.get("/internal/runtime/logs", include_in_schema=False)
+async def runtime_logs(lines: int = 200) -> dict:
+    from ..core.runtime_manager import log_path
+
+    capped = max(1, min(lines, 2000))
+    path = log_path()
+    if not path.exists():
+        return {"status": "success", "path": str(path), "lines": [], "exists": False}
+    with path.open("r", encoding="utf-8", errors="replace") as handle:
+        tail = deque(handle, maxlen=capped)
+    return {
+        "status": "success",
+        "path": str(path),
+        "exists": True,
+        "lines": [line.rstrip("\n") for line in tail],
+    }
+
+
+@router.get("/internal/runtime/upgrade/check", include_in_schema=False)
+async def runtime_upgrade_check() -> dict:
+    from ..services.package_management import (
+        check_latest_release,
+        inspect_installation,
+        manual_upgrade_command,
+    )
+
+    installation = inspect_installation()
+    try:
+        # urlopen with a 5s timeout: off the loop, or every other request waits on PyPI.
+        release = await asyncio.to_thread(check_latest_release)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {
+        "status": "success",
+        "installed_version": release["installed_version"],
+        "latest_version": release["latest_version"],
+        "state": release["state"],
+        "installer": release["installer"],
+        "editable": release["editable"] == "true",
+        "command": manual_upgrade_command(installation),
+    }
+
+
+@router.get("/internal/runtime/backups", include_in_schema=False)
+async def runtime_backups() -> dict:
+    from ..services import backup
+
+    return {
+        "status": "success",
+        "directory": str(backup.backup_dir()),
+        "items": backup.list_backups(),
+    }
+
+
+@router.post("/internal/runtime/backups", include_in_schema=False)
+async def runtime_create_backup() -> dict:
+    from ..services import backup
+
+    try:
+        created = await asyncio.to_thread(backup.create_backup)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except sqlite3.Error as exc:
+        logger.error("Snapshot failed", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    return {"status": "success", "backup": created}
+
+
+@router.delete("/internal/runtime/backups/{name}", include_in_schema=False)
+async def runtime_delete_backup(name: str) -> dict:
+    from ..services import backup
+
+    try:
+        removed = backup.delete_backup(name)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    if not removed:
+        raise HTTPException(status_code=404, detail="No such snapshot.")
+    return {"status": "success", "deleted": name}

@@ -717,6 +717,9 @@ def test_owned_log_is_bounded_and_tail_reads_latest_lines(
 def test_restart_preserves_console_process(monkeypatch, capsys):
     active_cli, active_runtime = _active_modules()
     calls = []
+    # With no Console-saved preset, restart carries the last start's metadata through.
+    active_flags = importlib.import_module("marm_mcp_server.core.runtime_flags")
+    monkeypatch.setattr(active_flags, "saved_runtime_preset", lambda: (None, None))
     monkeypatch.setattr(
         active_runtime,
         "read_state",

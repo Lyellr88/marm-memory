@@ -111,7 +111,7 @@ Then (default `http://127.0.0.1:8001`, no API key needed for a local, non-`0.0.0
 python scripts/benchmarking/accuracy/locomo/run_eval.py --ingest --recall --limit 5
 ```
 
-The dataset (`locomo10.json`) is downloaded automatically on first run and cached alongside the script (gitignored). `--samples N` limits to the first N of the 10 LoCoMo conversations for a quick smoke test.
+The dataset (`locomo10.json`) is downloaded automatically on first run into `accuracy/locomo/out/`, which holds every file the script reads or writes and is gitignored as a whole. `--samples N` limits to the first N of the 10 LoCoMo conversations for a quick smoke test.
 
 Re-run scoring only, against already-ingested data:
 
@@ -119,11 +119,11 @@ Re-run scoring only, against already-ingested data:
 python scripts/benchmarking/accuracy/locomo/run_eval.py --recall --limit 5
 ```
 
-Already-ingested conversations are skipped on `--ingest` re-runs (their ids live in `ingest_state.json`); for a clean slate, use a fresh DB and delete `ingest_state.json`.
+Already-ingested conversations are skipped on `--ingest` re-runs (their ids live in `out/ingest_state.json`); for a clean slate, use a fresh DB and delete `out/ingest_state.json`.
 
 **Metrics:**
 
-Reported per LoCoMo category (single-hop, temporal, multi-hop, open-domain, adversarial) and overall, in `results.json` (per-question detail) plus a summary table on stdout:
+Reported per LoCoMo category (single-hop, temporal, multi-hop, open-domain, adversarial) and overall, in `out/results.json` (per-question detail) plus a summary table on stdout:
 
 - `any_hit_rate`: fraction of questions where at least one gold evidence turn was recalled (either lane).
 - `all_hit_rate`: fraction where every gold evidence turn was recalled (matters for multi-hop questions with multiple evidence IDs).

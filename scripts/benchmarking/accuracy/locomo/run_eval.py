@@ -36,9 +36,10 @@ DATASET_URL = (
     "https://raw.githubusercontent.com/snap-research/locomo/main/data/locomo10.json"
 )
 HERE = Path(__file__).parent
-DATASET_PATH = HERE / "locomo10.json"
-STATE_PATH = HERE / "ingest_state.json"
-RESULTS_PATH = HERE / "results.json"
+OUT_DIR = HERE / "out"
+DATASET_PATH = OUT_DIR / "locomo10.json"
+STATE_PATH = OUT_DIR / "ingest_state.json"
+RESULTS_PATH = OUT_DIR / "results.json"
 
 CATEGORY_NAMES = {
     1: "single-hop",
@@ -105,6 +106,7 @@ def server_request(base_url, path, payload, api_key=None):
 
 
 def ensure_dataset():
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
     if DATASET_PATH.exists():
         return
     print(f"Downloading LoCoMo dataset to {DATASET_PATH} ...")
@@ -180,8 +182,8 @@ def ingest(base_url, api_key, limit_samples=None):
 
         # Re-ingesting an already-ingested conversation would duplicate rows
         # (server-side consolidation is off by default) and orphan the ids in
-        # ingest_state.json. Skip instead; for a clean run, point the server
-        # at a fresh DB and delete ingest_state.json.
+        # out/ingest_state.json. Skip instead; for a clean run, point the
+        # server at a fresh DB and delete out/ingest_state.json.
         if sample_id in state:
             print(f"  skipping {sample_id}: already in {STATE_PATH.name}")
             continue
@@ -242,7 +244,9 @@ def _blank_bucket():
 
 def recall_and_score(base_url, api_key, limit_k, limit_samples=None):
     if not STATE_PATH.exists():
-        print("No ingest_state.json found - run with --ingest first.", file=sys.stderr)
+        print(
+            "No out/ingest_state.json found - run with --ingest first.", file=sys.stderr
+        )
         sys.exit(1)
 
     state = load_state()

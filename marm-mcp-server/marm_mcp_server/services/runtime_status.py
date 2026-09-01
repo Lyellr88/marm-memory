@@ -17,6 +17,7 @@ from ..config.settings import (
     CONCEPT_AUTO_INDEX,
     CONCEPT_MODEL_AVAILABLE,
     DEFAULT_DB_PATH,
+    DEFAULT_SEMANTIC_DIM,
     DEFAULT_SEMANTIC_MODEL,
     FTS_CANDIDATE_LIMIT,
     FTS_EXTRA_STOPWORDS,
@@ -167,6 +168,7 @@ def maintenance_status() -> dict[str, Any]:
         "concept_database": knowledge_status()["database"],
         "embedding": {
             "model": DEFAULT_SEMANTIC_MODEL,
+            "dimension": DEFAULT_SEMANTIC_DIM,
             "marker": embedding.marker,
             "compatible": embedding.compatible,
             "incompatible_vectors": embedding.incompatible,

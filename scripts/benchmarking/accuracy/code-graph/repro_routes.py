@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Executed minimal reproductions for the two route findings.
 
-The drafts in docs/current/upstream/ were written from evidence gathered against
-MARM itself, which is not an upstream-quality report: a maintainer needs the
+The drafts in docs/current/upstream/ were written from evidence gathered
+against MARM itself, which is not an upstream-quality report: a maintainer needs the
 smallest project that shows the behaviour, plus the command output it produces.
 This builds exactly that project and runs the two commands against it.
 
@@ -13,11 +13,12 @@ Nine lines of Python and eight of TypeScript, one route, one client call. Runs
 against the engine CLI so nothing about MARM is in the picture. Prints the
 verbatim output to paste into an issue.
 
-C4 reproduces here. C6 does not, and the run says so: a direct `fetch` produces no
-client-side Route node, so without one there is nothing to mismatch and the trace
+C4 reproduces here, on 0.9.0, 0.10.5 and 0.10.6 alike. C6 does not, and the run says
+so: no client-side Route node is created, so there is nothing to mismatch and the trace
 measures client-call recognition instead of the route-key join. Exit 3 marks that,
 because a fixture that looks like it tests C6 while testing something else is worse
-than no fixture.
+than no fixture. C6 is not worth chasing further, having turned out to be already filed
+upstream twice over; see docs/current/upstream/engine-fork-scope.md.
 
     python scripts/benchmarking/accuracy/code-graph/repro_routes.py
     python scripts/benchmarking/accuracy/code-graph/repro_routes.py --keep
@@ -57,17 +58,26 @@ async def get_memory(memory_id: str):
     return {"id": memory_id}
 """
 
-# Literal path strings, matching how a generated API client is usually written.
-# An interpolated template (`${BASE}/memories/${id}`) produces no client-side route
-# node at all, so it cannot show the key mismatch this is meant to demonstrate.
-CLIENT_TS = """export async function getMemory(id: string) {
-  const res = await fetch("/api/memories/:id", { method: "GET" });
-  return res.json();
+# The client must call through a local wrapper that concatenates a base prefix and
+# forwards a method variable to fetch. That is the shape the engine recognises, and
+# it is the shape that produces the mismatch: the literal path at the wrapper call
+# site carries no prefix, and a variable `method` cannot be read statically, so the
+# client node is keyed __route__ANY__/memories/{} against the server's
+# __route__GET__/api/memories/{}. A bare fetch("/api/memories/:id", {method: "GET"})
+# at the call site produces no client route node at all.
+CLIENT_TS = """const BASE = "http://localhost:8080";
+
+async function request<T>(method: string, path: string): Promise<T> {
+  const res = await fetch(`${BASE}/api${path}`, { method });
+  return res.json() as Promise<T>;
+}
+
+export async function getMemory(id: string) {
+  return request<unknown>("GET", `/memories/${id}`);
 }
 
 export async function listMemories() {
-  const res = await fetch("/api/memories", { method: "GET" });
-  return res.json();
+  return request<unknown>("GET", "/memories");
 }
 """
 
@@ -89,6 +99,40 @@ def _build(repo: Path) -> None:
         encoding="utf-8",
     )
     git_init(repo)
+
+
+def _as_json(raw: str) -> dict | None:
+    start, end = raw.find("{"), raw.rfind("}")
+    if start < 0 or end < start:
+        return None
+    try:
+        return json.loads(raw[start : end + 1])
+    except json.JSONDecodeError:
+        return None
+
+
+def _rows(value) -> list[dict]:
+    """Flatten one 0.10.5 columnar section into dicts.
+
+    With --format json the engine returns {cols, rows} or {cols, groups}, where a
+    group's qn_prefix is the qualified-name stem for every row under it. Older engines
+    returned lists of dicts, so both shapes are accepted.
+    """
+    if isinstance(value, list):
+        return [v for v in value if isinstance(v, dict)]
+    if not isinstance(value, dict):
+        return []
+    cols = value.get("cols") or []
+    out = []
+    for row in value.get("rows") or []:
+        out.append(dict(zip(cols, row)))
+    for group in value.get("groups") or []:
+        prefix = group.get("qn_prefix") or ""
+        for row in group.get("rows") or []:
+            item = dict(zip(cols, row))
+            item["group"] = prefix
+            out.append(item)
+    return out
 
 
 def _handles_edges(store: Path) -> list[tuple[str, str]]:
@@ -123,10 +167,11 @@ def _route_keys(store: Path) -> list[str]:
 
 
 def _run(args, cleanup_failed: list[str]) -> int:
-    binary = engine_binary()
+    binary = Path(args.binary) if args.binary else engine_binary()
     if binary is None or not binary.exists():
         print("engine binary not found; run MARM once to download it")
         return 2
+    print(f"# engine: {binary}")
 
     work = Path(tempfile.mkdtemp(prefix="cga-routes-"))
     repo = work / "repro"
@@ -161,9 +206,22 @@ def _run(args, cleanup_failed: list[str]) -> int:
         store = Path.home() / ".cache" / "codebase-memory-mcp" / f"{project}.db"
 
         print("## C4: get_architecture routes[]")
-        arch_raw = engine_cli(binary, "get_architecture", "--project", project)
-        arch = json.loads(arch_raw[arch_raw.find("{") : arch_raw.rfind("}") + 1])
-        routes = arch.get("routes") or []
+        # 0.10.5 defaults to prefix-grouped text and returns a summary without
+        # `routes` unless the aspect is named, so both flags are load-bearing.
+        # Raw-JSON args, not flags: the CLI publishes no --format flag for this
+        # tool even though the MCP surface accepts the field, and without it the
+        # reply is prefix-grouped text. Naming the aspect is also required, since
+        # 0.10.5 returns a summary that omits `routes` when aspects is omitted.
+        arch_raw = engine_cli(
+            binary,
+            "get_architecture",
+            json.dumps({"project": project, "aspects": ["routes"], "format": "json"}),
+        )
+        arch = _as_json(arch_raw)
+        if arch is None:
+            print(f"ENGINE OUTPUT NOT JSON:{chr(10)}{arch_raw}")
+            return 2
+        routes = _rows(arch.get("routes"))
         print(json.dumps(routes, indent=2))
         filled = [r for r in routes if (r.get("handler") or "").strip()]
         print(f"\nroutes: {len(routes)}   with non-empty handler: {len(filled)}")
@@ -179,8 +237,7 @@ def _run(args, cleanup_failed: list[str]) -> int:
         print(f"HANDLES edges: {len(edges)}")
 
         print("\n## C6: trace_path --mode cross_service from getMemory")
-        trace_raw = engine_cli(
-            binary,
+        trace_args = (
             "trace_path",
             "--function-name",
             "getMemory",
@@ -190,15 +247,17 @@ def _run(args, cleanup_failed: list[str]) -> int:
             "cross_service",
             "--depth",
             "4",
+            "--include-evidence",
+            "true",
         )
-        trace = json.loads(trace_raw[trace_raw.find("{") : trace_raw.rfind("}") + 1])
+        # Both encodings: the text is what a maintainer reads in an issue, the
+        # JSON is what the assertion below can be trusted against.
+        print(engine_cli(binary, *trace_args))
+        trace = _as_json(engine_cli(binary, *trace_args, "--format", "json")) or {}
         print(json.dumps(trace, indent=2))
-        reached = [
-            c.get("name")
-            for c in (trace.get("callees") or [])
-            if isinstance(c, dict) and c.get("name") == "get_memory"
-        ]
-        print(f"\nreached the Python handler: {bool(reached)}")
+        callees = _rows(trace.get("callees"))
+        reached = [c for c in callees if c.get("name") == "get_memory"]
+        print(f"{chr(10)}reached the Python handler: {bool(reached)}")
 
         print("\n## Route node keys")
         route_keys = _route_keys(store)
@@ -222,13 +281,16 @@ def _run(args, cleanup_failed: list[str]) -> int:
         if not c6_ready:
             print(
                 "\n"
-                "C6 NOT REPRODUCED. Only server-declared routes were indexed, so the\n"
-                "trace above measures whether the client call was recognised at all,\n"
-                "NOT the __route__ANY__ to __route__GET__ join failure it is meant to\n"
-                "show. A direct fetch() is not detected; the real project's client\n"
-                "calls through a shared request() wrapper and does produce these\n"
-                "nodes. Until the recognised client shape is known, C4 above is the\n"
-                "only finding this fixture reproduces."
+                "C6 NOT REPRODUCED, and this is expected. Only server-declared routes\n"
+                "were indexed, so the trace above measures whether the client call was\n"
+                "recognised at all, NOT the __route__ANY__ to __route__GET__ join\n"
+                "failure it is meant to show. Two client shapes have been tried here, a\n"
+                "bare fetch() at the call site and the request(method, path) wrapper\n"
+                "above; neither produces a client route node in a two-file project,\n"
+                "while the real project's marm-api.ts produces sixteen. Upstream #1147\n"
+                "is the likeliest reason, a template literal over a module constant not\n"
+                "being extracted. C6 itself is already filed upstream as #1611 and\n"
+                "#678, so C4 above is the only finding this fixture needs to carry."
             )
         if not c4_ready:
             return 4
@@ -252,6 +314,11 @@ def _run(args, cleanup_failed: list[str]) -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument(
+        "--binary",
+        help="engine executable to run instead of the pinned one, for checking "
+        "whether a candidate release still reproduces before an issue is filed",
+    )
     ap.add_argument(
         "--keep",
         action="store_true",

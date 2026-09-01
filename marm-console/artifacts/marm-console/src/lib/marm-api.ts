@@ -55,6 +55,16 @@ import type {
   ProjectStatus,
   ProjectSummary,
   RuntimeSettings,
+  RuntimeProfile,
+  RuntimeProfileResult,
+  MaintenanceStatus,
+  DoctorStatus,
+  RuntimeLogs,
+  UpgradeCheck,
+  BackupList,
+  BackupItem,
+  CompactionDryRunJob,
+  ReloadDocsJob,
   RuntimeTrace,
   Session,
   SessionSummary,
@@ -271,6 +281,30 @@ export function createMarmClient(config: MarmClientConfig) {
       request<{ status: string; scope: 'graph' | 'concept'; enabled: boolean; effective: string }>(
         config, 'PUT', '/settings/automation', { body: { scope, enabled } },
       ),
+    updateRuntimeProfile: (profile: RuntimeProfile, rateLimitRpm?: number | null) =>
+      request<RuntimeProfileResult>(
+        config, 'PUT', '/settings/profile',
+        { body: { profile, rate_limit_rpm: rateLimitRpm ?? null } },
+      ),
+    getMaintenance: () => request<MaintenanceStatus>(config, 'GET', '/settings/maintenance'),
+    startCompactionDryRun: (sessionName: string) =>
+      request<CompactionDryRunJob>(
+        config, 'POST', '/settings/maintenance/compaction-dry-run',
+        { body: { session_name: sessionName } },
+      ),
+    getCompactionDryRun: (jobId: string) =>
+      request<CompactionDryRunJob>(config, 'GET', `/settings/maintenance/compaction-dry-run/${jobId}`),
+    startReloadDocs: () => request<ReloadDocsJob>(config, 'POST', '/settings/maintenance/reload-docs', { body: {} }),
+    getReloadDocs: (jobId: string) =>
+      request<ReloadDocsJob>(config, 'GET', `/settings/maintenance/reload-docs/${jobId}`),
+    getDoctor: () => request<DoctorStatus>(config, 'GET', '/settings/doctor'),
+    getRuntimeLogs: (lines: number) =>
+      request<RuntimeLogs>(config, 'GET', '/settings/logs', { query: { lines } }),
+    getUpgradeCheck: () => request<UpgradeCheck>(config, 'GET', '/settings/upgrade-check'),
+    getBackups: () => request<BackupList>(config, 'GET', '/settings/backups'),
+    createBackup: () => request<{ status: string; backup: BackupItem }>(config, 'POST', '/settings/backups', { body: {} }),
+    deleteBackup: (name: string) =>
+      request<{ status: string; deleted: string }>(config, 'DELETE', `/settings/backups/${encodeURIComponent(name)}`),
 
     // Projects / code graph
     listProjects: () => request<ProjectSummary[]>(config, 'GET', '/projects'),

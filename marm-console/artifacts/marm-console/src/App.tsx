@@ -8,6 +8,7 @@ import { OverviewPage } from '@/pages/Overview';
 import { MemoryPage } from '@/pages/Memory';
 import { KnowledgePage } from '@/pages/Knowledge';
 import { ProjectsPage } from '@/pages/Projects';
+import { SystemPage } from '@/pages/System';
 import NotFound from '@/pages/not-found';
 
 const queryClient = new QueryClient({
@@ -28,6 +29,7 @@ function Router() {
         <Route path="/memory" component={MemoryPage} />
         <Route path="/knowledge" component={KnowledgePage} />
         <Route path="/projects" component={ProjectsPage} />
+        <Route path="/system" component={SystemPage} />
         <Route component={NotFound} />
       </Switch>
     </Shell>
