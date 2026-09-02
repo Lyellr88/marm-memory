@@ -38,6 +38,7 @@ export const queryKeys = {
   projectCodeUnits: (baseUrl: string, project: string) => ['projectCodeUnits', baseUrl, project],
   projectGraph: (baseUrl: string, project: string) => ['projectGraph', baseUrl, project],
   projectGraphNeighborhood: (baseUrl: string, project: string, nodeId: string) => ['projectGraphNeighborhood', baseUrl, project, nodeId],
+  projectCodeUnitEdges: (baseUrl: string, project: string, unit: string) => ['projectCodeUnitEdges', baseUrl, project, unit],
   projectMemoryLinking: (baseUrl: string, project: string) => ['projectMemoryLinking', baseUrl, project],
   projectMemoryLinks: (baseUrl: string, project: string) => ['projectMemoryLinks', baseUrl, project],
 };
@@ -698,6 +699,15 @@ export function useProjectGraphNeighborhood(project: string, nodeId: string | nu
     queryKey: queryKeys.projectGraphNeighborhood(baseUrl, project, nodeId || ''),
     queryFn: () => client.getProjectGraphNeighborhood(project, nodeId || ''),
     enabled: !!project && !!nodeId && enabled,
+  });
+}
+
+export function useProjectCodeUnitEdges(project: string, unit: string | null, enabled = true) {
+  const { baseUrl, client } = useMarmConfig();
+  return useQuery({
+    queryKey: queryKeys.projectCodeUnitEdges(baseUrl, project, unit || ''),
+    queryFn: () => client.getProjectCodeUnitEdges(project, unit || ''),
+    enabled: !!project && !!unit && enabled,
   });
 }
 

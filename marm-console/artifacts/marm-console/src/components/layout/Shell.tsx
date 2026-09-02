@@ -3,7 +3,8 @@ import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { Link, useLocation } from 'wouter';
 import { useOverview, isAuthError } from '@/hooks/use-marm-queries';
 import { SettingsDialog } from './SettingsDialog';
-import { Settings, Database, Activity, Compass, Network, FolderCode, ServerCog, ChevronRight } from 'lucide-react';
+import { TerminalDock, readPersistedDockOpen } from '@/components/terminal/TerminalDock';
+import { Settings, Database, Activity, Compass, Network, FolderCode, ServerCog, AppWindowMac, ChevronRight } from 'lucide-react';
 import { cn } from '@/components/ui/core';
 
 const THEME_STORAGE_KEY = 'marm-console-accent';
@@ -32,6 +33,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
   const [navigationOpen, setNavigationOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [terminalOpen, setTerminalOpen] = useState(readPersistedDockOpen);
   const [accentTheme, setAccentTheme] = useState<AccentTheme>(getInitialTheme);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
   const { data, error, isFetching } = useOverview();
@@ -44,6 +46,17 @@ export function Shell({ children }: { children: React.ReactNode }) {
       // Theme selection still applies for the current session.
     }
   }, [accentTheme]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.ctrlKey && event.key === '`') {
+        event.preventDefault();
+        setTerminalOpen((current) => !current);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   let statusColor = 'bg-gray-500';
   let statusText = 'Disconnected';
@@ -95,6 +108,21 @@ export function Shell({ children }: { children: React.ReactNode }) {
             <span className="h-0.5 w-full rounded-full bg-primary transition-transform duration-200" />
           </button>
         )}
+
+        <button
+          type="button"
+          aria-label="Toggle terminal"
+          title="Toggle terminal (Ctrl+`)"
+          onClick={() => setTerminalOpen((current) => !current)}
+          className={cn(
+            'fixed right-4 top-4 z-[70] flex h-12 w-12 items-center justify-center rounded-lg border shadow-[0_12px_34px_rgba(0,0,0,0.32)] backdrop-blur-xl transition-[border-color,background-color,box-shadow] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60',
+            terminalOpen
+              ? 'border-primary/55 bg-accent text-primary'
+              : 'border-primary/25 bg-sidebar/90 text-muted-foreground hover:border-primary/55 hover:bg-accent hover:text-foreground'
+          )}
+        >
+          <AppWindowMac className="h-6 w-6" />
+        </button>
 
         <DialogPrimitive.Portal>
           <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-[#01040a]/55 backdrop-blur-[2px] data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0" />
@@ -206,6 +234,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         </main>
 
         <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+        <TerminalDock open={terminalOpen} onClose={() => setTerminalOpen(false)} />
       </div>
     </DialogPrimitive.Root>
   );

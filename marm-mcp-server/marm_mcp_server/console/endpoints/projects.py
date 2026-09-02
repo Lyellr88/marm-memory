@@ -172,6 +172,18 @@ def get_project_code_units(project: str) -> dict:
     return _project_operation("internal/projects/code-units", {"project": project})
 
 
+@router.get("/api/projects/{project}/code-units/edges")
+def get_project_code_unit_edges(
+    project: str,
+    unit: str = Query(
+        ..., min_length=1, max_length=1024, pattern=r"^[A-Za-z0-9._/\\@+()\[\] -]+$"
+    ),
+) -> dict:
+    return _project_operation(
+        "internal/projects/code-units/edges", {"project": project, "unit": unit}
+    )
+
+
 @router.get("/api/projects/{project}/graph")
 def get_project_graph(project: str) -> dict:
     return _project_operation("internal/projects/graph", {"project": project})

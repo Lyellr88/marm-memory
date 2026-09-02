@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "marm-mcp-server"
-version = "2.46.2"
+version = "2.47.0"
 description = "Local-first 3-in-1 AI memory layer & MCP server for Claude Code, Codex, Grok, Gemini, VS Code and Cursor. Fuses session history, codebase indexing & concept graphs in SQLite. Enables zero-cloud, privacy-first context & instant recall also works with multi-agent swarms."
 readme = "README.md"
 license = "Apache-2.0"
@@ -45,6 +45,8 @@ dependencies = [
     "codebase-memory-mcp==0.10.5",
     "spacy>=3.8.0,<3.9.0",
     "watchdog>=4.0.0,<7.0.0",
+    "websockets>=13.0",
+    "pywinpty>=2.0.13; sys_platform == 'win32'",
 ]
 
 [project.urls]
@@ -86,6 +88,7 @@ exclude = ["tests*", "*.tests*", "docs*"]
 
 [tool.mypy]
 python_version = "3.10"
+platform = "linux"
 warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = true
@@ -98,6 +101,7 @@ module = [
     "apscheduler.*",
     "fastapi_mcp",
     "watchdog.*",
+    "winpty.*",
 ]
 ignore_missing_imports = true
 

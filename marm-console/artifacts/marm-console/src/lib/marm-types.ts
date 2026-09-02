@@ -666,6 +666,20 @@ export interface CodeUnit {
   fan_out: number;
 }
 
+export interface CodeUnitEdge {
+  path: string;
+  count: number;
+}
+
+export interface CodeUnitEdges {
+  state: 'ready' | 'unavailable';
+  reason?: string;
+  message?: string;
+  unit?: string;
+  imports: CodeUnitEdge[];
+  imported_by: CodeUnitEdge[];
+}
+
 export interface CodeUnits {
   // Every empty table has a reason. `indexed_no_summary` means the project is
   // indexed but holds no source the table recognises, which is not the same as

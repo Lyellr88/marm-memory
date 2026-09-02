@@ -64,6 +64,36 @@ _FAN_OUT_QUERY = (
     f"ORDER BY fan_out DESC, unit LIMIT {MAX_LIMIT}"
 )
 _IMPORT_EDGE_TOTAL_QUERY = "MATCH (a:File)-[r:IMPORTS]->(b) RETURN count(r) AS total"
+UNIT_EDGE_LIMIT = 100
+
+
+def _unit_import_queries(unit: str) -> tuple[str, str]:
+    # No :File label constraint, matching _FAN_IN_QUERY/_FAN_OUT_QUERY: the graph's
+    # IMPORTS endpoints aren't reliably labeled File, and a label match against them
+    # silently returns zero rows instead of erroring.
+    imports = (
+        f"MATCH (a {{file_path: '{unit}'}})-[r:IMPORTS]->(b) "
+        "RETURN b.file_path AS target, count(r) AS import_count "
+        f"ORDER BY target LIMIT {UNIT_EDGE_LIMIT}"
+    )
+    imported_by = (
+        f"MATCH (a)-[r:IMPORTS]->(b {{file_path: '{unit}'}}) "
+        "RETURN a.file_path AS source, count(r) AS import_count "
+        f"ORDER BY source LIMIT {UNIT_EDGE_LIMIT}"
+    )
+    return imports, imported_by
+
+
+def edges_unavailable(reason: str, message: str | None = None) -> dict:
+    body: dict = {
+        "state": "unavailable",
+        "reason": reason,
+        "imports": [],
+        "imported_by": [],
+    }
+    if message:
+        body["message"] = message
+    return body
 
 
 def _aliases(query: str) -> list[str]:
@@ -249,6 +279,43 @@ def code_units(
         "sampled": sampled,
         "fan_in_is_lower_bound": True,
         "code_units": rows[:bounded],
+    }
+
+
+def code_unit_edges(client: CbmClient, project: Optional[str], unit: str) -> dict:
+    """Direct imports and importers for one file, for an inline row-expansion preview.
+
+    Uses the same File+IMPORTS projection code_units() already trusts, scoped to
+    one unit instead of the whole graph, so a table row can preview its immediate
+    neighbors without a full graph round trip.
+    """
+    if not project or not _PROJECT_RE.match(project):
+        return edges_unavailable("invalid_project")
+    if not unit or not _FILE_PATH_RE.fullmatch(unit):
+        return edges_unavailable("invalid_unit")
+
+    imports_query, imported_by_query = _unit_import_queries(unit)
+    try:
+        imports_rows = _query(client, imports_query, project)
+        imported_by_rows = _query(client, imported_by_query, project)
+    except CodeGraphViewError as exc:
+        logger.warning("code_graph_view.contract", project=project, error=str(exc))
+        return edges_unavailable("contract_mismatch", str(exc))
+    except (CbmToolError, CbmError) as exc:
+        logger.warning("code_graph_view.backend", project=project, error=str(exc))
+        return edges_unavailable("graph_unavailable", str(exc))
+
+    return {
+        "state": "ready",
+        "unit": unit,
+        "imports": [
+            {"path": str(row.get("target")), "count": _as_int(row.get("import_count"))}
+            for row in imports_rows
+        ],
+        "imported_by": [
+            {"path": str(row.get("source")), "count": _as_int(row.get("import_count"))}
+            for row in imported_by_rows
+        ],
     }
 
 

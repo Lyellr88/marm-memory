@@ -50,6 +50,7 @@ import type {
   ProjectCoverage,
   CodeGraphSnapshot,
   CodeGraphNeighborhood,
+  CodeUnitEdges,
   CodeUnits,
   ProjectIndexInput,
   ProjectStatus,
@@ -326,6 +327,8 @@ export function createMarmClient(config: MarmClientConfig) {
       request<ProjectArchitecture>(config, 'GET', `/projects/${encodeURIComponent(project)}/architecture`),
     getProjectCodeUnits: (project: string) =>
       request<CodeUnits>(config, 'GET', `/projects/${encodeURIComponent(project)}/code-units`),
+    getProjectCodeUnitEdges: (project: string, unit: string) =>
+      request<CodeUnitEdges>(config, 'GET', `/projects/${encodeURIComponent(project)}/code-units/edges`, { query: { unit } }),
     getProjectGraph: (project: string) =>
       request<CodeGraphSnapshot>(config, 'GET', `/projects/${encodeURIComponent(project)}/graph`),
     getProjectGraphNeighborhood: (project: string, nodeId: string) =>

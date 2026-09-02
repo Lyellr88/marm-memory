@@ -35,6 +35,7 @@ vi.mock('@/hooks/use-marm-queries', () => ({
   useProjectImpact: () => ({ isPending: false, mutate: vi.fn(), reset: mutationState.impactReset }),
   useProjectArchitecture: () => ({ data: undefined, isLoading: false }),
   useProjectCodeUnits: () => ({ data: undefined, isLoading: false, isError: false }),
+  useProjectCodeUnitEdges: () => ({ data: undefined, isLoading: false, isError: false }),
   useProjectCoverage: () => ({ data: undefined, isLoading: false, isError: false }),
   useProjectAdr: (project: string) => ({
     data: project === 'marm-systems'
@@ -83,10 +84,21 @@ describe('ExplorerPage', () => {
     renderExplorer();
 
     expect(screen.getByRole('heading', { name: 'Project Explorer' })).toBeTruthy();
-    for (const label of ['Architecture', 'Code search', 'Trace symbol', 'Impact', 'Coverage', 'Decisions', 'Runtime traces']) {
+    for (const label of ['Architecture', 'Impact', 'Coverage', 'Decisions', 'Runtime traces']) {
       expect(screen.getByRole('tab', { name: label })).toBeTruthy();
     }
     expect(screen.queryByRole('tab', { name: 'Investigate' })).toBeNull();
+    expect(screen.queryByRole('tab', { name: 'Code search' })).toBeNull();
+    expect(screen.queryByRole('tab', { name: 'Trace symbol' })).toBeNull();
+  });
+
+  it('opens the search & trace palette with Ctrl+K', async () => {
+    const user = userEvent.setup();
+    renderExplorer();
+
+    expect(screen.queryByRole('dialog', { name: 'Search & trace' })).toBeNull();
+    await user.keyboard('{Control>}k{/Control}');
+    expect(screen.getByRole('dialog', { name: 'Search & trace' })).toBeTruthy();
   });
 
   it('selects the project named in the URL rather than the first one', () => {
