@@ -1,0 +1,149 @@
+name: Docker CI
+
+# The 8 container tests in tests/test_docker_transports.py only ever ran in
+# publish-mcp.yml, which triggers on a `v*` tag. That put every Docker runtime
+# regression on the far side of a release: the tag is already spent by the time
+# the suite says it broke. This workflow builds the image on the PR and runs
+# those tests against it, so the failure lands on the PR that caused it.
+#
+# No `paths:` filter, deliberately. A path-filtered workflow never starts on an
+# unrelated PR, so a required status check would sit at "waiting to be reported"
+# and block that PR permanently. The job runs every time and decides internally
+# whether there is work, which keeps it eligible to be a required check.
+on:
+  pull_request:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+# Keyed on the PR number, not head_ref: two PRs from different forks can both
+# use a branch called `main`, and sharing a group means one cancels the other's
+# required check, leaving that PR blocked with nothing to report.
+concurrency:
+  group: docker-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  docker:
+    runs-on: ubuntu-latest
+    env:
+      # Explicit rather than leaning on the fixture default in
+      # tests/test_docker_transports.py, so the tag built below and the tag
+      # under test cannot drift apart silently.
+      MARM_DOCKER_IMAGE: lyellr88/marm-mcp-server:latest
+    steps:
+      # persist-credentials: false because the steps below build and run a
+      # PR-controlled Dockerfile, and the default leaves the job's token in
+      # .git/config where that build can read it. The gh call below passes
+      # GH_TOKEN itself, so it is unaffected.
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      # A skip-list, not an allow-list: default to running, and skip only when
+      # every changed file provably cannot reach the image. Dockerfile changes
+      # are deliberately not the trigger -- Dockerfile:11-13 and :48 put
+      # marm_mcp_server/ and marm_graph/ inside the image, so a source-only
+      # change alters the container while touching no Docker file at all.
+      # `grep -qv` asks whether any changed file falls outside the skip set, so
+      # anything unrecognized runs the tests: it fails safe by construction, and
+      # an empty or failed `gh pr diff` lands on run=true for the same reason.
+      #
+      # .claude/, .codex/ and .kiro/ are gitignored today (.gitignore:103-105),
+      # so they cannot appear in a PR diff; they are listed to hold the intent
+      # if that ever changes. The saving that is real today is documentation-only
+      # PRs and every Dependabot npm PR against marm-console/.
+      - name: Detect relevant changes
+        id: scope
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          files=$(gh pr diff "${{ github.event.number }}" --name-only)
+          if printf '%s\n' "$files" | grep -qvE '^(docs/|marm-console/|\.claude/|\.codex/|\.kiro/|scripts/benchmarking/|[^/]*\.md$)'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "No image-affecting paths changed. Reporting success without building."
+          fi
+
+      # Python version matches publish-mcp.yml's validate-and-test. If they
+      # drift, this job stops predicting the release gate.
+      - name: Set up Python
+        if: steps.scope.outputs.run == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache pip
+        if: steps.scope.outputs.run == 'true'
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('marm-mcp-server/pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      # The tests import marm_mcp_server.server for MCP_TOOL_OPERATIONS, so the
+      # package and its runtime dependencies have to be installed even though
+      # the server under test runs inside the container.
+      #
+      # No bundle-concept-model.py step, unlike python.yml and publish-mcp.yml.
+      # It is needed there because concept tests are skipif-guarded on the model
+      # being present; nothing here is. The import is safe without it
+      # (config/settings.py:37-39 probes for the model with is_file() and
+      # spacy.load is lazy, at core/concept_extraction.py:70), and the image
+      # bundles its own copy during the build (Dockerfile:15).
+      - name: Install dependencies
+        if: steps.scope.outputs.run == 'true'
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r marm-mcp-server/requirements.txt
+          pip install -e './marm-mcp-server' --no-deps
+          pip install pytest pytest-asyncio requests
+
+      - name: Set up Docker Buildx
+        if: steps.scope.outputs.run == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      # Lifted from publish-mcp.yml's build step: same context, same tag, same
+      # GHA cache scope, so a PR build reads the layers the last release build
+      # wrote instead of starting cold.
+      #
+      # publish-mcp.yml builds the console frontend into
+      # marm_mcp_server/console/static/ before this step and this workflow does
+      # not, because none of the docker-marked tests touch the console. The PR
+      # image is therefore NOT byte-identical to the released one: it is the
+      # same server without the bundled console assets. Anything testing the
+      # console in a container needs that build step added here first.
+      - name: Build Docker image
+        if: steps.scope.outputs.run == 'true'
+        uses: docker/build-push-action@v5
+        with:
+          context: marm-mcp-server
+          push: false
+          load: true
+          tags: lyellr88/marm-mcp-server:latest
+          cache-from: type=gha,scope=marm-mcp-server
+          cache-to: type=gha,scope=marm-mcp-server,mode=max
+
+      # The whole point of this workflow is that these tests actually execute.
+      # Their fixture skips -- rather than fails -- when the daemon or the image
+      # is missing, which is correct for a laptop and a false green here: a
+      # renamed tag or a build that silently produced nothing would leave the
+      # job reporting success having tested nothing. Assert the image is really
+      # loaded first, so that failure mode is red instead of green.
+      - name: Verify the image is loaded
+        if: steps.scope.outputs.run == 'true'
+        run: docker image inspect "$MARM_DOCKER_IMAGE" > /dev/null
+
+      # -m docker selects exactly the 8 container tests in
+      # test_docker_transports.py. The other 35 Docker tests are static text and
+      # argv assertions, are not docker-marked, and already run in python.yml.
+      # -rs so a skip that does slip through is visible in the log rather than
+      # buried in a dot.
+      - name: Run docker-marked tests
+        if: steps.scope.outputs.run == 'true'
+        working-directory: marm-mcp-server
+        run: python -m pytest tests/ -v -rs -m docker
