@@ -1,6 +1,39 @@
 # Changelog
 
 <details>
+<summary><strong>September 2nd, 2026: An Embedded Terminal, Deeper Architecture Tab Tooling, and a Concept-Build Phantom Fix (v2.47.0)</strong></summary>
+
+### Added: Embedded Terminal in MARM Console
+
+A real shell, backed by a native PTY (ConPTY on Windows, `pty`/`termios` on Linux and macOS), now runs in a dock at the bottom of the Console and is reachable from any page, not just one tab.
+
+- Toggle it from anywhere with the terminal button in the top-right corner or `Ctrl+\``. It stays off by default: it requires `MARM_CONSOLE_TERMINAL=1` and refuses to run unless the Console is bound to loopback, so nothing changes for anyone who hasn't opted in.
+- Up to 10 independent PTY sessions per dock, each its own tab. The dock is resizable by dragging its top edge and can be minimized without losing a session.
+- A session survives closing the dock or refreshing the browser page: the backend detaches the shell rather than killing it on disconnect, buffers its output, and replays that buffer when a new connection reattaches to the same session id. A detached session is only killed after 10 minutes with nothing reattached, or when its tab is explicitly closed.
+- Per-session settings (font, cursor, clipboard, scrollback, bell), a keyboard-shortcut reference, and in-terminal search (`Ctrl+F`) are available from the dock header.
+- A first-run guide walks through picking an operating system, then installing and launching Claude Code, Codex, or Antigravity CLI (Google's replacement for Gemini CLI), with the correct install command for Windows, macOS, or Linux and a dependency check for Node.js/npm and Git. It reappears on every launch by default; a "Don't launch on startup" checkbox turns that off.
+- The WebSocket auth check for the terminal now mirrors the console's own keyless-loopback exception, matching every other `/api/*` route, so the common local setup (no `MARM_API_KEY` configured) can actually open a terminal instead of being refused by a stricter rule that only the terminal enforced.
+
+### Added: Deeper Architecture Tab Tooling in Project Explorer
+
+- Code Structure rows now expand inline to show a file's direct "Imported by" and "Imports" lists, reusing the same import-edge query the fan-in/fan-out counts already trust, scoped to one file instead of the whole graph.
+- Code Search and Trace Symbol are merged into one `Ctrl+K` command palette on the Project Explorer page, with an inline "Trace" action per search result, replacing two separate near-identical tabs.
+- Node-type badges (Function, Class, File, and the rest of the graph's schema) now explain via tooltip why they can't filter the table below them: that table is file-level import structure only, and there is no "browse everything of this type" capability in the graph search backend today. A badge that pretended to filter would have shown wrong or empty results, so it says so instead.
+- The Project Explorer header and the Console's other pages were adjusted where the new terminal toggle button (below) overlapped existing controls.
+
+### Fixed: Resetting the Concept Graph Could Resurrect a Finished Build as Stuck "Queued"
+
+The Console's build-launch tracking held an in-memory placeholder for up to 5 minutes to bridge the gap before a new concept build's row lands in the database. A graph reset within that window deletes the row outright, and the still-live placeholder would then resurface in the build history as a phantom "queued" build, indefinitely, since nothing had ever told it the build was actually done.
+
+- The placeholder is now retired permanently the moment its database row is observed, instead of merely being filtered out of that one response, so a later reset can no longer resurrect a completed build.
+
+### Upgrade Note
+
+No action required. The terminal is opt-in and disabled by default.
+
+</details>
+
+<details>
 <summary><strong>September 2nd, 2026: Docker Tests Now Run in PR CI, and a Repaired Chunking Smoke Test (v2.46.2)</strong></summary>
 
 ### Added: Docker-Marked Tests Now Run on Every Pull Request

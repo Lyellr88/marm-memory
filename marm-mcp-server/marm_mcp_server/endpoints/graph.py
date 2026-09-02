@@ -62,6 +62,15 @@ class ConsoleGraphNeighborhoodRequest(ConsoleProjectRequest):
     )
 
 
+class ConsoleCodeUnitEdgesRequest(ConsoleProjectRequest):
+    unit: str = Field(
+        ...,
+        min_length=1,
+        max_length=1024,
+        pattern=r"^[A-Za-z0-9._/\\@+()\[\] -]+$",
+    )
+
+
 class ConsoleTraceRequest(BaseModel):
     project: str = Field(..., min_length=1, max_length=512)
     symbol: str = Field(..., min_length=1, max_length=1024)
@@ -550,6 +559,17 @@ async def console_project_code_units(req: ConsoleProjectRequest) -> dict:
         return code_graph_view.unavailable("graph_unavailable")
     return await asyncio.to_thread(
         code_graph_view.code_units, client, req.project, code_graph_view.MAX_LIMIT
+    )
+
+
+@router.post("/internal/projects/code-units/edges")
+async def console_project_code_unit_edges(req: ConsoleCodeUnitEdgesRequest) -> dict:
+    """Console-only. Direct imports/importers for one file, for row expansion."""
+    client = await asyncio.to_thread(graph_supervisor.get_client)
+    if client is None:
+        return code_graph_view.edges_unavailable("graph_unavailable")
+    return await asyncio.to_thread(
+        code_graph_view.code_unit_edges, client, req.project, req.unit
     )
 
 

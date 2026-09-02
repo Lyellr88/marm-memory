@@ -47,29 +47,29 @@ export function KnowledgePage() {
 
   return (
     <div className="page-enter p-7 xl:p-8 flex flex-col h-full overflow-hidden">
-      <div className="flex justify-between items-center mb-6 shrink-0">
-        <div>
-          <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-primary/80">Semantic intelligence</div>
-          <h1 className="text-[1.8rem] font-semibold tracking-[-0.045em]">Knowledge Graph</h1>
-          <p className="text-muted-foreground text-sm mt-1">Explore memory concepts, indexed code structure, provenance, and duplicate concepts.</p>
-        </div>
-        <Button onClick={() => setBuildOpen(true)} variant="secondary">
-          <Layers className="w-4 h-4 mr-2" /> Build Concepts
-        </Button>
+      <div className="mb-6 shrink-0">
+        <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-primary/80">Semantic intelligence</div>
+        <h1 className="text-[1.8rem] font-semibold tracking-[-0.045em]">Knowledge Graph</h1>
+        <p className="text-muted-foreground text-sm mt-1">Explore memory concepts, indexed code structure, provenance, and duplicate concepts.</p>
       </div>
 
       <Tabs defaultValue="memory" className="flex-1 flex flex-col overflow-hidden">
-        <TabsList className="self-start shrink-0 mb-4 bg-transparent border-x-0 border-t-0 border-b rounded-none w-full justify-start p-0 h-auto">
-          <TabsTrigger value="memory" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent py-3 px-5">
-            Memory Explorer
-          </TabsTrigger>
-          <TabsTrigger value="code" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent py-3 px-5">
-            Code Explorer
-          </TabsTrigger>
-          <TabsTrigger value="duplicates" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent py-3 px-5">
-            Potential Duplicates
-          </TabsTrigger>
-        </TabsList>
+        <div className="flex shrink-0 items-center justify-between gap-4 border-b mb-4">
+          <TabsList className="self-start bg-transparent border-0 rounded-none justify-start p-0 h-auto">
+            <TabsTrigger value="memory" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent py-3 px-5">
+              Memory Explorer
+            </TabsTrigger>
+            <TabsTrigger value="code" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent py-3 px-5">
+              Code Explorer
+            </TabsTrigger>
+            <TabsTrigger value="duplicates" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent py-3 px-5">
+              Potential Duplicates
+            </TabsTrigger>
+          </TabsList>
+          <Button onClick={() => setBuildOpen(true)} variant="secondary" className="shrink-0">
+            <Layers className="w-4 h-4 mr-2" /> Build Concepts
+          </Button>
+        </div>
 
         <div className="flex-1 overflow-hidden min-h-0">
           <TabsContent value="memory" className="m-0 h-full">

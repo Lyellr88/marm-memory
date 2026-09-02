@@ -258,6 +258,12 @@ def test_project_intelligence_routes_preserve_the_console_contract(monkeypatch):
             "nodes": [],
             "edges": [],
         },
+        "internal/projects/code-units/edges": {
+            "state": "ready",
+            "unit": "src/main.py",
+            "imports": [{"path": "src/db.py", "count": 1}],
+            "imported_by": [],
+        },
         "internal/projects/adr": {"content": "# Decisions"},
         "internal/projects/adr/update": {"status": "success"},
         "internal/projects/runtime-traces": {"status": "success", "ingested": 1},
@@ -277,6 +283,9 @@ def test_project_intelligence_routes_preserve_the_console_contract(monkeypatch):
         neighborhood = client.get(
             "/api/projects/proj/graph/neighborhood?node_id=src/main.py"
         )
+        code_unit_edges = client.get(
+            "/api/projects/proj/code-units/edges?unit=src/main.py"
+        )
         adr = client.get("/api/projects/proj/adr")
         update = client.put("/api/projects/proj/adr", json={"content": "# Decisions"})
         traces = client.post(
@@ -288,6 +297,7 @@ def test_project_intelligence_routes_preserve_the_console_contract(monkeypatch):
         coverage.status_code
         == graph.status_code
         == neighborhood.status_code
+        == code_unit_edges.status_code
         == adr.status_code
         == 200
     )
@@ -295,6 +305,7 @@ def test_project_intelligence_routes_preserve_the_console_contract(monkeypatch):
     assert coverage.json()["signal"] == "best_effort"
     assert graph.json()["rendered"] == {"code_units": 3, "import_edges": 2}
     assert neighborhood.json()["seed_id"] == "src/main.py"
+    assert code_unit_edges.json()["imports"] == [{"path": "src/db.py", "count": 1}]
     assert adr.json()["content"] == "# Decisions"
     assert update.json()["status"] == traces.json()["status"] == "success"
     assert calls == [
@@ -303,6 +314,10 @@ def test_project_intelligence_routes_preserve_the_console_contract(monkeypatch):
         (
             "internal/projects/graph/neighborhood",
             {"project": "proj", "node_id": "src/main.py"},
+        ),
+        (
+            "internal/projects/code-units/edges",
+            {"project": "proj", "unit": "src/main.py"},
         ),
         ("internal/projects/adr", {"project": "proj"}),
         ("internal/projects/adr/update", {"project": "proj", "content": "# Decisions"}),

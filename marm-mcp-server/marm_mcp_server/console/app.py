@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import logging
 import os
 import secrets
@@ -28,6 +30,8 @@ from .endpoints import (
     sessions,
     settings,
 )
+from .terminal.router import router as terminal_router
+from .terminal.router import start_sweep as start_terminal_sweep
 
 
 def _allowed_origins() -> list[str]:
@@ -71,7 +75,13 @@ async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
             "MARM Console frontend assets are missing; API remains available."
         )
     threading.Thread(target=_warm_project_cache, daemon=True).start()
-    yield
+    sweep_task = start_terminal_sweep()
+    try:
+        yield
+    finally:
+        sweep_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await sweep_task
 
 
 app = FastAPI(
@@ -141,6 +151,7 @@ app.include_router(compaction.router)
 app.include_router(concepts.router)
 app.include_router(projects.router)
 app.include_router(settings.router)
+app.include_router(terminal_router)
 
 
 @app.post("/api/auth/bootstrap", include_in_schema=False)

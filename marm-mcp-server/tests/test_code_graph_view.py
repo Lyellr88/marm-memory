@@ -517,3 +517,69 @@ def test_code_graph_neighborhood_rejects_backslash_before_engine_call():
 def test_import_edge_query_rejects_unvalidated_paths():
     with pytest.raises(ValueError, match="validated file identities"):
         V._import_edges_query(["src/unsafe'path.py"])
+
+
+def test_code_unit_edges_returns_direct_imports_and_importers():
+    unit = "marm-mcp-server/marm_mcp_server/config/settings.py"
+    client = FakeClient(
+        {
+            "AS target, count(r) AS import_count": {
+                "columns": ["target", "import_count"],
+                "rows": [["marm-mcp-server/marm_mcp_server/server.py", "1"]],
+                "total": 1,
+            },
+            "AS source, count(r) AS import_count": {
+                "columns": ["source", "import_count"],
+                "rows": [
+                    ["marm-mcp-server/marm_mcp_server/core/memory.py", "2"],
+                    ["marm-mcp-server/marm_mcp_server/server.py", "1"],
+                ],
+                "total": 2,
+            },
+        }
+    )
+
+    result = V.code_unit_edges(client, PROJECT, unit)
+
+    assert result["state"] == "ready"
+    assert result["unit"] == unit
+    assert result["imports"] == [
+        {"path": "marm-mcp-server/marm_mcp_server/server.py", "count": 1}
+    ]
+    assert result["imported_by"] == [
+        {"path": "marm-mcp-server/marm_mcp_server/core/memory.py", "count": 2},
+        {"path": "marm-mcp-server/marm_mcp_server/server.py", "count": 1},
+    ]
+
+
+def test_code_unit_edges_rejects_query_shaped_unit_before_engine_call():
+    client = FakeClient()
+
+    result = V.code_unit_edges(client, PROJECT, "x'}) DETACH DELETE (n {x:'")
+
+    assert result["state"] == "unavailable"
+    assert result["reason"] == "invalid_unit"
+    assert client.calls == []
+
+
+def test_code_unit_edges_reports_unavailable_when_project_is_invalid():
+    client = FakeClient()
+
+    result = V.code_unit_edges(client, "", "src/app.py")
+
+    assert result["state"] == "unavailable"
+    assert result["reason"] == "invalid_project"
+    assert client.calls == []
+
+
+def test_code_unit_edges_surfaces_backend_failure():
+    class Boom:
+        def call_tool(self, *args, **kwargs):
+            raise CbmToolError("engine unavailable")
+
+    result = V.code_unit_edges(Boom(), PROJECT, "src/app.py")
+
+    assert result["state"] == "unavailable"
+    assert result["reason"] == "graph_unavailable"
+    assert result["imports"] == []
+    assert result["imported_by"] == []

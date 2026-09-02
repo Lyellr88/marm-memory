@@ -174,17 +174,6 @@ export function OverviewPage() {
             <h1 className="text-[1.8rem] font-semibold tracking-[-0.045em]">Overview</h1>
             <p className="mt-1 text-sm text-muted-foreground">Memory health, graph readiness, and local runtime activity.</p>
           </div>
-          <div className="flex items-center gap-2">
-            <div className={cn('flex h-9 items-center gap-2 rounded-lg border px-3 font-mono text-[11px] font-semibold uppercase tracking-[0.08em]', reachable ? 'border-emerald-400/20 bg-emerald-400/[0.06] text-emerald-300' : 'border-destructive/30 bg-destructive/[0.06] text-red-300')}>
-              <span className={cn('h-1.5 w-1.5 rounded-full', reachable ? 'status-pulse bg-emerald-400' : 'bg-destructive')} />
-              MCP {reachable ? 'online' : 'offline'}
-            </div>
-            {overview.mcp_status?.latency_ms !== undefined && (
-              <div className="h-9 rounded-lg border border-border bg-[#080f1a]/80 px-3 py-2 font-mono text-xs text-muted-foreground">
-                {overview.mcp_status.latency_ms.toFixed(1)} ms
-              </div>
-            )}
-          </div>
         </header>
 
         <section className="grid grid-cols-4 gap-4" aria-label="System metrics">
@@ -282,7 +271,11 @@ export function OverviewPage() {
             <span className="flex items-center gap-1.5"><Cpu className="h-3.5 w-3.5" /> Runtime <span className="font-mono uppercase text-foreground/75">{overview.runtime_mode}</span></span>
             <span className="flex items-center gap-1.5"><GitBranch className="h-3.5 w-3.5" /> Local-first</span>
           </div>
-          <span className="font-mono">MARM MCP {overview.mcp_status?.version}</span>
+          <div className={cn('flex items-center gap-2 rounded-lg border px-3 py-1.5 font-mono text-[11px] font-semibold uppercase tracking-[0.08em]', reachable ? 'border-emerald-400/20 bg-emerald-400/[0.06] text-emerald-300' : 'border-destructive/30 bg-destructive/[0.06] text-red-300')}>
+            <span className={cn('h-1.5 w-1.5 rounded-full', reachable ? 'status-pulse bg-emerald-400' : 'bg-destructive')} />
+            MCP {reachable ? 'online' : 'offline'}
+            {overview.mcp_status?.version && <span className="opacity-70">· v{overview.mcp_status.version}</span>}
+          </div>
         </footer>
       </div>
     </div>

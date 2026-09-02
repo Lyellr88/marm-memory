@@ -123,6 +123,46 @@ def test_delete_graph_requires_the_literal_confirmation(monkeypatch):
     assert response.json()["schema_status"] == "rebuild_required"
 
 
+def test_reset_after_launch_does_not_resurrect_a_completed_build_as_queued(
+    monkeypatch, tmp_path
+):
+    """A build that finished and was reset should not reappear as "queued"
+    just because the console's in-flight launch placeholder outlives the
+    now-deleted DB row it was tracking."""
+    db_path = tmp_path / "marm_index.db"
+    _seed_build(db_path, run_id="run-1", status="success")
+    monkeypatch.setattr(concepts, "get_concept_db_path", lambda: db_path)
+
+    with concepts._launching_concept_builds_lock:
+        concepts._launching_concept_builds["run-1"] = (
+            {
+                "id": "run-1",
+                "status": "queued",
+                "created_at": "2026-08-21T12:00:00+00:00",
+            },
+            concepts.time.monotonic(),
+        )
+
+    with TestClient(app) as client:
+        seen_first = client.get("/api/concepts/builds").json()
+
+    assert seen_first[0]["id"] == "run-1"
+    assert seen_first[0]["status"] == "success"
+
+    # The graph reset deletes the persisted run row entirely.
+    ConceptDB(str(db_path))
+    import sqlite3
+
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("DELETE FROM concept_build_runs")
+        conn.commit()
+
+    with TestClient(app) as client:
+        seen_after_reset = client.get("/api/concepts/builds").json()
+
+    assert seen_after_reset == []
+
+
 def test_terminal_builds_are_never_presented_as_stale_runs():
     job = {
         "status": "cancelled",
