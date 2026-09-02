@@ -45,9 +45,9 @@ from marm_mcp_server.config.settings import (  # noqa: E402
 )
 from marm_mcp_server.core import memory as memory_module  # noqa: E402
 from marm_mcp_server.core.memory import (  # noqa: E402
-    CHUNK_OVERLAP_TOKENS,
-    CHUNK_THRESHOLD_WORDS,
-    CHUNK_TOKEN_LIMIT,
+    MEMORY_CHUNK_OVERLAP_WORDS,
+    MEMORY_CHUNK_TARGET_WORDS,
+    MEMORY_CHUNK_THRESHOLD_WORDS,
     MARMMemory,
     _chunk_text,
 )
@@ -59,9 +59,13 @@ from marm_mcp_server.core.memory_scoring import (  # noqa: E402
 SEP = "-" * 70
 SESSION = "smoke-chunking"
 
-# Long memory: first ~210 words are generic filler, distinctive phrase
+# Long memory: the first ~620 words are generic filler, distinctive phrase
 # "crystallization threshold boundary" only appears near the end.
 # Chunking preserves recall of the distinctive late-body phrase.
+# The filler repeats six times so the body clears MEMORY_CHUNK_THRESHOLD_WORDS
+# (500 since v2.14.0, 180 before it). At the old multiplier the body was 343
+# words, under the current threshold, so _chunk_text returned nothing at all
+# and every chunking assertion below was vacuous rather than wrong.
 _FILLER = (
     "This document covers general system architecture notes for the server. "
     "Connection pools are initialized at startup to reduce open/close overhead. "
@@ -74,13 +78,27 @@ _FILLER = (
     f"Embeddings are generated at {DEFAULT_SEMANTIC_DIM} dimensions. "
     "Compaction candidates are surfaced to agents after the configured write threshold. "
 )
-_LONG_BODY = (_FILLER * 3) + (
+_LONG_BODY = (_FILLER * 6) + (
     "The key operational parameter is the crystallization threshold boundary "
     "which governs phase transition detection in the downstream process pipeline. "
     "This value must be configured before calibration or results will be invalid."
 )
 
 SHORT_CONTENT = "MARM stores memories in SQLite with WAL mode."
+
+
+def _memory_chunks(text: str) -> list[str]:
+    """Chunk with the MEMORY profile, the one store_memory() actually uses.
+
+    _store_doc_mirror is the only writer that takes the DOC profile, so a
+    harness for the memory write path must pass the MEMORY_* values here.
+    """
+    return _chunk_text(
+        text,
+        threshold=MEMORY_CHUNK_THRESHOLD_WORDS,
+        target_size=MEMORY_CHUNK_TARGET_WORDS,
+        overlap=MEMORY_CHUNK_OVERLAP_WORDS,
+    )
 
 
 def _unit_vec(dim: int = DEFAULT_SEMANTIC_DIM) -> np.ndarray:
@@ -235,7 +253,7 @@ async def run(require_encoder: bool) -> bool:
         )
         r.check(
             "_chunk_text returns empty for short content",
-            _chunk_text(SHORT_CONTENT) == [],
+            _memory_chunks(SHORT_CONTENT) == [],
         )
         print()
 
@@ -243,34 +261,58 @@ async def run(require_encoder: bool) -> bool:
         print(SEP)
         print("CHECK 3: _chunk_text — threshold, size, overlap, full coverage")
         print(SEP)
-        long_word_count = len(_LONG_BODY.split())
+        all_words = _LONG_BODY.split()
+        long_word_count = len(all_words)
         print(
-            f"  Long body word count: {long_word_count}  threshold: {CHUNK_THRESHOLD_WORDS}"
+            f"  Long body word count: {long_word_count}  "
+            f"threshold: {MEMORY_CHUNK_THRESHOLD_WORDS}  "
+            f"target: {MEMORY_CHUNK_TARGET_WORDS}  "
+            f"overlap: {MEMORY_CHUNK_OVERLAP_WORDS}"
         )
-        chunks = _chunk_text(_LONG_BODY)
         r.check(
-            "_chunk_text produces chunks for long content",
-            len(chunks) > 0,
-            f"got {len(chunks)}",
+            "long body clears the chunking threshold",
+            long_word_count > MEMORY_CHUNK_THRESHOLD_WORDS,
+            f"{long_word_count} words vs threshold {MEMORY_CHUNK_THRESHOLD_WORDS}",
         )
-        oversized = [c for c in chunks if len(c.split()) > CHUNK_TOKEN_LIMIT]
+        chunks = _memory_chunks(_LONG_BODY)
+        expected_count = -(-long_word_count // MEMORY_CHUNK_TARGET_WORDS)
         r.check(
-            "no chunk exceeds CHUNK_TOKEN_LIMIT",
-            len(oversized) == 0,
-            f"oversized: {len(oversized)}",
+            "_chunk_text splits into ceil(words / target) chunks",
+            len(chunks) == expected_count,
+            f"got {len(chunks)}, expected {expected_count}",
         )
-        step = CHUNK_TOKEN_LIMIT - CHUNK_OVERLAP_TOKENS
+        # Each span is padded by overlap // 2 on both sides, so target alone is
+        # not the ceiling: target + overlap is.
+        sizes = [len(c.split()) for c in chunks]
+        size_cap = MEMORY_CHUNK_TARGET_WORDS + MEMORY_CHUNK_OVERLAP_WORDS
+        r.check(
+            "no chunk exceeds target + overlap",
+            max(sizes, default=0) <= size_cap,
+            f"sizes {sizes}, cap {size_cap}",
+        )
+        # The even split exists to stop a full-size chunk plus a tiny trailing
+        # fragment, which is what the old fixed sliding window produced.
+        r.check(
+            "no tiny trailing fragment — chunks are near-equal",
+            len(chunks) < 2 or min(sizes) >= max(sizes) // 2,
+            f"sizes {sizes}",
+        )
         if len(chunks) >= 2:
+            # Span starts come from an even division of the word list, with the
+            # remainder spread over the leading spans, then padded backwards by
+            # overlap // 2.
+            base, remainder = divmod(long_word_count, len(chunks))
+            span_start = base + min(1, remainder)
+            expected_index = max(0, span_start - MEMORY_CHUNK_OVERLAP_WORDS // 2)
             second_first_word = chunks[1].split()[0]
-            all_words = _LONG_BODY.split()
-            expected_first = all_words[step]
+            expected_first = all_words[expected_index]
             r.check(
-                "overlap is correct — second chunk starts at word index step",
+                "second chunk starts overlap // 2 words before its span",
                 second_first_word == expected_first,
                 f"got '{second_first_word}', want '{expected_first}'",
             )
         all_chunk_words = {w for c in chunks for w in c.split()}
-        all_body_words = set(_LONG_BODY.split())
+        all_body_words = set(all_words)
         r.check(
             "chunks collectively cover all words in the long body",
             all_body_words <= all_chunk_words,
@@ -432,7 +474,7 @@ async def run(require_encoder: bool) -> bool:
         else:
             live_id = await memory.store_memory(_LONG_BODY, session=SESSION)
             chunk_count = await _wait_for_chunks(db_path, live_id, timeout=25.0)
-            expected = len(_chunk_text(_LONG_BODY))
+            expected = len(_memory_chunks(_LONG_BODY))
             r.check(
                 "long content: background task writes chunk rows",
                 chunk_count == expected,
