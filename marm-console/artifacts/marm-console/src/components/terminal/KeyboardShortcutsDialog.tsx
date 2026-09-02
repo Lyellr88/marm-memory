@@ -1,5 +1,4 @@
-import { useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, Input } from '@/components/ui/core';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/core';
 
 interface KeyboardShortcutsDialogProps {
   open: boolean;
@@ -44,42 +43,35 @@ const CATEGORY_NAMES: Record<Shortcut['category'], string> = {
   shell: 'Shell',
 };
 
+const GROUPED = SHORTCUTS.reduce<Record<string, Shortcut[]>>((acc, shortcut) => {
+  (acc[shortcut.category] ??= []).push(shortcut);
+  return acc;
+}, {});
+
 export function KeyboardShortcutsDialog({ open, onOpenChange }: KeyboardShortcutsDialogProps) {
-  const [query, setQuery] = useState('');
-
-  const filtered = SHORTCUTS.filter(
-    (shortcut) => shortcut.keys.toLowerCase().includes(query.toLowerCase()) || shortcut.description.toLowerCase().includes(query.toLowerCase())
-  );
-  const grouped = filtered.reduce<Record<string, Shortcut[]>>((acc, shortcut) => {
-    (acc[shortcut.category] ??= []).push(shortcut);
-    return acc;
-  }, {});
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[calc(100vh-4rem)] max-w-md overflow-y-auto">
+      <DialogContent className="flex max-h-[calc(100vh-4rem)] max-w-3xl flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle>Keyboard Shortcuts</DialogTitle>
         </DialogHeader>
-        <Input placeholder="Search shortcuts..." value={query} onChange={(event) => setQuery(event.target.value)} autoFocus />
-        <div className="space-y-4 py-1">
-          {Object.keys(grouped).length === 0 ? (
-            <p className="py-6 text-center text-sm text-muted-foreground">No shortcuts found.</p>
-          ) : (
-            Object.entries(grouped).map(([category, shortcuts]) => (
-              <div key={category} className="space-y-2">
-                <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{CATEGORY_NAMES[category as Shortcut['category']]}</h3>
-                <div className="space-y-1.5">
-                  {shortcuts.map((shortcut) => (
-                    <div key={shortcut.keys + shortcut.description} className="flex items-center justify-between gap-3 text-sm">
-                      <kbd className="rounded border border-border/70 bg-muted/40 px-2 py-0.5 font-mono text-xs">{shortcut.keys}</kbd>
-                      <span className="flex-1 text-right text-muted-foreground">{shortcut.description}</span>
-                    </div>
-                  ))}
-                </div>
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto py-1 pr-1">
+          {Object.entries(GROUPED).map(([category, shortcuts]) => (
+            <div key={category} className="space-y-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{CATEGORY_NAMES[category as Shortcut['category']]}</h3>
+              <div className="columns-2 gap-3">
+                {shortcuts.map((shortcut) => (
+                  <div
+                    key={shortcut.keys + shortcut.description}
+                    className="mb-2.5 flex w-full break-inside-avoid flex-col gap-1 rounded-lg border border-border/70 bg-background/35 p-3"
+                  >
+                    <kbd className="w-fit rounded bg-primary/10 px-1.5 py-0.5 font-mono text-[11px] text-primary">{shortcut.keys}</kbd>
+                    <span className="text-sm text-muted-foreground">{shortcut.description}</span>
+                  </div>
+                ))}
               </div>
-            ))
-          )}
+            </div>
+          ))}
         </div>
       </DialogContent>
     </Dialog>

@@ -24,12 +24,10 @@ from .pty_session import (
 )
 from .state import TerminalRegistry
 
-TERMINAL_ENV = "MARM_CONSOLE_TERMINAL"
 HOST_ENV = "MARM_CONSOLE_HOST"
 PORT_ENV = "MARM_CONSOLE_PORT"
 ORIGINS_ENV = "MARM_CONSOLE_ALLOWED_ORIGINS"
 SESSION_COOKIE = "marm_console_session"
-_TRUTHY = {"1", "true", "yes", "on"}
 _CLOSE_POLICY = 1008
 
 # A refresh should not kill the shell underneath it, but a browser tab left
@@ -55,10 +53,6 @@ class Availability:
             "backend": self.backend,
             "shell": self.shell,
         }
-
-
-def _enabled() -> bool:
-    return os.environ.get(TERMINAL_ENV, "").strip().lower() in _TRUTHY
 
 
 def _bind_host() -> str:
@@ -122,13 +116,6 @@ def _authorized(websocket: WebSocket) -> bool:
 
 
 def terminal_availability() -> Availability:
-    if not _enabled():
-        return Availability(
-            False,
-            f"Terminal is disabled. Set {TERMINAL_ENV}=1 to enable it.",
-            "none",
-            None,
-        )
     if not _loopback_only():
         return Availability(
             False,
@@ -319,8 +306,6 @@ async def terminal_socket(websocket: WebSocket) -> None:
 async def _sweep_loop(interval_seconds: float, grace_seconds: float) -> None:
     while True:
         await asyncio.sleep(interval_seconds)
-        if not _enabled():
-            continue
         expired = await asyncio.to_thread(registry.sweep_expired, grace_seconds)
         for session in expired:
             session.kill()
@@ -332,7 +317,7 @@ def start_sweep(
 ) -> asyncio.Task:
     """A detached-but-still-running session outlives its WebSocket so a page
     refresh can reattach to it; this is what eventually kills one nobody
-    reattached to. A no-op tick while the terminal is disabled."""
+    reattached to."""
     return asyncio.get_running_loop().create_task(
         _sweep_loop(interval_seconds, grace_seconds)
     )

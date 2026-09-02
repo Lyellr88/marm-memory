@@ -28,12 +28,13 @@ Console currently indexes existing local directories. GitHub URL cloning, privat
 
 ## Terminal
 
-A real shell, backed by a native PTY (ConPTY on Windows, `pty`/`termios` on Linux and macOS), runs in a dock at the bottom of the Console and is reachable from any page, not just one tab — toggle it with the terminal button in the top-right corner or `Ctrl+\``. It is off by default; set `MARM_CONSOLE_TERMINAL=1` to enable it, and it refuses to run unless the Console is bound to loopback.
+A real shell, backed by a native PTY (ConPTY on Windows, `pty`/`termios` on Linux and macOS), runs in a dock at the bottom of the Console and is reachable from any page, not just one tab — toggle it with the terminal button in the top-right corner or `Ctrl+\``. It refuses to run unless the Console is bound to loopback.
 
 - Multiple sessions per dock, up to 10, each an independent PTY.
 - Resizable (drag the top edge) and can be minimized without losing the session.
 - A session survives closing the dock or refreshing the page: the backend detaches rather than kills the shell on disconnect, buffers its output, and replays it on reattach. A session is only killed after 10 minutes with nothing reattached, or when its tab is explicitly closed.
 - Settings (font, cursor, clipboard, scrollback, bell), keyboard shortcuts, and search (`Ctrl+F` in the terminal) are available from the dock header.
+- A searchable MARM Commands menu lists the `marm-memory` CLI grouped by task, each command with a short description and its flags shown alongside it; clicking one inserts it into the active session without running it. Commands that need a second look (key reveal, uninstall) sit in their own flagged section.
 - A first-run guide walks through picking an OS and installing/launching Claude Code, Codex, or Antigravity CLI, with per-OS install commands and a dependency check for Node.js/npm and Git. It reappears on every launch unless "Don't launch on startup" is checked.
 
 ## Run Console
