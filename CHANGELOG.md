@@ -1,6 +1,30 @@
 # Changelog
 
 <details>
+<summary><strong>September 2nd, 2026: Docker Tests Now Run in PR CI, and a Repaired Chunking Smoke Test (v2.46.2)</strong></summary>
+
+### Added: Docker-Marked Tests Now Run on Every Pull Request
+
+The 8 tests in `tests/test_docker_transports.py` that actually start a container previously only ran in the release workflow, which triggers on a version tag, so a Docker runtime regression was caught after a release was already tagged rather than on the PR that caused it. Contributed by [@tonydzi](https://github.com/tonydzi).
+
+- A new `docker.yml` workflow builds the image on every pull request using the same context, tag, and build cache the release workflow already trusts, then runs the 8 docker-marked tests against it. An internal skip-list keeps documentation-only and console-only PRs from paying for a build.
+- The image is explicitly asserted present before the tests run, since the test fixture silently skips rather than fails when the image is missing; without that assertion a renamed tag or a build that produced nothing would report a false green.
+- This is item 1 of a larger Docker coverage audit; background workers, cross-process lease locks, `docker compose up`, the glama image, and several runtime failure modes remain untested in a container and stay open.
+
+### Fixed: A Chunking Smoke Test That Passed Without Testing Anything
+
+`scripts/test-scripts/smoke_embedding_chunking.py` had been broken since chunking was split into separate memory and document profiles: it imported constants that no longer existed and called `_chunk_text` without the keyword arguments it now requires. Contributed by [@tonydzi](https://github.com/tonydzi).
+
+- Beyond the rename, the script's long-body fixture was under the current chunking threshold, so `_chunk_text` returned nothing and every chunking assertion in the script passed vacuously rather than by exercising real behavior. The fixture is now sized to clear the threshold.
+- Two assertions still described the old fixed sliding-window chunker rather than the current even-split-with-padding behavior; both are rewritten to match, and verified against three deliberate mutations of the fix to confirm the new assertions actually fail when they should.
+
+### Upgrade Note
+
+No action required. The Docker CI workflow only affects pull request checks; nothing in the published package changes.
+
+</details>
+
+<details>
 <summary><strong>September 1st, 2026: A Project Explorer Tab, Console UI Consistency, and a Silent Architecture Truncation Fix (v2.46.1)</strong></summary>
 
 ### Added: Project Explorer Tab in MARM Console
