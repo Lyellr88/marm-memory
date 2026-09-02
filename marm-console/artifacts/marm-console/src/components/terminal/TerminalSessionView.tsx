@@ -15,6 +15,7 @@ export type ConnectionState = 'idle' | 'connecting' | 'open' | 'closed';
 export interface TerminalSessionHandle {
   sendInput: (data: string) => void;
   sendClear: () => void;
+  sendKill: () => void;
   focus: () => void;
 }
 
@@ -111,6 +112,9 @@ export const TerminalSessionView = forwardRef<TerminalSessionHandle, TerminalSes
         const command = /pwsh|powershell/i.test(shellHint ?? '') ? 'Clear-Host\r' : 'clear\r';
         if (socketRef.current?.readyState === WebSocket.OPEN) socketRef.current.send(JSON.stringify({ type: 'input', data: command }));
       },
+      sendKill: () => {
+        if (socketRef.current?.readyState === WebSocket.OPEN) socketRef.current.send(JSON.stringify({ type: 'kill' }));
+      },
       focus: () => termRef.current?.focus(),
     }));
 
@@ -185,7 +189,7 @@ export const TerminalSessionView = forwardRef<TerminalSessionHandle, TerminalSes
             term.write(message.data);
           }
         }
-        else if (message.type === 'exit') term.write(`\r\n[process exited: ${message.exitCode ?? 'unknown'}]\r\n`);
+        else if (message.type === 'exit') term.write(`\r\n[process exited: ${message.code ?? 'unknown'}]\r\n`);
         else if (message.type === 'status' && message.state === 'running') {
           attaching = false;
           if (message.sessionId) onSessionIdChangeRef.current(message.sessionId);

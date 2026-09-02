@@ -308,6 +308,16 @@ def list_concept_builds() -> list[dict]:
     persisted = concept_store.build_runs(get_concept_db_path(), limit=100)
     persisted_ids = {run["id"] for run in persisted}
     with _launching_concept_builds_lock:
+        launching_ids = list(_launching_concept_builds)
+    # A launch id missing from `persisted` may just be older than the newest
+    # 100 rows, not actually unpersisted -- check those directly by id so a
+    # busy build history can't leave a completed build stuck as "queued".
+    for job_id in launching_ids:
+        if job_id not in persisted_ids and concept_store.get_build_run(
+            get_concept_db_path(), job_id
+        ):
+            persisted_ids.add(job_id)
+    with _launching_concept_builds_lock:
         # A build's DB row is the source of truth once it exists -- retire the
         # launch placeholder permanently here rather than just filtering it out
         # of this response, so a later graph reset (which deletes the row) can't

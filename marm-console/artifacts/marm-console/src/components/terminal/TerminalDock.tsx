@@ -107,7 +107,10 @@ export function TerminalDock({ open, onClose }: TerminalDockProps) {
         return res.json();
       })
       .then((data: TerminalStatus) => {
-        if (!cancelled) setStatus(data);
+        if (!cancelled) {
+          setStatusError('');
+          setStatus(data);
+        }
       })
       .catch((error: unknown) => {
         if (!cancelled) setStatusError(error instanceof Error ? error.message : 'Could not reach the terminal status endpoint.');
@@ -200,6 +203,7 @@ export function TerminalDock({ open, onClose }: TerminalDockProps) {
   };
 
   const closeSession = (id: string) => {
+    sessionRefs.current[id]?.sendKill();
     delete sessionRefs.current[id];
     setSessions((current) => {
       const remaining = current.filter((session) => session.id !== id);

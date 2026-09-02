@@ -83,6 +83,10 @@ def allowed_origins() -> set[str]:
         origins = {"http://127.0.0.1:5173", "http://localhost:5173"}
     port = os.environ.get(PORT_ENV, "8002").strip() or "8002"
     origins.update({f"http://127.0.0.1:{port}", f"http://localhost:{port}"})
+    bind_host = _bind_host()
+    if bind_host and bind_host not in {"127.0.0.1", "localhost"}:
+        host_part = f"[{bind_host}]" if ":" in bind_host else bind_host
+        origins.add(f"http://{host_part}:{port}")
     return origins
 
 
@@ -221,6 +225,7 @@ async def terminal_socket(websocket: WebSocket) -> None:
         loop.call_soon_threadsafe(events.put_nowait, event)
 
     session: TerminalSession | None = None
+    owner_token: object | None = None
     pump = asyncio.create_task(_pump(websocket, events))
     try:
         while True:
@@ -254,6 +259,7 @@ async def terminal_socket(websocket: WebSocket) -> None:
                     session = None
                     await websocket.send_json(_error(None, str(exc)))
                     continue
+                owner_token = session.owner_token
             elif kind == "attach":
                 if session is not None and not session.finished():
                     await websocket.send_json(
@@ -266,7 +272,7 @@ async def terminal_socket(websocket: WebSocket) -> None:
                     await websocket.send_json(_error(None, "Session not found."))
                     continue
                 session = candidate
-                await asyncio.to_thread(session.attach, emit)
+                owner_token = await asyncio.to_thread(session.attach, emit)
                 registry.mark_attached(session.session_id)
                 # Routed through the same queue as the buffer replay `attach`
                 # just triggered, rather than sent directly, so this confirmation
@@ -304,8 +310,10 @@ async def terminal_socket(websocket: WebSocket) -> None:
                 # The connection dropped -- maybe a refresh -- but the shell
                 # is still running. Leave it attachable until the sweep's
                 # grace period expires rather than killing it outright.
-                session.detach()
-                registry.mark_detached(session.session_id)
+                # If a newer client already attached, this connection no
+                # longer owns the session and must not mark it detached.
+                if session.detach(owner_token):
+                    registry.mark_detached(session.session_id)
 
 
 async def _sweep_loop(interval_seconds: float, grace_seconds: float) -> None:

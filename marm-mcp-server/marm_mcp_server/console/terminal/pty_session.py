@@ -257,6 +257,7 @@ class TerminalSession:
         self.exit_code: int | None = None
         self._emit = emit
         self._emit_lock = threading.Lock()
+        self._owner_token: object = object()
         self._buffer = ""
         self._buffer_lock = threading.Lock()
         self._commands: queue.Queue[PtyCommand] = queue.Queue()
@@ -339,25 +340,43 @@ class TerminalSession:
     def wait_closed(self, timeout: float | None = None) -> bool:
         return self._finished.wait(timeout)
 
-    def attach(self, emit: Callable[[dict], None]) -> None:
+    @property
+    def owner_token(self) -> object:
+        """Identifies whichever client currently owns this session's emit target."""
+        with self._emit_lock:
+            return self._owner_token
+
+    def attach(self, emit: Callable[[dict], None]) -> object:
         """Point this session's output at a new client and replay scrollback.
 
         The reader and command threads are untouched -- only the emit target
         changes, so a client reconnecting after a page refresh sees the shell
-        exactly as it left it."""
+        exactly as it left it. Returns a token the caller must pass to
+        `detach` -- a disconnect from a client that has since been replaced
+        by a newer `attach` must not clear the newer client's emit target."""
+        token = object()
         with self._emit_lock:
             self._emit = emit
+            self._owner_token = token
         with self._buffer_lock:
             snapshot = self._buffer
         if snapshot:
             self._safe_emit(
                 {"type": "data", "sessionId": self.session_id, "data": snapshot}
             )
+        return token
 
-    def detach(self) -> None:
-        """Stop emitting to the now-disconnected client. The shell keeps running."""
+    def detach(self, token: object) -> bool:
+        """Stop emitting to the now-disconnected client, unless a newer
+        client has already taken ownership via `attach`. The shell keeps
+        running either way. Returns whether this call actually detached --
+        the caller must not mark the session detached in the registry when
+        a newer owner already replaced it."""
         with self._emit_lock:
+            if self._owner_token is not token:
+                return False
             self._emit = lambda _event: None
+            return True
 
     def _safe_emit(self, event: dict) -> None:
         with self._emit_lock:

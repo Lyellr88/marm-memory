@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { Fragment, useEffect, useState } from 'react';
 import { Link, useLocation, useParams } from 'wouter';
 import { Activity, BookOpen, ChevronDown, ChevronRight, CircleAlert, FileWarning, FolderCode, Network, Save, Search, SearchCode, Upload } from 'lucide-react';
 import { useProjects, useSearchProjectCode, useTraceProject, useProjectImpact, useProjectArchitecture, useProjectCodeUnits, useProjectCodeUnitEdges, useProjectCoverage, useProjectAdr, useUpdateProjectAdr, useIngestProjectRuntimeTraces } from '@/hooks/use-marm-queries';
@@ -239,9 +239,8 @@ export function ExplorerPage() {
                           {!codeUnitsLoading && codeUnits && codeUnitsState === 'ready' && codeUnits.code_units.slice(codeUnitsPage * EXPLORER_PAGE_SIZE, (codeUnitsPage + 1) * EXPLORER_PAGE_SIZE).map((unit) => {
                             const isExpanded = expandedUnit === unit.unit;
                             return (
-                              <>
+                              <Fragment key={unit.unit}>
                                 <TableRow
-                                  key={unit.unit}
                                   className="cursor-pointer hover:bg-muted/40"
                                   onClick={() => setExpandedUnit(isExpanded ? null : unit.unit)}
                                 >
@@ -255,7 +254,7 @@ export function ExplorerPage() {
                                   <TableCell className="text-right">{unit.fan_out}</TableCell>
                                 </TableRow>
                                 {isExpanded && (
-                                  <TableRow key={`${unit.unit}-detail`} className="bg-muted/20">
+                                  <TableRow className="bg-muted/20">
                                     <TableCell colSpan={3} className="py-3">
                                       {unitEdges.isLoading ? (
                                         <p className="text-xs text-muted-foreground">Loading direct imports…</p>
@@ -284,7 +283,7 @@ export function ExplorerPage() {
                                     </TableCell>
                                   </TableRow>
                                 )}
-                              </>
+                              </Fragment>
                             );
                           })}
                         </TableBody>

@@ -28,6 +28,11 @@ export function useTerminalHotkeys({ onData, copySelection, pasteClipboard, onOp
 
       const isModifier = event.ctrlKey || event.metaKey;
       const key = event.key.toLowerCase();
+
+      if (key === 'insert' && event.shiftKey && !event.ctrlKey) {
+        void pasteClipboardRef.current(onDataRef.current);
+        return false;
+      }
       if (!isModifier) return true;
 
       if (key === 'c' && !event.shiftKey && term.hasSelection()) {
@@ -54,10 +59,6 @@ export function useTerminalHotkeys({ onData, copySelection, pasteClipboard, onOp
       }
       if (key === 'l' && !event.shiftKey) return true;
       if (key === 'r' && !event.shiftKey) return true;
-      if (key === 'insert' && event.shiftKey && !event.ctrlKey) {
-        void pasteClipboardRef.current(onDataRef.current);
-        return false;
-      }
 
       return true;
     },
