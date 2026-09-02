@@ -8,6 +8,7 @@ import { OverviewPage } from '@/pages/Overview';
 import { MemoryPage } from '@/pages/Memory';
 import { KnowledgePage } from '@/pages/Knowledge';
 import { ProjectsPage } from '@/pages/Projects';
+import { ExplorerPage } from '@/pages/Explorer';
 import { SystemPage } from '@/pages/System';
 import NotFound from '@/pages/not-found';
 
@@ -29,6 +30,8 @@ function Router() {
         <Route path="/memory" component={MemoryPage} />
         <Route path="/knowledge" component={KnowledgePage} />
         <Route path="/projects" component={ProjectsPage} />
+        <Route path="/explorer" component={ExplorerPage} />
+        <Route path="/explorer/:name" component={ExplorerPage} />
         <Route path="/system" component={SystemPage} />
         <Route component={NotFound} />
       </Switch>

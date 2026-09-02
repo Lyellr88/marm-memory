@@ -15,11 +15,11 @@ export function MemoryPage() {
     ? overview.memory.active_memories + overview.memory.compacted_sources
     : null;
   const tabs = [
-    { value: 'memories', label: 'Stored Memories', detail: 'Retrievable context', count: storedMemories, icon: Database, tone: 'memory-tab-cyan' },
-    { value: 'notebook', label: 'Notebook', detail: 'Pinned knowledge', count: overview?.memory.notebook_entries ?? null, icon: BookOpenText, tone: 'memory-tab-violet' },
-    { value: 'logs', label: 'Logs', detail: 'Structured history', count: overview?.memory.log_entries ?? null, icon: ScrollText, tone: 'memory-tab-blue' },
-    { value: 'sessions', label: 'Sessions', detail: 'Context workspaces', count: overview?.memory.sessions ?? null, icon: Waypoints, tone: 'memory-tab-emerald' },
-    { value: 'compaction', label: 'Compaction', detail: 'Pending summaries', count: overview?.memory.pending_compaction ?? null, icon: Layers3, tone: 'memory-tab-amber' },
+    { value: 'memories', label: 'Stored Memories', detail: 'Retrievable context', count: storedMemories, icon: Database, tone: 'console-tab-cyan' },
+    { value: 'notebook', label: 'Notebook', detail: 'Pinned knowledge', count: overview?.memory.notebook_entries ?? null, icon: BookOpenText, tone: 'console-tab-violet' },
+    { value: 'logs', label: 'Logs', detail: 'Structured history', count: overview?.memory.log_entries ?? null, icon: ScrollText, tone: 'console-tab-blue' },
+    { value: 'sessions', label: 'Sessions', detail: 'Context workspaces', count: overview?.memory.sessions ?? null, icon: Waypoints, tone: 'console-tab-emerald' },
+    { value: 'compaction', label: 'Compaction', detail: 'Pending summaries', count: overview?.memory.pending_compaction ?? null, icon: Layers3, tone: 'console-tab-amber' },
   ] as const;
 
   return (
@@ -40,16 +40,14 @@ export function MemoryPage() {
               <TabsTrigger
                 key={tab.value}
                 value={tab.value}
-                className={`memory-tab metric-enter group relative h-[58px] justify-start gap-3 overflow-hidden border border-transparent px-3 text-left data-[state=active]:bg-white/[0.035] ${tab.tone}`}
+                title={tab.detail}
+                className={`console-tab metric-enter group relative h-11 justify-start gap-3 overflow-hidden border border-transparent px-3 text-left data-[state=active]:bg-white/[0.035] ${tab.tone}`}
                 style={{ animationDelay: `${index * 45}ms` }}
               >
-                <span className="memory-tab-icon flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border bg-background/45 transition-transform duration-200 group-hover:scale-105">
+                <span className="console-tab-icon flex h-6 w-6 shrink-0 items-center justify-center rounded-md border bg-background/45 transition-transform duration-200 group-hover:scale-105">
                   <tab.icon className="h-3.5 w-3.5" />
                 </span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-xs font-semibold text-foreground">{tab.label}</span>
-                  <span className="mt-0.5 block truncate text-[10px] font-normal text-muted-foreground">{tab.detail}</span>
-                </span>
+                <span className="min-w-0 flex-1 truncate text-xs font-semibold text-foreground">{tab.label}</span>
                 <span className="font-mono text-sm font-semibold tabular-nums text-foreground/90">
                   {tab.count === null ? '—' : tab.count.toLocaleString()}
                 </span>

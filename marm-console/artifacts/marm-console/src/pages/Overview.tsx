@@ -1,4 +1,4 @@
-import { useId, useState, type ReactNode } from 'react';
+import { useId, useState } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { Link } from 'wouter';
 import {
@@ -18,6 +18,7 @@ import {
 import { useFilters, useMarmConfig, useOverview, isAuthError } from '@/hooks/use-marm-queries';
 import { SettingsDialog } from '@/components/layout/SettingsDialog';
 import { Badge, Button, Card, CardContent, CardHeader, Skeleton, cn } from '@/components/ui/core';
+import { StatCard } from '@/components/ui/panels';
 
 const CONCEPT_STATUS_LABEL: Record<string, string> = {
   ready: 'Ready',
@@ -37,60 +38,6 @@ function statusBadgeVariant(status: string): 'default' | 'secondary' | 'destruct
   if (status === 'error' || status === 'unavailable') return 'destructive';
   if (status === 'starting' || status === 'not_built') return 'secondary';
   return 'outline';
-}
-
-function MetricCard({
-  label,
-  value,
-  detail,
-  icon,
-  status,
-  tone = 'cyan',
-  delay = 0,
-}: {
-  label: string;
-  value: string;
-  detail: string;
-  icon: ReactNode;
-  status?: ReactNode;
-  tone?: 'cyan' | 'teal' | 'blue' | 'amber';
-  delay?: number;
-}) {
-  const cardTones = {
-    cyan: { borderColor: 'rgba(var(--primary-rgb), 0.28)', borderTopColor: 'var(--primary)', boxShadow: 'inset 0 1px 0 rgba(var(--primary-rgb), 0.18), 0 16px 40px rgba(0, 0, 0, 0.18)' },
-    teal: { borderColor: 'rgba(45, 212, 191, 0.24)', borderTopColor: '#2dd4bf', boxShadow: 'inset 0 1px 0 rgba(45, 212, 191, 0.16), 0 16px 40px rgba(0, 0, 0, 0.18)' },
-    blue: { borderColor: 'rgba(75, 140, 255, 0.25)', borderTopColor: '#4b8cff', boxShadow: 'inset 0 1px 0 rgba(75, 140, 255, 0.17), 0 16px 40px rgba(0, 0, 0, 0.18)' },
-    amber: { borderColor: 'rgba(245, 158, 11, 0.25)', borderTopColor: '#f59e0b', boxShadow: 'inset 0 1px 0 rgba(245, 158, 11, 0.16), 0 16px 40px rgba(0, 0, 0, 0.18)' },
-  };
-  const iconTones = {
-    cyan: 'text-primary bg-primary/[0.08]',
-    teal: 'text-teal-400 bg-teal-400/[0.08]',
-    blue: 'text-blue-400 bg-blue-400/[0.08]',
-    amber: 'text-amber-400 bg-amber-400/[0.08]',
-  };
-
-  return (
-    <Card
-      className="metric-enter group relative overflow-hidden border-t-2 transition-[border-color,transform] duration-200 hover:-translate-y-0.5"
-      style={{ animationDelay: `${delay}ms`, ...cardTones[tone] }}
-    >
-      <CardContent className="p-5">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.13em] text-muted-foreground">{label}</p>
-            <div className="mt-3 flex items-end gap-3">
-              <span className="font-mono text-[2rem] font-semibold leading-none tracking-[-0.06em] text-foreground">{value}</span>
-              {status}
-            </div>
-          </div>
-          <div className={cn('flex h-10 w-10 shrink-0 aspect-square items-center justify-center rounded-lg border border-current/15 transition-transform duration-200 group-hover:scale-105', iconTones[tone])}>
-            {icon}
-          </div>
-        </div>
-        <p className="mt-4 truncate text-xs text-muted-foreground">{detail}</p>
-      </CardContent>
-    </Card>
-  );
 }
 
 function SparseTelemetryField({ tone = 'cyan' }: { tone?: 'cyan' | 'teal' }) {
@@ -241,10 +188,10 @@ export function OverviewPage() {
         </header>
 
         <section className="grid grid-cols-4 gap-4" aria-label="System metrics">
-          <MetricCard label="Stored memories" value={storedMemories.toLocaleString()} detail={`${overview.memory.active_memories.toLocaleString()} active · ${overview.memory.compacted_sources.toLocaleString()} compacted sources`} icon={<Database className="h-5 w-5" />} delay={0} />
-          <MetricCard label="Concepts" value={overview.concepts.entities.toLocaleString()} detail={`${overview.concepts.relationships.toLocaleString()} relationships`} icon={<Network className="h-5 w-5" />} tone="teal" delay={50} status={<Badge variant={statusBadgeVariant(overview.concepts.status)} className="mb-0.5 text-[9px] uppercase">{CONCEPT_STATUS_LABEL[overview.concepts.status] || overview.concepts.status}</Badge>} />
-          <MetricCard label="Indexed projects" value={overview.graph.projects.length.toLocaleString()} detail={`Code graph ${overview.graph.status}`} icon={<FolderCode className="h-5 w-5" />} tone="blue" delay={100} status={<Badge variant={statusBadgeVariant(overview.graph.status)} className="mb-0.5 text-[9px] uppercase">{GRAPH_STATUS_LABEL[overview.graph.status] || overview.graph.status}</Badge>} />
-          <MetricCard label="Pending compaction" value={overview.memory.pending_compaction.toLocaleString()} detail={`${overview.memory.compacted_sources.toLocaleString()} previously compacted`} icon={<Layers className="h-5 w-5" />} tone="amber" delay={150} />
+          <StatCard label="Stored memories" value={storedMemories.toLocaleString()} detail={`${overview.memory.active_memories.toLocaleString()} active · ${overview.memory.compacted_sources.toLocaleString()} compacted sources`} icon={<Database className="h-5 w-5" />} delay={0} />
+          <StatCard label="Concepts" value={overview.concepts.entities.toLocaleString()} detail={`${overview.concepts.relationships.toLocaleString()} relationships`} icon={<Network className="h-5 w-5" />} tone="teal" delay={50} status={<Badge variant={statusBadgeVariant(overview.concepts.status)} className="mb-0.5 text-[9px] uppercase">{CONCEPT_STATUS_LABEL[overview.concepts.status] || overview.concepts.status}</Badge>} />
+          <StatCard label="Indexed projects" value={overview.graph.projects.length.toLocaleString()} detail={`Code graph ${overview.graph.status}`} icon={<FolderCode className="h-5 w-5" />} tone="blue" delay={100} status={<Badge variant={statusBadgeVariant(overview.graph.status)} className="mb-0.5 text-[9px] uppercase">{GRAPH_STATUS_LABEL[overview.graph.status] || overview.graph.status}</Badge>} />
+          <StatCard label="Pending compaction" value={overview.memory.pending_compaction.toLocaleString()} detail={`${overview.memory.compacted_sources.toLocaleString()} previously compacted`} icon={<Layers className="h-5 w-5" />} tone="amber" delay={150} />
         </section>
 
         <section className="grid min-h-[360px] flex-1 grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] gap-5">

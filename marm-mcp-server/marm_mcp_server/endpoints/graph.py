@@ -548,7 +548,9 @@ async def console_project_code_units(req: ConsoleProjectRequest) -> dict:
     client = await asyncio.to_thread(graph_supervisor.get_client)
     if client is None:
         return code_graph_view.unavailable("graph_unavailable")
-    return await asyncio.to_thread(code_graph_view.code_units, client, req.project)
+    return await asyncio.to_thread(
+        code_graph_view.code_units, client, req.project, code_graph_view.MAX_LIMIT
+    )
 
 
 @router.post("/internal/projects/graph")

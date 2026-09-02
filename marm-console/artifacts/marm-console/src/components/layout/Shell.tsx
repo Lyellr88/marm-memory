@@ -3,7 +3,7 @@ import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { Link, useLocation } from 'wouter';
 import { useOverview, isAuthError } from '@/hooks/use-marm-queries';
 import { SettingsDialog } from './SettingsDialog';
-import { Settings, Database, Activity, Network, FolderCode, ServerCog, ChevronRight } from 'lucide-react';
+import { Settings, Database, Activity, Compass, Network, FolderCode, ServerCog, ChevronRight } from 'lucide-react';
 import { cn } from '@/components/ui/core';
 
 const THEME_STORAGE_KEY = 'marm-console-accent';
@@ -73,6 +73,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     { name: 'Memories', href: '/memory', icon: Database },
     { name: 'Knowledge Graph', href: '/knowledge', icon: Network },
     { name: 'Indexed Projects', href: '/projects', icon: FolderCode },
+    { name: 'Project Explorer', href: '/explorer', icon: Compass },
     { name: 'System', href: '/system', icon: ServerCog },
   ];
 

@@ -5,7 +5,7 @@
      width="900"
      height="250">
 </picture>
-<h1 align="center">marm-memory v2.46.0 - Give your AI Agents a permanent memory in 60 seconds</h1>
+<h1 align="center">marm-memory v2.46.1 - Give your AI Agents a permanent memory in 60 seconds</h1>
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/Lyellr88/marm-memory/blob/MARM-main/LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)

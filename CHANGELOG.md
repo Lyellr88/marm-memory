@@ -1,6 +1,32 @@
 # Changelog
 
 <details>
+<summary><strong>September 1st, 2026: A Project Explorer Tab, Console UI Consistency, and a Silent Architecture Truncation Fix (v2.46.1)</strong></summary>
+
+### Added: Project Explorer Tab in MARM Console
+
+Architecture, code search, trace symbol, impact, coverage, decisions, and runtime traces move out of the Indexed Projects "Explore" dialog into their own top-level page, with a URL-backed project selector at the top so switching between indexed repositories no longer means reopening a dialog per project.
+
+- The prior seven-icon tool grid on the project card and the separate Investigate tab are both removed; Indexed Projects now links directly into the new page instead of duplicating navigation into it.
+- Architecture, coverage, code search, trace symbol, and impact results are paginated at 50 items per page. Code search, trace symbol, and impact keep their pager hidden until a result set actually needs more than one page, since they're typically small.
+
+### Fixed: Architecture Table Was Silently Capped at 50 Files Regardless of Project Size
+
+The code-units endpoint behind the Architecture tab always requested the default row limit of 50, so a 316-file project correctly reported a total of 316 but could only ever render the top 50, with the rest ranked server-side and never sent to the browser at all.
+
+- The endpoint now requests the same 500-row upper bound the architecture graph endpoint already trusts elsewhere in the same file, so pagination reflects the data that actually exists instead of a fixed early cutoff.
+- The server-side-only limit is unchanged in spirit: the browser still cannot choose it, only the fixed value moved.
+
+### Changed: Console UI Consistency Pass
+
+Four independently drifting card and tab implementations across Overview, Memories, Knowledge, Indexed Projects, and System are now one shared `StatCard`/`Panel` component set, and the System tab's Controls, Maintenance, and Diagnostics panels are gridded two-up instead of stacking full width.
+
+- The Memories and Project Explorer tab bars now share the same segmented, icon-led card style instead of a plain underlined row, with each card trimmed to its title only and its longer description moved to a hover tooltip.
+- The Diagnostics tab's "Stopping and restarting stays in the terminal" panel is removed; it only stated a limitation without offering anything actionable.
+
+</details>
+
+<details>
 <summary><strong>September 1st, 2026: A System Tab for the Console, and Rate-Limit Fixes It Uncovered (v2.46.0)</strong></summary>
 
 ### Added: System Tab in MARM Console
