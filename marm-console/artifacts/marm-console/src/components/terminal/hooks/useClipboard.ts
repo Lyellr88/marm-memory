@@ -19,7 +19,7 @@ export function useClipboard() {
     try {
       const text = await navigator.clipboard.readText();
       if (text) {
-        const normalized = text.replace(/(?:\r\n|\r|\n)+$/g, '');
+        const normalized = text.replace(/(?:\r\n|[\r\n])+$/g, '');
         if (normalized) onData(normalized);
       }
     } catch {
