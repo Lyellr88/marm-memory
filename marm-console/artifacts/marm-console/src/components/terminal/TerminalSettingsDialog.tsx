@@ -64,7 +64,7 @@ function Pill({ active, onClick, children }: { active: boolean; onClick: () => v
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="space-y-3 border-b border-border/60 pb-5 last:border-b-0 last:pb-0">
+    <div className="mb-4 break-inside-avoid space-y-3 rounded-lg border border-border/70 bg-background/35 p-4">
       <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{title}</h3>
       {children}
     </div>
@@ -85,12 +85,14 @@ export function TerminalSettingsDialog({ open, onOpenChange, settings: initialSe
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[calc(100vh-4rem)] max-w-lg overflow-y-auto">
+      <DialogContent className="max-h-[calc(100vh-4rem)] max-w-3xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Terminal Settings</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-5 py-2">
+        <div className="columns-1 py-1 sm:columns-2 sm:gap-4">
+          {/* Notifications is intentionally outside this container -- it renders
+              full-width below, since its pill rows need more room than one column gives. */}
           <Section title="Profile & Startup">
             <label className="flex items-center gap-2 text-sm">
               <input
@@ -215,50 +217,51 @@ export function TerminalSettingsDialog({ open, onOpenChange, settings: initialSe
             </div>
           </Section>
 
-          <Section title="Notifications">
-            <div className="space-y-1.5">
-              <Label className="text-xs text-muted-foreground">Bell style</Label>
-              <div className="flex flex-wrap gap-2">
-                {(['none', 'visual', 'audio', 'both'] as const).map((style) => (
-                  <Pill key={style} active={settings.notifications.bellStyle === style} onClick={() => setSettings({ ...settings, notifications: { ...settings.notifications, bellStyle: style } })}>
-                    {style[0].toUpperCase() + style.slice(1)}
-                  </Pill>
-                ))}
+        </div>
+
+        <Section title="Notifications">
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground">Bell style</Label>
+            <div className="flex flex-wrap gap-2">
+              {(['none', 'visual', 'audio', 'both'] as const).map((style) => (
+                <Pill key={style} active={settings.notifications.bellStyle === style} onClick={() => setSettings({ ...settings, notifications: { ...settings.notifications, bellStyle: style } })}>
+                  {style[0].toUpperCase() + style.slice(1)}
+                </Pill>
+              ))}
+            </div>
+          </div>
+          {(settings.notifications.bellStyle === 'audio' || settings.notifications.bellStyle === 'both') && (
+            <div className="grid grid-cols-2 gap-6">
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Volume</Label>
+                <div className="flex gap-2">
+                  {(['low', 'medium', 'high'] as const).map((volume) => (
+                    <Pill key={volume} active={settings.notifications.bellVolume === volume} onClick={() => setSettings({ ...settings, notifications: { ...settings.notifications, bellVolume: volume } })}>
+                      {volume[0].toUpperCase() + volume.slice(1)}
+                    </Pill>
+                  ))}
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs text-muted-foreground">Sound</Label>
+                <div className="flex gap-2">
+                  {(['chime', 'bell', 'pulse'] as const).map((sound) => (
+                    <Pill
+                      key={sound}
+                      active={settings.notifications.bellSound === sound}
+                      onClick={() => {
+                        setSettings({ ...settings, notifications: { ...settings.notifications, bellSound: sound } });
+                        playBellPreview(sound, settings.notifications.bellVolume);
+                      }}
+                    >
+                      {sound[0].toUpperCase() + sound.slice(1)}
+                    </Pill>
+                  ))}
+                </div>
               </div>
             </div>
-            {(settings.notifications.bellStyle === 'audio' || settings.notifications.bellStyle === 'both') && (
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Volume</Label>
-                  <div className="flex gap-2">
-                    {(['low', 'medium', 'high'] as const).map((volume) => (
-                      <Pill key={volume} active={settings.notifications.bellVolume === volume} onClick={() => setSettings({ ...settings, notifications: { ...settings.notifications, bellVolume: volume } })}>
-                        {volume[0].toUpperCase() + volume.slice(1)}
-                      </Pill>
-                    ))}
-                  </div>
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-xs text-muted-foreground">Sound</Label>
-                  <div className="flex gap-2">
-                    {(['chime', 'bell', 'pulse'] as const).map((sound) => (
-                      <Pill
-                        key={sound}
-                        active={settings.notifications.bellSound === sound}
-                        onClick={() => {
-                          setSettings({ ...settings, notifications: { ...settings.notifications, bellSound: sound } });
-                          playBellPreview(sound, settings.notifications.bellVolume);
-                        }}
-                      >
-                        {sound[0].toUpperCase() + sound.slice(1)}
-                      </Pill>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-          </Section>
-        </div>
+          )}
+        </Section>
 
         <DialogFooter className="gap-2">
           <Button variant="outline" onClick={() => setSettings(DEFAULT_TERMINAL_SETTINGS)}>Reset to Defaults</Button>

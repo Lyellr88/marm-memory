@@ -16,7 +16,6 @@ from marm_mcp_server.console.terminal.pty_session import backend_status
 from marm_mcp_server.console.terminal.router import (
     HOST_ENV,
     SESSION_COOKIE,
-    TERMINAL_ENV,
     registry,
     router,
     terminal_availability,
@@ -44,42 +43,15 @@ def authed(client: TestClient) -> TestClient:
 
 @pytest.fixture
 def enabled_loopback(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(TERMINAL_ENV, "1")
     monkeypatch.setenv(HOST_ENV, "127.0.0.1")
     monkeypatch.delenv("MARM_IN_DOCKER", raising=False)
     monkeypatch.delenv("KUBERNETES_SERVICE_HOST", raising=False)
 
 
-def test_terminal_is_unavailable_unless_explicitly_enabled(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.delenv(TERMINAL_ENV, raising=False)
-    availability = terminal_availability()
-    assert availability.available is False
-    assert TERMINAL_ENV in availability.reason
-    for value in ("0", "", "false", "no", "off", "maybe"):
-        monkeypatch.setenv(TERMINAL_ENV, value)
-        assert terminal_availability().available is False
-
-
-@pytest.mark.parametrize("value", ["1", "true", "TRUE", "yes", "on"])
-def test_recognized_opt_in_values_pass_the_enable_gate(
-    monkeypatch: pytest.MonkeyPatch, value: str
-) -> None:
-    monkeypatch.setenv(TERMINAL_ENV, value)
-    monkeypatch.setenv(HOST_ENV, "127.0.0.1")
-    assert terminal_availability().reason != (
-        f"Terminal is disabled. Set {TERMINAL_ENV}=1 to enable it."
-    )
-
-
 @pytest.mark.parametrize(
     "host", ["0.0.0.0", "::", "[::]", "192.168.1.50", "10.0.0.4", "example.local", ""]
 )
-def test_non_loopback_bind_refuses_even_when_enabled(
-    monkeypatch: pytest.MonkeyPatch, host: str
-) -> None:
-    monkeypatch.setenv(TERMINAL_ENV, "1")
+def test_non_loopback_bind_refuses(monkeypatch: pytest.MonkeyPatch, host: str) -> None:
     monkeypatch.setenv(HOST_ENV, host)
     availability = terminal_availability()
     assert availability.available is False
@@ -92,7 +64,6 @@ def test_non_loopback_bind_refuses_even_when_enabled(
 def test_loopback_binds_pass_the_host_gate(
     monkeypatch: pytest.MonkeyPatch, host: str
 ) -> None:
-    monkeypatch.setenv(TERMINAL_ENV, "1")
     monkeypatch.setenv(HOST_ENV, host)
     assert "loopback" not in terminal_availability().reason
 
@@ -109,13 +80,12 @@ def test_container_execution_reports_unavailable(
 def test_status_endpoint_mirrors_the_availability_gates(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.delenv(TERMINAL_ENV, raising=False)
+    monkeypatch.setenv(HOST_ENV, "0.0.0.0")
     payload = client.get("/api/terminal/status").json()
     assert payload["available"] is False
     assert payload["backend"] == "none"
-    assert TERMINAL_ENV in payload["reason"]
+    assert "loopback" in payload["reason"]
 
-    monkeypatch.setenv(TERMINAL_ENV, "1")
     monkeypatch.setenv(HOST_ENV, "127.0.0.1")
     payload = client.get("/api/terminal/status").json()
     assert payload["available"] is BACKEND.available
@@ -144,21 +114,9 @@ def test_websocket_requires_a_browser_session_when_a_key_is_configured(
         pass
 
 
-def test_websocket_refuses_when_the_terminal_is_disabled(
-    authed: TestClient, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.delenv(TERMINAL_ENV, raising=False)
-    with (
-        pytest.raises(WebSocketDisconnect),
-        authed.websocket_connect("/api/terminal/ws"),
-    ):
-        pass
-
-
 def test_websocket_refuses_a_non_loopback_bind(
     authed: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setenv(TERMINAL_ENV, "1")
     monkeypatch.setenv(HOST_ENV, "0.0.0.0")
     with (
         pytest.raises(WebSocketDisconnect),
@@ -302,12 +260,15 @@ def test_check_dependency_reports_a_missing_command(
     assert response.json()["success"] is False
 
 
-def test_check_dependency_respects_the_enable_gate(client: TestClient) -> None:
+def test_check_dependency_refuses_a_non_loopback_bind(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv(HOST_ENV, "0.0.0.0")
     response = client.post("/api/terminal/check", json={"command": "echo hi"})
     assert response.status_code == 200
     body = response.json()
     assert body["success"] is False
-    assert TERMINAL_ENV in body["output"]
+    assert "loopback" in body["output"]
 
 
 @requires_backend

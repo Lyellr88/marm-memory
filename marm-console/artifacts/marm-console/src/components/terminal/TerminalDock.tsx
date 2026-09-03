@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { CircleAlert, Eraser, Keyboard, Minus, Plus, Settings2, Sparkles, Square, X } from 'lucide-react';
+import { CircleAlert, Eraser, Keyboard, Minus, Plus, Settings2, Sparkles, Square, SquareTerminal, X } from 'lucide-react';
 import { cn } from '@/components/ui/core';
 import { useMarmConfig } from '@/hooks/use-marm-queries';
+import { CliCommandsDialog } from './CliCommandsDialog';
 import { KeyboardShortcutsDialog } from './KeyboardShortcutsDialog';
 import { OnboardingOverlay } from './OnboardingOverlay';
 import { TerminalSessionView, type ConnectionState, type TerminalSessionHandle } from './TerminalSessionView';
@@ -93,6 +94,7 @@ export function TerminalDock({ open, onClose }: TerminalDockProps) {
   const [settings, setSettings] = useState<TerminalSettings>(loadStoredSettings);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [commandsOpen, setCommandsOpen] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
   const [shellVersion, setShellVersion] = useState<string | null>(null);
   const dockRef = useRef<HTMLDivElement>(null);
@@ -258,8 +260,9 @@ export function TerminalDock({ open, onClose }: TerminalDockProps) {
     }
   };
 
-  const insertCommand = (command: string) => {
-    if (activeSessionId) sessionRefs.current[activeSessionId]?.sendInput(command);
+  const insertCommand = (command: string): boolean => {
+    if (!activeSessionId) return false;
+    return sessionRefs.current[activeSessionId]?.sendInput(command) ?? false;
   };
 
   const showNotice = statusError || !status || !status.available;
@@ -323,6 +326,7 @@ export function TerminalDock({ open, onClose }: TerminalDockProps) {
           </div>
           <div className="flex items-center gap-1">
             <HeaderIconButton label="Clear terminal" onClick={() => activeSessionId && sessionRefs.current[activeSessionId]?.sendClear()}><Eraser className="h-3.5 w-3.5" /></HeaderIconButton>
+            <HeaderIconButton label="MARM commands" onClick={() => setCommandsOpen(true)}><SquareTerminal className="h-3.5 w-3.5" /></HeaderIconButton>
             <HeaderIconButton label="Terminal guide" onClick={() => setGuideOpen(true)}><Sparkles className="h-3.5 w-3.5" /></HeaderIconButton>
             <HeaderIconButton label="Keyboard shortcuts" onClick={() => setShortcutsOpen(true)}><Keyboard className="h-3.5 w-3.5" /></HeaderIconButton>
             <HeaderIconButton label="Terminal settings" onClick={() => setSettingsOpen(true)}><Settings2 className="h-3.5 w-3.5" /></HeaderIconButton>
@@ -376,6 +380,7 @@ export function TerminalDock({ open, onClose }: TerminalDockProps) {
 
       <TerminalSettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} settings={settings} onSave={setSettings} />
       <KeyboardShortcutsDialog open={shortcutsOpen} onOpenChange={setShortcutsOpen} />
+      <CliCommandsDialog open={commandsOpen} onOpenChange={setCommandsOpen} onInsertCommand={insertCommand} />
     </>
   );
 }

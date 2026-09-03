@@ -1,6 +1,38 @@
 # Changelog
 
 <details>
+<summary><strong>September 2nd, 2026: The Terminal Is Always On, a MARM Commands Reference, and PR Review Fixes (v2.48.0)</strong></summary>
+
+### Changed: The Console Terminal Is No Longer Opt-In
+
+The embedded terminal required `MARM_CONSOLE_TERMINAL=1` before it would run. It's now always available, gated only by its real safety checks (loopback-only bind, a usable PTY backend actually present) rather than a hidden environment variable — it's a button in the dock header you can use or ignore, with no reason to keep it behind a flag.
+
+### Added: A Searchable MARM Commands Reference in the Terminal Dock
+
+A new icon in the terminal dock header opens a reference of the `marm-memory` CLI, grouped by task (daily runtime work, transports and setup, knowledge/projects/maintenance) with a short description for every command. Clicking one inserts it into the active terminal session without running it.
+
+- Commands that need a second look — `key reveal`, `uninstall` — sit in their own flagged "Review before running" section, always insert-only.
+- The reference and the Keyboard Shortcuts dialog now share the same two-column card layout and dialog sizing as the rest of the terminal's dialogs, instead of three visibly different-sized popups.
+
+### Fixed: PR Review Findings on the Embedded Terminal
+
+- An attach/detach ownership race in `TerminalSession`: a delayed disconnect from an old connection could clear a newer client's emit target after it had already reattached to the same session, breaking the still-live client.
+- The WebSocket origin allowlist only ever included `127.0.0.1`/`localhost`, so a Console bound to another loopback address (e.g. `127.0.0.5`) reported the terminal available while every WebSocket handshake was rejected.
+- Closing a terminal tab detached the shell instead of killing it, leaving it running unreachable for up to 10 minutes; it's now killed on explicit tab close.
+- The terminal's exit message read a field the backend never sends, so every process exit displayed "unknown" instead of the real exit code.
+- `pywinpty` was an opt-in extra rather than a base dependency, so a plain `pip install marm-mcp-server` never actually enabled the terminal on Windows.
+- A stale `statusError` was never cleared on a later successful status check, permanently hiding all terminal sessions behind an error banner after one transient failure.
+- The Project Explorer's expandable Architecture rows keyed the wrong JSX node, which could misattach row state during reconciliation.
+- Concept-build reconciliation only checked the newest 100 persisted rows; an in-flight build older than that window could stay shown as stuck "queued" even after finishing.
+- Two packaged READMEs (`marm-mcp-server/README.md`, the wheel-bundled `resources/marm-docs/README.md`) were left one version behind.
+
+### Upgrade Note
+
+No action required. The terminal is additive and was already loopback-gated; anyone who previously had to set `MARM_CONSOLE_TERMINAL=1` can remove it.
+
+</details>
+
+<details>
 <summary><strong>September 2nd, 2026: An Embedded Terminal, Deeper Architecture Tab Tooling, and a Concept-Build Phantom Fix (v2.47.0)</strong></summary>
 
 ### Added: Embedded Terminal in MARM Console
