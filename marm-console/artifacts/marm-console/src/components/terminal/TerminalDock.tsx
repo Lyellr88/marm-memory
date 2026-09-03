@@ -260,8 +260,9 @@ export function TerminalDock({ open, onClose }: TerminalDockProps) {
     }
   };
 
-  const insertCommand = (command: string) => {
-    if (activeSessionId) sessionRefs.current[activeSessionId]?.sendInput(command);
+  const insertCommand = (command: string): boolean => {
+    if (!activeSessionId) return false;
+    return sessionRefs.current[activeSessionId]?.sendInput(command) ?? false;
   };
 
   const showNotice = statusError || !status || !status.available;

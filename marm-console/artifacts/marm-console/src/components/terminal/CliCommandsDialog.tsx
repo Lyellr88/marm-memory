@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { TriangleAlert } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, Input } from '@/components/ui/core';
 
 interface CliCommandsDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onInsertCommand: (command: string) => void;
+  onInsertCommand: (command: string) => boolean;
 }
 
 interface CliCommand {
@@ -80,6 +80,11 @@ function matches(entry: CliCommand, query: string): boolean {
 
 export function CliCommandsDialog({ open, onOpenChange, onInsertCommand }: CliCommandsDialogProps) {
   const [query, setQuery] = useState('');
+  const [insertFailed, setInsertFailed] = useState(false);
+
+  useEffect(() => {
+    if (open) setInsertFailed(false);
+  }, [open]);
 
   const filteredGroups = COMMAND_GROUPS.map((group) => ({ ...group, commands: group.commands.filter((entry) => matches(entry, query)) })).filter(
     (group) => group.commands.length > 0
@@ -88,8 +93,11 @@ export function CliCommandsDialog({ open, onOpenChange, onInsertCommand }: CliCo
   const isEmpty = filteredGroups.length === 0 && filteredReviewFirst.length === 0;
 
   const handleSelect = (entry: CliCommand) => {
-    onInsertCommand(fullCommand(entry));
-    onOpenChange(false);
+    if (onInsertCommand(fullCommand(entry))) {
+      onOpenChange(false);
+    } else {
+      setInsertFailed(true);
+    }
   };
 
   return (
@@ -105,6 +113,11 @@ export function CliCommandsDialog({ open, onOpenChange, onInsertCommand }: CliCo
             className="w-56"
           />
         </DialogHeader>
+        {insertFailed && (
+          <p className="rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-1.5 text-xs text-amber-500">
+            No active terminal session to insert into. Open a session first.
+          </p>
+        )}
         <div className="min-h-0 flex-1 space-y-5 overflow-y-auto py-1 pr-1">
           {isEmpty ? (
             <p className="py-6 text-center text-sm text-muted-foreground">No commands found.</p>

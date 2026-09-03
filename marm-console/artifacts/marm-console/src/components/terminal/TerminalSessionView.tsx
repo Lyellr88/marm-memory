@@ -13,7 +13,7 @@ import type { TerminalSettings } from './types';
 export type ConnectionState = 'idle' | 'connecting' | 'open' | 'closed';
 
 export interface TerminalSessionHandle {
-  sendInput: (data: string) => void;
+  sendInput: (data: string) => boolean;
   sendClear: () => void;
   sendKill: () => void;
   focus: () => void;
@@ -106,7 +106,9 @@ export const TerminalSessionView = forwardRef<TerminalSessionHandle, TerminalSes
 
     useImperativeHandle(ref, () => ({
       sendInput: (data: string) => {
-        if (socketRef.current?.readyState === WebSocket.OPEN) socketRef.current.send(JSON.stringify({ type: 'input', data }));
+        if (socketRef.current?.readyState !== WebSocket.OPEN) return false;
+        socketRef.current.send(JSON.stringify({ type: 'input', data }));
+        return true;
       },
       sendClear: () => {
         const command = /pwsh|powershell/i.test(shellHint ?? '') ? 'Clear-Host\r' : 'clear\r';
