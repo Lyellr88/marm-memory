@@ -58,7 +58,7 @@ ENV PATH=/home/marm/.local/bin:$PATH
 EXPOSE 8001
 
 HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8001/health', timeout=5)" || exit 1
+    CMD python -c "import json, sys, urllib.request; sys.exit(0 if json.load(urllib.request.urlopen('http://localhost:8001/health', timeout=5)).get('status') == 'healthy' else 1)" || exit 1
 
 LABEL org.opencontainers.image.title="MARM Universal MCP Server"
 LABEL org.opencontainers.image.description="Production-ready Universal MCP Server with advanced AI memory capabilities, semantic search, and professional-grade architecture"

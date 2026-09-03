@@ -26,7 +26,13 @@ def _run_docker(args, timeout=60):
 
 
 def _docker_available():
-    result = _run_docker(["ps"], timeout=20)
+    try:
+        result = _run_docker(["ps"], timeout=20)
+    except OSError:
+        # No docker CLI on PATH at all (a Windows or macOS dev box without
+        # Docker Desktop): the fixture below promises a skip, and without this
+        # the FileNotFoundError surfaces as a collection error instead.
+        return False
     return result.returncode == 0
 
 
@@ -261,6 +267,111 @@ def test_docker_healthcheck_status_becomes_healthy(docker_image, marm_data_dir):
 
         assert status == "healthy", (
             f"container health status never became healthy (last: {status})"
+        )
+    finally:
+        _run_docker(["rm", "-f", container], timeout=30)
+
+
+# A stand-in for the server that answers /health with a fixed payload, so the
+# container's real HEALTHCHECK can be pointed at a service that reports itself
+# unhealthy. The live server cannot be driven into that state from outside:
+# its /health failure branch needs a broken SQLite handle, and connections are
+# pooled at startup (core/memory_db.py:30-56), so nothing done to the mounted
+# data dir afterwards reaches an already-open connection.
+_STUB_HEALTH_SERVER = """
+import json, sys
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+status = sys.argv[1]
+
+
+class Handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path != "/health":
+            self.send_response(404)
+            self.end_headers()
+            return
+        raw = json.dumps({"status": status, "service": "MARM MCP Server"}).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(raw)))
+        self.end_headers()
+        self.wfile.write(raw)
+
+    def log_message(self, *args):
+        pass
+
+
+HTTPServer(("0.0.0.0", 8001), Handler).serve_forever()
+"""
+
+
+def _wait_for_container_health(container, timeout=90):
+    """Docker's own health verdict, once it stops being 'starting'."""
+    deadline = time.time() + timeout
+    status = None
+    while time.time() < deadline:
+        inspect = _run_docker(
+            ["inspect", "--format={{.State.Health.Status}}", container], timeout=20
+        )
+        status = inspect.stdout.strip()
+        if status in ("healthy", "unhealthy"):
+            return status
+        time.sleep(1)
+    return status
+
+
+@pytest.mark.parametrize(
+    ("reported_status", "expected_health"),
+    [("healthy", "healthy"), ("unhealthy", "unhealthy")],
+)
+def test_docker_healthcheck_follows_the_reported_status(
+    docker_image, reported_status, expected_health
+):
+    """The unhealthy half of the healthcheck, which nothing covered before.
+
+    /health answers HTTP 200 on both of its branches (endpoints/system.py:88-115
+    returns {"status": "unhealthy"} from `except`), so a healthcheck that only
+    asks urlopen not to raise can never turn a container unhealthy no matter
+    what the service says. This drives the image's baked-in HEALTHCHECK -- and
+    Docker's runner for it, not our own HTTP polling -- against both answers.
+
+    test_docker_healthcheck_command.py checks the same contract without a
+    daemon; this one proves it survives being baked into the image.
+    """
+    container = f"marm-test-healthstatus-{uuid.uuid4().hex[:10]}"
+
+    run = _run_docker(
+        [
+            "run",
+            "-d",
+            "--name",
+            container,
+            "--entrypoint",
+            "python",
+            "--health-interval=2s",
+            "--health-timeout=5s",
+            "--health-retries=2",
+            "--health-start-period=1s",
+            docker_image,
+            "-c",
+            _STUB_HEALTH_SERVER,
+            reported_status,
+        ],
+        timeout=90,
+    )
+    assert run.returncode == 0, run.stderr
+
+    try:
+        status = _wait_for_container_health(container)
+        logs = _run_docker(["logs", container], timeout=20)
+        inspect = _run_docker(
+            ["inspect", "--format={{json .State.Health}}", container], timeout=20
+        )
+        assert status == expected_health, (
+            f"service reported {reported_status!r}, docker said {status!r}\n"
+            f"health: {inspect.stdout.strip()}\n"
+            f"logs: {logs.stdout}{logs.stderr}"
         )
     finally:
         _run_docker(["rm", "-f", container], timeout=30)
