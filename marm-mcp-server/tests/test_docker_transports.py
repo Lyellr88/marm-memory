@@ -696,7 +696,7 @@ def test_docker_without_a_key_generates_one_instead_of_loopback_fallback(
         # (auth.py:47), the loopback fallback (auth.py:26-36) sends none.
         assert unauthenticated.headers.get("WWW-Authenticate") == "Bearer"
 
-        generated = _read_generated_key(marm_data_dir / ".env")
+        generated = _read_generated_key(container)
         assert generated, "no key was persisted to the mounted data dir"
 
         authenticated = requests.get(
@@ -710,11 +710,20 @@ def test_docker_without_a_key_generates_one_instead_of_loopback_fallback(
         _run_docker(["rm", "-f", container], timeout=30)
 
 
-def _read_generated_key(env_path):
-    """MARM_API_KEY out of the .env the container wrote into the bind mount."""
-    if not env_path.exists():
+def _read_generated_key(container):
+    """MARM_API_KEY out of the .env the container wrote, read from inside it.
+
+    The file lands in the bind mount, but api_key_bootstrap.py:60 chmods it to
+    0600 and the container's non-root marm user owns it, so on a Linux host the
+    obvious read from the mount is a PermissionError rather than a key. Measured
+    on a runner: the host-side version of this failed exactly that way.
+    """
+    result = _run_docker(
+        ["exec", container, "cat", "/home/marm/.marm/.env"], timeout=20
+    )
+    if result.returncode != 0:
         return ""
-    for line in env_path.read_text().splitlines():
+    for line in result.stdout.splitlines():
         if line.strip().startswith("MARM_API_KEY="):
             return line.split("=", 1)[1].strip()
     return ""
