@@ -15,6 +15,18 @@ pytestmark = pytest.mark.docker
 
 DOCKER_IMAGE = os.environ.get("MARM_DOCKER_IMAGE", "lyellr88/marm-mcp-server:latest")
 
+# Every probe below talks to a container this file just started, so an ambient
+# proxy must never be consulted. With HTTP_PROXY set and no_proxy unset,
+# requests sends these calls to the proxy and the assertions then describe the
+# proxy rather than the container: a stub proxy that answers /health 200, an
+# unauthenticated call 401 and a keyed call 200 makes
+# test_docker_exposed_publish_still_requires_key_off_loopback pass with nothing
+# listening on the published port at all. Loopback is not exempt either -
+# requests.utils.should_bypass_proxies("http://127.0.0.1:<port>/health", None)
+# is False under those settings - so the session is the file's, not one test's.
+HTTP = requests.Session()
+HTTP.trust_env = False
+
 
 def _run_docker(args, timeout=60):
     return subprocess.run(
@@ -52,7 +64,7 @@ def _wait_for_health(base_url, timeout=90):
     last_error = None
     while time.time() < deadline:
         try:
-            response = requests.get(f"{base_url}/health", timeout=3)
+            response = HTTP.get(f"{base_url}/health", timeout=3)
             if response.status_code == 200 and response.json()["status"] == "healthy":
                 return
         except Exception as exc:
@@ -110,11 +122,11 @@ def test_docker_http_requires_key_and_serves_tools(docker_image, marm_data_dir):
     try:
         _wait_for_health(base_url)
 
-        ready = requests.get(f"{base_url}/ready", timeout=5)
+        ready = HTTP.get(f"{base_url}/ready", timeout=5)
         assert ready.status_code == 200
         assert "websocket" not in ready.text.lower()
 
-        openapi = requests.get(f"{base_url}/openapi.json", timeout=5)
+        openapi = HTTP.get(f"{base_url}/openapi.json", timeout=5)
         assert openapi.status_code == 200
         operation_ids = {
             operation.get("operationId")
@@ -124,16 +136,16 @@ def test_docker_http_requires_key_and_serves_tools(docker_image, marm_data_dir):
         }
         assert set(MCP_TOOL_OPERATIONS).issubset(operation_ids)
 
-        missing_auth = requests.get(
+        missing_auth = HTTP.get(
             f"{base_url}/marm_log_show", params={"session_name": "main"}, timeout=5
         )
-        wrong_auth = requests.get(
+        wrong_auth = HTTP.get(
             f"{base_url}/marm_log_show",
             params={"session_name": "main"},
             headers={"Authorization": "Bearer wrong"},
             timeout=5,
         )
-        correct_auth = requests.get(
+        correct_auth = HTTP.get(
             f"{base_url}/marm_log_show",
             params={"session_name": "main"},
             headers={"Authorization": f"Bearer {api_key}"},
@@ -144,7 +156,7 @@ def test_docker_http_requires_key_and_serves_tools(docker_image, marm_data_dir):
         assert wrong_auth.status_code == 401
         assert correct_auth.status_code == 200
 
-        no_websocket = requests.get(
+        no_websocket = HTTP.get(
             f"{base_url}/mcp/ws",
             headers={"Authorization": f"Bearer {api_key}"},
             timeout=5,
@@ -455,7 +467,7 @@ def test_docker_data_persists_across_container_restart(docker_image, marm_data_d
 
     try:
         base_url = _start(first_container)
-        write = requests.post(
+        write = HTTP.post(
             f"{base_url}/marm_log_entry",
             json={
                 "entry": f"2026-07-07-persist-check-wrote from {first_container}",
@@ -470,7 +482,7 @@ def test_docker_data_persists_across_container_restart(docker_image, marm_data_d
 
     try:
         base_url = _start(second_container)
-        read = requests.get(
+        read = HTTP.get(
             f"{base_url}/marm_log_show",
             params={"session_name": session_name},
             headers=headers,
@@ -631,13 +643,13 @@ def test_docker_exposed_publish_still_requires_key_off_loopback(
         _wait_for_health(f"http://127.0.0.1:{port}")
         remote = f"http://{host_ip}:{port}"
 
-        health = requests.get(f"{remote}/health", timeout=5)
+        health = HTTP.get(f"{remote}/health", timeout=5)
         assert health.status_code == 200, "exposed port unreachable off loopback"
 
-        missing_auth = requests.get(
+        missing_auth = HTTP.get(
             f"{remote}/marm_log_show", params={"session_name": "main"}, timeout=5
         )
-        correct_auth = requests.get(
+        correct_auth = HTTP.get(
             f"{remote}/marm_log_show",
             params={"session_name": "main"},
             headers={"Authorization": f"Bearer {api_key}"},
@@ -688,7 +700,7 @@ def test_docker_without_a_key_generates_one_instead_of_loopback_fallback(
     try:
         _wait_for_health(base_url)
 
-        unauthenticated = requests.get(
+        unauthenticated = HTTP.get(
             f"{base_url}/marm_log_show", params={"session_name": "main"}, timeout=5
         )
         assert unauthenticated.status_code == 401
@@ -699,7 +711,7 @@ def test_docker_without_a_key_generates_one_instead_of_loopback_fallback(
         generated = _read_generated_key(container)
         assert generated, "no key was persisted to the mounted data dir"
 
-        authenticated = requests.get(
+        authenticated = HTTP.get(
             f"{base_url}/marm_log_show",
             params={"session_name": "main"},
             headers={"Authorization": f"Bearer {generated}"},
