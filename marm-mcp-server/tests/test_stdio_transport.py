@@ -83,7 +83,8 @@ def test_stdio_graph_tools_import_order_does_not_affect_registration(tmp_path):
         "assert names == [\n"
         "    'marm_smart_recall', 'marm_log_entry', 'marm_log_show', 'marm_delete',\n"
         "    'marm_notebook', 'marm_summary', 'marm_compaction', 'marm_graph_index',\n"
-        "    'marm_code_lookup', 'marm_graph_trace', 'marm_graph_architecture',\n"
+        "    'marm_code_lookup', 'marm_code_context', 'marm_graph_trace',\n"
+        "    'marm_graph_architecture',\n"
         "    'marm_graph_impact', 'marm_concept_build', 'marm_concept_recall',\n"
         "], names\n"
     )
@@ -212,12 +213,13 @@ def test_stdio_handles_mcp_initialize_and_exposes_tools(tmp_path):
     assert "marm_apply_compaction" not in tool_names
     assert "marm_graph_index" in tool_names
     assert "marm_code_lookup" in tool_names
+    assert "marm_code_context" in tool_names
     assert "marm_graph_trace" in tool_names
     assert "marm_graph_architecture" in tool_names
     assert "marm_graph_impact" in tool_names
     assert "marm_concept_build" in tool_names
     assert "marm_concept_recall" in tool_names
-    assert len(tools) == 14
+    assert len(tools) == 15
 
     ordered_names = [t["name"] for t in tools]
     assert ordered_names == [
@@ -230,6 +232,7 @@ def test_stdio_handles_mcp_initialize_and_exposes_tools(tmp_path):
         "marm_compaction",
         "marm_graph_index",
         "marm_code_lookup",
+        "marm_code_context",
         "marm_graph_trace",
         "marm_graph_architecture",
         "marm_graph_impact",

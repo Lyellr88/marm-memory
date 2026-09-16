@@ -739,6 +739,48 @@ export interface CodeGraphNeighborhood {
 
 export type CodeSearchKind = 'auto' | 'symbol' | 'text' | 'snippet';
 
+export interface CodeContextInput {
+  task: string;
+  project?: string | null;
+  cwd?: string | null;
+  budget?: number;
+}
+
+export interface CodeContextSymbol {
+  name: string;
+  qualified_name: string;
+  label: string;
+  file_path: string;
+  start_line: number;
+  end_line: number;
+  score: number;
+  seeded: boolean;
+  truncated: boolean;
+  source: string;
+}
+
+export interface CodeContextProject {
+  name: string;
+  short_name: string;
+  root_path: string;
+}
+
+/** `no_project` and `unavailable` are answers, not failures: each carries the
+ *  next step to take, so the page renders the hint rather than an error. */
+export interface CodeContextResult {
+  status: 'success' | 'no_project' | 'unavailable';
+  message?: string;
+  hint?: string;
+  project?: CodeContextProject;
+  task?: string;
+  markdown?: string;
+  symbols?: CodeContextSymbol[];
+  memories?: Array<Record<string, unknown>>;
+  links?: Array<Record<string, unknown>>;
+  graph_nodes?: number;
+  notes?: string[];
+}
+
 export interface CodeSearchInput {
   query: string;
   kind?: CodeSearchKind;
