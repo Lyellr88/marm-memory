@@ -1,5 +1,6 @@
 import os
 import shlex
+import shutil
 import sys
 from pathlib import Path
 
@@ -46,6 +47,39 @@ def cbm_spawn_command() -> list[str]:
     if _CBM_COMMAND_RAW:
         return shlex.split(_CBM_COMMAND_RAW)
     return [sys.executable, "-m", "codebase_memory_mcp"]
+
+
+def cbm_binary_status() -> str:
+    """Check the selected launcher without starting it or downloading the engine."""
+    if CBM_BINARY_PATH or _CBM_COMMAND_RAW:
+        prefix = "configured_binary" if CBM_BINARY_PATH else "configured_command"
+        try:
+            command = cbm_spawn_command()
+        except ValueError:
+            return f"{prefix}_invalid"
+        if not command or not command[0]:
+            return f"{prefix}_invalid"
+        binary = Path(command[0])
+        if not binary.is_absolute() and not os.path.dirname(command[0]):
+            return "available" if shutil.which(command[0]) else f"{prefix}_missing"
+        if not binary.is_absolute():
+            binary = Path(CBM_CWD) / binary
+        try:
+            if not binary.is_file():
+                return f"{prefix}_missing"
+            if not os.access(binary, os.X_OK):
+                return f"{prefix}_not_executable"
+        except OSError:
+            return f"{prefix}_missing"
+        return "available"
+    try:
+        from codebase_memory_mcp import _cli
+
+        if _cli._bin_path(_cli._version()).is_file():
+            return "available"
+    except Exception:
+        pass
+    return "engine_binary_absent"
 
 
 CBM_STARTUP_TIMEOUT = float(_safe_int("CBM_STARTUP_TIMEOUT", 60))

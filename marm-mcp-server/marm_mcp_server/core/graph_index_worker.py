@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 
 import structlog
 
+from marm_graph.config import settings as graph_settings
 from marm_graph.core import tool_router as R
 from marm_graph.core.models import GraphIndexRequest
 
@@ -266,19 +267,13 @@ class GraphIndexWorker:
 
     @staticmethod
     def binary_present() -> bool:
-        """Whether the engine binary is already downloaded.
+        """Whether the selected engine launcher is already available.
 
         Auto-index is on by default, so an eager start that ignored this would
         make every fresh install pull ~269MB on first boot, including users who
-        never touch a graph tool. Same check graph_supervisor uses before it
-        logs the one-time download notice.
+        never touch a graph tool.
         """
-        try:
-            from codebase_memory_mcp import _cli
-
-            return bool(_cli._bin_path(_cli._version()).exists())
-        except Exception:
-            return False
+        return graph_settings.cbm_binary_status() == "available"
 
     def start(self) -> None:
         """Never raises. A worker that cannot run leaves graphs as stale as
@@ -404,8 +399,9 @@ class GraphIndexWorker:
         spawning and handshaking, so it must never run inline in lifespan and
         never inside a scheduling tick.
         """
-        if not self.binary_present():
-            logger.info("graph_auto_index.dormant", reason="engine_binary_absent")
+        status = graph_settings.cbm_binary_status()
+        if status != "available":
+            logger.info("graph_auto_index.dormant", reason=status)
             return
         try:
             await asyncio.to_thread(graph_supervisor.is_available)

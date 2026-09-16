@@ -630,6 +630,13 @@ docker logs marm-mcp-server
 
 ## Configuration
 
+### Automatic code indexing
+
+The image includes both the graph engine and Git. After you index a repository once with `marm_graph_index`, the background worker detects changes to that repository using its container-visible path. Mount the repository, including its `.git` directory, into the container for change detection.
+
+The worker uses the same launcher selection as manual graph tools: `CBM_BINARY_PATH`, then `CBM_COMMAND`, then the pip-managed engine. A missing configured path is reported as `graph_auto_index.dormant` with reason `configured_binary_missing`; a non-executable path uses `configured_binary_not_executable`. Check the path and permissions inside the container. Graph startup failures leave core memory tools available. Outside Docker, an absent pip-managed engine remains dormant until a manual graph call downloads it.
+
+
 ### **Environment Variables (Advanced)**
 
 For custom configuration, add environment variables to your Docker commands:

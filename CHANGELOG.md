@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Docker auto-indexing now recognizes the configured graph engine instead of checking only the pip download cache. The runtime image includes Git so repository changes can be detected.
+- Engine startup and the background worker share launcher availability checks. Invalid or missing configured launchers produce distinct dormant reasons without falling back to a different engine; a fresh pip installation still avoids downloading the engine until a graph tool is used.
+
 <details>
 <summary><strong>September 16th, 2026: Clearer Indexed Project Labels (v2.48.2)</strong></summary>
 

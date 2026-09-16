@@ -1,5 +1,3 @@
-import os
-
 import structlog
 
 from ..config import settings
@@ -39,10 +37,10 @@ _KNOWN_EXTRA_UPSTREAM_TOOLS = {
 
 def verify_and_start(client: CbmClient) -> None:
     """Start the child, verify the binary trust boundary, check for schema drift."""
-    if settings.CBM_BINARY_PATH and not os.path.exists(settings.CBM_BINARY_PATH):
-        raise RuntimeError(
-            f"CBM_BINARY_PATH does not exist: {settings.CBM_BINARY_PATH}"
-        )
+    if settings.CBM_BINARY_PATH or settings._CBM_COMMAND_RAW:
+        status = settings.cbm_binary_status()
+        if status != "available":
+            raise RuntimeError(f"Graph engine launcher unavailable: {status}")
     settings.STORE_DIR.mkdir(parents=True, exist_ok=True)
     client.start()
     logger.info(

@@ -705,7 +705,7 @@ def test_a_non_git_project_reindexes_only_when_due(shared_db, tmp_path, monkeypa
 
 
 def test_the_poller_stays_dormant_when_the_engine_binary_is_absent(
-    shared_db, monkeypatch
+    shared_db, monkeypatch, tmp_path
 ):
     """Auto-index is on by default. Priming the engine when the binary is not
     downloaded would make every fresh install pull ~269MB at first boot,
@@ -713,7 +713,11 @@ def test_the_poller_stays_dormant_when_the_engine_binary_is_absent(
     from marm_mcp_server.core import graph_index_worker as module
 
     worker = module.GraphIndexWorker()
-    monkeypatch.setattr(worker, "binary_present", lambda: False)
+    from codebase_memory_mcp import _cli
+
+    monkeypatch.setattr(module.graph_settings, "CBM_BINARY_PATH", "")
+    monkeypatch.setattr(module.graph_settings, "_CBM_COMMAND_RAW", "")
+    monkeypatch.setattr(_cli, "_bin_path", lambda version: tmp_path / "absent-engine")
     monkeypatch.setattr(
         module.graph_supervisor,
         "is_available",
