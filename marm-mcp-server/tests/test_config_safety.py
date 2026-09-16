@@ -204,9 +204,52 @@ def test_generated_key_file_is_not_world_readable_under_a_permissive_umask(
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX file modes")
+def test_an_existing_insecure_key_file_is_hardened_BEFORE_the_secret_is_written(
+    monkeypatch, tmp_path
+):
+    """The mode must be fixed before the new token reaches the file.
+
+    `O_CREAT` does not re-mode a file that already exists, so an existing 0644
+    `~/.marm/.env` would otherwise receive the new bearer token while still
+    world-readable, and only be hardened afterwards. That is the same exposure
+    as the new-file case on a path whose end state looks correct.
+
+    Captured by recording the mode at the moment the file is opened for
+    writing, rather than by inspecting it once everything has finished.
+    """
+    from marm_mcp_server.config import api_key_bootstrap
+
+    env_path = tmp_path / ".marm" / ".env"
+    env_path.parent.mkdir(parents=True)
+    env_path.write_text("MARM_API_KEY=stale-value-that-is-long-enough\n")
+    env_path.chmod(0o644)
+    monkeypatch.setattr(api_key_bootstrap, "_MARM_ENV_PATH", env_path)
+    monkeypatch.setattr(api_key_bootstrap, "_load_key_from_file", lambda: "")
+    monkeypatch.delenv("MARM_API_KEY", raising=False)
+
+    modes_at_open = []
+    real_open = os.open
+
+    def record_mode(path, flags, mode=0o777, *args, **kwargs):
+        if str(path) == str(env_path) and os.path.exists(path):
+            modes_at_open.append(stat.S_IMODE(os.stat(path).st_mode))
+        return real_open(path, flags, mode, *args, **kwargs)
+
+    monkeypatch.setattr(os, "open", record_mode)
+
+    generated_key = api_key_bootstrap.resolve_marm_api_key("0.0.0.0")
+
+    assert generated_key
+    assert modes_at_open, "the key file was never opened"
+    assert modes_at_open[0] & 0o077 == 0, (
+        f"secret written into a file still at {modes_at_open[0]:#o}"
+    )
+    assert env_path.read_text() == f"MARM_API_KEY={generated_key}\n"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX file modes")
 def test_existing_insecure_key_file_is_overwritten_and_hardened(monkeypatch, tmp_path):
-    """O_CREAT does not change the mode of a file that already exists, so the
-    hardening step still has to run. Bootstrap intentionally overwrites."""
+    """End state: content replaced and mode owner-only."""
     from marm_mcp_server.config import api_key_bootstrap
 
     env_path = tmp_path / ".marm" / ".env"

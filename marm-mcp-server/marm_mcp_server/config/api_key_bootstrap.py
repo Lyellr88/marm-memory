@@ -17,18 +17,32 @@ def _file_link(path: Path) -> str:
 
 
 def _write_key_file(path: Path, marm_api_key: str) -> None:
-    """Write the key file, creating it owner-only before the secret lands.
+    """Write the key file so the secret is never on disk world-readable.
 
-    `Path.write_text()` creates through the process umask -- 0644 typically,
-    0666 under `umask 0` -- so the plaintext bearer token is readable by other
-    local users for the window between the write and the chmod inside
-    `_protect_key_file()`. Opening with an explicit mode closes that window.
+    There are two distinct exposures, and the mode argument to `os.open` only
+    closes one of them.
 
-    The mode argument applies only when `os.open` CREATES the file, so an
-    existing file keeps whatever mode it already had; `_protect_key_file()`
-    stays the cross-platform hardening and verification step. `O_TRUNC`
-    because bootstrap intentionally overwrites.
+    New file: `Path.write_text()` creates through the process umask -- 0644
+    typically, 0666 under `umask 0` -- leaving the plaintext bearer token
+    readable by other local users until the chmod inside `_protect_key_file()`
+    lands. Creating with an explicit 0o600 closes that window.
+
+    Existing file: the mode argument applies ONLY when `os.open` creates the
+    file. An existing `~/.marm/.env` at 0644 keeps 0644 through the `O_TRUNC`
+    open, so without the step below the new token would be written into a
+    still-world-readable file and hardened only afterwards -- the same exposure
+    the new-file case has, on a path that is easy to overlook because the end
+    state looks correct. So harden before writing when the file already exists.
+
+    `_protect_key_file()` still runs after the write. It is the cross-platform
+    step, it is what validates Windows ACLs, and it is what the caller checks
+    before deciding the key was persisted safely.
+
+    `O_TRUNC` because bootstrap intentionally overwrites, where
+    `initialize_managed_key()` intentionally refuses to (`O_EXCL`).
     """
+    if path.exists() and not _protect_key_file(path):
+        raise OSError(f"could not secure the existing key file before writing: {path}")
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(descriptor, "w", encoding="utf-8") as key_file:
         key_file.write(f"MARM_API_KEY={marm_api_key}\n")
