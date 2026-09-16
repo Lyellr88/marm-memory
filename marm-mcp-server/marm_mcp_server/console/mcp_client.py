@@ -173,7 +173,10 @@ def _with_display_names(projects: list[dict]) -> list[dict]:
     def label(p: dict) -> str:
         pieces = parts[id(p)]
         if not pieces:
-            return p["name"]
+            # str() is for the type checker, not for safety: _usable_project has
+            # already established this is a non-empty string, but `projects` is
+            # an untyped dict so the subscript is Any.
+            return str(p["name"])
         return "/".join(pieces[-min(depth[id(p)], len(pieces)) :])
 
     # Deepen only the groups that still collide, so an unambiguous project keeps
