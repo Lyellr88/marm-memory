@@ -713,3 +713,76 @@ def test_stderr_tail_is_bounded():
     assert len(client._stderr_tail) == 10
     assert "line 49" in client._stderr_context()
     assert "line 39" not in client._stderr_context()
+
+
+class _ExitedProc:
+    """A stand-in for a child that has already exited."""
+
+    def poll(self):
+        return 1
+
+
+class _LiveProc:
+    """A stand-in for a child that is still running."""
+
+    def poll(self):
+        return None
+
+
+def test_stderr_context_waits_for_a_late_final_line_when_the_child_exited():
+    """stdout and stderr are drained by independent threads.
+
+    `_read_stdout` can queue `_EOF` while the child's last stderr line is still
+    in flight, so formatting the error immediately can drop the refusal this
+    mechanism exists to surface. When the child has exited, wait briefly for the
+    drain thread to finish.
+    """
+    import threading
+
+    from marm_graph.core.cbm_client import CbmClient
+
+    client = CbmClient(command=["/nonexistent"], startup_timeout=1, call_timeout=1)
+    client._proc = _ExitedProc()
+    client._stderr_done = threading.Event()
+
+    def late_line():
+        time.sleep(0.05)
+        client._stderr_tail.append("CBM could not start: cache directory differs")
+        client._stderr_done.set()
+
+    threading.Thread(target=late_line, daemon=True).start()
+    context = client._stderr_context()
+
+    assert "cache directory differs" in context
+
+
+def test_stderr_context_does_not_block_while_the_child_is_still_alive():
+    """stdout can close on a living child. Waiting then would stall the error
+    path for the full timeout on a process that never closes stderr."""
+    import threading
+
+    from marm_graph.core.cbm_client import CbmClient
+
+    client = CbmClient(command=["/nonexistent"], startup_timeout=1, call_timeout=1)
+    client._proc = _LiveProc()
+    client._stderr_done = threading.Event()  # never set
+
+    started = time.perf_counter()
+    client._stderr_context()
+    assert time.perf_counter() - started < 0.2
+
+
+def test_stderr_context_is_bounded_when_the_drain_never_finishes():
+    """A drain thread that never signals must not hang the error path."""
+    import threading
+
+    from marm_graph.core.cbm_client import _STDERR_SETTLE_TIMEOUT, CbmClient
+
+    client = CbmClient(command=["/nonexistent"], startup_timeout=1, call_timeout=1)
+    client._proc = _ExitedProc()
+    client._stderr_done = threading.Event()  # never set
+
+    started = time.perf_counter()
+    client._stderr_context()
+    elapsed = time.perf_counter() - started
+    assert _STDERR_SETTLE_TIMEOUT <= elapsed < _STDERR_SETTLE_TIMEOUT + 0.5
