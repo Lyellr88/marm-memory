@@ -4,6 +4,8 @@ import stat
 import sys
 from unittest import mock
 
+import pytest
+
 
 def _reload_settings_with_env(env: dict[str, str]):
     """Reload settings under a temporary env patch, then restore the original module."""
@@ -153,3 +155,100 @@ def test_resolve_marm_api_key_warns_when_insecure_file_cannot_be_removed(
     assert str(env_path) in warning
     assert "memory for this process only" in warning
     assert "Set MARM_API_KEY explicitly in the environment" in warning
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX file modes")
+def test_generated_key_file_is_created_owner_only_before_any_chmod(
+    monkeypatch, tmp_path
+):
+    """The key file must be owner-only from creation, not from the chmod after it.
+
+    `_protect_key_file` is neutralised to a no-op that reports success, so the
+    only thing that can make the mode 0600 here is how the file was created. If
+    creation still goes through the process umask, this fails.
+    """
+    from marm_mcp_server.config import api_key_bootstrap
+
+    env_path = tmp_path / ".marm" / ".env"
+    monkeypatch.setattr(api_key_bootstrap, "_MARM_ENV_PATH", env_path)
+    monkeypatch.setattr(api_key_bootstrap, "_protect_key_file", lambda path: True)
+    monkeypatch.delenv("MARM_API_KEY", raising=False)
+
+    generated_key = api_key_bootstrap.resolve_marm_api_key("0.0.0.0")
+
+    assert generated_key
+    assert stat.S_IMODE(env_path.stat().st_mode) == 0o600
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX file modes")
+def test_generated_key_file_is_not_world_readable_under_a_permissive_umask(
+    monkeypatch, tmp_path
+):
+    """umask 0 is the worst case: `Path.write_text()` would create this 0666,
+    publishing the bearer token to every local user until the chmod lands."""
+    from marm_mcp_server.config import api_key_bootstrap
+
+    env_path = tmp_path / ".marm" / ".env"
+    monkeypatch.setattr(api_key_bootstrap, "_MARM_ENV_PATH", env_path)
+    monkeypatch.setattr(api_key_bootstrap, "_protect_key_file", lambda path: True)
+    monkeypatch.delenv("MARM_API_KEY", raising=False)
+
+    previous_umask = os.umask(0)
+    try:
+        generated_key = api_key_bootstrap.resolve_marm_api_key("0.0.0.0")
+    finally:
+        os.umask(previous_umask)
+
+    assert generated_key
+    assert stat.S_IMODE(env_path.stat().st_mode) & 0o077 == 0
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX file modes")
+def test_existing_insecure_key_file_is_overwritten_and_hardened(monkeypatch, tmp_path):
+    """O_CREAT does not change the mode of a file that already exists, so the
+    hardening step still has to run. Bootstrap intentionally overwrites."""
+    from marm_mcp_server.config import api_key_bootstrap
+
+    env_path = tmp_path / ".marm" / ".env"
+    env_path.parent.mkdir(parents=True)
+    env_path.write_text("MARM_API_KEY=stale-value-that-is-long-enough\n")
+    env_path.chmod(0o644)
+    monkeypatch.setattr(api_key_bootstrap, "_MARM_ENV_PATH", env_path)
+    monkeypatch.setattr(api_key_bootstrap, "_load_key_from_file", lambda: "")
+    monkeypatch.delenv("MARM_API_KEY", raising=False)
+
+    generated_key = api_key_bootstrap.resolve_marm_api_key("0.0.0.0")
+
+    assert generated_key
+    assert env_path.read_text() == f"MARM_API_KEY={generated_key}\n"
+    assert stat.S_IMODE(env_path.stat().st_mode) & 0o077 == 0
+
+
+def test_key_file_creation_failure_is_reported_and_leaves_no_file(
+    monkeypatch, tmp_path, capsys
+):
+    """A failure opening the file must not crash startup, and must not leave a
+    partially written credential behind."""
+    from marm_mcp_server.config import api_key_bootstrap
+
+    env_path = tmp_path / ".marm" / ".env"
+    monkeypatch.setattr(api_key_bootstrap, "_MARM_ENV_PATH", env_path)
+    monkeypatch.delenv("MARM_API_KEY", raising=False)
+
+    real_open = os.open
+
+    def refuse_key_file(path, flags, mode=0o777, *args, **kwargs):
+        if str(path) == str(env_path):
+            raise OSError(13, "Permission denied")
+        return real_open(path, flags, mode, *args, **kwargs)
+
+    monkeypatch.setattr(os, "open", refuse_key_file)
+
+    generated_key = api_key_bootstrap.resolve_marm_api_key("0.0.0.0")
+
+    assert generated_key  # still usable in memory for this process
+    assert not env_path.exists()
+    # Assert on both streams: which one the warning lands on is not part of the
+    # contract, and under the full suite stdout is not always the process's own.
+    captured = capsys.readouterr()
+    assert "Could not save API key" in (captured.out + captured.err)

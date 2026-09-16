@@ -16,6 +16,24 @@ def _file_link(path: Path) -> str:
         return str(path)
 
 
+def _write_key_file(path: Path, marm_api_key: str) -> None:
+    """Write the key file, creating it owner-only before the secret lands.
+
+    `Path.write_text()` creates through the process umask -- 0644 typically,
+    0666 under `umask 0` -- so the plaintext bearer token is readable by other
+    local users for the window between the write and the chmod inside
+    `_protect_key_file()`. Opening with an explicit mode closes that window.
+
+    The mode argument applies only when `os.open` CREATES the file, so an
+    existing file keeps whatever mode it already had; `_protect_key_file()`
+    stays the cross-platform hardening and verification step. `O_TRUNC`
+    because bootstrap intentionally overwrites.
+    """
+    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(descriptor, "w", encoding="utf-8") as key_file:
+        key_file.write(f"MARM_API_KEY={marm_api_key}\n")
+
+
 def _load_key_from_file() -> str:
     """Read MARM_API_KEY from ~/.marm/.env if present."""
     try:
@@ -55,7 +73,7 @@ def resolve_marm_api_key(server_host: str) -> str:
         key_persisted = False
         try:
             _MARM_ENV_PATH.parent.mkdir(parents=True, exist_ok=True)
-            _MARM_ENV_PATH.write_text(f"MARM_API_KEY={marm_api_key}\n")
+            _write_key_file(_MARM_ENV_PATH, marm_api_key)
             try:
                 key_protected = _protect_key_file(_MARM_ENV_PATH)
             except Exception:
