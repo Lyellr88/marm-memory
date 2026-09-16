@@ -1,4 +1,5 @@
 import os
+import stat
 import sys
 from pathlib import Path
 
@@ -14,6 +15,35 @@ def _file_link(path: Path) -> str:
         return f"\033]8;;{uri}\033\\{path}\033]8;;\033\\"
     except Exception:
         return str(path)
+
+
+def _secure_key_dir(directory: Path) -> None:
+    """Create or tighten `~/.marm` so only its owner can put files in it.
+
+    `mkdir(parents=True, exist_ok=True)` uses `0o777 & ~umask`, so under
+    `umask 0` the directory is created world-writable. Any local user with
+    write and execute there can swap `.env` for a file or symlink they own
+    during the window between hardening it and opening it, and since an
+    explicit mode only applies when `os.open` CREATES a file, their file keeps
+    its permissive mode and receives the bearer token.
+
+    Closing that means the directory, not just the file: a mode argument to
+    `mkdir` applies only on creation, so an already-permissive directory is
+    tightened here too. Fails closed if it cannot be made owner-only, because
+    writing a credential into a directory other users can write to is the thing
+    being prevented.
+    """
+    directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if os.name == "nt":  # POSIX modes do not apply; ACLs are handled per-file
+        return
+    if stat.S_IMODE(directory.stat().st_mode) & 0o077:
+        directory.chmod(0o700)
+    remaining = stat.S_IMODE(directory.stat().st_mode)
+    if remaining & 0o077:
+        raise OSError(
+            f"key directory is accessible to other users and could not be "
+            f"secured: {directory} (mode {remaining:#o})"
+        )
 
 
 def _write_key_file(path: Path, marm_api_key: str) -> None:
@@ -41,9 +71,16 @@ def _write_key_file(path: Path, marm_api_key: str) -> None:
     `O_TRUNC` because bootstrap intentionally overwrites, where
     `initialize_managed_key()` intentionally refuses to (`O_EXCL`).
     """
+    if path.is_symlink():
+        # Never write a credential through a link: the target is chosen by
+        # whoever created the link, not by us.
+        raise OSError(f"key file is a symlink, refusing to write through it: {path}")
     if path.exists() and not _protect_key_file(path):
         raise OSError(f"could not secure the existing key file before writing: {path}")
-    descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    # O_NOFOLLOW makes the kernel refuse a symlink swapped in after the checks
+    # above, closing the gap between them and this open. Absent on Windows.
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(path, flags, 0o600)
     with os.fdopen(descriptor, "w", encoding="utf-8") as key_file:
         key_file.write(f"MARM_API_KEY={marm_api_key}\n")
 
@@ -86,7 +123,7 @@ def resolve_marm_api_key(server_host: str) -> str:
         marm_api_key = generate_api_key()
         key_persisted = False
         try:
-            _MARM_ENV_PATH.parent.mkdir(parents=True, exist_ok=True)
+            _secure_key_dir(_MARM_ENV_PATH.parent)
             _write_key_file(_MARM_ENV_PATH, marm_api_key)
             try:
                 key_protected = _protect_key_file(_MARM_ENV_PATH)

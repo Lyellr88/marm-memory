@@ -295,3 +295,74 @@ def test_key_file_creation_failure_is_reported_and_leaves_no_file(
     # contract, and under the full suite stdout is not always the process's own.
     captured = capsys.readouterr()
     assert "Could not save API key" in (captured.out + captured.err)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX directory modes")
+def test_key_directory_is_owner_only_even_under_a_permissive_umask(
+    monkeypatch, tmp_path
+):
+    """`~/.marm` must not be world-writable.
+
+    `mkdir(parents=True, exist_ok=True)` uses `0o777 & ~umask`, so under
+    `umask 0` it is created `0o777`. Another local user could then swap `.env`
+    between hardening and opening it, and `os.open`'s mode only applies when it
+    creates the file, so their file would keep its own mode and receive the key.
+    """
+    from marm_mcp_server.config import api_key_bootstrap
+
+    env_path = tmp_path / "home" / ".marm" / ".env"
+    monkeypatch.setattr(api_key_bootstrap, "_MARM_ENV_PATH", env_path)
+    monkeypatch.delenv("MARM_API_KEY", raising=False)
+
+    previous_umask = os.umask(0)
+    try:
+        generated_key = api_key_bootstrap.resolve_marm_api_key("0.0.0.0")
+    finally:
+        os.umask(previous_umask)
+
+    assert generated_key
+    assert stat.S_IMODE(env_path.parent.stat().st_mode) & 0o077 == 0
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX directory modes")
+def test_an_existing_world_writable_key_directory_is_tightened(monkeypatch, tmp_path):
+    """A mode passed to `mkdir` applies only on creation, so a directory that
+    already exists permissively has to be fixed explicitly."""
+    from marm_mcp_server.config import api_key_bootstrap
+
+    marm_dir = tmp_path / ".marm"
+    marm_dir.mkdir()
+    marm_dir.chmod(0o777)
+    env_path = marm_dir / ".env"
+    monkeypatch.setattr(api_key_bootstrap, "_MARM_ENV_PATH", env_path)
+    monkeypatch.delenv("MARM_API_KEY", raising=False)
+
+    generated_key = api_key_bootstrap.resolve_marm_api_key("0.0.0.0")
+
+    assert generated_key
+    assert stat.S_IMODE(marm_dir.stat().st_mode) & 0o077 == 0
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX symlinks")
+def test_a_symlinked_key_file_is_refused_rather_than_followed(monkeypatch, tmp_path):
+    """Writing through a link would put the token wherever the link points."""
+    from marm_mcp_server.config import api_key_bootstrap
+
+    marm_dir = tmp_path / ".marm"
+    marm_dir.mkdir()
+    target = tmp_path / "attacker-owned"
+    target.write_text("")
+    target.chmod(0o666)
+    env_path = marm_dir / ".env"
+    env_path.symlink_to(target)
+
+    monkeypatch.setattr(api_key_bootstrap, "_MARM_ENV_PATH", env_path)
+    monkeypatch.setattr(api_key_bootstrap, "_load_key_from_file", lambda: "")
+    monkeypatch.delenv("MARM_API_KEY", raising=False)
+
+    generated_key = api_key_bootstrap.resolve_marm_api_key("0.0.0.0")
+
+    # Startup still succeeds with an in-memory key; the secret never lands.
+    assert generated_key
+    assert target.read_text() == ""
+    assert generated_key not in target.read_text()
