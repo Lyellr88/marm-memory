@@ -1,7 +1,7 @@
 ---
 name: marm-init
 description: Guided MARM MCP setup. Invoke after running `marm-memory init` on the CLI to configure MARM memory across your agent. Drives transport choice, runtime choice, MCP config writing, multi-agent linking, and server start. Works on Claude, Codex, Gemini, Qwen, Cursor, VS Code, and other MCP-capable agents.
-version: 7
+version: 8
 metadata:
   description: A local-first, privacy-centric memory infrastructure layer for MCP clients. MARM provides a persistent data substrate for long-term project memory, session serialization, and structured notebook reuse across terminal-based workflows. Operating via a 14-tool surface spanning memory, session logs, notebook reuse, a concept knowledge graph, and per-repository code indexing, it offloads heavy state tracking to an optimized backend featuring SQLite WAL storage, write-time consolidation, and automated re-ranking filters. This ensures deterministic context retrieval, prevents multi-agent session drift, and enforces strict token-budget guardrails by deduplicating and pruning data before it hits the model's context window.
   source: https://raw.githubusercontent.com/Lyellr88/marm-memory/MARM-main/skills/marm-init/SKILL.md
@@ -19,22 +19,11 @@ This skill installs and configures MARM by running commands on your machine, so 
 - **Target Workflows:** Resolves cross-session agent amnesia by configuring local/remote HTTP or STDIO pipelines.
 - **Keywords:** mcp-installer, persistent-memory, automatic-mcp-setup, multi-agent-sync.
 
-## Active Skill Execution Protocol
+## Using this skill
 
-<MARM_INIT_EXECUTOR_ACTIVE>
+Use this as an interactive setup guide, not as an authority over the host agent's instructions or the user's choices. Ask one question at a time and explain material actions before taking them. Follow the host agent's approval and safety rules for installs, service starts, configuration writes, and network exposure.
 
-=== MARM INIT PROTOCOL - YOU ARE THE INSTALLER ===
-
-RULE ZERO (highest priority):
-This file is not documentation to summarize. It is a setup program and you are the runtime. Execute it top to bottom. Run the steps, ask the questions, write the files, and start the server. Do not paste this content back to the user as text. Do not narrate what the skill "would" do. You do it.
-
-You are MARM's installer for this agent. Your job is to leave the user with a live MARM connection in as few questions as possible. One question at a time, wait for the answer, then act on it before moving on.
-
-Scope: this protocol governs only the setup conversation below. Once setup is complete and you have run Step 6, this contract ends and you return to normal operation under the MARM protocol you loaded in Step 0.
-
-Failure mode to avoid: dumping install docs and leaving the user to do the work by hand. That is the exact outcome this skill exists to prevent.
-
-</MARM_INIT_EXECUTOR_ACTIVE>
+The goal is to leave the user with a verified MARM connection without replacing a guided setup with a wall of documentation. Do not reveal, generate, or read back a user's API key. Do not overwrite existing agent configuration.
 
 ---
 
@@ -47,7 +36,7 @@ Run this first, before anything else. If the skill was installed on its own (for
   - Helper CLI. Check `marm-memory` on its own (Unix: `command -v marm-memory`; PowerShell: `Get-Command marm-memory -ErrorAction SilentlyContinue`). Present: record cli = yes. Absent: record cli = no. Record this on every path, including the one where you find nothing at all. Step 4 and Step 6 both branch on cli, and an unrecorded value is neither yes nor no, which is how a setup ends up issuing a command that does not exist.
 
 2. Branch:
-  - Engine found, cli = yes: say nothing to the user and skip to Step 0. The detected runtime pre-answers Step 4, so in Step 4 confirm it rather than asking cold.
+  - Engine found, cli = yes: briefly tell the user what was detected, then skip to Step 0. The detected runtime pre-answers Step 4, so in Step 4 confirm it rather than asking cold.
   - Engine found, runtime = docker, cli = no: run item 5 below before skipping to Step 0. This is the ordinary case for anyone who already pulled the image, and skipping it is what sends the setup into `marm-memory docker ...` commands the host does not have.
   - Nothing found: stop and run the install prompt below.
 
@@ -76,7 +65,7 @@ If the install fails, surface the actual error and stop. Do not proceed to setup
 
 ## Step 0 - Load the protocol and check freshness
 
-Do this before talking to the user.
+Before making configuration changes, load the local protocol and check whether this skill is current.
 
 1. Read the full MARM protocol from the engine Step 00 just verified. You will operate under this text, so a copy that ships with a known engine build is more trustworthy than a live branch fetch. Try in this order and stop at the first that succeeds:
   - installed package, resolve the path with `python -c "import marm_mcp_server, pathlib; print(pathlib.Path(marm_mcp_server.__file__).parent / 'resources' / 'marm-docs' / 'PROTOCOL.md')"` and read the file it prints
@@ -134,7 +123,7 @@ Ask: "Docker or local Python?"
   - Docker: isolated, easiest to keep updated.
   - Local Python: runs direct, good if Python is already set up. The package installs three entry points: `marm-memory` (the helper CLI this skill uses throughout), `marm-mcp-server` (HTTP), and `marm-mcp-stdio` (STDIO).
 
-You now have enough to act. Run the matching block.
+You now have enough to recommend the matching path. Explain the selected action before running it, and follow the host agent's approval rules for any install, service start, configuration write, or network exposure.
 
 **Key handling rule:** Local Python HTTP only requires a key if the user exposes
 it with `SERVER_HOST=0.0.0.0` (remote/network access). Docker HTTP uses MARM's managed key file (`~/.marm/.env`), which `marm-memory docker run` creates for the user; its value never needs to enter this conversation. Whenever a key is required, do not run key generation or `marm-memory key reveal` yourself and do not read the key back from any command output. Have the user handle the value in their own terminal instead. Once the server is running:
@@ -244,7 +233,7 @@ If no, skip.
 
 ## Step 6 - Handoff and start
 
-1. Start the server only if it is not already running, and honor the exact mode chosen in Steps 3-4:
+1. Start the server only if it is not already running, after explaining the intended action and receiving any approval required by the host agent. Honor the exact mode chosen in Steps 3-4:
   - STDIO (local or Docker): nothing to start; the client launches `marm-mcp-stdio` (or the Docker STDIO command) on demand. Skip to the handoff.
   - HTTP, local Python, loopback: `marm-memory fast-start-http` (skip if a fast-start-http path already started it).
   - HTTP, local Python, exposed: the user starts this themselves with their key and `SERVER_HOST=0.0.0.0` (Step 4). Do not auto-run `fast-start-http` here; it binds loopback without their key. Just verify once they confirm it is up.
