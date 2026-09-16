@@ -1,6 +1,23 @@
 # Changelog
 
 <details>
+<summary><strong>September 16th, 2026: Clearer Indexed Project Labels (v2.48.2)</strong></summary>
+
+### Fixed: Project IDs No Longer Dominate the Console
+
+Indexed repositories now use concise, collision-aware labels across the Projects page, Overview, Project Explorer, and Knowledge Graph Code Explorer. The engine-generated project ID remains the identity for routes, refreshes, and deletion, and stays available as a tooltip where a short label is displayed.
+
+- Labels are derived from the repository path, handle Windows and POSIX separators, and add parent directories only as needed to distinguish colliding repository names.
+- The Console adapter now drops malformed project records rather than letting an invalid engine response fail the whole project list.
+- Console and Python development dependencies were refreshed through the merged Dependabot updates.
+
+### Acknowledgment
+
+Thank you to [@doublegate](https://github.com/doublegate) for reporting and fixing the path-derived project-label problem ([#197](https://github.com/Lyellr88/marm-memory/issues/197), [#198](https://github.com/Lyellr88/marm-memory/pull/198)).
+
+</details>
+
+<details>
 <summary><strong>September 16th, 2026: Transparent MARM Init Skill Guidance (v2.48.1)</strong></summary>
 
 ### Fixed: Guided Setup Now Respects Agent and User Authority
