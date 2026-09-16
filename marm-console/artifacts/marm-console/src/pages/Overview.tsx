@@ -251,7 +251,7 @@ export function OverviewPage() {
                         <HardDrive className="h-4 w-4" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="truncate font-mono text-xs font-medium">{project.name}</div>
+                        <div className="truncate font-mono text-xs font-medium" title={project.name}>{project.display_name ?? project.name}</div>
                         <div className="mt-1 truncate text-[11px] text-muted-foreground">{project.root_path}</div>
                       </div>
                       <div className="grid shrink-0 grid-cols-2 gap-4 border-l border-border/70 pl-4 text-right">

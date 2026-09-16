@@ -576,6 +576,8 @@ export interface ConceptBuildInput {
 
 export interface ProjectSummary {
   name: string;
+  /** Short label for display; falls back to `name`. Never use as an identity or route key. */
+  display_name?: string;
   root_path: string;
   nodes: number;
   edges: number;
