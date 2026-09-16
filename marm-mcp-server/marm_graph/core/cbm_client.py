@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import collections
 import json
 import queue
 import re
@@ -78,6 +79,9 @@ class CbmClient:
     ):
         self._command = command
         self._cwd = cwd
+        # Bounded: enough to explain a refusal, small enough that a chatty
+        # child cannot grow it without limit over a long-lived session.
+        self._stderr_tail: collections.deque[str] = collections.deque(maxlen=10)
         self._startup_timeout = startup_timeout
         self._call_timeout = call_timeout
         self._protocol_version = protocol_version
@@ -123,6 +127,7 @@ class CbmClient:
             self._terminate_process(proc)
             raise CbmError("client is closed")
 
+        self._stderr_tail.clear()
         self._out_q = queue.Queue()
         self._reader = threading.Thread(
             target=self._read_stdout, args=(proc.stdout, self._out_q), daemon=True
@@ -158,14 +163,26 @@ class CbmClient:
         """Continuously drain stderr so a full pipe buffer can't deadlock the child.
 
         The binary logs operational lines here (e.g. mem.init); route to debug.
+        A bounded tail is also retained so that if the child then dies, the
+        reason it printed can be attached to the error the caller sees. Without
+        that, a refusal as specific as "the active account daemon uses a
+        different cache directory" surfaces only as "closed stdout (EOF)".
         """
         try:
             for raw in iter(pipe.readline, b""):
                 line = raw.decode("utf-8", "replace").rstrip()
                 if line:
                     logger.debug("cbm.stderr", line=line)
+                    self._stderr_tail.append(line)
         except (ValueError, OSError):
             pass
+
+    def _stderr_context(self) -> str:
+        """The child's last stderr lines, as a suffix for an error message."""
+        lines = list(self._stderr_tail)
+        if not lines:
+            return ""
+        return "; child stderr: " + " | ".join(lines)
 
     def _handshake(self) -> None:
         init_result = self._send_recv(
@@ -265,7 +282,9 @@ class CbmClient:
                     f"timeout waiting for response id={expect_id}"
                 ) from err
             if raw is _EOF:
-                raise CbmError("child process closed stdout (EOF)")
+                raise CbmError(
+                    "child process closed stdout (EOF)" + self._stderr_context()
+                )
             text = raw.decode("utf-8", "replace").strip("\r\n").strip()
             if not text:
                 continue

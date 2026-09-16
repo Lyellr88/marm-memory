@@ -605,3 +605,50 @@ def test_known_extras_are_not_required_to_start():
 
     assert not (_KNOWN_EXTRA_UPSTREAM_TOOLS & _EXPECTED_UPSTREAM_TOOLS)
     check_schema(set(_EXPECTED_UPSTREAM_TOOLS))
+
+
+def test_eof_error_carries_the_child_stderr_reason():
+    """A child that explains itself on stderr before dying must not be reported
+    as a bare EOF.
+
+    The binary refuses to start with a precise message when another daemon
+    holds a different cache directory. That text was drained to debug logs and
+    dropped from the exception, so the caller saw only "closed stdout (EOF)"
+    and had no way to learn what to do about it.
+    """
+    import sys
+
+    from marm_graph.core.cbm_client import CbmClient, CbmError
+
+    reason = "CBM could not start because the active account daemon"
+    client = CbmClient(
+        command=[
+            sys.executable,
+            "-c",
+            f"import sys; print({reason!r}, file=sys.stderr); sys.stderr.flush()",
+        ],
+        startup_timeout=15,
+        call_timeout=15,
+    )
+    try:
+        with pytest.raises(CbmError) as excinfo:
+            client.start()
+    finally:
+        client.close()
+
+    assert "closed stdout (EOF)" in str(excinfo.value)
+    assert reason in str(excinfo.value)
+
+
+def test_stderr_tail_is_bounded_and_resets_per_spawn():
+    """The tail must not grow without limit, and a respawn must not report the
+    previous child's stderr as the new child's reason."""
+    from marm_graph.core.cbm_client import CbmClient
+
+    client = CbmClient(command=["/nonexistent"], startup_timeout=1, call_timeout=1)
+    for i in range(50):
+        client._stderr_tail.append(f"line {i}")
+    assert len(client._stderr_tail) == 10
+    assert "line 49" in client._stderr_context()
+    client._stderr_tail.clear()
+    assert client._stderr_context() == ""
