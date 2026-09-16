@@ -2,6 +2,7 @@ import json
 import os
 import socket
 import subprocess
+import sys
 import threading
 import time
 import uuid
@@ -610,7 +611,20 @@ def test_docker_exposed_publish_still_requires_key_off_loopback(
     that the flag reaches the argv. Neither reaches a running container over a
     non-loopback interface, so nothing yet proves that the mode which accepts
     off-host clients rejects the unauthenticated ones.
+
+    Linux only. The request goes from the host to its own published port over
+    the default-route address, and a UDP source-address lookup does not prove
+    that route is open: host firewall policy (the macOS application firewall,
+    for one) can drop it even for a plain 0.0.0.0 listener, which would read
+    here as an auth regression on a valid local setup. The Linux CI runner is
+    the environment where this path is supported.
     """
+    if not sys.platform.startswith("linux"):
+        pytest.skip(
+            "host-to-own-published-port over a non-loopback address is only "
+            "supported on the Linux CI runner; host firewalls elsewhere can "
+            "block it without any product change"
+        )
     host_ip = _non_loopback_ipv4()
     if not host_ip:
         pytest.skip("Host has no non-loopback IPv4 address to publish on")
@@ -662,23 +676,14 @@ def test_docker_exposed_publish_still_requires_key_off_loopback(
         _run_docker(["rm", "-f", container], timeout=30)
 
 
-def test_docker_without_a_key_generates_one_instead_of_loopback_fallback(
-    docker_image, marm_data_dir
-):
-    """A container started with no key is key-enforced, not loopback-trusting.
+def _start_keyless_container(docker_image, marm_data_dir, prefix):
+    """Start MARM the way the managed Docker command does, with no key supplied.
 
-    middleware/auth.py:16 documents a keyless mode that serves 127.0.0.1 and
-    401s everyone else. Docker never reaches it: the run plan always sets
-    SERVER_HOST=0.0.0.0 (services/docker_commands.py:143), and at that host
-    config/api_key_bootstrap.py:53-54 generates and persists a key when none
-    was supplied, so MARM_API_KEY is always truthy inside the image. The
-    documented fallback is unreachable here, and this pins that, because the
-    difference is invisible from outside until you ask which 401 you got.
+    SERVER_HOST=0.0.0.0 is what services/docker_commands.py:143 sets for every
+    container it plans, so this is that path, not Docker in general.
     """
-    container = f"marm-test-nokey-{uuid.uuid4().hex[:10]}"
+    container = f"{prefix}-{uuid.uuid4().hex[:10]}"
     port = _free_port()
-    base_url = f"http://127.0.0.1:{port}"
-
     run = _run_docker(
         [
             "run",
@@ -696,7 +701,26 @@ def test_docker_without_a_key_generates_one_instead_of_loopback_fallback(
         timeout=90,
     )
     assert run.returncode == 0, run.stderr
+    return container, f"http://127.0.0.1:{port}"
 
+
+def test_docker_managed_keyless_start_is_key_enforced_not_loopback_fallback(
+    docker_image, marm_data_dir
+):
+    """A keyless start on the managed Docker path answers with the Bearer 401.
+
+    middleware/auth.py:16 documents a keyless mode that serves 127.0.0.1 and
+    401s everyone else. MARM's managed Docker command path does not reach it:
+    it sets SERVER_HOST=0.0.0.0, and at that host config/api_key_bootstrap.py:53
+    generates a key when none was supplied, so MARM_API_KEY is truthy whether or
+    not the key is then persisted (bootstrap keeps it in memory when file
+    protection fails). The contract pinned here is only that: an
+    unauthenticated request gets the key branch's 401, not the fallback's.
+    Persistence is a separate contract, covered by the next test.
+    """
+    container, base_url = _start_keyless_container(
+        docker_image, marm_data_dir, "marm-test-nokey"
+    )
     try:
         _wait_for_health(base_url)
 
@@ -707,6 +731,26 @@ def test_docker_without_a_key_generates_one_instead_of_loopback_fallback(
         # The two 401s differ only here: the key branch sends a challenge
         # (auth.py:47), the loopback fallback (auth.py:26-36) sends none.
         assert unauthenticated.headers.get("WWW-Authenticate") == "Bearer"
+    finally:
+        _run_docker(["rm", "-f", container], timeout=30)
+
+
+def test_docker_managed_keyless_start_persists_the_generated_key(
+    docker_image, marm_data_dir
+):
+    """On a writable data volume the generated key is persisted and usable.
+
+    The durability requirement, stated on its own so a failure names it: with
+    /home/marm/.marm mounted writable, bootstrap writes MARM_API_KEY to .env
+    and protects it, so the key survives a container restart. If persistence
+    is declined (file protection failed) the server is still key-enforced,
+    which the test above covers, and only this test fails.
+    """
+    container, base_url = _start_keyless_container(
+        docker_image, marm_data_dir, "marm-test-nokey-persist"
+    )
+    try:
+        _wait_for_health(base_url)
 
         generated = _read_generated_key(container)
         assert generated, "no key was persisted to the mounted data dir"
