@@ -1,6 +1,27 @@
 # Changelog
 
 <details>
+<summary><strong>September 16th, 2026: Transparent MARM Init Skill Guidance (v2.48.1)</strong></summary>
+
+### Fixed: Guided Setup Now Respects Agent and User Authority
+
+The `marm-init` skill no longer presents itself as a higher-priority execution protocol or tells an agent not to narrate its work. It remains a guided installer, but now states plainly that host-agent instructions and user choices govern every setup action.
+
+- Installs, service starts, configuration writes, and network exposure must be explained before they are performed and follow the host agent's approval rules.
+- Existing safety rules remain intact: never reveal, generate, or read back a user's API key; merge rather than overwrite agent configuration; and require explicit network-exposure confirmation.
+- The root and wheel-bundled skill copies were updated together, so new installations and packaged releases carry the same guidance.
+
+### Acknowledgment
+
+Thank you to [@bonelifer](https://github.com/bonelifer) for reporting the unsafe instruction-priority framing and distinguishing it from the useful setup content ([#195](https://github.com/Lyellr88/marm-memory/issues/195)).
+
+### Upgrade Note
+
+Re-run `marm-memory init` to refresh an already installed skill file.
+
+</details>
+
+<details>
 <summary><strong>September 2nd, 2026: The Terminal Is Always On, a MARM Commands Reference, and PR Review Fixes (v2.48.0)</strong></summary>
 
 ### Changed: The Console Terminal Is No Longer Opt-In
