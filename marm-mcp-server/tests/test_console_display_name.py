@@ -177,3 +177,46 @@ def test_identical_roots_fall_back_to_the_unique_engine_id():
         ]
     )
     assert [p["display_name"] for p in projects] == ["id-one", "id-two"]
+
+
+def test_same_repo_on_different_drives_is_disambiguated_cleanly():
+    """C:\\work\\repo and D:\\work\\repo collide on every component but the drive.
+
+    PureWindowsPath.parts keeps the anchor verbatim ("C:\\"), so a naive join
+    would render "C:\\/work/repo".
+    """
+    projects = _with_display_names(
+        [
+            _project("c-work-repo", "C:\\work\\repo"),
+            _project("d-work-repo", "D:\\work\\repo"),
+        ]
+    )
+    labels = [p["display_name"] for p in projects]
+    assert labels == ["C:/work/repo", "D:/work/repo"], labels
+    assert not any("\\" in label for label in labels)
+
+
+def test_unc_share_label_has_no_raw_separators():
+    """A UNC anchor is ONE path component, so it normalises to "server/share"."""
+    projects = _with_display_names(
+        [
+            _project("a", "\\\\server\\shareA\\repo"),
+            _project("b", "\\\\server\\shareB\\repo"),
+        ]
+    )
+    labels = [p["display_name"] for p in projects]
+    assert labels == ["server/shareA/repo", "server/shareB/repo"], labels
+    assert not any("\\" in label for label in labels)
+
+
+def test_unc_and_drive_roots_survive_full_depth_qualification():
+    """Full-depth qualification must still produce clean labels."""
+    projects = _with_display_names(
+        [
+            _project("unc", "\\\\server\\share\\repo"),
+            _project("drive", "C:\\share\\repo"),
+        ]
+    )
+    labels = [p["display_name"] for p in projects]
+    assert len(set(labels)) == 2
+    assert not any("\\" in label or "//" in label for label in labels), labels

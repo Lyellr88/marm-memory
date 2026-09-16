@@ -141,12 +141,24 @@ def _root_parts(root_path: str) -> tuple[str, ...]:
     """Path components of a repository root, on either host's separators.
 
     `root_path` comes from the engine that owns the index, which may be a
-    Windows host, so `C:\\work\\repo\\` has to yield ("C:\\", "work", "repo")
+    Windows host, so `C:\\work\\repo\\` has to yield ("C:", "work", "repo")
     rather than one opaque string. Mirrors core.code_project_bindings.
+
+    Anchors are normalised rather than dropped. `PureWindowsPath.parts` keeps
+    them verbatim -- ("C:\\", "work", "repo"), or ("\\\\server\\share\\", "repo")
+    for a UNC path -- so joining raw parts would render `C:\\/work/repo`. They
+    cannot simply be discarded either: `C:\\work\\repo` and `D:\\work\\repo` are
+    different repositories that collide on every other component, and the drive
+    is the only thing that separates them.
     """
     normalized = root_path.strip().rstrip("/\\")
     path = PureWindowsPath(normalized) if "\\" in normalized else PurePath(normalized)
-    return tuple(part for part in path.parts if part not in ("/", "\\"))
+    parts = []
+    for part in path.parts:
+        cleaned = part.replace("\\", "/").strip("/")
+        if cleaned:
+            parts.append(cleaned)
+    return tuple(parts)
 
 
 def _with_display_names(projects: list[dict]) -> list[dict]:
