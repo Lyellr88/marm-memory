@@ -2,6 +2,7 @@ import os
 import shlex
 import sys
 from pathlib import Path
+from typing import Optional
 
 PINNED_CBM_VERSION = "0.10.5"
 
@@ -46,6 +47,75 @@ def cbm_spawn_command() -> list[str]:
     if _CBM_COMMAND_RAW:
         return shlex.split(_CBM_COMMAND_RAW)
     return [sys.executable, "-m", "codebase_memory_mcp"]
+
+
+def resolve_engine_binary() -> Optional[Path]:
+    """Resolve the engine binary path, checking CBM_BINARY_PATH first, then
+    CBM_COMMAND, then the pip-managed fallback location. Returns None when the
+    binary cannot be found through any route."""
+    if CBM_BINARY_PATH:
+        path = Path(CBM_BINARY_PATH)
+        if path.exists():
+            return path
+        return None
+    if _CBM_COMMAND_RAW:
+        cmd = shlex.split(_CBM_COMMAND_RAW)
+        if cmd and Path(cmd[0]).exists():
+            return Path(cmd[0])
+        return None
+    try:
+        from codebase_memory_mcp import _cli
+
+        path = _cli._bin_path(_cli._version())
+        if path.exists():
+            return path
+    except Exception:
+        pass
+    return None
+
+
+def engine_binary_details() -> dict:
+    """Return diagnostic details about the engine binary resolution.
+
+    Returns a dict with 'present' (bool), 'source' (str describing how the
+    path was determined), 'path' (str or None), and 'configured_path_missing'
+    (bool) — True only when CBM_BINARY_PATH is set but the target does not
+    exist on disk.
+    """
+    result: dict = {
+        "present": False,
+        "source": "unresolved",
+        "path": None,
+        "configured_path_missing": False,
+    }
+    if CBM_BINARY_PATH:
+        result["source"] = "CBM_BINARY_PATH"
+        result["path"] = CBM_BINARY_PATH
+        path = Path(CBM_BINARY_PATH)
+        if path.exists():
+            result["present"] = True
+        else:
+            result["configured_path_missing"] = True
+        return result
+    if _CBM_COMMAND_RAW:
+        result["source"] = "CBM_COMMAND"
+        cmd = shlex.split(_CBM_COMMAND_RAW)
+        if cmd:
+            result["path"] = cmd[0]
+            if Path(cmd[0]).exists():
+                result["present"] = True
+        return result
+    try:
+        from codebase_memory_mcp import _cli
+
+        bin_path = _cli._bin_path(_cli._version())
+        result["source"] = "pip_managed"
+        result["path"] = str(bin_path)
+        if bin_path.exists():
+            result["present"] = True
+    except Exception:
+        result["source"] = "pip_managed"
+    return result
 
 
 CBM_STARTUP_TIMEOUT = float(_safe_int("CBM_STARTUP_TIMEOUT", 60))

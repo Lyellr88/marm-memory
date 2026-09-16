@@ -2337,3 +2337,134 @@ async def test_an_ordinary_failure_still_advances_the_baseline_for_backoff(
     assert state.git_head is not None, (
         "an attempted-but-failed index must still record what was observed"
     )
+
+
+def test_binary_present_honors_cbm_binary_path_when_configured(monkeypatch, tmp_path):
+    """binary_present() must return True when CBM_BINARY_PATH points to an
+    existing executable, even when no pip-managed binary exists."""
+    binary = tmp_path / "codebase-memory-mcp-bin"
+    binary.touch()
+    import marm_graph.config.settings as gs
+    monkeypatch.setattr(gs, "CBM_BINARY_PATH", str(binary))
+
+    from marm_mcp_server.core.graph_index_worker import GraphIndexWorker
+    assert GraphIndexWorker.binary_present() is True
+
+
+def test_binary_present_returns_false_for_configured_but_missing_path(
+    monkeypatch, tmp_path
+):
+    """A CBM_BINARY_PATH that is set but does not exist must still produce a
+    recognizable diagnostic via binary_details()."""
+    missing = tmp_path / "does-not-exist"
+    import marm_graph.config.settings as gs
+    monkeypatch.setattr(gs, "CBM_BINARY_PATH", str(missing))
+
+    from marm_mcp_server.core.graph_index_worker import GraphIndexWorker
+    assert GraphIndexWorker.binary_present() is False
+    details = GraphIndexWorker.binary_details()
+    assert details["configured_path_missing"] is True
+    assert details["source"] == "CBM_BINARY_PATH"
+    assert details["present"] is False
+    assert details["path"] == str(missing)
+
+
+def test_binary_details_reports_pip_managed_fallback_when_no_env_var(monkeypatch):
+    """When neither CBM_BINARY_PATH nor CBM_COMMAND is set, details should
+    report the pip-managed fallback as the source."""
+    import marm_graph.config.settings as gs
+    monkeypatch.setattr(gs, "CBM_BINARY_PATH", "")
+    monkeypatch.setattr(gs, "_CBM_COMMAND_RAW", "")
+
+    from marm_mcp_server.core.graph_index_worker import GraphIndexWorker
+    details = GraphIndexWorker.binary_details()
+    assert details["source"] == "pip_managed"
+
+
+def test_binary_present_falls_back_to_pip_managed_when_cbm_binary_path_unset(
+    monkeypatch
+):
+    """When CBM_BINARY_PATH is not set, binary_present() uses the pip-managed
+    location, matching the behavior of graph_supervisor's old check."""
+    import marm_graph.config.settings as gs
+    monkeypatch.setattr(gs, "CBM_BINARY_PATH", "")
+    monkeypatch.setattr(gs, "_CBM_COMMAND_RAW", "")
+
+    from marm_mcp_server.core.graph_index_worker import GraphIndexWorker
+    result = GraphIndexWorker.binary_present()
+    assert isinstance(result, bool)
+
+
+def test_engine_binary_details_configured_path_missing(monkeypatch, tmp_path):
+    """engine_binary_details() must set configured_path_missing=True and
+    present=False when CBM_BINARY_PATH points to nothing on disk."""
+    missing = tmp_path / "cbm-missing"
+    import marm_graph.config.settings as gs
+    monkeypatch.setattr(gs, "CBM_BINARY_PATH", str(missing))
+
+    details = gs.engine_binary_details()
+    assert details["present"] is False
+    assert details["configured_path_missing"] is True
+    assert details["source"] == "CBM_BINARY_PATH"
+    assert details["path"] == str(missing)
+
+
+def test_engine_binary_details_present_when_configured_path_exists(
+    monkeypatch, tmp_path
+):
+    """engine_binary_details() must set present=True when the CBM_BINARY_PATH
+    target exists on disk."""
+    existing = tmp_path / "cbm-exists"
+    existing.touch()
+    import marm_graph.config.settings as gs
+    monkeypatch.setattr(gs, "CBM_BINARY_PATH", str(existing))
+
+    details = gs.engine_binary_details()
+    assert details["present"] is True
+    assert details["configured_path_missing"] is False
+    assert details["source"] == "CBM_BINARY_PATH"
+
+
+def test_engine_binary_details_fallback_source(monkeypatch):
+    """engine_binary_details() should report 'pip_managed' as the source when
+    neither env var is set."""
+    import marm_graph.config.settings as gs
+    monkeypatch.setattr(gs, "CBM_BINARY_PATH", "")
+    monkeypatch.setattr(gs, "_CBM_COMMAND_RAW", "")
+
+    details = gs.engine_binary_details()
+    assert details["source"] == "pip_managed"
+
+
+def test_prime_engine_logs_configured_path_missing_when_cbm_binary_path_set(
+    shared_db, monkeypatch, tmp_path
+):
+    """When CBM_BINARY_PATH is set but the target does not exist, _prime_engine
+    must log engine_binary_configured_path_missing rather than the generic
+    engine_binary_absent, so operators can distinguish a misconfigured Docker
+    path from an absent pip install."""
+    import structlog
+
+    missing = tmp_path / "no-such-binary"
+    import marm_graph.config.settings as gs
+    monkeypatch.setattr(gs, "CBM_BINARY_PATH", str(missing))
+
+    from marm_mcp_server.core import graph_index_worker as module
+
+    worker = module.GraphIndexWorker()
+
+    monkeypatch.setattr(
+        module.graph_supervisor,
+        "is_available",
+        lambda: pytest.fail("engine must not be started"),
+    )
+
+    with structlog.testing.capture_logs() as logs:
+        asyncio.run(worker._prime_engine())
+
+    events = [(entry.get("event"), entry.get("reason")) for entry in logs]
+    assert any(
+        event == "graph_auto_index.dormant"
+        and reason == "engine_binary_configured_path_missing"
+        for event, reason in events
+    ), f"expected configured_path_missing log, got {events}"

@@ -73,7 +73,16 @@ class GraphSupervisor:
 
         Independent of the child's own stderr, which CbmClient._drain_stderr
         already routes to DEBUG — this is the user-visible signal instead.
+
+        Uses the centralized engine-binary resolution so a Docker install with
+        CBM_BINARY_PATH set skips the download log even when no pip-managed
+        binary exists.
         """
+        path = graph_settings.resolve_engine_binary()
+        if path is not None:
+            return
+        if graph_settings.CBM_BINARY_PATH:
+            return
         try:
             from codebase_memory_mcp import _cli
 

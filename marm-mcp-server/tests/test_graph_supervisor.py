@@ -451,3 +451,27 @@ def test_stop_during_the_lock_wait_does_not_start_a_replacement(monkeypatch):
     assert built == [], f"a client was built after stop(): {len(built)}"
     assert supervisor.get_client() is None
     assert supervisor.is_available() is False
+
+
+def test_cbm_binary_path_set_skips_download_log_even_when_pip_binary_absent(
+    monkeypatch, tmp_path
+):
+    """When CBM_BINARY_PATH is set, _log_first_run_download must not emit the
+    'downloading graph engine' log message, because the binary location is
+    custom-configured (e.g., by Docker) and the pip-managed download path does
+    not apply."""
+    import marm_graph.config.settings as gs_cfg
+    monkeypatch.setattr(gs_cfg, "CBM_BINARY_PATH", "/custom/path/cbm-bin")
+    _cli = pytest.importorskip("codebase_memory_mcp._cli")
+    monkeypatch.setattr(_cli, "_bin_path", lambda version: tmp_path / "not-cached")
+    fake = _FakeClient()
+
+    gs = _fresh_gs()
+    monkeypatch.setattr(gs.mcp_settings, "GRAPH_ENABLED", True)
+    monkeypatch.setattr(gs, "CbmClient", lambda **kwargs: fake)
+    supervisor = gs.GraphSupervisor()
+    with structlog.testing.capture_logs() as logs:
+        supervisor.is_available()
+
+    messages = [entry.get("event") for entry in logs]
+    assert not any("downloading graph engine" in (m or "") for m in messages)

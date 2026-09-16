@@ -22,6 +22,12 @@ from ..config.settings import (
     GRAPH_AUTO_INDEX_PROJECT_TTL,
     GRAPH_AUTO_INDEX_RECONCILE_SECONDS,
 )
+
+from marm_graph.config.settings import (
+    CBM_BINARY_PATH,
+    engine_binary_details,
+    resolve_engine_binary,
+)
 from . import code_link_queue, code_project_bindings, runtime_flags
 from .graph_index_lock import GraphIndexBusy, run_exclusive
 from .graph_index_watcher import GraphIndexWatcher
@@ -268,17 +274,24 @@ class GraphIndexWorker:
     def binary_present() -> bool:
         """Whether the engine binary is already downloaded.
 
-        Auto-index is on by default, so an eager start that ignored this would
-        make every fresh install pull ~269MB on first boot, including users who
-        never touch a graph tool. Same check graph_supervisor uses before it
-        logs the one-time download notice.
+        Uses the centralized resolution from marm_graph.config.settings so that
+        CBM_BINARY_PATH (set in Docker) is checked alongside the pip-managed
+        fallback location.
         """
-        try:
-            from codebase_memory_mcp import _cli
+        path = resolve_engine_binary()
+        return path is not None
 
-            return bool(_cli._bin_path(_cli._version()).exists())
-        except Exception:
-            return False
+    @staticmethod
+    def binary_details() -> dict:
+        """Diagnostic details about engine binary resolution.
+
+        Returns a dict with 'present', 'source', 'path', and
+        'configured_path_missing', suitable for logging in the dormant reason
+        so a Docker install with CBM_BINARY_PATH set but a path that does not
+        exist can be distinguished from a pure pip install with no engine at
+        all.
+        """
+        return engine_binary_details()
 
     def start(self) -> None:
         """Never raises. A worker that cannot run leaves graphs as stale as
@@ -405,7 +418,13 @@ class GraphIndexWorker:
         never inside a scheduling tick.
         """
         if not self.binary_present():
-            logger.info("graph_auto_index.dormant", reason="engine_binary_absent")
+            details = self.binary_details()
+            reason = (
+                "engine_binary_configured_path_missing"
+                if details.get("configured_path_missing")
+                else "engine_binary_absent"
+            )
+            logger.info("graph_auto_index.dormant", reason=reason, binary=details)
             return
         try:
             await asyncio.to_thread(graph_supervisor.is_available)
@@ -716,6 +735,7 @@ class GraphIndexWorker:
             "cycles": self._cycles,
             "indexed": self._indexed,
             "engine_binary_present": self.binary_present(),
+            "engine_binary": self.binary_details(),
             "projects": [
                 {
                     "root_path": state.root,
