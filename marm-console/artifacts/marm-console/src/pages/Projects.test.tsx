@@ -31,7 +31,8 @@ vi.mock('@/hooks/use-marm-queries', () => ({
   },
   useProjects: () => ({
     data: [{
-      name: 'marm-systems',
+      name: 'C-work-marm-systems',
+      display_name: 'marm-systems',
       root_path: 'C:/work/marm-systems',
       nodes: 4500,
       edges: 23913,
@@ -86,6 +87,17 @@ describe('ProjectsPage', () => {
     expect(screen.getByText('Graph nodes')).toBeTruthy();
     expect(screen.getByText('marm-systems')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Open in explorer' })).toBeTruthy();
+  });
+
+  it('titles a project card with display_name while routing on the engine id', () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { container } = render(<QueryClientProvider client={queryClient}><ProjectsPage /></QueryClientProvider>);
+
+    // The short label is what the user reads...
+    expect(screen.getByText('marm-systems')).toBeTruthy();
+    // ...but the id stays the route key, or the explorer opens nothing.
+    const link = container.querySelector('a[href="/explorer/C-work-marm-systems"]');
+    expect(link).toBeTruthy();
   });
 
   it('refreshes architecture and code structure after indexing completes', async () => {

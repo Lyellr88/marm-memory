@@ -161,7 +161,7 @@ function RailMetric({ icon, label, value }: { icon: ReactNode; label: string; va
 }
 
 function ProjectPicker({ project, projects, projectName, onProjectChange }: Pick<Parameters<typeof CodeGraphExplorer>[0], 'project' | 'projects' | 'projectName' | 'onProjectChange'>) {
-  return <Select value={projectName} onValueChange={onProjectChange}><SelectTrigger className="h-7 w-[min(100%,24rem)] text-xs" aria-label={`Indexed repository: ${project.name}`}><SelectValue placeholder="Select indexed repository" /></SelectTrigger><SelectContent>{projects.map((item) => <SelectItem key={item.name} value={item.name}>{item.name}</SelectItem>)}</SelectContent></Select>;
+  return <Select value={projectName} onValueChange={onProjectChange}><SelectTrigger className="h-7 w-[min(100%,24rem)] text-xs" aria-label={`Indexed repository: ${project.display_name ?? project.name}`}><SelectValue placeholder="Select indexed repository" /></SelectTrigger><SelectContent>{projects.map((item) => <SelectItem key={item.name} value={item.name}>{item.display_name ?? item.name}</SelectItem>)}</SelectContent></Select>;
 }
 
 function FileFocusPanel({ selected, neighborhood, memoryLinks, isLoading, onClose }: { selected: CodeGraphSnapshot['nodes'][number]; neighborhood: CodeGraphNeighborhood | undefined; memoryLinks: { entity_id: number; entity_name: string; entity_type: string; link_method: string }[]; isLoading: boolean; onClose: () => void }) {

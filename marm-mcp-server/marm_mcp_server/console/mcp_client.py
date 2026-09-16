@@ -117,6 +117,40 @@ def get(operation: str, *, query: dict | None = None, timeout: float = 10.0) -> 
     return result
 
 
+def _with_display_names(projects: list[dict]) -> list[dict]:
+    """Attach a short, human-readable ``display_name`` to each project.
+
+    The engine's project id is derived from the repository's absolute path, and
+    the Console prints that path directly beneath the id -- so a card states the
+    same thing twice, and two projects under one parent truncate to an identical
+    title.
+
+    This is display only. ``name`` stays the engine id because it is the graph
+    database's filename and the ``/explorer/<name>`` routing key.
+
+    A bare basename is not unique: the same repository can be checked out under
+    two parent directories. Any basename claimed by more than one project
+    therefore falls back to ``<parent>/<basename>``, which keeps the label short
+    without making two projects look alike.
+    """
+    by_base: dict[str, list[dict]] = {}
+    for project in projects:
+        root = (project.get("root_path") or "").rstrip("/")
+        by_base.setdefault(os.path.basename(root) or project["name"], []).append(
+            project
+        )
+
+    for base, group in by_base.items():
+        if len(group) == 1:
+            group[0]["display_name"] = base
+            continue
+        for project in group:
+            root = (project.get("root_path") or "").rstrip("/")
+            parent = os.path.basename(os.path.dirname(root))
+            project["display_name"] = f"{parent}/{base}" if parent else base
+    return projects
+
+
 def list_projects() -> list[dict]:
     global _projects_cache
     if _projects_cache and time.monotonic() - _projects_cache[0] < 15:
@@ -138,6 +172,7 @@ def list_projects() -> list[dict]:
         for item in projects
         if isinstance(item, dict) and item.get("name") and item.get("root_path")
     ]
+    projects = _with_display_names(projects)
     _projects_cache = (time.monotonic(), projects)
     return projects
 
