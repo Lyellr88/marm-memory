@@ -144,7 +144,7 @@ export function ExplorerPage() {
             <Select value={project.name} onValueChange={(name) => navigate(`/explorer/${encodeURIComponent(name)}`)}>
               <SelectTrigger aria-label="Project"><SelectValue /></SelectTrigger>
               <SelectContent>
-                {projects?.map((candidate) => <SelectItem key={candidate.name} value={candidate.name}>{candidate.display_name ?? candidate.name}</SelectItem>)}
+                {projects?.map((candidate) => <SelectItem key={candidate.name} value={candidate.name} title={candidate.name}>{candidate.display_name ?? candidate.name}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
