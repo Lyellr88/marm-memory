@@ -1,5 +1,6 @@
 import asyncio
 import os
+import shutil
 import sys
 
 import pytest
@@ -153,6 +154,36 @@ def test_command_resolves_on_path(engine_config, monkeypatch):
     monkeypatch.setenv("PATH", str(Path(sys.executable).parent))
     monkeypatch.setattr(settings, "_CBM_COMMAND_RAW", Path(sys.executable).name)
     assert GraphIndexWorker.binary_present()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX FIFO permissions")
+@pytest.mark.parametrize("setting", ["CBM_BINARY_PATH", "_CBM_COMMAND_RAW"])
+def test_bare_launcher_must_be_a_regular_file(engine_config, monkeypatch, setting):
+    from marm_mcp_server.core import graph_index_worker as module
+
+    settings, cached = engine_config
+    fifo = cached.with_name("engine-fifo")
+    os.mkfifo(fifo, 0o755)
+    monkeypatch.setenv("PATH", str(fifo.parent))
+    monkeypatch.setattr(settings, setting, fifo.name)
+    assert shutil.which(fifo.name) == str(fifo)
+    monkeypatch.setattr(
+        module.graph_supervisor,
+        "is_available",
+        lambda: pytest.fail("a FIFO must not be used as an engine launcher"),
+    )
+    worker = module.GraphIndexWorker()
+    try:
+        asyncio.run(worker._prime_engine())
+        assert not worker.binary_present()
+        prefix = (
+            "configured_binary"
+            if setting == "CBM_BINARY_PATH"
+            else "configured_command"
+        )
+        assert settings.cbm_binary_status() == f"{prefix}_missing"
+    finally:
+        worker._watcher.stop()
 
 
 def test_configured_engine_does_not_log_a_pip_download(engine_config, monkeypatch):

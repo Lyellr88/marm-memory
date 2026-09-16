@@ -61,7 +61,10 @@ def cbm_binary_status() -> str:
             return f"{prefix}_invalid"
         binary = Path(command[0])
         if not binary.is_absolute() and not os.path.dirname(command[0]):
-            return "available" if shutil.which(command[0]) else f"{prefix}_missing"
+            resolved = shutil.which(command[0])
+            if resolved and Path(resolved).is_file():
+                return "available"
+            return f"{prefix}_missing"
         if not binary.is_absolute():
             binary = Path(CBM_CWD) / binary
         try:
