@@ -640,9 +640,71 @@ def test_eof_error_carries_the_child_stderr_reason():
     assert reason in str(excinfo.value)
 
 
-def test_stderr_tail_is_bounded_and_resets_per_spawn():
-    """The tail must not grow without limit, and a respawn must not report the
-    previous child's stderr as the new child's reason."""
+def _stderr_then_exit_command(text: str) -> list:
+    """A child that writes one line to stderr, then closes stdout and exits."""
+    import sys
+
+    return [
+        sys.executable,
+        "-c",
+        f"import sys; print({text!r}, file=sys.stderr); sys.stderr.flush()",
+    ]
+
+
+def test_a_respawn_does_not_report_the_previous_child_stderr():
+    """A real respawn, not a manual clear.
+
+    `_force_respawn()` kills the old child and calls `_spawn()` without joining
+    the old `_drain_stderr` thread, so that thread can still append after the
+    respawn begins. Isolation therefore cannot come from clearing shared state:
+    each spawn installs its own deque and hands that object to its own reader,
+    so a late write from the previous reader lands somewhere the current
+    `_stderr_context()` does not read.
+    """
+    from marm_graph.core.cbm_client import CbmClient, CbmError
+
+    client = CbmClient(
+        command=_stderr_then_exit_command("FIRST-CHILD-REFUSAL"),
+        startup_timeout=15,
+        call_timeout=15,
+    )
+    try:
+        with pytest.raises(CbmError) as first:
+            client.start()
+        assert "FIRST-CHILD-REFUSAL" in str(first.value)
+        first_tail = client._stderr_tail
+
+        # Respawn with a different child. _spawn() is what the recovery path calls.
+        client._command = _stderr_then_exit_command("SECOND-CHILD-REFUSAL")
+        client._closed = False
+        with pytest.raises(CbmError) as second:
+            client._spawn()
+    finally:
+        client.close()
+
+    assert "SECOND-CHILD-REFUSAL" in str(second.value)
+    assert "FIRST-CHILD-REFUSAL" not in str(second.value)
+    # The previous reader still owns its own deque; it is no longer the active one.
+    assert client._stderr_tail is not first_tail
+    assert "FIRST-CHILD-REFUSAL" in " ".join(first_tail)
+
+
+def test_a_late_write_from_a_previous_reader_cannot_reach_the_current_error():
+    """The race directly: append to the OLD deque after the respawn installed a
+    new one, and confirm it cannot surface in the current context."""
+    from marm_graph.core.cbm_client import CbmClient
+
+    client = CbmClient(command=["/nonexistent"], startup_timeout=1, call_timeout=1)
+    stale = client._stderr_tail
+    client._stderr_tail = type(stale)(maxlen=stale.maxlen)  # what _spawn installs
+
+    stale.append("STALE-LINE-FROM-DEAD-CHILD")
+
+    assert "STALE-LINE" not in client._stderr_context()
+
+
+def test_stderr_tail_is_bounded():
+    """A chatty child must not grow the tail without limit."""
     from marm_graph.core.cbm_client import CbmClient
 
     client = CbmClient(command=["/nonexistent"], startup_timeout=1, call_timeout=1)
@@ -650,5 +712,4 @@ def test_stderr_tail_is_bounded_and_resets_per_spawn():
         client._stderr_tail.append(f"line {i}")
     assert len(client._stderr_tail) == 10
     assert "line 49" in client._stderr_context()
-    client._stderr_tail.clear()
-    assert client._stderr_context() == ""
+    assert "line 39" not in client._stderr_context()

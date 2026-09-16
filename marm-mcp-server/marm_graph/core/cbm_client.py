@@ -79,8 +79,13 @@ class CbmClient:
     ):
         self._command = command
         self._cwd = cwd
-        # Bounded: enough to explain a refusal, small enough that a chatty
-        # child cannot grow it without limit over a long-lived session.
+        # The ACTIVE child's stderr tail. Each spawn installs a fresh deque and
+        # hands that same object to its own drain thread, so a previous child's
+        # reader keeps writing to the deque it was given and can never append to
+        # the current one. _force_respawn() kills and re-spawns without joining
+        # the old reader, so isolation has to come from the object, not timing.
+        # Bounded: enough to explain a refusal, small enough that a chatty child
+        # cannot grow it without limit over a long-lived session.
         self._stderr_tail: collections.deque[str] = collections.deque(maxlen=10)
         self._startup_timeout = startup_timeout
         self._call_timeout = call_timeout
@@ -127,14 +132,15 @@ class CbmClient:
             self._terminate_process(proc)
             raise CbmError("client is closed")
 
-        self._stderr_tail.clear()
+        stderr_tail: collections.deque[str] = collections.deque(maxlen=10)
+        self._stderr_tail = stderr_tail
         self._out_q = queue.Queue()
         self._reader = threading.Thread(
             target=self._read_stdout, args=(proc.stdout, self._out_q), daemon=True
         )
         self._reader.start()
         self._stderr_reader = threading.Thread(
-            target=self._drain_stderr, args=(proc.stderr,), daemon=True
+            target=self._drain_stderr, args=(proc.stderr, stderr_tail), daemon=True
         )
         self._stderr_reader.start()
 
@@ -159,7 +165,7 @@ class CbmClient:
         finally:
             q.put(_EOF)
 
-    def _drain_stderr(self, pipe: IO[bytes]) -> None:
+    def _drain_stderr(self, pipe: IO[bytes], tail: "collections.deque[str]") -> None:
         """Continuously drain stderr so a full pipe buffer can't deadlock the child.
 
         The binary logs operational lines here (e.g. mem.init); route to debug.
@@ -173,7 +179,7 @@ class CbmClient:
                 line = raw.decode("utf-8", "replace").rstrip()
                 if line:
                     logger.debug("cbm.stderr", line=line)
-                    self._stderr_tail.append(line)
+                    tail.append(line)
         except (ValueError, OSError):
             pass
 
