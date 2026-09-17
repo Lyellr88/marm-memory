@@ -12,7 +12,7 @@ marm-memory is a persistent memory layer for AI agents. The MCP server gives Cla
 
 | Component | Description | Best For |
 |-----------|-------------|----------|
-| **MARM MCP Server** | Persistent memory server with 15 MCP tools (HTTP + STDIO): 7 core memory tools, 6 bundled code-graph tools, and 2 concept-graph tools | AI agents, IDEs, local workflows, shared team memory |
+| **MARM MCP Server** | Persistent memory server with 16 MCP tools (HTTP + STDIO): 8 core memory tools, 6 bundled code-graph tools, and 2 concept-graph tools | AI agents, IDEs, local workflows, shared team memory |
 | **MARM Protocol** | Runtime guidance delivered automatically by the MCP server | Keeping agents aligned on what to store, recall, and trust |
 | **MARM Console** | Local browser UI for viewing memory, knowledge, projects, and server health | Inspection, cleanup, and quick status checks |
 
@@ -79,7 +79,7 @@ For HTTP mode, run `marm-memory status` or `marm-memory doctor`. The raw health 
 
 #### Q: What MCP tools does MARM provide?
 
-MARM currently exposes **15 MCP tools on both HTTP and STDIO**: 7 focused core memory tools, 6 bundled code-graph tools, and 2 concept-graph tools.
+MARM currently exposes **16 MCP tools on both HTTP and STDIO**: 8 focused core memory tools, 6 bundled code-graph tools, and 2 concept-graph tools.
 
 | Category | Tools | Description |
 |----------|-------|-------------|
@@ -88,7 +88,7 @@ MARM currently exposes **15 MCP tools on both HTTP and STDIO**: 7 focused core m
 | **Notebook** | `marm_notebook` | Reusable instructions and knowledge with `action="add"`, `"use"`, `"show"`, `"status"`, or `"clear"` |
 | **Delete** | `marm_delete` | Delete log sessions, log entries, or notebook entries |
 | **Summary** | `marm_summary` | Generate concise context summaries |
-| **Maintenance** | `marm_compaction` | Agent-assisted memory compaction with `action="status"`, `"candidates"`, `"review"`, `"stage"`, `"apply"`, or `"discard"` |
+| **Maintenance** | `marm_compaction`, `marm_distill` | Agent-assisted memory compaction with `action="status"`, `"candidates"`, `"review"`, `"stage"`, `"apply"`, or `"discard"` |
 | **Code Graph (HTTP + STDIO)** | `marm_graph_index`, `marm_code_lookup`, `marm_code_context`, `marm_graph_trace`, `marm_graph_architecture`, `marm_graph_impact` | Index repositories (kept current automatically after the first index), look up symbols/source, compose ranked task context, trace call paths, summarize architecture, and inspect change impact |
 | **Concept Graph (HTTP + STDIO)** | `marm_concept_build`, `marm_concept_recall` | Extract entities and typed relationships from stored memories, then query them with multi-hop traversal and code-symbol cross-links |
 

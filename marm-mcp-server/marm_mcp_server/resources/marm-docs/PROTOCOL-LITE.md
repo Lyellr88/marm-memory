@@ -20,7 +20,7 @@ You are under the MARM operating contract. The full protocol was delivered at se
 ## Tools
 
 `marm_smart_recall` | `marm_log_entry` | `marm_log_show`
-`marm_notebook` | `marm_summary` | `marm_delete` | `marm_compaction`
+`marm_notebook` | `marm_summary` | `marm_delete` | `marm_compaction` | `marm_distill`
 `marm_graph_index` | `marm_code_lookup` | `marm_code_context` | `marm_graph_trace`
 `marm_graph_architecture` | `marm_graph_impact`
 `marm_concept_build` | `marm_concept_recall`
