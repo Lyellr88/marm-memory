@@ -105,6 +105,17 @@ The frontend defaults to the Console API at `http://127.0.0.1:8002`.
 
 `GET /api/memories` supports `q`, `session`, `project`, `platform`, `context_type`, `compaction_role`, `limit`, and `offset` query parameters. Results are capped at 200 records per request.
 
+`POST /api/code-context` accepts `answer`, which asks a **local** model to answer the task
+from the composed context and cite the symbols it used. It is off in the tool and on in the
+Console. The proxy allows 150s when answering and 60s otherwise, because generation runs
+after retrieval. `answer_status` is `unavailable` rather than an error when no model is
+reachable — the ranked context is still the answer a reader needs.
+
+`POST /api/distill` uses the same local model to WRITE self-contained facts when one is
+reachable, falling back to selecting sentences verbatim when it is not; the response says
+which path ran in `mode`. Every generated fact carries the verbatim span it came from, and a
+fact whose span is not actually in the transcript is dropped server-side.
+
 `POST /api/distill` returns a tool refusal as **400**, not 503 -- applying a proposal that is
 already applied is the caller's mistake and is fixable by changing the request, which is a
 different thing from the server being unreachable. Collapsing the two would have the page tell a

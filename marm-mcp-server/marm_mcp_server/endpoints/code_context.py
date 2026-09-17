@@ -42,6 +42,16 @@ class CodeContextRequest(BaseModel):
             "contains. 0 uses the server default (MARM_CODE_CONTEXT_DETAIL)."
         ),
     )
+    answer: bool = Field(
+        default=False,
+        description=(
+            "Also answer the task from the composed context using a local "
+            "model, with citations to the symbols it used. Off by default: it "
+            "is the slow step, and the ranked context is already the answer "
+            "for a caller that reads code. Reports `answer_status` "
+            "'unavailable' rather than failing when no model is reachable."
+        ),
+    )
     include_graph: bool = Field(
         default=False,
         description=(
@@ -78,4 +88,5 @@ async def marm_code_context(req: CodeContextRequest) -> dict:
         budget=req.budget,
         include_graph=req.include_graph,
         detail=req.detail or None,
+        answer=req.answer,
     )

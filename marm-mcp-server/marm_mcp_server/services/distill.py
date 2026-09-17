@@ -10,6 +10,8 @@ memory unattended, and this store has the false-positive numbers to prove it.
 from __future__ import annotations
 
 import hashlib
+
+import asyncio
 import json
 import os
 import sqlite3
@@ -22,6 +24,7 @@ from ..core.distill import (
     DEFAULT_LIMIT,
     DEFAULT_THRESHOLD,
     extract_candidates,
+    llm_extract,
     resolve,
 )
 from ..core.memory import MARMMemory, sanitize_content
@@ -76,6 +79,7 @@ async def propose(
     threshold: float = DEFAULT_THRESHOLD,
     limit: int = DEFAULT_LIMIT,
     include_duplicates: bool = False,
+    use_llm: bool = True,
 ) -> dict[str, Any]:
     """Extract, resolve, stage. Returns the proposals with their verdicts.
 
@@ -84,7 +88,19 @@ async def propose(
     confirm forty things the store already knows will stop reading the list,
     and the first novel item is the one they will miss.
     """
-    candidates = extract_candidates(text, threshold=threshold, limit=limit)
+    # Generation first, selection as the fallback. The two differ in kind, not
+    # just quality: selection can only return sentences that were already
+    # written, so a fact stated across two turns is invisible to it, while
+    # generation rewrites facts to stand alone. Which one ran is reported, so a
+    # reviewer is never guessing why the proposals look different today.
+    mode = "generated"
+    candidates = None
+    if use_llm:
+        candidates = await asyncio.to_thread(llm_extract, text, limit=limit)
+    if candidates is None:
+        mode = "selected"
+        candidates = extract_candidates(text, threshold=threshold, limit=limit)
+
     if not candidates:
         return {
             "status": "success",
@@ -92,6 +108,7 @@ async def propose(
             "extracted": 0,
             "staged": 0,
             "session_name": session_name,
+            "mode": mode,
             "note": (
                 "Nothing in this text reads like a durable fact. That is the "
                 "usual outcome for a conversation that was mostly doing rather "
@@ -115,7 +132,12 @@ async def propose(
                 "reasons": list(candidate.reasons),
                 "verdict": resolution.verdict,
                 "cosine": resolution.cosine,
+                "mode": mode,
             }
+            if candidate.evidence:
+                record["evidence"] = candidate.evidence
+            if candidate.context_type:
+                record["context_type"] = candidate.context_type
             if resolution.neighbour_id:
                 record["neighbour_id"] = resolution.neighbour_id
             if resolution.neighbour_content:
@@ -140,9 +162,9 @@ async def propose(
                     (id, session_name, content, score, reasons, verdict, cosine,
                      neighbour_id, neighbour_content, status, candidate_hash,
                      project, context_type, applied_memory_id, expires_at,
-                     created_at, updated_at, reviewed_at)
+                     created_at, updated_at, reviewed_at, evidence, mode)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, NULL, ?,
-                        ?, ?, NULL)
+                        ?, ?, NULL, ?, ?)
                 """,
                 (
                     row_id,
@@ -156,10 +178,12 @@ async def propose(
                     resolution.neighbour_content,
                     _hash(session_name, candidate.content, project),
                     project,
-                    context_type,
+                    candidate.context_type or context_type,
                     expires_at,
                     now_iso,
                     now_iso,
+                    candidate.evidence,
+                    mode,
                 ),
             )
             inserted = cursor.rowcount > 0
@@ -177,6 +201,7 @@ async def propose(
         "extracted": len(candidates),
         "staged": staged,
         "session_name": session_name,
+        "mode": mode,
     }
 
 
@@ -201,7 +226,8 @@ def review(
     with memory.get_connection() as conn:
         rows = conn.execute(
             "SELECT id, session_name, content, score, reasons, verdict, cosine, "
-            "neighbour_id, neighbour_content, project, context_type, created_at "
+            "neighbour_id, neighbour_content, project, context_type, created_at, "
+            "evidence, mode "
             f"FROM distill_staging WHERE {' AND '.join(clauses)} "
             "ORDER BY score DESC, created_at DESC LIMIT ?",
             params,
@@ -225,6 +251,9 @@ def review(
             entry["neighbour_id"] = row[7]
         if row[8]:
             entry["neighbour"] = row[8]
+        if row[12]:
+            entry["evidence"] = row[12]
+        entry["mode"] = row[13] or "selected"
         pending.append(entry)
 
     return {"status": "success", "pending": pending, "count": len(pending)}
@@ -282,6 +311,8 @@ async def apply(memory: MARMMemory, proposal_id: str) -> dict[str, Any]:
             row = conn.execute(
                 "SELECT content, session_name, context_type, project, status, "
                 "expires_at, updated_at FROM distill_staging WHERE id = ?",
+
+                "expires_at, evidence, mode FROM distill_staging WHERE id = ?",
                 (proposal_id,),
             ).fetchone()
             if row is None:
@@ -337,6 +368,17 @@ async def apply(memory: MARMMemory, proposal_id: str) -> dict[str, Any]:
                 # Fall through and re-claim it.
                 status = "pending"
             if status not in ("pending", "nudge_exhausted"):
+            (
+                content,
+                session_name,
+                context_type,
+                project,
+                status,
+                expires_at,
+                evidence,
+                mode,
+            ) = row
+            if status != "pending":
                 conn.execute("ROLLBACK")
                 return {
                     "status": "error",
@@ -360,9 +402,20 @@ async def apply(memory: MARMMemory, proposal_id: str) -> dict[str, Any]:
             conn.execute("ROLLBACK")
             raise
 
-    metadata: dict[str, Any] = {"source": "marm_distill", "proposal_id": proposal_id}
+    metadata: dict[str, Any] = {
+        "source": "marm_distill",
+        "proposal_id": proposal_id,
+        "extraction": mode,
+    }
     if project:
         metadata["project"] = project
+    if evidence:
+        # The verbatim span lives in metadata, not in the memory. MARM memories
+        # must stay headline-shaped -- paragraph bodies measured 186 concept
+        # edges each against 27.4 -- but discarding the original is what makes
+        # extracted facts lose to verbatim chunks on nuance. Metadata is where
+        # both can be true at once.
+        metadata["evidence"] = evidence
     try:
         memory_id = await memory.store_memory_queued(
             sanitize_content(content),

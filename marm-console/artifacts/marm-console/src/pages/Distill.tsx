@@ -1,8 +1,13 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Button,
   Input,
   Label,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
   Tabs,
   TabsContent,
   TabsList,
@@ -12,12 +17,14 @@ import {
 } from '@/components/ui/core';
 import { StatCard } from '@/components/ui/panels';
 import { ActionNoticePanel, MemoryEmptyState } from '@/components/memory/shared';
-import { FlaskConical, Inbox, Sparkles, CircleCheck, CircleAlert, Layers } from 'lucide-react';
+import { FlaskConical, Inbox, Sparkles, CircleCheck, CircleAlert, Layers, Wand2, ScanText } from 'lucide-react';
 import {
   useDistillApply,
   useDistillDiscard,
   useDistillPending,
   useDistillPropose,
+  useLogs,
+  useSessions,
 } from '@/hooks/use-marm-queries';
 import { MarmApiError } from '@/lib/marm-api';
 import { LoadingState } from '@/components/code-context/shared';
@@ -54,6 +61,28 @@ export function DistillPage() {
   const [project, setProject] = useState('');
   const [tab, setTab] = useState<string>('queue');
   const [busyId, setBusyId] = useState<string | null>(null);
+  // Pasting a transcript is the fallback, not the main path. MARM already
+  // holds session logs, so the common case is "distil what I recorded in
+  // session X" — asking a user to go and copy that back out of the tool that
+  // stored it is work the page can simply do.
+  const [source, setSource] = useState<'session' | 'paste'>('session');
+
+  const sessions = useSessions();
+  // Default to a real session rather than an empty box, for the same reason
+  // Code Context defaults its project: the page is useless until one is
+  // chosen, and the most recently touched one is nearly always the right one.
+  useEffect(() => {
+    if (!sessionName && sessions.data?.length) setSessionName(sessions.data[0].name);
+  }, [sessionName, sessions.data]);
+  const sessionLogs = useLogs(
+    source === 'session' && sessionName ? { session: sessionName, limit: 200 } : undefined,
+  );
+  const fromSession = useMemo(() => {
+    const entries = sessionLogs.data?.items ?? [];
+    return entries
+      .map((log) => [log.topic, log.summary, log.entry].filter(Boolean).join(' — '))
+      .join('\n');
+  }, [sessionLogs.data]);
 
   const propose = useDistillPropose();
   const apply = useDistillApply();
@@ -69,14 +98,16 @@ export function DistillPage() {
     [lastRun],
   );
 
+  const body = source === 'session' ? fromSession : text;
+  const canSubmit = Boolean(body.trim() && sessionName.trim());
+
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
-    const body = text.trim();
-    if (!body || !sessionName.trim()) return;
+    if (!canSubmit) return;
     propose.mutate(
       {
         action: 'propose',
-        text: body,
+        text: body.trim(),
         session_name: sessionName.trim(),
         project: project.trim() || null,
       },
@@ -120,38 +151,87 @@ export function DistillPage() {
           </div>
           <h1 className="text-[1.8rem] font-semibold tracking-[-0.045em]">Distill</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Turn raw conversation into memory proposals, each resolved against what is already stored. MARM{' '}
-            <strong className="font-semibold text-foreground/90">selects</strong> sentences rather than writing them —
-            it runs no generative model — and nothing reaches memory until you keep it. The same answer an agent
+            Turn raw conversation into memory proposals, each resolved against what is already stored. When a local
+            model is reachable MARM <strong className="font-semibold text-foreground/90">writes</strong> each fact so
+            it stands on its own, keeping the words it came from; without one it falls back to{' '}
+            <strong className="font-semibold text-foreground/90">selecting</strong> sentences verbatim. Either way
+            nothing leaves this machine, and nothing reaches memory until you keep it. The same answer an agent
             receives from <code className="font-mono text-xs">marm_distill</code>.
           </p>
         </header>
 
         <form onSubmit={submit} className="mb-6 shrink-0 space-y-3">
-          <div>
-            <Label htmlFor="distill-text">Conversation</Label>
-            <Textarea
-              id="distill-text"
-              value={text}
-              onChange={(event) => setText(event.target.value)}
-              placeholder={PLACEHOLDER}
-              rows={5}
-              maxLength={400000}
-              className="mt-1.5 font-mono text-[13px]"
-            />
-          </div>
           <div className="flex flex-wrap items-end gap-3">
-            <div className="min-w-[14rem] flex-1">
+            <div className="min-w-[16rem] flex-1">
               <Label htmlFor="distill-session">Session</Label>
-              <Input
-                id="distill-session"
-                value={sessionName}
-                onChange={(event) => setSessionName(event.target.value)}
-                placeholder="Which session these belong to"
-                maxLength={256}
-                className="mt-1.5"
+              <Select value={sessionName} onValueChange={setSessionName}>
+                <SelectTrigger id="distill-session" aria-label="Session" className="mt-1.5">
+                  <SelectValue placeholder="Choose a session" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(sessions.data ?? []).map((item) => (
+                    <SelectItem key={item.name} value={item.name}>
+                      {item.name}
+                      <span className="ml-2 font-mono text-[10px] text-muted-foreground">
+                        {item.log_count} logs
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex h-10 items-center gap-1 rounded-md border border-border/70 bg-muted/40 p-1">
+              {(['session', 'paste'] as const).map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setSource(value)}
+                  className={cn(
+                    'rounded px-2.5 py-1 text-xs transition-colors',
+                    source === value
+                      ? 'bg-primary/15 text-primary-highlight'
+                      : 'text-muted-foreground hover:text-foreground/80',
+                  )}
+                >
+                  {value === 'session' ? 'From its logs' : 'Paste text'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {source === 'paste' ? (
+            <div>
+              <Label htmlFor="distill-text">Conversation</Label>
+              <Textarea
+                id="distill-text"
+                value={text}
+                onChange={(event) => setText(event.target.value)}
+                placeholder={PLACEHOLDER}
+                rows={5}
+                maxLength={400000}
+                className="mt-1.5 font-mono text-[13px]"
               />
             </div>
+          ) : (
+            <div className="rounded-xl border border-dashed border-border/70 bg-background/25 p-3 text-xs text-muted-foreground">
+              {!sessionName ? (
+                'Choose a session and MARM will distil what it already recorded there — no pasting.'
+              ) : sessionLogs.isLoading ? (
+                'Reading that session\u2019s log entries\u2026'
+              ) : fromSession ? (
+                <>
+                  <span className="font-mono tabular-nums text-foreground/80">
+                    {(sessionLogs.data?.items ?? []).length.toLocaleString()} log entries
+                  </span>{' '}
+                  ({fromSession.length.toLocaleString()} characters) will be distilled.
+                </>
+              ) : (
+                'That session has no log entries. Switch to “Paste text”, or log something first.'
+              )}
+            </div>
+          )}
+
+          <div className="flex flex-wrap items-end gap-3">
             <div className="min-w-[12rem] flex-1">
               <Label htmlFor="distill-project">Project (optional)</Label>
               <Input
@@ -163,7 +243,7 @@ export function DistillPage() {
                 className="mt-1.5"
               />
             </div>
-            <Button type="submit" isLoading={propose.isPending} disabled={!text.trim() || !sessionName.trim()}>
+            <Button type="submit" isLoading={propose.isPending} disabled={!canSubmit}>
               <Sparkles className="mr-2 h-4 w-4" /> Distill
             </Button>
           </div>
@@ -207,11 +287,21 @@ export function DistillPage() {
               delay={110}
             />
             <StatCard
-              label="In the queue"
-              value={queue.length.toLocaleString()}
-              detail="Across every session"
-              icon={<CircleAlert className="h-5 w-5" />}
-              tone="amber"
+              label={lastRun?.mode === 'generated' ? 'Written by' : 'Selected by'}
+              value={lastRun?.mode === 'generated' ? 'local model' : 'sentence shape'}
+              detail={
+                lastRun?.mode === 'generated'
+                  ? 'Facts rewritten to stand alone, each checked against the transcript'
+                  : 'No local model reachable — sentences lifted verbatim instead'
+              }
+              icon={
+                lastRun?.mode === 'generated' ? (
+                  <Wand2 className="h-5 w-5" />
+                ) : (
+                  <ScanText className="h-5 w-5" />
+                )
+              }
+              tone={lastRun?.mode === 'generated' ? 'amber' : 'blue'}
               delay={165}
             />
           </section>
@@ -304,6 +394,13 @@ export function DistillPage() {
         </Tabs>
 
         <p className="mt-3 shrink-0 text-[11px] text-muted-foreground">
+          {lastRun?.mode === 'selected' && (
+            <>
+              <span className="text-amber-300">No local model was reachable</span>, so these were{' '}
+              <em>selected</em> from the text rather than written: whole sentences, exactly as
+              typed, which means some carry references to whatever preceded them.{' '}
+            </>
+          )}
           A high score means a sentence <em>reads</em> like a durable fact — it is not a claim that the fact is true.
           A <span className="text-amber-300">near</span> verdict means the encoder found something close and cannot
           say whether this refines it or contradicts it; that judgement is the reason this queue exists.

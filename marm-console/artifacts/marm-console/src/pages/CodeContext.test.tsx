@@ -8,6 +8,19 @@ import type { CodeContextResult, CodeContextSymbol } from '@/lib/marm-types';
 // and what this page owns is the adapter, not the renderer.
 vi.mock('react-force-graph-2d', () => ({ default: () => null }));
 
+// jsdom has no matchMedia, and the shared GraphViz asks it about reduced
+// motion before it draws anything.
+globalThis.matchMedia ??= ((query: string) => ({
+  matches: false,
+  media: query,
+  onchange: null,
+  addListener: () => {},
+  removeListener: () => {},
+  addEventListener: () => {},
+  removeEventListener: () => {},
+  dispatchEvent: () => false,
+})) as unknown as typeof window.matchMedia;
+
 // jsdom has no ResizeObserver, and the pane measures its container with one.
 globalThis.ResizeObserver ??= class {
   observe() {}
@@ -104,6 +117,16 @@ afterEach(() => {
   window.history.replaceState(null, '', '/');
 });
 
+/** Open the Symbols pane.
+ *
+ *  `Answer` is the landing tab now — someone who typed a question wants the
+ *  answer first and the evidence under it — so assertions about symbol
+ *  rendering have to switch panes. Radix does not mount an inactive one.
+ */
+async function openSymbols() {
+  await userEvent.click(screen.getByRole('tab', { name: /ranked symbols/i }));
+}
+
 describe('CodeContextPage', () => {
   it('sends the trimmed task with the selected project and budget', async () => {
     const user = userEvent.setup();
@@ -118,6 +141,9 @@ describe('CodeContextPage', () => {
       project: 'C-work-marm-systems',
       budget: 12000,
       include_graph: true,
+      // Asking is on by default on the page: a reader who typed a question
+      // wants it answered. The tool's own default stays off, for agents.
+      answer: true,
       // The page lays the parts out separately, so it needs the structured
       // fields the markdown duplicates. The server default is 1 for agents.
       detail: 3,
@@ -172,7 +198,8 @@ describe('CodeContextPage', () => {
   });
 
   it('names the same panes in the empty state and in the tab strip', () => {
-    const labels = ['Ranked symbols', 'Call graph', 'What memory knows', 'Agent view'];
+    // Answer leads: the page answers a question, and the rest is its evidence.
+    const labels = ['Answer', 'Ranked symbols', 'Call graph', 'What memory knows', 'Agent view'];
     const { unmount } = render(<CodeContextPage />);
     const empty = labels.filter((label) => screen.queryByText(label));
     unmount();
@@ -227,26 +254,29 @@ describe('CodeContextPage', () => {
     expect(screen.getByText('Call neighbourhood')).toBeTruthy();
   });
 
-  it('groups symbols by file, best-ranked file first', () => {
+  it('groups symbols by file, best-ranked file first', async () => {
     buildState.data = SUCCESS;
     render(<CodeContextPage />);
+    await openSymbols();
 
     // marm/recall.py holds the 0.5 symbol; marm/terms.py the 0.01 one.
     const headers = screen.getAllByTitle(/^marm\/(recall|terms)\.py$/);
     expect(headers[0].textContent).toContain('marm/recall.py');
   });
 
-  it('distinguishes a seeded symbol from one reached through the call graph', () => {
+  it('distinguishes a seeded symbol from one reached through the call graph', async () => {
     buildState.data = SUCCESS;
     render(<CodeContextPage />);
+    await openSymbols();
 
     expect(screen.getByText('matched the task')).toBeTruthy();
     expect(screen.getByText('2 hop')).toBeTruthy();
   });
 
-  it('flags a heuristic edge, because it can bind across module boundaries', () => {
+  it('flags a heuristic edge, because it can bind across module boundaries', async () => {
     buildState.data = SUCCESS;
     render(<CodeContextPage />);
+    await openSymbols();
 
     // The page footnote also explains "heuristic", so scope to the badge.
     const badge = screen.getByTitle(/bind across module boundaries/);
@@ -255,9 +285,10 @@ describe('CodeContextPage', () => {
     expect(screen.getByText('CRITICAL')).toBeTruthy();
   });
 
-  it('numbers source lines from the symbol start, not from one', () => {
+  it('numbers source lines from the symbol start, not from one', async () => {
     buildState.data = SUCCESS;
     render(<CodeContextPage />);
+    await openSymbols();
 
     // The seeded symbol starts at line 10 and has two lines.
     expect(screen.getByText('10')).toBeTruthy();
@@ -268,6 +299,7 @@ describe('CodeContextPage', () => {
     const user = userEvent.setup();
     buildState.data = SUCCESS;
     render(<CodeContextPage />);
+    await openSymbols();
 
     await user.type(screen.getByLabelText('Filter symbols'), 'terms');
 
@@ -279,6 +311,7 @@ describe('CodeContextPage', () => {
     const user = userEvent.setup();
     buildState.data = SUCCESS;
     render(<CodeContextPage />);
+    await openSymbols();
 
     expect(screen.getByText('def rank_memories():')).toBeTruthy();
 
@@ -358,9 +391,11 @@ describe('CodeContextPage', () => {
 
     await user.click(screen.getByRole('tab', { name: /call graph/i }));
 
-    const metric = screen.getByText('Call edges').closest('.graph-metric')!;
-    expect(within(metric as HTMLElement).getByText('1')).toBeTruthy();
-    expect(screen.getByText(/filled nodes matched the task/)).toBeTruthy();
+    // Rendered by the Knowledge Graph's own GraphViz now, so this asserts the
+    // adapted data and the legend rather than a bespoke canvas.
+    expect(screen.getByText(/1 call edges/)).toBeTruthy();
+    expect(screen.getByText('matched the task')).toBeTruthy();
+    expect(screen.getByText('reached via the call graph')).toBeTruthy();
   });
 
 });

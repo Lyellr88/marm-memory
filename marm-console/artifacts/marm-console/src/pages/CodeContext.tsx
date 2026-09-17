@@ -25,6 +25,7 @@ import { CopyButton, LoadingState } from '@/components/code-context/shared';
 import { SymbolsPane } from '@/components/code-context/SymbolsPane';
 import { MemoryPane } from '@/components/code-context/MemoryPane';
 import { CallGraphPane } from '@/components/code-context/CallGraphPane';
+import { AnswerPane } from '@/components/code-context/AnswerPane';
 
 const DEFAULT_BUDGET = 12000;
 const MAX_BUDGET = 100000;
@@ -61,7 +62,17 @@ const PLACEHOLDER = 'How does recall decide which memories to return?';
  *  advertise a pane it does not then show. */
 const PANES = [
   {
+    value: 'answer',
+    accent: 'text-primary-highlight',
+    icon: Sparkles,
+    label: 'Answer',
+    tone: 'console-tab-cyan',
+    blurb:
+      'A grounded answer to your question, written by a local model from the ranked context alone, citing the symbols it used. Nothing leaves this machine.',
+  },
+  {
     value: 'symbols',
+    accent: 'text-cyan-300',
     icon: FileCode2,
     label: 'Ranked symbols',
     tone: 'console-tab-cyan',
@@ -70,6 +81,7 @@ const PANES = [
   },
   {
     value: 'graph',
+    accent: 'text-violet-300',
     icon: Network,
     label: 'Call graph',
     tone: 'console-tab-violet',
@@ -78,6 +90,7 @@ const PANES = [
   },
   {
     value: 'memory',
+    accent: 'text-emerald-300',
     icon: Brain,
     label: 'What memory knows',
     tone: 'console-tab-emerald',
@@ -86,6 +99,7 @@ const PANES = [
   },
   {
     value: 'agent',
+    accent: 'text-blue-300',
     icon: FileText,
     label: 'Agent view',
     tone: 'console-tab-blue',
@@ -104,6 +118,10 @@ const EXAMPLE_TASKS = [
 
 export function CodeContextPage() {
   const [params, setParams] = useSearchParams();
+  // Asking is opt-in per composition: generation is the slow step, and a
+  // reader who only wants the ranked symbols should not wait for it.
+  const [wantAnswer, setWantAnswer] = useState(true);
+  const [tab, setTab] = useState('answer');
   const [task, setTask] = useState(() => params.get('task') ?? '');
   const [project, setProject] = useState(() => params.get('project') ?? '');
   const [budget, setBudget] = useState(() => Number(params.get('budget')) || DEFAULT_BUDGET);
@@ -136,11 +154,18 @@ export function CodeContextPage() {
   const [composedBudget, setComposedBudget] = useState(DEFAULT_BUDGET);
   const compose = (nextTask: string, nextProject: string, nextBudget: number) => {
     setComposedBudget(nextBudget);
+  const compose = (
+    nextTask: string,
+    nextProject: string,
+    nextBudget: number,
+    withAnswer = wantAnswer,
+  ) => {
     build.mutate({
       task: nextTask,
       project: nextProject && nextProject !== AUTO_PROJECT ? nextProject : null,
       budget: nextBudget,
       include_graph: true,
+      answer: withAnswer,
       // The page lays out symbols, source and memory bodies separately, so it
       // needs the structured fields the markdown duplicates. An agent does not,
       // which is why the server default is 1 rather than this.
@@ -247,6 +272,18 @@ export function CodeContextPage() {
                 className="mt-1.5"
               />
             </div>
+            <label
+              className="flex h-10 cursor-pointer select-none items-center gap-2 rounded-md border border-border/70 bg-muted/40 px-3 text-xs text-muted-foreground"
+              title="Answer the question with the local model, grounded in the ranked context. Slower; the context itself does not need it."
+            >
+              <input
+                type="checkbox"
+                checked={wantAnswer}
+                onChange={(event) => setWantAnswer(event.target.checked)}
+                className="h-3.5 w-3.5 accent-[hsl(var(--primary))]"
+              />
+              Answer it too
+            </label>
             <Button type="submit" isLoading={build.isPending} disabled={!task.trim()}>
               <Sparkles className="mr-2 h-4 w-4" /> Compose context
             </Button>
@@ -339,11 +376,13 @@ export function CodeContextPage() {
               </div>
             )}
 
-            <Tabs defaultValue="symbols" className="flex min-h-0 flex-1 flex-col overflow-hidden">
-              <TabsList className="mb-4 grid h-auto w-full shrink-0 grid-cols-2 gap-1.5 rounded-xl border border-card-border bg-card/70 p-1.5 shadow-[0_14px_40px_rgba(0,0,0,0.16),inset_0_1px_0_rgba(var(--primary-rgb),0.04)] lg:grid-cols-4">
+            <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <TabsList className="mb-4 grid h-auto w-full shrink-0 grid-cols-2 gap-1.5 rounded-xl border border-card-border bg-card/70 p-1.5 shadow-[0_14px_40px_rgba(0,0,0,0.16),inset_0_1px_0_rgba(var(--primary-rgb),0.04)] lg:grid-cols-3 xl:grid-cols-5">
                 {PANES.map((pane, index) => {
                   const count =
-                    pane.value === 'symbols'
+                    pane.value === 'answer'
+                      ? null
+                      : pane.value === 'symbols'
                       ? symbols.length
                       : pane.value === 'graph'
                         ? (result.graph_nodes ?? 0)
@@ -376,11 +415,30 @@ export function CodeContextPage() {
               </TabsList>
 
               <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
+                <TabsContent value="answer" className="m-0">
+                  <AnswerPane
+                    result={result}
+                    asking={build.isPending}
+                    onAsk={() => {
+                      setWantAnswer(true);
+                      compose(task.trim() || result.task || '', project, budget, true);
+                    }}
+                    onCite={(citation) => {
+                      // Jump to the evidence rather than describing where it is.
+                      setTab('symbols');
+                      window.setTimeout(() => {
+                        document
+                          .querySelector(`[data-symbol="${CSS.escape(citation.qualified_name)}"]`)
+                          ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                      }, 60);
+                    }}
+                  />
+                </TabsContent>
                 <TabsContent value="symbols" className="m-0">
                   <SymbolsPane symbols={symbols} />
                 </TabsContent>
                 <TabsContent value="graph" className="m-0">
-                  <CallGraphPane symbols={symbols} edges={edges} />
+                  <CallGraphPane symbols={symbols} edges={edges} nodeCount={result.graph_nodes ?? 0} />
                 </TabsContent>
                 <TabsContent value="memory" className="m-0">
                   <MemoryPane memories={memories} links={links} recallUnavailable={recallUnavailable} />
@@ -423,7 +481,7 @@ export function CodeContextPage() {
                     key={pane.value}
                     className="metric-enter"
                     style={{ animationDelay: `${index * 45}ms` }}
-                    icon={<pane.icon className="h-5 w-5 text-primary" />}
+                    icon={<pane.icon className={cn("h-5 w-5", pane.accent)} />}
                     title={pane.label}
                     description={pane.blurb}
                   />

@@ -660,7 +660,7 @@ The AI agent will automatically use the appropriate tools. Manual tool access is
 | `marm_summary` | Cached, paste-ready session summaries with intelligent truncation | `session_name` |
 | `marm_notebook` | Session-scoped scratch pad plus promotion to a permanent, graph-linked doc | `action="add"\|"use"\|"show"\|"status"\|"clear"\|"save"`, `name`, `data`, `session_name`, `project`, `platform` |
 | `marm_compaction` | Agent-assisted memory cleanup with a reviewable audit trail | `action="status"\|"candidates"\|"review"\|"stage"\|"apply"\|"discard"` |
-| `marm_distill` | Propose durable memories from raw conversation, each resolved against the store as `new`, `duplicate`, or `near`; staged for review, never written unattended | `action="propose"\|"review"\|"apply"\|"discard"`, `text`, `session_name`, `proposal_id` |
+| `marm_distill` | Turn raw conversation into memory proposals, each resolved against the store as `new`, `duplicate`, or `near`. Writes self-contained facts with a local model when one is reachable, keeping the verbatim span each came from; selects sentences verbatim when not. Staged for review, never written unattended | `action="propose"\|"review"\|"apply"\|"discard"`, `text`, `session_name`, `proposal_id`, `use_llm` |
 
 ### 🕸️ Code Graph (6 tools)
 

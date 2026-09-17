@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { Badge, Button, cn } from '@/components/ui/core';
-import { Check, GitCompareArrows, Trash2 } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, GitCompareArrows, Quote, Trash2, Wand2 } from 'lucide-react';
 import type { DistillProposal } from '@/lib/marm-types';
 import { CopyButton } from '@/components/code-context/shared';
+import { memoryContext } from '@/components/memory/shared';
 
 /** Verdict drives the whole card, so it gets the colour vocabulary the rest of
  *  the Console already uses for severity: emerald means act, amber means look,
@@ -76,7 +78,13 @@ export function ProposalCard({
   busy?: boolean;
   delay?: number;
 }) {
+  const [showEvidence, setShowEvidence] = useState(false);
   const meta = VERDICTS[proposal.verdict] ?? VERDICTS.new;
+  // Coloured by the same helper the Memory page uses, so a `decision` is amber
+  // in both places. A second colour vocabulary for one concept is how a
+  // consistency pass introduces an inconsistency.
+  const context = memoryContext(proposal.context_type ?? null);
+  const ContextIcon = context.icon;
   // A proposal with no id was never staged -- a duplicate, or one already
   // reviewed. Showing apply/discard on it would offer an action that cannot
   // run, so the card renders as a record instead of a decision.
@@ -96,6 +104,22 @@ export function ProposalCard({
     >
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <VerdictBadge verdict={proposal.verdict} cosine={proposal.cosine} />
+        {proposal.context_type && (
+          <Badge variant="outline" className={cn('text-[10px]', context.tone)}>
+            <ContextIcon className="mr-1 h-3 w-3" />
+            {proposal.context_type}
+          </Badge>
+        )}
+        {proposal.mode === 'generated' && (
+          <Badge
+            variant="outline"
+            className="border-primary/30 text-[10px] text-primary-highlight"
+            title="Rewritten to stand alone by the local model, then checked against the transcript it came from"
+          >
+            <Wand2 className="mr-1 h-3 w-3" />
+            written
+          </Badge>
+        )}
         <span
           className="font-mono text-[11px] tabular-nums text-muted-foreground"
           title="Shape score: how strongly this reads like a durable fact"
@@ -123,6 +147,26 @@ export function ProposalCard({
       <div className="mt-3">
         <Reasons reasons={proposal.reasons} />
       </div>
+
+      {proposal.evidence && (
+        <div className="mt-3">
+          <button
+            type="button"
+            onClick={() => setShowEvidence((prev) => !prev)}
+            aria-expanded={showEvidence}
+            className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground transition-colors hover:text-foreground/80"
+          >
+            {showEvidence ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+            <Quote className="h-3 w-3" />
+            What was actually said
+          </button>
+          {showEvidence && (
+            <blockquote className="mt-2 border-l-2 border-primary/30 bg-background/30 py-2 pl-3 pr-2 text-[12px] leading-relaxed text-muted-foreground">
+              {proposal.evidence}
+            </blockquote>
+          )}
+        </div>
+      )}
 
       {proposal.neighbour && (
         <div className="mt-3 rounded-lg border border-border/70 bg-background/30 p-3">

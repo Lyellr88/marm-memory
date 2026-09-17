@@ -32,6 +32,13 @@ vi.mock('@/hooks/use-marm-queries', () => ({
   useDistillApply: () => applyState,
   useDistillDiscard: () => discardState,
   useDistillPending: () => pendingState,
+  useSessions: () => ({ data: [{ name: 'review', log_count: 3 }], isLoading: false }),
+  useLogs: () => logsState,
+}));
+
+const logsState = vi.hoisted(() => ({
+  data: { items: [] as Array<Record<string, unknown>>, total: 0, limit: 0, offset: 0 },
+  isLoading: false,
 }));
 
 function proposal(over: Partial<DistillProposal> = {}): DistillProposal {
@@ -71,37 +78,62 @@ beforeEach(() => {
   discardState.isSuccess = false;
   pendingState.data = undefined;
   pendingState.isLoading = false;
+  logsState.data = { items: [], total: 0, limit: 0, offset: 0 };
+  logsState.isLoading = false;
 });
 
 afterEach(cleanup);
 
 describe('DistillPage', () => {
-  it('cannot submit without both a transcript and a session', async () => {
+  it('cannot submit an empty paste', async () => {
     render(<DistillPage />);
-    const button = screen.getByRole('button', { name: /distill/i });
+    await userEvent.click(screen.getByRole('button', { name: /paste text/i }));
+    const button = screen.getByRole('button', { name: /^distill$/i });
+    // The session defaults to a real one, so text is the only thing missing.
     expect(button.hasAttribute('disabled')).toBe(true);
 
     await userEvent.type(screen.getByLabelText('Conversation'), 'some text');
-    expect(button.hasAttribute('disabled')).toBe(true);
-
-    await userEvent.type(screen.getByLabelText('Session'), 'review');
     expect(button.hasAttribute('disabled')).toBe(false);
   });
 
-  it('sends the transcript and session, and omits an empty project as null', async () => {
+  it('cannot submit a session that has no logs', () => {
+    // Nothing to distil is not an error, but it is not a submit either.
     render(<DistillPage />);
-    await userEvent.type(screen.getByLabelText('Conversation'), '  a transcript  ');
-    await userEvent.type(screen.getByLabelText('Session'), 'review');
-    await userEvent.click(screen.getByRole('button', { name: /distill/i }));
+    expect(
+      screen.getByRole('button', { name: /^distill$/i }).hasAttribute('disabled'),
+    ).toBe(true);
+    expect(screen.getByText(/has no log entries/i)).toBeTruthy();
+  });
+
+  it('offers a session\u2019s own logs instead of asking for a paste', () => {
+    // The transcript is already in MARM. Asking a user to copy it back out of
+    // the tool that stored it is work the page can do itself.
+    render(<DistillPage />);
+    expect(screen.getByRole('button', { name: /from its logs/i })).toBeTruthy();
+    expect(screen.queryByLabelText('Conversation')).toBeNull();
+  });
+
+  it('distils a session\u2019s log entries without a paste', async () => {
+    logsState.data = {
+      items: [
+        { topic: 'cutover', summary: null, entry: 'The daemon reparents to systemd.' },
+      ],
+      total: 1,
+      limit: 200,
+      offset: 0,
+    };
+    render(<DistillPage />);
+    // The session defaults to a real one, so there is nothing to pick. Radix
+    // Select does not open reliably under jsdom anyway, which is why the
+    // Explorer tests assert on the closed trigger too.
+    expect(screen.getByRole('combobox', { name: 'Session' }).textContent).toContain('review');
+    await userEvent.click(screen.getByRole('button', { name: /^distill$/i }));
 
     expect(proposeState.mutate).toHaveBeenCalledTimes(1);
     const [payload] = proposeState.mutate.mock.calls[0];
-    expect(payload).toMatchObject({
-      action: 'propose',
-      text: 'a transcript',
-      session_name: 'review',
-      project: null,
-    });
+    expect(payload.session_name).toBe('review');
+    expect(payload.text).toContain('reparents to systemd');
+    expect(payload.project).toBeNull();
   });
 
   it('shows the review queue on arrival, without needing a distillation first', () => {

@@ -12,6 +12,10 @@ class CodeContextPayload(BaseModel):
     budget: int = Field(default=12000, ge=500, le=100000)
     include_graph: bool = False
     detail: int = Field(default=0, ge=0, le=3)
+    #: Ask the local model to answer the task from the composed context. The
+    #: Console default is on; the tool's own default is off, because an agent
+    #: reads the ranked source and does not need prose about it.
+    answer: bool = False
 
 
 class DistillPayload(BaseModel):

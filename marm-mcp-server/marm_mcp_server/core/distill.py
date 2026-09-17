@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import re
 from typing import TYPE_CHECKING, NamedTuple, Optional, Sequence
 
@@ -71,6 +72,10 @@ NEAR_AT = 0.82
 # FOR excluding chatter; volume is `DEFAULT_LIMIT`'s job, and it alone.
 DEFAULT_THRESHOLD = 0.20
 DEFAULT_LIMIT = 20
+
+#: How much transcript the generation path sends. Well inside a 64k-token
+#: window at roughly 4 characters per token, leaving room for the reply.
+_LLM_INPUT_CHARS = int(os.environ.get("MARM_DISTILL_INPUT_CHARS") or 48000)
 
 # How deep to look for a nearest neighbour. Consolidation uses the same shape:
 # rank a handful and take the best, rather than trusting the top hit, because
@@ -131,11 +136,19 @@ _CODE_SHAPED = re.compile(
 
 
 class Candidate(NamedTuple):
-    """One proposed memory, before it meets the store."""
+    """One proposed memory, before it meets the store.
+
+    `evidence` is the verbatim span the fact came from. It is empty for the
+    selection path, where the content IS the original span, and populated by
+    the generation path, where it is the mitigation for the context collapse
+    that extraction otherwise causes (arXiv 2601.00821).
+    """
 
     content: str
     score: float
     reasons: tuple[str, ...]
+    evidence: str = ""
+    context_type: str = ""
 
 
 class Resolution(NamedTuple):
@@ -536,3 +549,150 @@ def _nearest_in_batch(
         if best is None or cosine > best[1]:
             best = (content, cosine)
     return best
+
+
+# ---------------------------------------------------------------------------
+# Generation-backed extraction.
+#
+# Everything above selects sentences that already read like memories. That is
+# what MARM can do with no generative model, and it stays the fallback. When a
+# local model IS reachable this does the job properly: it writes SELF-CONTAINED
+# facts, which selection cannot, because a sentence lifted out of a transcript
+# keeps whatever its neighbours were carrying for it.
+#
+# Two findings from the 2026 literature shaped this, and they pull in opposite
+# directions:
+#
+#   - Extraction beats summarisation, and a memory should be self-contained --
+#     carrying its own subject and specifics rather than depending on the turn
+#     it came from (mem0's 2026 guidance).
+#   - But extracted artifacts LOSE against verbatim chunks on multi-hop and
+#     nuance, through "context collapse": the relations between facts vanish
+#     with the surrounding text (arXiv 2601.00821).
+#
+# The resolution here is to refuse to choose. Each proposal carries the rewritten
+# self-contained fact AND the verbatim span it came from, so retrieval gets the
+# headline and a reader gets the original. MARM already has the place to put it:
+# the memory is the headline, the evidence goes in `metadata`.
+
+_LLM_SYSTEM = """\
+You extract durable facts from a technical conversation so they can be stored \
+as long-term memory for an engineering project.
+
+Return ONLY a JSON array. Each element:
+  {"content": str, "evidence": str, "context_type": str}
+
+RULES
+1. `content` must be SELF-CONTAINED. A reader six months from now sees only \
+this sentence, with no transcript. Name the subject explicitly. Never open with \
+"it", "this", "that", "they" or "there".
+2. `content` must be one assertion, stated plainly, under 240 characters.
+3. `evidence` MUST be copied VERBATIM from the conversation -- an exact \
+substring, character for character. It is checked. If you cannot copy an exact \
+span that supports the fact, omit the fact entirely.
+4. Extract only what the conversation actually STATES. Do not infer, do not \
+generalise, do not add knowledge of your own. A plausible fact that was not \
+said is worse than a missing one.
+5. Skip questions, greetings, instructions, plans, and anything only true \
+during this conversation.
+6. `context_type` is one of: decision, finding, constraint, error, tool, \
+general.
+
+Prefer few, high-quality facts. An empty array is a correct answer.\
+"""
+
+
+def _llm_usable(fact: object, haystack: str) -> Optional[Candidate]:
+    """Validate one model-proposed fact, or reject it.
+
+    The evidence check is the point. A model asked for a verbatim span and
+    given a transcript can still invent one, and an invented span is the exact
+    signature of an invented fact -- so a proposal whose evidence is not
+    actually in the input is dropped rather than shown to a reviewer. This is
+    cheap, deterministic, and catches the failure that matters most in a
+    memory store: a confident sentence nobody ever said.
+    """
+    if not isinstance(fact, dict):
+        return None
+    content = _normalise(str(fact.get("content") or ""))
+    evidence = str(fact.get("evidence") or "").strip()
+    if not content or not evidence:
+        return None
+    if not (MIN_LENGTH <= len(content) <= MAX_LENGTH):
+        return None
+    if _DANGLING_START.match(content):
+        return None
+
+    # Compare on collapsed whitespace: models normalise line breaks and indent
+    # when copying, and that is not the failure this guard is looking for.
+    if _squash(evidence) not in _squash(haystack):
+        return None
+
+    context_type = str(fact.get("context_type") or "general").strip().lower()
+    if context_type not in _CONTEXT_TYPES:
+        context_type = "general"
+
+    return Candidate(
+        content=content,
+        score=1.0,
+        reasons=("extracted by the local model", f"type: {context_type}"),
+        evidence=evidence[:1000],
+        context_type=context_type,
+    )
+
+
+_CONTEXT_TYPES = frozenset(
+    {"decision", "finding", "constraint", "error", "tool", "general"}
+)
+
+
+def _squash(text: str) -> str:
+    return " ".join(text.split()).casefold()
+
+
+def llm_extract(text: str, *, limit: int = DEFAULT_LIMIT) -> Optional[list[Candidate]]:
+    """Extract self-contained facts with the local model.
+
+    Returns None when no model is reachable, which is the caller's signal to
+    fall back to `extract_candidates`. An empty list is a real answer meaning
+    the conversation held nothing durable.
+    """
+    from ..services import local_llm
+
+    if not text.strip() or local_llm.available() is None:
+        return None
+
+    # The window is finite and a transcript is not. Take the tail: a
+    # conversation's conclusions are at the end, and the beginning is usually
+    # the part that was still being worked out.
+    excerpt = text[-_LLM_INPUT_CHARS:] if len(text) > _LLM_INPUT_CHARS else text
+
+    facts = local_llm.complete_json(
+        _LLM_SYSTEM,
+        f"Conversation:\n\n{excerpt}\n\nReturn the JSON array now.",
+        max_tokens=2048,
+    )
+    if facts is None:
+        return None
+    if isinstance(facts, dict):
+        # Some servers honour response_format by wrapping the array in an
+        # object; accept the common shapes rather than failing the run.
+        for key in ("facts", "memories", "items", "results", "data"):
+            if isinstance(facts.get(key), list):
+                facts = facts[key]
+                break
+    if not isinstance(facts, list):
+        return None
+
+    out: list[Candidate] = []
+    seen: set[str] = set()
+    for fact in facts:
+        candidate = _llm_usable(fact, text)
+        if candidate is None:
+            continue
+        key = _dedupe_key(candidate.content)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(candidate)
+    return out[:limit]

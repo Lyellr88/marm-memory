@@ -343,11 +343,14 @@ export function createMarmClient(config: MarmClientConfig) {
       request<{ links: ProjectMemoryCodeLink[] }>(config, 'GET', `/projects/${encodeURIComponent(project)}/memory-links`),
     confirmProjectMemoryLinking: (project: string, memoryProject: string) =>
       request<ProjectMemoryLinking>(config, 'PUT', `/projects/${encodeURIComponent(project)}/memory-linking`, { body: { memory_project: memoryProject } }),
-    // 90s: the composition reads source from disk and joins memory behind the
-    // Console's own 60s proxy timeout, so the browser must outlast the proxy or
-    // a slow-but-succeeding request reads as a client timeout.
+    // The browser must outlast the proxy or a slow-but-succeeding request reads
+    // as a client timeout. The proxy allows 60s for a composition and 150s when
+    // an answer is also asked for, because generation runs after retrieval.
     buildCodeContext: (data: CodeContextInput) =>
-      request<CodeContextResult>(config, 'POST', '/code-context', { body: data, timeoutMs: 90000 }),
+      request<CodeContextResult>(config, 'POST', '/code-context', {
+        body: data,
+        timeoutMs: data.answer ? 180000 : 90000,
+      }),
     // 150s: extraction parses every sentence and embeds every candidate behind
     // the Console's own 120s proxy timeout, so the browser must outlast the
     // proxy or a slow-but-succeeding distil reads as a client timeout.

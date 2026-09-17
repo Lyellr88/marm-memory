@@ -746,6 +746,8 @@ export interface CodeContextInput {
   budget?: number;
   /** Ask for the ranked call neighbourhood. Off by default server-side. */
   include_graph?: boolean;
+  /** Also answer the task from the composed context with the local model. */
+  answer?: boolean;
   /** 1 = markdown only, 2 = + metadata, 3 = + source and memory bodies.
    *  The Console lays the parts out, so it always asks for 3; an agent reads
    *  the markdown and stops, which is why the server default is 1. */
@@ -820,6 +822,22 @@ export interface CodeContextResult {
   /** `[source, target, weight]`, present only when `include_graph` was set. */
   graph_edges?: Array<[string, string, number]>;
   notes?: string[];
+  /** Grounded answer, present only when `answer` was requested. `null` with a
+   *  status of `unavailable`/`failed` means the retrieval above still stands. */
+  answer?: string | null;
+  answer_status?: 'ok' | 'unavailable' | 'failed';
+  answer_hint?: string;
+  answer_model?: string;
+  /** Only symbols that are actually in the context; an invented name is
+   *  dropped server-side rather than rendered as a dead link. */
+  answer_citations?: CodeContextCitation[];
+}
+
+export interface CodeContextCitation {
+  name: string;
+  qualified_name: string;
+  file_path: string;
+  start_line: number;
 }
 
 /** One distilled proposal, before or after it has been staged. */
@@ -837,6 +855,12 @@ export interface DistillProposal {
   neighbour?: string;
   staged?: boolean;
   note?: string;
+  /** The verbatim span the fact came from. Present on the generation path,
+   *  where the content was rewritten and the original would otherwise be lost. */
+  evidence?: string;
+  /** `generated` when a local model wrote it, `selected` when it was lifted
+   *  from the transcript verbatim. */
+  mode?: 'generated' | 'selected';
   session_name?: string;
   project?: string | null;
   context_type?: string;
@@ -853,6 +877,7 @@ export interface DistillInput {
   threshold?: number;
   limit?: number;
   include_duplicates?: boolean;
+  use_llm?: boolean;
 }
 
 export interface DistillResult {
@@ -868,6 +893,8 @@ export interface DistillResult {
   proposal_id?: string;
   /** Present when nothing read as durable -- a success, not a failure. */
   note?: string;
+  /** Which extraction path ran. `selected` means no local model was reachable. */
+  mode?: 'generated' | 'selected';
 }
 
 export interface CodeSearchInput {

@@ -9,6 +9,9 @@ words", which is not "which symbols matter here" -- a private helper whose name
 happens to match will outrank the class everything calls.
 """
 
+import asyncio
+import re
+
 from ...config.env_parsing import _safe_int
 from .backend import GraphUnavailable, LocalBackend
 from .compose import Context, Symbol, build
@@ -44,6 +47,7 @@ async def build_code_context(
     budget: int = 12000,
     include_graph: bool = False,
     detail: int | None = None,
+    answer: bool = False,
 ) -> dict:
     """Run the pipeline and return both the rendered text and its structure.
 
@@ -69,7 +73,10 @@ async def build_code_context(
                 else "Index a repository with marm_graph_index(repo_path=...) first."
             ),
         }
-    return serialise(ctx, task, include_graph=include_graph, detail=detail)
+    payload = serialise(ctx, task, include_graph=include_graph, detail=detail)
+    if answer:
+        payload.update(await answer_from_context(ctx, task))
+    return payload
 
 
 def serialise(
@@ -168,3 +175,124 @@ def serialise(
         payload["graph_edges"] = [[a, b, round(w, 4)] for a, b, w in ctx.graph_edges]
 
     return payload
+
+
+# ---------------------------------------------------------------------------
+# Grounded answering.
+#
+# The retrieval half of RAG has been here since `marm_code_context` shipped:
+# seed on the task, expand through the call graph, rank by personalised
+# PageRank, read the source, join memory. What was missing was the generation
+# half, and the reason was that MARM has no model. When a local one is
+# reachable, this closes the loop -- and it answers ONLY from the composed
+# context, so the ranking is what decides what the answer can be about.
+
+_ANSWER_SYSTEM = """\
+You answer questions about a specific codebase, using ONLY the context below.
+
+RULES
+1. Use only the provided symbols, their source, and the recorded memories. If \
+the context does not contain the answer, say exactly what is missing and stop. \
+Never fill a gap from general knowledge of similar projects -- a plausible \
+answer about code that is not this code is the worst outcome here.
+2. Cite the symbols you used in square brackets inline, spelled exactly as \
+the context spells them: [build_code_context]. Cite only names that appear in \
+the context above.
+3. Be concrete: name files, functions, and line numbers where the context \
+gives them.
+4. Be brief. Lead with the answer, then the evidence for it.
+5. If recorded memory and the source disagree, say so -- that disagreement is \
+usually the most useful thing you can report.\
+"""
+
+#: Generation is the slow step and the context is already budgeted, so the
+#: answer gets its own modest ceiling rather than the model's full window.
+_ANSWER_TOKENS = int(os.environ.get("MARM_CODE_CONTEXT_ANSWER_TOKENS") or 900)
+
+
+async def answer_from_context(ctx: "Context", task: str) -> dict:
+    """Answer `task` from the composed context, or explain why it could not.
+
+    Returns keys to merge into the response. The absence of a model is a
+    reported state rather than an error: every other part of the composition
+    is still valid and useful without it, and failing the whole call because an
+    optional container is down would be a poor trade.
+    """
+    from ...services import local_llm
+
+    model = await asyncio.to_thread(local_llm.available)
+    if model is None:
+        return {
+            "answer": None,
+            "answer_status": "unavailable",
+            "answer_hint": (
+                "No local model is reachable, so the ranked context above is "
+                "the whole answer. Set MARM_LLM_URL to an OpenAI-compatible "
+                "server on loopback to enable grounded answering."
+            ),
+        }
+
+    grounding = render(ctx)
+    text = await asyncio.to_thread(
+        local_llm.complete,
+        _ANSWER_SYSTEM,
+        f"{grounding}\n\n---\n\nQuestion: {task}\n\nAnswer, citing symbols:",
+        max_tokens=_ANSWER_TOKENS,
+    )
+    if not text:
+        return {
+            "answer": None,
+            "answer_status": "failed",
+            "answer_hint": (
+                "The local model did not return an answer in time. The ranked "
+                "context above is unaffected."
+            ),
+        }
+
+    return {
+        "answer": text,
+        "answer_status": "ok",
+        "answer_model": model,
+        "answer_citations": _resolve_citations(text, ctx),
+    }
+
+
+def _resolve_citations(text: str, ctx: "Context") -> list[dict]:
+    """Map the names a model cited back onto real symbols.
+
+    Resolution is against the BARE name, because that is what the model can
+    see: `format.render` writes `**name** (Kind)` and never the qualified name,
+    so an earlier version matching on `qualified_name` resolved nothing at all
+    and reported zero citations for an answer that was full of them.
+
+    Names not in the context are dropped rather than returned. A model that
+    invents a symbol is precisely the failure grounding exists to prevent, and
+    the Console renders these as links to source -- an invented one would be a
+    dead link presented as evidence.
+    """
+    by_name: dict[str, Symbol] = {}
+    for symbol in ctx.symbols:
+        for key in (symbol.name, symbol.qualified_name):
+            if key:
+                by_name.setdefault(key.casefold(), symbol)
+
+    seen: set[str] = set()
+    out: list[dict] = []
+    resolved: Symbol | None
+    # Backticks inside the brackets are normal -- a model writing markdown
+    # prose spells a symbol [`thing`] -- so they are stripped, not matched.
+    for raw in re.findall(r"\[`?([^\]`\n]{1,200})`?\]", text):
+        name = raw.strip().strip("`").split("(")[0].strip()
+        resolved = by_name.get(name.casefold())
+        if resolved is None or resolved.qualified_name in seen:
+            continue
+        seen.add(resolved.qualified_name)
+        out.append(
+            {
+                "name": resolved.name,
+                "qualified_name": resolved.qualified_name,
+                "file_path": resolved.file_path,
+                "start_line": resolved.start_line,
+            }
+        )
+    return out

@@ -63,6 +63,15 @@ class DistillRequest(BaseModel):
         default=False,
         description="Also stage candidates the store already holds.",
     )
+    use_llm: bool = Field(
+        default=True,
+        description=(
+            "Use the local generative model when one is reachable. It writes "
+            "self-contained facts, which sentence selection cannot. Set false "
+            "to force the selection path. Falls back automatically when no "
+            "model is available."
+        ),
+    )
 
 
 @router.post("/marm_distill", operation_id="marm_distill")
@@ -96,6 +105,7 @@ async def marm_distill(req: DistillRequest) -> dict:
             threshold=req.threshold,
             limit=req.limit,
             include_duplicates=req.include_duplicates,
+            use_llm=req.use_llm,
         )
 
     if req.action == "review":
