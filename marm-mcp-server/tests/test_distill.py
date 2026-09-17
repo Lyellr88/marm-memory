@@ -1089,3 +1089,67 @@ def test_an_expired_nudge_exhausted_proposal_is_swept(staged_memory):
     with staged_memory.get_connection() as conn:
         (status,) = conn.execute("SELECT status FROM distill_staging").fetchone()
     assert status == "stale", f"expired nudge_exhausted row was left as {status}"
+
+
+
+
+@pytest.mark.asyncio
+async def test_evidence_quoted_from_a_stored_memory_is_a_duplicate():
+    """Regression, from the real Grok-Bot queue.
+
+    Both of these resolved `new` -- at 0.800 and 0.801, just under NEAR_AT --
+    while the store already contained the sentence verbatim. The paragraph
+    they were extracted from is long, so its embedding is dominated by
+    everything else it says, and the generated content paraphrases the span
+    ("SQL and sshd_config" for "SQL/sshd_config") so it misses on the surface
+    too. The evidence span is the thing that matches exactly.
+    """
+    paragraph = (
+        "MARM 2.48.2 is healthy with connected SQLite, semantic search and "
+        "concept extraction. Grok-Bot full code graph is ready with 4,417 "
+        "nodes and 22,375 edges. Twelve SQL/sshd_config files have "
+        "best-effort partial parse ranges; use lexical lookup for those "
+        "ranges. No source files or Git state were changed."
+    )
+    stub = _StubMemory(neighbours=[{"id": "m1", "content": paragraph, "cosine": 0.801}])
+    (only,) = await resolve(
+        stub,
+        [
+            Candidate(
+                "Twelve SQL and sshd_config files have best-effort partial "
+                "parse ranges requiring lexical lookup.",
+                1.0,
+                (),
+                evidence=(
+                    "Twelve SQL/sshd_config files have best-effort partial "
+                    "parse ranges; use lexical lookup for those ranges."
+                ),
+            )
+        ],
+    )
+    assert only.verdict == "duplicate"
+    assert only.neighbour_id == "m1"
+    assert only.neighbour_content == paragraph
+
+
+@pytest.mark.asyncio
+async def test_containment_needs_a_span_long_enough_to_be_a_memory():
+    """A short span must not match half the store.
+
+    `MIN_LENGTH` is the floor rather than a second constant: it is already the
+    length below which a span is too slight to be a memory.
+    """
+    stub = _StubMemory(
+        neighbours=[
+            {
+                "id": "m1",
+                "content": "the graph daemon reparents to systemd",
+                "cosine": 0.4,
+            }
+        ]
+    )
+    (only,) = await resolve(
+        stub,
+        [Candidate("a wholly novel fact", 1.0, (), evidence="to systemd")],
+    )
+    assert only.verdict == "new"

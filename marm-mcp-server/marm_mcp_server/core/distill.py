@@ -38,7 +38,7 @@ import asyncio
 import logging
 import os
 import re
-from typing import TYPE_CHECKING, NamedTuple, Optional, Sequence
+from typing import TYPE_CHECKING, Any, Mapping, NamedTuple, Optional, Sequence
 
 import numpy as np
 
@@ -518,8 +518,31 @@ async def resolve(
             logger.exception("distill: recall failed for a candidate")
             rows = []
 
+        # The generation path quotes a verbatim span, and when that span is
+        # itself the text of a stored memory the store already says this --
+        # which no cosine can be trusted to notice. Measured on the Grok-Bot
+        # queue: two facts extracted out of long paragraph memories resolved
+        # `new` at 0.800 and 0.801, under NEAR_AT, because the paragraph's
+        # embedding is dominated by everything else it says while the
+        # generated content is a paraphrase ("SQL and sshd_config" for
+        # "SQL/sshd_config") that misses on the surface too. Both evidence
+        # spans were exact substrings of the memory they came from.
+        #
+        # Containment rather than a lower NEAR_AT: a normalised substring
+        # match means the store literally contains the sentence, so it has no
+        # false positives, where widening the band trades these for real ones.
+        twin_row = _containing_row(candidate.evidence, rows)
         scored = [r for r in rows if "cosine" in r]
-        if not scored:
+        if twin_row is not None:
+            out.append(
+                Resolution(
+                    verdict="duplicate",
+                    cosine=round(float(twin_row.get("cosine") or 0.0), 4),
+                    neighbour_id=str(twin_row["id"]),
+                    neighbour_content=str(twin_row.get("content") or ""),
+                )
+            )
+        elif not scored:
             out.append(Resolution("new", 0.0, None, None))
         else:
             nearest = max(scored, key=lambda r: r["cosine"])
@@ -659,6 +682,28 @@ _CONTEXT_TYPES = frozenset(
 
 def _squash(text: str) -> str:
     return " ".join(text.split()).casefold()
+
+
+def _containing_row(
+    evidence: str, rows: Sequence[Mapping[str, Any]]
+) -> Optional[Mapping[str, Any]]:
+    """The recalled memory that already contains this evidence span, if any.
+
+    Only the rows recall returned are checked, so a memory that quotes the
+    span but ranks outside `_NEIGHBOURS` is still missed -- the cheap half of
+    the fix, and the half that covers what was actually observed.
+
+    `MIN_LENGTH` is the floor rather than a new constant: it is already the
+    length below which a span is too slight to be a memory, and it is exactly
+    the property that stops a short fragment matching half the store.
+    """
+    needle = _squash(evidence)
+    if len(needle) < MIN_LENGTH:
+        return None
+    for row in rows:
+        if row.get("id") and needle in _squash(str(row.get("content") or "")):
+            return row
+    return None
 
 
 def llm_extract(text: str, *, limit: int = DEFAULT_LIMIT) -> Optional[list[Candidate]]:
