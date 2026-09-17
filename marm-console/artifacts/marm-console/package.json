@@ -42,7 +42,7 @@
     "tailwind-merge": "catalog:",
     "tailwindcss": "catalog:",
     "vite": "catalog:",
-    "vitest": "^4.1.11",
+    "vitest": "^5.0.0",
     "wouter": "catalog:"
   }
 }
