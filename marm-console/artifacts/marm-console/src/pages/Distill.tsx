@@ -211,19 +211,27 @@ export function DistillPage() {
         )}
 
         <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <TabsList className="h-auto w-full shrink-0 self-start border-x-0 border-t-0 border-b">
+          <TabsList className="mb-4 grid h-auto w-full shrink-0 grid-cols-2 gap-1.5 rounded-xl border border-card-border bg-card/70 p-1.5 shadow-[0_14px_40px_rgba(0,0,0,0.16),inset_0_1px_0_rgba(var(--primary-rgb),0.04)]">
             {PANES.map((pane, index) => {
               const count = pane.value === 'queue' ? queue.length : (lastRun?.proposals?.length ?? null);
               return (
                 <TabsTrigger
                   key={pane.value}
                   value={pane.value}
-                  className={cn('console-tab metric-enter', pane.tone)}
-                  style={{ animationDelay: `${index * 55}ms` }}
+                  title={pane.blurb}
+                  className={cn(
+                    'console-tab metric-enter group relative h-11 justify-start gap-3 overflow-hidden border border-transparent px-3 text-left data-[state=active]:bg-white/[0.035]',
+                    pane.tone,
+                  )}
+                  style={{ animationDelay: `${index * 45}ms` }}
                 >
-                  <pane.icon className="h-4 w-4" />
-                  <span>{pane.label}</span>
-                  <span className="font-mono text-[11px] tabular-nums opacity-70">
+                  <span className="console-tab-icon flex h-6 w-6 shrink-0 items-center justify-center rounded-md border bg-background/45 transition-transform duration-200 group-hover:scale-105">
+                    <pane.icon className="h-3.5 w-3.5" />
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-xs font-semibold text-foreground">
+                    {pane.label}
+                  </span>
+                  <span className="font-mono text-sm font-semibold tabular-nums text-foreground/90">
                     {count === null ? '—' : count.toLocaleString()}
                   </span>
                 </TabsTrigger>
@@ -231,10 +239,8 @@ export function DistillPage() {
             })}
           </TabsList>
 
-          <TabsContent
-            value="queue"
-            className="min-h-0 flex-1 overflow-y-auto pt-4 [scrollbar-gutter:stable]"
-          >
+          <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
+          <TabsContent value="queue" className="m-0">
             {pending.isLoading ? (
               <LoadingState label="Loading the review queue…" />
             ) : queue.length === 0 ? (
@@ -258,10 +264,7 @@ export function DistillPage() {
             )}
           </TabsContent>
 
-          <TabsContent
-            value="run"
-            className="min-h-0 flex-1 overflow-y-auto pt-4 [scrollbar-gutter:stable]"
-          >
+          <TabsContent value="run" className="m-0">
             {!ran ? (
               <MemoryEmptyState
                 title="No distillation has been run yet"
@@ -290,6 +293,7 @@ export function DistillPage() {
               </div>
             )}
           </TabsContent>
+          </div>
         </Tabs>
 
         <p className="mt-3 shrink-0 text-[11px] text-muted-foreground">

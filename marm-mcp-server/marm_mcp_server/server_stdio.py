@@ -331,7 +331,7 @@ async def marm_distill(
     proposal_id: Optional[str] = None,
     project: Optional[str] = None,
     context_type: str = "general",
-    threshold: float = 0.35,
+    threshold: float = 0.20,
     limit: int = 20,
     include_duplicates: bool = False,
 ) -> dict:
@@ -361,8 +361,9 @@ async def marm_distill(
     - proposal_id: which proposal to act on (required for apply/discard)
     - project: scope name recorded on the memory that `apply` writes
     - context_type: memory context type for the write (default general)
-    - threshold: shape-score floor. Excludes chatter. It is NOT the volume
-      control -- measured on real transcript it barely moves the count
+    - threshold: shape-score floor, default 0.20. Excludes chatter and little
+      else; measured against the live store, a higher floor discards real
+      memories long before it meaningfully reduces the count
     - limit: most proposals to return (default 20). THIS is the volume control
     - include_duplicates: also stage what the store already holds (default off,
       because a queue of known facts does not get read)
