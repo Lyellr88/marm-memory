@@ -343,6 +343,55 @@ export function createMarmClient(config: MarmClientConfig) {
       request<{ links: ProjectMemoryCodeLink[] }>(config, 'GET', `/projects/${encodeURIComponent(project)}/memory-links`),
     confirmProjectMemoryLinking: (project: string, memoryProject: string) =>
       request<ProjectMemoryLinking>(config, 'PUT', `/projects/${encodeURIComponent(project)}/memory-linking`, { body: { memory_project: memoryProject } }),
+    /** Stream a grounded answer, calling `onEvent` as each frame arrives.
+     *
+     *  Not `request()`: that awaits a whole body, which is the behaviour this
+     *  exists to avoid. Returns an abort handle, because a reader who retypes
+     *  the question should not wait out the previous answer.
+     */
+    streamCodeContextAnswer: (
+      data: CodeContextInput,
+      onEvent: (name: string, payload: Record<string, unknown>) => void,
+    ) => {
+      const controller = new AbortController();
+      const done = (async () => {
+        const response = await fetch(`${config.baseUrl}/api/code-context/answer`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+          body: JSON.stringify(data),
+          signal: controller.signal,
+        });
+        if (!response.ok || !response.body) {
+          throw new MarmApiError(response.status, 'Could not start the answer stream.');
+        }
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let name = '';
+        for (;;) {
+          const { done: finished, value } = await reader.read();
+          if (finished) break;
+          buffer += decoder.decode(value, { stream: true });
+          // Frames are newline-delimited and a chunk can split one, so the
+          // tail stays in the buffer until its newline arrives.
+          let index = buffer.indexOf('\n');
+          while (index !== -1) {
+            const line = buffer.slice(0, index).trim();
+            buffer = buffer.slice(index + 1);
+            if (line.startsWith('event:')) name = line.slice(6).trim();
+            else if (line.startsWith('data:')) {
+              try {
+                onEvent(name, JSON.parse(line.slice(5).trim()));
+              } catch {
+                /* a frame we cannot parse is a frame we skip, not a failed answer */
+              }
+            }
+            index = buffer.indexOf('\n');
+          }
+        }
+      })();
+      return { done, abort: () => controller.abort() };
+    },
     // The browser must outlast the proxy or a slow-but-succeeding request reads
     // as a client timeout. The proxy allows 60s for a composition and 150s when
     // an answer is also asked for, because generation runs after retrieval.

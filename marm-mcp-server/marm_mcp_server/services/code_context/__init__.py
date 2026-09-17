@@ -12,6 +12,7 @@ happens to match will outrank the class everything calls.
 import asyncio
 import os
 import re
+from collections.abc import Iterator
 
 from ...config.env_parsing import _safe_int
 from .backend import GraphUnavailable, LocalBackend
@@ -37,6 +38,7 @@ __all__ = [
     "build_code_context",
     "render",
     "serialise",
+    "stream_answer",
 ]
 
 
@@ -297,3 +299,69 @@ def _resolve_citations(text: str, ctx: "Context") -> list[dict]:
             }
         )
     return out
+
+
+def stream_answer(
+    task: str, project: str | None, cwd: str | None, budget: int
+) -> Iterator[tuple[str, dict]]:
+    """Compose, then yield the answer in pieces as the model writes it.
+
+    Split from `answer_from_context` rather than sharing it, because the two
+    have genuinely different shapes: that one returns a finished dict, this one
+    is a generator whose caller is a response body. What they DO share -- the
+    system prompt, the token ceiling, the grounding text and the citation
+    resolver -- is imported, not duplicated, so a change to how answers are
+    grounded cannot apply to one and not the other.
+
+    Yields `(event, payload)` tuples. The citation pass runs on the assembled
+    text at the end, because a citation cannot be resolved from a fragment: the
+    marker may still be arriving one character at a time.
+    """
+    from ...services import local_llm
+
+    backend = LocalBackend()
+    try:
+        ctx = asyncio.run(build(backend, task, cwd=cwd, project=project, budget=budget))
+    except GraphUnavailable as exc:
+        yield ("error", {"message": str(exc)})
+        return
+
+    if local_llm.available() is None:
+        yield (
+            "error",
+            {
+                "message": "No local model is reachable.",
+                "hint": (
+                    "Set MARM_LLM_URL to an OpenAI-compatible server on loopback "
+                    "to enable grounded answering. The ranked context is "
+                    "unaffected."
+                ),
+            },
+        )
+        return
+
+    # The reader gets the shape of the answer before its first word: which
+    # project, how many symbols it is grounded in, which model is writing.
+    yield (
+        "start",
+        {
+            "project": short_name(ctx.project),
+            "symbol_count": len(ctx.symbols),
+            "model": local_llm.available(),
+        },
+    )
+
+    pieces: list[str] = []
+    for piece in local_llm.stream(
+        _ANSWER_SYSTEM,
+        f"{render(ctx)}\n\n---\n\nQuestion: {task}\n\nAnswer, citing symbols:",
+        max_tokens=_ANSWER_TOKENS,
+    ):
+        pieces.append(piece)
+        yield ("delta", {"text": piece})
+
+    answer = "".join(pieces)
+    yield (
+        "done",
+        {"citations": _resolve_citations(answer, ctx), "length": len(answer)},
+    )

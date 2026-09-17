@@ -1,7 +1,8 @@
+import { useMemo } from 'react';
 import { Badge, Button, cn } from '@/components/ui/core';
 import { MemoryEmptyState } from '@/components/memory/shared';
 import { Sparkles, CircleAlert, FileCode2 } from 'lucide-react';
-import type { CodeContextCitation, CodeContextResult } from '@/lib/marm-types';
+import type { CodeContextCitation, CodeContextResult, CodeContextSymbol } from '@/lib/marm-types';
 import { CopyButton } from './shared';
 
 /** The model writes markdown. Rendering it as literal asterisks is not a small
@@ -81,8 +82,19 @@ function withCitations(
   });
 }
 
+export interface AnswerStream {
+  status: 'idle' | 'streaming' | 'done' | 'error';
+  text: string;
+  citations: CodeContextCitation[];
+  model?: string;
+  message?: string;
+  hint?: string;
+}
+
 export function AnswerPane({
   result,
+  symbols,
+  stream,
   onCite,
   onAsk,
   asking,
@@ -92,13 +104,64 @@ export function AnswerPane({
    *  the button composes and answers in one step, so a reader who arrived with
    *  a question never has to learn that "compose" comes first. */
   result?: CodeContextResult;
+  /** Ranked symbols from the composition, used to resolve citation markers
+   *  while the answer is still arriving. The server's own resolution lands
+   *  with the final frame and replaces this. */
+  symbols?: CodeContextSymbol[];
+  /** Live answer state. Present while one is arriving and after it lands;
+   *  `result.answer` remains the non-streaming path an agent-shaped response
+   *  still uses. */
+  stream?: AnswerStream;
   onCite: (citation: CodeContextCitation) => void;
   onAsk: () => void;
   asking: boolean;
   canAsk?: boolean;
 }) {
-  const status = result?.answer_status;
-  const citations = result?.answer_citations ?? [];
+  // A live stream wins over a finished JSON answer: it is the newer one, and
+  // during streaming it is the only one with any text at all.
+  const streaming = stream && stream.status !== 'idle';
+  const text = streaming ? stream.text : (result?.answer ?? '');
+  const settled = streaming ? stream.citations : (result?.answer_citations ?? []);
+  // While the answer is still arriving the server has not resolved anything
+  // yet -- it cannot, because a marker may still be arriving one character at
+  // a time. Without this a reader watches raw `[cpu_write_register]` text for
+  // the whole eight seconds and only sees links at the very end. The symbols
+  // are already on the page, so the same resolution is available locally.
+  const citations = useMemo(() => {
+    if (settled.length > 0 || !symbols?.length) return settled;
+    return symbols.map((symbol) => ({
+      name: symbol.name,
+      qualified_name: symbol.qualified_name,
+      file_path: symbol.file_path,
+      start_line: symbol.start_line,
+    }));
+  }, [settled, symbols]);
+  const model = streaming ? stream.model : result?.answer_model;
+  const status = streaming
+    ? stream.status === 'error'
+      ? 'failed'
+      : 'ok'
+    : result?.answer_status;
+
+  if (stream?.status === 'error') {
+    return (
+      <div className="rounded-xl border border-amber-500/25 bg-amber-500/[0.05] p-4">
+        <div className="flex items-start gap-3">
+          <CircleAlert className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" />
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-amber-100">{stream.message}</p>
+            {stream.hint && (
+              <p className="mt-1 text-sm text-muted-foreground">{stream.hint}</p>
+            )}
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              Everything else on this page is unaffected — the ranked symbols, their source and
+              what memory knows were retrieved without a model.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!status) {
     return (
@@ -120,7 +183,7 @@ export function AnswerPane({
     );
   }
 
-  if (status !== 'ok' || !result?.answer) {
+  if (status !== 'ok' || (!text && stream?.status !== 'streaming')) {
     return (
       <div className="rounded-xl border border-amber-500/25 bg-amber-500/[0.05] p-4">
         <div className="flex items-start gap-3">
@@ -149,31 +212,39 @@ export function AnswerPane({
           <Sparkles className="mr-1 h-3 w-3" />
           grounded answer
         </Badge>
-        {result.answer_model && (
+        {model && (
           <Badge variant="outline" className="font-mono text-[10px]">
-            {result.answer_model}
+            {model}
           </Badge>
         )}
         <span className="text-[11px] text-muted-foreground">
-          Answered only from the {(result.symbol_count ?? 0).toLocaleString()} ranked symbols
-          above — not from general knowledge of similar projects.
+          {/* While streaming, the composition may not have landed yet, so the
+              count is omitted rather than shown as a confident zero. */}
+          {typeof result?.symbol_count === 'number'
+            ? `Answered only from the ${result.symbol_count.toLocaleString()} ranked symbols above — not from general knowledge of similar projects.`
+            : 'Answered only from the ranked context for this task — not from general knowledge of similar projects.'}
         </span>
         <div className="ml-auto">
-          <CopyButton className="h-7 w-7" value={result.answer} label="Copy the answer" />
+          <CopyButton className="h-7 w-7" value={text} label="Copy the answer" />
         </div>
       </div>
 
       <div className="space-y-1 rounded-xl border border-border/80 bg-card/45 p-4 text-[13px] leading-relaxed">
-        {withCitations(result.answer, citations, onCite)}
+        {withCitations(text, citations, onCite)}
+        {stream?.status === 'streaming' && (
+          /* A caret, not a spinner: the answer is arriving, not pending, and a
+             spinner beside text that is already appearing says the wrong thing. */
+          <span className="ml-0.5 inline-block h-4 w-[2px] animate-pulse bg-primary align-text-bottom" />
+        )}
       </div>
 
-      {citations.length > 0 && (
+      {settled.length > 0 && (
         <div className="rounded-xl border border-border/70 bg-background/25 p-3">
           <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
             Sources it used
           </div>
           <div className="flex flex-wrap gap-2">
-            {citations.map((citation) => (
+            {settled.map((citation) => (
               <button
                 key={citation.qualified_name}
                 type="button"

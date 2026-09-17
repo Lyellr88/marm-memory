@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { QueryClient } from '@tanstack/react-query';
 import { useMarmClient } from '@/lib/use-marm-client';
@@ -6,7 +6,7 @@ import { useConnection } from '@/lib/marm-connection';
 import type { 
   MemoryListParams, MemoryInput, MemoryId, LogListParams, NotebookDeleteRef, NotebookInput,
   CompactionAction, ConceptSearchParams, ConceptBuildInput, ConceptGraphParams,
-  ProjectIndexInput, CodeSearchInput, CodeContextInput, DistillInput, TraceInput, ImpactInput, DuplicatePairInput,
+  ProjectIndexInput, CodeSearchInput, CodeContextInput, CodeContextCitation, DistillInput, TraceInput, ImpactInput, DuplicatePairInput,
   MergeDuplicateInput, RuntimeProfile
 } from '@/lib/marm-types';
 import { MarmApiError } from '@/lib/marm-api';
@@ -798,6 +798,75 @@ export function useDistillDiscard() {
     mutationFn: (proposalId: string) => client.distill({ action: 'discard', proposal_id: proposalId }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['distill-pending', baseUrl] }),
   });
+}
+
+/** A grounded answer, streamed.
+ *
+ *  Deliberately not react-query: this is not a request whose result is cached,
+ *  it is a response that arrives over seconds and is rendered as it goes.
+ *  Modelling it as a query would mean either caching a partial answer or
+ *  re-fetching a finished one, and neither is what a reader wants.
+ */
+export function useStreamingAnswer() {
+  const { client } = useMarmConfig();
+  const [state, setState] = useState<{
+    status: 'idle' | 'streaming' | 'done' | 'error';
+    text: string;
+    citations: CodeContextCitation[];
+    model?: string;
+    message?: string;
+    hint?: string;
+  }>({ status: 'idle', text: '', citations: [] });
+  const active = useRef<{ abort: () => void } | null>(null);
+
+  // A reader who leaves the page should not keep a model busy on their behalf.
+  useEffect(() => () => active.current?.abort(), []);
+
+  const start = useCallback(
+    (data: CodeContextInput) => {
+      active.current?.abort();
+      setState({ status: 'streaming', text: '', citations: [] });
+      const handle = client.streamCodeContextAnswer(data, (name, payload) => {
+        if (name === 'start') {
+          setState((prev) => ({ ...prev, model: payload.model as string }));
+        } else if (name === 'delta') {
+          const piece = payload.text as string;
+          setState((prev) => ({ ...prev, text: prev.text + piece }));
+        } else if (name === 'done') {
+          setState((prev) => ({
+            ...prev,
+            status: 'done',
+            citations: (payload.citations as CodeContextCitation[]) ?? [],
+          }));
+        } else if (name === 'error') {
+          setState((prev) => ({
+            ...prev,
+            status: 'error',
+            message: payload.message as string,
+            hint: payload.hint as string | undefined,
+          }));
+        }
+      });
+      active.current = handle;
+      handle.done.catch((error: unknown) => {
+        // An abort is the caller's own doing, not a failure to report.
+        if (error instanceof DOMException && error.name === 'AbortError') return;
+        setState((prev) => ({
+          ...prev,
+          status: 'error',
+          message: 'The answer stream failed.',
+        }));
+      });
+    },
+    [client],
+  );
+
+  const reset = useCallback(() => {
+    active.current?.abort();
+    setState({ status: 'idle', text: '', citations: [] });
+  }, []);
+
+  return { ...state, start, reset };
 }
 
 export function useSearchProjectCode() {
