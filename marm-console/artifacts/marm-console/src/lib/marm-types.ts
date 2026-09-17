@@ -746,6 +746,10 @@ export interface CodeContextInput {
   budget?: number;
   /** Ask for the ranked call neighbourhood. Off by default server-side. */
   include_graph?: boolean;
+  /** 1 = markdown only, 2 = + metadata, 3 = + source and memory bodies.
+   *  The Console lays the parts out, so it always asks for 3; an agent reads
+   *  the markdown and stops, which is why the server default is 1. */
+  detail?: number;
 }
 
 /** How a symbol was reached, when it arrived through the call graph rather than
@@ -807,6 +811,11 @@ export interface CodeContextResult {
   memories?: CodeContextMemory[];
   links?: Array<Record<string, unknown>>;
   graph_nodes?: number;
+  /** Which level the server actually applied, after its own default. */
+  detail?: number;
+  /** Present at every level: the counts survive when the arrays do not. */
+  symbol_count?: number;
+  memory_count?: number;
   /** `[source, target, weight]`, present only when `include_graph` was set. */
   graph_edges?: Array<[string, string, number]>;
   notes?: string[];

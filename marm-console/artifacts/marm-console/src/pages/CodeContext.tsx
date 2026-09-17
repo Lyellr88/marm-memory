@@ -117,6 +117,10 @@ export function CodeContextPage() {
       project: nextProject && nextProject !== AUTO_PROJECT ? nextProject : null,
       budget: nextBudget,
       include_graph: true,
+      // The page lays out symbols, source and memory bodies separately, so it
+      // needs the structured fields the markdown duplicates. An agent does not,
+      // which is why the server default is 1 rather than this.
+      detail: 3,
     });
     setParams(
       (prev) => {

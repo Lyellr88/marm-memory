@@ -361,6 +361,7 @@ async def marm_code_context(
     cwd: Optional[str] = None,
     budget: int = 12000,
     include_graph: bool = False,
+    detail: int = 0,
 ) -> dict:
     """
     🧩 Composed code context for a task: ranked symbols + source + memory, in ONE call.
@@ -382,6 +383,11 @@ async def marm_code_context(
     - budget: character budget for the returned source, 500-100000 (default 12000)
     - include_graph: also return the ranked call neighbourhood as `graph_edges`;
       off by default because it is several KB of JSON only a visualiser reads
+    - detail: how much to return. 1 is markdown only and is the default,
+      because `markdown` already contains the source and the memory text --
+      asking for 3 means paying for the same bytes twice. 2 adds symbol and
+      memory metadata without repeating bodies; 3 adds them. 0 means "use the
+      server default" (MARM_CODE_CONTEXT_DETAIL)
 
     Returns: status, project, markdown, symbols, memories, links, graph_nodes,
     notes -- or a no_project/unavailable status carrying the next step to take.
@@ -396,6 +402,7 @@ async def marm_code_context(
             cwd=cwd,
             budget=budget,
             include_graph=include_graph,
+            detail=detail,
         )
     except ValidationError as e:
         return {"status": "error", "message": f"Invalid code-context request: {e!s}"}
@@ -405,6 +412,7 @@ async def marm_code_context(
         cwd=req.cwd,
         budget=req.budget,
         include_graph=req.include_graph,
+        detail=req.detail or None,
     )
 
 

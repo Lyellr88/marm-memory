@@ -31,6 +31,17 @@ class CodeContextRequest(BaseModel):
         le=100000,
         description="Character budget for the returned source.",
     )
+    detail: int = Field(
+        default=0,
+        ge=0,
+        le=3,
+        description=(
+            "How much to return. 1=markdown only (an agent reads this and "
+            "stops); 2=adds symbol and memory metadata; 3=adds source and "
+            "memory text as structured fields, which the markdown already "
+            "contains. 0 uses the server default (MARM_CODE_CONTEXT_DETAIL)."
+        ),
+    )
     include_graph: bool = Field(
         default=False,
         description=(
@@ -66,4 +77,5 @@ async def marm_code_context(req: CodeContextRequest) -> dict:
         cwd=req.cwd,
         budget=req.budget,
         include_graph=req.include_graph,
+        detail=req.detail or None,
     )

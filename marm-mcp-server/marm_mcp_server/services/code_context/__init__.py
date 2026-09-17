@@ -9,12 +9,22 @@ words", which is not "which symbols matter here" -- a private helper whose name
 happens to match will outrank the class everything calls.
 """
 
+import os
+
 from .backend import GraphUnavailable, LocalBackend
-from .compose import Context, build
+from .compose import Context, Symbol, build
 from .format import render
 from .project import short_name
 
+#: Server-wide floor for how much `marm_code_context` returns, so an operator
+#: can quiet every agent at once instead of each caller passing `detail`.
+#: 1 is right for an agent: `markdown` already contains the source and the
+#: memory text, so returning the structured arrays as well means paying for the
+#: same bytes twice. The Console asks for 3 because it lays out the parts.
+DEFAULT_DETAIL = max(1, min(3, int(os.environ.get("MARM_CODE_CONTEXT_DETAIL") or 1)))
+
 __all__ = [
+    "DEFAULT_DETAIL",
     "GraphUnavailable",
     "LocalBackend",
     "build",
@@ -31,6 +41,7 @@ async def build_code_context(
     cwd: str | None = None,
     budget: int = 12000,
     include_graph: bool = False,
+    detail: int | None = None,
 ) -> dict:
     """Run the pipeline and return both the rendered text and its structure.
 
@@ -56,17 +67,70 @@ async def build_code_context(
                 else "Index a repository with marm_graph_index(repo_path=...) first."
             ),
         }
-    return serialise(ctx, task, include_graph=include_graph)
+    return serialise(ctx, task, include_graph=include_graph, detail=detail)
 
 
-def serialise(ctx: "Context", task: str, *, include_graph: bool = False) -> dict:
+def serialise(
+    ctx: "Context",
+    task: str,
+    *,
+    include_graph: bool = False,
+    detail: int | None = None,
+) -> dict:
     """Build the public response from a composed Context.
 
     Split out from build_code_context because this function -- not that one --
     defines the shape every agent receives over both transports, and it is the
     only part that can be asserted without a live graph backend.
+
+    `detail` controls how much of the SAME content is repeated. Measured on one
+    real composition: 42,235 bytes, of which `markdown` was 17,465 (41%) and
+    `symbols[].source` was another 12,131 (28%) -- the identical source text,
+    a second time. An agent reads `markdown` and stops, so at detail 3 it pays
+    for 59% it never looks at.
+
+      1  markdown and notes. What an agent needs, and nothing twice.
+      2  adds symbol and memory metadata -- names, files, lines, scores,
+         provenance -- but not the source or memory bodies already in the
+         markdown. For deciding where to look without re-reading.
+      3  everything, including source and memory text as structured fields.
+         What a renderer needs; the Console asks for this.
+
+    `include_graph` stays a separate switch: it is a different axis (a
+    visualisation payload nothing else reads), not more of the same content.
     """
-    return {
+    level = DEFAULT_DETAIL if detail is None else max(1, min(3, detail))
+
+    def _symbol(s: "Symbol") -> dict:
+        row = {
+            "name": s.name,
+            "qualified_name": s.qualified_name,
+            "label": s.label,
+            "file_path": s.file_path,
+            "start_line": s.start_line,
+            "end_line": s.end_line,
+            "score": round(s.score, 6),
+            "seeded": s.seeded,
+            "truncated": s.truncated,
+            # Nested, and None for a purely seeded symbol: these four are
+            # jointly present or jointly absent, so four flat zero-valued keys
+            # would claim a hop-0 heuristic edge that never existed.
+            "provenance": (
+                {
+                    "hop": s.hop,
+                    "strategy": s.strategy,
+                    "confidence": round(s.confidence, 4),
+                    "risk": s.risk,
+                }
+                if (s.hop or s.strategy or s.confidence or s.risk)
+                else None
+            ),
+        }
+        if level >= 3:
+            row["source"] = s.source
+        return row
+
+    payload = {
         "status": "success",
         # A fixed three-key shape rather than the engine's row: the engine names
         # a project after its absolute path, so callers that want a label need
@@ -78,44 +142,29 @@ def serialise(ctx: "Context", task: str, *, include_graph: bool = False) -> dict
         },
         "task": task,
         "markdown": render(ctx),
-        "symbols": [
-            {
-                "name": s.name,
-                "qualified_name": s.qualified_name,
-                "label": s.label,
-                "file_path": s.file_path,
-                "start_line": s.start_line,
-                "end_line": s.end_line,
-                "score": round(s.score, 6),
-                "seeded": s.seeded,
-                "truncated": s.truncated,
-                "source": s.source,
-                # Nested, and None for a purely seeded symbol: these four are
-                # jointly present or jointly absent, so four flat zero-valued
-                # keys would claim a hop-0 heuristic edge that never existed.
-                "provenance": (
-                    {
-                        "hop": s.hop,
-                        "strategy": s.strategy,
-                        "confidence": round(s.confidence, 4),
-                        "risk": s.risk,
-                    }
-                    if (s.hop or s.strategy or s.confidence or s.risk)
-                    else None
-                ),
-            }
-            for s in ctx.symbols
-        ],
-        "memories": ctx.memories,
-        "links": ctx.links,
+        "detail": level,
         "graph_nodes": ctx.graph_nodes,
-        # Opt-in: at ~37 nodes the edge list is 8-25 KB of JSON, and an agent
-        # reads `markdown` and stops. Charging every caller for a view only the
-        # Console renders would be paying tokens for nothing.
-        **(
-            {"graph_edges": [[a, b, round(w, 4)] for a, b, w in ctx.graph_edges]}
-            if include_graph
-            else {}
-        ),
         "notes": ctx.notes,
     }
+
+    # Counts survive every level. Knowing twenty-one symbols were ranked is the
+    # difference between "nothing matched" and "here is a summary of a lot",
+    # and it costs two integers.
+    payload["symbol_count"] = len(ctx.symbols)
+    payload["memory_count"] = len(ctx.memories) + len(ctx.links)
+
+    if level >= 2:
+        payload["symbols"] = [_symbol(s) for s in ctx.symbols]
+        payload["memories"] = (
+            ctx.memories
+            if level >= 3
+            else [{k: v for k, v in m.items() if k != "content"} for m in ctx.memories]
+        )
+        payload["links"] = ctx.links
+
+    if include_graph:
+        # Opt-in, and a different axis from `detail`: a visualisation payload
+        # nothing else reads, not more of the same content.
+        payload["graph_edges"] = [[a, b, round(w, 4)] for a, b, w in ctx.graph_edges]
+
+    return payload

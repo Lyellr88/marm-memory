@@ -109,6 +109,9 @@ describe('CodeContextPage', () => {
       project: 'C-work-marm-systems',
       budget: 12000,
       include_graph: true,
+      // The page lays the parts out separately, so it needs the structured
+      // fields the markdown duplicates. The server default is 1 for agents.
+      detail: 3,
     });
   });
 
