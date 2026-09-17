@@ -220,7 +220,7 @@ def test_docker_background_worker_reindexes_mounted_git_repository(
         assert receipts[0]["last_index_reason"] == "head_moved"
         assert receipts[0]["new_symbol"] == "added_by_background_worker"
         assert receipts[0]["manual_index_calls"] == 1
-        assert (repository / "example.py").is_file()
+        assert (repository / "fixture" / "example.py").is_file()
     finally:
         _run_docker(["rm", "-f", container], timeout=30)
 

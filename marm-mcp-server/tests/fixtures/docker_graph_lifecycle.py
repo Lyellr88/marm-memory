@@ -10,7 +10,7 @@ from pathlib import Path
 os.environ.update(
     MARM_API_KEY="TestDockerGraph_12345#abcDEF",
     GRAPH_AUTO_INDEX_DEBOUNCE_SECONDS="1",
-    GRAPH_AUTO_INDEX_PROJECT_TTL="1",
+    GRAPH_AUTO_INDEX_PROJECT_TTL="10",
     WRITE_QUEUE_ENABLED="0",
 )
 
@@ -23,13 +23,14 @@ from marm_mcp_server.core.graph_supervisor import graph_supervisor
 
 
 def git(root, *args):
-    return subprocess.run(
+    result = subprocess.run(
         ["git", "-C", str(root), *args],
-        check=True,
         capture_output=True,
         text=True,
         timeout=10,
     )
+    assert result.returncode == 0, result.stdout + result.stderr
+    return result
 
 
 async def wait_for(predicate, label):
@@ -44,7 +45,10 @@ async def wait_for(predicate, label):
 
 
 async def main():
-    root = Path("/repository")
+    # The bind mount belongs to the host uid on Linux. Create the repository
+    # as marm so Git's ownership check remains enabled and can trust it.
+    root = Path("/repository/fixture")
+    root.mkdir()
     assert not _cli._bin_path(_cli._version()).exists(), (
         "fresh container must not use pip's binary cache"
     )
