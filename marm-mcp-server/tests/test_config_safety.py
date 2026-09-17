@@ -214,15 +214,9 @@ def test_generated_key_file_is_not_world_readable_under_a_permissive_umask(
 def test_the_secret_is_never_written_into_a_file_others_can_read(monkeypatch, tmp_path):
     """The token must never exist on disk readable by anyone but its owner.
 
-    Originally this watched the mode of `~/.marm/.env` at the moment it was
-    opened, because the bug was that `O_CREAT` does not re-mode an existing
-    file. The write no longer touches `.env` at all -- it creates a private
-    temporary file and renames it over -- so watching that path would now watch
-    something that never happens and pass for the wrong reason.
-
-    The property is unchanged and is what is checked here: every file opened
-    for writing during the flow is owner-only at the instant it is opened, and
-    the pre-existing 0644 file is replaced rather than written through.
+    Checks the property, not the path: every file opened for writing is
+    owner-only at the instant it is opened, and a pre-existing 0644 file is
+    replaced rather than written through.
     """
     from marm_mcp_server.config import api_key_bootstrap
 
@@ -391,13 +385,10 @@ def test_a_symlinked_key_file_is_refused_rather_than_followed(monkeypatch, tmp_p
 def test_a_symlinked_key_file_is_refused_rather_than_read_through(
     monkeypatch, tmp_path
 ):
-    """CodeRabbit, PR #206, outside-diff finding 1.
+    """A symlinked key file must not be read through.
 
-    `_load_key_from_file` runs BEFORE `_secure_key_dir` and `_write_key_file`,
-    so a local actor who can place a symlink at `~/.marm/.env` supplies a key
-    the service adopts and then serves with, and none of the later protections
-    ever apply to it. Refusing a symlink on write while following one on read
-    is the same defect from the other side.
+    This read runs before the directory and file are hardened, so a key
+    adopted here never receives those protections.
     """
     from marm_mcp_server.config import api_key_bootstrap
 
@@ -418,18 +409,13 @@ def test_a_symlinked_key_file_is_refused_rather_than_read_through(
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX symlinks")
 def test_a_symlink_swapped_in_after_the_checks_does_not_receive_the_secret(tmp_path):
-    """CodeRabbit, PR #206, outside-diff finding 2.
+    """A link planted after the checks must not receive the secret.
 
-    No check on a PATHNAME survives that pathname being replaced immediately
-    afterwards. `O_NOFOLLOW` closes the race on POSIX but does not exist on
-    Windows, so the write must not depend on it: the secret goes to a private
-    temporary file and is renamed into place, which replaces a link rather than
-    writing through one.
-
-    Driven against `_write_key_file` directly, because that is the function the
-    finding names. Racing `resolve_marm_api_key` instead would plant the link
-    during the earlier READ, where a different guard refuses it -- the test
-    would pass while never exercising the write window at all.
+    No check on a pathname survives that pathname being replaced immediately
+    afterwards, so the write goes to a private temporary file and is renamed
+    into place. Driven against `_write_key_file` directly: racing
+    `resolve_marm_api_key` would plant the link during the earlier read, where
+    a different guard refuses it, and never exercise the write window.
     """
     from marm_mcp_server.config import api_key_bootstrap
 
@@ -463,3 +449,79 @@ def test_a_symlink_swapped_in_after_the_checks_does_not_receive_the_secret(tmp_p
     assert sorted(p.name for p in env_path.parent.iterdir()) == [".env"], (
         "the temporary file was left behind"
     )
+
+
+def test_the_read_path_fails_closed_when_it_cannot_open_safely(monkeypatch, tmp_path):
+    """An unsafe open must refuse, not fall back to a following one.
+
+    The Windows branch cannot run here and there is no Windows CI, so what is
+    pinned is the contract every branch shares: `open_no_follow` raising means
+    no key is adopted. Generating a fresh key is the tolerable outcome;
+    adopting one an attacker redirected is not.
+    """
+    from marm_mcp_server.config import api_key_bootstrap
+
+    env_path = tmp_path / ".marm" / ".env"
+    env_path.parent.mkdir(parents=True)
+    env_path.write_text("MARM_API_KEY=planted-value-that-is-long-enough\n")
+    monkeypatch.setattr(api_key_bootstrap, "_MARM_ENV_PATH", env_path)
+
+    def refuse(_path):
+        raise OSError("cannot prove this open is safe")
+
+    monkeypatch.setattr(api_key_bootstrap, "open_no_follow", refuse)
+    assert api_key_bootstrap._load_key_from_file() == ""
+
+
+def test_a_readable_key_file_is_still_adopted(monkeypatch, tmp_path):
+    """The guard above must not be the reason every key read returns empty."""
+    from marm_mcp_server.config import api_key_bootstrap
+
+    env_path = tmp_path / ".marm" / ".env"
+    env_path.parent.mkdir(parents=True)
+    env_path.write_text("MARM_API_KEY=a-real-key-value-long-enough\n")
+    monkeypatch.setattr(api_key_bootstrap, "_MARM_ENV_PATH", env_path)
+
+    assert api_key_bootstrap._load_key_from_file() == "a-real-key-value-long-enough"
+
+
+def test_open_no_follow_refuses_a_reparse_point_on_windows(monkeypatch, tmp_path):
+    """The Windows branch refuses what it opened when it is a reparse point.
+
+    Exercised by simulation because no runner here is Windows: the real
+    CreateFileW is replaced, and what is being pinned is that a handle whose
+    attributes carry FILE_ATTRIBUTE_REPARSE_POINT is closed and refused rather
+    than read.
+    """
+    import ctypes
+    import os as os_module
+
+    from marm_mcp_server.utils import security
+
+    monkeypatch.setattr(security.sys, "platform", "win32")
+
+    fake_fd = os_module.open(tmp_path / "decoy", os_module.O_CREAT | os_module.O_RDONLY)
+    closed = []
+
+    class _Kernel32:
+        @staticmethod
+        def CreateFileW(*_args):
+            return 4242
+
+    monkeypatch.setattr(ctypes, "WinDLL", lambda *a, **k: _Kernel32(), raising=False)
+    monkeypatch.setitem(
+        __import__("sys").modules,
+        "msvcrt",
+        type("m", (), {"open_osfhandle": staticmethod(lambda *_a: fake_fd)})(),
+    )
+    monkeypatch.setattr(
+        security.os,
+        "fstat",
+        lambda _fd: type("s", (), {"st_file_attributes": 0x400})(),
+    )
+    monkeypatch.setattr(security.os, "close", lambda fd: closed.append(fd))
+
+    with pytest.raises(OSError, match="reparse point"):
+        security.open_no_follow(tmp_path / ".env")
+    assert closed == [fake_fd], "the handle must be closed before refusing"
+    os_module.close(fake_fd)

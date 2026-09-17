@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 from ..services.key_management import _protect_key_file
-from ..utils.security import generate_api_key
+from ..utils.security import generate_api_key, open_no_follow
 
 _MARM_ENV_PATH = Path.home() / ".marm" / ".env"
 
@@ -13,11 +13,9 @@ _MARM_ENV_PATH = Path.home() / ".marm" / ".env"
 class KeyFileProtectionError(OSError):
     """The key file could not be made owner-only.
 
-    Distinct from every other write failure because the operator needs a
-    different instruction: the key is live in this process but will not survive
-    a restart, so set MARM_API_KEY explicitly. Hardening happens inside
-    `_write_key_file` now, so without a specific type that advice would be lost
-    to the generic "could not save" branch.
+    A distinct type because the operator needs a distinct instruction: the key
+    is live in this process but will not survive a restart, so set
+    MARM_API_KEY explicitly.
     """
 
 
@@ -32,18 +30,10 @@ def _file_link(path: Path) -> str:
 def _secure_key_dir(directory: Path) -> None:
     """Create or tighten `~/.marm` so only its owner can put files in it.
 
-    `mkdir(parents=True, exist_ok=True)` uses `0o777 & ~umask`, so under
-    `umask 0` the directory is created world-writable. Any local user with
-    write and execute there can swap `.env` for a file or symlink they own
-    during the window between hardening it and opening it, and since an
-    explicit mode only applies when `os.open` CREATES a file, their file keeps
-    its permissive mode and receives the bearer token.
-
-    Closing that means the directory, not just the file: a mode argument to
-    `mkdir` applies only on creation, so an already-permissive directory is
-    tightened here too. Fails closed if it cannot be made owner-only, because
-    writing a credential into a directory other users can write to is the thing
-    being prevented.
+    `mkdir(exist_ok=True)` applies its mode only on creation, so an
+    already-permissive directory is tightened here too -- otherwise a local
+    user with write access could swap `.env` for a file of their own and
+    receive the bearer token. Fails closed if it cannot be made owner-only.
     """
     directory.mkdir(parents=True, exist_ok=True, mode=0o700)
     if os.name == "nt":  # POSIX modes do not apply; ACLs are handled per-file
@@ -59,51 +49,24 @@ def _secure_key_dir(directory: Path) -> None:
 
 
 def _write_key_file(path: Path, marm_api_key: str) -> None:
-    """Write the key file so the secret is never on disk readable by anyone else.
+    """Write the key file so the secret is never readable by anyone else.
 
-    Three exposures, and a mode argument to `os.open` closes only the first.
+    The secret is never written to `path`. It goes to a fresh private file in
+    the same directory, is hardened while it still has a name nobody else
+    knows, and is then moved into place. That closes three exposures at once:
+    a new file created through the umask, an existing file whose mode `os.open`
+    does not change, and a pathname swapped between the check and the open --
+    which `O_NOFOLLOW` cannot close on Windows.
 
-    New file: `Path.write_text()` creates through the process umask -- 0644
-    typically, 0666 under `umask 0` -- leaving the plaintext bearer token
-    readable by other local users until a later chmod lands. Creating with an
-    explicit 0o600 closes that window.
+    `O_CREAT | O_EXCL` guarantees the descriptor is one we created. `os.replace`
+    is atomic on both platforms, so it replaces a symlink rather than writing
+    through it and a concurrent reader never sees a half-written key.
 
-    Existing file: the mode argument applies ONLY when `os.open` CREATES the
-    file. An existing `~/.marm/.env` at 0644 keeps 0644 through an `O_TRUNC`
-    open, so the new token would land in a still-readable file and be hardened
-    only afterwards -- easy to overlook, because the end state looks correct.
-
-    Replacement: no check on a pathname survives that pathname being replaced
-    immediately after the check. `O_NOFOLLOW` closes that race on POSIX, but it
-    does not exist on Windows -- `getattr(os, "O_NOFOLLOW", 0)` is 0 there -- so
-    an actor who can write to the directory could swap in a reparse point
-    between the check and the open, and the credential would be written through
-    it. Pathname-based ACL hardening afterwards cannot take that back.
-
-    All three close the same way: the secret is never written to `path` at all.
-    It goes to a fresh private file in the same directory, which is hardened
-    while it still has a name nobody else knows, and is then moved into place.
-
-    `O_CREAT | O_EXCL` means the descriptor is one we created: if anything
-    already holds the temporary name, the open fails rather than adopting a
-    file someone else controls. `os.replace` swaps the directory entry
-    atomically on both platforms, replacing a symlink or reparse point rather
-    than writing through it, and a concurrent reader sees either the old file
-    or the new one but never a half-written key.
-
-    `_protect_key_file()` runs on the temporary file, before it is reachable
-    under the real name, so there is no instant at which `.env` exists and is
-    readable by others. The caller runs it again on the final path: that is the
-    cross-platform check it uses to decide the key was persisted safely.
-
-    `initialize_managed_key()` intentionally refuses to overwrite (`O_EXCL` on
-    its destination); bootstrap intentionally does overwrite, which is why this
-    ends in a replace rather than a failure.
+    Unlike `initialize_managed_key()`, bootstrap intentionally overwrites,
+    which is why this ends in a replace rather than a failure.
     """
     if path.is_symlink():
-        # Cheap and clear: report the intent before doing any work. It is not
-        # what makes this safe -- the replace below is -- because the link can
-        # be created a microsecond after this returns.
+        # Reports intent early; the atomic replace below is what makes it safe.
         raise OSError(f"key file is a symlink, refusing to write through it: {path}")
 
     temporary = path.with_name(f".{path.name}.{os.getpid()}.{secrets.token_hex(8)}")
@@ -112,8 +75,7 @@ def _write_key_file(path: Path, marm_api_key: str) -> None:
         descriptor = os.open(temporary, flags, 0o600)
         with os.fdopen(descriptor, "w", encoding="utf-8") as key_file:
             key_file.write(f"MARM_API_KEY={marm_api_key}\n")
-        # Harden before the file is reachable under its real name, so there is
-        # no instant at which `.env` exists and is readable by anyone else.
+        # Harden before the file is reachable under its real name.
         try:
             protected = _protect_key_file(temporary)
         except Exception as exc:  # a platform backend can raise, not just fail
@@ -132,24 +94,14 @@ def _write_key_file(path: Path, marm_api_key: str) -> None:
 
 
 def _read_key_file_text(path: Path) -> str:
-    """Read the key file, refusing to follow a link to get there.
+    """Read the key file, refusing to follow a link to reach it.
 
-    The write path already refuses a symlinked `.env`; following one on READ is
-    the same defect from the other side. `_load_key_from_file` runs BEFORE
-    `_secure_key_dir` and `_write_key_file` in `resolve_marm_api_key`, so a
-    local actor who can place the link supplies a key that the service adopts
-    and then serves with, and none of the later protections ever apply to it.
-
-    `O_NOFOLLOW` makes the kernel refuse a symlinked final component, which
-    closes the check-then-read gap that a separate `is_symlink()` test leaves
-    open. It does not exist on Windows, so the explicit check carries that
-    platform -- see `_write_key_file` for why the write path does not rely on
-    an equivalent check there.
+    This read runs before `_secure_key_dir`, so a key adopted here never
+    receives the later protections. `open_no_follow` decides and opens in one
+    step on both platforms; a separate `is_symlink()` test would leave a
+    window in which the path can be swapped.
     """
-    if path.is_symlink():
-        raise OSError(f"key file is a symlink, refusing to read through it: {path}")
-    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
-    descriptor = os.open(path, flags)
+    descriptor = open_no_follow(path)
     with os.fdopen(descriptor, "r", encoding="utf-8") as key_file:
         return key_file.read()
 

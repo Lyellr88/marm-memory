@@ -1,4 +1,5 @@
 import ctypes
+import os
 import secrets
 import string
 import sys
@@ -177,3 +178,61 @@ def restrict_windows_file_to_current_user(path: Path) -> bool:
     if sys.platform != "win32":
         return True
     return _set_windows_owner_only_dacl(path)
+
+
+def _open_windows_no_reparse(path: Path) -> int:
+    """Open a file on Windows without traversing a reparse point.
+
+    `O_NOFOLLOW` is absent on Windows, so `os.open` follows a junction or
+    symlink swapped in after any `is_symlink()` check. `FILE_FLAG_OPEN_REPARSE_POINT`
+    binds the handle to the link itself instead of its target, and the
+    attribute is then read from that handle rather than from the path, so
+    there is no window between deciding and opening.
+
+    Guards its own platform rather than trusting the caller, like
+    `_set_windows_owner_only_dacl`: everything below dereferences Windows-only
+    APIs, and the type check runs with `platform = "linux"`.
+    """
+    if sys.platform != "win32":
+        raise OSError("no-reparse open is only available on Windows")
+
+    import msvcrt
+
+    generic_read = 0x80000000
+    file_share_read = 0x00000001
+    open_existing = 3
+    flag_open_reparse_point = 0x00200000
+    attribute_reparse_point = 0x400
+    invalid_handle = -1
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    handle = kernel32.CreateFileW(
+        str(path),
+        generic_read,
+        file_share_read,
+        None,
+        open_existing,
+        flag_open_reparse_point,
+        None,
+    )
+    if handle == invalid_handle:
+        raise OSError(ctypes.get_last_error(), f"cannot open key file: {path}")
+
+    descriptor = msvcrt.open_osfhandle(handle, os.O_RDONLY)
+    if getattr(os.fstat(descriptor), "st_file_attributes", 0) & attribute_reparse_point:
+        os.close(descriptor)
+        raise OSError(f"key file is a reparse point, refusing to read it: {path}")
+    return descriptor
+
+
+def open_no_follow(path: Path) -> int:
+    """Open `path` read-only, refusing to follow a link to reach it.
+
+    Fails closed: any platform, API or attribute check that cannot prove the
+    open was safe raises rather than returning a descriptor. A caller that
+    cannot read a key file falls back to generating one, which is the
+    tolerable outcome; adopting a key an attacker redirected is not.
+    """
+    if sys.platform == "win32":
+        return _open_windows_no_reparse(path)
+    return os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
