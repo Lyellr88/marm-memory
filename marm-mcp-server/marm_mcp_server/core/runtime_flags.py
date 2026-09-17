@@ -11,6 +11,17 @@ AUTO_INDEX_CONCEPT = "auto_index.concept"
 RUNTIME_PROFILE = "runtime.profile"
 RUNTIME_RATE_LIMIT_RPM = "runtime.rate_limit_rpm"
 
+#: Whether the optional local generative model may be used at all. Unlike the
+#: switches above, this does not gate a background worker -- it gates a request
+#: someone is waiting on, and every caller already falls back when no model
+#: answers, so an unreadable database costs a slower answer rather than a wrong
+#: one. That is why the reader below uses `get` and not `get_bool`.
+LLM_ENABLED = "llm.enabled"
+#: Which served model to name in the request, when the runtime honours it.
+LLM_MODEL = "llm.model"
+#: Extra directories to scan for models, joined with `os.pathsep`.
+LLM_MODEL_ROOTS = "llm.model_roots"
+
 _SUPPRESS_PREFIX = "watch_suppressed."
 _UNINDEXABLE_PREFIX = "unindexable."
 

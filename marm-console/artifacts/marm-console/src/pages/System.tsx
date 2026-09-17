@@ -1,14 +1,28 @@
 import { useState, type ReactNode } from 'react';
+import { useSearchParams } from 'wouter';
 import { Activity, Archive, BookOpen, Bot, CheckCircle2, CircleAlert, Database, FolderSync, Gauge, HardDrive, Network, Power, RefreshCw, Search, Stethoscope, Terminal, Trash2, Wrench, XCircle } from 'lucide-react';
 import { useRuntimeSettings, useUpdateRuntimeAutomation, useUpdateRuntimeProfile, useMaintenance, useDoctor, useRuntimeLogs, useUpgradeCheck, useBackups, useCreateBackup, useDeleteBackup, useStartCompactionDryRun, useCompactionDryRunJob, useStartReloadDocs, useReloadDocsJob } from '@/hooks/use-marm-queries';
 import { Button, Input, Label, Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/core';
 import { Panel, SectionHeading, SmallStat, StatCard } from '@/components/ui/panels';
+import { LocalModelPanels } from '@/components/system/LocalModelPanel';
 import type { RuntimeProfile, RuntimeSettings } from '@/lib/marm-types';
 
 type SystemTab = 'health' | 'controls' | 'maintenance' | 'diagnostics';
 
+const SYSTEM_TABS: SystemTab[] = ['health', 'controls', 'maintenance', 'diagnostics'];
+
 export function SystemPage() {
-  const [tab, setTab] = useState<SystemTab>('health');
+  // Deep-linkable so other pages can point at the control that fixes what
+  // they are complaining about -- Code Context's "Ask runs on" bar links
+  // straight to the local-model panes rather than to the top of System.
+  const [params, setParams] = useSearchParams();
+  const requested = params.get('tab') as SystemTab | null;
+  const tab: SystemTab = requested && SYSTEM_TABS.includes(requested) ? requested : 'health';
+  const setTab = (next: SystemTab) => {
+    const updated = new URLSearchParams(params);
+    updated.set('tab', next);
+    setParams(updated, { replace: true });
+  };
   const runtime = useRuntimeSettings();
   const updateAutomation = useUpdateRuntimeAutomation();
   const updateProfile = useUpdateRuntimeProfile();
@@ -84,6 +98,10 @@ export function SystemPage() {
                       <SmallStat label="Model installed" value={data.search.semantic_available ? 'Yes' : 'No'} tone={data.search.semantic_available ? 'good' : 'warn'} />
                       <SmallStat label="Model" value={MODEL_STATE_LABEL[data.search.model_state] ?? data.search.model_state} tone={MODEL_STATE_TONE[data.search.model_state]} />
                     </div>
+                    {/* No model name here on purpose: the "Embedding model"
+                        panel lower in this same tab already names it and gives
+                        its dimensions, so repeating it is two places to read
+                        and one more to keep in step. */}
                   </Panel>
                 </div>
                 <Panel
@@ -196,6 +214,16 @@ export function SystemPage() {
                   <WatchList title="Unindexable projects" description="These paths have a durable indexing block, such as a Windows path-length limitation. A successful manual reindex clears the block." items={data.automation.graph.unindexable_projects || []} tone="warn" />
                 </div>
               </>}
+            </section>
+
+            <section className="space-y-5">
+              <SectionHeading
+                title="Local model"
+                description="The optional generative model that writes grounded answers on Code Context and self-contained facts on Distill. Everything here is local; MARM refuses a non-loopback endpoint."
+              />
+              {runtime.isLoading && <LoadingState label="Reading model settings…" />}
+              {runtime.isError && <ErrorState message={errorMessage} />}
+              {data && <LocalModelPanels llm={data.llm} hardware={data.hardware} />}
             </section>
           </TabsContent>
           <TabsContent value="maintenance" className="system-panel m-0 space-y-8">

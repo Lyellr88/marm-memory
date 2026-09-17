@@ -59,6 +59,9 @@ import type {
   ProjectIndexInput,
   ProjectStatus,
   ProjectSummary,
+  LlmBrowseResponse,
+  LlmModelsResponse,
+  LocalLlmStatus,
   RuntimeSettings,
   RuntimeProfile,
   RuntimeProfileResult,
@@ -290,6 +293,22 @@ export function createMarmClient(config: MarmClientConfig) {
       request<RuntimeProfileResult>(
         config, 'PUT', '/settings/profile',
         { body: { profile, rate_limit_rpm: rateLimitRpm ?? null } },
+      ),
+    getLlmModels: (refresh = false) =>
+      request<LlmModelsResponse>(config, 'GET', `/settings/llm/models?refresh=${refresh}`),
+    browseLlmModels: (path?: string | null) =>
+      request<LlmBrowseResponse>(
+        config, 'GET',
+        path ? `/settings/llm/browse?path=${encodeURIComponent(path)}` : '/settings/llm/browse',
+      ),
+    // Only the fields actually being changed are sent: the toggle and the
+    // picker are separate controls, and posting both every time would have
+    // each silently overwrite whatever the other had set.
+    updateLlmSettings: (body: { enabled?: boolean; model?: string }) =>
+      request<{ status: string; llm: LocalLlmStatus }>(config, 'PUT', '/settings/llm', { body }),
+    updateLlmRoots: (path: string, remove = false) =>
+      request<LlmModelsResponse & { configured_roots: string[] }>(
+        config, 'POST', '/settings/llm/roots', { body: { path, remove } },
       ),
     getMaintenance: () => request<MaintenanceStatus>(config, 'GET', '/settings/maintenance'),
     startCompactionDryRun: (sessionName: string) =>

@@ -220,6 +220,60 @@ export function useUpdateRuntimeProfile() {
   });
 }
 
+/** What the runtime serves and what else is installed on this machine.
+ *
+ *  Not polled. The disk scan is cheap warm (35 ms against a 62 GB LM Studio
+ *  tree) but it is still directory I/O, and the answer only changes when
+ *  somebody downloads a model -- so it refetches on demand, not on a timer
+ *  like the health panes above.
+ */
+export function useLlmModels(enabled = true) {
+  const { baseUrl, client } = useMarmConfig();
+  return useQuery({
+    queryKey: ['llm-models', baseUrl],
+    queryFn: () => client.getLlmModels(false),
+    enabled,
+    retry: false,
+  });
+}
+
+export function useBrowseLlmModels(path: string | null, enabled = true) {
+  const { baseUrl, client } = useMarmConfig();
+  return useQuery({
+    queryKey: ['llm-browse', baseUrl, path],
+    queryFn: () => client.browseLlmModels(path),
+    enabled,
+    retry: false,
+  });
+}
+
+export function useUpdateLlmSettings() {
+  const { baseUrl, client } = useMarmConfig();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { enabled?: boolean; model?: string }) => client.updateLlmSettings(body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.runtimeSettings(baseUrl) });
+      qc.invalidateQueries({ queryKey: ['llm-models', baseUrl] });
+    },
+  });
+}
+
+export function useUpdateLlmRoots() {
+  const { baseUrl, client } = useMarmConfig();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ path, remove }: { path: string; remove?: boolean }) =>
+      client.updateLlmRoots(path, remove ?? false),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['llm-models', baseUrl] });
+      // A new root changes what Browse may look inside, so every cached
+      // listing is now answering with the wrong set of allowed roots.
+      qc.invalidateQueries({ queryKey: ['llm-browse', baseUrl] });
+    },
+  });
+}
+
 export function useMaintenance(enabled = true) {
   const { baseUrl, client } = useMarmConfig();
   return useQuery({ queryKey: ['maintenance', baseUrl], queryFn: client.getMaintenance, enabled, retry: false });

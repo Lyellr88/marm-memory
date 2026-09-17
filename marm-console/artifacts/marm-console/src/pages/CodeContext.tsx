@@ -19,13 +19,14 @@ import {
 import { Panel, SectionHeading, SmallStat, StatCard } from '@/components/ui/panels';
 import { ActionNoticePanel } from '@/components/memory/shared';
 import { Sparkles, FileCode2, Brain, FileText, AlertTriangle, Network, FolderCode } from 'lucide-react';
-import { useBuildCodeContext, useProjects, useStreamingAnswer } from '@/hooks/use-marm-queries';
+import { useBuildCodeContext, useProjects, useRuntimeSettings, useStreamingAnswer } from '@/hooks/use-marm-queries';
 import { MarmApiError } from '@/lib/marm-api';
 import { CopyButton, LoadingState } from '@/components/code-context/shared';
 import { SymbolsPane } from '@/components/code-context/SymbolsPane';
 import { MemoryPane } from '@/components/code-context/MemoryPane';
 import { CallGraphPane } from '@/components/code-context/CallGraphPane';
 import { AnswerPane } from '@/components/code-context/AnswerPane';
+import { AnswerEngineBar } from '@/components/code-context/AnswerEngineBar';
 
 const DEFAULT_BUDGET = 12000;
 const MAX_BUDGET = 100000;
@@ -159,6 +160,9 @@ export function CodeContextPage() {
   const [project, setProject] = useState(() => params.get('project') ?? '');
   const [budget, setBudget] = useState(() => Number(params.get('budget')) || DEFAULT_BUDGET);
   const { data: projects } = useProjects();
+  // Same 5s poll the System page uses: free VRAM moves while a model is
+  // loading, and a stale figure here is the one that misleads.
+  const runtimeSettings = useRuntimeSettings();
   const build = useBuildCodeContext();
   const answer = useStreamingAnswer();
   const autoRan = useRef(false);
@@ -277,6 +281,7 @@ export function CodeContextPage() {
             over the call graph, reads their source from disk, and joins what memory records about them — the same
             answer an agent receives from <code className="font-mono text-xs">marm_code_context</code>.
           </p>
+          <AnswerEngineBar llm={runtimeSettings.data?.llm} hardware={runtimeSettings.data?.hardware} className="mt-4" />
         </header>
 
         <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col overflow-hidden">
