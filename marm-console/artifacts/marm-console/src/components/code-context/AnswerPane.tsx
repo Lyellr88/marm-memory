@@ -86,29 +86,41 @@ export function AnswerPane({
   onCite,
   onAsk,
   asking,
+  canAsk = true,
 }: {
-  result: CodeContextResult;
+  /** Absent before anything has been composed. Asking still works from here:
+   *  the button composes and answers in one step, so a reader who arrived with
+   *  a question never has to learn that "compose" comes first. */
+  result?: CodeContextResult;
   onCite: (citation: CodeContextCitation) => void;
   onAsk: () => void;
   asking: boolean;
+  canAsk?: boolean;
 }) {
-  const status = result.answer_status;
-  const citations = result.answer_citations ?? [];
+  const status = result?.answer_status;
+  const citations = result?.answer_citations ?? [];
 
   if (!status) {
     return (
       <MemoryEmptyState
-        title="No answer was requested"
-        detail="Ask the local model to answer this task from the ranked context above. It answers only from what the ranking retrieved, and cites the symbols it used."
+        icon={Sparkles}
+        tone="console-tab-rose"
+        title={result ? 'No answer was requested' : 'Ask a question about this project'}
+        detail={
+          canAsk
+            ? 'The local model answers only from the context MARM ranks for your task, and cites the symbols it used. Nothing leaves this machine.'
+            : 'Type what you are trying to do or understand in the Task box above, then ask. Ranking is seeded from your own words.'
+        }
       >
-        <Button className="mt-4" onClick={onAsk} isLoading={asking}>
-          <Sparkles className="mr-2 h-4 w-4" /> Answer from this context
+        <Button className="mt-4" onClick={onAsk} isLoading={asking} disabled={!canAsk}>
+          <Sparkles className="mr-2 h-4 w-4" />
+          {result ? 'Answer from this context' : 'Compose and answer'}
         </Button>
       </MemoryEmptyState>
     );
   }
 
-  if (status !== 'ok' || !result.answer) {
+  if (status !== 'ok' || !result?.answer) {
     return (
       <div className="rounded-xl border border-amber-500/25 bg-amber-500/[0.05] p-4">
         <div className="flex items-start gap-3">
@@ -119,7 +131,7 @@ export function AnswerPane({
                 ? 'No local model is reachable'
                 : 'The local model did not answer'}
             </p>
-            <p className="mt-1 text-sm text-muted-foreground">{result.answer_hint}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{result?.answer_hint}</p>
             <p className="mt-2 text-[11px] text-muted-foreground">
               Everything else on this page is unaffected — the ranked symbols, their source and
               what memory knows were retrieved without a model and are the answer a reader needs.
