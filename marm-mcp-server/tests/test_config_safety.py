@@ -138,7 +138,14 @@ def test_resolve_marm_api_key_warns_when_insecure_file_cannot_be_removed(
 
     env_path = tmp_path / ".marm" / ".env"
     monkeypatch.setattr(api_key_bootstrap, "_MARM_ENV_PATH", env_path)
-    monkeypatch.setattr(api_key_bootstrap, "_protect_key_file", lambda path: False)
+
+    # Protection must SUCCEED on the temporary file and fail on the final one.
+    # A blanket False would now fail before the rename, where there is no file
+    # to remove and therefore no "could not be removed" case to reach.
+    def protect(path):
+        return str(path) != str(env_path)
+
+    monkeypatch.setattr(api_key_bootstrap, "_protect_key_file", protect)
 
     def fail_unlink(self, missing_ok=False):
         raise OSError("denied")
@@ -204,18 +211,18 @@ def test_generated_key_file_is_not_world_readable_under_a_permissive_umask(
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX file modes")
-def test_an_existing_insecure_key_file_is_hardened_BEFORE_the_secret_is_written(
-    monkeypatch, tmp_path
-):
-    """The mode must be fixed before the new token reaches the file.
+def test_the_secret_is_never_written_into_a_file_others_can_read(monkeypatch, tmp_path):
+    """The token must never exist on disk readable by anyone but its owner.
 
-    `O_CREAT` does not re-mode a file that already exists, so an existing 0644
-    `~/.marm/.env` would otherwise receive the new bearer token while still
-    world-readable, and only be hardened afterwards. That is the same exposure
-    as the new-file case on a path whose end state looks correct.
+    Originally this watched the mode of `~/.marm/.env` at the moment it was
+    opened, because the bug was that `O_CREAT` does not re-mode an existing
+    file. The write no longer touches `.env` at all -- it creates a private
+    temporary file and renames it over -- so watching that path would now watch
+    something that never happens and pass for the wrong reason.
 
-    Captured by recording the mode at the moment the file is opened for
-    writing, rather than by inspecting it once everything has finished.
+    The property is unchanged and is what is checked here: every file opened
+    for writing during the flow is owner-only at the instant it is opened, and
+    the pre-existing 0644 file is replaced rather than written through.
     """
     from marm_mcp_server.config import api_key_bootstrap
 
@@ -223,28 +230,37 @@ def test_an_existing_insecure_key_file_is_hardened_BEFORE_the_secret_is_written(
     env_path.parent.mkdir(parents=True)
     env_path.write_text("MARM_API_KEY=stale-value-that-is-long-enough\n")
     env_path.chmod(0o644)
+    stale_inode = env_path.stat().st_ino
     monkeypatch.setattr(api_key_bootstrap, "_MARM_ENV_PATH", env_path)
     monkeypatch.setattr(api_key_bootstrap, "_load_key_from_file", lambda: "")
     monkeypatch.delenv("MARM_API_KEY", raising=False)
 
-    modes_at_open = []
+    opened_for_write = []
     real_open = os.open
 
-    def record_mode(path, flags, mode=0o777, *args, **kwargs):
-        if str(path) == str(env_path) and os.path.exists(path):
-            modes_at_open.append(stat.S_IMODE(os.stat(path).st_mode))
-        return real_open(path, flags, mode, *args, **kwargs)
+    def record(path, flags, mode=0o777, *args, **kwargs):
+        descriptor = real_open(path, flags, mode, *args, **kwargs)
+        if flags & (os.O_WRONLY | os.O_RDWR):
+            opened_for_write.append(
+                (str(path), stat.S_IMODE(os.fstat(descriptor).st_mode))
+            )
+        return descriptor
 
-    monkeypatch.setattr(os, "open", record_mode)
+    monkeypatch.setattr(os, "open", record)
 
     generated_key = api_key_bootstrap.resolve_marm_api_key("0.0.0.0")
 
     assert generated_key
-    assert modes_at_open, "the key file was never opened"
-    assert modes_at_open[0] & 0o077 == 0, (
-        f"secret written into a file still at {modes_at_open[0]:#o}"
+    assert opened_for_write, "nothing was ever opened for writing"
+    for opened_path, mode in opened_for_write:
+        assert mode & 0o077 == 0, f"secret written into {opened_path} at {mode:#o}"
+    assert str(env_path) not in [p for p, _ in opened_for_write], (
+        "the credential was written through the real path, which a symlink "
+        "swapped in after the checks would have redirected"
     )
     assert env_path.read_text() == f"MARM_API_KEY={generated_key}\n"
+    assert env_path.stat().st_ino != stale_inode, "the 0644 file was reused"
+    assert stat.S_IMODE(env_path.stat().st_mode) & 0o077 == 0
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX file modes")
@@ -281,7 +297,10 @@ def test_key_file_creation_failure_is_reported_and_leaves_no_file(
     real_open = os.open
 
     def refuse_key_file(path, flags, mode=0o777, *args, **kwargs):
-        if str(path) == str(env_path):
+        # Match the directory, not the exact name: the write goes to a private
+        # temporary file beside `.env`, so a stub keyed on `.env` itself would
+        # inject no failure at all and the test would pass vacuously.
+        if os.path.dirname(str(path)) == str(env_path.parent):
             raise OSError(13, "Permission denied")
         return real_open(path, flags, mode, *args, **kwargs)
 
@@ -366,3 +385,81 @@ def test_a_symlinked_key_file_is_refused_rather_than_followed(monkeypatch, tmp_p
     assert generated_key
     assert target.read_text() == ""
     assert generated_key not in target.read_text()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX symlinks")
+def test_a_symlinked_key_file_is_refused_rather_than_read_through(
+    monkeypatch, tmp_path
+):
+    """CodeRabbit, PR #206, outside-diff finding 1.
+
+    `_load_key_from_file` runs BEFORE `_secure_key_dir` and `_write_key_file`,
+    so a local actor who can place a symlink at `~/.marm/.env` supplies a key
+    the service adopts and then serves with, and none of the later protections
+    ever apply to it. Refusing a symlink on write while following one on read
+    is the same defect from the other side.
+    """
+    from marm_mcp_server.config import api_key_bootstrap
+
+    planted = tmp_path / "attacker.env"
+    planted.write_text("MARM_API_KEY=key-chosen-by-somebody-else\n")
+    env_path = tmp_path / ".marm" / ".env"
+    env_path.parent.mkdir(parents=True)
+    env_path.symlink_to(planted)
+    monkeypatch.setattr(api_key_bootstrap, "_MARM_ENV_PATH", env_path)
+
+    assert api_key_bootstrap._load_key_from_file() == ""
+
+    # And the real file is still read normally -- the gate is the link, not the read.
+    env_path.unlink()
+    env_path.write_text("MARM_API_KEY=a-key-we-actually-wrote\n")
+    assert api_key_bootstrap._load_key_from_file() == "a-key-we-actually-wrote"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX symlinks")
+def test_a_symlink_swapped_in_after_the_checks_does_not_receive_the_secret(tmp_path):
+    """CodeRabbit, PR #206, outside-diff finding 2.
+
+    No check on a PATHNAME survives that pathname being replaced immediately
+    afterwards. `O_NOFOLLOW` closes the race on POSIX but does not exist on
+    Windows, so the write must not depend on it: the secret goes to a private
+    temporary file and is renamed into place, which replaces a link rather than
+    writing through one.
+
+    Driven against `_write_key_file` directly, because that is the function the
+    finding names. Racing `resolve_marm_api_key` instead would plant the link
+    during the earlier READ, where a different guard refuses it -- the test
+    would pass while never exercising the write window at all.
+    """
+    from marm_mcp_server.config import api_key_bootstrap
+
+    target = tmp_path / "attacker-target"
+    env_path = tmp_path / ".marm" / ".env"
+    env_path.parent.mkdir(parents=True)
+
+    real_is_symlink = type(env_path).is_symlink
+    raced = []
+
+    def swap_in_the_link(self):
+        answer = real_is_symlink(self)
+        # Once, and only for the write's own check: the attacker wins exactly
+        # the window between that check returning False and the open.
+        if not raced and str(self) == str(env_path) and not answer:
+            raced.append(True)
+            env_path.symlink_to(target)
+        return answer
+
+    type(env_path).is_symlink = swap_in_the_link
+    try:
+        api_key_bootstrap._write_key_file(env_path, "a-generated-key")
+    finally:
+        type(env_path).is_symlink = real_is_symlink
+
+    assert raced, "the window was never exercised"
+    assert not target.exists(), "the credential was written through the symlink"
+    assert not env_path.is_symlink(), "the symlink survived the write"
+    assert env_path.read_text() == "MARM_API_KEY=a-generated-key\n"
+    assert stat.S_IMODE(env_path.stat().st_mode) & 0o077 == 0
+    assert sorted(p.name for p in env_path.parent.iterdir()) == [".env"], (
+        "the temporary file was left behind"
+    )

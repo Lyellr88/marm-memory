@@ -1,4 +1,5 @@
 import os
+import secrets
 import stat
 import sys
 from pathlib import Path
@@ -7,6 +8,17 @@ from ..services.key_management import _protect_key_file
 from ..utils.security import generate_api_key
 
 _MARM_ENV_PATH = Path.home() / ".marm" / ".env"
+
+
+class KeyFileProtectionError(OSError):
+    """The key file could not be made owner-only.
+
+    Distinct from every other write failure because the operator needs a
+    different instruction: the key is live in this process but will not survive
+    a restart, so set MARM_API_KEY explicitly. Hardening happens inside
+    `_write_key_file` now, so without a specific type that advice would be lost
+    to the generic "could not save" branch.
+    """
 
 
 def _file_link(path: Path) -> str:
@@ -47,48 +59,105 @@ def _secure_key_dir(directory: Path) -> None:
 
 
 def _write_key_file(path: Path, marm_api_key: str) -> None:
-    """Write the key file so the secret is never on disk world-readable.
+    """Write the key file so the secret is never on disk readable by anyone else.
 
-    There are two distinct exposures, and the mode argument to `os.open` only
-    closes one of them.
+    Three exposures, and a mode argument to `os.open` closes only the first.
 
     New file: `Path.write_text()` creates through the process umask -- 0644
     typically, 0666 under `umask 0` -- leaving the plaintext bearer token
-    readable by other local users until the chmod inside `_protect_key_file()`
-    lands. Creating with an explicit 0o600 closes that window.
+    readable by other local users until a later chmod lands. Creating with an
+    explicit 0o600 closes that window.
 
-    Existing file: the mode argument applies ONLY when `os.open` creates the
-    file. An existing `~/.marm/.env` at 0644 keeps 0644 through the `O_TRUNC`
-    open, so without the step below the new token would be written into a
-    still-world-readable file and hardened only afterwards -- the same exposure
-    the new-file case has, on a path that is easy to overlook because the end
-    state looks correct. So harden before writing when the file already exists.
+    Existing file: the mode argument applies ONLY when `os.open` CREATES the
+    file. An existing `~/.marm/.env` at 0644 keeps 0644 through an `O_TRUNC`
+    open, so the new token would land in a still-readable file and be hardened
+    only afterwards -- easy to overlook, because the end state looks correct.
 
-    `_protect_key_file()` still runs after the write. It is the cross-platform
-    step, it is what validates Windows ACLs, and it is what the caller checks
-    before deciding the key was persisted safely.
+    Replacement: no check on a pathname survives that pathname being replaced
+    immediately after the check. `O_NOFOLLOW` closes that race on POSIX, but it
+    does not exist on Windows -- `getattr(os, "O_NOFOLLOW", 0)` is 0 there -- so
+    an actor who can write to the directory could swap in a reparse point
+    between the check and the open, and the credential would be written through
+    it. Pathname-based ACL hardening afterwards cannot take that back.
 
-    `O_TRUNC` because bootstrap intentionally overwrites, where
-    `initialize_managed_key()` intentionally refuses to (`O_EXCL`).
+    All three close the same way: the secret is never written to `path` at all.
+    It goes to a fresh private file in the same directory, which is hardened
+    while it still has a name nobody else knows, and is then moved into place.
+
+    `O_CREAT | O_EXCL` means the descriptor is one we created: if anything
+    already holds the temporary name, the open fails rather than adopting a
+    file someone else controls. `os.replace` swaps the directory entry
+    atomically on both platforms, replacing a symlink or reparse point rather
+    than writing through it, and a concurrent reader sees either the old file
+    or the new one but never a half-written key.
+
+    `_protect_key_file()` runs on the temporary file, before it is reachable
+    under the real name, so there is no instant at which `.env` exists and is
+    readable by others. The caller runs it again on the final path: that is the
+    cross-platform check it uses to decide the key was persisted safely.
+
+    `initialize_managed_key()` intentionally refuses to overwrite (`O_EXCL` on
+    its destination); bootstrap intentionally does overwrite, which is why this
+    ends in a replace rather than a failure.
     """
     if path.is_symlink():
-        # Never write a credential through a link: the target is chosen by
-        # whoever created the link, not by us.
+        # Cheap and clear: report the intent before doing any work. It is not
+        # what makes this safe -- the replace below is -- because the link can
+        # be created a microsecond after this returns.
         raise OSError(f"key file is a symlink, refusing to write through it: {path}")
-    if path.exists() and not _protect_key_file(path):
-        raise OSError(f"could not secure the existing key file before writing: {path}")
-    # O_NOFOLLOW makes the kernel refuse a symlink swapped in after the checks
-    # above, closing the gap between them and this open. Absent on Windows.
-    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_NOFOLLOW", 0)
-    descriptor = os.open(path, flags, 0o600)
-    with os.fdopen(descriptor, "w", encoding="utf-8") as key_file:
-        key_file.write(f"MARM_API_KEY={marm_api_key}\n")
+
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.{secrets.token_hex(8)}")
+    try:
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
+        descriptor = os.open(temporary, flags, 0o600)
+        with os.fdopen(descriptor, "w", encoding="utf-8") as key_file:
+            key_file.write(f"MARM_API_KEY={marm_api_key}\n")
+        # Harden before the file is reachable under its real name, so there is
+        # no instant at which `.env` exists and is readable by anyone else.
+        try:
+            protected = _protect_key_file(temporary)
+        except Exception as exc:  # a platform backend can raise, not just fail
+            raise KeyFileProtectionError(
+                f"could not secure the new key file: {path}: {exc}"
+            ) from exc
+        if not protected:
+            raise KeyFileProtectionError(f"could not secure the new key file: {path}")
+        os.replace(temporary, path)
+    except BaseException:
+        try:
+            os.unlink(temporary)
+        except OSError:
+            pass
+        raise
+
+
+def _read_key_file_text(path: Path) -> str:
+    """Read the key file, refusing to follow a link to get there.
+
+    The write path already refuses a symlinked `.env`; following one on READ is
+    the same defect from the other side. `_load_key_from_file` runs BEFORE
+    `_secure_key_dir` and `_write_key_file` in `resolve_marm_api_key`, so a
+    local actor who can place the link supplies a key that the service adopts
+    and then serves with, and none of the later protections ever apply to it.
+
+    `O_NOFOLLOW` makes the kernel refuse a symlinked final component, which
+    closes the check-then-read gap that a separate `is_symlink()` test leaves
+    open. It does not exist on Windows, so the explicit check carries that
+    platform -- see `_write_key_file` for why the write path does not rely on
+    an equivalent check there.
+    """
+    if path.is_symlink():
+        raise OSError(f"key file is a symlink, refusing to read through it: {path}")
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(path, flags)
+    with os.fdopen(descriptor, "r", encoding="utf-8") as key_file:
+        return key_file.read()
 
 
 def _load_key_from_file() -> str:
     """Read MARM_API_KEY from ~/.marm/.env if present."""
     try:
-        for raw_line in _MARM_ENV_PATH.read_text().splitlines():
+        for raw_line in _read_key_file_text(_MARM_ENV_PATH).splitlines():
             line = raw_line.strip()
             if not line or line.startswith("#"):
                 continue
@@ -102,6 +171,21 @@ def _load_key_from_file() -> str:
     except Exception:
         pass
     return ""
+
+
+def _warn_key_kept_in_memory() -> None:
+    """Said whenever the key exists but is not on disk safely.
+
+    Two paths reach it -- protection failing before the rename, and an
+    unprotected `.env` that was successfully removed -- and both leave the
+    operator in the same position, so they get the same instruction.
+    """
+    print(
+        "WARNING: API key file protection failed. The API key is being "
+        "kept in memory only and will not survive a restart. Set "
+        "MARM_API_KEY explicitly in the environment.",
+        file=sys.stderr,
+    )
 
 
 def resolve_marm_api_key(server_host: str) -> str:
@@ -124,33 +208,38 @@ def resolve_marm_api_key(server_host: str) -> str:
         key_persisted = False
         try:
             _secure_key_dir(_MARM_ENV_PATH.parent)
-            _write_key_file(_MARM_ENV_PATH, marm_api_key)
             try:
-                key_protected = _protect_key_file(_MARM_ENV_PATH)
-            except Exception:
-                key_protected = False
-            if key_protected:
-                key_persisted = True
+                _write_key_file(_MARM_ENV_PATH, marm_api_key)
+            except KeyFileProtectionError:
+                # Nothing reached `.env`. _write_key_file hardens its temporary
+                # file before the rename and removes it on failure, so there is
+                # no insecure file to warn about or try to delete -- saying
+                # otherwise would send the operator looking for a file that is
+                # not there.
+                _warn_key_kept_in_memory()
             else:
                 try:
-                    _MARM_ENV_PATH.unlink(missing_ok=True)
-                except OSError as e:
-                    print(
-                        "WARNING: API key file protection failed and the insecure "
-                        f"file could not be removed: {_MARM_ENV_PATH}: {e}. Remove "
-                        "it immediately. The generated API key remains active in "
-                        "memory for this process only; do not rely on the insecure "
-                        "file surviving a restart. Set MARM_API_KEY explicitly in "
-                        "the environment.",
-                        file=sys.stderr,
-                    )
+                    key_protected = _protect_key_file(_MARM_ENV_PATH)
+                except Exception:
+                    key_protected = False
+                if key_protected:
+                    key_persisted = True
                 else:
-                    print(
-                        "WARNING: API key file protection failed. The API key is being "
-                        "kept in memory only and will not survive a restart. Set "
-                        "MARM_API_KEY explicitly in the environment.",
-                        file=sys.stderr,
-                    )
+                    # `.env` does exist here and is not verifiably protected.
+                    try:
+                        _MARM_ENV_PATH.unlink(missing_ok=True)
+                    except OSError as e:
+                        print(
+                            "WARNING: API key file protection failed and the insecure "
+                            f"file could not be removed: {_MARM_ENV_PATH}: {e}. Remove "
+                            "it immediately. The generated API key remains active in "
+                            "memory for this process only; do not rely on the insecure "
+                            "file surviving a restart. Set MARM_API_KEY explicitly in "
+                            "the environment.",
+                            file=sys.stderr,
+                        )
+                    else:
+                        _warn_key_kept_in_memory()
         except Exception as e:
             print(f"WARNING: Could not save API key to {_MARM_ENV_PATH}: {e}")
 
