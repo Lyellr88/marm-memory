@@ -273,21 +273,53 @@ def trace_project(project: str, payload: ProjectTracePayload) -> dict:
 
 @router.post("/api/projects/{project}/impact")
 def project_impact(project: str, payload: ProjectImpactPayload) -> dict:
+    """Normalise the engine's change-impact result for the browser.
+
+    This was reading `affected_symbols` / `affected`, and the engine has always
+    returned **`impacted_symbols`** -- so the list was empty on every call and
+    the Impact tab reported "No impact detected" for a repository with 864
+    impacted symbols. The per-row field names were wrong too: the engine sends
+    `qn` and `file`, not `qualified_name` and `file_path`.
+
+    The old mapping also invented a value. It defaulted `risk` to `"low"` for a
+    field the engine does not send at all, so every row would have claimed a
+    risk assessment that nothing computed. `hop` replaces it -- distance from a
+    changed file, which the engine really does return and which means something.
+    """
     result = _project_operation(
         "internal/projects/impact", {"project": project, **payload.model_dump()}
     )
-    affected = result.get("affected_symbols", result.get("affected", []))
+    impacted = (
+        result.get("impacted_symbols")
+        or result.get("affected_symbols")
+        or result.get("affected")
+        or []
+    )
+    rows = [
+        {
+            "qualified_name": row.get("qn")
+            or row.get("qualified_name")
+            or row.get("name", ""),
+            "file_path": row.get("file") or row.get("file_path") or row.get("path", ""),
+            "label": row.get("label", ""),
+            # None rather than 0: an absent hop is unknown, and 0 would read as
+            # "this is itself a changed file", which is a different claim.
+            "hop": row.get("hop"),
+        }
+        for row in impacted
+        if isinstance(row, dict)
+    ]
+    total = result.get("impacted_total")
     return {
         "changed_files": result.get("changed_files", []),
-        "affected_symbols": [
-            {
-                "qualified_name": row.get("qualified_name", row.get("name", "")),
-                "file_path": row.get("file_path", row.get("path", "")),
-                "risk": str(row.get("risk", "low")).lower(),
-            }
-            for row in affected
-            if isinstance(row, dict)
-        ],
+        "affected_symbols": rows,
+        # Carried so the page can say "200 of 864" instead of showing 200 and
+        # letting a reader believe that is all of them.
+        "impacted_total": total if isinstance(total, int) else len(rows),
+        "impacted_shown": len(rows),
+        "impacted_modules": result.get("impacted_modules", []),
+        "seed_symbols": result.get("seed_symbols"),
+        "base": result.get("base"),
     }
 
 

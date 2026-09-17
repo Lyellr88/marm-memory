@@ -331,7 +331,7 @@ export function ExplorerPage() {
                 <Table>
                   <TableHeader className="sticky top-0 bg-muted/80 backdrop-blur">
                     <TableRow>
-                      <TableHead>Risk</TableHead>
+                      <TableHead className="w-20">Hops</TableHead>
                       <TableHead>Affected Symbol</TableHead>
                       <TableHead>File</TableHead>
                     </TableRow>
@@ -343,8 +343,11 @@ export function ExplorerPage() {
                     {impactCode.data?.affected_symbols.slice(impactPage * EXPLORER_PAGE_SIZE, (impactPage + 1) * EXPLORER_PAGE_SIZE).map((sym, i) => (
                       <TableRow key={i}>
                         <TableCell>
-                          <Badge variant={sym.risk === 'high' ? 'destructive' : sym.risk === 'medium' ? 'secondary' : 'outline'} className="text-[10px] uppercase">
-                            {sym.risk}
+                          {/* Hops from a changed file. The engine returns this;
+                              it never returned the `risk` that used to be
+                              rendered here, so every row claimed "low". */}
+                          <Badge variant={sym.hop === 1 ? 'destructive' : sym.hop === 2 ? 'secondary' : 'outline'} className="text-[10px] tabular-nums">
+                            {sym.hop == null ? '—' : sym.hop}
                           </Badge>
                         </TableCell>
                         <TableCell className="font-mono text-sm">{sym.qualified_name}</TableCell>
@@ -354,6 +357,17 @@ export function ExplorerPage() {
                   </TableBody>
                 </Table>
               </div>
+              {impactCode.data && (impactCode.data.impacted_total ?? 0) > (impactCode.data.impacted_shown ?? 0) && (
+                /* The engine caps what it returns. Paging through 200 rows
+                   without this reads as "these are all of them". */
+                <p className="px-1 pt-2 text-[11px] text-muted-foreground">
+                  Showing {(impactCode.data.impacted_shown ?? 0).toLocaleString()} of{' '}
+                  {(impactCode.data.impacted_total ?? 0).toLocaleString()} impacted symbols, across{' '}
+                  {(impactCode.data.impacted_modules?.length ?? 0).toLocaleString()} modules — the
+                  engine caps the list. Narrow the diff with a nearer base to see fewer, more
+                  relevant ones.
+                </p>
+              )}
               {(impactCode.data?.affected_symbols.length ?? 0) > EXPLORER_PAGE_SIZE && (
                 <PageControls
                   page={impactPage}
