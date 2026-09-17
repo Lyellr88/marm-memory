@@ -334,8 +334,17 @@ async def marm_graph_index(req: GraphIndexRequest) -> dict:
     """Index a code repository into the graph, or check status / list known projects.
 
     Pass `repo_path` to index a repo (returns the project name to use in every
-    other tool). Omit it to list indexed projects, or pass `project` to check
-    index status. Call this first — all other graph tools need an indexed project.
+    other GRAPH tool). Omit it to list indexed projects, or pass `project` to
+    check index status. Call this first — all other graph tools need an indexed
+    project.
+
+    This name identifies a CODE GRAPH and is derived from the repository path
+    (`home-user-Code-Grok-Bot`). It is not the memory scope. Do NOT pass it as
+    `project` to `marm_notebook`, `marm_concept_build` or `marm_smart_recall`:
+    those take a short memory scope (`Grok-Bot`), and the two namespaces are
+    joined by a binding rather than being interchangeable. Omit `project` on the
+    memory tools to use the detected scope, and bind a graph to a memory scope
+    with `/internal/projects/memory-linking/confirm`.
     """
     if req.action in AUTO_ACTIONS:
         return await asyncio.to_thread(auto_action, req.action)
