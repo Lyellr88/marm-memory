@@ -52,6 +52,47 @@ const projectState = vi.hoisted(() => ({
 }));
 
 vi.mock('@/hooks/use-marm-queries', () => ({
+  // The "Ask runs on" bar reads this. Returning a llama.cpp shape rather than
+  // undefined keeps the bar rendered in these tests, so a change that breaks
+  // it fails here instead of only in the browser.
+  useRuntimeSettings: () => ({
+    data: {
+      llm: {
+        configured: true,
+        enabled: true,
+        endpoint: 'http://127.0.0.1:18080',
+        available: true,
+        model: 'qwen3.6-27b-mtp',
+        model_in_use: 'qwen3.6-27b-mtp',
+        preferred_model: null,
+        loopback_enforced: true,
+        runtime: 'llama.cpp',
+        runtime_version: null,
+        can_switch: false,
+        model_path: '/models/Qwen3.6-27B-IQ4_NL.gguf',
+        context_length: 65536,
+        served: [],
+        switch_blocked_reason: null,
+      },
+      hardware: {
+        detected: true,
+        platform: 'Linux',
+        gpus: [
+          {
+            index: 0,
+            vendor: 'NVIDIA',
+            name: 'NVIDIA GeForce RTX 3090',
+            memory_total_mb: 24576,
+            memory_used_mb: 20296,
+            memory_free_mb: 3879,
+            utilisation_percent: 11,
+            driver: '615.71.09',
+            unified: false,
+          },
+        ],
+      },
+    },
+  }),
   useProjects: () => ({
     data: (projectState.list ?? DEFAULT_PROJECTS).map((p) => ({
       ...p,

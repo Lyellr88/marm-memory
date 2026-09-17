@@ -104,6 +104,23 @@ class RuntimeProfilePayload(BaseModel):
     rate_limit_rpm: int | None = None
 
 
+class RuntimeLlmPayload(BaseModel):
+    """A change to the optional local generative model.
+
+    Both fields optional, and the proxy forwards only what was set: the toggle
+    and the model picker are separate controls, and a payload that always
+    carried both would have each one silently overwrite the other's value.
+    """
+
+    enabled: bool | None = None
+    model: str | None = Field(default=None, max_length=512)
+
+
+class RuntimeLlmRootPayload(BaseModel):
+    path: str = Field(min_length=1, max_length=4096)
+    remove: bool = False
+
+
 class CompactionDryRunPayload(BaseModel):
     session_name: str
 

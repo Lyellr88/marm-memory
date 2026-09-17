@@ -98,6 +98,10 @@ The frontend defaults to the Console API at `http://127.0.0.1:8002`.
 | `/api/projects/*` | Local-repository indexing, job status, project health, delete, architecture, bounded graph snapshots and file neighborhoods, code search, trace, impact, coverage, decisions, and runtime trace routes |
 | `GET /api/settings/runtime` | Runtime, queue, graph, storage, embedding, automation, and watch-health diagnostics |
 | `PUT /api/settings/automation` | Enable or pause durable automatic code or concept indexing |
+| `GET /api/settings/llm/models` | What the local runtime serves, plus every model found on disk (LM Studio, Ollama, HuggingFace, llama.cpp, GPT4All, Jan, and configured roots). Each carries `served_id`: the id the runtime would accept, or null when it has never seen that file |
+| `GET /api/settings/llm/browse` | List one directory **inside the known model roots only**. Names, sizes and types; never file contents |
+| `PUT /api/settings/llm` | Turn local generation on or off, and choose which served model answers. Refuses a model the detected runtime cannot actually switch to |
+| `POST /api/settings/llm/roots` | Add or remove a directory that discovery and Browse may look inside |
 | `GET /api/terminal/status` | Whether the terminal is enabled and available, and its backend/shell |
 | `WS /api/terminal/ws` | Interactive PTY session: spawn, attach (reattach after disconnect), input, resize, kill |
 | `POST /api/distill` | Propose durable memories from raw conversation, review the staged queue, apply one, or discard one. Accepts `action`, `text`, `session_name`, `proposal_id`, `project`, `threshold`, `limit`, `include_duplicates` |
