@@ -161,6 +161,20 @@ def git_source_state(root: str) -> Optional[tuple[str, str]]:
     return (head, content_hash)
 
 
+def _invalidate_code_context_projects() -> None:
+    """Drop the code-context project cache, tolerating its absence.
+
+    Imported lazily and guarded: this worker must not fail an index because an
+    optional consumer of the project list could not be imported.
+    """
+    try:
+        from ..services.code_context.backend import invalidate_projects_cache
+
+        invalidate_projects_cache()
+    except Exception:  # pragma: no cover - defensive
+        pass
+
+
 def index_repository(client: "CbmClient", req: GraphIndexRequest) -> dict:
     """The callable every index path hands to the gate: index, then settle the
     durable block state before the lease is released.
@@ -175,6 +189,10 @@ def index_repository(client: "CbmClient", req: GraphIndexRequest) -> dict:
     invisible at the call site and there is nothing to notice when it is skipped.
     """
     result: dict = R.do_index(client, req)
+    # The set of indexed projects may have just changed, and code-context caches
+    # it. Invalidated here rather than at each caller for the reason above: a
+    # rule at four call sites is invisible when it is skipped.
+    _invalidate_code_context_projects()
     root = req.repo_path
     if not root:
         return result

@@ -174,10 +174,28 @@ async def _recall_similar(
 
     def _wrap(results: List[Dict], truncated: bool) -> RecallResult:
         if include_scan_metadata:
-            return results, {
+            meta: Dict = {
                 "recall_scan_truncated": truncated,
                 "recall_scan_limit": scan_limit,
             }
+            if truncated:
+                # A bare `True` is not a warning. The flag has been in this
+                # payload all along and nothing read it, because it says what
+                # happened and not what it means or what to do about it. When
+                # the scan truncates, recall is answering from the most recent
+                # `scan_limit` memories only -- older ones were never scored,
+                # so a perfect match can be missing with no other symptom.
+                meta["recall_scan_note"] = (
+                    f"Scanned only the {scan_limit:,} most recent memories; older "
+                    "ones were not scored, so a better match may exist outside "
+                    "this window. Narrow the search with `project` (or a "
+                    "`session`), or raise RECALL_SCAN_LIMIT."
+                )
+                _safe_print(
+                    f"recall_similar: scan truncated at {scan_limit} memories; "
+                    "older memories were not scored for this query"
+                )
+            return results, meta
         return results
 
     use_exact = (exact_mode == "exact") or (
