@@ -10,6 +10,7 @@ happens to match will outrank the class everything calls.
 """
 
 import asyncio
+import os
 import re
 
 from ...config.env_parsing import _safe_int
@@ -207,7 +208,7 @@ usually the most useful thing you can report.\
 
 #: Generation is the slow step and the context is already budgeted, so the
 #: answer gets its own modest ceiling rather than the model's full window.
-_ANSWER_TOKENS = int(os.environ.get("MARM_CODE_CONTEXT_ANSWER_TOKENS") or 900)
+_ANSWER_TOKENS = _safe_int("MARM_CODE_CONTEXT_ANSWER_TOKENS", 900)
 
 
 async def answer_from_context(ctx: "Context", task: str) -> dict:

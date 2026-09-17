@@ -187,29 +187,60 @@ describe('CodeContextPage', () => {
     expect(screen.getByText('Composing code context…')).toBeTruthy();
   });
 
-  it('describes every pane before a composition exists', () => {
+  it('offers all five panes before a composition exists', () => {
+    // The strip used to be hidden until a composition returned, so the page
+    // read as a lone text box and the panes looked unbuilt.
     render(<CodeContextPage />);
 
-    expect(screen.getByText('What you get back')).toBeTruthy();
-    for (const label of ['Ranked symbols', 'Call graph', 'What memory knows', 'Agent view']) {
-      expect(screen.getByText(label)).toBeTruthy();
+    const tabs = screen.getAllByRole('tab').map((el) => el.textContent ?? '');
+    expect(tabs).toHaveLength(5);
+    for (const label of ['Ask', 'Ranked symbols', 'Call graph', 'What memory knows', 'Agent view']) {
+      expect(tabs.some((text) => text.includes(label))).toBe(true);
     }
-    expect(screen.queryByRole('tab')).toBeNull();
   });
 
-  it('names the same panes in the empty state and in the tab strip', () => {
-    // Answer leads: the page answers a question, and the rest is its evidence.
-    const labels = ['Answer', 'Ranked symbols', 'Call graph', 'What memory knows', 'Agent view'];
+  it('a pane selected before a composition previews what it will show', async () => {
+    render(<CodeContextPage />);
+
+    await userEvent.click(screen.getByRole('tab', { name: /call graph/i }));
+    expect(screen.getByText(/Compose a task above to fill this pane/)).toBeTruthy();
+    expect(
+      screen.getByText(/The ranked call neighbourhood the scores were computed over/),
+    ).toBeTruthy();
+  });
+
+  it('asking works with no composition yet, and needs a task first', async () => {
+    // "Compose first, then ask" is an order a reader should not have to learn.
+    render(<CodeContextPage />);
+
+    const ask = screen.getByRole('button', { name: /compose and answer/i });
+    expect(ask.hasAttribute('disabled')).toBe(true);
+
+    await userEvent.type(screen.getByLabelText('Task'), 'how does recall rank');
+    expect(screen.getByRole('button', { name: /compose and answer/i }).hasAttribute('disabled')).toBe(
+      false,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: /compose and answer/i }));
+    expect(buildState.mutate).toHaveBeenCalledTimes(1);
+    expect(buildState.mutate.mock.calls[0][0].answer).toBe(true);
+  });
+
+  it('names the panes identically before and after a composition', () => {
+    // One strip does both jobs now, so the old empty-state card grid is gone
+    // and with it the chance for the two lists to disagree. What is still
+    // worth pinning is that composing does not reorder or rename them.
+    const labels = ['Ask', 'Ranked symbols', 'Call graph', 'What memory knows', 'Agent view'];
     const { unmount } = render(<CodeContextPage />);
-    const empty = labels.filter((label) => screen.queryByText(label));
+    const before = screen.getAllByRole('tab').map((el) => el.textContent ?? '');
     unmount();
 
     buildState.data = SUCCESS;
     render(<CodeContextPage />);
-    const tabs = screen.getAllByRole('tab').map((el) => el.textContent ?? '');
+    const after = screen.getAllByRole('tab').map((el) => el.textContent ?? '');
 
-    expect(empty).toEqual(labels);
-    expect(empty.every((label, i) => tabs[i].includes(label))).toBe(true);
+    expect(labels.every((label, i) => before[i].includes(label))).toBe(true);
+    expect(labels.every((label, i) => after[i].includes(label))).toBe(true);
   });
 
   it('an example task fills the box without submitting', async () => {
