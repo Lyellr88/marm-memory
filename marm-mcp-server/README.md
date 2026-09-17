@@ -90,7 +90,7 @@ It brings three things together:
 - 💻 **Code Graph (6 tools)** maps your repository so agents can find symbols, follow code paths, and understand the project without rereading it all. Point it at a repo once and it keeps itself current as you work.
 - 🧩 **Concept Graph (2 tools)** connects people, decisions, errors, and ideas from your stored memories, with links back to relevant code when available. It builds itself as you store memories.
 
-All 15 tools work over HTTP and STDIO. Your agents share the same local memory across sessions instead of starting from scratch each time. The bundled Console App provides a browsable view of **Memories**, the **Knowledge Graph**, and **Indexed Projects**, including progress for graph builds and repository indexing. Indexing a repository creates its independent Code Graph, which you can explore from Knowledge Graph → Code Explorer even before storing any memories.
+All 16 tools work over HTTP and STDIO. Your agents share the same local memory across sessions instead of starting from scratch each time. The bundled Console App provides a browsable view of **Memories**, the **Knowledge Graph**, and **Indexed Projects**, including progress for graph builds and repository indexing. Indexing a repository creates its independent Code Graph, which you can explore from Knowledge Graph → Code Explorer even before storing any memories.
 
 ### How It Works
 
@@ -280,7 +280,7 @@ python -m marm_mcp_server.server_stdio
 codex mcp add marm-memory-stdio -- marm-mcp-stdio
 ```
 
-Replace `marm-mcp-stdio` with `python -m marm_mcp_server.server_stdio` if using a virtualenv or a path-based setup. Works with Claude Code, Cursor, VS Code, Qwen, and Gemini CLI. STDIO stays a single local process with no port and no API key, and exposes the same 15 tools as HTTP.
+Replace `marm-mcp-stdio` with `python -m marm_mcp_server.server_stdio` if using a virtualenv or a path-based setup. Works with Claude Code, Cursor, VS Code, Qwen, and Gemini CLI. STDIO stays a single local process with no port and no API key, and exposes the same 16 tools as HTTP.
 
 </details>
 
@@ -667,7 +667,7 @@ Expected output includes server version, feature availability (semantic search s
 
 </details>
 
-## Complete MCP Tool Suite (15 Tools)
+## Complete MCP Tool Suite (16 Tools)
 
 **💡 Pro Tip:** You don't need to manually call these tools! Just tell your AI agent what you want in natural language:
 
@@ -688,6 +688,7 @@ The AI agent will automatically use the appropriate tools. Manual tool access is
 | `marm_summary` | Cached, paste-ready session summaries with intelligent truncation | `session_name` |
 | `marm_notebook` | Session-scoped scratch pad plus promotion to a permanent, graph-linked doc | `action="add"\|"use"\|"show"\|"status"\|"clear"\|"save"`, `name`, `data`, `session_name`, `project`, `platform` |
 | `marm_compaction` | Agent-assisted memory cleanup with a reviewable audit trail | `action="status"\|"candidates"\|"review"\|"stage"\|"apply"\|"discard"` |
+| `marm_distill` | Propose durable memories from raw conversation, each resolved against the store as `new`, `duplicate`, or `near`; staged for review, never written unattended | `action="propose"\|"review"\|"apply"\|"discard"`, `text`, `session_name`, `proposal_id` |
 
 ### 🕸️ Code Graph (6 tools)
 
@@ -707,7 +708,7 @@ The AI agent will automatically use the appropriate tools. Manual tool access is
 | `marm_concept_build` | Rebuild the graph, or index memories stored before automatic indexing. New memories are indexed on their own | `session_name`, `project`, or `search_all=True` (one required) |
 | `marm_concept_recall` | Explicitly query entities, relationships, and linked code symbols | `query`, `depth` (1-5), `direction`, `project`, `platform` |
 
-All 15 tools are available on both HTTP and STDIO. Behind the tool surface, the server handles lifecycle setup, protocol refresh, docs indexing, date context, summary-cache maintenance, write queue handling, concept indexing, code re-indexing as repos change, project/platform attribution, and health checks automatically; none of those consume the agent's attention or tokens. The two graph engines start lazily on first use and never block the 7 core memory tools if they fail to start. See [Architecture & Internals](#architecture--internals) for the mechanisms.
+All 16 tools are available on both HTTP and STDIO. Behind the tool surface, the server handles lifecycle setup, protocol refresh, docs indexing, date context, summary-cache maintenance, write queue handling, concept indexing, code re-indexing as repos change, project/platform attribution, and health checks automatically; none of those consume the agent's attention or tokens. The two graph engines start lazily on first use and never block the 8 core memory tools if they fail to start. See [Architecture & Internals](#architecture--internals) for the mechanisms.
 
 ## Using MARM: Talk, Don't Call Tools
 
@@ -1072,7 +1073,7 @@ It re-splits stale chunks, fills in any lost to an interrupted write, and drops 
 - Verify HTTP mode with `curl http://localhost:8001/health`
 - Check server logs for initialization errors
 - Disconnect and reconnect AI client to refresh tool list
-- Both HTTP and STDIO expose 15 tools: 7 core memory/logging/notebook/compaction tools, 6 bundled code-graph tools, and 2 concept-graph tools
+- Both HTTP and STDIO expose 16 tools: 8 core memory/logging/notebook/compaction tools, 6 bundled code-graph tools, and 2 concept-graph tools
 
 **Graph tools return `graph backend unavailable`**
 

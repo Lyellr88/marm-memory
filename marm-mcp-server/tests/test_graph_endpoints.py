@@ -6,14 +6,14 @@ import httpx
 from conftest import load_isolated_server, local_client
 
 
-def test_tools_list_exposes_fifteen_operation_ids(monkeypatch, tmp_path):
-    """7 core + 5 graph + 2 concept-graph tools are registered on the unified
+def test_tools_list_exposes_sixteen_operation_ids(monkeypatch, tmp_path):
+    """8 core + 6 graph + 2 concept-graph tools are registered on the unified
     server's MCP surface."""
     server = load_isolated_server(monkeypatch, tmp_path)
 
     names = {t.name for t in server.mcp.tools}
 
-    assert len(names) == 15
+    assert len(names) == 16
     assert names == {
         "marm_smart_recall",
         "marm_log_entry",
@@ -22,6 +22,7 @@ def test_tools_list_exposes_fifteen_operation_ids(monkeypatch, tmp_path):
         "marm_summary",
         "marm_notebook",
         "marm_compaction",
+        "marm_distill",
         "marm_graph_index",
         "marm_code_lookup",
         "marm_code_context",
