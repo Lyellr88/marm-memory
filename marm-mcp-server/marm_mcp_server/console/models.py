@@ -28,7 +28,7 @@ class DistillPayload(BaseModel):
     proposal_id: str | None = Field(default=None, max_length=64)
     project: str | None = Field(default=None, max_length=256)
     context_type: str = Field(default="general", max_length=64)
-    threshold: float = Field(default=0.35, ge=-2.0, le=3.0)
+    threshold: float = Field(default=0.20, ge=-2.0, le=3.0)
     limit: int = Field(default=20, ge=1, le=200)
     include_duplicates: bool = False
 

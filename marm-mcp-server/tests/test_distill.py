@@ -12,6 +12,7 @@ from __future__ import annotations
 import pytest
 
 from marm_mcp_server.core.distill import (
+    DEFAULT_THRESHOLD,
     DUPLICATE_AT,
     MAX_LENGTH,
     NEAR_AT,
@@ -73,6 +74,36 @@ def test_real_memories_are_selected_and_chatter_is_not():
         f"worst positive {min(positive.values()):+.2f} does not beat "
         f"best negative {max(kept_negatives.values()):+.2f}"
     )
+
+
+def test_every_canonical_memory_clears_the_DEFAULT_threshold():
+    """Separation is not enough: they must clear the floor actually shipped.
+
+    The earlier test only asserted that positives outscore negatives, which
+    stayed true while the default threshold sat above one of them. At 0.35,
+    "The code-graph daemon reparents to systemd and survives stopping the marm
+    service" scored +0.25 and was silently dropped -- found by rendering the
+    Console page and noticing a sentence missing from the queue, not by the
+    suite. This asserts the property that was actually broken.
+    """
+    missed = {
+        sentence: score
+        for sentence, score in _scores(POSITIVES).items()
+        if score is None or score < DEFAULT_THRESHOLD
+    }
+    assert not missed, (
+        f"real memories below the shipped default of {DEFAULT_THRESHOLD}: {missed}"
+    )
+
+
+def test_the_default_threshold_still_excludes_every_piece_of_chatter():
+    """The other half. Lowering the floor must not start admitting filler."""
+    admitted = {
+        sentence: score
+        for sentence, score in _scores(NEGATIVES).items()
+        if score is not None and score >= DEFAULT_THRESHOLD
+    }
+    assert not admitted, f"chatter admitted at {DEFAULT_THRESHOLD}: {admitted}"
 
 
 def test_imperative_is_rejected_but_a_hyphenated_identifier_is_not():

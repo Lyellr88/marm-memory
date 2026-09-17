@@ -66,7 +66,17 @@ NEAR_AT = 0.82
 
 # Selection defaults. See `extract_candidates` for why the cap, not the
 # threshold, is what keeps the queue reviewable.
-DEFAULT_THRESHOLD = 0.35
+# Measured, not chosen. Against the 441 live memories and a set of real
+# chatter, 0.35 admitted no chatter but discarded 14% of the store and one of
+# the five canonical MARM-Stack memories -- "The code-graph daemon reparents to
+# systemd and survives stopping the marm service" scores +0.25 and was silently
+# dropped, which is precisely the kind of memory this exists to catch.
+#
+# At 0.20 the store is kept whole (100%), all five canonical memories clear it,
+# and every piece of chatter is still excluded -- the best negative scores
+# -0.25, so there is 0.45 of margin. That matches what the threshold is FOR:
+# excluding chatter. Volume is `DEFAULT_LIMIT`'s job, and it alone.
+DEFAULT_THRESHOLD = 0.20
 DEFAULT_LIMIT = 20
 
 # How deep to look for a nearest neighbour. Consolidation uses the same shape:
@@ -369,8 +379,10 @@ def extract_candidates(
     rather than assumed. Over 49,833 words of real transcript the threshold
     barely bites: 931 candidates at 0.35 and still 672 at 0.60, because dense
     technical prose satisfies "named subject, indicative verb, specific object"
-    almost everywhere. Raising the threshold to cut volume would therefore
-    discard good memories long before it discarded enough of them to matter.
+    almost everywhere. Raising the threshold to cut volume therefore discards
+    good memories long before it discards enough of them to matter -- which is
+    not hypothetical: the default WAS 0.35, and at that floor 14% of the live
+    store and one of the five canonical MARM-Stack memories fell below it.
 
     So the threshold's job is to exclude chatter -- where it is decisive, since
     conversational filler scores negative -- and the cap's job is to keep a
