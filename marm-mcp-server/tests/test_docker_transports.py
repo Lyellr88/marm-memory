@@ -5,6 +5,7 @@ import subprocess
 import threading
 import time
 import uuid
+from pathlib import Path
 
 import pytest
 import requests
@@ -173,6 +174,55 @@ def test_docker_stdio_import_keeps_stdout_clean(docker_image, marm_data_dir):
 
     assert result.returncode == 0, result.stderr
     assert result.stdout == ""
+
+
+def test_docker_background_worker_reindexes_mounted_git_repository(
+    docker_image, marm_data_dir
+):
+    """Exercise the image's real launcher, Git, index store and worker loop."""
+    repository = marm_data_dir / "repository"
+    repository.mkdir(mode=0o777)
+    repository.chmod(0o777)
+    data = marm_data_dir / "data"
+    data.mkdir(mode=0o777)
+    data.chmod(0o777)
+    probe = Path(__file__).with_name("fixtures") / "docker_graph_lifecycle.py"
+    container = f"marm-test-graph-lifecycle-{uuid.uuid4().hex[:10]}"
+    try:
+        result = _run_docker(
+            [
+                "run",
+                "--rm",
+                "--network",
+                "none",
+                "--name",
+                container,
+                "--mount",
+                f"type=bind,source={repository.resolve()},target=/repository",
+                "--mount",
+                f"type=bind,source={data.resolve()},target=/home/marm/.marm",
+                "--mount",
+                f"type=bind,source={probe.resolve()},target=/probe.py,readonly",
+                "--entrypoint",
+                "python",
+                docker_image,
+                "/probe.py",
+            ],
+            timeout=120,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        receipts = [
+            json.loads(line.removeprefix("AUTO_INDEX_ACCEPTANCE "))
+            for line in result.stdout.splitlines()
+            if line.startswith("AUTO_INDEX_ACCEPTANCE ")
+        ]
+        assert len(receipts) == 1, result.stdout
+        assert receipts[0]["last_index_reason"] == "head_moved"
+        assert receipts[0]["new_symbol"] == "added_by_background_worker"
+        assert receipts[0]["manual_index_calls"] == 1
+        assert (repository / "example.py").is_file()
+    finally:
+        _run_docker(["rm", "-f", container], timeout=30)
 
 
 def test_docker_env_passthrough_reaches_runtime_settings(docker_image, marm_data_dir):
