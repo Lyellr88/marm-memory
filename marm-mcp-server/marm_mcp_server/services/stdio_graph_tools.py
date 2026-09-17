@@ -362,6 +362,7 @@ async def marm_code_context(
     budget: int = 12000,
     include_graph: bool = False,
     detail: int = 0,
+    answer: bool = False,
 ) -> dict:
     """
     🧩 Composed code context for a task: ranked symbols + source + memory, in ONE call.
@@ -383,6 +384,10 @@ async def marm_code_context(
     - budget: character budget for the returned source, 500-100000 (default 12000)
     - include_graph: also return the ranked call neighbourhood as `graph_edges`;
       off by default because it is several KB of JSON only a visualiser reads
+    - answer: also answer the task from the composed context with a local
+      model, citing the symbols it used. Off by default -- it is the slow step,
+      and for an agent that reads code the ranked context IS the answer. Says
+      `answer_status: "unavailable"` rather than failing when no model is up
     - detail: how much to return. 1 is markdown only and is the default,
       because `markdown` already contains the source and the memory text --
       asking for 3 means paying for the same bytes twice. 2 adds symbol and
@@ -403,6 +408,7 @@ async def marm_code_context(
             budget=budget,
             include_graph=include_graph,
             detail=detail,
+            answer=answer,
         )
     except ValidationError as e:
         return {"status": "error", "message": f"Invalid code-context request: {e!s}"}
@@ -413,6 +419,7 @@ async def marm_code_context(
         budget=req.budget,
         include_graph=req.include_graph,
         detail=req.detail or None,
+        answer=req.answer,
     )
 
 

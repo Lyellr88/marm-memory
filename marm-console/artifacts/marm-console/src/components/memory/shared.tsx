@@ -1,5 +1,5 @@
 import type { MemoryDeleteResult } from '@/lib/marm-types';
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useState, type ReactNode } from 'react';
 import { AlertTriangle, BrainCircuit, CheckCircle2, ChevronLeft, ChevronRight, CircleAlert, FileText, Lightbulb, MessageSquareText, Sparkles, Trash2, Wrench, XCircle } from 'lucide-react';
 import {
   Button,
@@ -76,10 +76,14 @@ export function MemoryEmptyState({
   title,
   detail,
   className = '',
+  children,
 }: {
   title: string;
   detail?: string;
   className?: string;
+  /** Optional call to action. Empty states that can be acted on directly are
+   *  better than empty states that describe an action taken elsewhere. */
+  children?: ReactNode;
 }) {
   return (
     <div className={`memory-empty-state relative flex min-h-40 flex-col items-center justify-center overflow-hidden rounded-xl ${className}`}>
@@ -89,6 +93,7 @@ export function MemoryEmptyState({
       </div>
       <p className="relative z-10 mt-3 text-sm font-medium text-foreground/90">{title}</p>
       {detail && <p className="relative z-10 mt-1 max-w-sm text-center text-xs text-muted-foreground">{detail}</p>}
+      {children && <div className="relative z-10">{children}</div>}
     </div>
   );
 }

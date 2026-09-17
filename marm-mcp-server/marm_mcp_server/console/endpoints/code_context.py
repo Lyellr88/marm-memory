@@ -25,8 +25,14 @@ def build_code_context(payload: CodeContextPayload) -> dict:
     truncated answer that looks complete.
     """
     try:
+        # Generation is the slow step and it runs after composition, so a
+        # request that asks for an answer needs a ceiling that covers both. A
+        # composition alone stays on the shorter one rather than paying for a
+        # timeout it will never use.
         result = mcp_client.post(
-            "marm_code_context", payload.model_dump(), timeout=60.0
+            "marm_code_context",
+            payload.model_dump(),
+            timeout=150.0 if payload.answer else 60.0,
         )
     except mcp_client.McpRequestError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc

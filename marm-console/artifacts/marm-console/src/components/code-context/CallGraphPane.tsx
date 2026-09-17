@@ -1,115 +1,166 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import ForceGraph2D from 'react-force-graph-2d';
+import { useMemo, useState } from 'react';
+import { GraphViz } from '@/components/knowledge/GraphViz';
 import { MemoryEmptyState } from '@/components/memory/shared';
-import type { CodeContextSymbol } from '@/lib/marm-types';
+import { Badge } from '@/components/ui/core';
+import type {
+  CodeContextSymbol,
+  Neighborhood,
+  NeighborhoodNode,
+} from '@/lib/marm-types';
 
-/** The ranked call neighbourhood.
+/** Adapt a composed call neighbourhood onto the Knowledge Graph's renderer.
  *
- *  Deliberately not CodeGraphViz. That component is a file-import visualiser:
- *  its props take a CodeGraphSnapshot whose node `kind` is the literal 'file'
- *  and whose edge `relation` is the literal 'imports', it groups and colours by
- *  directory, and it sizes nodes from fan_in/fan_out. Widening those literals
- *  to carry symbol-level call edges would weaken types that a working page
- *  depends on, so this is a second, much smaller component over the same
- *  already-bundled force-graph dependency.
+ *  This pane used to own a second force-graph component. That was wrong in two
+ *  directions: it duplicated a renderer the app already had, and it was the
+ *  poorer of the two — `GraphViz` has pause, zoom, fit-to-view, collision
+ *  spacing, hover and focus handling, and honours prefers-reduced-motion, none
+ *  of which the bespoke one did.
+ *
+ *  The earlier note here argued against reusing `CodeGraphViz`, and that
+ *  argument still holds: it is a file-import visualiser whose node `kind` is
+ *  the literal 'file'. But it aimed at the wrong component. `GraphViz` is
+ *  generic over a `Neighborhood`, so only the DATA needs adapting, and the two
+ *  graphs are never on screen together — they are different sidebar pages — so
+ *  sharing it costs nothing at runtime.
  */
+function toNeighborhood(
+  symbols: CodeContextSymbol[],
+  edges: Array<[string, string, number]>,
+): { graph: Neighborhood; byId: Map<number, CodeContextSymbol> } {
+  const index = new Map<string, number>();
+  const byId = new Map<number, CodeContextSymbol>();
+  const nodes: NeighborhoodNode[] = [];
+
+  // Degree drives node radius in the shared renderer, so it is counted from the
+  // edges rather than left at zero — otherwise every symbol renders identically
+  // and the structure the pane exists to show is invisible.
+  const degree = new Map<string, number>();
+  for (const [source, target] of edges) {
+    degree.set(source, (degree.get(source) ?? 0) + 1);
+    degree.set(target, (degree.get(target) ?? 0) + 1);
+  }
+
+  const ensure = (qualified: string, symbol?: CodeContextSymbol): number => {
+    const existing = index.get(qualified);
+    if (existing !== undefined) return existing;
+    const id = nodes.length + 1;
+    index.set(qualified, id);
+    nodes.push({
+      id,
+      name: symbol?.name || qualified.split(/[.:]/).pop() || qualified,
+      // `type` is what colours a node in the shared renderer. Seeded versus
+      // reached-by-call is the distinction that matters here: which symbols
+      // answered the task, and which were pulled in around them.
+      type: symbol?.seeded ? 'tool' : 'concept',
+      session_name: null,
+      project: symbol?.file_path ?? null,
+      mention_count: 0,
+      degree: degree.get(qualified) ?? 0,
+      hidden_neighbor_count: 0,
+      linked_code: [],
+    });
+    if (symbol) byId.set(id, symbol);
+    return id;
+  };
+
+  for (const symbol of symbols) ensure(symbol.qualified_name || symbol.name, symbol);
+
+  const graphEdges = edges.map(([source, target, weight], i) => ({
+    id: i + 1,
+    source: ensure(source),
+    target: ensure(target),
+    predicate: 'calls',
+    memory_id: null,
+    weight,
+  }));
+
+  return {
+    graph: {
+      seed_id: null,
+      nodes,
+      edges: graphEdges,
+      limits: { nodes: nodes.length, edges: graphEdges.length },
+      truncated: false,
+    },
+    byId,
+  };
+}
+
 export function CallGraphPane({
   symbols,
   edges,
-  onSelect,
+  nodeCount = 0,
 }: {
   symbols: CodeContextSymbol[];
-  edges: Array<[string, string, number]>;
-  onSelect?: (qualifiedName: string) => void;
+  edges?: Array<[string, string, number]>;
+  nodeCount?: number;
 }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState({ width: 0, height: 0 });
+  const [selected, setSelected] = useState<CodeContextSymbol | null>(null);
+  const { graph, byId } = useMemo(
+    () => toNeighborhood(symbols, edges ?? []),
+    [symbols, edges],
+  );
 
-  useEffect(() => {
-    if (!containerRef.current) return;
-    const observer = new ResizeObserver(([entry]) => {
-      setSize({ width: entry.contentRect.width, height: entry.contentRect.height });
-    });
-    observer.observe(containerRef.current);
-    return () => observer.disconnect();
-  }, []);
-
-  const data = useMemo(() => {
-    const byName = new Map(symbols.map((s) => [s.qualified_name, s]));
-    const top = Math.max(...symbols.map((s) => s.score), 0) || 1;
-    const ids = new Set<string>();
-    for (const [source, target] of edges) {
-      ids.add(source);
-      ids.add(target);
-    }
-    const nodes = [...ids].map((id) => {
-      const symbol = byName.get(id);
-      return {
-        id,
-        // A node in the neighbourhood that did not make the character budget
-        // still shapes the ranking, so it is drawn — dimmed, and labelled by
-        // its last segment because a qualified name is unreadable at this size.
-        name: symbol?.name || id.split('.').slice(-1)[0] || id,
-        score: symbol?.score ?? 0,
-        inContext: Boolean(symbol),
-        seeded: Boolean(symbol?.seeded),
-        val: 2 + ((symbol?.score ?? 0) / top) * 10,
-      };
-    });
-    return {
-      nodes,
-      links: edges.map(([source, target, weight]) => ({ source, target, weight })),
-    };
-  }, [edges, symbols]);
-
-  if (edges.length === 0) {
+  if (!edges || edges.length === 0) {
     return (
       <MemoryEmptyState
-        title="No call edges in this neighbourhood"
-        detail="Every shown symbol matched the task directly, so there were no caller or callee hops to rank over."
+        title="No call edges were returned"
+        detail={
+          nodeCount > 0
+            ? `Ranking reached ${nodeCount.toLocaleString()} nodes, but every returned symbol matched the task directly — there were no caller or callee hops left to draw.`
+            : 'Ranking found no call neighbourhood for this task. A question about behaviour usually reaches further than a bare symbol name.'
+        }
       />
     );
   }
 
   return (
     <div className="space-y-3">
-      <div className="graph-metrics-rail flex flex-wrap items-center gap-x-6 gap-y-2 rounded-lg px-4 py-2 text-xs">
-        <span className="graph-metric">
-          <span className="text-muted-foreground">Nodes </span>
-          <span className="font-mono tabular-nums">{data.nodes.length.toLocaleString()}</span>
+      <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+        <span className="graph-metric font-mono tabular-nums">
+          {graph.nodes.length.toLocaleString()} nodes
         </span>
-        <span className="graph-metric">
-          <span className="text-muted-foreground">Call edges </span>
-          <span className="font-mono tabular-nums">{edges.length.toLocaleString()}</span>
+        <span className="graph-metric font-mono tabular-nums">
+          {graph.edges.length.toLocaleString()} call edges
         </span>
-        <span className="text-muted-foreground">
-          Size is PageRank score · filled nodes matched the task · dimmed nodes shape the ranking but were not shown
-        </span>
+        <Badge variant="outline" className="border-emerald-400/30 text-emerald-300">
+          matched the task
+        </Badge>
+        <Badge variant="outline" className="border-sky-400/30 text-sky-300">
+          reached via the call graph
+        </Badge>
+        <span className="ml-auto">Node size is how many calls touch it. Click one to read it.</span>
       </div>
-      <div
-        ref={containerRef}
-        className="force-graph-container knowledge-graph-surface h-[32rem] overflow-hidden rounded-xl border border-border/70"
-      >
-        {size.width > 0 && (
-          <ForceGraph2D
-            width={size.width}
-            height={size.height}
-            graphData={data}
-            backgroundColor="transparent"
-            nodeLabel={(node: any) => `${node.id}\nscore ${node.score.toFixed(5)}`}
-            nodeVal={(node: any) => node.val}
-            nodeColor={(node: any) =>
-              node.seeded ? '#20b8f4' : node.inContext ? '#7bdcff' : '#3b5570'
-            }
-            linkColor={() => 'rgba(123, 220, 255, 0.18)'}
-            linkWidth={(link: any) => 0.4 + (link.weight || 0) * 1.6}
-            linkDirectionalArrowLength={3}
-            linkDirectionalArrowRelPos={1}
-            onNodeClick={(node: any) => onSelect?.(String(node.id))}
-            cooldownTicks={80}
-          />
-        )}
+
+      <div className="knowledge-graph-surface force-graph-container h-[460px] overflow-hidden rounded-xl border border-border/70">
+        <GraphViz
+          neighborhood={graph}
+          hiddenPredicates={new Set()}
+          hiddenTypes={new Set()}
+          focusedId={null}
+          expandingId={null}
+          onNodeClick={(node) => setSelected(byId.get(node.id) ?? null)}
+        />
       </div>
+
+      {selected && (
+        <div className="rounded-xl border border-border/80 bg-card/45 p-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-mono text-sm font-semibold text-primary-highlight">
+              {selected.name}
+            </span>
+            {selected.label && <Badge variant="secondary">{selected.label}</Badge>}
+            <span className="font-mono text-[11px] text-muted-foreground">
+              {selected.file_path}:{selected.start_line}
+            </span>
+          </div>
+          {selected.source && (
+            <pre className="mt-2 max-h-56 overflow-auto rounded-lg bg-background/30 px-3 py-2 font-mono text-[12px] leading-relaxed">
+              <code>{selected.source}</code>
+            </pre>
+          )}
+        </div>
+      )}
     </div>
   );
 }

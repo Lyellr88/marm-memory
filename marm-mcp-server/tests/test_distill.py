@@ -541,6 +541,115 @@ def test_nothing_durable_is_a_success_not_an_error(staged):
     assert "not an error" in result["note"]
 
 
+# --- generation-backed extraction ------------------------------------------
+#
+# The evidence check is the load-bearing guard here. A model asked for a
+# verbatim span can invent one, and an invented span is the signature of an
+# invented fact -- the single worst failure for a memory store, because the
+# result is a confident sentence nobody ever said.
+
+TRANSCRIPT = (
+    "We decided to cap distill proposals at twenty because raising the shape "
+    "threshold barely changed the count on real transcript."
+)
+
+
+def _fact(**over):
+    base = {
+        "content": "Distill proposals are capped at twenty because a higher threshold barely changed the count.",
+        "evidence": "We decided to cap distill proposals at twenty",
+        "context_type": "decision",
+    }
+    base.update(over)
+    return base
+
+
+def test_a_fact_whose_evidence_is_not_in_the_transcript_is_dropped():
+    from marm_mcp_server.core.distill import _llm_usable
+
+    invented = _fact(evidence="We agreed to cap proposals at fifty on Tuesday")
+    assert _llm_usable(invented, TRANSCRIPT) is None
+
+
+def test_a_fact_with_real_evidence_is_kept_and_carries_it():
+    from marm_mcp_server.core.distill import _llm_usable
+
+    candidate = _llm_usable(_fact(), TRANSCRIPT)
+    assert candidate is not None
+    assert candidate.context_type == "decision"
+    assert candidate.evidence in TRANSCRIPT
+
+
+def test_evidence_matching_ignores_whitespace_but_not_words():
+    """Models re-wrap and re-indent when they copy, and that is not the failure
+    this guard exists to catch."""
+    from marm_mcp_server.core.distill import _llm_usable
+
+    rewrapped = _fact(evidence="We   decided to cap\n  distill proposals at twenty")
+    assert _llm_usable(rewrapped, TRANSCRIPT) is not None
+
+    reworded = _fact(evidence="We chose to cap distill proposals at twenty")
+    assert _llm_usable(reworded, TRANSCRIPT) is None
+
+
+def test_a_generated_fact_may_not_open_on_a_dangling_pronoun():
+    """Self-containment is the whole reason to generate rather than select."""
+    from marm_mcp_server.core.distill import _llm_usable
+
+    dangling = _fact(
+        content="It is capped at twenty because a higher threshold changed little."
+    )
+    assert _llm_usable(dangling, TRANSCRIPT) is None
+
+
+@pytest.mark.parametrize("missing", ["content", "evidence"])
+def test_an_incomplete_fact_is_dropped(missing):
+    from marm_mcp_server.core.distill import _llm_usable
+
+    assert _llm_usable(_fact(**{missing: ""}), TRANSCRIPT) is None
+
+
+def test_an_unknown_context_type_falls_back_rather_than_being_stored():
+    from marm_mcp_server.core.distill import _llm_usable
+
+    candidate = _llm_usable(_fact(context_type="wildly-invented"), TRANSCRIPT)
+    assert candidate is not None
+    assert candidate.context_type == "general"
+
+
+def test_extraction_falls_back_to_selection_when_no_model_is_reachable(monkeypatch):
+    """The generation path is an enhancement over a pipeline that works. A
+    stopped container must not take the feature down with it."""
+    from marm_mcp_server.core import distill as core
+    from marm_mcp_server.services import local_llm
+
+    monkeypatch.setattr(local_llm, "available", lambda *a, **k: None)
+    assert core.llm_extract(TRANSCRIPT) is None
+
+
+def test_a_model_that_returns_nonsense_falls_back_too(monkeypatch):
+    from marm_mcp_server.core import distill as core
+    from marm_mcp_server.services import local_llm
+
+    monkeypatch.setattr(local_llm, "available", lambda *a, **k: "stub")
+    monkeypatch.setattr(local_llm, "complete_json", lambda *a, **k: None)
+    assert core.llm_extract(TRANSCRIPT) is None
+
+
+def test_an_object_wrapped_array_is_accepted(monkeypatch):
+    """Some servers honour response_format by wrapping the array in an object;
+    that is a shape difference, not a failure."""
+    from marm_mcp_server.core import distill as core
+    from marm_mcp_server.services import local_llm
+
+    monkeypatch.setattr(local_llm, "available", lambda *a, **k: "stub")
+    monkeypatch.setattr(
+        local_llm, "complete_json", lambda *a, **k: {"facts": [_fact()]}
+    )
+    got = core.llm_extract(TRANSCRIPT)
+    assert got and got[0].evidence
+
+
 # --- review nudges ----------------------------------------------------------
 #
 # A staged proposal nobody is told about is a proposal nobody reviews. Seven
@@ -569,9 +678,9 @@ def _stage(
             "INSERT INTO distill_staging (id, session_name, content, score, reasons, "
             "verdict, cosine, neighbour_id, neighbour_content, status, candidate_hash, "
             "project, context_type, applied_memory_id, nudge_count, last_nudged_at, "
-            "expires_at, created_at, updated_at, reviewed_at) "
+            "expires_at, created_at, updated_at, reviewed_at, evidence, mode) "
             "VALUES (?,?,?,?,'[]',?,0.9,NULL,'the stored one',?,?,NULL,'general',NULL,"
-            "?,NULL,?,?,?,NULL)",
+            "?,NULL,?,?,?,NULL,'','generated')",
             (
                 row_id,
                 session,
