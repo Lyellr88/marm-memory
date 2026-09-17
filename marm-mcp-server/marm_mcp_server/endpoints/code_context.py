@@ -31,6 +31,13 @@ class CodeContextRequest(BaseModel):
         le=100000,
         description="Character budget for the returned source.",
     )
+    include_graph: bool = Field(
+        default=False,
+        description=(
+            "Also return the ranked call neighbourhood as `graph_edges`. Off by "
+            "default: it is several KB of JSON that only a visualiser reads."
+        ),
+    )
 
 
 @router.post("/marm_code_context", operation_id="marm_code_context")
@@ -54,5 +61,9 @@ async def marm_code_context(req: CodeContextRequest) -> dict:
     evidence.
     """
     return await build_code_context(
-        task=req.task, project=req.project, cwd=req.cwd, budget=req.budget
+        task=req.task,
+        project=req.project,
+        cwd=req.cwd,
+        budget=req.budget,
+        include_graph=req.include_graph,
     )

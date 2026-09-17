@@ -50,6 +50,14 @@ class Symbol:
     seeded: bool = False
     source: str = ""
     truncated: bool = False
+    # How this symbol arrived, when it arrived through the call graph. `label`
+    # is the code KIND and must never carry any of this: a trace row's `risk`
+    # was previously stored there, so a symbol displayed "CRITICAL" where a
+    # reader expects "Function", in the Console and in the agent markdown alike.
+    risk: str = ""
+    hop: int = 0
+    strategy: str = ""
+    confidence: float = 0.0
 
 
 @dataclass
@@ -62,6 +70,10 @@ class Context:
     notes: list[str] = field(default_factory=list)
     seed_count: int = 0
     graph_nodes: int = 0
+    # The ranked call neighbourhood, aggregated to one record per ordered pair.
+    # `edges` as PageRank consumes it is a raw duplicated list whose repetition
+    # IS the weighting, so this is a separate view rather than the same object.
+    graph_edges: list[tuple[str, str, float]] = field(default_factory=list)
 
 
 def _sym(row: dict) -> Symbol:
@@ -292,14 +304,25 @@ async def build(
                     by_qn[qn] = Symbol(
                         qualified_name=qn,
                         name=row.get("name", ""),
-                        label=row.get("risk", ""),
+                        # Deliberately empty: the kind comes from the search
+                        # backfill below, which can only fill a blank label.
+                        label="",
                         file_path="",
                         start_line=0,
                         end_line=0,
+                        risk=str(row.get("risk") or ""),
+                        hop=int(row.get("hop") or 0),
+                        strategy=str(row.get("strategy") or ""),
+                        confidence=float(row.get("confidence") or 0.0),
                     )
 
     ranks = personalised_pagerank(edges, seed_mass) if edges else dict(seed_mass)
     ctx.graph_nodes = len({n for a, b, _ in edges for n in (a, b)})
+    aggregated: dict[tuple[str, str], float] = {}
+    for a, b, w in edges:
+        pair = (a, b)
+        aggregated[pair] = max(aggregated.get(pair, 0.0), w)
+    ctx.graph_edges = [(a, b, w) for (a, b), w in aggregated.items()]
     for qn, s in by_qn.items():
         # A seeded symbol keeps a floor: it demonstrably matched the task text,
         # and a symbol absent from the call graph would otherwise score zero and
@@ -375,6 +398,11 @@ async def build(
     # Project scoping is the real filter now that memories carry a project and
     # the project is bound to this graph. The lexical gate stays only as a
     # backstop for an unbound project, where recall still spans the whole store.
+    # Best six, not first six. `collected` is built probe by probe, so without
+    # this a 0.95 memory found by the fourth probe loses its place to a 0.72 one
+    # found by the first -- and the caller sees a ranked-looking list that is
+    # actually in discovery order.
+    collected.sort(key=lambda r: -float(r.get("similarity") or 0.0))
     ctx.memories = (
         collected[:MEMORY_LIMIT]
         if memory_project

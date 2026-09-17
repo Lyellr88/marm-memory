@@ -360,6 +360,7 @@ async def marm_code_context(
     project: Optional[str] = None,
     cwd: Optional[str] = None,
     budget: int = 12000,
+    include_graph: bool = False,
 ) -> dict:
     """
     🧩 Composed code context for a task: ranked symbols + source + memory, in ONE call.
@@ -379,16 +380,31 @@ async def marm_code_context(
     - project: code-graph project name or repo path; omit to resolve from cwd
     - cwd: directory to resolve the project from (optional)
     - budget: character budget for the returned source, 500-100000 (default 12000)
+    - include_graph: also return the ranked call neighbourhood as `graph_edges`;
+      off by default because it is several KB of JSON only a visualiser reads
 
     Returns: status, project, markdown, symbols, memories, links, graph_nodes,
-    notes -- or a no_project/unavailable status carrying the next step to take
+    notes -- or a no_project/unavailable status carrying the next step to take.
+    Each symbol carries `label` (the code KIND) and, when it arrived through the
+    call graph rather than by matching the task, a `provenance` object with hop,
+    strategy, confidence and risk; `provenance` is null for a seeded symbol
     """
     try:
-        req = CodeContextRequest(task=task, project=project, cwd=cwd, budget=budget)
+        req = CodeContextRequest(
+            task=task,
+            project=project,
+            cwd=cwd,
+            budget=budget,
+            include_graph=include_graph,
+        )
     except ValidationError as e:
         return {"status": "error", "message": f"Invalid code-context request: {e!s}"}
     return await build_code_context(
-        task=req.task, project=req.project, cwd=req.cwd, budget=req.budget
+        task=req.task,
+        project=req.project,
+        cwd=req.cwd,
+        budget=req.budget,
+        include_graph=req.include_graph,
     )
 
 

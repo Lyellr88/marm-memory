@@ -76,7 +76,22 @@ def render(ctx: Context) -> str:
         for s in ctx.symbols:
             loc = f"{s.file_path}:{s.start_line}" if s.file_path else "?"
             kind = f" ({s.label})" if s.label else ""
-            mark = "" if s.seeded else "  ·via call graph"
+            # Say how a call-graph symbol was reached, not just that it was.
+            # `strategy` is load-bearing rather than trivia: heuristic binding
+            # is what invents cross-module edges, so a reader who cannot see
+            # "heuristic" cannot discount a row that deserves discounting.
+            mark = ""
+            if not s.seeded:
+                detail = [f"{s.hop} hop" if s.hop else "via call graph"]
+                if s.strategy:
+                    detail.append(
+                        f"{s.strategy} {s.confidence:.2f}"
+                        if s.confidence
+                        else s.strategy
+                    )
+                if s.risk:
+                    detail.append(f"risk {s.risk}")
+                mark = "  ·" + " ·".join(detail)
             out.append(f"- **{s.name}**{kind} — `{loc}`{mark}")
         out.append("")
 

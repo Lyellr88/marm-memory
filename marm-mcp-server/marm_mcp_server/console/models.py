@@ -10,6 +10,7 @@ class CodeContextPayload(BaseModel):
     project: str | None = Field(default=None, max_length=512)
     cwd: str | None = Field(default=None, max_length=4096)
     budget: int = Field(default=12000, ge=500, le=100000)
+    include_graph: bool = False
 
 
 class ConceptBuildPayload(BaseModel):

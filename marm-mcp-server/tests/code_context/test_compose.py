@@ -136,6 +136,88 @@ async def test_memories_are_joined_in(repo):
 
 
 @pytest.mark.asyncio
+async def test_the_memories_kept_are_the_best_not_the_first_seen(repo):
+    """`collected` is built probe by probe, so without an explicit sort the cut
+    keeps discovery order and presents it as if it were a ranking. A strong
+    memory found late must beat a weak one found early."""
+    memories = [
+        {"content": f"m{i}", "similarity": s} for i, s in enumerate([0.10, 0.95, 0.20])
+    ]
+    c = Stub(
+        repo,
+        results=[_row("helper", "proj.m.helper", 1, 2)],
+        memories=memories,
+        memory_project="proj",
+    )
+
+    ctx = await build(c, "helper", cwd=str(repo))
+
+    assert [m["content"] for m in ctx.memories][:1] == ["m1"]
+    sims = [m["similarity"] for m in ctx.memories]
+    assert sims == sorted(sims, reverse=True)
+
+
+@pytest.mark.asyncio
+async def test_a_trace_symbol_keeps_its_risk_out_of_its_label(repo):
+    """The engine returns `risk` on a trace row. Storing it in `label` made a
+    symbol report CRITICAL where a code kind belongs -- visible in the Console
+    badge and in the agent markdown, which renders label as `(kind)`."""
+    trace = {
+        "proj.m.helper": {
+            "callers": [
+                {
+                    "qualified_name": "proj.m.caller",
+                    "name": "caller",
+                    "risk": "CRITICAL",
+                    "hop": 1,
+                    "strategy": "lsp",
+                    "confidence": 0.97,
+                }
+            ]
+        }
+    }
+
+    # Query-aware on purpose. The shared Stub returns every row for any query,
+    # which would seed `caller` directly and never exercise the trace path at
+    # all -- the symbol has to be findable by the backfill search but absent
+    # from the seed results.
+    class Backfill(Stub):
+        def search(self, project, query, limit=25, semantic=None):
+            self.searches.append(query)
+            if query == "caller":
+                return [_row("caller", "proj.m.caller", 4, 6, label="Method")]
+            return self._results
+
+    c = Backfill(repo, results=[_row("helper", "proj.m.helper", 1, 2)], trace=trace)
+
+    ctx = await build(c, "helper", cwd=str(repo))
+    caller = next((s for s in ctx.symbols if s.name == "caller"), None)
+
+    assert caller is not None
+    assert caller.label != "CRITICAL"
+    assert caller.risk == "CRITICAL"
+    assert (caller.hop, caller.strategy, caller.confidence) == (1, "lsp", 0.97)
+
+
+@pytest.mark.asyncio
+async def test_the_ranked_edges_survive_for_a_caller_that_wants_them(repo):
+    """PageRank consumes a raw duplicated edge list whose repetition IS the
+    weighting; the aggregated view is one record per ordered pair."""
+    trace = {
+        "proj.m.helper": {
+            "callers": [{"qualified_name": "proj.m.caller", "name": "caller", "hop": 1}]
+        }
+    }
+    c = Stub(repo, results=[_row("helper", "proj.m.helper", 1, 2)], trace=trace)
+
+    ctx = await build(c, "helper", cwd=str(repo))
+
+    assert ctx.graph_edges
+    pairs = [(a, b) for a, b, _ in ctx.graph_edges]
+    assert len(pairs) == len(set(pairs))
+
+
+@pytest.mark.asyncio
 async def test_memory_links_are_filtered_to_shown_symbols(repo):
     """The API returns `qualified_name`; the concept DB column is
     `graph_qualified_name`. Reading only the latter matched nothing and left the

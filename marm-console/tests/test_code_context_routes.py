@@ -21,6 +21,7 @@ SUCCESS = {
             "score": 0.07157,
             "seeded": True,
             "truncated": False,
+            "provenance": None,
         }
     ],
     "memories": [{"content": "ranking is personalised PageRank"}],
@@ -58,6 +59,9 @@ def test_code_context_passes_the_request_through_and_returns_the_composition(
     assert seen["payload"]["task"] == "how does recall rank"
     assert seen["payload"]["project"] == "marm-memory"
     assert seen["payload"]["budget"] == 12000
+    # Off unless the caller asks: the edge list is several KB only a visualiser
+    # reads, and an agent reads `markdown` and stops.
+    assert seen["payload"]["include_graph"] is False
     # Composition reads source from disk and joins memory, so it must not be
     # held to the default 10s used by plain lookups.
     assert seen["timeout"] == 60.0
@@ -87,6 +91,19 @@ def test_graph_unavailable_becomes_503(monkeypatch):
         response = client.post("/api/code-context", json={"task": "anything"})
 
     assert response.status_code == 503
+
+
+def test_include_graph_is_passed_through_when_asked_for(monkeypatch):
+    seen = {}
+
+    def fake_post(operation: str, payload: dict, *, timeout: float = 10.0) -> dict:
+        seen.update(payload)
+        return SUCCESS
+
+    with _client(monkeypatch, fake_post) as client:
+        client.post("/api/code-context", json={"task": "t", "include_graph": True})
+
+    assert seen["include_graph"] is True
 
 
 @pytest.mark.parametrize(
