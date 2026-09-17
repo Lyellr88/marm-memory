@@ -60,6 +60,16 @@ vi.mock('@/hooks/use-marm-queries', () => ({
     isLoading: false,
   }),
   useBuildCodeContext: () => buildState,
+  useStreamingAnswer: () => answerState,
+}));
+
+const answerState = vi.hoisted(() => ({
+  status: 'idle' as 'idle' | 'streaming' | 'done' | 'error',
+  text: '',
+  citations: [] as unknown[],
+  model: undefined as string | undefined,
+  start: vi.fn(),
+  reset: vi.fn(),
 }));
 
 function symbol(over: Partial<CodeContextSymbol> = {}): CodeContextSymbol {
@@ -113,6 +123,12 @@ afterEach(() => {
   buildState.data = undefined;
   buildState.error = null;
   buildState.isPending = false;
+  answerState.status = 'idle';
+  answerState.text = '';
+  answerState.citations = [];
+  answerState.model = undefined;
+  answerState.start = vi.fn();
+  answerState.reset = vi.fn();
   projectState.status = 'ready';
   window.history.replaceState(null, '', '/');
 });
@@ -141,9 +157,9 @@ describe('CodeContextPage', () => {
       project: 'C-work-marm-systems',
       budget: 12000,
       include_graph: true,
-      // Asking is on by default on the page: a reader who typed a question
-      // wants it answered. The tool's own default stays off, for agents.
-      answer: true,
+      // The answer arrives on its own stream now, so the JSON body never waits
+      // for generation. Retrieval lands in ~380 ms; generation takes seconds.
+      answer: false,
       // The page lays the parts out separately, so it needs the structured
       // fields the markdown duplicates. The server default is 1 for agents.
       detail: 3,
@@ -199,6 +215,39 @@ describe('CodeContextPage', () => {
     }
   });
 
+  it('renders an answer as it streams, before it is finished', () => {
+    // The whole point: 8.6 s of nothing reads as a hung page. Partial text on
+    // screen reads as a working one.
+    answerState.status = 'streaming';
+    answerState.text = 'The PPU triggers an NMI when';
+    render(<CodeContextPage />);
+
+    expect(screen.getByText(/The PPU triggers an NMI when/)).toBeTruthy();
+  });
+
+  it('a streaming answer does not wait for the composition', () => {
+    // There is no `result` at all here -- retrieval has not returned yet and
+    // the answer is already on screen.
+    answerState.status = 'streaming';
+    answerState.text = 'partial';
+    buildState.data = undefined;
+    render(<CodeContextPage />);
+
+    expect(screen.getByText(/partial/)).toBeTruthy();
+  });
+
+  it('a failed stream says so without discarding the rest of the page', () => {
+    answerState.status = 'error';
+    answerState.text = '';
+    (answerState as Record<string, unknown>).message = 'No local model is reachable.';
+    buildState.data = SUCCESS;
+    render(<CodeContextPage />);
+
+    expect(screen.getByText('No local model is reachable.')).toBeTruthy();
+    expect(screen.getByText(/ranked symbols, their source and/)).toBeTruthy();
+    delete (answerState as Record<string, unknown>).message;
+  });
+
   it('a pane selected before a composition previews what it will show', async () => {
     render(<CodeContextPage />);
 
@@ -223,7 +272,10 @@ describe('CodeContextPage', () => {
 
     await userEvent.click(screen.getByRole('button', { name: /compose and answer/i }));
     expect(buildState.mutate).toHaveBeenCalledTimes(1);
-    expect(buildState.mutate.mock.calls[0][0].answer).toBe(true);
+    // Retrieval and generation are two round trips now.
+    expect(buildState.mutate.mock.calls[0][0].answer).toBe(false);
+    expect(answerState.start).toHaveBeenCalledTimes(1);
+    expect(answerState.start.mock.calls[0][0].task).toBe('how does recall rank');
   });
 
   it('names the panes identically before and after a composition', () => {

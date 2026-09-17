@@ -19,7 +19,7 @@ import {
 import { Panel, SectionHeading, SmallStat, StatCard } from '@/components/ui/panels';
 import { ActionNoticePanel } from '@/components/memory/shared';
 import { Sparkles, FileCode2, Brain, FileText, AlertTriangle, Network, FolderCode } from 'lucide-react';
-import { useBuildCodeContext, useProjects } from '@/hooks/use-marm-queries';
+import { useBuildCodeContext, useProjects, useStreamingAnswer } from '@/hooks/use-marm-queries';
 import { MarmApiError } from '@/lib/marm-api';
 import { CopyButton, LoadingState } from '@/components/code-context/shared';
 import { SymbolsPane } from '@/components/code-context/SymbolsPane';
@@ -160,6 +160,7 @@ export function CodeContextPage() {
   const [budget, setBudget] = useState(() => Number(params.get('budget')) || DEFAULT_BUDGET);
   const { data: projects } = useProjects();
   const build = useBuildCodeContext();
+  const answer = useStreamingAnswer();
   const autoRan = useRef(false);
 
   // Default to a real project rather than to path resolution. The server
@@ -197,12 +198,24 @@ export function CodeContextPage() {
     nextBudget: number,
     withAnswer = wantAnswer,
   ) => {
+    const scopedProject =
+      nextProject && nextProject !== AUTO_PROJECT ? nextProject : null;
+    // Two round trips on purpose. The composition returns in ~380 ms and fills
+    // four panes; the answer takes seconds. Asking for both in one response
+    // meant a reader waited 8.6 s to see anything at all.
+    if (withAnswer) {
+      answer.start({ task: nextTask, project: scopedProject, budget: nextBudget });
+    } else {
+      answer.reset();
+    }
     build.mutate({
       task: nextTask,
-      project: nextProject && nextProject !== AUTO_PROJECT ? nextProject : null,
+      project: scopedProject,
       budget: nextBudget,
       include_graph: true,
-      answer: withAnswer,
+      // The answer arrives on its own stream now, so the JSON body never waits
+      // for generation.
+      answer: false,
       // The page lays out symbols, source and memory bodies separately, so it
       // needs the structured fields the markdown duplicates. An agent does not,
       // which is why the server default is 1 rather than this.
@@ -473,7 +486,9 @@ export function CodeContextPage() {
           <TabsContent value="answer" className="m-0">
             <AnswerPane
               result={composed}
-              asking={build.isPending}
+              symbols={symbols}
+              stream={answer}
+              asking={build.isPending || answer.status === 'streaming'}
               canAsk={Boolean(task.trim())}
               onAsk={() => {
                 setWantAnswer(true);

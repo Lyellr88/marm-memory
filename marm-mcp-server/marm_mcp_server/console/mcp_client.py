@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import time
+from collections.abc import Iterator
 from pathlib import PurePath, PureWindowsPath
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
@@ -249,3 +250,46 @@ def cached_projects() -> list[dict] | None:
     if _projects_cache is None:
         return None
     return _projects_cache[1]
+
+
+def stream(
+    operation: str,
+    payload: dict | None = None,
+    *,
+    timeout: float = 300.0,
+) -> "Iterator[bytes]":
+    """Proxy a server-sent event stream from the MCP server, unbuffered.
+
+    Yields raw bytes rather than parsed events on purpose: the Console is a
+    pipe here, not a participant. Re-parsing the frames only to re-encode them
+    would add a place for the two ends to disagree about the protocol, and the
+    browser is the thing that actually reads them.
+
+    The timeout is long because the whole point is a slow response. It bounds a
+    hung connection, not a working one.
+    """
+    base_url = os.environ.get("MARM_MCP_URL", "http://127.0.0.1:8001").rstrip("/")
+    headers = {"Content-Type": "application/json", "Accept": "text/event-stream"}
+    api_key = _api_key()
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    http_request = Request(
+        f"{base_url}/{operation.lstrip('/')}",
+        data=json.dumps(payload).encode("utf-8") if payload is not None else None,
+        headers=headers,
+        method="POST",
+    )
+    try:
+        response = urlopen(http_request, timeout=timeout)
+    except HTTPError as exc:
+        raise _http_error(exc) from exc
+    except (URLError, OSError) as exc:
+        raise McpUnavailable(
+            "MARM MCP server is unavailable for this request."
+        ) from exc
+
+    with response:
+        # Line at a time, not `.read()`: reading the body would wait for the
+        # end of a stream whose whole purpose is to arrive gradually.
+        for line in response:
+            yield line
