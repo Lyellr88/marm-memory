@@ -2,21 +2,11 @@ import { useState, useEffect } from 'react';
 import { useMemories, useFilters, useCreateMemory, useUpdateMemory, useDeleteMemory, useBulkDeleteMemories } from '@/hooks/use-marm-queries';
 import { Badge, Button, Input, Select, SelectTrigger, SelectValue, SelectContent, SelectItem, Table, TableHeader, TableRow, TableHead, TableBody, TableCell, Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, Textarea, Label, cn } from '@/components/ui/core';
 import { format } from 'date-fns';
-import { BrainCircuit, CircleAlert, FileText, Lightbulb, MessageSquareText, Search, Trash2, Plus, Edit2, Wrench } from 'lucide-react';
+import { Search, Trash2, Plus, Edit2 } from 'lucide-react';
 import type { Memory, MemoryId, MemoryListParams } from '@/lib/marm-types';
-import { type ActionNotice, mutationErrorMessage, deleteNotice, ActionNoticePanel, DeleteSelectionDialog, MemoryEmptyState, PageControls } from './shared';
+import { type ActionNotice, mutationErrorMessage, deleteNotice, ActionNoticePanel, DeleteSelectionDialog, MemoryEmptyState, PageControls, memoryContext } from './shared';
 
 const MEMORY_PAGE_SIZE = 100;
-
-function memoryContext(contextType: string | null) {
-  const value = (contextType || 'general').toLowerCase();
-  if (value.includes('decision')) return { icon: Lightbulb, tone: 'text-amber-300 border-amber-400/20 bg-amber-400/[0.06]', rail: 'border-l-amber-400/70' };
-  if (value.includes('error') || value.includes('issue')) return { icon: CircleAlert, tone: 'text-red-300 border-red-400/20 bg-red-400/[0.06]', rail: 'border-l-red-400/70' };
-  if (value.includes('doc') || value.includes('book') || value.includes('handbook')) return { icon: FileText, tone: 'text-violet-300 border-violet-400/20 bg-violet-400/[0.06]', rail: 'border-l-violet-400/70' };
-  if (value.includes('code') || value.includes('project') || value.includes('tool')) return { icon: Wrench, tone: 'text-blue-300 border-blue-400/20 bg-blue-400/[0.06]', rail: 'border-l-blue-400/70' };
-  if (value.includes('concept') || value.includes('pattern')) return { icon: BrainCircuit, tone: 'text-teal-300 border-teal-400/20 bg-teal-400/[0.06]', rail: 'border-l-teal-400/70' };
-  return { icon: MessageSquareText, tone: 'text-primary border-primary/20 bg-primary/[0.06]', rail: 'border-l-primary/70' };
-}
 
 function MemoryRow({ 
   memory, 

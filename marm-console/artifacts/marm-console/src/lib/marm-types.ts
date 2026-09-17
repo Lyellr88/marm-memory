@@ -744,6 +744,18 @@ export interface CodeContextInput {
   project?: string | null;
   cwd?: string | null;
   budget?: number;
+  /** Ask for the ranked call neighbourhood. Off by default server-side. */
+  include_graph?: boolean;
+}
+
+/** How a symbol was reached, when it arrived through the call graph rather than
+ *  by matching the task. `null` for a seeded symbol — the four fields are
+ *  jointly present or jointly absent, so zeros would be a claim, not an absence. */
+export interface CodeContextProvenance {
+  hop: number;
+  strategy: string;
+  confidence: number;
+  risk: string;
 }
 
 export interface CodeContextSymbol {
@@ -757,6 +769,23 @@ export interface CodeContextSymbol {
   seeded: boolean;
   truncated: boolean;
   source: string;
+  provenance: CodeContextProvenance | null;
+}
+
+/** A memory row as `smart_recall` returns it. Every field optional: these come
+ *  straight off the recall response and the page must not assume a shape it
+ *  does not control. */
+export interface CodeContextMemory {
+  id?: string;
+  content?: string;
+  summary?: string;
+  session_name?: string;
+  similarity?: number;
+  timestamp?: string;
+  context_type?: string;
+  project?: string;
+  platform?: string;
+  [key: string]: unknown;
 }
 
 export interface CodeContextProject {
@@ -775,9 +804,11 @@ export interface CodeContextResult {
   task?: string;
   markdown?: string;
   symbols?: CodeContextSymbol[];
-  memories?: Array<Record<string, unknown>>;
+  memories?: CodeContextMemory[];
   links?: Array<Record<string, unknown>>;
   graph_nodes?: number;
+  /** `[source, target, weight]`, present only when `include_graph` was set. */
+  graph_edges?: Array<[string, string, number]>;
   notes?: string[];
 }
 

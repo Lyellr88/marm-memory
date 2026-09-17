@@ -69,6 +69,7 @@ export function Panel({
   action,
   alert = false,
   className,
+  style,
   children,
 }: {
   icon?: ReactNode;
@@ -77,6 +78,8 @@ export function Panel({
   action?: ReactNode;
   alert?: boolean;
   className?: string;
+  /** For staggering `metric-enter` via animationDelay, as StatCard already allows. */
+  style?: React.CSSProperties;
   children?: ReactNode;
 }) {
   return (
@@ -86,6 +89,7 @@ export function Panel({
         alert ? 'status-pulse border-amber-400/30 bg-amber-400/[0.05]' : 'border-border/80 bg-card/45',
         className,
       )}
+      style={style}
     >
       {(icon || title || action) && (
         <div className="flex items-start justify-between gap-4">
