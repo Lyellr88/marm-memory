@@ -443,6 +443,14 @@ if _raw_cncs < 0:
         file=sys.stderr,
     )
 
+# Distill review nudges. Separate knobs from compaction's on purpose: a
+# proposal is cheaper to review than a summary is to write, so the sensible
+# cadence is not the same one.
+DISTILL_NUDGE_ENABLED = os.environ.get("MARM_DISTILL_NUDGE", "1") == "1"
+DISTILL_MAX_NUDGES = max(1, _safe_int("MARM_DISTILL_MAX_NUDGES", 3))
+DISTILL_NUDGE_COOLDOWN_SECONDS = max(0, _safe_int("MARM_DISTILL_NUDGE_COOLDOWN", 900))
+DISTILL_INJECTION_BYTE_BUDGET = max(0, _safe_int("MARM_DISTILL_INJECTION_BYTES", 1536))
+
 _raw_cibb = _safe_int("COMPACTION_INJECTION_BYTE_BUDGET", 2048)
 COMPACTION_INJECTION_BYTE_BUDGET = max(0, _raw_cibb)
 if _raw_cibb < 0:

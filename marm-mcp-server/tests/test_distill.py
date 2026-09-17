@@ -442,3 +442,161 @@ def test_nothing_durable_is_a_success_not_an_error(staged):
     assert result["status"] == "success"
     assert result["proposals"] == []
     assert "not an error" in result["note"]
+
+
+# --- review nudges ----------------------------------------------------------
+#
+# A staged proposal nobody is told about is a proposal nobody reviews. Seven
+# generated proposals sat pending for hours on the live deployment because the
+# only way to learn the queue was non-empty was to open the Console and look.
+
+
+def _stage(
+    memory,
+    content,
+    *,
+    score=1.0,
+    verdict="new",
+    hours=168,
+    nudges=0,
+    status="pending",
+    session="s",
+):
+    import uuid
+    from datetime import datetime, timedelta, timezone
+
+    now = datetime.now(timezone.utc)
+    row_id = str(uuid.uuid4())
+    with memory.get_connection() as conn:
+        conn.execute(
+            "INSERT INTO distill_staging (id, session_name, content, score, reasons, "
+            "verdict, cosine, neighbour_id, neighbour_content, status, candidate_hash, "
+            "project, context_type, applied_memory_id, nudge_count, last_nudged_at, "
+            "expires_at, created_at, updated_at, reviewed_at) "
+            "VALUES (?,?,?,?,'[]',?,0.9,NULL,'the stored one',?,?,NULL,'general',NULL,"
+            "?,NULL,?,?,?,NULL)",
+            (
+                row_id,
+                session,
+                content,
+                score,
+                verdict,
+                status,
+                row_id,
+                nudges,
+                (now + timedelta(hours=hours)).isoformat(),
+                now.isoformat(),
+                now.isoformat(),
+            ),
+        )
+    return row_id
+
+
+@pytest.fixture()
+def staged_memory(monkeypatch, tmp_path):
+    from conftest import load_isolated_server
+
+    assert load_isolated_server(monkeypatch, tmp_path) is not None
+    from marm_mcp_server.core.memory import memory as live
+
+    return live
+
+
+def test_a_pending_proposal_asks_to_be_reviewed(staged_memory):
+    from marm_mcp_server.services.distill import claim_pending_distill_prompt
+
+    proposal_id = _stage(staged_memory, "The daemon reparents to systemd.")
+    block = claim_pending_distill_prompt(staged_memory)
+
+    assert block is not None, "a pending proposal produced no review request"
+    text = block["text"]
+    assert proposal_id in text
+    # Both decisions, spelled as calls the agent can make verbatim.
+    assert 'action="apply"' in text
+    assert 'action="discard"' in text
+
+
+def test_a_near_verdict_carries_the_memory_it_resembles(staged_memory):
+    """The whole reason a `near` needs a human: an encoder cannot tell
+    "refines" from "contradicts", so the comparison has to be in the ask."""
+    from marm_mcp_server.services.distill import claim_pending_distill_prompt
+
+    _stage(staged_memory, "A restatement.", verdict="near")
+    text = claim_pending_distill_prompt(staged_memory)["text"]
+
+    assert "the stored one" in text
+    assert "contradicts" in text
+
+
+def test_only_one_review_is_asked_for_per_window(staged_memory):
+    """The cooldown is GLOBAL, not per proposal.
+
+    A distil run stages a batch. A per-row cooldown would then put a review
+    request on N consecutive tool responses, which is the terminal noise
+    agents already get complained about.
+    """
+    from marm_mcp_server.services.distill import claim_pending_distill_prompt
+
+    for i in range(5):
+        _stage(
+            staged_memory,
+            f"Proposal {i} about something durable.",
+            score=1.0 - i * 0.01,
+        )
+
+    asked = [bool(claim_pending_distill_prompt(staged_memory)) for _ in range(5)]
+    assert asked.count(True) == 1, asked
+
+
+def test_the_best_proposal_is_asked_about_first(staged_memory):
+    from marm_mcp_server.services.distill import claim_pending_distill_prompt
+
+    _stage(staged_memory, "A weak one.", score=0.3)
+    _stage(staged_memory, "The strongest one.", score=1.4)
+    text = claim_pending_distill_prompt(staged_memory)["text"]
+
+    assert "The strongest one." in text
+
+
+def test_an_expired_proposal_is_swept_rather_than_asked_about(staged_memory):
+    """`review` already filtered these out, so without the sweep they were a
+    slow leak: invisible and permanent."""
+    from marm_mcp_server.services.distill import claim_pending_distill_prompt
+
+    expired = _stage(staged_memory, "Nobody ever looked at this.", hours=-1)
+    assert claim_pending_distill_prompt(staged_memory) is None
+
+    with staged_memory.get_connection() as conn:
+        status = conn.execute(
+            "SELECT status FROM distill_staging WHERE id = ?", (expired,)
+        ).fetchone()[0]
+    assert status == "stale"
+
+
+def test_a_queue_nobody_answers_stops_asking(staged_memory):
+    """Otherwise it nags forever, which is how the channel stops being read."""
+    from marm_mcp_server.services.distill import claim_pending_distill_prompt
+
+    ignored = _stage(staged_memory, "Asked about three times already.", nudges=3)
+    assert claim_pending_distill_prompt(staged_memory) is None
+
+    with staged_memory.get_connection() as conn:
+        status = conn.execute(
+            "SELECT status FROM distill_staging WHERE id = ?", (ignored,)
+        ).fetchone()[0]
+    assert status == "nudge_exhausted"
+
+
+def test_nothing_pending_asks_nothing(staged_memory):
+    from marm_mcp_server.services.distill import claim_pending_distill_prompt
+
+    assert claim_pending_distill_prompt(staged_memory) is None
+
+
+def test_the_nudge_can_be_turned_off(staged_memory, monkeypatch):
+    from marm_mcp_server.config import settings
+    from marm_mcp_server.services.distill import claim_pending_distill_prompt
+
+    _stage(staged_memory, "Something durable.")
+    monkeypatch.setattr(settings, "DISTILL_NUDGE_ENABLED", False)
+    assert claim_pending_distill_prompt(staged_memory) is None

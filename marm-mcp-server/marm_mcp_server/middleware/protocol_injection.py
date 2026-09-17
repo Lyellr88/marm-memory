@@ -19,6 +19,7 @@ from ..core.protocol_delivery_state import (
     _protocol_session_delivered,
     _prune_call_counts,
 )
+from ..services.distill import claim_pending_distill_prompt
 from ..services.documentation import (
     docs_are_loaded,
     ensure_marm_started,
@@ -163,6 +164,15 @@ async def _mcp_tool_call_tracker(
                 )
                 if compaction_block:
                     injections.append(compaction_block)
+                else:
+                    # Only when compaction has nothing to ask. Two review
+                    # requests in one response is how both get ignored, and
+                    # compaction's is the older contract.
+                    distill_block = await asyncio.to_thread(
+                        claim_pending_distill_prompt, memory, None
+                    )
+                    if distill_block:
+                        injections.append(distill_block)
 
             if not injections:
                 from starlette.responses import Response as StarletteResponse

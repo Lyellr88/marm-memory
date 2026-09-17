@@ -295,4 +295,157 @@ def discard(memory: MARMMemory, proposal_id: str) -> dict[str, Any]:
     return {"status": "success", "proposal_id": proposal_id}
 
 
-__all__ = ["TTL_HOURS", "apply", "discard", "propose", "review"]
+__all__ = [
+    "TTL_HOURS",
+    "apply",
+    "claim_pending_distill_prompt",
+    "discard",
+    "propose",
+    "review",
+]
+
+
+# ---------------------------------------------------------------------------
+# Review nudges.
+#
+# A staged proposal that nobody is told about is a proposal nobody reviews.
+# Measured on this deployment: seven generated proposals sat pending for hours
+# because the only way to learn the queue was non-empty was to open the Console
+# page and look. `marm_compaction` has solved this since it shipped -- it asks
+# the connected agent, through the same response-injection channel -- and this
+# is deliberately the same mechanism rather than a second one.
+#
+# The expiry sweep lives here too, for the same reason compaction's does: the
+# claim already takes the write lock and already walks the table, so a separate
+# scheduler would be a second moving part doing a subset of this one's work.
+
+
+def _prompt_block(row: tuple, byte_budget: int) -> dict:
+    proposal_id, session, content, verdict, cosine, neighbour, expires_at, nudges = row
+    lines = [
+        "[MARM DISTILL REVIEW]",
+        "",
+        "A memory proposal is waiting for a decision. Read it, then call ONE of:",
+        f'  marm_distill(action="apply",   proposal_id="{proposal_id}")',
+        f'  marm_distill(action="discard", proposal_id="{proposal_id}")',
+        "",
+        f"session: {session}",
+        f"verdict: {verdict}",
+    ]
+    if verdict != "new":
+        lines.append(f"closest stored memory (cosine {cosine:.3f}):")
+        lines.append(f"  {neighbour or '(unavailable)'}")
+        lines.append(
+            "A `near` verdict is why this needs you: an encoder cannot tell "
+            "whether this refines the memory above or contradicts it."
+        )
+    lines += [
+        f"expires: {expires_at}",
+        f"nudge: {nudges + 1}",
+        "",
+        "Proposal:",
+        f"  {content}",
+        "",
+        "Apply only what you would want recalled months from now. Discarding is "
+        "permanent; it will not be proposed again.",
+    ]
+    return {"type": "text", "text": _truncate(("\n".join(lines)), byte_budget)}
+
+
+def _truncate(text: str, byte_budget: int) -> str:
+    encoded = text.encode("utf-8")
+    if len(encoded) <= byte_budget:
+        return text
+    if byte_budget <= 3:
+        return "..."[:byte_budget]
+    return encoded[: byte_budget - 3].decode("utf-8", errors="ignore") + "..."
+
+
+def claim_pending_distill_prompt(
+    memory: MARMMemory, session_name: Optional[str] = None
+) -> Optional[dict]:
+    """Claim one pending proposal for response injection, or None.
+
+    Sweeps first: expired rows become `stale` and over-nudged rows become
+    `nudge_exhausted`, so a queue nobody ever answers stops asking rather than
+    nagging forever, and rows past their TTL stop accumulating invisibly --
+    `review` already filtered them out, so without this they were a slow leak.
+
+    Uses BEGIN IMMEDIATE and rowcount rather than SQLite RETURNING, matching
+    compaction, so older bundled sqlite3 builds keep working.
+    """
+    from ..config import settings
+
+    if not getattr(settings, "DISTILL_NUDGE_ENABLED", True):
+        return None
+
+    now_dt = _now()
+    now = now_dt.isoformat()
+    cooldown = getattr(settings, "DISTILL_NUDGE_COOLDOWN_SECONDS", 900)
+    cutoff = (now_dt - timedelta(seconds=cooldown)).isoformat()
+    max_nudges = getattr(settings, "DISTILL_MAX_NUDGES", 3)
+    budget = getattr(settings, "DISTILL_INJECTION_BYTE_BUDGET", 1536)
+
+    with memory.get_connection() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+        try:
+            conn.execute(
+                "UPDATE distill_staging SET status = 'stale', updated_at = ? "
+                "WHERE status = 'pending' AND expires_at <= ?",
+                (now, now),
+            )
+            conn.execute(
+                "UPDATE distill_staging SET status = 'nudge_exhausted', updated_at = ? "
+                "WHERE status = 'pending' AND nudge_count >= ?",
+                (now, max_nudges),
+            )
+            # GLOBAL cooldown, not per-row. Compaction's is per-candidate,
+            # which is fine when candidates are rare -- but a distil run stages
+            # a batch, and a per-row cooldown would then put a review request
+            # on N consecutive tool responses. That is precisely the terminal
+            # noise agents already get complained about. One request per
+            # window, whichever proposal it is.
+            last = conn.execute(
+                "SELECT MAX(last_nudged_at) FROM distill_staging WHERE last_nudged_at IS NOT NULL"
+            ).fetchone()
+            if last and last[0] and last[0] > cutoff:
+                conn.execute("COMMIT")
+                return None
+
+            clauses = [
+                "status = 'pending'",
+                "expires_at > ?",
+                "nudge_count < ?",
+                "(last_nudged_at IS NULL OR last_nudged_at <= ?)",
+            ]
+            params: list[Any] = [now, max_nudges, cutoff]
+            if session_name:
+                clauses.append("session_name = ?")
+                params.append(session_name)
+            row = conn.execute(
+                "SELECT id, session_name, content, verdict, cosine, neighbour_content, "
+                "expires_at, nudge_count FROM distill_staging "
+                f"WHERE {' AND '.join(clauses)} "
+                # Best first: a reviewer's attention is the scarce resource, and
+                # the highest-scoring proposal is the one most worth spending it on.
+                "ORDER BY score DESC, created_at ASC LIMIT 1",
+                params,
+            ).fetchone()
+            if row is None:
+                conn.execute("COMMIT")
+                return None
+            claimed = conn.execute(
+                "UPDATE distill_staging SET nudge_count = nudge_count + 1, "
+                "last_nudged_at = ?, updated_at = ? WHERE id = ? AND status = 'pending'",
+                (now, now, row[0]),
+            )
+            if claimed.rowcount != 1:
+                # Another request claimed it between the select and the update.
+                conn.execute("ROLLBACK")
+                return None
+            conn.execute("COMMIT")
+        except Exception:
+            conn.execute("ROLLBACK")
+            raise
+
+    return _prompt_block(row, budget)
