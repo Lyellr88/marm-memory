@@ -11,6 +11,8 @@ const buildState = vi.hoisted(() => ({
   isPending: false,
 }));
 
+const projectState = vi.hoisted(() => ({ status: 'ready' as string }));
+
 vi.mock('@/hooks/use-marm-queries', () => ({
   useProjects: () => ({
     data: [
@@ -20,7 +22,7 @@ vi.mock('@/hooks/use-marm-queries', () => ({
         root_path: 'C:/work/marm-systems',
         nodes: 4500,
         edges: 23913,
-        status: 'ready',
+        status: projectState.status,
       },
     ],
     isLoading: false,
@@ -71,6 +73,7 @@ afterEach(() => {
   buildState.data = undefined;
   buildState.error = null;
   buildState.isPending = false;
+  projectState.status = 'ready';
 });
 
 describe('CodeContextPage', () => {
@@ -79,7 +82,6 @@ describe('CodeContextPage', () => {
     render(<CodeContextPage />);
 
     await user.type(screen.getByLabelText('Task'), '  how does recall rank  ');
-    await user.selectOptions(screen.getByLabelText('Project'), 'C-work-marm-systems');
     await user.click(screen.getByRole('button', { name: /compose context/i }));
 
     await waitFor(() => expect(buildState.mutate).toHaveBeenCalledTimes(1));
@@ -133,5 +135,69 @@ describe('CodeContextPage', () => {
     await user.click(screen.getByRole('tab', { name: /what memory knows/i }));
 
     expect(screen.getByText('ranking is personalised PageRank')).toBeTruthy();
+  });
+
+  it('defaults the project to a real one rather than to path resolution', async () => {
+    // Omitting project makes the server resolve from the CONSOLE's working
+    // directory, which is wherever the service was started and is not an
+    // indexed repository. Left blank, the first click always returned
+    // no_project.
+    const user = userEvent.setup();
+    render(<CodeContextPage />);
+
+    await waitFor(() =>
+      expect((screen.getByLabelText('Project') as HTMLSelectElement).value).toBe('C-work-marm-systems'),
+    );
+
+    await user.type(screen.getByLabelText('Task'), 'anything');
+    await user.click(screen.getByRole('button', { name: /compose context/i }));
+
+    await waitFor(() => expect(buildState.mutate).toHaveBeenCalledTimes(1));
+    expect(buildState.mutate.mock.calls[0][0].project).toBe('C-work-marm-systems');
+  });
+
+  it('describes every pane before a composition exists', () => {
+    // The panes render only once there is a result, so without this the page
+    // reads as a single text box and the features look unbuilt.
+    render(<CodeContextPage />);
+
+    expect(screen.getByText('What you get back')).toBeTruthy();
+    for (const label of ['Ranked symbols', 'What memory knows', 'Agent view']) {
+      expect(screen.getByText(label)).toBeTruthy();
+    }
+    expect(screen.queryByRole('tab')).toBeNull();
+  });
+
+  it('names the same panes in the empty state and in the tab strip', () => {
+    const { unmount } = render(<CodeContextPage />);
+    const empty = ['Ranked symbols', 'What memory knows', 'Agent view']
+      .filter((l) => screen.queryByText(l));
+    unmount();
+
+    buildState.data = SUCCESS;
+    render(<CodeContextPage />);
+    const tabs = screen.getAllByRole('tab').map((el) => el.textContent?.trim());
+
+    expect(empty).toEqual(tabs);
+  });
+
+  it('an example task fills the box without submitting', async () => {
+    const user = userEvent.setup();
+    render(<CodeContextPage />);
+
+    const example = screen.getByRole('button', { name: /how does recall decide/i });
+    await user.click(example);
+
+    expect((screen.getByLabelText('Task') as HTMLTextAreaElement).value)
+      .toBe('How does recall decide which memories to return?');
+    expect(buildState.mutate).not.toHaveBeenCalled();
+  });
+
+  it('warns when the selected project is not finished indexing', () => {
+    // A no_project after a 30s wait is a worse way to learn this.
+    projectState.status = 'indexing';
+    render(<CodeContextPage />);
+
+    expect(screen.getByText(/index status: indexing/i)).toBeTruthy();
   });
 });
