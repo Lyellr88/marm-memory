@@ -2,6 +2,7 @@ import json
 import os
 import socket
 import subprocess
+import sys
 import threading
 import time
 import uuid
@@ -14,6 +15,18 @@ from marm_mcp_server.server import MCP_TOOL_OPERATIONS
 pytestmark = pytest.mark.docker
 
 DOCKER_IMAGE = os.environ.get("MARM_DOCKER_IMAGE", "lyellr88/marm-mcp-server:latest")
+
+# Every probe below talks to a container this file just started, so an ambient
+# proxy must never be consulted. With HTTP_PROXY set and no_proxy unset,
+# requests sends these calls to the proxy and the assertions then describe the
+# proxy rather than the container: a stub proxy that answers /health 200, an
+# unauthenticated call 401 and a keyed call 200 makes
+# test_docker_exposed_publish_still_requires_key_off_loopback pass with nothing
+# listening on the published port at all. Loopback is not exempt either -
+# requests.utils.should_bypass_proxies("http://127.0.0.1:<port>/health", None)
+# is False under those settings - so the session is the file's, not one test's.
+HTTP = requests.Session()
+HTTP.trust_env = False
 
 
 def _run_docker(args, timeout=60):
@@ -52,7 +65,7 @@ def _wait_for_health(base_url, timeout=90):
     last_error = None
     while time.time() < deadline:
         try:
-            response = requests.get(f"{base_url}/health", timeout=3)
+            response = HTTP.get(f"{base_url}/health", timeout=3)
             if response.status_code == 200 and response.json()["status"] == "healthy":
                 return
         except Exception as exc:
@@ -110,11 +123,11 @@ def test_docker_http_requires_key_and_serves_tools(docker_image, marm_data_dir):
     try:
         _wait_for_health(base_url)
 
-        ready = requests.get(f"{base_url}/ready", timeout=5)
+        ready = HTTP.get(f"{base_url}/ready", timeout=5)
         assert ready.status_code == 200
         assert "websocket" not in ready.text.lower()
 
-        openapi = requests.get(f"{base_url}/openapi.json", timeout=5)
+        openapi = HTTP.get(f"{base_url}/openapi.json", timeout=5)
         assert openapi.status_code == 200
         operation_ids = {
             operation.get("operationId")
@@ -124,16 +137,16 @@ def test_docker_http_requires_key_and_serves_tools(docker_image, marm_data_dir):
         }
         assert set(MCP_TOOL_OPERATIONS).issubset(operation_ids)
 
-        missing_auth = requests.get(
+        missing_auth = HTTP.get(
             f"{base_url}/marm_log_show", params={"session_name": "main"}, timeout=5
         )
-        wrong_auth = requests.get(
+        wrong_auth = HTTP.get(
             f"{base_url}/marm_log_show",
             params={"session_name": "main"},
             headers={"Authorization": "Bearer wrong"},
             timeout=5,
         )
-        correct_auth = requests.get(
+        correct_auth = HTTP.get(
             f"{base_url}/marm_log_show",
             params={"session_name": "main"},
             headers={"Authorization": f"Bearer {api_key}"},
@@ -144,7 +157,7 @@ def test_docker_http_requires_key_and_serves_tools(docker_image, marm_data_dir):
         assert wrong_auth.status_code == 401
         assert correct_auth.status_code == 200
 
-        no_websocket = requests.get(
+        no_websocket = HTTP.get(
             f"{base_url}/mcp/ws",
             headers={"Authorization": f"Bearer {api_key}"},
             timeout=5,
@@ -455,7 +468,7 @@ def test_docker_data_persists_across_container_restart(docker_image, marm_data_d
 
     try:
         base_url = _start(first_container)
-        write = requests.post(
+        write = HTTP.post(
             f"{base_url}/marm_log_entry",
             json={
                 "entry": f"2026-07-07-persist-check-wrote from {first_container}",
@@ -470,7 +483,7 @@ def test_docker_data_persists_across_container_restart(docker_image, marm_data_d
 
     try:
         base_url = _start(second_container)
-        read = requests.get(
+        read = HTTP.get(
             f"{base_url}/marm_log_show",
             params={"session_name": session_name},
             headers=headers,
@@ -566,3 +579,207 @@ def test_docker_stdio_tool_count_matches_http_registered_tools(
     assert 2 in responses, f"No tools/list response; stderr: {stderr_text}"
     tool_names = {t["name"] for t in responses[2]["result"]["tools"]}
     assert tool_names == set(MCP_TOOL_OPERATIONS)
+
+
+def _non_loopback_ipv4():
+    """The host's own address on its default route, or "" if it has none.
+
+    `--expose-network` publishes on 0.0.0.0 instead of 127.0.0.1, and the only
+    thing that distinguishes the two is whether a client arriving on a real
+    interface is served. Reaching the port over this address is what makes the
+    exposed test different from every other test in this file, which all talk
+    to 127.0.0.1. UDP connect() sends nothing; it only asks the kernel which
+    source address it would use.
+    """
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+        try:
+            sock.connect(("192.0.2.1", 9))  # TEST-NET-1, never routed anywhere
+        except OSError:
+            return ""
+        address = sock.getsockname()[0]
+    return "" if address.startswith("127.") else address
+
+
+def test_docker_exposed_publish_still_requires_key_off_loopback(
+    docker_image, marm_data_dir
+):
+    """Exposed mode must authenticate the clients that only it can reach.
+
+    test_docker_http_requires_key_and_serves_tools proves auth over a
+    127.0.0.1-published port, which is the binding `--expose-network` exists to
+    change (services/docker_commands.py:126). test_docker_commands.py:74 checks
+    that the flag reaches the argv. Neither reaches a running container over a
+    non-loopback interface, so nothing yet proves that the mode which accepts
+    off-host clients rejects the unauthenticated ones.
+
+    Linux only. The request goes from the host to its own published port over
+    the default-route address, and a UDP source-address lookup does not prove
+    that route is open: host firewall policy (the macOS application firewall,
+    for one) can drop it even for a plain 0.0.0.0 listener, which would read
+    here as an auth regression on a valid local setup. The Linux CI runner is
+    the environment where this path is supported.
+    """
+    if not sys.platform.startswith("linux"):
+        pytest.skip(
+            "host-to-own-published-port over a non-loopback address is only "
+            "supported on the Linux CI runner; host firewalls elsewhere can "
+            "block it without any product change"
+        )
+    host_ip = _non_loopback_ipv4()
+    if not host_ip:
+        pytest.skip("Host has no non-loopback IPv4 address to publish on")
+
+    container = f"marm-test-exposed-{uuid.uuid4().hex[:10]}"
+    port = _free_port()
+    api_key = "TestExposedKey_67890#abcDEF"
+
+    run = _run_docker(
+        [
+            "run",
+            "-d",
+            "--name",
+            container,
+            "-p",
+            f"0.0.0.0:{port}:8001",
+            "-e",
+            "SERVER_HOST=0.0.0.0",
+            "-e",
+            f"MARM_API_KEY={api_key}",
+            "-v",
+            f"{marm_data_dir}:/home/marm/.marm",
+            docker_image,
+        ],
+        timeout=90,
+    )
+    assert run.returncode == 0, run.stderr
+
+    try:
+        _wait_for_health(f"http://127.0.0.1:{port}")
+        remote = f"http://{host_ip}:{port}"
+
+        health = HTTP.get(f"{remote}/health", timeout=5)
+        assert health.status_code == 200, "exposed port unreachable off loopback"
+
+        missing_auth = HTTP.get(
+            f"{remote}/marm_log_show", params={"session_name": "main"}, timeout=5
+        )
+        correct_auth = HTTP.get(
+            f"{remote}/marm_log_show",
+            params={"session_name": "main"},
+            headers={"Authorization": f"Bearer {api_key}"},
+            timeout=5,
+        )
+
+        assert missing_auth.status_code == 401
+        assert correct_auth.status_code == 200
+    finally:
+        _run_docker(["rm", "-f", container], timeout=30)
+
+
+def _start_keyless_container(docker_image, marm_data_dir, prefix):
+    """Start MARM the way the managed Docker command does, with no key supplied.
+
+    SERVER_HOST=0.0.0.0 is what services/docker_commands.py:143 sets for every
+    container it plans, so this is that path, not Docker in general.
+    """
+    container = f"{prefix}-{uuid.uuid4().hex[:10]}"
+    port = _free_port()
+    run = _run_docker(
+        [
+            "run",
+            "-d",
+            "--name",
+            container,
+            "-p",
+            f"127.0.0.1:{port}:8001",
+            "-e",
+            "SERVER_HOST=0.0.0.0",
+            "-v",
+            f"{marm_data_dir}:/home/marm/.marm",
+            docker_image,
+        ],
+        timeout=90,
+    )
+    assert run.returncode == 0, run.stderr
+    return container, f"http://127.0.0.1:{port}"
+
+
+def test_docker_managed_keyless_start_is_key_enforced_not_loopback_fallback(
+    docker_image, marm_data_dir
+):
+    """A keyless start on the managed Docker path answers with the Bearer 401.
+
+    middleware/auth.py:16 documents a keyless mode that serves 127.0.0.1 and
+    401s everyone else. MARM's managed Docker command path does not reach it:
+    it sets SERVER_HOST=0.0.0.0, and at that host config/api_key_bootstrap.py:53
+    generates a key when none was supplied, so MARM_API_KEY is truthy whether or
+    not the key is then persisted (bootstrap keeps it in memory when file
+    protection fails). The contract pinned here is only that: an
+    unauthenticated request gets the key branch's 401, not the fallback's.
+    Persistence is a separate contract, covered by the next test.
+    """
+    container, base_url = _start_keyless_container(
+        docker_image, marm_data_dir, "marm-test-nokey"
+    )
+    try:
+        _wait_for_health(base_url)
+
+        unauthenticated = HTTP.get(
+            f"{base_url}/marm_log_show", params={"session_name": "main"}, timeout=5
+        )
+        assert unauthenticated.status_code == 401
+        # The two 401s differ only here: the key branch sends a challenge
+        # (auth.py:47), the loopback fallback (auth.py:26-36) sends none.
+        assert unauthenticated.headers.get("WWW-Authenticate") == "Bearer"
+    finally:
+        _run_docker(["rm", "-f", container], timeout=30)
+
+
+def test_docker_managed_keyless_start_persists_the_generated_key(
+    docker_image, marm_data_dir
+):
+    """On a writable data volume the generated key is persisted and usable.
+
+    The durability requirement, stated on its own so a failure names it: with
+    /home/marm/.marm mounted writable, bootstrap writes MARM_API_KEY to .env
+    and protects it, so the key survives a container restart. If persistence
+    is declined (file protection failed) the server is still key-enforced,
+    which the test above covers, and only this test fails.
+    """
+    container, base_url = _start_keyless_container(
+        docker_image, marm_data_dir, "marm-test-nokey-persist"
+    )
+    try:
+        _wait_for_health(base_url)
+
+        generated = _read_generated_key(container)
+        assert generated, "no key was persisted to the mounted data dir"
+
+        authenticated = HTTP.get(
+            f"{base_url}/marm_log_show",
+            params={"session_name": "main"},
+            headers={"Authorization": f"Bearer {generated}"},
+            timeout=5,
+        )
+        assert authenticated.status_code == 200
+    finally:
+        _run_docker(["rm", "-f", container], timeout=30)
+
+
+def _read_generated_key(container):
+    """MARM_API_KEY out of the .env the container wrote, read from inside it.
+
+    The file lands in the bind mount, but api_key_bootstrap.py:60 chmods it to
+    0600 and the container's non-root marm user owns it, so on a Linux host the
+    obvious read from the mount is a PermissionError rather than a key. Measured
+    on a runner: the host-side version of this failed exactly that way.
+    """
+    result = _run_docker(
+        ["exec", container, "cat", "/home/marm/.marm/.env"], timeout=20
+    )
+    if result.returncode != 0:
+        return ""
+    for line in result.stdout.splitlines():
+        if line.strip().startswith("MARM_API_KEY="):
+            return line.split("=", 1)[1].strip()
+    return ""
