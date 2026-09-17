@@ -4,7 +4,7 @@ import { Link, useLocation } from 'wouter';
 import { useOverview, isAuthError } from '@/hooks/use-marm-queries';
 import { SettingsDialog } from './SettingsDialog';
 import { TerminalDock, readPersistedDockOpen } from '@/components/terminal/TerminalDock';
-import { Settings, Database, Activity, Compass, Network, FolderCode, Sparkles, ServerCog, AppWindowMac, ChevronRight } from 'lucide-react';
+import { Settings, Database, Activity, Compass, Network, FolderCode, Sparkles, FlaskConical, ServerCog, AppWindowMac, ChevronRight } from 'lucide-react';
 import { cn } from '@/components/ui/core';
 
 const THEME_STORAGE_KEY = 'marm-console-accent';
@@ -88,6 +88,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     { name: 'Indexed Projects', href: '/projects', icon: FolderCode },
     { name: 'Project Explorer', href: '/explorer', icon: Compass },
     { name: 'Code Context', href: '/code-context', icon: Sparkles },
+    { name: 'Distill', href: '/distill', icon: FlaskConical },
     { name: 'System', href: '/system', icon: ServerCog },
   ];
 
