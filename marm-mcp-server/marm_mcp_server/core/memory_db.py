@@ -340,6 +340,8 @@ def init_database(db_path: str) -> None:
                 project TEXT,
                 context_type TEXT NOT NULL DEFAULT 'general',
                 applied_memory_id TEXT,
+                nudge_count INTEGER NOT NULL DEFAULT 0,
+                last_nudged_at TEXT,
                 expires_at TEXT NOT NULL,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
@@ -358,6 +360,18 @@ def init_database(db_path: str) -> None:
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_distill_staging_hash "
             "ON distill_staging(candidate_hash)"
         )
+        # Added with the review nudge; a store created before it needs them.
+        distill_cols = {
+            row[1]
+            for row in conn.execute("PRAGMA table_info(distill_staging)").fetchall()
+        }
+        if "nudge_count" not in distill_cols:
+            conn.execute(
+                "ALTER TABLE distill_staging "
+                "ADD COLUMN nudge_count INTEGER NOT NULL DEFAULT 0"
+            )
+        if "last_nudged_at" not in distill_cols:
+            conn.execute("ALTER TABLE distill_staging ADD COLUMN last_nudged_at TEXT")
 
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_log_entries_session "
