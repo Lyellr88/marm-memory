@@ -260,7 +260,7 @@ def test_call_tool_missing_arg_raises_with_hint(client):
 
 @requires_binary
 def test_timeout_does_not_kill_child(binary, monkeypatch):
-    """A slow-but-alive child must not be killed on timeout (finding 3):
+    """A slow-but-alive child must not be killed on timeout:
     killing it mid-call would destroy in-flight work (e.g. a long index run)
     and force a blind retry from zero. Force a deterministic timeout by
     monkeypatching _send_recv (not a real short call_timeout racing against
@@ -357,7 +357,7 @@ def test_start_after_close_does_not_spawn(monkeypatch):
 
 
 def test_list_tools_after_close_does_not_spawn(monkeypatch):
-    """The third public path into _spawn(), and the one no review flagged."""
+    """The third public path into _spawn()."""
     client = CbmClient(command=["unused"])
     spawned = _popen_recorder(monkeypatch)
     client.close()
@@ -608,13 +608,11 @@ def test_known_extras_are_not_required_to_start():
 
 
 def test_eof_error_carries_the_child_stderr_reason():
-    """A child that explains itself on stderr before dying must not be reported
-    as a bare EOF.
+    """A child that explains itself on stderr before dying must not be
+    reported as a bare EOF.
 
-    The binary refuses to start with a precise message when another daemon
-    holds a different cache directory. That text was drained to debug logs and
-    dropped from the exception, so the caller saw only "closed stdout (EOF)"
-    and had no way to learn what to do about it.
+    The refusal text is the actionable part; without it the caller sees only
+    "closed stdout (EOF)".
     """
     import sys
 
@@ -654,12 +652,10 @@ def _stderr_then_exit_command(text: str) -> list:
 def test_a_respawn_does_not_report_the_previous_child_stderr():
     """A real respawn, not a manual clear.
 
-    `_force_respawn()` kills the old child and calls `_spawn()` without joining
-    the old `_drain_stderr` thread, so that thread can still append after the
-    respawn begins. Isolation therefore cannot come from clearing shared state:
-    each spawn installs its own deque and hands that object to its own reader,
-    so a late write from the previous reader lands somewhere the current
-    `_stderr_context()` does not read.
+    `_force_respawn()` does not join the old drain thread, so that thread can
+    still append after the respawn begins. Each spawn therefore installs its
+    own deque, and a late write from the previous reader lands somewhere the
+    current `_stderr_context()` does not read.
     """
     from marm_graph.core.cbm_client import CbmClient, CbmError
 

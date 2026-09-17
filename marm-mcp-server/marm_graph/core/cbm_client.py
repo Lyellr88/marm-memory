@@ -183,13 +183,11 @@ class CbmClient:
         tail: "collections.deque[str]",
         done: "threading.Event",
     ) -> None:
-        """Continuously drain stderr so a full pipe buffer can't deadlock the child.
+        """Drain stderr so a full pipe buffer cannot deadlock the child.
 
-        The binary logs operational lines here (e.g. mem.init); route to debug.
-        A bounded tail is also retained so that if the child then dies, the
-        reason it printed can be attached to the error the caller sees. Without
-        that, a refusal as specific as "the active account daemon uses a
-        different cache directory" surfaces only as "closed stdout (EOF)".
+        Keeps a bounded tail so that if the child dies, the reason it printed
+        can be attached to the error the caller sees rather than being lost
+        behind "closed stdout (EOF)".
         """
         try:
             for raw in iter(pipe.readline, b""):
@@ -207,14 +205,10 @@ class CbmClient:
     def _stderr_context(self) -> str:
         """The child's last stderr lines, as a suffix for an error message.
 
-        Waits briefly for the drain thread when the child has already exited.
-        stdout and stderr are drained independently, so `_EOF` can reach
-        `_read_response` first and the refusal the child printed just before
-        dying would be lost -- the one message this mechanism exists to surface.
-
-        The wait is conditional on the process having exited, because stdout can
-        also close while the child is alive; waiting then would stall an error
-        path for the full timeout on a child that never closes stderr.
+        Waits for the drain thread only when the child has already exited:
+        stdout and stderr drain independently, so `_EOF` can arrive first and
+        lose the final line. Waiting unconditionally would stall the error path
+        on a live child that never closes stderr.
         """
         proc = self._proc
         done = self._stderr_done
