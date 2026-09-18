@@ -20,8 +20,10 @@ def _serve(monkeypatch, responses: dict):
     of the *other* paths they also serve.
     """
     monkeypatch.setattr(local_llm, "endpoint", lambda: "http://127.0.0.1:18080")
+    # `_get_at`, not `_get`: detection is parameterised by base URL so the
+    # server scan can reuse it against every candidate port.
     monkeypatch.setattr(
-        local_llm, "_get", lambda path, timeout=4.0: responses.get(path)
+        local_llm, "_get_at", lambda base, path, timeout=4.0: responses.get(path)
     )
 
 
@@ -190,3 +192,79 @@ def test_a_path_reported_by_the_runtime_wins_over_a_name_guess():
     model = {"name": "whatever-the-file-is-called.gguf", "path": "/models/m.gguf"}
     served = [{"id": "an-alias-sharing-no-words", "path": "/models/m.gguf"}]
     assert _served_id_for(model, served) == "an-alias-sharing-no-words"
+
+
+# --- finding the other servers on this machine ------------------------------
+
+
+def test_the_scan_never_probes_marms_own_ports(monkeypatch):
+    """MARM serves on 8001/8002, and asking yourself over HTTP from the loop
+    that would answer deadlocks until the timeout -- the defect that made
+    `/internal/runtime/settings` cost a full second. A scan that included them
+    would reintroduce it once per sweep."""
+    monkeypatch.setenv("SERVER_PORT", "8001")
+    monkeypatch.setenv("MARM_CONSOLE_PORT", "8002")
+    monkeypatch.setattr(
+        local_llm,
+        "KNOWN_PORTS",
+        ((8001, "self"), (8002, "console"), (1234, "LM Studio")),
+    )
+    monkeypatch.setattr(local_llm, "endpoint", lambda: None)
+
+    probed = []
+    monkeypatch.setattr(
+        local_llm, "_port_open", lambda port: (probed.append(port), False)[1]
+    )
+
+    result = local_llm.discover_servers(force=True)
+    assert 8001 not in probed and 8002 not in probed
+    assert probed == [1234]
+    assert result["servers"] == []
+
+
+def test_something_listening_that_is_not_an_llm_is_not_offered(monkeypatch):
+    """Syncthing and a dozen other things live on these ports.
+
+    Offering one as a candidate hands the reader an endpoint that cannot
+    generate, and they find out only when an answer never arrives.
+    """
+    monkeypatch.setattr(local_llm, "KNOWN_PORTS", ((8384, "not an llm"),))
+    monkeypatch.setattr(local_llm, "endpoint", lambda: None)
+    monkeypatch.setattr(local_llm, "_port_open", lambda _port: True)
+    monkeypatch.setattr(
+        local_llm, "_identify", lambda base, timeout=4.0: {"runtime": None}
+    )
+
+    assert local_llm.discover_servers(force=True)["servers"] == []
+
+
+def test_the_configured_endpoint_is_reported_even_when_dead(monkeypatch):
+    """ "The one you configured is not answering" is the most useful thing
+    this can say, so the configured port is always scanned."""
+    monkeypatch.setattr(local_llm, "KNOWN_PORTS", ())
+    monkeypatch.setattr(local_llm, "endpoint", lambda: "http://127.0.0.1:18080")
+    monkeypatch.setattr(local_llm, "_port_open", lambda _port: False)
+
+    result = local_llm.discover_servers(force=True)
+    assert 18080 in result["scanned_ports"]
+    assert result["configured_reachable"] is False
+
+
+def test_a_found_server_reports_what_it_serves(monkeypatch):
+    monkeypatch.setattr(local_llm, "KNOWN_PORTS", ((1234, "LM Studio"),))
+    monkeypatch.setattr(local_llm, "endpoint", lambda: None)
+    monkeypatch.setattr(local_llm, "_port_open", lambda _port: True)
+    monkeypatch.setattr(
+        local_llm,
+        "_identify",
+        lambda base, timeout=4.0: {
+            "runtime": "LM Studio",
+            "can_switch": True,
+            "served": [{"id": "gpt-oss-20b"}, {"id": "qwen3-14b"}],
+        },
+    )
+    (server,) = local_llm.discover_servers(force=True)["servers"]
+    assert server["url"] == "http://127.0.0.1:1234"
+    assert server["runtime"] == "LM Studio"
+    assert server["can_switch"] is True
+    assert server["models"] == ["gpt-oss-20b", "qwen3-14b"]

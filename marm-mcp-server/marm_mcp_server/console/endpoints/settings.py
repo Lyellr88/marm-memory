@@ -182,3 +182,14 @@ def update_llm_roots(payload: RuntimeLlmRootPayload) -> dict:
         payload.model_dump(),
         timeout=30.0,
     )
+
+
+@router.get("/api/settings/llm/servers")
+def get_llm_servers(refresh: bool = False) -> dict:
+    """Which local model servers are running, by scanning loopback ports."""
+    return _proxy(
+        mcp_client.get,
+        "internal/runtime/llm/servers",
+        query={"refresh": str(refresh).lower()},
+        timeout=20.0,
+    )

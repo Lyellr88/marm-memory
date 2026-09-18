@@ -114,6 +114,7 @@ class RuntimeLlmPayload(BaseModel):
 
     enabled: bool | None = None
     model: str | None = Field(default=None, max_length=512)
+    endpoint: str | None = Field(default=None, max_length=512)
 
 
 class RuntimeLlmRootPayload(BaseModel):

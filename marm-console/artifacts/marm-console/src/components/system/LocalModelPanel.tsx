@@ -28,6 +28,7 @@ import {
 } from '@/hooks/use-marm-queries';
 import { CopyButton } from '@/components/code-context/shared';
 import { GpuList, formatBytes } from './gpu';
+import { ServerPicker } from './ServerPicker';
 import type { HardwareStatus, LocalLlmStatus } from '@/lib/marm-types';
 
 /** The command that actually changes a llama.cpp model.
@@ -430,8 +431,8 @@ export function LocalModelPanels({
             </>
           ) : (
             <>
-              No endpoint is configured. Set <code className="font-mono text-xs">MARM_LLM_URL</code>{' '}
-              to a local OpenAI-compatible server to enable written answers.
+              No endpoint is configured. Scan below for a local server, or set{' '}
+              <code className="font-mono text-xs">MARM_LLM_URL</code> to one.
             </>
           )
         }
@@ -486,7 +487,7 @@ export function LocalModelPanels({
               <div className="mt-1 font-mono text-[10px] text-muted-foreground">{llm.endpoint}</div>
             </div>
 
-            <div className="mt-4">
+            <div className="mt-4 border-t border-border/60 pt-4">
               <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                 Model
               </div>
@@ -494,6 +495,12 @@ export function LocalModelPanels({
             </div>
           </>
         )}
+
+        {/* Outside the `configured` gate on purpose: a deployment with no
+            endpoint set is precisely the one that needs to find a server. */}
+        <div className={cn(llm.configured && 'mt-4 border-t border-border/60 pt-4')}>
+          <ServerPicker llm={llm} />
+        </div>
       </Panel>
 
       <Panel

@@ -12,6 +12,18 @@ from marm_mcp_server.services import local_llm
 
 
 @pytest.fixture(autouse=True)
+def _no_saved_endpoint(monkeypatch):
+    """Isolate these from the durable endpoint override.
+
+    `endpoint()` prefers the saved flag over `MARM_LLM_URL`, which is the whole
+    point of the Console picker -- but it also means a value left in the real
+    database silently wins over the URL these tests patch in, and the loopback
+    assertions then pass or fail on the developer's own configuration.
+    """
+    monkeypatch.setattr(local_llm, "_saved_endpoint", lambda: None)
+
+
+@pytest.fixture(autouse=True)
 def _clear_probe_cache():
     local_llm._probe_cache["at"] = 0.0
     local_llm._probe_cache["model"] = None
