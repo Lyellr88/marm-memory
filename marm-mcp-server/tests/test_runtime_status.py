@@ -39,3 +39,79 @@ def test_passive_status_does_not_start_graph(monkeypatch, tmp_path):
     assert result["projects"] == {"state": "runtime_stopped"}
     assert result["memory"]["exists"] is False
     assert not memory_path.exists()
+
+
+# --- the runtime must never probe itself over HTTP -------------------------
+
+
+def test_inspect_runtime_does_not_probe_itself(monkeypatch):
+    """Answering the probe is itself the proof, so never send one.
+
+    `request_runtime` blocks, and an async endpoint calling it blocks the very
+    event loop that would have to serve the probe. Measured before the fix:
+    `/internal/runtime/settings` took 1.04s -- the full timeout -- on a page
+    that polls every 5s, and a concurrent request to any other route stalled
+    922ms behind it. The probe then returned nothing, so a healthy server
+    reported itself as not ready.
+    """
+    import os
+
+    from marm_mcp_server.core import runtime_manager
+
+    monkeypatch.setattr(
+        runtime_manager,
+        "read_state",
+        lambda: {
+            "pid": os.getpid(),
+            "runtime_id": "rid",
+            "host": "127.0.0.1",
+            "port": 8001,
+        },
+    )
+
+    def fail(*_args, **_kwargs):
+        raise AssertionError("inspect_runtime probed its own process over HTTP")
+
+    monkeypatch.setattr(runtime_manager, "request_runtime", fail)
+
+    result = runtime_manager.inspect_runtime()
+    assert result["state"] == "ready"
+    assert result["identity_matches"] is True
+    # Callers read this as though it came over the wire.
+    assert result["runtime"]["write_queue"] is not None
+    assert "graph" in result["runtime"], (
+        "full_status() reads `graph` from here and otherwise invents "
+        "`runtime_stopped` for a running server"
+    )
+
+
+def test_inspect_runtime_still_probes_another_process(monkeypatch):
+    """The CLI runs in a separate process, where the probe is the only way to
+    know. That path must be left alone."""
+    import os
+
+    from marm_mcp_server.core import runtime_manager
+
+    monkeypatch.setattr(
+        runtime_manager,
+        "read_state",
+        lambda: {
+            "pid": os.getpid() + 1,
+            "runtime_id": "rid",
+            "host": "127.0.0.1",
+            "port": 8001,
+        },
+    )
+    monkeypatch.setattr(runtime_manager, "process_matches", lambda _state: False)
+
+    probed = []
+
+    def record(path, **kwargs):
+        probed.append(path)
+        return None
+
+    monkeypatch.setattr(runtime_manager, "request_runtime", record)
+
+    result = runtime_manager.inspect_runtime()
+    assert probed == ["/internal/runtime/status"]
+    assert result["state"] == "stale"

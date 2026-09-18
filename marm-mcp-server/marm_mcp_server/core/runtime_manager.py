@@ -200,10 +200,64 @@ def process_matches(state: dict[str, Any]) -> bool:
         return False
 
 
+def _own_runtime_snapshot(state: dict[str, Any]) -> dict[str, Any]:
+    """What `/internal/runtime/status` would have answered about this process.
+
+    Must stay field-for-field equivalent to that endpoint, because callers read
+    it as though it came over the wire -- `full_status()` reads `graph` from
+    here and falls back to `{"state": "runtime_stopped"}`, which is what it
+    reported for a perfectly healthy server while the self-probe was timing out.
+    """
+    from ..config import settings
+    from .graph_supervisor import graph_supervisor
+    from .memory import memory
+
+    queue = memory._write_queue
+    return {
+        "status": "ready",
+        "state": "ready",
+        "service": "marm-memory-runtime",
+        "runtime_id": state.get("runtime_id"),
+        "pid": os.getpid(),
+        "version": SERVER_VERSION,
+        "profile": os.environ.get("MARM_RUNTIME_PROFILE", "standard"),
+        "write_queue": {
+            "enabled": settings.WRITE_QUEUE_ENABLED,
+            "running": bool(
+                queue and queue._worker_task and not queue._worker_task.done()
+            ),
+            "depth": queue.queue.qsize() if queue else 0,
+            "capacity": queue.queue.maxsize if queue else settings.MAX_QUEUE_SIZE,
+            "stopping": queue._stopping if queue else False,
+        },
+        "graph": graph_supervisor.snapshot(),
+    }
+
+
 def inspect_runtime() -> dict[str, Any]:
     state = read_state()
     if state is None:
         return {"state": "stopped", "managed": False}
+
+    # Answering is itself the proof, so never probe over HTTP when the runtime
+    # being inspected is THIS process. `request_runtime` blocks, and an async
+    # endpoint calling it blocks the very event loop that would serve the
+    # probe: the request can never be answered, so it spends the full timeout
+    # and then reports the running server as not ready. Measured on
+    # `/internal/runtime/settings` -- 1.04s per call, on a page that polls
+    # every 5s, and a concurrent request to any other route stalled 922ms
+    # behind it. Every other caller here is a separate process (the CLI), where
+    # the probe is the only way to know and is left alone.
+    if state.get("pid") == os.getpid():
+        return {
+            "state": "ready",
+            "managed": True,
+            "identity_matches": True,
+            "process_alive": True,
+            "metadata": state,
+            "runtime": _own_runtime_snapshot(state),
+        }
+
     process_alive = process_matches(state)
     remote = request_runtime(
         "/internal/runtime/status",
