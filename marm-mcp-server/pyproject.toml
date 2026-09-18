@@ -68,6 +68,11 @@ dev = [
     "pytest>=7.0.0",
     "pytest-asyncio>=0.21.0",
     "pytest-cov>=4.0.0",
+    # starlette 1.x drives TestClient with httpx2 and warns on every import when
+    # only httpx 0.x is present. The runtime deliberately stays on httpx<1.0.0,
+    # so this is a test-only dependency that keeps the suite's output clean
+    # without moving the runtime's HTTP client.
+    "httpx2>=2.13.0",
     "build>=1.2.2",
     "jsonschema>=4.0.0",
     "requests>=2.31.0",
@@ -109,6 +114,27 @@ ignore_missing_imports = true
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 addopts = "-p no:cacheprovider"
+filterwarnings = [
+    # starlette's own module-level annotation reads the deprecated
+    # `anyio.abc.BlockingPortal` alias (starlette/testclient.py:53), so the
+    # warning fires on import of starlette.testclient and no caller can avoid
+    # it. starlette 1.6.0 and anyio 4.15.1 are both the latest releases, so
+    # there is nothing to upgrade to. This is suppression, not a fix: delete it
+    # and re-run once starlette moves to anyio.from_thread.BlockingPortal.
+    # Scoped to that exact message and module so it cannot hide anything else.
+    "ignore:The anyio\\.abc\\.BlockingPortal alias is deprecated:DeprecationWarning:starlette\\.testclient",
+    # fastapi-mcp 0.4.0 defines AuthConfig by overriding the deprecated
+    # `__get_pydantic_core_schema__` (fastapi_mcp/types.py:172), so the warning
+    # fires on any import of our server. 0.4.0 is the only release at or above
+    # our floor, so again there is nothing to upgrade to. Same rule as above:
+    # this is suppression, and it goes away when fastapi-mcp stops overriding
+    # that method -- re-check on the next release rather than leaving it here.
+    # No module scope here: the warning is issued by pydantic/main.py but pytest
+    # attributes it to pydantic._internal._generate_schema, so a module regex
+    # matching the raising file silently fails to apply. The message is the
+    # specific part and carries the scoping on its own.
+    "ignore:The `__get_pydantic_core_schema__` method of the `BaseModel` class is deprecated:DeprecationWarning",
+]
 tmp_path_retention_policy = "none"
 markers = [
     "docker: Docker transport tests skipped by scripts/run-tests.py unless --docker is used",
