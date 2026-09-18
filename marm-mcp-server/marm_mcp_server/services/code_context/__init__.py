@@ -9,8 +9,7 @@ words", which is not "which symbols matter here" -- a private helper whose name
 happens to match will outrank the class everything calls.
 """
 
-import os
-
+from ...config.env_parsing import _safe_int
 from .backend import GraphUnavailable, LocalBackend
 from .compose import Context, Symbol, build
 from .format import render
@@ -21,7 +20,10 @@ from .project import short_name
 #: 1 is right for an agent: `markdown` already contains the source and the
 #: memory text, so returning the structured arrays as well means paying for the
 #: same bytes twice. The Console asks for 3 because it lays out the parts.
-DEFAULT_DETAIL = max(1, min(3, int(os.environ.get("MARM_CODE_CONTEXT_DETAIL") or 1)))
+# Guarded: a typo in an operator-facing variable must not stop the server
+# starting. _safe_int warns and falls back, which is the convention the rest
+# of the settings layer already uses.
+DEFAULT_DETAIL = max(1, min(3, _safe_int("MARM_CODE_CONTEXT_DETAIL", 1)))
 
 __all__ = [
     "DEFAULT_DETAIL",

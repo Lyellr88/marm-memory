@@ -99,8 +99,11 @@ async def test_call_graph_promotes_a_symbol_the_search_ranked_lower(repo):
         _row("caller", "proj.m.caller", 7, 8),
         _row("central", "proj.m.central", 4, 5),
     ]
+    # Keyed by the QUALIFIED name, because that is what build() traces. Keying it
+    # by the bare tail made the stub return {} -- no promotion happened at all,
+    # and the assertion below passed only because `central` was already a seed.
     trace = {
-        "caller": {
+        "proj.m.caller": {
             "callees": [
                 {
                     "qualified_name": "proj.m.central",
@@ -112,8 +115,21 @@ async def test_call_graph_promotes_a_symbol_the_search_ranked_lower(repo):
         }
     }
     ctx = await build(Stub(repo, results=results, trace=trace), "caller", cwd=str(repo))
-    names = [s.name for s in ctx.symbols]
-    assert "central" in names
+    assert "central" in [s.name for s in ctx.symbols]
+
+    # Membership alone proves nothing -- `central` is already a seed, so it is
+    # present whether or not the call graph was consulted. The promotion is the
+    # change in relative score, so the test compares the two rankings directly.
+    baseline = await build(
+        Stub(repo, results=results, trace={}), "caller", cwd=str(repo)
+    )
+
+    def ratio(context):
+        by_name = {s.name: s.score for s in context.symbols}
+        return by_name["central"] / by_name["caller"]
+
+    # Measured: 0.50 on search order alone, ~0.95 once the callee edge is used.
+    assert ratio(ctx) > ratio(baseline) * 1.5
 
 
 @pytest.mark.asyncio
@@ -121,7 +137,10 @@ async def test_budget_is_respected(repo):
     (repo / "m.py").write_text("\n".join(f"line {i}" for i in range(400)))
     c = Stub(repo, results=[_row("big", "proj.m.big", 1, 400)])
     ctx = await build(c, "big", cwd=str(repo), budget=50)
-    assert sum(len(s.source) for s in ctx.symbols) < 4000
+    # The contract is a CHARACTER budget. Before the per-snippet clamp this could
+    # only be asserted loosely, because one 60-line snippet was appended whole
+    # before `spent` was re-checked.
+    assert sum(len(s.source) for s in ctx.symbols) <= 50
 
 
 @pytest.mark.asyncio
@@ -640,3 +659,68 @@ async def test_the_project_name_counts_as_a_structural_anchor():
     symbols = [_sym("resolve", "marm_ctx/project.py")]
     rows = [{"content": "marm-stack now pins its ruff rule set in ruff.toml"}]
     assert len(_relevant_memories(rows, symbols, {"root_path": "/x/MARM-Stack"})) == 1
+
+
+def test_snippet_read_refuses_a_path_outside_the_project_root(tmp_path):
+    """The engine reports file_path; this process opens it and returns the text
+    to the MCP caller, so containment is checked rather than assumed.
+
+    os.path.join returns an absolute second argument unchanged, and does nothing
+    about `..` or a symlink pointing out of the tree.
+    """
+    from marm_mcp_server.services.code_context.snippets import read
+
+    root = tmp_path / "repo"
+    (root / "pkg").mkdir(parents=True)
+    (root / "pkg" / "ok.py").write_text("line one\nline two\n")
+    outside = tmp_path / "elsewhere"
+    outside.mkdir()
+    (outside / "secret.txt").write_text("SECRET\n")
+    (root / "link.txt").symlink_to(outside / "secret.txt")
+
+    assert read(str(root), "pkg/ok.py", 1, 2)[0] == "line one\nline two"
+    assert read(str(root), str(outside / "secret.txt"), 1, 1)[0] == ""
+    assert read(str(root), "../elsewhere/secret.txt", 1, 1)[0] == ""
+    assert read(str(root), "link.txt", 1, 1)[0] == ""
+
+
+@pytest.mark.asyncio
+async def test_a_dead_graph_is_not_an_empty_result(repo):
+    """`do_lookup` is wrapped in @safe, so a failure arrives as a payload rather
+    than an exception. Reading it as zero results would report a successful
+    composition with no symbols -- indistinguishable from a genuine miss."""
+    from marm_mcp_server.services.code_context.backend import (
+        GraphUnavailable,
+        LocalBackend,
+    )
+
+    backend = LocalBackend.__new__(LocalBackend)
+    backend._client = lambda: None  # type: ignore[method-assign]
+
+    import marm_graph.core.tool_router as R
+
+    original = R.do_lookup
+    R.do_lookup = lambda *_a, **_k: {"status": "error", "error": "engine gone"}
+    try:
+        with pytest.raises(GraphUnavailable):
+            backend.search("proj", "anything")
+    finally:
+        R.do_lookup = original
+
+
+@pytest.mark.asyncio
+async def test_a_missed_qualified_trace_is_not_retried_by_bare_name(repo):
+    """Retrying with the bare tail can resolve a DIFFERENT symbol that owns that
+    name elsewhere and splice its call graph into the ranking. Skipping loses
+    edges; guessing invents them."""
+    traced: list[str] = []
+
+    class _Tracer(Stub):
+        def trace(self, project, symbol, depth=2, direction="both"):
+            traced.append(symbol)
+            return {"status": "not_found"}
+
+    results = [_row("handler", "proj.a.handler", 1, 2)]
+    await build(_Tracer(repo, results=results), "handler", cwd=str(repo))
+
+    assert traced == ["proj.a.handler"], f"unexpected trace calls: {traced}"

@@ -13,11 +13,32 @@ import os
 MAX_LINES = 60
 
 
+def _contained(root_path: str, file_path: str) -> "str | None":
+    """Resolve `file_path` under `root_path`, or None if it escapes.
+
+    `os.path.join` returns the second argument unchanged when it is absolute, and
+    does nothing about `..` or a symlink pointing out of the tree. The text this
+    reads is handed back to the MCP caller, so the path has to be checked rather
+    than trusted -- the engine indexes the repository, but nothing here re-derives
+    that the row it returned still names a file inside it.
+    """
+    try:
+        root = os.path.realpath(root_path)
+        full = os.path.realpath(os.path.join(root, file_path))
+    except (OSError, ValueError):
+        return None
+    if full == root or full.startswith(root + os.sep):
+        return full
+    return None
+
+
 def read(
     root_path: str, file_path: str, start: int, end: int, *, max_lines: int = MAX_LINES
 ) -> tuple[str, bool]:
     """Return (text, truncated). Line numbers are 1-based and inclusive."""
-    full = os.path.join(root_path, file_path)
+    full = _contained(root_path, file_path)
+    if full is None:
+        return "", False
     try:
         with open(full, "r", encoding="utf-8", errors="replace") as fh:
             lines = fh.readlines()

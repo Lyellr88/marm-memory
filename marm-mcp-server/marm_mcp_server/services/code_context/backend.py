@@ -16,6 +16,7 @@ import threading
 import time
 from typing import Any, Optional
 
+from ...config.env_parsing import _safe_float
 from ...core import code_project_bindings
 from ...core.graph_supervisor import graph_supervisor
 
@@ -36,7 +37,7 @@ class GraphUnavailable(RuntimeError):
 # index or delete visible immediately, and the TTL bounds staleness for the
 # paths that mutate the list without going through this process at all (the
 # auto-index poller, a second client, a `marm-memory` CLI call).
-_PROJECTS_TTL = float(os.environ.get("MARM_CODE_CONTEXT_PROJECTS_TTL") or 30)
+_PROJECTS_TTL = _safe_float("MARM_CODE_CONTEXT_PROJECTS_TTL", 30.0)
 _projects_lock = threading.Lock()
 _projects_cache: dict[str, Any] = {"at": 0.0, "value": None}
 
@@ -94,7 +95,6 @@ class LocalBackend:
         query: str,
         *,
         limit: int = 25,
-        semantic: Optional[str] = None,
     ) -> list[dict]:
         from marm_graph.core import tool_router as R
         from marm_graph.core.models import CodeLookupRequest
@@ -102,8 +102,15 @@ class LocalBackend:
         req = CodeLookupRequest(
             project=project, query=query, kind="symbol", limit=limit
         )
-        out = R.do_lookup(self._client(), req)
-        return (out or {}).get("results", []) or []
+        out = R.do_lookup(self._client(), req) or {}
+        # do_lookup is wrapped in @safe, so a dead engine or a subprocess failure
+        # arrives as {"status": "error"} rather than raising. Reading that as an
+        # empty result turns "the graph is down" into a successful composition
+        # with no symbols, which is the one answer a caller cannot tell from a
+        # genuine miss.
+        if out.get("status") == "error":
+            raise GraphUnavailable(str(out.get("error") or "code graph lookup failed"))
+        return out.get("results", []) or []
 
     def trace(
         self, project: str, symbol: str, *, depth: int = 2, direction: str = "both"
@@ -162,7 +169,6 @@ class LocalBackend:
         "no links", not an error, because the graph is useful long before
         anything has been linked to it.
         """
-        import os
 
         from ...core.concept_db import ConceptDB, get_concept_db_path
 

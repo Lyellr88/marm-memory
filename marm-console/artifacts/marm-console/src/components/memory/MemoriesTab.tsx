@@ -81,7 +81,6 @@ const ALL_PROJECTS = '__all__';
 
 export function MemoriesTab() {
   const [params, setParams] = useState<MemoryListParams>({ limit: MEMORY_PAGE_SIZE, offset: 0 });
-  const { data, isLoading, isFetching } = useMemories(params);
   const { data: filters } = useFilters();
   // Scope to ONE project by default, chosen once the filter list arrives.
   // Loading every project was the previous behaviour and is still available,
@@ -90,6 +89,12 @@ export function MemoriesTab() {
   // scope, and distillation makes rows cheaper to create than ever.
   const [scopedAll, setScopedAll] = useState(false);
   const { data: overview } = useOverview();
+  // Hold the first request until the scope is settled. The default-project
+  // effect below cannot influence the render that would already have started an
+  // all-project listing, and that listing is the expensive one -- it scales with
+  // every row in the store, which is exactly what scoping exists to avoid.
+  const scopeSettled = scopedAll || !!params.project || !!filters;
+  const { data, isLoading, isFetching } = useMemories(params, scopeSettled);
   useEffect(() => {
     if (scopedAll || params.project || !filters?.projects?.length) return;
     setParams(prev => ({ ...prev, project: filters.projects[0], offset: 0 }));

@@ -48,6 +48,7 @@ export function ComposeAction({
       variant="outline"
       className={className}
       title={`Compose context for ${qualifiedName} — you can edit the question before it runs`}
+      aria-label={`Compose context for ${qualifiedName}`}
       onClick={() => {
         const params = new URLSearchParams({ task: taskForSymbol(qualifiedName) });
         if (project) params.set('project', project);

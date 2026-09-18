@@ -71,9 +71,9 @@ export function useFilters() {
 }
 
 // --- Memory ---
-export function useMemories(params?: MemoryListParams) {
+export function useMemories(params?: MemoryListParams, enabled = true) {
   const { baseUrl, client } = useMarmConfig();
-  return useQuery({ queryKey: queryKeys.memories(baseUrl, params), queryFn: () => client.listMemories(params) });
+  return useQuery({ queryKey: queryKeys.memories(baseUrl, params), queryFn: () => client.listMemories(params), enabled });
 }
 
 export function useMemory(id: MemoryId) {

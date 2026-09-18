@@ -139,10 +139,16 @@ export function CodeContextPage() {
     if (autoRan.current || params.get('run') !== '1') return;
     const seeded = params.get('task')?.trim();
     if (!seeded) return;
+    // A link without ?project must wait for the default-project effect above.
+    // Composing on the first render would send the empty string, and the server
+    // then resolves the project from the CONSOLE's working directory -- which is
+    // wherever the service was started, not the repository the link meant.
+    const target = params.get('project') ?? project;
+    if (!target) return;
     autoRan.current = true;
-    compose(seeded, params.get('project') ?? project, Number(params.get('budget')) || DEFAULT_BUDGET);
+    compose(seeded, target, Number(params.get('budget')) || DEFAULT_BUDGET);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params]);
+  }, [params, project]);
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -296,7 +302,11 @@ export function CodeContextPage() {
                     onClick={() => {
                       const raised = Math.min(budget * 2, MAX_BUDGET);
                       setBudget(raised);
-                      compose(task.trim() || result.task || '', project, raised);
+                      // The request that produced THIS result, not whatever is
+                      // in the form now. The control says "recompose", so
+                      // editing the box first must not silently change what is
+                      // re-run under that label.
+                      compose(result.task || task.trim(), result.project?.name || project, raised);
                     }}
                   >
                     Raise to {Math.min(budget * 2, MAX_BUDGET).toLocaleString()} and recompose

@@ -772,7 +772,8 @@ export interface CodeContextSymbol {
   score: number;
   seeded: boolean;
   truncated: boolean;
-  source: string;
+  /** Present only at detail level 3; `serialise` omits it below that. */
+  source?: string;
   provenance: CodeContextProvenance | null;
 }
 

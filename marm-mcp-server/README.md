@@ -33,7 +33,7 @@ mcp-name: io.github.Lyellr88/marm-mcp-server
 - [Performance & Scaling Benchmarks](#performance--scaling-benchmarks)
 - [MCP Client Setup](#mcp-client-setup-for-http--stdio)
 - [Runtime CLI Commands](#runtime-cli-commands)
-- [Complete MCP Tool Suite](#complete-mcp-tool-suite-14-tools)
+- [Complete MCP Tool Suite](#complete-mcp-tool-suite-15-tools)
 - [Using MARM: Talk, Don't Call Tools](#using-marm-talk-dont-call-tools)
 - [Understanding MARM Memory](#understanding-marm-memory)
 - [Knowledge Graphs: Code & Concepts](#knowledge-graphs-code--concepts)
@@ -87,7 +87,7 @@ marm-memory gives your agents a private, shared memory for the context that norm
 It brings three things together:
 
 - 🧠 **Core Memory (7 tools)** stores conversations, notes, notebook entries, and summaries so they stay searchable.
-- 💻 **Code Graph (5 tools)** maps your repository so agents can find symbols, follow code paths, and understand the project without rereading it all. Point it at a repo once and it keeps itself current as you work.
+- 💻 **Code Graph (6 tools)** maps your repository so agents can find symbols, follow code paths, and understand the project without rereading it all. Point it at a repo once and it keeps itself current as you work.
 - 🧩 **Concept Graph (2 tools)** connects people, decisions, errors, and ideas from your stored memories, with links back to relevant code when available. It builds itself as you store memories.
 
 All 15 tools work over HTTP and STDIO. Your agents share the same local memory across sessions instead of starting from scratch each time. The bundled Console App provides a browsable view of **Memories**, the **Knowledge Graph**, and **Indexed Projects**, including progress for graph builds and repository indexing. Indexing a repository creates its independent Code Graph, which you can explore from Knowledge Graph → Code Explorer even before storing any memories.
@@ -695,7 +695,7 @@ The AI agent will automatically use the appropriate tools. Manual tool access is
 | ------ | -------------- | ---------------- |
 | `marm_graph_index` | Index a repo into the code-structure graph, check status, list projects, or turn automatic re-indexing on and off | `repo_path`, `project`, `action` |
 | `marm_code_lookup` | Find symbols, text patterns, or a symbol's source; use instead of grep/glob | `kind="auto"\|"symbol"\|"text"\|"snippet"` |
-| `marm_code_context` | Composed context for a task in one call: symbols ranked by personalised PageRank, their source read from disk, and what memory records about them | `task`, `project`, `cwd`, `budget` |
+| `marm_code_context` | Composed context for a task in one call: symbols ranked by personalised PageRank, their source read from disk, and what memory records about them | `task`, `project`, `cwd`, `budget`, `detail` (1-3, default from `MARM_CODE_CONTEXT_DETAIL`), `include_graph` (default `false`) |
 | `marm_graph_trace` | Trace call paths and data flow from a function | `direction`, `mode` |
 | `marm_graph_architecture` | Architecture overview: modules, node/edge breakdown, schema | `project` |
 | `marm_graph_impact` | Blast radius of code changes: git diff → affected symbols + risk | `since`, `base_branch`, `depth` |
@@ -996,7 +996,7 @@ Packaged docs are indexed into the `marm_system` memory namespace on startup and
 | `COMPACTION_TRIGGER_COUNT` | `5` | Writes per session before a compaction pass. A maintenance pass also runs on the scheduler interval, so a session that stops being written to is still scanned once its memories age past `COMPACTION_MIN_AGE_HOURS` |
 | `COMPACTION_SIMILARITY_THRESHOLD` / `COMPACTION_MIN_CLUSTER_SIZE` / `COMPACTION_MIN_AGE_HOURS` | `0.88` / `3` / `24` | Cluster detection gates |
 | `COMPACTION_STAGING_TTL_HOURS` | `168` | How long staged summaries wait before expiring |
-| `GRAPH_ENABLED` | `true` | Kill switch for the 5 code-graph tools |
+| `GRAPH_ENABLED` | `true` | Kill switch for the 6 code-graph tools |
 | `GRAPH_AUTO_INDEX` | `true` | Automatic re-indexing of repos already in the code graph. A saved switch from `projects auto off` or `marm_graph_index(action="auto_off")` overrides this, so a value set here cannot re-enable what a user turned off |
 | `GRAPH_AUTO_INDEX_DEBOUNCE_SECONDS` | `2` | Quiet period after a watcher event before a repo is evaluated, so a burst of saves becomes one re-index. Minimum 0.5 |
 | `GRAPH_AUTO_INDEX_RECONCILE_SECONDS` | `300` | Fallback pass that catches a missed watcher event, covers a filesystem that cannot be watched, and is the only trigger for a directory that is not a git repo. Minimum 60. Replaces the deprecated `GRAPH_AUTO_INDEX_FULL_INTERVAL`, whose value carries over automatically if this is unset. `GRAPH_AUTO_INDEX_INTERVAL` (the old fixed poll) is deprecated and no longer read for anything but a warning |

@@ -254,10 +254,11 @@ async def build(
     name, root = chosen["name"], chosen.get("root_path", "")
     ctx = Context(project=chosen, task=task)
 
-    # Seeding on the raw sentence lets BM25 score snake_case test names that
-    # are mostly English filler; the semantic side still gets the full task.
+    # Seeding on the raw sentence lets BM25 score snake_case test names that are
+    # mostly English filler. Seeding is lexical: the engine's lookup has no
+    # semantic field, and claiming otherwise is what the review caught.
     seeds_rows = await asyncio.to_thread(
-        client.search, name, seed_query(task), limit=SEED_LIMIT, semantic=task
+        client.search, name, seed_query(task), limit=SEED_LIMIT
     )
     ctx.seed_count = len(seeds_rows)
     by_qn: dict[str, Symbol] = {}
@@ -288,10 +289,11 @@ async def build(
             payload = await asyncio.to_thread(
                 client.trace, name, s.qualified_name, depth=TRACE_DEPTH
             )
-            if payload.get("status") in ("ambiguous", "not_found"):
-                payload = await asyncio.to_thread(
-                    client.trace, name, s.name, depth=TRACE_DEPTH
-                )
+            # No bare-name retry. A qualified trace that misses means this
+            # symbol's neighbourhood is unknown; retrying with the bare tail can
+            # resolve to a DIFFERENT symbol that happens to own that name
+            # elsewhere in the project and splice its call graph into the
+            # ranking. Skipping loses edges; guessing invents them.
             if payload.get("status") in ("ambiguous", "not_found"):
                 continue
         except GraphUnavailable:
@@ -354,7 +356,16 @@ async def build(
         text, truncated = read(root, s.file_path, s.start_line, s.end_line)
         if not text:
             continue
-        s.source, s.truncated = dedent_block(text), truncated
+        block = dedent_block(text)
+        # budget is a CHARACTER budget, and read() limits lines, not characters.
+        # Appending a whole 60-line snippet and only then checking `spent` lets a
+        # single large symbol overshoot by thousands of characters, so the clamp
+        # has to happen before the append rather than between symbols.
+        room = budget - spent
+        if len(block) > room:
+            block = block[:room]
+            truncated = True
+        s.source, s.truncated = block, truncated
         spent += len(s.source)
         ctx.symbols.append(s)
         if spent >= budget:

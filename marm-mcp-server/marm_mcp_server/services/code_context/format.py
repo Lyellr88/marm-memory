@@ -40,6 +40,21 @@ def _lang(path: str) -> str:
     return ""
 
 
+def _fence_for(source: str) -> str:
+    """A fence longer than the longest backtick run inside the source.
+
+    Source that contains a triple-backtick line -- a Markdown example, a docstring
+    with a fenced block -- would otherwise close the fence early, and the rest of
+    the snippet would be rendered as prose in the agent-facing Markdown.
+    """
+    longest = 0
+    run = 0
+    for ch in source:
+        run = run + 1 if ch == "`" else 0
+        longest = max(longest, run)
+    return "`" * max(3, longest + 1)
+
+
 def render(ctx: Context) -> str:
     out: list[str] = []
     name = short_name(ctx.project)
@@ -98,11 +113,12 @@ def render(ctx: Context) -> str:
         out.append("### Code")
         for s in ctx.symbols:
             out.append(f"#### {s.name} — `{s.file_path}:{s.start_line}`")
-            out.append(f"```{_lang(s.file_path)}")
+            fence = _fence_for(s.source)
+            out.append(f"{fence}{_lang(s.file_path)}")
             out.append(s.source)
             if s.truncated:
                 out.append("# ... truncated ...")
-            out.append("```")
+            out.append(fence)
             out.append("")
 
     if not ctx.symbols:
