@@ -130,7 +130,12 @@ export function CodeContextPage() {
   const truncated = notes.some((note) => note.includes('budget'));
   const recallUnavailable = notes.some((note) => note.includes('recall unavailable'));
 
+  // The budget that produced the displayed result. `result` carries task and
+  // project but not budget, and reading the live form value meant the
+  // truncation notice and its button described a request that had not run.
+  const [composedBudget, setComposedBudget] = useState(DEFAULT_BUDGET);
   const compose = (nextTask: string, nextProject: string, nextBudget: number) => {
+    setComposedBudget(nextBudget);
     build.mutate({
       task: nextTask,
       project: nextProject && nextProject !== AUTO_PROJECT ? nextProject : null,
@@ -319,7 +324,7 @@ export function CodeContextPage() {
                     variant="outline"
                     className="ml-auto"
                     onClick={() => {
-                      const raised = Math.min(budget * 2, MAX_BUDGET);
+                      const raised = Math.min(composedBudget * 2, MAX_BUDGET);
                       setBudget(raised);
                       // The request that produced THIS result, not whatever is
                       // in the form now. The control says "recompose", so
@@ -328,7 +333,7 @@ export function CodeContextPage() {
                       compose(result.task || task.trim(), result.project?.name || project, raised);
                     }}
                   >
-                    Raise to {Math.min(budget * 2, MAX_BUDGET).toLocaleString()} and recompose
+                    Raise to {Math.min(composedBudget * 2, MAX_BUDGET).toLocaleString()} and recompose
                   </Button>
                 )}
               </div>

@@ -96,12 +96,19 @@ export function DistillPage() {
       : 'The distil request failed.'
     : null;
 
+  // useMutation keeps success state, so after an apply succeeds `apply.isSuccess`
+  // stays true and would outrank a later discard. Compare when each last
+  // settled and report the most recent one.
   const lastAction =
-    apply.isSuccess && apply.data?.memory_id
-      ? `Kept. Written to memory as ${apply.data.memory_id}.`
-      : discard.isSuccess
-        ? 'Discarded. It will not be proposed again.'
-        : null;
+    apply.isSuccess || discard.isSuccess
+      ? (apply.submittedAt ?? 0) >= (discard.submittedAt ?? 0)
+        ? apply.isSuccess && apply.data?.memory_id
+          ? `Kept. Written to memory as ${apply.data.memory_id}.`
+          : null
+        : discard.isSuccess
+          ? 'Discarded. It will not be proposed again.'
+          : null
+      : null;
 
   return (
     <div className="page-enter flex h-full flex-col overflow-hidden p-7 xl:p-8">

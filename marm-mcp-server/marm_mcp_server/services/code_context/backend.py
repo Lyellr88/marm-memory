@@ -39,11 +39,17 @@ class GraphUnavailable(RuntimeError):
 _PROJECTS_TTL = _safe_float("MARM_CODE_CONTEXT_PROJECTS_TTL", 30.0)
 _projects_lock = threading.Lock()
 _projects_cache: dict[str, Any] = {"at": 0.0, "value": None}
+# Bumped by every invalidation. The refill below releases the lock while it
+# talks to the engine, so without this an invalidation landing in that window
+# would be overwritten by the in-flight result it was meant to discard.
+_projects_generation = 0
 
 
 def invalidate_projects_cache() -> None:
     """Drop the cached project list. Safe to call from any thread."""
+    global _projects_generation
     with _projects_lock:
+        _projects_generation += 1
         _projects_cache["at"] = 0.0
         _projects_cache["value"] = None
 
@@ -68,6 +74,7 @@ class LocalBackend:
         """
         now = time.monotonic()
         with _projects_lock:
+            generation = _projects_generation
             cached = _projects_cache["value"]
             if (
                 cached is not None
@@ -84,8 +91,13 @@ class LocalBackend:
         projects = (out or {}).get("projects", []) or []
 
         with _projects_lock:
-            _projects_cache["at"] = time.monotonic()
-            _projects_cache["value"] = list(projects)
+            # Only publish if nothing invalidated the cache while this call was
+            # in flight. Otherwise a delete or a re-index would be undone by a
+            # result that predates it, and the stale list would be served for a
+            # full TTL.
+            if generation == _projects_generation:
+                _projects_cache["at"] = time.monotonic()
+                _projects_cache["value"] = list(projects)
         return projects
 
     def search(

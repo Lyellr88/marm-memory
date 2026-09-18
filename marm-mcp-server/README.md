@@ -33,7 +33,7 @@ mcp-name: io.github.Lyellr88/marm-mcp-server
 - [Performance & Scaling Benchmarks](#performance--scaling-benchmarks)
 - [MCP Client Setup](#mcp-client-setup-for-http--stdio)
 - [Runtime CLI Commands](#runtime-cli-commands)
-- [Complete MCP Tool Suite](#complete-mcp-tool-suite-15-tools)
+- [Complete MCP Tool Suite](#complete-mcp-tool-suite-16-tools)
 - [Using MARM: Talk, Don't Call Tools](#using-marm-talk-dont-call-tools)
 - [Understanding MARM Memory](#understanding-marm-memory)
 - [Knowledge Graphs: Code & Concepts](#knowledge-graphs-code--concepts)
@@ -86,7 +86,7 @@ marm-memory gives your agents a private, shared memory for the context that norm
 
 It brings three things together:
 
-- 🧠 **Core Memory (7 tools)** stores conversations, notes, notebook entries, and summaries so they stay searchable.
+- 🧠 **Core Memory (8 tools)** stores conversations, notes, notebook entries, and summaries so they stay searchable.
 - 💻 **Code Graph (6 tools)** maps your repository so agents can find symbols, follow code paths, and understand the project without rereading it all. Point it at a repo once and it keeps itself current as you work.
 - 🧩 **Concept Graph (2 tools)** connects people, decisions, errors, and ideas from your stored memories, with links back to relevant code when available. It builds itself as you store memories.
 
@@ -101,7 +101,7 @@ All 16 tools work over HTTP and STDIO. Your agents share the same local memory a
 | **Intelligence layer** | FTS filter, semantic re-rank, bounded semantic fallback, auto-classification, write-time consolidation, and compaction candidates | Keeps recall useful as memory grows instead of letting duplicates pile up |
 | **Code graph layer** | Repo indexing, symbol lookup, call tracing, architecture overview, and change-impact analysis | Gives agents project structure without rereading the whole codebase |
 | **Concept graph layer** | Entity and relationship extraction from stored memories, with links back into the code graph | Connects decisions, errors, tools, and people across sessions instead of leaving them as flat text |
-| **Token layer** | Lightweight 7-tool core surface (14 total with bundled graph tools), semantic re-rank before retrieval, and write-time deduplication | Reduces tokens sent to the model on every recall and cost stays predictable as memory scales |
+| **Token layer** | Lightweight 8-tool core surface (16 total with bundled graph tools), semantic re-rank before retrieval, and write-time deduplication | Reduces tokens sent to the model on every recall and cost stays predictable as memory scales |
 | **Deployment layer** | Pip, Docker, STDIO, HTTP, and managed `swarm`, `swarm-max`, and `trusted` profiles | Lets you run private local memory or shared multi-agent memory with the same MCP surface |
 
 See [Performance & Scaling Benchmarks](#performance--scaling-benchmarks) for retrieval latency, concurrency, and write-cost numbers, and [Architecture & Internals](#architecture--internals) for the mechanisms behind each layer.
@@ -677,7 +677,7 @@ Expected output includes server version, feature availability (semantic search s
 
 The AI agent will automatically use the appropriate tools. Manual tool access is available for power users who want direct control.
 
-### 🧠 Core Memory (7 tools)
+### 🧠 Core Memory (8 tools)
 
 | Tool | What it does | Key parameters |
 | ------ | -------------- | ---------------- |
