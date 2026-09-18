@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import collections
 import json
 import queue
 import re
@@ -13,6 +14,10 @@ import structlog
 logger = structlog.get_logger(__name__)
 
 _EOF = object()
+# How long to wait for a dead child's final stderr line before giving up on it.
+# Short enough to be invisible on an error path, long enough for a line already
+# written to the pipe to be read.
+_STDERR_SETTLE_TIMEOUT = 0.5
 _CLOSE_LOCK_WAIT_SECONDS = 0.1
 
 
@@ -78,6 +83,18 @@ class CbmClient:
     ):
         self._command = command
         self._cwd = cwd
+        # The ACTIVE child's stderr tail. Each spawn installs a fresh deque and
+        # hands that same object to its own drain thread, so a previous child's
+        # reader keeps writing to the deque it was given and can never append to
+        # the current one. _force_respawn() kills and re-spawns without joining
+        # the old reader, so isolation has to come from the object, not timing.
+        # Bounded: enough to explain a refusal, small enough that a chatty child
+        # cannot grow it without limit over a long-lived session.
+        self._stderr_tail: collections.deque[str] = collections.deque(maxlen=10)
+        # Set when this generation's drain thread reaches EOF on stderr. stdout
+        # and stderr are drained by independent threads, so _EOF can reach
+        # _read_response while the child's last stderr line is still in flight.
+        self._stderr_done: threading.Event = threading.Event()
         self._startup_timeout = startup_timeout
         self._call_timeout = call_timeout
         self._protocol_version = protocol_version
@@ -123,13 +140,19 @@ class CbmClient:
             self._terminate_process(proc)
             raise CbmError("client is closed")
 
+        stderr_tail: collections.deque[str] = collections.deque(maxlen=10)
+        stderr_done = threading.Event()
+        self._stderr_tail = stderr_tail
+        self._stderr_done = stderr_done
         self._out_q = queue.Queue()
         self._reader = threading.Thread(
             target=self._read_stdout, args=(proc.stdout, self._out_q), daemon=True
         )
         self._reader.start()
         self._stderr_reader = threading.Thread(
-            target=self._drain_stderr, args=(proc.stderr,), daemon=True
+            target=self._drain_stderr,
+            args=(proc.stderr, stderr_tail, stderr_done),
+            daemon=True,
         )
         self._stderr_reader.start()
 
@@ -154,18 +177,47 @@ class CbmClient:
         finally:
             q.put(_EOF)
 
-    def _drain_stderr(self, pipe: IO[bytes]) -> None:
-        """Continuously drain stderr so a full pipe buffer can't deadlock the child.
+    def _drain_stderr(
+        self,
+        pipe: IO[bytes],
+        tail: "collections.deque[str]",
+        done: "threading.Event",
+    ) -> None:
+        """Drain stderr so a full pipe buffer cannot deadlock the child.
 
-        The binary logs operational lines here (e.g. mem.init); route to debug.
+        Keeps a bounded tail so that if the child dies, the reason it printed
+        can be attached to the error the caller sees rather than being lost
+        behind "closed stdout (EOF)".
         """
         try:
             for raw in iter(pipe.readline, b""):
                 line = raw.decode("utf-8", "replace").rstrip()
                 if line:
                     logger.debug("cbm.stderr", line=line)
+                    tail.append(line)
         except (ValueError, OSError):
             pass
+        finally:
+            # Always signal, including after a read error: a waiter must never
+            # block for the full timeout because this thread failed early.
+            done.set()
+
+    def _stderr_context(self) -> str:
+        """The child's last stderr lines, as a suffix for an error message.
+
+        Waits for the drain thread only when the child has already exited:
+        stdout and stderr drain independently, so `_EOF` can arrive first and
+        lose the final line. Waiting unconditionally would stall the error path
+        on a live child that never closes stderr.
+        """
+        proc = self._proc
+        done = self._stderr_done
+        if done is not None and proc is not None and proc.poll() is not None:
+            done.wait(_STDERR_SETTLE_TIMEOUT)
+        lines = list(self._stderr_tail)
+        if not lines:
+            return ""
+        return "; child stderr: " + " | ".join(lines)
 
     def _handshake(self) -> None:
         init_result = self._send_recv(
@@ -265,7 +317,9 @@ class CbmClient:
                     f"timeout waiting for response id={expect_id}"
                 ) from err
             if raw is _EOF:
-                raise CbmError("child process closed stdout (EOF)")
+                raise CbmError(
+                    "child process closed stdout (EOF)" + self._stderr_context()
+                )
             text = raw.decode("utf-8", "replace").strip("\r\n").strip()
             if not text:
                 continue

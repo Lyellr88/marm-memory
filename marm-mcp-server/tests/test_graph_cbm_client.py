@@ -260,7 +260,7 @@ def test_call_tool_missing_arg_raises_with_hint(client):
 
 @requires_binary
 def test_timeout_does_not_kill_child(binary, monkeypatch):
-    """A slow-but-alive child must not be killed on timeout (finding 3):
+    """A slow-but-alive child must not be killed on timeout:
     killing it mid-call would destroy in-flight work (e.g. a long index run)
     and force a blind retry from zero. Force a deterministic timeout by
     monkeypatching _send_recv (not a real short call_timeout racing against
@@ -357,7 +357,7 @@ def test_start_after_close_does_not_spawn(monkeypatch):
 
 
 def test_list_tools_after_close_does_not_spawn(monkeypatch):
-    """The third public path into _spawn(), and the one no review flagged."""
+    """The third public path into _spawn()."""
     client = CbmClient(command=["unused"])
     spawned = _popen_recorder(monkeypatch)
     client.close()
@@ -605,3 +605,180 @@ def test_known_extras_are_not_required_to_start():
 
     assert not (_KNOWN_EXTRA_UPSTREAM_TOOLS & _EXPECTED_UPSTREAM_TOOLS)
     check_schema(set(_EXPECTED_UPSTREAM_TOOLS))
+
+
+def test_eof_error_carries_the_child_stderr_reason():
+    """A child that explains itself on stderr before dying must not be
+    reported as a bare EOF.
+
+    The refusal text is the actionable part; without it the caller sees only
+    "closed stdout (EOF)".
+    """
+    import sys
+
+    from marm_graph.core.cbm_client import CbmClient, CbmError
+
+    reason = "CBM could not start because the active account daemon"
+    client = CbmClient(
+        command=[
+            sys.executable,
+            "-c",
+            f"import sys; print({reason!r}, file=sys.stderr); sys.stderr.flush()",
+        ],
+        startup_timeout=15,
+        call_timeout=15,
+    )
+    try:
+        with pytest.raises(CbmError) as excinfo:
+            client.start()
+    finally:
+        client.close()
+
+    assert "closed stdout (EOF)" in str(excinfo.value)
+    assert reason in str(excinfo.value)
+
+
+def _stderr_then_exit_command(text: str) -> list:
+    """A child that writes one line to stderr, then closes stdout and exits."""
+    import sys
+
+    return [
+        sys.executable,
+        "-c",
+        f"import sys; print({text!r}, file=sys.stderr); sys.stderr.flush()",
+    ]
+
+
+def test_a_respawn_does_not_report_the_previous_child_stderr():
+    """A real respawn, not a manual clear.
+
+    `_force_respawn()` does not join the old drain thread, so that thread can
+    still append after the respawn begins. Each spawn therefore installs its
+    own deque, and a late write from the previous reader lands somewhere the
+    current `_stderr_context()` does not read.
+    """
+    from marm_graph.core.cbm_client import CbmClient, CbmError
+
+    client = CbmClient(
+        command=_stderr_then_exit_command("FIRST-CHILD-REFUSAL"),
+        startup_timeout=15,
+        call_timeout=15,
+    )
+    try:
+        with pytest.raises(CbmError) as first:
+            client.start()
+        assert "FIRST-CHILD-REFUSAL" in str(first.value)
+        first_tail = client._stderr_tail
+
+        # Respawn with a different child. _spawn() is what the recovery path calls.
+        client._command = _stderr_then_exit_command("SECOND-CHILD-REFUSAL")
+        client._closed = False
+        with pytest.raises(CbmError) as second:
+            client._spawn()
+    finally:
+        client.close()
+
+    assert "SECOND-CHILD-REFUSAL" in str(second.value)
+    assert "FIRST-CHILD-REFUSAL" not in str(second.value)
+    # The previous reader still owns its own deque; it is no longer the active one.
+    assert client._stderr_tail is not first_tail
+    assert "FIRST-CHILD-REFUSAL" in " ".join(first_tail)
+
+
+def test_a_late_write_from_a_previous_reader_cannot_reach_the_current_error():
+    """The race directly: append to the OLD deque after the respawn installed a
+    new one, and confirm it cannot surface in the current context."""
+    from marm_graph.core.cbm_client import CbmClient
+
+    client = CbmClient(command=["/nonexistent"], startup_timeout=1, call_timeout=1)
+    stale = client._stderr_tail
+    client._stderr_tail = type(stale)(maxlen=stale.maxlen)  # what _spawn installs
+
+    stale.append("STALE-LINE-FROM-DEAD-CHILD")
+
+    assert "STALE-LINE" not in client._stderr_context()
+
+
+def test_stderr_tail_is_bounded():
+    """A chatty child must not grow the tail without limit."""
+    from marm_graph.core.cbm_client import CbmClient
+
+    client = CbmClient(command=["/nonexistent"], startup_timeout=1, call_timeout=1)
+    for i in range(50):
+        client._stderr_tail.append(f"line {i}")
+    assert len(client._stderr_tail) == 10
+    assert "line 49" in client._stderr_context()
+    assert "line 39" not in client._stderr_context()
+
+
+class _ExitedProc:
+    """A stand-in for a child that has already exited."""
+
+    def poll(self):
+        return 1
+
+
+class _LiveProc:
+    """A stand-in for a child that is still running."""
+
+    def poll(self):
+        return None
+
+
+def test_stderr_context_waits_for_a_late_final_line_when_the_child_exited():
+    """stdout and stderr are drained by independent threads.
+
+    `_read_stdout` can queue `_EOF` while the child's last stderr line is still
+    in flight, so formatting the error immediately can drop the refusal this
+    mechanism exists to surface. When the child has exited, wait briefly for the
+    drain thread to finish.
+    """
+    import threading
+
+    from marm_graph.core.cbm_client import CbmClient
+
+    client = CbmClient(command=["/nonexistent"], startup_timeout=1, call_timeout=1)
+    client._proc = _ExitedProc()
+    client._stderr_done = threading.Event()
+
+    def late_line():
+        time.sleep(0.05)
+        client._stderr_tail.append("CBM could not start: cache directory differs")
+        client._stderr_done.set()
+
+    threading.Thread(target=late_line, daemon=True).start()
+    context = client._stderr_context()
+
+    assert "cache directory differs" in context
+
+
+def test_stderr_context_does_not_block_while_the_child_is_still_alive():
+    """stdout can close on a living child. Waiting then would stall the error
+    path for the full timeout on a process that never closes stderr."""
+    import threading
+
+    from marm_graph.core.cbm_client import CbmClient
+
+    client = CbmClient(command=["/nonexistent"], startup_timeout=1, call_timeout=1)
+    client._proc = _LiveProc()
+    client._stderr_done = threading.Event()  # never set
+
+    started = time.perf_counter()
+    client._stderr_context()
+    assert time.perf_counter() - started < 0.2
+
+
+def test_stderr_context_is_bounded_when_the_drain_never_finishes():
+    """A drain thread that never signals must not hang the error path."""
+    import threading
+
+    from marm_graph.core.cbm_client import _STDERR_SETTLE_TIMEOUT, CbmClient
+
+    client = CbmClient(command=["/nonexistent"], startup_timeout=1, call_timeout=1)
+    client._proc = _ExitedProc()
+    client._stderr_done = threading.Event()  # never set
+
+    started = time.perf_counter()
+    client._stderr_context()
+    elapsed = time.perf_counter() - started
+    assert _STDERR_SETTLE_TIMEOUT <= elapsed < _STDERR_SETTLE_TIMEOUT + 0.5
