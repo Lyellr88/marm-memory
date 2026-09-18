@@ -107,6 +107,18 @@ def _write_key_file(path: Path, marm_api_key: str) -> None:
         # Reports intent early; the atomic replace below is what makes it safe.
         raise OSError(f"key file is a symlink, refusing to write through it: {path}")
 
+    # The PARENT matters too, and refusing it on the read path only was worse
+    # than not refusing it at all: `open_no_follow` declines a symlinked
+    # `~/.marm`, so the key was never loaded back, while this path happily wrote
+    # through the same link. Every restart therefore generated and saved a new
+    # key and rejected every client holding the previous one. Persistence
+    # through a symlinked key directory is unsupported, so it fails closed here
+    # and the caller keeps the key in memory.
+    if path.parent.is_symlink():
+        raise KeyFileProtectionError(
+            f"key directory is a symlink, refusing to persist through it: {path.parent}"
+        )
+
     temporary = path.with_name(f".{path.name}.{os.getpid()}.{secrets.token_hex(8)}")
     try:
         flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
@@ -138,10 +150,18 @@ def _write_key_file(path: Path, marm_api_key: str) -> None:
         try:
             _sync_directory(path.parent)
         except OSError as exc:
-            # The file is in place but the entry may not survive a crash, and
-            # the caller is about to promise that it will. A persistence
-            # failure is the honest report -- it is the branch that says the
-            # key is live in memory and will not survive a restart.
+            # After the rename, `temporary` no longer exists -- the cleanup
+            # below would unlink nothing and `.env` would survive holding the
+            # key, while the caller reported that persistence failed and warned
+            # the operator the key lives only in memory. The state and the
+            # warning have to agree, so this removes the file it just placed:
+            # "not persisted" then means exactly that, and the next start
+            # generates a key rather than adopting one whose directory entry
+            # may not survive a crash.
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
             raise KeyFileProtectionError(
                 f"could not flush the key directory entry: {path.parent}: {exc}"
             ) from exc

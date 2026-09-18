@@ -16,6 +16,11 @@ class MemoryWriteRequest:
     context_type: str
     metadata: Optional[dict]
     future: asyncio.Future
+    # Scope travels WITH the request. `_store_memory` already accepted these;
+    # the queue simply did not forward them, so every queued write fell back to
+    # the detected MARM_PROJECT no matter what the caller asked for.
+    project: Optional[str] = None
+    explicit_scope: bool = False
 
 
 @dataclass
@@ -60,13 +65,23 @@ class WriteQueue:
         session: str,
         context_type: str = "general",
         metadata: Optional[dict] = None,
+        project: Optional[str] = None,
+        explicit_scope: bool = False,
     ) -> str:
         if self._stopping:
             raise RuntimeError("write queue is shutting down")
         loop = asyncio.get_running_loop()
         future: asyncio.Future[str] = loop.create_future()
         await self.queue.put(
-            MemoryWriteRequest(content, session, context_type, metadata, future)
+            MemoryWriteRequest(
+                content,
+                session,
+                context_type,
+                metadata,
+                future,
+                project,
+                explicit_scope,
+            )
         )
         return await future
 
@@ -101,6 +116,8 @@ class WriteQueue:
                         request.session,
                         request.context_type,
                         request.metadata,
+                        project=request.project,
+                        explicit_scope=request.explicit_scope,
                     )
                 elif isinstance(request, CallableWriteRequest):
                     maybe_result = request.func(*request.args, **request.kwargs)

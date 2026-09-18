@@ -666,3 +666,58 @@ def test_a_failed_flush_is_reported_as_a_persistence_failure(monkeypatch, tmp_pa
     with pytest.raises(api_key_bootstrap.KeyFileProtectionError):
         api_key_bootstrap._write_key_file(env_path, "a-key-long-enough-to-store")
     assert not env_path.exists(), "a failed write must not leave a file behind"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX symlinks")
+def test_a_symlinked_key_directory_is_refused_rather_than_written_through(tmp_path):
+    """Persistence must fail closed on a symlinked `~/.marm`, not rotate the key.
+
+    The read path already refuses one: `open_no_follow` declines a symlinked
+    parent, so the saved key was never loaded back. The write path followed the
+    same link happily, so every restart generated a key, saved it where the
+    reader would not look, and rejected every client holding the previous one.
+    """
+    from marm_mcp_server.config.api_key_bootstrap import (
+        KeyFileProtectionError,
+        _write_key_file,
+    )
+
+    real = tmp_path / "real-marm"
+    real.mkdir()
+    linked = tmp_path / "linked-marm"
+    linked.symlink_to(real, target_is_directory=True)
+
+    with pytest.raises(KeyFileProtectionError, match="key directory is a symlink"):
+        _write_key_file(linked / ".env", "k-should-not-be-written")
+
+    assert not (real / ".env").exists(), "the key was written through the symlink"
+
+
+def test_a_directory_sync_failure_after_the_rename_leaves_no_key_behind(
+    monkeypatch, tmp_path
+):
+    """State and warning have to agree.
+
+    If the file fsync and `os.replace` both succeed and only the directory sync
+    fails, the temporary path is already gone -- so the old cleanup unlinked
+    nothing and `.env` survived holding the key, while the caller reported that
+    persistence had failed and told the operator the key lived only in memory.
+    """
+    from marm_mcp_server.config import api_key_bootstrap as boot
+
+    target = tmp_path / ".env"
+
+    def _fail_directory_sync(_directory):
+        raise OSError("simulated directory fsync failure")
+
+    monkeypatch.setattr(boot, "_sync_directory", _fail_directory_sync)
+
+    with pytest.raises(boot.KeyFileProtectionError, match="directory entry"):
+        boot._write_key_file(target, "k-not-durably-persisted")
+
+    assert not target.exists(), (
+        "persistence reported failure but the key file remained, so the next "
+        "start would silently adopt a key the caller said was not saved"
+    )
+    leftovers = [p.name for p in tmp_path.iterdir()]
+    assert leftovers == [], f"temporary files left behind: {leftovers}"
