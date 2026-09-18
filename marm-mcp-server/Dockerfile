@@ -36,6 +36,9 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+RUN apt-get update && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN groupadd -r marm && useradd -r -g marm marm
 RUN mkdir -p /home/marm /home/marm/.marm /home/marm/.cache
 RUN chown -R marm:marm /home/marm

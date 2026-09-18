@@ -74,13 +74,8 @@ class GraphSupervisor:
         Independent of the child's own stderr, which CbmClient._drain_stderr
         already routes to DEBUG — this is the user-visible signal instead.
         """
-        try:
-            from codebase_memory_mcp import _cli
-
-            if not _cli._bin_path(_cli._version()).exists():
-                logger.info("MARM: downloading graph engine (~269MB, one-time)...")
-        except Exception:
-            pass
+        if graph_settings.cbm_binary_status() == "engine_binary_absent":
+            logger.info("MARM: downloading graph engine (~269MB, one-time)...")
 
     def is_available(self) -> bool:
         self._ensure_started()

@@ -189,6 +189,8 @@ def test_first_run_download_logs_before_start(monkeypatch, tmp_path):
     _cli = pytest.importorskip("codebase_memory_mcp._cli")
 
     gs = _fresh_gs()
+    monkeypatch.setattr(gs.graph_settings, "CBM_BINARY_PATH", "")
+    monkeypatch.setattr(gs.graph_settings, "_CBM_COMMAND_RAW", "")
     monkeypatch.setattr(gs.mcp_settings, "GRAPH_ENABLED", True)
     monkeypatch.setattr(_cli, "_bin_path", lambda version: tmp_path / "not-cached-yet")
     fake = _FakeClient()
@@ -206,6 +208,8 @@ def test_cached_binary_skips_download_log(monkeypatch, tmp_path):
     _cli = pytest.importorskip("codebase_memory_mcp._cli")
 
     gs = _fresh_gs()
+    monkeypatch.setattr(gs.graph_settings, "CBM_BINARY_PATH", "")
+    monkeypatch.setattr(gs.graph_settings, "_CBM_COMMAND_RAW", "")
     monkeypatch.setattr(gs.mcp_settings, "GRAPH_ENABLED", True)
     cached = tmp_path / "already-cached"
     cached.touch()

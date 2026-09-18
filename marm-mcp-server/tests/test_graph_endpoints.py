@@ -113,6 +113,30 @@ def test_all_five_graph_tools_return_clean_error_when_unavailable(
         }, path
 
 
+def test_core_memory_survives_a_missing_configured_engine(monkeypatch, tmp_path):
+    from marm_graph.config import settings
+
+    monkeypatch.setattr(settings, "CBM_BINARY_PATH", str(tmp_path / "missing-engine"))
+    monkeypatch.setenv("GRAPH_ENABLED", "true")
+    server = load_isolated_server(monkeypatch, tmp_path)
+    client = local_client(server.app)
+    graph = client.post("/marm_graph_index", json={"action": "list"})
+    assert graph.status_code == 200
+    assert graph.json() == {"status": "error", "message": "graph backend unavailable"}
+    assert server.graph_supervisor.snapshot()["state"] == "error"
+    logged = client.post(
+        "/marm_log_entry",
+        json={"session_name": "main", "entry": "missing-engine memory survives"},
+    )
+    assert logged.status_code == 200
+    assert logged.json()["status"] == "success"
+    recalled = client.post(
+        "/marm_smart_recall", json={"query": "missing-engine memory survives"}
+    )
+    assert recalled.status_code == 200
+    assert "missing-engine memory survives" in recalled.text
+
+
 def test_console_project_routes_are_internal_and_degrade_cleanly(monkeypatch, tmp_path):
     monkeypatch.setenv("GRAPH_ENABLED", "false")
     server = load_isolated_server(monkeypatch, tmp_path)
