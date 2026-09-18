@@ -194,14 +194,13 @@ export function CodeContextPage() {
   // project but not budget, and reading the live form value meant the
   // truncation notice and its button described a request that had not run.
   const [composedBudget, setComposedBudget] = useState(DEFAULT_BUDGET);
-  const compose = (nextTask: string, nextProject: string, nextBudget: number) => {
-    setComposedBudget(nextBudget);
   const compose = (
     nextTask: string,
     nextProject: string,
     nextBudget: number,
     withAnswer = wantAnswer,
   ) => {
+    setComposedBudget(nextBudget);
     const scopedProject =
       nextProject && nextProject !== AUTO_PROJECT ? nextProject : null;
     // Two round trips on purpose. The composition returns in ~380 ms and fills

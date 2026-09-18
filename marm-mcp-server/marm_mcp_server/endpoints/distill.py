@@ -83,9 +83,14 @@ async def marm_distill(req: DistillRequest) -> dict:
     `new` (nothing close), `duplicate` (already recorded), or `near` (close to
     something stored, and worth a human look).
 
-    It SELECTS sentences rather than writing new ones, because MARM has no
-    generative model. A fact spread across three turns, or implied and never
-    stated, will not be proposed -- this finds what was said plainly.
+    With `use_llm` (the default where a local model is configured) it composes
+    a self-contained fact, and every generated proposal cites a VERBATIM span
+    from the transcript, which is checked against the source before the proposal
+    is offered -- an invented span is the signature of an invented fact.
+
+    Without a model, or with `use_llm=False`, it falls back to SELECTING
+    sentences. That fallback finds only what was said plainly: a fact spread
+    across three turns, or implied and never stated, will not be proposed.
 
     Nothing is written to memory by `propose`. Proposals are staged for review
     and only `apply` writes one, for the same reason `marm_compaction` stages:

@@ -222,8 +222,14 @@ async def runtime_settings() -> dict:
             # No model name here: `embedding` in this same payload already
             # carries it, and the Console renders that one.
         },
-        "llm": _llm_status(),
-        "hardware": hardware.probe(),
+        # Off the event loop, both of them. `local_llm.status()` makes a blocking
+        # loopback request and `hardware.probe()` shells out to vendor tools; the
+        # Console polls this route every 5s, so a stalled LLM server or a slow
+        # nvidia-smi would hold the loop and delay unrelated MCP calls. This is
+        # the same mistake the runtime self-probe made -- an async handler is not
+        # a safe place to wait on anything.
+        "llm": await asyncio.to_thread(_llm_status),
+        "hardware": await asyncio.to_thread(hardware.probe),
     }
 
 
