@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+<details>
+<summary><strong>September 18th, 2026: Docker Graph Lifecycle Support and a Console Demo Pack (v2.49.0)</strong></summary>
+
+### Added: Docker-Aware Code Graph Auto-Indexing
+
+MARM's code graph runtime now recognizes the configured graph engine in Docker and can automatically index and refresh repositories from the container lifecycle. The image includes Git so repository state can be evaluated correctly.
+
+- Engine startup and the background worker now share launcher availability checks. Missing or invalid configured launchers report a distinct dormant reason without falling back to another engine.
+- Docker lifecycle fixtures and regression coverage exercise initial indexing, repository changes, engine resolution, and worker behavior in the built image.
+
+### Added: Recording-Ready MARM Console Demo Pack
+
+`marm-console/assets/demo-pack/` provides a safe, self-contained recording environment for the Console: 36 fictional memories, a deeper synthetic Python project with a meaningful import graph, a loopback-only importer, a recording plan, and an asset manifest.
+
+- The pack demonstrates Memories, Knowledge Graph, Indexed Projects, Code Explorer, and the terminal dock without using personal memories, private source code, or real API keys.
+- The sample project includes a runnable `python -m signalboard.cli` release-readiness flow alongside its code-graph topology.
+
+### Fixed
+
+- Code graph client EOF failures now retain the supervised child process's stderr, so engine startup and transport failures are diagnosable from the resulting error.
+- Console project labels and development dependencies incorporate the latest merged contributor and Dependabot updates.
+
+### Acknowledgments
+
+Thank you to [@kevin-lozada-santos](https://github.com/kevin-lozada-santos) for Docker graph-engine lifecycle support ([#204](https://github.com/Lyellr88/marm-memory/pull/204)) and [@doublegate](https://github.com/doublegate) for improving graph engine error context ([#207](https://github.com/Lyellr88/marm-memory/pull/207)).
+
+</details>
+
 ### Fixed
 
 - Docker auto-indexing now recognizes the configured graph engine instead of checking only the pip download cache. The runtime image includes Git so repository changes can be detected.
