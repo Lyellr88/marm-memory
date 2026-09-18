@@ -168,7 +168,10 @@ def review(
 ) -> dict[str, Any]:
     """List proposals still awaiting a decision, best-scoring first."""
     now_iso = _now().isoformat()
-    clauses = ["status = 'pending'", "expires_at > ?"]
+    # `nudge_exhausted` means "stop advertising this", not "discard it". Selecting
+    # only `pending` made an un-answered proposal vanish from the queue and become
+    # impossible to apply or discard -- a dead row nobody could reach.
+    clauses = ["status IN ('pending', 'nudge_exhausted')", "expires_at > ?"]
     params: list[Any] = [now_iso]
     if session_name:
         clauses.append("session_name = ?")
@@ -261,6 +264,11 @@ async def apply(memory: MARMMemory, proposal_id: str) -> dict[str, Any]:
             session_name,
             context_type or "general",
             metadata,
+            # The column, not just the metadata blob. Metadata is not what
+            # project-filtered recall or code-context read, so a proposal applied
+            # with project=... was landing unscoped.
+            project=project,
+            explicit_scope=bool(project),
         )
     except Exception as exc:
         with memory.get_connection() as conn:
@@ -287,7 +295,7 @@ def discard(memory: MARMMemory, proposal_id: str) -> dict[str, Any]:
     with memory.get_connection() as conn:
         cursor = conn.execute(
             "UPDATE distill_staging SET status = 'discarded', reviewed_at = ?, "
-            "updated_at = ? WHERE id = ? AND status = 'pending'",
+            "updated_at = ? WHERE id = ? AND status IN ('pending', 'nudge_exhausted')",
             (now_iso, now_iso, proposal_id),
         )
     if cursor.rowcount == 0:

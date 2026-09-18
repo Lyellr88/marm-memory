@@ -600,3 +600,40 @@ def test_the_nudge_can_be_turned_off(staged_memory, monkeypatch):
     _stage(staged_memory, "Something durable.")
     monkeypatch.setattr(settings, "DISTILL_NUDGE_ENABLED", False)
     assert claim_pending_distill_prompt(staged_memory) is None
+
+
+@pytest.mark.asyncio
+async def test_a_queued_write_carries_the_project_column(tmp_path):
+    """`metadata["project"]` is not the `project` column.
+
+    Project-filtered recall and code-context read the column, so a proposal
+    applied with `project=...` was landing unscoped: `store_memory_queued` did
+    not forward the scope, and `_store_memory` fell back to `MARM_PROJECT`.
+    """
+    from marm_mcp_server.core.memory import MARMMemory
+
+    mem = MARMMemory(str(tmp_path / "memory.db"))
+    mem._encoder_failed = True
+
+    scoped = await mem.store_memory_queued(
+        "a fact worth keeping",
+        "sess",
+        "general",
+        {"source": "marm_distill"},
+        queue_enabled=False,
+        project="scoped-project",
+        explicit_scope=True,
+    )
+    unscoped = await mem.store_memory_queued(
+        "another fact", "sess", "general", {}, queue_enabled=False
+    )
+
+    with mem.get_connection() as conn:
+        rows = dict(
+            conn.execute(
+                "SELECT id, project FROM memories WHERE id IN (?, ?)",
+                (scoped, unscoped),
+            ).fetchall()
+        )
+    assert rows[scoped] == "scoped-project"
+    assert rows[unscoped] != "scoped-project"
