@@ -42,8 +42,12 @@ def distill(payload: DistillPayload) -> dict:
     except mcp_client.McpUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     if result.get("status") == "error":
+        # A released claim is retryable and must not be reported as a caller
+        # error: 400 tells a retry-aware client the request was malformed and
+        # repeating it is pointless, when in fact the proposal is back in
+        # `pending` precisely so it can be applied again.
         raise HTTPException(
-            status_code=400,
+            status_code=503 if result.get("retryable") else 400,
             detail=result.get("error") or result.get("message") or "Distill failed.",
         )
     return result

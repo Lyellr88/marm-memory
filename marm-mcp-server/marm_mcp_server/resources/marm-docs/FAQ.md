@@ -88,7 +88,8 @@ MARM currently exposes **16 MCP tools on both HTTP and STDIO**: 8 focused core m
 | **Notebook** | `marm_notebook` | Reusable instructions and knowledge with `action="add"`, `"use"`, `"show"`, `"status"`, or `"clear"` |
 | **Delete** | `marm_delete` | Delete log sessions, log entries, or notebook entries |
 | **Summary** | `marm_summary` | Generate concise context summaries |
-| **Maintenance** | `marm_compaction`, `marm_distill` | Agent-assisted memory compaction with `action="status"`, `"candidates"`, `"review"`, `"stage"`, `"apply"`, or `"discard"` |
+| **Maintenance** | `marm_compaction` | Agent-assisted memory compaction with `action="status"`, `"candidates"`, `"review"`, `"stage"`, `"apply"`, or `"discard"` |
+| **Maintenance** | `marm_distill` | Turn a transcript into reviewable memory proposals with `action="propose"`, `"review"`, `"apply"`, or `"discard"` |
 | **Code Graph (HTTP + STDIO)** | `marm_graph_index`, `marm_code_lookup`, `marm_code_context`, `marm_graph_trace`, `marm_graph_architecture`, `marm_graph_impact` | Index repositories (kept current automatically after the first index), look up symbols/source, compose ranked task context, trace call paths, summarize architecture, and inspect change impact |
 | **Concept Graph (HTTP + STDIO)** | `marm_concept_build`, `marm_concept_recall` | Extract entities and typed relationships from stored memories, then query them with multi-hop traversal and code-symbol cross-links |
 

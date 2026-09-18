@@ -231,7 +231,12 @@ async def apply(memory: MARMMemory, proposal_id: str) -> dict[str, Any]:
                 conn.execute("ROLLBACK")
                 return {"status": "error", "error": f"no proposal {proposal_id}"}
             content, session_name, context_type, project, status, expires_at = row
-            if status != "pending":
+            # `nudge_exhausted` means the queue stopped asking, not that the
+            # proposal was resolved. review() and discard() both accept it, so
+            # apply() must too -- otherwise an un-answered proposal can be
+            # listed and thrown away but never accepted, which is a worse
+            # half-state than not surfacing it at all.
+            if status not in ("pending", "nudge_exhausted"):
                 conn.execute("ROLLBACK")
                 return {
                     "status": "error",
@@ -277,7 +282,15 @@ async def apply(memory: MARMMemory, proposal_id: str) -> dict[str, Any]:
                 "WHERE id = ? AND status = 'applying'",
                 (_now().isoformat(), proposal_id),
             )
-        return {"status": "error", "error": f"write failed: {exc}"}
+        # The claim was released above, so this proposal really can be applied
+        # again. Say so: the HTTP layer maps every error envelope to 400 by
+        # default, and 400 tells a retry-aware caller the request itself was
+        # wrong and must not be repeated.
+        return {
+            "status": "error",
+            "error": f"write failed: {exc}",
+            "retryable": True,
+        }
 
     done = _now().isoformat()
     with memory.get_connection() as conn:

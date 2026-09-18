@@ -80,7 +80,11 @@ export function ProposalCard({
   // A proposal with no id was never staged -- a duplicate, or one already
   // reviewed. Showing apply/discard on it would offer an action that cannot
   // run, so the card renders as a record instead of a decision.
-  const actionable = Boolean(proposal.id && (onApply || onDiscard));
+  // Per-handler, not either-or: a caller supplying only one of them would
+  // otherwise get an enabled button whose click does nothing.
+  const canApply = Boolean(proposal.id && onApply);
+  const canDiscard = Boolean(proposal.id && onDiscard);
+  const actionable = canApply || canDiscard;
 
   return (
     <article
@@ -136,17 +140,23 @@ export function ProposalCard({
 
       {actionable && (
         <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border/70 pt-3">
-          <Button size="sm" onClick={() => onApply?.(proposal.id!)} disabled={busy}>
-            <Check className="mr-1.5 h-3.5 w-3.5" /> Keep it
-          </Button>
-          <Button size="sm" variant="outline" onClick={() => onDiscard?.(proposal.id!)} disabled={busy}>
-            <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Discard
-          </Button>
+          {canApply && (
+            <Button size="sm" onClick={() => onApply!(proposal.id!)} disabled={busy}>
+              <Check className="mr-1.5 h-3.5 w-3.5" /> Keep it
+            </Button>
+          )}
+          {canDiscard && (
+            <Button size="sm" variant="outline" onClick={() => onDiscard!(proposal.id!)} disabled={busy}>
+              <Trash2 className="mr-1.5 h-3.5 w-3.5" /> Discard
+            </Button>
+          )}
           {/* Stated on the card, not buried in a help page: discard is the one
               action here that cannot be undone from this screen. */}
-          <span className="text-[11px] text-muted-foreground">
-            Discarding is permanent — it will not be proposed again.
-          </span>
+          {canDiscard && (
+            <span className="text-[11px] text-muted-foreground">
+              Discarding is permanent — it will not be proposed again.
+            </span>
+          )}
         </div>
       )}
     </article>
