@@ -192,7 +192,14 @@ def clear_state(runtime_id: str | None = None) -> None:
 def process_matches(state: dict[str, Any]) -> bool:
     try:
         process = psutil.Process(int(state["pid"]))
-        if not process.is_running():
+        # A zombie is a process that has exited and is waiting to be reaped by
+        # its parent, and psutil reports is_running() as True for one -- the PID
+        # still exists. Treating that as a live runtime makes `stop` wait out its
+        # full timeout and then report "did not stop cleanly" about a server that
+        # shut down correctly seconds earlier. It only shows up when the parent
+        # defers reaping, which a supervisor script or a test harness does and
+        # systemd does not, so the service path never sees it.
+        if not process.is_running() or process.status() == psutil.STATUS_ZOMBIE:
             return False
         expected = float(state.get("process_created_at", 0))
         return not expected or abs(process.create_time() - expected) < 2.0
