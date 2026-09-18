@@ -10,7 +10,6 @@ happens to match will outrank the class everything calls.
 """
 
 import asyncio
-import os
 import re
 from collections.abc import Iterator
 
@@ -361,6 +360,23 @@ def stream_answer(
         yield ("delta", {"text": piece})
 
     answer = "".join(pieces)
+    if not answer.strip():
+        # A reasoning model can spend its whole budget in `reasoning` and emit no
+        # content at all. Reporting that as a successful `done` with length 0
+        # hands the reader a confident blank, and disagrees with the
+        # non-streaming path, which already treats empty content as no answer.
+        yield (
+            "error",
+            {
+                "message": (
+                    "the model produced no answer text. A reasoning model may "
+                    "have spent its budget before writing; raise "
+                    "MARM_CODE_CONTEXT_ANSWER_TOKENS. The ranked context is "
+                    "unaffected."
+                )
+            },
+        )
+        return
     yield (
         "done",
         {"citations": _resolve_citations(answer, ctx), "length": len(answer)},

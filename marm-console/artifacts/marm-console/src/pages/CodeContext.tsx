@@ -200,6 +200,7 @@ export function CodeContextPage() {
     nextBudget: number,
     withAnswer = wantAnswer,
   ) => {
+    setComposedBudget(nextBudget);
     const scopedProject =
       nextProject && nextProject !== AUTO_PROJECT ? nextProject : null;
     // Two round trips on purpose. The composition returns in ~380 ms and fills

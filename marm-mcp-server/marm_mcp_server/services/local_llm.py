@@ -216,11 +216,20 @@ def available(force: bool = False) -> Optional[str]:
     if isinstance(body, dict):
         entries = body.get("data") or body.get("models") or []
         if entries and isinstance(entries, list):
-            first = entries[0]
+            served = [
+                e.get("id") or e.get("name")
+                for e in entries
+                if isinstance(e, dict) and (e.get("id") or e.get("name"))
+            ]
+            # Honour the operator's choice when the server is actually serving
+            # it. Without this the saved preference was display-only: every
+            # completion used entries[0], so picking a model in the Console
+            # reported a switch that never happened.
+            wanted = preferred_model()
             model = (
-                first.get("id") or first.get("name")
-                if isinstance(first, dict)
-                else None
+                wanted
+                if wanted and wanted in served
+                else (served[0] if served else None)
             )
     _probe_cache["at"] = now
     _probe_cache["model"] = model

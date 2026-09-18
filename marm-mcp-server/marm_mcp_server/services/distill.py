@@ -351,11 +351,6 @@ async def apply(memory: MARMMemory, proposal_id: str) -> dict[str, Any]:
                 evidence,
                 mode,
             ) = row
-            # `nudge_exhausted` means the queue stopped asking, not that the
-            # proposal was resolved. review() and discard() both accept it, so
-            # apply() must too -- otherwise an un-answered proposal can be
-            # listed and thrown away but never accepted, which is a worse
-            # half-state than not surfacing it at all.
             if status == "applying":
                 # Left behind by a crash between the memory write and the
                 # staging update. Decide from the store, not from the status:
@@ -390,6 +385,11 @@ async def apply(memory: MARMMemory, proposal_id: str) -> dict[str, Any]:
                 # No memory, so the write never landed and this is retryable.
                 # Fall through and re-claim it.
                 status = "pending"
+            # `nudge_exhausted` means the queue stopped asking, not that the
+            # proposal was resolved. review() and discard() both accept it, so
+            # apply() must too -- otherwise an un-answered proposal can be
+            # listed and thrown away but never accepted, which is a worse
+            # half-state than not surfacing it at all.
             if status not in ("pending", "nudge_exhausted"):
                 conn.execute("ROLLBACK")
                 return {

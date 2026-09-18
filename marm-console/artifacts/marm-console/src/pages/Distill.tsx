@@ -31,6 +31,9 @@ import { LoadingState } from '@/components/code-context/shared';
 import { ProposalCard } from '@/components/distill/ProposalCard';
 import type { DistillProposal } from '@/lib/marm-types';
 
+/** The API request cap. Surfaced in the UI when it is actually reached. */
+const SESSION_LOG_LIMIT = 200;
+
 const PLACEHOLDER =
   'Paste a conversation. MARM selects the sentences in it that already read like durable facts — it does not write new ones.';
 
@@ -75,8 +78,12 @@ export function DistillPage() {
     if (!sessionName && sessions.data?.length) setSessionName(sessions.data[0].name);
   }, [sessionName, sessions.data]);
   const sessionLogs = useLogs(
-    source === 'session' && sessionName ? { session: sessionName, limit: 200 } : undefined,
+    source === 'session' && sessionName ? { session: sessionName, limit: SESSION_LOG_LIMIT } : undefined,
   );
+  // The request caps at 200 entries. Saying "N entries will be distilled" while
+  // silently dropping older ones is how a long session loses durable facts with
+  // no indication, so the cap is surfaced when it actually bites.
+  const sessionCapped = (sessionLogs.data?.items?.length ?? 0) >= SESSION_LOG_LIMIT;
   const fromSession = useMemo(() => {
     const entries = sessionLogs.data?.items ?? [];
     return entries
@@ -224,6 +231,12 @@ export function DistillPage() {
                     {(sessionLogs.data?.items ?? []).length.toLocaleString()} log entries
                   </span>{' '}
                   ({fromSession.length.toLocaleString()} characters) will be distilled.
+                    {sessionCapped && (
+                      <span className="text-muted-foreground">
+                        {' '}Only the most recent {SESSION_LOG_LIMIT.toLocaleString()} entries are read,
+                        so anything older in this session is not included.
+                      </span>
+                    )}
                 </>
               ) : (
                 'That session has no log entries. Switch to “Paste text”, or log something first.'

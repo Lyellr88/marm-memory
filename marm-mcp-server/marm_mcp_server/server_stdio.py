@@ -334,6 +334,7 @@ async def marm_distill(
     threshold: float = 0.20,
     limit: int = 20,
     include_duplicates: bool = False,
+    use_llm: Optional[bool] = None,
 ) -> dict:
     """
     Propose durable memories from raw conversation, resolved against the store.
@@ -344,9 +345,13 @@ async def marm_distill(
     something stored -- worth your judgement, because an encoder cannot tell
     "refines it" from "contradicts it").
 
-    It SELECTS sentences rather than composing new ones, because MARM runs no
-    generative model. A fact spread over three turns, or implied but never
-    said plainly, will not be proposed.
+    With `use_llm` (the default where a local model is configured) it composes
+    a self-contained fact, and every generated proposal cites a VERBATIM span
+    from the transcript, checked against the source before it is offered.
+
+    Without a model, or with `use_llm=False`, it falls back to SELECTING
+    sentences: a fact spread over three turns, or implied but never said
+    plainly, will not be proposed.
 
     NOTHING IS WRITTEN BY `propose`. Proposals are staged for review, and only
     `apply` writes one -- the same contract as marm_compaction, for the same
@@ -387,6 +392,10 @@ async def marm_distill(
                 threshold=threshold,
                 limit=limit,
                 include_duplicates=include_duplicates,
+                # Forwarded so STDIO callers can force the verbatim-selection
+                # fallback exactly as HTTP callers can. Omitting it left the two
+                # transports with different behaviour for the same tool.
+                **({} if use_llm is None else {"use_llm": use_llm}),
             )
         )
     except Exception as e:
