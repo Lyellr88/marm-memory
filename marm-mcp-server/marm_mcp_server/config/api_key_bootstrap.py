@@ -33,19 +33,41 @@ def _secure_key_dir(directory: Path) -> None:
     `mkdir(exist_ok=True)` applies its mode only on creation, so an
     already-permissive directory is tightened here too -- otherwise a local
     user with write access could swap `.env` for a file of their own and
-    receive the bearer token. Fails closed if it cannot be made owner-only.
+    receive the bearer token.
+
+    Refuses only a directory we OWN and still cannot secure, which is the case
+    where staying permissive was our choice to make. A directory owned by
+    somebody else cannot be chmodded at all, and hard-failing there breaks the
+    one deployment that always looks like this: a Docker bind mount is
+    world-writable by necessity, because the container's non-root user does not
+    share the host uid. Persisting is still safe there -- the key goes to a
+    private temporary file, is hardened before it has a public name, and is
+    renamed into place -- so this warns and continues rather than declining to
+    save a key at all.
     """
     directory.mkdir(parents=True, exist_ok=True, mode=0o700)
     if os.name == "nt":  # POSIX modes do not apply; ACLs are handled per-file
         return
     if stat.S_IMODE(directory.stat().st_mode) & 0o077:
-        directory.chmod(0o700)
-    remaining = stat.S_IMODE(directory.stat().st_mode)
-    if remaining & 0o077:
+        try:
+            directory.chmod(0o700)
+        except OSError:
+            pass
+    info = directory.stat()
+    remaining = stat.S_IMODE(info.st_mode)
+    if not remaining & 0o077:
+        return
+    if info.st_uid == os.getuid():
         raise OSError(
             f"key directory is accessible to other users and could not be "
             f"secured: {directory} (mode {remaining:#o})"
         )
+    print(
+        f"WARNING: {directory} is owned by another user and is group- or "
+        f"world-accessible (mode {remaining:#o}); the key file itself is still "
+        f"created owner-only.",
+        flush=True,
+    )
 
 
 def _write_key_file(path: Path, marm_api_key: str) -> None:

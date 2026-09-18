@@ -2,6 +2,7 @@ import importlib
 import os
 import stat
 import sys
+from pathlib import Path
 from unittest import mock
 
 import pytest
@@ -525,3 +526,67 @@ def test_open_no_follow_refuses_a_reparse_point_on_windows(monkeypatch, tmp_path
         security.open_no_follow(tmp_path / ".env")
     assert closed == [fake_fd], "the handle must be closed before refusing"
     os_module.close(fake_fd)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX directory modes")
+def test_a_key_directory_owned_by_someone_else_still_persists_the_key(
+    monkeypatch, tmp_path
+):
+    """A Docker bind mount is world-writable and not ours, and must still work.
+
+    The container's non-root user does not share the host uid, so the mount is
+    world-writable by necessity and cannot be chmodded from inside. Refusing
+    there meant no key was ever persisted -- caught by the upstream Docker
+    suite, not by this file, because it only appears with a real mount.
+    """
+    from marm_mcp_server.config import api_key_bootstrap
+
+    directory = tmp_path / ".marm"
+    directory.mkdir(mode=0o777)
+    os.chmod(directory, 0o777)
+
+    real_stat = Path.stat
+
+    def not_ours(self, *args, **kwargs):
+        info = real_stat(self, *args, **kwargs)
+        if self == directory:
+            return os.stat_result(
+                (
+                    info.st_mode,
+                    info.st_ino,
+                    info.st_dev,
+                    info.st_nlink,
+                    info.st_uid + 1,
+                    info.st_gid,
+                    *tuple(info)[6:],
+                )
+            )
+        return info
+
+    monkeypatch.setattr(Path, "stat", not_ours)
+    monkeypatch.setattr(
+        Path,
+        "chmod",
+        lambda *a, **k: (_ for _ in ()).throw(
+            PermissionError("Operation not permitted")
+        ),
+    )
+
+    # Warns, but does not raise: the key file itself is still created 0600.
+    api_key_bootstrap._secure_key_dir(directory)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX directory modes")
+def test_a_key_directory_we_own_and_cannot_secure_is_still_refused(
+    monkeypatch, tmp_path
+):
+    """The original protection, unchanged: staying permissive was our choice."""
+    from marm_mcp_server.config import api_key_bootstrap
+
+    directory = tmp_path / ".marm"
+    directory.mkdir(mode=0o777)
+    os.chmod(directory, 0o777)
+    monkeypatch.setattr(Path, "chmod", lambda *a, **k: None)
+
+    with pytest.raises(OSError, match="could not be secured"):
+        api_key_bootstrap._secure_key_dir(directory)
