@@ -356,6 +356,33 @@ export interface LocalLlmStatus {
   applied_model?: string;
 }
 
+/** A local OpenAI-compatible server found by scanning loopback ports.
+ *
+ *  `expected` is which runtime that port conventionally belongs to; `runtime`
+ *  is what actually answered. They can differ — anyone may run llama.cpp on
+ *  1234 — and the pane shows what answered.
+ */
+export interface DiscoveredServer {
+  url: string;
+  port: number;
+  expected: string;
+  runtime: string;
+  version: string | null;
+  can_switch: boolean;
+  model_count: number;
+  models: string[];
+  model_path: string | null;
+  context_length: number | null;
+}
+
+export interface LlmServersResponse {
+  servers: DiscoveredServer[];
+  configured: string | null;
+  configured_reachable: boolean;
+  scanned_ports: number[];
+  scan_seconds: number;
+}
+
 export interface DiscoveredModel {
   name: string;
   path: string;

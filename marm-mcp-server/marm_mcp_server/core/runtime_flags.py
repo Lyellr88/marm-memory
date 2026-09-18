@@ -17,6 +17,8 @@ RUNTIME_RATE_LIMIT_RPM = "runtime.rate_limit_rpm"
 #: answers, so an unreadable database costs a slower answer rather than a wrong
 #: one. That is why the reader below uses `get` and not `get_bool`.
 LLM_ENABLED = "llm.enabled"
+#: Which local server to talk to, overriding MARM_LLM_URL.
+LLM_ENDPOINT = "llm.endpoint"
 #: Which served model to name in the request, when the runtime honours it.
 LLM_MODEL = "llm.model"
 #: Extra directories to scan for models, joined with `os.pathsep`.

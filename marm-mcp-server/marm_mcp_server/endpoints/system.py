@@ -54,6 +54,8 @@ class RuntimeLlmRequest(BaseModel):
     enabled: bool | None = None
     #: An empty string clears the preference and returns to whatever is served.
     model: str | None = Field(default=None, max_length=512)
+    #: An empty string clears the override and returns to MARM_LLM_URL.
+    endpoint: str | None = Field(default=None, max_length=512)
 
 
 class RuntimeLlmRootRequest(BaseModel):
@@ -295,6 +297,17 @@ def _served_id_for(model: dict, served: list[dict]) -> str | None:
     return None
 
 
+@router.get("/internal/runtime/llm/servers", include_in_schema=False)
+async def runtime_llm_servers(refresh: bool = False) -> dict:
+    """Every local OpenAI-compatible server this machine is running.
+
+    Loopback only, and MARM's own ports are never probed -- asking yourself a
+    question over HTTP from the loop that would answer it is what made
+    `/internal/runtime/settings` take a full second.
+    """
+    return local_llm.discover_servers(force=refresh)
+
+
 @router.get("/internal/runtime/llm/browse", include_in_schema=False)
 async def runtime_llm_browse(path: str | None = None) -> dict:
     """List one directory inside the known model roots. Never file contents."""
@@ -309,6 +322,25 @@ async def update_runtime_llm(req: RuntimeLlmRequest) -> dict:
 
     applied_model: str | None = None
     rejected: str | None = None
+
+    if req.endpoint is not None:
+        chosen = req.endpoint.strip().rstrip("/")
+        if not chosen:
+            runtime_flags.clear(runtime_flags.LLM_ENDPOINT)
+        elif not local_llm._is_loopback(chosen):
+            # Refused here as well as in `endpoint()`, so the Console gets a
+            # reason rather than silently saving a value that will be ignored.
+            rejected = (
+                f"{chosen} is not a loopback address. MARM only talks to a model "
+                "on this machine."
+            )
+        else:
+            runtime_flags.set_(runtime_flags.LLM_ENDPOINT, chosen)
+            # A different server serves different models, so a model chosen for
+            # the old one is meaningless against the new one.
+            runtime_flags.clear(runtime_flags.LLM_MODEL)
+        local_llm.invalidate_settings_cache()
+        local_llm.invalidate_servers_cache()
     if req.model is not None:
         chosen = req.model.strip()
         if not chosen:

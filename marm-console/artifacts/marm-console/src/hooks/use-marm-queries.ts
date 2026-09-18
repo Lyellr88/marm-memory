@@ -227,6 +227,18 @@ export function useUpdateRuntimeProfile() {
  *  somebody downloads a model -- so it refetches on demand, not on a timer
  *  like the health panes above.
  */
+/** Which local model servers are running. Scanned on demand, not polled:
+ *  a loopback sweep is 6ms but it is still nine connect attempts. */
+export function useLlmServers(enabled = true) {
+  const { baseUrl, client } = useMarmConfig();
+  return useQuery({
+    queryKey: ['llm-servers', baseUrl],
+    queryFn: () => client.getLlmServers(false),
+    enabled,
+    retry: false,
+  });
+}
+
 export function useLlmModels(enabled = true) {
   const { baseUrl, client } = useMarmConfig();
   return useQuery({
@@ -251,10 +263,12 @@ export function useUpdateLlmSettings() {
   const { baseUrl, client } = useMarmConfig();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { enabled?: boolean; model?: string }) => client.updateLlmSettings(body),
+    mutationFn: (body: { enabled?: boolean; model?: string; endpoint?: string }) =>
+      client.updateLlmSettings(body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.runtimeSettings(baseUrl) });
       qc.invalidateQueries({ queryKey: ['llm-models', baseUrl] });
+      qc.invalidateQueries({ queryKey: ['llm-servers', baseUrl] });
     },
   });
 }
