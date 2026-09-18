@@ -258,19 +258,44 @@ def complete(
         "stream": False,
     }
     if json_object:
-        # Honoured by llama.cpp, vLLM and LM Studio; ignored by servers that do
-        # not implement it, which is why callers must still parse defensively.
         payload["response_format"] = {"type": "json_object"}
 
     body = _request("/v1/chat/completions", payload, timeout or TIMEOUT)
+    if body is None and json_object:
+        # `json_object` is an optimisation, not a requirement -- callers parse
+        # defensively anyway. LM Studio REJECTS it outright: measured against
+        # 0.3.x, `{"type":"json_object"}` returns HTTP 400
+        # "'response_format.type' must be 'json_schema' or 'text'", so every
+        # generated distillation silently fell back to sentence selection the
+        # moment MARM pointed at LM Studio instead of llama.cpp. Retrying
+        # without it costs one request on servers that refuse, and nothing on
+        # servers that do not.
+        payload.pop("response_format", None)
+        body = _request("/v1/chat/completions", payload, timeout or TIMEOUT)
     if not isinstance(body, dict):
         return None
     try:
-        text = body["choices"][0]["message"]["content"]
+        choice = body["choices"][0]
+        text = choice["message"]["content"]
     except (KeyError, IndexError, TypeError):
         logger.debug("local_llm: unexpected response shape")
         return None
-    return text.strip() if isinstance(text, str) else None
+    if isinstance(text, str) and text.strip():
+        return text.strip()
+
+    # Empty content is not an empty answer. A reasoning model (gpt-oss, the
+    # R1 family) emits its chain of thought into a separate `reasoning` field
+    # and can spend the whole token budget there, returning
+    # finish_reason="length" with content still "". Returning "" would hand
+    # the caller a confident blank; None is the state every caller already
+    # falls back from.
+    if choice.get("finish_reason") == "length":
+        logger.debug(
+            "local_llm: the model hit the token limit before answering",
+            model=model,
+            hint="raise max_tokens; a reasoning model spends budget before content",
+        )
+    return None
 
 
 def stream(

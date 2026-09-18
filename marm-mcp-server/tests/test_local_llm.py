@@ -108,3 +108,69 @@ def test_json_is_recovered_from_however_the_model_wrapped_it(raw, expected):
     """Models fence and preface JSON however they were tuned to. A reply that
     cannot be parsed is the same `None` as no model at all."""
     assert local_llm._first_json_value(raw) == expected
+
+
+# --- talking to a server that is not llama.cpp ------------------------------
+
+
+def test_json_object_is_retried_without_it_when_the_server_refuses(monkeypatch):
+    """LM Studio returns HTTP 400 for `response_format: {"type":"json_object"}`.
+
+    Measured against 0.3.x: *"'response_format.type' must be 'json_schema' or
+    'text'"*. Every generated distillation silently fell back to sentence
+    selection the moment MARM pointed at LM Studio instead of llama.cpp, and
+    nothing said why. `json_object` is an optimisation -- callers parse
+    defensively anyway -- so refusing it must not cost the feature.
+    """
+    monkeypatch.setattr(local_llm, "available", lambda *a, **k: "gpt-oss-20b")
+    sent = []
+
+    def fake_request(path, payload, timeout):
+        # A snapshot: the retry pops `response_format` off the same dict, so
+        # storing the reference would show both calls without it.
+        sent.append(dict(payload))
+        if "response_format" in payload:
+            return None  # the 400
+        return {"choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}]}
+
+    monkeypatch.setattr(local_llm, "_request", fake_request)
+
+    assert local_llm.complete("sys", "user", json_object=True) == "ok"
+    assert len(sent) == 2, "the refusal must be retried without response_format"
+    assert "response_format" in sent[0] and "response_format" not in sent[1]
+
+
+def test_a_reasoning_model_that_never_reached_content_is_a_failure(monkeypatch):
+    """Empty content is not an empty answer.
+
+    gpt-oss and the R1 family emit chain of thought into a separate
+    `reasoning` field and can spend the whole budget there, returning
+    finish_reason="length" with content still "". Returning "" hands the
+    caller a confident blank; None is the state every caller falls back from.
+    """
+    monkeypatch.setattr(local_llm, "available", lambda *a, **k: "gpt-oss-20b")
+    monkeypatch.setattr(
+        local_llm,
+        "_request",
+        lambda *a, **k: {
+            "choices": [
+                {
+                    "message": {"content": "", "reasoning": "thinking at length..."},
+                    "finish_reason": "length",
+                }
+            ]
+        },
+    )
+    assert local_llm.complete("sys", "user") is None
+
+
+def test_a_normal_empty_reply_is_also_a_failure_not_an_answer(monkeypatch):
+    monkeypatch.setattr(local_llm, "available", lambda *a, **k: "m")
+    monkeypatch.setattr(
+        local_llm,
+        "_request",
+        lambda *a, **k: {
+            "choices": [{"message": {"content": "  "}, "finish_reason": "stop"}]
+        },
+    )
+    assert local_llm.complete("sys", "user") is None
