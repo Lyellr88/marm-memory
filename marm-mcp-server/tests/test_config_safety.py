@@ -590,3 +590,38 @@ def test_a_key_directory_we_own_and_cannot_secure_is_still_refused(
 
     with pytest.raises(OSError, match="could not be secured"):
         api_key_bootstrap._secure_key_dir(directory)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX symlinks")
+def test_a_symlinked_key_directory_is_refused(monkeypatch, tmp_path):
+    """`O_NOFOLLOW` covers only the final component.
+
+    With `~/.marm` itself the symlink rather than `~/.marm/.env`, the open
+    still traversed it and adopted whatever key the attacker's directory held.
+    Opening relative to a validated parent descriptor closes that.
+    """
+    from marm_mcp_server.config import api_key_bootstrap
+
+    planted = tmp_path / "attacker"
+    planted.mkdir()
+    (planted / ".env").write_text("MARM_API_KEY=planted-through-the-parent-dir\n")
+
+    home = tmp_path / "home"
+    home.mkdir()
+    (home / ".marm").symlink_to(planted)
+    monkeypatch.setattr(api_key_bootstrap, "_MARM_ENV_PATH", home / ".marm" / ".env")
+
+    assert api_key_bootstrap._load_key_from_file() == ""
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX symlinks")
+def test_a_real_key_directory_still_reads(monkeypatch, tmp_path):
+    """The guard above must not refuse every ordinary directory."""
+    from marm_mcp_server.config import api_key_bootstrap
+
+    env_path = tmp_path / ".marm" / ".env"
+    env_path.parent.mkdir(parents=True)
+    env_path.write_text("MARM_API_KEY=an-ordinary-key-value-here\n")
+    monkeypatch.setattr(api_key_bootstrap, "_MARM_ENV_PATH", env_path)
+
+    assert api_key_bootstrap._load_key_from_file() == "an-ordinary-key-value-here"

@@ -180,7 +180,7 @@ def restrict_windows_file_to_current_user(path: Path) -> bool:
     return _set_windows_owner_only_dacl(path)
 
 
-def _open_windows_no_reparse(path: Path) -> int:
+def _open_windows_no_reparse(path: Path, *, directory: bool = False) -> int:
     """Open a file on Windows without traversing a reparse point.
 
     `O_NOFOLLOW` is absent on Windows, so `os.open` follows a junction or
@@ -197,36 +197,60 @@ def _open_windows_no_reparse(path: Path) -> int:
         raise OSError("no-reparse open is only available on Windows")
 
     import msvcrt
+    from ctypes import wintypes
 
     generic_read = 0x80000000
     file_share_read = 0x00000001
     open_existing = 3
+    flag_backup_semantics = 0x02000000
     flag_open_reparse_point = 0x00200000
     attribute_reparse_point = 0x400
-    invalid_handle = -1
 
     kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    # Declared, not defaulted. ctypes returns c_int unless told otherwise, and
+    # CreateFileW returns a pointer-sized HANDLE: on 64-bit Windows a valid
+    # handle above 2**31 would be truncated before open_osfhandle ever saw it,
+    # and the comparison below would be against the wrong width. The rest of
+    # this module declares every call the same way.
+    kernel32.CreateFileW.argtypes = [
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.LPVOID,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.HANDLE,
+    ]
+    kernel32.CreateFileW.restype = wintypes.HANDLE
+    invalid_handle = ctypes.cast(ctypes.c_void_p(-1), wintypes.HANDLE).value
+
+    flags = flag_open_reparse_point | (flag_backup_semantics if directory else 0)
     handle = kernel32.CreateFileW(
-        str(path),
-        generic_read,
-        file_share_read,
-        None,
-        open_existing,
-        flag_open_reparse_point,
-        None,
+        str(path), generic_read, file_share_read, None, open_existing, flags, None
     )
     if handle == invalid_handle:
-        raise OSError(ctypes.get_last_error(), f"cannot open key file: {path}")
+        raise OSError(ctypes.get_last_error(), f"cannot open {path}")
 
     descriptor = msvcrt.open_osfhandle(handle, os.O_RDONLY)
     if getattr(os.fstat(descriptor), "st_file_attributes", 0) & attribute_reparse_point:
         os.close(descriptor)
-        raise OSError(f"key file is a reparse point, refusing to read it: {path}")
+        raise OSError(f"{path} is a reparse point, refusing to use it")
     return descriptor
 
 
 def open_no_follow(path: Path) -> int:
     """Open `path` read-only, refusing to follow a link to reach it.
+
+    `O_NOFOLLOW` covers only the FINAL component, so a symlinked parent is
+    still traversed -- `~/.marm` itself being the link, not `~/.marm/.env`.
+    The parent is therefore opened with `O_NOFOLLOW | O_DIRECTORY` and the
+    file is opened relative to that descriptor, which also closes the gap
+    between validating the directory and using it: the descriptor cannot be
+    repointed once it is open.
+
+    Refusing a symlinked `~/.marm` is the same rule one level up from the
+    existing refusal of a symlinked `.env`, so persistence through a
+    symlinked key directory is deliberately unsupported.
 
     Fails closed: any platform, API or attribute check that cannot prove the
     open was safe raises rather than returning a descriptor. A caller that
@@ -234,5 +258,16 @@ def open_no_follow(path: Path) -> int:
     tolerable outcome; adopting a key an attacker redirected is not.
     """
     if sys.platform == "win32":
+        # Windows has no handle-relative open without NtCreateFile, so the
+        # parent is checked as its own no-reparse open and then the file is
+        # opened by path. That leaves a window between the two which POSIX
+        # does not have; the reparse check on the file itself still holds.
+        parent = _open_windows_no_reparse(path.parent, directory=True)
+        os.close(parent)
         return _open_windows_no_reparse(path)
-    return os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+
+    directory = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        return os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW, dir_fd=directory)
+    finally:
+        os.close(directory)
