@@ -555,6 +555,18 @@ def _sessions_needing_scan(memory: "MARMMemory") -> list:
     ]
 
 
+def _sessions_with_active_candidates(memory: "MARMMemory") -> list:
+    """Sessions holding a staged candidate that has not been resolved yet."""
+    with memory.get_connection() as conn:
+        return [
+            row[0]
+            for row in conn.execute(
+                "SELECT DISTINCT session_name FROM compaction_staging "
+                "WHERE status IN ('pending_summary', 'summary_staged')"
+            ).fetchall()
+        ]
+
+
 def _record_scan(
     memory: "MARMMemory", session_name: str, when: str, fingerprint: str
 ) -> None:
@@ -606,6 +618,20 @@ def run_periodic_compaction_scan(memory: "MARMMemory") -> dict:
     scanned: list = []
     skipped: list = []
     staged = 0
+
+    # Re-validate staged candidates for every session that has any, not only the
+    # ones due a scan. A session drops out of _sessions_needing_scan once its
+    # eligible set falls below MIN_CLUSTER_SIZE -- which is exactly what applying
+    # a compaction does, by marking its sources compacted -- and a staged
+    # candidate overlapping those sources would otherwise stay `pending_summary`
+    # with nothing left to re-check it, and could still be injected as a prompt.
+    # This is cheap: it re-reads staging rows and their sources, with no
+    # similarity pass.
+    for session_name in _sessions_with_active_candidates(memory):
+        try:
+            mark_stale_candidates(memory, session_name)
+        except Exception as e:
+            print(f"[compaction] stale re-check failed for '{session_name}': {e}")
 
     for session_name, fingerprint in _sessions_needing_scan(memory):
         task = pending.get(session_name)

@@ -259,7 +259,20 @@ def inspect_runtime() -> dict[str, Any]:
     # every 5s, and a concurrent request to any other route stalled 922ms
     # behind it. Every other caller here is a separate process (the CLI), where
     # the probe is the only way to know and is left alone.
-    if state.get("pid") == os.getpid():
+    # PID alone is not identity. A stale runtime.json can hold a pid the OS later
+    # reuses, and if it is reused by a CLI process this branch would claim that
+    # process IS the runtime -- stop_runtime() then reads identity_matches and
+    # POSTs shutdown to the host and port in the stale file, which another
+    # runtime may now be serving. process_matches() compares the creation time,
+    # which a reused pid cannot forge -- and the field is required to be PRESENT,
+    # because process_matches() treats a missing one as a match (`not expected or
+    # ...`), which would let a stale file without it through on pid alone.
+    # make_state() always writes it, so a real state file always qualifies.
+    if (
+        state.get("pid") == os.getpid()
+        and state.get("process_created_at")
+        and process_matches(state)
+    ):
         return {
             "state": "ready",
             "managed": True,

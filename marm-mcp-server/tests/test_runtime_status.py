@@ -1,3 +1,5 @@
+import psutil
+
 from marm_mcp_server.services import runtime_status
 
 
@@ -63,6 +65,7 @@ def test_inspect_runtime_does_not_probe_itself(monkeypatch):
         "read_state",
         lambda: {
             "pid": os.getpid(),
+            "process_created_at": psutil.Process(os.getpid()).create_time(),
             "runtime_id": "rid",
             "host": "127.0.0.1",
             "port": 8001,
@@ -115,3 +118,45 @@ def test_inspect_runtime_still_probes_another_process(monkeypatch):
     result = runtime_manager.inspect_runtime()
     assert probed == ["/internal/runtime/status"]
     assert result["state"] == "stale"
+
+
+def test_inspect_runtime_does_not_trust_a_reused_pid(monkeypatch):
+    """A stale runtime.json whose pid the OS reused must not look like us.
+
+    The self-snapshot branch keys on `pid == os.getpid()`. If a stale state file
+    holds a pid that is later reused -- by the very CLI process doing the
+    inspecting -- that test alone is satisfied by coincidence. `stop_runtime()`
+    reads the result as `identity_matches` and POSTs shutdown to the host and
+    port in the stale file, which a different runtime may now be serving.
+
+    Creation time is what a reused pid cannot forge, so it must be present and
+    must match before the branch is taken.
+    """
+    import os
+
+    from marm_mcp_server.core import runtime_manager
+
+    probed: list[str] = []
+
+    monkeypatch.setattr(
+        runtime_manager,
+        "read_state",
+        lambda: {
+            "pid": os.getpid(),
+            # the stale file was written by a process that started long ago
+            "process_created_at": psutil.Process(os.getpid()).create_time() - 10_000,
+            "runtime_id": "stale",
+            "host": "127.0.0.1",
+            "port": 8001,
+        },
+    )
+    monkeypatch.setattr(
+        runtime_manager,
+        "request_runtime",
+        lambda *a, **k: probed.append("probed") or None,
+    )
+
+    result = runtime_manager.inspect_runtime()
+
+    assert result.get("identity_matches") is not True
+    assert probed, "a pid that only coincidentally matches must still be probed"
