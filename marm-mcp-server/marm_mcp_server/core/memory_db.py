@@ -279,6 +279,24 @@ def init_database(db_path: str) -> None:
                 updated_at TEXT NOT NULL
             )
         """)
+        # Added after the table shipped: the time-driven scan needs to know when
+        # it last looked at a session, or it repeats an O(n^2) similarity pass
+        # every interval for no new input. Additive, same pattern as below.
+        state_cols = {
+            row[1]
+            for row in conn.execute(
+                "PRAGMA table_info(compaction_session_state)"
+            ).fetchall()
+        }
+        if "last_scanned_at" not in state_cols:
+            conn.execute(
+                "ALTER TABLE compaction_session_state ADD COLUMN last_scanned_at TEXT"
+            )
+        if "last_scan_fingerprint" not in state_cols:
+            conn.execute(
+                "ALTER TABLE compaction_session_state "
+                "ADD COLUMN last_scan_fingerprint TEXT"
+            )
         staging_cols = {
             row[1]
             for row in conn.execute("PRAGMA table_info(compaction_staging)").fetchall()

@@ -559,3 +559,234 @@ async def test_scan_fires_after_grace_period(monkeypatch, tmp_path):
         await asyncio.sleep(0.01)
 
     assert "sess-fire" in scan_called
+
+
+# --- periodic (time-driven) scan -------------------------------------------
+#
+# The write-driven trigger cannot reach a quiet session: it fires 15 minutes
+# after the last write, and a memory is not eligible until it is 24 hours old.
+# These cover the scan that closes that gap. See FINDINGS 23 / candidate C11.
+
+
+def _aged_session(mem: MARMMemory, session: str, age_hours: float = 48.0) -> list:
+    """Three mutually-similar memories old enough to be compaction-eligible."""
+    return [
+        _insert_memory_row(
+            mem, session, f"{session} content {i}", emb, age_hours=age_hours
+        )
+        for i, emb in enumerate(_make_similar_embeddings(3))
+    ]
+
+
+def _compaction_settings(monkeypatch):
+    import marm_mcp_server.config.settings as s
+
+    monkeypatch.setattr(s, "COMPACTION_ENABLED", True)
+    monkeypatch.setattr(s, "COMPACTION_MIN_CLUSTER_SIZE", 3)
+    monkeypatch.setattr(s, "COMPACTION_SIMILARITY_THRESHOLD", 0.88)
+    monkeypatch.setattr(s, "COMPACTION_MIN_AGE_HOURS", 24)
+    return s
+
+
+def _staging_rows(mem: MARMMemory) -> list:
+    with mem.get_connection() as conn:
+        return conn.execute(
+            "SELECT session_name, status, candidate_hash FROM compaction_staging"
+        ).fetchall()
+
+
+def test_periodic_scan_stages_a_session_no_write_will_ever_reach(monkeypatch, tmp_path):
+    """The whole defect in one test: a quiet session with eligible memories.
+
+    Nothing writes to it, so the write-driven trigger never fires; its memories
+    are 48h old, so they are long past the age gate. Before the periodic scan
+    existed this session was invisible forever.
+    """
+    from marm_mcp_server.core.compaction import run_periodic_compaction_scan
+
+    mem = MARMMemory(str(tmp_path / "memory.db"))
+    mem._encoder_failed = True
+    _compaction_settings(monkeypatch)
+    _aged_session(mem, "quiet-session")
+
+    assert _staging_rows(mem) == []
+    result = run_periodic_compaction_scan(mem)
+
+    assert result["staged"] == 1
+    assert "quiet-session" in result["scanned"]
+    rows = _staging_rows(mem)
+    assert len(rows) == 1
+    assert rows[0][0] == "quiet-session"
+    assert rows[0][1] == "pending_summary"
+
+
+def test_periodic_scan_skips_a_session_with_nothing_old_enough(monkeypatch, tmp_path):
+    """The cheap pre-check. A session written an hour ago must not be scanned:
+    the age gate would reject every row, so the O(n^2) pass is pure waste."""
+    from marm_mcp_server.core.compaction import run_periodic_compaction_scan
+
+    mem = MARMMemory(str(tmp_path / "memory.db"))
+    mem._encoder_failed = True
+    _compaction_settings(monkeypatch)
+    _aged_session(mem, "fresh-session", age_hours=1.0)
+
+    result = run_periodic_compaction_scan(mem)
+
+    assert result["scanned"] == []
+    assert _staging_rows(mem) == []
+
+
+def test_periodic_scan_never_re_offers_a_discarded_cluster(monkeypatch, tmp_path):
+    """A rejected proposal must not come back.
+
+    `discard` writes nothing to `memories`, so the sources stay eligible and the
+    same cluster is found on every later scan. With a write-driven trigger that
+    almost never fired this was invisible; on an hourly scan it would re-offer
+    every rejection forever, which is how a review queue stops being read.
+    """
+    from marm_mcp_server.core.compaction import run_periodic_compaction_scan
+
+    mem = MARMMemory(str(tmp_path / "memory.db"))
+    mem._encoder_failed = True
+    _compaction_settings(monkeypatch)
+    _aged_session(mem, "reviewed-session")
+
+    run_periodic_compaction_scan(mem)
+    rows = _staging_rows(mem)
+    assert len(rows) == 1
+    with mem.get_connection() as conn:
+        conn.execute("UPDATE compaction_staging SET status = 'discarded'")
+    # Force a re-scan rather than relying on the skip, so this asserts the
+    # de-duplication and not merely that the session was passed over.
+    with mem.get_connection() as conn:
+        conn.execute("DELETE FROM compaction_session_state")
+
+    run_periodic_compaction_scan(mem)
+
+    rows = _staging_rows(mem)
+    assert len(rows) == 1, "a discarded cluster was offered again"
+    assert rows[0][1] == "discarded"
+
+
+def test_periodic_scan_still_re_offers_a_stale_cluster(monkeypatch, tmp_path):
+    """'stale' exists precisely to be re-offered: it means the sources changed
+    under a staged proposal, so the cluster deserves a fresh look. The discard
+    guard must not swallow this case too."""
+    from marm_mcp_server.core.compaction import run_periodic_compaction_scan
+
+    mem = MARMMemory(str(tmp_path / "memory.db"))
+    mem._encoder_failed = True
+    _compaction_settings(monkeypatch)
+    _aged_session(mem, "changed-session")
+
+    run_periodic_compaction_scan(mem)
+    with mem.get_connection() as conn:
+        conn.execute("UPDATE compaction_staging SET status = 'stale'")
+        conn.execute("DELETE FROM compaction_session_state")
+
+    run_periodic_compaction_scan(mem)
+
+    rows = _staging_rows(mem)
+    assert len(rows) == 2, "a stale cluster should be offered again"
+    assert sorted(r[1] for r in rows) == ["pending_summary", "stale"]
+
+
+def test_periodic_scan_does_not_race_a_live_write_triggered_scan(monkeypatch, tmp_path):
+    """The write-driven path owns a session while its delayed scan is pending.
+    Two scans staging the same cluster is not harmful (the hash dedupes) but it
+    is wasted work and makes the logs lie about who staged what."""
+    from marm_mcp_server.core.compaction import run_periodic_compaction_scan
+
+    mem = MARMMemory(str(tmp_path / "memory.db"))
+    mem._encoder_failed = True
+    _compaction_settings(monkeypatch)
+    _aged_session(mem, "busy-session")
+
+    class _LiveTask:
+        def done(self) -> bool:
+            return False
+
+    mem._pending_compaction_scans["busy-session"] = _LiveTask()
+
+    result = run_periodic_compaction_scan(mem)
+
+    assert result["scanned"] == []
+    assert result["skipped"] == ["busy-session"]
+    assert _staging_rows(mem) == []
+
+
+def test_periodic_scan_does_not_rescan_a_session_that_has_not_aged(
+    monkeypatch, tmp_path
+):
+    """Second pass over an unchanged session is skipped, so the interval job
+    does not repeat an O(n^2) similarity pass every hour for no new input."""
+    from marm_mcp_server.core.compaction import run_periodic_compaction_scan
+
+    mem = MARMMemory(str(tmp_path / "memory.db"))
+    mem._encoder_failed = True
+    _compaction_settings(monkeypatch)
+    _aged_session(mem, "settled-session")
+
+    first = run_periodic_compaction_scan(mem)
+    second = run_periodic_compaction_scan(mem)
+
+    assert first["scanned"] == ["settled-session"]
+    assert second["scanned"] == [], "unchanged session was scanned twice"
+
+
+def test_periodic_scan_picks_a_session_back_up_when_a_memory_ages_in(
+    monkeypatch, tmp_path
+):
+    """...but the skip must not wedge. A memory that crosses the age line after
+    the last scan makes the session eligible again — otherwise the fix would
+    reintroduce the very 'never scanned again' failure it exists to remove."""
+    from marm_mcp_server.core.compaction import run_periodic_compaction_scan
+
+    mem = MARMMemory(str(tmp_path / "memory.db"))
+    mem._encoder_failed = True
+    _compaction_settings(monkeypatch)
+    _aged_session(mem, "growing-session", age_hours=48.0)
+
+    run_periodic_compaction_scan(mem)
+    assert run_periodic_compaction_scan(mem)["scanned"] == []
+
+    # Three more, just over the line: eligible now, and not at the last scan.
+    for i, emb in enumerate(_make_similar_embeddings(3, base_axis=40)):
+        _insert_memory_row(
+            mem, "growing-session", f"later content {i}", emb, age_hours=24.5
+        )
+
+    assert run_periodic_compaction_scan(mem)["scanned"] == ["growing-session"]
+
+
+def test_periodic_scan_sees_memories_imported_with_old_timestamps(
+    monkeypatch, tmp_path
+):
+    """A backdated bulk import must re-trigger a scan.
+
+    This is not hypothetical: the claude-mem import wrote 424 memories carrying
+    their original timestamps, every one already past the age gate on arrival.
+    An earlier version of the skip asked "did any memory become eligible since
+    the last scan?" by comparing each memory's own timestamp to the scan time,
+    which answers no for a row that was already old when it was inserted -- so a
+    session scanned before such an import would never have been scanned again.
+    """
+    from marm_mcp_server.core.compaction import run_periodic_compaction_scan
+
+    mem = MARMMemory(str(tmp_path / "memory.db"))
+    mem._encoder_failed = True
+    _compaction_settings(monkeypatch)
+    _aged_session(mem, "imported-session", age_hours=48.0)
+
+    run_periodic_compaction_scan(mem)
+    assert run_periodic_compaction_scan(mem)["scanned"] == []
+
+    # An archive import: inserted now, but timestamped weeks ago.
+    for i, emb in enumerate(_make_similar_embeddings(3, base_axis=60)):
+        _insert_memory_row(
+            mem, "imported-session", f"archived {i}", emb, age_hours=720.0
+        )
+
+    result = run_periodic_compaction_scan(mem)
+    assert result["scanned"] == ["imported-session"]
+    assert result["staged"] == 1
