@@ -115,6 +115,7 @@ _COMMON = {
     "core",
     "count",
     "create",
+    "criterion",
     "current",
     "cursor",
     "custom",

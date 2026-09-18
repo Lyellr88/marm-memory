@@ -18,7 +18,14 @@ _GATE_SOURCE = pathlib.Path(gate.__file__)
 
 # The six links observed before the gate existed. None was about the symbol it
 # matched; see the module docstring in gate.py.
-OBSERVED_FALSE_POSITIVES = ["upload", "update", "toml", "actions", "updates"]
+OBSERVED_FALSE_POSITIVES = [
+    "upload",
+    "update",
+    "toml",
+    "actions",
+    "updates",
+    "criterion",
+]
 
 
 @pytest.mark.parametrize("name", OBSERVED_FALSE_POSITIVES)

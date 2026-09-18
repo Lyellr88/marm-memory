@@ -207,7 +207,7 @@ def process_matches(state: dict[str, Any]) -> bool:
         return False
 
 
-def _own_runtime_snapshot(state: dict[str, Any]) -> dict[str, Any]:
+def _own_runtime_snapshot() -> dict[str, Any]:
     """What `/internal/runtime/status` would have answered about this process.
 
     Must stay field-for-field equivalent to that endpoint, because callers read
@@ -220,11 +220,15 @@ def _own_runtime_snapshot(state: dict[str, Any]) -> dict[str, Any]:
     from .memory import memory
 
     queue = memory._write_queue
+    # Field-for-field with the endpoint: no extra `state` key, and `runtime_id`
+    # from MARM_RUNTIME_ID rather than the state file. This function only runs
+    # when the state file's pid is our own, so cli.py has already exported that
+    # variable in this process -- the two sources agree, and reading the same one
+    # the endpoint reads keeps them from drifting apart later.
     return {
         "status": "ready",
-        "state": "ready",
         "service": "marm-memory-runtime",
-        "runtime_id": state.get("runtime_id"),
+        "runtime_id": os.environ.get("MARM_RUNTIME_ID"),
         "pid": os.getpid(),
         "version": SERVER_VERSION,
         "profile": os.environ.get("MARM_RUNTIME_PROFILE", "standard"),
@@ -262,7 +266,7 @@ def inspect_runtime() -> dict[str, Any]:
             "identity_matches": True,
             "process_alive": True,
             "metadata": state,
-            "runtime": _own_runtime_snapshot(state),
+            "runtime": _own_runtime_snapshot(),
         }
 
     process_alive = process_matches(state)
