@@ -625,3 +625,44 @@ def test_a_real_key_directory_still_reads(monkeypatch, tmp_path):
     monkeypatch.setattr(api_key_bootstrap, "_MARM_ENV_PATH", env_path)
 
     assert api_key_bootstrap._load_key_from_file() == "an-ordinary-key-value-here"
+
+
+def test_the_key_is_flushed_to_disk_before_it_is_called_saved(monkeypatch, tmp_path):
+    """`os.replace` is atomic against a reader, not against power loss.
+
+    The caller prints "Saved to: ..." and "on subsequent starts the key loads
+    silently", so an unflushed write makes that a promise the code has not
+    kept: a crash before writeback leaves the next start generating a
+    different key and rejecting every client that kept the first one.
+    """
+    from marm_mcp_server.config import api_key_bootstrap
+
+    env_path = tmp_path / ".marm" / ".env"
+    env_path.parent.mkdir(parents=True)
+
+    synced = []
+    real_fsync = os.fsync
+    monkeypatch.setattr(os, "fsync", lambda fd: (synced.append(fd), real_fsync(fd))[1])
+
+    api_key_bootstrap._write_key_file(env_path, "a-key-long-enough-to-store")
+
+    assert env_path.read_text() == "MARM_API_KEY=a-key-long-enough-to-store\n"
+    # One for the file contents, one for the renamed directory entry.
+    assert len(synced) == 2, f"expected file and directory fsync, saw {len(synced)}"
+
+
+def test_a_failed_flush_is_reported_as_a_persistence_failure(monkeypatch, tmp_path):
+    """Otherwise the caller prints "Saved to:" for a key that may not be there."""
+    from marm_mcp_server.config import api_key_bootstrap
+
+    env_path = tmp_path / ".marm" / ".env"
+    env_path.parent.mkdir(parents=True)
+
+    def refuse(_fd):
+        raise OSError("disk went away")
+
+    monkeypatch.setattr(os, "fsync", refuse)
+
+    with pytest.raises(api_key_bootstrap.KeyFileProtectionError):
+        api_key_bootstrap._write_key_file(env_path, "a-key-long-enough-to-store")
+    assert not env_path.exists(), "a failed write must not leave a file behind"

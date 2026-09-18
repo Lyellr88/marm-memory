@@ -70,6 +70,22 @@ def _secure_key_dir(directory: Path) -> None:
     )
 
 
+def _sync_directory(directory: Path) -> None:
+    """Make the renamed directory entry durable, not just the file contents.
+
+    A POSIX rename is a directory operation, so fsyncing the file alone leaves
+    the entry itself unflushed. Windows exposes no directory handle to sync and
+    does not need one for this.
+    """
+    if os.name == "nt":
+        return
+    descriptor = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
 def _write_key_file(path: Path, marm_api_key: str) -> None:
     """Write the key file so the secret is never readable by anyone else.
 
@@ -97,6 +113,18 @@ def _write_key_file(path: Path, marm_api_key: str) -> None:
         descriptor = os.open(temporary, flags, 0o600)
         with os.fdopen(descriptor, "w", encoding="utf-8") as key_file:
             key_file.write(f"MARM_API_KEY={marm_api_key}\n")
+            # `os.replace` is atomic against a concurrent reader, not against
+            # power loss. Without this the caller prints "Saved to: ..." and
+            # "on subsequent starts the key loads silently", and a crash before
+            # writeback makes the next start generate a DIFFERENT key and
+            # reject every client that kept the one it was handed.
+            key_file.flush()
+            try:
+                os.fsync(key_file.fileno())
+            except OSError as exc:
+                raise KeyFileProtectionError(
+                    f"could not flush the new key file to disk: {path}: {exc}"
+                ) from exc
         # Harden before the file is reachable under its real name.
         try:
             protected = _protect_key_file(temporary)
@@ -107,6 +135,16 @@ def _write_key_file(path: Path, marm_api_key: str) -> None:
         if not protected:
             raise KeyFileProtectionError(f"could not secure the new key file: {path}")
         os.replace(temporary, path)
+        try:
+            _sync_directory(path.parent)
+        except OSError as exc:
+            # The file is in place but the entry may not survive a crash, and
+            # the caller is about to promise that it will. A persistence
+            # failure is the honest report -- it is the branch that says the
+            # key is live in memory and will not survive a restart.
+            raise KeyFileProtectionError(
+                f"could not flush the key directory entry: {path.parent}: {exc}"
+            ) from exc
     except BaseException:
         try:
             os.unlink(temporary)
