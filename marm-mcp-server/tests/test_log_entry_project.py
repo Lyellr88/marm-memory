@@ -129,3 +129,25 @@ async def test_the_scope_survives_the_write_queue(monkeypatch, tmp_path):
         assert _rows(memory, "log_entries") == [SCOPE]
     finally:
         await memory.stop_write_queue()
+
+
+def test_the_http_project_bound_matches_the_other_project_routes():
+    """A bound that is stricter here than elsewhere is a transport divergence.
+
+    `project` is unbounded over STDIO and on every other project-scoped model
+    in `core/models.py`; the one payload that bounds it -- the Console memory
+    payload -- uses 255. A tighter limit on this one model would reject over
+    HTTP a scope the same caller can use everywhere else, which is the kind of
+    difference nobody discovers until a real project name is long.
+    """
+    from marm_mcp_server.core.models import LogEntryRequest
+    from marm_mcp_server.endpoints.memory import ConsoleMemoryPayload
+
+    def bound(model, field):
+        return next(
+            m.max_length
+            for m in model.model_fields[field].metadata
+            if getattr(m, "max_length", None) is not None
+        )
+
+    assert bound(LogEntryRequest, "project") == bound(ConsoleMemoryPayload, "project")
