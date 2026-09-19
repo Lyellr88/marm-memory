@@ -351,6 +351,14 @@ export interface LocalLlmStatus {
   context_length: number | null;
   served: ServedModel[];
   switch_blocked_reason: string | null;
+  /** WHICH RULE chose `endpoint`, which is not the same as what it chose.
+   *
+   *  `flag` and `environment` mean somebody stated this address; `discovery`
+   *  means nothing answered at the stated one and MARM fell back to whatever
+   *  is running. A picker that cannot tell those apart shows an auto-selected
+   *  server as "in use" and disables it, while the banner above still asks the
+   *  reader to pick one — telling them to do something the UI forbids. */
+  endpoint_source?: 'flag' | 'environment' | 'discovery' | 'default';
   source?: string;
   rejected?: string;
   applied_model?: string;

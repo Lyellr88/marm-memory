@@ -26,6 +26,11 @@ export function ServerPicker({ llm }: { llm: LocalLlmStatus }) {
   const data = servers.data;
   const found = data?.servers ?? [];
   const configuredDead = data ? !data.configured_reachable : false;
+  // WHICH RULE chose the endpoint, not just which endpoint. `discovery` means
+  // nothing answered at the stated address and MARM fell back on its own, so
+  // that server is serving but was never CHOSEN -- and picking it is still a
+  // real action: it pins the address instead of leaving it to re-scan.
+  const autoSelected = llm.endpoint_source === 'discovery';
 
   const choose = (url: string) => update.mutate({ endpoint: url });
 
@@ -61,9 +66,11 @@ export function ServerPicker({ llm }: { llm: LocalLlmStatus }) {
           <p className="text-xs text-amber-100">
             Nothing is answering at{' '}
             <code className="font-mono text-[11px]">{data?.configured}</code>
-            {found.length > 0
-              ? ' — but another local server is running. Pick it below.'
-              : '. Start a local model server, or enter its address below.'}
+            {found.length === 0
+              ? '. Start a local model server, or enter its address below.'
+              : autoSelected
+                ? ' — MARM is using the running server below instead. Pick it to keep that choice, or it reverts when the address above answers again.'
+                : ' — but another local server is running. Pick it below.'}
           </p>
         </div>
       )}
@@ -72,11 +79,14 @@ export function ServerPicker({ llm }: { llm: LocalLlmStatus }) {
         <div className="space-y-1">
           {found.map((server) => {
             const active = server.url === llm.endpoint;
+            // Disabled only when this address was CHOSEN. An auto-selected one
+            // is serving but unpinned, and clicking it is what pins it.
+            const pinned = active && !autoSelected;
             return (
               <button
                 key={server.url}
                 type="button"
-                disabled={update.isPending || active}
+                disabled={update.isPending || pinned}
                 onClick={() => choose(server.url)}
                 className={cn(
                   'flex w-full items-center gap-2 rounded-lg border px-2.5 py-2 text-left transition-colors',
@@ -85,7 +95,13 @@ export function ServerPicker({ llm }: { llm: LocalLlmStatus }) {
                     : 'border-border/60 bg-card/35 hover:border-primary/40',
                   update.isPending && 'opacity-60',
                 )}
-                title={active ? 'Currently in use' : `Use ${server.runtime} on port ${server.port}`}
+                title={
+                  pinned
+                    ? 'Currently in use'
+                    : active
+                      ? `Auto-selected because the configured address is not answering — click to keep ${server.runtime}`
+                      : `Use ${server.runtime} on port ${server.port}`
+                }
               >
                 <Plug
                   className={cn('h-3.5 w-3.5 shrink-0', active ? 'text-primary' : 'text-cyan-300')}
@@ -117,7 +133,7 @@ export function ServerPicker({ llm }: { llm: LocalLlmStatus }) {
                     variant="outline"
                     className="shrink-0 border-primary/40 text-[9px] text-primary-highlight"
                   >
-                    in use
+                    {pinned ? 'in use' : 'auto-selected'}
                   </Badge>
                 )}
                 {!server.can_switch && (
