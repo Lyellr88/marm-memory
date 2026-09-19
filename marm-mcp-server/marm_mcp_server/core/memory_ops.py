@@ -4,6 +4,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Dict
 
+import structlog
+
 from ..config.settings import (
     CONSOLIDATION_ENABLED,
     CONSOLIDATION_THRESHOLD,
@@ -30,6 +32,8 @@ from .memory_utils import (
     _spawn_chunk_write,
     sanitize_content,
 )
+
+logger = structlog.get_logger(__name__)
 
 if TYPE_CHECKING:
     from .memory import MARMMemory
@@ -71,6 +75,18 @@ async def _update_memory(mem: "MARMMemory", memory_id: str, new_content: str) ->
     # caller's fallback is to store the memory as its own row. Two rows the
     # scorer can tell apart beat one row with half the evidence missing.
     if len(existing_content) + len(_MARKER) + len(new_content) > _MAX:
+        # Logged, because a silent refusal has the same shape as the silent
+        # truncation it replaces: both end with the caller believing
+        # consolidation did something reasonable. `merge_refused_oversize`
+        # separates "not similar enough to merge" from "similar, but
+        # preserving the evidence needed its own row" in an audit.
+        logger.info(
+            "consolidation.merge_refused_oversize",
+            memory_id=memory_id,
+            existing_chars=len(existing_content),
+            incoming_chars=len(new_content),
+            limit=_MAX,
+        )
         return False
     merged_content = f"{existing_content}{_MARKER}{new_content}"
     merged_at = datetime.now(timezone.utc).isoformat()
