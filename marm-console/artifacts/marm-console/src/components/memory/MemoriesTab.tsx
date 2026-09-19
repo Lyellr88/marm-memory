@@ -233,16 +233,27 @@ export function MemoriesTab() {
         metadata: selectedMemory.metadata,
       }
     }, {
-      onSuccess: () => {
+      // `selectedMemory` holds the SERVER's representation, which is escaped;
+      // `editContent` is the decoded text the editor showed. Echoing the
+      // editor value back into it would leave the two out of step, and the
+      // detail renderer -- which decodes what it is given -- would decode an
+      // already-decoded string, turning a memory that really contains the
+      // characters `&lt;` into one that appears to contain `<`. PUT returns
+      // the stored row, so take it. The response degrades to a bare `{id}`
+      // if the row cannot be read back, and a partial object must not
+      // overwrite a whole one.
+      onSuccess: (updated) => {
         setEditMode(false);
-        setSelectedMemory({
-          ...selectedMemory,
-          content: editContent,
-          project: editProject.trim() || null,
-          platform: editPlatform.trim() || null,
-          context_type: editContextType.trim() || 'general',
-        });
-        setActionNotice({ kind: 'success', message: 'Memory updated.' });
+        if (typeof updated?.content === 'string') {
+          setSelectedMemory(updated);
+          setActionNotice({ kind: 'success', message: 'Memory updated.' });
+          return;
+        }
+        // The row could not be read back -- the write landed, but there is
+        // nothing to show. Close rather than leave the pre-edit content on
+        // screen looking like the saved result.
+        setSelectedMemory(null);
+        setActionNotice({ kind: 'success', message: 'Memory updated, but it could not be read back.' });
       },
       onError: (error) => setActionNotice({ kind: 'error', message: mutationErrorMessage(error) }),
     });
