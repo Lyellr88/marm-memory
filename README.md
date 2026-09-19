@@ -859,11 +859,28 @@ MARM ships two graph systems that complement the memory store: a **code graph** 
 
 ```text
 Use marm_graph_index to index this repository.
-Then use marm_code_lookup when you need symbols, files, or source snippets.
+Then use marm_code_context when the question is how something works or what a change would touch.
+Use marm_code_lookup when you need a specific symbol, file, or source snippet.
 Use marm_graph_trace for call paths, marm_graph_architecture for an overview, and marm_graph_impact for change-risk checks.
 ```
 
-The recommended agent workflow: index once, then `marm_code_lookup` before broad file reads, `marm_graph_trace` when callers/callees or data-flow context matters, `marm_graph_architecture` for orientation, and `marm_graph_impact` before risky refactors. One graph query replaces dozens of grep/read cycles, which is where the token savings come from.
+The recommended agent workflow: index once, then `marm_code_context` for a task-shaped question, `marm_code_lookup` before broad file reads, `marm_graph_trace` when callers/callees or data-flow context matters, `marm_graph_architecture` for orientation, and `marm_graph_impact` before risky refactors. One graph query replaces dozens of grep/read cycles, which is where the token savings come from.
+
+#### Composed context: `marm_code_context`
+
+The other five tools answer one question each, and an agent typically chains them: search for a name, trace its callers, read each file, then look for anything memory recorded about them. `marm_code_context` runs that chain server-side and returns the result as one payload:
+
+```text
+marm_code_context(task="how does the write queue serialise concurrent writes?")
+```
+
+Six steps: **seed** with lexical and semantic search, **expand** along callers and callees, **rank** that subgraph with personalised PageRank, **read** the winners' source off disk, **recall** the memories and memory→symbol links attached to them, and **budget** the result down to a character limit with the decisive material first.
+
+Step three is the one plain search cannot do. Lexical search answers "which symbols mention these words", which is not the question an agent is asking; a symbol nothing calls and nothing references ranks below one sitting at the centre of the relevant neighbourhood, even when both mention the terms equally. Step five is the one a pure code index structurally cannot do — it carries why the code is the way it is, not only what it says.
+
+`detail` trades size for structure. `1` (the default) returns the markdown and notes: what an agent needs, and nothing twice. `2` adds symbol and memory metadata — names, files, lines, scores, and the `provenance` that records whether a symbol was seeded from the task or pulled in along a call edge — without repeating the source already in the markdown. `3` adds source and memory text as structured fields too, which is what a renderer wants and what the Console asks for. `MARM_CODE_CONTEXT_DETAIL` moves that default for every agent at once. `include_graph` is a separate switch on a different axis, off by default: it returns the ranked edge list for visualisation, which nothing else reads.
+
+One constraint worth knowing: traces resolve by **qualified** name. A bare name matching two symbols comes back as `status: "ambiguous"` with no edges rather than a guess, which leaves ranking with nothing to work on and collapses the result to plain search order.
 
 Once a repository is indexed, MARM keeps it current on its own. A filesystem watcher notices a save, a commit, a branch switch, or a merge and re-indexes shortly after, debounced so a burst of changes becomes one pass rather than one per file. A periodic reconciliation pass catches anything a watcher event missed and is the only trigger for a directory that is not a git repo. To index only on request instead:
 
@@ -873,7 +890,7 @@ marm-mcp-server projects auto off
 
 An agent can do the same with `marm_graph_index(action="auto_off")`, and `action="auto_status"` reports what is being watched and when each project was last indexed. The switch persists across restarts and beats the `GRAPH_AUTO_INDEX` environment variable.
 
-Under the hood, the engine is [codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp) (MIT), a zero-dependency static binary that parses 158 languages through tree-sitter with Hybrid LSP type resolution for the major ones, indexes an average repository in seconds, and answers symbol search and call tracing in well under a second. Measured on a 149,107-node graph over the persistent connection MARM holds: symbol search 146ms, call tracing 67ms, and the full architecture overview 1.23s, which is the one query that is not sub-second. MARM pins a specific release, verifies its tool schema on startup, and routes the upstream tool set through 5 focused MCP tools so the model surface stays small. The graph backend starts lazily on first graph-tool use, so memory, logging, notebook, and summary tools still start fast. In Docker, the engine binary is baked into the image; local pip installs fetch it on first graph use (~269MB, one time).
+Under the hood, the engine is [codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp) (MIT), a zero-dependency static binary that parses 158 languages through tree-sitter with Hybrid LSP type resolution for the major ones, indexes an average repository in seconds, and answers symbol search and call tracing in well under a second. Measured on a 149,107-node graph over the persistent connection MARM holds: symbol search 146ms, call tracing 67ms, and the full architecture overview 1.23s, which is the one query that is not sub-second. MARM pins a specific release, verifies its tool schema on startup, and routes the upstream tool set through 6 focused MCP tools so the model surface stays small. The graph backend starts lazily on first graph-tool use, so memory, logging, notebook, and summary tools still start fast. In Docker, the engine binary is baked into the image; local pip installs fetch it on first graph use (~269MB, one time).
 
 **Degraded mode:** if the graph engine fails to start (no network for the first-run download, disk full, schema drift) or `GRAPH_ENABLED=false` is set, graph tools return `{"status": "error", "message": "graph backend unavailable"}` while the other 9 tools keep working normally. Graph failures can never take down memory.
 
@@ -999,6 +1016,7 @@ Packaged docs are indexed into the `marm_system` memory namespace on startup and
 | `GRAPH_AUTO_INDEX_DEBOUNCE_SECONDS` | `2` | Quiet period after a watcher event before a repo is evaluated, so a burst of saves becomes one re-index. Minimum 0.5 |
 | `GRAPH_AUTO_INDEX_RECONCILE_SECONDS` | `300` | Fallback pass that catches a missed watcher event, covers a filesystem that cannot be watched, and is the only trigger for a directory that is not a git repo. Minimum 60. Replaces the deprecated `GRAPH_AUTO_INDEX_FULL_INTERVAL`, whose value carries over automatically if this is unset. `GRAPH_AUTO_INDEX_INTERVAL` (the old fixed poll) is deprecated and no longer read for anything but a warning |
 | `GRAPH_AUTO_INDEX_MODE` | `moderate` | Index depth for automatic re-indexes: `full`, `moderate`, or `fast`. Anything else warns and falls back |
+| `MARM_CODE_CONTEXT_DETAIL` | `1` | Default `detail` for `marm_code_context` when a caller passes `0`. Clamped to 1-3. Raising it is the lever for a client that renders the structured parts itself; leaving it at `1` keeps the response to the markdown block, which is what most agents read |
 | `GRAPH_AUTO_INDEX_LEASE_SECONDS` | `120` | How long the indexing gate stays owned once nothing is renewing it. A running index renews its own lease, so this bounds how long a *killed* process blocks indexing, not how long an index may take |
 | `GRAPH_AUTO_INDEX_PROJECT_TTL` | `300` | How long the list of watched projects is trusted before it is re-read from the engine |
 | `CONCEPT_BUILD_ROW_CAP` | `500` | Memory rows read per page during a concept-graph build. Not a cap on the build: every memory in scope is read either way |
