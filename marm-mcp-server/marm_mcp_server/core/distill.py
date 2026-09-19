@@ -20,11 +20,10 @@ WHY THIS IS SELECTION AND NOT GENERATION
     plainly, not what was meant.
 
 WHY IT PROPOSES RATHER THAN WRITES
-    The same reason `marm_compaction` stages instead of applying: on this data
-    a 0.88 similarity threshold on entity names returns roughly 81% false
-    positives, and the same metric rates `v1.8.1` and `v1.8.2` at 0.996.
-    Anything that writes memory unattended on a similarity score will poison
-    the store faster than it fills it.
+    The same reason `marm_compaction` stages instead of applying: a similarity
+    threshold on entity names produces enough false positives that anything
+    writing memory unattended on such a score poisons the store faster than it
+    fills it -- two adjacent version strings score as near-identical.
 
     Resolution is deliberately three-valued, not four. An LLM-backed pipeline
     can classify a near-match as "supersedes" or "contradicts"; an encoder
@@ -66,16 +65,10 @@ NEAR_AT = 0.82
 
 # Selection defaults. See `extract_candidates` for why the cap, not the
 # threshold, is what keeps the queue reviewable.
-# Measured, not chosen. Against the 441 live memories and a set of real
-# chatter, 0.35 admitted no chatter but discarded 14% of the store and one of
-# the five canonical MARM-Stack memories -- "The code-graph daemon reparents to
-# systemd and survives stopping the marm service" scores +0.25 and was silently
-# dropped, which is precisely the kind of memory this exists to catch.
-#
-# At 0.20 the store is kept whole (100%), all five canonical memories clear it,
-# and every piece of chatter is still excluded -- the best negative scores
-# -0.25, so there is 0.45 of margin. That matches what the threshold is FOR:
-# excluding chatter. Volume is `DEFAULT_LIMIT`'s job, and it alone.
+# Calibrated against real memories rather than invented examples: a higher
+# threshold discarded genuine memories without excluding any more chatter,
+# because a terse technical assertion can score close to one. The threshold is
+# FOR excluding chatter; volume is `DEFAULT_LIMIT`'s job, and it alone.
 DEFAULT_THRESHOLD = 0.20
 DEFAULT_LIMIT = 20
 
@@ -199,11 +192,9 @@ def _shape_score(doc_or_span: "Doc | Span") -> tuple[float, list[str]]:
         #
         # The membership test is LEXICAL, and that is not belt-and-braces. A
         # pronoun is a closed class, so a token tagged PRON that is not one of
-        # these words is a mistag -- and `en_core_web_sm` makes exactly that
-        # mistake on this domain's identifiers. Measured: after a question,
-        # "marm_delete removes log entries only" has `marm_delete` tagged
-        # PRON/PRP, which flipped a +0.35 bonus into a -0.25 penalty and sank a
-        # real memory from +0.85 to +0.25.
+        # these words is a mistag -- and the model makes exactly that mistake on
+        # this domain's identifiers, which would otherwise turn a bonus into a
+        # penalty and sink a real memory.
         if subject.lower_ in _PRONOUNS:
             score -= 0.25
             reasons.append("subject is a bare pronoun")
@@ -288,9 +279,8 @@ def _normalise(text: str) -> str:
 def _dedupe_key(content: str) -> str:
     """Collapse to letters and digits so two spellings of one sentence agree.
 
-    Measured need: the same sentence appeared twice in one transcript, once
-    with `marm_compaction` in backticks and once without. Casefolding alone
-    treats those as different memories and proposes both.
+    One sentence can appear twice in a transcript differing only in backticks
+    or punctuation; casefolding alone treats those as two memories.
     """
     return re.sub(r"[^a-z0-9]+", "", content.casefold())
 
