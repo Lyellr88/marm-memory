@@ -49,6 +49,7 @@ def test_only_loopback_endpoints_are_used(monkeypatch, url, allowed):
     That is the one failure with no local symptom, so it is refused rather than
     warned about.
     """
+    monkeypatch.setenv("MARM_LLM_URL", url)
     monkeypatch.setattr(local_llm, "DEFAULT_URL", url)
     monkeypatch.setattr(local_llm, "ALLOW_REMOTE", False)
     assert (local_llm.endpoint() is not None) is allowed
@@ -57,12 +58,14 @@ def test_only_loopback_endpoints_are_used(monkeypatch, url, allowed):
 def test_a_remote_endpoint_needs_an_explicit_sentence_to_enable(monkeypatch):
     """The override is a sentence, not a truthy flag, so it cannot be set by
     accident or by a stray `=1` copied from another variable."""
+    monkeypatch.setenv("MARM_LLM_URL", "https://api.example.com")
     monkeypatch.setattr(local_llm, "DEFAULT_URL", "https://api.example.com")
     monkeypatch.setattr(local_llm, "ALLOW_REMOTE", True)
     assert local_llm.endpoint() == "https://api.example.com"
 
 
 def test_an_unreachable_server_is_none_and_not_an_exception(monkeypatch):
+    monkeypatch.setenv("MARM_LLM_URL", "http://127.0.0.1:9")
     monkeypatch.setattr(local_llm, "DEFAULT_URL", "http://127.0.0.1:9")
     assert local_llm.available() is None
     assert local_llm.complete("s", "u") is None
