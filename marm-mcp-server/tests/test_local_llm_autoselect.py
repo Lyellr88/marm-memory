@@ -123,3 +123,21 @@ def test_a_non_loopback_discovery_is_refused(monkeypatch):
     )
     monkeypatch.setattr(local_llm, "ALLOW_REMOTE", False)
     assert local_llm.endpoint() == local_llm.DEFAULT_URL.rstrip("/")
+
+
+def test_endpoint_source_names_the_rule_that_chose(monkeypatch):
+    """A URL does not say how it was picked, and "discovery" means it can
+    change by itself when a server starts or stops."""
+    _discovers(monkeypatch, [_server(11434, "Ollama")])
+    assert local_llm.endpoint_source() == "discovery"
+
+    monkeypatch.setenv("MARM_LLM_URL", "http://127.0.0.1:8080")
+    assert local_llm.endpoint_source() == "environment"
+
+    monkeypatch.setattr(local_llm, "_saved_endpoint", lambda: "http://127.0.0.1:5001")
+    assert local_llm.endpoint_source() == "flag"
+
+
+def test_endpoint_source_is_default_when_nothing_answers(monkeypatch):
+    _discovers(monkeypatch, [])
+    assert local_llm.endpoint_source() == "default"
