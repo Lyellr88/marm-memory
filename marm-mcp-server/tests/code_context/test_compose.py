@@ -419,6 +419,72 @@ async def test_a_partial_trace_failure_says_how_many(repo):
 
 
 @pytest.mark.asyncio
+async def test_the_unavailable_note_counts_only_trace_candidates(repo):
+    """The denominator is what was expanded, not what ended up in the map.
+
+    A successful trace adds graph-derived symbols, so measuring after the loop
+    counts symbols that were never candidates for expansion.
+    """
+
+    class Mixed(Stub):
+        def trace(self, project, symbol, depth=2, direction="both"):
+            if symbol == "proj.m.good":
+                return {
+                    "callees": [
+                        {"qualified_name": f"proj.m.extra{i}", "name": f"extra{i}"}
+                        for i in range(5)
+                    ]
+                }
+            return {"status": "error", "message": "engine gone"}
+
+    c = Mixed(
+        repo,
+        results=[
+            _row("good", "proj.m.good", 1, 2),
+            _row("bad", "proj.m.bad", 3, 4),
+        ],
+    )
+    ctx = await build(c, "good bad", cwd=str(repo))
+    note = next(n for n in ctx.notes if "call graph unavailable" in n)
+    assert note.endswith("of 2 expanded symbols"), (
+        f"five symbols arrived via trace and must not inflate the denominator: {note}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_graph_outage_during_backfill_still_returns_a_composition(repo):
+    """The backfill search is cosmetic; losing it must not fail the request.
+
+    Every other graph call in build() degrades. This one resolves a file and
+    line for a symbol the ranking already has, so an engine that dies after
+    seeding should cost the line numbers, not the whole composition.
+    """
+    from marm_mcp_server.services.code_context.backend import GraphUnavailable
+
+    class DiesLate(Stub):
+        def __init__(self, *a, **k):
+            super().__init__(*a, **k)
+            self._seeded = False
+
+        def search(self, project, query, limit=25, semantic=None):
+            if self._seeded:
+                raise GraphUnavailable("engine gone")
+            self._seeded = True
+            return self._results
+
+        def trace(self, project, symbol, depth=2, direction="both"):
+            return {
+                "callees": [
+                    {"qualified_name": "proj.m.orphan", "name": "orphan", "hop": 1}
+                ]
+            }
+
+    c = DiesLate(repo, results=[_row("caller", "proj.m.caller", 1, 2)])
+    ctx = await build(c, "caller", cwd=str(repo))
+    assert ctx.symbols, "the composition must survive a backfill outage"
+
+
+@pytest.mark.asyncio
 async def test_ambiguous_on_both_forms_is_survivable(repo):
     class AllAmb(Stub):
         def trace(self, *a, **k):

@@ -281,7 +281,11 @@ async def build(
 
     edges: list[tuple[str, str, float]] = []
     traces_unavailable = 0
-    for s in list(by_qn.values())[:EXPAND_SEEDS]:
+    # Snapshot BEFORE the loop: a successful trace adds graph-derived symbols to
+    # `by_qn`, so measuring it afterwards would report a denominator including
+    # symbols that were never candidates for expansion.
+    trace_candidates = list(by_qn.values())[:EXPAND_SEEDS]
+    for s in trace_candidates:
         # Trace by QUALIFIED name. A bare name that matches more than one symbol
         # -- routine in any real codebase, e.g. two `cpu_clock` methods on
         # different structs -- comes back as status "ambiguous" with no edges,
@@ -335,7 +339,7 @@ async def build(
         # present a partial call graph as a whole one.
         ctx.notes.append(
             f"call graph unavailable for {traces_unavailable} of "
-            f"{min(len(by_qn), EXPAND_SEEDS)} expanded symbols"
+            f"{len(trace_candidates)} expanded symbols"
         )
 
     ranks = personalised_pagerank(edges, seed_mass) if edges else dict(seed_mass)
@@ -358,7 +362,16 @@ async def build(
     for s in ordered[:12]:
         if s.file_path or not s.name:
             continue
-        for row in await asyncio.to_thread(client.search, name, s.name, limit=3):
+        try:
+            rows = await asyncio.to_thread(client.search, name, s.name, limit=3)
+        except GraphUnavailable:
+            # Every other graph call here degrades rather than failing: the
+            # trace loop counts it, binding/recall/memory_links swallow it.
+            # This is cosmetic backfill -- a file and line for a symbol the
+            # ranking already has -- so an engine that dies after seeding must
+            # not turn a usable composition into a failed request.
+            break
+        for row in rows:
             if row.get("qualified_name") == s.qualified_name:
                 found = _sym(row)
                 s.file_path, s.start_line, s.end_line = (
