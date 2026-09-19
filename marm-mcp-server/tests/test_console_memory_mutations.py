@@ -371,6 +371,26 @@ def test_replace_keeps_the_timestamp_when_only_metadata_changes(monkeypatch, tmp
                     "UPDATE memories SET timestamp = ? WHERE id = ?",
                     ("2026-01-01T00:00:00+00:00", memory_id),
                 )
+                # A staging row the replace has to mark stale. Its updated_at
+                # is about the staging row, not about the memory.
+                conn.execute(
+                    """INSERT INTO compaction_staging
+                       (id, session_name, source_memory_ids, preview, status,
+                        candidate_hash, source_updated_at_snapshot, expires_at,
+                        created_at, updated_at)
+                       VALUES (?, ?, ?, ?, 'pending_review', ?, ?, ?, ?, ?)""",
+                    (
+                        "stage-1",
+                        "s",
+                        json.dumps([memory_id]),
+                        "preview",
+                        "hash-1",
+                        "2026-01-01T00:00:00+00:00",
+                        "2027-01-01T00:00:00+00:00",
+                        "2026-01-01T00:00:00+00:00",
+                        "2026-01-01T00:00:00+00:00",
+                    ),
+                )
 
             # Metadata-only: same content, corrected project.
             moved = client.put(
@@ -390,9 +410,27 @@ def test_replace_keeps_the_timestamp_when_only_metadata_changes(monkeypatch, tmp
                 project, timestamp = conn.execute(
                     "SELECT project, timestamp FROM memories WHERE id = ?", (memory_id,)
                 ).fetchone()
+                (last_accessed,) = conn.execute(
+                    "SELECT last_accessed FROM sessions WHERE session_name = ?", ("s",)
+                ).fetchone()
+                staged_status, staged_updated = conn.execute(
+                    "SELECT status, updated_at FROM compaction_staging WHERE id = ?",
+                    ("stage-1",),
+                ).fetchone()
             assert project == "right-project", "the re-scope must still take effect"
             assert timestamp == "2026-01-01T00:00:00+00:00", (
                 "a metadata-only change must not make the memory look new"
+            )
+            # Only `memories.timestamp` may be historical. `last_accessed` is
+            # about the WRITE, and it decides which session is current and how
+            # the Console orders the session list, so backdating it would
+            # demote a session that was just touched.
+            assert last_accessed > "2026-01-01T00:00:00+00:00", (
+                "the session was accessed now, whatever the memory is dated"
+            )
+            assert staged_status == "stale"
+            assert staged_updated > "2026-01-01T00:00:00+00:00", (
+                "the staging row went stale now, not when the memory is from"
             )
 
             # A CONTENT change does move it: the memory now says something else

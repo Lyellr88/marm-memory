@@ -335,11 +335,15 @@ async def _replace_memory(
         previous_hash, previous_content, previous_timestamp = previous
         if previous_hash is None:
             previous_hash = compute_content_hash(previous_content or "")
-        timestamp = (
-            previous_timestamp
-            if previous_hash == content_hash
-            else datetime.now(timezone.utc).isoformat()
-        )
+        # `written_at` is when THIS write happened, and the rows below are
+        # about the write rather than about the memory: a staging row going
+        # stale, and a session being touched. Only `memories.timestamp` may
+        # be historical -- reusing it for those would backdate them, and
+        # `last_accessed` in particular decides which session is current
+        # (`memory.py`: ORDER BY last_accessed DESC LIMIT 1) and orders the
+        # Console's session list.
+        written_at = datetime.now(timezone.utc).isoformat()
+        timestamp = previous_timestamp if previous_hash == content_hash else written_at
         cursor = conn.execute(
             """UPDATE memories SET content = ?, session_name = ?, context_type = ?, metadata = ?,
                project = ?, platform = ?, content_hash = ?, embedding = ?, timestamp = ? WHERE id = ?""",
@@ -369,7 +373,7 @@ async def _replace_memory(
                   WHERE value = ?
               )
             """,
-            (timestamp, memory_id),
+            (written_at, memory_id),
         )
         conn.execute(
             """
@@ -377,7 +381,7 @@ async def _replace_memory(
             VALUES (?, ?)
             ON CONFLICT(session_name) DO UPDATE SET last_accessed = excluded.last_accessed
             """,
-            (session, timestamp),
+            (session, written_at),
         )
         conn.execute("DELETE FROM memory_chunks WHERE memory_id = ?", (memory_id,))
         enqueue_concept_index(conn, memory_id, content_hash)
