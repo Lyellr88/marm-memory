@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { decodeEntities } from '@/lib/entities';
 import { useMemories, useFilters, useCreateMemory, useUpdateMemory, useDeleteMemory, useBulkDeleteMemories } from '@/hooks/use-marm-queries';
 import { Badge, Button, Input, Select, SelectTrigger, SelectValue, SelectContent, SelectItem, Table, TableHeader, TableRow, TableHead, TableBody, TableCell, Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, Textarea, Label, cn } from '@/components/ui/core';
 import { format } from 'date-fns';
@@ -69,7 +70,7 @@ function MemoryRow({
             <ContextIcon className="h-2.5 w-2.5" /> {memory.context_type || 'general'}
           </Badge>
         </div>
-        <div className="line-clamp-2 text-sm leading-relaxed text-foreground/90 transition-colors group-hover:text-foreground">{memory.content}</div>
+        <div className="line-clamp-2 text-sm leading-relaxed text-foreground/90 transition-colors group-hover:text-foreground">{decodeEntities(memory.content)}</div>
       </TableCell>
       <TableCell className="text-right">
         {memory.compaction_role !== 'none' && (
@@ -438,7 +439,7 @@ export function MemoriesTab() {
                 {!editMode && (
                   <Button variant="ghost" size="sm" className="h-6" onClick={() => {
                     setEditMode(true);
-                    setEditContent(selectedMemory?.content || '');
+                    setEditContent(decodeEntities(selectedMemory?.content));
                     setEditProject(selectedMemory?.project || '');
                     setEditPlatform(selectedMemory?.platform || '');
                     setEditContextType(selectedMemory?.context_type || '');
@@ -466,7 +467,7 @@ export function MemoriesTab() {
                 </div>
               ) : (
                 <div className="p-4 bg-muted/30 rounded-md font-mono text-sm whitespace-pre-wrap">
-                  {selectedMemory?.content}
+                  {decodeEntities(selectedMemory?.content)}
                 </div>
               )}
             </div>
@@ -516,7 +517,7 @@ export function MemoriesTab() {
                       onClick={() => { setSelectedMemory(memory); setEditMode(false); }}
                       className="group w-full rounded-lg border border-border/70 bg-background/40 p-3 text-left transition-[border-color,background-color,transform] duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:bg-primary/[0.035] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
-                      <span className="line-clamp-2 text-xs leading-relaxed text-foreground/80 group-hover:text-foreground">{memory.content}</span>
+                      <span className="line-clamp-2 text-xs leading-relaxed text-foreground/80 group-hover:text-foreground">{decodeEntities(memory.content)}</span>
                       <span className="mt-2 block font-mono text-[10px] text-muted-foreground">{memory.session_name}{memory.project ? ` · ${memory.project}` : ''}</span>
                     </button>
                   ))}
