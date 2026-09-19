@@ -137,11 +137,10 @@ def get_reload_docs(job_id: str) -> dict:
 
 @router.get("/api/settings/llm/models")
 def get_llm_models(refresh: bool = False) -> dict:
-    """What the local runtime serves, and what else is on this machine.
+    """What the local runtime serves, and what models are installed locally.
 
-    The scan walks real directories -- 62 GB of LM Studio tree on the machine
-    this was built against -- so the timeout is well above the 35 ms a warm
-    scan measures, to leave room for a cold cache on a spinning disk.
+    The scan walks real directories, which can be a large tree, so the timeout
+    is set well above a warm scan to leave room for a cold cache.
     """
     return _proxy(
         mcp_client.get,

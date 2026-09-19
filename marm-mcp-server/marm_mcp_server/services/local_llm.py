@@ -682,12 +682,10 @@ def _identify(base: Optional[str], timeout: float = 4.0) -> dict[str, Any]:
 def runtime_info(force: bool = False) -> dict[str, Any]:
     """Which server is on the other end, and whether it can change models.
 
-    THIS EXISTS BECAUSE A MODEL DROPDOWN IS A LIE ON llama.cpp. Measured
-    2026-09-17 against the live endpoint: a request naming
-    `definitely-not-a-real-model` was answered by `qwen3.6-27b-mtp` with HTTP
-    200 and no error field. llama-server serves one model per process and
-    ignores the `model` parameter, so a UI that set it would report success,
-    change nothing, and give the reader no way to find out.
+    A model dropdown would otherwise lie on llama.cpp: it serves one model per
+    process and ignores the `model` parameter, answering a request for a
+    non-existent model with HTTP 200 and no error field. A UI that set it would
+    report a switch that never happened.
 
     So the runtime is identified first and `can_switch` is derived from what
     that runtime actually does, never assumed:
