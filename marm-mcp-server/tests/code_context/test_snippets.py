@@ -157,6 +157,36 @@ def test_a_selected_clipped_line_is_not_walked_to_its_end(tmp_path: pathlib.Path
     )
 
 
+def test_a_distant_start_cannot_scan_an_unbounded_prefix(tmp_path: pathlib.Path):
+    """Skipping to a far-off `start` must be charged, not free.
+
+    The budget originally counted only the drains of over-long lines, so a file
+    of short lines bypassed it entirely: reaching line 500,000 read every one
+    of the 499,999 before it, synchronously, inside an async request.
+    """
+    lines = 400_000
+    (tmp_path / "long.py").write_text("".join(f"L{i}\n" for i in range(lines)))
+    text, truncated = read(str(tmp_path), "long.py", lines - 1, lines)
+
+    assert truncated, "giving up on the scan must be reported"
+    assert text == "", (
+        "the requested range was never reached, so anything returned would be "
+        "lines from the wrong place"
+    )
+
+
+def test_the_budget_never_calls_readline_with_zero(tmp_path: pathlib.Path):
+    """`readline(0)` returns "" and is indistinguishable from end of file.
+
+    Reading it as EOF turns "I stopped early" into "that was the whole file",
+    which is a short answer presented as a complete one.
+    """
+    (tmp_path / "exact.py").write_text("a\n" * (MAX_SCAN_CHARS // 2 + 10))
+    text, truncated = read(str(tmp_path), "exact.py", 1, 999_999, max_lines=999_999)
+    assert truncated, "the budget ran out, so the result is not the whole file"
+    assert text, "stopping early must still return what was actually read"
+
+
 def test_dedent_strips_common_indent_only():
     src = "    def f():\n        return 1\n"
     assert dedent_block(src) == "def f():\n    return 1"

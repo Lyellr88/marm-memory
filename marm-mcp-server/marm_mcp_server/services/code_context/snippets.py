@@ -102,8 +102,11 @@ def read(
     #     line of several megabytes.
     #   * bounding the line LENGTH caps what is kept, but walking to the next
     #     newline still costs the whole line.
-    # So: keep at most MAX_LINE_CHARS, walk at most MAX_SCAN_CHARS in total, and
-    # never walk a line at all once nothing after it is wanted.
+    #   * charging only the drains leaves the skip to a distant `start`
+    #     unbounded -- a million short lines cost a million reads.
+    # So: keep at most MAX_LINE_CHARS, charge EVERY read against a total of
+    # MAX_SCAN_CHARS, and never walk a line at all once nothing after it is
+    # wanted.
     chunk: list[str] = []
     truncated = False
     number = 0
@@ -111,9 +114,16 @@ def read(
     try:
         with open(full, "r", encoding="utf-8", errors="replace") as fh:
             while True:
-                piece = fh.readline(MAX_LINE_CHARS)
+                if budget <= 0:
+                    # Never call readline(0): it returns "" and would read as
+                    # end of file, turning "I stopped early" into "that was the
+                    # whole file" -- a short answer presented as a complete one.
+                    truncated = True
+                    break
+                piece = fh.readline(min(MAX_LINE_CHARS, budget))
                 if not piece:
                     break
+                budget -= len(piece)
                 ended = piece.endswith("\n")
                 number += 1
                 if number > end:
@@ -152,9 +162,6 @@ def read(
                         truncated = True
                     piece = piece.rstrip("\n") + "\n"
                 chunk.append(piece)
-                if budget <= 0:
-                    truncated = True
-                    break
     except (OSError, ValueError):
         return "", False
     return "".join(chunk).rstrip("\n"), truncated
