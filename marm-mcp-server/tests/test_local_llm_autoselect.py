@@ -141,3 +141,25 @@ def test_endpoint_source_names_the_rule_that_chose(monkeypatch):
 def test_endpoint_source_is_default_when_nothing_answers(monkeypatch):
     _discovers(monkeypatch, [])
     assert local_llm.endpoint_source() == "default"
+
+
+def test_discovery_does_not_recurse_through_auto_selection(monkeypatch):
+    """`discover_servers()` includes the CONFIGURED endpoint in its list, and
+    for a while it asked `endpoint()` for it -- which asks auto-selection, which
+    asks `discover_servers()`. Measured at 1,170 ms per call against ~5 ms of
+    real probing, with the RecursionError swallowed and invisible.
+    """
+    calls = {"n": 0}
+    real = local_llm.discover_servers
+
+    def counting(force=False):
+        calls["n"] += 1
+        if calls["n"] > 3:
+            raise AssertionError("discover_servers re-entered itself")
+        return real(force=force)
+
+    monkeypatch.setattr(local_llm, "discover_servers", counting)
+    monkeypatch.setattr(local_llm, "_port_open", lambda port: False)
+    local_llm._servers_cache.update({"at": 0.0, "value": None})
+    local_llm.discover_servers(force=True)
+    assert calls["n"] == 1
