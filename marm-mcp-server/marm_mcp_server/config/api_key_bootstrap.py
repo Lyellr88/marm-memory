@@ -1,3 +1,4 @@
+import errno
 import os
 import secrets
 import stat
@@ -35,15 +36,20 @@ def _secure_key_dir(directory: Path) -> None:
     user with write access could swap `.env` for a file of their own and
     receive the bearer token.
 
-    Refuses only a directory we OWN and still cannot secure, which is the case
-    where staying permissive was our choice to make. A directory owned by
-    somebody else cannot be chmodded at all, and hard-failing there breaks the
-    one deployment that always looks like this: a Docker bind mount is
-    world-writable by necessity, because the container's non-root user does not
-    share the host uid. Persisting is still safe there -- the key goes to a
-    private temporary file, is hardened before it has a public name, and is
-    renamed into place -- so this warns and continues rather than declining to
-    save a key at all.
+    Refuses any directory that cannot end up private and owner-owned, whoever
+    owns it. An earlier version warned and continued when the directory
+    belonged to somebody else, on the grounds that a Docker bind mount is
+    world-writable by necessity and hard-failing there would break the one
+    deployment that always looks like this.
+
+    That reasoning was wrong about the threat. A world-writable directory owned
+    by another uid is exactly where an auto-generated key must not be written:
+    the private-temp-then-rename dance protects the file's *contents*, not the
+    directory that anyone may swap or pre-populate underneath it. Reported on
+    PR #206 against the write path, and the same argument applies here.
+
+    The supported answer in a container is `MARM_API_KEY` from the
+    environment, which needs no key file at all.
     """
     directory.mkdir(parents=True, exist_ok=True, mode=0o700)
     if os.name == "nt":  # POSIX modes do not apply; ACLs are handled per-file
@@ -57,20 +63,15 @@ def _secure_key_dir(directory: Path) -> None:
     remaining = stat.S_IMODE(info.st_mode)
     if not remaining & 0o077:
         return
-    if info.st_uid == os.getuid():
-        raise OSError(
-            f"key directory is accessible to other users and could not be "
-            f"secured: {directory} (mode {remaining:#o})"
-        )
-    print(
-        f"WARNING: {directory} is owned by another user and is group- or "
-        f"world-accessible (mode {remaining:#o}); the key file itself is still "
-        f"created owner-only.",
-        flush=True,
+    owner = "this process" if info.st_uid == os.getuid() else f"uid {info.st_uid}"
+    raise OSError(
+        f"key directory is accessible to other users and could not be secured: "
+        f"{directory} (mode {remaining:#o}, owned by {owner}); set MARM_API_KEY "
+        f"in the environment to run without persisting a key"
     )
 
 
-def _sync_directory(directory: Path) -> None:
+def _sync_directory(directory: "Path | int") -> None:
     """Make the renamed directory entry durable, not just the file contents.
 
     A POSIX rename is a directory operation, so fsyncing the file alone leaves
@@ -79,11 +80,96 @@ def _sync_directory(directory: Path) -> None:
     """
     if os.name == "nt":
         return
+    if isinstance(directory, int):
+        # Already an open, verified descriptor. Re-resolving the path to sync it
+        # would reopen the very window that descriptor exists to close.
+        os.fsync(directory)
+        return
     descriptor = os.open(directory, os.O_RDONLY | os.O_DIRECTORY)
     try:
         os.fsync(descriptor)
     finally:
         os.close(descriptor)
+
+
+#: Descriptor-relative creation is the only way to close the parent-swap
+#: window. `os.open(..., dir_fd=...)` resolves the child against an already-open
+#: directory inode, so replacing the *pathname* afterwards cannot redirect it.
+_HAVE_DIR_FD = (
+    hasattr(os, "O_DIRECTORY")
+    and os.open in getattr(os, "supports_dir_fd", set())
+    # `os.rename`, not `os.replace`: only rename is descriptor-capable, and on
+    # POSIX -- the only place this branch runs -- they are the same rename(2),
+    # which overwrites atomically. `replace` differs from `rename` on Windows
+    # alone, and Windows takes the fail-closed path below.
+    and os.rename in getattr(os, "supports_dir_fd", set())
+    and os.unlink in getattr(os, "supports_dir_fd", set())
+)
+
+
+def _open_private_key_dir(directory: Path) -> int:
+    """Open the key directory and verify it THROUGH the descriptor.
+
+    Checking the parent by pathname and then creating a file by pathname is a
+    check-then-use gap: `O_NOFOLLOW` constrains only the final component, so a
+    directory swapped between the two -- a junction on Windows, a symlink on
+    POSIX -- still receives the key. Reported on PR #206 with a working
+    reproduction: replacing the directory immediately after the check delivered
+    `MARM_API_KEY` to an attacker-controlled target.
+
+    Everything here is decided from `fstat` on the descriptor, never from the
+    path. Once this returns, the caller operates relative to that inode and the
+    pathname is irrelevant.
+
+    Fails closed rather than falling back. An auto-generated key must never
+    land in a directory that cannot be shown to be private and owner-owned --
+    including the world-writable, foreign-owned Docker bind mount, where the
+    supported answer is to supply `MARM_API_KEY` from the environment.
+    """
+    if not _HAVE_DIR_FD:
+        # Windows, or any platform without descriptor-relative openat. The race
+        # cannot be closed here, and a full handle-relative implementation is
+        # out of proportion to the problem, so persistence is declined.
+        raise KeyFileProtectionError(
+            "this platform cannot verify the key directory without a "
+            "time-of-check/time-of-use gap; set MARM_API_KEY in the environment "
+            "to persist a key"
+        )
+    flags = os.O_RDONLY | os.O_DIRECTORY | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(directory, flags)
+    except OSError as exc:
+        # O_NOFOLLOW|O_DIRECTORY reports a symlinked directory as ELOOP or
+        # ENOTDIR depending on the platform. Say what actually happened --
+        # "Not a directory" about a directory is a confusing way to report a
+        # symlink, and this is the message an operator has to act on.
+        if exc.errno in (errno.ELOOP, errno.ENOTDIR):
+            raise KeyFileProtectionError(
+                f"key directory is a symlink, refusing to persist through it: "
+                f"{directory}"
+            ) from exc
+        raise KeyFileProtectionError(
+            f"could not open the key directory safely: {directory}: {exc}"
+        ) from exc
+    try:
+        info = os.fstat(descriptor)
+        if info.st_uid != os.geteuid():
+            raise KeyFileProtectionError(
+                f"key directory is owned by uid {info.st_uid}, not by this "
+                f"process (uid {os.geteuid()}): {directory}; set MARM_API_KEY "
+                f"in the environment to persist a key"
+            )
+        mode = stat.S_IMODE(info.st_mode)
+        if mode & 0o022:
+            raise KeyFileProtectionError(
+                f"key directory is writable by group or others (mode "
+                f"{mode:#o}): {directory}; set MARM_API_KEY in the environment "
+                f"to persist a key"
+            )
+    except BaseException:
+        os.close(descriptor)
+        raise
+    return descriptor
 
 
 def _write_key_file(path: Path, marm_api_key: str) -> None:
@@ -96,6 +182,14 @@ def _write_key_file(path: Path, marm_api_key: str) -> None:
     does not change, and a pathname swapped between the check and the open --
     which `O_NOFOLLOW` cannot close on Windows.
 
+    **Every step runs relative to a verified directory descriptor.** An earlier
+    version checked `path.parent.is_symlink()` and then created the temporary
+    file through the parent *pathname*, which left a swap window: replacing the
+    directory with a junction between the two delivered the key to an
+    attacker-controlled target (reported on PR #206, with a reproduction). A
+    descriptor is immune to that -- the inode is already open, so renaming or
+    replacing the path afterwards changes nothing.
+
     `O_CREAT | O_EXCL` guarantees the descriptor is one we created. `os.replace`
     is atomic on both platforms, so it replaces a symlink rather than writing
     through it and a concurrent reader never sees a half-written key.
@@ -107,22 +201,17 @@ def _write_key_file(path: Path, marm_api_key: str) -> None:
         # Reports intent early; the atomic replace below is what makes it safe.
         raise OSError(f"key file is a symlink, refusing to write through it: {path}")
 
-    # The PARENT matters too, and refusing it on the read path only was worse
-    # than not refusing it at all: `open_no_follow` declines a symlinked
-    # `~/.marm`, so the key was never loaded back, while this path happily wrote
-    # through the same link. Every restart therefore generated and saved a new
-    # key and rejected every client holding the previous one. Persistence
-    # through a symlinked key directory is unsupported, so it fails closed here
-    # and the caller keeps the key in memory.
-    if path.parent.is_symlink():
-        raise KeyFileProtectionError(
-            f"key directory is a symlink, refusing to persist through it: {path.parent}"
-        )
-
-    temporary = path.with_name(f".{path.name}.{os.getpid()}.{secrets.token_hex(8)}")
+    # Fails closed when the directory cannot be shown to be private and ours --
+    # a symlinked `~/.marm`, a foreign owner, or group/other write. This is the
+    # check the old `path.parent.is_symlink()` test was reaching for, done
+    # against an inode instead of a name.
+    directory = _open_private_key_dir(path.parent)
+    # A bare name, never a path: every operation below is relative to the
+    # verified descriptor, so there is nothing left to resolve.
+    name = f".{path.name}.{os.getpid()}.{secrets.token_hex(8)}"
     try:
         flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0)
-        descriptor = os.open(temporary, flags, 0o600)
+        descriptor = os.open(name, flags, 0o600, dir_fd=directory)
         with os.fdopen(descriptor, "w", encoding="utf-8") as key_file:
             key_file.write(f"MARM_API_KEY={marm_api_key}\n")
             # `os.replace` is atomic against a concurrent reader, not against
@@ -137,29 +226,36 @@ def _write_key_file(path: Path, marm_api_key: str) -> None:
                 raise KeyFileProtectionError(
                     f"could not flush the new key file to disk: {path}: {exc}"
                 ) from exc
-        # Harden before the file is reachable under its real name.
+        # Harden before the file is reachable under its real name -- and do it
+        # through the same descriptor. `_protect_key_file()` takes a path, so
+        # calling it here would reintroduce the pathname dependency this
+        # function exists to remove: under the reported swap it looks for the
+        # temporary file in the attacker's directory, does not find it, and
+        # fails a write that was never actually endangered.
         try:
-            protected = _protect_key_file(temporary)
-        except Exception as exc:  # a platform backend can raise, not just fail
+            os.chmod(name, 0o600, dir_fd=directory)
+            info = os.stat(name, dir_fd=directory, follow_symlinks=False)
+        except OSError as exc:
             raise KeyFileProtectionError(
                 f"could not secure the new key file: {path}: {exc}"
             ) from exc
-        if not protected:
-            raise KeyFileProtectionError(f"could not secure the new key file: {path}")
-        os.replace(temporary, path)
+        if stat.S_IMODE(info.st_mode) & 0o077:
+            raise KeyFileProtectionError(
+                f"could not secure the new key file: {path} "
+                f"(mode {stat.S_IMODE(info.st_mode):#o})"
+            )
+        os.rename(name, path.name, src_dir_fd=directory, dst_dir_fd=directory)
         try:
-            _sync_directory(path.parent)
+            # Pass the verified descriptor, not the path: re-resolving it here
+            # would reopen the window the descriptor exists to close.
+            _sync_directory(directory)
         except OSError as exc:
-            # After the rename, `temporary` no longer exists -- the cleanup
-            # below would unlink nothing and `.env` would survive holding the
-            # key, while the caller reported that persistence failed and warned
-            # the operator the key lives only in memory. The state and the
-            # warning have to agree, so this removes the file it just placed:
-            # "not persisted" then means exactly that, and the next start
-            # generates a key rather than adopting one whose directory entry
-            # may not survive a crash.
+            # The file is in place but the entry may not survive a crash, and
+            # the caller is about to promise that it will. A persistence
+            # failure is the honest report -- it is the branch that says the
+            # key is live in memory and will not survive a restart.
             try:
-                os.unlink(path)
+                os.unlink(path.name, dir_fd=directory)
             except OSError:
                 pass
             raise KeyFileProtectionError(
@@ -167,10 +263,12 @@ def _write_key_file(path: Path, marm_api_key: str) -> None:
             ) from exc
     except BaseException:
         try:
-            os.unlink(temporary)
+            os.unlink(name, dir_fd=directory)
         except OSError:
             pass
         raise
+    finally:
+        os.close(directory)
 
 
 def _read_key_file_text(path: Path) -> str:

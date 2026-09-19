@@ -292,10 +292,17 @@ def test_key_file_creation_failure_is_reported_and_leaves_no_file(
     real_open = os.open
 
     def refuse_key_file(path, flags, mode=0o777, *args, **kwargs):
-        # Match the directory, not the exact name: the write goes to a private
-        # temporary file beside `.env`, so a stub keyed on `.env` itself would
-        # inject no failure at all and the test would pass vacuously.
-        if os.path.dirname(str(path)) == str(env_path.parent):
+        # Match on the CREATE, not on the path. The write is descriptor-relative
+        # now -- `os.open(name, ..., dir_fd=fd)` passes a bare filename -- so a
+        # stub keyed on the directory prefix stops matching and injects no
+        # failure at all, which is the vacuous pass the original comment warned
+        # about. The directory's own open must still succeed, or this would
+        # exercise the wrong failure.
+        creating = flags & os.O_CREAT
+        in_key_dir = kwargs.get("dir_fd") is not None or os.path.dirname(
+            str(path)
+        ) == str(env_path.parent)
+        if creating and in_key_dir:
             raise OSError(13, "Permission denied")
         return real_open(path, flags, mode, *args, **kwargs)
 
@@ -529,15 +536,18 @@ def test_open_no_follow_refuses_a_reparse_point_on_windows(monkeypatch, tmp_path
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX directory modes")
-def test_a_key_directory_owned_by_someone_else_still_persists_the_key(
-    monkeypatch, tmp_path
-):
-    """A Docker bind mount is world-writable and not ours, and must still work.
+def test_a_key_directory_owned_by_someone_else_is_refused(monkeypatch, tmp_path):
+    """A world-writable directory owned by another uid must NOT receive a key.
 
-    The container's non-root user does not share the host uid, so the mount is
-    world-writable by necessity and cannot be chmodded from inside. Refusing
-    there meant no key was ever persisted -- caught by the upstream Docker
-    suite, not by this file, because it only appears with a real mount.
+    This asserted the opposite until 2026-09-19: a Docker bind mount is
+    world-writable by necessity, so refusing there meant no key was persisted,
+    and warning-and-continuing looked like the pragmatic choice.
+
+    It was the wrong trade, and the maintainer said so on PR #206. Writing to a
+    private temporary file and renaming protects the key's CONTENTS; it does
+    nothing about a directory any local user may swap or pre-populate. The
+    supported answer in a container is `MARM_API_KEY` from the environment,
+    which needs no key file at all.
     """
     from marm_mcp_server.config import api_key_bootstrap
 
@@ -572,8 +582,8 @@ def test_a_key_directory_owned_by_someone_else_still_persists_the_key(
         ),
     )
 
-    # Warns, but does not raise: the key file itself is still created 0600.
-    api_key_bootstrap._secure_key_dir(directory)
+    with pytest.raises(OSError, match="could not be secured"):
+        api_key_bootstrap._secure_key_dir(directory)
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX directory modes")
@@ -721,3 +731,51 @@ def test_a_directory_sync_failure_after_the_rename_leaves_no_key_behind(
     )
     leftovers = [p.name for p in tmp_path.iterdir()]
     assert leftovers == [], f"temporary files left behind: {leftovers}"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX descriptor-relative writes")
+def test_swapping_the_key_directory_after_the_check_cannot_redirect_the_key(
+    monkeypatch, tmp_path
+):
+    """The reported attack, reproduced: swap the parent between check and write.
+
+    `_write_key_file()` used to test `path.parent.is_symlink()` and then create
+    its temporary file through that same parent *pathname*. `O_NOFOLLOW`
+    constrains only the final component, so replacing the directory in the gap
+    delivered the key to an attacker-controlled target. Reported on PR #206 with
+    a Windows junction; a symlink is the POSIX equivalent.
+
+    Verifying an open descriptor instead makes the swap irrelevant -- the inode
+    is already held, so renaming the path afterwards redirects nothing.
+    """
+    from marm_mcp_server.config import api_key_bootstrap as boot
+
+    real = tmp_path / "real"
+    real.mkdir(mode=0o700)
+    attacker = tmp_path / "attacker"
+    attacker.mkdir(mode=0o700)
+    target = real / ".env"
+
+    real_open = os.open
+    swapped = {"done": False}
+
+    def swap_then_open(path, flags, mode=0o777, *args, **kwargs):
+        descriptor = real_open(path, flags, mode, *args, **kwargs)
+        # Fire once, immediately after the directory is opened and verified --
+        # precisely the window the report describes.
+        if not swapped["done"] and flags & getattr(os, "O_DIRECTORY", 0):
+            swapped["done"] = True
+            real.rename(tmp_path / "moved-away")
+            (tmp_path / "real").symlink_to(attacker, target_is_directory=True)
+        return descriptor
+
+    monkeypatch.setattr(os, "open", swap_then_open)
+    boot._write_key_file(target, "k-must-not-leak")
+
+    assert swapped["done"], "the swap never fired; the test proved nothing"
+    assert not (attacker / ".env").exists(), (
+        "the key was written into the attacker's directory after the swap"
+    )
+    assert (tmp_path / "moved-away" / ".env").read_text().strip() == (
+        "MARM_API_KEY=k-must-not-leak"
+    ), "the key must land in the directory that was actually verified"
