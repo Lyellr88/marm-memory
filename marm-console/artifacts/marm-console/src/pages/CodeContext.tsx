@@ -29,6 +29,24 @@ import { CallGraphPane } from '@/components/code-context/CallGraphPane';
 const DEFAULT_BUDGET = 12000;
 const MAX_BUDGET = 100000;
 
+/** Projects in the order a reader scans them: by the name they see.
+ *
+ *  The API returns them in index order, which puts the most recently touched
+ *  at the bottom and reads as arbitrary to anyone looking for a name.
+ *
+ *  Sorts on `display_name` because that is what the option shows -- sorting on
+ *  `name` would order a list by strings the reader cannot see. `localeCompare`
+ *  rather than `<` so an accented name lands where it is expected instead of
+ *  after Z by code point.
+ */
+export function sortProjectsByName<T extends { name: string; display_name?: string | null }>(
+  projects: readonly T[] | undefined,
+): T[] {
+  return [...(projects ?? [])].sort((a, b) =>
+    (a.display_name || a.name).localeCompare(b.display_name || b.name),
+  );
+}
+
 /** Radix forbids `value=""` on a SelectItem, so the auto-detect option needs a
  *  sentinel. Kept rather than deleted: it is still correct for anyone running
  *  the Console from inside a repository rather than as a service. */
@@ -101,6 +119,7 @@ export function CodeContextPage() {
     if (!project && projects?.length) setProject(projects[0].name);
   }, [project, projects]);
 
+  const sortedProjects = useMemo(() => sortProjectsByName(projects), [projects]);
   const selected = projects?.find((item) => item.name === project);
   const result = build.data;
   const symbols = useMemo(() => result?.symbols ?? [], [result]);
@@ -202,7 +221,7 @@ export function CodeContextPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={AUTO_PROJECT}>Auto-detect from the Console's working directory</SelectItem>
-                  {projects?.map((item) => (
+                  {sortedProjects.map((item) => (
                     <SelectItem key={item.name} value={item.name} title={item.name}>
                       {item.display_name || item.name}
                     </SelectItem>

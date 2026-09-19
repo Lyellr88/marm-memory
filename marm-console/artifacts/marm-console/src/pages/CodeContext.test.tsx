@@ -22,20 +22,28 @@ const buildState = vi.hoisted(() => ({
   isPending: false,
 }));
 
-const projectState = vi.hoisted(() => ({ status: 'ready' as string }));
+const DEFAULT_PROJECTS = [
+  {
+    name: 'C-work-marm-systems',
+    display_name: 'marm-systems',
+    root_path: 'C:/work/marm-systems',
+    nodes: 4500,
+    edges: 23913,
+  },
+];
+
+const projectState = vi.hoisted(() => ({
+  status: 'ready' as string,
+  // Mutable so a test can vary the LIST, not only one project's status.
+  list: null as Array<Record<string, unknown>> | null,
+}));
 
 vi.mock('@/hooks/use-marm-queries', () => ({
   useProjects: () => ({
-    data: [
-      {
-        name: 'C-work-marm-systems',
-        display_name: 'marm-systems',
-        root_path: 'C:/work/marm-systems',
-        nodes: 4500,
-        edges: 23913,
-        status: projectState.status,
-      },
-    ],
+    data: (projectState.list ?? DEFAULT_PROJECTS).map((p) => ({
+      ...p,
+      status: projectState.status,
+    })),
     isLoading: false,
   }),
   useBuildCodeContext: () => buildState,
@@ -86,6 +94,7 @@ const SUCCESS: CodeContextResult = {
 };
 
 afterEach(() => {
+  projectState.list = null;   // ordering must not leak between tests
   cleanup();
   buildState.mutate = vi.fn();
   buildState.data = undefined;
@@ -353,4 +362,5 @@ describe('CodeContextPage', () => {
     expect(within(metric as HTMLElement).getByText('1')).toBeTruthy();
     expect(screen.getByText(/filled nodes matched the task/)).toBeTruthy();
   });
+
 });
