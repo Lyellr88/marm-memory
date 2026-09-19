@@ -318,13 +318,23 @@ async def _replace_memory(
         # "this says something new as of now" is true, and which is also what
         # keeps compaction's per-session fingerprint (count + newest eligible
         # timestamp) changing so an edited session is re-scanned.
+        #
+        # `content_hash` was added to `memories` by ALTER TABLE with no
+        # backfill, so any row written before that migration carries NULL.
+        # The stored content is the authority and the column is a cache of
+        # it, so hash the content when the column holds nothing -- otherwise
+        # an upgraded database restamps every pre-migration memory and keeps
+        # the defect this fixes.
         previous = conn.execute(
-            "SELECT content_hash, timestamp FROM memories WHERE id = ?", (memory_id,)
+            "SELECT content_hash, content, timestamp FROM memories WHERE id = ?",
+            (memory_id,),
         ).fetchone()
         if previous is None:
             conn.execute("ROLLBACK")
             return False
-        previous_hash, previous_timestamp = previous
+        previous_hash, previous_content, previous_timestamp = previous
+        if previous_hash is None:
+            previous_hash = compute_content_hash(previous_content or "")
         timestamp = (
             previous_timestamp
             if previous_hash == content_hash

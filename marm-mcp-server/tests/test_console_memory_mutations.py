@@ -418,3 +418,68 @@ def test_replace_keeps_the_timestamp_when_only_metadata_changes(monkeypatch, tmp
             )
     finally:
         _stop_queue()
+
+
+def test_replace_preserves_the_timestamp_for_a_row_with_no_content_hash(
+    monkeypatch, tmp_path
+):
+    """A pre-migration row has `content_hash = NULL` and must behave the same.
+
+    `content_hash` was added by ALTER TABLE with no backfill, so every memory
+    written before that migration carries NULL. Comparing the stored hash alone
+    makes `None == "<sha>"` false and restamps -- which would leave the defect
+    in place on exactly the databases that have the most old memories to lose.
+    """
+    server = load_isolated_server(
+        monkeypatch, tmp_path, api_key="test-key", write_queue_enabled=True
+    )
+    headers = {"Authorization": "Bearer test-key"}
+    try:
+        with TestClient(server.app) as client:
+            created = client.post(
+                "/internal/memories",
+                headers=headers,
+                json={
+                    "content": "An upgraded database's older memory",
+                    "session_name": "s",
+                    "context_type": "note",
+                    "project": "wrong-project",
+                },
+            )
+            assert created.status_code == 201
+            memory_id = created.json()["id"]
+
+            db = tmp_path / "marm_memory.db"
+            with sqlite3.connect(db) as conn:
+                conn.execute(
+                    "UPDATE memories SET timestamp = ?, content_hash = NULL"
+                    " WHERE id = ?",
+                    ("2026-01-01T00:00:00+00:00", memory_id),
+                )
+
+            moved = client.put(
+                f"/internal/memories/{memory_id}",
+                headers=headers,
+                json={
+                    "content": "An upgraded database's older memory",
+                    "session_name": "s",
+                    "context_type": "note",
+                    "project": "right-project",
+                },
+            )
+            assert moved.status_code == 200
+
+            with sqlite3.connect(db) as conn:
+                project, timestamp, stored_hash = conn.execute(
+                    "SELECT project, timestamp, content_hash FROM memories"
+                    " WHERE id = ?",
+                    (memory_id,),
+                ).fetchone()
+            assert project == "right-project"
+            assert timestamp == "2026-01-01T00:00:00+00:00", (
+                "a NULL stored hash must fall back to the stored content,"
+                " not be read as a content change"
+            )
+            assert stored_hash, "the replace also fills the missing hash in"
+    finally:
+        _stop_queue()
