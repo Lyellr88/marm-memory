@@ -7,7 +7,14 @@ from marm_mcp_server.console import mcp_client
 
 SUCCESS = {
     "status": "success",
-    "project": "marm-memory",
+    # The real contract, not a convenient string: `serialise()` emits an object,
+    # and the Console type expects one. A fixture that invents a simpler shape
+    # certifies the mapping against fiction rather than against the tool.
+    "project": {
+        "name": "home-parobek-Code-marm-memory",
+        "short_name": "marm-memory",
+        "root_path": "/home/parobek/Code/marm-memory",
+    },
     "task": "how does recall rank",
     "markdown": "# Code context\n\n## rank_memories",
     "symbols": [

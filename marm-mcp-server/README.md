@@ -695,7 +695,7 @@ The AI agent will automatically use the appropriate tools. Manual tool access is
 | ------ | -------------- | ---------------- |
 | `marm_graph_index` | Index a repo into the code-structure graph, check status, list projects, or turn automatic re-indexing on and off | `repo_path`, `project`, `action` |
 | `marm_code_lookup` | Find symbols, text patterns, or a symbol's source; use instead of grep/glob | `kind="auto"\|"symbol"\|"text"\|"snippet"` |
-| `marm_code_context` | Composed context for a task in one call: symbols ranked by personalised PageRank, their source read from disk, and what memory records about them | `task`, `project`, `cwd`, `budget`, `detail` (1-3, default from `MARM_CODE_CONTEXT_DETAIL`), `include_graph` (default `false`) |
+| `marm_code_context` | Composed context for a task in one call: symbols ranked by personalised PageRank, their source read from disk, and what memory records about them | `task`, `project`, `cwd`, `budget`, `detail` (0-3; `0` uses `MARM_CODE_CONTEXT_DETAIL`, the server default), `include_graph` (default `false`) |
 | `marm_graph_trace` | Trace call paths and data flow from a function | `direction`, `mode` |
 | `marm_graph_architecture` | Architecture overview: modules, node/edge breakdown, schema | `project` |
 | `marm_graph_impact` | Blast radius of code changes: git diff → affected symbols + risk | `since`, `base_branch`, `depth` |

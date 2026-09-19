@@ -367,6 +367,58 @@ async def test_ambiguous_trace_does_not_silently_drop_the_call_graph(repo):
 
 
 @pytest.mark.asyncio
+async def test_a_failed_trace_is_reported_not_silently_dropped(repo):
+    """A trace failure arrives as `{"status": "error"}`, not as an exception.
+
+    An errored payload carries no edges, which is indistinguishable from "this
+    symbol calls nothing" -- so an engine outage produced a source-only
+    composition that looked complete, with no graph nodes and no warning. It is
+    unavailability, and the result has to say so.
+    """
+
+    class Broken(Stub):
+        def trace(self, project, symbol, depth=2, direction="both"):
+            return {"status": "error", "message": "engine gone"}
+
+    c = Broken(repo, results=[_row("helper", "proj.m.helper", 1, 2)])
+    ctx = await build(c, "helper", cwd=str(repo))
+
+    assert ctx.symbols, "the seeds still answer; only the call graph is missing"
+    assert ctx.graph_nodes == 0
+    assert any("call graph unavailable" in n for n in ctx.notes), (
+        f"a failed trace must be reported, not presented as an empty "
+        f"neighbourhood; notes were {ctx.notes}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_partial_trace_failure_says_how_many(repo):
+    """One bad symbol must not be reported as a whole-graph outage, or vice versa."""
+
+    class Half(Stub):
+        def trace(self, project, symbol, depth=2, direction="both"):
+            if symbol == "proj.m.good":
+                return {
+                    "callees": [
+                        {"qualified_name": "proj.m.other", "name": "other", "hop": 1}
+                    ]
+                }
+            return {"status": "error", "message": "engine gone"}
+
+    c = Half(
+        repo,
+        results=[
+            _row("good", "proj.m.good", 1, 2),
+            _row("bad", "proj.m.bad", 3, 4),
+        ],
+    )
+    ctx = await build(c, "good bad", cwd=str(repo))
+
+    assert ctx.graph_nodes > 0, "the healthy symbol still contributes edges"
+    assert any("call graph unavailable for 1 of" in n for n in ctx.notes), ctx.notes
+
+
+@pytest.mark.asyncio
 async def test_ambiguous_on_both_forms_is_survivable(repo):
     class AllAmb(Stub):
         def trace(self, *a, **k):
@@ -676,11 +728,19 @@ def test_snippet_read_refuses_a_path_outside_the_project_root(tmp_path):
     outside = tmp_path / "elsewhere"
     outside.mkdir()
     (outside / "secret.txt").write_text("SECRET\n")
-    (root / "link.txt").symlink_to(outside / "secret.txt")
 
     assert read(str(root), "pkg/ok.py", 1, 2)[0] == "line one\nline two"
     assert read(str(root), str(outside / "secret.txt"), 1, 1)[0] == ""
     assert read(str(root), "../elsewhere/secret.txt", 1, 1)[0] == ""
+
+    # Creating a symlink needs a privilege most Windows setups do not grant, and
+    # an unprivileged failure here aborts the test BEFORE the absolute and
+    # traversal assertions above -- losing coverage that has nothing to do with
+    # symlinks. Only this last check is conditional.
+    try:
+        (root / "link.txt").symlink_to(outside / "secret.txt")
+    except (OSError, NotImplementedError) as exc:
+        pytest.skip(f"cannot create a symlink on this platform: {exc}")
     assert read(str(root), "link.txt", 1, 1)[0] == ""
 
 

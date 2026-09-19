@@ -280,6 +280,7 @@ async def build(
         seed_mass[s.qualified_name] = mass
 
     edges: list[tuple[str, str, float]] = []
+    traces_unavailable = 0
     for s in list(by_qn.values())[:EXPAND_SEEDS]:
         # Trace by QUALIFIED name. A bare name that matches more than one symbol
         # -- routine in any real codebase, e.g. two `cpu_clock` methods on
@@ -296,7 +297,18 @@ async def build(
             # ranking. Skipping loses edges; guessing invents them.
             if payload.get("status") in ("ambiguous", "not_found"):
                 continue
+            if payload.get("status") == "error":
+                # The router reports a failed trace as a STATUS, not an
+                # exception, and an errored payload carries no edges -- which is
+                # indistinguishable from "this symbol calls nothing". Untreated,
+                # a graph outage produced a source-only composition that looked
+                # complete. It is unavailability, so it takes that path.
+                raise GraphUnavailable(payload.get("message") or "trace failed")
         except GraphUnavailable:
+            # One symbol's neighbourhood is missing, not the whole composition,
+            # so the remaining seeds still rank -- but the result has to SAY the
+            # call graph is partial rather than present a shorter one as whole.
+            traces_unavailable += 1
             continue
         edges += _edges_from_trace(payload, s.qualified_name)
         for key in ("callees", "callers"):
@@ -317,6 +329,14 @@ async def build(
                         strategy=str(row.get("strategy") or ""),
                         confidence=float(row.get("confidence") or 0.0),
                     )
+
+    if traces_unavailable:
+        # The composition still ranks on the seeds it has, but it must not
+        # present a partial call graph as a whole one.
+        ctx.notes.append(
+            f"call graph unavailable for {traces_unavailable} of "
+            f"{min(len(by_qn), EXPAND_SEEDS)} expanded symbols"
+        )
 
     ranks = personalised_pagerank(edges, seed_mass) if edges else dict(seed_mass)
     ctx.graph_nodes = len({n for a, b, _ in edges for n in (a, b)})

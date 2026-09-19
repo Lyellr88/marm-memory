@@ -102,7 +102,7 @@ Use `marm_code_lookup` when you know what you are looking for -- a symbol name, 
 
 The difference is ranking, not convenience. Lexical search answers "which symbols mention these words", which is a different question from "which symbols matter here" -- a private helper whose name happens to match the task will outrank the class everything calls. `marm_code_context` seeds on the task's own terms, expands through callers and callees, and ranks that subgraph by personalised PageRank, so centrality is measured relative to the task rather than to the repository. Each returned symbol says which way it arrived: `seeded` means it matched the task's words, and the rest were pulled in by the call graph.
 
-It needs an indexed project, which it resolves from `cwd` unless you name one. When nothing matches it returns `no_project` rather than an error, with the next step to take. The Console renders the same composition under **Code Context**.
+It needs an indexed project, which it resolves from `cwd` unless you name one. When no *indexed project* matches it returns `no_project` rather than an error, with the next step to take -- an indexed project that simply has no symbols matching the task returns a successful, empty composition instead. The Console renders the same composition under **Code Context**.
 
 #### Q: What is the concept graph and how do I use it?
 
