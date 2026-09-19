@@ -9,6 +9,7 @@ memory unattended, and this store has the false-positive numbers to prove it.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import sqlite3
@@ -48,10 +49,21 @@ def _hash(session_name: str, content: str, project: "str | None") -> str:
     project in one session, including after the first was discarded, so a
     project could never be offered a fact another project had rejected.
     """
-    scope = project or ""
-    return compute_content_hash(
-        f"{session_name}{_HASH_SEPARATOR}{scope}{_HASH_SEPARATOR}{content}"
+    # Only the CONTENT is normalised. `compute_content_hash` lowercases and
+    # strips its whole input, so folding the scope through it would make
+    # `Alpha` and `alpha` the same proposal and the unique index would drop one
+    # of two legitimately distinct ones. A session name and a project are
+    # identifiers, not prose.
+    identity = json.dumps(
+        {
+            "session": session_name,
+            "project": project or "",
+            "content": compute_content_hash(content),
+        },
+        separators=(",", ":"),
+        sort_keys=True,
     )
+    return hashlib.sha256(identity.encode("utf-8")).hexdigest()
 
 
 async def propose(
@@ -218,6 +230,27 @@ def review(
     return {"status": "success", "pending": pending, "count": len(pending)}
 
 
+#: How long an `applying` claim is trusted before it is treated as abandoned.
+#: Long enough that a slow write is never stolen, short enough that a crashed
+#: apply is recoverable without operator action.
+_APPLY_CLAIM_SECONDS = 300
+
+
+def _claim_is_stale(claimed_at: "str | None", now_iso: str) -> bool:
+    """Has an `applying` claim been held longer than any real write would take?
+
+    An unparseable or missing timestamp counts as stale: the row predates the
+    claim bookkeeping, so there is nothing in flight to protect.
+    """
+    if not claimed_at:
+        return True
+    try:
+        held = datetime.fromisoformat(now_iso) - datetime.fromisoformat(claimed_at)
+    except ValueError:
+        return True
+    return held.total_seconds() >= _APPLY_CLAIM_SECONDS
+
+
 def _applied_memory_id(conn: "sqlite3.Connection", proposal_id: str) -> "str | None":
     """The memory this proposal already wrote, if it did.
 
@@ -248,13 +281,21 @@ async def apply(memory: MARMMemory, proposal_id: str) -> dict[str, Any]:
         try:
             row = conn.execute(
                 "SELECT content, session_name, context_type, project, status, "
-                "expires_at FROM distill_staging WHERE id = ?",
+                "expires_at, updated_at FROM distill_staging WHERE id = ?",
                 (proposal_id,),
             ).fetchone()
             if row is None:
                 conn.execute("ROLLBACK")
                 return {"status": "error", "error": f"no proposal {proposal_id}"}
-            content, session_name, context_type, project, status, expires_at = row
+            (
+                content,
+                session_name,
+                context_type,
+                project,
+                status,
+                expires_at,
+                claimed_at,
+            ) = row
             # `nudge_exhausted` means the queue stopped asking, not that the
             # proposal was resolved. review() and discard() both accept it, so
             # apply() must too -- otherwise an un-answered proposal can be
@@ -267,6 +308,17 @@ async def apply(memory: MARMMemory, proposal_id: str) -> dict[str, Any]:
                 # bookkeeping is missing, and rejecting it strands the proposal
                 # permanently -- nothing else recovers this state.
                 existing = _applied_memory_id(conn, proposal_id)
+                if existing is None and not _claim_is_stale(claimed_at, now_iso):
+                    # No memory yet, and the claim is fresh -- so this is an
+                    # apply still IN FLIGHT, not a crashed one. Taking it over
+                    # would enqueue a second write for the same proposal, which
+                    # is the duplicate this whole service exists to avoid.
+                    # Only a stale claim is safe to recover.
+                    conn.execute("ROLLBACK")
+                    return {
+                        "status": "error",
+                        "error": f"proposal {proposal_id} is already applying",
+                    }
                 if existing is not None:
                     conn.execute(
                         "UPDATE distill_staging SET status = 'applied', "
@@ -469,8 +521,12 @@ def claim_pending_distill_prompt(
         conn.execute("BEGIN IMMEDIATE")
         try:
             conn.execute(
+                # `nudge_exhausted` expires too: the queue stopped ASKING
+                # about it, which is not the same as it being resolved. Left
+                # out, an expired one is hidden by review() and never swept,
+                # so the staging table grows without bound.
                 "UPDATE distill_staging SET status = 'stale', updated_at = ? "
-                "WHERE status = 'pending' AND expires_at <= ?",
+                "WHERE status IN ('pending', 'nudge_exhausted') AND expires_at <= ?",
                 (now, now),
             )
             conn.execute(

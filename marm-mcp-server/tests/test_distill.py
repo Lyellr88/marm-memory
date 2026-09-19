@@ -348,6 +348,12 @@ def staged(monkeypatch, tmp_path):
     return service, live
 
 
+def _now_iso() -> str:
+    from datetime import datetime, timezone
+
+    return datetime.now(timezone.utc).isoformat()
+
+
 def _propose(service, live, text, **kwargs):
     import asyncio
 
@@ -698,11 +704,39 @@ def test_an_apply_interrupted_after_the_write_is_recovered_not_stranded(staged):
     assert memory_id == recovered["memory_id"]
 
 
-def test_an_applying_row_with_no_memory_is_retried_not_recovered(staged):
+def test_a_stale_applying_row_with_no_memory_is_retried_not_recovered(staged):
     """The mirror case: decide from the store, not from the status.
 
     If the write never landed there is nothing to recover, and treating the row
-    as applied would claim a memory that does not exist.
+    as applied would claim a memory that does not exist. The claim is backdated
+    so it reads as abandoned rather than in flight.
+    """
+    import asyncio
+    from datetime import datetime, timedelta, timezone
+
+    service, live = staged
+    proposal_id = _propose(service, live, POSITIVES[1])["proposals"][0]["id"]
+    long_ago = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+    with live.get_connection() as conn:
+        conn.execute(
+            "UPDATE distill_staging SET status = 'applying', updated_at = ? "
+            "WHERE id = ?",
+            (long_ago, proposal_id),
+        )
+
+    result = asyncio.run(service.apply(live, proposal_id))
+    assert result["status"] == "success"
+    assert result.get("recovered") is not True, "nothing was there to recover"
+    assert result["memory_id"]
+
+
+def test_a_fresh_applying_claim_is_not_stolen_from_a_write_in_flight(staged):
+    """Recovery must not become a second writer.
+
+    An `applying` row with no memory yet is EITHER a crash before the write
+    landed OR an apply still running. Taking over the second case enqueues a
+    second write for the same proposal -- the duplicate this service exists to
+    prevent -- so only a claim old enough to be abandoned may be recovered.
     """
     import asyncio
 
@@ -710,14 +744,22 @@ def test_an_applying_row_with_no_memory_is_retried_not_recovered(staged):
     proposal_id = _propose(service, live, POSITIVES[1])["proposals"][0]["id"]
     with live.get_connection() as conn:
         conn.execute(
-            "UPDATE distill_staging SET status = 'applying' WHERE id = ?",
-            (proposal_id,),
+            "UPDATE distill_staging SET status = 'applying', updated_at = ? "
+            "WHERE id = ?",
+            (_now_iso(), proposal_id),
         )
 
     result = asyncio.run(service.apply(live, proposal_id))
-    assert result["status"] == "success"
-    assert result.get("recovered") is not True, "nothing was there to recover"
-    assert result["memory_id"]
+    assert result["status"] == "error"
+    assert "already applying" in result["error"]
+
+    with live.get_connection() as conn:
+        (count,) = conn.execute(
+            "SELECT COUNT(*) FROM memories "
+            "WHERE json_extract(metadata, '$.proposal_id') = ?",
+            (proposal_id,),
+        ).fetchone()
+    assert count == 0, "refusing the claim must not have written a memory"
 
 
 def test_a_long_neighbour_cannot_crowd_out_the_proposal(staged_memory):
@@ -738,3 +780,47 @@ def test_a_long_neighbour_cannot_crowd_out_the_proposal(staged_memory):
     text = claim_pending_distill_prompt(staged_memory)["text"]
     assert "Proposal:" in text, "the proposal heading was truncated away"
     assert content[:60] in text, "the proposal text itself was truncated away"
+
+
+def test_scope_identity_is_case_sensitive(staged):
+    """`compute_content_hash` normalises; a session or project name must not be.
+
+    It lowercases and strips its whole input, so folding the scope through it
+    made `Alpha` and `alpha` one proposal -- and `INSERT OR IGNORE` on the
+    unique index then dropped one of two legitimately distinct ones.
+    """
+    service, live = staged
+
+    lower = _propose(service, live, POSITIVES[1], project="alpha")
+    upper = _propose(service, live, POSITIVES[1], project="Alpha")
+
+    # `proposals` lists a suppressed record too, with staged=False -- so the
+    # presence of the entry proves nothing. `staged` is the signal.
+    assert lower["proposals"][0]["staged"] is True
+    assert upper["proposals"][0]["staged"] is True, (
+        "a project differing only in case is a different scope, and must not be "
+        "suppressed by the unique candidate_hash index"
+    )
+    assert upper["proposals"][0]["id"] != lower["proposals"][0]["id"]
+
+
+def test_an_expired_nudge_exhausted_proposal_is_swept(staged_memory):
+    """The queue giving up on a proposal is not the proposal being resolved.
+
+    The sweep only touched `pending`, so an expired `nudge_exhausted` row was
+    hidden by review() and never cleaned up -- unbounded growth in staging.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    from marm_mcp_server.services.distill import claim_pending_distill_prompt
+
+    _stage(staged_memory, "Exhausted and expired.", status="nudge_exhausted")
+    past = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+    with staged_memory.get_connection() as conn:
+        conn.execute("UPDATE distill_staging SET expires_at = ?", (past,))
+
+    claim_pending_distill_prompt(staged_memory)
+
+    with staged_memory.get_connection() as conn:
+        (status,) = conn.execute("SELECT status FROM distill_staging").fetchone()
+    assert status == "stale", f"expired nudge_exhausted row was left as {status}"
