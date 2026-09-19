@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import sqlite3
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
@@ -35,15 +36,22 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _hash(session_name: str, content: str) -> str:
-    """Identity of a proposal: its text, within its session.
+def _hash(session_name: str, content: str, project: "str | None") -> str:
+    """Identity of a proposal: its text, within its session AND its project.
 
-    Session-scoped on purpose. The same sentence distilled in two different
-    sessions is two proposals, because the reviewer deciding about it is
-    working in one session and should not have their decision silently made
+    Session-scoped so that the same sentence distilled in two sessions is two
+    proposals -- the reviewer deciding in one should not have the decision made
     for them by the other.
+
+    Project is in the identity for the same reason. Without it the unique
+    `candidate_hash` index suppresses the same content proposed for a different
+    project in one session, including after the first was discarded, so a
+    project could never be offered a fact another project had rejected.
     """
-    return compute_content_hash(f"{session_name}{_HASH_SEPARATOR}{content}")
+    scope = project or ""
+    return compute_content_hash(
+        f"{session_name}{_HASH_SEPARATOR}{scope}{_HASH_SEPARATOR}{content}"
+    )
 
 
 async def propose(
@@ -134,7 +142,7 @@ async def propose(
                     resolution.cosine,
                     resolution.neighbour_id,
                     resolution.neighbour_content,
-                    _hash(session_name, candidate.content),
+                    _hash(session_name, candidate.content, project),
                     project,
                     context_type,
                     expires_at,
@@ -210,6 +218,22 @@ def review(
     return {"status": "success", "pending": pending, "count": len(pending)}
 
 
+def _applied_memory_id(conn: "sqlite3.Connection", proposal_id: str) -> "str | None":
+    """The memory this proposal already wrote, if it did.
+
+    `apply()` stamps `proposal_id` into the memory's metadata before the write,
+    which makes the write recoverable: the staging row and the memory live in
+    separate transactions, so a crash between them leaves the memory stored and
+    the proposal `applying` forever.
+    """
+    row = conn.execute(
+        "SELECT id FROM memories WHERE json_extract(metadata, '$.proposal_id') = ? "
+        "ORDER BY rowid LIMIT 1",
+        (proposal_id,),
+    ).fetchone()
+    return row[0] if row else None
+
+
 async def apply(memory: MARMMemory, proposal_id: str) -> dict[str, Any]:
     """Write one staged proposal into memory and mark it applied.
 
@@ -236,6 +260,30 @@ async def apply(memory: MARMMemory, proposal_id: str) -> dict[str, Any]:
             # apply() must too -- otherwise an un-answered proposal can be
             # listed and thrown away but never accepted, which is a worse
             # half-state than not surfacing it at all.
+            if status == "applying":
+                # Left behind by a crash between the memory write and the
+                # staging update. Decide from the store, not from the status:
+                # if the memory is there the apply SUCCEEDED and only the
+                # bookkeeping is missing, and rejecting it strands the proposal
+                # permanently -- nothing else recovers this state.
+                existing = _applied_memory_id(conn, proposal_id)
+                if existing is not None:
+                    conn.execute(
+                        "UPDATE distill_staging SET status = 'applied', "
+                        "applied_memory_id = ?, reviewed_at = ?, updated_at = ? "
+                        "WHERE id = ?",
+                        (existing, now_iso, now_iso, proposal_id),
+                    )
+                    conn.execute("COMMIT")
+                    return {
+                        "status": "success",
+                        "memory_id": existing,
+                        "proposal_id": proposal_id,
+                        "recovered": True,
+                    }
+                # No memory, so the write never landed and this is retryable.
+                # Fall through and re-claim it.
+                status = "pending"
             if status not in ("pending", "nudge_exhausted"):
                 conn.execute("ROLLBACK")
                 return {
@@ -337,6 +385,12 @@ __all__ = [
 # already walks the table; a separate scheduler would duplicate that work.
 
 
+#: Longest neighbour rendered in a review prompt. The proposal itself is capped
+#: at 240 characters when it is extracted; an unbounded neighbour beside it is
+#: what let one variable field crowd out the other.
+_NEIGHBOUR_CHARS = 400
+
+
 def _prompt_block(row: tuple, byte_budget: int) -> dict:
     proposal_id, session, content, verdict, cosine, neighbour, expires_at, nudges = row
     lines = [
@@ -349,19 +403,27 @@ def _prompt_block(row: tuple, byte_budget: int) -> dict:
         f"session: {session}",
         f"verdict: {verdict}",
     ]
-    if verdict != "new":
-        lines.append(f"closest stored memory (cosine {cosine:.3f}):")
-        lines.append(f"  {neighbour or '(unavailable)'}")
-        lines.append(
-            "A `near` verdict is why this needs you: an encoder cannot tell "
-            "whether this refines the memory above or contradicts it."
-        )
+    # The proposal comes FIRST of the variable-length parts, and the neighbour
+    # is bounded. `_truncate` keeps the prefix, and `neighbour_content` has no
+    # length constraint in the database while the write path accepts 10,000
+    # characters -- so with the neighbour above it, a long enough neighbour kept
+    # the apply/discard instructions and cut away the very text under review.
     lines += [
         f"expires: {expires_at}",
         f"nudge: {nudges + 1}",
         "",
         "Proposal:",
         f"  {content}",
+    ]
+    if verdict != "new":
+        lines += [
+            "",
+            f"closest stored memory (cosine {cosine:.3f}):",
+            f"  {_truncate(neighbour, _NEIGHBOUR_CHARS) if neighbour else '(unavailable)'}",
+            "A `near` verdict is why this needs you: an encoder cannot tell "
+            "whether this refines the proposal above or contradicts it.",
+        ]
+    lines += [
         "",
         "Apply only what you would want recalled months from now. Discarding is "
         "permanent; it will not be proposed again.",

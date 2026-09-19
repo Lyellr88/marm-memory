@@ -637,3 +637,104 @@ async def test_a_queued_write_carries_the_project_column(tmp_path):
         )
     assert rows[scoped] == "scoped-project"
     assert rows[unscoped] != "scoped-project"
+
+
+def test_the_same_content_can_be_proposed_for_a_different_project(staged):
+    """`project` is part of proposal identity, not just a stored attribute.
+
+    The unique `candidate_hash` index with INSERT OR IGNORE means a hash that
+    omits the project silently suppresses the same fact for another project in
+    the same session -- including after the first was discarded, so a project
+    could never be offered something another had rejected.
+    """
+    service, live = staged
+
+    first = _propose(service, live, POSITIVES[1], project="alpha")
+    assert first["proposals"], "the first project must get a proposal"
+    service.discard(live, first["proposals"][0]["id"])
+
+    second = _propose(service, live, POSITIVES[1], project="beta")
+    assert second["proposals"], (
+        "a second project must still be offered content the first discarded"
+    )
+    assert second["proposals"][0]["id"] != first["proposals"][0]["id"]
+
+
+def test_an_apply_interrupted_after_the_write_is_recovered_not_stranded(staged):
+    """A crash between the memory write and the staging update must be
+    recoverable.
+
+    The two live in separate transactions, so the memory can be committed while
+    the proposal is still `applying`. Nothing else reads that status -- apply
+    rejected it, discard and review skip it -- so the proposal was stranded
+    forever and its memory orphaned from its own bookkeeping.
+    """
+    import asyncio
+
+    service, live = staged
+    proposal_id = _propose(service, live, POSITIVES[1])["proposals"][0]["id"]
+    assert asyncio.run(service.apply(live, proposal_id))["status"] == "success"
+
+    # Rewind exactly what a crash would have left: the memory is committed, the
+    # staging row never made it past `applying`.
+    with live.get_connection() as conn:
+        conn.execute(
+            "UPDATE distill_staging SET status = 'applying', "
+            "applied_memory_id = NULL WHERE id = ?",
+            (proposal_id,),
+        )
+
+    recovered = asyncio.run(service.apply(live, proposal_id))
+    assert recovered["status"] == "success", recovered
+    assert recovered.get("recovered") is True
+    assert recovered["memory_id"], "it must report the memory that was already written"
+
+    with live.get_connection() as conn:
+        status, memory_id = conn.execute(
+            "SELECT status, applied_memory_id FROM distill_staging WHERE id = ?",
+            (proposal_id,),
+        ).fetchone()
+    assert status == "applied"
+    assert memory_id == recovered["memory_id"]
+
+
+def test_an_applying_row_with_no_memory_is_retried_not_recovered(staged):
+    """The mirror case: decide from the store, not from the status.
+
+    If the write never landed there is nothing to recover, and treating the row
+    as applied would claim a memory that does not exist.
+    """
+    import asyncio
+
+    service, live = staged
+    proposal_id = _propose(service, live, POSITIVES[1])["proposals"][0]["id"]
+    with live.get_connection() as conn:
+        conn.execute(
+            "UPDATE distill_staging SET status = 'applying' WHERE id = ?",
+            (proposal_id,),
+        )
+
+    result = asyncio.run(service.apply(live, proposal_id))
+    assert result["status"] == "success"
+    assert result.get("recovered") is not True, "nothing was there to recover"
+    assert result["memory_id"]
+
+
+def test_a_long_neighbour_cannot_crowd_out_the_proposal(staged_memory):
+    """The text under review must survive truncation.
+
+    `neighbour_content` has no length constraint while the write path accepts
+    10,000 characters, and `_truncate` keeps the prefix -- so with the neighbour
+    rendered above it, a long enough neighbour kept the apply/discard
+    instructions and cut away the proposal itself.
+    """
+    from marm_mcp_server.services.distill import claim_pending_distill_prompt
+
+    content = "The proposal that has to survive."
+    _stage(staged_memory, content, verdict="near")
+    with staged_memory.get_connection() as conn:
+        conn.execute("UPDATE distill_staging SET neighbour_content = ?", ("N" * 9000,))
+
+    text = claim_pending_distill_prompt(staged_memory)["text"]
+    assert "Proposal:" in text, "the proposal heading was truncated away"
+    assert content[:60] in text, "the proposal text itself was truncated away"
