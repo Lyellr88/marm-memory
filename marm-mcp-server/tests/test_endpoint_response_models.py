@@ -76,6 +76,10 @@ def test_marm_delete_response_payloads_are_unchanged(monkeypatch, tmp_path):
                 "message": "🗑️ Deleted 2 items",
                 "deleted_count": 2,
                 "memories_deleted": 2,
+                # Added alongside the concept cleanup this path now performs,
+                # mirroring what the memory endpoints already report. Additive:
+                # every previously-present key keeps its name and meaning.
+                "concept_cleanup": {"status": "success", "entities_removed": 3},
             },
         ),
         (

@@ -7,6 +7,7 @@ from typing import Callable, Optional
 from ..config.settings import MARM_PLATFORM, MARM_PROJECT
 from ..core.events import events
 from ..core.memory import memory
+from ..core.memory_utils import _safe_print
 
 _SESSION_PREFIXES = ("Session: ", "Topic: ")
 _SESSION_INACTIVITY_NOTICE_SECONDS = 3600
@@ -276,6 +277,28 @@ async def list_log_entries(
         return {"status": "error", "message": "Log show failed."}
 
 
+async def _cleanup_concepts_for(memory_ids: list[str]) -> dict:
+    """Remove concept entities left behind by deleted memories.
+
+    Imported inside the function, as `services/notebook.py` does for the same
+    helper: `endpoints/memory` imports from this package, so a module-level
+    import would close the cycle.
+
+    Never raises. A delete that has already committed must not be reported as
+    a failure because its follow-up cleanup could not run -- the rows are
+    gone either way, and `tools`-side sweeps can still find the strays.
+    """
+    if not memory_ids:
+        return {"status": "skipped", "reason": "no memories deleted"}
+    from ..endpoints.memory import _cleanup_deleted_concepts_async
+
+    try:
+        return await _cleanup_deleted_concepts_async(memory_ids)
+    except Exception as e:
+        _safe_print(f"Concept cleanup failed after log delete: {e}")
+        return {"status": "error", "message": str(e)}
+
+
 async def delete_log_or_notebook_entry(
     type: str,
     target: str,
@@ -294,6 +317,14 @@ async def delete_log_or_notebook_entry(
         with memory.get_connection() as conn:
             if type == "log":
                 memories_deleted = 0
+                # Ids of the memories this delete removes, so their concept
+                # entities can be cleaned up after the commit. The memory
+                # endpoints already do this; this path did not, which is the
+                # whole of the inconsistency -- the same rows removed through
+                # bulk-delete were cleaned and removed through marm_delete
+                # were not, leaving entities that keep their relationships and
+                # go on steering concept recall with nothing evidencing them.
+                deleted_memory_ids: list[str] = []
                 if session_name:
                     conn.execute("BEGIN IMMEDIATE")
                     try:
@@ -309,6 +340,16 @@ async def delete_log_or_notebook_entry(
                         deleted = cursor.rowcount
                         if entry_ids:
                             placeholders = ",".join("?" * len(entry_ids))
+                            # Collected BEFORE the delete: afterwards the rows
+                            # are gone and the ids are unrecoverable.
+                            deleted_memory_ids = [
+                                r[0]
+                                for r in conn.execute(
+                                    "SELECT id FROM memories WHERE json_extract(metadata, '$.source') = 'log_entry' "
+                                    f"AND json_extract(metadata, '$.log_entry_id') IN ({placeholders})",
+                                    entry_ids,
+                                ).fetchall()
+                            ]
                             memories_deleted = conn.execute(
                                 "DELETE FROM memories WHERE json_extract(metadata, '$.source') = 'log_entry' "
                                 f"AND json_extract(metadata, '$.log_entry_id') IN ({placeholders})",
@@ -346,6 +387,14 @@ async def delete_log_or_notebook_entry(
                             )
                         except Exception:
                             pass
+                        deleted_memory_ids = [
+                            r[0]
+                            for r in conn.execute(
+                                "SELECT id FROM memories WHERE session_name = ? "
+                                "AND json_extract(metadata, '$.source') = 'log_entry'",
+                                (target,),
+                            ).fetchall()
+                        ]
                         memories_deleted = conn.execute(
                             "DELETE FROM memories WHERE session_name = ? "
                             "AND json_extract(metadata, '$.source') = 'log_entry'",
@@ -357,11 +406,13 @@ async def delete_log_or_notebook_entry(
                         raise
                 if not session_name and memory.active_log_session == target:
                     memory.active_log_session = "main"
+                concept_cleanup = await _cleanup_concepts_for(deleted_memory_ids)
                 return {
                     "status": "success",
                     "message": f"🗑️ Deleted {deleted} items",
                     "deleted_count": deleted,
                     "memories_deleted": memories_deleted,
+                    "concept_cleanup": concept_cleanup,
                 }
             else:
                 notebook_session = (session_name or "main").strip() or "main"
