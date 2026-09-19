@@ -14,17 +14,31 @@ import sqlite3
 import pytest
 
 from marm_mcp_server.core.memory import memory
-from marm_mcp_server.core.memory_db import init_database
+from marm_mcp_server.core.memory_db import SQLiteConnectionPool, init_database
 from marm_mcp_server.endpoints import system
 
 
 @pytest.fixture(autouse=True)
-def schema():
-    """conftest redirects HOME, so the isolated database starts without tables.
+def schema(tmp_path, monkeypatch):
+    """Point the pool at a temporary database, then create its tables.
 
-    Initialise the path the pool actually resolved, not the imported constant.
+    Redirecting HOME is not enough and the difference is not theoretical: this
+    module imports the `memory` singleton at module scope, so its pool resolved
+    `~/.marm/marm_memory.db` before any session fixture ran. These tests then
+    perform REAL queued writes, and `store_memory_queued` returns when the
+    future resolves rather than when the row is visible -- so the cleanup below
+    deleted nothing and every run left a probe memory in the developer's own
+    store. Measured: 8 such rows had accumulated, and one more appeared per run.
+
+    Repointing the pool is what actually isolates it, because it does not
+    depend on when the module was imported.
     """
-    init_database(memory.connection_pool.db_path)
+    db = tmp_path / "marm_memory.db"
+    init_database(str(db))
+    # The POOL, not its `db_path`: SQLiteConnectionPool opens its first
+    # connections in __init__, so repointing the attribute afterwards leaves
+    # every existing connection bound to the original file.
+    monkeypatch.setattr(memory, "connection_pool", SQLiteConnectionPool(str(db)))
 
 
 def test_reload_docs_job_is_a_coroutine_not_a_thread_target():
