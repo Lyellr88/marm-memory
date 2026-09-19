@@ -148,6 +148,7 @@ async def marm_smart_recall(
 async def marm_log_entry(
     entry: str,
     session_name: Optional[str] = None,
+    project: Optional[str] = None,
 ) -> dict:
     """
     📝 Write a log entry to the active session.
@@ -165,7 +166,7 @@ async def marm_log_entry(
 
     Returns: status, message confirming the entry or session switch, entry_id, memory_id
     """
-    return await create_log_entry_stdio(entry, session_name)
+    return await create_log_entry_stdio(entry, session_name, project)
 
 
 @mcp.tool()

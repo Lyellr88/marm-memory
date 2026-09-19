@@ -13,6 +13,18 @@ class LogEntryRequest(BaseModel):
         default=None,
         description="Session name — omit to use the active session (auto-restored on startup)",
     )
+    project: Optional[str] = Field(
+        default=None,
+        # Matches the project bound on the memory endpoint (endpoints/memory.py).
+        # A stricter limit here would reject over HTTP a scope that the same
+        # caller can use over STDIO and on every other project-scoped route.
+        max_length=255,
+        description=(
+            "Project scope for this entry — omit to use the server's detected "
+            "project. Set it on a shared HTTP runtime, where the detected value "
+            "is the server's working directory rather than yours."
+        ),
+    )
 
 
 class NotebookRequest(BaseModel):

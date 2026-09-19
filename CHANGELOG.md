@@ -24,6 +24,15 @@ Thank you to [@doublegate](https://github.com/doublegate) for the runtime, compa
 
 </details>
 
+
+### Added
+
+- `marm_log_entry` accepts an optional `project` on both HTTP and STDIO. Omitting it keeps the current behaviour, where the entry is attributed to the project MARM detects from the server process's working directory. That default is wrong on a shared HTTP runtime — it names the server's directory rather than the caller's — so a logged entry could not be found under the project it belonged to. The scope now reaches the `log_entries` row, the session-switch marker row, and the semantic memory the entry creates.
+
+### Fixed
+
+- The serialized write queue carries `project` and `explicit_scope` through to the stored memory. `_store_memory` has always accepted both, but the queue did not forward them, so any queued write fell back to the detected project regardless of what the caller asked for — which is every write on a default configuration. The code for this shipped in the API-key PR (#206) without a changelog entry; this records it.
+
 <details>
 <summary><strong>September 18th, 2026: Docker Graph Lifecycle Support and a Console Demo Pack (v2.49.0)</strong></summary>
 
