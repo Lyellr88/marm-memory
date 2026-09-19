@@ -31,7 +31,7 @@ Thank you to [@doublegate](https://github.com/doublegate) for the runtime, compa
 
 ### Fixed
 
-- The serialized write queue now carries `project` and `explicit_scope` through to the stored memory. `_store_memory` has always accepted both, but the queue did not forward them, so any queued write fell back to the detected project regardless of what the caller asked for — which is every write on a default configuration.
+- The serialized write queue carries `project` and `explicit_scope` through to the stored memory. `_store_memory` has always accepted both, but the queue did not forward them, so any queued write fell back to the detected project regardless of what the caller asked for — which is every write on a default configuration. The code for this shipped in the API-key PR (#206) without a changelog entry; this records it.
 
 <details>
 <summary><strong>September 18th, 2026: Docker Graph Lifecycle Support and a Console Demo Pack (v2.49.0)</strong></summary>
