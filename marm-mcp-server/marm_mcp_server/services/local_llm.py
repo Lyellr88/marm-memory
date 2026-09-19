@@ -176,6 +176,15 @@ def _explicit_url() -> Optional[str]:
     return os.environ.get("MARM_LLM_URL") or None
 
 
+def _chosen_endpoint() -> Optional[str]:
+    """An endpoint somebody actually chose -- the Console flag or
+    `MARM_LLM_URL` -- as distinct from the built-in guess and from whatever
+    auto-selection settled on. One name for the concept, so callers that must
+    not re-enter auto-selection have something to ask.
+    """
+    return _saved_endpoint() or _explicit_url()
+
+
 def _rank(server: dict[str, Any]) -> tuple:
     """Lower sorts first. Order: has a model, is the deployment default, is not
     a deprioritised runtime, then port for determinism."""
@@ -257,9 +266,7 @@ def endpoint() -> Optional[str]:
     in order to render the pane you turn generation back on from, and gating
     here would blank that pane at exactly the moment it is being read.
     """
-    url = (
-        _saved_endpoint() or _explicit_url() or _auto_endpoint() or DEFAULT_URL
-    ).rstrip("/")
+    url = (_chosen_endpoint() or _auto_endpoint() or DEFAULT_URL).rstrip("/")
     if not url:
         return None
     if not _is_loopback(url) and not ALLOW_REMOTE:
@@ -815,7 +822,13 @@ def discover_servers(force: bool = False) -> dict[str, Any]:
         (port, label) for port, label in KNOWN_PORTS if port not in skip
     ]
 
-    configured = endpoint()
+    # NOT `endpoint()`: that consults auto-selection, which consults this
+    # function, which is unbounded mutual recursion -- measured at 1,170 ms per
+    # call with the RecursionError swallowed by the guard in `_auto_endpoint`,
+    # against ~5 ms of actual probing. What belongs in this list is the endpoint
+    # somebody CONFIGURED, so that "the one you chose is dead" can be shown;
+    # the auto-selected one is by construction already among the discovered.
+    configured = _chosen_endpoint() or DEFAULT_URL
     configured_port = None
     if configured:
         try:
