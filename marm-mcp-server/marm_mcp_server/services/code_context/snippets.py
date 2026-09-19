@@ -9,8 +9,16 @@ snippet can never disagree with what is on disk.
 from __future__ import annotations
 
 import os
+from typing import TextIO
 
 MAX_LINES = 60
+
+#: Longest physical line materialised from a source file. Bounding the line
+#: COUNT is not enough: a minified or generated file is routinely one line of
+#: several megabytes, so reading "one line" can still pull the whole file into
+#: memory. 2,000 characters is far beyond any line a human wrote and well under
+#: anything that costs.
+MAX_LINE_CHARS = 2000
 
 
 def _contained(root_path: str, file_path: str) -> "str | None":
@@ -32,6 +40,32 @@ def _contained(root_path: str, file_path: str) -> "str | None":
     return None
 
 
+def _bounded_line(fh: "TextIO", limit: int) -> "tuple[str, bool]":
+    """Read one physical line, materialising at most `limit` characters of it.
+
+    Returns (text, over_long). The whole line is always consumed so the caller's
+    line numbering stays correct, but the part beyond `limit` is discarded
+    rather than kept.
+
+    `readline(limit)` returning a string with no trailing newline is ambiguous
+    on its own: it means either a line longer than `limit`, or a final line with
+    no newline at end of file. Draining is what distinguishes them -- if the
+    drain reads nothing, it was the short final line.
+    """
+    piece = fh.readline(limit)
+    if not piece or piece.endswith("\n"):
+        return piece, False
+    over_long = False
+    while True:
+        rest = fh.readline(limit)
+        if not rest:
+            break
+        over_long = True
+        if rest.endswith("\n"):
+            break
+    return piece, over_long
+
+
 def read(
     root_path: str, file_path: str, start: int, end: int, *, max_lines: int = MAX_LINES
 ) -> tuple[str, bool]:
@@ -39,18 +73,45 @@ def read(
     full = _contained(root_path, file_path)
     if full is None:
         return "", False
-    try:
-        with open(full, "r", encoding="utf-8", errors="replace") as fh:
-            lines = fh.readlines()
-    except (OSError, ValueError):
-        return "", False
     if start < 1:
         start = 1
-    end = min(end if end and end >= start else start, len(lines))
-    chunk = lines[start - 1 : end]
-    truncated = len(chunk) > max_lines
-    if truncated:
-        chunk = chunk[:max_lines]
+    if not end or end < start:
+        end = start
+    # Bounded on both axes, because each one alone leaves a way to read an
+    # arbitrarily large amount of a file:
+    #   * `readlines()` materialises every line before `max_lines` applies, so a
+    #     40 MB generated file cost 40 MB to return 60 lines of it.
+    #   * iterating the handle fixes that but bounds only the line COUNT, and a
+    #     minified file is routinely ONE line of several megabytes -- so even
+    #     `start=1, end=1` pulled the whole file in as a single string.
+    # Reading line-by-line with a per-line character bound, and stopping as soon
+    # as the requested range is satisfied, makes the cost a function of the
+    # range rather than of the file.
+    chunk: list[str] = []
+    truncated = False
+    number = 0
+    try:
+        with open(full, "r", encoding="utf-8", errors="replace") as fh:
+            while True:
+                line, over_long = _bounded_line(fh, MAX_LINE_CHARS)
+                if not line:
+                    break
+                number += 1
+                if number < start:
+                    continue
+                if number > end:
+                    break
+                if len(chunk) >= max_lines:
+                    truncated = True
+                    break
+                if over_long:
+                    # Say so rather than returning a silently clipped line as if
+                    # it were the whole thing.
+                    truncated = True
+                    line = line.rstrip("\n") + "\n"
+                chunk.append(line)
+    except (OSError, ValueError):
+        return "", False
     return "".join(chunk).rstrip("\n"), truncated
 
 
