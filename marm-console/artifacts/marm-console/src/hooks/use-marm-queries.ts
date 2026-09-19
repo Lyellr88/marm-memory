@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { QueryClient } from '@tanstack/react-query';
 import { useMarmClient } from '@/lib/use-marm-client';
@@ -6,7 +6,7 @@ import { useConnection } from '@/lib/marm-connection';
 import type { 
   MemoryListParams, MemoryInput, MemoryId, LogListParams, NotebookDeleteRef, NotebookInput,
   CompactionAction, ConceptSearchParams, ConceptBuildInput, ConceptGraphParams,
-  ProjectIndexInput, CodeSearchInput, TraceInput, ImpactInput, DuplicatePairInput,
+  ProjectIndexInput, CodeSearchInput, CodeContextInput, CodeContextCitation, DistillInput, TraceInput, ImpactInput, DuplicatePairInput,
   MergeDuplicateInput, RuntimeProfile
 } from '@/lib/marm-types';
 import { MarmApiError } from '@/lib/marm-api';
@@ -17,6 +17,7 @@ export const queryKeys = {
   memories: (baseUrl: string, params?: MemoryListParams) => ['memories', baseUrl, params],
   memory: (baseUrl: string, id: MemoryId) => ['memory', baseUrl, id],
   sessions: (baseUrl: string) => ['sessions', baseUrl],
+  distillPending: (baseUrl: string, session?: string | null) => ['distill-pending', baseUrl, session ?? null],
   logs: (baseUrl: string, params?: LogListParams) => ['logs', baseUrl, params],
   notebook: (baseUrl: string, params?: any) => ['notebook', baseUrl, params],
   summary: (baseUrl: string, session: string) => ['summary', baseUrl, session],
@@ -71,9 +72,9 @@ export function useFilters() {
 }
 
 // --- Memory ---
-export function useMemories(params?: MemoryListParams) {
+export function useMemories(params?: MemoryListParams, enabled = true) {
   const { baseUrl, client } = useMarmConfig();
-  return useQuery({ queryKey: queryKeys.memories(baseUrl, params), queryFn: () => client.listMemories(params) });
+  return useQuery({ queryKey: queryKeys.memories(baseUrl, params), queryFn: () => client.listMemories(params), enabled });
 }
 
 export function useMemory(id: MemoryId) {
@@ -216,6 +217,74 @@ export function useUpdateRuntimeProfile() {
     mutationFn: ({ profile, rateLimitRpm }: { profile: RuntimeProfile; rateLimitRpm?: number | null }) =>
       client.updateRuntimeProfile(profile, rateLimitRpm),
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.runtimeSettings(baseUrl) }),
+  });
+}
+
+/** What the runtime serves and what else is installed on this machine.
+ *
+ *  Not polled. The disk scan is cheap warm (35 ms against a 62 GB LM Studio
+ *  tree) but it is still directory I/O, and the answer only changes when
+ *  somebody downloads a model -- so it refetches on demand, not on a timer
+ *  like the health panes above.
+ */
+/** Which local model servers are running. Scanned on demand, not polled:
+ *  a loopback sweep is 6ms but it is still nine connect attempts. */
+export function useLlmServers(enabled = true) {
+  const { baseUrl, client } = useMarmConfig();
+  return useQuery({
+    queryKey: ['llm-servers', baseUrl],
+    queryFn: () => client.getLlmServers(false),
+    enabled,
+    retry: false,
+  });
+}
+
+export function useLlmModels(enabled = true) {
+  const { baseUrl, client } = useMarmConfig();
+  return useQuery({
+    queryKey: ['llm-models', baseUrl],
+    queryFn: () => client.getLlmModels(false),
+    enabled,
+    retry: false,
+  });
+}
+
+export function useBrowseLlmModels(path: string | null, enabled = true) {
+  const { baseUrl, client } = useMarmConfig();
+  return useQuery({
+    queryKey: ['llm-browse', baseUrl, path],
+    queryFn: () => client.browseLlmModels(path),
+    enabled,
+    retry: false,
+  });
+}
+
+export function useUpdateLlmSettings() {
+  const { baseUrl, client } = useMarmConfig();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { enabled?: boolean; model?: string; endpoint?: string }) =>
+      client.updateLlmSettings(body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.runtimeSettings(baseUrl) });
+      qc.invalidateQueries({ queryKey: ['llm-models', baseUrl] });
+      qc.invalidateQueries({ queryKey: ['llm-servers', baseUrl] });
+    },
+  });
+}
+
+export function useUpdateLlmRoots() {
+  const { baseUrl, client } = useMarmConfig();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ path, remove }: { path: string; remove?: boolean }) =>
+      client.updateLlmRoots(path, remove ?? false),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['llm-models', baseUrl] });
+      // A new root changes what Browse may look inside, so every cached
+      // listing is now answering with the wrong set of allowed roots.
+      qc.invalidateQueries({ queryKey: ['llm-browse', baseUrl] });
+    },
   });
 }
 
@@ -746,6 +815,126 @@ export function useConfirmProjectMemoryLinking() {
       qc.invalidateQueries({ queryKey: queryKeys.conceptsGraph(baseUrl) });
     },
   });
+}
+
+export function useBuildCodeContext() {
+  const { client } = useMarmConfig();
+  return useMutation({ mutationFn: (data: CodeContextInput) => client.buildCodeContext(data) });
+}
+
+/** The review queue. Separate from the propose mutation on purpose: a reviewer
+ *  arriving at the page has proposals waiting from an agent's own distil runs,
+ *  and should not have to paste a transcript to see them. */
+export function useDistillPending(sessionName?: string | null, enabled = true) {
+  const { baseUrl, client } = useMarmConfig();
+  return useQuery({
+    queryKey: queryKeys.distillPending(baseUrl, sessionName),
+    queryFn: () => client.distill({ action: 'review', session_name: sessionName ?? null, limit: 200 }),
+    enabled,
+  });
+}
+
+export function useDistillPropose() {
+  const { baseUrl, client } = useMarmConfig();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: DistillInput) => client.distill({ ...data, action: 'propose' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['distill-pending', baseUrl] }),
+  });
+}
+
+/** Applying writes a memory, so the memory lists and counts are stale too --
+ *  invalidating only the queue would leave the rest of the Console showing a
+ *  store that no longer exists. */
+export function useDistillApply() {
+  const { baseUrl, client } = useMarmConfig();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (proposalId: string) => client.distill({ action: 'apply', proposal_id: proposalId }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['distill-pending', baseUrl] });
+      qc.invalidateQueries({ queryKey: ['memories', baseUrl] });
+      qc.invalidateQueries({ queryKey: queryKeys.overview(baseUrl) });
+    },
+  });
+}
+
+export function useDistillDiscard() {
+  const { baseUrl, client } = useMarmConfig();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (proposalId: string) => client.distill({ action: 'discard', proposal_id: proposalId }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['distill-pending', baseUrl] }),
+  });
+}
+
+/** A grounded answer, streamed.
+ *
+ *  Deliberately not react-query: this is not a request whose result is cached,
+ *  it is a response that arrives over seconds and is rendered as it goes.
+ *  Modelling it as a query would mean either caching a partial answer or
+ *  re-fetching a finished one, and neither is what a reader wants.
+ */
+export function useStreamingAnswer() {
+  const { client } = useMarmConfig();
+  const [state, setState] = useState<{
+    status: 'idle' | 'streaming' | 'done' | 'error';
+    text: string;
+    citations: CodeContextCitation[];
+    model?: string;
+    message?: string;
+    hint?: string;
+  }>({ status: 'idle', text: '', citations: [] });
+  const active = useRef<{ abort: () => void } | null>(null);
+
+  // A reader who leaves the page should not keep a model busy on their behalf.
+  useEffect(() => () => active.current?.abort(), []);
+
+  const start = useCallback(
+    (data: CodeContextInput) => {
+      active.current?.abort();
+      setState({ status: 'streaming', text: '', citations: [] });
+      const handle = client.streamCodeContextAnswer(data, (name, payload) => {
+        if (name === 'start') {
+          setState((prev) => ({ ...prev, model: payload.model as string }));
+        } else if (name === 'delta') {
+          const piece = payload.text as string;
+          setState((prev) => ({ ...prev, text: prev.text + piece }));
+        } else if (name === 'done') {
+          setState((prev) => ({
+            ...prev,
+            status: 'done',
+            citations: (payload.citations as CodeContextCitation[]) ?? [],
+          }));
+        } else if (name === 'error') {
+          setState((prev) => ({
+            ...prev,
+            status: 'error',
+            message: payload.message as string,
+            hint: payload.hint as string | undefined,
+          }));
+        }
+      });
+      active.current = handle;
+      handle.done.catch((error: unknown) => {
+        // An abort is the caller's own doing, not a failure to report.
+        if (error instanceof DOMException && error.name === 'AbortError') return;
+        setState((prev) => ({
+          ...prev,
+          status: 'error',
+          message: 'The answer stream failed.',
+        }));
+      });
+    },
+    [client],
+  );
+
+  const reset = useCallback(() => {
+    active.current?.abort();
+    setState({ status: 'idle', text: '', citations: [] });
+  }, []);
+
+  return { ...state, start, reset };
 }
 
 export function useSearchProjectCode() {

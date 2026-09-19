@@ -1,0 +1,179 @@
+"""Tests for the optional local generation backend.
+
+Nothing here contacts a model. What is asserted is the contract every caller
+depends on: a failure is a `None`, and a non-loopback endpoint is refused.
+"""
+
+from __future__ import annotations
+
+import pytest
+
+from marm_mcp_server.services import local_llm
+
+
+@pytest.fixture(autouse=True)
+def _no_saved_endpoint(monkeypatch):
+    """Isolate these from the durable endpoint override.
+
+    `endpoint()` prefers the saved flag over `MARM_LLM_URL`, which is the whole
+    point of the Console picker -- but it also means a value left in the real
+    database silently wins over the URL these tests patch in, and the loopback
+    assertions then pass or fail on the developer's own configuration.
+    """
+    monkeypatch.setattr(local_llm, "_saved_endpoint", lambda: None)
+
+
+@pytest.fixture(autouse=True)
+def _clear_probe_cache():
+    local_llm._probe_cache["at"] = 0.0
+    local_llm._probe_cache["model"] = None
+    yield
+    local_llm._probe_cache["at"] = 0.0
+    local_llm._probe_cache["model"] = None
+
+
+@pytest.mark.parametrize(
+    "url,allowed",
+    [
+        ("http://127.0.0.1:18080", True),
+        ("http://localhost:11434", True),
+        ("http://[::1]:8080", True),
+        ("http://192.168.1.50:8080", False),
+        ("https://api.example.com/v1", False),
+        ("http://model.internal:8080", False),
+    ],
+)
+def test_only_loopback_endpoints_are_used(monkeypatch, url, allowed):
+    """A misconfigured endpoint would ship transcripts off the box silently.
+
+    That is the one failure with no local symptom, so it is refused rather than
+    warned about.
+    """
+    monkeypatch.setenv("MARM_LLM_URL", url)
+    monkeypatch.setattr(local_llm, "DEFAULT_URL", url)
+    monkeypatch.setattr(local_llm, "ALLOW_REMOTE", False)
+    assert (local_llm.endpoint() is not None) is allowed
+
+
+def test_a_remote_endpoint_needs_an_explicit_sentence_to_enable(monkeypatch):
+    """The override is a sentence, not a truthy flag, so it cannot be set by
+    accident or by a stray `=1` copied from another variable."""
+    monkeypatch.setenv("MARM_LLM_URL", "https://api.example.com")
+    monkeypatch.setattr(local_llm, "DEFAULT_URL", "https://api.example.com")
+    monkeypatch.setattr(local_llm, "ALLOW_REMOTE", True)
+    assert local_llm.endpoint() == "https://api.example.com"
+
+
+def test_an_unreachable_server_is_none_and_not_an_exception(monkeypatch):
+    monkeypatch.setenv("MARM_LLM_URL", "http://127.0.0.1:9")
+    monkeypatch.setattr(local_llm, "DEFAULT_URL", "http://127.0.0.1:9")
+    assert local_llm.available() is None
+    assert local_llm.complete("s", "u") is None
+    assert local_llm.complete_json("s", "u") is None
+
+
+def test_a_negative_probe_is_cached(monkeypatch):
+    """Otherwise every distil on a machine with no model pays a full timeout
+    before falling back, turning a working feature into a slow one."""
+    calls = []
+
+    def fake_request(path, payload, timeout):
+        calls.append(path)
+        return None
+
+    monkeypatch.setattr(local_llm, "_request", fake_request)
+    assert local_llm.available() is None
+    assert local_llm.available() is None
+    assert len(calls) == 1, "the negative result was re-probed"
+
+
+def test_status_reports_what_the_console_shows(monkeypatch):
+    monkeypatch.setattr(local_llm, "DEFAULT_URL", "http://127.0.0.1:18080")
+    monkeypatch.setattr(local_llm, "_request", lambda *a, **k: None)
+    status = local_llm.status()
+    assert status["configured"] is True
+    assert status["available"] is False
+    assert status["loopback_enforced"] is True
+
+
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ('[{"a": 1}]', [{"a": 1}]),
+        ('```json\n[{"a": 1}]\n```', [{"a": 1}]),
+        ('Here you go:\n[{"a": 1}]\nHope that helps.', [{"a": 1}]),
+        ('{"facts": []}', {"facts": []}),
+        ("not json at all", None),
+        ("", None),
+    ],
+)
+def test_json_is_recovered_from_however_the_model_wrapped_it(raw, expected):
+    """Models fence and preface JSON however they were tuned to. A reply that
+    cannot be parsed is the same `None` as no model at all."""
+    assert local_llm._first_json_value(raw) == expected
+
+
+# --- talking to a server that is not llama.cpp ------------------------------
+
+
+def test_json_object_is_retried_without_it_when_the_server_refuses(monkeypatch):
+    """LM Studio returns HTTP 400 for `response_format: {"type":"json_object"}`.
+
+    Measured against 0.3.x: *"'response_format.type' must be 'json_schema' or
+    'text'"*. Every generated distillation silently fell back to sentence
+    selection the moment MARM pointed at LM Studio instead of llama.cpp, and
+    nothing said why. `json_object` is an optimisation -- callers parse
+    defensively anyway -- so refusing it must not cost the feature.
+    """
+    monkeypatch.setattr(local_llm, "available", lambda *a, **k: "gpt-oss-20b")
+    sent = []
+
+    def fake_request(path, payload, timeout):
+        # A snapshot: the retry pops `response_format` off the same dict, so
+        # storing the reference would show both calls without it.
+        sent.append(dict(payload))
+        if "response_format" in payload:
+            return None  # the 400
+        return {"choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}]}
+
+    monkeypatch.setattr(local_llm, "_request", fake_request)
+
+    assert local_llm.complete("sys", "user", json_object=True) == "ok"
+    assert len(sent) == 2, "the refusal must be retried without response_format"
+    assert "response_format" in sent[0] and "response_format" not in sent[1]
+
+
+def test_a_reasoning_model_that_never_reached_content_is_a_failure(monkeypatch):
+    """Empty content is not an empty answer.
+
+    gpt-oss and the R1 family emit chain of thought into a separate
+    `reasoning` field and can spend the whole budget there, returning
+    finish_reason="length" with content still "". Returning "" hands the
+    caller a confident blank; None is the state every caller falls back from.
+    """
+    monkeypatch.setattr(local_llm, "available", lambda *a, **k: "gpt-oss-20b")
+    monkeypatch.setattr(
+        local_llm,
+        "_request",
+        lambda *a, **k: {
+            "choices": [
+                {
+                    "message": {"content": "", "reasoning": "thinking at length..."},
+                    "finish_reason": "length",
+                }
+            ]
+        },
+    )
+    assert local_llm.complete("sys", "user") is None
+
+
+def test_a_normal_empty_reply_is_also_a_failure_not_an_answer(monkeypatch):
+    monkeypatch.setattr(local_llm, "available", lambda *a, **k: "m")
+    monkeypatch.setattr(
+        local_llm,
+        "_request",
+        lambda *a, **k: {
+            "choices": [{"message": {"content": "  "}, "finish_reason": "stop"}]
+        },
+    )
+    assert local_llm.complete("sys", "user") is None

@@ -5,6 +5,38 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
+class CodeContextPayload(BaseModel):
+    task: str = Field(min_length=1, max_length=1000)
+    project: str | None = Field(default=None, max_length=512)
+    cwd: str | None = Field(default=None, max_length=4096)
+    budget: int = Field(default=12000, ge=500, le=100000)
+    include_graph: bool = False
+    detail: int = Field(default=0, ge=0, le=3)
+    #: Ask the local model to answer the task from the composed context. The
+    #: Console default is on; the tool's own default is off, because an agent
+    #: reads the ranked source and does not need prose about it.
+    answer: bool = False
+
+
+class DistillPayload(BaseModel):
+    """Mirrors the tool's own request shape.
+
+    Kept deliberately thin rather than split per action: the Console posts the
+    same body an agent would, so the two cannot drift into disagreeing about
+    what an action requires.
+    """
+
+    action: Literal["propose", "review", "apply", "discard"] = "propose"
+    text: str | None = Field(default=None, max_length=400000)
+    session_name: str | None = Field(default=None, max_length=256)
+    proposal_id: str | None = Field(default=None, max_length=64)
+    project: str | None = Field(default=None, max_length=256)
+    context_type: str = Field(default="general", max_length=64)
+    threshold: float = Field(default=0.20, ge=-2.0, le=3.0)
+    limit: int = Field(default=20, ge=1, le=200)
+    include_duplicates: bool = False
+
+
 class ConceptBuildPayload(BaseModel):
     session_name: str | None = None
     project: str | None = None
@@ -70,6 +102,24 @@ class RuntimeAutomationPayload(BaseModel):
 class RuntimeProfilePayload(BaseModel):
     profile: Literal["standard", "swarm", "swarm-max", "trusted"]
     rate_limit_rpm: int | None = None
+
+
+class RuntimeLlmPayload(BaseModel):
+    """A change to the optional local generative model.
+
+    Both fields optional, and the proxy forwards only what was set: the toggle
+    and the model picker are separate controls, and a payload that always
+    carried both would have each one silently overwrite the other's value.
+    """
+
+    enabled: bool | None = None
+    model: str | None = Field(default=None, max_length=512)
+    endpoint: str | None = Field(default=None, max_length=512)
+
+
+class RuntimeLlmRootPayload(BaseModel):
+    path: str = Field(min_length=1, max_length=4096)
+    remove: bool = False
 
 
 class CompactionDryRunPayload(BaseModel):

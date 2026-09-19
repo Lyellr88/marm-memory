@@ -19,6 +19,7 @@ import { useFilters, useMarmConfig, useOverview, isAuthError } from '@/hooks/use
 import { SettingsDialog } from '@/components/layout/SettingsDialog';
 import { Badge, Button, Card, CardContent, CardHeader, Skeleton, cn } from '@/components/ui/core';
 import { StatCard } from '@/components/ui/panels';
+import { AskBar } from '@/components/overview/AskBar';
 
 const CONCEPT_STATUS_LABEL: Record<string, string> = {
   ready: 'Ready',
@@ -182,6 +183,8 @@ export function OverviewPage() {
           <StatCard label="Indexed projects" value={overview.graph.projects.length.toLocaleString()} detail={`Code graph ${overview.graph.status}`} icon={<FolderCode className="h-5 w-5" />} tone="blue" delay={100} status={<Badge variant={statusBadgeVariant(overview.graph.status)} className="mb-0.5 text-[9px] uppercase">{GRAPH_STATUS_LABEL[overview.graph.status] || overview.graph.status}</Badge>} />
           <StatCard label="Pending compaction" value={overview.memory.pending_compaction.toLocaleString()} detail={`${overview.memory.compacted_sources.toLocaleString()} previously compacted`} icon={<Layers className="h-5 w-5" />} tone="amber" delay={150} />
         </section>
+
+        <AskBar />
 
         <section className="grid min-h-[360px] flex-1 grid-cols-[minmax(0,1.05fr)_minmax(0,0.95fr)] gap-5">
           <Card className="relative flex h-full flex-col overflow-hidden border-t-2 border-t-emerald-400/35 shadow-[0_18px_55px_rgba(0,0,0,0.2),inset_0_1px_0_rgba(45,212,191,0.05)]">

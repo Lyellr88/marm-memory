@@ -9,6 +9,10 @@ import type {
   BulkLogDeleteResult,
   BulkNotebookDeleteResult,
   BulkSessionDeleteResult,
+  CodeContextInput,
+  CodeContextResult,
+  DistillInput,
+  DistillResult,
   CodeSearchInput,
   CodeSearchResult,
   CompactionAction,
@@ -55,6 +59,10 @@ import type {
   ProjectIndexInput,
   ProjectStatus,
   ProjectSummary,
+  LlmBrowseResponse,
+  LlmModelsResponse,
+  LlmServersResponse,
+  LocalLlmStatus,
   RuntimeSettings,
   RuntimeProfile,
   RuntimeProfileResult,
@@ -287,6 +295,24 @@ export function createMarmClient(config: MarmClientConfig) {
         config, 'PUT', '/settings/profile',
         { body: { profile, rate_limit_rpm: rateLimitRpm ?? null } },
       ),
+    getLlmServers: (refresh = false) =>
+      request<LlmServersResponse>(config, 'GET', `/settings/llm/servers?refresh=${refresh}`),
+    getLlmModels: (refresh = false) =>
+      request<LlmModelsResponse>(config, 'GET', `/settings/llm/models?refresh=${refresh}`),
+    browseLlmModels: (path?: string | null) =>
+      request<LlmBrowseResponse>(
+        config, 'GET',
+        path ? `/settings/llm/browse?path=${encodeURIComponent(path)}` : '/settings/llm/browse',
+      ),
+    // Only the fields actually being changed are sent: the toggle and the
+    // picker are separate controls, and posting both every time would have
+    // each silently overwrite whatever the other had set.
+    updateLlmSettings: (body: { enabled?: boolean; model?: string; endpoint?: string }) =>
+      request<{ status: string; llm: LocalLlmStatus }>(config, 'PUT', '/settings/llm', { body }),
+    updateLlmRoots: (path: string, remove = false) =>
+      request<LlmModelsResponse & { configured_roots: string[] }>(
+        config, 'POST', '/settings/llm/roots', { body: { path, remove } },
+      ),
     getMaintenance: () => request<MaintenanceStatus>(config, 'GET', '/settings/maintenance'),
     startCompactionDryRun: (sessionName: string) =>
       request<CompactionDryRunJob>(
@@ -339,6 +365,68 @@ export function createMarmClient(config: MarmClientConfig) {
       request<{ links: ProjectMemoryCodeLink[] }>(config, 'GET', `/projects/${encodeURIComponent(project)}/memory-links`),
     confirmProjectMemoryLinking: (project: string, memoryProject: string) =>
       request<ProjectMemoryLinking>(config, 'PUT', `/projects/${encodeURIComponent(project)}/memory-linking`, { body: { memory_project: memoryProject } }),
+    /** Stream a grounded answer, calling `onEvent` as each frame arrives.
+     *
+     *  Not `request()`: that awaits a whole body, which is the behaviour this
+     *  exists to avoid. Returns an abort handle, because a reader who retypes
+     *  the question should not wait out the previous answer.
+     */
+    streamCodeContextAnswer: (
+      data: CodeContextInput,
+      onEvent: (name: string, payload: Record<string, unknown>) => void,
+    ) => {
+      const controller = new AbortController();
+      const done = (async () => {
+        const response = await fetch(`${config.baseUrl}/api/code-context/answer`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+          body: JSON.stringify(data),
+          signal: controller.signal,
+        });
+        if (!response.ok || !response.body) {
+          throw new MarmApiError(response.status, 'Could not start the answer stream.');
+        }
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let name = '';
+        for (;;) {
+          const { done: finished, value } = await reader.read();
+          if (finished) break;
+          buffer += decoder.decode(value, { stream: true });
+          // Frames are newline-delimited and a chunk can split one, so the
+          // tail stays in the buffer until its newline arrives.
+          let index = buffer.indexOf('\n');
+          while (index !== -1) {
+            const line = buffer.slice(0, index).trim();
+            buffer = buffer.slice(index + 1);
+            if (line.startsWith('event:')) name = line.slice(6).trim();
+            else if (line.startsWith('data:')) {
+              try {
+                onEvent(name, JSON.parse(line.slice(5).trim()));
+              } catch {
+                /* a frame we cannot parse is a frame we skip, not a failed answer */
+              }
+            }
+            index = buffer.indexOf('\n');
+          }
+        }
+      })();
+      return { done, abort: () => controller.abort() };
+    },
+    // The browser must outlast the proxy or a slow-but-succeeding request reads
+    // as a client timeout. The proxy allows 60s for a composition and 150s when
+    // an answer is also asked for, because generation runs after retrieval.
+    buildCodeContext: (data: CodeContextInput) =>
+      request<CodeContextResult>(config, 'POST', '/code-context', {
+        body: data,
+        timeoutMs: data.answer ? 180000 : 90000,
+      }),
+    // 150s: extraction parses every sentence and embeds every candidate behind
+    // the Console's own 120s proxy timeout, so the browser must outlast the
+    // proxy or a slow-but-succeeding distil reads as a client timeout.
+    distill: (data: DistillInput) =>
+      request<DistillResult>(config, 'POST', '/distill', { body: data, timeoutMs: 150000 }),
     searchProjectCode: (project: string, data: CodeSearchInput) =>
       request<CodeSearchResult[]>(config, 'POST', `/projects/${encodeURIComponent(project)}/search`, { body: data }),
     traceProject: (project: string, data: TraceInput) =>

@@ -319,6 +319,72 @@ def init_database(db_path: str) -> None:
             "ON compaction_staging(candidate_hash)"
         )
 
+        # Distilled proposals await review here rather than being written.
+        # `candidate_hash` carries the same job it does for compaction: a
+        # re-run over the same transcript must not enqueue the same proposal
+        # twice, and an agent that distils on every turn would otherwise fill
+        # the queue with its own repeats.
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS distill_staging (
+                id TEXT PRIMARY KEY,
+                session_name TEXT NOT NULL,
+                content TEXT NOT NULL,
+                score REAL NOT NULL DEFAULT 0,
+                reasons TEXT NOT NULL DEFAULT '[]',
+                verdict TEXT NOT NULL DEFAULT 'new',
+                cosine REAL NOT NULL DEFAULT 0,
+                evidence TEXT NOT NULL DEFAULT '',
+                mode TEXT NOT NULL DEFAULT 'selected',
+                neighbour_id TEXT,
+                neighbour_content TEXT,
+                status TEXT NOT NULL DEFAULT 'pending',
+                candidate_hash TEXT NOT NULL,
+                project TEXT,
+                context_type TEXT NOT NULL DEFAULT 'general',
+                applied_memory_id TEXT,
+                nudge_count INTEGER NOT NULL DEFAULT 0,
+                last_nudged_at TEXT,
+                expires_at TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL,
+                reviewed_at TEXT
+            )
+        """)
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_distill_staging_session_status "
+            "ON distill_staging(session_name, status)"
+        )
+        # Unique, not merely indexed: the re-run guard is only a guard if the
+        # database enforces it. Two concurrent agent sessions distilling the
+        # same transcript race, and an INSERT OR IGNORE against this constraint
+        # is the only thing that makes the second one a no-op.
+        conn.execute(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_distill_staging_hash "
+            "ON distill_staging(candidate_hash)"
+        )
+        # The table shipped before generation-backed extraction existed, so a
+        # store created by the earlier version needs the two new columns.
+        distill_cols = {
+            row[1]
+            for row in conn.execute("PRAGMA table_info(distill_staging)").fetchall()
+        }
+        if "evidence" not in distill_cols:
+            conn.execute(
+                "ALTER TABLE distill_staging ADD COLUMN evidence TEXT NOT NULL DEFAULT ''"
+            )
+        if "mode" not in distill_cols:
+            conn.execute(
+                "ALTER TABLE distill_staging "
+                "ADD COLUMN mode TEXT NOT NULL DEFAULT 'selected'"
+            )
+        if "nudge_count" not in distill_cols:
+            conn.execute(
+                "ALTER TABLE distill_staging "
+                "ADD COLUMN nudge_count INTEGER NOT NULL DEFAULT 0"
+            )
+        if "last_nudged_at" not in distill_cols:
+            conn.execute("ALTER TABLE distill_staging ADD COLUMN last_nudged_at TEXT")
+
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_log_entries_session "
             "ON log_entries(session_name, entry_date)"

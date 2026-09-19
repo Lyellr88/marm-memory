@@ -27,6 +27,7 @@ from marm_mcp_server.core.models import (
     ConceptBuildRequest,
     ConceptRecallRequest,
 )
+from marm_mcp_server.endpoints.code_context import CodeContextRequest
 from marm_mcp_server.endpoints.concepts import (
     _run_recall,
 )
@@ -36,6 +37,7 @@ from marm_mcp_server.endpoints.concepts import (
 
 from ..core.stdio_logging import _stdio_log
 from ..core.stdio_tool_lifecycle import _log_tool_call
+from ..services.code_context import build_code_context
 
 
 def _graph_unavailable() -> dict:
@@ -352,6 +354,75 @@ async def marm_concept_recall(
         return {"status": "error", "message": "Concept recall failed."}
 
 
+@_log_tool_call
+async def marm_code_context(
+    task: str,
+    project: Optional[str] = None,
+    cwd: Optional[str] = None,
+    budget: int = 12000,
+    include_graph: bool = False,
+    detail: int = 0,
+    answer: bool = False,
+) -> dict:
+    """
+    🧩 Composed code context for a task: ranked symbols + source + memory, in ONE call.
+
+    Prefer this over marm_code_lookup when the question is "how does X work",
+    "where is X handled", or "what would changing X affect" -- it answers with
+    the symbols that matter, their source read from disk, and what memory
+    records about them, instead of leaving you to fetch each part yourself.
+
+    Ranking is personalised PageRank over the call graph seeded from `task`, so
+    a result is central *to this task* rather than globally popular or merely
+    word-matching. Read `markdown` and stop; the structured fields are the same
+    content for programmatic callers.
+
+    Parameters:
+    - task: what you are trying to do or understand
+    - project: code-graph project name or repo path; omit to resolve from cwd
+    - cwd: directory to resolve the project from (optional)
+    - budget: character budget for the returned source, 500-100000 (default 12000)
+    - include_graph: also return the ranked call neighbourhood as `graph_edges`;
+      off by default because it is several KB of JSON only a visualiser reads
+    - answer: also answer the task from the composed context with a local
+      model, citing the symbols it used. Off by default -- it is the slow step,
+      and for an agent that reads code the ranked context IS the answer. Says
+      `answer_status: "unavailable"` rather than failing when no model is up
+    - detail: how much to return. 1 is markdown only and is the default,
+      because `markdown` already contains the source and the memory text --
+      asking for 3 means paying for the same bytes twice. 2 adds symbol and
+      memory metadata without repeating bodies; 3 adds them. 0 means "use the
+      server default" (MARM_CODE_CONTEXT_DETAIL)
+
+    Returns: status, project, markdown, symbols, memories, links, graph_nodes,
+    notes -- or a no_project/unavailable status carrying the next step to take.
+    Each symbol carries `label` (the code KIND) and, when it arrived through the
+    call graph rather than by matching the task, a `provenance` object with hop,
+    strategy, confidence and risk; `provenance` is null for a seeded symbol
+    """
+    try:
+        req = CodeContextRequest(
+            task=task,
+            project=project,
+            cwd=cwd,
+            budget=budget,
+            include_graph=include_graph,
+            detail=detail,
+            answer=answer,
+        )
+    except ValidationError as e:
+        return {"status": "error", "message": f"Invalid code-context request: {e!s}"}
+    return await build_code_context(
+        task=req.task,
+        project=req.project,
+        cwd=req.cwd,
+        budget=req.budget,
+        include_graph=req.include_graph,
+        detail=req.detail or None,
+        answer=req.answer,
+    )
+
+
 def register_graph_tools(mcp: "FastMCP") -> None:
     """Explicit, order-independent tool registration -- called once from
     server_stdio.py after the 7 core tools are already registered, so
@@ -359,6 +430,7 @@ def register_graph_tools(mcp: "FastMCP") -> None:
     one first."""
     mcp.add_tool(marm_graph_index)
     mcp.add_tool(marm_code_lookup)
+    mcp.add_tool(marm_code_context)
     mcp.add_tool(marm_graph_trace)
     mcp.add_tool(marm_graph_architecture)
     mcp.add_tool(marm_graph_impact)
