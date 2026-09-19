@@ -418,7 +418,7 @@ async def test_similar_content_in_different_session_stores_as_new_row(
 async def test_a_merge_that_would_not_fit_stores_a_second_row_instead(
     monkeypatch, tmp_path
 ):
-    """The end the refusal exists for: both bodies remain retrievable.
+    """This is what the refusal is for: both bodies remain retrievable.
 
     A near-duplicate that cannot be folded in without discarding text is kept
     as its own memory. Previously the merge went ahead and cut the existing
