@@ -2,46 +2,27 @@
 
 ## Unreleased
 
+<details>
+<summary><strong>September 19th, 2026: Runtime Reliability and Safer API-Key Persistence (v2.49.1)</strong></summary>
+
 ### Fixed
 
-- `marm-memory stop` no longer reports that a cleanly stopped server "did not stop cleanly". The identity check treated a process that had exited but not yet been reaped by its parent as still running, because the PID still exists until then. `stop` waited out its full timeout and failed, seconds after the server had shut down correctly. Parents that reap promptly, including systemd, never saw it; supervisor scripts, launchers and test harnesses that wait afterwards did.
-- Background compaction now runs on a timer instead of only after a write. A scan was scheduled five writes into a session and ran fifteen minutes later, but candidates must be older than `COMPACTION_MIN_AGE_HOURS` (24 by default), so the scan always ran before its own session's memories were eligible, and a session that went quiet was never scanned again. Stores with compaction enabled could accumulate eligible clusters indefinitely while `marm_compaction(action="status")` reported none. The maintenance job now scans sessions whose eligible set has changed since the last scan, off the event loop, before it processes staging.
-- A discarded compaction candidate is no longer offered again. `discard` does not modify the source memories, so the same cluster was re-detected by any later scan. It is now skipped by content hash, while `stale` candidates remain eligible for re-detection as intended.
-- `/internal/runtime/settings` no longer issues a blocking HTTP request to the server that is answering it. The endpoint probed its own runtime over loopback from the event loop, which serialized the request behind its own response and held the endpoint at roughly one second regardless of how little work it did.
-- Project Explorer's Impact tab returns results again. The Console read `affected_symbols` from a response that carries `impacted_symbols`, and per-row fields were read under the wrong names, so a repository with hundreds of impacted symbols rendered as "No impact detected". Rows also no longer report a `risk` value the engine does not send.
-- `marm_graph_index` no longer tells agents to reuse the returned code-graph id as the project name for every other tool. Memory tools take a short project scope, and following the previous wording produced memories scoped to a path-derived graph id.
+- `marm-memory stop` now recognizes a cleanly exited process that is awaiting reaping, instead of waiting out its timeout and reporting that the runtime did not stop cleanly.
+- Background compaction now scans eligible quiet sessions on its maintenance interval, rather than only shortly after a write. Discarded candidates are no longer offered again.
+- `/internal/runtime/settings` no longer blocks itself with a loopback request, restoring responsive runtime status and settings pages.
+- Project Explorer's Impact tab now maps the code-graph engine's real response shape and displays affected symbols instead of incorrectly reporting no impact.
+- `marm_graph_index` now distinguishes its code-graph project ID from the short memory project scope used by other MARM tools.
 
 ### Changed
 
-- Memory-to-code links are gated on whether a name could plausibly identify a specific symbol. Short, common, or ambiguous names no longer create links, which removes a class of confidently wrong associations between a memory and unrelated code.
-### Changed: Windows and foreign-owned directories no longer persist an auto-generated API key
+- Memory-to-code links now require a name that plausibly identifies a specific symbol, preventing common or ambiguous memory entities from being confidently linked to unrelated code.
+- Auto-generated API keys are saved only when MARM can verify a private, owner-owned directory without a path-substitution race. Windows and Docker bind mounts with an unsuitable ownership model now use an explicitly supplied `MARM_API_KEY`; existing readable key files continue to load normally.
 
-The API-key bootstrap now refuses to write a generated key into any directory it
-cannot verify, through a descriptor, as private and owner-owned. This closes a
-time-of-check/time-of-use gap: the previous code checked the parent directory by
-name and then created its temporary file by name, and `O_NOFOLLOW` constrains
-only the final path component, so replacing the directory between the two
-delivered the key to an attacker-controlled target.
+### Acknowledgment
 
-The write path is now descriptor-relative throughout - the directory is opened
-once with `O_DIRECTORY | O_NOFOLLOW` and verified by `fstat`, and create, chmod,
-stat, rename and cleanup all operate against that descriptor - so the pathname
-is never re-resolved and cannot be redirected.
+Thank you to [@doublegate](https://github.com/doublegate) for the runtime, compaction, graph-linking, Console, and API-key hardening work in [#206](https://github.com/Lyellr88/marm-memory/pull/206) and [#215](https://github.com/Lyellr88/marm-memory/pull/215).
 
-**Two deployments are affected, both by design:**
-
-- **Windows.** Python exposes no descriptor-relative directory operations there,
-  so the gap cannot be closed and persistence is declined. An existing readable
-  `.env` key still loads normally; only the generate-and-save case changes. An
-  installation without a key file receives an in-memory key that differs after
-  every restart, so set `MARM_API_KEY` in the environment. See
-  "Set `MARM_API_KEY` yourself on Windows" in `docs/INSTALL-WINDOWS.md`.
-- **Docker with a bind-mounted `~/.marm`.** The mount is world-writable and owned
-  by a different uid than the container user, by necessity, and the container
-  cannot chmod it. Supplying `MARM_API_KEY` through the environment is the
-  supported configuration and needs no key file at all.
-
-Every refusal names `MARM_API_KEY` in its message.
+</details>
 
 <details>
 <summary><strong>September 18th, 2026: Docker Graph Lifecycle Support and a Console Demo Pack (v2.49.0)</strong></summary>
