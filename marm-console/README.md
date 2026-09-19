@@ -94,6 +94,7 @@ The frontend defaults to the Console API at `http://127.0.0.1:8002`.
 | `GET /api/summaries/{session}`; `POST /api/summaries/{session}/generate` | Cached session summary and summary generation |
 | `GET /api/compaction` | Compaction pipeline history and per-candidate actions |
 | `/api/concepts/*` | Concept summary, graph, search, neighborhood, duplicate review, build lifecycle, and graph reset routes |
+| `POST /api/code-context` | Composed code context for a task: symbols ranked by personalised PageRank, their source, and joined memory. Accepts `task`, `project`, `cwd`, `budget`, `include_graph` |
 | `/api/projects/*` | Local-repository indexing, job status, project health, delete, architecture, bounded graph snapshots and file neighborhoods, code search, trace, impact, coverage, decisions, and runtime trace routes |
 | `GET /api/settings/runtime` | Runtime, queue, graph, storage, embedding, automation, and watch-health diagnostics |
 | `PUT /api/settings/automation` | Enable or pause durable automatic code or concept indexing |
@@ -102,6 +103,10 @@ The frontend defaults to the Console API at `http://127.0.0.1:8002`.
 | `POST /api/terminal/check` | Run a command outside the interactive stream (dependency checks) |
 
 `GET /api/memories` supports `q`, `session`, `project`, `platform`, `context_type`, `compaction_role`, `limit`, and `offset` query parameters. Results are capped at 200 records per request.
+
+`POST /api/code-context` returns the ranked call neighbourhood as `graph_edges` only when `include_graph` is set. It is off by default because an agent reads the composed `markdown` and stops, so the edge list would be several KB it never looks at.
+
+The Code Context page is the one route that carries state in the URL: `/code-context?task=…&project=…&budget=…`, plus `run=1` to compose on arrival. Other pages keep tab and filter state in React. Adding more query state is fine; keep it to values worth sharing a link to.
 
 ## Development Notes
 

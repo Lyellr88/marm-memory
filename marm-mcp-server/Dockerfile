@@ -72,7 +72,7 @@ LABEL org.opencontainers.image.source="https://github.com/Lyellr88/marm-memory"
 LABEL org.opencontainers.image.licenses="Apache-2.0"
 LABEL mcp.server="true"
 LABEL mcp.name="marm-mcp-server"
-LABEL mcp.tools="14"
+LABEL mcp.tools="15"
 LABEL io.modelcontextprotocol.server.name="io.github.Lyellr88/marm-mcp-server"
 
 ENV PYTHONPATH=/app

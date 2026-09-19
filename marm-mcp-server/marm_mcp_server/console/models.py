@@ -5,6 +5,15 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
+class CodeContextPayload(BaseModel):
+    task: str = Field(min_length=1, max_length=1000)
+    project: str | None = Field(default=None, max_length=512)
+    cwd: str | None = Field(default=None, max_length=4096)
+    budget: int = Field(default=12000, ge=500, le=100000)
+    include_graph: bool = False
+    detail: int = Field(default=0, ge=0, le=3)
+
+
 class ConceptBuildPayload(BaseModel):
     session_name: str | None = None
     project: str | None = None

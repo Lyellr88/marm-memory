@@ -12,7 +12,7 @@ marm-memory is a persistent memory layer for AI agents. The MCP server gives Cla
 
 | Component | Description | Best For |
 |-----------|-------------|----------|
-| **MARM MCP Server** | Persistent memory server with 14 MCP tools (HTTP + STDIO): 7 core memory tools, 5 bundled code-graph tools, and 2 concept-graph tools | AI agents, IDEs, local workflows, shared team memory |
+| **MARM MCP Server** | Persistent memory server with 15 MCP tools (HTTP + STDIO): 7 core memory tools, 6 bundled code-graph tools, and 2 concept-graph tools | AI agents, IDEs, local workflows, shared team memory |
 | **MARM Protocol** | Runtime guidance delivered automatically by the MCP server | Keeping agents aligned on what to store, recall, and trust |
 | **MARM Console** | Local browser UI for viewing memory, knowledge, projects, and server health | Inspection, cleanup, and quick status checks |
 
@@ -79,7 +79,7 @@ For HTTP mode, run `marm-memory status` or `marm-memory doctor`. The raw health 
 
 #### Q: What MCP tools does MARM provide?
 
-MARM currently exposes **14 MCP tools on both HTTP and STDIO**: 7 focused core memory tools, 5 bundled code-graph tools, and 2 concept-graph tools.
+MARM currently exposes **15 MCP tools on both HTTP and STDIO**: 7 focused core memory tools, 6 bundled code-graph tools, and 2 concept-graph tools.
 
 | Category | Tools | Description |
 |----------|-------|-------------|
@@ -89,12 +89,20 @@ MARM currently exposes **14 MCP tools on both HTTP and STDIO**: 7 focused core m
 | **Delete** | `marm_delete` | Delete log sessions, log entries, or notebook entries |
 | **Summary** | `marm_summary` | Generate concise context summaries |
 | **Maintenance** | `marm_compaction` | Agent-assisted memory compaction with `action="status"`, `"candidates"`, `"review"`, `"stage"`, `"apply"`, or `"discard"` |
-| **Code Graph (HTTP + STDIO)** | `marm_graph_index`, `marm_code_lookup`, `marm_graph_trace`, `marm_graph_architecture`, `marm_graph_impact` | Index repositories (kept current automatically after the first index), look up symbols/source, trace call paths, summarize architecture, and inspect change impact |
+| **Code Graph (HTTP + STDIO)** | `marm_graph_index`, `marm_code_lookup`, `marm_code_context`, `marm_graph_trace`, `marm_graph_architecture`, `marm_graph_impact` | Index repositories (kept current automatically after the first index), look up symbols/source, compose ranked task context, trace call paths, summarize architecture, and inspect change impact |
 | **Concept Graph (HTTP + STDIO)** | `marm_concept_build`, `marm_concept_recall` | Extract entities and typed relationships from stored memories, then query them with multi-hop traversal and code-symbol cross-links |
 
 #### Q: Do I still need to call `marm_start`?
 
 No. Session startup, protocol delivery, protocol-lite refresh, and documentation loading are automatic. The server injects the protocol on the first successful MCP tool call for each session scope, then periodically refreshes the lightweight protocol reference and keeps docs indexed with hash-based caching so unchanged docs are not repeatedly duplicated.
+
+#### Q: When should I use `marm_code_context` instead of `marm_code_lookup`?
+
+Use `marm_code_lookup` when you know what you are looking for -- a symbol name, a text pattern, one function's source. Use `marm_code_context` when you do not: "how does X work", "where is X handled", "what would changing X affect". It answers the whole question in one call, returning the symbols that matter for the task, their source read from disk, and what memory records about them, so there is no search-then-fetch-then-recall loop to run by hand.
+
+The difference is ranking, not convenience. Lexical search answers "which symbols mention these words", which is a different question from "which symbols matter here" -- a private helper whose name happens to match the task will outrank the class everything calls. `marm_code_context` seeds on the task's own terms, expands through callers and callees, and ranks that subgraph by personalised PageRank, so centrality is measured relative to the task rather than to the repository. Each returned symbol says which way it arrived: `seeded` means it matched the task's words, and the rest were pulled in by the call graph.
+
+It needs an indexed project, which it resolves from `cwd` unless you name one. When no *indexed project* matches it returns `no_project` rather than an error, with the next step to take -- an indexed project that simply has no symbols matching the task returns a successful, empty composition instead. The Console renders the same composition under **Code Context**.
 
 #### Q: What is the concept graph and how do I use it?
 

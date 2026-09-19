@@ -9,6 +9,7 @@ import { MemoryPage } from '@/pages/Memory';
 import { KnowledgePage } from '@/pages/Knowledge';
 import { ProjectsPage } from '@/pages/Projects';
 import { ExplorerPage } from '@/pages/Explorer';
+import { CodeContextPage } from '@/pages/CodeContext';
 import { SystemPage } from '@/pages/System';
 import NotFound from '@/pages/not-found';
 
@@ -32,6 +33,7 @@ function Router() {
         <Route path="/projects" component={ProjectsPage} />
         <Route path="/explorer" component={ExplorerPage} />
         <Route path="/explorer/:name" component={ExplorerPage} />
+        <Route path="/code-context" component={CodeContextPage} />
         <Route path="/system" component={SystemPage} />
         <Route component={NotFound} />
       </Switch>

@@ -1,22 +1,12 @@
 import { useState, useEffect } from 'react';
-import { useMemories, useFilters, useCreateMemory, useUpdateMemory, useDeleteMemory, useBulkDeleteMemories } from '@/hooks/use-marm-queries';
+import { useMemories, useFilters, useOverview, useCreateMemory, useUpdateMemory, useDeleteMemory, useBulkDeleteMemories } from '@/hooks/use-marm-queries';
 import { Badge, Button, Input, Select, SelectTrigger, SelectValue, SelectContent, SelectItem, Table, TableHeader, TableRow, TableHead, TableBody, TableCell, Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, Textarea, Label, cn } from '@/components/ui/core';
 import { format } from 'date-fns';
-import { BrainCircuit, CircleAlert, FileText, Lightbulb, MessageSquareText, Search, Trash2, Plus, Edit2, Wrench } from 'lucide-react';
+import { Search, Trash2, Plus, Edit2 } from 'lucide-react';
 import type { Memory, MemoryId, MemoryListParams } from '@/lib/marm-types';
-import { type ActionNotice, mutationErrorMessage, deleteNotice, ActionNoticePanel, DeleteSelectionDialog, MemoryEmptyState, PageControls } from './shared';
+import { type ActionNotice, mutationErrorMessage, deleteNotice, ActionNoticePanel, DeleteSelectionDialog, MemoryEmptyState, PageControls, memoryContext } from './shared';
 
 const MEMORY_PAGE_SIZE = 100;
-
-function memoryContext(contextType: string | null) {
-  const value = (contextType || 'general').toLowerCase();
-  if (value.includes('decision')) return { icon: Lightbulb, tone: 'text-amber-300 border-amber-400/20 bg-amber-400/[0.06]', rail: 'border-l-amber-400/70' };
-  if (value.includes('error') || value.includes('issue')) return { icon: CircleAlert, tone: 'text-red-300 border-red-400/20 bg-red-400/[0.06]', rail: 'border-l-red-400/70' };
-  if (value.includes('doc') || value.includes('book') || value.includes('handbook')) return { icon: FileText, tone: 'text-violet-300 border-violet-400/20 bg-violet-400/[0.06]', rail: 'border-l-violet-400/70' };
-  if (value.includes('code') || value.includes('project') || value.includes('tool')) return { icon: Wrench, tone: 'text-blue-300 border-blue-400/20 bg-blue-400/[0.06]', rail: 'border-l-blue-400/70' };
-  if (value.includes('concept') || value.includes('pattern')) return { icon: BrainCircuit, tone: 'text-teal-300 border-teal-400/20 bg-teal-400/[0.06]', rail: 'border-l-teal-400/70' };
-  return { icon: MessageSquareText, tone: 'text-primary border-primary/20 bg-primary/[0.06]', rail: 'border-l-primary/70' };
-}
 
 function MemoryRow({ 
   memory, 
@@ -82,10 +72,33 @@ function MemoryRow({
   );
 }
 
+/** Sentinel for "load every project's memories".
+ *
+ *  Radix forbids `value=""`, and the option needs to be explicit rather than
+ *  the default: one project is a bounded page of rows, every project is the
+ *  whole store, and the store is the thing that grows. */
+const ALL_PROJECTS = '__all__';
+
 export function MemoriesTab() {
   const [params, setParams] = useState<MemoryListParams>({ limit: MEMORY_PAGE_SIZE, offset: 0 });
-  const { data, isLoading, isFetching } = useMemories(params);
   const { data: filters } = useFilters();
+  // Scope to ONE project by default, chosen once the filter list arrives.
+  // Loading every project was the previous behaviour and is still available,
+  // but it is the expensive option and should be asked for rather than
+  // happened upon: recall and listing both scale with how many rows are in
+  // scope, and distillation makes rows cheaper to create than ever.
+  const [scopedAll, setScopedAll] = useState(false);
+  const { data: overview } = useOverview();
+  // Hold the first request until the scope is settled. The default-project
+  // effect below cannot influence the render that would already have started an
+  // all-project listing, and that listing is the expensive one -- it scales with
+  // every row in the store, which is exactly what scoping exists to avoid.
+  const scopeSettled = scopedAll || !!params.project || !!filters;
+  const { data, isLoading, isFetching } = useMemories(params, scopeSettled);
+  useEffect(() => {
+    if (scopedAll || params.project || !filters?.projects?.length) return;
+    setParams(prev => ({ ...prev, project: filters.projects[0], offset: 0 }));
+  }, [filters, params.project, scopedAll]);
   const [selectedMemory, setSelectedMemory] = useState<Memory | null>(null);
   const [freshMemoryId, setFreshMemoryId] = useState<MemoryId | null>(null);
   const [actionNotice, setActionNotice] = useState<ActionNotice | null>(null);
@@ -287,6 +300,21 @@ export function MemoriesTab() {
             onChange={e => updateFilters({ q: e.target.value || undefined })}
           />
         </div>
+        <Select
+          value={params.project || ALL_PROJECTS}
+          onValueChange={v => {
+            setScopedAll(v === ALL_PROJECTS);
+            updateFilters({ project: v === ALL_PROJECTS ? undefined : v });
+          }}
+        >
+          <SelectTrigger className="w-[210px] border-transparent bg-background/65" aria-label="Project scope">
+            <SelectValue placeholder="Project" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL_PROJECTS}>All projects (slower)</SelectItem>
+            {filters?.projects.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+          </SelectContent>
+        </Select>
         <Select value={params.session || "all"} onValueChange={v => updateFilters({ session: v === "all" ? undefined : v })}>
           <SelectTrigger className="w-[180px] border-transparent bg-background/65">
             <SelectValue placeholder="Session" />
@@ -362,14 +390,39 @@ export function MemoriesTab() {
           </Table>
         </div>
         {data && (
-          <PageControls
-            page={currentPage}
-            pageSize={MEMORY_PAGE_SIZE}
-            total={data.total}
-            itemLabel="memories"
-            isFetching={isFetching}
-            onPageChange={(page) => setParams((previous) => ({ ...previous, offset: page * MEMORY_PAGE_SIZE }))}
-          />
+          <>
+            {/* Scoping must never hide rows quietly. If the store holds more
+                than this scope does, the page says so and offers the way out.
+                The same principle the recall scan-truncation note follows:
+                showing less is fine, showing less without saying so is not. */}
+            {params.project && typeof overview?.memory.active_memories === 'number'
+              && overview.memory.active_memories > data.total && (
+              <p className="px-1 pt-2 text-[11px] text-muted-foreground">
+                Scoped to <span className="font-mono text-foreground/80">{params.project}</span> —{' '}
+                {data.total.toLocaleString()} of {overview.memory.active_memories.toLocaleString()} stored
+                memories.{' '}
+                <button
+                  type="button"
+                  className="underline underline-offset-2 hover:text-foreground/80"
+                  onClick={() => {
+                    setScopedAll(true);
+                    updateFilters({ project: undefined });
+                  }}
+                >
+                  Show all projects
+                </button>
+                .
+              </p>
+            )}
+            <PageControls
+              page={currentPage}
+              pageSize={MEMORY_PAGE_SIZE}
+              total={data.total}
+              itemLabel="memories"
+              isFetching={isFetching}
+              onPageChange={(page) => setParams((previous) => ({ ...previous, offset: page * MEMORY_PAGE_SIZE }))}
+            />
+          </>
         )}
       </div>
 

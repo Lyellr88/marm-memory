@@ -26,6 +26,7 @@ CANONICAL_TOOLS = [
     "marm_compaction",
     "marm_graph_index",
     "marm_code_lookup",
+    "marm_code_context",
     "marm_graph_trace",
     "marm_graph_architecture",
     "marm_graph_impact",

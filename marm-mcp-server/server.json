@@ -64,6 +64,10 @@
       "description": "Find symbols, source snippets, or text matches in an indexed repository"
     },
     {
+      "name": "marm_code_context",
+      "description": "Composed code context for a task: ranked symbols, their source, and what memory knows"
+    },
+    {
       "name": "marm_graph_trace",
       "description": "Trace call paths or data flow through the indexed code graph"
     },
