@@ -6,7 +6,7 @@ import { useConnection } from '@/lib/marm-connection';
 import type { 
   MemoryListParams, MemoryInput, MemoryId, LogListParams, NotebookDeleteRef, NotebookInput,
   CompactionAction, ConceptSearchParams, ConceptBuildInput, ConceptGraphParams,
-  ProjectIndexInput, CodeSearchInput, TraceInput, ImpactInput, DuplicatePairInput,
+  ProjectIndexInput, CodeSearchInput, CodeContextInput, DistillInput, TraceInput, ImpactInput, DuplicatePairInput,
   MergeDuplicateInput, RuntimeProfile
 } from '@/lib/marm-types';
 import { MarmApiError } from '@/lib/marm-api';
@@ -17,6 +17,7 @@ export const queryKeys = {
   memories: (baseUrl: string, params?: MemoryListParams) => ['memories', baseUrl, params],
   memory: (baseUrl: string, id: MemoryId) => ['memory', baseUrl, id],
   sessions: (baseUrl: string) => ['sessions', baseUrl],
+  distillPending: (baseUrl: string, session?: string | null) => ['distill-pending', baseUrl, session ?? null],
   logs: (baseUrl: string, params?: LogListParams) => ['logs', baseUrl, params],
   notebook: (baseUrl: string, params?: any) => ['notebook', baseUrl, params],
   summary: (baseUrl: string, session: string) => ['summary', baseUrl, session],
@@ -71,9 +72,9 @@ export function useFilters() {
 }
 
 // --- Memory ---
-export function useMemories(params?: MemoryListParams) {
+export function useMemories(params?: MemoryListParams, enabled = true) {
   const { baseUrl, client } = useMarmConfig();
-  return useQuery({ queryKey: queryKeys.memories(baseUrl, params), queryFn: () => client.listMemories(params) });
+  return useQuery({ queryKey: queryKeys.memories(baseUrl, params), queryFn: () => client.listMemories(params), enabled });
 }
 
 export function useMemory(id: MemoryId) {
@@ -745,6 +746,57 @@ export function useConfirmProjectMemoryLinking() {
       qc.invalidateQueries({ queryKey: queryKeys.projectMemoryLinks(baseUrl, variables.project) });
       qc.invalidateQueries({ queryKey: queryKeys.conceptsGraph(baseUrl) });
     },
+  });
+}
+
+export function useBuildCodeContext() {
+  const { client } = useMarmConfig();
+  return useMutation({ mutationFn: (data: CodeContextInput) => client.buildCodeContext(data) });
+}
+
+/** The review queue. Separate from the propose mutation on purpose: a reviewer
+ *  arriving at the page has proposals waiting from an agent's own distil runs,
+ *  and should not have to paste a transcript to see them. */
+export function useDistillPending(sessionName?: string | null, enabled = true) {
+  const { baseUrl, client } = useMarmConfig();
+  return useQuery({
+    queryKey: queryKeys.distillPending(baseUrl, sessionName),
+    queryFn: () => client.distill({ action: 'review', session_name: sessionName ?? null, limit: 200 }),
+    enabled,
+  });
+}
+
+export function useDistillPropose() {
+  const { baseUrl, client } = useMarmConfig();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: DistillInput) => client.distill({ ...data, action: 'propose' }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['distill-pending', baseUrl] }),
+  });
+}
+
+/** Applying writes a memory, so the memory lists and counts are stale too --
+ *  invalidating only the queue would leave the rest of the Console showing a
+ *  store that no longer exists. */
+export function useDistillApply() {
+  const { baseUrl, client } = useMarmConfig();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (proposalId: string) => client.distill({ action: 'apply', proposal_id: proposalId }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['distill-pending', baseUrl] });
+      qc.invalidateQueries({ queryKey: ['memories', baseUrl] });
+      qc.invalidateQueries({ queryKey: queryKeys.overview(baseUrl) });
+    },
+  });
+}
+
+export function useDistillDiscard() {
+  const { baseUrl, client } = useMarmConfig();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (proposalId: string) => client.distill({ action: 'discard', proposal_id: proposalId }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['distill-pending', baseUrl] }),
   });
 }
 

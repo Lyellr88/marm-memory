@@ -3,6 +3,7 @@ import functools
 import json
 from typing import Any, Awaitable, Callable
 
+from ..services.distill import claim_pending_distill_prompt
 from ..services.documentation import ensure_marm_started, maybe_auto_refresh
 from ..utils.helpers import read_protocol_file, read_protocol_lite_file
 from .compaction import claim_pending_compaction_prompt
@@ -108,8 +109,26 @@ def _log_tool_call(
                                 },
                             ],
                         }
+                    else:
+                        # Only when compaction has nothing to ask -- two review
+                        # requests in one response is how both get ignored, and
+                        # compaction's is the older contract. Same ordering the
+                        # HTTP middleware uses, so the two transports surface
+                        # proposals identically.
+                        distill_block = await asyncio.to_thread(
+                            claim_pending_distill_prompt, memory, None
+                        )
+                        if distill_block:
+                            serialized_result = json.dumps(result, ensure_ascii=False)
+                            result = {
+                                **result,
+                                "content": [
+                                    distill_block,
+                                    {"type": "text", "text": serialized_result},
+                                ],
+                            }
                 except Exception as e:
-                    _stdio_log.warning("compaction injection failed: %s", e)
+                    _stdio_log.warning("review injection failed: %s", e)
 
         try:
             await maybe_auto_refresh()

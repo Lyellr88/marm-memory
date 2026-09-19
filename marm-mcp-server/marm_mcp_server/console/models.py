@@ -5,6 +5,34 @@ from typing import Literal
 from pydantic import BaseModel, Field
 
 
+class CodeContextPayload(BaseModel):
+    task: str = Field(min_length=1, max_length=1000)
+    project: str | None = Field(default=None, max_length=512)
+    cwd: str | None = Field(default=None, max_length=4096)
+    budget: int = Field(default=12000, ge=500, le=100000)
+    include_graph: bool = False
+    detail: int = Field(default=0, ge=0, le=3)
+
+
+class DistillPayload(BaseModel):
+    """Mirrors the tool's own request shape.
+
+    Kept deliberately thin rather than split per action: the Console posts the
+    same body an agent would, so the two cannot drift into disagreeing about
+    what an action requires.
+    """
+
+    action: Literal["propose", "review", "apply", "discard"] = "propose"
+    text: str | None = Field(default=None, max_length=400000)
+    session_name: str | None = Field(default=None, max_length=256)
+    proposal_id: str | None = Field(default=None, max_length=64)
+    project: str | None = Field(default=None, max_length=256)
+    context_type: str = Field(default="general", max_length=64)
+    threshold: float = Field(default=0.20, ge=-2.0, le=3.0)
+    limit: int = Field(default=20, ge=1, le=200)
+    include_duplicates: bool = False
+
+
 class ConceptBuildPayload(BaseModel):
     session_name: str | None = None
     project: str | None = None

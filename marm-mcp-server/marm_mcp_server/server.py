@@ -17,8 +17,10 @@ from .core.concept_worker import concept_worker
 from .core.graph_index_worker import graph_index_worker
 from .core.graph_supervisor import graph_supervisor  # noqa: F401
 from .core.memory import memory
+from .endpoints.code_context import router as code_context_router
 from .endpoints.compaction import router as compaction_router
 from .endpoints.concepts import router as concepts_router
+from .endpoints.distill import router as distill_router
 from .endpoints.graph import router as graph_router
 from .endpoints.logging import router as logging_router
 from .endpoints.memory import router as memory_router
@@ -112,6 +114,8 @@ app.include_router(memory_router)
 app.include_router(system_router)
 app.include_router(compaction_router)
 app.include_router(graph_router)
+app.include_router(code_context_router)
+app.include_router(distill_router)
 app.include_router(concepts_router)
 
 
@@ -123,8 +127,10 @@ MCP_TOOL_OPERATIONS = [
     "marm_summary",
     "marm_notebook",
     "marm_compaction",
+    "marm_distill",
     "marm_graph_index",
     "marm_code_lookup",
+    "marm_code_context",
     "marm_graph_trace",
     "marm_graph_architecture",
     "marm_graph_impact",

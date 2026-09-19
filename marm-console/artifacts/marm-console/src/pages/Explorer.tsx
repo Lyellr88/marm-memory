@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useState } from 'react';
 import { Link, useLocation, useParams } from 'wouter';
+import { ComposeAction } from '@/components/code-context/ComposeAction';
 import { Activity, BookOpen, ChevronDown, ChevronRight, CircleAlert, FileWarning, FolderCode, Network, Save, Search, SearchCode, Upload } from 'lucide-react';
 import { useProjects, useSearchProjectCode, useTraceProject, useProjectImpact, useProjectArchitecture, useProjectCodeUnits, useProjectCodeUnitEdges, useProjectCoverage, useProjectAdr, useUpdateProjectAdr, useIngestProjectRuntimeTraces } from '@/hooks/use-marm-queries';
 import { Badge, Button, Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Input, Select, SelectContent, SelectItem, SelectTrigger, SelectValue, Tabs, TabsList, TabsTrigger, TabsContent, Table, TableHeader, TableRow, TableHead, TableBody, TableCell, Textarea } from '@/components/ui/core';
@@ -334,11 +335,12 @@ export function ExplorerPage() {
                       <TableHead className="w-20">Hops</TableHead>
                       <TableHead>Affected Symbol</TableHead>
                       <TableHead>File</TableHead>
+                      <TableHead className="w-16 text-right">Ask</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {impactCode.data?.affected_symbols.length === 0 && (
-                      <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground h-24">No impact detected.</TableCell></TableRow>
+                      <TableRow><TableCell colSpan={4} className="text-center text-muted-foreground h-24">No impact detected.</TableCell></TableRow>
                     )}
                     {impactCode.data?.affected_symbols.slice(impactPage * EXPLORER_PAGE_SIZE, (impactPage + 1) * EXPLORER_PAGE_SIZE).map((sym, i) => (
                       <TableRow key={i}>
@@ -352,6 +354,9 @@ export function ExplorerPage() {
                         </TableCell>
                         <TableCell className="font-mono text-sm">{sym.qualified_name}</TableCell>
                         <TableCell className="text-xs text-muted-foreground">{sym.file_path}</TableCell>
+                        <TableCell className="text-right">
+                          <ComposeAction qualifiedName={sym.qualified_name} project={project?.name} />
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -468,7 +473,7 @@ export function ExplorerPage() {
                     <TableRow>
                       <TableHead>Symbol / File</TableHead>
                       <TableHead>Kind</TableHead>
-                      <TableHead className="w-24 text-right">Trace</TableHead>
+                      <TableHead className="w-24 text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -483,9 +488,12 @@ export function ExplorerPage() {
                         </TableCell>
                         <TableCell><Badge variant="outline" className="text-[10px]">{res.kind}</Badge></TableCell>
                         <TableCell className="text-right">
-                          <Button size="sm" variant="outline" disabled={!res.qualified_name} onClick={() => runPaletteTrace(res.qualified_name)}>
-                            <Activity className="h-3.5 w-3.5" />
-                          </Button>
+                          <div className="flex items-center justify-end gap-1.5">
+                            <ComposeAction qualifiedName={res.qualified_name} project={project?.name} />
+                            <Button size="sm" variant="outline" disabled={!res.qualified_name} onClick={() => runPaletteTrace(res.qualified_name)}>
+                              <Activity className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}

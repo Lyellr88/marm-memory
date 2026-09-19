@@ -56,12 +56,20 @@
       "description": "Review, stage, apply, or discard agent-assisted memory compaction candidates"
     },
     {
+      "name": "marm_distill",
+      "description": "Propose durable memories from raw conversation and resolve them against the store; review, apply, or discard each proposal"
+    },
+    {
       "name": "marm_graph_index",
       "description": "Index a repository into the bundled code graph, check index status, or list indexed projects"
     },
     {
       "name": "marm_code_lookup",
       "description": "Find symbols, source snippets, or text matches in an indexed repository"
+    },
+    {
+      "name": "marm_code_context",
+      "description": "Composed code context for a task: ranked symbols, their source, and what memory knows"
     },
     {
       "name": "marm_graph_trace",

@@ -30,6 +30,7 @@ from ..core.graph_index_worker import (
     index_repository,
 )
 from ..core.graph_supervisor import graph_supervisor
+from ..services.code_context.backend import invalidate_projects_cache
 
 router = APIRouter(prefix="", tags=["Graph"])
 
@@ -758,6 +759,10 @@ async def console_delete_project(req: ConsoleDeleteProjectRequest) -> dict:
         result if isinstance(result, dict) else {"result": result}
     )
     if result.get("status") != "error":
+        # A deleted project must stop being offered immediately, not after the
+        # cache TTL: the next composition would otherwise resolve to a project
+        # whose graph is gone.
+        invalidate_projects_cache()
         if root_path:
             graph_index_worker.drop_watch(root_path)
         if suppression_issue:

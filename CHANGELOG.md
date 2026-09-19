@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Added
+
+- `marm_code_context` composes a task-scoped view of a repository in one call: it seeds from the task's own words, expands through the call graph, ranks the result with personalised PageRank, reads the matching source from disk, and joins whatever memory knows about each symbol. Lexical search answers "which symbols mention these words"; this answers "which symbols matter for this task". Available on both transports, with a `detail` level so a caller can ask for less.
+- The Console gains a Code Context section, an ask bar on Overview, and a compose action on Project Explorer symbols, so a composition can be started from where you are already looking.
+- `marm_distill` turns conversation text into reviewable memory candidates. It proposes into a staging table and never writes a memory itself; `apply` writes, `discard` rejects, and a discarded proposal is not offered again, so re-running it over the same transcript is a no-op and safe to call repeatedly. Each proposal carries the score, the reasons it scored, and the stored memory it most resembles.
+
+### Fixed
+
+- Call-graph symbols no longer report a risk label in the field that carries the code kind, so a function is described as a function rather than as `CRITICAL`. The trace provenance the pipeline already computes — hop distance, binding strategy, confidence — is now returned instead of discarded.
+- Recall results say when a scan was truncated and which project scope produced them, rather than presenting a partial answer as a complete one.
+
+
 <details>
 <summary><strong>September 19th, 2026: Runtime Reliability and Safer API-Key Persistence (v2.49.1)</strong></summary>
 
@@ -23,6 +35,7 @@
 Thank you to [@doublegate](https://github.com/doublegate) for the runtime, compaction, graph-linking, Console, and API-key hardening work in [#206](https://github.com/Lyellr88/marm-memory/pull/206) and [#215](https://github.com/Lyellr88/marm-memory/pull/215).
 
 </details>
+
 
 <details>
 <summary><strong>September 18th, 2026: Docker Graph Lifecycle Support and a Console Demo Pack (v2.49.0)</strong></summary>
