@@ -637,6 +637,7 @@ def test_a_real_key_directory_still_reads(monkeypatch, tmp_path):
     assert api_key_bootstrap._load_key_from_file() == "an-ordinary-key-value-here"
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX descriptor-relative writes")
 def test_the_key_is_flushed_to_disk_before_it_is_called_saved(monkeypatch, tmp_path):
     """`os.replace` is atomic against a reader, not against power loss.
 
@@ -661,6 +662,7 @@ def test_the_key_is_flushed_to_disk_before_it_is_called_saved(monkeypatch, tmp_p
     assert len(synced) == 2, f"expected file and directory fsync, saw {len(synced)}"
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX descriptor-relative writes")
 def test_a_failed_flush_is_reported_as_a_persistence_failure(monkeypatch, tmp_path):
     """Otherwise the caller prints "Saved to:" for a key that may not be there."""
     from marm_mcp_server.config import api_key_bootstrap
@@ -703,6 +705,7 @@ def test_a_symlinked_key_directory_is_refused_rather_than_written_through(tmp_pa
     assert not (real / ".env").exists(), "the key was written through the symlink"
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX descriptor-relative writes")
 def test_a_directory_sync_failure_after_the_rename_leaves_no_key_behind(
     monkeypatch, tmp_path
 ):
