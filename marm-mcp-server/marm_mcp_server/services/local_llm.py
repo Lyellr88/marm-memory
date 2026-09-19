@@ -226,6 +226,24 @@ def _auto_endpoint() -> Optional[str]:
     return chosen
 
 
+def endpoint_source() -> str:
+    """Which rule produced the endpoint: flag, environment, discovery, default.
+
+    Worth reporting because the four are not equally trustworthy and a reader
+    cannot tell them apart from the URL alone. "discovery" in particular means
+    *this can change by itself* when a server starts or stops, which is the
+    whole point of auto-selection and exactly the thing a person staring at a
+    settings pane would otherwise have to guess at.
+    """
+    if _saved_endpoint():
+        return "flag"
+    if _explicit_url():
+        return "environment"
+    if _auto_endpoint():
+        return "discovery"
+    return "default"
+
+
 def endpoint() -> Optional[str]:
     """The endpoint to use, or None when it must not be used.
 
@@ -693,6 +711,7 @@ def status() -> dict[str, Any]:
         "context_length": info.get("context_length"),
         "served": info.get("served") or [],
         "switch_blocked_reason": info.get("reason"),
+        "endpoint_source": endpoint_source(),
     }
 
 
