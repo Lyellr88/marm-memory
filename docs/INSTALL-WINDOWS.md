@@ -402,13 +402,41 @@ python -m marm_mcp_server
 2. Click "Environment Variables..." button
 3. Add under "User variables"
 
+### **Set `MARM_API_KEY` yourself on Windows**
+
+An auto-generated key is **not persisted on Windows**, so it lives only in
+memory and is different after every restart. Every client configured with the
+previous key is then rejected until it is reconfigured.
+
+This is deliberate. Persisting the key means creating a file in a directory
+that must be verified as private and owner-controlled, and the only way to do
+that without a time-of-check/time-of-use gap is descriptor-relative directory
+operations (`openat`), which Windows does not provide through Python. Checking
+the directory by name and then writing to it by name leaves a window in which
+the directory can be replaced - on Windows with a junction - and the key
+delivered somewhere else. Rather than take that risk quietly, MARM declines to
+persist and says so on startup.
+
+**Nothing changes if you already have a key.** An existing readable
+`%USERPROFILE%\.marm\.env` still loads normally; this affects only the case
+where MARM would have generated and saved a new one.
+
+**What to do:** generate a key once and set it in the environment.
+
+```powershell
+python -m marm_mcp_server --generate-key
+[Environment]::SetEnvironmentVariable("MARM_API_KEY", "your-generated-key", "User")
+```
+
+Set this way the key survives restarts, and no key file is needed at all.
+
 ### **Available Environment Variables**
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `SERVER_HOST` | `127.0.0.1` | Bind address. Default is localhost-only. Set `0.0.0.0` for network/Docker access - key auto-generated on first start. |
 | `SERVER_PORT` | `8001` | Server port |
-| `MARM_API_KEY` | *(unset)* | Bearer token for all capability endpoints. Auto-generated when `SERVER_HOST=0.0.0.0` and not set. Required for Docker. Generate manually: `python -m marm_mcp_server --generate-key` |
+| `MARM_API_KEY` | *(unset)* | Bearer token for all capability endpoints. Auto-generated when `SERVER_HOST=0.0.0.0` and not set. Required for Docker. Generate manually: `python -m marm_mcp_server --generate-key`. **On Windows an auto-generated key is not saved to disk** - see the note below. |
 | `MAX_DB_CONNECTIONS` | `5` | Database connection pool size |
 | `MARM_ANALYTICS_DB_PATH` | `%USERPROFILE%\.marm\marm_usage_analytics.db` | Override analytics database path |
 | `DEFAULT_SEMANTIC_MODEL` | `jinaai/jina-embeddings-v2-small-en` | Default semantic-search model: 512 dimensions, 8,192-token context, 33M parameters, Apache-2.0 licensed; no query/document text prefixes required. |

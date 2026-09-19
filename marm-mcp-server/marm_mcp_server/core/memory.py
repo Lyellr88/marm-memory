@@ -266,8 +266,18 @@ class MARMMemory:
         session: str,
         context_type: str = "general",
         metadata: Dict | None = None,
+        project: str | None = None,
+        explicit_scope: bool = False,
     ) -> str:
-        return await _store_memory(self, content, session, context_type, metadata)
+        return await _store_memory(
+            self,
+            content,
+            session,
+            context_type,
+            metadata,
+            project=project,
+            explicit_scope=explicit_scope,
+        )
 
     async def store_memory_queued(
         self,
@@ -276,6 +286,8 @@ class MARMMemory:
         context_type: str = "general",
         metadata: Dict | None = None,
         queue_enabled: Optional[bool] = None,
+        project: str | None = None,
+        explicit_scope: bool = False,
     ) -> str:
         """Store memory through the write queue unless explicitly disabled."""
         if queue_enabled is None:
@@ -283,8 +295,24 @@ class MARMMemory:
         if queue_enabled and self._write_queue is None:
             await self.start_write_queue()
         if self._write_queue is not None:
-            return await self._write_queue.put(content, session, context_type, metadata)
-        return await self.store_memory(content, session, context_type, metadata)
+            return await self._write_queue.put(
+                content,
+                session,
+                context_type,
+                metadata,
+                project=project,
+                explicit_scope=explicit_scope,
+            )
+        # The direct path carries the scope too: a caller that disables the
+        # queue must not silently lose it.
+        return await self.store_memory(
+            content,
+            session,
+            context_type,
+            metadata,
+            project=project,
+            explicit_scope=explicit_scope,
+        )
 
     async def console_create_memory(
         self,

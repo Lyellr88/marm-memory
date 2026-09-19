@@ -785,33 +785,72 @@ def test_docker_managed_keyless_start_is_key_enforced_not_loopback_fallback(
         _run_docker(["rm", "-f", container], timeout=30)
 
 
-def test_docker_managed_keyless_start_persists_the_generated_key(
+def test_docker_keyless_start_on_a_foreign_owned_mount_persists_no_key(
     docker_image, marm_data_dir
 ):
-    """On a writable data volume the generated key is persisted and usable.
+    """A bind mount is not a private directory, so no key is written into it.
 
-    The durability requirement, stated on its own so a failure names it: with
-    /home/marm/.marm mounted writable, bootstrap writes MARM_API_KEY to .env
-    and protects it, so the key survives a container restart. If persistence
-    is declined (file protection failed) the server is still key-enforced,
-    which the test above covers, and only this test fails.
+    This asserted the opposite until 2026-09-19, when a maintainer review of
+    PR #206 called the old behaviour out: writing to a private temporary file
+    and renaming protects the key's *contents*, and does nothing about a
+    directory that other users may swap or pre-populate.
+
+    Measured inside this image rather than assumed: the process runs as uid 999
+    and `/home/marm/.marm` arrives owned by uid 1000 with mode 0777, and
+    `chmod` returns "Operation not permitted". Foreign-owned, world-writable
+    and unfixable from inside -- exactly the directory an auto-generated key
+    must not land in.
+
+    The container is still usable: it is key-enforced (the test above), and the
+    supported way to run one is `MARM_API_KEY` from the environment, which
+    needs no key file at all -- asserted here so "declined to persist" cannot
+    quietly become "cannot be used".
     """
     container, base_url = _start_keyless_container(
         docker_image, marm_data_dir, "marm-test-nokey-persist"
     )
     try:
         _wait_for_health(base_url)
+        assert _read_generated_key(container) == "", (
+            "a key was persisted into a world-writable directory owned by another uid"
+        )
+    finally:
+        _run_docker(["rm", "-f", container], timeout=30)
 
-        generated = _read_generated_key(container)
-        assert generated, "no key was persisted to the mounted data dir"
-
-        authenticated = HTTP.get(
+    supplied = "k-supplied-through-the-environment"
+    container = f"marm-test-env-key-{uuid.uuid4().hex[:10]}"
+    port = _free_port()
+    run = _run_docker(
+        [
+            "run",
+            "-d",
+            "--name",
+            container,
+            "-p",
+            f"127.0.0.1:{port}:8001",
+            "-e",
+            "SERVER_HOST=0.0.0.0",
+            "-e",
+            f"MARM_API_KEY={supplied}",
+            "-v",
+            f"{marm_data_dir}:/home/marm/.marm",
+            docker_image,
+        ],
+        timeout=90,
+    )
+    assert run.returncode == 0, run.stderr
+    try:
+        base_url = f"http://127.0.0.1:{port}"
+        _wait_for_health(base_url)
+        answered = HTTP.get(
             f"{base_url}/marm_log_show",
             params={"session_name": "main"},
-            headers={"Authorization": f"Bearer {generated}"},
+            headers={"Authorization": f"Bearer {supplied}"},
             timeout=5,
         )
-        assert authenticated.status_code == 200
+        assert answered.status_code == 200, (
+            "an explicitly supplied key must work without any key file"
+        )
     finally:
         _run_docker(["rm", "-f", container], timeout=30)
 

@@ -14,6 +14,34 @@
 ### Changed
 
 - Memory-to-code links are gated on whether a name could plausibly identify a specific symbol. Short, common, or ambiguous names no longer create links, which removes a class of confidently wrong associations between a memory and unrelated code.
+### Changed: Windows and foreign-owned directories no longer persist an auto-generated API key
+
+The API-key bootstrap now refuses to write a generated key into any directory it
+cannot verify, through a descriptor, as private and owner-owned. This closes a
+time-of-check/time-of-use gap: the previous code checked the parent directory by
+name and then created its temporary file by name, and `O_NOFOLLOW` constrains
+only the final path component, so replacing the directory between the two
+delivered the key to an attacker-controlled target.
+
+The write path is now descriptor-relative throughout - the directory is opened
+once with `O_DIRECTORY | O_NOFOLLOW` and verified by `fstat`, and create, chmod,
+stat, rename and cleanup all operate against that descriptor - so the pathname
+is never re-resolved and cannot be redirected.
+
+**Two deployments are affected, both by design:**
+
+- **Windows.** Python exposes no descriptor-relative directory operations there,
+  so the gap cannot be closed and persistence is declined. An existing readable
+  `.env` key still loads normally; only the generate-and-save case changes. An
+  installation without a key file receives an in-memory key that differs after
+  every restart, so set `MARM_API_KEY` in the environment. See
+  "Set `MARM_API_KEY` yourself on Windows" in `docs/INSTALL-WINDOWS.md`.
+- **Docker with a bind-mounted `~/.marm`.** The mount is world-writable and owned
+  by a different uid than the container user, by necessity, and the container
+  cannot chmod it. Supplying `MARM_API_KEY` through the environment is the
+  supported configuration and needs no key file at all.
+
+Every refusal names `MARM_API_KEY` in its message.
 
 <details>
 <summary><strong>September 18th, 2026: Docker Graph Lifecycle Support and a Console Demo Pack (v2.49.0)</strong></summary>
