@@ -988,7 +988,7 @@ MARM has never shipped a generative model. Concept extraction is spaCy and searc
 Two features use it, and both degrade rather than fail:
 
 - `marm_distill` writes self-contained facts instead of lifting sentences, and keeps the verbatim span each one came from. The proposal's `mode` says which happened: `generated` means a model answered, `selected` means it did not.
-- `marm_code_context(answer=true)` closes the loop and answers the task in prose, grounded **only** in the context it just composed — so the ranking decides what the answer is allowed to be about. `stream_answer` returns it token by token.
+- `marm_code_context(answer=true)` closes the loop and answers the task in prose, grounded **only** in the context it just composed — so the ranking decides what the answer is allowed to be about. The Console streams that answer over an internal route, so text appears while the rest is still being written.
 
 **Loopback is enforced, not documented.** A non-loopback host is refused outright rather than warned about, because a configuration mistake pointing this at a hosted endpoint would ship transcripts and source off the machine quietly, with no other symptom. The override exists, requires stating the intent in full (`MARM_LLM_ALLOW_REMOTE=i-understand-this-leaves-my-machine`), and is named in the refusal.
 
