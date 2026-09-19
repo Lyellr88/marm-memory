@@ -146,3 +146,89 @@ async def test_a_failing_cleanup_does_not_fail_the_delete(monkeypatch, tmp_path)
     assert result["status"] == "success"
     assert result["memories_deleted"] == 1
     assert result["concept_cleanup"]["status"] == "error"
+
+
+@pytest.mark.asyncio
+async def test_the_memory_connection_is_released_before_the_cleanup_awaits(
+    monkeypatch, tmp_path
+):
+    """The cleanup awaits on the CONCEPT database, so it must not run while a
+    pooled MEMORY connection is checked out. Holding one across that await lets
+    concurrent deletes exhaust the pool and fail unrelated queries.
+
+    Measured by pool depth rather than by reading the code: the pool is full
+    again by the time the cleanup is entered.
+    """
+    from marm_mcp_server.core import memory as memory_module
+
+    mem = memory_module.MARMMemory(str(tmp_path / "memory.db"))
+    mem._encoder_failed = True
+    monkeypatch.setattr(log_entry_module, "memory", mem)
+
+    await mem.store_memory(
+        "a decision",
+        "doomed",
+        metadata={"source": "log_entry", "log_entry_id": "e0"},
+    )
+
+    # Baseline with nothing checked out, taken the same way as the measurement.
+    with mem.get_connection():
+        held_depth = mem.connection_pool.pool.qsize()
+    free_depth = mem.connection_pool.pool.qsize()
+    assert free_depth > held_depth, "a checked-out connection must lower the depth"
+
+    seen_depth = {}
+
+    async def fake_cleanup(memory_ids):
+        seen_depth["at_cleanup"] = mem.connection_pool.pool.qsize()
+        return {"status": "success"}
+
+    with patch(
+        "marm_mcp_server.endpoints.memory._cleanup_deleted_concepts_async", fake_cleanup
+    ):
+        result = await log_entry_module.delete_log_or_notebook_entry(
+            "log", "doomed", None
+        )
+
+    assert result["concept_cleanup"]["status"] == "success"
+    assert seen_depth["at_cleanup"] == free_depth, (
+        "a memory connection was still checked out when the cleanup awaited"
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_failing_import_does_not_fail_the_delete(monkeypatch, tmp_path):
+    """The lazy import must be inside the try, not above it.
+
+    `endpoints.memory` is imported at call time to avoid a cycle. An
+    ImportError there is a cleanup failure like any other, and by then the
+    delete has already committed -- so raising would report a completed delete
+    as a failure. Simulated by replacing the module with one that does not
+    carry the symbol, which is exactly what `from x import y` raises on.
+    """
+    import sys
+    import types
+
+    from marm_mcp_server.core import memory as memory_module
+
+    mem = memory_module.MARMMemory(str(tmp_path / "memory.db"))
+    mem._encoder_failed = True
+    monkeypatch.setattr(log_entry_module, "memory", mem)
+
+    await mem.store_memory(
+        "a decision",
+        "doomed",
+        metadata={"source": "log_entry", "log_entry_id": "e0"},
+    )
+
+    monkeypatch.setitem(
+        sys.modules,
+        "marm_mcp_server.endpoints.memory",
+        types.ModuleType("marm_mcp_server.endpoints.memory"),
+    )
+
+    result = await log_entry_module.delete_log_or_notebook_entry("log", "doomed", None)
+
+    assert result["status"] == "success", "the delete committed; it did not fail"
+    assert result["memories_deleted"] == 1
+    assert result["concept_cleanup"]["status"] == "error"

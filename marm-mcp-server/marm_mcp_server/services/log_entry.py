@@ -290,9 +290,12 @@ async def _cleanup_concepts_for(memory_ids: list[str]) -> dict:
     """
     if not memory_ids:
         return {"status": "skipped", "reason": "no memories deleted"}
-    from ..endpoints.memory import _cleanup_deleted_concepts_async
-
     try:
+        # Inside the try, not above it: an ImportError here is a cleanup
+        # failure like any other, and the delete it follows has already
+        # committed. Raising would report a completed delete as failed.
+        from ..endpoints.memory import _cleanup_deleted_concepts_async
+
         return await _cleanup_deleted_concepts_async(memory_ids)
     except Exception as e:
         _safe_print(f"Concept cleanup failed after log delete: {e}")
@@ -406,13 +409,15 @@ async def delete_log_or_notebook_entry(
                         raise
                 if not session_name and memory.active_log_session == target:
                     memory.active_log_session = "main"
-                concept_cleanup = await _cleanup_concepts_for(deleted_memory_ids)
-                return {
+                # Built here, returned after the connection is released: the
+                # cleanup below awaits on the CONCEPT database, and holding a
+                # pooled memory connection across that await lets concurrent
+                # deletes exhaust the pool and fail unrelated queries.
+                log_result = {
                     "status": "success",
                     "message": f"🗑️ Deleted {deleted} items",
                     "deleted_count": deleted,
                     "memories_deleted": memories_deleted,
-                    "concept_cleanup": concept_cleanup,
                 }
             else:
                 notebook_session = (session_name or "main").strip() or "main"
@@ -455,6 +460,9 @@ async def delete_log_or_notebook_entry(
                     raise
                 if deleted > 0:
                     memory.remove_active_notebook_entry(target, notebook_session)
+                # Returns from inside the connection context, which is fine:
+                # the notebook branch deletes no memories and so awaits
+                # nothing here.
                 return {
                     "status": "success" if deleted > 0 else "not_found",
                     "message": (
@@ -464,6 +472,8 @@ async def delete_log_or_notebook_entry(
                     ),
                     "deleted": deleted > 0,
                 }
+        log_result["concept_cleanup"] = await _cleanup_concepts_for(deleted_memory_ids)
+        return log_result
     except sqlite3.Error as e:
         log_warning(f"Database error deleting: {e}")
         return {"status": "error", "message": "Database error while deleting."}
