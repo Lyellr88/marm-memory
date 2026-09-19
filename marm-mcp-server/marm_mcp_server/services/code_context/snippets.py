@@ -20,6 +20,13 @@ MAX_LINES = 60
 #: anything that costs.
 MAX_LINE_CHARS = 2000
 
+#: Total characters `read()` will scan for one snippet. The per-line bound caps
+#: what is KEPT; draining the tail of an over-long line still had to walk it, so
+#: a 40 MB minified file cost a 40 MB scan to return 2,000 characters of it. This
+#: runs synchronously inside an async request, so that scan is the event loop's.
+#: Running out stops the read and reports truncation rather than guessing.
+MAX_SCAN_CHARS = 262144
+
 
 def _contained(root_path: str, file_path: str) -> "str | None":
     """Resolve `file_path` under `root_path`, or None if it escapes.
@@ -40,12 +47,19 @@ def _contained(root_path: str, file_path: str) -> "str | None":
     return None
 
 
-def _bounded_line(fh: "TextIO", limit: int) -> "tuple[str, bool]":
+def _bounded_line(
+    fh: "TextIO", limit: int, budget: int
+) -> "tuple[str, bool, int, bool]":
     """Read one physical line, materialising at most `limit` characters of it.
 
-    Returns (text, over_long). The whole line is always consumed so the caller's
-    line numbering stays correct, but the part beyond `limit` is discarded
-    rather than kept.
+    Returns (text, over_long, scanned, complete). The line is consumed to its
+    end so the caller's numbering stays correct, but only `limit` characters
+    are kept.
+
+    `complete` is False when `budget` ran out mid-line. The handle is then
+    parked inside a physical line, so every later line number is unknowable and
+    the caller has to stop: a short result is honest, lines numbered from the
+    wrong place are not.
 
     `readline(limit)` returning a string with no trailing newline is ambiguous
     on its own: it means either a line longer than `limit`, or a final line with
@@ -54,16 +68,20 @@ def _bounded_line(fh: "TextIO", limit: int) -> "tuple[str, bool]":
     """
     piece = fh.readline(limit)
     if not piece or piece.endswith("\n"):
-        return piece, False
+        return piece, False, len(piece), True
+    scanned = len(piece)
     over_long = False
     while True:
+        if scanned >= budget:
+            return piece, True, scanned, False
         rest = fh.readline(limit)
         if not rest:
             break
         over_long = True
+        scanned += len(rest)
         if rest.endswith("\n"):
             break
-    return piece, over_long
+    return piece, over_long, scanned, True
 
 
 def read(
@@ -90,13 +108,26 @@ def read(
     chunk: list[str] = []
     truncated = False
     number = 0
+    budget = MAX_SCAN_CHARS
     try:
         with open(full, "r", encoding="utf-8", errors="replace") as fh:
             while True:
-                line, over_long = _bounded_line(fh, MAX_LINE_CHARS)
+                line, over_long, scanned, complete = _bounded_line(
+                    fh, MAX_LINE_CHARS, budget
+                )
+                budget -= scanned
                 if not line:
                     break
                 number += 1
+                if not complete:
+                    # Parked mid-line with no budget left. Keep this line if it
+                    # was wanted -- it is the only one whose number is still
+                    # known -- and stop, because the next newline was never
+                    # reached and everything after it would be misnumbered.
+                    truncated = True
+                    if start <= number <= end and len(chunk) < max_lines:
+                        chunk.append(line.rstrip("\n") + "\n")
+                    break
                 if number < start:
                     continue
                 if number > end:
@@ -110,6 +141,9 @@ def read(
                     truncated = True
                     line = line.rstrip("\n") + "\n"
                 chunk.append(line)
+                if budget <= 0:
+                    truncated = True
+                    break
     except (OSError, ValueError):
         return "", False
     return "".join(chunk).rstrip("\n"), truncated
