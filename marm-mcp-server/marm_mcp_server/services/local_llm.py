@@ -152,15 +152,96 @@ def _saved_endpoint() -> Optional[str]:
     return saved
 
 
+#: Ranked last among live servers. Not a judgement on the app: it is a desktop
+#: program that is often running with nothing loaded, and it is the runtime
+#: measured to reject `response_format={"type":"json_object"}` (FINDINGS 22),
+#: so when a purpose-run server is also answering that one is the better pick.
+#: It is still selected whenever it is the only thing serving.
+_DEPRIORITISED_RUNTIMES = ("lm studio",)
+
+_auto_cache: dict[str, Any] = {"at": 0.0, "value": None}
+_AUTO_TTL = 30.0
+
+
+def _explicit_url() -> Optional[str]:
+    """An endpoint the operator stated, as opposed to the built-in guess.
+
+    `MARM_LLM_URL` outranks discovery: setting it is a decision, and a decision
+    that turns out to name a dead or non-loopback server must SURFACE -- as a
+    refusal or a failed probe -- rather than be quietly papered over with
+    whatever else happens to be listening. Only the built-in fallback
+    (`127.0.0.1:18080`) is superseded by what is actually serving, because that
+    one is a guess nobody made.
+    """
+    return os.environ.get("MARM_LLM_URL") or None
+
+
+def _rank(server: dict[str, Any]) -> tuple:
+    """Lower sorts first. Order: has a model, is the deployment default, is not
+    a deprioritised runtime, then port for determinism."""
+    runtime = str(server.get("runtime") or "").strip().lower()
+    url = str(server.get("url") or "").rstrip("/")
+    return (
+        0 if server.get("model_count") else 1,
+        0 if url == DEFAULT_URL.rstrip("/") else 1,
+        1 if runtime in _DEPRIORITISED_RUNTIMES else 0,
+        int(server.get("port") or 0),
+    )
+
+
+def _auto_endpoint() -> Optional[str]:
+    """Whichever local server is actually serving, or None if none is.
+
+    `DEFAULT_URL` was a blind default: it named llama.cpp on 18080 whether or
+    not anything was there, so when that container stopped, generation went
+    silently off for 22 hours while LM Studio was serving on 1234 the whole
+    time. Here the default becomes a *preference* -- first choice when it
+    answers, ignored when it does not.
+
+    Cached separately from the saved-endpoint lookup because a scan is nine
+    connect() calls rather than one flag read; a closed loopback port refuses
+    instantly, so the sweep is milliseconds, but not per generation.
+    """
+    now = time.monotonic()
+    if (now - float(_auto_cache["at"])) < _AUTO_TTL:
+        value = _auto_cache["value"]
+        return value if isinstance(value, str) else None
+    chosen = None
+    try:
+        servers = (discover_servers() or {}).get("servers") or []
+        # Filter here rather than letting `endpoint()` refuse: a refusal there
+        # returns None and turns generation off completely, so one bad entry
+        # would cost the working servers too. Discovery only scans 127.0.0.1,
+        # so this is a guard against a future caller, not a live case.
+        live = [
+            s
+            for s in servers
+            if s.get("url") and (_is_loopback(str(s["url"])) or ALLOW_REMOTE)
+        ]
+        if live:
+            chosen = str(sorted(live, key=_rank)[0]["url"]).rstrip("/")
+    except Exception:  # pragma: no cover - discovery must never break generation
+        logger.debug("local_llm: auto-selection failed; falling back to the default")
+    _auto_cache.update({"at": now, "value": chosen})
+    return chosen
+
+
 def endpoint() -> Optional[str]:
-    """The configured endpoint, or None when it must not be used.
+    """The endpoint to use, or None when it must not be used.
+
+    Resolution order: the operator's explicit pick, then whatever is actually
+    serving, then the configured default. Auto-selection sits in the middle on
+    purpose -- a Console choice is a decision and must not be overridden, while
+    the default is only a starting guess.
 
     Deliberately NOT gated on `enabled()`. The switch belongs in `available()`
     instead: the Console has to keep probing which runtime and model are there
     in order to render the pane you turn generation back on from, and gating
     here would blank that pane at exactly the moment it is being read.
     """
-    url = (_saved_endpoint() or DEFAULT_URL).rstrip("/")
+    url = (
+        _saved_endpoint() or _explicit_url() or _auto_endpoint() or DEFAULT_URL
+    ).rstrip("/")
     if not url:
         return None
     if not _is_loopback(url) and not ALLOW_REMOTE:
