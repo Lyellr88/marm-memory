@@ -509,13 +509,10 @@ async def resolve(
 
         # The generation path quotes a verbatim span, and when that span is
         # itself the text of a stored memory the store already says this --
-        # which no cosine can be trusted to notice. Measured on the Grok-Bot
-        # queue: two facts extracted out of long paragraph memories resolved
-        # `new` at 0.800 and 0.801, under NEAR_AT, because the paragraph's
-        # embedding is dominated by everything else it says while the
-        # generated content is a paraphrase ("SQL and sshd_config" for
-        # "SQL/sshd_config") that misses on the surface too. Both evidence
-        # spans were exact substrings of the memory they came from.
+        # which no cosine can be trusted to notice. A fact extracted out of a
+        # long paragraph memory resolves `new`, because the paragraph's
+        # embedding is dominated by everything else it says while the generated
+        # content is a paraphrase that misses on the surface too.
         #
         # Containment rather than a lower NEAR_AT: a normalised substring
         # match means the store literally contains the sentence, so it has no
