@@ -334,3 +334,87 @@ def test_internal_memory_mutation_rejects_disabled_write_queue(monkeypatch, tmp_
 
     assert response.status_code == 409
     assert response.json()["detail"] == "memory write queue is unavailable"
+
+
+def test_replace_keeps_the_timestamp_when_only_metadata_changes(monkeypatch, tmp_path):
+    """`timestamp` is when the memory is FROM, not when the row was last written.
+
+    Compaction's age gate selects `timestamp < cutoff` and recall's fallback
+    scan takes `ORDER BY timestamp DESC LIMIT ?`, so stamping `now` on every
+    replace made a re-scope look like a brand new memory: it reset the age gate
+    by a full COMPACTION_MIN_AGE_HOURS and pushed something genuinely recent
+    out of the scan window.
+    """
+    server = load_isolated_server(
+        monkeypatch, tmp_path, api_key="test-key", write_queue_enabled=True
+    )
+    headers = {"Authorization": "Bearer test-key"}
+    try:
+        with TestClient(server.app) as client:
+            created = client.post(
+                "/internal/memories",
+                headers=headers,
+                json={
+                    "content": "A fact recorded some time ago",
+                    "session_name": "s",
+                    "context_type": "note",
+                    "project": "wrong-project",
+                    "metadata": {"source": "test"},
+                },
+            )
+            assert created.status_code == 201
+            memory_id = created.json()["id"]
+
+            db = tmp_path / "marm_memory.db"
+            with sqlite3.connect(db) as conn:
+                conn.execute(
+                    "UPDATE memories SET timestamp = ? WHERE id = ?",
+                    ("2026-01-01T00:00:00+00:00", memory_id),
+                )
+
+            # Metadata-only: same content, corrected project.
+            moved = client.put(
+                f"/internal/memories/{memory_id}",
+                headers=headers,
+                json={
+                    "content": "A fact recorded some time ago",
+                    "session_name": "s",
+                    "context_type": "note",
+                    "project": "right-project",
+                    "metadata": {"source": "test"},
+                },
+            )
+            assert moved.status_code == 200
+
+            with sqlite3.connect(db) as conn:
+                project, timestamp = conn.execute(
+                    "SELECT project, timestamp FROM memories WHERE id = ?", (memory_id,)
+                ).fetchone()
+            assert project == "right-project", "the re-scope must still take effect"
+            assert timestamp == "2026-01-01T00:00:00+00:00", (
+                "a metadata-only change must not make the memory look new"
+            )
+
+            # A CONTENT change does move it: the memory now says something else
+            # as of now, and compaction's per-session fingerprint has to notice.
+            edited = client.put(
+                f"/internal/memories/{memory_id}",
+                headers=headers,
+                json={
+                    "content": "A fact, corrected",
+                    "session_name": "s",
+                    "context_type": "note",
+                    "project": "right-project",
+                    "metadata": {"source": "test"},
+                },
+            )
+            assert edited.status_code == 200
+            with sqlite3.connect(db) as conn:
+                (timestamp_after,) = conn.execute(
+                    "SELECT timestamp FROM memories WHERE id = ?", (memory_id,)
+                ).fetchone()
+            assert timestamp_after != "2026-01-01T00:00:00+00:00", (
+                "an edit that changes what the memory says should move it"
+            )
+    finally:
+        _stop_queue()

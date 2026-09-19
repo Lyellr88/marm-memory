@@ -300,9 +300,36 @@ async def _replace_memory(
             )
         except Exception as exc:
             _safe_print(f"Failed to generate replacement embedding: {exc}")
-    timestamp = datetime.now(timezone.utc).isoformat()
     with mem.get_connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
+        # `timestamp` is WHEN THE MEMORY IS FROM, not when the row was last
+        # written -- `created_at` already records the insert. Every consumer
+        # reads it that way: compaction's age gate selects `timestamp < cutoff`,
+        # and recall's fallback scan takes `ORDER BY timestamp DESC LIMIT ?`.
+        #
+        # Stamping `now` on every replace therefore made an edit look like a new
+        # memory: it reset the compaction age gate by a full
+        # COMPACTION_MIN_AGE_HOURS, and moved the memory to the front of the
+        # recall scan window, displacing something genuinely recent out of it.
+        # For a metadata-only change -- re-scoping a project, correcting a
+        # session -- the content is not even different.
+        #
+        # So it moves only when the CONTENT moves, which is the one case where
+        # "this says something new as of now" is true, and which is also what
+        # keeps compaction's per-session fingerprint (count + newest eligible
+        # timestamp) changing so an edited session is re-scanned.
+        previous = conn.execute(
+            "SELECT content_hash, timestamp FROM memories WHERE id = ?", (memory_id,)
+        ).fetchone()
+        if previous is None:
+            conn.execute("ROLLBACK")
+            return False
+        previous_hash, previous_timestamp = previous
+        timestamp = (
+            previous_timestamp
+            if previous_hash == content_hash
+            else datetime.now(timezone.utc).isoformat()
+        )
         cursor = conn.execute(
             """UPDATE memories SET content = ?, session_name = ?, context_type = ?, metadata = ?,
                project = ?, platform = ?, content_hash = ?, embedding = ?, timestamp = ? WHERE id = ?""",
