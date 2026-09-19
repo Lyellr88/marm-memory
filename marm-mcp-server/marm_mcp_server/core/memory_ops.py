@@ -300,9 +300,50 @@ async def _replace_memory(
             )
         except Exception as exc:
             _safe_print(f"Failed to generate replacement embedding: {exc}")
-    timestamp = datetime.now(timezone.utc).isoformat()
     with mem.get_connection() as conn:
         conn.execute("BEGIN IMMEDIATE")
+        # `timestamp` is WHEN THE MEMORY IS FROM, not when the row was last
+        # written -- `created_at` already records the insert. Every consumer
+        # reads it that way: compaction's age gate selects `timestamp < cutoff`,
+        # and recall's fallback scan takes `ORDER BY timestamp DESC LIMIT ?`.
+        #
+        # Stamping `now` on every replace therefore made an edit look like a new
+        # memory: it reset the compaction age gate by a full
+        # COMPACTION_MIN_AGE_HOURS, and moved the memory to the front of the
+        # recall scan window, displacing something genuinely recent out of it.
+        # For a metadata-only change -- re-scoping a project, correcting a
+        # session -- the content is not even different.
+        #
+        # So it moves only when the CONTENT moves, which is the one case where
+        # "this says something new as of now" is true, and which is also what
+        # keeps compaction's per-session fingerprint (count + newest eligible
+        # timestamp) changing so an edited session is re-scanned.
+        #
+        # `content_hash` was added to `memories` by ALTER TABLE with no
+        # backfill, so any row written before that migration carries NULL.
+        # The stored content is the authority and the column is a cache of
+        # it, so hash the content when the column holds nothing -- otherwise
+        # an upgraded database restamps every pre-migration memory and keeps
+        # the defect this fixes.
+        previous = conn.execute(
+            "SELECT content_hash, content, timestamp FROM memories WHERE id = ?",
+            (memory_id,),
+        ).fetchone()
+        if previous is None:
+            conn.execute("ROLLBACK")
+            return False
+        previous_hash, previous_content, previous_timestamp = previous
+        if previous_hash is None:
+            previous_hash = compute_content_hash(previous_content or "")
+        # `written_at` is when THIS write happened, and the rows below are
+        # about the write rather than about the memory: a staging row going
+        # stale, and a session being touched. Only `memories.timestamp` may
+        # be historical -- reusing it for those would backdate them, and
+        # `last_accessed` in particular decides which session is current
+        # (`memory.py`: ORDER BY last_accessed DESC LIMIT 1) and orders the
+        # Console's session list.
+        written_at = datetime.now(timezone.utc).isoformat()
+        timestamp = previous_timestamp if previous_hash == content_hash else written_at
         cursor = conn.execute(
             """UPDATE memories SET content = ?, session_name = ?, context_type = ?, metadata = ?,
                project = ?, platform = ?, content_hash = ?, embedding = ?, timestamp = ? WHERE id = ?""",
@@ -332,7 +373,7 @@ async def _replace_memory(
                   WHERE value = ?
               )
             """,
-            (timestamp, memory_id),
+            (written_at, memory_id),
         )
         conn.execute(
             """
@@ -340,7 +381,7 @@ async def _replace_memory(
             VALUES (?, ?)
             ON CONFLICT(session_name) DO UPDATE SET last_accessed = excluded.last_accessed
             """,
-            (session, timestamp),
+            (session, written_at),
         )
         conn.execute("DELETE FROM memory_chunks WHERE memory_id = ?", (memory_id,))
         enqueue_concept_index(conn, memory_id, content_hash)
