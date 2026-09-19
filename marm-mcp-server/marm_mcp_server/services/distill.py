@@ -9,9 +9,8 @@ memory unattended, and this store has the false-positive numbers to prove it.
 
 from __future__ import annotations
 
-import hashlib
-
 import asyncio
+import hashlib
 import json
 import os
 import sqlite3
@@ -312,8 +311,6 @@ async def apply(memory: MARMMemory, proposal_id: str) -> dict[str, Any]:
                 "SELECT content, session_name, context_type, project, status, "
                 "expires_at, updated_at, evidence, mode "
                 "FROM distill_staging WHERE id = ?",
-
-                "expires_at, evidence, mode FROM distill_staging WHERE id = ?",
                 (proposal_id,),
             ).fetchone()
             if row is None:

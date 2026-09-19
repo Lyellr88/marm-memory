@@ -935,8 +935,6 @@ def test_an_expired_nudge_exhausted_proposal_is_swept(staged_memory):
     assert status == "stale", f"expired nudge_exhausted row was left as {status}"
 
 
-
-
 @pytest.mark.asyncio
 async def test_evidence_quoted_from_a_stored_memory_is_a_duplicate():
     """Regression, from the real Grok-Bot queue.
