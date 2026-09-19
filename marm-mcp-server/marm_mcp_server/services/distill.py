@@ -329,16 +329,12 @@ __all__ = [
 # ---------------------------------------------------------------------------
 # Review nudges.
 #
-# A staged proposal that nobody is told about is a proposal nobody reviews.
-# Measured on this deployment: seven generated proposals sat pending for hours
-# because the only way to learn the queue was non-empty was to open the Console
-# page and look. `marm_compaction` has solved this since it shipped -- it asks
-# the connected agent, through the same response-injection channel -- and this
-# is deliberately the same mechanism rather than a second one.
+# A staged proposal nobody is told about is a proposal nobody reviews, so the
+# connected agent is asked through the same response-injection channel
+# `marm_compaction` uses, rather than a second mechanism.
 #
-# The expiry sweep lives here too, for the same reason compaction's does: the
-# claim already takes the write lock and already walks the table, so a separate
-# scheduler would be a second moving part doing a subset of this one's work.
+# The expiry sweep lives here because the claim already takes the write lock and
+# already walks the table; a separate scheduler would duplicate that work.
 
 
 def _prompt_block(row: tuple, byte_budget: int) -> dict:
