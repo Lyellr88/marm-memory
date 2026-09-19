@@ -819,10 +819,8 @@ def test_docker_managed_keyless_start_persists_the_generated_key(
 def _read_generated_key(container):
     """MARM_API_KEY out of the .env the container wrote, read from inside it.
 
-    The file lands in the bind mount, but api_key_bootstrap.py:60 chmods it to
-    0600 and the container's non-root marm user owns it, so on a Linux host the
-    obvious read from the mount is a PermissionError rather than a key. Measured
-    on a runner: the host-side version of this failed exactly that way.
+    The file is 0600 and owned by the container's non-root user, so reading it
+    from the host side of the bind mount raises PermissionError.
     """
     result = _run_docker(
         ["exec", container, "cat", "/home/marm/.marm/.env"], timeout=20

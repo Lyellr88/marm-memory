@@ -49,12 +49,9 @@ def test_passive_status_does_not_start_graph(monkeypatch, tmp_path):
 def test_inspect_runtime_does_not_probe_itself(monkeypatch):
     """Answering the probe is itself the proof, so never send one.
 
-    `request_runtime` blocks, and an async endpoint calling it blocks the very
-    event loop that would have to serve the probe. Measured before the fix:
-    `/internal/runtime/settings` took 1.04s -- the full timeout -- on a page
-    that polls every 5s, and a concurrent request to any other route stalled
-    922ms behind it. The probe then returned nothing, so a healthy server
-    reported itself as not ready.
+    `request_runtime` blocks, so an async endpoint calling it blocks the very
+    loop that would have to serve the probe: it can only time out, and a
+    healthy server then reports itself as not ready.
     """
     import os
 

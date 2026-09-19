@@ -23,13 +23,9 @@ def _maybe_start_compaction_scheduler() -> "AsyncIOScheduler | None":
     Runs whenever COMPACTION_ENABLED is true — auto-apply is optional on top.
     nudge_exhausted processing always runs so candidates are never permanently dead-ended.
 
-    The job SCANS before it processes. Until this was added it only ever
-    processed rows already in `compaction_staging`, and the only thing that put
-    rows there was a write-driven trigger that fires ~24 hours before its own
-    candidates are eligible — so on a store whose sessions had gone quiet the
-    scheduler ran hourly against an empty table forever while real clusters sat
-    unseen. FINDINGS 23. Scanning first also means anything staged this tick is
-    nudged and (if enabled) auto-applied in the same tick rather than the next.
+    The job SCANS before it processes, so a session that has gone quiet is
+    still reached — the write-driven trigger fires before its own candidates
+    are eligible — and anything staged this tick is handled in the same tick.
     """
     if not SCHEDULER_AVAILABLE or not COMPACTION_ENABLED:
         return None
@@ -41,20 +37,12 @@ def _maybe_start_compaction_scheduler() -> "AsyncIOScheduler | None":
     from .compaction import run_periodic_compaction_scan
 
     async def _scan() -> None:
-        """Off the event loop, always.
-
-        Finding candidates compares every pair of a session's eligible memories,
-        so it is O(n^2) CPU plus synchronous SQLite reads. Running that on the
-        loop would stall every request the server is serving for its duration —
-        the same mistake as the runtime self-probe in FINDINGS 21, which turned a
-        13 ms call into 1.04 s by blocking the loop that had to answer it.
-        """
+        """Off the event loop, always: the candidate search is O(n^2) CPU plus
+        synchronous SQLite reads, and would stall every request alongside it."""
         try:
             result = await asyncio.to_thread(run_periodic_compaction_scan, memory)
         except Exception:
-            # An unattended maintenance job must not take the scheduler down with
-            # it; APScheduler would keep the job but the traceback would be the
-            # only record, and nobody reads those until something else breaks.
+            # An unattended maintenance job must not take the scheduler down.
             logger.exception("Periodic compaction scan failed")
             return
         if result["scanned"] or result["skipped"]:
@@ -85,13 +73,9 @@ def _maybe_start_compaction_scheduler() -> "AsyncIOScheduler | None":
         minutes=COMPACTION_AUTO_APPLY_INTERVAL_MINUTES,
         id="compaction_auto_apply",
         max_instances=1,
-        # An interval job's first run is otherwise one whole interval away, so a
-        # deployment that just enabled compaction sees nothing for an hour and
-        # cannot tell "working" from "broken" -- which is the state this feature
-        # was already in. Run once shortly after startup instead. The delay keeps
-        # it out of the way of serving the first requests, the scan itself is off
-        # the event loop, and the per-session fingerprint means every restart
-        # after the first does almost no work.
+        # An interval job's first run is otherwise a whole interval away, so a
+        # deployment that just enabled compaction cannot tell working from
+        # broken for an hour. The delay keeps it clear of the first requests.
         next_run_time=datetime.now(timezone.utc) + timedelta(seconds=30),
     )
     scheduler.start()

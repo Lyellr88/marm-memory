@@ -565,7 +565,7 @@ async def test_scan_fires_after_grace_period(monkeypatch, tmp_path):
 #
 # The write-driven trigger cannot reach a quiet session: it fires 15 minutes
 # after the last write, and a memory is not eligible until it is 24 hours old.
-# These cover the scan that closes that gap. See FINDINGS 23 / candidate C11.
+# These cover the scan that closes that gap.
 
 
 def _aged_session(mem: MARMMemory, session: str, age_hours: float = 48.0) -> list:
@@ -764,12 +764,8 @@ def test_periodic_scan_sees_memories_imported_with_old_timestamps(
 ):
     """A backdated bulk import must re-trigger a scan.
 
-    This is not hypothetical: the claude-mem import wrote 424 memories carrying
-    their original timestamps, every one already past the age gate on arrival.
-    An earlier version of the skip asked "did any memory become eligible since
-    the last scan?" by comparing each memory's own timestamp to the scan time,
-    which answers no for a row that was already old when it was inserted -- so a
-    session scanned before such an import would never have been scanned again.
+    Rows inserted already past the age gate do not "become eligible" at any
+    point after the last scan, so a rule phrased that way never re-scans them.
     """
     from marm_mcp_server.core.compaction import run_periodic_compaction_scan
 

@@ -192,13 +192,9 @@ def clear_state(runtime_id: str | None = None) -> None:
 def process_matches(state: dict[str, Any]) -> bool:
     try:
         process = psutil.Process(int(state["pid"]))
-        # A zombie is a process that has exited and is waiting to be reaped by
-        # its parent, and psutil reports is_running() as True for one -- the PID
-        # still exists. Treating that as a live runtime makes `stop` wait out its
-        # full timeout and then report "did not stop cleanly" about a server that
-        # shut down correctly seconds earlier. It only shows up when the parent
-        # defers reaping, which a supervisor script or a test harness does and
-        # systemd does not, so the service path never sees it.
+        # psutil reports is_running() as True for a zombie, whose pid still
+        # exists although the process has exited. Treating that as live makes
+        # `stop` wait out its timeout and misreport a clean shutdown.
         if not process.is_running() or process.status() == psutil.STATUS_ZOMBIE:
             return False
         expected = float(state.get("process_created_at", 0))
@@ -210,21 +206,17 @@ def process_matches(state: dict[str, Any]) -> bool:
 def _own_runtime_snapshot() -> dict[str, Any]:
     """What `/internal/runtime/status` would have answered about this process.
 
-    Must stay field-for-field equivalent to that endpoint, because callers read
-    it as though it came over the wire -- `full_status()` reads `graph` from
-    here and falls back to `{"state": "runtime_stopped"}`, which is what it
-    reported for a perfectly healthy server while the self-probe was timing out.
+    Must stay field-for-field equivalent to that endpoint: callers read it as
+    though it arrived over the wire.
     """
     from ..config import settings
     from .graph_supervisor import graph_supervisor
     from .memory import memory
 
     queue = memory._write_queue
-    # Field-for-field with the endpoint: no extra `state` key, and `runtime_id`
-    # from MARM_RUNTIME_ID rather than the state file. This function only runs
-    # when the state file's pid is our own, so cli.py has already exported that
-    # variable in this process -- the two sources agree, and reading the same one
-    # the endpoint reads keeps them from drifting apart later.
+    # `runtime_id` comes from MARM_RUNTIME_ID, the same source the endpoint
+    # reads, rather than the state file -- this only runs when the state file's
+    # pid is our own, so cli.py has already exported it in this process.
     return {
         "status": "ready",
         "service": "marm-memory-runtime",
@@ -250,24 +242,14 @@ def inspect_runtime() -> dict[str, Any]:
     if state is None:
         return {"state": "stopped", "managed": False}
 
-    # Answering is itself the proof, so never probe over HTTP when the runtime
-    # being inspected is THIS process. `request_runtime` blocks, and an async
-    # endpoint calling it blocks the very event loop that would serve the
-    # probe: the request can never be answered, so it spends the full timeout
-    # and then reports the running server as not ready. Measured on
-    # `/internal/runtime/settings` -- 1.04s per call, on a page that polls
-    # every 5s, and a concurrent request to any other route stalled 922ms
-    # behind it. Every other caller here is a separate process (the CLI), where
-    # the probe is the only way to know and is left alone.
-    # PID alone is not identity. A stale runtime.json can hold a pid the OS later
-    # reuses, and if it is reused by a CLI process this branch would claim that
-    # process IS the runtime -- stop_runtime() then reads identity_matches and
-    # POSTs shutdown to the host and port in the stale file, which another
-    # runtime may now be serving. process_matches() compares the creation time,
-    # which a reused pid cannot forge -- and the field is required to be PRESENT,
-    # because process_matches() treats a missing one as a match (`not expected or
-    # ...`), which would let a stale file without it through on pid alone.
-    # make_state() always writes it, so a real state file always qualifies.
+    # Never probe over HTTP when the runtime being inspected is THIS process:
+    # `request_runtime` blocks, so an async endpoint calling it blocks the very
+    # loop that would answer the probe, and the call can only time out. Other
+    # callers are separate processes, where the probe is the only way to know.
+    # PID alone is not identity: a stale state file can hold a pid the OS has
+    # reused. process_matches() compares the creation time, which a reused pid
+    # cannot forge. `process_created_at` must be PRESENT as well, because
+    # process_matches() treats a missing one as a match.
     if (
         state.get("pid") == os.getpid()
         and state.get("process_created_at")

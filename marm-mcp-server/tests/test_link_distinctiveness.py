@@ -146,8 +146,9 @@ def test_stoplist_has_no_duplicate_literals():
 
 
 def test_stoplist_entries_are_normalised():
-    """Lookup is `text.casefold().strip('_')`, so an entry that is not already
-    lowercase and stripped can never match anything."""
+    """Lookup is `text.casefold()`, and the identifier-shape check catches
+    anything containing `_` before it, so an entry that is not lowercase or that
+    carries an underscore can never match."""
     odd = [
         w for w in _stoplist_literals() if w != w.casefold().strip().strip("_") or not w
     ]

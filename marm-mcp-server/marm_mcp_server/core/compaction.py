@@ -231,22 +231,12 @@ def persist_candidates_to_staging(memory: "MARMMemory", candidates: list) -> int
             source_ids = candidate["source_memory_ids"]
             candidate_hash = _compute_candidate_hash(source_ids)
 
-            # 'discarded' joins the two active statuses here, and it is the one
-            # this guard exists for. `discard` writes nothing to `memories`, so
-            # the sources stay eligible and the identical cluster is found by
-            # every later scan. While the only trigger was a write that almost
-            # never fired that was invisible; on a periodic scan it would
-            # re-offer every rejection on every interval, forever, which is how
-            # a review queue stops being read.
-            #
-            # Two statuses are deliberately NOT here. 'stale' means the sources
-            # changed underneath a staged proposal, so a fresh look is exactly
-            # what it is asking for. 'applied' stays re-insertable because that
-            # is existing tested behaviour
-            # (test_persist_allows_reinsertion_after_applied) and it costs
-            # nothing: apply marks its sources with compaction_role, so
-            # find_compaction_candidates skips them and the cluster cannot come
-            # back on its own anyway.
+            # 'discarded' is included because `discard` writes nothing to
+            # `memories`: the sources stay eligible, so every later scan would
+            # re-offer a rejected cluster. 'stale' is excluded because changed
+            # sources are precisely what deserves a fresh look, and 'applied'
+            # because apply marks its sources with compaction_role, which takes
+            # the cluster out of find_compaction_candidates anyway.
             existing = conn.execute(
                 "SELECT id FROM compaction_staging WHERE candidate_hash = ? "
                 "AND status IN ('pending_summary', 'summary_staged', 'discarded')",
@@ -497,32 +487,18 @@ def claim_pending_compaction_prompt(
 def _sessions_needing_scan(memory: "MARMMemory") -> list:
     """Sessions whose compaction-eligible memories have changed since the last scan.
 
-    This is the cheap pre-check that makes a periodic scan affordable. Finding
-    candidates is O(n^2) in a session's memory count -- every pair is compared --
-    so running it hourly over every session regardless of whether anything
-    changed is the kind of cost that gets a feature switched off.
+    The cheap pre-check that makes an hourly scan affordable: finding candidates
+    is O(n^2) in a session's memory count.
 
     A session qualifies when at least MIN_CLUSTER_SIZE memories are past the age
-    gate (a smaller group cannot form a cluster however similar it is) AND the
-    fingerprint of that eligible set differs from the one recorded at the last
-    scan. Never scanned counts as differing.
+    gate and the fingerprint of that set, `<count>:<newest eligible timestamp>`,
+    differs from the one recorded at the last scan. Never scanned counts as
+    differing.
 
-    The fingerprint is `<count>:<newest eligible timestamp>`, and it is one value
-    on purpose rather than two rules that overlap -- two guards covering the same
-    case is how a mutation passes a test suite that looks thorough. It moves for
-    every way the eligible set can change:
-
-    * a memory ages past the gate           -> count rises
-    * a memory is INSERTED already old       -> count rises
-    * a memory is deleted or compacted       -> count falls
-    * one swapped for another in one window  -> newest timestamp moves
-
-    An earlier version of this compared each memory's own timestamp against the
-    last scan time, asking "did anything become eligible since?". That is wrong
-    for a backdated insert, which is not a hypothetical here: the claude-mem
-    import wrote 424 memories carrying their original timestamps, every one of
-    them already past the age gate on arrival. Under the timestamp rule a
-    session scanned before such an import would never have been scanned again.
+    The fingerprint describes the SET rather than asking "did anything become
+    eligible since the last scan?", because the latter answers no for a
+    backdated insert -- memories imported with their original timestamps arrive
+    already past the age gate.
     """
     now = datetime.now(timezone.utc)
     cutoff = (now - timedelta(hours=settings.COMPACTION_MIN_AGE_HOURS)).isoformat()
@@ -591,25 +567,13 @@ def _record_scan(
 def run_periodic_compaction_scan(memory: "MARMMemory") -> dict:
     """Scan quiet sessions for compaction candidates. Synchronous by design.
 
-    WHY THIS EXISTS. The write-driven trigger cannot reach the sessions that
-    most need compacting. `_on_memory_written` schedules a scan five writes in,
-    it runs 15 minutes later, and `find_compaction_candidates` then selects only
-    memories older than COMPACTION_MIN_AGE_HOURS (24) -- so the scan fires
-    roughly 23 3/4 hours too early, every time. Any further write cancels the
-    pending scan and resets the counter, so it runs exactly once: 15 minutes
-    after a session falls quiet, when nothing in it is yet eligible. Nothing
-    re-scanned afterwards, so a finished session was invisible forever and the
-    staging table on this deployment stayed empty for its entire life while 14
-    real clusters sat in the store. FINDINGS 23.
+    The write-driven trigger cannot reach a quiet session: it fires 15 minutes
+    after the last write, while candidates must first be
+    COMPACTION_MIN_AGE_HOURS old, and nothing re-scans afterwards. This is the
+    time-driven trigger that does.
 
-    The age gate is not the bug and is not touched -- it is what stops a session
-    being compacted while it is still being written to. The missing piece was a
-    trigger driven by TIME rather than by writes, which is what this is.
-
-    It is deliberately synchronous: the caller runs it off the event loop (see
-    the scheduler). An O(n^2) similarity pass on the loop would block every
-    request the server is serving, which is the same mistake as the runtime
-    self-probe in FINDINGS 21.
+    Synchronous because the caller runs it off the event loop; the similarity
+    pass is O(n^2) and would block every request alongside it.
     """
     if not settings.COMPACTION_ENABLED:
         return {"scanned": [], "skipped": [], "staged": 0}
@@ -619,14 +583,10 @@ def run_periodic_compaction_scan(memory: "MARMMemory") -> dict:
     skipped: list = []
     staged = 0
 
-    # Re-validate staged candidates for every session that has any, not only the
-    # ones due a scan. A session drops out of _sessions_needing_scan once its
-    # eligible set falls below MIN_CLUSTER_SIZE -- which is exactly what applying
-    # a compaction does, by marking its sources compacted -- and a staged
-    # candidate overlapping those sources would otherwise stay `pending_summary`
-    # with nothing left to re-check it, and could still be injected as a prompt.
-    # This is cheap: it re-reads staging rows and their sources, with no
-    # similarity pass.
+    # Every session holding staged candidates, not only those due a scan:
+    # applying a compaction marks its sources compacted, which can drop the
+    # session out of _sessions_needing_scan and strand a candidate that is still
+    # injectable. Cheap -- no similarity pass.
     for session_name in _sessions_with_active_candidates(memory):
         try:
             mark_stale_candidates(memory, session_name)
@@ -636,9 +596,7 @@ def run_periodic_compaction_scan(memory: "MARMMemory") -> dict:
     for session_name, fingerprint in _sessions_needing_scan(memory):
         task = pending.get(session_name)
         if task is not None and not task.done():
-            # The write-driven path already owns this session. Two scans would
-            # de-duplicate correctly via candidate_hash, but the work is wasted
-            # and the logs would misreport which path staged what.
+            # The write-driven path already owns this session.
             skipped.append(session_name)
             continue
         try:
@@ -653,9 +611,7 @@ def run_periodic_compaction_scan(memory: "MARMMemory") -> dict:
             )
             scanned.append(session_name)
         except Exception as e:
-            # One bad session must not stop the sweep: this runs unattended on
-            # an interval, and a scan that dies halfway leaves later sessions
-            # unscanned with nothing to say so.
+            # One bad session must not stop an unattended sweep.
             print(f"[compaction] periodic scan error for '{session_name}': {e}")
             skipped.append(session_name)
 
