@@ -70,13 +70,33 @@ async def test_reload_docs_runs_on_the_loop_that_owns_the_write_queue():
 
 
 @pytest.mark.asyncio
-async def test_a_queued_write_from_a_foreign_loop_would_hang():
-    """Pins the hazard itself, so nobody reintroduces asyncio.run in a worker thread."""
-    await memory.start_write_queue()
+async def test_a_queued_write_binds_its_completion_to_the_calling_loop():
+    """Pins the hazard itself, so nobody reintroduces asyncio.run in a worker thread.
+
+    `WriteQueue.put` creates its completion Future on the CALLING loop, while the
+    worker resolves it from the server loop. That binding is the hazard, and it
+    is deterministic.
+
+    An earlier version asserted the SYMPTOM instead -- that such a write must not
+    complete within a timeout -- and failed intermittently in CI, because
+    resolving a Future across loops sometimes succeeds by scheduling luck. A test
+    of a race condition must assert the structure that makes the race possible,
+    not the outcome it usually produces.
+
+    The queue here is deliberately never started, so nothing can drain it and
+    nothing races: the await times out, and the request it left behind is
+    inspected directly.
+    """
+    from marm_mcp_server.core.write_queue import WriteQueue
+
+    server_loop = asyncio.get_running_loop()
+    idle = WriteQueue(memory)
+    captured: dict = {}
 
     def foreign_loop_write():
         async def do_write():
-            return await memory.store_memory_queued(
+            captured["loop"] = asyncio.get_running_loop()
+            await idle.put(
                 content="foreign loop probe",
                 session="marm_loop_probe",
                 context_type="general",
@@ -88,16 +108,18 @@ async def test_a_queued_write_from_a_foreign_loop_would_hang():
             return "completed"
         except asyncio.TimeoutError:
             return "hung"
-        except Exception as exc:
-            return type(exc).__name__
 
     outcome = await asyncio.to_thread(foreign_loop_write)
-    await _delete_probe_memories()
 
-    assert outcome != "completed", (
-        "a foreign-loop queued write unexpectedly succeeded; if the write queue "
-        "became loop-agnostic, the reload job may no longer need to stay on the "
-        "server loop and this constraint should be revisited"
+    assert outcome == "hung", "nothing drains this queue, so the await cannot finish"
+    request = idle.queue.get_nowait()
+    assert request.future.get_loop() is captured["loop"], (
+        "the completion Future must belong to the loop that called put()"
+    )
+    assert request.future.get_loop() is not server_loop, (
+        "which is NOT the loop the worker resolves it from -- if this ever "
+        "becomes the same loop, the write queue has become loop-agnostic and "
+        "the reload job may no longer need to stay on the server loop"
     )
 
 
