@@ -157,11 +157,9 @@ def _saved_endpoint() -> Optional[str]:
     return saved
 
 
-#: Ranked last among live servers. Not a judgement on the app: it is a desktop
-#: program that is often running with nothing loaded, and it is the runtime
-#: measured to reject `response_format={"type":"json_object"}` (FINDINGS 22),
-#: so when a purpose-run server is also answering that one is the better pick.
-#: It is still selected whenever it is the only thing serving.
+#: Ranked last among live servers: a desktop app is often running with nothing
+#: loaded, and this one rejects `response_format={"type":"json_object"}`. Still
+#: selected whenever it is the only thing serving.
 _DEPRIORITISED_RUNTIMES = ("lm studio",)
 
 _auto_cache: dict[str, Any] = {"at": 0.0, "value": None}
@@ -411,17 +409,11 @@ def complete(
     # the caller a confident blank; None is the state every caller already
     # falls back from.
     if choice.get("finish_reason") == "length" and not _retrying:
-        # Acting on this beats logging a hint about it. Measured 2026-09-18:
-        # `gemma-4-26b-a4b-qat` spent all 2,048 tokens of a distill budget on
-        # reasoning and returned content="", so every proposal silently fell
-        # back to sentence selection -- the §22 failure, on a model nobody
-        # chose. Auto-selection (§29) means the model CAN change underneath
-        # this call, so coping belongs here rather than in each caller's
-        # constant.
-        #
-        # One retry, quadrupled and capped. Unbounded escalation would turn a
-        # chatty model into a very slow one, and a model that cannot answer in
-        # 4x its budget is not going to.
+        # A reasoning model can spend its whole budget in `reasoning` and
+        # return content="", and auto-selection means the model can change
+        # underneath this call -- so coping belongs here, not in each caller's
+        # constant. One retry, quadrupled and capped: a model that cannot
+        # answer in 4x its budget is not going to.
         wider = min(max_tokens * 4, MAX_RETRY_TOKENS)
         if wider > max_tokens:
             logger.debug(
@@ -458,17 +450,11 @@ def stream(
 ) -> Iterator[str]:
     """Yield the reply in pieces as the model produces them.
 
-    WHY THIS EXISTS AT ALL, GIVEN `complete` WORKS
-        Measured on this machine: a grounded answer takes 8.6 s, and the first
-        token arrives at 282 ms. Non-streaming spends 8.3 of those seconds
-        showing a reader nothing, which reads as a hung page rather than a slow
-        one. The total time is identical; what changes is whether anything is
-        happening on screen.
+    Total time is the same as `complete`; what changes is that a reader sees
+    text at the first token instead of nothing until the last.
 
-    WHY IT IS NOT USED BY THE MCP TOOL
-        An agent consumes the whole answer before it acts on any of it, so
-        streaming to an agent adds framing and buys nothing. This is a
-        human-interface concern, and the tool keeps returning one JSON body.
+    Deliberately unused by the MCP tool: an agent consumes the whole answer
+    before acting on any of it, so the tool keeps returning one JSON body.
 
     Yields nothing at all when no model is reachable -- the same degradation
     `complete` makes, in the shape a `for` loop already handles.
@@ -835,13 +821,11 @@ def _probe_server(port: int, label: str) -> Optional[dict[str, Any]]:
 def discover_servers(force: bool = False) -> dict[str, Any]:
     """Every local OpenAI-compatible server this machine is running.
 
-    Loopback only, and that is not a default but the same rule `endpoint()`
-    enforces: this deployment exists to keep the data on one box, so there is
-    no scanning of anything that is not 127.0.0.1.
+    Loopback only -- the same rule `endpoint()` enforces; nothing that is not
+    127.0.0.1 is ever probed.
 
-    The currently configured endpoint is always included even when it is not
-    on a known port, because "the one you configured is dead" is the single
-    most useful thing this can tell a reader.
+    The configured endpoint is always included even on an unknown port, so that
+    "the one you configured is dead" can be reported.
     """
     now = time.monotonic()
     cached = _servers_cache["value"]
@@ -858,11 +842,8 @@ def discover_servers(force: bool = False) -> dict[str, Any]:
     ]
 
     # NOT `endpoint()`: that consults auto-selection, which consults this
-    # function, which is unbounded mutual recursion -- measured at 1,170 ms per
-    # call with the RecursionError swallowed by the guard in `_auto_endpoint`,
-    # against ~5 ms of actual probing. What belongs in this list is the endpoint
-    # somebody CONFIGURED, so that "the one you chose is dead" can be shown;
-    # the auto-selected one is by construction already among the discovered.
+    # function -- mutual recursion. What belongs here is the endpoint somebody
+    # CONFIGURED; an auto-selected one is by construction already discovered.
     configured = _chosen_endpoint() or DEFAULT_URL
     configured_port = None
     if configured:
