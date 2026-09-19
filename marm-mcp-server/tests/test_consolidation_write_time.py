@@ -412,3 +412,48 @@ async def test_similar_content_in_different_session_stores_as_new_row(
 
     assert a_count == 1
     assert b_count == 1
+
+
+@pytest.mark.asyncio
+async def test_a_merge_that_would_not_fit_stores_a_second_row_instead(
+    monkeypatch, tmp_path
+):
+    """The end the refusal exists for: both bodies remain retrievable.
+
+    A near-duplicate that cannot be folded in without discarding text is kept
+    as its own memory. Previously the merge went ahead and cut the existing
+    content down to fit, so the older body left the store while merge_history
+    went on claiming it had been absorbed -- a later query returned the
+    surviving neighbour's text as though it were the answer.
+    """
+    from marm_mcp_server.core import memory as memory_module
+    from marm_mcp_server.core import memory_ops as memory_ops_module
+
+    monkeypatch.setattr(memory_ops_module, "CONSOLIDATION_ENABLED", True)
+    mem = memory_module.MARMMemory(str(tmp_path / "memory.db"))
+    mem._encoder_failed = True
+
+    first_body = "PLAN-ONE " + ("x" * 9000)
+    second_body = "PLAN-TWO " + ("y" * 9000)
+
+    first_id = await mem.store_memory(first_body, "plans")
+
+    async def always_duplicate(memory, content, session_name, threshold, **kwargs):
+        return first_id
+
+    monkeypatch.setattr(memory_ops_module, "find_semantic_duplicate", always_duplicate)
+
+    second_id = await mem.store_memory(second_body, "plans")
+
+    assert second_id != first_id, "the second body must get its own row"
+
+    with mem.get_connection() as conn:
+        rows = dict(
+            conn.execute(
+                "SELECT id, content FROM memories WHERE session_name = ?", ("plans",)
+            ).fetchall()
+        )
+
+    assert len(rows) == 2
+    assert "PLAN-ONE" in rows[first_id], "the first body is untouched"
+    assert "PLAN-TWO" in rows[second_id], "and the second is stored in full"

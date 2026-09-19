@@ -1,4 +1,5 @@
 import asyncio
+import json
 
 import pytest
 
@@ -486,8 +487,17 @@ async def test_recall_similar_finds_match_past_old_1000_row_cliff(
 
 
 @pytest.mark.asyncio
-async def test_update_memory_merge_cap_never_exceeds_10000_chars(tmp_path):
-    """Regression: merging two 10,000-char contents must not produce a blob > 10,000 chars."""
+async def test_update_memory_refuses_a_merge_that_would_not_fit(tmp_path):
+    """A merge that cannot fit is refused, not truncated into place.
+
+    This test previously asserted the opposite -- that the existing content was
+    cut away to make room (`assert "A" not in stored`) -- which pinned silent
+    data loss as the contract. Consolidation exists to avoid storing a
+    duplicate row; discarding text to achieve that is the wrong trade, and it
+    compounds: a repeatedly-merged record sits at exactly the cap holding only
+    its head and the most recent arrivals, while merge_history still lists
+    everything that was supposedly folded into it.
+    """
     memory = MARMMemory(str(tmp_path / "memory.db"))
     memory._encoder_failed = True
 
@@ -500,18 +510,37 @@ async def test_update_memory_merge_cap_never_exceeds_10000_chars(tmp_path):
             (big_existing, memory_id),
         )
 
-    big_new = "B" * 10000
-    await _update_memory(memory, memory_id, big_new)
+    merged = await _update_memory(memory, memory_id, "B" * 10000)
+
+    assert merged is False, "the caller must be told to store the memory separately"
 
     with memory.get_connection() as conn:
-        row = conn.execute(
+        stored, metadata_json = conn.execute(
+            "SELECT content, metadata FROM memories WHERE id = ?", (memory_id,)
+        ).fetchone()
+
+    assert stored == big_existing, "a refused merge must not modify the row"
+    assert "merge_history" not in json.loads(metadata_json or "{}"), (
+        "a merge that never happened must not be recorded as one"
+    )
+
+
+@pytest.mark.asyncio
+async def test_update_memory_still_merges_when_the_result_fits(tmp_path):
+    """The refusal is about capacity only -- an ordinary merge is unaffected."""
+    memory = MARMMemory(str(tmp_path / "memory.db"))
+    memory._encoder_failed = True
+
+    memory_id = await memory.store_memory("a modest existing body", session="cap-test")
+    merged = await _update_memory(memory, memory_id, "a modest new body")
+
+    assert merged is True
+
+    with memory.get_connection() as conn:
+        (stored,) = conn.execute(
             "SELECT content FROM memories WHERE id = ?", (memory_id,)
         ).fetchone()
 
-    stored = row[0]
-    merge_marker = "\n[merged] "
-    expected_new_len = 10000 - len(merge_marker)
-    assert len(stored) == 10000
-    assert stored.startswith(merge_marker)
-    assert stored.endswith("B" * expected_new_len)
-    assert "A" not in stored
+    assert "a modest existing body" in stored, "the existing body survives"
+    assert "a modest new body" in stored, "and the new one is appended"
+    assert len(stored) <= 10000
