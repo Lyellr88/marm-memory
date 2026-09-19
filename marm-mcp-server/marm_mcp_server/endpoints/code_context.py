@@ -106,7 +106,7 @@ def stream_code_context_answer(req: CodeContextRequest) -> StreamingResponse:
     Deliberately NOT part of the MCP tool surface, and `include_in_schema` is
     off so it cannot be picked up as one. An agent consumes a whole answer
     before acting on any of it, so streaming to an agent adds framing and buys
-    nothing; this exists for the Console, where 8.6 seconds of nothing reads as
+    nothing; this exists for the Console, where seconds of blank screen read as
     a hung page rather than a slow one. The tool keeps returning a single JSON
     body.
 

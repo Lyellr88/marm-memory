@@ -57,9 +57,9 @@ def stream_answer(payload: CodeContextPayload) -> StreamingResponse:
     ranked context still comes back from `/api/code-context` as one JSON body;
     this carries only the answer, which is the part that takes seconds.
 
-    Splitting the two is the point. Before, a reader waited 8.6 s for
-    everything at once. Now the ranked symbols land in ~380 ms and the answer
-    starts arriving ~300 ms after that, into a pane that is already on screen.
+    Splitting the two is the point: the ranked symbols arrive in well under a
+    second, and the answer streams into a pane that is already on screen
+    instead of the reader waiting for both.
     """
 
     def relay() -> Iterator[bytes]:
