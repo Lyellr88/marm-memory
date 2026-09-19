@@ -858,13 +858,8 @@ def test_docker_keyless_start_on_a_foreign_owned_mount_persists_no_key(
 def _read_generated_key(container):
     """MARM_API_KEY out of the .env the container wrote, read from inside it.
 
-    Read from inside the container rather than from the host side of the mount.
-    Measured on a runner: the host-side version failed with PermissionError
-    instead of returning a key.
-
-    Note the mount itself is NOT owned by the container user -- measured in this
-    image, the process is uid 999 and `/home/marm/.marm` arrives owned by uid
-    1000 with mode 0777. That is why nothing is persisted there any more.
+    The file is 0600 and owned by the container's non-root user, so reading it
+    from the host side of the bind mount raises PermissionError.
     """
     result = _run_docker(
         ["exec", container, "cat", "/home/marm/.marm/.env"], timeout=20

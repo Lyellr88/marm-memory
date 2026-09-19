@@ -208,29 +208,38 @@ def _get_source_snapshot(conn: sqlite3.Connection, source_ids: list) -> dict:
     return dict(rows)
 
 
-def persist_candidates_to_staging(memory: "MARMMemory", candidates: list) -> None:
-    """Insert new compaction candidates into staging table, skipping duplicates.
+def persist_candidates_to_staging(memory: "MARMMemory", candidates: list) -> int:
+    """Insert new compaction candidates into staging, skipping ones already seen.
 
-    Uses candidate_hash to detect clusters that are already active in staging
-    (pending_summary or summary_staged). Does not re-insert applied/discarded/stale rows.
+    Returns the number of rows ACTUALLY inserted, which is not the number of
+    candidates passed in: a cluster whose hash has already been put to a reviewer
+    is skipped. Callers that report a count must use this rather than
+    `len(candidates)`, or they claim to have staged work they de-duplicated away.
     """
     if not candidates:
-        return
+        return 0
 
     now = datetime.now(timezone.utc)
     expires_at = (
         now + timedelta(hours=settings.COMPACTION_STAGING_TTL_HOURS)
     ).isoformat()
     now_iso = now.isoformat()
+    inserted = 0
 
     with memory.get_connection() as conn:
         for candidate in candidates:
             source_ids = candidate["source_memory_ids"]
             candidate_hash = _compute_candidate_hash(source_ids)
 
+            # 'discarded' is included because `discard` writes nothing to
+            # `memories`: the sources stay eligible, so every later scan would
+            # re-offer a rejected cluster. 'stale' is excluded because changed
+            # sources are precisely what deserves a fresh look, and 'applied'
+            # because apply marks its sources with compaction_role, which takes
+            # the cluster out of find_compaction_candidates anyway.
             existing = conn.execute(
-                "SELECT id FROM compaction_staging "
-                "WHERE candidate_hash = ? AND status IN ('pending_summary', 'summary_staged')",
+                "SELECT id FROM compaction_staging WHERE candidate_hash = ? "
+                "AND status IN ('pending_summary', 'summary_staged', 'discarded')",
                 (candidate_hash,),
             ).fetchone()
             if existing:
@@ -259,6 +268,9 @@ def persist_candidates_to_staging(memory: "MARMMemory", candidates: list) -> Non
                     now_iso,
                 ),
             )
+            inserted += 1
+
+    return inserted
 
 
 def mark_stale_candidates(memory: "MARMMemory", session_name: str) -> None:
@@ -470,6 +482,140 @@ def claim_pending_compaction_prompt(
             raise
 
     return _build_compaction_prompt_block(claimed, byte_budget) if claimed else None
+
+
+def _sessions_needing_scan(memory: "MARMMemory") -> list:
+    """Sessions whose compaction-eligible memories have changed since the last scan.
+
+    The cheap pre-check that makes an hourly scan affordable: finding candidates
+    is O(n^2) in a session's memory count.
+
+    A session qualifies when at least MIN_CLUSTER_SIZE memories are past the age
+    gate and the fingerprint of that set, `<count>:<newest eligible timestamp>`,
+    differs from the one recorded at the last scan. Never scanned counts as
+    differing.
+
+    The fingerprint describes the SET rather than asking "did anything become
+    eligible since the last scan?", because the latter answers no for a
+    backdated insert -- memories imported with their original timestamps arrive
+    already past the age gate.
+    """
+    now = datetime.now(timezone.utc)
+    cutoff = (now - timedelta(hours=settings.COMPACTION_MIN_AGE_HOURS)).isoformat()
+
+    with memory.get_connection() as conn:
+        rows = conn.execute(
+            """
+            SELECT m.session_name,
+                   COUNT(*)                   AS eligible,
+                   MAX(m.timestamp)           AS newest_eligible,
+                   s.last_scan_fingerprint    AS fingerprint
+            FROM memories AS m
+            LEFT JOIN compaction_session_state AS s
+                   ON s.session_name = m.session_name
+            WHERE m.session_name != 'marm_system'
+              AND m.timestamp < ?
+              AND m.embedding IS NOT NULL
+              AND (m.compaction_role IS NULL
+                   OR m.compaction_role NOT IN ('source', 'summary'))
+            GROUP BY m.session_name
+            HAVING eligible >= ?
+            """,
+            (cutoff, settings.COMPACTION_MIN_CLUSTER_SIZE),
+        ).fetchall()
+
+    return [
+        (session_name, f"{eligible}:{newest_eligible}")
+        for session_name, eligible, newest_eligible, fingerprint in rows
+        if fingerprint != f"{eligible}:{newest_eligible}"
+    ]
+
+
+def _sessions_with_active_candidates(memory: "MARMMemory") -> list:
+    """Sessions holding a staged candidate that has not been resolved yet."""
+    with memory.get_connection() as conn:
+        return [
+            row[0]
+            for row in conn.execute(
+                "SELECT DISTINCT session_name FROM compaction_staging "
+                "WHERE status IN ('pending_summary', 'summary_staged')"
+            ).fetchall()
+        ]
+
+
+def _record_scan(
+    memory: "MARMMemory", session_name: str, when: str, fingerprint: str
+) -> None:
+    """Remember what the eligible set looked like, so an unchanged session is
+    skipped next interval. Written only after a scan completes: a scan that
+    raised must be retried, not recorded as done."""
+    with memory.get_connection() as conn:
+        conn.execute(
+            """
+            INSERT INTO compaction_session_state
+                (session_name, write_count, updated_at, last_scanned_at, last_scan_fingerprint)
+            VALUES (?, 0, ?, ?, ?)
+            ON CONFLICT(session_name) DO UPDATE SET
+                updated_at = excluded.updated_at,
+                last_scanned_at = excluded.last_scanned_at,
+                last_scan_fingerprint = excluded.last_scan_fingerprint
+            """,
+            (session_name, when, when, fingerprint),
+        )
+
+
+def run_periodic_compaction_scan(memory: "MARMMemory") -> dict:
+    """Scan quiet sessions for compaction candidates. Synchronous by design.
+
+    The write-driven trigger cannot reach a quiet session: it fires 15 minutes
+    after the last write, while candidates must first be
+    COMPACTION_MIN_AGE_HOURS old, and nothing re-scans afterwards. This is the
+    time-driven trigger that does.
+
+    Synchronous because the caller runs it off the event loop; the similarity
+    pass is O(n^2) and would block every request alongside it.
+    """
+    if not settings.COMPACTION_ENABLED:
+        return {"scanned": [], "skipped": [], "staged": 0}
+
+    pending = getattr(memory, "_pending_compaction_scans", {})
+    scanned: list = []
+    skipped: list = []
+    staged = 0
+
+    # Every session holding staged candidates, not only those due a scan:
+    # applying a compaction marks its sources compacted, which can drop the
+    # session out of _sessions_needing_scan and strand a candidate that is still
+    # injectable. Cheap -- no similarity pass.
+    for session_name in _sessions_with_active_candidates(memory):
+        try:
+            mark_stale_candidates(memory, session_name)
+        except Exception as e:
+            print(f"[compaction] stale re-check failed for '{session_name}': {e}")
+
+    for session_name, fingerprint in _sessions_needing_scan(memory):
+        task = pending.get(session_name)
+        if task is not None and not task.done():
+            # The write-driven path already owns this session.
+            skipped.append(session_name)
+            continue
+        try:
+            mark_stale_candidates(memory, session_name)
+            candidates = find_compaction_candidates(memory, session_name)
+            staged += persist_candidates_to_staging(memory, candidates)
+            _record_scan(
+                memory,
+                session_name,
+                datetime.now(timezone.utc).isoformat(),
+                fingerprint,
+            )
+            scanned.append(session_name)
+        except Exception as e:
+            # One bad session must not stop an unattended sweep.
+            print(f"[compaction] periodic scan error for '{session_name}': {e}")
+            skipped.append(session_name)
+
+    return {"scanned": scanned, "skipped": skipped, "staged": staged}
 
 
 async def _delayed_scan(memory: "MARMMemory", session_name: str) -> None:

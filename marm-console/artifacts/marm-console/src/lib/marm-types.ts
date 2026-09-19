@@ -783,5 +783,21 @@ export interface ImpactInput {
 
 export interface ImpactResult {
   changed_files: string[];
-  affected_symbols: { qualified_name: string; file_path: string; risk: 'low' | 'medium' | 'high' }[];
+  /** Normalised by the Console proxy from the engine's `impacted_symbols`.
+   *  There is no `risk` here: the engine does not compute one, and the field
+   *  this replaced was defaulted to `'low'` for every row — a risk assessment
+   *  nothing had made. `hop` is the real signal: distance from a changed file. */
+  affected_symbols: {
+    qualified_name: string;
+    file_path: string;
+    label?: string;
+    hop?: number | null;
+  }[];
+  /** The engine caps what it returns. Without these the page shows 200 rows
+   *  and lets a reader believe that is all of them. */
+  impacted_total?: number;
+  impacted_shown?: number;
+  impacted_modules?: { module: string; count: number }[];
+  seed_symbols?: number;
+  base?: string;
 }

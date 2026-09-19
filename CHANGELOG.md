@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Fixed
+
+- `marm-memory stop` no longer reports that a cleanly stopped server "did not stop cleanly". The identity check treated a process that had exited but not yet been reaped by its parent as still running, because the PID still exists until then. `stop` waited out its full timeout and failed, seconds after the server had shut down correctly. Parents that reap promptly, including systemd, never saw it; supervisor scripts, launchers and test harnesses that wait afterwards did.
+- Background compaction now runs on a timer instead of only after a write. A scan was scheduled five writes into a session and ran fifteen minutes later, but candidates must be older than `COMPACTION_MIN_AGE_HOURS` (24 by default), so the scan always ran before its own session's memories were eligible, and a session that went quiet was never scanned again. Stores with compaction enabled could accumulate eligible clusters indefinitely while `marm_compaction(action="status")` reported none. The maintenance job now scans sessions whose eligible set has changed since the last scan, off the event loop, before it processes staging.
+- A discarded compaction candidate is no longer offered again. `discard` does not modify the source memories, so the same cluster was re-detected by any later scan. It is now skipped by content hash, while `stale` candidates remain eligible for re-detection as intended.
+- `/internal/runtime/settings` no longer issues a blocking HTTP request to the server that is answering it. The endpoint probed its own runtime over loopback from the event loop, which serialized the request behind its own response and held the endpoint at roughly one second regardless of how little work it did.
+- Project Explorer's Impact tab returns results again. The Console read `affected_symbols` from a response that carries `impacted_symbols`, and per-row fields were read under the wrong names, so a repository with hundreds of impacted symbols rendered as "No impact detected". Rows also no longer report a `risk` value the engine does not send.
+- `marm_graph_index` no longer tells agents to reuse the returned code-graph id as the project name for every other tool. Memory tools take a short project scope, and following the previous wording produced memories scoped to a path-derived graph id.
+
+### Changed
+
+- Memory-to-code links are gated on whether a name could plausibly identify a specific symbol. Short, common, or ambiguous names no longer create links, which removes a class of confidently wrong associations between a memory and unrelated code.
 ### Changed: Windows and foreign-owned directories no longer persist an auto-generated API key
 
 The API-key bootstrap now refuses to write a generated key into any directory it

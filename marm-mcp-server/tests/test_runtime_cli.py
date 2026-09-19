@@ -54,6 +54,37 @@ def test_process_identity_rejects_reused_pid_metadata():
     assert runtime_manager.process_matches(state) is False
 
 
+def test_process_identity_rejects_an_unreaped_zombie(monkeypatch):
+    """A process that exited but has not been reaped is not a running runtime.
+
+    `psutil.is_running()` is True for a zombie, because the PID still exists
+    until the parent reaps it. Trusting that made `stop` wait out its full
+    15-second timeout and then report that a server which had shut down
+    correctly seconds earlier "did not stop cleanly".
+
+    Only a parent that defers reaping sees it -- a supervisor script, a launcher,
+    or a test harness that calls wait() after asserting. systemd reaps promptly,
+    which is why the service path never hit it.
+    """
+
+    class _UnreapedChild:
+        def is_running(self) -> bool:
+            return True
+
+        def status(self) -> str:
+            return psutil.STATUS_ZOMBIE
+
+        def create_time(self) -> float:
+            return 1000.0
+
+    monkeypatch.setattr(
+        runtime_manager.psutil, "Process", lambda _pid: _UnreapedChild()
+    )
+
+    state = {"pid": 4321, "process_created_at": 1000.0}
+    assert runtime_manager.process_matches(state) is False
+
+
 def test_product_script_is_installed_without_removing_compatibility_commands():
     try:
         import tomllib

@@ -192,7 +192,10 @@ def clear_state(runtime_id: str | None = None) -> None:
 def process_matches(state: dict[str, Any]) -> bool:
     try:
         process = psutil.Process(int(state["pid"]))
-        if not process.is_running():
+        # psutil reports is_running() as True for a zombie, whose pid still
+        # exists although the process has exited. Treating that as live makes
+        # `stop` wait out its timeout and misreport a clean shutdown.
+        if not process.is_running() or process.status() == psutil.STATUS_ZOMBIE:
             return False
         expected = float(state.get("process_created_at", 0))
         return not expected or abs(process.create_time() - expected) < 2.0
@@ -200,10 +203,67 @@ def process_matches(state: dict[str, Any]) -> bool:
         return False
 
 
+def _own_runtime_snapshot() -> dict[str, Any]:
+    """What `/internal/runtime/status` would have answered about this process.
+
+    Must stay field-for-field equivalent to that endpoint: callers read it as
+    though it arrived over the wire.
+    """
+    from ..config import settings
+    from .graph_supervisor import graph_supervisor
+    from .memory import memory
+
+    queue = memory._write_queue
+    # `runtime_id` comes from MARM_RUNTIME_ID, the same source the endpoint
+    # reads, rather than the state file -- this only runs when the state file's
+    # pid is our own, so cli.py has already exported it in this process.
+    return {
+        "status": "ready",
+        "service": "marm-memory-runtime",
+        "runtime_id": os.environ.get("MARM_RUNTIME_ID"),
+        "pid": os.getpid(),
+        "version": SERVER_VERSION,
+        "profile": os.environ.get("MARM_RUNTIME_PROFILE", "standard"),
+        "write_queue": {
+            "enabled": settings.WRITE_QUEUE_ENABLED,
+            "running": bool(
+                queue and queue._worker_task and not queue._worker_task.done()
+            ),
+            "depth": queue.queue.qsize() if queue else 0,
+            "capacity": queue.queue.maxsize if queue else settings.MAX_QUEUE_SIZE,
+            "stopping": queue._stopping if queue else False,
+        },
+        "graph": graph_supervisor.snapshot(),
+    }
+
+
 def inspect_runtime() -> dict[str, Any]:
     state = read_state()
     if state is None:
         return {"state": "stopped", "managed": False}
+
+    # Never probe over HTTP when the runtime being inspected is THIS process:
+    # `request_runtime` blocks, so an async endpoint calling it blocks the very
+    # loop that would answer the probe, and the call can only time out. Other
+    # callers are separate processes, where the probe is the only way to know.
+    # PID alone is not identity: a stale state file can hold a pid the OS has
+    # reused. process_matches() compares the creation time, which a reused pid
+    # cannot forge. `process_created_at` must be PRESENT as well, because
+    # process_matches() treats a missing one as a match.
+    if (
+        state.get("pid") == os.getpid()
+        and state.get("process_created_at")
+        and process_matches(state)
+    ):
+        return {
+            "state": "ready",
+            "managed": True,
+            "identity_matches": True,
+            "process_alive": True,
+            "metadata": state,
+            "runtime": _own_runtime_snapshot(),
+        }
+
     process_alive = process_matches(state)
     remote = request_runtime(
         "/internal/runtime/status",

@@ -992,7 +992,7 @@ Packaged docs are indexed into the `marm_system` memory namespace on startup and
 | `CONSOLIDATION_ENABLED` | `0` | Write-time dedup + semantic merge |
 | `CONSOLIDATION_THRESHOLD` | `0.92` | Cosine similarity needed to merge near-duplicates. Compared against meaning-similarity alone, not the blended ranking score |
 | `COMPACTION_ENABLED` | `0` | Background cluster detection + agent-assisted compaction |
-| `COMPACTION_TRIGGER_COUNT` | `5` | Writes per session before a compaction pass |
+| `COMPACTION_TRIGGER_COUNT` | `5` | Writes per session before a compaction pass. A maintenance pass also runs on the scheduler interval, so a session that stops being written to is still scanned once its memories age past `COMPACTION_MIN_AGE_HOURS` |
 | `COMPACTION_SIMILARITY_THRESHOLD` / `COMPACTION_MIN_CLUSTER_SIZE` / `COMPACTION_MIN_AGE_HOURS` | `0.88` / `3` / `24` | Cluster detection gates |
 | `COMPACTION_STAGING_TTL_HOURS` | `168` | How long staged summaries wait before expiring |
 | `GRAPH_ENABLED` | `true` | Kill switch for the 5 code-graph tools |

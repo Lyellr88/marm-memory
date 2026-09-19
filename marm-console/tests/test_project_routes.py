@@ -90,13 +90,22 @@ def test_project_routes_map_graph_results(monkeypatch):
                 "callers": [{"qualified_name": "marm.main", "file_path": "main.py"}],
                 "callees": [],
             },
+            # The shape the ENGINE actually returns. This stub used to invent
+            # `affected_symbols` with a `risk` field, neither of which the
+            # engine sends, and then assert the mapping worked against that
+            # fiction -- which is why the route returned an empty list in
+            # production for as long as it existed while this test stayed
+            # green. Full coverage of the mapping is in
+            # test_project_impact_routes.py.
             "internal/projects/impact": {
                 "changed_files": ["core.py"],
-                "affected_symbols": [
+                "impacted_total": 1,
+                "impacted_symbols": [
                     {
-                        "qualified_name": "marm.core.run",
-                        "file_path": "core.py",
-                        "risk": "HIGH",
+                        "qn": "marm.core.run",
+                        "file": "core.py",
+                        "label": "Function",
+                        "hop": 1,
                     }
                 ],
             },
@@ -164,7 +173,8 @@ def test_project_routes_map_graph_results(monkeypatch):
             "/api/projects/marm-memory/impact", json={"since": "HEAD~1"}
         )
         assert impact.status_code == 200
-        assert impact.json()["affected_symbols"][0]["risk"] == "high"
+        assert impact.json()["affected_symbols"][0]["qualified_name"] == "marm.core.run"
+        assert impact.json()["affected_symbols"][0]["hop"] == 1
 
         deleted = client.request(
             "DELETE",
