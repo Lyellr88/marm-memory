@@ -56,12 +56,20 @@ def test_consolidation_threshold_clamped_to_unit_range():
 
 
 def test_resolve_marm_api_key_persists_a_generated_key_across_starts(
-    monkeypatch, tmp_path
+    monkeypatch, tmp_path, capsys
 ):
-    """A real generated key must round-trip through resolve_marm_api_key's
-    persist-then-reload path exactly: the first 0.0.0.0 start with no key
-    anywhere generates and saves one, and every start after that must load
-    the same key back rather than generating a new one each time."""
+    """Runs everywhere, and asserts whichever contract the platform has.
+
+    Where the key can be persisted safely it must round-trip: the first
+    0.0.0.0 start generates and saves one, and every start after loads the
+    same key back. Where it cannot -- no descriptor-relative directory
+    operations, which is Windows -- nothing is written, the server still
+    starts with the key in memory, and the operator is told so.
+
+    Branching rather than skipping is deliberate: a skip on Windows would
+    leave the documented Windows behaviour unasserted on the one platform
+    where it applies.
+    """
     from marm_mcp_server.config import api_key_bootstrap
 
     env_path = tmp_path / ".marm" / ".env"
@@ -70,12 +78,56 @@ def test_resolve_marm_api_key_persists_a_generated_key_across_starts(
 
     first_start = api_key_bootstrap.resolve_marm_api_key("0.0.0.0")
     assert first_start
-    assert env_path.read_text() == f"MARM_API_KEY={first_start}\n"
-    if os.name != "nt":
+    second_start = api_key_bootstrap.resolve_marm_api_key("0.0.0.0")
+
+    if api_key_bootstrap._HAVE_DIR_FD:
+        assert env_path.read_text() == f"MARM_API_KEY={first_start}\n"
         assert stat.S_IMODE(env_path.stat().st_mode) & 0o077 == 0
+        assert second_start == first_start
+    else:
+        _assert_key_kept_in_memory(env_path, capsys)
+        assert second_start != first_start, (
+            "nothing was persisted, so the next start must generate a new key"
+        )
+
+
+def _assert_key_kept_in_memory(env_path, capsys):
+    """The contract where a key cannot be persisted safely.
+
+    No `.env`, and a warning that says both what happened and what to do --
+    a warning without the instruction leaves the operator with a server whose
+    key silently changes every restart.
+    """
+    assert not env_path.exists(), "no key may be written through an unverifiable path"
+    warning = capsys.readouterr().err
+    assert "kept in memory only and will not survive a restart" in warning
+    assert "Set MARM_API_KEY explicitly in the environment" in warning
+
+
+def test_a_generated_key_is_not_persisted_without_openat(monkeypatch, tmp_path, capsys):
+    """The Windows contract, forced on so it is exercised everywhere.
+
+    The branch in the three tests above only runs its Windows half on Windows,
+    and CI is Linux -- which is how this behaviour reached a maintainer's
+    machine unasserted. Patching `_HAVE_DIR_FD` rather than `os.name` runs the
+    same path on every platform.
+    """
+    from marm_mcp_server.config import api_key_bootstrap
+
+    env_path = tmp_path / ".marm" / ".env"
+    monkeypatch.setattr(api_key_bootstrap, "_MARM_ENV_PATH", env_path)
+    monkeypatch.setattr(api_key_bootstrap, "_HAVE_DIR_FD", False)
+    monkeypatch.delenv("MARM_API_KEY", raising=False)
+
+    first_start = api_key_bootstrap.resolve_marm_api_key("0.0.0.0")
+    assert first_start, "the server must still start, with the key in memory"
+    _assert_key_kept_in_memory(env_path, capsys)
 
     second_start = api_key_bootstrap.resolve_marm_api_key("0.0.0.0")
-    assert second_start == first_start
+    assert second_start != first_start, (
+        "nothing was persisted, so the next start must generate a different key "
+        "-- which is exactly what the operator is being warned about"
+    )
 
 
 def test_resolve_marm_api_key_removes_file_when_protection_fails(
@@ -135,6 +187,14 @@ def test_resolve_marm_api_key_removes_file_when_protection_raises(
 def test_resolve_marm_api_key_warns_when_insecure_file_cannot_be_removed(
     monkeypatch, tmp_path, capsys
 ):
+    """An unprotectable `.env` that also cannot be deleted must be shouted about.
+
+    Where no key file is written at all -- no descriptor-relative directory
+    operations, which is Windows -- there is no insecure file to fail to
+    remove, and the contract is the in-memory one instead. Asserted here
+    rather than skipped, so the platform behaviour is covered on the platform
+    that has it.
+    """
     from marm_mcp_server.config import api_key_bootstrap
 
     env_path = tmp_path / ".marm" / ".env"
@@ -155,8 +215,12 @@ def test_resolve_marm_api_key_warns_when_insecure_file_cannot_be_removed(
     monkeypatch.delenv("MARM_API_KEY", raising=False)
 
     generated_key = api_key_bootstrap.resolve_marm_api_key("0.0.0.0")
-
     assert generated_key
+
+    if not api_key_bootstrap._HAVE_DIR_FD:
+        _assert_key_kept_in_memory(env_path, capsys)
+        return
+
     assert env_path.exists()
     warning = capsys.readouterr().err
     assert "insecure file could not be removed" in warning
@@ -282,7 +346,13 @@ def test_key_file_creation_failure_is_reported_and_leaves_no_file(
     monkeypatch, tmp_path, capsys
 ):
     """A failure opening the file must not crash startup, and must not leave a
-    partially written credential behind."""
+    partially written credential behind.
+
+    The stub injects that failure into the descriptor-relative write. Where
+    there is no such write -- Windows -- nothing is ever opened and the same
+    end state is reached by declining earlier, which is asserted rather than
+    skipped so the behaviour is covered on that platform too.
+    """
     from marm_mcp_server.config import api_key_bootstrap
 
     env_path = tmp_path / ".marm" / ".env"
@@ -311,6 +381,11 @@ def test_key_file_creation_failure_is_reported_and_leaves_no_file(
     generated_key = api_key_bootstrap.resolve_marm_api_key("0.0.0.0")
 
     assert generated_key  # still usable in memory for this process
+
+    if not api_key_bootstrap._HAVE_DIR_FD:
+        _assert_key_kept_in_memory(env_path, capsys)
+        return
+
     assert not env_path.exists()
     # Assert on both streams: which one the warning lands on is not part of the
     # contract, and under the full suite stdout is not always the process's own.
