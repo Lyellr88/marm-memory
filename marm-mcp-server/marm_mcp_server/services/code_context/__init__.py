@@ -85,11 +85,9 @@ def serialise(
     defines the shape every agent receives over both transports, and it is the
     only part that can be asserted without a live graph backend.
 
-    `detail` controls how much of the SAME content is repeated. Measured on one
-    real composition: 42,235 bytes, of which `markdown` was 17,465 (41%) and
-    `symbols[].source` was another 12,131 (28%) -- the identical source text,
-    a second time. An agent reads `markdown` and stops, so at detail 3 it pays
-    for 59% it never looks at.
+    `detail` controls how much of the SAME content is repeated: `markdown`
+    already carries the source, so `symbols[].source` at detail 3 is that text
+    a second time. An agent reads `markdown` and stops.
 
       1  markdown and notes. What an agent needs, and nothing twice.
       2  adds symbol and memory metadata -- names, files, lines, scores,

@@ -413,11 +413,8 @@ async def build(
     memory_project = (binding or {}).get("memory_project")
 
     # Query memory with the SYMBOLS the code stage found, not only the task
-    # sentence. Memories are written as short headlines that name things --
-    # "Enhanced Styling Initialization Flow Analysis" -- so a symbol name is a
-    # far better probe than a prose question. Measured on this store: the task
-    # "how does the content script inject CSS" returned nothing, while the
-    # symbols it surfaced returned the relevant memories.
+    # sentence. Memories are headlines that name things, so a symbol name is a
+    # far better probe than a prose question.
     probes: list[str] = []
     for s in ctx.symbols[:MEMORY_PROBES]:
         if is_distinctive(s.name):

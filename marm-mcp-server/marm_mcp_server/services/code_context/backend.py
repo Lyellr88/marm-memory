@@ -27,11 +27,10 @@ class GraphUnavailable(RuntimeError):
 
 # --- indexed-project cache --------------------------------------------------
 #
-# `projects()` is a full `action="list"` round trip to the graph SUBPROCESS,
-# and `compose` calls it once per composition purely to work out which project
-# a task belongs to. Profiled on a real composition it was 117 ms of 595 --
-# 20% of every call -- to re-fetch a list that changes only when someone
-# indexes or deletes a repository.
+# `projects()` is a full round trip to the graph SUBPROCESS, called once per
+# composition purely to work out which project a task belongs to -- a large
+# share of each call, re-fetching a list that changes only when someone indexes
+# or deletes a repository.
 #
 # TTL *and* explicit invalidation, not either alone: invalidation keeps an
 # index or delete visible immediately, and the TTL bounds staleness for the
