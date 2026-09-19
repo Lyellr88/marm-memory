@@ -50,6 +50,11 @@ ALLOW_REMOTE = (
 #: with whatever else is on the box, so the ceiling is generous but finite.
 TIMEOUT = float(os.environ.get("MARM_LLM_TIMEOUT") or 120)
 
+#: Ceiling for the one automatic retry when a model burns its whole budget
+#: before answering. Generous enough for a reasoning model's preamble, small
+#: enough that a pathological model costs one slow call rather than many.
+MAX_RETRY_TOKENS = int(os.environ.get("MARM_LLM_MAX_RETRY_TOKENS") or 8192)
+
 #: A probe is cheap but not free, and the answer changes rarely.
 _PROBE_TTL = float(os.environ.get("MARM_LLM_PROBE_TTL") or 60)
 
@@ -350,6 +355,7 @@ def complete(
     temperature: float = 0.0,
     timeout: Optional[float] = None,
     json_object: bool = False,
+    _retrying: bool = False,
 ) -> Optional[str]:
     """One turn of chat completion. Returns the text, or None on any failure.
 
@@ -404,11 +410,40 @@ def complete(
     # finish_reason="length" with content still "". Returning "" would hand
     # the caller a confident blank; None is the state every caller already
     # falls back from.
+    if choice.get("finish_reason") == "length" and not _retrying:
+        # Acting on this beats logging a hint about it. Measured 2026-09-18:
+        # `gemma-4-26b-a4b-qat` spent all 2,048 tokens of a distill budget on
+        # reasoning and returned content="", so every proposal silently fell
+        # back to sentence selection -- the §22 failure, on a model nobody
+        # chose. Auto-selection (§29) means the model CAN change underneath
+        # this call, so coping belongs here rather than in each caller's
+        # constant.
+        #
+        # One retry, quadrupled and capped. Unbounded escalation would turn a
+        # chatty model into a very slow one, and a model that cannot answer in
+        # 4x its budget is not going to.
+        wider = min(max_tokens * 4, MAX_RETRY_TOKENS)
+        if wider > max_tokens:
+            logger.debug(
+                "local_llm: retrying with a wider token budget",
+                model=model,
+                was=max_tokens,
+                now=wider,
+            )
+            return complete(
+                system,
+                user,
+                max_tokens=wider,
+                temperature=temperature,
+                timeout=timeout,
+                json_object=json_object,
+                _retrying=True,
+            )
     if choice.get("finish_reason") == "length":
         logger.debug(
             "local_llm: the model hit the token limit before answering",
             model=model,
-            hint="raise max_tokens; a reasoning model spends budget before content",
+            hint="the retry at a wider budget also came back empty",
         )
     return None
 
