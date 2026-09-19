@@ -108,4 +108,63 @@ describe('ServerPicker', () => {
     render(<ServerPicker llm={llm()} />);
     expect(screen.getByText(/nothing here reaches the network/i)).toBeTruthy();
   });
+
+  it('an auto-selected server is pickable, because picking it pins the choice', () => {
+    // The bug this covers: with the configured address dead, auto-selection
+    // routes to whatever is running, so `endpoint` EQUALS that server. The
+    // picker read only that, badged it "in use" and disabled it -- while the
+    // banner above told the reader to pick it. A dead end.
+    state.servers = {
+      ...state.servers,
+      configured_reachable: false,
+      servers: [
+        {
+          url: 'http://127.0.0.1:1234',
+          port: 1234,
+          runtime: 'LM Studio',
+          expected: 'LM Studio',
+          models: ['gemma-4-26b'],
+          model_count: 7,
+          can_switch: true,
+        },
+      ],
+    } as typeof state.servers;
+
+    render(
+      <ServerPicker
+        llm={llm({ endpoint: 'http://127.0.0.1:1234', endpoint_source: 'discovery' })}
+      />,
+    );
+
+    const row = screen.getByTitle(/click to keep LM Studio/i) as HTMLButtonElement;
+    expect(row.disabled).toBe(false);
+    expect(screen.getByText('auto-selected')).toBeTruthy();
+    expect(screen.queryByText('in use')).toBeNull();
+  });
+
+  it('an explicitly chosen server is not offered again', () => {
+    state.servers = {
+      ...state.servers,
+      configured_reachable: true,
+      servers: [
+        {
+          url: 'http://127.0.0.1:1234',
+          port: 1234,
+          runtime: 'LM Studio',
+          expected: 'LM Studio',
+          models: ['gemma-4-26b'],
+          model_count: 7,
+          can_switch: true,
+        },
+      ],
+    } as typeof state.servers;
+
+    render(
+      <ServerPicker llm={llm({ endpoint: 'http://127.0.0.1:1234', endpoint_source: 'flag' })} />,
+    );
+
+    const row = screen.getByTitle('Currently in use') as HTMLButtonElement;
+    expect(row.disabled).toBe(true);
+    expect(screen.getByText('in use')).toBeTruthy();
+  });
 });
