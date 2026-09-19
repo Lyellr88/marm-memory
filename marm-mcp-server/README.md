@@ -852,6 +852,25 @@ MARM automatically categorizes content on write: **Code** (programming snippets 
 
 MARM stores nullable `project` and `platform` columns on memories, log entries, and notebook entries. The project is detected from the working directory and the platform from the connecting client (Claude Code, VS Code, Cursor, ...); `MARM_PROJECT` and `MARM_PLATFORM` override detection. `marm_smart_recall(project=..., platform=...)` scopes recall without changing the default unfiltered behavior, so one shared server can hold several projects without cross-contamination.
 
+### Distilling a conversation into memory
+
+Storing a memory is an explicit act, so the things worth keeping are the ones somebody remembered to keep. `marm_distill` works the other way round: hand it a stretch of raw conversation and it proposes the durable facts in it.
+
+```text
+marm_distill(action="propose", text="<the conversation so far>")
+marm_distill(action="review")                       → the staged proposals and their verdicts
+marm_distill(action="apply", proposal_id="...")     → writes that one as a memory
+marm_distill(action="discard", proposal_id="...")   → rejects it, permanently
+```
+
+Every proposal is resolved against what is already stored and carries a verdict: `new`, `duplicate`, or `near`. `near` is the interesting one — it is where a correction lives, a fact that restates a stored memory but does not agree with it.
+
+**It proposes; it never writes.** `propose` stages into a review queue and only `apply` creates a memory. That is deliberately the same shape as `marm_compaction`, and for the same reason: a similarity score is not evidence enough to write memory unattended, and anything that does so on such a score fills a store with near-misses faster than it fills it with facts. A **discarded proposal is never proposed again**, enforced by a unique constraint rather than by convention — re-offering something a reviewer already rejected is how a review queue stops being read. It also makes re-running `propose` over the same text a no-op, which is what makes it safe to call at the end of every session.
+
+**What it will not find.** This selects sentences that already read like durable facts and normalises them; it does not compose new ones. A fact spread across three turns, or implied but never stated, will not be proposed. It finds what was said plainly, not what was meant. That is a real limitation, and it is also a reasonable fit: a MARM memory is a headline, and a headline is usually a sentence someone already typed.
+
+When a session accumulates enough unreviewed material, MARM can nudge the agent to run a pass rather than waiting to be asked. `MARM_DISTILL_NUDGE=0` turns that off; the cooldown and budget are tunable in the [configuration reference](#configuration-reference).
+
 ## Knowledge Graphs: Code & Concepts
 
 MARM ships two graph systems that complement the memory store: a **code graph** that understands your repository's structure, and a **concept graph** that understands what your stored memories are about. When both are indexed for the same project, concept entities cross-link to code symbols.
@@ -1014,6 +1033,10 @@ Packaged docs are indexed into the `marm_system` memory namespace on startup and
 | `COMPACTION_TRIGGER_COUNT` | `5` | Writes per session before a compaction pass. A maintenance pass also runs on the scheduler interval, so a session that stops being written to is still scanned once its memories age past `COMPACTION_MIN_AGE_HOURS` |
 | `COMPACTION_SIMILARITY_THRESHOLD` / `COMPACTION_MIN_CLUSTER_SIZE` / `COMPACTION_MIN_AGE_HOURS` | `0.88` / `3` / `24` | Cluster detection gates |
 | `COMPACTION_STAGING_TTL_HOURS` | `168` | How long staged summaries wait before expiring |
+| `MARM_DISTILL_NUDGE` | `1` | Whether MARM may nudge the agent to run a `marm_distill` pass on a session with unreviewed material. Set `0` to only ever distill when asked |
+| `MARM_DISTILL_MAX_NUDGES` | `3` | Nudges per session before MARM stops asking |
+| `MARM_DISTILL_NUDGE_COOLDOWN` | `900` | Seconds between nudges |
+| `MARM_DISTILL_INJECTION_BYTES` | `1536` | Byte budget for the nudge injected into the agent's context |
 | `GRAPH_ENABLED` | `true` | Kill switch for the 6 code-graph tools |
 | `GRAPH_AUTO_INDEX` | `true` | Automatic re-indexing of repos already in the code graph. A saved switch from `projects auto off` or `marm_graph_index(action="auto_off")` overrides this, so a value set here cannot re-enable what a user turned off |
 | `GRAPH_AUTO_INDEX_DEBOUNCE_SECONDS` | `2` | Quiet period after a watcher event before a repo is evaluated, so a burst of saves becomes one re-index. Minimum 0.5 |
