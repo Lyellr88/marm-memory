@@ -839,7 +839,7 @@ Every proposal is resolved against what is already stored and carries a verdict:
 
 **It proposes; it never writes.** `propose` stages into a review queue and only `apply` creates a memory. That is deliberately the same shape as `marm_compaction`, and for the same reason: a similarity score is not evidence enough to write memory unattended, and anything that does so on such a score fills a store with near-misses faster than it fills it with facts. A **discarded proposal is never proposed again**, enforced by a unique constraint rather than by convention — re-offering something a reviewer already rejected is how a review queue stops being read. It also makes re-running `propose` over the same text a no-op, which is what makes it safe to call at the end of every session.
 
-**What it will not find.** This selects sentences that already read like durable facts and normalises them; it does not compose new ones. A fact spread across three turns, or implied but never stated, will not be proposed. It finds what was said plainly, not what was meant. That is a real limitation, and it is also a reasonable fit: a MARM memory is a headline, and a headline is usually a sentence someone already typed.
+**How the text is written.** With no local model reachable, this selects sentences that already read like durable facts and normalises them, rather than composing new ones — so a fact spread across three turns, or implied but never stated, will not be proposed. It finds what was said plainly, not what was meant. That is a real limitation, and also a reasonable fit: a MARM memory is a headline, and a headline is usually a sentence someone already typed. When a local model *is* reachable it writes the fact instead and keeps the verbatim span it came from; a proposal's `mode` reports which of the two happened. See [Optional local generation](#optional-local-generation).
 
 While proposals sit unreviewed, MARM can attach a review request to a tool response rather than waiting to be asked. The request names one proposal and asks for a decision on it — `apply` or `discard` — and only one is attached per cooldown window, server-wide, so a batch of proposals cannot put a request on every response. `MARM_DISTILL_NUDGE=0` turns that off; the cooldown and budget are tunable in the [configuration reference](#configuration-reference).
 
@@ -875,6 +875,8 @@ Step three is the one plain search cannot do. Lexical search answers "which symb
 `detail` trades size for structure. `1` (the default) returns the markdown and notes: what an agent needs, and nothing twice. `2` adds symbol and memory metadata — names, files, lines, scores, and the `provenance` that records whether a symbol was seeded from the task or pulled in along a call edge — without repeating the source already in the markdown. `3` adds source and memory text as structured fields too, which is what a renderer wants and what the Console asks for. `MARM_CODE_CONTEXT_DETAIL` moves that default for every agent at once. `include_graph` is a separate switch on a different axis, off by default: it returns the ranked edge list for visualisation, which nothing else reads.
 
 One constraint worth knowing: traces resolve by **qualified** name. A bare name matching two symbols comes back as `status: "ambiguous"` with no edges rather than a guess, which leaves ranking with nothing to work on and collapses the result to plain search order.
+
+`answer=true` goes one step further and answers the task in prose from the composed context alone — see [Optional local generation](#optional-local-generation).
 
 Once a repository is indexed, MARM keeps it current on its own. A filesystem watcher notices a save, a commit, a branch switch, or a merge and re-indexes shortly after, debounced so a burst of changes becomes one pass rather than one per file. A periodic reconciliation pass catches anything a watcher event missed and is the only trigger for a directory that is not a git repo. To index only on request instead:
 
@@ -953,6 +955,23 @@ The bundled graph engine runs as a supervised child process, not an import:
 - **Auto re-indexing is filesystem watched, with a git content signature and a reconciliation fallback**: a bundled watcher wakes the worker on a save, commit, branch switch, or merge; matching events are debounced so a burst becomes one re-index. For a git repository, the trigger is confirmed by hashing the diff against `HEAD` plus a fingerprint of non-ignored untracked files, computed outside the engine so an idle check costs no engine lock and two different edits to the same already-modified file are told apart instead of read as identical. A periodic reconciliation pass catches a missed watcher event, covers a filesystem that cannot be watched, and is the only trigger for a directory that is not a git repo. Git runs with `core.fsmonitor` disabled and a scrubbed environment, since that setting names a program git would otherwise execute from a watched repository.
 - **One gate for every store mutation**: manual indexes on all three surfaces, the auto-index worker, and project deletion all pass through a single leased row in the memory database. HTTP and STDIO are separate processes with separate engine children over one shared engine store, so an in-process lock cannot span them. The lease is released when the engine call actually returns rather than when its caller stops waiting: a cancelled request cannot hand the store to another process while the engine is still writing to it.
 
+### Optional local generation
+
+MARM has never shipped a generative model. Concept extraction is spaCy and search is a sentence encoder, both local, which is why `marm_distill` selects sentences rather than writing them. This does not change that default — it makes generation available *when a local server happens to be running*, and leaves everything working when it is not.
+
+Two features use it, and both degrade rather than fail:
+
+- `marm_distill` writes self-contained facts instead of lifting sentences, and keeps the verbatim span each one came from. The proposal's `mode` says which happened: `generated` means a model answered, `selected` means it did not.
+- `marm_code_context(answer=true)` closes the loop and answers the task in prose, grounded **only** in the context it just composed — so the ranking decides what the answer is allowed to be about. `stream_answer` returns it token by token.
+
+**Loopback is enforced, not documented.** A non-loopback host is refused outright rather than warned about, because a configuration mistake pointing this at a hosted endpoint would ship transcripts and source off the machine quietly, with no other symptom. The override exists, requires stating the intent in full (`MARM_LLM_ALLOW_REMOTE=i-understand-this-leaves-my-machine`), and is named in the refusal.
+
+**Every failure is a `None`, never an exception.** A cold model, a busy GPU, a stopped container and a malformed reply all degrade to "no model answer this time". Callers branch on the `None`; they do not catch. A memory tool must not stop working because an unrelated container was restarted.
+
+The endpoint is resolved in order: a runtime choice saved from the Console, then `MARM_LLM_URL`, then discovery, then the built-in default. Discovery scans loopback for the ports the common local runtimes use and reports what *answered* rather than what a port usually belongs to, so MARM follows whichever server is actually serving without a restart or a config change. A stated endpoint always wins, so an address you set and that is dead surfaces as dead instead of being silently replaced.
+
+The Console's **System → Controls** tab surfaces all of it: which server answered and how it was chosen, the models it is serving, the model files found in the usual local roots, and a picker that pins a choice as a durable runtime flag.
+
 ### Security & rate limiting
 
 - **Two-mode auth gate**: keyless on loopback (`127.0.0.1`), `MARM_API_KEY` (Bearer) mandatory the moment the server is network-exposed (`SERVER_HOST=0.0.0.0`, Docker). `--generate-key` produces one. Safe by default, zero setup friction locally.
@@ -1009,6 +1028,10 @@ Packaged docs are indexed into the `marm_system` memory namespace on startup and
 | `MARM_DISTILL_MAX_NUDGES` | `3` | Times a single proposal may be asked about before it is marked `nudge_exhausted` and stops being offered |
 | `MARM_DISTILL_NUDGE_COOLDOWN` | `900` | Seconds between review requests. Server-wide, not per proposal or per session |
 | `MARM_DISTILL_INJECTION_BYTES` | `1536` | Byte budget for the nudge injected into the agent's context |
+| `MARM_LLM_URL` | `http://127.0.0.1:18080` | Local OpenAI-compatible endpoint for optional generation. A stated address wins over discovery, so one that is dead surfaces rather than being silently replaced |
+| `MARM_LLM_ALLOW_REMOTE` | unset | Must be the exact string `i-understand-this-leaves-my-machine` to permit a non-loopback endpoint. Anything else, including `1` or `true`, is refused |
+| `MARM_LLM_TIMEOUT` | `120` | Seconds to wait for a completion. Generous on purpose: a shared GPU makes a slow answer normal rather than broken |
+| `MARM_LLM_MAX_RETRY_TOKENS` | `8192` | Ceiling for the single wider retry issued when a model spends its whole budget without producing content |
 | `GRAPH_ENABLED` | `true` | Kill switch for the 6 code-graph tools |
 | `GRAPH_AUTO_INDEX` | `true` | Automatic re-indexing of repos already in the code graph. A saved switch from `projects auto off` or `marm_graph_index(action="auto_off")` overrides this, so a value set here cannot re-enable what a user turned off |
 | `GRAPH_AUTO_INDEX_DEBOUNCE_SECONDS` | `2` | Quiet period after a watcher event before a repo is evaluated, so a burst of saves becomes one re-index. Minimum 0.5 |
