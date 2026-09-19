@@ -47,41 +47,41 @@ def _contained(root_path: str, file_path: str) -> "str | None":
     return None
 
 
-def _bounded_line(
-    fh: "TextIO", limit: int, budget: int
-) -> "tuple[str, bool, int, bool]":
-    """Read one physical line, materialising at most `limit` characters of it.
+def _finish_line(fh: "TextIO", limit: int, budget: int) -> "tuple[bool, int, bool]":
+    """Consume the rest of the current physical line, keeping none of it.
 
-    Returns (text, over_long, scanned, complete). The line is consumed to its
-    end so the caller's numbering stays correct, but only `limit` characters
-    are kept.
+    Returns (over_long, scanned, complete). Called only when the caller still
+    needs the lines AFTER this one, because that is the only reason to walk a
+    line whose content is already decided.
 
     `complete` is False when `budget` ran out mid-line. The handle is then
     parked inside a physical line, so every later line number is unknowable and
     the caller has to stop: a short result is honest, lines numbered from the
     wrong place are not.
-
-    `readline(limit)` returning a string with no trailing newline is ambiguous
-    on its own: it means either a line longer than `limit`, or a final line with
-    no newline at end of file. Draining is what distinguishes them -- if the
-    drain reads nothing, it was the short final line.
     """
-    piece = fh.readline(limit)
-    if not piece or piece.endswith("\n"):
-        return piece, False, len(piece), True
-    scanned = len(piece)
+    scanned = 0
     over_long = False
     while True:
         if scanned >= budget:
-            return piece, True, scanned, False
+            return True, scanned, False
         rest = fh.readline(limit)
         if not rest:
-            break
+            return over_long, scanned, True
         over_long = True
         scanned += len(rest)
         if rest.endswith("\n"):
-            break
-    return piece, over_long, scanned, True
+            return over_long, scanned, True
+
+
+def _was_clipped(fh: "TextIO") -> bool:
+    """Did the line just read continue past the bound, or end the file?
+
+    `readline(limit)` returning text with no trailing newline is ambiguous: it
+    means either a line longer than `limit`, or a final line with no newline at
+    EOF. One character settles it, which is the whole cost -- there is no reason
+    to walk to the next newline when nothing after this line is wanted.
+    """
+    return bool(fh.read(1))
 
 
 def read(
@@ -95,16 +95,15 @@ def read(
         start = 1
     if not end or end < start:
         end = start
-    # Bounded on both axes, because each one alone leaves a way to read an
-    # arbitrarily large amount of a file:
-    #   * `readlines()` materialises every line before `max_lines` applies, so a
-    #     40 MB generated file cost 40 MB to return 60 lines of it.
-    #   * iterating the handle fixes that but bounds only the line COUNT, and a
-    #     minified file is routinely ONE line of several megabytes -- so even
-    #     `start=1, end=1` pulled the whole file in as a single string.
-    # Reading line-by-line with a per-line character bound, and stopping as soon
-    # as the requested range is satisfied, makes the cost a function of the
-    # range rather than of the file.
+    # Bounded on every axis, because each one alone leaves a way to read an
+    # arbitrary amount of a file:
+    #   * `readlines()` materialises every line before `max_lines` applies.
+    #   * iterating bounds the line COUNT, and a minified file is routinely ONE
+    #     line of several megabytes.
+    #   * bounding the line LENGTH caps what is kept, but walking to the next
+    #     newline still costs the whole line.
+    # So: keep at most MAX_LINE_CHARS, walk at most MAX_SCAN_CHARS in total, and
+    # never walk a line at all once nothing after it is wanted.
     chunk: list[str] = []
     truncated = False
     number = 0
@@ -112,35 +111,47 @@ def read(
     try:
         with open(full, "r", encoding="utf-8", errors="replace") as fh:
             while True:
-                line, over_long, scanned, complete = _bounded_line(
-                    fh, MAX_LINE_CHARS, budget
-                )
-                budget -= scanned
-                if not line:
+                piece = fh.readline(MAX_LINE_CHARS)
+                if not piece:
                     break
+                ended = piece.endswith("\n")
                 number += 1
-                if not complete:
-                    # Parked mid-line with no budget left. Keep this line if it
-                    # was wanted -- it is the only one whose number is still
-                    # known -- and stop, because the next newline was never
-                    # reached and everything after it would be misnumbered.
-                    truncated = True
-                    if start <= number <= end and len(chunk) < max_lines:
-                        chunk.append(line.rstrip("\n") + "\n")
-                    break
-                if number < start:
-                    continue
                 if number > end:
                     break
+                if number < start:
+                    # Not wanted, but the rest of it has to be consumed or the
+                    # next line number would be wrong.
+                    if not ended:
+                        _, scanned, complete = _finish_line(fh, MAX_LINE_CHARS, budget)
+                        budget -= scanned
+                        if not complete:
+                            truncated = True
+                            break
+                    continue
                 if len(chunk) >= max_lines:
                     truncated = True
                     break
-                if over_long:
-                    # Say so rather than returning a silently clipped line as if
-                    # it were the whole thing.
-                    truncated = True
-                    line = line.rstrip("\n") + "\n"
-                chunk.append(line)
+                if not ended:
+                    if number == end or len(chunk) + 1 >= max_lines:
+                        # Nothing after this line is wanted, so do not walk it.
+                        if _was_clipped(fh):
+                            truncated = True
+                        chunk.append(piece.rstrip("\n") + "\n")
+                        break
+                    over_long, scanned, complete = _finish_line(
+                        fh, MAX_LINE_CHARS, budget
+                    )
+                    budget -= scanned
+                    if not complete:
+                        truncated = True
+                        chunk.append(piece.rstrip("\n") + "\n")
+                        break
+                    if over_long:
+                        # Say so rather than returning a silently clipped line
+                        # as if it were the whole thing.
+                        truncated = True
+                    piece = piece.rstrip("\n") + "\n"
+                chunk.append(piece)
                 if budget <= 0:
                     truncated = True
                     break

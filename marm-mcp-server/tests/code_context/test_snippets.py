@@ -1,4 +1,6 @@
+import builtins
 import pathlib
+from unittest import mock
 
 from marm_mcp_server.services.code_context.snippets import (
     MAX_LINE_CHARS,
@@ -108,6 +110,51 @@ def test_an_unfinished_line_never_yields_lines_numbered_from_the_wrong_place(
     assert truncated
     assert "second" not in text and "third" not in text and "fourth" not in text
     assert len(text) <= MAX_LINE_CHARS, "only the bounded first line may come back"
+
+
+def test_a_selected_clipped_line_is_not_walked_to_its_end(tmp_path: pathlib.Path):
+    """Once nothing after a line is wanted, the line must not be walked.
+
+    Returning `MAX_LINE_CHARS` of a huge minified line only needs those
+    characters plus one more to tell a clipped line from the file's last line.
+    Draining to the next newline is pure cost on the event loop, and the scan
+    budget caps it rather than removing it.
+
+    Measured by counting characters actually read, which is the only way to see
+    the difference -- the returned value is identical either way.
+    """
+    size = 5_000_000
+    (tmp_path / "bundle.min.js").write_text("x" * size)
+    read_chars = 0
+    real_open = builtins.open
+
+    def counting_open(*args, **kwargs):
+        handle = real_open(*args, **kwargs)
+        real_readline, real_read = handle.readline, handle.read
+
+        def readline(*a, **k):
+            nonlocal read_chars
+            out = real_readline(*a, **k)
+            read_chars += len(out)
+            return out
+
+        def rd(*a, **k):
+            nonlocal read_chars
+            out = real_read(*a, **k)
+            read_chars += len(out)
+            return out
+
+        handle.readline, handle.read = readline, rd
+        return handle
+
+    with mock.patch.object(builtins, "open", counting_open):
+        text, truncated = read(str(tmp_path), "bundle.min.js", 1, 1)
+
+    assert truncated and len(text) <= MAX_LINE_CHARS
+    assert read_chars <= MAX_LINE_CHARS + 1, (
+        f"read {read_chars} characters to return {len(text)}: the line was "
+        f"walked although nothing after it was wanted"
+    )
 
 
 def test_dedent_strips_common_indent_only():
