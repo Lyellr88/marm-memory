@@ -64,7 +64,10 @@ def _finish_line(fh: "TextIO", limit: int, budget: int) -> "tuple[bool, int, boo
     while True:
         if scanned >= budget:
             return True, scanned, False
-        rest = fh.readline(limit)
+        # Capped by what is LEFT, not by the per-line bound: reading `limit`
+        # after checking the budget overshoots it by up to a line. The guard
+        # above keeps this above zero, and `readline(0)` would read as EOF.
+        rest = fh.readline(min(limit, budget - scanned))
         if not rest:
             return over_long, scanned, True
         over_long = True

@@ -187,6 +187,52 @@ def test_the_budget_never_calls_readline_with_zero(tmp_path: pathlib.Path):
     assert text, "stopping early must still return what was actually read"
 
 
+def test_draining_a_skipped_line_cannot_overrun_the_budget(tmp_path: pathlib.Path):
+    """The drain must be capped by what is LEFT, not by the per-line bound.
+
+    Checking the budget and then reading `MAX_LINE_CHARS` anyway lets the last
+    read overshoot by a whole line. The total is the event loop's, so the one
+    read that is not charged against it is the one that matters.
+
+    Shaped so the over-long line begins with 3,000 characters of budget left:
+    the first read takes 2,000 as a line of its own, leaving 1,000 for a drain
+    that would otherwise read 2,000.
+    """
+    lead = "s\n" * ((MAX_SCAN_CHARS - 3000) // 2)
+    (tmp_path / "mixed.js").write_text(f"{lead}{'x' * 5_000_000}\nwanted\n")
+
+    read_chars = 0
+    real_open = builtins.open
+
+    def counting_open(*args, **kwargs):
+        handle = real_open(*args, **kwargs)
+        real_readline, real_read = handle.readline, handle.read
+
+        def readline(*a, **k):
+            nonlocal read_chars
+            out = real_readline(*a, **k)
+            read_chars += len(out)
+            return out
+
+        def rd(*a, **k):
+            nonlocal read_chars
+            out = real_read(*a, **k)
+            read_chars += len(out)
+            return out
+
+        handle.readline, handle.read = readline, rd
+        return handle
+
+    with mock.patch.object(builtins, "open", counting_open):
+        _, truncated = read(str(tmp_path), "mixed.js", 999_999, 999_999)
+
+    assert truncated, "the scan gave up mid-line, so it must say so"
+    assert read_chars <= MAX_SCAN_CHARS, (
+        f"read {read_chars} characters against a budget of {MAX_SCAN_CHARS}: "
+        f"the drain was capped by the line bound, not by what was left"
+    )
+
+
 def test_dedent_strips_common_indent_only():
     src = "    def f():\n        return 1\n"
     assert dedent_block(src) == "def f():\n    return 1"
