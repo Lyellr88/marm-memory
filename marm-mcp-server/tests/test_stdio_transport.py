@@ -282,6 +282,40 @@ def test_stdio_compaction_claimed_against_resolved_session_not_literal_default(
     )
 
 
+def test_stdio_distill_claims_against_the_resolved_session_not_globally(
+    monkeypatch, tmp_path
+):
+    """A proposal belongs to the session whose transcript produced it.
+
+    Both transports passed `None` here, which the helper reads as "any
+    session". Session A's proposal could then be injected into session B's next
+    tool response, asking a reviewer to accept a memory drawn from a
+    conversation they never had. The helper already filtered; only the call
+    site was unscoped.
+    """
+    import marm_mcp_server.core.stdio_tool_lifecycle as lifecycle
+
+    stdio = _isolated_stdio(monkeypatch, tmp_path)
+
+    claimed_sessions = []
+
+    def _spy_claim(memory, session_name):
+        claimed_sessions.append(session_name)
+        return None
+
+    monkeypatch.setattr(lifecycle, "claim_pending_distill_prompt", _spy_claim)
+
+    result = asyncio.run(stdio.marm_log_entry(entry="regression test entry"))
+    assert result["status"] == "success"
+
+    resolved_session = stdio.memory.active_log_session
+    assert claimed_sessions == [resolved_session], (
+        f"distill claimed against {claimed_sessions}, expected the resolved "
+        f"session {resolved_session!r}. None means every session, so a "
+        f"proposal staged elsewhere would be injected here"
+    )
+
+
 def test_stdio_delete_invalid_type_returns_error_dict_not_raise(monkeypatch, tmp_path):
     """log-entry-dedup.md: STDIO has no Pydantic Literal on `type` (it's a
     plain str param), so delete_entry_stdio's own validation is the only

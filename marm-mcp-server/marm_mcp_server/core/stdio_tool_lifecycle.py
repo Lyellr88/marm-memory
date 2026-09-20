@@ -112,11 +112,15 @@ def _log_tool_call(
                     else:
                         # Only when compaction has nothing to ask -- two review
                         # requests in one response is how both get ignored, and
-                        # compaction's is the older contract. Same ordering the
-                        # HTTP middleware uses, so the two transports surface
-                        # proposals identically.
+                        # compaction's is the older contract. Same ordering and
+                        # same resolved session the HTTP middleware uses, so the
+                        # two transports surface proposals identically.
+                        #
+                        # Scoped, because a proposal names the session whose
+                        # transcript produced it: injecting it elsewhere asks
+                        # one session to accept a memory it cannot judge.
                         distill_block = await asyncio.to_thread(
-                            claim_pending_distill_prompt, memory, None
+                            claim_pending_distill_prompt, memory, compaction_session
                         )
                         if distill_block:
                             serialized_result = json.dumps(result, ensure_ascii=False)
