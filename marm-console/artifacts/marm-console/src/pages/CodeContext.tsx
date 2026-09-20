@@ -107,6 +107,10 @@ export function CodeContextPage() {
   const [task, setTask] = useState(() => params.get('task') ?? '');
   const [project, setProject] = useState(() => params.get('project') ?? '');
   const [budget, setBudget] = useState(() => Number(params.get('budget')) || DEFAULT_BUDGET);
+  // The budget the DISPLAYED result was composed under, which is not `budget`:
+  // that box stays editable afterwards. Pinned when the result lands rather
+  // than when it is requested, so the two always move together.
+  const [composedBudget, setComposedBudget] = useState<number | null>(null);
   const { data: projects } = useProjects();
   const build = useBuildCodeContext();
   const autoRan = useRef(false);
@@ -131,16 +135,19 @@ export function CodeContextPage() {
   const recallUnavailable = notes.some((note) => note.includes('recall unavailable'));
 
   const compose = (nextTask: string, nextProject: string, nextBudget: number) => {
-    build.mutate({
-      task: nextTask,
-      project: nextProject && nextProject !== AUTO_PROJECT ? nextProject : null,
-      budget: nextBudget,
-      include_graph: true,
-      // The page lays out symbols, source and memory bodies separately, so it
-      // needs the structured fields the markdown duplicates. An agent does not,
-      // which is why the server default is 1 rather than this.
-      detail: 3,
-    });
+    build.mutate(
+      {
+        task: nextTask,
+        project: nextProject && nextProject !== AUTO_PROJECT ? nextProject : null,
+        budget: nextBudget,
+        include_graph: true,
+        // The page lays out symbols, source and memory bodies separately, so it
+        // needs the structured fields the markdown duplicates. An agent does not,
+        // which is why the server default is 1 rather than this.
+        detail: 3,
+      },
+      { onSuccess: () => setComposedBudget(nextBudget) },
+    );
     setParams(
       (prev) => {
         prev.set('task', nextTask);
@@ -308,27 +315,28 @@ export function CodeContextPage() {
               <div className="mb-4 flex shrink-0 flex-wrap items-center gap-3 rounded-lg border border-amber-400/30 bg-amber-400/[0.05] px-4 py-3 text-sm">
                 <AlertTriangle className="h-4 w-4 shrink-0 text-amber-400" />
                 <span>
-                  Output was truncated at {budget.toLocaleString()} characters, so lower-ranked symbols were left out.
+                  Output was truncated at {(composedBudget ?? budget).toLocaleString()} characters, so lower-ranked symbols were left out.
                 </span>
                 {/* The note was already the right diagnosis; it just was not
                     wired to the control that fixes it, 300px above. */}
-                {budget < MAX_BUDGET && (
+                {(composedBudget ?? budget) < MAX_BUDGET && (
                   <Button
                     type="button"
                     size="sm"
                     variant="outline"
                     className="ml-auto"
                     onClick={() => {
-                      const raised = Math.min(budget * 2, MAX_BUDGET);
+                      const raised = Math.min((composedBudget ?? budget) * 2, MAX_BUDGET);
                       setBudget(raised);
                       // The request that produced THIS result, not whatever is
                       // in the form now. The control says "recompose", so
                       // editing the box first must not silently change what is
-                      // re-run under that label.
+                      // re-run under that label -- including the budget, which
+                      // a lowered box would otherwise turn into a cut.
                       compose(result.task || task.trim(), result.project?.name || project, raised);
                     }}
                   >
-                    Raise to {Math.min(budget * 2, MAX_BUDGET).toLocaleString()} and recompose
+                    Raise to {Math.min((composedBudget ?? budget) * 2, MAX_BUDGET).toLocaleString()} and recompose
                   </Button>
                 )}
               </div>

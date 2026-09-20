@@ -113,7 +113,7 @@ describe('CodeContextPage', () => {
     await user.click(screen.getByRole('button', { name: /compose context/i }));
 
     await waitFor(() => expect(buildState.mutate).toHaveBeenCalledTimes(1));
-    expect(buildState.mutate).toHaveBeenCalledWith({
+    expect(buildState.mutate.mock.calls[0][0]).toEqual({
       task: 'how does recall rank',
       project: 'C-work-marm-systems',
       budget: 12000,
@@ -319,6 +319,54 @@ describe('CodeContextPage', () => {
 
     await waitFor(() => expect(buildState.mutate).toHaveBeenCalledTimes(1));
     expect(buildState.mutate.mock.calls[0][0].budget).toBe(24000);
+  });
+
+  it('raises the budget the result was composed under, not the edited box', async () => {
+    // The box stays editable after the result renders, so reading it here
+    // would let a lowered number turn "Raise to" into a cut -- the label
+    // promising more while the request asks for less.
+    const user = userEvent.setup();
+    buildState.mutate = vi.fn((_vars, options?: { onSuccess?: () => void }) => {
+      buildState.data = { ...SUCCESS, notes: ['output truncated at the character budget'] };
+      options?.onSuccess?.();
+    });
+    render(<CodeContextPage />);
+
+    await user.type(screen.getByLabelText('Task'), 'how does recall rank');
+    await user.click(screen.getByRole('button', { name: /compose context/i }));
+    await screen.findByRole('button', { name: /raise to 24,000/i });
+
+    const box = screen.getByLabelText('Source budget');
+    await user.clear(box);
+    await user.type(box, '500');
+
+    expect(screen.getByText(/truncated at 12,000 characters/)).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: /raise to 24,000/i }));
+
+    await waitFor(() => expect(buildState.mutate).toHaveBeenCalledTimes(2));
+    expect(buildState.mutate.mock.calls[1][0].budget).toBe(24000);
+  });
+
+  it('offers no raise once the result was composed at the maximum', async () => {
+    // Reading the edited box here would bring the control back at the ceiling,
+    // where there is nothing left to raise to.
+    const user = userEvent.setup();
+    window.history.replaceState(null, '', '/?budget=100000');
+    buildState.mutate = vi.fn((_vars, options?: { onSuccess?: () => void }) => {
+      buildState.data = { ...SUCCESS, notes: ['output truncated at the character budget'] };
+      options?.onSuccess?.();
+    });
+    render(<CodeContextPage />);
+
+    await user.type(screen.getByLabelText('Task'), 'how does recall rank');
+    await user.click(screen.getByRole('button', { name: /compose context/i }));
+    await screen.findByText(/truncated at 100,000 characters/);
+
+    const box = screen.getByLabelText('Source budget');
+    await user.clear(box);
+    await user.type(box, '500');
+
+    expect(screen.queryByRole('button', { name: /raise to/i })).toBeNull();
   });
 
   it('prefills and composes from a deep link', async () => {
