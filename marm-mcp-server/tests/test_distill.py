@@ -235,6 +235,47 @@ def test_identical_sentences_are_proposed_once_regardless_of_spelling():
     assert len(extract_candidates(text, threshold=-99.0)) == 1
 
 
+def test_a_leading_number_is_kept_and_a_list_marker_is_not():
+    """A memory that lost its number still reads like a fact.
+
+    The marker strip was a character class including `\\d`, so it ate any
+    digits a sentence opened with: "404 responses are retried" was stored as
+    "responses are retried", and a leading date disappeared entirely. Only a
+    complete list marker -- bullet, heading, quote, or `1.` with its space --
+    may be removed.
+    """
+    from marm_mcp_server.core.distill import _normalise
+
+    assert _normalise("404 responses are retried") == "404 responses are retried"
+    assert _normalise("2026-09-20 was the cutover date") == (
+        "2026-09-20 was the cutover date"
+    )
+    assert _normalise("80% of writes are deduplicated") == (
+        "80% of writes are deduplicated"
+    )
+    # The marker goes; the number that follows it stays.
+    assert _normalise("1. 404 responses are retried") == "404 responses are retried"
+    assert _normalise("- A bullet item stays") == "A bullet item stays"
+    assert _normalise("## A heading stays") == "A heading stays"
+
+
+def test_two_identifiers_differing_only_in_case_are_two_proposals():
+    """`Foo` and `foo` are two identifiers here, not two spellings.
+
+    The dedupe key casefolded, so the second of any such pair never reached
+    the proposal hash and was silently never proposed. Punctuation still
+    collapses -- that is what the key is for -- but case does not.
+    """
+    from marm_mcp_server.core.distill import _dedupe_key
+
+    assert _dedupe_key("MARM_DB_PATH is read") != _dedupe_key("marm_db_path is read")
+    assert _dedupe_key("Foo is cached") != _dedupe_key("foo is cached")
+    # Still one key for one sentence spelled two ways.
+    assert _dedupe_key("uses `marm_compaction` here") == _dedupe_key(
+        "uses marm_compaction here"
+    )
+
+
 @needs_parser
 def test_a_heading_is_not_welded_to_the_paragraph_below_it():
     """A markdown heading has no full stop, so segmentation ran it into the

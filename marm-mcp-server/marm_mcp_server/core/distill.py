@@ -268,7 +268,12 @@ def _shape_score(doc_or_span: "Doc | Span") -> tuple[float, list[str]]:
 def _normalise(text: str) -> str:
     """One line, no markdown furniture, no trailing punctuation noise."""
     collapsed = " ".join(text.split())
-    collapsed = re.sub(r"^[-*\u2022#>\d.)\s]+", "", collapsed)
+    # A COMPLETE list marker, not a character class. The class matched bare
+    # digits, so a sentence opening with a number lost it: "404 responses are
+    # retried" was stored as "responses are retried", and a date opening a
+    # sentence went the same way. A memory that has lost its number still
+    # reads like a fact, which is what makes it worse than no memory at all.
+    collapsed = re.sub(r"^\s*(?:[-*\u2022#>]+\s+|\d+[.)]\s+)", "", collapsed)
     # Emphasis markers survive segmentation and would be stored verbatim.
     # Backticks are deliberately KEPT: `marm_delete` reads as an identifier and
     # a memory that loses them reads as prose about a word.
@@ -280,9 +285,15 @@ def _dedupe_key(content: str) -> str:
     """Collapse to letters and digits so two spellings of one sentence agree.
 
     One sentence can appear twice in a transcript differing only in backticks
-    or punctuation; casefolding alone treats those as two memories.
+    or punctuation; stripping those is what makes them one proposal.
+
+    Case is PRESERVED. Folding it also merged sentences about `Foo` and `foo`,
+    and in this domain those are two identifiers rather than two spellings.
+    The asymmetry decides it: a near-duplicate that survives is shown to a
+    reviewer with a `duplicate` verdict, while a distinct fact dropped here is
+    never proposed at all.
     """
-    return re.sub(r"[^a-z0-9]+", "", content.casefold())
+    return re.sub(r"[^A-Za-z0-9]+", "", content)
 
 
 def _demarkdown(text: str) -> str:
