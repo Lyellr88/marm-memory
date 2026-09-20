@@ -278,3 +278,51 @@ def test_a_found_server_reports_what_it_serves(monkeypatch):
     assert server["runtime"] == "LM Studio"
     assert server["can_switch"] is True
     assert server["models"] == ["gpt-oss-20b", "qwen3-14b"]
+
+
+# --- saving an endpoint from the Console -------------------------------------
+
+
+def _save_endpoint(monkeypatch, url, *, allow_remote):
+    """Drive the Console's save path and return its `rejected` reason, if any."""
+    import asyncio
+
+    from marm_mcp_server.endpoints import system
+    from marm_mcp_server.endpoints.system import RuntimeLlmRequest
+
+    monkeypatch.setattr(local_llm, "ALLOW_REMOTE", allow_remote)
+    saved: dict[str, str] = {}
+    monkeypatch.setattr(
+        system.runtime_flags, "set_", lambda key, value: saved.update({key: value})
+    )
+    monkeypatch.setattr(system.runtime_flags, "clear", lambda key: None)
+    monkeypatch.setattr(system.runtime_flags, "set_bool", lambda key, value: None)
+    monkeypatch.setattr(local_llm, "invalidate_settings_cache", lambda: None)
+    monkeypatch.setattr(system, "_llm_status", lambda: {})
+
+    result = asyncio.run(system.update_runtime_llm(RuntimeLlmRequest(endpoint=url)))
+    # `rejected` rides inside the `llm` status payload, not at the top level.
+    return result["llm"].get("rejected"), saved
+
+
+def test_a_non_loopback_endpoint_is_refused_without_the_override(monkeypatch):
+    """The default. Nothing but this machine, and the Console says why."""
+    rejected, saved = _save_endpoint(
+        monkeypatch, "http://10.0.0.5:1234", allow_remote=False
+    )
+    assert rejected and "loopback" in rejected
+    assert not saved, "a refused endpoint must not reach the flag store"
+
+
+def test_the_override_the_server_honours_is_honoured_here_too(monkeypatch):
+    """`endpoint()` accepts a non-loopback URL once `MARM_LLM_ALLOW_REMOTE` is
+    stated in full, and this path refused to SAVE that same URL -- so the
+    Console could not configure an endpoint the server would then have used.
+    The comment here claimed parity with `endpoint()`; it did not hold."""
+    rejected, saved = _save_endpoint(
+        monkeypatch, "http://10.0.0.5:1234", allow_remote=True
+    )
+    assert rejected is None, (
+        f"the override was stated, but the save was refused: {rejected}"
+    )
+    assert saved, "the endpoint the server would use must actually be stored"

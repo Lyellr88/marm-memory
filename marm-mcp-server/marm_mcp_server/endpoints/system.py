@@ -336,9 +336,13 @@ async def update_runtime_llm(req: RuntimeLlmRequest) -> dict:
         chosen = req.endpoint.strip().rstrip("/")
         if not chosen:
             runtime_flags.clear(runtime_flags.LLM_ENDPOINT)
-        elif not local_llm._is_loopback(chosen):
+        elif not local_llm._is_loopback(chosen) and not local_llm.ALLOW_REMOTE:
             # Refused here as well as in `endpoint()`, so the Console gets a
             # reason rather than silently saving a value that will be ignored.
+            # `ALLOW_REMOTE` has to be honoured for that to be true: `endpoint()`
+            # accepts a non-loopback URL once the operator has stated the
+            # override in full, and without this clause the Console refused to
+            # save the very endpoint the server would then have used.
             rejected = (
                 f"{chosen} is not a loopback address. MARM only talks to a model "
                 "on this machine."
