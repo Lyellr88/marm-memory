@@ -916,7 +916,7 @@ An agent can do the same with `marm_graph_index(action="auto_off")`, and `action
 
 Under the hood, the engine is [codebase-memory-mcp](https://github.com/DeusData/codebase-memory-mcp) (MIT), a zero-dependency static binary that parses 158 languages through tree-sitter with Hybrid LSP type resolution for the major ones, indexes an average repository in seconds, and answers symbol search and call tracing in well under a second. Measured on a 149,107-node graph over the persistent connection MARM holds: symbol search 146ms, call tracing 67ms, and the full architecture overview 1.23s, which is the one query that is not sub-second. MARM pins a specific release, verifies its tool schema on startup, and routes the upstream tool set through 6 focused MCP tools so the model surface stays small. The graph backend starts lazily on first graph-tool use, so memory, logging, notebook, and summary tools still start fast. In Docker, the engine binary is baked into the image; local pip installs fetch it on first graph use (~269MB, one time).
 
-**Degraded mode:** if the graph engine fails to start (no network for the first-run download, disk full, schema drift) or `GRAPH_ENABLED=false` is set, graph tools return `{"status": "error", "message": "graph backend unavailable"}` while the other 9 tools keep working normally. Graph failures can never take down memory.
+**Degraded mode:** if the graph engine fails to start (no network for the first-run download, disk full, schema drift) or `GRAPH_ENABLED=false` is set, graph tools return `{"status": "error", "message": "graph backend unavailable"}` while the other 10 tools keep working normally. Graph failures can never take down memory.
 
 ### Concept Graph: what your memories are about
 
