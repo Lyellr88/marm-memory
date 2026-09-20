@@ -82,3 +82,10 @@ body:
       label: Server logs or error output
       description: Paste any relevant terminal output or logs here.
       render: shell
+  - type: checkboxes
+    id: human-review
+    attributes:
+      label: Human review
+      options:
+        - label: I have personally reviewed and submitted this report. It is not an unattended agent-generated submission.
+          required: true

@@ -40,3 +40,10 @@ body:
           required: false
         - label: "I can contribute code and submit a PR if guided."
           required: false
+  - type: checkboxes
+    id: human-review
+    attributes:
+      label: Human review
+      options:
+        - label: I have personally reviewed and submitted this request. It is not an unattended agent-generated submission.
+          required: true
