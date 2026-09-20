@@ -25,6 +25,16 @@ def _server(port, runtime, models=1):
 @pytest.fixture(autouse=True)
 def _no_saved_endpoint_or_cache(monkeypatch):
     monkeypatch.setattr(local_llm, "_saved_endpoint", lambda: None)
+    # The saved flag is not the only override. `endpoint_source()` reads
+    # MARM_LLM_URL from the environment at call time, so a developer who
+    # exports it gets "environment" where these assert "discovery" or
+    # "default" -- the test then describes the machine, not the code.
+    monkeypatch.delenv("MARM_LLM_URL", raising=False)
+    # `delenv` alone is not enough: DEFAULT_URL is computed from the same
+    # variable at IMPORT time, so an exported value is already baked into the
+    # module before any fixture runs. These tests assert against the
+    # documented deployment default, so pin it.
+    monkeypatch.setattr(local_llm, "DEFAULT_URL", "http://127.0.0.1:18080")
     local_llm._auto_cache.update({"at": 0.0, "value": None})
     yield
     local_llm._auto_cache.update({"at": 0.0, "value": None})

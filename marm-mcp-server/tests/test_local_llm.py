@@ -21,15 +21,19 @@ def _no_saved_endpoint(monkeypatch):
     assertions then pass or fail on the developer's own configuration.
     """
     monkeypatch.setattr(local_llm, "_saved_endpoint", lambda: None)
+    # And not only the saved flag: `endpoint()` falls back to MARM_LLM_URL,
+    # read from the environment at call time, so a developer who exports it
+    # overrides the URL these tests patch in.
+    monkeypatch.delenv("MARM_LLM_URL", raising=False)
 
 
 @pytest.fixture(autouse=True)
 def _clear_probe_cache():
-    local_llm._probe_cache["at"] = 0.0
-    local_llm._probe_cache["model"] = None
+    # `endpoint` too: the cache is keyed by it, so a stale key is as good as
+    # a stale value.
+    local_llm._probe_cache.update({"at": 0.0, "model": None, "endpoint": None})
     yield
-    local_llm._probe_cache["at"] = 0.0
-    local_llm._probe_cache["model"] = None
+    local_llm._probe_cache.update({"at": 0.0, "model": None, "endpoint": None})
 
 
 @pytest.mark.parametrize(
@@ -85,6 +89,34 @@ def test_a_negative_probe_is_cached(monkeypatch):
     assert local_llm.available() is None
     assert local_llm.available() is None
     assert len(calls) == 1, "the negative result was re-probed"
+
+
+def test_a_cached_model_is_not_reused_after_the_endpoint_moves(monkeypatch):
+    """The cached id belongs to the server that answered, not to the clock.
+
+    Auto-selection rotates on a 30s TTL while the probe cache defaults to 60s,
+    so an endpoint can move from A to B with A's model id still cached. The
+    next completion then asks B for one of A's models, which either errors or
+    quietly serves something else -- the silent case being the worse one.
+    """
+    served = {
+        "http://127.0.0.1:1111": "model-on-a",
+        "http://127.0.0.1:2222": "model-on-b",
+    }
+    current = {"base": "http://127.0.0.1:1111"}
+    monkeypatch.setattr(local_llm, "endpoint", lambda: current["base"])
+    monkeypatch.setattr(
+        local_llm,
+        "_request",
+        lambda *a, **k: {"data": [{"id": served[current["base"]]}]},
+    )
+
+    assert local_llm.available() == "model-on-a"
+    current["base"] = "http://127.0.0.1:2222"
+    assert local_llm.available() == "model-on-b", (
+        "the endpoint moved, so the model cached from the previous server "
+        "must be a miss rather than a hit within the TTL"
+    )
 
 
 def test_status_reports_what_the_console_shows(monkeypatch):

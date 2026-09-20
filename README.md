@@ -994,6 +994,8 @@ Two features use it, and both degrade rather than fail:
 
 **Every failure is a `None`, never an exception.** A cold model, a busy GPU, a stopped container and a malformed reply all degrade to "no model answer this time". Callers branch on the `None`; they do not catch. A memory tool must not stop working because an unrelated container was restarted.
 
+That is the contract for `marm_code_context(answer=true)`, which returns `"answer": null` when a model is unreachable or answers with nothing. The Console's streaming route cannot use it, because a stream has already started by the time generation fails: it emits an SSE `error` event whose JSON `data` carries a `message`, plus a `hint` when no model is reachable at all. Same outcome either way -- the ranked context stands and only the answer is missing -- but a client reading the stream branches on the event, not on a null.
+
 The endpoint is resolved in order: a runtime choice saved from the Console, then `MARM_LLM_URL`, then discovery, then the built-in default. Discovery scans loopback for the ports the common local runtimes use and reports what *answered* rather than what a port usually belongs to, so MARM follows whichever server is actually serving without a restart or a config change. A stated endpoint always wins, so an address you set and that is dead surfaces as dead instead of being silently replaced.
 
 The Console's **System → Controls** tab surfaces all of it: which server answered and how it was chosen, the models it is serving, the model files found in the usual local roots, and a picker that pins a choice as a durable runtime flag.

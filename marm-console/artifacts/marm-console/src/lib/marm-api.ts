@@ -377,11 +377,20 @@ export function createMarmClient(config: MarmClientConfig) {
     ) => {
       const controller = new AbortController();
       const done = (async () => {
+        // The credentials `request()` sends. Without them this one call 401s
+        // on a keyed deployment while every other call on the page succeeds,
+        // which reads as "the answer feature is broken" rather than as auth.
+        const headers: Record<string, string> = {
+          'Content-Type': 'application/json',
+          Accept: 'text/event-stream',
+        };
+        if (config.apiKey) headers.Authorization = `Bearer ${config.apiKey}`;
         const response = await fetch(`${config.baseUrl}/api/code-context/answer`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+          headers,
           body: JSON.stringify(data),
           signal: controller.signal,
+          credentials: 'same-origin',
         });
         if (!response.ok || !response.body) {
           throw new MarmApiError(response.status, 'Could not start the answer stream.');

@@ -250,8 +250,11 @@ async def runtime_llm_models(refresh: bool = False) -> dict:
     rather than on the model. Merging them is how a picker ends up implying a
     switch that will not happen -- see `local_llm.runtime_info`.
     """
-    status = local_llm.status()
-    found = model_discovery.discover(force=refresh)
+    # Both off the loop, for the reason spelled out on the status route
+    # above: a stalled model server or a slow scan of the model roots
+    # would otherwise hold the loop and delay unrelated MCP calls.
+    status = await asyncio.to_thread(local_llm.status)
+    found = await asyncio.to_thread(model_discovery.discover, force=refresh)
     served = status.get("served") or []
     models = [
         {**model, "served_id": _served_id_for(model, served)}
@@ -317,7 +320,7 @@ async def runtime_llm_servers(refresh: bool = False) -> dict:
 @router.get("/internal/runtime/llm/browse", include_in_schema=False)
 async def runtime_llm_browse(path: str | None = None) -> dict:
     """List one directory inside the known model roots. Never file contents."""
-    return model_discovery.browse(path)
+    return await asyncio.to_thread(model_discovery.browse, path)
 
 
 @router.put("/internal/runtime/settings/llm", include_in_schema=False)
@@ -352,7 +355,7 @@ async def update_runtime_llm(req: RuntimeLlmRequest) -> dict:
         if not chosen:
             runtime_flags.clear(runtime_flags.LLM_MODEL)
         else:
-            info = local_llm.runtime_info(force=True)
+            info = await asyncio.to_thread(local_llm.runtime_info, force=True)
             if not info.get("can_switch"):
                 # Refusing rather than saving a preference that cannot take
                 # effect. A stored choice the runtime ignores is exactly the
@@ -376,7 +379,7 @@ async def update_runtime_llm(req: RuntimeLlmRequest) -> dict:
                     applied_model = chosen
 
     local_llm.invalidate_settings_cache()
-    status = _llm_status()
+    status = await asyncio.to_thread(_llm_status)
     if rejected:
         status["rejected"] = rejected
     if applied_model:
@@ -410,7 +413,7 @@ async def update_runtime_llm_roots(req: RuntimeLlmRootRequest) -> dict:
     return {
         "status": "success",
         "configured_roots": roots,
-        **model_discovery.discover(force=True),
+        **(await asyncio.to_thread(model_discovery.discover, force=True)),
     }
 
 

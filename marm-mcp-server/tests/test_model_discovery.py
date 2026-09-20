@@ -155,7 +155,13 @@ def test_a_root_that_does_not_exist_is_reported_rather_than_dropped(tmp_path):
     roots = md.candidate_roots()
     ollama = [r for r in roots if r["source"] == "Ollama"]
     assert ollama, "Ollama must always be offered as a place to look"
-    assert all(r["exists"] is False for r in ollama)
+    # Only the home-scoped root, because only that one is isolated: the Linux
+    # branch also offers /usr/share and /var/lib paths, which the fixture
+    # cannot redirect. Asserting over all of them made the result depend on
+    # whether the host happened to have packaged Ollama installed.
+    scoped = [r for r in ollama if str(tmp_path) in r["path"]]
+    assert scoped, "the home-scoped Ollama root must be among the candidates"
+    assert all(r["exists"] is False for r in scoped)
 
 
 def test_an_unreadable_directory_does_not_abort_the_scan(tmp_path):

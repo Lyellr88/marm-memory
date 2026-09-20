@@ -58,7 +58,11 @@ MAX_RETRY_TOKENS = int(os.environ.get("MARM_LLM_MAX_RETRY_TOKENS") or 8192)
 #: A probe is cheap but not free, and the answer changes rarely.
 _PROBE_TTL = float(os.environ.get("MARM_LLM_PROBE_TTL") or 60)
 
-_probe_cache: dict[str, Any] = {"at": 0.0, "model": None}
+#: Keyed by the endpoint as well as the clock. Auto-selection rotates on a
+#: 30s TTL while this one defaults to 60s, so without the key a model id
+#: probed from server A stayed valid after the endpoint moved to B --
+#: and `complete()` then asks B for one of A's models.
+_probe_cache: dict[str, Any] = {"at": 0.0, "model": None, "endpoint": None}
 
 
 def _is_loopback(url: str) -> bool:
@@ -316,7 +320,12 @@ def available(force: bool = False) -> Optional[str]:
     if not enabled():
         return None
     now = time.monotonic()
-    if not force and (now - float(_probe_cache["at"])) < _PROBE_TTL:
+    base = endpoint()
+    if (
+        not force
+        and _probe_cache["endpoint"] == base
+        and (now - float(_probe_cache["at"])) < _PROBE_TTL
+    ):
         cached = _probe_cache["model"]
         return cached if isinstance(cached, str) else None
 
@@ -342,6 +351,7 @@ def available(force: bool = False) -> Optional[str]:
             )
     _probe_cache["at"] = now
     _probe_cache["model"] = model
+    _probe_cache["endpoint"] = base
     return model
 
 
@@ -579,7 +589,9 @@ def _get(path: str, timeout: float = 4.0) -> Optional[dict]:
 #: Which server is running changes far less often than whether it answers.
 _RUNTIME_TTL = float(os.environ.get("MARM_LLM_RUNTIME_TTL") or 30.0)
 
-_runtime_cache: dict[str, Any] = {"at": 0.0, "value": None}
+#: Endpoint-keyed for the same reason as `_probe_cache`: `can_switch`,
+#: `model_path` and `served` all describe one server.
+_runtime_cache: dict[str, Any] = {"at": 0.0, "value": None, "endpoint": None}
 
 
 def _identify(base: Optional[str], timeout: float = 4.0) -> dict[str, Any]:
@@ -700,16 +712,18 @@ def runtime_info(force: bool = False) -> dict[str, Any]:
                   taken at its word; one listed model is treated as fixed.
     """
     now = time.monotonic()
+    base = endpoint()
     cached = _runtime_cache["value"]
     if (
         not force
         and cached is not None
+        and _runtime_cache["endpoint"] == base
         and (now - float(_runtime_cache["at"])) < _RUNTIME_TTL
     ):
         return dict(cached)
 
-    info = _identify(endpoint())
-    _runtime_cache.update({"at": now, "value": info})
+    info = _identify(base)
+    _runtime_cache.update({"at": now, "value": info, "endpoint": base})
     return dict(info)
 
 
