@@ -323,6 +323,7 @@ async def marm_compaction(
 
 
 from .services.stdio_graph_tools import (  # noqa: E402,F401
+    marm_code_context,
     marm_code_lookup,
     marm_concept_build,
     marm_concept_recall,

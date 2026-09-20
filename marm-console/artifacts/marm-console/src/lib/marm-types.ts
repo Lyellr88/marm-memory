@@ -739,6 +739,89 @@ export interface CodeGraphNeighborhood {
 
 export type CodeSearchKind = 'auto' | 'symbol' | 'text' | 'snippet';
 
+export interface CodeContextInput {
+  task: string;
+  project?: string | null;
+  cwd?: string | null;
+  budget?: number;
+  /** Ask for the ranked call neighbourhood. Off by default server-side. */
+  include_graph?: boolean;
+  /** 1 = markdown only, 2 = + metadata, 3 = + source and memory bodies.
+   *  The Console lays the parts out, so it always asks for 3; an agent reads
+   *  the markdown and stops, which is why the server default is 1. */
+  detail?: number;
+}
+
+/** How a symbol was reached, when it arrived through the call graph rather than
+ *  by matching the task. `null` for a seeded symbol — the four fields are
+ *  jointly present or jointly absent, so zeros would be a claim, not an absence. */
+export interface CodeContextProvenance {
+  hop: number;
+  strategy: string;
+  confidence: number;
+  risk: string;
+}
+
+export interface CodeContextSymbol {
+  name: string;
+  qualified_name: string;
+  label: string;
+  file_path: string;
+  start_line: number;
+  end_line: number;
+  score: number;
+  seeded: boolean;
+  truncated: boolean;
+  /** Present only at detail level 3; `serialise` omits it below that. */
+  source?: string;
+  provenance: CodeContextProvenance | null;
+}
+
+/** A memory row as `smart_recall` returns it. Every field optional: these come
+ *  straight off the recall response and the page must not assume a shape it
+ *  does not control. */
+export interface CodeContextMemory {
+  id?: string;
+  content?: string;
+  summary?: string;
+  session_name?: string;
+  similarity?: number;
+  timestamp?: string;
+  context_type?: string;
+  project?: string;
+  platform?: string;
+  [key: string]: unknown;
+}
+
+export interface CodeContextProject {
+  name: string;
+  short_name: string;
+  root_path: string;
+}
+
+/** `no_project` and `unavailable` are answers, not failures: each carries the
+ *  next step to take, so the page renders the hint rather than an error. */
+export interface CodeContextResult {
+  status: 'success' | 'no_project' | 'unavailable';
+  message?: string;
+  hint?: string;
+  project?: CodeContextProject;
+  task?: string;
+  markdown?: string;
+  symbols?: CodeContextSymbol[];
+  memories?: CodeContextMemory[];
+  links?: Array<Record<string, unknown>>;
+  graph_nodes?: number;
+  /** Which level the server actually applied, after its own default. */
+  detail?: number;
+  /** Present at every level: the counts survive when the arrays do not. */
+  symbol_count?: number;
+  memory_count?: number;
+  /** `[source, target, weight]`, present only when `include_graph` was set. */
+  graph_edges?: Array<[string, string, number]>;
+  notes?: string[];
+}
+
 export interface CodeSearchInput {
   query: string;
   kind?: CodeSearchKind;

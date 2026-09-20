@@ -6,7 +6,7 @@ import { useConnection } from '@/lib/marm-connection';
 import type { 
   MemoryListParams, MemoryInput, MemoryId, LogListParams, NotebookDeleteRef, NotebookInput,
   CompactionAction, ConceptSearchParams, ConceptBuildInput, ConceptGraphParams,
-  ProjectIndexInput, CodeSearchInput, TraceInput, ImpactInput, DuplicatePairInput,
+  ProjectIndexInput, CodeSearchInput, CodeContextInput, TraceInput, ImpactInput, DuplicatePairInput,
   MergeDuplicateInput, RuntimeProfile
 } from '@/lib/marm-types';
 import { MarmApiError } from '@/lib/marm-api';
@@ -71,9 +71,9 @@ export function useFilters() {
 }
 
 // --- Memory ---
-export function useMemories(params?: MemoryListParams) {
+export function useMemories(params?: MemoryListParams, enabled = true) {
   const { baseUrl, client } = useMarmConfig();
-  return useQuery({ queryKey: queryKeys.memories(baseUrl, params), queryFn: () => client.listMemories(params) });
+  return useQuery({ queryKey: queryKeys.memories(baseUrl, params), queryFn: () => client.listMemories(params), enabled });
 }
 
 export function useMemory(id: MemoryId) {
@@ -746,6 +746,11 @@ export function useConfirmProjectMemoryLinking() {
       qc.invalidateQueries({ queryKey: queryKeys.conceptsGraph(baseUrl) });
     },
   });
+}
+
+export function useBuildCodeContext() {
+  const { client } = useMarmConfig();
+  return useMutation({ mutationFn: (data: CodeContextInput) => client.buildCodeContext(data) });
 }
 
 export function useSearchProjectCode() {

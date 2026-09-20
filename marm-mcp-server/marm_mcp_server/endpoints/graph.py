@@ -30,6 +30,7 @@ from ..core.graph_index_worker import (
     index_repository,
 )
 from ..core.graph_supervisor import graph_supervisor
+from ..services.code_context.backend import invalidate_projects_cache
 
 router = APIRouter(prefix="", tags=["Graph"])
 
@@ -307,6 +308,11 @@ def _resolve_and_delete(project: str) -> tuple[str | None, str | None, dict]:
     failed = isinstance(result, dict) and result.get("status") == "error"
     if failed:
         return root_path, None, result
+    # Here rather than in the caller, for the same reason the tombstone is:
+    # `run_exclusive` awaits a shielded task, so a cancelled request detaches
+    # while the delete runs on. Anything after that await is skipped, and the
+    # deleted project would stay offered until the cache TTL expired.
+    invalidate_projects_cache()
     try:
         _cleanup_project_code_links(project)
     except Exception:
@@ -758,6 +764,9 @@ async def console_delete_project(req: ConsoleDeleteProjectRequest) -> dict:
         result if isinstance(result, dict) else {"result": result}
     )
     if result.get("status") != "error":
+        # The projects cache is invalidated inside the gate. The watch is
+        # dropped out here because `_watched` is not lock-guarded and the gate
+        # runs in a worker thread.
         if root_path:
             graph_index_worker.drop_watch(root_path)
         if suppression_issue:

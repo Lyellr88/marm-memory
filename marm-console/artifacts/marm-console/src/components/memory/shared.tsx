@@ -1,6 +1,6 @@
 import type { MemoryDeleteResult } from '@/lib/marm-types';
 import { useEffect, useId, useState } from 'react';
-import { AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, Sparkles, Trash2, XCircle } from 'lucide-react';
+import { AlertTriangle, BrainCircuit, CheckCircle2, ChevronLeft, ChevronRight, CircleAlert, FileText, Lightbulb, MessageSquareText, Sparkles, Trash2, Wrench, XCircle } from 'lucide-react';
 import {
   Button,
   Dialog,
@@ -207,4 +207,22 @@ export function DeleteSelectionDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+/** How a memory's context_type is coloured and iconified.
+ *
+ *  Lives here, not in MemoriesTab, because Code Context shows the same memory
+ *  records. The concept-graph palette in knowledge/shared.tsx is a different
+ *  vocabulary for a different thing -- it colours graph ENTITY types, where
+ *  `decision` is violet. Using it for a memory would render the same record
+ *  amber on /memory and violet on /code-context.
+ */
+export function memoryContext(contextType: string | null) {
+  const value = (contextType || 'general').toLowerCase();
+  if (value.includes('decision')) return { icon: Lightbulb, tone: 'text-amber-300 border-amber-400/20 bg-amber-400/[0.06]', rail: 'border-l-amber-400/70' };
+  if (value.includes('error') || value.includes('issue')) return { icon: CircleAlert, tone: 'text-red-300 border-red-400/20 bg-red-400/[0.06]', rail: 'border-l-red-400/70' };
+  if (value.includes('doc') || value.includes('book') || value.includes('handbook')) return { icon: FileText, tone: 'text-violet-300 border-violet-400/20 bg-violet-400/[0.06]', rail: 'border-l-violet-400/70' };
+  if (value.includes('code') || value.includes('project') || value.includes('tool')) return { icon: Wrench, tone: 'text-blue-300 border-blue-400/20 bg-blue-400/[0.06]', rail: 'border-l-blue-400/70' };
+  if (value.includes('concept') || value.includes('pattern')) return { icon: BrainCircuit, tone: 'text-teal-300 border-teal-400/20 bg-teal-400/[0.06]', rail: 'border-l-teal-400/70' };
+  return { icon: MessageSquareText, tone: 'text-primary border-primary/20 bg-primary/[0.06]', rail: 'border-l-primary/70' };
 }
