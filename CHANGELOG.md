@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Added
+
+- A reproducible MCPB bundle prototype with locked dependencies, cross-platform
+  CI validation, archive checks, and a staged STDIO protocol smoke test.
+- Contributor PR and issue templates now require a human-review confirmation;
+  the contribution guide defines the project policy for AI-assisted work.
+
 <details>
 <summary><strong>September 20th, 2026: Task-Scoped Code Context (v2.50.0)</strong></summary>
 
@@ -20,7 +27,6 @@
 Thank you to [@doublegate](https://github.com/doublegate) for the task-scoped Code Context tool and Console workflow in [#216](https://github.com/Lyellr88/marm-memory/pull/216).
 
 </details>
-
 
 <details>
 <summary><strong>September 19th, 2026: Runtime Reliability and Safer API-Key Persistence (v2.49.1)</strong></summary>
@@ -43,7 +49,6 @@ Thank you to [@doublegate](https://github.com/doublegate) for the task-scoped Co
 Thank you to [@doublegate](https://github.com/doublegate) for the runtime, compaction, graph-linking, Console, and API-key hardening work in [#206](https://github.com/Lyellr88/marm-memory/pull/206) and [#215](https://github.com/Lyellr88/marm-memory/pull/215).
 
 </details>
-
 
 <details>
 <summary><strong>September 18th, 2026: Docker Graph Lifecycle Support and a Console Demo Pack (v2.49.0)</strong></summary>

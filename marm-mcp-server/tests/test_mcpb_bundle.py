@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import shutil
 import subprocess
 import zipfile
 from pathlib import Path
@@ -61,14 +62,22 @@ def test_mcpb_stage_and_archive_have_the_locked_runtime_contract(tmp_path, monke
 
 
 @pytest.mark.slow_stdio
+@pytest.mark.skipif(
+    shutil.which("uv") is None,
+    reason="the MCPB runtime smoke requires the external UV executable",
+)
 def test_mcpb_entry_starts_and_lists_the_shipped_tools(tmp_path, monkeypatch):
     builder = _builder()
     monkeypatch.setattr(builder, "OUTPUT_ROOT", tmp_path / "bundle")
     stage = builder._stage(builder._version(), require_model=False)
     manifest = json.loads((stage / "manifest.json").read_text(encoding="utf-8"))
     mcp_config = manifest["server"]["mcp_config"]
-    command = [mcp_config["command"], *mcp_config["args"]]
-    command[command.index("${__dirname}")] = str(stage)
+    command = [
+        part.replace("${__dirname}", str(stage))
+        for part in [mcp_config["command"], *mcp_config["args"]]
+    ]
+    client_root = tmp_path / "client-project"
+    client_root.mkdir()
     env = os.environ.copy()
     env.update(
         {
@@ -93,7 +102,7 @@ def test_mcpb_entry_starts_and_lists_the_shipped_tools(tmp_path, monkeypatch):
     ]
     result = subprocess.run(
         command,
-        cwd=stage,
+        cwd=client_root,
         env=env,
         input="".join(json.dumps(message) + "\n" for message in messages),
         text=True,

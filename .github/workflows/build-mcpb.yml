@@ -23,6 +23,8 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-python@v5
         with:
@@ -36,11 +38,8 @@ jobs:
         with:
           node-version: "24"
 
-      - name: Install MCPB test runner
-        run: python -m pip install pytest
-
       - name: Smoke the staged MCPB runtime
-        run: python -m pytest -q marm-mcp-server/tests/test_mcpb_bundle.py
+        run: uv run --locked --project packaging/mcpb --with pytest pytest -q marm-mcp-server/tests/test_mcpb_bundle.py
 
       - name: Bundle concept extraction model
         run: python marm-mcp-server/scripts/bundle-concept-model.py
@@ -49,10 +48,38 @@ jobs:
         run: python scripts/build-mcpb.py --smoke-stdio
 
       - name: Verify packed MCPB
-        run: npx --yes @anthropic-ai/mcpb@2.1.2 info dist/mcpb/*.mcpb
+        shell: pwsh
+        run: |
+          $artifacts = @(Get-ChildItem -Path dist/mcpb -Filter *.mcpb -File)
+          if ($artifacts.Count -ne 1) {
+            throw "Expected one MCPB artifact, found $($artifacts.Count)."
+          }
+          $npx = Get-Command npx -ErrorAction Stop
+          & $npx.Source --yes @anthropic-ai/mcpb@2.1.2 info $artifacts[0].FullName
+          if ($LASTEXITCODE -ne 0) {
+            exit $LASTEXITCODE
+          }
 
-      - name: Upload MCPB artifact
+      - name: Upload Linux MCPB candidate
         if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: marm-memory-mcpb-linux-candidate
+          path: dist/mcpb/*.mcpb
+          if-no-files-found: error
+
+  upload:
+    needs: build
+    if: needs.build.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download validated Linux MCPB
+        uses: actions/download-artifact@v4
+        with:
+          name: marm-memory-mcpb-linux-candidate
+          path: dist/mcpb
+
+      - name: Upload canonical MCPB artifact
         uses: actions/upload-artifact@v4
         with:
           name: marm-memory-mcpb

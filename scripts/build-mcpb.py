@@ -117,7 +117,12 @@ def _validate_stage(stage: Path) -> None:
     if manifest.get("server", {}).get("type") != "uv":
         raise ValueError("MCPB manifest must use the UV runtime")
     args = manifest.get("server", {}).get("mcp_config", {}).get("args")
-    if not isinstance(args, list) or "--locked" not in args:
+    if (
+        not isinstance(args, list)
+        or "--locked" not in args
+        or "--project" not in args
+        or "--directory" in args
+    ):
         raise ValueError("MCPB manifest must run UV with the staged lockfile")
 
 
@@ -154,6 +159,16 @@ def _mcpb_command(stage: Path, artifact: Path) -> list[str]:
     ]
 
 
+def _staged_uv_command(stage: Path) -> list[str]:
+    manifest = json.loads((stage / "manifest.json").read_text(encoding="utf-8"))
+    config = manifest.get("server", {}).get("mcp_config", {})
+    command = config.get("command")
+    args = config.get("args")
+    if command != "uv" or not isinstance(args, list):
+        raise ValueError("MCPB manifest must declare a UV command")
+    return [str(part).replace("${__dirname}", str(stage)) for part in [command, *args]]
+
+
 def _uv_stdio_smoke(stage: Path) -> None:
     manifest = json.loads((stage / "manifest.json").read_text(encoding="utf-8"))
     expected_tools = {tool["name"] for tool in manifest["tools"]}
@@ -183,15 +198,8 @@ def _uv_stdio_smoke(stage: Path) -> None:
             }
         )
         process = subprocess.Popen(
-            [
-                "uv",
-                "run",
-                "--locked",
-                "--directory",
-                str(stage),
-                "marm_mcpb_entry.py",
-            ],
-            cwd=stage,
+            _staged_uv_command(stage),
+            cwd=temp_path,
             env=env,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
@@ -202,7 +210,9 @@ def _uv_stdio_smoke(stage: Path) -> None:
         try:
             watchdog.start()
             if process.stdin is None or process.stdout is None:
-                raise RuntimeError("MCPB UV stdio smoke did not create standard streams")
+                raise RuntimeError(
+                    "MCPB UV stdio smoke did not create standard streams"
+                )
             process.stdin.write(payload)
             process.stdin.flush()
             while 2 not in responses:
@@ -213,10 +223,17 @@ def _uv_stdio_smoke(stage: Path) -> None:
                 if isinstance(response.get("id"), int):
                     responses[response["id"]] = response
         finally:
-            watchdog.cancel()
-            if process.stdin is not None:
-                process.stdin.close()
-            process.wait(timeout=15)
+            try:
+                if process.stdin is not None:
+                    process.stdin.close()
+            finally:
+                try:
+                    process.wait(timeout=15)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait()
+                finally:
+                    watchdog.cancel()
         stderr = b"" if process.stderr is None else process.stderr.read()
         if process.returncode != 0:
             raise RuntimeError(

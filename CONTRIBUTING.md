@@ -4,6 +4,12 @@ You do not need to write code to contribute. Testing MARM with your client setup
 
 If you do want to go deeper, MARM is focused on the MCP server, local memory workflows, the code and concept knowledge graphs, Docker/STDIO transports, IDE and client integrations, and marm-console for inspecting local memory data. This guide covers that practical development workflow. For project history and community recognition, see [ACKNOWLEDGMENTS.md](docs/ACKNOWLEDGMENTS.md).
 
+## AI-Assisted Contributions
+
+AI coding tools, including Claude Code, Codex, and Copilot, are welcome for generating code and draft reviews. The account owner remains responsible for every contribution: PR descriptions, issue comments, and code reviews must be personally reviewed and submitted by that person. Automated bot-to-bot conversational responses on issue and pull-request threads are not permitted.
+
+When opening a PR or issue, complete the human-review confirmation in the template. This keeps discussion grounded in a contributor's own understanding of the change, report, or recommendation.
+
 ## Questions or Ideas
 
 Drop a message in [MARM Discord](https://discord.gg/nhyJWPz2cf) or reach out directly at support@marmemory.com.

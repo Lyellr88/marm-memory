@@ -54,9 +54,9 @@ without blocking core memory tools.
 ## Release path
 
 The build workflow validates the artifact on Linux, Windows, and macOS. The
-Linux run uploads the canonical bundle only after all three platforms pass.
+canonical bundle uploads only after all three platforms pass.
 Each CI build starts the staged bundle with the manifest's exact
-`uv run --locked --directory <stage> marm_mcpb_entry.py` command and verifies
+`uv run --locked --project <stage> <stage>/marm_mcpb_entry.py` command and verifies
 an MCP initialize followed by `tools/list` before upload.
 Before publishing a release, open that resulting `.mcpb` in a host that
 supports MCPB on each operating system and perform an MCP initialize plus
@@ -67,7 +67,22 @@ GitHub release, then publish that stdio bundle to Smithery.
 and manual verification. This prototype intentionally does not publish or
 attach release assets. Add a release-job upload only after the clean-host
 checks are automated and Smithery confirms support for the MCPB manifest
-version. The automated stdio smoke uses Python from the test environment; it
-does not replace a host-managed UV installation test. CI artifacts are
+version. The automated stdio smoke uses the staged locked UV runtime; it does
+not replace a host-managed desktop installation test. CI artifacts are
 unsigned. Decide whether Smithery or the target desktop host requires a
 release signing certificate before adding an automated GitHub-release upload.
+
+## Maintenance
+
+The bundle is mostly self-maintaining:
+
+- Tool additions flow into the MCPB manifest from `server.json`, with parity
+  checked by tests.
+- The bundle version is read from MARM's `pyproject.toml`.
+- Dependency changes fail the build until the MCPB dependency file and
+  `uv.lock` are refreshed.
+- New files within `marm_mcp_server` and `marm_graph` are copied automatically.
+
+Manual changes are only needed for a new top-level runtime package, an external
+asset or model location, or a changed STDIO entry-point architecture. The build
+and CI catch normal growth cases.

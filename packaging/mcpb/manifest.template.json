@@ -26,9 +26,9 @@
       "args": [
         "run",
         "--locked",
-        "--directory",
+        "--project",
         "${__dirname}",
-        "marm_mcpb_entry.py"
+        "${__dirname}/marm_mcpb_entry.py"
       ]
     }
   },
