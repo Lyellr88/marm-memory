@@ -44,7 +44,25 @@ NEGATIVES = [
     "Can you check whether the daemon is still running?",
 ]
 
-spacy_model = pytest.importorskip("spacy", reason="concept model not bundled")
+
+def _parser_loads() -> bool:
+    """Can the parser these tests score with actually be loaded?
+
+    `importorskip("spacy")` asked the wrong question. spaCy is a dependency of
+    the package; the bundled model is a build artifact that a source checkout
+    need not have. With one present and the other missing, `extract_candidates`
+    returns nothing and every scoring assertion fails on an empty list -- a
+    missing artifact reported as eighteen broken tests.
+    """
+    from marm_mcp_server.core.concept_extraction import _load_nlp_lazily
+
+    return _load_nlp_lazily() is not None
+
+
+needs_parser = pytest.mark.skipif(
+    not _parser_loads(),
+    reason="bundled concept model not loadable, so extraction yields nothing",
+)
 
 
 def _scores(sentences):
@@ -56,6 +74,7 @@ def _scores(sentences):
     return out
 
 
+@needs_parser
 def test_real_memories_are_selected_and_chatter_is_not():
     """The property that matters: every positive outscores every negative.
 
@@ -76,6 +95,7 @@ def test_real_memories_are_selected_and_chatter_is_not():
     )
 
 
+@needs_parser
 def test_every_canonical_memory_clears_the_DEFAULT_threshold():
     """Separation is not enough: they must clear the floor actually shipped.
 
@@ -96,6 +116,7 @@ def test_every_canonical_memory_clears_the_DEFAULT_threshold():
     )
 
 
+@needs_parser
 def test_the_default_threshold_still_excludes_every_piece_of_chatter():
     """The other half. Lowering the floor must not start admitting filler."""
     admitted = {
@@ -106,6 +127,7 @@ def test_the_default_threshold_still_excludes_every_piece_of_chatter():
     assert not admitted, f"chatter admitted at {DEFAULT_THRESHOLD}: {admitted}"
 
 
+@needs_parser
 def test_imperative_is_rejected_but_a_hyphenated_identifier_is_not():
     """Regression: `marm-ctx ...` was thrown out as an imperative.
 
@@ -122,6 +144,7 @@ def test_imperative_is_rejected_but_a_hyphenated_identifier_is_not():
     ), "a real imperative was accepted"
 
 
+@needs_parser
 def test_score_does_not_depend_on_the_preceding_sentence():
     """Regression: the tagger carried context across a sentence boundary.
 
@@ -147,6 +170,7 @@ def test_score_does_not_depend_on_the_preceding_sentence():
     assert in_context[0].score == pytest.approx(alone, abs=0.01)
 
 
+@needs_parser
 def test_a_mistagged_identifier_is_not_treated_as_a_pronoun():
     """Pins the lexical guard on its own, bypassing the standalone re-parse.
 
@@ -175,6 +199,7 @@ def test_a_mistagged_identifier_is_not_treated_as_a_pronoun():
     assert "subject is a bare pronoun" not in reasons
 
 
+@needs_parser
 def test_a_real_pronoun_subject_is_still_penalised():
     """The lexical guard must not simply disable the penalty."""
     from marm_mcp_server.core.distill import _load_nlp_lazily, _shape_score
@@ -185,6 +210,7 @@ def test_a_real_pronoun_subject_is_still_penalised():
     assert "subject is a bare pronoun" in reasons
 
 
+@needs_parser
 def test_the_cap_bounds_the_queue_not_the_threshold():
     """Volume is controlled by `limit`.
 
@@ -197,6 +223,7 @@ def test_the_cap_bounds_the_queue_not_the_threshold():
     assert len(extract_candidates(text, limit=1)) == 1
 
 
+@needs_parser
 def test_identical_sentences_are_proposed_once_regardless_of_spelling():
     """Backticked and bare spellings of one sentence are one proposal."""
     text = (
@@ -208,6 +235,7 @@ def test_identical_sentences_are_proposed_once_regardless_of_spelling():
     assert len(extract_candidates(text, threshold=-99.0)) == 1
 
 
+@needs_parser
 def test_a_heading_is_not_welded_to_the_paragraph_below_it():
     """A markdown heading has no full stop, so segmentation ran it into the
     following sentence and emitted a title welded to an unrelated clause."""
@@ -222,6 +250,7 @@ def test_a_heading_is_not_welded_to_the_paragraph_below_it():
     ), f"heading welded to the paragraph: {contents}"
 
 
+@needs_parser
 def test_content_is_bounded_to_the_headline_band():
     long_sentence = "The server " + ("records every single event " * 40) + "always."
     for candidate in extract_candidates(long_sentence, threshold=-99.0):
@@ -334,6 +363,26 @@ async def test_a_candidate_duplicating_an_earlier_candidate_is_caught_in_batch()
 # Driven against a real SQLite file rather than a stubbed connection, because
 # the properties being asserted here (the unique hash index, the claim before
 # the write) are enforced by the schema and a stub would assert nothing.
+#
+# Extraction, by contrast, IS stubbed. What these assert is the database path,
+# and routing them through the parser made them depend on a build artifact a
+# source checkout need not have: with the model absent every one failed on an
+# IndexError into an empty proposal list, which says nothing about claim
+# ordering or the unique index.
+
+
+def _fixed_candidates(text: str, *, limit: int = 50, **_: object) -> list[Candidate]:
+    """Stand in for the parser: a POSITIVE is durable, anything else is not.
+
+    Deliberately exact-match rather than a re-implementation of the scorer. A
+    stub that tried to approximate extraction would drift from it and start
+    asserting its own behaviour.
+    """
+    found = [sentence for sentence in POSITIVES if sentence in text]
+    return [
+        Candidate(content=sentence, score=0.9, reasons=("fixture",))
+        for sentence in found
+    ][:limit]
 
 
 @pytest.fixture()
@@ -345,6 +394,7 @@ def staged(monkeypatch, tmp_path):
     from marm_mcp_server.services import distill as service
 
     assert server is not None
+    monkeypatch.setattr(service, "extract_candidates", _fixed_candidates)
     return service, live
 
 
