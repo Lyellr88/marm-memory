@@ -10,6 +10,10 @@ on:
       - "marm-mcp-server/pyproject.toml"
       - "marm-mcp-server/marm_mcp_server/**"
       - "marm-mcp-server/marm_graph/**"
+      # The suite this job runs. Without it a change to the MCPB contract
+      # checks skips the only job that executes them, so the test guarding the
+      # bundle could be edited -- or broken -- with nothing to catch it.
+      - "marm-mcp-server/tests/test_mcpb_bundle.py"
 
 permissions:
   contents: read
