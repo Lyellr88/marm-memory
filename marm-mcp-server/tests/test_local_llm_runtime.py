@@ -242,9 +242,16 @@ def test_something_listening_that_is_not_an_llm_is_not_offered(monkeypatch):
 
 def test_the_configured_endpoint_is_reported_even_when_dead(monkeypatch):
     """ "The one you configured is not answering" is the most useful thing
-    this can say, so the configured port is always scanned."""
+    this can say, so the configured port is always scanned.
+
+    Patches `_chosen_endpoint` and not `endpoint`: `discover_servers` reads
+    the former deliberately, to avoid the recursion through auto-selection.
+    Patching `endpoint` left the call reading the real saved flag, so the
+    test asserted against whichever server the developer last picked in the
+    Console and passed only on a machine that had never picked one.
+    """
     monkeypatch.setattr(local_llm, "KNOWN_PORTS", ())
-    monkeypatch.setattr(local_llm, "endpoint", lambda: "http://127.0.0.1:18080")
+    monkeypatch.setattr(local_llm, "_chosen_endpoint", lambda: "http://127.0.0.1:18080")
     monkeypatch.setattr(local_llm, "_port_open", lambda _port: False)
 
     result = local_llm.discover_servers(force=True)
