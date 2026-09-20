@@ -1,6 +1,7 @@
 # Changelog
 
-## Unreleased
+<details>
+<summary><strong>September 20th, 2026: MCPB Bundle and Contribution Policy (v2.50.1)</strong></summary>
 
 ### Added
 
@@ -8,6 +9,14 @@
   CI validation, archive checks, and a staged STDIO protocol smoke test.
 - Contributor PR and issue templates now require a human-review confirmation;
   the contribution guide defines the project policy for AI-assisted work.
+
+### Fixed
+
+- MCPB validation now preserves the client working directory, runs through its
+  locked UV environment, and gates the canonical artifact on all supported
+  platform checks.
+
+</details>
 
 <details>
 <summary><strong>September 20th, 2026: Task-Scoped Code Context (v2.50.0)</strong></summary>
