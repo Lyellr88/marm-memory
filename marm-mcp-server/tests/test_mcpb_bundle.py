@@ -7,6 +7,7 @@ import json
 import os
 import shutil
 import subprocess
+import threading
 import zipfile
 from pathlib import Path
 
@@ -100,23 +101,56 @@ def test_mcpb_entry_starts_and_lists_the_shipped_tools(tmp_path, monkeypatch):
         {"jsonrpc": "2.0", "method": "notifications/initialized", "params": {}},
         {"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
     ]
-    result = subprocess.run(
+    # stdin stays OPEN until the replies are in. `subprocess.run(input=...)`
+    # closes it the moment the three messages are written, which is the
+    # shutdown signal for an MCP stdio server -- and `tools/list` cannot answer
+    # until the graph child has spawned and reported its own tools, about two
+    # seconds. The reply and the teardown then raced, and the teardown won
+    # roughly one run in five: `initialize` answered, `tools/list` missing,
+    # exit status 0. A real client holds stdin open, so the race belonged to
+    # the harness rather than to anything this test means to assert.
+    proc = subprocess.Popen(
         command,
         cwd=client_root,
         env=env,
-        input="".join(json.dumps(message) + "\n" for message in messages),
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
         text=True,
-        capture_output=True,
         encoding="utf-8",
         errors="replace",
-        timeout=180,
     )
-    assert result.returncode == 0, result.stderr[:500]
-    responses = {
-        response["id"]: response
-        for line in result.stdout.splitlines()
-        if "id" in (response := json.loads(line))
-    }
+    assert proc.stdin is not None and proc.stdout is not None
+    # Drained on a thread: the server logs startup and the graph handshake to
+    # stderr, and a full pipe there would block it forever while this side
+    # waits on stdout.
+    errors: list[str] = []
+    drain = threading.Thread(
+        target=lambda: errors.extend(proc.stderr or []), daemon=True
+    )
+    drain.start()
+    watchdog = threading.Timer(180, proc.kill)
+    watchdog.start()
+    responses: dict[int, dict] = {}
+    try:
+        proc.stdin.write("".join(json.dumps(message) + "\n" for message in messages))
+        proc.stdin.flush()
+        for line in proc.stdout:  # ends on EOF, or when the watchdog kills it
+            try:
+                response = json.loads(line)
+            except ValueError:
+                continue  # a stray log line on stdout is not a protocol error
+            if "id" in response:
+                responses[response["id"]] = response
+            if 2 in responses:
+                break
+    finally:
+        watchdog.cancel()
+        proc.stdin.close()
+        proc.wait(timeout=60)
+        drain.join(timeout=10)
+    stderr = "".join(errors)
+    assert proc.returncode == 0, stderr[:500]
     assert "serverInfo" in responses[1]["result"]
     tool_names = {tool["name"] for tool in responses[2]["result"]["tools"]}
     assert tool_names == {
