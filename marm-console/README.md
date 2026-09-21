@@ -100,9 +100,19 @@ The frontend defaults to the Console API at `http://127.0.0.1:8002`.
 | `PUT /api/settings/automation` | Enable or pause durable automatic code or concept indexing |
 | `GET /api/terminal/status` | Whether the terminal is enabled and available, and its backend/shell |
 | `WS /api/terminal/ws` | Interactive PTY session: spawn, attach (reattach after disconnect), input, resize, kill |
+| `POST /api/distill` | Propose durable memories from raw conversation, review the staged queue, apply one, or discard one. Accepts `action`, `text`, `session_name`, `proposal_id`, `project`, `threshold`, `limit`, `include_duplicates` |
 | `POST /api/terminal/check` | Run a command outside the interactive stream (dependency checks) |
 
 `GET /api/memories` supports `q`, `session`, `project`, `platform`, `context_type`, `compaction_role`, `limit`, and `offset` query parameters. Results are capped at 200 records per request.
+
+`POST /api/distill` returns a tool refusal as **400**, not 503 -- applying a proposal that is
+already applied is the caller's mistake and is fixable by changing the request, which is a
+different thing from the server being unreachable. Collapsing the two would have the page tell a
+reviewer to retry something that can never succeed.
+
+Nothing on that route writes to memory except `action="apply"`. `propose` stages only, for the
+same reason `marm_compaction` stages: a similarity score is not evidence enough to modify memory
+unattended. A discarded proposal is never proposed again.
 
 `POST /api/code-context` returns the ranked call neighbourhood as `graph_edges` only when `include_graph` is set. It is off by default because an agent reads the composed `markdown` and stops, so the edge list would be several KB it never looks at.
 

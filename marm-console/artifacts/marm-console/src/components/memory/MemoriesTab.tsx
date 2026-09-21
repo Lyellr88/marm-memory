@@ -93,7 +93,12 @@ export function MemoriesTab() {
   // effect below cannot influence the render that would already have started an
   // all-project listing, and that listing is the expensive one -- it scales with
   // every row in the store, which is exactly what scoping exists to avoid.
-  const scopeSettled = scopedAll || !!params.project || !!filters;
+  // `!!filters` was not enough: filters arriving is what lets the effect below
+  // pick a default, so between those two renders the scope is still unset and
+  // the query would fire unscoped anyway. The gate needs an actual scope --
+  // or proof that none exists, which is filters with no projects in it.
+  const scopeSettled =
+    scopedAll || !!params.project || (!!filters && !filters.projects?.length);
   const { data, isLoading, isFetching } = useMemories(params, scopeSettled);
   useEffect(() => {
     if (scopedAll || params.project || !filters?.projects?.length) return;

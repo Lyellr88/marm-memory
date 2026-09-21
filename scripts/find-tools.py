@@ -24,6 +24,7 @@ CANONICAL_TOOLS = [
     "marm_summary",
     "marm_notebook",
     "marm_compaction",
+    "marm_distill",
     "marm_graph_index",
     "marm_code_lookup",
     "marm_code_context",

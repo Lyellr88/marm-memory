@@ -19,6 +19,7 @@ from ..core.protocol_delivery_state import (
     _protocol_session_delivered,
     _prune_call_counts,
 )
+from ..services.distill import claim_pending_distill_prompt
 from ..services.documentation import (
     docs_are_loaded,
     ensure_marm_started,
@@ -98,9 +99,16 @@ async def _mcp_tool_call_tracker(
             call_count = _protocol_call_counts[_protocol_session]
             _prune_call_counts()
 
+            # Leave early only when NOTHING below can produce an injection.
+            # This tested compaction alone, which was complete until a second
+            # review path was added beneath it: distill nudges default on and
+            # compaction defaults off, so on a default install every HTTP
+            # response returned here and the nudge never fired. STDIO has no
+            # such gate, so the two transports disagreed.
             if (
                 _protocol_session_delivered(_protocol_session)
                 and not settings.COMPACTION_ENABLED
+                and not settings.DISTILL_NUDGE_ENABLED
             ):
                 if call_count % _PROTOCOL_LITE_INTERVAL != 0:
                     return response
@@ -163,6 +171,18 @@ async def _mcp_tool_call_tracker(
                 )
                 if compaction_block:
                     injections.append(compaction_block)
+                elif _compaction_session:
+                    # Only when compaction has nothing to ask; compaction's is
+                    # the older contract and accepts None as "any session", but
+                    # distill must not -- a proposal names the session whose
+                    # transcript produced it, and _compaction_session is None
+                    # for a call with no session_name and no per-tool rule
+                    # above (e.g. marm_summary).
+                    distill_block = await asyncio.to_thread(
+                        claim_pending_distill_prompt, memory, _compaction_session
+                    )
+                    if distill_block:
+                        injections.append(distill_block)
 
             if not injections:
                 from starlette.responses import Response as StarletteResponse

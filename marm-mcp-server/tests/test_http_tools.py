@@ -1546,3 +1546,276 @@ def test_delete_log_session_spares_non_log_memories(monkeypatch, tmp_path):
         }
     assert logged["memory_id"] not in remaining
     assert manual_id in remaining
+
+
+def test_http_distill_claims_against_the_resolved_session_not_globally(
+    monkeypatch, tmp_path
+):
+    """A proposal belongs to the session whose transcript produced it.
+
+    Both transports passed `None` here, which the helper reads as "any
+    session". Session A's proposal could then be injected into session B's next
+    tool response, asking a reviewer to accept a memory drawn from a
+    conversation they never had. The helper already filtered; only the call
+    site was unscoped, so this asserts the argument rather than the filter.
+    """
+    import json
+    from unittest.mock import AsyncMock, MagicMock
+
+    load_isolated_server(monkeypatch, tmp_path)
+    protocol_delivery_state = importlib.import_module(
+        "marm_mcp_server.core.protocol_delivery_state"
+    )
+    protocol_injection = importlib.import_module(
+        "marm_mcp_server.middleware.protocol_injection"
+    )
+
+    # Already delivered, so the response reaches the compaction/distill branch
+    # instead of carrying the one-time protocol block.
+    protocol_delivery_state._protocol_delivered_sessions = {"session-a"}
+
+    claimed = []
+    compaction_claimed = []
+
+    def _spy_claim(memory, session_name):
+        claimed.append(session_name)
+        return None
+
+    def _spy_compaction(memory, session_name):
+        compaction_claimed.append(session_name)
+        return None
+
+    monkeypatch.setattr(
+        protocol_injection, "claim_pending_compaction_prompt", _spy_compaction
+    )
+    monkeypatch.setattr(protocol_injection, "claim_pending_distill_prompt", _spy_claim)
+
+    body = json.dumps(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "marm_notebook",
+                "arguments": {"action": "status", "session_name": "session-a"},
+            },
+        }
+    ).encode()
+
+    def make_mock_response():
+        payload = json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "result": {"content": [{"type": "text", "text": '{"status":"ok"}'}]},
+            }
+        ).encode()
+
+        async def _iter():
+            yield payload
+
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.headers = MagicMock()
+        resp.headers.items.return_value = [("x-request-id", "1")]
+        resp.body_iterator = _iter()
+        resp.body = payload
+        return resp
+
+    req = MagicMock()
+    req.method = "POST"
+    req.url.path = "/mcp"
+    req.body = AsyncMock(return_value=body)
+
+    asyncio.run(
+        protocol_injection._mcp_tool_call_tracker(
+            req, AsyncMock(return_value=make_mock_response())
+        )
+    )
+
+    assert compaction_claimed == ["session-a"], (
+        "test setup broken: the response never reached the review-prompt "
+        f"branch (compaction claims: {compaction_claimed})"
+    )
+    assert claimed == compaction_claimed, (
+        f"distill claimed against {claimed}, compaction against "
+        f"{compaction_claimed}. None means every session, so a proposal "
+        f"staged elsewhere would be injected into this one"
+    )
+
+
+def test_http_distill_is_not_claimed_when_no_session_resolves(monkeypatch, tmp_path):
+    """A tool call with nothing to scope to must not claim across every one.
+
+    `_compaction_session` falls through to None for a valid call that omits
+    `session_name` and is not one of the few tools with a per-tool resolution
+    rule -- `marm_summary` is the maintainer's own example. Compaction accepts
+    None as "any session" (its older, looser contract, left alone here); this
+    asserts distill does not repeat that, since a None claim there means one
+    session's proposal can land in an unrelated session's response.
+    """
+    import json
+    from unittest.mock import AsyncMock, MagicMock
+
+    load_isolated_server(monkeypatch, tmp_path)
+    protocol_delivery_state = importlib.import_module(
+        "marm_mcp_server.core.protocol_delivery_state"
+    )
+    protocol_injection = importlib.import_module(
+        "marm_mcp_server.middleware.protocol_injection"
+    )
+
+    protocol_delivery_state._protocol_delivered_sessions = {"__default__"}
+
+    claimed = []
+    compaction_claimed = []
+
+    def _spy_claim(memory, session_name):
+        claimed.append(session_name)
+        return None
+
+    def _spy_compaction(memory, session_name):
+        compaction_claimed.append(session_name)
+        return None
+
+    monkeypatch.setattr(
+        protocol_injection, "claim_pending_compaction_prompt", _spy_compaction
+    )
+    monkeypatch.setattr(protocol_injection, "claim_pending_distill_prompt", _spy_claim)
+
+    # marm_summary with no session_name: not the explicit-session branch, and
+    # not one of the per-tool resolution rules, so _compaction_session is None.
+    body = json.dumps(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {"name": "marm_summary", "arguments": {}},
+        }
+    ).encode()
+
+    def make_mock_response():
+        payload = json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "result": {"content": [{"type": "text", "text": '{"status":"ok"}'}]},
+            }
+        ).encode()
+
+        async def _iter():
+            yield payload
+
+        resp = MagicMock()
+        resp.status_code = 200
+        resp.headers = MagicMock()
+        resp.headers.items.return_value = [("x-request-id", "1")]
+        resp.body_iterator = _iter()
+        resp.body = payload
+        return resp
+
+    req = MagicMock()
+    req.method = "POST"
+    req.url.path = "/mcp"
+    req.body = AsyncMock(return_value=body)
+
+    asyncio.run(
+        protocol_injection._mcp_tool_call_tracker(
+            req, AsyncMock(return_value=make_mock_response())
+        )
+    )
+
+    assert compaction_claimed == [None], (
+        "test setup broken: the response never reached the review-prompt "
+        f"branch (compaction claims: {compaction_claimed})"
+    )
+    assert claimed == [], (
+        f"distill claimed against {claimed} with no session resolved -- "
+        f"a None claim here reaches every session's pending proposals"
+    )
+
+
+def test_http_distill_nudge_is_not_gated_on_compaction_being_enabled(
+    monkeypatch, tmp_path
+):
+    """The nudge defaults on; compaction defaults off. HTTP required both.
+
+    The middleware returned early once a session had its protocol and
+    compaction was disabled -- correct while compaction was the only thing
+    below it, and wrong the moment distill was added beneath. On a default
+    install (`COMPACTION_ENABLED=0`, `MARM_DISTILL_NUDGE=1`) every HTTP
+    response took that return and no proposal was ever offered, while STDIO,
+    which has no such gate, offered them normally.
+    """
+    import json
+    from unittest.mock import AsyncMock, MagicMock
+
+    load_isolated_server(monkeypatch, tmp_path)
+    protocol_delivery_state = importlib.import_module(
+        "marm_mcp_server.core.protocol_delivery_state"
+    )
+    protocol_injection = importlib.import_module(
+        "marm_mcp_server.middleware.protocol_injection"
+    )
+    settings = importlib.import_module("marm_mcp_server.config.settings")
+
+    monkeypatch.setattr(settings, "COMPACTION_ENABLED", False)
+    monkeypatch.setattr(settings, "DISTILL_NUDGE_ENABLED", True)
+    protocol_delivery_state._protocol_delivered_sessions = {"session-a"}
+
+    claimed = []
+    monkeypatch.setattr(
+        protocol_injection, "claim_pending_compaction_prompt", lambda *a, **k: None
+    )
+    monkeypatch.setattr(
+        protocol_injection,
+        "claim_pending_distill_prompt",
+        lambda memory, session_name: claimed.append(session_name),
+    )
+
+    body = json.dumps(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "tools/call",
+            "params": {
+                "name": "marm_notebook",
+                "arguments": {"action": "status", "session_name": "session-a"},
+            },
+        }
+    ).encode()
+
+    payload = json.dumps(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {"content": [{"type": "text", "text": '{"status":"ok"}'}]},
+        }
+    ).encode()
+
+    async def _iter():
+        yield payload
+
+    resp = MagicMock()
+    resp.status_code = 200
+    resp.headers = MagicMock()
+    resp.headers.items.return_value = [("x-request-id", "1")]
+    resp.body_iterator = _iter()
+    resp.body = payload
+
+    req = MagicMock()
+    req.method = "POST"
+    req.url.path = "/mcp"
+    req.body = AsyncMock(return_value=body)
+
+    asyncio.run(
+        protocol_injection._mcp_tool_call_tracker(req, AsyncMock(return_value=resp))
+    )
+
+    # Deliberately asserts only that the claim was ATTEMPTED, not which
+    # session it named. Scoping is a separate property with its own test; an
+    # assertion on both here would fail for either reason and name neither.
+    assert len(claimed) == 1, (
+        "with compaction disabled the response returned before the distill "
+        "nudge could be offered, so the feature was dead on a default install"
+    )

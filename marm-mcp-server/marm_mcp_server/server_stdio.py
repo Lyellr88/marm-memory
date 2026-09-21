@@ -322,6 +322,77 @@ async def marm_compaction(
         return {"status": "error", "message": f"Compaction operation failed: {e!s}"}
 
 
+@mcp.tool()
+@_log_tool_call
+async def marm_distill(
+    action: str = "propose",
+    text: Optional[str] = None,
+    session_name: Optional[str] = None,
+    proposal_id: Optional[str] = None,
+    project: Optional[str] = None,
+    context_type: str = "general",
+    threshold: float = 0.20,
+    limit: int = 20,
+    include_duplicates: bool = False,
+) -> dict:
+    """
+    Propose durable memories from raw conversation, resolved against the store.
+
+    Pass a transcript as `text` and this returns the sentences in it that read
+    like durable facts, each already checked against what is stored: `new`
+    (nothing close), `duplicate` (already recorded), or `near` (close to
+    something stored -- worth your judgement, because an encoder cannot tell
+    "refines it" from "contradicts it").
+
+    It SELECTS sentences rather than composing new ones, because MARM runs no
+    generative model. A fact spread over three turns, or implied but never
+    said plainly, will not be proposed.
+
+    NOTHING IS WRITTEN BY `propose`. Proposals are staged for review, and only
+    `apply` writes one -- the same contract as marm_compaction, for the same
+    reason: a similarity score is not evidence enough to change memory
+    unattended.
+
+    Parameters:
+    - action: propose | review | apply | discard (default propose)
+    - text: the conversation to distil (required for propose)
+    - session_name: session the proposals belong to (required for propose;
+      optional filter for review)
+    - proposal_id: which proposal to act on (required for apply/discard)
+    - project: scope name recorded on the memory that `apply` writes
+    - context_type: memory context type for the write (default general)
+    - threshold: shape-score floor, default 0.20. Excludes chatter and little
+      else; measured against the live store, a higher floor discards real
+      memories long before it meaningfully reduces the count
+    - limit: most proposals to return (default 20). THIS is the volume control
+    - include_duplicates: also stage what the store already holds (default off,
+      because a queue of known facts does not get read)
+
+    Returns: status plus `proposals` (propose) or `pending` (review), each
+    carrying content, score, the reasons it scored, verdict, cosine, and the
+    neighbouring memory when there is one.
+    """
+    try:
+        from marm_mcp_server.endpoints.distill import DistillRequest
+        from marm_mcp_server.endpoints.distill import marm_distill as _impl
+
+        return await _impl(
+            DistillRequest(
+                action=action,
+                text=text,
+                session_name=session_name,
+                proposal_id=proposal_id,
+                project=project,
+                context_type=context_type,
+                threshold=threshold,
+                limit=limit,
+                include_duplicates=include_duplicates,
+            )
+        )
+    except Exception as e:
+        return {"status": "error", "message": f"Distill operation failed: {e!s}"}
+
+
 from .services.stdio_graph_tools import (  # noqa: E402,F401
     marm_code_context,
     marm_code_lookup,

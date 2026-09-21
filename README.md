@@ -31,7 +31,7 @@
 - [Performance & Scaling Benchmarks](#performance--scaling-benchmarks)
 - [MCP Client Setup](#mcp-client-setup-for-http--stdio)
 - [Runtime CLI Commands](#runtime-cli-commands)
-- [Complete MCP Tool Suite](#complete-mcp-tool-suite-15-tools)
+- [Complete MCP Tool Suite](#complete-mcp-tool-suite-16-tools)
 - [Using MARM: Talk, Don't Call Tools](#using-marm-talk-dont-call-tools)
 - [Understanding MARM Memory](#understanding-marm-memory)
 - [Knowledge Graphs: Code & Concepts](#knowledge-graphs-code--concepts)
@@ -84,11 +84,11 @@ marm-memory gives your agents a private, shared memory for the context that norm
 
 It brings three things together:
 
-- 🧠 **Core Memory (7 tools)** stores conversations, notes, notebook entries, and summaries so they stay searchable.
+- 🧠 **Core Memory (8 tools)** stores conversations, notes, notebook entries, and summaries so they stay searchable.
 - 💻 **Code Graph (6 tools)** maps your repository so agents can find symbols, follow code paths, and understand the project without rereading it all. Point it at a repo once and it keeps itself current as you work.
 - 🧩 **Concept Graph (2 tools)** connects people, decisions, errors, and ideas from your stored memories, with links back to relevant code when available. It builds itself as you store memories.
 
-All 15 tools work over HTTP and STDIO. Your agents share the same local memory across sessions instead of starting from scratch each time. The bundled Console App provides a browsable view of **Memories**, the **Knowledge Graph**, and **Indexed Projects**, including progress for graph builds and repository indexing. Indexing a repository creates its independent Code Graph, which you can explore from Knowledge Graph → Code Explorer even before storing any memories.
+All 16 tools work over HTTP and STDIO. Your agents share the same local memory across sessions instead of starting from scratch each time. The bundled Console App provides a browsable view of **Memories**, the **Knowledge Graph**, and **Indexed Projects**, including progress for graph builds and repository indexing. Indexing a repository creates its independent Code Graph, which you can explore from Knowledge Graph → Code Explorer even before storing any memories.
 
 ### How It Works
 
@@ -99,7 +99,7 @@ All 15 tools work over HTTP and STDIO. Your agents share the same local memory a
 | **Intelligence layer** | FTS filter, semantic re-rank, bounded semantic fallback, auto-classification, write-time consolidation, and compaction candidates | Keeps recall useful as memory grows instead of letting duplicates pile up |
 | **Code graph layer** | Repo indexing, symbol lookup, call tracing, architecture overview, and change-impact analysis | Gives agents project structure without rereading the whole codebase |
 | **Concept graph layer** | Entity and relationship extraction from stored memories, with links back into the code graph | Connects decisions, errors, tools, and people across sessions instead of leaving them as flat text |
-| **Token layer** | Lightweight 7-tool core surface (15 total with bundled graph tools), semantic re-rank before retrieval, and write-time deduplication | Reduces tokens sent to the model on every recall and cost stays predictable as memory scales |
+| **Token layer** | Lightweight 8-tool core surface (16 total with bundled graph tools), semantic re-rank before retrieval, and write-time deduplication | Reduces tokens sent to the model on every recall and cost stays predictable as memory scales |
 | **Deployment layer** | Pip, Docker, STDIO, HTTP, and managed `swarm`, `swarm-max`, and `trusted` profiles | Lets you run private local memory or shared multi-agent memory with the same MCP surface |
 
 See [Performance & Scaling Benchmarks](#performance--scaling-benchmarks) for retrieval latency, concurrency, and write-cost numbers, and [Architecture & Internals](#architecture--internals) for the mechanisms behind each layer.
@@ -278,7 +278,7 @@ python -m marm_mcp_server.server_stdio
 codex mcp add marm-memory-stdio -- marm-mcp-stdio
 ```
 
-Replace `marm-mcp-stdio` with `python -m marm_mcp_server.server_stdio` if using a virtualenv or a path-based setup. Works with Claude Code, Cursor, VS Code, Qwen, and Gemini CLI. STDIO stays a single local process with no port and no API key, and exposes the same 15 tools as HTTP.
+Replace `marm-mcp-stdio` with `python -m marm_mcp_server.server_stdio` if using a virtualenv or a path-based setup. Works with Claude Code, Cursor, VS Code, Qwen, and Gemini CLI. STDIO stays a single local process with no port and no API key, and exposes the same 16 tools as HTTP.
 
 </details>
 
@@ -665,7 +665,7 @@ Expected output includes server version, feature availability (semantic search s
 
 </details>
 
-## Complete MCP Tool Suite (15 Tools)
+## Complete MCP Tool Suite (16 Tools)
 
 **💡 Pro Tip:** You don't need to manually call these tools! Just tell your AI agent what you want in natural language:
 
@@ -675,7 +675,7 @@ Expected output includes server version, feature availability (semantic search s
 
 The AI agent will automatically use the appropriate tools. Manual tool access is available for power users who want direct control.
 
-### 🧠 Core Memory (7 tools)
+### 🧠 Core Memory (8 tools)
 
 | Tool | What it does | Key parameters |
 | ------ | -------------- | ---------------- |
@@ -686,6 +686,7 @@ The AI agent will automatically use the appropriate tools. Manual tool access is
 | `marm_summary` | Cached, paste-ready session summaries with intelligent truncation | `session_name` |
 | `marm_notebook` | Session-scoped scratch pad plus promotion to a permanent, graph-linked doc | `action="add"\|"use"\|"show"\|"status"\|"clear"\|"save"`, `name`, `data`, `session_name`, `project`, `platform` |
 | `marm_compaction` | Agent-assisted memory cleanup with a reviewable audit trail | `action="status"\|"candidates"\|"review"\|"stage"\|"apply"\|"discard"` |
+| `marm_distill` | Propose durable memories from raw conversation, each resolved against the store as `new`, `duplicate`, or `near`; staged for review, never written unattended | `action="propose"\|"review"\|"apply"\|"discard"`, `text`, `session_name`, `proposal_id` |
 
 ### 🕸️ Code Graph (6 tools)
 
@@ -705,7 +706,7 @@ The AI agent will automatically use the appropriate tools. Manual tool access is
 | `marm_concept_build` | Rebuild the graph, or index memories stored before automatic indexing. New memories are indexed on their own | `session_name`, `project`, or `search_all=True` (one required) |
 | `marm_concept_recall` | Explicitly query entities, relationships, and linked code symbols | `query`, `depth` (1-5), `direction`, `project`, `platform` |
 
-All 15 tools are available on both HTTP and STDIO. Behind the tool surface, the server handles lifecycle setup, protocol refresh, docs indexing, date context, summary-cache maintenance, write queue handling, concept indexing, code re-indexing as repos change, project/platform attribution, and health checks automatically; none of those consume the agent's attention or tokens. The two graph engines start lazily on first use and never block the 7 core memory tools if they fail to start. See [Architecture & Internals](#architecture--internals) for the mechanisms.
+All 16 tools are available on both HTTP and STDIO. Behind the tool surface, the server handles lifecycle setup, protocol refresh, docs indexing, date context, summary-cache maintenance, write queue handling, concept indexing, code re-indexing as repos change, project/platform attribution, and health checks automatically; none of those consume the agent's attention or tokens. The two graph engines start lazily on first use and never block the 8 core memory tools if they fail to start. See [Architecture & Internals](#architecture--internals) for the mechanisms.
 
 ## Using MARM: Talk, Don't Call Tools
 
@@ -848,6 +849,25 @@ MARM automatically categorizes content on write: **Code** (programming snippets 
 ### Project & platform attribution
 
 MARM stores nullable `project` and `platform` columns on memories, log entries, and notebook entries. The project is detected from the working directory and the platform from the connecting client (Claude Code, VS Code, Cursor, ...); `MARM_PROJECT` and `MARM_PLATFORM` override detection. `marm_smart_recall(project=..., platform=...)` scopes recall without changing the default unfiltered behavior, so one shared server can hold several projects without cross-contamination.
+
+### Distilling a conversation into memory
+
+Storing a memory is an explicit act, so the things worth keeping are the ones somebody remembered to keep. `marm_distill` works the other way round: hand it a stretch of raw conversation and it proposes the durable facts in it.
+
+```text
+marm_distill(action="propose", session_name="release-notes", text="<the conversation so far>")
+marm_distill(action="review")                       → the staged proposals and their verdicts
+marm_distill(action="apply", proposal_id="...")     → writes that one as a memory
+marm_distill(action="discard", proposal_id="...")   → rejects it, permanently
+```
+
+Every proposal is resolved against what is already stored and carries a verdict: `new`, `duplicate`, or `near`. `near` is the one that needs a person: it is close enough to a stored memory to be related, and a similarity score cannot say whether it refines that memory, contradicts it, or is simply adjacent. The proposal is shown beside the memory it resembles so a reviewer can decide which.
+
+**It proposes; it never writes.** `propose` stages into a review queue and only `apply` creates a memory. That is deliberately the same shape as `marm_compaction`, and for the same reason: a similarity score is not evidence enough to write memory unattended, and anything that does so on such a score fills a store with near-misses faster than it fills it with facts. A **discarded proposal is never proposed again**, enforced by a unique constraint rather than by convention — re-offering something a reviewer already rejected is how a review queue stops being read. It also makes re-running `propose` over the same text a no-op, which is what makes it safe to call at the end of every session.
+
+**What it will not find.** This selects sentences that already read like durable facts and normalises them; it does not compose new ones. A fact spread across three turns, or implied but never stated, will not be proposed. It finds what was said plainly, not what was meant. That is a real limitation, and it is also a reasonable fit: a MARM memory is a headline, and a headline is usually a sentence someone already typed.
+
+While proposals sit unreviewed, MARM can attach a review request to a tool response rather than waiting to be asked. The request names one proposal and asks for a decision on it — `apply` or `discard` — and only one is attached per cooldown window, server-wide, so a batch of proposals cannot put a request on every response. `MARM_DISTILL_NUDGE=0` turns that off; the cooldown and budget are tunable in the [configuration reference](#configuration-reference).
 
 ## Knowledge Graphs: Code & Concepts
 
@@ -1011,6 +1031,10 @@ Packaged docs are indexed into the `marm_system` memory namespace on startup and
 | `COMPACTION_TRIGGER_COUNT` | `5` | Writes per session before a compaction pass. A maintenance pass also runs on the scheduler interval, so a session that stops being written to is still scanned once its memories age past `COMPACTION_MIN_AGE_HOURS` |
 | `COMPACTION_SIMILARITY_THRESHOLD` / `COMPACTION_MIN_CLUSTER_SIZE` / `COMPACTION_MIN_AGE_HOURS` | `0.88` / `3` / `24` | Cluster detection gates |
 | `COMPACTION_STAGING_TTL_HOURS` | `168` | How long staged summaries wait before expiring |
+| `MARM_DISTILL_NUDGE` | `1` | Whether MARM may attach a review request for one waiting proposal to a tool response, asking the agent to `apply` or `discard` it. Set `0` to never ask |
+| `MARM_DISTILL_MAX_NUDGES` | `3` | Times a single proposal may be asked about before it is marked `nudge_exhausted` and stops being offered |
+| `MARM_DISTILL_NUDGE_COOLDOWN` | `900` | Seconds between review requests. Server-wide, not per proposal or per session |
+| `MARM_DISTILL_INJECTION_BYTES` | `1536` | Byte budget for the nudge injected into the agent's context |
 | `GRAPH_ENABLED` | `true` | Kill switch for the 6 code-graph tools |
 | `GRAPH_AUTO_INDEX` | `true` | Automatic re-indexing of repos already in the code graph. A saved switch from `projects auto off` or `marm_graph_index(action="auto_off")` overrides this, so a value set here cannot re-enable what a user turned off |
 | `GRAPH_AUTO_INDEX_DEBOUNCE_SECONDS` | `2` | Quiet period after a watcher event before a repo is evaluated, so a burst of saves becomes one re-index. Minimum 0.5 |
@@ -1088,7 +1112,7 @@ It re-splits stale chunks, fills in any lost to an interrupted write, and drops 
 - Verify HTTP mode with `curl http://localhost:8001/health`
 - Check server logs for initialization errors
 - Disconnect and reconnect AI client to refresh tool list
-- Both HTTP and STDIO expose 15 tools: 7 core memory/logging/notebook/compaction tools, 6 bundled code-graph tools, and 2 concept-graph tools
+- Both HTTP and STDIO expose 16 tools: 8 core memory/logging/notebook/compaction tools, 6 bundled code-graph tools, and 2 concept-graph tools
 
 **Graph tools return `graph backend unavailable`**
 

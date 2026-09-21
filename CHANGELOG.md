@@ -36,6 +36,7 @@
 
 - `marm_code_context` composes a task-scoped view of a repository in one call: it seeds from the task's own words, expands through the call graph, ranks the result with personalised PageRank, reads the matching source from disk, and joins whatever memory knows about each symbol. Lexical search answers "which symbols mention these words"; this answers "which symbols matter for this task". Available on both transports, with a `detail` level so a caller can ask for less.
 - The Console gains a Code Context section, an ask bar on Overview, and a compose action on Project Explorer symbols, so a composition can be started from where you are already looking.
+- `marm_distill` turns conversation text into reviewable memory candidates. It proposes into a staging table and never writes a memory itself; `apply` writes, `discard` rejects, and a discarded proposal is not offered again, so re-running it over the same transcript is a no-op and safe to call repeatedly. Each proposal carries the score, the reasons it scored, and the stored memory it most resembles.
 
 ### Fixed
 

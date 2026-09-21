@@ -11,6 +11,8 @@ import type {
   BulkSessionDeleteResult,
   CodeContextInput,
   CodeContextResult,
+  DistillInput,
+  DistillResult,
   CodeSearchInput,
   CodeSearchResult,
   CompactionAction,
@@ -346,6 +348,11 @@ export function createMarmClient(config: MarmClientConfig) {
     // a slow-but-succeeding request reads as a client timeout.
     buildCodeContext: (data: CodeContextInput) =>
       request<CodeContextResult>(config, 'POST', '/code-context', { body: data, timeoutMs: 90000 }),
+    // 150s: extraction parses every sentence and embeds every candidate behind
+    // the Console's own 120s proxy timeout, so the browser must outlast the
+    // proxy or a slow-but-succeeding distil reads as a client timeout.
+    distill: (data: DistillInput) =>
+      request<DistillResult>(config, 'POST', '/distill', { body: data, timeoutMs: 150000 }),
     searchProjectCode: (project: string, data: CodeSearchInput) =>
       request<CodeSearchResult[]>(config, 'POST', `/projects/${encodeURIComponent(project)}/search`, { body: data }),
     traceProject: (project: string, data: TraceInput) =>

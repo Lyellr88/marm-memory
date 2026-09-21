@@ -326,7 +326,7 @@ def test_response_models_preserve_mcp_tool_metadata(monkeypatch, tmp_path):
     logging_endpoint = importlib.import_module("marm_mcp_server.endpoints.logging")
     tools = {tool.name: tool for tool in server.mcp.tools}
 
-    assert len(server.mcp.tools) == len(server.MCP_TOOL_OPERATIONS) == 15
+    assert len(server.mcp.tools) == len(server.MCP_TOOL_OPERATIONS) == 16
     assert set(tools) == set(server.MCP_TOOL_OPERATIONS)
     expected_tools = {
         "marm_log_entry": (

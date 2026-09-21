@@ -822,6 +822,54 @@ export interface CodeContextResult {
   notes?: string[];
 }
 
+/** One distilled proposal, before or after it has been staged. */
+export interface DistillProposal {
+  /** Absent when the proposal was not staged (a duplicate, or already seen). */
+  id?: string;
+  content: string;
+  score: number;
+  /** Why it scored what it scored -- shown so a reviewer can judge the judge. */
+  reasons: string[];
+  verdict: 'new' | 'duplicate' | 'near';
+  cosine: number;
+  /** Absent for `new`: below the near band there is no relationship to show. */
+  neighbour_id?: string;
+  neighbour?: string;
+  staged?: boolean;
+  note?: string;
+  session_name?: string;
+  project?: string | null;
+  context_type?: string;
+  created_at?: string;
+}
+
+export interface DistillInput {
+  action: 'propose' | 'review' | 'apply' | 'discard';
+  text?: string | null;
+  session_name?: string | null;
+  proposal_id?: string | null;
+  project?: string | null;
+  context_type?: string;
+  threshold?: number;
+  limit?: number;
+  include_duplicates?: boolean;
+}
+
+export interface DistillResult {
+  status: 'success';
+  /** `propose` returns proposals; `review` returns pending. Never both. */
+  proposals?: DistillProposal[];
+  pending?: DistillProposal[];
+  count?: number;
+  extracted?: number;
+  staged?: number;
+  session_name?: string;
+  memory_id?: string;
+  proposal_id?: string;
+  /** Present when nothing read as durable -- a success, not a failure. */
+  note?: string;
+}
+
 export interface CodeSearchInput {
   query: string;
   kind?: CodeSearchKind;

@@ -82,7 +82,8 @@ def test_stdio_graph_tools_import_order_does_not_affect_registration(tmp_path):
         "names = [t.name for t in asyncio.run(stdio.mcp.list_tools())]\n"
         "assert names == [\n"
         "    'marm_smart_recall', 'marm_log_entry', 'marm_log_show', 'marm_delete',\n"
-        "    'marm_notebook', 'marm_summary', 'marm_compaction', 'marm_graph_index',\n"
+        "    'marm_notebook', 'marm_summary', 'marm_compaction', 'marm_distill',\n"
+        "    'marm_graph_index',\n"
         "    'marm_code_lookup', 'marm_code_context', 'marm_graph_trace',\n"
         "    'marm_graph_architecture',\n"
         "    'marm_graph_impact', 'marm_concept_build', 'marm_concept_recall',\n"
@@ -211,6 +212,7 @@ def test_stdio_handles_mcp_initialize_and_exposes_tools(tmp_path):
     assert "marm_stage_compaction_summaries" not in tool_names
     assert "marm_get_staged_summaries" not in tool_names
     assert "marm_apply_compaction" not in tool_names
+    assert "marm_distill" in tool_names
     assert "marm_graph_index" in tool_names
     assert "marm_code_lookup" in tool_names
     assert "marm_code_context" in tool_names
@@ -219,7 +221,7 @@ def test_stdio_handles_mcp_initialize_and_exposes_tools(tmp_path):
     assert "marm_graph_impact" in tool_names
     assert "marm_concept_build" in tool_names
     assert "marm_concept_recall" in tool_names
-    assert len(tools) == 15
+    assert len(tools) == 16
 
     ordered_names = [t["name"] for t in tools]
     assert ordered_names == [
@@ -230,6 +232,7 @@ def test_stdio_handles_mcp_initialize_and_exposes_tools(tmp_path):
         "marm_notebook",
         "marm_summary",
         "marm_compaction",
+        "marm_distill",
         "marm_graph_index",
         "marm_code_lookup",
         "marm_code_context",
@@ -276,6 +279,40 @@ def test_stdio_compaction_claimed_against_resolved_session_not_literal_default(
         f"compaction claimed against {claimed_sessions}, expected the "
         f"actually-resolved session {resolved_session!r}, not the literal "
         f"string 'default'"
+    )
+
+
+def test_stdio_distill_claims_against_the_resolved_session_not_globally(
+    monkeypatch, tmp_path
+):
+    """A proposal belongs to the session whose transcript produced it.
+
+    Both transports passed `None` here, which the helper reads as "any
+    session". Session A's proposal could then be injected into session B's next
+    tool response, asking a reviewer to accept a memory drawn from a
+    conversation they never had. The helper already filtered; only the call
+    site was unscoped.
+    """
+    import marm_mcp_server.core.stdio_tool_lifecycle as lifecycle
+
+    stdio = _isolated_stdio(monkeypatch, tmp_path)
+
+    claimed_sessions = []
+
+    def _spy_claim(memory, session_name):
+        claimed_sessions.append(session_name)
+        return None
+
+    monkeypatch.setattr(lifecycle, "claim_pending_distill_prompt", _spy_claim)
+
+    result = asyncio.run(stdio.marm_log_entry(entry="regression test entry"))
+    assert result["status"] == "success"
+
+    resolved_session = stdio.memory.active_log_session
+    assert claimed_sessions == [resolved_session], (
+        f"distill claimed against {claimed_sessions}, expected the resolved "
+        f"session {resolved_session!r}. None means every session, so a "
+        f"proposal staged elsewhere would be injected here"
     )
 
 
