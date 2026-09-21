@@ -1,6 +1,25 @@
 # Changelog
 
 <details>
+<summary><strong>September 21st, 2026: Reviewable Memory Distillation (v2.51.0)</strong></summary>
+
+### Added
+
+- `marm_distill` provides a propose, review, apply, and discard workflow for
+  turning conversation text into durable memories. Proposals are staged first,
+  preserve their score and rationale, and never write a memory until an
+  explicit apply action succeeds.
+- The workflow is available over HTTP, STDIO, and the MARM Console, including
+  durable cross-process proposal claims and bounded review controls.
+
+### Acknowledgment
+
+Thank you to [@doublegate](https://github.com/doublegate) for the distillation
+workflow in [#217](https://github.com/Lyellr88/marm-memory/pull/217).
+
+</details>
+
+<details>
 <summary><strong>September 20th, 2026: Remove Unsupported Bundle Distribution (v2.50.2)</strong></summary>
 
 ### Removed
@@ -92,17 +111,15 @@ MARM's code graph runtime now recognizes the configured graph engine in Docker a
 
 - Code graph client EOF failures now retain the supervised child process's stderr, so engine startup and transport failures are diagnosable from the resulting error.
 - Console project labels and development dependencies incorporate the latest merged contributor and Dependabot updates.
+- Docker auto-indexing now recognizes the configured graph engine instead of checking only the pip download cache. The runtime image includes Git so repository changes can be detected.
+- Engine startup and the background worker share launcher availability checks. Invalid or missing configured launchers produce distinct dormant reasons without falling back to a different engine; a fresh pip installation still avoids downloading the engine until a graph tool is used.
+
 
 ### Acknowledgments
 
 Thank you to [@kevin-lozada-santos](https://github.com/kevin-lozada-santos) for Docker graph-engine lifecycle support ([#204](https://github.com/Lyellr88/marm-memory/pull/204)) and [@doublegate](https://github.com/doublegate) for improving graph engine error context ([#207](https://github.com/Lyellr88/marm-memory/pull/207)).
 
 </details>
-
-### Fixed
-
-- Docker auto-indexing now recognizes the configured graph engine instead of checking only the pip download cache. The runtime image includes Git so repository changes can be detected.
-- Engine startup and the background worker share launcher availability checks. Invalid or missing configured launchers produce distinct dormant reasons without falling back to a different engine; a fresh pip installation still avoids downloading the engine until a graph tool is used.
 
 <details>
 <summary><strong>September 16th, 2026: Clearer Indexed Project Labels (v2.48.2)</strong></summary>
