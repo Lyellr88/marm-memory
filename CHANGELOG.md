@@ -1,6 +1,17 @@
 # Changelog
 
 <details>
+<summary><strong>September 20th, 2026: Remove Unsupported Bundle Distribution (v2.50.2)</strong></summary>
+
+### Removed
+
+- The MCPB bundle source, build script, CI workflow, and bundle-specific tests.
+  The bundle used a valid UV runtime, but Smithery cannot publish that runtime,
+  so the unsupported distribution path has been removed.
+
+</details>
+
+<details>
 <summary><strong>September 20th, 2026: MCPB Bundle and Contribution Policy (v2.50.1)</strong></summary>
 
 ### Added
