@@ -853,6 +853,65 @@ def test_a_fresh_applying_claim_is_not_stolen_from_a_write_in_flight(staged):
     assert count == 0, "refusing the claim must not have written a memory"
 
 
+def test_a_claim_older_than_the_timeout_is_not_stolen_while_still_queued(
+    staged, monkeypatch
+):
+    """Elapsed time alone cannot tell a crash from a backlog.
+
+    The write queue is one worker, so a burst of writes can hold a request
+    behind it past `_APPLY_CLAIM_SECONDS` while the original apply() is still
+    genuinely running. `_APPLY_CLAIM_SECONDS` is forced to 0 here so the claim
+    is stale by elapsed time on the very first check -- and the second apply()
+    must still be refused, because `_applying_now` says this process has not
+    let go of it.
+    """
+    import asyncio
+
+    from marm_mcp_server.services import distill as distill_module
+
+    service, live = staged
+    monkeypatch.setattr(distill_module, "_APPLY_CLAIM_SECONDS", 0)
+    proposal_id = _propose(service, live, POSITIVES[1])["proposals"][0]["id"]
+
+    real_store = live.store_memory_queued
+    entered = asyncio.Event()
+    release = asyncio.Event()
+
+    async def blocking_store(*args, **kwargs):
+        entered.set()
+        await release.wait()
+        return await real_store(*args, **kwargs)
+
+    monkeypatch.setattr(live, "store_memory_queued", blocking_store)
+
+    async def scenario():
+        first = asyncio.create_task(service.apply(live, proposal_id))
+        await entered.wait()
+        # The claim is already older than the forced 0s timeout, so nothing
+        # but `_applying_now` distinguishes this from an abandoned claim.
+        second = await service.apply(live, proposal_id)
+        release.set()
+        return await first, second
+
+    # Bounded: if the guard regresses, the second apply() no longer refuses
+    # and instead re-enters `blocking_store`, which awaits the same `release`
+    # this scenario only sets AFTER `second` resolves -- a real deadlock, not
+    # a slow pass. A regression must fail fast here, not hang the suite.
+    first_result, second_result = asyncio.run(asyncio.wait_for(scenario(), 5))
+
+    assert first_result["status"] == "success"
+    assert second_result["status"] == "error"
+    assert "already applying" in second_result["error"]
+
+    with live.get_connection() as conn:
+        (count,) = conn.execute(
+            "SELECT COUNT(*) FROM memories "
+            "WHERE json_extract(metadata, '$.proposal_id') = ?",
+            (proposal_id,),
+        ).fetchone()
+    assert count == 1, "the live write must not have been duplicated"
+
+
 def test_a_long_neighbour_cannot_crowd_out_the_proposal(staged_memory):
     """The text under review must survive truncation.
 

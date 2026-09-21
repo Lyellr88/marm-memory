@@ -235,6 +235,16 @@ def review(
 #: apply is recoverable without operator action.
 _APPLY_CLAIM_SECONDS = 300
 
+#: proposal_ids with an apply() call currently awaiting `store_memory_queued`
+#: IN THIS PROCESS. The write queue is one worker, so a burst of writes can
+#: hold a request behind it longer than `_APPLY_CLAIM_SECONDS` while the
+#: original apply() is still genuinely running -- elapsed time alone cannot
+#: tell that apart from a crashed apply that never released its claim.
+#: Membership means "verified still in flight right now", so it overrides the
+#: timeout; a claim from a process that has since restarted has no entry here
+#: and falls back to the timeout, which is what it is still for.
+_applying_now: set[str] = set()
+
 
 def _claim_is_stale(claimed_at: "str | None", now_iso: str) -> bool:
     """Has an `applying` claim been held longer than any real write would take?
@@ -308,12 +318,14 @@ async def apply(memory: MARMMemory, proposal_id: str) -> dict[str, Any]:
                 # bookkeeping is missing, and rejecting it strands the proposal
                 # permanently -- nothing else recovers this state.
                 existing = _applied_memory_id(conn, proposal_id)
-                if existing is None and not _claim_is_stale(claimed_at, now_iso):
-                    # No memory yet, and the claim is fresh -- so this is an
-                    # apply still IN FLIGHT, not a crashed one. Taking it over
-                    # would enqueue a second write for the same proposal, which
-                    # is the duplicate this whole service exists to avoid.
-                    # Only a stale claim is safe to recover.
+                live_in_process = proposal_id in _applying_now
+                if existing is None and (
+                    live_in_process or not _claim_is_stale(claimed_at, now_iso)
+                ):
+                    # No memory yet, and the claim is live or merely fresh --
+                    # either way an apply is still IN FLIGHT, not crashed.
+                    # Taking it over would enqueue a second write, the
+                    # duplicate this whole service exists to avoid.
                     conn.execute("ROLLBACK")
                     return {
                         "status": "error",
@@ -363,6 +375,7 @@ async def apply(memory: MARMMemory, proposal_id: str) -> dict[str, Any]:
     metadata: dict[str, Any] = {"source": "marm_distill", "proposal_id": proposal_id}
     if project:
         metadata["project"] = project
+    _applying_now.add(proposal_id)
     try:
         memory_id = await memory.store_memory_queued(
             sanitize_content(content),
@@ -391,6 +404,8 @@ async def apply(memory: MARMMemory, proposal_id: str) -> dict[str, Any]:
             "error": f"write failed: {exc}",
             "retryable": True,
         }
+    finally:
+        _applying_now.discard(proposal_id)
 
     done = _now().isoformat()
     with memory.get_connection() as conn:
