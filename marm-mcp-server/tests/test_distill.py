@@ -856,21 +856,25 @@ def test_a_fresh_applying_claim_is_not_stolen_from_a_write_in_flight(staged):
 def test_a_claim_older_than_the_timeout_is_not_stolen_while_still_queued(
     staged, monkeypatch
 ):
-    """Elapsed time alone cannot tell a crash from a backlog.
+    """Elapsed time alone cannot tell a crash from a backlog -- across processes.
 
-    The write queue is one worker, so a burst of writes can hold a request
-    behind it past `_APPLY_CLAIM_SECONDS` while the original apply() is still
-    genuinely running. `_APPLY_CLAIM_SECONDS` is forced to 0 here so the claim
-    is stale by elapsed time on the very first check -- and the second apply()
-    must still be refused, because `_applying_now` says this process has not
-    let go of it.
+    The write queue is one worker per process, so a burst of writes can hold a
+    request behind it past `_APPLY_CLAIM_SECONDS` while the original apply()
+    is still genuinely running. HTTP and STDIO are separate processes, so
+    only a timestamp persisted in the shared SQLite row -- not process-local
+    state -- can prove liveness to whichever process checks it; `apply()`
+    itself never reads anything else, so this test needs no special stand-in
+    for a second process. `_APPLY_CLAIM_SECONDS` and `_APPLY_HEARTBEAT_SECONDS`
+    are forced small here so the claim goes stale by elapsed time almost
+    immediately UNLESS the heartbeat is renewing it.
     """
     import asyncio
 
     from marm_mcp_server.services import distill as distill_module
 
     service, live = staged
-    monkeypatch.setattr(distill_module, "_APPLY_CLAIM_SECONDS", 0)
+    monkeypatch.setattr(distill_module, "_APPLY_CLAIM_SECONDS", 0.1)
+    monkeypatch.setattr(distill_module, "_APPLY_HEARTBEAT_SECONDS", 0.03)
     proposal_id = _propose(service, live, POSITIVES[1])["proposals"][0]["id"]
 
     real_store = live.store_memory_queued
@@ -887,16 +891,18 @@ def test_a_claim_older_than_the_timeout_is_not_stolen_while_still_queued(
     async def scenario():
         first = asyncio.create_task(service.apply(live, proposal_id))
         await entered.wait()
-        # The claim is already older than the forced 0s timeout, so nothing
-        # but `_applying_now` distinguishes this from an abandoned claim.
+        # Outlast the (forced-tiny) staleness window several times over. If
+        # nothing were renewing the row, the claim would be long stale by now.
+        await asyncio.sleep(0.35)
         second = await service.apply(live, proposal_id)
         release.set()
         return await first, second
 
-    # Bounded: if the guard regresses, the second apply() no longer refuses
-    # and instead re-enters `blocking_store`, which awaits the same `release`
-    # this scenario only sets AFTER `second` resolves -- a real deadlock, not
-    # a slow pass. A regression must fail fast here, not hang the suite.
+    # Bounded: if the heartbeat regresses (stops renewing, or renews the wrong
+    # row), the second apply() no longer refuses and instead re-enters
+    # `blocking_store`, which awaits the same `release` this scenario only
+    # sets AFTER `second` resolves -- a real deadlock, not a slow pass. A
+    # regression must fail fast here, not hang the suite.
     first_result, second_result = asyncio.run(asyncio.wait_for(scenario(), 5))
 
     assert first_result["status"] == "success"
