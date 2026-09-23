@@ -36,6 +36,14 @@ If nothing is durable, reply with nothing.\
 """
 
 _BULLET = re.compile(r"^\s*[-*]\s+(.+?)\s*$")
+# A bracket of packet handles only: `[S1]`, `[S1, S2]`, `[M1; S2]`.
+_HANDLES = re.compile(r"\s*\[\s*[SM]\d+(?:\s*[,;]\s*[SM]\d+)*\s*\]", re.IGNORECASE)
+
+
+def _without_handles(line: str) -> str:
+    """A handle means something only inside its packet; a memory outlives it."""
+    text = _HANDLES.sub("", line)
+    return re.sub(r"\s+([.,;:!?])", r"\1", text).strip()
 
 
 def parse_conclusions(text: str) -> list[str]:
@@ -91,6 +99,7 @@ async def stage_conclusions(
             if v.state != "verified":
                 skipped.append({"content": line, "reason": f"not verified ({v.state})"})
                 continue
+            content = _without_handles(line)
             row_id = str(uuid.uuid4())
             cur = conn.execute(
                 """
@@ -106,9 +115,9 @@ async def stage_conclusions(
                 (
                     row_id,
                     session_name,
-                    line,
+                    content,
                     v.score,
-                    distill_service._hash(session_name, line, project),
+                    distill_service._hash(session_name, content, project),
                     project,
                     expires,
                     now.isoformat(),
@@ -120,7 +129,7 @@ async def stage_conclusions(
             if cur.rowcount:
                 staged.append(row_id)
             else:
-                skipped.append({"content": line, "reason": "already proposed"})
+                skipped.append({"content": content, "reason": "already proposed"})
     return {"staged": staged, "skipped": skipped}
 
 

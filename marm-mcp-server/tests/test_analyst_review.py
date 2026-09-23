@@ -586,3 +586,28 @@ def test_a_reply_with_no_bullets_says_nothing_was_durable(staged_memory, monkeyp
     _model(monkeypatch, "Nothing here is worth remembering.")
     out = _stage(staged_memory, "apply calls claim [S1] [S2].")
     assert out["skipped"] == [{"content": "", "reason": "nothing durable to propose"}]
+
+
+def test_a_staged_conclusion_does_not_keep_packet_handles(staged_memory, monkeypatch):
+    """`[S1]` names a symbol only inside one packet. A memory keeping it would
+    cite nothing for ever after; the evidence is kept separately."""
+    _model(monkeypatch, "- `apply` calls claim before writing [S1, S2].")
+    out = _stage(staged_memory, "apply calls claim [S1] [S2].")
+    assert len(out["staged"]) == 1
+    with staged_memory.get_connection() as conn:
+        content, evidence = conn.execute(
+            "SELECT content, evidence FROM distill_staging"
+        ).fetchone()
+    assert content == "`apply` calls claim before writing."
+    assert evidence, "the cited source is still attached"
+
+
+def test_a_handle_stripped_duplicate_is_still_one_proposal(staged_memory, monkeypatch):
+    """Two spellings of one fact that differ only in their citations."""
+    _model(
+        monkeypatch,
+        "- apply calls claim before writing [S1]\n- apply calls claim before writing [S1, S2]",
+    )
+    out = _stage(staged_memory, "apply calls claim [S1] [S2].")
+    assert len(out["staged"]) == 1
+    assert out["skipped"][0]["reason"] == "already proposed"
