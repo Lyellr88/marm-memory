@@ -5,22 +5,13 @@
 
 ### Fixed
 
-- Console metadata-only memory edits now preserve the memory's original
-  timestamp, while an actual content edit continues to record when that content
-  changed.
-- Write-time consolidation now refuses a near-duplicate merge that would exceed
-  the 10,000-character memory limit. The existing memory remains intact and the
-  incoming content is stored separately rather than silently truncating prior
-  evidence.
-- Distill Markdown heading handling now uses bounded line parsing rather than a
-  backtracking regular expression on caller-provided transcript text.
+- Console metadata-only memory edits now preserve the memory's original timestamp, while an actual content edit continues to record when that content changed.
+- Write-time consolidation now refuses a near-duplicate merge that would exceed the 10,000-character memory limit. The existing memory remains intact and the incoming content is stored separately rather than silently truncating prior evidence.
+- Distill Markdown heading handling now uses bounded line parsing rather than a backtracking regular expression on caller-provided transcript text.
 
 ### Acknowledgment
 
-Thank you to [@doublegate](https://github.com/doublegate) for the timestamp
-integrity fix in [#223](https://github.com/Lyellr88/marm-memory/pull/223) and
-the non-destructive consolidation fix in
-[#225](https://github.com/Lyellr88/marm-memory/pull/225).
+Thank you to [@doublegate](https://github.com/doublegate) for the timestamp integrity fix in [#223](https://github.com/Lyellr88/marm-memory/pull/223) and the non-destructive consolidation fix in [#225](https://github.com/Lyellr88/marm-memory/pull/225).
 
 </details>
 
@@ -29,17 +20,12 @@ the non-destructive consolidation fix in
 
 ### Added
 
-- `marm_distill` provides a propose, review, apply, and discard workflow for
-  turning conversation text into durable memories. Proposals are staged first,
-  preserve their score and rationale, and never write a memory until an
-  explicit apply action succeeds.
-- The workflow is available over HTTP, STDIO, and the MARM Console, including
-  durable cross-process proposal claims and bounded review controls.
+- `marm_distill` provides a propose, review, apply, and discard workflow for turning conversation text into durable memories. Proposals are staged first, preserve their score and rationale, and never write a memory until an explicit apply action succeeds.
+- The workflow is available over HTTP, STDIO, and the MARM Console, including durable cross-process proposal claims and bounded review controls.
 
 ### Acknowledgment
 
-Thank you to [@doublegate](https://github.com/doublegate) for the distillation
-workflow in [#217](https://github.com/Lyellr88/marm-memory/pull/217).
+Thank you to [@doublegate](https://github.com/doublegate) for the distillation workflow in [#217](https://github.com/Lyellr88/marm-memory/pull/217).
 
 </details>
 
@@ -48,9 +34,7 @@ workflow in [#217](https://github.com/Lyellr88/marm-memory/pull/217).
 
 ### Removed
 
-- The MCPB bundle source, build script, CI workflow, and bundle-specific tests.
-  The bundle used a valid UV runtime, but Smithery cannot publish that runtime,
-  so the unsupported distribution path has been removed.
+- The MCPB bundle source, build script, CI workflow, and bundle-specific tests. The bundle used a valid UV runtime, but Smithery cannot publish that runtime, so the unsupported distribution path has been removed.
 
 </details>
 
@@ -59,16 +43,12 @@ workflow in [#217](https://github.com/Lyellr88/marm-memory/pull/217).
 
 ### Added
 
-- A reproducible MCPB bundle prototype with locked dependencies, cross-platform
-  CI validation, archive checks, and a staged STDIO protocol smoke test.
-- Contributor PR and issue templates now require a human-review confirmation;
-  the contribution guide defines the project policy for AI-assisted work.
+- A reproducible MCPB bundle prototype with locked dependencies, cross-platform CI validation, archive checks, and a staged STDIO protocol smoke test.
+- Contributor PR and issue templates now require a human-review confirmation; the contribution guide defines the project policy for AI-assisted work.
 
 ### Fixed
 
-- MCPB validation now preserves the client working directory, runs through its
-  locked UV environment, and gates the canonical artifact on all supported
-  platform checks.
+- MCPB validation now preserves the client working directory, runs through its locked UV environment, and gates the canonical artifact on all supported platform checks.
 
 </details>
 

@@ -279,8 +279,9 @@ def test_two_identifiers_differing_only_in_case_are_two_proposals():
 def test_demarkdown_handles_a_whitespace_heavy_heading():
     from marm_mcp_server.core.distill import _demarkdown
 
-    heading = "#" + (" " * 400_000) + "Bounded heading\n"
-    assert _demarkdown(heading) == "Bounded heading.\n"
+    internal_space = " " * 400_000
+    heading = "#A" + internal_space + "B\n"
+    assert _demarkdown(heading) == f"A{internal_space}B.\n"
 
 
 @needs_parser
