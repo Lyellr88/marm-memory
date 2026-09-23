@@ -51,15 +51,13 @@ def build_code_context(payload: CodeContextPayload) -> dict:
 
 @router.post("/api/code-context/answer")
 def stream_answer(payload: CodeContextPayload) -> StreamingResponse:
-    """Pass the grounded answer through to the browser as it is written.
+    """Pass the composition and its answer through to the browser.
 
-    The Console is a pipe here. Composition still happens server-side and the
-    ranked context still comes back from `/api/code-context` as one JSON body;
-    this carries only the answer, which is the part that takes seconds.
-
-    Splitting the two is the point: the ranked symbols arrive in well under a
-    second, and the answer streams into a pane that is already on screen
-    instead of the reader waiting for both.
+    The Console is a pipe here. When an answer is asked for this is the ONLY
+    request: the stream's first event is the composition the panes render, and
+    the answer that follows is written from that same composition. The panes
+    still fill in well under a second, because that event arrives before
+    generation starts.
     """
 
     def relay() -> Iterator[bytes]:

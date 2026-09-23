@@ -6,7 +6,7 @@ import { useConnection } from '@/lib/marm-connection';
 import type { 
   MemoryListParams, MemoryInput, MemoryId, LogListParams, NotebookDeleteRef, NotebookInput,
   CompactionAction, ConceptSearchParams, ConceptBuildInput, ConceptGraphParams,
-  ProjectIndexInput, CodeSearchInput, CodeContextInput, CodeContextCitation, AnswerGrounding, DistillInput, TraceInput, ImpactInput, DuplicatePairInput,
+  ProjectIndexInput, CodeSearchInput, CodeContextInput, CodeContextCitation, CodeContextResult, AnswerGrounding, DistillInput, TraceInput, ImpactInput, DuplicatePairInput,
   MergeDuplicateInput, RuntimeProfile
 } from '@/lib/marm-types';
 import { MarmApiError } from '@/lib/marm-api';
@@ -887,6 +887,8 @@ export function useStreamingAnswer() {
     /** The server's verdict on the finished text; absent until `done`. */
     grounding?: AnswerGrounding;
     unresolved?: string[];
+    /** The composition the answer is written from: the stream's first event. */
+    context?: CodeContextResult;
   }>({ status: 'idle', text: '', citations: [] });
   const active = useRef<{ abort: () => void } | null>(null);
 
@@ -898,7 +900,9 @@ export function useStreamingAnswer() {
       active.current?.abort();
       setState({ status: 'streaming', text: '', citations: [] });
       const handle = client.streamCodeContextAnswer(data, (name, payload) => {
-        if (name === 'start') {
+        if (name === 'context') {
+          setState((prev) => ({ ...prev, context: payload as unknown as CodeContextResult }));
+        } else if (name === 'start') {
           setState((prev) => ({ ...prev, model: payload.model as string }));
         } else if (name === 'delta') {
           const piece = payload.text as string;

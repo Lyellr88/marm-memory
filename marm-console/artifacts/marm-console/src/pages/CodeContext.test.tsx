@@ -382,11 +382,54 @@ describe('CodeContextPage', () => {
     );
 
     await userEvent.click(screen.getByRole('button', { name: /compose and answer/i }));
-    expect(buildState.mutate).toHaveBeenCalledTimes(1);
-    // Retrieval and generation are two round trips now.
-    expect(buildState.mutate.mock.calls[0][0].answer).toBe(false);
+    // One request: the stream composes, sends that composition, then answers
+    // from it. A separate compose would be a second retrieval the answer was
+    // not written from.
+    expect(buildState.mutate).not.toHaveBeenCalled();
     expect(answerState.start).toHaveBeenCalledTimes(1);
-    expect(answerState.start.mock.calls[0][0].task).toBe('how does recall rank');
+    expect(answerState.start.mock.calls[0][0]).toMatchObject({
+      task: 'how does recall rank',
+      include_graph: true,
+      detail: 3,
+    });
+  });
+
+  it('renders the panes from the composition the answer was written from', async () => {
+    const user = userEvent.setup();
+    render(<CodeContextPage />);
+    await user.type(screen.getByLabelText('Task'), 'how does recall rank');
+    await user.click(screen.getByRole('checkbox', { name: /answer it too/i }));
+    await user.click(screen.getByRole('button', { name: /compose context/i }));
+    expect(buildState.mutate).not.toHaveBeenCalled();
+
+    // A stale JSON composition must not be what the panes show.
+    buildState.data = { ...SUCCESS, symbols: [symbol({ name: 'stale_symbol' })] };
+    (answerState as Record<string, unknown>).context = SUCCESS;
+    answerState.status = 'streaming';
+    await user.click(screen.getByRole('tab', { name: /ranked symbols/i }));
+
+    expect(screen.getAllByText('rank_memories').length).toBeGreaterThan(0);
+    expect(screen.queryByText('stale_symbol')).toBeNull();
+    delete (answerState as Record<string, unknown>).context;
+  });
+
+  it('shows a composition the stream could not produce as the usual notice', async () => {
+    const user = userEvent.setup();
+    render(<CodeContextPage />);
+    await user.type(screen.getByLabelText('Task'), 'how does recall rank');
+    await user.click(screen.getByRole('checkbox', { name: /answer it too/i }));
+    await user.click(screen.getByRole('button', { name: /compose context/i }));
+
+    (answerState as Record<string, unknown>).context = {
+      status: 'no_project',
+      message: 'no indexed project matches',
+      hint: 'Call marm_graph_index(action=list) to see indexed projects.',
+    };
+    answerState.status = 'done';
+    await user.click(screen.getByRole('tab', { name: /ranked symbols/i }));
+
+    expect(screen.getByText(/no indexed project matches/)).toBeTruthy();
+    delete (answerState as Record<string, unknown>).context;
   });
 
   it('names the panes identically before and after a composition', () => {

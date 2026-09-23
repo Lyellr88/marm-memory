@@ -182,7 +182,13 @@ export function CodeContextPage() {
 
   const sortedProjects = useMemo(() => sortProjectsByName(projects), [projects]);
   const selected = projects?.find((item) => item.name === project);
-  const result = build.data;
+  // Which request produced what is on screen. An answered composition arrives
+  // on the answer stream, so the panes and the answer come from one retrieval.
+  const [answered, setAnswered] = useState(false);
+  const result = answered ? answer.context : build.data;
+  const composing = answered
+    ? answer.status === 'streaming' && !answer.context
+    : build.isPending;
   // A `no_project` or `unavailable` answer is rendered as a notice above, not
   // as panes. Branching on this once keeps the five panes from each having to
   // re-check the status.
@@ -204,30 +210,28 @@ export function CodeContextPage() {
     setComposedBudget(nextBudget);
     const scopedProject =
       nextProject && nextProject !== AUTO_PROJECT ? nextProject : null;
-    // Two round trips on purpose. The composition returns in ~380 ms and fills
-    // four panes; the answer takes seconds. Asking for both in one response
-    // meant a reader waited 8.6 s to see anything at all.
+    const request = {
+      task: nextTask,
+      project: scopedProject,
+      budget: nextBudget,
+      include_graph: true,
+      // The page lays out symbols, source and memory bodies separately, so it
+      // needs the structured fields the markdown duplicates. An agent does not,
+      // which is why the server default is 1 rather than this.
+      detail: 3,
+    };
+    setAnswered(withAnswer);
     if (withAnswer) {
-      answer.start({ task: nextTask, project: scopedProject, budget: nextBudget });
+      // One request. The stream's first event is the composition, which fills
+      // the panes before generation starts; the answer is written from it.
+      answer.start(request);
     } else {
       answer.reset();
+      build.mutate(
+        { ...request, answer: false },
+        { onSuccess: () => setComposedBudget(nextBudget) },
+      );
     }
-    build.mutate(
-      {
-        task: nextTask,
-        project: scopedProject,
-        budget: nextBudget,
-        include_graph: true,
-        // The answer arrives on its own stream now, so the JSON body never waits
-        // for generation.
-        answer: false,
-        // The page lays out symbols, source and memory bodies separately, so it
-        // needs the structured fields the markdown duplicates. An agent does not,
-        // which is why the server default is 1 rather than this.
-        detail: 3,
-      },
-      { onSuccess: () => setComposedBudget(nextBudget) },
-    );
     setParams(
       (prev) => {
         prev.set('task', nextTask);
@@ -263,8 +267,12 @@ export function CodeContextPage() {
     compose(trimmed, project, budget);
   };
 
-  const errorMessage =
-    build.error instanceof MarmApiError
+  const errorMessage = answered
+    ? // A stream that failed before sending its composition composed nothing.
+      answer.status === 'error' && !answer.context
+      ? (answer.message ?? 'Composing code context failed.')
+      : null
+    : build.error instanceof MarmApiError
       ? build.error.message
       : build.error
         ? 'Composing code context failed.'
@@ -390,7 +398,7 @@ export function CodeContextPage() {
               />
               Answer it too
             </label>
-            <Button type="submit" isLoading={build.isPending} disabled={!task.trim()}>
+            <Button type="submit" isLoading={composing} disabled={!task.trim()}>
               <Sparkles className="mr-2 h-4 w-4" /> Compose context
             </Button>
           </div>
@@ -490,14 +498,14 @@ export function CodeContextPage() {
             there is not, so selecting a box always shows something rather than
             switching a tab that is not on the page yet. */}
         <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
-          {build.isPending && !composed && <LoadingState label="Composing code context…" />}
+          {composing && !composed && <LoadingState label="Composing code context…" />}
 
           <TabsContent value="answer" className="m-0">
             <AnswerPane
               result={composed}
               symbols={symbols}
               stream={answer}
-              asking={build.isPending || answer.status === 'streaming'}
+              asking={composing || answer.status === 'streaming'}
               canAsk={Boolean(task.trim())}
               onAsk={() => {
                 setWantAnswer(true);
@@ -551,7 +559,7 @@ export function CodeContextPage() {
           {/* The pane strip now describes every pane, so the old "what you get
               back" card grid would say the same thing twice. What stays is the
               part it never covered: a starting point, and what will be searched. */}
-          {!composed && !errorMessage && !build.isPending && (
+          {!composed && !errorMessage && !composing && (
             <div className="mt-6 space-y-6">
               <section className="space-y-3">
                 <SectionHeading

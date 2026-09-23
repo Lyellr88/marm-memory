@@ -60,25 +60,32 @@ async def build_code_context(
     try:
         ctx = await build(backend, task, cwd=cwd, project=project, budget=budget)
     except GraphUnavailable as exc:
-        # Two different failures share this exception: the graph is not running,
-        # and the graph is running but nothing matches. They need different
-        # advice, and the message already carries the indexed list in the second
-        # case, so the caller is told what to do rather than just what failed.
-        message = str(exc)
-        unmatched = "no indexed project" in message
-        return {
-            "status": "no_project" if unmatched else "unavailable",
-            "message": message,
-            "hint": (
-                "Call marm_graph_index(action='list') to see indexed projects."
-                if unmatched
-                else "Index a repository with marm_graph_index(repo_path=...) first."
-            ),
-        }
+        return _unavailable_payload(exc)
     payload = serialise(ctx, task, include_graph=include_graph, detail=detail)
     if answer:
         payload.update(await answer_from_context(ctx, task))
     return payload
+
+
+def _unavailable_payload(exc: GraphUnavailable) -> dict:
+    """The response when nothing could be composed.
+
+    Two different failures share this exception: the graph is not running, and
+    the graph is running but nothing matches. They need different advice, and
+    the message already carries the indexed list in the second case, so the
+    caller is told what to do rather than just what failed.
+    """
+    message = str(exc)
+    unmatched = "no indexed project" in message
+    return {
+        "status": "no_project" if unmatched else "unavailable",
+        "message": message,
+        "hint": (
+            "Call marm_graph_index(action='list') to see indexed projects."
+            if unmatched
+            else "Index a repository with marm_graph_index(repo_path=...) first."
+        ),
+    }
 
 
 def serialise(
@@ -340,16 +347,26 @@ def _grounding(citations: list[dict], unresolved: list[str]) -> tuple[str, str |
 
 
 def stream_answer(
-    task: str, project: str | None, cwd: str | None, budget: int
+    task: str,
+    project: str | None,
+    cwd: str | None,
+    budget: int,
+    *,
+    include_graph: bool = False,
+    detail: int | None = None,
 ) -> Iterator[tuple[str, dict]]:
-    """Compose, then yield the answer in pieces as the model writes it.
+    """Compose ONCE, send that composition, then answer from it as it is written.
+
+    The first event is `context`: the same payload `build_code_context` would
+    return, for the caller to render. The answer that follows is written from
+    that very composition, so what is displayed and what the answer is grounded
+    in cannot be two different retrievals.
 
     Split from `answer_from_context` rather than sharing it, because the two
     have genuinely different shapes: that one returns a finished dict, this one
     is a generator whose caller is a response body. What they DO share -- the
     system prompt, the token ceiling, the grounding text and the citation
-    resolver -- is imported, not duplicated, so a change to how answers are
-    grounded cannot apply to one and not the other.
+    check -- is imported, not duplicated.
 
     Yields `(event, payload)` tuples. The citation pass runs on the assembled
     text at the end, because a citation cannot be resolved from a fragment: the
@@ -361,8 +378,9 @@ def stream_answer(
     try:
         ctx = asyncio.run(build(backend, task, cwd=cwd, project=project, budget=budget))
     except GraphUnavailable as exc:
-        yield ("error", {"message": str(exc)})
+        yield ("context", _unavailable_payload(exc))
         return
+    yield ("context", serialise(ctx, task, include_graph=include_graph, detail=detail))
 
     if local_llm.available() is None:
         yield (

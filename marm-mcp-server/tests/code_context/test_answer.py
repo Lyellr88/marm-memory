@@ -127,3 +127,59 @@ def test_sse_answer_citing_a_symbol_not_in_context_is_unverified(model, composed
     done = _done(_sse(INVENTED, model))
     assert done["status"] == "unverified"
     assert done["unresolved"] == ["persist_all_rows"]
+
+
+# --- one composition feeds both the panes and the answer --------------------
+
+
+def test_the_stream_composes_once_and_sends_that_composition_first(model, composed):
+    model["text"] = GROUNDED
+    events = list(
+        cc.stream_answer("how", None, None, 12000, include_graph=True, detail=3)
+    )
+
+    assert composed == ["how"], "one request must compose exactly once"
+    name, payload = events[0]
+    assert name == "context"
+    assert payload == cc.serialise(_ctx(), "how", include_graph=True, detail=3)
+
+
+def test_the_answer_is_written_from_the_composition_it_sent(
+    model, composed, monkeypatch
+):
+    prompts = []
+
+    def stream(system, user, **_k):
+        prompts.append(user)
+        yield GROUNDED
+
+    monkeypatch.setattr(local_llm, "stream", stream)
+    events = list(
+        cc.stream_answer("how", None, None, 12000, include_graph=True, detail=3)
+    )
+
+    assert prompts and prompts[0].startswith(cc.render(_ctx()))
+    assert events[0][1]["markdown"] == cc.render(_ctx())
+
+
+def test_an_unavailable_graph_is_reported_as_the_context(model, monkeypatch):
+    async def build(*_a, **_k):
+        raise cc.GraphUnavailable("no indexed project matches 'x'")
+
+    monkeypatch.setattr(cc, "build", build)
+    monkeypatch.setattr(cc, "LocalBackend", lambda: object())
+    events = list(cc.stream_answer("how", "x", None, 12000))
+
+    assert [name for name, _ in events] == ["context"]
+    assert events[0][1]["status"] == "no_project"
+    assert events[0][1]["hint"]
+
+
+def test_no_model_still_delivers_the_context(composed, monkeypatch):
+    monkeypatch.setattr(local_llm, "available", lambda *a, **k: None)
+    events = list(
+        cc.stream_answer("how", None, None, 12000, include_graph=True, detail=3)
+    )
+
+    assert [name for name, _ in events] == ["context", "error"]
+    assert events[0][1]["status"] == "success"

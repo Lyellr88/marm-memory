@@ -113,6 +113,9 @@ def stream_code_context_answer(req: CodeContextRequest) -> StreamingResponse:
     a hung page rather than a slow one. The tool keeps returning a single JSON
     body.
 
+    The first event is `context`, the composition the answer is written from,
+    so a client renders the evidence and the answer from one retrieval.
+
     A sync generator on purpose: Starlette iterates it in a worker thread, the
     llama.cpp client is blocking, and the composition it does first is
     `asyncio.run` over a coroutine -- all of which are correct off the event
@@ -122,7 +125,12 @@ def stream_code_context_answer(req: CodeContextRequest) -> StreamingResponse:
     def events() -> Iterator[str]:
         try:
             for name, payload in stream_answer(
-                task=req.task, project=req.project, cwd=req.cwd, budget=req.budget
+                task=req.task,
+                project=req.project,
+                cwd=req.cwd,
+                budget=req.budget,
+                include_graph=req.include_graph,
+                detail=req.detail or None,
             ):
                 yield f"event: {name}\ndata: {json.dumps(payload)}\n\n"
         except Exception as exc:  # pragma: no cover - defensive
