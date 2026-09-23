@@ -114,3 +114,46 @@ def test_stdio_tool_reports_the_verdict(monkeypatch, tmp_path, reply, status):
     payload = json.loads(result.content[0].text)
 
     assert payload["answer_status"] == status
+
+
+def _stdio_call(monkeypatch, tmp_path, args):
+    from test_stdio_transport import _isolated_stdio
+
+    stdio = _isolated_stdio(monkeypatch, tmp_path)
+    _stub(monkeypatch, GROUNDED)
+
+    async def run():
+        async with create_connected_server_and_client_session(stdio.mcp) as client:
+            return await client.call_tool("marm_code_context", args)
+
+    return json.loads(asyncio.run(run()).content[0].text)
+
+
+def test_analyst_mode_reaches_the_service_over_both_transports(monkeypatch, tmp_path):
+    """A mode one transport drops is a mode that silently does nothing there."""
+    args = {
+        "task": "how",
+        "project": "p",
+        "answer": True,
+        "analyst_mode": "manual_review",
+    }
+    client = local_client(load_isolated_server(monkeypatch, tmp_path).app)
+    _stub(monkeypatch, GROUNDED)
+    http = client.post("/marm_code_context", json=args).json()
+    assert http["analyst"]["mode"] == "manual_review"
+
+    stdio_dir = tmp_path / "stdio"
+    stdio_dir.mkdir()
+    stdio = _stdio_call(monkeypatch, stdio_dir, args)
+    assert stdio["analyst"]["mode"] == "manual_review"
+
+
+def test_an_unknown_analyst_mode_is_refused_over_both_transports(monkeypatch, tmp_path):
+    args = {"task": "how", "project": "p", "answer": True, "analyst_mode": "write"}
+    client = local_client(load_isolated_server(monkeypatch, tmp_path).app)
+    _stub(monkeypatch, GROUNDED)
+    assert client.post("/marm_code_context", json=args).status_code == 422
+
+    stdio_dir = tmp_path / "stdio"
+    stdio_dir.mkdir()
+    assert _stdio_call(monkeypatch, stdio_dir, args)["status"] == "error"

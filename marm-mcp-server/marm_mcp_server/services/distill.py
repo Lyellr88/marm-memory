@@ -227,7 +227,7 @@ def review(
         rows = conn.execute(
             "SELECT id, session_name, content, score, reasons, verdict, cosine, "
             "neighbour_id, neighbour_content, project, context_type, created_at, "
-            "evidence, mode "
+            "evidence, mode, origin, verification, decision "
             f"FROM distill_staging WHERE {' AND '.join(clauses)} "
             "ORDER BY score DESC, created_at DESC LIMIT ?",
             params,
@@ -254,6 +254,11 @@ def review(
         if row[12]:
             entry["evidence"] = row[12]
         entry["mode"] = row[13] or "selected"
+        entry["origin"] = row[14] or "distill"
+        if row[15]:
+            entry["verification"] = json.loads(row[15])
+        if row[16]:
+            entry["decision"] = json.loads(row[16])
         pending.append(entry)
 
     return {"status": "success", "pending": pending, "count": len(pending)}
@@ -333,7 +338,7 @@ async def apply(memory: MARMMemory, proposal_id: str) -> dict[str, Any]:
         try:
             row = conn.execute(
                 "SELECT content, session_name, context_type, project, status, "
-                "expires_at, updated_at, evidence, mode "
+                "expires_at, updated_at, evidence, mode, origin, verification "
                 "FROM distill_staging WHERE id = ?",
                 (proposal_id,),
             ).fetchone()
@@ -350,6 +355,8 @@ async def apply(memory: MARMMemory, proposal_id: str) -> dict[str, Any]:
                 claimed_at,
                 evidence,
                 mode,
+                origin,
+                verification,
             ) = row
             if status == "applying":
                 # Left behind by a crash between the memory write and the
@@ -418,7 +425,10 @@ async def apply(memory: MARMMemory, proposal_id: str) -> dict[str, Any]:
         "source": "marm_distill",
         "proposal_id": proposal_id,
         "extraction": mode,
+        "origin": origin or "distill",
     }
+    if verification:
+        metadata["verification"] = json.loads(verification)
     if project:
         metadata["project"] = project
     if evidence:

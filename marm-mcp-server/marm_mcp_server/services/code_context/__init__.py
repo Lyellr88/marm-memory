@@ -11,12 +11,16 @@ happens to match will outrank the class everything calls.
 
 import asyncio
 from collections.abc import Iterator
+from typing import TYPE_CHECKING
 
 from ...config.env_parsing import _safe_int
 from .backend import GraphUnavailable, LocalBackend
 from .compose import Context, Symbol, build
 from .format import render
 from .project import short_name
+
+if TYPE_CHECKING:
+    from ..analyst import Brief
 
 #: Server-wide floor for how much `marm_code_context` returns, so an operator
 #: can quiet every agent at once instead of each caller passing `detail`.
@@ -49,6 +53,7 @@ async def build_code_context(
     include_graph: bool = False,
     detail: int | None = None,
     answer: bool = False,
+    analyst_mode: str = "read_only",
 ) -> dict:
     """Run the pipeline and return both the rendered text and its structure.
 
@@ -61,13 +66,43 @@ async def build_code_context(
     except GraphUnavailable as exc:
         return _unavailable_payload(exc)
     payload = serialise(ctx, task, include_graph=include_graph, detail=detail)
-    if answer:
-        payload.update(
-            await answer_from_context(
-                ctx, task, backend=backend, project=project, cwd=cwd, budget=budget
+    if not answer:
+        if analyst_mode != "read_only":
+            payload["analyst"] = _analyst_result(
+                analyst_mode, [], [{"content": "", "reason": "answer not requested"}]
             )
+        return payload
+    brief = await _analyse_brief(
+        ctx, task, backend=backend, project=project, cwd=cwd, budget=budget
+    )
+    payload.update(brief.to_answer_fields())
+    if analyst_mode != "read_only":
+        from ...core.memory import memory
+        from ..analyst.review import stage_conclusions
+
+        staged = await stage_conclusions(
+            memory,
+            brief,
+            task,
+            session_name=f"analyst:{short_name(ctx.project)}",
+            project=_memory_scope(ctx),
+        )
+        payload["analyst"] = _analyst_result(
+            analyst_mode, staged["staged"], staged["skipped"]
         )
     return payload
+
+
+def _analyst_result(mode: str, staged: list, skipped: list) -> dict:
+    return {"mode": mode, "staged": staged, "skipped": skipped, "decisions": []}
+
+
+def _memory_scope(ctx: "Context") -> str:
+    """The memory scope bound to this graph; staged rows are recalled by it."""
+    from ...core.code_project_bindings import get_by_graph_project
+
+    binding = get_by_graph_project(ctx.project.get("name", ""))
+    return binding.memory_project if binding else short_name(ctx.project)
 
 
 def _unavailable_payload(exc: GraphUnavailable) -> dict:
@@ -211,9 +246,24 @@ async def answer_from_context(
     reported state rather than an error: every other part of the composition
     is still valid and useful without it.
     """
+    brief = await _analyse_brief(
+        ctx, task, backend=backend, project=project, cwd=cwd, budget=budget
+    )
+    return brief.to_answer_fields()
+
+
+async def _analyse_brief(
+    ctx: "Context",
+    task: str,
+    *,
+    backend: LocalBackend | None,
+    project: str | None,
+    cwd: str | None,
+    budget: int | None,
+) -> "Brief":
     from ..analyst import Budget, analyse
 
-    brief = await analyse(
+    return await analyse(
         ctx,
         task,
         budget=Budget.from_env(context_chars=budget),
@@ -221,7 +271,6 @@ async def answer_from_context(
         project=project,
         cwd=cwd,
     )
-    return brief.to_answer_fields()
 
 
 def stream_answer(
