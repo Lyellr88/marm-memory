@@ -345,6 +345,7 @@ async def marm_distill(
     limit: int = 20,
     include_duplicates: bool = False,
     use_llm: Optional[bool] = None,
+    review_mode: Optional[str] = None,
 ) -> dict:
     """
     Propose durable memories from raw conversation, resolved against the store.
@@ -385,6 +386,9 @@ async def marm_distill(
       because a queue of known facts does not get read)
     - use_llm: write facts with the local model (default off; needs the
       operator to have enabled generation, and falls back to selection)
+    - review_mode: "manual" (default) stages everything for review;
+      "guardrails" also applies a proposal that passes every deterministic
+      check, only when the operator set MARM_ANALYST_AUTO_APPLY=1
 
     Returns: status plus `proposals` (propose) or `pending` (review), each
     carrying content, score, the reasons it scored, verdict, cosine, and the
@@ -409,6 +413,7 @@ async def marm_distill(
                 # fallback exactly as HTTP callers can. Omitting it left the two
                 # transports with different behaviour for the same tool.
                 **({} if use_llm is None else {"use_llm": use_llm}),
+                **({} if review_mode is None else {"review_mode": review_mode}),
             )
         )
     except Exception as e:

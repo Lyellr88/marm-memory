@@ -129,31 +129,38 @@ def _stdio_call(monkeypatch, tmp_path, args):
     return json.loads(asyncio.run(run()).content[0].text)
 
 
-def test_analyst_mode_reaches_the_service_over_both_transports(monkeypatch, tmp_path):
-    """A mode one transport drops is a mode that silently does nothing there."""
-    args = {
-        "task": "how",
-        "project": "p",
-        "answer": True,
-        "analyst_mode": "manual_review",
-    }
+def _http_call(monkeypatch, tmp_path, args):
     client = local_client(load_isolated_server(monkeypatch, tmp_path).app)
     _stub(monkeypatch, GROUNDED)
-    http = client.post("/marm_code_context", json=args).json()
-    assert http["analyst"]["mode"] == "manual_review"
-
-    stdio_dir = tmp_path / "stdio"
-    stdio_dir.mkdir()
-    stdio = _stdio_call(monkeypatch, stdio_dir, args)
-    assert stdio["analyst"]["mode"] == "manual_review"
+    return client.post("/marm_code_context", json=args)
 
 
-def test_an_unknown_analyst_mode_is_refused_over_both_transports(monkeypatch, tmp_path):
-    args = {"task": "how", "project": "p", "answer": True, "analyst_mode": "write"}
-    client = local_client(load_isolated_server(monkeypatch, tmp_path).app)
-    _stub(monkeypatch, GROUNDED)
-    assert client.post("/marm_code_context", json=args).status_code == 422
+# One transport per test: the HTTP app starts a background worker bound to its
+# own event loop, and sharing a test with a STDIO session leaks it into the next.
+_REVIEW = {
+    "task": "how",
+    "project": "p",
+    "answer": True,
+    "analyst_mode": "manual_review",
+}
+_UNKNOWN = {**_REVIEW, "analyst_mode": "write"}
 
-    stdio_dir = tmp_path / "stdio"
-    stdio_dir.mkdir()
-    assert _stdio_call(monkeypatch, stdio_dir, args)["status"] == "error"
+
+def test_analyst_mode_reaches_the_service_over_http(monkeypatch, tmp_path):
+    assert _http_call(monkeypatch, tmp_path, _REVIEW).json()["analyst"]["mode"] == (
+        "manual_review"
+    )
+
+
+def test_analyst_mode_reaches_the_service_over_stdio(monkeypatch, tmp_path):
+    assert _stdio_call(monkeypatch, tmp_path, _REVIEW)["analyst"]["mode"] == (
+        "manual_review"
+    )
+
+
+def test_an_unknown_analyst_mode_is_refused_over_http(monkeypatch, tmp_path):
+    assert _http_call(monkeypatch, tmp_path, _UNKNOWN).status_code == 422
+
+
+def test_an_unknown_analyst_mode_is_refused_over_stdio(monkeypatch, tmp_path):
+    assert _stdio_call(monkeypatch, tmp_path, _UNKNOWN)["status"] == "error"

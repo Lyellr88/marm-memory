@@ -1,5 +1,7 @@
 """Propose durable memories from raw conversation, and review the proposals."""
 
+from typing import Literal
+
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
@@ -72,6 +74,16 @@ class DistillRequest(BaseModel):
             "falls back to selection otherwise."
         ),
     )
+    review_mode: Literal["manual", "guardrails"] = Field(
+        default="manual",
+        description=(
+            "manual stages every proposal for review. guardrails also applies "
+            "a proposal that passes every deterministic check (new, one line, "
+            "verbatim in the text, no secret), and only when the operator has "
+            "set MARM_ANALYST_AUTO_APPLY=1; otherwise each stays pending with "
+            "the failing check named."
+        ),
+    )
 
 
 @router.post("/marm_distill", operation_id="marm_distill")
@@ -112,6 +124,7 @@ async def marm_distill(req: DistillRequest) -> dict:
             limit=req.limit,
             include_duplicates=req.include_duplicates,
             use_llm=req.use_llm,
+            review_mode=req.review_mode,
         )
 
     if req.action == "review":

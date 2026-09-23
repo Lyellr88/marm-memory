@@ -90,6 +90,12 @@ async def build_code_context(
         payload["analyst"] = _analyst_result(
             analyst_mode, staged["staged"], staged["skipped"]
         )
+        if analyst_mode == "guardrails":
+            from ..analyst.review import auto_apply
+
+            payload["analyst"]["decisions"] = await auto_apply(
+                memory, staged["staged"], source_text=None
+            )
     return payload
 
 

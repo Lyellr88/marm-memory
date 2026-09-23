@@ -37,6 +37,7 @@ class DistillPayload(BaseModel):
     # Pydantic drops an undeclared field silently, so an option missing here
     # never reaches the server: the page's checkbox would do nothing.
     use_llm: bool = False
+    review_mode: Literal["manual", "guardrails"] = "manual"
 
 
 class ConceptBuildPayload(BaseModel):

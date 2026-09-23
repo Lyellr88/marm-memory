@@ -219,3 +219,199 @@ def test_no_model_is_not_reported_as_a_rejection(composed, staged_memory, monkey
     )
     assert out["analyst"]["staged"] == []
     assert out["analyst"]["skipped"][0]["reason"] == "no answer"
+
+
+# --- Automated Guardrails ------------------------------------------------------
+
+from marm_mcp_server.services.analyst.review import (  # noqa: E402
+    guardrail_decision,
+)
+
+FACT = "We decided that apply claims the row before writing it."
+
+
+def _ok(**over):
+    kw = {
+        "content": "apply claims the row before writing it",
+        "verdict": "new",
+        "evidence": "apply claims the row before writing it",
+        "source_text": "... apply claims the row before writing it ...",
+        "verification": None,
+        "origin": "distill",
+    }
+    kw.update(over)
+    return kw
+
+
+def test_all_checks_pass(monkeypatch):
+    monkeypatch.setenv("MARM_ANALYST_AUTO_APPLY", "1")
+    d = guardrail_decision(**_ok())
+    assert d.apply is True and all(d.checks.values())
+
+
+@pytest.mark.parametrize(
+    "over,check",
+    [
+        ({"verdict": "near"}, "novel"),
+        ({"content": "x"}, "headline_shaped"),
+        ({"content": "two lines\nare not a headline at all"}, "headline_shaped"),
+        (
+            {"evidence": "not in source", "content": "not in source either at all"},
+            "evidence_verbatim",
+        ),
+        ({"content": "the api_key = abc123 is used here for auth"}, "no_secret"),
+        (
+            {"origin": "analyst", "verification": {"state": "uncertain", "score": 0.8}},
+            "verified",
+        ),
+        (
+            {"origin": "analyst", "verification": {"state": "verified", "score": 0.9}},
+            "verified",
+        ),
+    ],
+)
+def test_each_check_blocks_alone(monkeypatch, over, check):
+    monkeypatch.setenv("MARM_ANALYST_AUTO_APPLY", "1")
+    d = guardrail_decision(**_ok(**over))
+    assert d.apply is False and d.checks[check] is False
+    assert check in d.reason
+
+
+@pytest.mark.parametrize("value", ["", "true", "yes", "0", " 1"])
+def test_operator_switch_is_exactly_1(monkeypatch, value):
+    monkeypatch.setenv("MARM_ANALYST_AUTO_APPLY", value)
+    assert guardrail_decision(**_ok()).checks["operator_enabled"] is False
+
+
+def _propose(memory, text=FACT):
+    from marm_mcp_server.services import distill
+
+    return asyncio.run(
+        distill.propose(
+            memory, text, session_name="s", use_llm=False, review_mode="guardrails"
+        )
+    )
+
+
+def test_guardrails_without_operator_switch_writes_nothing(staged_memory, monkeypatch):
+    monkeypatch.delenv("MARM_ANALYST_AUTO_APPLY", raising=False)
+    out = _propose(staged_memory)
+    assert out["review_mode"] == "guardrails"
+    assert out["guardrails"], "nothing was staged, so nothing was decided"
+    assert all(not d["applied"] for d in out["guardrails"])
+    assert "MARM_ANALYST_AUTO_APPLY" in out["guardrails"][0]["decision"]["reason"]
+    with staged_memory.get_connection() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0] == 0
+        statuses = {r[0] for r in conn.execute("SELECT status FROM distill_staging")}
+    assert statuses == {"pending"}
+
+
+def test_guardrails_applies_a_verbatim_new_fact(staged_memory, monkeypatch):
+    monkeypatch.setenv("MARM_ANALYST_AUTO_APPLY", "1")
+    out = _propose(staged_memory)
+    applied = [d for d in out["guardrails"] if d["applied"]]
+    assert applied and applied[0]["memory_id"]
+    with staged_memory.get_connection() as conn:
+        (decision,) = conn.execute(
+            "SELECT decision FROM distill_staging WHERE id = ?",
+            (applied[0]["proposal_id"],),
+        ).fetchone()
+    assert json.loads(decision)["apply"] is True
+
+
+def test_a_blocked_decision_is_recorded_on_the_row(staged_memory, monkeypatch):
+    """The audit record exists whether or not anything was written."""
+    monkeypatch.delenv("MARM_ANALYST_AUTO_APPLY", raising=False)
+    out = _propose(staged_memory)
+    pid = out["guardrails"][0]["proposal_id"]
+    with staged_memory.get_connection() as conn:
+        (decision,) = conn.execute(
+            "SELECT decision FROM distill_staging WHERE id = ?", (pid,)
+        ).fetchone()
+    assert json.loads(decision)["apply"] is False
+
+
+def test_guardrails_with_nothing_extractable_still_reports_the_mode(staged_memory):
+    out = _propose(staged_memory, "ok thanks")
+    assert out["review_mode"] == "guardrails"
+    assert out["guardrails"] == []
+
+
+def test_manual_mode_decides_nothing(staged_memory, monkeypatch):
+    from marm_mcp_server.services import distill
+
+    monkeypatch.setenv("MARM_ANALYST_AUTO_APPLY", "1")
+    out = asyncio.run(
+        distill.propose(staged_memory, FACT, session_name="s", use_llm=False)
+    )
+    assert out["review_mode"] == "manual"
+    assert "guardrails" not in out
+    with staged_memory.get_connection() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0] == 0
+
+
+def test_code_context_guardrails_records_decisions(
+    composed, staged_memory, monkeypatch
+):
+    monkeypatch.delenv("MARM_ANALYST_AUTO_APPLY", raising=False)
+    out = asyncio.run(
+        composed.build_code_context(task="how", answer=True, analyst_mode="guardrails")
+    )
+    assert out["analyst"]["mode"] == "guardrails"
+    decisions = out["analyst"]["decisions"]
+    assert len(decisions) == 1 and decisions[0]["applied"] is False
+    assert decisions[0]["decision"]["checks"]["operator_enabled"] is False
+
+
+def _distill_http(monkeypatch, tmp_path, args):
+    from conftest import load_isolated_server, local_client
+
+    client = local_client(load_isolated_server(monkeypatch, tmp_path).app)
+    return client.post("/marm_distill", json=args)
+
+
+def _distill_stdio(monkeypatch, tmp_path, args):
+    from mcp.shared.memory import create_connected_server_and_client_session
+    from test_stdio_transport import _isolated_stdio
+
+    stdio = _isolated_stdio(monkeypatch, tmp_path)
+
+    async def run():
+        async with create_connected_server_and_client_session(stdio.mcp) as c:
+            return await c.call_tool("marm_distill", args)
+
+    return json.loads(asyncio.run(run()).content[0].text)
+
+
+# One transport per test: the HTTP app starts a background worker bound to its
+# own event loop, and sharing a test with a STDIO session leaks it into the next.
+_GUARDED = {
+    "action": "propose",
+    "text": FACT,
+    "session_name": "s",
+    "review_mode": "guardrails",
+}
+_UNKNOWN = {**_GUARDED, "review_mode": "auto"}
+
+
+def test_review_mode_reaches_the_service_over_http(monkeypatch, tmp_path):
+    monkeypatch.delenv("MARM_ANALYST_AUTO_APPLY", raising=False)
+    assert (
+        _distill_http(monkeypatch, tmp_path, _GUARDED).json()["review_mode"]
+        == "guardrails"
+    )
+
+
+def test_review_mode_reaches_the_service_over_stdio(monkeypatch, tmp_path):
+    monkeypatch.delenv("MARM_ANALYST_AUTO_APPLY", raising=False)
+    assert (
+        _distill_stdio(monkeypatch, tmp_path, _GUARDED)["review_mode"] == "guardrails"
+    )
+
+
+def test_an_unknown_review_mode_is_refused_over_http(monkeypatch, tmp_path):
+    assert _distill_http(monkeypatch, tmp_path, _UNKNOWN).status_code == 422
+
+
+def test_an_unknown_review_mode_is_refused_over_stdio(monkeypatch, tmp_path):
+    assert _distill_stdio(monkeypatch, tmp_path, _UNKNOWN)["status"] == "error"

@@ -8,15 +8,24 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
 import uuid
+from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any
+
+import structlog
 
 from .. import distill as distill_service
 from .. import local_llm
 from .brief import Brief, _user
 from .verify import extract_citations, verify
+
+logger = structlog.get_logger(__name__)
+
+AUTO_APPLY_ENV = "MARM_ANALYST_AUTO_APPLY"
+_SECRET = re.compile(r"(?i)(api[_-]?key|secret|password|token)\s*[:=]|-----BEGIN")
 
 CONCLUSIONS_SYSTEM = """\
 From your answer below, state at most three durable facts about this codebase \
@@ -102,3 +111,118 @@ async def stage_conclusions(
             else:
                 skipped.append({"content": line, "reason": "already proposed"})
     return {"staged": staged, "skipped": skipped}
+
+
+def auto_apply_allowed() -> bool:
+    return os.environ.get(AUTO_APPLY_ENV) == "1"
+
+
+@dataclass(frozen=True)
+class Decision:
+    apply: bool
+    checks: dict[str, bool]
+    reason: str
+
+    def to_public(self) -> dict[str, Any]:
+        return {"apply": self.apply, "checks": dict(self.checks), "reason": self.reason}
+
+
+def _norm(text: str) -> str:
+    return " ".join((text or "").split()).casefold()
+
+
+def guardrail_decision(
+    *,
+    content: str,
+    verdict: str,
+    evidence: str,
+    source_text: str | None,
+    verification: dict[str, Any] | None,
+    origin: str,
+) -> Decision:
+    headline = content.strip()
+    checks = {
+        "operator_enabled": auto_apply_allowed(),
+        "novel": verdict == "new",
+        "headline_shaped": "\n" not in headline and 12 <= len(headline) <= 300,
+        "evidence_verbatim": (
+            bool(evidence.strip())
+            if origin == "analyst"
+            else bool(source_text)
+            and _norm(evidence or content) in _norm(source_text or "")
+        ),
+        "no_secret": not _SECRET.search(content),
+    }
+    if origin == "analyst":
+        checks["verified"] = bool(
+            verification
+            and verification.get("state") == "verified"
+            and float(verification.get("score") or 0) == 1.0
+        )
+    failed = [name for name, ok in checks.items() if not ok]
+    if not failed:
+        return Decision(True, checks, "all deterministic checks passed")
+    if failed == ["operator_enabled"]:
+        reason = f"review required: automatic apply is off ({AUTO_APPLY_ENV} is not 1)"
+    else:
+        reason = f"review required: failed {', '.join(failed)}"
+    return Decision(False, checks, reason)
+
+
+async def auto_apply(
+    memory: Any, proposal_ids: list[str], *, source_text: str | None
+) -> list[dict[str, Any]]:
+    from ...core.distill import Candidate, resolve
+
+    out: list[dict[str, Any]] = []
+    for pid in proposal_ids:
+        with memory.get_connection() as conn:
+            row = conn.execute(
+                "SELECT content, verdict, evidence, origin, verification, project "
+                "FROM distill_staging WHERE id = ? AND status = 'pending'",
+                (pid,),
+            ).fetchone()
+        if row is None:
+            continue
+        content, verdict, evidence, origin, verification, project = row
+        if origin == "analyst":
+            # Staged without the duplicate resolver; novelty needs it.
+            (resolution,) = await resolve(
+                memory,
+                [Candidate(content=content, score=1.0, reasons=())],
+                session=None,
+                project=project,
+            )
+            verdict = resolution.verdict
+        decision = guardrail_decision(
+            content=content,
+            verdict=verdict,
+            evidence=evidence or "",
+            source_text=source_text,
+            verification=json.loads(verification) if verification else None,
+            origin=origin or "distill",
+        )
+        # Recorded before any write, so an apply that fails still leaves its reason.
+        with memory.get_connection() as conn:
+            conn.execute(
+                "UPDATE distill_staging SET decision = ? WHERE id = ?",
+                (json.dumps(decision.to_public()), pid),
+            )
+        logger.info(
+            "guardrails.decision",
+            proposal_id=pid,
+            apply=decision.apply,
+            checks=decision.checks,
+        )
+        entry: dict[str, Any] = {
+            "proposal_id": pid,
+            "applied": False,
+            "decision": decision.to_public(),
+        }
+        if decision.apply:
+            result = await distill_service.apply(memory, pid)
+            entry["applied"] = result.get("status") == "success"
+            if entry["applied"]:
+                entry["memory_id"] = result["memory_id"]
+        out.append(entry)
+    return out

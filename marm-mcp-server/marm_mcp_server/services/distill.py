@@ -80,6 +80,7 @@ async def propose(
     limit: int = DEFAULT_LIMIT,
     include_duplicates: bool = False,
     use_llm: bool = False,
+    review_mode: str = "manual",
 ) -> dict[str, Any]:
     """Extract, resolve, stage. Returns the proposals with their verdicts.
 
@@ -109,6 +110,8 @@ async def propose(
             "staged": 0,
             "session_name": session_name,
             "mode": mode,
+            "review_mode": review_mode,
+            **({"guardrails": []} if review_mode == "guardrails" else {}),
             "note": (
                 "Nothing in this text reads like a durable fact. That is the "
                 "usual outcome for a conversation that was mostly doing rather "
@@ -195,14 +198,21 @@ async def propose(
                 record["note"] = "already proposed, or already reviewed"
             proposals.append(record)
 
-    return {
+    result: dict[str, Any] = {
         "status": "success",
         "proposals": proposals,
         "extracted": len(candidates),
         "staged": staged,
         "session_name": session_name,
         "mode": mode,
+        "review_mode": review_mode,
     }
+    if review_mode == "guardrails":
+        from .analyst.review import auto_apply
+
+        staged_ids = [p["id"] for p in proposals if p.get("staged")]
+        result["guardrails"] = await auto_apply(memory, staged_ids, source_text=text)
+    return result
 
 
 def review(
