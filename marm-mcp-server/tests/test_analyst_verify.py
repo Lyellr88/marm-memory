@@ -162,3 +162,64 @@ def test_markdown_scaffolding_is_not_a_claim(packet):
     v = verify("apply claims first [S1].\n- [ ] todo\nfootnote [1]", packet)
     assert v.claims == 1
     assert v.state == "verified"
+
+
+# --- calibrated against real answers (gemma-4-26b-a4b-qat, 2026-09-23) -------
+# Four of eleven non-verified answers were correct and fully cited; each was
+# marked uncertain for a list lead-in such as "This process involves:".
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "apply claims the row first [S1]. This process involves:\n"
+        "*   **Ordering:** it writes only after claiming [S1].",
+        "apply claims the row [S1] using the following logic:\n"
+        "1.  **Claim:** it calls claim first [S1].",
+        "When the claim fails, apply stops [S1].\n\nDepending on the entry point:\n"
+        "*   apply returns early [S1].",
+        "apply sanitises the row [S1]. It performs the following transformations:\n"
+        "*   **Claim:** it calls claim [S1].",
+    ],
+)
+def test_a_list_lead_in_is_not_an_uncited_claim(packet, answer):
+    v = verify(answer, packet)
+    assert "uncited claims" not in v.failures, v.failures
+    assert v.citation_coverage == 1.0
+
+
+def test_a_colon_inside_a_sentence_is_still_a_claim(packet):
+    v = verify("apply does two things: it claims and it writes.", packet)
+    assert v.claims == 1
+    assert "uncited claims" in v.failures
+
+
+def test_an_uncited_statement_still_counts_after_a_lead_in(packet):
+    v = verify(
+        "apply works like this:\n* it claims the row first [S1].\n* it retries forever.",
+        packet,
+    )
+    assert "uncited claims" in v.failures
+
+
+def test_one_citation_closing_a_bullet_covers_the_bullet(packet):
+    """The real shape: a bullet of two sentences, cited once at its end."""
+    answer = (
+        "2.  **Claim:** apply looks at the row first. If it is free, apply "
+        "claims it before writing [S1]."
+    )
+    v = verify(answer, packet)
+    assert "uncited claims" not in v.failures, v.failures
+
+
+def test_a_citation_does_not_reach_back_across_lines(packet):
+    v = verify("apply retries forever.\napply claims the row first [S1].", packet)
+    assert "uncited claims" in v.failures
+
+
+def test_an_abstention_is_not_folded_into_the_cited_claim_after_it(packet):
+    v = verify(
+        "The packet does not show the retry policy. apply claims first [S1].", packet
+    )
+    assert v.state == "verified", (v.state, v.failures)
+    assert v.claims == 1

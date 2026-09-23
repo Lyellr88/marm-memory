@@ -32,7 +32,7 @@ _ABSTAIN = re.compile(
     r"(context|packet|evidence)|cannot (tell|determine|find)|no evidence)\b",
     re.I,
 )
-_SENTENCE = re.compile(r"(?<=[.!?])\s+|\n+")
+_SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
 
 
 @dataclass(frozen=True)
@@ -155,12 +155,32 @@ def extract_citations(
 
 
 def _claims(text: str) -> list[str]:
-    out = []
-    for part in _SENTENCE.split(text):
-        s = part.strip().lstrip("-*# ").strip()
-        # Words with letters in them: `- [ ] todo` is scaffolding, not a claim.
-        if sum(1 for w in s.split() if re.search(r"[A-Za-z]", w)) >= 3:
-            out.append(s)
+    """Claims to check for citations, one per cited run of sentences.
+
+    A citation closing a line covers the uncited sentences before it on that
+    line, the way a bullet or paragraph is cited once at its end. It never
+    reaches across lines, and an abstention is never folded into it.
+    """
+    out: list[str] = []
+    for line in text.split("\n"):
+        pending: list[str] = []
+        for part in _SENTENCE_END.split(line):
+            s = part.strip().lstrip("-*# ").strip()
+            # A list lead-in ("It works as follows:") announces claims; the
+            # items under it make them.
+            if s.endswith(":"):
+                continue
+            # Words with letters in them: `- [ ] todo` is scaffolding, not a claim.
+            if sum(1 for w in s.split() if re.search(r"[A-Za-z]", w)) < 3:
+                continue
+            if _BRACKET.search(s):
+                out.append(" ".join([*pending, s]))
+                pending = []
+            elif _ABSTAIN.search(s):
+                out.append(s)
+            else:
+                pending.append(s)
+        out.extend(pending)
     return out
 
 
