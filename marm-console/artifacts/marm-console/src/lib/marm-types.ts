@@ -902,6 +902,9 @@ export interface CodeContextInput {
    *  The Console lays the parts out, so it always asks for 3; an agent reads
    *  the markdown and stops, which is why the server default is 1. */
   detail?: number;
+  /** With `answer`: also stage its verified conclusions for review, or under
+   *  guardrails apply the ones every check passes. */
+  analyst_mode?: AnalystMode;
 }
 
 /** How a symbol was reached, when it arrived through the call graph rather than
@@ -975,25 +978,89 @@ export interface CodeContextResult {
   /** Grounded answer, present only when `answer` was requested. `null` with a
    *  status of `unavailable`/`failed` means the retrieval above still stands. */
   answer?: string | null;
-  /** `ok` only when the citations resolve to the composed symbols and none
-   *  name anything else; `unverified` otherwise. */
+  /** `ok` when verified against the composed context, `unverified` when its
+   *  support is weak, `rejected` when it cites something the context does
+   *  not contain. */
   answer_status?: AnswerGrounding | 'unavailable' | 'failed';
   answer_hint?: string;
   answer_model?: string;
-  /** Only symbols that are actually in the context; an invented name is
-   *  dropped server-side rather than rendered as a dead link. */
+  answer_model_info?: AnswerModelInfo;
+  /** Only what is actually in the context; an invented name is dropped
+   *  server-side rather than rendered as a dead link. */
   answer_citations?: CodeContextCitation[];
   /** Identifier-shaped citations that resolved to nothing in the context. */
   answer_unresolved?: string[];
+  answer_verification?: AnswerVerification;
+  answer_packet?: AnswerPacket;
+  /** Present when `analyst_mode` was not `read_only`. */
+  analyst?: AnalystResult;
 }
 
-export type AnswerGrounding = 'ok' | 'unverified';
+export type AnswerGrounding = 'ok' | 'unverified' | 'rejected';
+
+export type AnalystMode = 'read_only' | 'manual_review' | 'guardrails';
 
 export interface CodeContextCitation {
+  /** `S1`/`M1`: the packet handle the answer cited. Absent from an older server. */
+  handle?: string;
+  kind?: 'symbol' | 'memory';
   name: string;
-  qualified_name: string;
-  file_path: string;
-  start_line: number;
+  qualified_name?: string;
+  file_path?: string;
+  start_line?: number;
+  memory_id?: string;
+}
+
+export interface AnswerVerification {
+  state: 'verified' | 'uncertain' | 'rejected';
+  /** The minimum of the three checks, never their average. */
+  score: number;
+  citation_coverage: number;
+  source_span_support: number;
+  graph_memory_consistency: number;
+  claims: number;
+  cited_claims: number;
+  failures: string[];
+  hard_failures: string[];
+  abstained: boolean;
+}
+
+export interface AnswerModelInfo {
+  id: string;
+  endpoint_source: string | null;
+  max_tokens: number;
+  elapsed_ms: number;
+  stopped: 'cancelled' | 'deadline' | null;
+}
+
+export interface AnswerPacket {
+  packet_id: string;
+  project: string;
+  task: string;
+  symbols: Array<{
+    handle: string;
+    qualified_name: string;
+    name: string;
+    file_path: string;
+    start_line: number;
+    end_line: number;
+  }>;
+  memories: Array<{ handle: string; memory_id: string; content: string }>;
+}
+
+export interface GuardrailDecision {
+  proposal_id: string;
+  applied: boolean;
+  memory_id?: string;
+  decision: { apply: boolean; checks: Record<string, boolean>; reason: string };
+}
+
+export interface AnalystResult {
+  mode: AnalystMode;
+  /** Proposal ids staged into the Distill queue. */
+  staged: string[];
+  skipped: Array<{ content: string; reason: string }>;
+  decisions: GuardrailDecision[];
 }
 
 /** One distilled proposal, before or after it has been staged. */
@@ -1021,6 +1088,11 @@ export interface DistillProposal {
   project?: string | null;
   context_type?: string;
   created_at?: string;
+  /** `analyst` when the Code Context analyst staged it. */
+  origin?: 'distill' | 'analyst';
+  verification?: AnswerVerification;
+  /** A guardrails decision, recorded whether or not it applied. */
+  decision?: GuardrailDecision['decision'];
 }
 
 export interface DistillInput {
@@ -1034,6 +1106,7 @@ export interface DistillInput {
   limit?: number;
   include_duplicates?: boolean;
   use_llm?: boolean;
+  review_mode?: 'manual' | 'guardrails';
 }
 
 export interface DistillResult {
@@ -1051,6 +1124,9 @@ export interface DistillResult {
   note?: string;
   /** Which extraction path ran. `selected` means no local model was reachable. */
   mode?: 'generated' | 'selected';
+  review_mode?: 'manual' | 'guardrails';
+  /** Present in guardrails mode: one decision per staged proposal. */
+  guardrails?: GuardrailDecision[];
 }
 
 export interface CodeSearchInput {

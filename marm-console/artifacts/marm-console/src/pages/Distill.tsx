@@ -29,7 +29,7 @@ import {
 import { MarmApiError } from '@/lib/marm-api';
 import { LoadingState } from '@/components/code-context/shared';
 import { ProposalCard } from '@/components/distill/ProposalCard';
-import type { DistillProposal } from '@/lib/marm-types';
+import type { DistillProposal, GuardrailDecision } from '@/lib/marm-types';
 
 /** The API request cap. Surfaced in the UI when it is actually reached. */
 const SESSION_LOG_LIMIT = 200;
@@ -58,6 +58,26 @@ const PANES = [
   },
 ] as const;
 
+/** What guardrails did with each staged proposal. Applied or not, every
+ *  decision names its reason, so "left pending" never reads as "ignored". */
+function GuardrailsSummary({ decisions }: { decisions: GuardrailDecision[] }) {
+  const applied = decisions.filter((d) => d.applied).length;
+  return (
+    <div className="rounded-xl border border-border/70 bg-background/25 p-3 text-[12px]">
+      <p className="font-medium text-foreground/90">
+        {applied} of {decisions.length} applied by guardrails
+      </p>
+      {decisions
+        .filter((d) => !d.applied)
+        .map((d) => (
+          <p key={d.proposal_id} className="mt-1 text-[11px] text-muted-foreground">
+            {d.decision.reason}
+          </p>
+        ))}
+    </div>
+  );
+}
+
 export function DistillPage() {
   const [text, setText] = useState('');
   const [sessionName, setSessionName] = useState('');
@@ -75,6 +95,9 @@ export function DistillPage() {
   // What the displayed run asked for, captured at submit: a `selected` run
   // means "no model answered" only if generation was requested.
   const [requestedLlm, setRequestedLlm] = useState(false);
+  // Manual stages everything for a person. Guardrails applies what every
+  // deterministic check passes, and only where the operator switched it on.
+  const [reviewMode, setReviewMode] = useState<'manual' | 'guardrails'>('manual');
 
   const sessions = useSessions();
   // Default to a real session rather than an empty box, for the same reason
@@ -125,6 +148,7 @@ export function DistillPage() {
         session_name: sessionName.trim(),
         project: project.trim() || null,
         use_llm: useLlm,
+        review_mode: reviewMode,
       },
       {
         onSuccess: () => {
@@ -281,6 +305,19 @@ export function DistillPage() {
               />
               Write facts with the local model
             </label>
+            <label className="flex h-10 items-center gap-2 text-xs text-muted-foreground">
+              <span>Review</span>
+              <select
+                aria-label="Review"
+                value={reviewMode}
+                onChange={(event) => setReviewMode(event.target.value as 'manual' | 'guardrails')}
+                title="Manual stages every proposal for you. Guardrails applies one only when every deterministic check passes (new, one line, verbatim in the text, no secret), and only where the operator set MARM_ANALYST_AUTO_APPLY=1."
+                className="h-10 rounded-md border border-border/70 bg-muted/40 px-2 text-xs text-foreground"
+              >
+                <option value="manual">Manual</option>
+                <option value="guardrails">Guardrails</option>
+              </select>
+            </label>
             <Button type="submit" isLoading={propose.isPending} disabled={!canSubmit}>
               <Sparkles className="mr-2 h-4 w-4" /> Distill
             </Button>
@@ -417,6 +454,7 @@ export function DistillPage() {
               />
             ) : (
               <div className="space-y-3">
+                {lastRun?.guardrails && <GuardrailsSummary decisions={lastRun.guardrails} />}
                 {(lastRun?.proposals ?? []).map((proposal, index) => (
                   <ProposalCard
                     key={proposal.id ?? `${index}-${proposal.content.slice(0, 40)}`}
