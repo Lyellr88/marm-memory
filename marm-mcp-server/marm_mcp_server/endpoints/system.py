@@ -312,9 +312,11 @@ async def runtime_llm_servers(refresh: bool = False) -> dict:
 
     Loopback only, and MARM's own ports are never probed -- asking yourself a
     question over HTTP from the loop that would answer it is what made
-    `/internal/runtime/settings` take a full second.
+    `/internal/runtime/settings` take a full second. The scan itself opens
+    sockets and makes HTTP probes, so it runs off the loop like the model
+    routes beside it.
     """
-    return local_llm.discover_servers(force=refresh)
+    return await asyncio.to_thread(local_llm.discover_servers, force=refresh)
 
 
 @router.get("/internal/runtime/llm/browse", include_in_schema=False)
