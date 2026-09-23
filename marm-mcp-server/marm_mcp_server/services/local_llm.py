@@ -69,8 +69,20 @@ _PROBE_TTL = float(os.environ.get("MARM_LLM_PROBE_TTL") or 60)
 _probe_cache: dict[str, Any] = {"at": 0.0, "model": None, "endpoint": None}
 
 
+def _host(url: str) -> Optional[str]:
+    """The URL's host, or None when it has none or cannot be parsed.
+
+    `urlparse` raises on some malformed input (`http://[::1`); every caller
+    here must degrade to "no endpoint" rather than raise.
+    """
+    try:
+        return urllib.parse.urlparse(url).hostname or None
+    except ValueError:
+        return None
+
+
 def _is_loopback(url: str) -> bool:
-    host = urllib.parse.urlparse(url).hostname or ""
+    host = _host(url) or ""
     if host in {"localhost", "localhost.localdomain"}:
         return True
     try:
@@ -283,6 +295,10 @@ def endpoint() -> Optional[str]:
     """
     url = (_chosen_endpoint() or _auto_endpoint() or DEFAULT_URL).rstrip("/")
     if not url:
+        return None
+    if _host(url) is None:
+        # Unusable with or without the remote override: there is no host.
+        logger.warning("local_llm: ignoring a malformed endpoint", url=url)
         return None
     if not _is_loopback(url) and not ALLOW_REMOTE:
         logger.warning(

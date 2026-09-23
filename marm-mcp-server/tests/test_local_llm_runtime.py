@@ -326,3 +326,9 @@ def test_the_override_the_server_honours_is_honoured_here_too(monkeypatch):
         f"the override was stated, but the save was refused: {rejected}"
     )
     assert saved, "the endpoint the server would use must actually be stored"
+
+
+def test_a_malformed_endpoint_is_refused_with_a_reason_not_a_crash(monkeypatch):
+    rejected, saved = _save_endpoint(monkeypatch, "http://[::1", allow_remote=True)
+    assert rejected and "not a valid" in rejected
+    assert not saved

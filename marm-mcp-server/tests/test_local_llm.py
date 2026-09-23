@@ -333,3 +333,24 @@ def test_stream_reports_a_normal_stop(monkeypatch):
     finished: dict = {}
     assert list(local_llm.stream("s", "u", finished=finished)) == ["done"]
     assert finished["reason"] == "stop"
+
+
+MALFORMED = ["http://[::1", "http://[::1:8080", "http://"]
+
+
+@pytest.mark.parametrize("url", MALFORMED)
+@pytest.mark.parametrize("allow_remote", [False, True])
+def test_a_malformed_endpoint_is_none_not_an_exception(
+    monkeypatch, generation_on, url, allow_remote
+):
+    """Every caller relies on a `None` to fall back to its non-generated path;
+    an exception here fails Distill and Code Context outright. Unusable even
+    with the remote override, because there is no host to talk to."""
+    monkeypatch.setenv("MARM_LLM_URL", url)
+    monkeypatch.setattr(local_llm, "DEFAULT_URL", url)
+    monkeypatch.setattr(local_llm, "ALLOW_REMOTE", allow_remote)
+    monkeypatch.setattr(local_llm, "_auto_endpoint", lambda: None)
+    assert local_llm._is_loopback(url) is False
+    assert local_llm.endpoint() is None
+    assert local_llm.available() is None
+    assert local_llm.status()["available"] is False

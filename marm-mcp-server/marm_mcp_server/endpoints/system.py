@@ -338,6 +338,8 @@ async def update_runtime_llm(req: RuntimeLlmRequest) -> dict:
         chosen = req.endpoint.strip().rstrip("/")
         if not chosen:
             runtime_flags.clear(runtime_flags.LLM_ENDPOINT)
+        elif local_llm._host(chosen) is None:
+            rejected = f"{chosen} is not a valid URL: it has no host to connect to."
         elif not local_llm._is_loopback(chosen) and not local_llm.ALLOW_REMOTE:
             # Refused here as well as in `endpoint()`, so the Console gets a
             # reason rather than silently saving a value that will be ignored.
