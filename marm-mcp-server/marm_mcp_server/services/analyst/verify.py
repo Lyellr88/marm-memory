@@ -158,7 +158,8 @@ def _claims(text: str) -> list[str]:
     out = []
     for part in _SENTENCE.split(text):
         s = part.strip().lstrip("-*# ").strip()
-        if len(s.split()) >= 3:
+        # Words with letters in them: `- [ ] todo` is scaffolding, not a claim.
+        if sum(1 for w in s.split() if re.search(r"[A-Za-z]", w)) >= 3:
             out.append(s)
     return out
 

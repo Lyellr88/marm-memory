@@ -154,3 +154,11 @@ def test_public_shape(packet):
         "hard_failures",
         "abstained",
     }
+
+
+def test_markdown_scaffolding_is_not_a_claim(packet):
+    """`- [ ] todo` is three tokens and no statement; counting it as an
+    uncited claim would mark a fully cited answer unverified."""
+    v = verify("apply claims first [S1].\n- [ ] todo\nfootnote [1]", packet)
+    assert v.claims == 1
+    assert v.state == "verified"
