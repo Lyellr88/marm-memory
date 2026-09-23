@@ -16,8 +16,8 @@ class LogEntryRequest(BaseModel):
     project: Optional[str] = Field(
         default=None,
         # Matches the project bound on the memory endpoint (endpoints/memory.py).
-        # A stricter limit here would reject over HTTP a scope that the same
-        # caller can use over STDIO and on every other project-scoped route.
+        # The STDIO tool validates through this model too, so the bound is the
+        # same on both transports.
         max_length=255,
         description=(
             "Project scope for this entry — omit to use the server's detected "

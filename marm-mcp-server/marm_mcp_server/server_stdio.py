@@ -17,6 +17,7 @@ from anyio import BrokenResourceError, ClosedResourceError, EndOfStream  # noqa:
 os.environ["SERVER_HOST"] = "127.0.0.1"
 
 from mcp.server.fastmcp import FastMCP  # noqa: E402
+from pydantic import ValidationError  # noqa: E402
 
 from marm_mcp_server.config.settings import (  # noqa: E402
     CHUNK_DRAIN_TIMEOUT_SECONDS,
@@ -29,6 +30,7 @@ from marm_mcp_server.core.graph_index_worker import graph_index_worker  # noqa: 
 from marm_mcp_server.core.graph_supervisor import graph_supervisor  # noqa: E402
 from marm_mcp_server.core.memory import memory  # noqa: E402
 from marm_mcp_server.core.memory_utils import drain_chunk_writes  # noqa: E402
+from marm_mcp_server.core.models import LogEntryRequest  # noqa: E402
 from marm_mcp_server.services.notebook import notebook_dispatch  # noqa: E402
 from marm_mcp_server.services.recall import smart_recall  # noqa: E402
 from marm_mcp_server.services.stdio_entry_tools import (  # noqa: E402
@@ -163,10 +165,17 @@ async def marm_log_entry(
     Parameters:
     - entry: the text to log; plain text or prefixed with "Session:" / "Topic:" to switch sessions
     - session_name: override the target session explicitly (optional; active session used if omitted)
+    - project: project scope for this entry, up to 255 characters (optional; the
+      server's detected project is used if omitted)
 
     Returns: status, message confirming the entry or session switch, entry_id, memory_id
     """
-    return await create_log_entry_stdio(entry, session_name, project)
+    # The HTTP request model, so both transports accept exactly the same calls.
+    try:
+        req = LogEntryRequest(entry=entry, session_name=session_name, project=project)
+    except ValidationError as e:
+        return {"status": "error", "message": f"Invalid log entry: {e!s}"}
+    return await create_log_entry_stdio(req.entry, req.session_name, req.project)
 
 
 @mcp.tool()

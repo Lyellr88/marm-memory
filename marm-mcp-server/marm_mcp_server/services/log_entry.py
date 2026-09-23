@@ -201,9 +201,11 @@ async def create_log_entry(
                 formatted_entry,
                 session,
                 metadata={"source": "log_entry", "log_entry_id": entry_id},
-                # The column, not the metadata blob: project-scoped recall and
-                # code-context read the column.
+                # The columns, not the metadata blob: scoped recall reads them.
+                # The platform is the one the log row above records, so an
+                # explicit project does not also erase where the entry came from.
                 project=scope,
+                platform=MARM_PLATFORM or None,
                 explicit_scope=explicit,
             )
         except Exception as store_error:
