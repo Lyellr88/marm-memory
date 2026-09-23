@@ -180,10 +180,15 @@ export function ProposalCard({
           >
             {showEvidence ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
             <Quote className="h-3 w-3" />
-            What was actually said
+            {proposal.origin === 'analyst' ? 'The source it cites' : 'What was actually said'}
           </button>
           {showEvidence && (
-            <blockquote className="mt-2 border-l-2 border-primary/30 bg-background/30 py-2 pl-3 pr-2 text-[12px] leading-relaxed text-muted-foreground">
+            <blockquote
+              className={cn(
+                'mt-2 border-l-2 border-primary/30 bg-background/30 py-2 pl-3 pr-2 text-[12px] leading-relaxed text-muted-foreground',
+                proposal.origin === 'analyst' && 'whitespace-pre-wrap font-mono text-[11px]',
+              )}
+            >
               {proposal.evidence}
             </blockquote>
           )}
