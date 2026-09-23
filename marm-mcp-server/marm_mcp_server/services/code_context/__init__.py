@@ -272,8 +272,9 @@ async def answer_from_context(ctx: "Context", task: str) -> dict:
     return out
 
 
-# `[name]` or `[`name`]`, but not the text of a markdown link `[text](url)`.
-_CITATION = re.compile(r"\[(`?)([^\]`\n]{1,200})`?\](?!\()")
+# `[name]`, `[`name`]` or `[a, b]`, but not the text of a markdown link.
+_CITATION = re.compile(r"\[([^\[\]\n]{1,200})\](?!\()")
+_CITATION_SEPARATOR = re.compile(r"[,;]")
 _IDENTIFIER = re.compile(r"[A-Za-z_][\w.:]*")
 # What separates a cited identifier from a bracketed word: an underscore, a
 # qualifying separator, or an inner capital. `[optional]` and `[1]` are prose.
@@ -300,28 +301,34 @@ def _check_citations(text: str, ctx: "Context") -> tuple[list[dict], list[str]]:
     out: list[dict] = []
     unresolved: list[str] = []
     for match in _CITATION.finditer(text):
-        backticked, raw = match.group(1), match.group(2)
-        name = raw.strip().strip("`").split("(")[0].strip()
-        resolved = by_name.get(name.casefold())
-        if resolved is None:
-            if (
-                _IDENTIFIER.fullmatch(name)
-                and (backticked or _IDENTIFIER_MARK.search(name))
-                and name not in unresolved
-            ):
-                unresolved.append(name)
-            continue
-        if resolved.qualified_name in seen:
-            continue
-        seen.add(resolved.qualified_name)
-        out.append(
-            {
-                "name": resolved.name,
-                "qualified_name": resolved.qualified_name,
-                "file_path": resolved.file_path,
-                "start_line": resolved.start_line,
-            }
-        )
+        # Each name in `[a, b]` is its own citation, so an invented one cannot
+        # ride along beside a real one.
+        for part in _CITATION_SEPARATOR.split(match.group(1)):
+            part = part.strip()
+            backticked = part.startswith("`")
+            name = part.strip("`").split("(")[0].strip()
+            if not name:
+                continue
+            resolved = by_name.get(name.casefold())
+            if resolved is None:
+                if (
+                    _IDENTIFIER.fullmatch(name)
+                    and (backticked or _IDENTIFIER_MARK.search(name))
+                    and name not in unresolved
+                ):
+                    unresolved.append(name)
+                continue
+            if resolved.qualified_name in seen:
+                continue
+            seen.add(resolved.qualified_name)
+            out.append(
+                {
+                    "name": resolved.name,
+                    "qualified_name": resolved.qualified_name,
+                    "file_path": resolved.file_path,
+                    "start_line": resolved.start_line,
+                }
+            )
     return out, unresolved
 
 

@@ -183,3 +183,21 @@ def test_no_model_still_delivers_the_context(composed, monkeypatch):
 
     assert [name for name, _ in events] == ["context", "error"]
     assert events[0][1]["status"] == "success"
+
+
+# --- a bracket can cite more than one symbol ---------------------------------
+#
+# Seen from a real model: "... old enough to be considered a crashed process
+# [apply, _claim_is_stale]." Each name inside is its own citation.
+
+
+def test_each_name_in_a_multi_name_bracket_is_a_citation(model):
+    out = _json("apply claims first, then checks the row [apply, `claim_row`].", model)
+    assert out["answer_status"] == "ok"
+    assert [c["name"] for c in out["answer_citations"]] == ["apply", "claim_row"]
+
+
+def test_an_invented_name_cannot_hide_in_a_multi_name_bracket(model):
+    out = _json("apply claims first, then persists [apply; persist_all_rows].", model)
+    assert out["answer_status"] == "unverified"
+    assert out["answer_unresolved"] == ["persist_all_rows"]

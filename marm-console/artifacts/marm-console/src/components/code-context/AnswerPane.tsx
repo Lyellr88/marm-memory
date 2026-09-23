@@ -56,25 +56,38 @@ function withCitations(
   onCite: (citation: CodeContextCitation) => void,
 ) {
   const byName = new Map(citations.map((c) => [c.name.toLowerCase(), c]));
+  const lookup = (raw: string) =>
+    byName.get(raw.trim().replace(/`/g, '').split('(')[0].trim().toLowerCase());
+  const link = (citation: CodeContextCitation, key: string) => (
+    <button
+      key={key}
+      type="button"
+      onClick={() => onCite(citation)}
+      title={`${citation.file_path}:${citation.start_line}`}
+      className="mx-0.5 rounded border border-primary/30 bg-primary/10 px-1 font-mono text-[0.85em] text-primary-highlight transition-colors hover:bg-primary/20"
+    >
+      {citation.name}
+    </button>
+  );
   return text.split('\n').map((line, lineIndex) => {
     const bullet = /^\s*(?:[-*]|\d+\.)\s+/.exec(line);
     const body = bullet ? line.slice(bullet[0].length) : line;
-    const rendered = body.split(/(\[`?[^\]`\n]{1,200}`?\])/g).map((part, i) => {
-      const match = /^\[`?([^\]`\n]{1,200})`?\]$/.exec(part);
-      const citation = match
-        ? byName.get(match[1].trim().replace(/`/g, '').split('(')[0].trim().toLowerCase())
-        : undefined;
-      if (!citation) return <span key={`${lineIndex}-${i}`}>{inline(part, `${lineIndex}-${i}`)}</span>;
+    // Same shape the server resolves: `[a]`, `[`a`]`, `[a, b]`, never a link's text.
+    const rendered = body.split(/(\[[^[\]\n]{1,200}\](?!\())/g).map((part, i) => {
+      const key = `${lineIndex}-${i}`;
+      const match = /^\[([^[\]\n]{1,200})\]$/.exec(part);
+      const names = match ? match[1].split(/([,;])/) : [];
+      if (!names.some((name, n) => n % 2 === 0 && lookup(name))) {
+        return <span key={key}>{inline(part, key)}</span>;
+      }
+      // Resolved names become links; anything unresolved stays plain text.
       return (
-        <button
-          key={`${lineIndex}-${i}`}
-          type="button"
-          onClick={() => onCite(citation)}
-          title={`${citation.file_path}:${citation.start_line}`}
-          className="mx-0.5 rounded border border-primary/30 bg-primary/10 px-1 font-mono text-[0.85em] text-primary-highlight transition-colors hover:bg-primary/20"
-        >
-          {citation.name}
-        </button>
+        <span key={key}>
+          {names.map((name, n) => {
+            const citation = n % 2 === 0 ? lookup(name) : undefined;
+            return citation ? link(citation, `${key}-${n}`) : <span key={`${key}-${n}`}>{name}</span>;
+          })}
+        </span>
       );
     });
     if (!line.trim()) return <div key={lineIndex} className="h-2" />;

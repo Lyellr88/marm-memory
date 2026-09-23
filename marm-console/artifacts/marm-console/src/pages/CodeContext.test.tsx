@@ -321,6 +321,24 @@ describe('CodeContextPage', () => {
     }
   });
 
+  it('links every name in a bracket that cites more than one symbol', () => {
+    answerState.status = 'done';
+    answerState.text = 'It ranks, then seeds [rank_memories, `seed_query`; invented_thing].';
+    answerState.citations = [
+      { name: 'rank_memories', qualified_name: 'marm.recall.rank_memories', file_path: 'marm/recall.py', start_line: 10 },
+      { name: 'seed_query', qualified_name: 'marm.recall.seed_query', file_path: 'marm/terms.py', start_line: 50 },
+    ];
+    Object.assign(answerState as Record<string, unknown>, { grounding: 'unverified', unresolved: ['invented_thing'] });
+    render(<CodeContextPage />);
+
+    expect(screen.getByRole('button', { name: 'rank_memories' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'seed_query' })).toBeTruthy();
+    // Unresolved stays plain text: a link that goes nowhere looks like evidence.
+    expect(screen.queryByRole('button', { name: 'invented_thing' })).toBeNull();
+    expect(screen.getByText(/invented_thing/)).toBeTruthy();
+    for (const key of ['grounding', 'unresolved']) delete (answerState as Record<string, unknown>)[key];
+  });
+
   it('labels an unverified JSON answer the same way', () => {
     buildState.data = {
       ...SUCCESS,
