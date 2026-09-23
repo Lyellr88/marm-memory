@@ -412,3 +412,124 @@ async def test_similar_content_in_different_session_stores_as_new_row(
 
     assert a_count == 1
     assert b_count == 1
+
+
+@pytest.mark.asyncio
+async def test_a_merge_that_would_not_fit_stores_a_second_row_instead(
+    monkeypatch, tmp_path
+):
+    """This is what the refusal is for: both bodies remain retrievable.
+
+    A near-duplicate that cannot be folded in without discarding text is kept
+    as its own memory. Previously the merge went ahead and cut the existing
+    content down to fit, so the older body left the store while merge_history
+    went on claiming it had been absorbed -- a later query returned the
+    surviving neighbour's text as though it were the answer.
+    """
+    from marm_mcp_server.core import memory as memory_module
+    from marm_mcp_server.core import memory_ops as memory_ops_module
+
+    monkeypatch.setattr(memory_ops_module, "CONSOLIDATION_ENABLED", True)
+    mem = memory_module.MARMMemory(str(tmp_path / "memory.db"))
+    mem._encoder_failed = True
+
+    first_body = "PLAN-ONE " + ("x" * 9000)
+    second_body = "PLAN-TWO " + ("y" * 9000)
+
+    first_id = await mem.store_memory(first_body, "plans")
+
+    async def always_duplicate(memory, content, session_name, threshold, **kwargs):
+        return first_id
+
+    monkeypatch.setattr(memory_ops_module, "find_semantic_duplicate", always_duplicate)
+
+    second_id = await mem.store_memory(second_body, "plans")
+
+    assert second_id != first_id, "the second body must get its own row"
+
+    with mem.get_connection() as conn:
+        rows = dict(
+            conn.execute(
+                "SELECT id, content FROM memories WHERE session_name = ?", ("plans",)
+            ).fetchall()
+        )
+
+    assert len(rows) == 2
+    assert "PLAN-ONE" in rows[first_id], "the first body is untouched"
+    assert "PLAN-TWO" in rows[second_id], "and the second is stored in full"
+
+
+@pytest.mark.asyncio
+async def test_an_oversize_refusal_is_observable(monkeypatch, tmp_path):
+    """A silent refusal has the same shape as the silent truncation it replaces.
+
+    Both leave the caller believing consolidation did something reasonable, so
+    the refusal emits `consolidation.merge_refused_oversize`. It separates
+    "not similar enough to merge" from "similar, but preserving the evidence
+    needed its own row", which is the distinction an audit cannot otherwise
+    make after the fact.
+    """
+    import structlog.testing
+
+    memory = MARMMemory(str(tmp_path / "memory.db"))
+    memory._encoder_failed = True
+
+    memory_id = await memory.store_memory("seed", session="cap-test")
+    with memory.get_connection() as conn:
+        conn.execute(
+            "UPDATE memories SET content = ? WHERE id = ?", ("A" * 10000, memory_id)
+        )
+
+    with structlog.testing.capture_logs() as logs:
+        merged = await _update_memory(memory, memory_id, "B" * 10000)
+
+    assert merged is False
+    events = [entry.get("event") for entry in logs]
+    assert "consolidation.merge_refused_oversize" in events, (
+        "a refusal must leave a trace; otherwise it is as silent as the "
+        "truncation it replaced"
+    )
+    refusal = next(
+        e for e in logs if e.get("event") == "consolidation.merge_refused_oversize"
+    )
+    # The sizes are the point: an audit needs to see WHY it did not fit.
+    assert refusal["existing_chars"] == 10000
+    assert refusal["incoming_chars"] == 10000
+    assert refusal["limit"] == 10000
+
+
+@pytest.mark.asyncio
+async def test_both_bodies_stay_recallable_after_a_refused_merge(monkeypatch, tmp_path):
+    """The contract users actually need: the content still exists somewhere.
+
+    A size cap on one row is fine. Turning two distinguishable memories into
+    one misleading neighbour is not -- that was the defect. So a token unique
+    to each body must retrieve that body's own row.
+    """
+    from marm_mcp_server.core import memory as memory_module
+    from marm_mcp_server.core import memory_ops as memory_ops_module
+    from marm_mcp_server.core.memory_recall import _recall_text_search
+
+    monkeypatch.setattr(memory_ops_module, "CONSOLIDATION_ENABLED", True)
+    mem = memory_module.MARMMemory(str(tmp_path / "memory.db"))
+    mem._encoder_failed = True
+
+    first_id = await mem.store_memory("ZEBRAFISH plan " + ("x" * 9000), "plans")
+
+    async def always_duplicate(memory, content, session_name, threshold, **kwargs):
+        return first_id
+
+    monkeypatch.setattr(memory_ops_module, "find_semantic_duplicate", always_duplicate)
+    second_id = await mem.store_memory("PANGOLIN plan " + ("y" * 9000), "plans")
+
+    assert second_id != first_id
+
+    first_hits = await _recall_text_search(mem, "ZEBRAFISH", session="plans", limit=5)
+    second_hits = await _recall_text_search(mem, "PANGOLIN", session="plans", limit=5)
+
+    assert [h["id"] for h in first_hits] == [first_id], (
+        "a token unique to the first body must return the first body's row"
+    )
+    assert [h["id"] for h in second_hits] == [second_id], (
+        "and the second must return the second's, not its neighbour's"
+    )

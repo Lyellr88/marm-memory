@@ -4,6 +4,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Dict
 
+import structlog
+
 from ..config.settings import (
     CONSOLIDATION_ENABLED,
     CONSOLIDATION_THRESHOLD,
@@ -31,6 +33,8 @@ from .memory_utils import (
     sanitize_content,
 )
 
+logger = structlog.get_logger(__name__)
+
 if TYPE_CHECKING:
     from .memory import MARMMemory
 
@@ -41,8 +45,10 @@ async def _update_memory(mem: "MARMMemory", memory_id: str, new_content: str) ->
     Recomputes content_hash and embedding so Layer 1 dedup and semantic recall
     stay accurate after the merge. Returns False (no write happened) if the
     row was deleted or changed concurrently between the pre-read and the
-    write lock -- callers must not assume the merge landed just because this
-    returned without raising.
+    write lock, or if the merge would not fit -- callers must not assume the
+    merge landed just because this returned without raising. The caller then
+    stores the memory separately, which is the point: consolidation exists to
+    avoid a duplicate row, never to destroy text.
     """
     with mem.get_connection() as conn:
         row = conn.execute(
@@ -55,11 +61,33 @@ async def _update_memory(mem: "MARMMemory", memory_id: str, new_content: str) ->
     metadata = json.loads(metadata_json) if metadata_json else {}
     _MAX = 10000
     _MARKER = "\n[merged] "
-    _new_budget = _MAX - len(_MARKER)
-    if len(new_content) > _new_budget:
-        new_content = new_content[:_new_budget]
-    _existing_budget = _MAX - len(_MARKER) - len(new_content)
-    existing_content = existing_content[: max(0, _existing_budget)]
+    # Refuse a merge that does not fit rather than truncating to make it fit.
+    #
+    # This used to give `new_content` the budget first and cut `existing_content`
+    # down to whatever was left, so each merge could evict bodies merged
+    # earlier -- a record would sit at exactly _MAX and silently hold only its
+    # head and the most recent arrivals. Nothing reported the loss: the
+    # merge_history kept growing while the text it pointed at was gone, and a
+    # later query returned a neighbouring memory's body as if it were the
+    # answer.
+    #
+    # Returning False is already the "no write happened" contract, and the
+    # caller's fallback is to store the memory as its own row. Two rows the
+    # scorer can tell apart beat one row with half the evidence missing.
+    if len(existing_content) + len(_MARKER) + len(new_content) > _MAX:
+        # Logged, because a silent refusal has the same shape as the silent
+        # truncation it replaces: both end with the caller believing
+        # consolidation did something reasonable. `merge_refused_oversize`
+        # separates "not similar enough to merge" from "similar, but
+        # preserving the evidence needed its own row" in an audit.
+        logger.info(
+            "consolidation.merge_refused_oversize",
+            memory_id=memory_id,
+            existing_chars=len(existing_content),
+            incoming_chars=len(new_content),
+            limit=_MAX,
+        )
+        return False
     merged_content = f"{existing_content}{_MARKER}{new_content}"
     merged_at = datetime.now(timezone.utc).isoformat()
     if "merge_history" not in metadata:
