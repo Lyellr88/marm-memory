@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import importlib
+import re
 import time
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 from fastapi import FastAPI
@@ -21,6 +24,8 @@ from marm_mcp_server.console.terminal.router import (
     terminal_availability,
 )
 
+# The package re-exports the APIRouter as `router`, shadowing the module.
+router_module = importlib.import_module("marm_mcp_server.console.terminal.router")
 BACKEND = backend_status()
 requires_backend = pytest.mark.skipif(
     not BACKEND.available, reason=f"No PTY backend available: {BACKEND.reason}"
@@ -242,17 +247,22 @@ def test_console_own_origin_is_accepted(
 def test_check_dependency_reports_a_real_command(
     client: TestClient, enabled_loopback: None
 ) -> None:
-    response = client.post("/api/terminal/check", json={"command": "echo hello"})
+    response = client.post("/api/terminal/check", json={"command": "git --version"})
     assert response.status_code == 200
     body = response.json()
     assert body["success"] is True
-    assert "hello" in body["output"]
+    assert "git version" in body["output"]
 
 
 @requires_backend
 def test_check_dependency_reports_a_missing_command(
-    client: TestClient, enabled_loopback: None
+    client: TestClient, enabled_loopback: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    monkeypatch.setattr(
+        router_module,
+        "CHECK_COMMANDS",
+        frozenset({"definitely-not-a-real-command-xyz"}),
+    )
     response = client.post(
         "/api/terminal/check", json={"command": "definitely-not-a-real-command-xyz"}
     )
@@ -260,11 +270,48 @@ def test_check_dependency_reports_a_missing_command(
     assert response.json()["success"] is False
 
 
+@pytest.mark.parametrize(
+    "command",
+    [
+        "echo pwned",
+        "git --version; id",
+        "git --version && id",
+        "git --version\nid",
+        "git --version $(id)",
+        " git --version",
+    ],
+)
+def test_check_dependency_refuses_anything_but_a_known_probe(
+    client: TestClient, enabled_loopback: None, command: str
+) -> None:
+    response = client.post("/api/terminal/check", json={"command": command})
+    assert response.status_code == 400
+    assert "not a dependency check" in response.json()["detail"]
+
+
+def test_every_probe_the_console_sends_is_allowed() -> None:
+    """The allowlist duplicates strings the Console owns, so pin them together."""
+    root = Path(__file__).resolve().parents[2] / "marm-console/artifacts/marm-console"
+    sources = [
+        root / "src/components/terminal/AgentConfigs.ts",
+        root / "src/components/terminal/TerminalDock.tsx",
+    ]
+    if not all(path.is_file() for path in sources):
+        pytest.skip("Console sources are not in this checkout")
+    sent = {
+        match
+        for path in sources
+        for match in re.findall(r"\bcommand: '([^']+)'", path.read_text("utf-8"))
+    }
+    assert len(sent) == 6
+    assert sent == router_module.CHECK_COMMANDS
+
+
 def test_check_dependency_refuses_a_non_loopback_bind(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv(HOST_ENV, "0.0.0.0")
-    response = client.post("/api/terminal/check", json={"command": "echo hi"})
+    response = client.post("/api/terminal/check", json={"command": "git --version"})
     assert response.status_code == 200
     body = response.json()
     assert body["success"] is False
