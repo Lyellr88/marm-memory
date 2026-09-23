@@ -609,6 +609,16 @@ def test_an_incomplete_fact_is_dropped(missing):
     assert _llm_usable(_fact(**{missing: ""}), TRANSCRIPT) is None
 
 
+@pytest.mark.parametrize("evidence", ["We", "the", "We decided to cap"])
+def test_a_span_too_short_to_mean_anything_is_not_evidence(evidence):
+    """A one-word span occurs in almost any transcript, so accepting it would
+    let an invented fact pass as one quoted from the conversation."""
+    from marm_mcp_server.core.distill import MIN_LENGTH, _llm_usable
+
+    assert evidence in TRANSCRIPT and len(evidence) < MIN_LENGTH
+    assert _llm_usable(_fact(evidence=evidence), TRANSCRIPT) is None
+
+
 def test_an_unknown_context_type_falls_back_rather_than_being_stored():
     from marm_mcp_server.core.distill import _llm_usable
 

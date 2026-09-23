@@ -655,8 +655,11 @@ def _llm_usable(fact: object, haystack: str) -> Optional[Candidate]:
         return None
 
     # Compare on collapsed whitespace: models normalise line breaks and indent
-    # when copying, and that is not the failure this guard is looking for.
-    if _squash(evidence) not in _squash(haystack):
+    # when copying, and that is not the failure this guard is looking for. A
+    # span shorter than a memory can be occurs in almost any transcript, so it
+    # verifies nothing.
+    needle = _squash(evidence)
+    if len(needle) < MIN_LENGTH or needle not in _squash(haystack):
         return None
 
     context_type = str(fact.get("context_type") or "general").strip().lower()
