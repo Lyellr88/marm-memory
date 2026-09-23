@@ -10,7 +10,7 @@ import type {
   MergeDuplicateInput, RuntimeProfile
 } from '@/lib/marm-types';
 import { MarmApiError } from '@/lib/marm-api';
-import { IDLE_ANSWER, applyAnswerEvent, type AnswerStreamState } from '@/lib/answer-stream';
+import { IDLE_ANSWER, applyAnswerEvent, applyStreamEnd, type AnswerStreamState } from '@/lib/answer-stream';
 
 export const queryKeys = {
   overview: (baseUrl: string) => ['overview', baseUrl],
@@ -892,15 +892,21 @@ export function useStreamingAnswer() {
         setState((prev) => applyAnswerEvent(prev, name, payload));
       });
       active.current = handle;
-      handle.done.catch((error: unknown) => {
-        // An abort is the caller's own doing, not a failure to report.
-        if (error instanceof DOMException && error.name === 'AbortError') return;
-        setState((prev) => ({
-          ...prev,
-          status: 'error',
-          message: 'The answer stream failed.',
-        }));
-      });
+      handle.done
+        .then(() => {
+          // A newer request owns the state now; this one's ending is not news.
+          if (active.current !== handle) return;
+          setState(applyStreamEnd);
+        })
+        .catch((error: unknown) => {
+          // An abort is the caller's own doing, not a failure to report.
+          if (error instanceof DOMException && error.name === 'AbortError') return;
+          setState((prev) => ({
+            ...prev,
+            status: 'error',
+            message: 'The answer stream failed.',
+          }));
+        });
     },
     [client],
   );

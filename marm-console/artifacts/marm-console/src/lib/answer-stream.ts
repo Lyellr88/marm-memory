@@ -59,3 +59,15 @@ export function applyAnswerEvent(
       return prev;
   }
 }
+
+/** The response body closed. A stream still `streaming` never sent `done` or
+ *  `error` -- a proxy or server restart, an upstream timeout -- and would
+ *  otherwise show "answering…" forever. */
+export function applyStreamEnd(prev: AnswerStreamState): AnswerStreamState {
+  if (prev.status !== 'streaming') return prev;
+  return {
+    ...prev,
+    status: 'error',
+    message: 'The answer stream ended before the answer finished.',
+  };
+}
