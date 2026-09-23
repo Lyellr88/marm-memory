@@ -171,7 +171,8 @@ def extract_entities(content: str) -> ExtractionResult:
     seen_spans: dict[str, "Span"] = {}
 
     for ent in doc.ents:
-        name = ent.text.strip()
+        # A span can straddle a line wrap; the name must not carry it.
+        name = " ".join(ent.text.split())
         if not name or name in seen_names:
             continue
         label = ent.label_ if ent.label_ in _KEPT_NER_LABELS else None
@@ -183,7 +184,7 @@ def extract_entities(content: str) -> ExtractionResult:
         seen_spans[name] = ent
 
     for chunk in doc.noun_chunks:
-        name = chunk.text.strip()
+        name = " ".join(chunk.text.split())
         if not name or name in seen_names:
             continue
         if _STOPWORD_ONLY_SKIP and all(tok.is_stop or tok.is_punct for tok in chunk):
