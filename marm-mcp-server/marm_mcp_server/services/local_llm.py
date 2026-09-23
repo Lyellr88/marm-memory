@@ -811,6 +811,14 @@ _servers_cache: dict[str, Any] = {"at": 0.0, "value": None}
 _SERVERS_TTL = 15.0
 
 
+def _is_marm_itself(url: str) -> bool:
+    try:
+        port = urllib.parse.urlparse(url).port
+    except ValueError:
+        return False
+    return port in _marm_own_ports() and _is_loopback(url)
+
+
 def _marm_own_ports() -> set[int]:
     """Ports MARM itself serves, which must never be probed.
 

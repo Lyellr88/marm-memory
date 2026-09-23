@@ -351,6 +351,8 @@ async def update_runtime_llm(req: RuntimeLlmRequest) -> dict:
                 f"{chosen} is not a loopback address. MARM only talks to a model "
                 "on this machine."
             )
+        elif local_llm._is_marm_itself(chosen):
+            rejected = f"{chosen} is MARM's own port. Point it at the model server."
         else:
             runtime_flags.set_(runtime_flags.LLM_ENDPOINT, chosen)
             # A different server serves different models, so a model chosen for

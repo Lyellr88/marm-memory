@@ -332,3 +332,21 @@ def test_a_malformed_endpoint_is_refused_with_a_reason_not_a_crash(monkeypatch):
     rejected, saved = _save_endpoint(monkeypatch, "http://[::1", allow_remote=True)
     assert rejected and "not a valid" in rejected
     assert not saved
+
+
+@pytest.mark.parametrize("url", ["http://127.0.0.1:8001", "http://localhost:8002/v1"])
+def test_marms_own_port_is_refused_as_the_model_endpoint(monkeypatch, url):
+    """Discovery never offers these; a typed one must not get in either."""
+    monkeypatch.delenv("SERVER_PORT", raising=False)
+    monkeypatch.delenv("MARM_CONSOLE_PORT", raising=False)
+    rejected, saved = _save_endpoint(monkeypatch, url, allow_remote=False)
+    assert rejected and "MARM" in rejected
+    assert not saved
+
+
+def test_another_loopback_port_is_still_saved(monkeypatch):
+    rejected, saved = _save_endpoint(
+        monkeypatch, "http://127.0.0.1:1234", allow_remote=False
+    )
+    assert rejected is None
+    assert saved
