@@ -69,6 +69,9 @@ export function DistillPage() {
   // session X" — asking a user to go and copy that back out of the tool that
   // stored it is work the page can simply do.
   const [source, setSource] = useState<'session' | 'paste'>('session');
+  // Generation is opt-in: a reachable model must not change what a
+  // distillation produces unless the reader asks for it.
+  const [useLlm, setUseLlm] = useState(false);
 
   const sessions = useSessions();
   // Default to a real session rather than an empty box, for the same reason
@@ -117,6 +120,7 @@ export function DistillPage() {
         text: body.trim(),
         session_name: sessionName.trim(),
         project: project.trim() || null,
+        use_llm: useLlm,
       },
       { onSuccess: () => setTab('run') },
     );
@@ -158,10 +162,10 @@ export function DistillPage() {
           </div>
           <h1 className="text-[1.8rem] font-semibold tracking-[-0.045em]">Distill</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Turn raw conversation into memory proposals, each resolved against what is already stored. When a local
-            model is reachable MARM <strong className="font-semibold text-foreground/90">writes</strong> each fact so
-            it stands on its own, keeping the words it came from; without one it falls back to{' '}
-            <strong className="font-semibold text-foreground/90">selecting</strong> sentences verbatim. Either way
+            Turn raw conversation into memory proposals, each resolved against what is already stored. By default MARM{' '}
+            <strong className="font-semibold text-foreground/90">selects</strong> sentences verbatim; ask it to use the
+            local model and it <strong className="font-semibold text-foreground/90">writes</strong> each fact so it
+            stands on its own, keeping the words it came from. Either way
             nothing leaves this machine, and nothing reaches memory until you keep it. The same answer an agent
             receives from <code className="font-mono text-xs">marm_distill</code>.
           </p>
@@ -256,6 +260,18 @@ export function DistillPage() {
                 className="mt-1.5"
               />
             </div>
+            <label
+              className="flex h-10 cursor-pointer select-none items-center gap-2 rounded-md border border-border/70 bg-muted/40 px-3 text-xs text-muted-foreground"
+              title="Write each fact with the local model, keeping the words it came from. Needs local generation switched on under System; without it MARM selects sentences."
+            >
+              <input
+                type="checkbox"
+                checked={useLlm}
+                onChange={(event) => setUseLlm(event.target.checked)}
+                className="h-3.5 w-3.5 accent-[hsl(var(--primary))]"
+              />
+              Write facts with the local model
+            </label>
             <Button type="submit" isLoading={propose.isPending} disabled={!canSubmit}>
               <Sparkles className="mr-2 h-4 w-4" /> Distill
             </Button>

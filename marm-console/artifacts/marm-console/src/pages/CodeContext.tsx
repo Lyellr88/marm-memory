@@ -152,9 +152,10 @@ function PanePreview({ value }: { value: string }) {
 
 export function CodeContextPage() {
   const [params, setParams] = useSearchParams();
-  // Asking is opt-in per composition: generation is the slow step, and a
-  // reader who only wants the ranked symbols should not wait for it.
-  const [wantAnswer, setWantAnswer] = useState(true);
+  // Asking is opt-in per composition: generation is the slow step, a reader
+  // who only wants the ranked symbols should not wait for it, and a running
+  // model must not make it part of the workflow by default.
+  const [wantAnswer, setWantAnswer] = useState(false);
   const [tab, setTab] = useState('answer');
   const [task, setTask] = useState(() => params.get('task') ?? '');
   const [project, setProject] = useState(() => params.get('project') ?? '');

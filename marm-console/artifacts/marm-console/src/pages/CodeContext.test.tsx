@@ -207,6 +207,21 @@ describe('CodeContextPage', () => {
     });
   });
 
+  it('does not ask the model unless the reader opts in', async () => {
+    // Generation is opt-in: composing context must not also start a model.
+    const user = userEvent.setup();
+    render(<CodeContextPage />);
+
+    const box = screen.getByRole('checkbox', { name: /answer it too/i });
+    expect((box as HTMLInputElement).checked).toBe(false);
+
+    await user.type(screen.getByLabelText('Task'), 'how does recall rank');
+    await user.click(screen.getByRole('button', { name: /compose context/i }));
+
+    expect(answerState.start).not.toHaveBeenCalled();
+    expect(buildState.mutate).toHaveBeenCalledTimes(1);
+  });
+
   it('does not submit a task that is only whitespace', async () => {
     const user = userEvent.setup();
     render(<CodeContextPage />);

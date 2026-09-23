@@ -3,8 +3,10 @@
 MARM has never had a generative model. Concept extraction is spaCy and search
 is a sentence encoder, both local, and that is the whole reason `marm_distill`
 selects sentences rather than writing them. This module does not change that
-default: it makes generation available WHEN a local server happens to be
-running, and leaves every caller working when it is not.
+default: generation is used only once the operator switches it on (the Console
+toggle, or `MARM_LLM_ENABLED`) and a local server is reachable. Finding a
+running model is never enough on its own, and every caller keeps working
+without one.
 
 WHY LOOPBACK IS ENFORCED AND NOT MERELY DOCUMENTED
     This deployment exists to keep memory on one machine. A configuration
@@ -34,6 +36,8 @@ import urllib.request
 from typing import Any, Iterator, Optional
 
 import structlog
+
+from ..config.env_parsing import _safe_bool
 
 logger = structlog.get_logger(__name__)
 
@@ -78,22 +82,26 @@ def _is_loopback(url: str) -> bool:
 #: The saved on/off switch is read often enough to be worth not hitting SQLite
 #: for on every generation call, and changes only when someone clicks it.
 _ENABLED_TTL = 5.0
-_enabled_cache: dict[str, Any] = {"at": -1.0, "value": True}
+_enabled_cache: dict[str, Any] = {"at": -1.0, "value": False}
 
 
 def enabled() -> bool:
-    """Whether generation is switched on, from the durable runtime flag.
+    """Whether the operator has switched generation on.
+
+    A saved Console choice wins, then `MARM_LLM_ENABLED`, then off. Off is the
+    default because discovering a running model must not silently make
+    generation part of a workflow that did not ask for it.
 
     `get` rather than `get_bool`: `get_bool` answers False when the database
     cannot be read, which is right for the switches that authorise background
     workers and wrong here. Generation is a request someone is waiting on and
     every caller already falls back, so an unreadable database should leave
-    the feature where the environment put it, not silently turn it off.
+    the feature where the environment put it.
     """
     now = time.monotonic()
     if (now - float(_enabled_cache["at"])) < _ENABLED_TTL:
         return bool(_enabled_cache["value"])
-    value = True
+    value = _safe_bool("MARM_LLM_ENABLED", False)
     try:
         from ..core import runtime_flags
 

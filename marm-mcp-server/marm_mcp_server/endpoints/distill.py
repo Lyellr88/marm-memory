@@ -64,12 +64,12 @@ class DistillRequest(BaseModel):
         description="Also stage candidates the store already holds.",
     )
     use_llm: bool = Field(
-        default=True,
+        default=False,
         description=(
-            "Use the local generative model when one is reachable. It writes "
-            "self-contained facts, which sentence selection cannot. Set false "
-            "to force the selection path. Falls back automatically when no "
-            "model is available."
+            "Write self-contained facts with the local generative model, which "
+            "sentence selection cannot. Off by default; takes effect only when "
+            "the operator has enabled generation and a model is reachable, and "
+            "falls back to selection otherwise."
         ),
     )
 
@@ -83,12 +83,13 @@ async def marm_distill(req: DistillRequest) -> dict:
     `new` (nothing close), `duplicate` (already recorded), or `near` (close to
     something stored, and worth a human look).
 
-    With `use_llm` (the default where a local model is configured) it composes
-    a self-contained fact, and every generated proposal cites a VERBATIM span
-    from the transcript, which is checked against the source before the proposal
-    is offered -- an invented span is the signature of an invented fact.
+    With `use_llm=True`, once the operator has enabled local generation, it
+    composes a self-contained fact, and every generated proposal cites a
+    VERBATIM span from the transcript, which is checked against the source
+    before the proposal is offered -- an invented span is the signature of an
+    invented fact.
 
-    Without a model, or with `use_llm=False`, it falls back to SELECTING
+    By default, and whenever no model is enabled and reachable, it SELECTS
     sentences. That fallback finds only what was said plainly: a fact spread
     across three turns, or implied and never stated, will not be proposed.
 

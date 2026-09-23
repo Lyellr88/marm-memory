@@ -136,6 +136,26 @@ describe('DistillPage', () => {
     expect(payload.project).toBeNull();
   });
 
+  it('selects sentences unless the operator asks for generation', async () => {
+    // A running model must not silently change what a distillation produces.
+    logsState.data = {
+      items: [{ topic: 't', summary: null, entry: 'The daemon reparents to systemd.' }],
+      total: 1,
+      limit: 200,
+      offset: 0,
+    };
+    render(<DistillPage />);
+    const box = screen.getByRole('checkbox', { name: /write facts with the local model/i });
+    expect((box as HTMLInputElement).checked).toBe(false);
+
+    await userEvent.click(screen.getByRole('button', { name: /^distill$/i }));
+    expect(proposeState.mutate.mock.calls[0][0].use_llm).toBe(false);
+
+    await userEvent.click(box);
+    await userEvent.click(screen.getByRole('button', { name: /^distill$/i }));
+    expect(proposeState.mutate.mock.calls[1][0].use_llm).toBe(true);
+  });
+
   it('shows the review queue on arrival, without needing a distillation first', () => {
     pendingState.data = { status: 'success', pending: [proposal()], count: 1 };
     render(<DistillPage />);

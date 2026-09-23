@@ -650,6 +650,40 @@ def test_an_object_wrapped_array_is_accepted(monkeypatch):
     assert got and got[0].evidence
 
 
+def test_propose_selects_unless_generation_is_asked_for(staged, monkeypatch):
+    """A reachable model must not silently change what an existing caller gets."""
+    service, live = staged
+
+    def generate(*_a, **_k):
+        raise AssertionError("generation ran without being asked for")
+
+    monkeypatch.setattr(service, "llm_extract", generate)
+    result = _propose(service, live, POSITIVES[1])
+    assert result["mode"] == "selected"
+
+
+def test_propose_generates_when_asked(staged, monkeypatch):
+    from marm_mcp_server.core.distill import Candidate
+
+    service, live = staged
+    fact = Candidate(
+        content="Distill stages proposals and never writes them unasked.",
+        score=1.0,
+        reasons=("generated",),
+        evidence=POSITIVES[1],
+    )
+    monkeypatch.setattr(service, "llm_extract", lambda *_a, **_k: [fact])
+    result = _propose(service, live, POSITIVES[1], use_llm=True)
+    assert result["mode"] == "generated"
+
+
+def test_the_tool_defaults_to_selection_on_both_transports():
+    """STDIO builds this same request model, so one default governs both."""
+    from marm_mcp_server.endpoints.distill import DistillRequest
+
+    assert DistillRequest(action="propose").use_llm is False
+
+
 # --- review nudges ----------------------------------------------------------
 #
 # A staged proposal nobody is told about is a proposal nobody reviews. Seven

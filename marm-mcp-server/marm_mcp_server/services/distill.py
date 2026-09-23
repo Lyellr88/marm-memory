@@ -79,7 +79,7 @@ async def propose(
     threshold: float = DEFAULT_THRESHOLD,
     limit: int = DEFAULT_LIMIT,
     include_duplicates: bool = False,
-    use_llm: bool = True,
+    use_llm: bool = False,
 ) -> dict[str, Any]:
     """Extract, resolve, stage. Returns the proposals with their verdicts.
 

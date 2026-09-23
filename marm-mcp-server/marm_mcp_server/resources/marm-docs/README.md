@@ -660,7 +660,7 @@ The AI agent will automatically use the appropriate tools. Manual tool access is
 | `marm_summary` | Cached, paste-ready session summaries with intelligent truncation | `session_name` |
 | `marm_notebook` | Session-scoped scratch pad plus promotion to a permanent, graph-linked doc | `action="add"\|"use"\|"show"\|"status"\|"clear"\|"save"`, `name`, `data`, `session_name`, `project`, `platform` |
 | `marm_compaction` | Agent-assisted memory cleanup with a reviewable audit trail | `action="status"\|"candidates"\|"review"\|"stage"\|"apply"\|"discard"` |
-| `marm_distill` | Turn raw conversation into memory proposals, each resolved against the store as `new`, `duplicate`, or `near`. Writes self-contained facts with a local model when one is reachable, keeping the verbatim span each came from; selects sentences verbatim when not. Staged for review, never written unattended | `action="propose"\|"review"\|"apply"\|"discard"`, `text`, `session_name`, `proposal_id`, `use_llm` |
+| `marm_distill` | Turn raw conversation into memory proposals, each resolved against the store as `new`, `duplicate`, or `near`. Selects sentences verbatim by default; with `use_llm=true` and local generation enabled, writes self-contained facts with a local model instead, keeping the verbatim span each came from. Staged for review, never written unattended | `action="propose"\|"review"\|"apply"\|"discard"`, `text`, `session_name`, `proposal_id`, `use_llm` |
 
 ### 🕸️ Code Graph (6 tools)
 
@@ -839,7 +839,7 @@ Every proposal is resolved against what is already stored and carries a verdict:
 
 **It proposes; it never writes.** `propose` stages into a review queue and only `apply` creates a memory. That is deliberately the same shape as `marm_compaction`, and for the same reason: a similarity score is not evidence enough to write memory unattended, and anything that does so on such a score fills a store with near-misses faster than it fills it with facts. A **discarded proposal is never proposed again**, enforced by a unique constraint rather than by convention — re-offering something a reviewer already rejected is how a review queue stops being read. It also makes re-running `propose` over the same text a no-op, which is what makes it safe to call at the end of every session.
 
-**How the text is written.** With no local model reachable, this selects sentences that already read like durable facts and normalises them, rather than composing new ones — so a fact spread across three turns, or implied but never stated, will not be proposed. It finds what was said plainly, not what was meant. That is a real limitation, and also a reasonable fit: a MARM memory is a headline, and a headline is usually a sentence someone already typed. When a local model *is* reachable it writes the fact instead and keeps the verbatim span it came from; a proposal's `mode` reports which of the two happened. See [Optional local generation](#optional-local-generation).
+**How the text is written.** With no local model reachable, this selects sentences that already read like durable facts and normalises them, rather than composing new ones — so a fact spread across three turns, or implied but never stated, will not be proposed. It finds what was said plainly, not what was meant. That is a real limitation, and also a reasonable fit: a MARM memory is a headline, and a headline is usually a sentence someone already typed. Asked to (`use_llm=true`) with local generation enabled and a model reachable, it writes the fact instead and keeps the verbatim span it came from; a proposal's `mode` reports which of the two happened. See [Optional local generation](#optional-local-generation).
 
 While proposals sit unreviewed, MARM can attach a review request to a tool response rather than waiting to be asked. The request names one proposal and asks for a decision on it — `apply` or `discard` — and only one is attached per cooldown window, server-wide, so a batch of proposals cannot put a request on every response. `MARM_DISTILL_NUDGE=0` turns that off; the cooldown and budget are tunable in the [configuration reference](#configuration-reference).
 
@@ -957,11 +957,11 @@ The bundled graph engine runs as a supervised child process, not an import:
 
 ### Optional local generation
 
-MARM has never shipped a generative model. Concept extraction is spaCy and search is a sentence encoder, both local, which is why `marm_distill` selects sentences rather than writing them. This does not change that default — it makes generation available *when a local server happens to be running*, and leaves everything working when it is not.
+MARM has never shipped a generative model. Concept extraction is spaCy and search is a sentence encoder, both local, which is why `marm_distill` selects sentences rather than writing them. This does not change that default — generation is used only once the operator switches it on (the Console's **System → Controls** toggle, or `MARM_LLM_ENABLED=1`) *and* a local server is reachable. Discovering a running model is never enough on its own, and everything keeps working without one.
 
-Two features use it, and both degrade rather than fail:
+Two features use it, both only when asked per call, and both degrade rather than fail:
 
-- `marm_distill` writes self-contained facts instead of lifting sentences, and keeps the verbatim span each one came from. The proposal's `mode` says which happened: `generated` means a model answered, `selected` means it did not.
+- `marm_distill(use_llm=true)` writes self-contained facts instead of lifting sentences, and keeps the verbatim span each one came from. The proposal's `mode` says which happened: `generated` means a model answered, `selected` means it did not.
 - `marm_code_context(answer=true)` closes the loop and answers the task in prose, grounded **only** in the context it just composed — so the ranking decides what the answer is allowed to be about. The Console streams that answer over an internal route, so text appears while the rest is still being written.
 
 **Loopback is enforced, not documented.** A non-loopback host is refused outright rather than warned about, because a configuration mistake pointing this at a hosted endpoint would ship transcripts and source off the machine quietly, with no other symptom. The override exists, requires stating the intent in full (`MARM_LLM_ALLOW_REMOTE=i-understand-this-leaves-my-machine`), and is named in the refusal.
@@ -1030,6 +1030,7 @@ Packaged docs are indexed into the `marm_system` memory namespace on startup and
 | `MARM_DISTILL_MAX_NUDGES` | `3` | Times a single proposal may be asked about before it is marked `nudge_exhausted` and stops being offered |
 | `MARM_DISTILL_NUDGE_COOLDOWN` | `900` | Seconds between review requests. Server-wide, not per proposal or per session |
 | `MARM_DISTILL_INJECTION_BYTES` | `1536` | Byte budget for the nudge injected into the agent's context |
+| `MARM_LLM_ENABLED` | unset (off) | Switch optional local generation on. A choice saved from the Console overrides it in either direction. Finding a running model does not turn generation on |
 | `MARM_LLM_URL` | `http://127.0.0.1:18080` | Local OpenAI-compatible endpoint for optional generation. A stated address wins over discovery, so one that is dead surfaces rather than being silently replaced |
 | `MARM_LLM_ALLOW_REMOTE` | unset | Must be the exact string `i-understand-this-leaves-my-machine` to permit a non-loopback endpoint. Anything else, including `1` or `true`, is refused |
 | `MARM_LLM_TIMEOUT` | `120` | Seconds to wait for a completion. Generous on purpose: a shared GPU makes a slow answer normal rather than broken |

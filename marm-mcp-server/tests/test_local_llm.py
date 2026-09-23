@@ -36,6 +36,65 @@ def _clear_probe_cache():
     local_llm._probe_cache.update({"at": 0.0, "model": None, "endpoint": None})
 
 
+@pytest.fixture
+def switch(monkeypatch):
+    """Drive `enabled()` from a fake saved flag and a clean environment."""
+    from marm_mcp_server.core import runtime_flags
+
+    state = {"saved": None, "readable": True}
+
+    def fake_get(key):
+        if not state["readable"]:
+            return None
+        return state["saved"] if key == runtime_flags.LLM_ENABLED else None
+
+    monkeypatch.setattr(runtime_flags, "get", fake_get)
+    monkeypatch.delenv("MARM_LLM_ENABLED", raising=False)
+    local_llm._enabled_cache.update({"at": -1.0, "value": False})
+    yield state
+    local_llm._enabled_cache.update({"at": -1.0, "value": False})
+
+
+def test_generation_is_off_until_the_operator_enables_it(switch):
+    """Finding a running model must not make generation part of a workflow."""
+    assert local_llm.enabled() is False
+
+
+@pytest.mark.parametrize("value,expected", [("1", True), ("true", True), ("0", False)])
+def test_the_environment_can_enable_it(switch, monkeypatch, value, expected):
+    monkeypatch.setenv("MARM_LLM_ENABLED", value)
+    assert local_llm.enabled() is expected
+
+
+@pytest.mark.parametrize(
+    "saved,env,expected", [("true", "0", True), ("false", "1", False)]
+)
+def test_a_saved_choice_outranks_the_environment(
+    switch, monkeypatch, saved, env, expected
+):
+    monkeypatch.setenv("MARM_LLM_ENABLED", env)
+    switch["saved"] = saved
+    assert local_llm.enabled() is expected
+
+
+def test_an_unreadable_flag_falls_back_to_the_environment_not_to_on(
+    switch, monkeypatch
+):
+    switch["readable"] = False
+    assert local_llm.enabled() is False
+    local_llm._enabled_cache.update({"at": -1.0})
+    monkeypatch.setenv("MARM_LLM_ENABLED", "1")
+    assert local_llm.enabled() is True
+
+
+def test_switched_off_reads_as_no_model_without_probing(switch, monkeypatch):
+    def probe(*_a, **_k):
+        raise AssertionError("a disabled backend must not be probed")
+
+    monkeypatch.setattr(local_llm, "endpoint", probe)
+    assert local_llm.available() is None
+
+
 @pytest.mark.parametrize(
     "url,allowed",
     [
@@ -68,7 +127,15 @@ def test_a_remote_endpoint_needs_an_explicit_sentence_to_enable(monkeypatch):
     assert local_llm.endpoint() == "https://api.example.com"
 
 
-def test_an_unreachable_server_is_none_and_not_an_exception(monkeypatch):
+@pytest.fixture
+def generation_on(monkeypatch):
+    """Probe behaviour is only reachable once the operator has switched it on;
+    without this, `available()` answers None before it probes anything, and a
+    test of the probe passes without exercising it."""
+    monkeypatch.setattr(local_llm, "enabled", lambda: True)
+
+
+def test_an_unreachable_server_is_none_and_not_an_exception(monkeypatch, generation_on):
     monkeypatch.setenv("MARM_LLM_URL", "http://127.0.0.1:9")
     monkeypatch.setattr(local_llm, "DEFAULT_URL", "http://127.0.0.1:9")
     assert local_llm.available() is None
@@ -76,7 +143,7 @@ def test_an_unreachable_server_is_none_and_not_an_exception(monkeypatch):
     assert local_llm.complete_json("s", "u") is None
 
 
-def test_a_negative_probe_is_cached(monkeypatch):
+def test_a_negative_probe_is_cached(monkeypatch, generation_on):
     """Otherwise every distil on a machine with no model pays a full timeout
     before falling back, turning a working feature into a slow one."""
     calls = []
@@ -91,7 +158,9 @@ def test_a_negative_probe_is_cached(monkeypatch):
     assert len(calls) == 1, "the negative result was re-probed"
 
 
-def test_a_cached_model_is_not_reused_after_the_endpoint_moves(monkeypatch):
+def test_a_cached_model_is_not_reused_after_the_endpoint_moves(
+    monkeypatch, generation_on
+):
     """The cached id belongs to the server that answered, not to the clock.
 
     Auto-selection rotates on a 30s TTL while the probe cache defaults to 60s,

@@ -345,11 +345,12 @@ async def marm_distill(
     something stored -- worth your judgement, because an encoder cannot tell
     "refines it" from "contradicts it").
 
-    With `use_llm` (the default where a local model is configured) it composes
-    a self-contained fact, and every generated proposal cites a VERBATIM span
-    from the transcript, checked against the source before it is offered.
+    With `use_llm=True`, once the operator has enabled local generation, it
+    composes a self-contained fact, and every generated proposal cites a
+    VERBATIM span from the transcript, checked against the source before it is
+    offered.
 
-    Without a model, or with `use_llm=False`, it falls back to SELECTING
+    By default, and whenever no model is enabled and reachable, it SELECTS
     sentences: a fact spread over three turns, or implied but never said
     plainly, will not be proposed.
 
@@ -372,6 +373,8 @@ async def marm_distill(
     - limit: most proposals to return (default 20). THIS is the volume control
     - include_duplicates: also stage what the store already holds (default off,
       because a queue of known facts does not get read)
+    - use_llm: write facts with the local model (default off; needs the
+      operator to have enabled generation, and falls back to selection)
 
     Returns: status plus `proposals` (propose) or `pending` (review), each
     carrying content, score, the reasons it scored, verdict, cosine, and the
