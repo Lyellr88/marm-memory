@@ -20,6 +20,7 @@ import structlog
 from .. import distill as distill_service
 from .. import local_llm
 from .brief import Brief, _user
+from .budget import Budget
 from .verify import extract_citations, verify
 
 logger = structlog.get_logger(__name__)
@@ -65,17 +66,27 @@ async def stage_conclusions(
         return {"staged": [], "skipped": [{"content": "", "reason": "no answer"}]}
     if brief.verification is None or brief.verification.state == "rejected":
         return {"staged": [], "skipped": [{"content": "", "reason": "brief rejected"}]}
+    # The answer's own budget: a reasoning model spends a small one thinking.
     reply = await asyncio.to_thread(
         local_llm.complete,
         CONCLUSIONS_SYSTEM,
         f"{_user(brief.packet, task)}\n\nYour answer:\n{brief.answer}",
-        max_tokens=256,
+        max_tokens=Budget.from_env().output_tokens,
     )
+    if not reply or not reply.strip():
+        reason = "the model wrote no conclusions within its budget"
+        return {"staged": [], "skipped": [{"content": "", "reason": reason}]}
+    lines = parse_conclusions(reply)
+    if not lines:
+        return {
+            "staged": [],
+            "skipped": [{"content": "", "reason": "nothing durable to propose"}],
+        }
     staged: list[str] = []
     now = distill_service._now()
     expires = (now + timedelta(hours=distill_service.TTL_HOURS)).isoformat()
     with memory.get_connection() as conn:
-        for line in parse_conclusions(reply or ""):
+        for line in lines:
             v = verify(line, brief.packet)
             if v.state != "verified":
                 skipped.append({"content": line, "reason": f"not verified ({v.state})"})

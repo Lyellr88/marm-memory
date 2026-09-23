@@ -551,3 +551,38 @@ def test_the_stream_can_apply_when_the_operator_allows_it(monkeypatch, tmp_path)
             "SELECT metadata FROM memories WHERE id = ?", (decision["memory_id"],)
         ).fetchone()
     assert json.loads(meta)["origin"] == "analyst"
+
+
+def test_conclusions_get_the_same_output_budget_as_the_answer(
+    staged_memory, monkeypatch
+):
+    """A reasoning model spends a small budget thinking and answers with
+    nothing; 256 tokens came back empty twice against a live model."""
+    from marm_mcp_server.services.analyst import Budget
+
+    seen = {}
+
+    def complete(*_a, max_tokens=None, **_k):
+        seen["max_tokens"] = max_tokens
+        return "- apply calls claim before writing [S1] [S2]"
+
+    monkeypatch.setattr(review.local_llm, "complete", complete)
+    _stage(staged_memory, "apply calls claim [S1] [S2].")
+    assert seen["max_tokens"] == Budget.from_env().output_tokens
+
+
+def test_a_model_that_returns_nothing_is_not_reported_as_nothing_durable(
+    staged_memory, monkeypatch
+):
+    _model(monkeypatch, None)
+    out = _stage(staged_memory, "apply calls claim [S1] [S2].")
+    assert out["staged"] == []
+    assert out["skipped"] == [
+        {"content": "", "reason": "the model wrote no conclusions within its budget"}
+    ]
+
+
+def test_a_reply_with_no_bullets_says_nothing_was_durable(staged_memory, monkeypatch):
+    _model(monkeypatch, "Nothing here is worth remembering.")
+    out = _stage(staged_memory, "apply calls claim [S1] [S2].")
+    assert out["skipped"] == [{"content": "", "reason": "nothing durable to propose"}]
