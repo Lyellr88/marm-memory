@@ -2,7 +2,12 @@ import { useMemo } from 'react';
 import { Badge, Button, cn } from '@/components/ui/core';
 import { MemoryEmptyState } from '@/components/memory/shared';
 import { Sparkles, CircleAlert, FileCode2 } from 'lucide-react';
-import type { CodeContextCitation, CodeContextResult, CodeContextSymbol } from '@/lib/marm-types';
+import type {
+  AnswerGrounding,
+  CodeContextCitation,
+  CodeContextResult,
+  CodeContextSymbol,
+} from '@/lib/marm-types';
 import { CopyButton } from './shared';
 
 /** The model writes markdown. Rendering it as literal asterisks is not a small
@@ -89,6 +94,8 @@ export interface AnswerStream {
   model?: string;
   message?: string;
   hint?: string;
+  grounding?: AnswerGrounding;
+  unresolved?: string[];
 }
 
 export function AnswerPane({
@@ -127,21 +134,27 @@ export function AnswerPane({
   // a time. Without this a reader watches raw `[cpu_write_register]` text for
   // the whole eight seconds and only sees links at the very end. The symbols
   // are already on the page, so the same resolution is available locally.
+  // Once the server has ruled, only what it resolved is linked.
+  const arriving = stream?.status === 'streaming';
   const citations = useMemo(() => {
-    if (settled.length > 0 || !symbols?.length) return settled;
+    if (!arriving || !symbols?.length) return settled;
     return symbols.map((symbol) => ({
       name: symbol.name,
       qualified_name: symbol.qualified_name,
       file_path: symbol.file_path,
       start_line: symbol.start_line,
     }));
-  }, [settled, symbols]);
+  }, [arriving, settled, symbols]);
   const model = streaming ? stream.model : result?.answer_model;
+  // `answering` is not a verdict: grounding is decided on the finished text.
   const status = streaming
     ? stream.status === 'error'
       ? 'failed'
-      : 'ok'
+      : arriving
+        ? 'answering'
+        : (stream.grounding ?? 'unverified')
     : result?.answer_status;
+  const hint = streaming ? stream.hint : result?.answer_hint;
 
   if (stream?.status === 'error') {
     return (
@@ -183,7 +196,7 @@ export function AnswerPane({
     );
   }
 
-  if (status !== 'ok' || (!text && stream?.status !== 'streaming')) {
+  if (status === 'unavailable' || status === 'failed' || (!text && !arriving)) {
     return (
       <div className="rounded-xl border border-amber-500/25 bg-amber-500/[0.05] p-4">
         <div className="flex items-start gap-3">
@@ -194,7 +207,7 @@ export function AnswerPane({
                 ? 'No local model is reachable'
                 : 'The local model did not answer'}
             </p>
-            <p className="mt-1 text-sm text-muted-foreground">{result?.answer_hint}</p>
+            <p className="mt-1 text-sm text-muted-foreground">{hint}</p>
             <p className="mt-2 text-[11px] text-muted-foreground">
               Everything else on this page is unaffected — the ranked symbols, their source and
               what memory knows were retrieved without a model and are the answer a reader needs.
@@ -208,21 +221,33 @@ export function AnswerPane({
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <Badge variant="outline" className="border-primary/30 text-primary-highlight">
-          <Sparkles className="mr-1 h-3 w-3" />
-          grounded answer
-        </Badge>
+        {status === 'ok' ? (
+          <Badge variant="outline" className="border-primary/30 text-primary-highlight">
+            <Sparkles className="mr-1 h-3 w-3" />
+            grounded answer
+          </Badge>
+        ) : status === 'answering' ? (
+          <Badge variant="outline" className="text-muted-foreground">
+            <Sparkles className="mr-1 h-3 w-3" />
+            answering…
+          </Badge>
+        ) : (
+          <Badge variant="outline" className="border-amber-500/40 text-amber-200">
+            <CircleAlert className="mr-1 h-3 w-3" />
+            unverified
+          </Badge>
+        )}
         {model && (
           <Badge variant="outline" className="font-mono text-[10px]">
             {model}
           </Badge>
         )}
         <span className="text-[11px] text-muted-foreground">
-          {/* While streaming, the composition may not have landed yet, so the
-              count is omitted rather than shown as a confident zero. */}
-          {typeof result?.symbol_count === 'number'
-            ? `Answered only from the ${result.symbol_count.toLocaleString()} ranked symbols above — not from general knowledge of similar projects.`
-            : 'Answered only from the ranked context for this task — not from general knowledge of similar projects.'}
+          {status === 'unverified'
+            ? hint
+            : typeof result?.symbol_count === 'number'
+              ? `Written only from the ${result.symbol_count.toLocaleString()} ranked symbols above — not from general knowledge of similar projects.`
+              : 'Written only from the ranked context for this task — not from general knowledge of similar projects.'}
         </span>
         <div className="ml-auto">
           <CopyButton className="h-7 w-7" value={text} label="Copy the answer" />
@@ -264,10 +289,12 @@ export function AnswerPane({
         </div>
       )}
 
-      <p className="text-[11px] text-muted-foreground">
-        A grounded answer can still be wrong about code it was given. The citations are the point —
-        click one to read the source it claims to be describing.
-      </p>
+      {status === 'ok' && (
+        <p className="text-[11px] text-muted-foreground">
+          A grounded answer can still be wrong about code it was given. The citations are the point —
+          click one to read the source it claims to be describing.
+        </p>
+      )}
     </div>
   );
 }

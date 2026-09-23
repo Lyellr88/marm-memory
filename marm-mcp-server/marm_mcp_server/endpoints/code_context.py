@@ -55,8 +55,11 @@ class CodeContextRequest(BaseModel):
             "Also answer the task from the composed context using a local "
             "model, with citations to the symbols it used. Off by default: it "
             "is the slow step, and the ranked context is already the answer "
-            "for a caller that reads code. Reports `answer_status` "
-            "'unavailable' rather than failing when no model is reachable."
+            "for a caller that reads code. `answer_status` is 'ok' only when "
+            "the answer's citations resolve to composed symbols and none name "
+            "anything else; otherwise 'unverified', with `answer_unresolved`. "
+            "'unavailable' rather than a failure when generation is off or no "
+            "model is reachable."
         ),
     )
     include_graph: bool = Field(

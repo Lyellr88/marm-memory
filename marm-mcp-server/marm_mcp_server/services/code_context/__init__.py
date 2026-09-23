@@ -251,26 +251,37 @@ async def answer_from_context(ctx: "Context", task: str) -> dict:
             ),
         }
 
-    return {
+    citations, unresolved = _check_citations(text, ctx)
+    status, hint = _grounding(citations, unresolved)
+    out = {
         "answer": text,
-        "answer_status": "ok",
+        "answer_status": status,
         "answer_model": model,
-        "answer_citations": _resolve_citations(text, ctx),
+        "answer_citations": citations,
+        "answer_unresolved": unresolved,
     }
+    if hint:
+        out["answer_hint"] = hint
+    return out
 
 
-def _resolve_citations(text: str, ctx: "Context") -> list[dict]:
-    """Map the names a model cited back onto real symbols.
+# `[name]` or `[`name`]`, but not the text of a markdown link `[text](url)`.
+_CITATION = re.compile(r"\[(`?)([^\]`\n]{1,200})`?\](?!\()")
+_IDENTIFIER = re.compile(r"[A-Za-z_][\w.:]*")
+# What separates a cited identifier from a bracketed word: an underscore, a
+# qualifying separator, or an inner capital. `[optional]` and `[1]` are prose.
+_IDENTIFIER_MARK = re.compile(r"[_.:]|[a-z][A-Z]")
+
+
+def _check_citations(text: str, ctx: "Context") -> tuple[list[dict], list[str]]:
+    """Map the names a model cited onto real symbols, and report the rest.
 
     Resolution is against the BARE name, because that is what the model can
-    see: `format.render` writes `**name** (Kind)` and never the qualified name,
-    so an earlier version matching on `qualified_name` resolved nothing at all
-    and reported zero citations for an answer that was full of them.
+    see: `format.render` writes `**name** (Kind)` and never the qualified name.
 
-    Names not in the context are dropped rather than returned. A model that
-    invents a symbol is precisely the failure grounding exists to prevent, and
-    the Console renders these as links to source -- an invented one would be a
-    dead link presented as evidence.
+    An identifier-shaped citation that resolves to nothing is returned in the
+    second list, never as a citation: the Console renders citations as links
+    to source, and an invented one would be a dead link presented as evidence.
     """
     by_name: dict[str, Symbol] = {}
     for symbol in ctx.symbols:
@@ -280,13 +291,20 @@ def _resolve_citations(text: str, ctx: "Context") -> list[dict]:
 
     seen: set[str] = set()
     out: list[dict] = []
-    resolved: Symbol | None
-    # Backticks inside the brackets are normal -- a model writing markdown
-    # prose spells a symbol [`thing`] -- so they are stripped, not matched.
-    for raw in re.findall(r"\[`?([^\]`\n]{1,200})`?\]", text):
+    unresolved: list[str] = []
+    for match in _CITATION.finditer(text):
+        backticked, raw = match.group(1), match.group(2)
         name = raw.strip().strip("`").split("(")[0].strip()
         resolved = by_name.get(name.casefold())
-        if resolved is None or resolved.qualified_name in seen:
+        if resolved is None:
+            if (
+                _IDENTIFIER.fullmatch(name)
+                and (backticked or _IDENTIFIER_MARK.search(name))
+                and name not in unresolved
+            ):
+                unresolved.append(name)
+            continue
+        if resolved.qualified_name in seen:
             continue
         seen.add(resolved.qualified_name)
         out.append(
@@ -297,7 +315,28 @@ def _resolve_citations(text: str, ctx: "Context") -> list[dict]:
                 "start_line": resolved.start_line,
             }
         )
-    return out
+    return out, unresolved
+
+
+def _grounding(citations: list[dict], unresolved: list[str]) -> tuple[str, str | None]:
+    """`ok` only when the answer cites the context and cites nothing else.
+
+    The same verdict on both paths, so the Console cannot call one answer
+    grounded that an agent would be told is not.
+    """
+    if unresolved:
+        return "unverified", (
+            "The answer cites "
+            + ", ".join(unresolved[:5])
+            + ", which the composed context does not contain, so it is not "
+            "grounded in the evidence shown."
+        )
+    if not citations:
+        return "unverified", (
+            "No citation in the answer resolves to a symbol in the composed "
+            "context, so it is not grounded in the evidence shown."
+        )
+    return "ok", None
 
 
 def stream_answer(
@@ -377,7 +416,14 @@ def stream_answer(
             },
         )
         return
-    yield (
-        "done",
-        {"citations": _resolve_citations(answer, ctx), "length": len(answer)},
-    )
+    citations, unresolved = _check_citations(answer, ctx)
+    status, hint = _grounding(citations, unresolved)
+    done: dict = {
+        "citations": citations,
+        "unresolved": unresolved,
+        "status": status,
+        "length": len(answer),
+    }
+    if hint:
+        done["hint"] = hint
+    yield ("done", done)

@@ -6,7 +6,7 @@ import { useConnection } from '@/lib/marm-connection';
 import type { 
   MemoryListParams, MemoryInput, MemoryId, LogListParams, NotebookDeleteRef, NotebookInput,
   CompactionAction, ConceptSearchParams, ConceptBuildInput, ConceptGraphParams,
-  ProjectIndexInput, CodeSearchInput, CodeContextInput, CodeContextCitation, DistillInput, TraceInput, ImpactInput, DuplicatePairInput,
+  ProjectIndexInput, CodeSearchInput, CodeContextInput, CodeContextCitation, AnswerGrounding, DistillInput, TraceInput, ImpactInput, DuplicatePairInput,
   MergeDuplicateInput, RuntimeProfile
 } from '@/lib/marm-types';
 import { MarmApiError } from '@/lib/marm-api';
@@ -884,6 +884,9 @@ export function useStreamingAnswer() {
     model?: string;
     message?: string;
     hint?: string;
+    /** The server's verdict on the finished text; absent until `done`. */
+    grounding?: AnswerGrounding;
+    unresolved?: string[];
   }>({ status: 'idle', text: '', citations: [] });
   const active = useRef<{ abort: () => void } | null>(null);
 
@@ -905,6 +908,11 @@ export function useStreamingAnswer() {
             ...prev,
             status: 'done',
             citations: (payload.citations as CodeContextCitation[]) ?? [],
+            // Absent from a server that predates the check, which cannot have
+            // verified anything, so it is unverified rather than grounded.
+            grounding: (payload.status as AnswerGrounding | undefined) ?? 'unverified',
+            unresolved: (payload.unresolved as string[] | undefined) ?? [],
+            hint: payload.hint as string | undefined,
           }));
         } else if (name === 'error') {
           setState((prev) => ({

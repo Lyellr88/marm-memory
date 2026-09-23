@@ -975,13 +975,19 @@ export interface CodeContextResult {
   /** Grounded answer, present only when `answer` was requested. `null` with a
    *  status of `unavailable`/`failed` means the retrieval above still stands. */
   answer?: string | null;
-  answer_status?: 'ok' | 'unavailable' | 'failed';
+  /** `ok` only when the citations resolve to the composed symbols and none
+   *  name anything else; `unverified` otherwise. */
+  answer_status?: AnswerGrounding | 'unavailable' | 'failed';
   answer_hint?: string;
   answer_model?: string;
   /** Only symbols that are actually in the context; an invented name is
    *  dropped server-side rather than rendered as a dead link. */
   answer_citations?: CodeContextCitation[];
+  /** Identifier-shaped citations that resolved to nothing in the context. */
+  answer_unresolved?: string[];
 }
+
+export type AnswerGrounding = 'ok' | 'unverified';
 
 export interface CodeContextCitation {
   name: string;

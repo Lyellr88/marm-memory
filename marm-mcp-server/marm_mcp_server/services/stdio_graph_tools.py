@@ -386,8 +386,11 @@ async def marm_code_context(
       off by default because it is several KB of JSON only a visualiser reads
     - answer: also answer the task from the composed context with a local
       model, citing the symbols it used. Off by default -- it is the slow step,
-      and for an agent that reads code the ranked context IS the answer. Says
-      `answer_status: "unavailable"` rather than failing when no model is up
+      and for an agent that reads code the ranked context IS the answer.
+      `answer_status` is "ok" only when its citations resolve to composed
+      symbols and none name anything else, otherwise "unverified" with
+      `answer_unresolved`; "unavailable" rather than a failure when
+      generation is off or no model is up
     - detail: how much to return. 1 is markdown only and is the default,
       because `markdown` already contains the source and the memory text --
       asking for 3 means paying for the same bytes twice. 2 adds symbol and

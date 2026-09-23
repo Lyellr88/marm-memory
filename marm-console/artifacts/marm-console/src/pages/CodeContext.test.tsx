@@ -281,6 +281,61 @@ describe('CodeContextPage', () => {
     expect(screen.getByText(/The PPU triggers an NMI when/)).toBeTruthy();
   });
 
+  it('does not call an answer grounded while it is still arriving', () => {
+    // Grounding is decided on the finished text; a marker may still be arriving.
+    answerState.status = 'streaming';
+    answerState.text = 'rank_memories sorts by';
+    render(<CodeContextPage />);
+
+    expect(screen.getByText('answering…')).toBeTruthy();
+    expect(screen.queryByText('grounded answer')).toBeNull();
+  });
+
+  it('calls a finished answer grounded only when the server verified it', () => {
+    answerState.status = 'done';
+    answerState.text = 'It sorts [rank_memories].';
+    (answerState as Record<string, unknown>).grounding = 'ok';
+    render(<CodeContextPage />);
+
+    expect(screen.getByText('grounded answer')).toBeTruthy();
+    delete (answerState as Record<string, unknown>).grounding;
+  });
+
+  it('labels an unverified streamed answer and says why', () => {
+    answerState.status = 'done';
+    answerState.text = 'It calls [persist_all_rows].';
+    Object.assign(answerState as Record<string, unknown>, {
+      grounding: 'unverified',
+      unresolved: ['persist_all_rows'],
+      hint: 'The answer cites persist_all_rows, which the composed context does not contain.',
+    });
+    render(<CodeContextPage />);
+
+    expect(screen.queryByText('grounded answer')).toBeNull();
+    expect(screen.getByText(/^unverified$/i)).toBeTruthy();
+    expect(screen.getByText(/which the composed context does not contain/)).toBeTruthy();
+    // The text is still shown -- it is labelled, not hidden.
+    expect(screen.getByText(/It calls/)).toBeTruthy();
+    for (const key of ['grounding', 'unresolved', 'hint']) {
+      delete (answerState as Record<string, unknown>)[key];
+    }
+  });
+
+  it('labels an unverified JSON answer the same way', () => {
+    buildState.data = {
+      ...SUCCESS,
+      answer: 'It sorts, somehow.',
+      answer_status: 'unverified',
+      answer_citations: [],
+      answer_hint: 'No citation in the answer resolves to a symbol in the composed context.',
+    };
+    render(<CodeContextPage />);
+
+    expect(screen.queryByText('grounded answer')).toBeNull();
+    expect(screen.getByText(/^unverified$/i)).toBeTruthy();
+    expect(screen.getByText(/No citation in the answer resolves/)).toBeTruthy();
+  });
+
   it('a streaming answer does not wait for the composition', () => {
     // There is no `result` at all here -- retrieval has not returned yet and
     // the answer is already on screen.
