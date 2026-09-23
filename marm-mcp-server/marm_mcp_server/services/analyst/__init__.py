@@ -5,5 +5,15 @@ whether the answer is supported. Nothing here writes memory.
 """
 
 from .packet import EvidencePacket, build_packet, merge_packets, render_packet
+from .verify import Citation, Verification, extract_citations, verify
 
-__all__ = ["EvidencePacket", "build_packet", "merge_packets", "render_packet"]
+__all__ = [
+    "Citation",
+    "EvidencePacket",
+    "Verification",
+    "build_packet",
+    "extract_citations",
+    "merge_packets",
+    "render_packet",
+    "verify",
+]
