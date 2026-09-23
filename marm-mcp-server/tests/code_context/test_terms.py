@@ -1,4 +1,7 @@
+import pytest
+
 from marm_mcp_server.services.code_context.terms import (
+    asks_for_callers,
     content_terms,
     is_distinctive,
     looks_like_test,
@@ -56,3 +59,31 @@ def test_source_paths_are_not_flagged():
 def test_test_function_names_are_recognised():
     assert looks_like_test("src/lib.rs", "test_parses_header")
     assert looks_like_test("src/lib.rs", "it_rejects_bad_input")
+
+
+@pytest.mark.parametrize(
+    "task",
+    [
+        "What calls build_code_context?",
+        "who calls apply",
+        "Which functions call claim()?",
+        "callers of seed_query",
+        "where is is_distinctive called from",
+        "Where is `read` used?",
+    ],
+)
+def test_a_question_about_callers_is_recognised(task):
+    assert asks_for_callers(task)
+
+
+@pytest.mark.parametrize(
+    "task",
+    [
+        "How does build_code_context work?",
+        "What does apply call?",
+        "what does the rate limiter do when the swarm profile is active",
+        "the budget never calls readline with zero",
+    ],
+)
+def test_a_question_about_anything_else_is_not(task):
+    assert not asks_for_callers(task)

@@ -235,6 +235,21 @@ def seed_query(task: str) -> str:
     return " ".join(terms) if terms else (task or "")
 
 
+_CALLER_QUESTION = re.compile(
+    r"\bcallers?\b"
+    r"|\b(?:what|who|which)\s+(?:(?!(?:do|does|did)\b)\w+\s+){0,2}"
+    r"(?:calls?|invokes?|uses?)\b"
+    r"|\bwhere\b[^?.]*\b(?:called|used|invoked)\b"
+    r"|\bcalled\s+(?:by|from)\b",
+    re.I,
+)
+
+
+def asks_for_callers(task: str) -> bool:
+    """True when the task asks what calls something rather than what it does."""
+    return bool(_CALLER_QUESTION.search(task or ""))
+
+
 def is_distinctive(word: str) -> bool:
     """True when `word` identifies something, rather than being boilerplate."""
     low = word.lower().strip("_")

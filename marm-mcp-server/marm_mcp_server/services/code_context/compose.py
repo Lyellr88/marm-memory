@@ -26,7 +26,7 @@ from .backend import GraphUnavailable, LocalBackend
 from .project import resolve, short_name
 from .rank import personalised_pagerank
 from .snippets import dedent_block, read
-from .terms import is_distinctive, looks_like_test, seed_query
+from .terms import asks_for_callers, is_distinctive, looks_like_test, seed_query
 
 SEED_LIMIT = 25
 EXPAND_SEEDS = 6
@@ -36,6 +36,8 @@ DEFAULT_BUDGET = 12000
 TEST_PENALTY = 0.15
 MEMORY_PROBES = 6
 MEMORY_LIMIT = 6
+BACKFILL_SEARCHES = 24
+BACKFILL_ROWS = 10
 
 
 @dataclass
@@ -280,6 +282,8 @@ async def build(
         seed_mass[s.qualified_name] = mass
 
     edges: list[tuple[str, str, float]] = []
+    # Direct callers of a seed, with that seed's mass.
+    callers_of_seeds: dict[str, float] = {}
     traces_unavailable = 0
     # Snapshot BEFORE the loop: a successful trace adds graph-derived symbols to
     # `by_qn`, so measuring it afterwards would report a denominator including
@@ -315,6 +319,11 @@ async def build(
             traces_unavailable += 1
             continue
         edges += _edges_from_trace(payload, s.qualified_name)
+        for row in payload.get("callers") or []:
+            qn = row.get("qualified_name")
+            if qn and int(row.get("hop") or 1) <= 1:
+                mass = seed_mass.get(s.qualified_name, 0.0)
+                callers_of_seeds[qn] = max(callers_of_seeds.get(qn, 0.0), mass)
         for key in ("callees", "callers"):
             for row in payload.get(key) or []:
                 qn = row.get("qualified_name")
@@ -354,37 +363,47 @@ async def build(
         # and a symbol absent from the call graph would otherwise score zero and
         # vanish even when it is the obvious answer.
         s.score = max(ranks.get(qn, 0.0), seed_mass.get(qn, 0.0) * 0.1)
+    if asks_for_callers(task):
+        # The graph cannot tell a caller from a callee of the same seed; the
+        # question can. A direct caller then answers it as surely as a seed.
+        for qn, mass in callers_of_seeds.items():
+            if qn in by_qn:
+                by_qn[qn].score = max(by_qn[qn].score, mass * 0.1)
 
     _apply_test_penalty(list(by_qn.values()))
     ordered = sorted(by_qn.values(), key=lambda s: -s.score)
 
-    # Resolve file/line for ranked symbols that arrived via trace without them.
-    for s in ordered[:12]:
-        if s.file_path or not s.name:
-            continue
-        try:
-            rows = await asyncio.to_thread(client.search, name, s.name, limit=3)
-        except GraphUnavailable:
-            # Every other graph call here degrades rather than failing: the
-            # trace loop counts it, binding/recall/memory_links swallow it.
-            # This is cosmetic backfill -- a file and line for a symbol the
-            # ranking already has -- so an engine that dies after seeding must
-            # not turn a usable composition into a failed request.
-            break
-        for row in rows:
-            if row.get("qualified_name") == s.qualified_name:
-                found = _sym(row)
-                s.file_path, s.start_line, s.end_line = (
-                    found.file_path,
-                    found.start_line,
-                    found.end_line,
-                )
-                s.label = s.label or found.label
-                break
-
+    # Traced symbols arrive without a file. Resolve them as emission reaches
+    # them, so the budget, not a fixed window, decides how deep the output goes.
+    backfills = 0
+    backfill_ok = True
     spent = 0
     for s in ordered:
-        if not s.file_path or spent >= budget:
+        if spent >= budget:
+            break
+        if not s.file_path and s.name and backfill_ok and backfills < BACKFILL_SEARCHES:
+            backfills += 1
+            try:
+                # A bare name is shared by its namesakes across the project, so
+                # read past the first few rows for the traced one.
+                rows = await asyncio.to_thread(
+                    client.search, name, s.name, limit=BACKFILL_ROWS
+                )
+            except GraphUnavailable:
+                # Cosmetic: losing the engine here costs file and line only.
+                backfill_ok = False
+                rows = []
+            for row in rows:
+                if row.get("qualified_name") == s.qualified_name:
+                    found = _sym(row)
+                    s.file_path, s.start_line, s.end_line = (
+                        found.file_path,
+                        found.start_line,
+                        found.end_line,
+                    )
+                    s.label = s.label or found.label
+                    break
+        if not s.file_path:
             continue
         text, truncated = read(root, s.file_path, s.start_line, s.end_line)
         if not text:
