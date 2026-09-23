@@ -415,3 +415,139 @@ def test_an_unknown_review_mode_is_refused_over_http(monkeypatch, tmp_path):
 
 def test_an_unknown_review_mode_is_refused_over_stdio(monkeypatch, tmp_path):
     assert _distill_stdio(monkeypatch, tmp_path, _UNKNOWN)["status"] == "error"
+
+
+# --- the same modes on the answer STREAM (what the Console uses) ---------------
+
+
+@pytest.fixture
+def streamed(monkeypatch, tmp_path):
+    return _streamed(monkeypatch, tmp_path)
+
+
+def _streamed(monkeypatch, tmp_path, **server_kw):
+    """The real HTTP stream route, with the graph and the model stubbed."""
+    from conftest import load_isolated_server, local_client
+
+    server = load_isolated_server(monkeypatch, tmp_path, **server_kw)
+    import importlib
+
+    cc = importlib.import_module("marm_mcp_server.services.code_context")
+    local_llm = importlib.import_module("marm_mcp_server.services.local_llm")
+    rv = importlib.import_module("marm_mcp_server.services.analyst.review")
+
+    async def build(_backend, _task, **_kw):
+        return Context(
+            project={"name": "graph-id", "root_path": "/x/demo"},
+            task="how",
+            symbols=[
+                Symbol(
+                    "pkg.apply",
+                    "apply",
+                    "Function",
+                    "pkg/a.py",
+                    1,
+                    9,
+                    source="def apply():\n    claim()\n",
+                ),
+                Symbol("pkg.claim", "claim", "Function", "pkg/a.py", 11, 15),
+            ],
+            graph_edges=[("pkg.apply", "pkg.claim", 1.0)],
+        )
+
+    def complete(system, *_a, **_k):
+        if system == rv.CONCLUSIONS_SYSTEM:
+            return "- apply calls claim before writing [S1] [S2]"
+        return "apply calls claim [S1] [S2]."
+
+    def stream(*_a, finished=None, **_k):
+        if finished is not None:
+            finished["reason"] = "stop"
+        yield "apply calls claim [S1] [S2]."
+
+    monkeypatch.setattr(cc, "build", build)
+    monkeypatch.setattr(cc, "LocalBackend", lambda: object())
+    monkeypatch.setattr(local_llm, "available", lambda *a, **k: "stub-model")
+    monkeypatch.setattr(local_llm, "endpoint_source", lambda: "environment")
+    monkeypatch.setattr(local_llm, "complete", complete)
+    monkeypatch.setattr(local_llm, "stream", stream)
+    client = local_client(server.app)
+    from marm_mcp_server.core.memory import memory as live
+
+    return client, live
+
+
+def _done_of(body):
+    events = []
+    for block in body.strip().split("\n\n"):
+        lines = dict(ln.split(": ", 1) for ln in block.splitlines() if ": " in ln)
+        events.append((lines["event"], json.loads(lines["data"])))
+    assert events[-1][0] == "done", [e for e, _ in events]
+    return events[-1][1]
+
+
+def _stream(client, mode):
+    return client.post(
+        "/internal/code-context/answer",
+        json={"task": "how", "project": "p", "answer": True, "analyst_mode": mode},
+    ).text
+
+
+def test_the_stream_stages_in_manual_review(streamed):
+    client, memory = streamed
+    done = _done_of(_stream(client, "manual_review"))
+    assert done["status"] == "ok"
+    assert done["analyst"]["mode"] == "manual_review"
+    assert len(done["analyst"]["staged"]) == 1
+    assert _pending(memory) == [("analyst:demo", "demo")]
+
+
+def test_the_stream_stays_read_only_by_default(streamed):
+    client, memory = streamed
+    done = _done_of(_stream(client, "read_only"))
+    assert "analyst" not in done
+    assert _pending(memory) == []
+
+
+def test_the_stream_reports_guardrail_decisions(streamed, monkeypatch):
+    monkeypatch.delenv("MARM_ANALYST_AUTO_APPLY", raising=False)
+    client, memory = streamed
+    done = _done_of(_stream(client, "guardrails"))
+    (decision,) = done["analyst"]["decisions"]
+    assert decision["applied"] is False
+    assert decision["decision"]["checks"]["operator_enabled"] is False
+    with memory.get_connection() as conn:
+        assert conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0] == 0
+
+
+def test_the_stream_can_apply_when_the_operator_allows_it(monkeypatch, tmp_path):
+    """The one path that writes, through the write queue as the server runs it.
+
+    The first queued write starts the queue on whatever loop is running. From
+    the stream's worker thread, anything but the server's own loop leaves the
+    write waiting on a queue bound to a loop that has closed, and the answer
+    stalls until the queue times out (about a minute) and falls back. `with
+    client` keeps one server loop across requests, as a real server has.
+    """
+    import time
+
+    monkeypatch.setenv("MARM_ANALYST_AUTO_APPLY", "1")
+    client, memory = _streamed(monkeypatch, tmp_path, write_queue_enabled=True)
+    with client:
+        started = time.monotonic()
+        done = _done_of(_stream(client, "guardrails"))
+        elapsed = time.monotonic() - started
+        later = client.post(
+            "/marm_log_entry",
+            json={"entry": "2026-01-02-a later write still lands", "session_name": "s"},
+        )
+    assert elapsed < 20, f"the answer stalled {elapsed:.0f}s writing through the queue"
+    (decision,) = done["analyst"]["decisions"]
+    assert decision["applied"] is True, decision["decision"]
+    assert later.status_code == 200, later.text
+    assert later.json().get("status") != "error", later.text
+    with memory.get_connection() as conn:
+        (meta,) = conn.execute(
+            "SELECT metadata FROM memories WHERE id = ?", (decision["memory_id"],)
+        ).fetchone()
+    assert json.loads(meta)["origin"] == "analyst"

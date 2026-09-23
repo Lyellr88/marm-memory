@@ -147,6 +147,7 @@ def stream_code_context_answer(req: CodeContextRequest) -> StreamingResponse:
                 budget=req.budget,
                 include_graph=req.include_graph,
                 detail=req.detail or None,
+                analyst_mode=req.analyst_mode,
             ):
                 if name == "context" and payload.get("status") in {
                     "unavailable",

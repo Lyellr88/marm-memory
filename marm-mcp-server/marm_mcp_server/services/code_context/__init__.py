@@ -10,8 +10,10 @@ happens to match will outrank the class everything calls.
 """
 
 import asyncio
-from collections.abc import Iterator
-from typing import TYPE_CHECKING
+from collections.abc import Callable, Coroutine, Iterator
+from typing import TYPE_CHECKING, Any
+
+import anyio.from_thread
 
 from ...config.env_parsing import _safe_int
 from .backend import GraphUnavailable, LocalBackend
@@ -77,26 +79,42 @@ async def build_code_context(
     )
     payload.update(brief.to_answer_fields())
     if analyst_mode != "read_only":
-        from ...core.memory import memory
-        from ..analyst.review import stage_conclusions
-
-        staged = await stage_conclusions(
-            memory,
-            brief,
-            task,
-            session_name=f"analyst:{short_name(ctx.project)}",
-            project=_memory_scope(ctx),
-        )
-        payload["analyst"] = _analyst_result(
-            analyst_mode, staged["staged"], staged["skipped"]
-        )
-        if analyst_mode == "guardrails":
-            from ..analyst.review import auto_apply
-
-            payload["analyst"]["decisions"] = await auto_apply(
-                memory, staged["staged"], source_text=None
-            )
+        payload["analyst"] = await _review_brief(brief, task, ctx, analyst_mode)
     return payload
+
+
+async def _review_brief(
+    brief: "Brief", task: str, ctx: "Context", analyst_mode: str
+) -> dict:
+    """Stage the brief's verified conclusions; under guardrails, decide them."""
+    from ...core.memory import memory
+    from ..analyst.review import auto_apply, stage_conclusions
+
+    staged = await stage_conclusions(
+        memory,
+        brief,
+        task,
+        session_name=f"analyst:{short_name(ctx.project)}",
+        project=_memory_scope(ctx),
+    )
+    result = _analyst_result(analyst_mode, staged["staged"], staged["skipped"])
+    if analyst_mode == "guardrails":
+        result["decisions"] = await auto_apply(
+            memory, staged["staged"], source_text=None
+        )
+    return result
+
+
+def _on_server_loop(make: Callable[[], Coroutine[Any, Any, dict]]) -> dict:
+    """Run a coroutine on the server's own loop from the stream's worker thread.
+
+    Guardrails may write through the write queue, which is bound to that loop.
+    A caller with no worker thread (a direct call) has no loop to reach.
+    """
+    try:
+        return anyio.from_thread.run(make)
+    except RuntimeError:
+        return asyncio.run(make())
 
 
 def _analyst_result(mode: str, staged: list, skipped: list) -> dict:
@@ -287,6 +305,7 @@ def stream_answer(
     *,
     include_graph: bool = False,
     detail: int | None = None,
+    analyst_mode: str = "read_only",
 ) -> Iterator[tuple[str, dict]]:
     """Compose ONCE, send that composition, then answer from it as it is written.
 
@@ -315,6 +334,9 @@ def stream_answer(
     def render_context(current: "Context") -> dict:
         return serialise(current, task, include_graph=include_graph, detail=detail)
 
+    def review(brief: "Brief") -> dict:
+        return _on_server_loop(lambda: _review_brief(brief, task, ctx, analyst_mode))
+
     yield ("context", render_context(ctx))
     yield from stream_analysis(
         ctx,
@@ -324,4 +346,5 @@ def stream_answer(
         backend=backend,
         project=project,
         cwd=cwd,
+        after=None if analyst_mode == "read_only" else review,
     )

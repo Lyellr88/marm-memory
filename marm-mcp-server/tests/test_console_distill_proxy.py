@@ -60,3 +60,15 @@ def test_every_server_option_has_a_console_field():
 
     missing = set(DistillRequest.model_fields) - set(DistillPayload.model_fields)
     assert not missing, f"Console drops these distill options: {sorted(missing)}"
+
+
+def test_every_code_context_option_has_a_console_field():
+    """The same defect as `use_llm`, on the other proxy: a server option the
+    Console model does not declare is dropped before it is forwarded."""
+    from marm_mcp_server.console.models import CodeContextPayload
+    from marm_mcp_server.endpoints.code_context import CodeContextRequest
+
+    missing = set(CodeContextRequest.model_fields) - set(
+        CodeContextPayload.model_fields
+    )
+    assert not missing, f"Console drops these code-context options: {sorted(missing)}"

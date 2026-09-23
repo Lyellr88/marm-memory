@@ -15,6 +15,7 @@ class CodeContextPayload(BaseModel):
     #: Ask the local model to answer the task from the composed context. Off
     #: unless requested, here and in the tool.
     answer: bool = False
+    analyst_mode: Literal["read_only", "manual_review", "guardrails"] = "read_only"
 
 
 class DistillPayload(BaseModel):

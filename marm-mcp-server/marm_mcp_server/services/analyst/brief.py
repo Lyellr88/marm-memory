@@ -271,8 +271,12 @@ def stream_analysis(
     backend: LocalBackend | None = None,
     project: str | None = None,
     cwd: str | None = None,
+    after: Callable[[Brief], dict] | None = None,
 ) -> Iterator[tuple[str, dict]]:
     """Yield the answer as it is written, then its verification.
+
+    `after` sees the judged brief before `done` is sent; its result rides on
+    `done` as `analyst`.
 
     The caller has already sent `context`. A follow-up re-sends it through
     `render_context`, so what is displayed is always the evidence the answer
@@ -355,4 +359,8 @@ def stream_analysis(
     brief = Brief(packet=packet, model_id=model, follow_ups_used=used)
     brief.model_info = _model_info(model, max_tokens, started, run, stopped)
     brief.truncated = finished.get("reason") == "length" or bool(stopped)
-    yield ("done", _judge(brief, answer).to_done_event(len(answer)))
+    judged = _judge(brief, answer)
+    done = judged.to_done_event(len(answer))
+    if after is not None:
+        done["analyst"] = after(judged)
+    yield ("done", done)
