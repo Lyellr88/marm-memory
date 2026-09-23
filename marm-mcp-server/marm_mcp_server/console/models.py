@@ -35,6 +35,9 @@ class DistillPayload(BaseModel):
     threshold: float = Field(default=0.20, ge=-2.0, le=3.0)
     limit: int = Field(default=20, ge=1, le=200)
     include_duplicates: bool = False
+    # Pydantic drops an undeclared field silently, so an option missing here
+    # never reaches the server: the page's checkbox would do nothing.
+    use_llm: bool = False
 
 
 class ConceptBuildPayload(BaseModel):
