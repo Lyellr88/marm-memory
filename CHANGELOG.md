@@ -1,6 +1,30 @@
 # Changelog
 
 <details>
+<summary><strong>September 23rd, 2026: Memory Integrity and Distill Input Hardening (v2.51.1)</strong></summary>
+
+### Fixed
+
+- Console metadata-only memory edits now preserve the memory's original
+  timestamp, while an actual content edit continues to record when that content
+  changed.
+- Write-time consolidation now refuses a near-duplicate merge that would exceed
+  the 10,000-character memory limit. The existing memory remains intact and the
+  incoming content is stored separately rather than silently truncating prior
+  evidence.
+- Distill Markdown heading handling now uses bounded line parsing rather than a
+  backtracking regular expression on caller-provided transcript text.
+
+### Acknowledgment
+
+Thank you to [@doublegate](https://github.com/doublegate) for the timestamp
+integrity fix in [#223](https://github.com/Lyellr88/marm-memory/pull/223) and
+the non-destructive consolidation fix in
+[#225](https://github.com/Lyellr88/marm-memory/pull/225).
+
+</details>
+
+<details>
 <summary><strong>September 21st, 2026: Reviewable Memory Distillation (v2.51.0)</strong></summary>
 
 ### Added

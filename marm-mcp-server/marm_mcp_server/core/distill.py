@@ -306,8 +306,22 @@ def _demarkdown(text: str) -> str:
     """
     # Code blocks are transcript, not statement, and they wreck segmentation.
     out = re.sub(r"```.*?```", " ", text, flags=re.S)
-    out = re.sub(r"^\s{0,3}#{1,6}\s*(.+?)\s*$", r"\1.", out, flags=re.M)
-    return out
+    lines = []
+    for line in out.splitlines(keepends=True):
+        body = line.rstrip("\r\n")
+        ending = line[len(body) :]
+        leading = len(body) - len(body.lstrip())
+        if leading > 3:
+            lines.append(line)
+            continue
+        remainder = body[leading:]
+        hashes = len(remainder) - len(remainder.lstrip("#"))
+        heading = remainder[hashes:].strip()
+        if 1 <= hashes <= 6 and heading:
+            lines.append(f"{heading}.{ending}")
+        else:
+            lines.append(line)
+    return "".join(lines)
 
 
 def _usable(span: "Span") -> bool:

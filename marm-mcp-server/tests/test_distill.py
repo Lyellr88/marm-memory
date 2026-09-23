@@ -276,6 +276,13 @@ def test_two_identifiers_differing_only_in_case_are_two_proposals():
     )
 
 
+def test_demarkdown_handles_a_whitespace_heavy_heading():
+    from marm_mcp_server.core.distill import _demarkdown
+
+    heading = "#" + (" " * 400_000) + "Bounded heading\n"
+    assert _demarkdown(heading) == "Bounded heading.\n"
+
+
 @needs_parser
 def test_a_heading_is_not_welded_to_the_paragraph_below_it():
     """A markdown heading has no full stop, so segmentation ran it into the
