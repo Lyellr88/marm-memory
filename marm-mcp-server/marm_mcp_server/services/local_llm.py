@@ -465,6 +465,7 @@ def stream(
     max_tokens: int = 1024,
     temperature: float = 0.0,
     timeout: Optional[float] = None,
+    finished: Optional[dict[str, Any]] = None,
 ) -> Iterator[str]:
     """Yield the reply in pieces as the model produces them.
 
@@ -476,6 +477,10 @@ def stream(
 
     Yields nothing at all when no model is reachable -- the same degradation
     `complete` makes, in the shape a `for` loop already handles.
+
+    `finished`, when given, receives the server's `finish_reason` as
+    `finished["reason"]`. A generator cannot return it, and `length` is how a
+    caller learns the answer was cut off rather than complete.
     """
     base = endpoint()
     model = available()
@@ -512,6 +517,9 @@ def stream(
                 except ValueError:
                     continue
                 choices = chunk.get("choices") or [{}]
+                reason = choices[0].get("finish_reason")
+                if reason and finished is not None:
+                    finished["reason"] = reason
                 piece = (choices[0].get("delta") or {}).get("content")
                 if piece:
                     yield piece

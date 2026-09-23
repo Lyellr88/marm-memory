@@ -6,10 +6,11 @@ import { useConnection } from '@/lib/marm-connection';
 import type { 
   MemoryListParams, MemoryInput, MemoryId, LogListParams, NotebookDeleteRef, NotebookInput,
   CompactionAction, ConceptSearchParams, ConceptBuildInput, ConceptGraphParams,
-  ProjectIndexInput, CodeSearchInput, CodeContextInput, CodeContextCitation, CodeContextResult, AnswerGrounding, DistillInput, TraceInput, ImpactInput, DuplicatePairInput,
+  ProjectIndexInput, CodeSearchInput, CodeContextInput, DistillInput, TraceInput, ImpactInput, DuplicatePairInput,
   MergeDuplicateInput, RuntimeProfile
 } from '@/lib/marm-types';
 import { MarmApiError } from '@/lib/marm-api';
+import { IDLE_ANSWER, applyAnswerEvent, type AnswerStreamState } from '@/lib/answer-stream';
 
 export const queryKeys = {
   overview: (baseUrl: string) => ['overview', baseUrl],
@@ -877,19 +878,7 @@ export function useDistillDiscard() {
  */
 export function useStreamingAnswer() {
   const { client } = useMarmConfig();
-  const [state, setState] = useState<{
-    status: 'idle' | 'streaming' | 'done' | 'error';
-    text: string;
-    citations: CodeContextCitation[];
-    model?: string;
-    message?: string;
-    hint?: string;
-    /** The server's verdict on the finished text; absent until `done`. */
-    grounding?: AnswerGrounding;
-    unresolved?: string[];
-    /** The composition the answer is written from: the stream's first event. */
-    context?: CodeContextResult;
-  }>({ status: 'idle', text: '', citations: [] });
+  const [state, setState] = useState<AnswerStreamState>(IDLE_ANSWER);
   const active = useRef<{ abort: () => void } | null>(null);
 
   // A reader who leaves the page should not keep a model busy on their behalf.
@@ -898,34 +887,9 @@ export function useStreamingAnswer() {
   const start = useCallback(
     (data: CodeContextInput) => {
       active.current?.abort();
-      setState({ status: 'streaming', text: '', citations: [] });
+      setState({ ...IDLE_ANSWER, status: 'streaming' });
       const handle = client.streamCodeContextAnswer(data, (name, payload) => {
-        if (name === 'context') {
-          setState((prev) => ({ ...prev, context: payload as unknown as CodeContextResult }));
-        } else if (name === 'start') {
-          setState((prev) => ({ ...prev, model: payload.model as string }));
-        } else if (name === 'delta') {
-          const piece = payload.text as string;
-          setState((prev) => ({ ...prev, text: prev.text + piece }));
-        } else if (name === 'done') {
-          setState((prev) => ({
-            ...prev,
-            status: 'done',
-            citations: (payload.citations as CodeContextCitation[]) ?? [],
-            // Absent from a server that predates the check, which cannot have
-            // verified anything, so it is unverified rather than grounded.
-            grounding: (payload.status as AnswerGrounding | undefined) ?? 'unverified',
-            unresolved: (payload.unresolved as string[] | undefined) ?? [],
-            hint: payload.hint as string | undefined,
-          }));
-        } else if (name === 'error') {
-          setState((prev) => ({
-            ...prev,
-            status: 'error',
-            message: payload.message as string,
-            hint: payload.hint as string | undefined,
-          }));
-        }
+        setState((prev) => applyAnswerEvent(prev, name, payload));
       });
       active.current = handle;
       handle.done.catch((error: unknown) => {
@@ -943,7 +907,7 @@ export function useStreamingAnswer() {
 
   const reset = useCallback(() => {
     active.current?.abort();
-    setState({ status: 'idle', text: '', citations: [] });
+    setState(IDLE_ANSWER);
   }, []);
 
   return { ...state, start, reset };

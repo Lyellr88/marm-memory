@@ -278,3 +278,58 @@ def test_a_normal_empty_reply_is_also_a_failure_not_an_answer(monkeypatch):
         },
     )
     assert local_llm.complete("sys", "user") is None
+
+
+class _FakeSSE:
+    """Stands in for the HTTP response `stream()` iterates, line by line."""
+
+    def __init__(self, chunks):
+        import json
+
+        self._lines = [f"data: {json.dumps(c)}\n".encode() for c in chunks]
+        self._lines.append(b"data: [DONE]\n")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def __iter__(self):
+        return iter(self._lines)
+
+
+def _serve(monkeypatch, chunks):
+    monkeypatch.setattr(local_llm, "endpoint", lambda: "http://127.0.0.1:1234")
+    monkeypatch.setattr(local_llm, "available", lambda *a, **k: "m")
+    monkeypatch.setattr(
+        local_llm.urllib.request, "urlopen", lambda *a, **k: _FakeSSE(chunks)
+    )
+
+
+def test_stream_yields_content_and_reports_how_it_finished(monkeypatch):
+    _serve(
+        monkeypatch,
+        [
+            {"choices": [{"delta": {"reasoning_content": "thinking..."}}]},
+            {"choices": [{"delta": {"content": "The `apply`"}}]},
+            {"choices": [{"delta": {}, "finish_reason": "length"}]},
+        ],
+    )
+    finished: dict = {}
+    pieces = list(local_llm.stream("s", "u", finished=finished))
+    assert pieces == ["The `apply`"], "reasoning is not answer text"
+    assert finished["reason"] == "length"
+
+
+def test_stream_reports_a_normal_stop(monkeypatch):
+    _serve(
+        monkeypatch,
+        [
+            {"choices": [{"delta": {"content": "done"}}]},
+            {"choices": [{"delta": {}, "finish_reason": "stop"}]},
+        ],
+    )
+    finished: dict = {}
+    assert list(local_llm.stream("s", "u", finished=finished)) == ["done"]
+    assert finished["reason"] == "stop"

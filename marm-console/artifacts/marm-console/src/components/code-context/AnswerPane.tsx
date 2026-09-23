@@ -109,6 +109,7 @@ export interface AnswerStream {
   hint?: string;
   grounding?: AnswerGrounding;
   unresolved?: string[];
+  truncated?: boolean;
 }
 
 export function AnswerPane({
@@ -275,6 +276,14 @@ export function AnswerPane({
           <span className="ml-0.5 inline-block h-4 w-[2px] animate-pulse bg-primary align-text-bottom" />
         )}
       </div>
+
+      {stream?.status === 'done' && stream.truncated && (
+        <p className="text-[11px] text-amber-200/90">
+          The model stopped at its token budget, even after one retry with a wider one, so this answer
+          ends early. Raise <code className="font-mono">MARM_CODE_CONTEXT_ANSWER_TOKENS</code> for a
+          reasoning model.
+        </p>
+      )}
 
       {settled.length > 0 && (
         <div className="rounded-xl border border-border/70 bg-background/25 p-3">

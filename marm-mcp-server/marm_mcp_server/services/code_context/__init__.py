@@ -414,14 +414,26 @@ def stream_answer(
         },
     )
 
+    prompt = f"{render(ctx)}\n\n---\n\nQuestion: {task}\n\nAnswer, citing symbols:"
+    max_tokens = _ANSWER_TOKENS
+    finished: dict = {}
     pieces: list[str] = []
-    for piece in local_llm.stream(
-        _ANSWER_SYSTEM,
-        f"{render(ctx)}\n\n---\n\nQuestion: {task}\n\nAnswer, citing symbols:",
-        max_tokens=_ANSWER_TOKENS,
-    ):
-        pieces.append(piece)
-        yield ("delta", {"text": piece})
+    for attempt in range(2):
+        finished.clear()
+        pieces = []
+        for piece in local_llm.stream(
+            _ANSWER_SYSTEM, prompt, max_tokens=max_tokens, finished=finished
+        ):
+            pieces.append(piece)
+            yield ("delta", {"text": piece})
+        wider = min(max_tokens * 4, local_llm.MAX_RETRY_TOKENS)
+        if attempt or finished.get("reason") != "length" or wider <= max_tokens:
+            break
+        # The same one wider retry `complete` makes when a reasoning model
+        # spends its budget before it finishes writing. Text already sent is
+        # withdrawn first, so the reader never sees two answers spliced.
+        max_tokens = wider
+        yield ("restart", {"reason": "length", "max_tokens": max_tokens})
 
     answer = "".join(pieces)
     if not answer.strip():
@@ -448,6 +460,7 @@ def stream_answer(
         "unresolved": unresolved,
         "status": status,
         "length": len(answer),
+        "truncated": finished.get("reason") == "length",
     }
     if hint:
         done["hint"] = hint

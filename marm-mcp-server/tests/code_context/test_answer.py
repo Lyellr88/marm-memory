@@ -201,3 +201,69 @@ def test_an_invented_name_cannot_hide_in_a_multi_name_bracket(model):
     out = _json("apply claims first, then persists [apply; persist_all_rows].", model)
     assert out["answer_status"] == "unverified"
     assert out["answer_unresolved"] == ["persist_all_rows"]
+
+
+# --- the stream gets the same one wider retry as `complete` ------------------
+
+
+@pytest.fixture
+def budgeted(monkeypatch):
+    """A model whose replies, per attempt, are (text, finish_reason)."""
+    attempts: list[int] = []
+    replies: list[tuple[str, str]] = []
+
+    def stream(*_a, max_tokens, finished=None, **_k):
+        attempts.append(max_tokens)
+        text, reason = replies[len(attempts) - 1]
+        if finished is not None:
+            finished["reason"] = reason
+        yield from (text[i : i + 5] for i in range(0, len(text), 5))
+
+    monkeypatch.setattr(local_llm, "available", lambda *a, **k: "stub-model")
+    monkeypatch.setattr(local_llm, "stream", stream)
+    return attempts, replies
+
+
+def _after_last_restart(events):
+    names = [n for n, _ in events]
+    start = len(names) - 1 - names[::-1].index("restart") if "restart" in names else 0
+    return "".join(p["text"] for n, p in events[start:] if n == "delta")
+
+
+def test_a_stream_cut_off_by_its_budget_is_retried_once_wider(composed, budgeted):
+    attempts, replies = budgeted
+    replies[:] = [("The `apply`", "length"), (GROUNDED, "stop")]
+    events = list(cc.stream_answer("how", None, None, 12000))
+
+    names = [n for n, _ in events]
+    assert names.count("restart") == 1
+    assert attempts == [
+        cc._ANSWER_TOKENS,
+        min(cc._ANSWER_TOKENS * 4, local_llm.MAX_RETRY_TOKENS),
+    ]
+    assert _after_last_restart(events) == GROUNDED
+    done = _done(events)
+    assert done["status"] == "ok" and done["truncated"] is False
+    assert done["length"] == len(GROUNDED), "the verdict is on the retried text only"
+
+
+def test_a_stream_that_finishes_normally_is_not_retried(composed, budgeted):
+    attempts, replies = budgeted
+    replies[:] = [(GROUNDED, "stop")]
+    events = list(cc.stream_answer("how", None, None, 12000))
+
+    assert "restart" not in [n for n, _ in events]
+    assert len(attempts) == 1
+    assert _done(events)["truncated"] is False
+
+
+def test_a_second_cut_off_is_reported_not_retried_again(composed, budgeted):
+    attempts, replies = budgeted
+    replies[:] = [
+        ("The `apply`", "length"),
+        ("The `apply` claims [apply] then", "length"),
+    ]
+    events = list(cc.stream_answer("how", None, None, 12000))
+
+    assert len(attempts) == 2
+    assert _done(events)["truncated"] is True
