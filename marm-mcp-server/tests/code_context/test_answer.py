@@ -170,9 +170,12 @@ def test_an_unavailable_graph_is_reported_as_the_context(model, monkeypatch):
     monkeypatch.setattr(cc, "LocalBackend", lambda: object())
     events = list(cc.stream_answer("how", "x", None, 12000))
 
-    assert [name for name, _ in events] == ["context"]
+    # A terminal event too: a stream that ends after `context` alone leaves a
+    # reader's answer pane waiting for an answer that will never come.
+    assert [name for name, _ in events] == ["context", "error"]
     assert events[0][1]["status"] == "no_project"
-    assert events[0][1]["hint"]
+    assert events[1][1]["message"] == events[0][1]["message"]
+    assert events[1][1]["hint"] == events[0][1]["hint"]
 
 
 def test_no_model_still_delivers_the_context(composed, monkeypatch):

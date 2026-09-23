@@ -385,7 +385,14 @@ def stream_answer(
     try:
         ctx = asyncio.run(build(backend, task, cwd=cwd, project=project, budget=budget))
     except GraphUnavailable as exc:
-        yield ("context", _unavailable_payload(exc))
+        unavailable = _unavailable_payload(exc)
+        yield ("context", unavailable)
+        # Every stream ends on a terminal event, so a client waiting for the
+        # answer is told there will not be one.
+        yield (
+            "error",
+            {"message": unavailable["message"], "hint": unavailable["hint"]},
+        )
         return
     yield ("context", serialise(ctx, task, include_graph=include_graph, detail=detail))
 
