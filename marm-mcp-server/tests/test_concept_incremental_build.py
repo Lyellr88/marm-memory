@@ -466,3 +466,28 @@ def test_route_response_never_carries_the_per_memory_outcome_map(
 
     assert "outcomes" not in result
     assert result["memories_processed"] == 1
+
+
+def test_extraction_reads_the_text_not_its_stored_escaping(concepts_env, monkeypatch):
+    """Content is stored HTML-escaped, so parsing it as stored turns every
+    apostrophe or quote into `&#x27;` inside the concept names."""
+    from marm_mcp_server.core.concept_extraction import ExtractionResult
+
+    concepts, memory_module = concepts_env
+    _seed(
+        memory_module, [("m1", "rebase someone else&#x27;s &quot;PR&quot; &amp; merge")]
+    )
+    seen: list[str] = []
+
+    def record(content):
+        seen.append(content)
+        return ExtractionResult(entities=[], relationship_pairs=[])
+
+    concept_build_engine = importlib.import_module(
+        "marm_mcp_server.services.concept_build_engine"
+    )
+    monkeypatch.setattr(concept_build_engine, "extract_entities", record)
+
+    asyncio.run(concepts.build_for_memory_ids(["m1"]))
+
+    assert seen == ['rebase someone else\'s "PR" & merge']

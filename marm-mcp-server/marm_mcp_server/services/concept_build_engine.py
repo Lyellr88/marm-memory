@@ -1,3 +1,4 @@
+import html
 import threading
 from collections.abc import Callable, Iterable, Iterator
 from typing import Optional
@@ -268,7 +269,8 @@ def _run_build(
                     mem_platform = row[4] if len(row) > 4 else None
                     memories_processed += 1
                     try:
-                        result = extract_entities(content)
+                        # Stored content is HTML-escaped; parse what was written.
+                        result = extract_entities(html.unescape(content))
                     except Exception as e:
                         _safe_print(
                             f"Concept extraction failed for memory {mem_id}: {e}"
