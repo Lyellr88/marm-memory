@@ -405,6 +405,11 @@ async def update_runtime_llm_roots(req: RuntimeLlmRootRequest) -> dict:
     if req.remove:
         roots = [r for r in roots if r != str(target)]
     else:
+        if model_discovery.too_broad(target):
+            raise HTTPException(
+                status_code=422,
+                detail=f"{target} is too broad to be a model directory.",
+            )
         if not target.is_dir():
             raise HTTPException(
                 status_code=422, detail=f"{target} is not a directory MARM can see."

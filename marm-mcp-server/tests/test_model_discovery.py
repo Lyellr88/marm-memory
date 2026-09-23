@@ -8,6 +8,9 @@ import pytest
 
 from marm_mcp_server.services import model_discovery as md
 
+# Captured before the autouse fixture stubs it out.
+_real_extra_roots = md._extra_roots
+
 
 @pytest.fixture(autouse=True)
 def _isolated(monkeypatch, tmp_path):
@@ -177,3 +180,50 @@ def test_an_unreadable_directory_does_not_abort_the_scan(tmp_path):
         assert any("good.gguf" in n for n in names)
     finally:
         os.chmod(blocked, 0o755)
+
+
+# --- a root too broad to be a model directory ---------------------------------
+
+
+def _operator_roots(monkeypatch, *paths):
+    from marm_mcp_server.core import runtime_flags
+
+    monkeypatch.setattr(runtime_flags, "get", lambda key: None)
+    monkeypatch.setenv("MARM_LLM_MODEL_ROOTS", os.pathsep.join(map(str, paths)))
+    monkeypatch.setattr(md, "_extra_roots", _real_extra_roots)
+    md.invalidate()
+
+
+def test_a_root_that_would_scope_browse_to_the_whole_disk_is_ignored(
+    tmp_path, monkeypatch
+):
+    home = tmp_path / "home"
+    models = tmp_path / "models"
+    models.mkdir()
+    home.mkdir()
+    _operator_roots(monkeypatch, "/", home, tmp_path, models)
+
+    assert md._extra_roots() == [models]
+    assert "outside every known model directory" in md.browse("/etc")["error"]
+
+
+@pytest.mark.parametrize("wide", ["/", "~"])
+def test_adding_a_too_broad_root_is_refused_with_a_reason(wide, tmp_path, monkeypatch):
+    import asyncio
+
+    (tmp_path / "home").mkdir()  # importing the endpoints creates ~/.marm
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))  # what `~` expands to
+
+    from fastapi import HTTPException
+
+    from marm_mcp_server.endpoints import system
+    from marm_mcp_server.endpoints.system import RuntimeLlmRootRequest
+
+    stored: list[str] = []
+    monkeypatch.setattr(system.runtime_flags, "get", lambda key: None)
+    monkeypatch.setattr(system.runtime_flags, "set_", lambda k, v: stored.append(v))
+    with pytest.raises(HTTPException) as refused:
+        asyncio.run(system.update_runtime_llm_roots(RuntimeLlmRootRequest(path=wide)))
+    assert refused.value.status_code == 422
+    assert "too broad" in refused.value.detail
+    assert not stored

@@ -85,7 +85,21 @@ def _extra_roots() -> list[Path]:
         paths.extend(p for p in saved.split(os.pathsep) if p.strip())
     except Exception:  # pragma: no cover - discovery must survive a flag read
         logger.debug("model_discovery: could not read the saved roots")
-    return [Path(p).expanduser() for p in paths]
+    roots = [Path(p).expanduser() for p in paths]
+    return [r for r in roots if not too_broad(r)]
+
+
+def too_broad(path: Path) -> bool:
+    """A filesystem root, the home directory, or anything above it.
+
+    Browse and the scan would then range over the whole disk.
+    """
+    try:
+        resolved = path.expanduser().resolve()
+        home = _home().resolve()
+    except (OSError, RuntimeError):
+        return True
+    return resolved == Path(resolved.anchor) or home.is_relative_to(resolved)
 
 
 def candidate_roots() -> list[dict[str, Any]]:
