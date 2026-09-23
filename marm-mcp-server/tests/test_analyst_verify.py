@@ -258,3 +258,44 @@ def test_an_empty_call_names_the_function_it_calls(bind_packet, span):
 def test_a_call_the_packet_does_not_hold_still_fails(bind_packet, span):
     v = verify(f"Bindings are created by `{span}` [S1].", bind_packet)
     assert v.source_span_support == 0.0
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "There is no direct evidence that [S1] calls [S2].",
+        "There is no clear evidence that [S2] calls [S1].",
+        "The packet does not directly show that [S2] calls [S1].",
+        "The context does not clearly show whether [S2] invokes [S1].",
+    ],
+)
+def test_a_qualified_abstention_about_a_call_is_not_a_call_claim(packet, text):
+    """Saying the evidence is missing asserts nothing, so there is no edge to
+    check and nothing to call inconsistent."""
+    v = verify(text, packet)
+    assert v.abstained is True, v
+    assert not any("call edge" in f for f in v.failures), v.failures
+    assert v.state == "uncertain"
+
+
+def test_a_cited_abstention_does_not_hide_the_uncited_claim_before_it(packet):
+    """Folding the claim into the abstention after it would drop it from the
+    count along with the abstention."""
+    v = verify(
+        "apply retries forever. There is no direct evidence that [S1] calls [S2].",
+        packet,
+    )
+    assert v.claims == 1
+    assert "uncited claims" in v.failures
+
+
+def test_a_negated_call_agrees_with_a_missing_edge(packet):
+    """`claim` does not call `apply`, and the packet holds no such edge."""
+    v = verify("claim [S2] does not call apply [S1].", packet)
+    assert v.graph_memory_consistency == 1.0, v.failures
+
+
+def test_a_negated_call_contradicts_an_edge_the_packet_holds(packet):
+    v = verify("apply [S1] never calls claim [S2].", packet)
+    assert v.graph_memory_consistency < 1.0
+    assert any("call edge" in f for f in v.failures), v.failures

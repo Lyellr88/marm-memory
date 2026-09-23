@@ -28,9 +28,18 @@ _CODE_SPAN = re.compile(r"`([^`\n]{2,120})`")
 _EMPTY_CALL = re.compile(r"[A-Za-z_][\w.]*\(\)")
 _LINE_REF = re.compile(r"([\w./-]+\.\w+):(\d+)")
 _CALL = re.compile(r"\b(calls|invokes|delegates to)\b", re.I)
+_NOT_CALL = re.compile(
+    r"\b(does not|doesn't|do not|don't|never|not)\s+(directly\s+)?"
+    r"(call|calls|invoke|invokes|delegate to|delegates to)\b",
+    re.I,
+)
+# One or two qualifiers are allowed ("no direct evidence", "does not clearly
+# show"); a qualified abstention still asserts nothing.
+_QUALIFIER = r"(?:\w+\s+){0,2}"
 _ABSTAIN = re.compile(
-    r"\b(does not (contain|show|include|say)|not (in|present in|shown in) the "
-    r"(context|packet|evidence)|cannot (tell|determine|find)|no evidence)\b",
+    rf"\b(does not {_QUALIFIER}(contain|show|include|say)|not {_QUALIFIER}"
+    r"(in|present in|shown in) the (context|packet|evidence)|cannot "
+    rf"{_QUALIFIER}(tell|determine|find)|no {_QUALIFIER}evidence)\b",
     re.I,
 )
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
@@ -174,11 +183,13 @@ def _claims(text: str) -> list[str]:
             # Words with letters in them: `- [ ] todo` is scaffolding, not a claim.
             if sum(1 for w in s.split() if re.search(r"[A-Za-z]", w)) < 3:
                 continue
-            if _BRACKET.search(s):
+            # Before the citation check: an abstention that cites something
+            # would otherwise absorb the uncited claims pending before it.
+            if _ABSTAIN.search(s):
+                out.append(s)
+            elif _BRACKET.search(s):
                 out.append(" ".join([*pending, s]))
                 pending = []
-            elif _ABSTAIN.search(s):
-                out.append(s)
             else:
                 pending.append(s)
         out.extend(pending)
@@ -226,11 +237,18 @@ def _consistency(claims: list[str], packet: EvidencePacket) -> tuple[float, list
         cites, _ = extract_citations(claim, packet)
         syms = [c for c in cites if c.kind == "symbol"]
         mems = [c for c in cites if c.kind == "memory"]
-        if len(syms) >= 2 and _CALL.search(claim):
+        negated = bool(_NOT_CALL.search(claim))
+        if len(syms) >= 2 and (negated or _CALL.search(claim)):
             checked += 1
             a, b = syms[0].qualified_name or "", syms[1].qualified_name or ""
-            if (a, b) in packet.edges:
+            edge = (a, b) in packet.edges
+            if edge != negated:
                 consistent += 1
+            elif negated:
+                failures.append(
+                    f"call edge {syms[0].handle} -> {syms[1].handle} "
+                    "contradicts the claim"
+                )
             else:
                 failures.append(f"no call edge {syms[0].handle} -> {syms[1].handle}")
         for m in mems:
