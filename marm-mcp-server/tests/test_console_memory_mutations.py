@@ -334,3 +334,190 @@ def test_internal_memory_mutation_rejects_disabled_write_queue(monkeypatch, tmp_
 
     assert response.status_code == 409
     assert response.json()["detail"] == "memory write queue is unavailable"
+
+
+def test_replace_keeps_the_timestamp_when_only_metadata_changes(monkeypatch, tmp_path):
+    """`timestamp` is when the memory is FROM, not when the row was last written.
+
+    Compaction's age gate selects `timestamp < cutoff` and recall's fallback
+    scan takes `ORDER BY timestamp DESC LIMIT ?`, so stamping `now` on every
+    replace made a re-scope look like a brand new memory: it reset the age gate
+    by a full COMPACTION_MIN_AGE_HOURS and pushed something genuinely recent
+    out of the scan window.
+    """
+    server = load_isolated_server(
+        monkeypatch, tmp_path, api_key="test-key", write_queue_enabled=True
+    )
+    headers = {"Authorization": "Bearer test-key"}
+    try:
+        with TestClient(server.app) as client:
+            created = client.post(
+                "/internal/memories",
+                headers=headers,
+                json={
+                    "content": "A fact recorded some time ago",
+                    "session_name": "s",
+                    "context_type": "note",
+                    "project": "wrong-project",
+                    "metadata": {"source": "test"},
+                },
+            )
+            assert created.status_code == 201
+            memory_id = created.json()["id"]
+
+            db = tmp_path / "marm_memory.db"
+            with sqlite3.connect(db) as conn:
+                conn.execute(
+                    "UPDATE memories SET timestamp = ? WHERE id = ?",
+                    ("2026-01-01T00:00:00+00:00", memory_id),
+                )
+                # A staging row the replace has to mark stale. Its updated_at
+                # is about the staging row, not about the memory.
+                conn.execute(
+                    """INSERT INTO compaction_staging
+                       (id, session_name, source_memory_ids, preview, status,
+                        candidate_hash, source_updated_at_snapshot, expires_at,
+                        created_at, updated_at)
+                       VALUES (?, ?, ?, ?, 'pending_review', ?, ?, ?, ?, ?)""",
+                    (
+                        "stage-1",
+                        "s",
+                        json.dumps([memory_id]),
+                        "preview",
+                        "hash-1",
+                        "2026-01-01T00:00:00+00:00",
+                        "2027-01-01T00:00:00+00:00",
+                        "2026-01-01T00:00:00+00:00",
+                        "2026-01-01T00:00:00+00:00",
+                    ),
+                )
+
+            # Metadata-only: same content, corrected project.
+            moved = client.put(
+                f"/internal/memories/{memory_id}",
+                headers=headers,
+                json={
+                    "content": "A fact recorded some time ago",
+                    "session_name": "s",
+                    "context_type": "note",
+                    "project": "right-project",
+                    "metadata": {"source": "test"},
+                },
+            )
+            assert moved.status_code == 200
+
+            with sqlite3.connect(db) as conn:
+                project, timestamp = conn.execute(
+                    "SELECT project, timestamp FROM memories WHERE id = ?", (memory_id,)
+                ).fetchone()
+                (last_accessed,) = conn.execute(
+                    "SELECT last_accessed FROM sessions WHERE session_name = ?", ("s",)
+                ).fetchone()
+                staged_status, staged_updated = conn.execute(
+                    "SELECT status, updated_at FROM compaction_staging WHERE id = ?",
+                    ("stage-1",),
+                ).fetchone()
+            assert project == "right-project", "the re-scope must still take effect"
+            assert timestamp == "2026-01-01T00:00:00+00:00", (
+                "a metadata-only change must not make the memory look new"
+            )
+            # Only `memories.timestamp` may be historical. `last_accessed` is
+            # about the WRITE, and it decides which session is current and how
+            # the Console orders the session list, so backdating it would
+            # demote a session that was just touched.
+            assert last_accessed > "2026-01-01T00:00:00+00:00", (
+                "the session was accessed now, whatever the memory is dated"
+            )
+            assert staged_status == "stale"
+            assert staged_updated > "2026-01-01T00:00:00+00:00", (
+                "the staging row went stale now, not when the memory is from"
+            )
+
+            # A CONTENT change does move it: the memory now says something else
+            # as of now, and compaction's per-session fingerprint has to notice.
+            edited = client.put(
+                f"/internal/memories/{memory_id}",
+                headers=headers,
+                json={
+                    "content": "A fact, corrected",
+                    "session_name": "s",
+                    "context_type": "note",
+                    "project": "right-project",
+                    "metadata": {"source": "test"},
+                },
+            )
+            assert edited.status_code == 200
+            with sqlite3.connect(db) as conn:
+                (timestamp_after,) = conn.execute(
+                    "SELECT timestamp FROM memories WHERE id = ?", (memory_id,)
+                ).fetchone()
+            assert timestamp_after != "2026-01-01T00:00:00+00:00", (
+                "an edit that changes what the memory says should move it"
+            )
+    finally:
+        _stop_queue()
+
+
+def test_replace_preserves_the_timestamp_for_a_row_with_no_content_hash(
+    monkeypatch, tmp_path
+):
+    """A pre-migration row has `content_hash = NULL` and must behave the same.
+
+    `content_hash` was added by ALTER TABLE with no backfill, so every memory
+    written before that migration carries NULL. Comparing the stored hash alone
+    makes `None == "<sha>"` false and restamps -- which would leave the defect
+    in place on exactly the databases that have the most old memories to lose.
+    """
+    server = load_isolated_server(
+        monkeypatch, tmp_path, api_key="test-key", write_queue_enabled=True
+    )
+    headers = {"Authorization": "Bearer test-key"}
+    try:
+        with TestClient(server.app) as client:
+            created = client.post(
+                "/internal/memories",
+                headers=headers,
+                json={
+                    "content": "An upgraded database's older memory",
+                    "session_name": "s",
+                    "context_type": "note",
+                    "project": "wrong-project",
+                },
+            )
+            assert created.status_code == 201
+            memory_id = created.json()["id"]
+
+            db = tmp_path / "marm_memory.db"
+            with sqlite3.connect(db) as conn:
+                conn.execute(
+                    "UPDATE memories SET timestamp = ?, content_hash = NULL"
+                    " WHERE id = ?",
+                    ("2026-01-01T00:00:00+00:00", memory_id),
+                )
+
+            moved = client.put(
+                f"/internal/memories/{memory_id}",
+                headers=headers,
+                json={
+                    "content": "An upgraded database's older memory",
+                    "session_name": "s",
+                    "context_type": "note",
+                    "project": "right-project",
+                },
+            )
+            assert moved.status_code == 200
+
+            with sqlite3.connect(db) as conn:
+                project, timestamp, stored_hash = conn.execute(
+                    "SELECT project, timestamp, content_hash FROM memories"
+                    " WHERE id = ?",
+                    (memory_id,),
+                ).fetchone()
+            assert project == "right-project"
+            assert timestamp == "2026-01-01T00:00:00+00:00", (
+                "a NULL stored hash must fall back to the stored content,"
+                " not be read as a content change"
+            )
+            assert stored_hash, "the replace also fills the missing hash in"
+    finally:
+        _stop_queue()
