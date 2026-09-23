@@ -156,6 +156,40 @@ describe('DistillPage', () => {
     expect(proposeState.mutate.mock.calls[1][0].use_llm).toBe(true);
   });
 
+  it('does not report the model as unreachable when generation was not asked for', async () => {
+    logsState.data = {
+      items: [{ topic: 't', summary: null, entry: 'The daemon reparents to systemd.' }],
+      total: 1,
+      limit: 200,
+      offset: 0,
+    };
+    render(<DistillPage />);
+    await userEvent.click(screen.getByRole('button', { name: /^distill$/i }));
+    expect(proposeState.mutate).toHaveBeenCalledTimes(1);
+    proposeState.data = { status: 'success', proposals: [], extracted: 0, staged: 0, mode: 'selected' };
+    await userEvent.click(screen.getByRole('checkbox', { name: /write facts with the local model/i }));
+
+    expect(screen.queryByText(/no local model/i)).toBeNull();
+    expect(screen.getByText(/generation was not requested/i)).toBeTruthy();
+  });
+
+  it('reports the model as unreachable when generation was asked for and did not happen', async () => {
+    logsState.data = {
+      items: [{ topic: 't', summary: null, entry: 'The daemon reparents to systemd.' }],
+      total: 1,
+      limit: 200,
+      offset: 0,
+    };
+    render(<DistillPage />);
+    await userEvent.click(screen.getByRole('checkbox', { name: /write facts with the local model/i }));
+    await userEvent.click(screen.getByRole('button', { name: /^distill$/i }));
+    expect(proposeState.mutate).toHaveBeenCalledTimes(1);
+    proposeState.data = { status: 'success', proposals: [], extracted: 0, staged: 0, mode: 'selected' };
+    await userEvent.click(screen.getByRole('checkbox', { name: /write facts with the local model/i }));
+
+    expect(screen.getAllByText(/no local model/i).length).toBeGreaterThan(0);
+  });
+
   it('shows the review queue on arrival, without needing a distillation first', () => {
     pendingState.data = { status: 'success', pending: [proposal()], count: 1 };
     render(<DistillPage />);

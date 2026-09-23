@@ -72,6 +72,9 @@ export function DistillPage() {
   // Generation is opt-in: a reachable model must not change what a
   // distillation produces unless the reader asks for it.
   const [useLlm, setUseLlm] = useState(false);
+  // What the displayed run asked for, captured at submit: a `selected` run
+  // means "no model answered" only if generation was requested.
+  const [requestedLlm, setRequestedLlm] = useState(false);
 
   const sessions = useSessions();
   // Default to a real session rather than an empty box, for the same reason
@@ -114,6 +117,7 @@ export function DistillPage() {
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
     if (!canSubmit) return;
+    const asked = useLlm;
     propose.mutate(
       {
         action: 'propose',
@@ -122,7 +126,12 @@ export function DistillPage() {
         project: project.trim() || null,
         use_llm: useLlm,
       },
-      { onSuccess: () => setTab('run') },
+      {
+        onSuccess: () => {
+          setRequestedLlm(asked);
+          setTab('run');
+        },
+      },
     );
   };
 
@@ -321,7 +330,9 @@ export function DistillPage() {
               detail={
                 lastRun?.mode === 'generated'
                   ? 'Facts rewritten to stand alone, each checked against the transcript'
-                  : 'No local model reachable — sentences lifted verbatim instead'
+                  : requestedLlm
+                    ? 'No local model reachable — sentences lifted verbatim instead'
+                    : 'Sentences lifted verbatim; generation was not requested'
               }
               icon={
                 lastRun?.mode === 'generated' ? (
@@ -425,7 +436,13 @@ export function DistillPage() {
         <p className="mt-3 shrink-0 text-[11px] text-muted-foreground">
           {lastRun?.mode === 'selected' && (
             <>
-              <span className="text-amber-300">No local model was reachable</span>, so these were{' '}
+              {requestedLlm ? (
+                <>
+                  <span className="text-amber-300">No local model was reachable</span>, so these were{' '}
+                </>
+              ) : (
+                'These were '
+              )}
               <em>selected</em> from the text rather than written: whole sentences, exactly as
               typed, which means some carry references to whatever preceded them.{' '}
             </>
