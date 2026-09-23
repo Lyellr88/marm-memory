@@ -70,7 +70,9 @@ async def marm_log_entry(request: LogEntryRequest) -> dict:
     Entries are also stored as semantic memories so marm_smart_recall can find them.
     Equivalent to /log entry: [YYYY-MM-DD-topic-summary] command
     """
-    return await create_log_entry(request.entry, request.session_name)
+    return await create_log_entry(
+        request.entry, request.session_name, project=request.project
+    )
 
 
 @router.get("/marm_log_show", operation_id="marm_log_show")

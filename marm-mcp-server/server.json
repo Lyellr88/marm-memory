@@ -29,7 +29,7 @@
   "tools": [
     {
       "name": "marm_log_entry",
-      "description": "Log important information to MARM's memory system"
+      "description": "Log important information to MARM's memory system. Optional `project` scopes the entry; omit it to use the server's detected project"
     },
     {
       "name": "marm_smart_recall",
