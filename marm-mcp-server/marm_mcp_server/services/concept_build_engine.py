@@ -287,9 +287,6 @@ def _run_build(
                         )
                         continue
 
-                    # An edited memory replaces what it said; its old concepts
-                    # would otherwise stand beside the new ones.
-                    concept_db.retract_memory_provenance(conn, [mem_id])
                     memory_failed = False
                     name_to_id: dict[str, int] = {}
                     name_to_canonical: dict[str, str] = {}
@@ -348,11 +345,13 @@ def _run_build(
                                     {"entity": canonical_name, "candidates": candidates}
                                 )
 
+                    asserted: set[tuple[int, int, str]] = set()
                     for name_a, name_b, predicate in result.relationship_pairs:
                         id_a = name_to_id.get(name_a)
                         id_b = name_to_id.get(name_b)
                         if id_a is None or id_b is None:
                             continue
+                        asserted.add((id_a, id_b, predicate))
                         try:
                             if concept_db.store_relationship(
                                 conn,
@@ -369,6 +368,18 @@ def _run_build(
                                 f"Concept relationship write failed for memory {mem_id}: {e}"
                             )
                             memory_failed = True
+
+                    # An edited memory replaces what it said: withdraw whatever
+                    # its previous text contributed and this extraction did
+                    # not repeat. Skipped after a failed write, which would
+                    # otherwise strip citations that are still true.
+                    if not memory_failed:
+                        concept_db.retract_memory_provenance(
+                            conn,
+                            [mem_id],
+                            keep_entities=name_to_id.values(),
+                            keep_relationships=asserted,
+                        )
 
                     binding = None
                     if mem_project:

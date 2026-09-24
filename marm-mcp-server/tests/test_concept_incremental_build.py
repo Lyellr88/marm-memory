@@ -566,3 +566,28 @@ def test_re_extracting_an_edited_memory_retracts_what_it_said_before(
         "Shared": ["m2"],
     }
     assert rels == [("Ada Lovelace", "Notes", "m1")]
+
+
+def test_a_failed_write_leaves_the_old_concepts_in_place(concepts_env, monkeypatch):
+    """With the new extraction only partly written, retracting would strip
+    citations that are still true; the old ones stay until a clean rebuild."""
+    concepts, memory_module = concepts_env
+    _seed(memory_module, [("m1", "old")])
+    _extract_with_pairs(monkeypatch, {"old": (["Old"], []), "new": (["New"], [])})
+    asyncio.run(concepts.build_for_memory_ids(["m1"]))
+
+    with memory_module.memory.get_connection() as conn:
+        conn.execute("UPDATE memories SET content = 'new' WHERE id = 'm1'")
+    concept_db = concepts._get_concept_db()
+    real = concept_db.get_or_create_entity
+
+    def flaky(conn, name, *args, **kwargs):
+        if name == "New":
+            raise RuntimeError("disk full")
+        return real(conn, name, *args, **kwargs)
+
+    monkeypatch.setattr(concept_db, "get_or_create_entity", flaky)
+    outcomes = asyncio.run(concepts.build_for_memory_ids(["m1"]))
+
+    assert outcomes == {"m1": "failed"}
+    assert _graph(concepts)[0] == {"Old": ["m1"]}

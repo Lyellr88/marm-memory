@@ -846,13 +846,22 @@ class ConceptDB:
         return {"status": "success", **counts}
 
     def retract_memory_provenance(
-        self, conn: sqlite3.Connection, memory_ids: Iterable[str]
+        self,
+        conn: sqlite3.Connection,
+        memory_ids: Iterable[str],
+        *,
+        keep_entities: Iterable[int] = (),
+        keep_relationships: Iterable[tuple[int, int, str]] = (),
     ) -> dict:
         """Withdraw what these memories contributed to the graph, on `conn`.
 
-        An entity another memory still cites keeps that citation; one left
-        citing nothing goes, with its relationships and code links.
+        What `keep_*` names is what a re-extraction just re-asserted, so it
+        stays, with its ids. An entity another memory still cites keeps that
+        citation; one left citing nothing goes, with its relationships and
+        code links.
         """
+        kept_entities = set(keep_entities)
+        kept_relationships = set(keep_relationships)
         ids = {str(memory_id) for memory_id in memory_ids}
         if not ids:
             return {
@@ -861,9 +870,17 @@ class ConceptDB:
                 "entities_deleted": 0,
             }
         placeholders = ",".join("?" for _ in ids)
-        rel_cursor = conn.execute(
-            f"DELETE FROM relationships WHERE memory_id IN ({placeholders})",
-            list(ids),
+        stale = [
+            rel_id
+            for rel_id, source_id, target_id, predicate in conn.execute(
+                "SELECT id, source_id, target_id, predicate FROM relationships "
+                f"WHERE memory_id IN ({placeholders})",
+                list(ids),
+            ).fetchall()
+            if (source_id, target_id, predicate) not in kept_relationships
+        ]
+        conn.executemany(
+            "DELETE FROM relationships WHERE id = ?", [(rel_id,) for rel_id in stale]
         )
         # A textual prefilter; the JSON parse below is the real test.
         where = " OR ".join("source_memory_ids LIKE ?" for _ in ids)
@@ -874,6 +891,8 @@ class ConceptDB:
         entities_updated = 0
         entities_deleted = 0
         for entity_id, source_json in entity_rows:
+            if entity_id in kept_entities:
+                continue
             try:
                 source_ids = [str(item) for item in json.loads(source_json or "[]")]
             except (TypeError, ValueError, json.JSONDecodeError):
@@ -898,7 +917,7 @@ class ConceptDB:
             conn.execute("DELETE FROM entities WHERE id = ?", (entity_id,))
             entities_deleted += 1
         return {
-            "relationships_deleted": rel_cursor.rowcount,
+            "relationships_deleted": len(stale),
             "entities_updated": entities_updated,
             "entities_deleted": entities_deleted,
         }
