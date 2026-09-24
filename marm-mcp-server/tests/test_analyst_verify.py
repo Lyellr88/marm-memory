@@ -317,7 +317,7 @@ def test_a_negative_claim_about_the_code_is_still_a_claim(packet, text):
 
 
 def test_a_packet_id_covers_everything_the_model_is_shown():
-    def packet(label, truncated):
+    def packet(label, truncated, name="a"):
         return build_packet(
             Context(
                 project={"name": "demo"},
@@ -325,7 +325,7 @@ def test_a_packet_id_covers_everything_the_model_is_shown():
                 symbols=[
                     Symbol(
                         "pkg.a",
-                        "a",
+                        name,
                         label,
                         "pkg/a.py",
                         1,
@@ -340,3 +340,4 @@ def test_a_packet_id_covers_everything_the_model_is_shown():
     base = packet("Function", False).packet_id
     assert packet("Method", False).packet_id != base
     assert packet("Function", True).packet_id != base
+    assert packet("Function", False, name="alias").packet_id != base

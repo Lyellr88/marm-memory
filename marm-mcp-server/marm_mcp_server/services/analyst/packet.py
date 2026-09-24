@@ -100,6 +100,7 @@ def _digest(
             "symbols": [
                 [
                     s.qualified_name,
+                    s.name,
                     s.label,
                     s.file_path,
                     s.start_line,
