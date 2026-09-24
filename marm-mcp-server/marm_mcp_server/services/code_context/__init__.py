@@ -14,12 +14,15 @@ from collections.abc import Callable, Coroutine, Iterator
 from typing import TYPE_CHECKING, Any
 
 import anyio.from_thread
+import structlog
 
 from ...config.env_parsing import _safe_int
 from .backend import GraphUnavailable, LocalBackend
 from .compose import Context, Symbol, build
 from .format import render
 from .project import short_name
+
+logger = structlog.get_logger(__name__)
 
 if TYPE_CHECKING:
     from ..analyst import Brief
@@ -90,17 +93,24 @@ async def _review_brief(
     from ...core.memory import memory
     from ..analyst.review import auto_apply, stage_conclusions
 
-    staged = await stage_conclusions(
-        memory,
-        brief,
-        task,
-        session_name=f"analyst:{short_name(ctx.project)}",
-        project=_memory_scope(ctx),
-    )
-    result = _analyst_result(analyst_mode, staged["staged"], staged["skipped"])
-    if analyst_mode == "guardrails":
-        result["decisions"] = await auto_apply(
-            memory, staged["staged"], source_text=None
+    # The answer is already verified; a failure here must cost the review only.
+    try:
+        staged = await stage_conclusions(
+            memory,
+            brief,
+            task,
+            session_name=f"analyst:{short_name(ctx.project)}",
+            project=_memory_scope(ctx),
+        )
+        result = _analyst_result(analyst_mode, staged["staged"], staged["skipped"])
+        if analyst_mode == "guardrails":
+            result["decisions"] = await auto_apply(
+                memory, staged["staged"], source_text=None
+            )
+    except Exception:
+        logger.exception("analyst.review_failed", mode=analyst_mode)
+        return _analyst_result(
+            analyst_mode, [], [{"content": "", "reason": "review failed"}]
         )
     return result
 

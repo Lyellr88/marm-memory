@@ -611,3 +611,88 @@ def test_a_handle_stripped_duplicate_is_still_one_proposal(staged_memory, monkey
     out = _stage(staged_memory, "apply calls claim [S1] [S2].")
     assert len(out["staged"]) == 1
     assert out["skipped"][0]["reason"] == "already proposed"
+
+
+def test_a_secret_in_the_cited_evidence_blocks_automatic_apply(monkeypatch):
+    """The evidence is persisted with the memory, so it is checked as well."""
+    monkeypatch.setenv(review.AUTO_APPLY_ENV, "1")
+    d = review.guardrail_decision(
+        content="apply loads its client configuration first",
+        verdict="new",
+        evidence='client = Client(api_key="sk-live-1234")',
+        source_text=None,
+        verification={"state": "verified", "score": 1.0},
+        origin="analyst",
+    )
+    assert d.apply is False
+    assert d.checks["no_secret"] is False
+
+
+def _resolving(monkeypatch, verdict, neighbour=None):
+    from marm_mcp_server.core.distill import Resolution
+
+    async def fake(_memory, candidates, **_kw):
+        return [
+            Resolution(verdict, 0.97, neighbour and "n-1", neighbour)
+            for _ in candidates
+        ]
+
+    monkeypatch.setattr(review, "resolve", fake)
+
+
+def test_a_conclusion_already_stored_is_not_staged(staged_memory, monkeypatch):
+    """Manual review applies the staged row as it stands, so staging resolves."""
+    _model(monkeypatch, "- apply calls claim before writing [S1] [S2]")
+    _resolving(monkeypatch, "duplicate", "apply calls claim before writing")
+    out = _stage(staged_memory, "apply calls claim [S1] [S2].")
+    assert out["staged"] == []
+    assert out["skipped"][0]["reason"] == "already recorded"
+
+
+def test_a_near_conclusion_is_staged_with_its_neighbour(staged_memory, monkeypatch):
+    _model(monkeypatch, "- apply calls claim before writing [S1] [S2]")
+    _resolving(monkeypatch, "near", "apply claims rows")
+    out = _stage(staged_memory, "apply calls claim [S1] [S2].")
+    assert len(out["staged"]) == 1
+    with staged_memory.get_connection() as conn:
+        row = conn.execute(
+            "SELECT verdict, cosine, neighbour_id, neighbour_content "
+            "FROM distill_staging"
+        ).fetchone()
+    assert row == ("near", 0.97, "n-1", "apply claims rows")
+
+
+def test_the_conclusions_call_is_bounded_by_the_time_budget(staged_memory, monkeypatch):
+    seen = {}
+
+    def complete(*_a, **kw):
+        seen.update(kw)
+        return ""
+
+    monkeypatch.setenv("MARM_ANALYST_TIME_BUDGET", "30")
+    monkeypatch.setattr(review.local_llm, "complete", complete)
+    _stage(staged_memory, "apply calls claim [S1] [S2].")
+    assert seen.get("timeout") is not None and 0 < seen["timeout"] <= 30
+
+
+def test_a_review_failure_keeps_the_verified_answer(composed, monkeypatch):
+    """Staging runs after the answer is verified; its failure must not lose it."""
+
+    import importlib
+
+    async def boom(*_a, **_k):
+        raise RuntimeError("staging database locked")
+
+    # The isolated server re-imports the package; patch the module it calls.
+    live = importlib.import_module("marm_mcp_server.services.analyst.review")
+    monkeypatch.setattr(live, "stage_conclusions", boom)
+    out = asyncio.run(
+        composed.build_code_context(
+            task="how", answer=True, analyst_mode="manual_review"
+        )
+    )
+    assert out["answer_status"] == "ok"
+    assert out["answer"]
+    skipped = out["analyst"]["skipped"]
+    assert skipped and skipped[0]["reason"] == "review failed"
+    assert "locked" not in json.dumps(out["analyst"])

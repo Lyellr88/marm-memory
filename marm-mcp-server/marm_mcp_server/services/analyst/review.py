@@ -1,7 +1,8 @@
-"""Stage what the analyst concluded; never write it.
+"""Stage what the analyst concluded, for review.
 
-A conclusion reaches memory only through `marm_distill apply`, the same
-reviewed path every other proposal takes.
+A conclusion reaches memory only through `marm_distill apply`, the same path
+every other proposal takes: applied by a reviewer, or under Automated
+Guardrails when every deterministic check passes and the operator allows it.
 """
 
 from __future__ import annotations
@@ -17,6 +18,7 @@ from typing import Any
 
 import structlog
 
+from ...core.distill import Candidate, resolve
 from .. import distill as distill_service
 from .. import local_llm
 from .brief import Brief, _user
@@ -75,11 +77,13 @@ async def stage_conclusions(
     if brief.verification is None or brief.verification.state == "rejected":
         return {"staged": [], "skipped": [{"content": "", "reason": "brief rejected"}]}
     # The answer's own budget: a reasoning model spends a small one thinking.
+    budget = Budget.from_env()
     reply = await asyncio.to_thread(
         local_llm.complete,
         CONCLUSIONS_SYSTEM,
         f"{_user(brief.packet, task)}\n\nYour answer:\n{brief.answer}",
-        max_tokens=Budget.from_env().output_tokens,
+        max_tokens=budget.output_tokens,
+        timeout=budget.time_s,
     )
     if not reply or not reply.strip():
         reason = "the model wrote no conclusions within its budget"
@@ -90,16 +94,32 @@ async def stage_conclusions(
             "staged": [],
             "skipped": [{"content": "", "reason": "nothing durable to propose"}],
         }
+    verified: list[tuple[str, Any]] = []
+    for line in lines:
+        v = verify(line, brief.packet)
+        if v.state != "verified":
+            skipped.append({"content": line, "reason": f"not verified ({v.state})"})
+        else:
+            verified.append((line, v))
+    # Resolved as `propose` does: a reviewer applies the staged row as it stands.
+    resolutions = await resolve(
+        memory,
+        [
+            Candidate(content=_without_handles(line), score=1.0, reasons=())
+            for line, _ in verified
+        ],
+        session=None,
+        project=project,
+    )
     staged: list[str] = []
     now = distill_service._now()
     expires = (now + timedelta(hours=distill_service.TTL_HOURS)).isoformat()
     with memory.get_connection() as conn:
-        for line in lines:
-            v = verify(line, brief.packet)
-            if v.state != "verified":
-                skipped.append({"content": line, "reason": f"not verified ({v.state})"})
-                continue
+        for (line, v), resolution in zip(verified, resolutions):
             content = _without_handles(line)
+            if resolution.verdict == "duplicate":
+                skipped.append({"content": content, "reason": "already recorded"})
+                continue
             row_id = str(uuid.uuid4())
             cur = conn.execute(
                 """
@@ -109,7 +129,7 @@ async def stage_conclusions(
                      project, context_type, applied_memory_id, expires_at,
                      created_at, updated_at, reviewed_at, evidence, mode,
                      origin, verification)
-                VALUES (?, ?, ?, ?, '[]', 'new', 0.0, NULL, NULL, 'pending', ?,
+                VALUES (?, ?, ?, ?, '[]', ?, ?, ?, ?, 'pending', ?,
                         ?, 'code', NULL, ?, ?, ?, NULL, ?, 'analyst', 'analyst', ?)
                 """,
                 (
@@ -117,6 +137,10 @@ async def stage_conclusions(
                     session_name,
                     content,
                     v.score,
+                    resolution.verdict,
+                    resolution.cosine,
+                    resolution.neighbour_id,
+                    resolution.neighbour_content,
                     distill_service._hash(session_name, content, project),
                     project,
                     expires,
@@ -171,7 +195,8 @@ def guardrail_decision(
             else bool(source_text)
             and _norm(evidence or content) in _norm(source_text or "")
         ),
-        "no_secret": not _SECRET.search(content),
+        # The evidence is stored with the memory, so it must be clean too.
+        "no_secret": not _SECRET.search(content) and not _SECRET.search(evidence),
     }
     if origin == "analyst":
         checks["verified"] = bool(
@@ -192,8 +217,6 @@ def guardrail_decision(
 async def auto_apply(
     memory: Any, proposal_ids: list[str], *, source_text: str | None
 ) -> list[dict[str, Any]]:
-    from ...core.distill import Candidate, resolve
-
     out: list[dict[str, Any]] = []
     for pid in proposal_ids:
         with memory.get_connection() as conn:
