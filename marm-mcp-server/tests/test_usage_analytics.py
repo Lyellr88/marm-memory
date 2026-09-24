@@ -142,9 +142,17 @@ def test_usage_follows_the_environment_at_write_time(monkeypatch, tmp_path):
     analytics.track_usage("probe", endpoint="x", user_data={"user_agent": "t"})
     assert [e[0] for e in _events(configured)] == ["probe"]
 
+
+@pytest.mark.skipif(
+    os.path.exists("/app/data"),
+    reason="the Docker branch owns the default path when /app/data exists",
+)
+def test_the_home_fallback_follows_home_at_write_time(monkeypatch, tmp_path):
+    from marm_mcp_server.services import analytics
+
     fake_home = tmp_path / "home"
     fake_home.mkdir()
-    monkeypatch.delenv("MARM_ANALYTICS_DB_PATH")
+    monkeypatch.delenv("MARM_ANALYTICS_DB_PATH", raising=False)
     monkeypatch.setenv("HOME", str(fake_home))
     monkeypatch.setenv("USERPROFILE", str(fake_home))
     analytics.track_usage("probe-home", endpoint="x")
