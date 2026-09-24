@@ -35,14 +35,14 @@
     "@vitejs/plugin-react": "catalog:",
     "clsx": "catalog:",
     "date-fns": "^4.4.0",
-    "jsdom": "^30.0.1",
+    "jsdom": "^30.1.0",
     "lucide-react": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
     "tailwind-merge": "catalog:",
     "tailwindcss": "catalog:",
     "vite": "catalog:",
-    "vitest": "^5.0.0",
+    "vitest": "^5.0.1",
     "wouter": "catalog:"
   }
 }
