@@ -782,6 +782,30 @@ describe('CodeContextPage', () => {
       expect(screen.queryByText('Sources it used')).toBeNull();
     });
 
+    it('jumps to the cited memory, not just to its tab', async () => {
+      const user = userEvent.setup();
+      const scrolled: Element[] = [];
+      const original = Element.prototype.scrollIntoView;
+      Element.prototype.scrollIntoView = function (this: Element) {
+        scrolled.push(this);
+      };
+      try {
+        buildState.data = SUCCESS;
+        finished({ grounding: 'ok' });
+        answerState.text = 'It ranks by PageRank [M1].';
+        answerState.citations = [{ handle: 'M1', kind: 'memory', name: 'M1', memory_id: 'm1' }];
+        (answerState as Record<string, unknown>).packet = PACKET;
+        render(<CodeContextPage />);
+
+        await user.click(screen.getAllByRole('button', { name: /M1/ })[0]);
+        await waitFor(() =>
+          expect(scrolled.some((el) => el.getAttribute('data-memory') === 'm1')).toBe(true),
+        );
+      } finally {
+        Element.prototype.scrollIntoView = original;
+      }
+    });
+
     it('shows which model answered, how long it took, and from which packet', () => {
       finished({
         grounding: 'ok',

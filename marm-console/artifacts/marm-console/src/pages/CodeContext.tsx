@@ -532,17 +532,19 @@ export function CodeContextPage() {
               }}
               onCite={(citation) => {
                 // Jump to the evidence rather than describing where it is.
+                const jump = (selector: string) =>
+                  window.setTimeout(() => {
+                    document
+                      .querySelector(selector)
+                      ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                  }, 60);
                 if (citation.kind === 'memory' || !citation.qualified_name) {
                   setTab('memory');
+                  if (citation.memory_id) jump(`[data-memory="${CSS.escape(citation.memory_id)}"]`);
                   return;
                 }
-                const qualified = citation.qualified_name;
                 setTab('symbols');
-                window.setTimeout(() => {
-                  document
-                    .querySelector(`[data-symbol="${CSS.escape(qualified)}"]`)
-                    ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                }, 60);
+                jump(`[data-symbol="${CSS.escape(citation.qualified_name)}"]`);
               }}
             />
           </TabsContent>
