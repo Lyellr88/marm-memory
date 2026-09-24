@@ -70,6 +70,8 @@ def test_test_function_names_are_recognised():
         "callers of seed_query",
         "where is is_distinctive called from",
         "Where is `read` used?",
+        "What else calls apply?",
+        "which methods invoke claim",
     ],
 )
 def test_a_question_about_callers_is_recognised(task):
@@ -83,6 +85,9 @@ def test_a_question_about_callers_is_recognised(task):
         "What does apply call?",
         "what does the rate limiter do when the swarm profile is active",
         "the budget never calls readline with zero",
+        "What target calls",
+        "what build_code_context calls internally",
+        "Which helpers does apply call?",
     ],
 )
 def test_a_question_about_anything_else_is_not(task):

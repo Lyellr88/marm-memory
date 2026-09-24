@@ -321,7 +321,9 @@ async def build(
         edges += _edges_from_trace(payload, s.qualified_name)
         for row in payload.get("callers") or []:
             qn = row.get("qualified_name")
-            if qn and int(row.get("hop") or 1) <= 1:
+            strategy = (row.get("strategy") or "").strip().lower()
+            trust = _STRATEGY_TRUST.get(strategy, _UNKNOWN_STRATEGY_TRUST)
+            if qn and trust > 0.0 and int(row.get("hop") or 1) <= 1:
                 mass = seed_mass.get(s.qualified_name, 0.0)
                 callers_of_seeds[qn] = max(callers_of_seeds.get(qn, 0.0), mass)
         for key in ("callees", "callers"):
@@ -351,7 +353,11 @@ async def build(
             f"{len(trace_candidates)} expanded symbols"
         )
 
-    ranks = personalised_pagerank(edges, seed_mass) if edges else dict(seed_mass)
+    wants_callers = asks_for_callers(task)
+    # A caller question reads the graph against its arrows, so importance
+    # flows to callers rather than callees. `graph_edges` keeps the true ones.
+    ranked_edges = [(b, a, w) for a, b, w in edges] if wants_callers else edges
+    ranks = personalised_pagerank(ranked_edges, seed_mass) if edges else dict(seed_mass)
     ctx.graph_nodes = len({n for a, b, _ in edges for n in (a, b)})
     aggregated: dict[tuple[str, str], float] = {}
     for a, b, w in edges:
@@ -363,9 +369,8 @@ async def build(
         # and a symbol absent from the call graph would otherwise score zero and
         # vanish even when it is the obvious answer.
         s.score = max(ranks.get(qn, 0.0), seed_mass.get(qn, 0.0) * 0.1)
-    if asks_for_callers(task):
-        # The graph cannot tell a caller from a callee of the same seed; the
-        # question can. A direct caller then answers it as surely as a seed.
+    if wants_callers:
+        # A direct caller answers the question as surely as a seed does.
         for qn, mass in callers_of_seeds.items():
             if qn in by_qn:
                 by_qn[qn].score = max(by_qn[qn].score, mass * 0.1)
@@ -381,13 +386,19 @@ async def build(
     for s in ordered:
         if spent >= budget:
             break
-        if not s.file_path and s.name and backfill_ok and backfills < BACKFILL_SEARCHES:
+        # A bare name is shared by its namesakes across the project, so ask
+        # with its parent first, then read past the first rows of the bare one.
+        parts = s.qualified_name.split(".")
+        queries = [f"{parts[-2]} {s.name}"] if len(parts) > 1 else []
+        for query in [*queries, s.name]:
+            if s.file_path or not s.name or not backfill_ok:
+                break
+            if backfills >= BACKFILL_SEARCHES:
+                break
             backfills += 1
             try:
-                # A bare name is shared by its namesakes across the project, so
-                # read past the first few rows for the traced one.
                 rows = await asyncio.to_thread(
-                    client.search, name, s.name, limit=BACKFILL_ROWS
+                    client.search, name, query, limit=BACKFILL_ROWS
                 )
             except GraphUnavailable:
                 # Cosmetic: losing the engine here costs file and line only.

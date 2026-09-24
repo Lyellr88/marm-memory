@@ -235,9 +235,16 @@ def seed_query(task: str) -> str:
     return " ".join(terms) if terms else (task or "")
 
 
+# Only a category may stand between the question word and the verb: in
+# "which functions call X" the functions are the callers, but in "what target
+# calls" the named symbol is the subject and the question asks for callees.
+_CALLER_CATEGORY = (
+    r"(?:else|other|functions?|methods?|code|symbols?|modules?|classes?|files?|"
+    r"handlers?|routes?|tests?|places?|parts?|components?|things?)"
+)
 _CALLER_QUESTION = re.compile(
     r"\bcallers?\b"
-    r"|\b(?:what|who|which)\s+(?:(?!(?:do|does|did)\b)\w+\s+){0,2}"
+    rf"|\b(?:what|who|which)\s+(?:{_CALLER_CATEGORY}\s+){{0,2}}"
     r"(?:calls?|invokes?|uses?)\b"
     r"|\bwhere\b[^?.]*\b(?:called|used|invoked)\b"
     r"|\bcalled\s+(?:by|from)\b",

@@ -876,8 +876,9 @@ async def test_a_traced_caller_ranked_past_the_top_dozen_is_still_shown(tmp_path
     class Resolving(Stub):
         def search(self, project, query, limit=25, semantic=None):
             self.searches.append(query)
-            if query in rows:
-                return [rows[query]]
+            # Answers "<parent> <name>" as well as the bare name, as the engine does.
+            if query.split()[-1] in rows:
+                return [rows[query.split()[-1]]]
             return self._results
 
     c = Resolving(
@@ -963,3 +964,98 @@ async def test_asking_how_a_symbol_works_does_not_promote_its_callers(tmp_path):
     ctx = await build(_hub(tmp_path), "how does target work", cwd=str(tmp_path))
     names = [s.name for s in ctx.symbols]
     assert names.index("entry") > max(names.index(f"h{i}") for i in range(6)), names
+
+
+def _one_each(tmp_path, caller_strategy="lsp"):
+    """`target` calls `helper` and is called by `entry`: one of each."""
+    (tmp_path / "m.py").write_text(
+        "def target():\n    helper()\n\ndef entry():\n    target()\n\n"
+        "def helper():\n    pass\n"
+    )
+    trace = {
+        "proj.m.target": {
+            "callees": [
+                {
+                    "qualified_name": "proj.m.helper",
+                    "name": "helper",
+                    "hop": 1,
+                    "strategy": "lsp",
+                }
+            ],
+            "callers": [
+                {
+                    "qualified_name": "proj.m.entry",
+                    "name": "entry",
+                    "hop": 1,
+                    "strategy": caller_strategy,
+                }
+            ],
+        }
+    }
+    rows = {
+        "helper": _row("helper", "proj.m.helper", 7, 8),
+        "entry": _row("entry", "proj.m.entry", 4, 5),
+    }
+
+    class Resolving(Stub):
+        def search(self, project, query, limit=25, semantic=None):
+            self.searches.append(query)
+            return [rows[query]] if query in rows else self._results
+
+    return Resolving(
+        tmp_path, results=[_row("target", "proj.m.target", 1, 2)], trace=trace
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_single_caller_outranks_a_single_callee_for_a_caller_question(tmp_path):
+    ctx = await build(_one_each(tmp_path), "what calls target", cwd=str(tmp_path))
+    names = [s.name for s in ctx.symbols]
+    assert names.index("entry") < names.index("helper"), names
+
+
+@pytest.mark.asyncio
+async def test_an_unresolved_caller_is_not_promoted(tmp_path):
+    """The engine reporting that it does not know a caller is not a caller."""
+    asked = await build(
+        _one_each(tmp_path, caller_strategy="unresolved"),
+        "what calls target",
+        cwd=str(tmp_path),
+    )
+    plain = await build(
+        _one_each(tmp_path, caller_strategy="unresolved"),
+        "how does target work",
+        cwd=str(tmp_path),
+    )
+
+    def score(ctx):
+        return next((s.score for s in ctx.symbols if s.name == "entry"), 0.0)
+
+    assert score(asked) == score(plain)
+
+
+@pytest.mark.asyncio
+async def test_backfill_finds_a_name_with_more_namesakes_than_rows(repo):
+    """`build` has dozens of namesakes; no row limit reaches the traced one, but
+    naming its parent does."""
+    trace = {
+        "proj.m.helper": {
+            "callers": [{"qualified_name": "proj.m.caller", "name": "caller", "hop": 1}]
+        }
+    }
+
+    class Crowded(Stub):
+        def search(self, project, query, limit=25, semantic=None):
+            self.searches.append(query)
+            if query == "caller":
+                return [_row("caller", f"proj.x{i}.caller") for i in range(limit)]
+            if query == "m caller":
+                return [_row("caller", "proj.m.caller", 7, 8)]
+            return self._results
+
+    c = Crowded(repo, results=[_row("helper", "proj.m.helper", 1, 2)], trace=trace)
+    ctx = await build(c, "helper", cwd=str(repo))
+
+    caller = next((s for s in ctx.symbols if s.qualified_name == "proj.m.caller"), None)
+    assert caller is not None
+    assert (caller.start_line, caller.end_line) == (7, 8)
