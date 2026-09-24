@@ -1,6 +1,7 @@
 import { Badge, cn } from '@/components/ui/core';
 import { MemoryEmptyState, memoryContext } from '@/components/memory/shared';
 import { AlertTriangle } from 'lucide-react';
+import { decodeEntities } from '@/lib/entities';
 import type { CodeContextMemory } from '@/lib/marm-types';
 
 function when(timestamp?: string): string | null {
@@ -10,7 +11,7 @@ function when(timestamp?: string): string | null {
 }
 
 function text(memory: CodeContextMemory): string {
-  return String(memory.content ?? memory.summary ?? '').split(/\s+/).join(' ').trim();
+  return decodeEntities(String(memory.content ?? memory.summary ?? '')).split(/\s+/).join(' ').trim();
 }
 
 function MemoryCard({ memory }: { memory: CodeContextMemory }) {
