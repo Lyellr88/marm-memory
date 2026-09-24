@@ -126,3 +126,28 @@ def test_default_analytics_path_is_under_the_marm_home(monkeypatch, tmp_path):
 
     assert _events(resolved)
     assert list(launch_dir.iterdir()) == []
+
+
+def test_usage_follows_the_environment_at_write_time(monkeypatch, tmp_path):
+    """The path is read when an event is written, not when the module loads.
+
+    Bound at import, it was fixed during test collection -- before any fixture
+    could redirect it -- so a suite that mounts a router directly wrote its
+    events into the developer's real ~/.marm.
+    """
+    from marm_mcp_server.services import analytics
+
+    configured = tmp_path / "later" / "analytics.db"
+    monkeypatch.setenv("MARM_ANALYTICS_DB_PATH", str(configured))
+    analytics.track_usage("probe", endpoint="x", user_data={"user_agent": "t"})
+    assert [e[0] for e in _events(configured)] == ["probe"]
+
+    fake_home = tmp_path / "home"
+    fake_home.mkdir()
+    monkeypatch.delenv("MARM_ANALYTICS_DB_PATH")
+    monkeypatch.setenv("HOME", str(fake_home))
+    monkeypatch.setenv("USERPROFILE", str(fake_home))
+    analytics.track_usage("probe-home", endpoint="x")
+    assert [e[0] for e in _events(fake_home / ".marm" / "marm_usage_analytics.db")] == [
+        "probe-home"
+    ]
