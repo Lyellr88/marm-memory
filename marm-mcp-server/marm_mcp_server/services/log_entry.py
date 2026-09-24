@@ -16,9 +16,23 @@ async def create_log_entry(
     entry: str,
     session_name: Optional[str],
     *,
+    project: Optional[str] = None,
     log_info: Callable[[str], None] = print,
     log_warning: Callable[[str], None] = print,
 ) -> dict:
+    """Write a log entry, optionally scoped to a caller-chosen project.
+
+    `project` is optional and falls back to the detected `MARM_PROJECT` when it
+    is omitted, so existing callers keep their current behaviour. It matters on
+    a shared HTTP runtime, where the detected value is the SERVER process's
+    working directory rather than the caller's, and project-scoped recall then
+    misses or misattributes the entry.
+    """
+    # One expression, used by the session-marker row, the normal row and the
+    # semantic write, so the three cannot disagree about what scope means.
+    scope = project or MARM_PROJECT or None
+    explicit = bool(project)
+
     try:
         formatted_entry = entry.strip()
 
@@ -60,7 +74,7 @@ async def create_log_entry(
                                 "session_start",
                                 base_name,
                                 formatted_entry,
-                                MARM_PROJECT or None,
+                                scope,
                                 MARM_PLATFORM or None,
                             ),
                         )
@@ -157,7 +171,7 @@ async def create_log_entry(
                         topic,
                         summary,
                         formatted_entry,
-                        MARM_PROJECT or None,
+                        scope,
                         MARM_PLATFORM or None,
                     ),
                 )
@@ -187,6 +201,12 @@ async def create_log_entry(
                 formatted_entry,
                 session,
                 metadata={"source": "log_entry", "log_entry_id": entry_id},
+                # The columns, not the metadata blob: scoped recall reads them.
+                # The platform is the one the log row above records, so an
+                # explicit project does not also erase where the entry came from.
+                project=scope,
+                platform=MARM_PLATFORM or None,
+                explicit_scope=explicit,
             )
         except Exception as store_error:
             log_warning(

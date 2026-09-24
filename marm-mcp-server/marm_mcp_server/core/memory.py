@@ -267,6 +267,7 @@ class MARMMemory:
         context_type: str = "general",
         metadata: Dict | None = None,
         project: str | None = None,
+        platform: str | None = None,
         explicit_scope: bool = False,
     ) -> str:
         return await _store_memory(
@@ -276,6 +277,7 @@ class MARMMemory:
             context_type,
             metadata,
             project=project,
+            platform=platform,
             explicit_scope=explicit_scope,
         )
 
@@ -287,6 +289,7 @@ class MARMMemory:
         metadata: Dict | None = None,
         queue_enabled: Optional[bool] = None,
         project: str | None = None,
+        platform: str | None = None,
         explicit_scope: bool = False,
     ) -> str:
         """Store memory through the write queue unless explicitly disabled."""
@@ -301,6 +304,7 @@ class MARMMemory:
                 context_type,
                 metadata,
                 project=project,
+                platform=platform,
                 explicit_scope=explicit_scope,
             )
         # The direct path carries the scope too: a caller that disables the
@@ -311,6 +315,7 @@ class MARMMemory:
             context_type,
             metadata,
             project=project,
+            platform=platform,
             explicit_scope=explicit_scope,
         )
 

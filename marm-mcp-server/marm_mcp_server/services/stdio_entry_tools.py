@@ -4,9 +4,15 @@ from ..core.stdio_logging import _stdio_log
 from .log_entry import create_log_entry, delete_log_or_notebook_entry, list_log_entries
 
 
-async def create_log_entry_stdio(entry: str, session_name: Optional[str]) -> dict:
+async def create_log_entry_stdio(
+    entry: str, session_name: Optional[str], project: Optional[str] = None
+) -> dict:
     return await create_log_entry(
-        entry, session_name, log_info=_stdio_log.info, log_warning=_stdio_log.warning
+        entry,
+        session_name,
+        project=project,
+        log_info=_stdio_log.info,
+        log_warning=_stdio_log.warning,
     )
 
 

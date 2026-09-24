@@ -654,7 +654,7 @@ The AI agent will automatically use the appropriate tools. Manual tool access is
 | Tool | What it does | Key parameters |
 | ------ | -------------- | ---------------- |
 | `marm_smart_recall` | Hybrid memory recall with an additive, bounded concept/code graph sidecar when a compatible graph exists | `query`, `limit`, `session_name`, `search_all`, `detail=1/2/3`, `project`, `platform`, `exact_mode` |
-| `marm_log_entry` | Add structured session log entries; each entry is also embedded into semantic memory so `marm_smart_recall` can find it | `entry`, `session_name` |
+| `marm_log_entry` | Add structured session log entries; each entry is also embedded into semantic memory so `marm_smart_recall` can find it | `entry`, `session_name`, `project` (optional; defaults to the server's detected project) |
 | `marm_log_show` | Display all entries and sessions, with filtering | `session_name` |
 | `marm_delete` | Delete a log session, log entry, or notebook entry | `type`, `target`, `session_name`, `project`, `platform` |
 | `marm_summary` | Cached, paste-ready session summaries with intelligent truncation | `session_name` |
