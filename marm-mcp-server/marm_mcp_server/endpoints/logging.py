@@ -1,7 +1,7 @@
 from typing import Literal, Optional
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from ..core.models import DeleteRequest, LogEntryRequest
 from ..services.log_entry import (
@@ -39,6 +39,10 @@ class LogDeleteResponse(_ResponseModel):
     message: str
     deleted_count: int
     memories_deleted: int
+    # Mirrors what the memory endpoints already report for the same follow-up.
+    # Free-form rather than a model: it is passed through verbatim from the
+    # cleanup helper, which owns its own shape.
+    concept_cleanup: dict = Field(default_factory=dict)
 
 
 class NotebookDeleteResponse(_ResponseModel):
