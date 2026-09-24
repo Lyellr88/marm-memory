@@ -25,6 +25,7 @@ _IDENTIFIER_MARK = re.compile(r"[_.:]|[a-z][A-Z]")
 _BRACKET = re.compile(r"\[([^\[\]\n]{1,200})\](?!\()")
 _SEPARATOR = re.compile(r"[,;]")
 _CODE_SPAN = re.compile(r"`([^`\n]{2,120})`")
+_EMPTY_CALL = re.compile(r"[A-Za-z_][\w.]*\(\)")
 _LINE_REF = re.compile(r"([\w./-]+\.\w+):(\d+)")
 _CALL = re.compile(r"\b(calls|invokes|delegates to)\b", re.I)
 _ABSTAIN = re.compile(
@@ -198,7 +199,9 @@ def _span_support(text: str, packet: EvidencePacket) -> tuple[float, list[str]]:
         if _HANDLE.match(span):
             continue
         checked += 1
-        if span in corpus:
+        # Prose writes a function as `name()`; its source never does once it
+        # takes arguments, so an empty call matches any call or definition.
+        if span in corpus or (_EMPTY_CALL.fullmatch(span) and span[:-1] in corpus):
             supported += 1
         else:
             failures.append(f"code span not in packet: `{span}`")

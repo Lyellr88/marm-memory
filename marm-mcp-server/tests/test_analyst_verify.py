@@ -223,3 +223,38 @@ def test_an_abstention_is_not_folded_into_the_cited_claim_after_it(packet):
     )
     assert v.state == "verified", (v.state, v.failures)
     assert v.claims == 1
+
+
+@pytest.fixture
+def bind_packet():
+    return build_packet(
+        Context(
+            project={"name": "demo"},
+            task="how are bindings created",
+            symbols=[
+                Symbol(
+                    "pkg.bind.auto_bind",
+                    "auto_bind",
+                    "Function",
+                    "pkg/bind.py",
+                    1,
+                    3,
+                    source="def auto_bind(self, graph):\n    store.insert(graph)\n",
+                ),
+            ],
+        )
+    )
+
+
+@pytest.mark.parametrize("span", ["auto_bind()", "store.insert()"])
+def test_an_empty_call_names_the_function_it_calls(bind_packet, span):
+    """`name()` is how prose writes a function; the source never spells it
+    with empty parentheses once the function takes arguments."""
+    v = verify(f"Bindings are created by `{span}` [S1].", bind_packet)
+    assert v.source_span_support == 1.0, v.failures
+
+
+@pytest.mark.parametrize("span", ["ghost()", "auto_bind(force=True)", "store.remove()"])
+def test_a_call_the_packet_does_not_hold_still_fails(bind_packet, span):
+    v = verify(f"Bindings are created by `{span}` [S1].", bind_packet)
+    assert v.source_span_support == 0.0
