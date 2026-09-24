@@ -72,6 +72,8 @@ def test_test_function_names_are_recognised():
         "Where is `read` used?",
         "What else calls apply?",
         "which methods invoke claim",
+        "Which internal functions call target?",
+        "which private helper methods call apply",
     ],
 )
 def test_a_question_about_callers_is_recognised(task):

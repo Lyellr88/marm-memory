@@ -382,15 +382,20 @@ async def build(
     # them, so the budget, not a fixed window, decides how deep the output goes.
     backfills = 0
     backfill_ok = True
+    # A bare name is shared by its namesakes, so "<parent> <name>" often finds
+    # the traced symbol when the bare name cannot. Whichever form has found
+    # more is tried first, so a miss-prone form cannot spend the budget.
+    form_hits = {"parent": 0, "bare": 0}
     spent = 0
     for s in ordered:
         if spent >= budget:
             break
-        # A bare name is shared by its namesakes across the project, so ask
-        # with its parent first, then read past the first rows of the bare one.
         parts = s.qualified_name.split(".")
-        queries = [f"{parts[-2]} {s.name}"] if len(parts) > 1 else []
-        for query in [*queries, s.name]:
+        forms = {"bare": s.name}
+        if len(parts) > 1:
+            forms["parent"] = f"{parts[-2]} {s.name}"
+        order = sorted(forms, key=lambda f: (-form_hits[f], f != "parent"))
+        for form in order:
             if s.file_path or not s.name or not backfill_ok:
                 break
             if backfills >= BACKFILL_SEARCHES:
@@ -398,7 +403,7 @@ async def build(
             backfills += 1
             try:
                 rows = await asyncio.to_thread(
-                    client.search, name, query, limit=BACKFILL_ROWS
+                    client.search, name, forms[form], limit=BACKFILL_ROWS
                 )
             except GraphUnavailable:
                 # Cosmetic: losing the engine here costs file and line only.
@@ -413,6 +418,7 @@ async def build(
                         found.end_line,
                     )
                     s.label = s.label or found.label
+                    form_hits[form] += 1
                     break
         if not s.file_path:
             continue

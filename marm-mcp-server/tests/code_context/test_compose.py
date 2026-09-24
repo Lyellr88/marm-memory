@@ -876,9 +876,10 @@ async def test_a_traced_caller_ranked_past_the_top_dozen_is_still_shown(tmp_path
     class Resolving(Stub):
         def search(self, project, query, limit=25, semantic=None):
             self.searches.append(query)
-            # Answers "<parent> <name>" as well as the bare name, as the engine does.
-            if query.split()[-1] in rows:
-                return [rows[query.split()[-1]]]
+            # Bare names only: a parent-qualified query that never matches must
+            # not spend the search budget the bare-name fallback needs.
+            if query in rows:
+                return [rows[query]]
             return self._results
 
     c = Resolving(
