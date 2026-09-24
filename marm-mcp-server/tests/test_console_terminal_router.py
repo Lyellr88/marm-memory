@@ -245,13 +245,18 @@ def test_console_own_origin_is_accepted(
 
 @requires_backend
 def test_check_dependency_reports_a_real_command(
-    client: TestClient, enabled_loopback: None
+    client: TestClient, enabled_loopback: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    response = client.post("/api/terminal/check", json={"command": "git --version"})
+    # A command every shell has, so the test does not depend on what the
+    # probes look for being installed.
+    monkeypatch.setattr(
+        router_module, "CHECK_COMMANDS", router_module.CHECK_COMMANDS | {"echo hello"}
+    )
+    response = client.post("/api/terminal/check", json={"command": "echo hello"})
     assert response.status_code == 200
     body = response.json()
     assert body["success"] is True
-    assert "git version" in body["output"]
+    assert "hello" in body["output"]
 
 
 @requires_backend
@@ -312,7 +317,7 @@ def test_every_probe_the_console_sends_is_allowed() -> None:
     # missing directory fails rather than skipping the check.
     sources = [
         p
-        for p in sorted((root / "src/components/terminal").glob("*.ts*"))
+        for p in sorted((root / "src/components/terminal").rglob("*.ts*"))
         if ".test." not in p.name
     ]
     assert sources, "Console terminal sources not found"
