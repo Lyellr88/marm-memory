@@ -11,16 +11,10 @@ describe('decodeEntities', () => {
   });
 
   it('is a single pass, so a nested escape survives as literal text', () => {
-    // `&amp;lt;` is how an author's literal "&lt;" was stored. Decoding
-    // `&amp;` first and then re-scanning would yield "<" -- inventing a tag
-    // the author never wrote.
     expect(decodeEntities('&amp;lt;')).toBe('&lt;');
   });
 
   it('makes the edit round-trip stable, which is the corruption this fixes', () => {
-    // The editor seeds from stored content and the server escapes on save.
-    // Seeding with the RAW stored value meant each save added a level:
-    // `&#x27;` -> `&amp;#x27;`. Decoding first makes save idempotent.
     const stored = 'the target&#x27;s write';
     const escape = (s: string) =>
       s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')

@@ -246,15 +246,8 @@ export function MemoriesTab() {
         metadata: selectedMemory.metadata,
       }
     }, {
-      // `selectedMemory` holds the SERVER's representation, which is escaped;
-      // `editContent` is the decoded text the editor showed. Echoing the
-      // editor value back into it would leave the two out of step, and the
-      // detail renderer -- which decodes what it is given -- would decode an
-      // already-decoded string, turning a memory that really contains the
-      // characters `&lt;` into one that appears to contain `<`. PUT returns
-      // the stored row, so take it. The response degrades to a bare `{id}`
-      // if the row cannot be read back, and a partial object must not
-      // overwrite a whole one.
+      // Keep the server's escaped row, not the decoded editor text: decoding
+      // must happen once. A bare `{id}` response must not replace a whole row.
       onSuccess: (updated) => {
         setEditMode(false);
         if (typeof updated?.content === 'string') {

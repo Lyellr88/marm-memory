@@ -4,13 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Memory } from '@/lib/marm-types';
 import { MemoriesTab } from './MemoriesTab';
 
-// A memory whose real text contains the literal characters `&lt;` -- an author
-// quoting an entity. The server stores that with the `&` escaped.
-//
-// This content is chosen deliberately: decoding it TWICE differs from decoding
-// it once. Something like `&#x27;` would not catch the defect at all, because
-// decoding an apostrophe again is a no-op and the second decode leaves no
-// trace. A test written on that content passes against the broken code.
+// Decoding this once and twice differ, so a double decode fails the test.
 const STORED = 'compare a &amp;lt; b';
 const DECODED = 'compare a &lt; b';
 const DECODED_TWICE = 'compare a < b';
@@ -94,12 +88,7 @@ describe('MemoriesTab editing', () => {
   });
 
   it('keeps the server representation after a save, not the editor text', async () => {
-    // Writing `editContent` back into `selectedMemory` left the component
-    // holding the DECODED text where it believes it holds the stored one.
-    // The detail view decodes whatever it is given, so re-opening the editor
-    // decoded a second time -- turning a memory that really contains `&lt;`
-    // into one that appears to contain `<`, which the next save would then
-    // make true. Re-opening must show exactly one decode, not two.
+    // Re-opening the editor must show one decode, not two.
     const user = userEvent.setup();
     render(<MemoriesTab />);
 
