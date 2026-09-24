@@ -98,7 +98,15 @@ def _digest(
             "project": project,
             "task": task,
             "symbols": [
-                [s.qualified_name, s.file_path, s.start_line, s.end_line, s.source]
+                [
+                    s.qualified_name,
+                    s.label,
+                    s.file_path,
+                    s.start_line,
+                    s.end_line,
+                    s.truncated,
+                    s.source,
+                ]
                 for s in symbols
             ],
             "memories": [[m.memory_id, m.content] for m in memories],

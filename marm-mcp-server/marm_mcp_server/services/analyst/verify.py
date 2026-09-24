@@ -33,13 +33,18 @@ _NOT_CALL = re.compile(
     r"(call|calls|invoke|invokes|delegate to|delegates to)\b",
     re.I,
 )
+# An abstention is about the evidence or the answerer, never about the code:
+# "the packet does not show X" abstains, "it does not include retries" claims.
 # One or two qualifiers are allowed ("no direct evidence", "does not clearly
 # show"); a qualified abstention still asserts nothing.
 _QUALIFIER = r"(?:\w+\s+){0,2}"
+_EVIDENCE = r"(?:context|packet|evidence|sources?|excerpts?|provided code)"
 _ABSTAIN = re.compile(
-    rf"\b(does not {_QUALIFIER}(contain|show|include|say)|not {_QUALIFIER}"
-    r"(in|present in|shown in) the (context|packet|evidence)|cannot "
-    rf"{_QUALIFIER}(tell|determine|find)|no {_QUALIFIER}evidence)\b",
+    rf"\b({_EVIDENCE}\s+(does not|doesn't)\s+{_QUALIFIER}"
+    r"(contain|show|include|say|mention|indicate)"
+    rf"|not {_QUALIFIER}(in|present in|shown in) the {_EVIDENCE}"
+    rf"|(I|we)\s+(cannot|can't)\s+{_QUALIFIER}(tell|determine|find|see)"
+    rf"|no {_QUALIFIER}evidence)\b",
     re.I,
 )
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+")

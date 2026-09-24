@@ -299,3 +299,44 @@ def test_a_negated_call_contradicts_an_edge_the_packet_holds(packet):
     v = verify("apply [S1] never calls claim [S2].", packet)
     assert v.graph_memory_consistency < 1.0
     assert any("call edge" in f for f in v.failures), v.failures
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "apply claims the row first [S1]. It does not include any retry logic.",
+        "apply claims the row first [S1]. The function does not show a warning.",
+    ],
+)
+def test_a_negative_claim_about_the_code_is_still_a_claim(packet, text):
+    """Only a statement about the evidence is an abstention; one about the code,
+    however negative, needs a citation like any other claim."""
+    v = verify(text, packet)
+    assert v.state != "verified", v
+    assert "uncited claims" in v.failures
+
+
+def test_a_packet_id_covers_everything_the_model_is_shown():
+    def packet(label, truncated):
+        return build_packet(
+            Context(
+                project={"name": "demo"},
+                task="how",
+                symbols=[
+                    Symbol(
+                        "pkg.a",
+                        "a",
+                        label,
+                        "pkg/a.py",
+                        1,
+                        2,
+                        source="def a(): pass",
+                        truncated=truncated,
+                    )
+                ],
+            )
+        )
+
+    base = packet("Function", False).packet_id
+    assert packet("Method", False).packet_id != base
+    assert packet("Function", True).packet_id != base
