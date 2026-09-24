@@ -157,6 +157,11 @@ def test_a_name_wrapped_across_lines_is_stored_on_one_line():
     """Memories are often hard-wrapped, and a noun phrase that straddles the
     wrap came back with the newline inside it, as a different entity from the
     same phrase on one line."""
+    wrapped_only = extract_entities(
+        "The team measured the rendering-heavy\nbench on the new frame\nscheduler."
+    )
+    assert "the rendering-heavy bench" in [e.name for e in wrapped_only.entities]
+
     result = extract_entities(
         "The team measured the rendering-heavy\nbench on the new frame\n"
         "scheduler, then reran the rendering-heavy bench."
@@ -165,9 +170,12 @@ def test_a_name_wrapped_across_lines_is_stored_on_one_line():
     assert names, "the model extracted nothing, so this proves nothing"
     assert not [n for n in names if any(c.isspace() and c != " " for c in n)]
     assert not [n for n in names if "  " in n]
-    assert len(names) == len(set(names))
-    for pair in result.relationship_pairs:
-        assert "\n" not in pair.source and "\n" not in pair.target
+    # The wrapped and the one-line mention are one entity, not two.
+    assert names.count("the rendering-heavy bench") == 1
+    pairs = {(p.source, p.target) for p in result.relationship_pairs}
+    assert ("the rendering-heavy bench", "the new frame scheduler") in pairs
+    for source, target in pairs:
+        assert "\n" not in source and "\n" not in target
 
 
 @pytest.mark.skipif(
