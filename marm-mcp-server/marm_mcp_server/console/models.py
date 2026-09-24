@@ -12,6 +12,9 @@ class CodeContextPayload(BaseModel):
     budget: int = Field(default=12000, ge=500, le=100000)
     include_graph: bool = False
     detail: int = Field(default=0, ge=0, le=3)
+    #: Ask the local model to answer the task from the composed context. Off
+    #: unless requested, here and in the tool.
+    answer: bool = False
 
 
 class DistillPayload(BaseModel):
@@ -31,6 +34,9 @@ class DistillPayload(BaseModel):
     threshold: float = Field(default=0.20, ge=-2.0, le=3.0)
     limit: int = Field(default=20, ge=1, le=200)
     include_duplicates: bool = False
+    # Pydantic drops an undeclared field silently, so an option missing here
+    # never reaches the server: the page's checkbox would do nothing.
+    use_llm: bool = False
 
 
 class ConceptBuildPayload(BaseModel):
@@ -98,6 +104,24 @@ class RuntimeAutomationPayload(BaseModel):
 class RuntimeProfilePayload(BaseModel):
     profile: Literal["standard", "swarm", "swarm-max", "trusted"]
     rate_limit_rpm: int | None = None
+
+
+class RuntimeLlmPayload(BaseModel):
+    """A change to the optional local generative model.
+
+    Both fields optional, and the proxy forwards only what was set: the toggle
+    and the model picker are separate controls, and a payload that always
+    carried both would have each one silently overwrite the other's value.
+    """
+
+    enabled: bool | None = None
+    model: str | None = Field(default=None, max_length=512)
+    endpoint: str | None = Field(default=None, max_length=512)
+
+
+class RuntimeLlmRootPayload(BaseModel):
+    path: str = Field(min_length=1, max_length=4096)
+    remove: bool = False
 
 
 class CompactionDryRunPayload(BaseModel):

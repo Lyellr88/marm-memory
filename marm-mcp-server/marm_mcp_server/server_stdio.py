@@ -334,6 +334,7 @@ async def marm_distill(
     threshold: float = 0.20,
     limit: int = 20,
     include_duplicates: bool = False,
+    use_llm: Optional[bool] = None,
 ) -> dict:
     """
     Propose durable memories from raw conversation, resolved against the store.
@@ -344,9 +345,14 @@ async def marm_distill(
     something stored -- worth your judgement, because an encoder cannot tell
     "refines it" from "contradicts it").
 
-    It SELECTS sentences rather than composing new ones, because MARM runs no
-    generative model. A fact spread over three turns, or implied but never
-    said plainly, will not be proposed.
+    With `use_llm=True`, once the operator has enabled local generation, it
+    composes a self-contained fact, and every generated proposal cites a
+    VERBATIM span from the transcript, checked against the source before it is
+    offered.
+
+    By default, and whenever no model is enabled and reachable, it SELECTS
+    sentences: a fact spread over three turns, or implied but never said
+    plainly, will not be proposed.
 
     NOTHING IS WRITTEN BY `propose`. Proposals are staged for review, and only
     `apply` writes one -- the same contract as marm_compaction, for the same
@@ -367,6 +373,8 @@ async def marm_distill(
     - limit: most proposals to return (default 20). THIS is the volume control
     - include_duplicates: also stage what the store already holds (default off,
       because a queue of known facts does not get read)
+    - use_llm: write facts with the local model (default off; needs the
+      operator to have enabled generation, and falls back to selection)
 
     Returns: status plus `proposals` (propose) or `pending` (review), each
     carrying content, score, the reasons it scored, verdict, cosine, and the
@@ -387,6 +395,10 @@ async def marm_distill(
                 threshold=threshold,
                 limit=limit,
                 include_duplicates=include_duplicates,
+                # Forwarded so STDIO callers can force the verbatim-selection
+                # fallback exactly as HTTP callers can. Omitting it left the two
+                # transports with different behaviour for the same tool.
+                **({} if use_llm is None else {"use_llm": use_llm}),
             )
         )
     except Exception as e:

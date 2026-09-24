@@ -1,5 +1,5 @@
 import type { MemoryDeleteResult } from '@/lib/marm-types';
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useState, type ReactNode } from 'react';
 import { AlertTriangle, BrainCircuit, CheckCircle2, ChevronLeft, ChevronRight, CircleAlert, FileText, Lightbulb, MessageSquareText, Sparkles, Trash2, Wrench, XCircle } from 'lucide-react';
 import {
   Button,
@@ -76,19 +76,37 @@ export function MemoryEmptyState({
   title,
   detail,
   className = '',
+  children,
+  icon: Icon = Sparkles,
+  tone,
 }: {
   title: string;
   detail?: string;
   className?: string;
+  /** Optional call to action. Empty states that can be acted on directly are
+   *  better than empty states that describe an action taken elsewhere. */
+  children?: ReactNode;
+  /** Optional icon and `console-tab-*` tone. A pane with its own colour should
+   *  keep it here too; a rose pane whose empty state is cyan reads as a
+   *  different pane. Defaults preserve every existing caller. */
+  icon?: typeof Sparkles;
+  tone?: string;
 }) {
   return (
     <div className={`memory-empty-state relative flex min-h-40 flex-col items-center justify-center overflow-hidden rounded-xl ${className}`}>
       <div className="memory-empty-field" aria-hidden="true" />
-      <div className="relative z-10 flex h-11 w-11 items-center justify-center rounded-xl border border-primary/20 bg-primary/[0.07] text-primary shadow-[0_0_28px_rgba(var(--primary-rgb),0.08)]">
-        <Sparkles className="h-4.5 w-4.5" />
+      <div
+        className={
+          tone
+            ? `console-tab ${tone} console-tab-icon relative z-10 flex h-11 w-11 items-center justify-center rounded-xl border`
+            : 'relative z-10 flex h-11 w-11 items-center justify-center rounded-xl border border-primary/20 bg-primary/[0.07] text-primary shadow-[0_0_28px_rgba(var(--primary-rgb),0.08)]'
+        }
+      >
+        <Icon className="h-4.5 w-4.5" />
       </div>
       <p className="relative z-10 mt-3 text-sm font-medium text-foreground/90">{title}</p>
       {detail && <p className="relative z-10 mt-1 max-w-sm text-center text-xs text-muted-foreground">{detail}</p>}
+      {children && <div className="relative z-10">{children}</div>}
     </div>
   );
 }

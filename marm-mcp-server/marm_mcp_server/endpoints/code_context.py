@@ -1,11 +1,21 @@
 """One-call composed code context: ranked symbols, their source, and memory."""
 
+import json
+from collections.abc import Iterator
+
+import structlog
 from fastapi import APIRouter
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from ..services.code_context import build_code_context
+from ..services.code_context import build_code_context, stream_answer
+
+logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="", tags=["Code Context"])
+
+_PUBLIC_UNAVAILABLE_MESSAGE = "Code Context is unavailable."
+_PUBLIC_NO_PROJECT_MESSAGE = "No matching indexed project is available."
 
 
 class CodeContextRequest(BaseModel):
@@ -40,6 +50,19 @@ class CodeContextRequest(BaseModel):
             "stops); 2=adds symbol and memory metadata; 3=adds source and "
             "memory text as structured fields, which the markdown already "
             "contains. 0 uses the server default (MARM_CODE_CONTEXT_DETAIL)."
+        ),
+    )
+    answer: bool = Field(
+        default=False,
+        description=(
+            "Also answer the task from the composed context using a local "
+            "model, with citations to the symbols it used. Off by default: it "
+            "is the slow step, and the ranked context is already the answer "
+            "for a caller that reads code. `answer_status` is 'ok' only when "
+            "the answer's citations resolve to composed symbols and none name "
+            "anything else; otherwise 'unverified', with `answer_unresolved`. "
+            "'unavailable' rather than a failure when generation is off or no "
+            "model is reachable."
         ),
     )
     include_graph: bool = Field(
@@ -78,4 +101,78 @@ async def marm_code_context(req: CodeContextRequest) -> dict:
         budget=req.budget,
         include_graph=req.include_graph,
         detail=req.detail or None,
+        answer=req.answer,
+    )
+
+
+@router.post("/internal/code-context/answer", include_in_schema=False)
+def stream_code_context_answer(req: CodeContextRequest) -> StreamingResponse:
+    """Server-sent events carrying a grounded answer as it is written.
+
+    Deliberately NOT part of the MCP tool surface, and `include_in_schema` is
+    off so it cannot be picked up as one. An agent consumes a whole answer
+    before acting on any of it, so streaming to an agent adds framing and buys
+    nothing; this exists for the Console, where seconds of blank screen read as
+    a hung page rather than a slow one. The tool keeps returning a single JSON
+    body.
+
+    The first event is `context`, the composition the answer is written from,
+    so a client renders the evidence and the answer from one retrieval.
+
+    A sync generator on purpose: Starlette iterates it in a worker thread, the
+    llama.cpp client is blocking, and the composition it does first is
+    `asyncio.run` over a coroutine -- all of which are correct off the event
+    loop and wrong on it.
+    """
+
+    def events() -> Iterator[str]:
+        graph_failure_message: str | None = None
+        try:
+            for name, payload in stream_answer(
+                task=req.task,
+                project=req.project,
+                cwd=req.cwd,
+                budget=req.budget,
+                include_graph=req.include_graph,
+                detail=req.detail or None,
+            ):
+                if name == "context" and payload.get("status") in {
+                    "unavailable",
+                    "no_project",
+                }:
+                    graph_failure_message = (
+                        _PUBLIC_NO_PROJECT_MESSAGE
+                        if payload["status"] == "no_project"
+                        else _PUBLIC_UNAVAILABLE_MESSAGE
+                    )
+                    payload = {**payload, "message": graph_failure_message}
+                elif name == "error" and graph_failure_message is not None:
+                    payload = {**payload, "message": graph_failure_message}
+                yield f"event: {name}\ndata: {json.dumps(payload)}\n\n"
+        except Exception:  # pragma: no cover - defensive
+            try:
+                logger.exception("code-context answer stream failed")
+            except Exception:
+                try:
+                    logger.warning(
+                        "code-context answer stream failed; diagnostics unavailable"
+                    )
+                except Exception:
+                    pass
+            yield (
+                "event: error\n"
+                f"data: {json.dumps({'message': 'Code Context answer is unavailable.'})}\n\n"
+            )
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={
+            # Without these a proxy or the browser will buffer the stream and
+            # deliver it all at once, which is the exact failure this endpoint
+            # exists to avoid.
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
     )
