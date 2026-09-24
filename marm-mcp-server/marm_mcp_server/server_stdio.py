@@ -365,10 +365,12 @@ async def marm_distill(
     sentences: a fact spread over three turns, or implied but never said
     plainly, will not be proposed.
 
-    NOTHING IS WRITTEN BY `propose`. Proposals are staged for review, and only
-    `apply` writes one -- the same contract as marm_compaction, for the same
-    reason: a similarity score is not evidence enough to change memory
-    unattended.
+    By default NOTHING IS WRITTEN BY `propose`. Proposals are staged for
+    review, and only `apply` writes one -- the same contract as
+    marm_compaction, for the same reason: a similarity score is not evidence
+    enough to change memory unattended. The one exception is
+    review_mode="guardrails" with MARM_ANALYST_AUTO_APPLY=1, where `propose`
+    also applies each proposal that passes every deterministic check.
 
     Parameters:
     - action: propose | review | apply | discard (default propose)

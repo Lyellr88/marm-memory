@@ -105,9 +105,12 @@ async def marm_distill(req: DistillRequest) -> dict:
     sentences. That fallback finds only what was said plainly: a fact spread
     across three turns, or implied and never stated, will not be proposed.
 
-    Nothing is written to memory by `propose`. Proposals are staged for review
-    and only `apply` writes one, for the same reason `marm_compaction` stages:
-    a similarity score is not evidence enough to modify memory unattended.
+    By default nothing is written to memory by `propose`. Proposals are staged
+    for review and only `apply` writes one, for the same reason
+    `marm_compaction` stages: a similarity score is not evidence enough to
+    modify memory unattended. The exception is `review_mode="guardrails"` with
+    MARM_ANALYST_AUTO_APPLY=1, which also applies each proposal that passes
+    every deterministic check.
     """
     if req.action == "propose":
         if not req.text or not req.text.strip():
