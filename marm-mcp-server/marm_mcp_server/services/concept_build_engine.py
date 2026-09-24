@@ -287,6 +287,9 @@ def _run_build(
                         )
                         continue
 
+                    # An edited memory replaces what it said; its old concepts
+                    # would otherwise stand beside the new ones.
+                    concept_db.retract_memory_provenance(conn, [mem_id])
                     memory_failed = False
                     name_to_id: dict[str, int] = {}
                     name_to_canonical: dict[str, str] = {}

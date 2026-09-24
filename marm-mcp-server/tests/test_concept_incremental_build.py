@@ -491,3 +491,78 @@ def test_extraction_reads_the_text_not_its_stored_escaping(concepts_env, monkeyp
     asyncio.run(concepts.build_for_memory_ids(["m1"]))
 
     assert seen == ['rebase someone else\'s "PR" & merge']
+
+
+def _extract_with_pairs(monkeypatch, by_content):
+    from marm_mcp_server.core.concept_extraction import (
+        Entity,
+        ExtractionResult,
+        RelationshipPair,
+    )
+
+    def fake(content):
+        names, pairs = by_content[content]
+        return ExtractionResult(
+            entities=[Entity(name, "concept") for name in names],
+            relationship_pairs=[RelationshipPair(a, b, "related") for a, b in pairs],
+        )
+
+    concept_build_engine = importlib.import_module(
+        "marm_mcp_server.services.concept_build_engine"
+    )
+    monkeypatch.setattr(concept_build_engine, "extract_entities", fake)
+
+
+def _graph(concepts):
+    import json
+
+    with concepts._get_concept_db().get_connection() as conn:
+        entities = {
+            name: sorted(json.loads(src or "[]"))
+            for name, src in conn.execute(
+                "SELECT name, source_memory_ids FROM entities"
+            ).fetchall()
+        }
+        rels = conn.execute(
+            "SELECT e1.name, e2.name, r.memory_id FROM relationships r "
+            "JOIN entities e1 ON e1.id = r.source_id "
+            "JOIN entities e2 ON e2.id = r.target_id"
+        ).fetchall()
+    return entities, sorted(rels)
+
+
+def test_re_extracting_an_edited_memory_retracts_what_it_said_before(
+    concepts_env, monkeypatch
+):
+    """An edit replaces a memory's text, so its concepts are replaced too.
+
+    The old extraction here is the wrapped name the extractor used to keep;
+    without retraction it survived beside the corrected one, both citing m1.
+    """
+    concepts, memory_module = concepts_env
+    _seed(memory_module, [("m1", "old"), ("m2", "other")])
+    _extract_with_pairs(
+        monkeypatch,
+        {
+            "old": (
+                ["Ada\nLovelace", "Engine", "Shared"],
+                [("Ada\nLovelace", "Engine")],
+            ),
+            "other": (["Shared"], []),
+            "new": (["Ada Lovelace", "Notes"], [("Ada Lovelace", "Notes")]),
+        },
+    )
+    asyncio.run(concepts.build_for_memory_ids(["m1", "m2"]))
+    assert _graph(concepts)[0]["Ada\nLovelace"] == ["m1"]
+
+    with memory_module.memory.get_connection() as conn:
+        conn.execute("UPDATE memories SET content = 'new' WHERE id = 'm1'")
+    asyncio.run(concepts.build_for_memory_ids(["m1"]))
+
+    entities, rels = _graph(concepts)
+    assert entities == {
+        "Ada Lovelace": ["m1"],
+        "Notes": ["m1"],
+        "Shared": ["m2"],
+    }
+    assert rels == [("Ada Lovelace", "Notes", "m1")]
