@@ -289,21 +289,35 @@ def test_check_dependency_refuses_anything_but_a_known_probe(
     assert "not a dependency check" in response.json()["detail"]
 
 
+_COMMAND_LITERAL = re.compile(r"""\bcommand:\s*(['"`])((?:(?!\1)[^\\\n])+)\1""")
+
+
+def _probe_literals(source: str) -> set[str]:
+    return {m.group(2) for m in _COMMAND_LITERAL.finditer(source)}
+
+
+def test_probe_literals_are_found_in_every_quote_style() -> None:
+    source = (
+        "{ command: 'a --version' }\n{ command: \"b --version\" }\n{ command: `c` }"
+    )
+    assert _probe_literals(source) == {"a --version", "b --version", "c"}
+
+
 def test_every_probe_the_console_sends_is_allowed() -> None:
     """The allowlist duplicates strings the Console owns, so pin them together."""
     root = Path(__file__).resolve().parents[2] / "marm-console/artifacts/marm-console"
-    sources = [
-        root / "src/components/terminal/AgentConfigs.ts",
-        root / "src/components/terminal/TerminalDock.tsx",
-    ]
-    if not all(path.is_file() for path in sources):
+    if not root.is_dir():
         pytest.skip("Console sources are not in this checkout")
-    sent = {
-        match
-        for path in sources
-        for match in re.findall(r"\bcommand: '([^']+)'", path.read_text("utf-8"))
-    }
-    assert len(sent) == 6
+    # Every terminal source, so a probe added in a new file is still seen; a
+    # missing directory fails rather than skipping the check.
+    sources = [
+        p
+        for p in sorted((root / "src/components/terminal").glob("*.ts*"))
+        if ".test." not in p.name
+    ]
+    assert sources, "Console terminal sources not found"
+    sent = set().union(*(_probe_literals(p.read_text("utf-8")) for p in sources))
+    assert not [c for c in sent if "${" in c], "a probe the allowlist cannot match"
     assert sent == router_module.CHECK_COMMANDS
 
 
