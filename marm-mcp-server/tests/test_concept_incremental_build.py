@@ -511,8 +511,6 @@ def _extract_with_pairs(monkeypatch, by_content):
         "marm_mcp_server.services.concept_build_engine"
     )
     monkeypatch.setattr(concept_build_engine, "extract_entities", fake)
-    # The fake stands in for a loaded model, whether or not one is installed.
-    monkeypatch.setattr(concept_build_engine, "extractor_available", lambda: True)
 
 
 def _graph(concepts):
@@ -611,9 +609,12 @@ def test_an_unavailable_extractor_does_not_retract(concepts_env, monkeypatch):
     monkeypatch.setattr(
         concept_build_engine,
         "extract_entities",
-        lambda _content: ExtractionResult(entities=[], relationship_pairs=[]),
+        lambda _content: ExtractionResult(
+            entities=[], relationship_pairs=[], available=False
+        ),
     )
-    monkeypatch.setattr(concept_build_engine, "extractor_available", lambda: False)
-    asyncio.run(concepts.build_for_memory_ids(["m1"]))
+    outcomes = asyncio.run(concepts.build_for_memory_ids(["m1"]))
 
+    # Failed, not no_entities, so the queue keeps the memory and retries it.
+    assert outcomes == {"m1": "failed"}
     assert _graph(concepts)[0] == {"Old": ["m1"]}

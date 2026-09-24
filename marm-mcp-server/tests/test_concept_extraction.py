@@ -116,8 +116,11 @@ def unavailable_concept_model(monkeypatch):
 
 
 def test_extract_entities_fails_open_when_model_unavailable(unavailable_concept_model):
+    """Fail-open, but not silently: the empty result says it had no model."""
     result = extract_entities("MARM stores memories with fastembed embeddings.")
-    assert result == ExtractionResult(entities=[], relationship_pairs=[])
+    assert result == ExtractionResult(
+        entities=[], relationship_pairs=[], available=False
+    )
 
 
 def test_load_nlp_lazily_returns_none_without_model(unavailable_concept_model):

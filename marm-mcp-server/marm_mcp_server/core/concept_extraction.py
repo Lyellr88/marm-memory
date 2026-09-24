@@ -45,6 +45,9 @@ class RelationshipPair(NamedTuple):
 class ExtractionResult(NamedTuple):
     entities: list[Entity]
     relationship_pairs: list[RelationshipPair]
+    # False when no model could run: the result is empty for lack of a model,
+    # not because the text held nothing.
+    available: bool = True
 
 
 _nlp = None
@@ -150,12 +153,6 @@ def _classify_predicate(span_a: "Span", span_b: "Span") -> str:
     return "related_to"
 
 
-def extractor_available() -> bool:
-    """True when the model is loaded, so an empty result means nothing was
-    found rather than that nothing could be looked for."""
-    return _load_nlp_lazily() is not None
-
-
 def extract_entities(content: str) -> ExtractionResult:
     """Extract entities + relationship pairs from one memory's content
     string. Fail-open: returns an empty result if spaCy/the model isn't
@@ -170,7 +167,7 @@ def extract_entities(content: str) -> ExtractionResult:
     """
     nlp = _load_nlp_lazily()
     if nlp is None:
-        return ExtractionResult(entities=[], relationship_pairs=[])
+        return ExtractionResult(entities=[], relationship_pairs=[], available=False)
 
     doc = nlp(content)
     seen_names: dict[str, str] = {}
