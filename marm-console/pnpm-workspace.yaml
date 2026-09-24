@@ -14,13 +14,13 @@ catalog:
   '@radix-ui/react-select': ^2.3.7
   '@radix-ui/react-tabs': ^1.1.21
   '@tailwindcss/vite': ^4.3.3
-  '@tanstack/react-query': ^5.102.8
-  '@types/node': ^26.5.1
+  '@tanstack/react-query': ^5.103.1
+  '@types/node': ^26.6.2
   '@types/react': ^19.3.0
   '@types/react-dom': ^19.3.0
   '@vitejs/plugin-react': ^6.1.1
   clsx: ^2.1.1
-  lucide-react: ^1.45.0
+  lucide-react: ^1.47.0
   react: 19.3.0
   react-dom: 19.3.0
   tailwind-merge: ^3.7.0
