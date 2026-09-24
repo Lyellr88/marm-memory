@@ -12,10 +12,11 @@
 
 - Stored HTML entities now render as readable text throughout Console memory, comparison, provenance, and Code Context views. Editing preserves the server representation through save and reopen.
 - Code Context graph-failure streams now return only fixed public status and message fields, rather than forwarding backend error details or hints to the Console.
+- Console dependency checks now run only MARM's fixed, approved probes outside the interactive terminal stream. Other commands are rejected.
 
 ### Acknowledgment
 
-Thank you to [@doublegate](https://github.com/doublegate) for [#219](https://github.com/Lyellr88/marm-memory/pull/219), [#221](https://github.com/Lyellr88/marm-memory/pull/221), and [#227](https://github.com/Lyellr88/marm-memory/pull/227).
+Thank you to [@doublegate](https://github.com/doublegate) for [#219](https://github.com/Lyellr88/marm-memory/pull/219), [#221](https://github.com/Lyellr88/marm-memory/pull/221), [#227](https://github.com/Lyellr88/marm-memory/pull/227), and [#233](https://github.com/Lyellr88/marm-memory/pull/233).
 
 </details>
 
