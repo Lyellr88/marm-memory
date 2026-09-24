@@ -105,7 +105,7 @@ The frontend defaults to the Console API at `http://127.0.0.1:8002`.
 | `GET /api/terminal/status` | Whether the terminal is enabled and available, and its backend/shell |
 | `WS /api/terminal/ws` | Interactive PTY session: spawn, attach (reattach after disconnect), input, resize, kill |
 | `POST /api/distill` | Propose durable memories from raw conversation, review the staged queue, apply one, or discard one. Accepts `action`, `text`, `session_name`, `proposal_id`, `project`, `threshold`, `limit`, `include_duplicates`, `use_llm` |
-| `POST /api/terminal/check` | Run a command outside the interactive stream (dependency checks) |
+| `POST /api/terminal/check` | Run one of the Console's fixed dependency probes outside the interactive stream; any other command is refused |
 
 `GET /api/memories` supports `q`, `session`, `project`, `platform`, `context_type`, `compaction_role`, `limit`, and `offset` query parameters. Results are capped at 200 records per request.
 

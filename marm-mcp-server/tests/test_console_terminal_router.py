@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import importlib
+import re
 import time
 from collections.abc import Iterator
+from pathlib import Path
 
 import pytest
 from fastapi import FastAPI
@@ -21,6 +24,8 @@ from marm_mcp_server.console.terminal.router import (
     terminal_availability,
 )
 
+# The package re-exports the APIRouter as `router`, shadowing the module.
+router_module = importlib.import_module("marm_mcp_server.console.terminal.router")
 BACKEND = backend_status()
 requires_backend = pytest.mark.skipif(
     not BACKEND.available, reason=f"No PTY backend available: {BACKEND.reason}"
@@ -240,8 +245,13 @@ def test_console_own_origin_is_accepted(
 
 @requires_backend
 def test_check_dependency_reports_a_real_command(
-    client: TestClient, enabled_loopback: None
+    client: TestClient, enabled_loopback: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    # A command every shell has, so the test does not depend on what the
+    # probes look for being installed.
+    monkeypatch.setattr(
+        router_module, "CHECK_COMMANDS", router_module.CHECK_COMMANDS | {"echo hello"}
+    )
     response = client.post("/api/terminal/check", json={"command": "echo hello"})
     assert response.status_code == 200
     body = response.json()
@@ -251,8 +261,13 @@ def test_check_dependency_reports_a_real_command(
 
 @requires_backend
 def test_check_dependency_reports_a_missing_command(
-    client: TestClient, enabled_loopback: None
+    client: TestClient, enabled_loopback: None, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    monkeypatch.setattr(
+        router_module,
+        "CHECK_COMMANDS",
+        frozenset({"definitely-not-a-real-command-xyz"}),
+    )
     response = client.post(
         "/api/terminal/check", json={"command": "definitely-not-a-real-command-xyz"}
     )
@@ -260,11 +275,62 @@ def test_check_dependency_reports_a_missing_command(
     assert response.json()["success"] is False
 
 
+@pytest.mark.parametrize(
+    "command",
+    [
+        "echo pwned",
+        "git --version; id",
+        "git --version && id",
+        "git --version\nid",
+        "git --version $(id)",
+        " git --version",
+    ],
+)
+def test_check_dependency_refuses_anything_but_a_known_probe(
+    client: TestClient, enabled_loopback: None, command: str
+) -> None:
+    response = client.post("/api/terminal/check", json={"command": command})
+    assert response.status_code == 400
+    assert "not a dependency check" in response.json()["detail"]
+
+
+_COMMAND_LITERAL = re.compile(r"""\bcommand:\s*(['"`])((?:(?!\1)[^\\\n])+)\1""")
+
+
+def _probe_literals(source: str) -> set[str]:
+    return {m.group(2) for m in _COMMAND_LITERAL.finditer(source)}
+
+
+def test_probe_literals_are_found_in_every_quote_style() -> None:
+    source = (
+        "{ command: 'a --version' }\n{ command: \"b --version\" }\n{ command: `c` }"
+    )
+    assert _probe_literals(source) == {"a --version", "b --version", "c"}
+
+
+def test_every_probe_the_console_sends_is_allowed() -> None:
+    """The allowlist duplicates strings the Console owns, so pin them together."""
+    root = Path(__file__).resolve().parents[2] / "marm-console/artifacts/marm-console"
+    if not root.is_dir():
+        pytest.skip("Console sources are not in this checkout")
+    # Every terminal source, so a probe added in a new file is still seen; a
+    # missing directory fails rather than skipping the check.
+    sources = [
+        p
+        for p in sorted((root / "src/components/terminal").rglob("*.ts*"))
+        if ".test." not in p.name
+    ]
+    assert sources, "Console terminal sources not found"
+    sent = set().union(*(_probe_literals(p.read_text("utf-8")) for p in sources))
+    assert not [c for c in sent if "${" in c], "a probe the allowlist cannot match"
+    assert sent == router_module.CHECK_COMMANDS
+
+
 def test_check_dependency_refuses_a_non_loopback_bind(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv(HOST_ENV, "0.0.0.0")
-    response = client.post("/api/terminal/check", json={"command": "echo hi"})
+    response = client.post("/api/terminal/check", json={"command": "git --version"})
     assert response.status_code == 200
     body = response.json()
     assert body["success"] is False
