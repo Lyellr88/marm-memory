@@ -1,7 +1,7 @@
 # Changelog
 
 <details>
-<summary><strong>September 24th, 2026: Log and Memory View Improvements (v2.52.2)</strong></summary>
+<summary><strong>September 24th, 2026: Log and Memory View Improvements (v2.52.3)</strong></summary>
 
 ### Added
 
