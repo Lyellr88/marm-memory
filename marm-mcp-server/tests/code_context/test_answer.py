@@ -178,6 +178,24 @@ def test_an_unavailable_graph_is_reported_as_the_context(model, monkeypatch):
     assert events[1][1]["hint"] == events[0][1]["hint"]
 
 
+def test_graph_failure_details_are_not_returned_over_json_or_sse(monkeypatch):
+    async def build(*_a, **_k):
+        raise cc.GraphUnavailable("engine failure at /private/secret.db")
+
+    monkeypatch.setattr(cc, "build", build)
+    monkeypatch.setattr(cc, "LocalBackend", lambda: object())
+
+    json_payload = asyncio.run(
+        cc.build_code_context(task="how", project="p", cwd=None, budget=12000)
+    )
+    stream_events = list(cc.stream_answer("how", "p", None, 12000))
+
+    assert json_payload["message"] == "Code Context is unavailable."
+    assert "secret.db" not in str(json_payload)
+    assert stream_events[0][1]["message"] == "Code Context is unavailable."
+    assert "secret.db" not in str(stream_events)
+
+
 def test_no_model_still_delivers_the_context(composed, monkeypatch):
     monkeypatch.setattr(local_llm, "available", lambda *a, **k: None)
     events = list(

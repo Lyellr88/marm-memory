@@ -68,18 +68,15 @@ async def build_code_context(
 
 
 def _unavailable_payload(exc: GraphUnavailable) -> dict:
-    """The response when nothing could be composed.
-
-    Two different failures share this exception: the graph is not running, and
-    the graph is running but nothing matches. They need different advice, and
-    the message already carries the indexed list in the second case, so the
-    caller is told what to do rather than just what failed.
-    """
-    message = str(exc)
-    unmatched = "no indexed project" in message
+    """Return a public, status-specific response without exception details."""
+    unmatched = "no indexed project" in str(exc)
     return {
         "status": "no_project" if unmatched else "unavailable",
-        "message": message,
+        "message": (
+            "No matching indexed project is available."
+            if unmatched
+            else "Code Context is unavailable."
+        ),
         "hint": (
             "Call marm_graph_index(action='list') to see indexed projects."
             if unmatched
