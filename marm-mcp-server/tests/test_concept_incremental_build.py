@@ -511,6 +511,8 @@ def _extract_with_pairs(monkeypatch, by_content):
         "marm_mcp_server.services.concept_build_engine"
     )
     monkeypatch.setattr(concept_build_engine, "extract_entities", fake)
+    # The fake stands in for a loaded model, whether or not one is installed.
+    monkeypatch.setattr(concept_build_engine, "extractor_available", lambda: True)
 
 
 def _graph(concepts):
@@ -590,4 +592,28 @@ def test_a_failed_write_leaves_the_old_concepts_in_place(concepts_env, monkeypat
     outcomes = asyncio.run(concepts.build_for_memory_ids(["m1"]))
 
     assert outcomes == {"m1": "failed"}
+    assert _graph(concepts)[0] == {"Old": ["m1"]}
+
+
+def test_an_unavailable_extractor_does_not_retract(concepts_env, monkeypatch):
+    """A model that fails to load yields an empty result, which is not an
+    extraction that found nothing; the old concepts must survive it."""
+    from marm_mcp_server.core.concept_extraction import ExtractionResult
+
+    concepts, memory_module = concepts_env
+    _seed(memory_module, [("m1", "old")])
+    _extract_with_pairs(monkeypatch, {"old": (["Old"], [])})
+    asyncio.run(concepts.build_for_memory_ids(["m1"]))
+
+    concept_build_engine = importlib.import_module(
+        "marm_mcp_server.services.concept_build_engine"
+    )
+    monkeypatch.setattr(
+        concept_build_engine,
+        "extract_entities",
+        lambda _content: ExtractionResult(entities=[], relationship_pairs=[]),
+    )
+    monkeypatch.setattr(concept_build_engine, "extractor_available", lambda: False)
+    asyncio.run(concepts.build_for_memory_ids(["m1"]))
+
     assert _graph(concepts)[0] == {"Old": ["m1"]}

@@ -9,7 +9,7 @@ from ..config.settings import (
 )
 from ..core.code_project_bindings import CodeProjectBinding, get_by_memory_project
 from ..core.concept_db import ConceptDB, backup_and_reset_concept_database
-from ..core.concept_extraction import extract_entities
+from ..core.concept_extraction import extract_entities, extractor_available
 from ..core.graph_client import find_code_match
 from ..core.memory import memory
 from ..core.memory_utils import _embedding_to_bytes, _safe_print
@@ -372,8 +372,9 @@ def _run_build(
                     # An edited memory replaces what it said: withdraw whatever
                     # its previous text contributed and this extraction did
                     # not repeat. Skipped after a failed write, which would
-                    # otherwise strip citations that are still true.
-                    if not memory_failed:
+                    # otherwise strip citations that are still true, and when
+                    # the model is unavailable, whose empty result says nothing.
+                    if not memory_failed and extractor_available():
                         concept_db.retract_memory_provenance(
                             conn,
                             [mem_id],

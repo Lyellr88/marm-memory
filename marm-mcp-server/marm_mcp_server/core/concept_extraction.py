@@ -150,6 +150,12 @@ def _classify_predicate(span_a: "Span", span_b: "Span") -> str:
     return "related_to"
 
 
+def extractor_available() -> bool:
+    """True when the model is loaded, so an empty result means nothing was
+    found rather than that nothing could be looked for."""
+    return _load_nlp_lazily() is not None
+
+
 def extract_entities(content: str) -> ExtractionResult:
     """Extract entities + relationship pairs from one memory's content
     string. Fail-open: returns an empty result if spaCy/the model isn't
