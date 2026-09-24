@@ -1,6 +1,25 @@
 # Changelog
 
 <details>
+<summary><strong>September 24th, 2026: Log and Memory View Improvements (v2.52.2)</strong></summary>
+
+### Added
+
+- `marm_log_entry` can now receive an optional project scope over HTTP and STDIO. Queued semantic-memory writes preserve its requested project and platform metadata.
+- Deleting log entries now also removes their associated concept entities after the memory deletion commits. Cleanup status and removed entity counts are returned without allowing a cleanup failure to reverse the log deletion.
+
+### Fixed
+
+- Stored HTML entities now render as readable text throughout Console memory, comparison, provenance, and Code Context views. Editing preserves the server representation through save and reopen.
+- Code Context graph-failure streams now return only fixed public status and message fields, rather than forwarding backend error details or hints to the Console.
+
+### Acknowledgment
+
+Thank you to [@doublegate](https://github.com/doublegate) for [#219](https://github.com/Lyellr88/marm-memory/pull/219), [#221](https://github.com/Lyellr88/marm-memory/pull/221), and [#227](https://github.com/Lyellr88/marm-memory/pull/227).
+
+</details>
+
+<details>
 <summary><strong>September 24th, 2026: Code Context Error Hardening (v2.52.1)</strong></summary>
 
 ### Fixed

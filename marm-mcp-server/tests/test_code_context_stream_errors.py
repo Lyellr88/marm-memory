@@ -63,14 +63,14 @@ def test_runtime_answer_stream_hides_graph_failure_details(monkeypatch):
             {
                 "status": "unavailable",
                 "message": "graph backend secret detail",
-                "hint": "Index a repository with marm_graph_index(repo_path=...) first.",
+                "hint": "graph backend hint secret",
             },
         )
         yield (
             "error",
             {
                 "message": "graph backend secret detail",
-                "hint": "Index a repository with marm_graph_index(repo_path=...) first.",
+                "hint": "graph backend hint secret",
             },
         )
 
@@ -82,7 +82,12 @@ def test_runtime_answer_stream_hides_graph_failure_details(monkeypatch):
     context = next(response.content)
     error = next(response.content)
 
-    assert _event(context)["message"] == "Code Context is unavailable."
-    assert _event(error)["message"] == "Code Context is unavailable."
+    assert _event(context) == {
+        "status": "unavailable",
+        "message": "Code Context is unavailable.",
+    }
+    assert _event(error) == {"message": "Code Context is unavailable."}
     assert "graph backend secret detail" not in context
     assert "graph backend secret detail" not in error
+    assert "graph backend hint secret" not in context
+    assert "graph backend hint secret" not in error

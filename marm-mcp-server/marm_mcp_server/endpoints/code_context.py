@@ -140,14 +140,15 @@ def stream_code_context_answer(req: CodeContextRequest) -> StreamingResponse:
                     "unavailable",
                     "no_project",
                 }:
+                    status = payload["status"]
                     graph_failure_message = (
                         _PUBLIC_NO_PROJECT_MESSAGE
-                        if payload["status"] == "no_project"
+                        if status == "no_project"
                         else _PUBLIC_UNAVAILABLE_MESSAGE
                     )
-                    payload = {**payload, "message": graph_failure_message}
+                    payload = {"status": status, "message": graph_failure_message}
                 elif name == "error" and graph_failure_message is not None:
-                    payload = {**payload, "message": graph_failure_message}
+                    payload = {"message": graph_failure_message}
                 yield f"event: {name}\ndata: {json.dumps(payload)}\n\n"
         except Exception:  # pragma: no cover - defensive
             try:
