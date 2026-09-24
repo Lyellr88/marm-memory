@@ -74,6 +74,8 @@ def test_test_function_names_are_recognised():
         "which methods invoke claim",
         "Which internal functions call target?",
         "which private helper methods call apply",
+        "Is seed_query called by anything?",
+        "target is called by what?",
     ],
 )
 def test_a_question_about_callers_is_recognised(task):
@@ -90,6 +92,8 @@ def test_a_question_about_callers_is_recognised(task):
         "What target calls",
         "what build_code_context calls internally",
         "Which helpers does apply call?",
+        "What is called by target?",
+        "Which helper is called by target?",
     ],
 )
 def test_a_question_about_anything_else_is_not(task):
