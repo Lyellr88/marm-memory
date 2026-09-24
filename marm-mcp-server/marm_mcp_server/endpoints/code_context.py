@@ -14,6 +14,9 @@ logger = structlog.get_logger(__name__)
 
 router = APIRouter(prefix="", tags=["Code Context"])
 
+_PUBLIC_UNAVAILABLE_MESSAGE = "Code Context is unavailable."
+_PUBLIC_NO_PROJECT_MESSAGE = "No matching indexed project is available."
+
 
 class CodeContextRequest(BaseModel):
     task: str = Field(
@@ -123,6 +126,7 @@ def stream_code_context_answer(req: CodeContextRequest) -> StreamingResponse:
     """
 
     def events() -> Iterator[str]:
+        graph_failure_message: str | None = None
         try:
             for name, payload in stream_answer(
                 task=req.task,
@@ -132,12 +136,32 @@ def stream_code_context_answer(req: CodeContextRequest) -> StreamingResponse:
                 include_graph=req.include_graph,
                 detail=req.detail or None,
             ):
+                if name == "context" and payload.get("status") in {
+                    "unavailable",
+                    "no_project",
+                }:
+                    graph_failure_message = (
+                        _PUBLIC_NO_PROJECT_MESSAGE
+                        if payload["status"] == "no_project"
+                        else _PUBLIC_UNAVAILABLE_MESSAGE
+                    )
+                    payload = {**payload, "message": graph_failure_message}
+                elif name == "error" and graph_failure_message is not None:
+                    payload = {**payload, "message": graph_failure_message}
                 yield f"event: {name}\ndata: {json.dumps(payload)}\n\n"
-        except Exception as exc:  # pragma: no cover - defensive
-            logger.exception("code-context answer stream failed")
+        except Exception:  # pragma: no cover - defensive
+            try:
+                logger.exception("code-context answer stream failed")
+            except Exception:
+                try:
+                    logger.warning(
+                        "code-context answer stream failed; diagnostics unavailable"
+                    )
+                except Exception:
+                    pass
             yield (
                 "event: error\n"
-                f"data: {json.dumps({'message': f'answer stream failed: {exc}'})}\n\n"
+                f"data: {json.dumps({'message': 'Code Context answer is unavailable.'})}\n\n"
             )
 
     return StreamingResponse(

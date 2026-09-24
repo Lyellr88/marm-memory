@@ -65,9 +65,10 @@ def stream_answer(payload: CodeContextPayload) -> StreamingResponse:
             yield from mcp_client.stream(
                 "internal/code-context/answer", payload.model_dump()
             )
-        except mcp_client.McpUnavailable as exc:
+        except mcp_client.McpUnavailable:
             yield (
-                f"event: error\ndata: {json.dumps({'message': str(exc)})}\n\n"
+                "event: error\n"
+                f"data: {json.dumps({'message': 'Code Context answer is unavailable.'})}\n\n"
             ).encode()
 
     return StreamingResponse(

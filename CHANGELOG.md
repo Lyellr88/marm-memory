@@ -1,6 +1,15 @@
 # Changelog
 
 <details>
+<summary><strong>September 24th, 2026: Code Context Error Hardening (v2.52.1)</strong></summary>
+
+### Fixed
+
+- Code Context streaming errors no longer send MCP or server exception details to the Console browser. The server attempts to retain diagnostics, and a safe fallback response is still delivered if a Windows console logger cannot encode the traceback.
+
+</details>
+
+<details>
 <summary><strong>September 23rd, 2026: Optional Local Generation (v2.52.0)</strong></summary>
 
 ### Added
