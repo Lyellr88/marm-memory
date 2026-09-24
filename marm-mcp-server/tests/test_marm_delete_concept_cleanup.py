@@ -14,6 +14,9 @@ import pytest
 
 from marm_mcp_server.services import log_entry as log_entry_module
 
+# The memory endpoints' contract: detail stays in the log.
+GENERIC_CLEANUP_FAILURE = {"status": "failed", "error": "Concept cleanup failed."}
+
 
 @pytest.mark.asyncio
 async def test_deleting_a_log_entry_cleans_up_its_concepts(monkeypatch, tmp_path):
@@ -145,7 +148,8 @@ async def test_a_failing_cleanup_does_not_fail_the_delete(monkeypatch, tmp_path)
 
     assert result["status"] == "success"
     assert result["memories_deleted"] == 1
-    assert result["concept_cleanup"]["status"] == "error"
+    assert result["concept_cleanup"] == GENERIC_CLEANUP_FAILURE
+    assert "index unavailable" not in repr(result), "raw exception text leaked"
 
 
 @pytest.mark.asyncio
@@ -231,4 +235,5 @@ async def test_a_failing_import_does_not_fail_the_delete(monkeypatch, tmp_path):
 
     assert result["status"] == "success", "the delete committed; it did not fail"
     assert result["memories_deleted"] == 1
-    assert result["concept_cleanup"]["status"] == "error"
+    assert result["concept_cleanup"] == GENERIC_CLEANUP_FAILURE
+    assert "marm_mcp_server.endpoints.memory" not in repr(result)

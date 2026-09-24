@@ -298,8 +298,9 @@ async def _cleanup_concepts_for(memory_ids: list[str]) -> dict:
 
         return await _cleanup_deleted_concepts_async(memory_ids)
     except Exception as e:
+        # Detail stays local; the response matches the memory endpoints'.
         _safe_print(f"Concept cleanup failed after log delete: {e}")
-        return {"status": "error", "message": str(e)}
+        return {"status": "failed", "error": "Concept cleanup failed."}
 
 
 async def delete_log_or_notebook_entry(
