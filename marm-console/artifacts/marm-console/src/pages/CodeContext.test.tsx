@@ -787,7 +787,7 @@ describe('CodeContextPage', () => {
         grounding: 'ok',
         verification: VERIFIED,
         packet: PACKET,
-        modelInfo: { id: 'qwen3.6-27b-mtp', endpoint_source: 'discovery', max_tokens: 900, elapsed_ms: 2240, stopped: null },
+        modelInfo: { id: 'local-model', endpoint_source: 'discovery', max_tokens: 900, elapsed_ms: 2240, stopped: null },
       });
       answerState.text = 'It sorts [S1].';
       render(<CodeContextPage />);

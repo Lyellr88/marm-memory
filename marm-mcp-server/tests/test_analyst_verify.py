@@ -164,7 +164,7 @@ def test_markdown_scaffolding_is_not_a_claim(packet):
     assert v.state == "verified"
 
 
-# --- calibrated against real answers (gemma-4-26b-a4b-qat, 2026-09-23) -------
+# --- cases taken from real answers ---------------------------------------------
 # Four of eleven non-verified answers were correct and fully cited; each was
 # marked uncertain for a list lead-in such as "This process involves:".
 

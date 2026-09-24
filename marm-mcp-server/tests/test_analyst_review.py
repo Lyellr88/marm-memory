@@ -556,8 +556,8 @@ def test_the_stream_can_apply_when_the_operator_allows_it(monkeypatch, tmp_path)
 def test_conclusions_get_the_same_output_budget_as_the_answer(
     staged_memory, monkeypatch
 ):
-    """A reasoning model spends a small budget thinking and answers with
-    nothing; 256 tokens came back empty twice against a live model."""
+    """A reasoning model can spend a small budget thinking and answer with
+    nothing, so the conclusions call gets the answer's budget."""
     from marm_mcp_server.services.analyst import Budget
 
     seen = {}
