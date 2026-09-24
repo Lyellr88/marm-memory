@@ -333,6 +333,8 @@ def init_database(db_path: str) -> None:
                 reasons TEXT NOT NULL DEFAULT '[]',
                 verdict TEXT NOT NULL DEFAULT 'new',
                 cosine REAL NOT NULL DEFAULT 0,
+                evidence TEXT NOT NULL DEFAULT '',
+                mode TEXT NOT NULL DEFAULT 'selected',
                 neighbour_id TEXT,
                 neighbour_content TEXT,
                 status TEXT NOT NULL DEFAULT 'pending',
@@ -360,11 +362,21 @@ def init_database(db_path: str) -> None:
             "CREATE UNIQUE INDEX IF NOT EXISTS idx_distill_staging_hash "
             "ON distill_staging(candidate_hash)"
         )
-        # Added with the review nudge; a store created before it needs them.
+        # The table shipped before generation-backed extraction existed, so a
+        # store created by the earlier version needs the two new columns.
         distill_cols = {
             row[1]
             for row in conn.execute("PRAGMA table_info(distill_staging)").fetchall()
         }
+        if "evidence" not in distill_cols:
+            conn.execute(
+                "ALTER TABLE distill_staging ADD COLUMN evidence TEXT NOT NULL DEFAULT ''"
+            )
+        if "mode" not in distill_cols:
+            conn.execute(
+                "ALTER TABLE distill_staging "
+                "ADD COLUMN mode TEXT NOT NULL DEFAULT 'selected'"
+            )
         if "nudge_count" not in distill_cols:
             conn.execute(
                 "ALTER TABLE distill_staging "

@@ -63,6 +63,15 @@ class DistillRequest(BaseModel):
         default=False,
         description="Also stage candidates the store already holds.",
     )
+    use_llm: bool = Field(
+        default=False,
+        description=(
+            "Write self-contained facts with the local generative model, which "
+            "sentence selection cannot. Off by default; takes effect only when "
+            "the operator has enabled generation and a model is reachable, and "
+            "falls back to selection otherwise."
+        ),
+    )
 
 
 @router.post("/marm_distill", operation_id="marm_distill")
@@ -74,9 +83,15 @@ async def marm_distill(req: DistillRequest) -> dict:
     `new` (nothing close), `duplicate` (already recorded), or `near` (close to
     something stored, and worth a human look).
 
-    It SELECTS sentences rather than writing new ones, because MARM has no
-    generative model. A fact spread across three turns, or implied and never
-    stated, will not be proposed -- this finds what was said plainly.
+    With `use_llm=True`, once the operator has enabled local generation, it
+    composes a self-contained fact, and every generated proposal cites a
+    VERBATIM span from the transcript, which is checked against the source
+    before the proposal is offered -- an invented span is the signature of an
+    invented fact.
+
+    By default, and whenever no model is enabled and reachable, it SELECTS
+    sentences. That fallback finds only what was said plainly: a fact spread
+    across three turns, or implied and never stated, will not be proposed.
 
     Nothing is written to memory by `propose`. Proposals are staged for review
     and only `apply` writes one, for the same reason `marm_compaction` stages:
@@ -96,6 +111,7 @@ async def marm_distill(req: DistillRequest) -> dict:
             threshold=req.threshold,
             limit=req.limit,
             include_duplicates=req.include_duplicates,
+            use_llm=req.use_llm,
         )
 
     if req.action == "review":

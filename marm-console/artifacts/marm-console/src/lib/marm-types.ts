@@ -290,6 +290,156 @@ export interface RuntimeSettings {
     semantic_available: boolean;
     model_state: 'loaded' | 'loading' | 'failed' | 'not_loaded';
   };
+  llm?: LocalLlmStatus;
+  hardware?: HardwareStatus;
+}
+
+/** One accelerator, as its own vendor tool describes it.
+ *
+ *  `unified` is load-bearing rather than cosmetic: on Apple Silicon the GPU
+ *  shares one pool with the CPU, so `memory_total_mb` is the whole machine's
+ *  RAM and there is no free-VRAM figure to give. Rendering that the same way
+ *  as a discrete card tells a Mac owner they have 64 GB to spend on weights.
+ */
+export interface GpuInfo {
+  index: number;
+  vendor: string;
+  name: string;
+  memory_total_mb: number | null;
+  memory_used_mb: number | null;
+  memory_free_mb: number | null;
+  utilisation_percent: number | null;
+  driver: string | null;
+  unified: boolean;
+}
+
+export interface HardwareStatus {
+  gpus: GpuInfo[];
+  platform: string;
+  detected: boolean;
+}
+
+export interface ServedModel {
+  id: string | null;
+  path?: string | null;
+  state?: string | null;
+}
+
+/** The optional local generative model, and what can actually be changed.
+ *
+ *  `can_switch` is not a capability MARM chose; it is what the detected
+ *  runtime was measured to do. llama.cpp accepts a `model` parameter and
+ *  ignores it, so a picker rendered without consulting this would report a
+ *  swap that never happened.
+ */
+export interface LocalLlmStatus {
+  configured: boolean;
+  enabled: boolean;
+  endpoint: string | null;
+  available: boolean;
+  /** What would answer. Present even while switched off, so the pane that
+   *  turns it back on can say what it would turn on. */
+  model: string | null;
+  /** What IS answering. Null whenever generation is off. */
+  model_in_use: string | null;
+  preferred_model: string | null;
+  loopback_enforced: boolean;
+  runtime: string | null;
+  runtime_version: string | null;
+  can_switch: boolean;
+  model_path: string | null;
+  context_length: number | null;
+  served: ServedModel[];
+  switch_blocked_reason: string | null;
+  /** WHICH RULE chose `endpoint`, which is not the same as what it chose.
+   *
+   *  `flag` and `environment` mean somebody stated this address; `discovery`
+   *  means nothing answered at the stated one and MARM fell back to whatever
+   *  is running. A picker that cannot tell those apart shows an auto-selected
+   *  server as "in use" and disables it, while the banner above still asks the
+   *  reader to pick one — telling them to do something the UI forbids. */
+  endpoint_source?: 'flag' | 'environment' | 'discovery' | 'default';
+  source?: string;
+  rejected?: string;
+  applied_model?: string;
+}
+
+/** A local OpenAI-compatible server found by scanning loopback ports.
+ *
+ *  `expected` is which runtime that port conventionally belongs to; `runtime`
+ *  is what actually answered. They can differ — anyone may run llama.cpp on
+ *  1234 — and the pane shows what answered.
+ */
+export interface DiscoveredServer {
+  url: string;
+  port: number;
+  expected: string;
+  runtime: string;
+  version: string | null;
+  can_switch: boolean;
+  model_count: number;
+  models: string[];
+  model_path: string | null;
+  context_length: number | null;
+}
+
+export interface LlmServersResponse {
+  servers: DiscoveredServer[];
+  configured: string | null;
+  configured_reachable: boolean;
+  scanned_ports: number[];
+  scan_seconds: number;
+}
+
+export interface DiscoveredModel {
+  name: string;
+  path: string;
+  size_bytes: number | null;
+  source: string;
+  format: string;
+  root: string;
+  shards?: number;
+  /** The id this runtime would accept for it, or null when the runtime has
+   *  never seen this file and so cannot load it by name. Decides whether the
+   *  row in "Models on this machine" is clickable. */
+  served_id?: string | null;
+}
+
+export interface ModelRoot {
+  source: string;
+  path: string;
+  exists: boolean;
+  configured: boolean;
+}
+
+export interface LlmModelsResponse {
+  runtime: string | null;
+  can_switch: boolean;
+  switch_blocked_reason: string | null;
+  served: ServedModel[];
+  model_in_use: string | null;
+  preferred_model: string | null;
+  models: DiscoveredModel[];
+  roots: ModelRoot[];
+  total: number;
+  truncated: boolean;
+  scan_seconds: number;
+  note?: string;
+}
+
+export interface BrowseEntry {
+  name: string;
+  path: string;
+  kind: 'directory' | 'model';
+  size_bytes?: number | null;
+}
+
+export interface LlmBrowseResponse {
+  roots: string[];
+  path: string | null;
+  parent: string | null;
+  entries: BrowseEntry[];
+  error?: string;
 }
 
 export interface LogListResponse {
@@ -746,6 +896,8 @@ export interface CodeContextInput {
   budget?: number;
   /** Ask for the ranked call neighbourhood. Off by default server-side. */
   include_graph?: boolean;
+  /** Also answer the task from the composed context with the local model. */
+  answer?: boolean;
   /** 1 = markdown only, 2 = + metadata, 3 = + source and memory bodies.
    *  The Console lays the parts out, so it always asks for 3; an agent reads
    *  the markdown and stops, which is why the server default is 1. */
@@ -820,6 +972,28 @@ export interface CodeContextResult {
   /** `[source, target, weight]`, present only when `include_graph` was set. */
   graph_edges?: Array<[string, string, number]>;
   notes?: string[];
+  /** Grounded answer, present only when `answer` was requested. `null` with a
+   *  status of `unavailable`/`failed` means the retrieval above still stands. */
+  answer?: string | null;
+  /** `ok` only when the citations resolve to the composed symbols and none
+   *  name anything else; `unverified` otherwise. */
+  answer_status?: AnswerGrounding | 'unavailable' | 'failed';
+  answer_hint?: string;
+  answer_model?: string;
+  /** Only symbols that are actually in the context; an invented name is
+   *  dropped server-side rather than rendered as a dead link. */
+  answer_citations?: CodeContextCitation[];
+  /** Identifier-shaped citations that resolved to nothing in the context. */
+  answer_unresolved?: string[];
+}
+
+export type AnswerGrounding = 'ok' | 'unverified';
+
+export interface CodeContextCitation {
+  name: string;
+  qualified_name: string;
+  file_path: string;
+  start_line: number;
 }
 
 /** One distilled proposal, before or after it has been staged. */
@@ -837,6 +1011,12 @@ export interface DistillProposal {
   neighbour?: string;
   staged?: boolean;
   note?: string;
+  /** The verbatim span the fact came from. Present on the generation path,
+   *  where the content was rewritten and the original would otherwise be lost. */
+  evidence?: string;
+  /** `generated` when a local model wrote it, `selected` when it was lifted
+   *  from the transcript verbatim. */
+  mode?: 'generated' | 'selected';
   session_name?: string;
   project?: string | null;
   context_type?: string;
@@ -853,6 +1033,7 @@ export interface DistillInput {
   threshold?: number;
   limit?: number;
   include_duplicates?: boolean;
+  use_llm?: boolean;
 }
 
 export interface DistillResult {
@@ -868,6 +1049,8 @@ export interface DistillResult {
   proposal_id?: string;
   /** Present when nothing read as durable -- a success, not a failure. */
   note?: string;
+  /** Which extraction path ran. `selected` means no local model was reachable. */
+  mode?: 'generated' | 'selected';
 }
 
 export interface CodeSearchInput {

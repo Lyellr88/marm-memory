@@ -8,6 +8,19 @@ import type { CodeContextResult, CodeContextSymbol } from '@/lib/marm-types';
 // and what this page owns is the adapter, not the renderer.
 vi.mock('react-force-graph-2d', () => ({ default: () => null }));
 
+// jsdom has no matchMedia, and the shared GraphViz asks it about reduced
+// motion before it draws anything.
+globalThis.matchMedia ??= ((query: string) => ({
+  matches: false,
+  media: query,
+  onchange: null,
+  addListener: () => {},
+  removeListener: () => {},
+  addEventListener: () => {},
+  removeEventListener: () => {},
+  dispatchEvent: () => false,
+})) as unknown as typeof window.matchMedia;
+
 // jsdom has no ResizeObserver, and the pane measures its container with one.
 globalThis.ResizeObserver ??= class {
   observe() {}
@@ -39,6 +52,47 @@ const projectState = vi.hoisted(() => ({
 }));
 
 vi.mock('@/hooks/use-marm-queries', () => ({
+  // The "Ask runs on" bar reads this. Returning a llama.cpp shape rather than
+  // undefined keeps the bar rendered in these tests, so a change that breaks
+  // it fails here instead of only in the browser.
+  useRuntimeSettings: () => ({
+    data: {
+      llm: {
+        configured: true,
+        enabled: true,
+        endpoint: 'http://127.0.0.1:18080',
+        available: true,
+        model: 'qwen3.6-27b-mtp',
+        model_in_use: 'qwen3.6-27b-mtp',
+        preferred_model: null,
+        loopback_enforced: true,
+        runtime: 'llama.cpp',
+        runtime_version: null,
+        can_switch: false,
+        model_path: '/models/Qwen3.6-27B-IQ4_NL.gguf',
+        context_length: 65536,
+        served: [],
+        switch_blocked_reason: null,
+      },
+      hardware: {
+        detected: true,
+        platform: 'Linux',
+        gpus: [
+          {
+            index: 0,
+            vendor: 'NVIDIA',
+            name: 'NVIDIA GeForce RTX 3090',
+            memory_total_mb: 24576,
+            memory_used_mb: 20296,
+            memory_free_mb: 3879,
+            utilisation_percent: 11,
+            driver: '615.71.09',
+            unified: false,
+          },
+        ],
+      },
+    },
+  }),
   useProjects: () => ({
     data: (projectState.list ?? DEFAULT_PROJECTS).map((p) => ({
       ...p,
@@ -47,6 +101,16 @@ vi.mock('@/hooks/use-marm-queries', () => ({
     isLoading: false,
   }),
   useBuildCodeContext: () => buildState,
+  useStreamingAnswer: () => answerState,
+}));
+
+const answerState = vi.hoisted(() => ({
+  status: 'idle' as 'idle' | 'streaming' | 'done' | 'error',
+  text: '',
+  citations: [] as unknown[],
+  model: undefined as string | undefined,
+  start: vi.fn(),
+  reset: vi.fn(),
 }));
 
 function symbol(over: Partial<CodeContextSymbol> = {}): CodeContextSymbol {
@@ -100,9 +164,25 @@ afterEach(() => {
   buildState.data = undefined;
   buildState.error = null;
   buildState.isPending = false;
+  answerState.status = 'idle';
+  answerState.text = '';
+  answerState.citations = [];
+  answerState.model = undefined;
+  answerState.start = vi.fn();
+  answerState.reset = vi.fn();
   projectState.status = 'ready';
   window.history.replaceState(null, '', '/');
 });
+
+/** Open the Symbols pane.
+ *
+ *  `Answer` is the landing tab now — someone who typed a question wants the
+ *  answer first and the evidence under it — so assertions about symbol
+ *  rendering have to switch panes. Radix does not mount an inactive one.
+ */
+async function openSymbols() {
+  await userEvent.click(screen.getByRole('tab', { name: /ranked symbols/i }));
+}
 
 describe('CodeContextPage', () => {
   it('sends the trimmed task with the selected project and budget', async () => {
@@ -118,10 +198,28 @@ describe('CodeContextPage', () => {
       project: 'C-work-marm-systems',
       budget: 12000,
       include_graph: true,
+      // The answer arrives on its own stream now, so the JSON body never waits
+      // for generation. Retrieval lands in ~380 ms; generation takes seconds.
+      answer: false,
       // The page lays the parts out separately, so it needs the structured
       // fields the markdown duplicates. The server default is 1 for agents.
       detail: 3,
     });
+  });
+
+  it('does not ask the model unless the reader opts in', async () => {
+    // Generation is opt-in: composing context must not also start a model.
+    const user = userEvent.setup();
+    render(<CodeContextPage />);
+
+    const box = screen.getByRole('checkbox', { name: /answer it too/i });
+    expect((box as HTMLInputElement).checked).toBe(false);
+
+    await user.type(screen.getByLabelText('Task'), 'how does recall rank');
+    await user.click(screen.getByRole('button', { name: /compose context/i }));
+
+    expect(answerState.start).not.toHaveBeenCalled();
+    expect(buildState.mutate).toHaveBeenCalledTimes(1);
   });
 
   it('does not submit a task that is only whitespace', async () => {
@@ -161,28 +259,212 @@ describe('CodeContextPage', () => {
     expect(screen.getByText('Composing code context…')).toBeTruthy();
   });
 
-  it('describes every pane before a composition exists', () => {
+  it('offers all five panes before a composition exists', () => {
+    // The strip used to be hidden until a composition returned, so the page
+    // read as a lone text box and the panes looked unbuilt.
     render(<CodeContextPage />);
 
-    expect(screen.getByText('What you get back')).toBeTruthy();
-    for (const label of ['Ranked symbols', 'Call graph', 'What memory knows', 'Agent view']) {
-      expect(screen.getByText(label)).toBeTruthy();
+    const tabs = screen.getAllByRole('tab').map((el) => el.textContent ?? '');
+    expect(tabs).toHaveLength(5);
+    for (const label of ['Ask', 'Ranked symbols', 'Call graph', 'What memory knows', 'Agent view']) {
+      expect(tabs.some((text) => text.includes(label))).toBe(true);
     }
-    expect(screen.queryByRole('tab')).toBeNull();
   });
 
-  it('names the same panes in the empty state and in the tab strip', () => {
-    const labels = ['Ranked symbols', 'Call graph', 'What memory knows', 'Agent view'];
+  it('renders an answer as it streams, before it is finished', () => {
+    // The whole point: 8.6 s of nothing reads as a hung page. Partial text on
+    // screen reads as a working one.
+    answerState.status = 'streaming';
+    answerState.text = 'The PPU triggers an NMI when';
+    render(<CodeContextPage />);
+
+    expect(screen.getByText(/The PPU triggers an NMI when/)).toBeTruthy();
+  });
+
+  it('does not call an answer grounded while it is still arriving', () => {
+    // Grounding is decided on the finished text; a marker may still be arriving.
+    answerState.status = 'streaming';
+    answerState.text = 'rank_memories sorts by';
+    render(<CodeContextPage />);
+
+    expect(screen.getByText('answering…')).toBeTruthy();
+    expect(screen.queryByText('grounded answer')).toBeNull();
+  });
+
+  it('calls a finished answer grounded only when the server verified it', () => {
+    answerState.status = 'done';
+    answerState.text = 'It sorts [rank_memories].';
+    (answerState as Record<string, unknown>).grounding = 'ok';
+    render(<CodeContextPage />);
+
+    expect(screen.getByText('grounded answer')).toBeTruthy();
+    delete (answerState as Record<string, unknown>).grounding;
+  });
+
+  it('labels an unverified streamed answer and says why', () => {
+    answerState.status = 'done';
+    answerState.text = 'It calls [persist_all_rows].';
+    Object.assign(answerState as Record<string, unknown>, {
+      grounding: 'unverified',
+      unresolved: ['persist_all_rows'],
+      hint: 'The answer cites persist_all_rows, which the composed context does not contain.',
+    });
+    render(<CodeContextPage />);
+
+    expect(screen.queryByText('grounded answer')).toBeNull();
+    expect(screen.getByText(/^unverified$/i)).toBeTruthy();
+    expect(screen.getByText(/which the composed context does not contain/)).toBeTruthy();
+    // The text is still shown -- it is labelled, not hidden.
+    expect(screen.getByText(/It calls/)).toBeTruthy();
+    for (const key of ['grounding', 'unresolved', 'hint']) {
+      delete (answerState as Record<string, unknown>)[key];
+    }
+  });
+
+  it('links every name in a bracket that cites more than one symbol', () => {
+    answerState.status = 'done';
+    answerState.text = 'It ranks, then seeds [rank_memories, `seed_query`; invented_thing].';
+    answerState.citations = [
+      { name: 'rank_memories', qualified_name: 'marm.recall.rank_memories', file_path: 'marm/recall.py', start_line: 10 },
+      { name: 'seed_query', qualified_name: 'marm.recall.seed_query', file_path: 'marm/terms.py', start_line: 50 },
+    ];
+    Object.assign(answerState as Record<string, unknown>, { grounding: 'unverified', unresolved: ['invented_thing'] });
+    render(<CodeContextPage />);
+
+    expect(screen.getByRole('button', { name: 'rank_memories' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'seed_query' })).toBeTruthy();
+    // Unresolved stays plain text: a link that goes nowhere looks like evidence.
+    expect(screen.queryByRole('button', { name: 'invented_thing' })).toBeNull();
+    expect(screen.getByText(/invented_thing/)).toBeTruthy();
+    for (const key of ['grounding', 'unresolved']) delete (answerState as Record<string, unknown>)[key];
+  });
+
+  it('labels an unverified JSON answer the same way', () => {
+    buildState.data = {
+      ...SUCCESS,
+      answer: 'It sorts, somehow.',
+      answer_status: 'unverified',
+      answer_citations: [],
+      answer_hint: 'No citation in the answer resolves to a symbol in the composed context.',
+    };
+    render(<CodeContextPage />);
+
+    expect(screen.queryByText('grounded answer')).toBeNull();
+    expect(screen.getByText(/^unverified$/i)).toBeTruthy();
+    expect(screen.getByText(/No citation in the answer resolves/)).toBeTruthy();
+  });
+
+  it('a streaming answer does not wait for the composition', () => {
+    // There is no `result` at all here -- retrieval has not returned yet and
+    // the answer is already on screen.
+    answerState.status = 'streaming';
+    answerState.text = 'partial';
+    buildState.data = undefined;
+    render(<CodeContextPage />);
+
+    expect(screen.getByText(/partial/)).toBeTruthy();
+  });
+
+  it('a failed stream says so without discarding the rest of the page', () => {
+    answerState.status = 'error';
+    answerState.text = '';
+    (answerState as Record<string, unknown>).message = 'No local model is reachable.';
+    buildState.data = SUCCESS;
+    render(<CodeContextPage />);
+
+    expect(screen.getByText('No local model is reachable.')).toBeTruthy();
+    expect(screen.getByText(/ranked symbols, their source and/)).toBeTruthy();
+    delete (answerState as Record<string, unknown>).message;
+  });
+
+  it('a pane selected before a composition previews what it will show', async () => {
+    render(<CodeContextPage />);
+
+    await userEvent.click(screen.getByRole('tab', { name: /call graph/i }));
+    expect(screen.getByText(/Compose a task above to fill this pane/)).toBeTruthy();
+    expect(
+      screen.getByText(/The ranked call neighbourhood the scores were computed over/),
+    ).toBeTruthy();
+  });
+
+  it('asking works with no composition yet, and needs a task first', async () => {
+    // "Compose first, then ask" is an order a reader should not have to learn.
+    render(<CodeContextPage />);
+
+    const ask = screen.getByRole('button', { name: /compose and answer/i });
+    expect(ask.hasAttribute('disabled')).toBe(true);
+
+    await userEvent.type(screen.getByLabelText('Task'), 'how does recall rank');
+    expect(screen.getByRole('button', { name: /compose and answer/i }).hasAttribute('disabled')).toBe(
+      false,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: /compose and answer/i }));
+    // One request: the stream composes, sends that composition, then answers
+    // from it. A separate compose would be a second retrieval the answer was
+    // not written from.
+    expect(buildState.mutate).not.toHaveBeenCalled();
+    expect(answerState.start).toHaveBeenCalledTimes(1);
+    expect(answerState.start.mock.calls[0][0]).toMatchObject({
+      task: 'how does recall rank',
+      include_graph: true,
+      detail: 3,
+    });
+  });
+
+  it('renders the panes from the composition the answer was written from', async () => {
+    const user = userEvent.setup();
+    render(<CodeContextPage />);
+    await user.type(screen.getByLabelText('Task'), 'how does recall rank');
+    await user.click(screen.getByRole('checkbox', { name: /answer it too/i }));
+    await user.click(screen.getByRole('button', { name: /compose context/i }));
+    expect(buildState.mutate).not.toHaveBeenCalled();
+
+    // A stale JSON composition must not be what the panes show.
+    buildState.data = { ...SUCCESS, symbols: [symbol({ name: 'stale_symbol' })] };
+    (answerState as Record<string, unknown>).context = SUCCESS;
+    answerState.status = 'streaming';
+    await user.click(screen.getByRole('tab', { name: /ranked symbols/i }));
+
+    expect(screen.getAllByText('rank_memories').length).toBeGreaterThan(0);
+    expect(screen.queryByText('stale_symbol')).toBeNull();
+    delete (answerState as Record<string, unknown>).context;
+  });
+
+  it('shows a composition the stream could not produce as the usual notice', async () => {
+    const user = userEvent.setup();
+    render(<CodeContextPage />);
+    await user.type(screen.getByLabelText('Task'), 'how does recall rank');
+    await user.click(screen.getByRole('checkbox', { name: /answer it too/i }));
+    await user.click(screen.getByRole('button', { name: /compose context/i }));
+
+    (answerState as Record<string, unknown>).context = {
+      status: 'no_project',
+      message: 'no indexed project matches',
+      hint: 'Call marm_graph_index(action=list) to see indexed projects.',
+    };
+    answerState.status = 'done';
+    await user.click(screen.getByRole('tab', { name: /ranked symbols/i }));
+
+    expect(screen.getByText(/no indexed project matches/)).toBeTruthy();
+    delete (answerState as Record<string, unknown>).context;
+  });
+
+  it('names the panes identically before and after a composition', () => {
+    // One strip does both jobs now, so the old empty-state card grid is gone
+    // and with it the chance for the two lists to disagree. What is still
+    // worth pinning is that composing does not reorder or rename them.
+    const labels = ['Ask', 'Ranked symbols', 'Call graph', 'What memory knows', 'Agent view'];
     const { unmount } = render(<CodeContextPage />);
-    const empty = labels.filter((label) => screen.queryByText(label));
+    const before = screen.getAllByRole('tab').map((el) => el.textContent ?? '');
     unmount();
 
     buildState.data = SUCCESS;
     render(<CodeContextPage />);
-    const tabs = screen.getAllByRole('tab').map((el) => el.textContent ?? '');
+    const after = screen.getAllByRole('tab').map((el) => el.textContent ?? '');
 
-    expect(empty).toEqual(labels);
-    expect(empty.every((label, i) => tabs[i].includes(label))).toBe(true);
+    expect(labels.every((label, i) => before[i].includes(label))).toBe(true);
+    expect(labels.every((label, i) => after[i].includes(label))).toBe(true);
   });
 
   it('an example task fills the box without submitting', async () => {
@@ -227,26 +509,29 @@ describe('CodeContextPage', () => {
     expect(screen.getByText('Call neighbourhood')).toBeTruthy();
   });
 
-  it('groups symbols by file, best-ranked file first', () => {
+  it('groups symbols by file, best-ranked file first', async () => {
     buildState.data = SUCCESS;
     render(<CodeContextPage />);
+    await openSymbols();
 
     // marm/recall.py holds the 0.5 symbol; marm/terms.py the 0.01 one.
     const headers = screen.getAllByTitle(/^marm\/(recall|terms)\.py$/);
     expect(headers[0].textContent).toContain('marm/recall.py');
   });
 
-  it('distinguishes a seeded symbol from one reached through the call graph', () => {
+  it('distinguishes a seeded symbol from one reached through the call graph', async () => {
     buildState.data = SUCCESS;
     render(<CodeContextPage />);
+    await openSymbols();
 
     expect(screen.getByText('matched the task')).toBeTruthy();
     expect(screen.getByText('2 hop')).toBeTruthy();
   });
 
-  it('flags a heuristic edge, because it can bind across module boundaries', () => {
+  it('flags a heuristic edge, because it can bind across module boundaries', async () => {
     buildState.data = SUCCESS;
     render(<CodeContextPage />);
+    await openSymbols();
 
     // The page footnote also explains "heuristic", so scope to the badge.
     const badge = screen.getByTitle(/bind across module boundaries/);
@@ -255,9 +540,10 @@ describe('CodeContextPage', () => {
     expect(screen.getByText('CRITICAL')).toBeTruthy();
   });
 
-  it('numbers source lines from the symbol start, not from one', () => {
+  it('numbers source lines from the symbol start, not from one', async () => {
     buildState.data = SUCCESS;
     render(<CodeContextPage />);
+    await openSymbols();
 
     // The seeded symbol starts at line 10 and has two lines.
     expect(screen.getByText('10')).toBeTruthy();
@@ -268,6 +554,7 @@ describe('CodeContextPage', () => {
     const user = userEvent.setup();
     buildState.data = SUCCESS;
     render(<CodeContextPage />);
+    await openSymbols();
 
     await user.type(screen.getByLabelText('Filter symbols'), 'terms');
 
@@ -279,6 +566,7 @@ describe('CodeContextPage', () => {
     const user = userEvent.setup();
     buildState.data = SUCCESS;
     render(<CodeContextPage />);
+    await openSymbols();
 
     expect(screen.getByText('def rank_memories():')).toBeTruthy();
 
@@ -406,9 +694,11 @@ describe('CodeContextPage', () => {
 
     await user.click(screen.getByRole('tab', { name: /call graph/i }));
 
-    const metric = screen.getByText('Call edges').closest('.graph-metric')!;
-    expect(within(metric as HTMLElement).getByText('1')).toBeTruthy();
-    expect(screen.getByText(/filled nodes matched the task/)).toBeTruthy();
+    // Rendered by the Knowledge Graph's own GraphViz now, so this asserts the
+    // adapted data and the legend rather than a bespoke canvas.
+    expect(screen.getByText(/1 call edges/)).toBeTruthy();
+    expect(screen.getByText('matched the task')).toBeTruthy();
+    expect(screen.getByText('reached via the call graph')).toBeTruthy();
   });
 
 });
