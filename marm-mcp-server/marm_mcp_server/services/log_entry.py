@@ -7,6 +7,7 @@ from typing import Callable, Optional
 from ..config.settings import MARM_PLATFORM, MARM_PROJECT
 from ..core.events import events
 from ..core.memory import memory
+from ..core.memory_utils import _safe_print
 
 _SESSION_PREFIXES = ("Session: ", "Topic: ")
 _SESSION_INACTIVITY_NOTICE_SECONDS = 3600
@@ -16,9 +17,23 @@ async def create_log_entry(
     entry: str,
     session_name: Optional[str],
     *,
+    project: Optional[str] = None,
     log_info: Callable[[str], None] = print,
     log_warning: Callable[[str], None] = print,
 ) -> dict:
+    """Write a log entry, optionally scoped to a caller-chosen project.
+
+    `project` is optional and falls back to the detected `MARM_PROJECT` when it
+    is omitted, so existing callers keep their current behaviour. It matters on
+    a shared HTTP runtime, where the detected value is the SERVER process's
+    working directory rather than the caller's, and project-scoped recall then
+    misses or misattributes the entry.
+    """
+    # One expression, used by the session-marker row, the normal row and the
+    # semantic write, so the three cannot disagree about what scope means.
+    scope = project or MARM_PROJECT or None
+    explicit = bool(project)
+
     try:
         formatted_entry = entry.strip()
 
@@ -60,7 +75,7 @@ async def create_log_entry(
                                 "session_start",
                                 base_name,
                                 formatted_entry,
-                                MARM_PROJECT or None,
+                                scope,
                                 MARM_PLATFORM or None,
                             ),
                         )
@@ -157,7 +172,7 @@ async def create_log_entry(
                         topic,
                         summary,
                         formatted_entry,
-                        MARM_PROJECT or None,
+                        scope,
                         MARM_PLATFORM or None,
                     ),
                 )
@@ -187,6 +202,12 @@ async def create_log_entry(
                 formatted_entry,
                 session,
                 metadata={"source": "log_entry", "log_entry_id": entry_id},
+                # The columns, not the metadata blob: scoped recall reads them.
+                # The platform is the one the log row above records, so an
+                # explicit project does not also erase where the entry came from.
+                project=scope,
+                platform=MARM_PLATFORM or None,
+                explicit_scope=explicit,
             )
         except Exception as store_error:
             log_warning(
@@ -276,6 +297,32 @@ async def list_log_entries(
         return {"status": "error", "message": "Log show failed."}
 
 
+async def _cleanup_concepts_for(memory_ids: list[str]) -> dict:
+    """Remove concept entities left behind by deleted memories.
+
+    Imported inside the function, as `services/notebook.py` does for the same
+    helper: `endpoints/memory` imports from this package, so a module-level
+    import would close the cycle.
+
+    Never raises. A delete that has already committed must not be reported as
+    a failure because its follow-up cleanup could not run -- the rows are
+    gone either way, and `tools`-side sweeps can still find the strays.
+    """
+    if not memory_ids:
+        return {"status": "skipped", "reason": "no memories deleted"}
+    try:
+        # Inside the try, not above it: an ImportError here is a cleanup
+        # failure like any other, and the delete it follows has already
+        # committed. Raising would report a completed delete as failed.
+        from ..endpoints.memory import _cleanup_deleted_concepts_async
+
+        return await _cleanup_deleted_concepts_async(memory_ids)
+    except Exception as e:
+        # Detail stays local; the response matches the memory endpoints'.
+        _safe_print(f"Concept cleanup failed after log delete: {e}")
+        return {"status": "failed", "error": "Concept cleanup failed."}
+
+
 async def delete_log_or_notebook_entry(
     type: str,
     target: str,
@@ -294,6 +341,14 @@ async def delete_log_or_notebook_entry(
         with memory.get_connection() as conn:
             if type == "log":
                 memories_deleted = 0
+                # Ids of the memories this delete removes, so their concept
+                # entities can be cleaned up after the commit. The memory
+                # endpoints already do this; this path did not, which is the
+                # whole of the inconsistency -- the same rows removed through
+                # bulk-delete were cleaned and removed through marm_delete
+                # were not, leaving entities that keep their relationships and
+                # go on steering concept recall with nothing evidencing them.
+                deleted_memory_ids: list[str] = []
                 if session_name:
                     conn.execute("BEGIN IMMEDIATE")
                     try:
@@ -309,6 +364,16 @@ async def delete_log_or_notebook_entry(
                         deleted = cursor.rowcount
                         if entry_ids:
                             placeholders = ",".join("?" * len(entry_ids))
+                            # Collected BEFORE the delete: afterwards the rows
+                            # are gone and the ids are unrecoverable.
+                            deleted_memory_ids = [
+                                r[0]
+                                for r in conn.execute(
+                                    "SELECT id FROM memories WHERE json_extract(metadata, '$.source') = 'log_entry' "
+                                    f"AND json_extract(metadata, '$.log_entry_id') IN ({placeholders})",
+                                    entry_ids,
+                                ).fetchall()
+                            ]
                             memories_deleted = conn.execute(
                                 "DELETE FROM memories WHERE json_extract(metadata, '$.source') = 'log_entry' "
                                 f"AND json_extract(metadata, '$.log_entry_id') IN ({placeholders})",
@@ -346,6 +411,14 @@ async def delete_log_or_notebook_entry(
                             )
                         except Exception:
                             pass
+                        deleted_memory_ids = [
+                            r[0]
+                            for r in conn.execute(
+                                "SELECT id FROM memories WHERE session_name = ? "
+                                "AND json_extract(metadata, '$.source') = 'log_entry'",
+                                (target,),
+                            ).fetchall()
+                        ]
                         memories_deleted = conn.execute(
                             "DELETE FROM memories WHERE session_name = ? "
                             "AND json_extract(metadata, '$.source') = 'log_entry'",
@@ -357,7 +430,11 @@ async def delete_log_or_notebook_entry(
                         raise
                 if not session_name and memory.active_log_session == target:
                     memory.active_log_session = "main"
-                return {
+                # Built here, returned after the connection is released: the
+                # cleanup below awaits on the CONCEPT database, and holding a
+                # pooled memory connection across that await lets concurrent
+                # deletes exhaust the pool and fail unrelated queries.
+                log_result = {
                     "status": "success",
                     "message": f"🗑️ Deleted {deleted} items",
                     "deleted_count": deleted,
@@ -404,6 +481,9 @@ async def delete_log_or_notebook_entry(
                     raise
                 if deleted > 0:
                     memory.remove_active_notebook_entry(target, notebook_session)
+                # Returns from inside the connection context, which is fine:
+                # the notebook branch deletes no memories and so awaits
+                # nothing here.
                 return {
                     "status": "success" if deleted > 0 else "not_found",
                     "message": (
@@ -413,6 +493,8 @@ async def delete_log_or_notebook_entry(
                     ),
                     "deleted": deleted > 0,
                 }
+        log_result["concept_cleanup"] = await _cleanup_concepts_for(deleted_memory_ids)
+        return log_result
     except sqlite3.Error as e:
         log_warning(f"Database error deleting: {e}")
         return {"status": "error", "message": "Database error while deleting."}

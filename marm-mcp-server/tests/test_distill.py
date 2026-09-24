@@ -549,6 +549,159 @@ def test_nothing_durable_is_a_success_not_an_error(staged):
     assert "not an error" in result["note"]
 
 
+# --- generation-backed extraction ------------------------------------------
+#
+# The evidence check is the load-bearing guard here. A model asked for a
+# verbatim span can invent one, and an invented span is the signature of an
+# invented fact -- the single worst failure for a memory store, because the
+# result is a confident sentence nobody ever said.
+
+TRANSCRIPT = (
+    "We decided to cap distill proposals at twenty because raising the shape "
+    "threshold barely changed the count on real transcript."
+)
+
+
+def _fact(**over):
+    base = {
+        "content": "Distill proposals are capped at twenty because a higher threshold barely changed the count.",
+        "evidence": "We decided to cap distill proposals at twenty",
+        "context_type": "decision",
+    }
+    base.update(over)
+    return base
+
+
+def test_a_fact_whose_evidence_is_not_in_the_transcript_is_dropped():
+    from marm_mcp_server.core.distill import _llm_usable
+
+    invented = _fact(evidence="We agreed to cap proposals at fifty on Tuesday")
+    assert _llm_usable(invented, TRANSCRIPT) is None
+
+
+def test_a_fact_with_real_evidence_is_kept_and_carries_it():
+    from marm_mcp_server.core.distill import _llm_usable
+
+    candidate = _llm_usable(_fact(), TRANSCRIPT)
+    assert candidate is not None
+    assert candidate.context_type == "decision"
+    assert candidate.evidence in TRANSCRIPT
+
+
+def test_evidence_matching_ignores_whitespace_but_not_words():
+    """Models re-wrap and re-indent when they copy, and that is not the failure
+    this guard exists to catch."""
+    from marm_mcp_server.core.distill import _llm_usable
+
+    rewrapped = _fact(evidence="We   decided to cap\n  distill proposals at twenty")
+    assert _llm_usable(rewrapped, TRANSCRIPT) is not None
+
+    reworded = _fact(evidence="We chose to cap distill proposals at twenty")
+    assert _llm_usable(reworded, TRANSCRIPT) is None
+
+
+def test_a_generated_fact_may_not_open_on_a_dangling_pronoun():
+    """Self-containment is the whole reason to generate rather than select."""
+    from marm_mcp_server.core.distill import _llm_usable
+
+    dangling = _fact(
+        content="It is capped at twenty because a higher threshold changed little."
+    )
+    assert _llm_usable(dangling, TRANSCRIPT) is None
+
+
+@pytest.mark.parametrize("missing", ["content", "evidence"])
+def test_an_incomplete_fact_is_dropped(missing):
+    from marm_mcp_server.core.distill import _llm_usable
+
+    assert _llm_usable(_fact(**{missing: ""}), TRANSCRIPT) is None
+
+
+@pytest.mark.parametrize("evidence", ["We", "the", "We decided to cap"])
+def test_a_span_too_short_to_mean_anything_is_not_evidence(evidence):
+    """A one-word span occurs in almost any transcript, so accepting it would
+    let an invented fact pass as one quoted from the conversation."""
+    from marm_mcp_server.core.distill import MIN_LENGTH, _llm_usable
+
+    assert evidence in TRANSCRIPT and len(evidence) < MIN_LENGTH
+    assert _llm_usable(_fact(evidence=evidence), TRANSCRIPT) is None
+
+
+def test_an_unknown_context_type_falls_back_rather_than_being_stored():
+    from marm_mcp_server.core.distill import _llm_usable
+
+    candidate = _llm_usable(_fact(context_type="wildly-invented"), TRANSCRIPT)
+    assert candidate is not None
+    assert candidate.context_type == "general"
+
+
+def test_extraction_falls_back_to_selection_when_no_model_is_reachable(monkeypatch):
+    """The generation path is an enhancement over a pipeline that works. A
+    stopped container must not take the feature down with it."""
+    from marm_mcp_server.core import distill as core
+    from marm_mcp_server.services import local_llm
+
+    monkeypatch.setattr(local_llm, "available", lambda *a, **k: None)
+    assert core.llm_extract(TRANSCRIPT) is None
+
+
+def test_a_model_that_returns_nonsense_falls_back_too(monkeypatch):
+    from marm_mcp_server.core import distill as core
+    from marm_mcp_server.services import local_llm
+
+    monkeypatch.setattr(local_llm, "available", lambda *a, **k: "stub")
+    monkeypatch.setattr(local_llm, "complete_json", lambda *a, **k: None)
+    assert core.llm_extract(TRANSCRIPT) is None
+
+
+def test_an_object_wrapped_array_is_accepted(monkeypatch):
+    """Some servers honour response_format by wrapping the array in an object;
+    that is a shape difference, not a failure."""
+    from marm_mcp_server.core import distill as core
+    from marm_mcp_server.services import local_llm
+
+    monkeypatch.setattr(local_llm, "available", lambda *a, **k: "stub")
+    monkeypatch.setattr(
+        local_llm, "complete_json", lambda *a, **k: {"facts": [_fact()]}
+    )
+    got = core.llm_extract(TRANSCRIPT)
+    assert got and got[0].evidence
+
+
+def test_propose_selects_unless_generation_is_asked_for(staged, monkeypatch):
+    """A reachable model must not silently change what an existing caller gets."""
+    service, live = staged
+
+    def generate(*_a, **_k):
+        raise AssertionError("generation ran without being asked for")
+
+    monkeypatch.setattr(service, "llm_extract", generate)
+    result = _propose(service, live, POSITIVES[1])
+    assert result["mode"] == "selected"
+
+
+def test_propose_generates_when_asked(staged, monkeypatch):
+    from marm_mcp_server.core.distill import Candidate
+
+    service, live = staged
+    fact = Candidate(
+        content="Distill stages proposals and never writes them unasked.",
+        score=1.0,
+        reasons=("generated",),
+        evidence=POSITIVES[1],
+    )
+    monkeypatch.setattr(service, "llm_extract", lambda *_a, **_k: [fact])
+    result = _propose(service, live, POSITIVES[1], use_llm=True)
+    assert result["mode"] == "generated"
+
+
+def test_the_tool_defaults_to_selection_on_both_transports():
+    """STDIO builds this same request model, so one default governs both."""
+    from marm_mcp_server.endpoints.distill import DistillRequest
+
+    assert DistillRequest(action="propose").use_llm is False
+
+
 # --- review nudges ----------------------------------------------------------
 #
 # A staged proposal nobody is told about is a proposal nobody reviews. Seven
@@ -577,9 +730,9 @@ def _stage(
             "INSERT INTO distill_staging (id, session_name, content, score, reasons, "
             "verdict, cosine, neighbour_id, neighbour_content, status, candidate_hash, "
             "project, context_type, applied_memory_id, nudge_count, last_nudged_at, "
-            "expires_at, created_at, updated_at, reviewed_at) "
+            "expires_at, created_at, updated_at, reviewed_at, evidence, mode) "
             "VALUES (?,?,?,?,'[]',?,0.9,NULL,'the stored one',?,?,NULL,'general',NULL,"
-            "?,NULL,?,?,?,NULL)",
+            "?,NULL,?,?,?,NULL,'','generated')",
             (
                 row_id,
                 session,
@@ -988,3 +1141,65 @@ def test_an_expired_nudge_exhausted_proposal_is_swept(staged_memory):
     with staged_memory.get_connection() as conn:
         (status,) = conn.execute("SELECT status FROM distill_staging").fetchone()
     assert status == "stale", f"expired nudge_exhausted row was left as {status}"
+
+
+@pytest.mark.asyncio
+async def test_evidence_quoted_from_a_stored_memory_is_a_duplicate():
+    """Regression, from the real Grok-Bot queue.
+
+    Both of these resolved `new` -- at 0.800 and 0.801, just under NEAR_AT --
+    while the store already contained the sentence verbatim. The paragraph
+    they were extracted from is long, so its embedding is dominated by
+    everything else it says, and the generated content paraphrases the span
+    ("SQL and sshd_config" for "SQL/sshd_config") so it misses on the surface
+    too. The evidence span is the thing that matches exactly.
+    """
+    paragraph = (
+        "MARM 2.48.2 is healthy with connected SQLite, semantic search and "
+        "concept extraction. Grok-Bot full code graph is ready with 4,417 "
+        "nodes and 22,375 edges. Twelve SQL/sshd_config files have "
+        "best-effort partial parse ranges; use lexical lookup for those "
+        "ranges. No source files or Git state were changed."
+    )
+    stub = _StubMemory(neighbours=[{"id": "m1", "content": paragraph, "cosine": 0.801}])
+    (only,) = await resolve(
+        stub,
+        [
+            Candidate(
+                "Twelve SQL and sshd_config files have best-effort partial "
+                "parse ranges requiring lexical lookup.",
+                1.0,
+                (),
+                evidence=(
+                    "Twelve SQL/sshd_config files have best-effort partial "
+                    "parse ranges; use lexical lookup for those ranges."
+                ),
+            )
+        ],
+    )
+    assert only.verdict == "duplicate"
+    assert only.neighbour_id == "m1"
+    assert only.neighbour_content == paragraph
+
+
+@pytest.mark.asyncio
+async def test_containment_needs_a_span_long_enough_to_be_a_memory():
+    """A short span must not match half the store.
+
+    `MIN_LENGTH` is the floor rather than a second constant: it is already the
+    length below which a span is too slight to be a memory.
+    """
+    stub = _StubMemory(
+        neighbours=[
+            {
+                "id": "m1",
+                "content": "the graph daemon reparents to systemd",
+                "cosine": 0.4,
+            }
+        ]
+    )
+    (only,) = await resolve(
+        stub,
+        [Candidate("a wholly novel fact", 1.0, (), evidence="to systemd")],
+    )
+    assert only.verdict == "new"

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { decodeEntities } from '@/lib/entities';
 import { useMemories, useFilters, useOverview, useCreateMemory, useUpdateMemory, useDeleteMemory, useBulkDeleteMemories } from '@/hooks/use-marm-queries';
 import { Badge, Button, Input, Select, SelectTrigger, SelectValue, SelectContent, SelectItem, Table, TableHeader, TableRow, TableHead, TableBody, TableCell, Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, Textarea, Label, cn } from '@/components/ui/core';
 import { format } from 'date-fns';
@@ -59,7 +60,7 @@ function MemoryRow({
             <ContextIcon className="h-2.5 w-2.5" /> {memory.context_type || 'general'}
           </Badge>
         </div>
-        <div className="line-clamp-2 text-sm leading-relaxed text-foreground/90 transition-colors group-hover:text-foreground">{memory.content}</div>
+        <div className="line-clamp-2 text-sm leading-relaxed text-foreground/90 transition-colors group-hover:text-foreground">{decodeEntities(memory.content)}</div>
       </TableCell>
       <TableCell className="text-right">
         {memory.compaction_role !== 'none' && (
@@ -250,16 +251,20 @@ export function MemoriesTab() {
         metadata: selectedMemory.metadata,
       }
     }, {
-      onSuccess: () => {
+      // Keep the server's escaped row, not the decoded editor text: decoding
+      // must happen once. A bare `{id}` response must not replace a whole row.
+      onSuccess: (updated) => {
         setEditMode(false);
-        setSelectedMemory({
-          ...selectedMemory,
-          content: editContent,
-          project: editProject.trim() || null,
-          platform: editPlatform.trim() || null,
-          context_type: editContextType.trim() || 'general',
-        });
-        setActionNotice({ kind: 'success', message: 'Memory updated.' });
+        if (typeof updated?.content === 'string') {
+          setSelectedMemory(updated);
+          setActionNotice({ kind: 'success', message: 'Memory updated.' });
+          return;
+        }
+        // The row could not be read back -- the write landed, but there is
+        // nothing to show. Close rather than leave the pre-edit content on
+        // screen looking like the saved result.
+        setSelectedMemory(null);
+        setActionNotice({ kind: 'success', message: 'Memory updated, but it could not be read back.' });
       },
       onError: (error) => setActionNotice({ kind: 'error', message: mutationErrorMessage(error) }),
     });
@@ -496,7 +501,7 @@ export function MemoriesTab() {
                 {!editMode && (
                   <Button variant="ghost" size="sm" className="h-6" onClick={() => {
                     setEditMode(true);
-                    setEditContent(selectedMemory?.content || '');
+                    setEditContent(decodeEntities(selectedMemory?.content));
                     setEditProject(selectedMemory?.project || '');
                     setEditPlatform(selectedMemory?.platform || '');
                     setEditContextType(selectedMemory?.context_type || '');
@@ -524,7 +529,7 @@ export function MemoriesTab() {
                 </div>
               ) : (
                 <div className="p-4 bg-muted/30 rounded-md font-mono text-sm whitespace-pre-wrap">
-                  {selectedMemory?.content}
+                  {decodeEntities(selectedMemory?.content)}
                 </div>
               )}
             </div>
@@ -574,7 +579,7 @@ export function MemoriesTab() {
                       onClick={() => { setSelectedMemory(memory); setEditMode(false); }}
                       className="group w-full rounded-lg border border-border/70 bg-background/40 p-3 text-left transition-[border-color,background-color,transform] duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:bg-primary/[0.035] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
-                      <span className="line-clamp-2 text-xs leading-relaxed text-foreground/80 group-hover:text-foreground">{memory.content}</span>
+                      <span className="line-clamp-2 text-xs leading-relaxed text-foreground/80 group-hover:text-foreground">{decodeEntities(memory.content)}</span>
                       <span className="mt-2 block font-mono text-[10px] text-muted-foreground">{memory.session_name}{memory.project ? ` · ${memory.project}` : ''}</span>
                     </button>
                   ))}

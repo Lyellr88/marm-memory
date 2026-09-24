@@ -19,12 +19,14 @@ import {
 import { Panel, SectionHeading, SmallStat, StatCard } from '@/components/ui/panels';
 import { ActionNoticePanel } from '@/components/memory/shared';
 import { Sparkles, FileCode2, Brain, FileText, AlertTriangle, Network, FolderCode } from 'lucide-react';
-import { useBuildCodeContext, useProjects } from '@/hooks/use-marm-queries';
+import { useBuildCodeContext, useProjects, useRuntimeSettings, useStreamingAnswer } from '@/hooks/use-marm-queries';
 import { MarmApiError } from '@/lib/marm-api';
 import { CopyButton, LoadingState } from '@/components/code-context/shared';
 import { SymbolsPane } from '@/components/code-context/SymbolsPane';
 import { MemoryPane } from '@/components/code-context/MemoryPane';
 import { CallGraphPane } from '@/components/code-context/CallGraphPane';
+import { AnswerPane } from '@/components/code-context/AnswerPane';
+import { AnswerEngineBar } from '@/components/code-context/AnswerEngineBar';
 
 const DEFAULT_BUDGET = 12000;
 const MAX_BUDGET = 100000;
@@ -61,7 +63,19 @@ const PLACEHOLDER = 'How does recall decide which memories to return?';
  *  advertise a pane it does not then show. */
 const PANES = [
   {
+    value: 'answer',
+    summary: 'A grounded answer, cited back to the code',
+    accent: 'text-rose-300',
+    icon: Sparkles,
+    label: 'Ask',
+    tone: 'console-tab-rose',
+    blurb:
+      'A grounded answer to your question, written by a local model from the ranked context alone, citing the symbols it used. Nothing leaves this machine.',
+  },
+  {
     value: 'symbols',
+    summary: 'The symbols that matter, with their source',
+    accent: 'text-cyan-300',
     icon: FileCode2,
     label: 'Ranked symbols',
     tone: 'console-tab-cyan',
@@ -70,6 +84,8 @@ const PANES = [
   },
   {
     value: 'graph',
+    summary: 'The call neighbourhood it ranked over',
+    accent: 'text-violet-300',
     icon: Network,
     label: 'Call graph',
     tone: 'console-tab-violet',
@@ -78,6 +94,8 @@ const PANES = [
   },
   {
     value: 'memory',
+    summary: 'Decisions and rationale MARM has stored',
+    accent: 'text-emerald-300',
     icon: Brain,
     label: 'What memory knows',
     tone: 'console-tab-emerald',
@@ -86,6 +104,8 @@ const PANES = [
   },
   {
     value: 'agent',
+    summary: 'The exact markdown an agent receives',
+    accent: 'text-blue-300',
     icon: FileText,
     label: 'Agent view',
     tone: 'console-tab-blue',
@@ -102,8 +122,41 @@ const EXAMPLE_TASKS = [
   'What would changing the ranking weights affect?',
 ];
 
+/** What a pane will show, before there is anything to show.
+ *
+ *  Selecting a box used to switch to a tab that did not exist yet, because the
+ *  whole strip was hidden until a composition returned. Now every box is always
+ *  selectable and answers the question it raises: what is this one for?
+ */
+function PanePreview({ value }: { value: string }) {
+  const pane = PANES.find((item) => item.value === value);
+  if (!pane) return null;
+  return (
+    <div
+      className={cn(
+        'console-tab console-tab-filled flex flex-col items-center rounded-xl border p-12 text-center',
+        pane.tone,
+      )}
+    >
+      <span className="console-tab-icon mb-4 flex h-11 w-11 items-center justify-center rounded-xl border">
+        <pane.icon className="h-5 w-5" />
+      </span>
+      <p className="text-sm font-medium text-foreground/90">{pane.label}</p>
+      <p className="mt-1.5 max-w-xl text-xs leading-relaxed text-muted-foreground">{pane.blurb}</p>
+      <p className="mt-4 text-[11px] text-muted-foreground/80">
+        Compose a task above to fill this pane.
+      </p>
+    </div>
+  );
+}
+
 export function CodeContextPage() {
   const [params, setParams] = useSearchParams();
+  // Asking is opt-in per composition: generation is the slow step, a reader
+  // who only wants the ranked symbols should not wait for it, and a running
+  // model must not make it part of the workflow by default.
+  const [wantAnswer, setWantAnswer] = useState(false);
+  const [tab, setTab] = useState('answer');
   const [task, setTask] = useState(() => params.get('task') ?? '');
   const [project, setProject] = useState(() => params.get('project') ?? '');
   const [budget, setBudget] = useState(() => Number(params.get('budget')) || DEFAULT_BUDGET);
@@ -112,7 +165,11 @@ export function CodeContextPage() {
   // than when it is requested, so the two always move together.
   const [composedBudget, setComposedBudget] = useState<number | null>(null);
   const { data: projects } = useProjects();
+  // Same 5s poll the System page uses: free VRAM moves while a model is
+  // loading, and a stale figure here is the one that misleads.
+  const runtimeSettings = useRuntimeSettings();
   const build = useBuildCodeContext();
+  const answer = useStreamingAnswer();
   const autoRan = useRef(false);
 
   // Default to a real project rather than to path resolution. The server
@@ -125,7 +182,17 @@ export function CodeContextPage() {
 
   const sortedProjects = useMemo(() => sortProjectsByName(projects), [projects]);
   const selected = projects?.find((item) => item.name === project);
-  const result = build.data;
+  // Which request produced what is on screen. An answered composition arrives
+  // on the answer stream, so the panes and the answer come from one retrieval.
+  const [answered, setAnswered] = useState(false);
+  const result = answered ? answer.context : build.data;
+  const composing = answered
+    ? answer.status === 'streaming' && !answer.context
+    : build.isPending;
+  // A `no_project` or `unavailable` answer is rendered as a notice above, not
+  // as panes. Branching on this once keeps the five panes from each having to
+  // re-check the status.
+  const composed = result?.status === 'success' ? result : undefined;
   const symbols = useMemo(() => result?.symbols ?? [], [result]);
   const memories = useMemo(() => result?.memories ?? [], [result]);
   const links = useMemo(() => result?.links ?? [], [result]);
@@ -134,20 +201,37 @@ export function CodeContextPage() {
   const truncated = notes.some((note) => note.includes('budget'));
   const recallUnavailable = notes.some((note) => note.includes('recall unavailable'));
 
-  const compose = (nextTask: string, nextProject: string, nextBudget: number) => {
-    build.mutate(
-      {
-        task: nextTask,
-        project: nextProject && nextProject !== AUTO_PROJECT ? nextProject : null,
-        budget: nextBudget,
-        include_graph: true,
-        // The page lays out symbols, source and memory bodies separately, so it
-        // needs the structured fields the markdown duplicates. An agent does not,
-        // which is why the server default is 1 rather than this.
-        detail: 3,
-      },
-      { onSuccess: () => setComposedBudget(nextBudget) },
-    );
+  const compose = (
+    nextTask: string,
+    nextProject: string,
+    nextBudget: number,
+    withAnswer = wantAnswer,
+  ) => {
+    setComposedBudget(nextBudget);
+    const scopedProject =
+      nextProject && nextProject !== AUTO_PROJECT ? nextProject : null;
+    const request = {
+      task: nextTask,
+      project: scopedProject,
+      budget: nextBudget,
+      include_graph: true,
+      // The page lays out symbols, source and memory bodies separately, so it
+      // needs the structured fields the markdown duplicates. An agent does not,
+      // which is why the server default is 1 rather than this.
+      detail: 3,
+    };
+    setAnswered(withAnswer);
+    if (withAnswer) {
+      // One request. The stream's first event is the composition, which fills
+      // the panes before generation starts; the answer is written from it.
+      answer.start(request);
+    } else {
+      answer.reset();
+      build.mutate(
+        { ...request, answer: false },
+        { onSuccess: () => setComposedBudget(nextBudget) },
+      );
+    }
     setParams(
       (prev) => {
         prev.set('task', nextTask);
@@ -183,8 +267,12 @@ export function CodeContextPage() {
     compose(trimmed, project, budget);
   };
 
-  const errorMessage =
-    build.error instanceof MarmApiError
+  const errorMessage = answered
+    ? // A stream that failed before sending its composition composed nothing.
+      answer.status === 'error' && !answer.context
+      ? (answer.message ?? 'Composing code context failed.')
+      : null
+    : build.error instanceof MarmApiError
       ? build.error.message
       : build.error
         ? 'Composing code context failed.'
@@ -204,7 +292,56 @@ export function CodeContextPage() {
             over the call graph, reads their source from disk, and joins what memory records about them — the same
             answer an agent receives from <code className="font-mono text-xs">marm_code_context</code>.
           </p>
+          <AnswerEngineBar llm={runtimeSettings.data?.llm} hardware={runtimeSettings.data?.hardware} className="mt-4" />
         </header>
+
+        <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          {/* Above the form, and present before anything is composed. These are
+              both the page's table of contents and its tab strip: five identical
+              grey cards below an empty text box did not tell a reader what the
+              page would do, and hiding the panes until a run made the page look
+              unbuilt. Selecting one now previews what it will show. */}
+          <TabsList className="mb-5 grid h-auto w-full shrink-0 grid-cols-2 gap-2 rounded-xl border border-card-border bg-card/40 p-2 shadow-[0_14px_40px_rgba(0,0,0,0.16)] md:grid-cols-3 lg:grid-cols-5">
+            {PANES.map((pane, index) => {
+              const count =
+                !result || result.status !== 'success' || pane.value === 'answer' || pane.value === 'agent'
+                  ? null
+                  : pane.value === 'symbols'
+                    ? symbols.length
+                    : pane.value === 'graph'
+                      ? (result.graph_nodes ?? 0)
+                      : memories.length + links.length;
+              return (
+                <TabsTrigger
+                  key={pane.value}
+                  value={pane.value}
+                  title={pane.blurb}
+                  className={cn(
+                    'console-tab console-tab-filled metric-enter group relative h-auto flex-col items-start gap-1.5 overflow-hidden rounded-lg border px-3 py-2.5 text-left',
+                    pane.tone,
+                  )}
+                  style={{ animationDelay: `${index * 45}ms` }}
+                >
+                  <span className="flex w-full items-center gap-2">
+                    <span className="console-tab-icon flex h-6 w-6 shrink-0 items-center justify-center rounded-md border transition-transform duration-200 group-hover:scale-105">
+                      <pane.icon className="h-3.5 w-3.5" />
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-xs font-semibold text-foreground">
+                      {pane.label}
+                    </span>
+                    {count !== null && (
+                      <span className="font-mono text-sm font-semibold tabular-nums text-foreground/90">
+                        {count.toLocaleString()}
+                      </span>
+                    )}
+                  </span>
+                  <span className="line-clamp-2 w-full whitespace-normal text-[10.5px] leading-snug text-muted-foreground">
+                    {pane.summary}
+                  </span>
+                </TabsTrigger>
+              );
+            })}
+          </TabsList>
 
         <form onSubmit={submit} className="mb-6 shrink-0 space-y-3">
           <div>
@@ -249,7 +386,19 @@ export function CodeContextPage() {
                 className="mt-1.5"
               />
             </div>
-            <Button type="submit" isLoading={build.isPending} disabled={!task.trim()}>
+            <label
+              className="flex h-10 cursor-pointer select-none items-center gap-2 rounded-md border border-border/70 bg-muted/40 px-3 text-xs text-muted-foreground"
+              title="Answer the question with the local model, grounded in the ranked context. Slower; the context itself does not need it."
+            >
+              <input
+                type="checkbox"
+                checked={wantAnswer}
+                onChange={(event) => setWantAnswer(event.target.checked)}
+                className="h-3.5 w-3.5 accent-[hsl(var(--primary))]"
+              />
+              Answer it too
+            </label>
+            <Button type="submit" isLoading={composing} disabled={!task.trim()}>
               <Sparkles className="mr-2 h-4 w-4" /> Compose context
             </Button>
           </div>
@@ -271,7 +420,7 @@ export function CodeContextPage() {
           />
         )}
 
-        {result?.status === 'success' && (
+        {composed && (
           <>
             <section
               className="mb-4 grid shrink-0 gap-3 sm:grid-cols-2 xl:grid-cols-4"
@@ -279,15 +428,15 @@ export function CodeContextPage() {
             >
               <StatCard
                 label="Project"
-                value={result.project?.short_name ?? '—'}
-                detail={result.project?.root_path ?? 'Resolved by the server'}
+                value={composed.project?.short_name ?? '—'}
+                detail={composed.project?.root_path ?? 'Resolved by the server'}
                 icon={<FolderCode className="h-5 w-5" />}
                 tone="cyan"
                 delay={0}
               />
               <StatCard
                 label="Call neighbourhood"
-                value={(result.graph_nodes ?? 0).toLocaleString()}
+                value={(composed.graph_nodes ?? 0).toLocaleString()}
                 detail="Nodes reached from the task's seed symbols"
                 icon={<Network className="h-5 w-5" />}
                 tone="violet"
@@ -333,7 +482,7 @@ export function CodeContextPage() {
                       // editing the box first must not silently change what is
                       // re-run under that label -- including the budget, which
                       // a lowered box would otherwise turn into a cut.
-                      compose(result.task || task.trim(), result.project?.name || project, raised);
+                      compose(composed.task || task.trim(), composed.project?.name || project, raised);
                     }}
                   >
                     Raise to {Math.min((composedBudget ?? budget) * 2, MAX_BUDGET).toLocaleString()} and recompose
@@ -341,133 +490,113 @@ export function CodeContextPage() {
                 )}
               </div>
             )}
-
-            <Tabs defaultValue="symbols" className="flex min-h-0 flex-1 flex-col overflow-hidden">
-              <TabsList className="mb-4 grid h-auto w-full shrink-0 grid-cols-2 gap-1.5 rounded-xl border border-card-border bg-card/70 p-1.5 shadow-[0_14px_40px_rgba(0,0,0,0.16),inset_0_1px_0_rgba(var(--primary-rgb),0.04)] lg:grid-cols-4">
-                {PANES.map((pane, index) => {
-                  const count =
-                    pane.value === 'symbols'
-                      ? symbols.length
-                      : pane.value === 'graph'
-                        ? (result.graph_nodes ?? 0)
-                        : pane.value === 'memory'
-                          ? memories.length + links.length
-                          : null;
-                  return (
-                    <TabsTrigger
-                      key={pane.value}
-                      value={pane.value}
-                      title={pane.blurb}
-                      className={cn(
-                        'console-tab metric-enter group relative h-11 justify-start gap-3 overflow-hidden border border-transparent px-3 text-left data-[state=active]:bg-white/[0.035]',
-                        pane.tone,
-                      )}
-                      style={{ animationDelay: `${index * 45}ms` }}
-                    >
-                      <span className="console-tab-icon flex h-6 w-6 shrink-0 items-center justify-center rounded-md border bg-background/45 transition-transform duration-200 group-hover:scale-105">
-                        <pane.icon className="h-3.5 w-3.5" />
-                      </span>
-                      <span className="min-w-0 flex-1 truncate text-xs font-semibold text-foreground">
-                        {pane.label}
-                      </span>
-                      <span className="font-mono text-sm font-semibold tabular-nums text-foreground/90">
-                        {count === null ? '—' : count.toLocaleString()}
-                      </span>
-                    </TabsTrigger>
-                  );
-                })}
-              </TabsList>
-
-              <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
-                <TabsContent value="symbols" className="m-0">
-                  <SymbolsPane symbols={symbols} />
-                </TabsContent>
-                <TabsContent value="graph" className="m-0">
-                  <CallGraphPane symbols={symbols} edges={edges} />
-                </TabsContent>
-                <TabsContent value="memory" className="m-0">
-                  <MemoryPane memories={memories} links={links} recallUnavailable={recallUnavailable} />
-                </TabsContent>
-                <TabsContent value="agent" className="m-0">
-                  <div className="relative">
-                    <CopyButton
-                      className="absolute right-2 top-2 h-7 w-7"
-                      value={result.markdown ?? ''}
-                      label="Copy the composed markdown"
-                    />
-                    <pre className="overflow-auto rounded-xl border border-border/70 bg-background/35 p-4 pr-12 font-mono text-[12px] leading-relaxed whitespace-pre-wrap">
-                      {result.markdown}
-                    </pre>
-                  </div>
-                </TabsContent>
-              </div>
-            </Tabs>
           </>
         )}
 
-        {build.isPending && !result && (
-          <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
-            <LoadingState label="Composing code context…" />
-          </div>
-        )}
+        {/* The panes live OUTSIDE the success guard. Each renders its real
+            content when there is a composition and a preview of itself when
+            there is not, so selecting a box always shows something rather than
+            switching a tab that is not on the page yet. */}
+        <div className="min-h-0 flex-1 overflow-y-auto [scrollbar-gutter:stable]">
+          {composing && !composed && <LoadingState label="Composing code context…" />}
 
-        {/* Everything above renders only once a composition exists, so without
-            this the page reads as a single text box and the panes look unbuilt. */}
-        {!result && !errorMessage && !build.isPending && (
-          <div className="min-h-0 flex-1 space-y-6 overflow-y-auto [scrollbar-gutter:stable]">
-            <section className="space-y-3">
-              <SectionHeading
-                title="What you get back"
-                description="One call returns all four, composed from the same ranking."
-              />
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-                {PANES.map((pane, index) => (
-                  <Panel
-                    key={pane.value}
-                    className="metric-enter"
-                    style={{ animationDelay: `${index * 45}ms` }}
-                    icon={<pane.icon className="h-5 w-5 text-primary" />}
-                    title={pane.label}
-                    description={pane.blurb}
-                  />
-                ))}
-              </div>
-            </section>
-
-            <section className="space-y-3">
-              <SectionHeading
-                title="Try one"
-                description="Ranking is seeded from the task's own words, so a question about behaviour composes better context than a bare symbol name."
-              />
-              <div className="flex flex-wrap gap-2">
-                {EXAMPLE_TASKS.map((example) => (
-                  <Button key={example} type="button" variant="outline" size="sm" onClick={() => setTask(example)}>
-                    {example}
-                  </Button>
-                ))}
-              </div>
-            </section>
-
-            {selected && (
-              <Panel
-                icon={<Network className="h-5 w-5 text-primary" />}
-                title={`Will search ${selected.display_name || selected.name}`}
-                description={selected.root_path}
-                alert={selected.status !== 'ready'}
-              >
-                <div className="mt-4 grid gap-3 sm:grid-cols-3">
-                  <SmallStat label="Graph nodes" value={selected.nodes.toLocaleString()} caption="Files and symbols" />
-                  <SmallStat label="Graph edges" value={selected.edges.toLocaleString()} caption="Calls and imports" />
-                  <SmallStat
-                    label="Index status"
-                    value={selected.status}
-                    tone={selected.status === 'ready' ? 'good' : 'warn'}
-                  />
-                </div>
-              </Panel>
+          <TabsContent value="answer" className="m-0">
+            <AnswerPane
+              result={composed}
+              symbols={symbols}
+              stream={answer}
+              asking={composing || answer.status === 'streaming'}
+              canAsk={Boolean(task.trim())}
+              onAsk={() => {
+                setWantAnswer(true);
+                compose(task.trim() || composed?.task || '', project, budget, true);
+              }}
+              onCite={(citation) => {
+                // Jump to the evidence rather than describing where it is.
+                setTab('symbols');
+                window.setTimeout(() => {
+                  document
+                    .querySelector(`[data-symbol="${CSS.escape(citation.qualified_name)}"]`)
+                    ?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }, 60);
+              }}
+            />
+          </TabsContent>
+          <TabsContent value="symbols" className="m-0">
+            {composed ? <SymbolsPane symbols={symbols} /> : <PanePreview value="symbols" />}
+          </TabsContent>
+          <TabsContent value="graph" className="m-0">
+            {composed ? (
+              <CallGraphPane symbols={symbols} edges={edges} nodeCount={composed.graph_nodes ?? 0} />
+            ) : (
+              <PanePreview value="graph" />
             )}
-          </div>
-        )}
+          </TabsContent>
+          <TabsContent value="memory" className="m-0">
+            {composed ? (
+              <MemoryPane memories={memories} links={links} recallUnavailable={recallUnavailable} />
+            ) : (
+              <PanePreview value="memory" />
+            )}
+          </TabsContent>
+          <TabsContent value="agent" className="m-0">
+            {composed ? (
+              <div className="relative">
+                <CopyButton
+                  className="absolute right-2 top-2 h-7 w-7"
+                  value={composed.markdown ?? ''}
+                  label="Copy the composed markdown"
+                />
+                <pre className="overflow-auto rounded-xl border border-border/70 bg-background/35 p-4 pr-12 font-mono text-[12px] leading-relaxed whitespace-pre-wrap">
+                  {composed.markdown}
+                </pre>
+              </div>
+            ) : (
+              <PanePreview value="agent" />
+            )}
+          </TabsContent>
+
+          {/* The pane strip now describes every pane, so the old "what you get
+              back" card grid would say the same thing twice. What stays is the
+              part it never covered: a starting point, and what will be searched. */}
+          {!composed && !errorMessage && !composing && (
+            <div className="mt-6 space-y-6">
+              <section className="space-y-3">
+                <SectionHeading
+                  title="Try one"
+                  description="Ranking is seeded from the task's own words, so a question about behaviour composes better context than a bare symbol name."
+                />
+                <div className="flex flex-wrap gap-2">
+                  {EXAMPLE_TASKS.map((example) => (
+                    <Button key={example} type="button" variant="outline" size="sm" onClick={() => setTask(example)}>
+                      {example}
+                    </Button>
+                  ))}
+                </div>
+              </section>
+
+              {selected && (
+                <Panel
+                  icon={<Network className="h-5 w-5 text-violet-300" />}
+                  title={`Will search ${selected.display_name || selected.name}`}
+                  description={selected.root_path}
+                  alert={selected.status !== 'ready'}
+                >
+                  <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                    <SmallStat label="Graph nodes" value={selected.nodes.toLocaleString()} caption="Files and symbols" />
+                    <SmallStat label="Graph edges" value={selected.edges.toLocaleString()} caption="Calls and imports" />
+                    <SmallStat
+                      label="Index status"
+                      value={selected.status}
+                      tone={selected.status === 'ready' ? 'good' : 'warn'}
+                    />
+                  </div>
+                </Panel>
+              )}
+            </div>
+          )}
+        </div>
+        </Tabs>
 
         <footer className="mt-4 shrink-0 border-t border-border/70 pt-3 text-[11px] text-muted-foreground">
           A high score means a symbol is well connected to the task's seed symbols in the call graph — it does not

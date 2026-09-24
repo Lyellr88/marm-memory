@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from ..config import settings
 from ..config.settings import (
@@ -24,6 +24,7 @@ from ..core.graph_supervisor import graph_supervisor
 from ..core.memory import memory
 from ..core.rate_limiter import rate_limiter
 from ..core.shutdown_manager import shutdown_manager
+from ..services import hardware, local_llm, model_discovery
 from ..services.documentation import reload_marm_documentation
 from ..services.runtime_status import knowledge_status, maintenance_status
 
@@ -40,6 +41,28 @@ class RuntimeAutomationRequest(BaseModel):
 class RuntimeProfileRequest(BaseModel):
     profile: Literal["standard", "swarm", "swarm-max", "trusted"]
     rate_limit_rpm: int | None = None
+
+
+class RuntimeLlmRequest(BaseModel):
+    """A change to the optional local generative model.
+
+    Both fields are optional and only what is sent is applied, so the toggle
+    and the model picker do not each have to know the other's current value to
+    avoid clobbering it.
+    """
+
+    enabled: bool | None = None
+    #: An empty string clears the preference and returns to whatever is served.
+    model: str | None = Field(default=None, max_length=512)
+    #: An empty string clears the override and returns to MARM_LLM_URL.
+    endpoint: str | None = Field(default=None, max_length=512)
+
+
+class RuntimeLlmRootRequest(BaseModel):
+    """Add or remove a directory that Browse and discovery may look inside."""
+
+    path: str = Field(min_length=1, max_length=4096)
+    remove: bool = False
 
 
 def _model_state() -> str:
@@ -196,7 +219,216 @@ async def runtime_settings() -> dict:
             "semantic_enabled": SEMANTIC_SEARCH_ENABLED,
             "semantic_available": SEMANTIC_SEARCH_AVAILABLE,
             "model_state": _model_state(),
+            # No model name here: `embedding` in this same payload already
+            # carries it, and the Console renders that one.
         },
+        # Off the event loop, both of them. `local_llm.status()` makes a blocking
+        # loopback request and `hardware.probe()` shells out to vendor tools; the
+        # Console polls this route every 5s, so a stalled LLM server or a slow
+        # nvidia-smi would hold the loop and delay unrelated MCP calls. This is
+        # the same mistake the runtime self-probe made -- an async handler is not
+        # a safe place to wait on anything.
+        "llm": await asyncio.to_thread(_llm_status),
+        "hardware": await asyncio.to_thread(hardware.probe),
+    }
+
+
+def _llm_status() -> dict:
+    """Generation status, with the saved switch folded in."""
+    status = local_llm.status()
+    status["source"] = runtime_flags.source(runtime_flags.LLM_ENABLED)
+    return status
+
+
+@router.get("/internal/runtime/llm/models", include_in_schema=False)
+async def runtime_llm_models(refresh: bool = False) -> dict:
+    """What is served now, and what else is on disk.
+
+    The two lists are kept apart rather than merged into one dropdown because
+    they mean different things: `served` can be selected, `discovered` may
+    need the runtime restarted first, and which applies depends on the runtime
+    rather than on the model. Merging them is how a picker ends up implying a
+    switch that will not happen -- see `local_llm.runtime_info`.
+    """
+    # Both off the loop, for the reason spelled out on the status route
+    # above: a stalled model server or a slow scan of the model roots
+    # would otherwise hold the loop and delay unrelated MCP calls.
+    status = await asyncio.to_thread(local_llm.status)
+    found = await asyncio.to_thread(model_discovery.discover, force=refresh)
+    served = status.get("served") or []
+    models = [
+        {**model, "served_id": _served_id_for(model, served)}
+        for model in found.get("models", [])
+    ]
+    return {
+        "runtime": status.get("runtime"),
+        "can_switch": status.get("can_switch"),
+        "switch_blocked_reason": status.get("switch_blocked_reason"),
+        "served": served,
+        "model_in_use": status.get("model_in_use"),
+        "preferred_model": status.get("preferred_model"),
+        **found,
+        "models": models,
+    }
+
+
+def _served_id_for(model: dict, served: list[dict]) -> str | None:
+    """The id a runtime would accept for this on-disk model, if any.
+
+    Clicking a row in the installed list should select that model, and this is
+    what decides whether it CAN be selected. A file on disk is only loadable by
+    name if the runtime already knows about it -- Ollama loads any pulled tag
+    on demand, LM Studio JIT-loads anything it has registered -- so a disk-only
+    model that the runtime has never seen is not selectable however switchable
+    the runtime is in general.
+
+    Matched three ways because the two sides name the same model differently:
+    Ollama's `llama3.2:8b` is exactly its manifest name, while LM Studio serves
+    `publisher/repo` for a file discovery reports as
+    `publisher/repo/weights.gguf`. Matching on path first is the most reliable
+    where the runtime reports one at all.
+    """
+    path = str(model.get("path") or "")
+    name = str(model.get("name") or "")
+    stem = name.rsplit("/", 1)[-1]
+    for entry in served:
+        served_id = entry.get("id")
+        if not served_id:
+            continue
+        served_path = entry.get("path")
+        if served_path and path and str(served_path) == path:
+            return str(served_id)
+        if served_id == name or served_id == stem:
+            return str(served_id)
+        # `publisher/repo` against `publisher/repo/file.gguf`.
+        if name.startswith(f"{served_id}/"):
+            return str(served_id)
+    return None
+
+
+@router.get("/internal/runtime/llm/servers", include_in_schema=False)
+async def runtime_llm_servers(refresh: bool = False) -> dict:
+    """Every local OpenAI-compatible server this machine is running.
+
+    Loopback only, and MARM's own ports are never probed -- asking yourself a
+    question over HTTP from the loop that would answer it is what made
+    `/internal/runtime/settings` take a full second. The scan itself opens
+    sockets and makes HTTP probes, so it runs off the loop like the model
+    routes beside it.
+    """
+    return await asyncio.to_thread(local_llm.discover_servers, force=refresh)
+
+
+@router.get("/internal/runtime/llm/browse", include_in_schema=False)
+async def runtime_llm_browse(path: str | None = None) -> dict:
+    """List one directory inside the known model roots. Never file contents."""
+    return await asyncio.to_thread(model_discovery.browse, path)
+
+
+@router.put("/internal/runtime/settings/llm", include_in_schema=False)
+async def update_runtime_llm(req: RuntimeLlmRequest) -> dict:
+    """Turn generation on or off, and choose which served model answers."""
+    if req.enabled is not None:
+        runtime_flags.set_bool(runtime_flags.LLM_ENABLED, req.enabled)
+
+    applied_model: str | None = None
+    rejected: str | None = None
+
+    if req.endpoint is not None:
+        chosen = req.endpoint.strip().rstrip("/")
+        if not chosen:
+            runtime_flags.clear(runtime_flags.LLM_ENDPOINT)
+        elif local_llm._host(chosen) is None:
+            rejected = f"{chosen} is not a valid URL: it has no host to connect to."
+        elif not local_llm._is_loopback(chosen) and not local_llm.ALLOW_REMOTE:
+            # Refused here as well as in `endpoint()`, so the Console gets a
+            # reason rather than silently saving a value that will be ignored.
+            # `ALLOW_REMOTE` has to be honoured for that to be true: `endpoint()`
+            # accepts a non-loopback URL once the operator has stated the
+            # override in full, and without this clause the Console refused to
+            # save the very endpoint the server would then have used.
+            rejected = (
+                f"{chosen} is not a loopback address. MARM only talks to a model "
+                "on this machine."
+            )
+        elif local_llm._is_marm_itself(chosen):
+            rejected = f"{chosen} is MARM's own port. Point it at the model server."
+        else:
+            runtime_flags.set_(runtime_flags.LLM_ENDPOINT, chosen)
+            # A different server serves different models, so a model chosen for
+            # the old one is meaningless against the new one.
+            runtime_flags.clear(runtime_flags.LLM_MODEL)
+        local_llm.invalidate_settings_cache()
+        local_llm.invalidate_servers_cache()
+    if req.model is not None:
+        chosen = req.model.strip()
+        if not chosen:
+            runtime_flags.clear(runtime_flags.LLM_MODEL)
+        else:
+            info = await asyncio.to_thread(local_llm.runtime_info, force=True)
+            if not info.get("can_switch"):
+                # Refusing rather than saving a preference that cannot take
+                # effect. A stored choice the runtime ignores is exactly the
+                # silent no-op this whole feature exists to avoid.
+                rejected = info.get("reason") or (
+                    "This runtime does not support selecting a model."
+                )
+            else:
+                served = {
+                    str(entry.get("id"))
+                    for entry in (info.get("served") or [])
+                    if entry.get("id")
+                }
+                if served and chosen not in served:
+                    rejected = (
+                        f"{chosen!r} is not served by {info.get('runtime')}. "
+                        "Load it in that runtime first."
+                    )
+                else:
+                    runtime_flags.set_(runtime_flags.LLM_MODEL, chosen)
+                    applied_model = chosen
+
+    local_llm.invalidate_settings_cache()
+    status = await asyncio.to_thread(_llm_status)
+    if rejected:
+        status["rejected"] = rejected
+    if applied_model:
+        status["applied_model"] = applied_model
+    return {"status": "success", "llm": status}
+
+
+@router.post("/internal/runtime/settings/llm/roots", include_in_schema=False)
+async def update_runtime_llm_roots(req: RuntimeLlmRootRequest) -> dict:
+    """Add or remove a directory that discovery and Browse may look inside."""
+    target = Path(req.path).expanduser()
+    saved = runtime_flags.get(runtime_flags.LLM_MODEL_ROOTS) or ""
+    roots = [r for r in saved.split(os.pathsep) if r]
+
+    if req.remove:
+        roots = [r for r in roots if r != str(target)]
+    else:
+        if model_discovery.too_broad(target):
+            raise HTTPException(
+                status_code=422,
+                detail=f"{target} is too broad to be a model directory.",
+            )
+        if not target.is_dir():
+            raise HTTPException(
+                status_code=422, detail=f"{target} is not a directory MARM can see."
+            )
+        if str(target) not in roots:
+            roots.append(str(target))
+
+    runtime_flags.set_(runtime_flags.LLM_MODEL_ROOTS, os.pathsep.join(roots))
+    # The scan caches a resolved root list, so it has to be told.
+    model_discovery.invalidate()
+    # Named `configured_roots` because `discover()` also returns `roots` -- the
+    # full candidate list with an `exists` flag -- and spreading it over a key
+    # of the same name silently changed the shape depending on ordering.
+    return {
+        "status": "success",
+        "configured_roots": roots,
+        **(await asyncio.to_thread(model_discovery.discover, force=True)),
     }
 
 

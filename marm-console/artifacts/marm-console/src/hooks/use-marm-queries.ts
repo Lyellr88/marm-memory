@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { QueryClient } from '@tanstack/react-query';
 import { useMarmClient } from '@/lib/use-marm-client';
@@ -10,6 +10,7 @@ import type {
   MergeDuplicateInput, RuntimeProfile
 } from '@/lib/marm-types';
 import { MarmApiError } from '@/lib/marm-api';
+import { IDLE_ANSWER, applyAnswerEvent, applyStreamEnd, type AnswerStreamState } from '@/lib/answer-stream';
 
 export const queryKeys = {
   overview: (baseUrl: string) => ['overview', baseUrl],
@@ -217,6 +218,74 @@ export function useUpdateRuntimeProfile() {
     mutationFn: ({ profile, rateLimitRpm }: { profile: RuntimeProfile; rateLimitRpm?: number | null }) =>
       client.updateRuntimeProfile(profile, rateLimitRpm),
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.runtimeSettings(baseUrl) }),
+  });
+}
+
+/** What the runtime serves and what else is installed on this machine.
+ *
+ *  Not polled. The disk scan is cheap warm (35 ms against a 62 GB LM Studio
+ *  tree) but it is still directory I/O, and the answer only changes when
+ *  somebody downloads a model -- so it refetches on demand, not on a timer
+ *  like the health panes above.
+ */
+/** Which local model servers are running. Scanned on demand, not polled:
+ *  a loopback sweep is 6ms but it is still nine connect attempts. */
+export function useLlmServers(enabled = true) {
+  const { baseUrl, client } = useMarmConfig();
+  return useQuery({
+    queryKey: ['llm-servers', baseUrl],
+    queryFn: () => client.getLlmServers(false),
+    enabled,
+    retry: false,
+  });
+}
+
+export function useLlmModels(enabled = true) {
+  const { baseUrl, client } = useMarmConfig();
+  return useQuery({
+    queryKey: ['llm-models', baseUrl],
+    queryFn: () => client.getLlmModels(false),
+    enabled,
+    retry: false,
+  });
+}
+
+export function useBrowseLlmModels(path: string | null, enabled = true) {
+  const { baseUrl, client } = useMarmConfig();
+  return useQuery({
+    queryKey: ['llm-browse', baseUrl, path],
+    queryFn: () => client.browseLlmModels(path),
+    enabled,
+    retry: false,
+  });
+}
+
+export function useUpdateLlmSettings() {
+  const { baseUrl, client } = useMarmConfig();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { enabled?: boolean; model?: string; endpoint?: string }) =>
+      client.updateLlmSettings(body),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.runtimeSettings(baseUrl) });
+      qc.invalidateQueries({ queryKey: ['llm-models', baseUrl] });
+      qc.invalidateQueries({ queryKey: ['llm-servers', baseUrl] });
+    },
+  });
+}
+
+export function useUpdateLlmRoots() {
+  const { baseUrl, client } = useMarmConfig();
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ path, remove }: { path: string; remove?: boolean }) =>
+      client.updateLlmRoots(path, remove ?? false),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['llm-models', baseUrl] });
+      // A new root changes what Browse may look inside, so every cached
+      // listing is now answering with the wrong set of allowed roots.
+      qc.invalidateQueries({ queryKey: ['llm-browse', baseUrl] });
+    },
   });
 }
 
@@ -798,6 +867,56 @@ export function useDistillDiscard() {
     mutationFn: (proposalId: string) => client.distill({ action: 'discard', proposal_id: proposalId }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['distill-pending', baseUrl] }),
   });
+}
+
+/** A grounded answer, streamed.
+ *
+ *  Deliberately not react-query: this is not a request whose result is cached,
+ *  it is a response that arrives over seconds and is rendered as it goes.
+ *  Modelling it as a query would mean either caching a partial answer or
+ *  re-fetching a finished one, and neither is what a reader wants.
+ */
+export function useStreamingAnswer() {
+  const { client } = useMarmConfig();
+  const [state, setState] = useState<AnswerStreamState>(IDLE_ANSWER);
+  const active = useRef<{ abort: () => void } | null>(null);
+
+  // A reader who leaves the page should not keep a model busy on their behalf.
+  useEffect(() => () => active.current?.abort(), []);
+
+  const start = useCallback(
+    (data: CodeContextInput) => {
+      active.current?.abort();
+      setState({ ...IDLE_ANSWER, status: 'streaming' });
+      const handle = client.streamCodeContextAnswer(data, (name, payload) => {
+        setState((prev) => applyAnswerEvent(prev, name, payload));
+      });
+      active.current = handle;
+      handle.done
+        .then(() => {
+          // A newer request owns the state now; this one's ending is not news.
+          if (active.current !== handle) return;
+          setState(applyStreamEnd);
+        })
+        .catch((error: unknown) => {
+          // An abort is the caller's own doing, not a failure to report.
+          if (error instanceof DOMException && error.name === 'AbortError') return;
+          setState((prev) => ({
+            ...prev,
+            status: 'error',
+            message: 'The answer stream failed.',
+          }));
+        });
+    },
+    [client],
+  );
+
+  const reset = useCallback(() => {
+    active.current?.abort();
+    setState(IDLE_ANSWER);
+  }, []);
+
+  return { ...state, start, reset };
 }
 
 export function useSearchProjectCode() {

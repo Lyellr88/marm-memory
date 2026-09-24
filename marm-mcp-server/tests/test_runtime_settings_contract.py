@@ -544,6 +544,30 @@ def test_the_release_check_does_not_block_the_event_loop(monkeypatch):
     assert calling_threads and calling_threads[0] != handler_thread
 
 
+def test_the_local_server_scan_does_not_block_the_event_loop(monkeypatch):
+    """The scan opens sockets and makes HTTP probes; on the loop it stalls
+    every other request, which the model routes beside it already avoid."""
+    system = system_module()
+    local_llm = _mod("marm_mcp_server.services.local_llm")
+    calling_threads = []
+
+    def scan(force: bool = False) -> dict:
+        calling_threads.append((threading.current_thread().name, force))
+        return {"servers": []}
+
+    monkeypatch.setattr(local_llm, "discover_servers", scan)
+
+    async def call_and_report() -> tuple[dict, str]:
+        result = await system.runtime_llm_servers(refresh=True)
+        return result, threading.current_thread().name
+
+    payload, handler_thread = asyncio.run(call_and_report())
+
+    assert payload == {"servers": []}
+    assert calling_threads and calling_threads[0][0] != handler_thread
+    assert calling_threads[0][1] is True, "refresh must still reach the scan"
+
+
 def test_concurrent_polling_survives_a_worker_finishing_the_job():
     """Workers mutate the job dict off the loop while the status route iterates it."""
     system = system_module()

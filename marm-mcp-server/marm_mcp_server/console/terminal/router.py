@@ -10,7 +10,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
 from .. import auth
@@ -138,6 +138,19 @@ class DependencyCheckRequest(BaseModel):
 
 _CHECK_TIMEOUT_SECONDS = 15
 
+#: The probes the Console sends. The route runs its command through a shell, so
+#: it runs only these exact strings, never caller-supplied text.
+CHECK_COMMANDS = frozenset(
+    {
+        "node --version; npm --version",
+        "git --version",
+        "bash --version",
+        "zsh --version",
+        "ver",
+        "$PSVersionTable.PSVersion.ToString()",
+    }
+)
+
 
 def _check_command_args(shell: str, command: str) -> list[str]:
     name = Path(shell).name.lower()
@@ -150,11 +163,14 @@ def _check_command_args(shell: str, command: str) -> list[str]:
 
 @router.post("/api/terminal/check")
 def check_dependency(req: DependencyCheckRequest) -> dict:
-    """Run a command outside the interactive PTY stream and report its result.
+    """Run one of the Console's fixed probes outside the PTY stream.
 
     Used by the onboarding guide to check whether a tool (node, git, an agent
     CLI) is installed without needing to parse it out of live terminal output.
     """
+    if req.command not in CHECK_COMMANDS:
+        raise HTTPException(status_code=400, detail="That is not a dependency check.")
+
     availability = terminal_availability()
     if not availability.available:
         return {"success": False, "output": availability.reason}

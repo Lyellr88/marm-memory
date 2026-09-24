@@ -3,6 +3,7 @@ import { useConceptsSummary, useSearchConcepts, useNeighborhood, useConceptGraph
 import { Card, CardContent, CardHeader, Input, Button, Badge, Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/components/ui/core';
 import { Search, GitGraph, Network, AlertTriangle, X, ArrowLeft, Braces, Waypoints } from 'lucide-react';
 import type { Neighborhood, NeighborhoodNode, ConceptDetail, ConceptGraphParams, ConceptGraphScope } from '@/lib/marm-types';
+import { decodeEntities } from '@/lib/entities';
 import { DEFAULT_HIDDEN_PREDICATES, typeColor, mergeNeighborhoods } from './shared';
 import { GraphViz } from './GraphViz';
 
@@ -72,7 +73,7 @@ function ProvenancePanel({
             <div className="space-y-2">
               {detail.source_memories.map((memory) => (
                 <div key={memory.id} className="p-2 bg-muted/30 rounded text-xs">
-                  <p className="line-clamp-3">{memory.content}</p>
+                  <p className="line-clamp-3">{decodeEntities(memory.content)}</p>
                   <p className="mt-1 text-muted-foreground truncate">{memory.session_name}{memory.project ? ` · ${memory.project}` : ''}</p>
                 </div>
               ))}

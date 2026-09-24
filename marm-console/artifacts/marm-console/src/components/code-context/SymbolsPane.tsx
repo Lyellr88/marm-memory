@@ -85,7 +85,11 @@ function SymbolCard({ symbol, delay, top }: { symbol: CodeContextSymbol; delay: 
   const location = symbol.file_path ? `${symbol.file_path}:${symbol.start_line}` : symbol.qualified_name;
   return (
     <div
-      className="metric-enter rounded-xl border border-border/80 bg-card/45 transition-transform duration-200 hover:-translate-y-px"
+      // Anchor for the Answer pane: a citation scrolls to the symbol it names,
+      // so "it cites X" and "here is X" are one click apart rather than a
+      // manual search through a filtered list.
+      data-symbol={symbol.qualified_name}
+      className="metric-enter scroll-mt-4 rounded-xl border border-border/80 bg-card/45 transition-transform duration-200 hover:-translate-y-px"
       style={{ animationDelay: `${delay}ms` }}
     >
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-border/70 px-4 py-3">

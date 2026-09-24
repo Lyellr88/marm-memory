@@ -1,6 +1,54 @@
 # Changelog
 
 <details>
+<summary><strong>September 24th, 2026: Log and Memory View Improvements (v2.52.3)</strong></summary>
+
+### Added
+
+- `marm_log_entry` can now receive an optional project scope over HTTP and STDIO. Queued semantic-memory writes preserve its requested project and platform metadata.
+- Deleting log entries now also removes their associated concept entities after the memory deletion commits. Cleanup status and removed entity counts are returned without allowing a cleanup failure to reverse the log deletion.
+
+### Fixed
+
+- Stored HTML entities now render as readable text throughout Console memory, comparison, provenance, and Code Context views. Editing preserves the server representation through save and reopen.
+- Code Context graph-failure streams now return only fixed public status and message fields, rather than forwarding backend error details or hints to the Console.
+- Console dependency checks now run only MARM's fixed, approved probes outside the interactive terminal stream. Other commands are rejected.
+
+### Acknowledgment
+
+Thank you to [@doublegate](https://github.com/doublegate) for [#219](https://github.com/Lyellr88/marm-memory/pull/219), [#221](https://github.com/Lyellr88/marm-memory/pull/221), [#227](https://github.com/Lyellr88/marm-memory/pull/227), and [#233](https://github.com/Lyellr88/marm-memory/pull/233).
+
+</details>
+
+<details>
+<summary><strong>September 24th, 2026: Code Context Error Hardening (v2.52.1)</strong></summary>
+
+### Fixed
+
+- Code Context streaming errors no longer send MCP or server exception details to the Console browser. The server attempts to retain diagnostics, and a safe fallback response is still delivered if a Windows console logger cannot encode the traceback.
+
+</details>
+
+<details>
+<summary><strong>September 23rd, 2026: Optional Local Generation (v2.52.0)</strong></summary>
+
+### Added
+
+- MARM can optionally use a local OpenAI-compatible model for Distill fact proposals and Code Context answers. Local generation is disabled by default, and each request must explicitly opt in before MARM sends it to a model.
+- The Console can discover supported local model servers on loopback, show runtime and accelerator details, browse known model directories, select a served model where the runtime supports it, and control local generation.
+- Code Context answers stream from the same bounded composition shown in the Console and expose resolved citations. Answers without resolvable citations are labelled unverified instead of grounded.
+
+### Safety
+
+- Model endpoints are loopback-only unless an operator deliberately sets the explicit remote override. Failed probes, unavailable models, malformed replies, and interrupted streams fall back without breaking normal memory or code-context workflows.
+
+### Acknowledgment
+
+Thank you to [@doublegate](https://github.com/doublegate) for the optional local-generation and Console model-control work in [#218](https://github.com/Lyellr88/marm-memory/pull/218).
+
+</details>
+
+<details>
 <summary><strong>September 23rd, 2026: Memory Integrity and Distill Input Hardening (v2.51.1)</strong></summary>
 
 ### Fixed

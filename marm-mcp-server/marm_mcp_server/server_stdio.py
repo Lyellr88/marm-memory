@@ -17,6 +17,7 @@ from anyio import BrokenResourceError, ClosedResourceError, EndOfStream  # noqa:
 os.environ["SERVER_HOST"] = "127.0.0.1"
 
 from mcp.server.fastmcp import FastMCP  # noqa: E402
+from pydantic import ValidationError  # noqa: E402
 
 from marm_mcp_server.config.settings import (  # noqa: E402
     CHUNK_DRAIN_TIMEOUT_SECONDS,
@@ -29,6 +30,7 @@ from marm_mcp_server.core.graph_index_worker import graph_index_worker  # noqa: 
 from marm_mcp_server.core.graph_supervisor import graph_supervisor  # noqa: E402
 from marm_mcp_server.core.memory import memory  # noqa: E402
 from marm_mcp_server.core.memory_utils import drain_chunk_writes  # noqa: E402
+from marm_mcp_server.core.models import LogEntryRequest  # noqa: E402
 from marm_mcp_server.services.notebook import notebook_dispatch  # noqa: E402
 from marm_mcp_server.services.recall import smart_recall  # noqa: E402
 from marm_mcp_server.services.stdio_entry_tools import (  # noqa: E402
@@ -148,6 +150,7 @@ async def marm_smart_recall(
 async def marm_log_entry(
     entry: str,
     session_name: Optional[str] = None,
+    project: Optional[str] = None,
 ) -> dict:
     """
     📝 Write a log entry to the active session.
@@ -162,10 +165,17 @@ async def marm_log_entry(
     Parameters:
     - entry: the text to log; plain text or prefixed with "Session:" / "Topic:" to switch sessions
     - session_name: override the target session explicitly (optional; active session used if omitted)
+    - project: project scope for this entry, up to 255 characters (optional; the
+      server's detected project is used if omitted)
 
     Returns: status, message confirming the entry or session switch, entry_id, memory_id
     """
-    return await create_log_entry_stdio(entry, session_name)
+    # The HTTP request model, so both transports accept exactly the same calls.
+    try:
+        req = LogEntryRequest(entry=entry, session_name=session_name, project=project)
+    except ValidationError as e:
+        return {"status": "error", "message": f"Invalid log entry: {e!s}"}
+    return await create_log_entry_stdio(req.entry, req.session_name, req.project)
 
 
 @mcp.tool()
@@ -334,6 +344,7 @@ async def marm_distill(
     threshold: float = 0.20,
     limit: int = 20,
     include_duplicates: bool = False,
+    use_llm: Optional[bool] = None,
 ) -> dict:
     """
     Propose durable memories from raw conversation, resolved against the store.
@@ -344,9 +355,14 @@ async def marm_distill(
     something stored -- worth your judgement, because an encoder cannot tell
     "refines it" from "contradicts it").
 
-    It SELECTS sentences rather than composing new ones, because MARM runs no
-    generative model. A fact spread over three turns, or implied but never
-    said plainly, will not be proposed.
+    With `use_llm=True`, once the operator has enabled local generation, it
+    composes a self-contained fact, and every generated proposal cites a
+    VERBATIM span from the transcript, checked against the source before it is
+    offered.
+
+    By default, and whenever no model is enabled and reachable, it SELECTS
+    sentences: a fact spread over three turns, or implied but never said
+    plainly, will not be proposed.
 
     NOTHING IS WRITTEN BY `propose`. Proposals are staged for review, and only
     `apply` writes one -- the same contract as marm_compaction, for the same
@@ -367,6 +383,8 @@ async def marm_distill(
     - limit: most proposals to return (default 20). THIS is the volume control
     - include_duplicates: also stage what the store already holds (default off,
       because a queue of known facts does not get read)
+    - use_llm: write facts with the local model (default off; needs the
+      operator to have enabled generation, and falls back to selection)
 
     Returns: status plus `proposals` (propose) or `pending` (review), each
     carrying content, score, the reasons it scored, verdict, cosine, and the
@@ -387,6 +405,10 @@ async def marm_distill(
                 threshold=threshold,
                 limit=limit,
                 include_duplicates=include_duplicates,
+                # Forwarded so STDIO callers can force the verbatim-selection
+                # fallback exactly as HTTP callers can. Omitting it left the two
+                # transports with different behaviour for the same tool.
+                **({} if use_llm is None else {"use_llm": use_llm}),
             )
         )
     except Exception as e:

@@ -45,9 +45,14 @@ def test_marm_log_entry_response_payloads_are_unchanged(monkeypatch, tmp_path):
     ]
     current = {"payload": payloads[0]}
 
-    async def fake_create_log_entry(entry: str, session_name: str | None) -> dict:
+    async def fake_create_log_entry(
+        entry: str, session_name: str | None, *, project: str | None = None
+    ) -> dict:
         assert entry == "payload-parity"
         assert session_name == "schema-check"
+        # The endpoint forwards the new optional scope; this test is about the
+        # RESPONSE payloads, which are unchanged, so the stub only has to accept
+        # it rather than assert on it.
         return current["payload"]
 
     monkeypatch.setattr(logging_endpoint, "create_log_entry", fake_create_log_entry)
@@ -76,6 +81,10 @@ def test_marm_delete_response_payloads_are_unchanged(monkeypatch, tmp_path):
                 "message": "🗑️ Deleted 2 items",
                 "deleted_count": 2,
                 "memories_deleted": 2,
+                # Added alongside the concept cleanup this path now performs,
+                # mirroring what the memory endpoints already report. Additive:
+                # every previously-present key keeps its name and meaning.
+                "concept_cleanup": {"status": "success", "entities_removed": 3},
             },
         ),
         (
@@ -307,7 +316,9 @@ def test_response_models_reject_undeclared_fields(monkeypatch, tmp_path):
         raise_server_exceptions=False,
     )
 
-    async def fake_create_log_entry(entry: str, session_name: str | None) -> dict:
+    async def fake_create_log_entry(
+        entry: str, session_name: str | None, *, project: str | None = None
+    ) -> dict:
         return {
             "status": "error",
             "message": "expected error",

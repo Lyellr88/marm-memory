@@ -11,6 +11,8 @@ from .. import mcp_client
 from ..models import (
     CompactionDryRunPayload,
     RuntimeAutomationPayload,
+    RuntimeLlmPayload,
+    RuntimeLlmRootPayload,
     RuntimeProfilePayload,
 )
 
@@ -130,4 +132,63 @@ def get_reload_docs(job_id: str) -> dict:
         mcp_client.get,
         f"internal/runtime/maintenance/reload-docs/{job_id}",
         timeout=15.0,
+    )
+
+
+@router.get("/api/settings/llm/models")
+def get_llm_models(refresh: bool = False) -> dict:
+    """What the local runtime serves, and what models are installed locally.
+
+    The scan walks real directories, which can be a large tree, so the timeout
+    is set well above a warm scan to leave room for a cold cache.
+    """
+    return _proxy(
+        mcp_client.get,
+        "internal/runtime/llm/models",
+        query={"refresh": str(refresh).lower()},
+        timeout=30.0,
+    )
+
+
+@router.get("/api/settings/llm/browse")
+def browse_llm_models(path: str | None = None) -> dict:
+    """List one directory inside the known model roots."""
+    return _proxy(
+        mcp_client.get,
+        "internal/runtime/llm/browse",
+        query={"path": path} if path else None,
+        timeout=15.0,
+    )
+
+
+@router.put("/api/settings/llm")
+def update_llm_settings(payload: RuntimeLlmPayload) -> dict:
+    """Turn generation on or off, and choose which served model answers."""
+    return _proxy(
+        mcp_client.put,
+        "internal/runtime/settings/llm",
+        payload.model_dump(exclude_none=True),
+        timeout=15.0,
+    )
+
+
+@router.post("/api/settings/llm/roots")
+def update_llm_roots(payload: RuntimeLlmRootPayload) -> dict:
+    """Add or remove a directory discovery and Browse may look inside."""
+    return _proxy(
+        mcp_client.post,
+        "internal/runtime/settings/llm/roots",
+        payload.model_dump(),
+        timeout=30.0,
+    )
+
+
+@router.get("/api/settings/llm/servers")
+def get_llm_servers(refresh: bool = False) -> dict:
+    """Which local model servers are running, by scanning loopback ports."""
+    return _proxy(
+        mcp_client.get,
+        "internal/runtime/llm/servers",
+        query={"refresh": str(refresh).lower()},
+        timeout=20.0,
     )

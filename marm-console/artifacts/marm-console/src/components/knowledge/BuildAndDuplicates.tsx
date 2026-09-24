@@ -4,6 +4,7 @@ import { useBuildConcepts, useMarmConfig, useFilters, useConceptBuild, useConcep
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, Button, Badge, Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Table, TableHeader, TableRow, TableHead, TableBody, TableCell, Select, SelectTrigger, SelectValue, SelectContent, SelectItem, Label } from '@/components/ui/core';
 import { Play, X, Eye, Merge, ShieldX, Trash2, ChevronLeft, ChevronRight, Square, RotateCcw, Database, Network, Waypoints, CircleCheck, CircleAlert, History, CheckCircle2 } from 'lucide-react';
 import type { ConceptBuildInput, ConceptBuildRun, ConceptDetail, DuplicateCandidate } from '@/lib/marm-types';
+import { decodeEntities } from '@/lib/entities';
 
 type BuildConceptsDialogProps = {
   open: boolean;
@@ -702,7 +703,7 @@ function ConceptCompareCard({ label, entity, detail, loading }: {
                   <span>Memory {index + 1}</span>
                   <span>{memory.session_name}</span>
                 </div>
-                <p className="whitespace-pre-wrap break-words text-foreground">{memory.content}</p>
+                <p className="whitespace-pre-wrap break-words text-foreground">{decodeEntities(memory.content)}</p>
               </article>
             ))}
           </div>

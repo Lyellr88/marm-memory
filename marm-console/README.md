@@ -94,16 +94,38 @@ The frontend defaults to the Console API at `http://127.0.0.1:8002`.
 | `GET /api/summaries/{session}`; `POST /api/summaries/{session}/generate` | Cached session summary and summary generation |
 | `GET /api/compaction` | Compaction pipeline history and per-candidate actions |
 | `/api/concepts/*` | Concept summary, graph, search, neighborhood, duplicate review, build lifecycle, and graph reset routes |
-| `POST /api/code-context` | Composed code context for a task: symbols ranked by personalised PageRank, their source, and joined memory. Accepts `task`, `project`, `cwd`, `budget`, `include_graph` |
+| `POST /api/code-context` | Composed code context for a task: symbols ranked by personalised PageRank, their source, and joined memory. Accepts `task`, `project`, `cwd`, `budget`, `include_graph`, `answer` |
 | `/api/projects/*` | Local-repository indexing, job status, project health, delete, architecture, bounded graph snapshots and file neighborhoods, code search, trace, impact, coverage, decisions, and runtime trace routes |
 | `GET /api/settings/runtime` | Runtime, queue, graph, storage, embedding, automation, and watch-health diagnostics |
 | `PUT /api/settings/automation` | Enable or pause durable automatic code or concept indexing |
+| `GET /api/settings/llm/models` | What the local runtime serves, plus every model found on disk (LM Studio, Ollama, HuggingFace, llama.cpp, GPT4All, Jan, and configured roots). Each carries `served_id`: the id the runtime would accept, or null when it has never seen that file |
+| `GET /api/settings/llm/browse` | List one directory **inside the known model roots only**. Names, sizes and types; never file contents |
+| `PUT /api/settings/llm` | Turn local generation on or off, and choose which served model answers. Refuses a model the detected runtime cannot actually switch to |
+| `POST /api/settings/llm/roots` | Add or remove a directory that discovery and Browse may look inside |
 | `GET /api/terminal/status` | Whether the terminal is enabled and available, and its backend/shell |
 | `WS /api/terminal/ws` | Interactive PTY session: spawn, attach (reattach after disconnect), input, resize, kill |
-| `POST /api/distill` | Propose durable memories from raw conversation, review the staged queue, apply one, or discard one. Accepts `action`, `text`, `session_name`, `proposal_id`, `project`, `threshold`, `limit`, `include_duplicates` |
-| `POST /api/terminal/check` | Run a command outside the interactive stream (dependency checks) |
+| `POST /api/distill` | Propose durable memories from raw conversation, review the staged queue, apply one, or discard one. Accepts `action`, `text`, `session_name`, `proposal_id`, `project`, `threshold`, `limit`, `include_duplicates`, `use_llm` |
+| `POST /api/terminal/check` | Run one of the Console's fixed dependency probes outside the interactive stream; any other command is refused |
 
 `GET /api/memories` supports `q`, `session`, `project`, `platform`, `context_type`, `compaction_role`, `limit`, and `offset` query parameters. Results are capped at 200 records per request.
+
+Local generation is opt-in twice over. The operator switches it on (System → Controls, or
+`MARM_LLM_ENABLED=1`), and each request then asks for it. Finding a running model enables
+nothing.
+
+`POST /api/code-context` accepts `answer`, which asks a **local** model to answer the task
+from the composed context and cite the symbols it used. It defaults to false, in the tool and
+in the Console, where **Answer it too** starts unchecked. The proxy allows 150s when
+answering and 60s otherwise, because generation runs after retrieval. `answer_status` is
+`unavailable` rather than an error when generation is off or no model is reachable — the
+ranked context is still the answer a reader needs.
+
+`POST /api/distill` selects sentences verbatim by default. It uses the local model to WRITE
+self-contained facts only when the request sets `use_llm=true` (the page's **Write facts
+with the local model**, unchecked by default) *and* local generation is enabled; otherwise,
+or when no model is reachable, it selects. The response says which path ran in `mode`.
+Every generated fact carries the verbatim span it came from, and a fact whose span is not
+actually in the transcript is dropped server-side.
 
 `POST /api/distill` returns a tool refusal as **400**, not 503 -- applying a proposal that is
 already applied is the caller's mistake and is fixable by changing the request, which is a

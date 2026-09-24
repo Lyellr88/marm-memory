@@ -21,6 +21,7 @@ class MemoryWriteRequest:
     # the detected MARM_PROJECT no matter what the caller asked for.
     project: Optional[str] = None
     explicit_scope: bool = False
+    platform: Optional[str] = None
 
 
 @dataclass
@@ -67,6 +68,7 @@ class WriteQueue:
         metadata: Optional[dict] = None,
         project: Optional[str] = None,
         explicit_scope: bool = False,
+        platform: Optional[str] = None,
     ) -> str:
         if self._stopping:
             raise RuntimeError("write queue is shutting down")
@@ -81,6 +83,7 @@ class WriteQueue:
                 future,
                 project,
                 explicit_scope,
+                platform,
             )
         )
         return await future
@@ -117,6 +120,7 @@ class WriteQueue:
                         request.context_type,
                         request.metadata,
                         project=request.project,
+                        platform=request.platform,
                         explicit_scope=request.explicit_scope,
                     )
                 elif isinstance(request, CallableWriteRequest):

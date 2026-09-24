@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "marm-mcp-server"
-version = "2.51.1"
+version = "2.52.3"
 description = "Local-first 3-in-1 AI memory layer & MCP server for Claude Code, Codex, Grok, Gemini, VS Code and Cursor. Fuses session history, codebase indexing & concept graphs in SQLite. Enables zero-cloud, privacy-first context & instant recall also works with multi-agent swarms."
 readme = "README.md"
 license = "Apache-2.0"
@@ -78,7 +78,7 @@ dev = [
     "requests>=2.31.0",
     "mypy==2.3.1",
     "types-psutil==7.2.2.20260906",
-    "ruff==0.16.7",
+    "ruff==0.16.8",
     "tomli>=2.0.0; python_version < '3.11'",
 ]
 
