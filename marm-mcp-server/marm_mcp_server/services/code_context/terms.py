@@ -254,8 +254,10 @@ _CALLER_QUESTION = re.compile(
     r"|\bwhere\b[^?.]*\b(?:called|used|invoked)\b"
     # Passive voice keeps the direction only when the unknown follows it:
     # "X is called by what" wants callers, "what is called by X" callees.
+    # A stranded "by" ("who is X called by?") leaves the caller unknown too.
     r"|\b(?:called|invoked|used)\s+(?:by|from)\s+"
-    r"(?:what|which|whom|who|where|anything|anyone|something)\b",
+    r"(?:what|which|whom|who|where|anything|anyone|something)\b"
+    r"|\b(?:called|invoked|used)\s+(?:by|from)\s*(?:[?.!]|$)",
     re.I,
 )
 

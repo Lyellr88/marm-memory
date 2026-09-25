@@ -76,6 +76,9 @@ def test_test_function_names_are_recognised():
         "which private helper methods call apply",
         "Is seed_query called by anything?",
         "target is called by what?",
+        "Who is seed_query called by?",
+        "Where is apply called from?",
+        "what is read used by",
     ],
 )
 def test_a_question_about_callers_is_recognised(task):
@@ -94,6 +97,7 @@ def test_a_question_about_callers_is_recognised(task):
         "Which helpers does apply call?",
         "What is called by target?",
         "Which helper is called by target?",
+        "Who is called by seed_query?",
     ],
 )
 def test_a_question_about_anything_else_is_not(task):
