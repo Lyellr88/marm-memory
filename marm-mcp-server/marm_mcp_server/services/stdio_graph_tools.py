@@ -363,6 +363,7 @@ async def marm_code_context(
     include_graph: bool = False,
     detail: int = 0,
     answer: bool = False,
+    analyst_mode: str = "read_only",
 ) -> dict:
     """
     🧩 Composed code context for a task: ranked symbols + source + memory, in ONE call.
@@ -393,6 +394,11 @@ async def marm_code_context(
       context does not contain (`answer_unresolved` names it);
       "unavailable" rather than a failure when generation is off or no model
       is up
+    - analyst_mode: with `answer`, "read_only" (default) returns the verified
+      answer only; "manual_review" also stages its verified results as
+      marm_distill proposals for approval; "guardrails" lets MARM apply the
+      ones it can prove mechanically, only where the operator set
+      MARM_ANALYST_AUTO_APPLY=1. The model never applies anything
     - detail: how much to return. 1 is markdown only and is the default,
       because `markdown` already contains the source and the memory text --
       asking for 3 means paying for the same bytes twice. 2 adds symbol and
@@ -414,6 +420,7 @@ async def marm_code_context(
             include_graph=include_graph,
             detail=detail,
             answer=answer,
+            analyst_mode=analyst_mode,
         )
     except ValidationError as e:
         return {"status": "error", "message": f"Invalid code-context request: {e!s}"}
@@ -425,6 +432,7 @@ async def marm_code_context(
         include_graph=req.include_graph,
         detail=req.detail or None,
         answer=req.answer,
+        analyst_mode=req.analyst_mode,
     )
 
 

@@ -344,6 +344,9 @@ def init_database(db_path: str) -> None:
                 applied_memory_id TEXT,
                 nudge_count INTEGER NOT NULL DEFAULT 0,
                 last_nudged_at TEXT,
+                origin TEXT NOT NULL DEFAULT 'distill',
+                verification TEXT NOT NULL DEFAULT '',
+                decision TEXT NOT NULL DEFAULT '',
                 expires_at TEXT NOT NULL,
                 created_at TEXT NOT NULL,
                 updated_at TEXT NOT NULL,
@@ -384,6 +387,13 @@ def init_database(db_path: str) -> None:
             )
         if "last_nudged_at" not in distill_cols:
             conn.execute("ALTER TABLE distill_staging ADD COLUMN last_nudged_at TEXT")
+        for column, ddl in (
+            ("origin", "TEXT NOT NULL DEFAULT 'distill'"),
+            ("verification", "TEXT NOT NULL DEFAULT ''"),
+            ("decision", "TEXT NOT NULL DEFAULT ''"),
+        ):
+            if column not in distill_cols:
+                conn.execute(f"ALTER TABLE distill_staging ADD COLUMN {column} {ddl}")
 
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_log_entries_session "
