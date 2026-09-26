@@ -1,8 +1,10 @@
 import { useMemo } from 'react';
+import { Link } from 'wouter';
 import { Badge, Button, cn } from '@/components/ui/core';
 import { MemoryEmptyState } from '@/components/memory/shared';
 import { Sparkles, CircleAlert, FileCode2, Brain, ShieldAlert } from 'lucide-react';
 import type {
+  AnalystResult,
   AnswerDisagreement,
   AnswerGrounding,
   AnswerItem,
@@ -146,6 +148,7 @@ export interface AnswerStream {
   modelInfo?: AnswerModelInfo;
   items?: AnswerItem[];
   disagreements?: AnswerDisagreement[];
+  analyst?: AnalystResult;
 }
 
 function elapsed(info: AnswerModelInfo) {
@@ -208,6 +211,7 @@ export function AnswerPane({
   const modelInfo = streaming ? stream.modelInfo : result?.answer_model_info;
   const items = streaming ? stream.items : result?.answer_items;
   const disagreements = streaming ? stream.disagreements : result?.answer_disagreements;
+  const analyst = streaming ? stream.analyst : result?.analyst;
   const model = streaming ? stream.model : result?.answer_model;
   // `answering` is not a verdict: grounding is decided on the finished text.
   const status = streaming
@@ -355,6 +359,29 @@ export function AnswerPane({
       )}
 
       {!arriving && <AnalysisItems items={items} disagreements={disagreements} />}
+
+      {analyst && !arriving && (
+        <div className="rounded-xl border border-border/70 bg-background/25 p-3 text-[12px]">
+          {analyst.staged.length > 0 && (
+            <Link href="/distill" className="font-medium text-primary-highlight underline-offset-2 hover:underline">
+              {analyst.staged.length === 1
+                ? '1 verified result staged for review'
+                : `${analyst.staged.length} verified results staged for review`}
+            </Link>
+          )}
+          {analyst.staged.length === 0 && (
+            <p className="text-muted-foreground">
+              Nothing was staged
+              {analyst.skipped[0]?.reason ? `: ${analyst.skipped[0].reason}` : '.'}
+            </p>
+          )}
+          {analyst.decisions.map((d) => (
+            <p key={d.proposal_id} className="mt-1 text-[11px] text-muted-foreground">
+              {d.applied ? 'Applied as a memory.' : d.decision.reason}
+            </p>
+          ))}
+        </div>
+      )}
 
       {cited.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">

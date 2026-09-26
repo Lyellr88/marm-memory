@@ -66,4 +66,10 @@ describe('ProposalCard', () => {
     expect(screen.getByRole('button', { name: /keep it/i }).hasAttribute('disabled')).toBe(true);
     expect(screen.getByRole('button', { name: /discard/i }).hasAttribute('disabled')).toBe(true);
   });
+
+  it('labels an analyst proposal\u2019s evidence as the source it cites', () => {
+    render(<ProposalCard proposal={proposal({ origin: 'analyst', evidence: 'def apply():\n    claim()' })} />);
+    expect(screen.getByText(/the source it cites/i)).toBeTruthy();
+    expect(screen.queryByText(/what was actually said/i)).toBeNull();
+  });
 });

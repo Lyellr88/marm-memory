@@ -1,4 +1,5 @@
 import type {
+  AnalystResult,
   AnswerDisagreement,
   AnswerGrounding,
   AnswerItem,
@@ -36,6 +37,8 @@ export interface AnswerStreamState {
   operations?: AnswerOperation[];
   items?: AnswerItem[];
   disagreements?: AnswerDisagreement[];
+  /** Staged results and guardrails decisions, when a mode asked for them. */
+  analyst?: AnalystResult;
 }
 
 export const IDLE_ANSWER: AnswerStreamState = { status: 'idle', text: '', citations: [] };
@@ -86,6 +89,7 @@ export function applyAnswerEvent(
         operations: (payload.operations as AnswerOperation[] | undefined) ?? prev.operations,
         items: payload.items as AnswerItem[] | undefined,
         disagreements: payload.disagreements as AnswerDisagreement[] | undefined,
+        analyst: payload.analyst as AnalystResult | undefined,
       };
     case 'error':
       return {
