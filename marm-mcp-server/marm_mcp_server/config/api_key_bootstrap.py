@@ -5,6 +5,7 @@ import stat
 import sys
 from pathlib import Path
 
+from ..services import key_management
 from ..services.key_management import _protect_key_file
 from ..utils.security import generate_api_key, open_no_follow
 
@@ -303,6 +304,18 @@ def _load_key_from_file() -> str:
     return ""
 
 
+def _load_key_from_keychain() -> tuple[str, str]:
+    """Read an explicitly stored keychain credential and preserve failures."""
+    key, problem = key_management.keychain_lookup()
+    if problem:
+        print(
+            f"MARM: cannot use the OS keychain ({problem}); "
+            f"falling back to {_MARM_ENV_PATH}.",
+            file=sys.stderr,
+        )
+    return key, problem
+
+
 def _warn_key_kept_in_memory() -> None:
     """Said whenever the key exists but is not on disk safely.
 
@@ -319,14 +332,17 @@ def _warn_key_kept_in_memory() -> None:
 
 
 def resolve_marm_api_key(server_host: str) -> str:
-    """Resolve MARM_API_KEY: env var, then ~/.marm/.env, then auto-generate
-    and persist one when server_host is 0.0.0.0 and no key was found."""
+    """Resolve MARM_API_KEY from env, keychain, file, or a new key."""
     marm_api_key = os.environ.get("MARM_API_KEY", "")
 
     if server_host == "0.0.0.0" and not marm_api_key:
-        file_key = _load_key_from_file()
-        if file_key:
-            marm_api_key = file_key
+        keychain_key, keychain_problem = _load_key_from_keychain()
+        marm_api_key = keychain_key or _load_key_from_file()
+        if not marm_api_key and keychain_problem:
+            raise key_management.KeychainUnavailable(
+                "MARM_API_KEY was not loaded because the OS keychain failed and "
+                f"no fallback file exists: {keychain_problem}"
+            )
 
     is_generate_key_cmd = "--generate-key" in sys.argv or sys.argv[1:3] == [
         "key",

@@ -91,6 +91,32 @@ def test_resolve_marm_api_key_persists_a_generated_key_across_starts(
         )
 
 
+def test_failed_keychain_without_a_file_does_not_generate_a_replacement_key(
+    monkeypatch, tmp_path
+):
+    from marm_mcp_server.config import api_key_bootstrap
+    from marm_mcp_server.services import key_management
+
+    env_path = tmp_path / ".marm" / ".env"
+    monkeypatch.setattr(api_key_bootstrap, "_MARM_ENV_PATH", env_path)
+    monkeypatch.delenv("MARM_API_KEY", raising=False)
+    monkeypatch.setattr(
+        key_management,
+        "keychain_lookup",
+        lambda: ("", "the OS keychain could not be read (locked)"),
+    )
+    monkeypatch.setattr(
+        api_key_bootstrap,
+        "generate_api_key",
+        lambda: pytest.fail("a failed keychain must not rotate the bearer key"),
+    )
+
+    with pytest.raises(key_management.KeychainUnavailable, match="keychain failed"):
+        api_key_bootstrap.resolve_marm_api_key("0.0.0.0")
+
+    assert not env_path.exists()
+
+
 def _assert_key_kept_in_memory(env_path, capsys):
     """The contract where a key cannot be persisted safely.
 

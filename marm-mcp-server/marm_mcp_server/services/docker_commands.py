@@ -12,7 +12,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from .key_management import initialize_managed_key, managed_key_path, read_managed_key
+from .key_management import (
+    initialize_managed_key,
+    keychain_lookup,
+    managed_key_path,
+    read_managed_key,
+)
 
 DEFAULT_IMAGE_REPOSITORY = "lyellr88/marm-mcp-server"
 DEFAULT_CONTAINER_NAME = "marm-mcp-server"
@@ -73,6 +78,18 @@ def ensure_managed_env_file(path: Path | None = None) -> Path:
         raise DockerCommandError(
             f"{env_file} does not contain MARM_API_KEY. Add one or omit --env-file "
             "to use MARM's managed key file."
+        )
+    keychain_key, keychain_problem = keychain_lookup()
+    if keychain_problem:
+        raise DockerCommandError(
+            "Could not verify the OS keychain before preparing managed Docker: "
+            f"{keychain_problem}. Resolve the keychain issue or supply an explicit "
+            "--env-file containing MARM_API_KEY."
+        )
+    if keychain_key:
+        raise DockerCommandError(
+            "Managed Docker cannot use a key stored only in the OS keychain. "
+            "Supply an explicit --env-file containing that MARM_API_KEY."
         )
     created_path, _created = initialize_managed_key(env_file)
     return created_path

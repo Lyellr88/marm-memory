@@ -251,6 +251,55 @@ def test_managed_key_init_reuses_existing_credential(monkeypatch, tmp_path):
     assert active_key_management.read_managed_key(path) == "first-key"
 
 
+def test_keychain_init_reuses_a_keychain_only_credential(
+    monkeypatch, tmp_path, memory_keychain
+):
+    active_key_management = importlib.import_module(
+        "marm_mcp_server.services.key_management"
+    )
+    path = tmp_path / ".marm" / ".env"
+    monkeypatch.setattr(active_key_management, "managed_key_path", lambda: path)
+    memory_keychain.set_password(
+        active_key_management.KEYRING_SERVICE,
+        active_key_management.KEYRING_USERNAME,
+        "keychain-key",
+    )
+    monkeypatch.setattr(
+        active_key_management,
+        "initialize_managed_key",
+        lambda: pytest.fail("a keychain-only credential must not be replaced"),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["marm-memory", "key", "init", "--keychain", "--remove-plaintext"],
+    )
+
+    with pytest.raises(SystemExit) as exc_info:
+        cli.main()
+
+    assert exc_info.value.code == 0
+    assert not path.exists()
+    assert active_key_management.read_keychain_key() == "keychain-key"
+
+
+def test_managed_key_init_removes_a_new_file_when_protection_fails(
+    monkeypatch, tmp_path
+):
+    active_key_management = importlib.import_module(
+        "marm_mcp_server.services.key_management"
+    )
+    path = tmp_path / ".marm" / ".env"
+    monkeypatch.setattr(active_key_management, "managed_key_path", lambda: path)
+    monkeypatch.setattr(active_key_management, "generate_api_key", lambda: "new-key")
+    monkeypatch.setattr(active_key_management, "_protect_key_file", lambda _path: False)
+
+    with pytest.raises(RuntimeError, match="Could not secure"):
+        active_key_management.initialize_managed_key()
+
+    assert not path.exists()
+
+
 def test_managed_key_init_persists_a_real_generated_key_intact(monkeypatch, tmp_path):
     """initialize_managed_key must round-trip whatever generate_api_key()
     actually produces through the real (unquoted) file write and read, not
@@ -340,6 +389,24 @@ def test_key_path_and_reveal_keep_output_intentional(monkeypatch, capsys, tmp_pa
     captured = capsys.readouterr()
     assert "saved-key" in (captured.out + captured.err)
     assert "terminal capture" in (captured.out + captured.err)
+
+
+def test_key_reveal_reports_a_keychain_failure(monkeypatch, capsys):
+    active_key_management = importlib.import_module(
+        "marm_mcp_server.services.key_management"
+    )
+    monkeypatch.setattr(
+        active_key_management,
+        "keychain_lookup",
+        lambda: ("", "collection is locked"),
+    )
+
+    assert (
+        cli._dispatch_product(SimpleNamespace(command="key", key_command="reveal")) == 1
+    )
+    captured = capsys.readouterr()
+    assert "collection is locked" in captured.err
+    assert "No managed MARM API key exists" not in captured.err
 
 
 def test_product_help_uses_grouped_stable_layout(capsys):
