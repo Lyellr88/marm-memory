@@ -110,6 +110,7 @@ module = [
     "fastapi_mcp",
     "watchdog.*",
     "winpty.*",
+    "keyring.*",
 ]
 ignore_missing_imports = true
 

@@ -501,6 +501,23 @@ def _dispatch_product(args: argparse.Namespace) -> int:
                     file=sys.stderr,
                 )
                 return 2
+            if args.keychain:
+                keychain_key, keychain_problem = key_management.keychain_lookup()
+                if keychain_problem:
+                    print(
+                        f"Could not use the OS keychain: {keychain_problem}",
+                        file=sys.stderr,
+                    )
+                    return 1
+                if keychain_key and not key_management.read_managed_key_from_file(
+                    key_management.managed_key_path()
+                ):
+                    print(
+                        "Using existing MARM API key in the OS keychain "
+                        f"({key_management.KEYRING_SERVICE}/"
+                        f"{key_management.KEYRING_USERNAME})."
+                    )
+                    return 0
             path, created = key_management.initialize_managed_key()
             state = "Created" if created else "Using existing"
             print(f"{state} MARM API key file: {path}")

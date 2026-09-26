@@ -78,6 +78,23 @@ def test_migration_rejects_a_write_the_keychain_did_not_keep(
         key_management.migrate_managed_key_to_keychain(path)
 
 
+def test_migration_refuses_to_replace_an_existing_different_keychain_key(
+    tmp_path, memory_keychain
+):
+    path = _managed_env_file(tmp_path, "file-key")
+    memory_keychain.set_password(
+        key_management.KEYRING_SERVICE,
+        key_management.KEYRING_USERNAME,
+        "keychain-key",
+    )
+
+    with pytest.raises(key_management.KeychainUnavailable, match="refusing to replace"):
+        key_management.migrate_managed_key_to_keychain(path)
+
+    assert key_management.read_keychain_key() == "keychain-key"
+    assert key_management.read_managed_key_from_file(path) == "file-key"
+
+
 def test_migration_refuses_when_the_env_file_holds_no_key(tmp_path, memory_keychain):
     path = _managed_env_file(tmp_path, key=None)
 

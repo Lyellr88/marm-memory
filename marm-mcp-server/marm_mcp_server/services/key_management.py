@@ -103,6 +103,13 @@ def initialize_managed_key(path: Path | None = None) -> tuple[Path, bool]:
         destination.unlink(missing_ok=True)
         raise
     if not _protect_key_file(destination):
+        try:
+            destination.unlink()
+        except OSError as exc:
+            raise RuntimeError(
+                f"Could not secure managed key file: {destination}; "
+                f"the plaintext file could not be removed: {exc}"
+            ) from exc
         raise RuntimeError(f"Could not secure managed key file: {destination}")
     return destination, True
 
@@ -243,6 +250,24 @@ def migrate_managed_key_to_keychain(
     key = read_managed_key_from_file(source)
     if not key:
         raise KeychainUnavailable(f"{source} does not contain MARM_API_KEY")
+    existing, problem = keychain_lookup()
+    if problem:
+        raise KeychainUnavailable(problem)
+    if existing and existing != key:
+        raise KeychainUnavailable(
+            "the OS keychain already contains a different MARM API key; "
+            "refusing to replace it without an explicit rotation command"
+        )
+    if existing == key:
+        if not remove_plaintext:
+            return key, False
+        try:
+            source.unlink(missing_ok=True)
+        except OSError as exc:
+            raise KeychainUnavailable(
+                f"the key is in the keychain but {source} could not be removed: {exc}"
+            ) from exc
+        return key, True
     write_keychain_key(key)
     # Read back before reporting success: a backend that accepts the write and
     # silently drops it would otherwise look like a completed migration while

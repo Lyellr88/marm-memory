@@ -304,8 +304,8 @@ def _load_key_from_file() -> str:
     return ""
 
 
-def _load_key_from_keychain() -> str:
-    """Read an explicitly stored keychain credential, when available."""
+def _load_key_from_keychain() -> tuple[str, str]:
+    """Read an explicitly stored keychain credential and preserve failures."""
     key, problem = key_management.keychain_lookup()
     if problem:
         print(
@@ -313,7 +313,7 @@ def _load_key_from_keychain() -> str:
             f"falling back to {_MARM_ENV_PATH}.",
             file=sys.stderr,
         )
-    return key
+    return key, problem
 
 
 def _warn_key_kept_in_memory() -> None:
@@ -336,7 +336,13 @@ def resolve_marm_api_key(server_host: str) -> str:
     marm_api_key = os.environ.get("MARM_API_KEY", "")
 
     if server_host == "0.0.0.0" and not marm_api_key:
-        marm_api_key = _load_key_from_keychain() or _load_key_from_file()
+        keychain_key, keychain_problem = _load_key_from_keychain()
+        marm_api_key = keychain_key or _load_key_from_file()
+        if not marm_api_key and keychain_problem:
+            raise key_management.KeychainUnavailable(
+                "MARM_API_KEY was not loaded because the OS keychain failed and "
+                f"no fallback file exists: {keychain_problem}"
+            )
 
     is_generate_key_cmd = "--generate-key" in sys.argv or sys.argv[1:3] == [
         "key",
