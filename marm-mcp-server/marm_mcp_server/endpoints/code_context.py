@@ -2,6 +2,7 @@
 
 import json
 from collections.abc import Iterator
+from typing import Literal
 
 import structlog
 from fastapi import APIRouter
@@ -67,6 +68,16 @@ class CodeContextRequest(BaseModel):
             "reachable."
         ),
     )
+    analyst_mode: Literal["read_only", "manual_review", "guardrails"] = Field(
+        default="read_only",
+        description=(
+            "With `answer`: read_only returns the verified answer only; "
+            "manual_review also stages its verified results as marm_distill "
+            "proposals for approval; guardrails lets MARM apply the ones it "
+            "can prove mechanically, only where the operator set "
+            "MARM_ANALYST_AUTO_APPLY=1. The model never applies anything."
+        ),
+    )
     include_graph: bool = Field(
         default=False,
         description=(
@@ -104,6 +115,7 @@ async def marm_code_context(req: CodeContextRequest) -> dict:
         include_graph=req.include_graph,
         detail=req.detail or None,
         answer=req.answer,
+        analyst_mode=req.analyst_mode,
     )
 
 
@@ -137,6 +149,7 @@ def stream_code_context_answer(req: CodeContextRequest) -> StreamingResponse:
                 budget=req.budget,
                 include_graph=req.include_graph,
                 detail=req.detail or None,
+                analyst_mode=req.analyst_mode,
             ):
                 if name == "context" and payload.get("status") in {
                     "unavailable",

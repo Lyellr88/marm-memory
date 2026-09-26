@@ -10,14 +10,19 @@ happens to match will outrank the class everything calls.
 """
 
 import asyncio
-from collections.abc import Iterator
-from typing import TYPE_CHECKING
+from collections.abc import Callable, Coroutine, Iterator
+from typing import TYPE_CHECKING, Any
+
+import anyio.from_thread
+import structlog
 
 from ...config.env_parsing import _safe_int
 from .backend import GraphUnavailable, LocalBackend
 from .compose import Context, Symbol, build
 from .format import render
 from .project import short_name
+
+logger = structlog.get_logger(__name__)
 
 if TYPE_CHECKING:
     from ..analyst import Brief
@@ -53,6 +58,7 @@ async def build_code_context(
     include_graph: bool = False,
     detail: int | None = None,
     answer: bool = False,
+    analyst_mode: str = "read_only",
 ) -> dict:
     """Run the pipeline and return both the rendered text and its structure.
 
@@ -65,10 +71,74 @@ async def build_code_context(
     except GraphUnavailable as exc:
         return _unavailable_payload(exc)
     payload = serialise(ctx, task, include_graph=include_graph, detail=detail)
-    if answer:
-        brief = await _analyse_brief(ctx, task, budget=budget)
-        payload.update(brief.to_answer_fields())
+    if not answer:
+        if analyst_mode != "read_only":
+            payload["analyst"] = _analyst_result(
+                analyst_mode, [], [{"content": "", "reason": "answer not requested"}]
+            )
+        return payload
+    brief = await _analyse_brief(ctx, task, budget=budget)
+    payload.update(brief.to_answer_fields())
+    if analyst_mode != "read_only":
+        payload["analyst"] = await _review_brief(brief, task, ctx, analyst_mode)
     return payload
+
+
+async def _review_brief(
+    brief: "Brief", task: str, ctx: "Context", analyst_mode: str
+) -> dict:
+    """Stage a verified answer's results; under guardrails, let MARM decide them.
+
+    The model has no part in this: it answered, and deterministic code decides
+    what may be staged and what may be applied.
+    """
+    from ...core.memory import memory
+    from ..analyst.review import auto_apply, stage_conclusions
+
+    # The answer is already judged; a failure here must cost the review only.
+    try:
+        staged = await stage_conclusions(
+            memory,
+            brief,
+            task,
+            session_name=f"analyst:{short_name(ctx.project)}",
+            project=_memory_scope(ctx),
+        )
+        result = _analyst_result(analyst_mode, staged["staged"], staged["skipped"])
+        if analyst_mode == "guardrails":
+            result["decisions"] = await auto_apply(
+                memory, staged["staged"], source_text=None
+            )
+    except Exception:
+        logger.exception("analyst.review_failed", mode=analyst_mode)
+        return _analyst_result(
+            analyst_mode, [], [{"content": "", "reason": "review failed"}]
+        )
+    return result
+
+
+def _on_server_loop(make: Callable[[], Coroutine[Any, Any, dict]]) -> dict:
+    """Run a coroutine on the server's own loop from the stream's worker thread.
+
+    Guardrails may write through the write queue, which is bound to that loop.
+    A caller with no worker thread (a direct call) has no loop to reach.
+    """
+    try:
+        return anyio.from_thread.run(make)
+    except RuntimeError:
+        return asyncio.run(make())
+
+
+def _analyst_result(mode: str, staged: list, skipped: list) -> dict:
+    return {"mode": mode, "staged": staged, "skipped": skipped, "decisions": []}
+
+
+def _memory_scope(ctx: "Context") -> str:
+    """The memory scope bound to this graph; staged rows are recalled by it."""
+    from ...core.code_project_bindings import get_by_graph_project
+
+    binding = get_by_graph_project(ctx.project.get("name", ""))
+    return binding.memory_project if binding else short_name(ctx.project)
 
 
 def _unavailable_payload(exc: GraphUnavailable) -> dict:
@@ -223,6 +293,7 @@ def stream_answer(
     *,
     include_graph: bool = False,
     detail: int | None = None,
+    analyst_mode: str = "read_only",
 ) -> Iterator[tuple[str, dict]]:
     """Compose ONCE, send that composition, then answer from it as it is written.
 
@@ -247,5 +318,14 @@ def stream_answer(
         )
         return
 
+    def review(brief: "Brief") -> dict:
+        return _on_server_loop(lambda: _review_brief(brief, task, ctx, analyst_mode))
+
     yield ("context", serialise(ctx, task, include_graph=include_graph, detail=detail))
-    yield from stream_analysis(ctx, task, profile=resolve(context_chars=budget))
+    yield from stream_analysis(
+        ctx,
+        task,
+        profile=resolve(context_chars=budget),
+        # Read-only never reaches the review code at all.
+        after=None if analyst_mode == "read_only" else review,
+    )
