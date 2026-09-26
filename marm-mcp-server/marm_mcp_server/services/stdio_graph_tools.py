@@ -387,10 +387,12 @@ async def marm_code_context(
     - answer: also answer the task from the composed context with a local
       model, citing the symbols it used. Off by default -- it is the slow step,
       and for an agent that reads code the ranked context IS the answer.
-      `answer_status` is "ok" only when its citations resolve to composed
-      symbols and none name anything else, otherwise "unverified" with
-      `answer_unresolved`; "unavailable" rather than a failure when
-      generation is off or no model is up
+      The operator's analyst profile bounds it. `answer_status` is "ok" when
+      every result is verified against the composed context, "unverified"
+      when support is incomplete, "rejected" when it cites something the
+      context does not contain (`answer_unresolved` names it);
+      "unavailable" rather than a failure when generation is off or no model
+      is up
     - detail: how much to return. 1 is markdown only and is the default,
       because `markdown` already contains the source and the memory text --
       asking for 3 means paying for the same bytes twice. 2 adds symbol and
