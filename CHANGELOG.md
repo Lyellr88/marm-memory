@@ -1,6 +1,24 @@
 # Changelog
 
 <details>
+<summary><strong>September 26th, 2026: Code Context Caller Discovery (v2.53.0)</strong></summary>
+
+### Added
+
+- Code Context recognizes more caller-focused requests, ranks relevant callers more effectively, and resolves additional traced symbols, including shared names and alternate-search matches.
+
+### Fixed
+
+- Analytics resolves the configured database path when writing, so runtime configuration changes are honored instead of using a stale import-time path.
+- Added Console regression coverage for decoded memory content in the Code Context memory pane.
+
+### Acknowledgment
+
+Thank you to [@doublegate](https://github.com/doublegate) for [#237](https://github.com/Lyellr88/marm-memory/pull/237), [#247](https://github.com/Lyellr88/marm-memory/pull/247), and [#248](https://github.com/Lyellr88/marm-memory/pull/248).
+
+</details>
+
+<details>
 <summary><strong>September 24th, 2026: Log and Memory View Improvements (v2.52.3)</strong></summary>
 
 ### Added
