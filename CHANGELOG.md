@@ -1,6 +1,24 @@
 # Changelog
 
 <details>
+<summary><strong>September 26th, 2026: Optional OS Keychain API Keys (v2.54.0)</strong></summary>
+
+### Added
+
+- Public HTTP deployments can optionally store the managed MARM API key in the operating system keychain through `marm-memory key init --keychain`. Existing managed keys can be migrated, with the file fallback retained unless `--remove-plaintext` is explicitly requested.
+
+### Fixed
+
+- Keychain-only credentials are preserved when preparing managed Docker. Docker now asks for an explicit environment file instead of silently generating a replacement bearer key.
+- Key reveal reports an unavailable or locked keychain instead of incorrectly reporting that no managed key exists.
+
+### Acknowledgment
+
+Thank you to [@TrueFurina](https://github.com/TrueFurina) for the OS keychain API-key work in [#163](https://github.com/Lyellr88/marm-memory/pull/163).
+
+</details>
+
+<details>
 <summary><strong>September 26th, 2026: Code Context Caller Discovery (v2.53.0)</strong></summary>
 
 ### Added
