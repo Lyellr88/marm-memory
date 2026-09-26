@@ -391,6 +391,24 @@ def test_key_path_and_reveal_keep_output_intentional(monkeypatch, capsys, tmp_pa
     assert "terminal capture" in (captured.out + captured.err)
 
 
+def test_key_reveal_reports_a_keychain_failure(monkeypatch, capsys):
+    active_key_management = importlib.import_module(
+        "marm_mcp_server.services.key_management"
+    )
+    monkeypatch.setattr(
+        active_key_management,
+        "keychain_lookup",
+        lambda: ("", "collection is locked"),
+    )
+
+    assert (
+        cli._dispatch_product(SimpleNamespace(command="key", key_command="reveal")) == 1
+    )
+    captured = capsys.readouterr()
+    assert "collection is locked" in captured.err
+    assert "No managed MARM API key exists" not in captured.err
+
+
 def test_product_help_uses_grouped_stable_layout(capsys):
     parser = cli._product_parser()
 

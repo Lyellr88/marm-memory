@@ -134,6 +134,19 @@ def test_managed_env_file_creates_key_but_explicit_file_must_contain_one(
         docker_commands.ensure_managed_env_file(explicit)
 
 
+def test_managed_docker_refuses_to_replace_a_keychain_only_key(monkeypatch, tmp_path):
+    managed = tmp_path / "managed.env"
+    monkeypatch.setattr(docker_commands, "managed_env_file", lambda: managed)
+    monkeypatch.setattr(
+        docker_commands, "keychain_lookup", lambda: ("keychain-key", "")
+    )
+
+    with pytest.raises(docker_commands.DockerCommandError, match="--env-file"):
+        docker_commands.ensure_managed_env_file()
+
+    assert not managed.exists()
+
+
 def test_docker_status_redacts_container_environment(monkeypatch):
     monkeypatch.setattr(
         docker_commands,

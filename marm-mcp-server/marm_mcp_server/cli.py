@@ -545,7 +545,15 @@ def _dispatch_product(args: argparse.Namespace) -> int:
         if args.key_command == "path":
             print(key_management.managed_key_path())
             return 0
-        key = key_management.read_managed_key()
+        keychain_key, keychain_problem = key_management.keychain_lookup()
+        if keychain_problem:
+            print(
+                f"Could not read the MARM API key from the OS keychain: "
+                f"{keychain_problem}",
+                file=sys.stderr,
+            )
+            return 1
+        key = keychain_key or key_management.read_managed_key_from_file()
         if not key:
             print(
                 "No managed MARM API key exists. Run `marm-memory key init` first.",
