@@ -170,7 +170,7 @@ afterEach(() => {
   answerState.model = undefined;
   answerState.start = vi.fn();
   answerState.reset = vi.fn();
-  for (const key of ['grounding', 'unresolved', 'hint', 'packet', 'verification', 'modelInfo', 'items', 'disagreements']) {
+  for (const key of ['grounding', 'unresolved', 'hint', 'packet', 'verification', 'modelInfo', 'items', 'disagreements', 'analyst']) {
     delete (answerState as Record<string, unknown>)[key];
   }
   projectState.status = 'ready';
@@ -858,6 +858,63 @@ describe('CodeContextPage', () => {
       expect(screen.getByText(/small profile/)).toBeTruthy();
       expect(screen.getByText(/≤ 1,024 tokens/)).toBeTruthy();
       expect(screen.getByText(/5 calls/)).toBeTruthy();
+    });
+
+    it('defaults the analyst to read-only and sends that mode with an answer', async () => {
+      const user = userEvent.setup();
+      render(<CodeContextPage />);
+
+      const mode = screen.getByRole('combobox', { name: /analyst/i }) as HTMLSelectElement;
+      expect(mode.value).toBe('read_only');
+      expect(mode.disabled).toBe(true);
+
+      await user.click(screen.getByRole('checkbox', { name: /answer it too/i }));
+      expect(mode.disabled).toBe(false);
+      await user.selectOptions(mode, 'manual_review');
+      await user.type(screen.getByLabelText('Task'), 'how does recall rank');
+      await user.click(screen.getByRole('button', { name: /compose context/i }));
+
+      await waitFor(() => expect(answerState.start).toHaveBeenCalledTimes(1));
+      expect(answerState.start.mock.calls[0][0]).toMatchObject({ analyst_mode: 'manual_review' });
+    });
+
+    it('points to the Distill queue when verified results were staged', () => {
+      finished({
+        grounding: 'ok',
+        analyst: { mode: 'manual_review', staged: ['a', 'b'], skipped: [], decisions: [] },
+      });
+      answerState.text = 'It sorts [S1].';
+      render(<CodeContextPage />);
+
+      const link = screen.getByRole('link', { name: /2 verified results staged for review/i });
+      expect(link.getAttribute('href')).toContain('/distill');
+    });
+
+    it('says why guardrails left a result for review', () => {
+      finished({
+        grounding: 'ok',
+        analyst: {
+          mode: 'guardrails',
+          staged: ['a'],
+          skipped: [],
+          decisions: [
+            {
+              proposal_id: 'a',
+              applied: false,
+              decision: {
+                apply: false,
+                status: 'review_required',
+                checks: {},
+                reason: 'review required: MARM cannot prove a paraphrase claim mechanically',
+              },
+            },
+          ],
+        },
+      });
+      answerState.text = 'It sorts [S1].';
+      render(<CodeContextPage />);
+
+      expect(screen.getByText(/cannot prove a paraphrase claim/)).toBeTruthy();
     });
 
     it('says when memory and the graph disagree', () => {
