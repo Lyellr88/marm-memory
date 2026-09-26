@@ -696,7 +696,7 @@ The AI agent will automatically use the appropriate tools. Manual tool access is
 | ------ | -------------- | ---------------- |
 | `marm_graph_index` | Index a repo into the code-structure graph, check status, list projects, or turn automatic re-indexing on and off | `repo_path`, `project`, `action` |
 | `marm_code_lookup` | Find symbols, text patterns, or a symbol's source; use instead of grep/glob | `kind="auto"\|"symbol"\|"text"\|"snippet"` |
-| `marm_code_context` | Composed context for a task in one call: symbols ranked by personalised PageRank, their source read from disk, and what memory records about them | `task`, `project`, `cwd`, `budget`, `detail` (0-3; `0` uses `MARM_CODE_CONTEXT_DETAIL`, the server default), `include_graph` (default `false`) |
+| `marm_code_context` | Composed context for a task in one call: symbols ranked by personalised PageRank, their source read from disk, and what memory records about them | `task`, `project`, `cwd`, `budget`, `detail` (0-3; `0` uses `MARM_CODE_CONTEXT_DETAIL`, the server default), `include_graph` (default `false`), `answer` (default `false`) |
 | `marm_graph_trace` | Trace call paths and data flow from a function | `direction`, `mode` |
 | `marm_graph_architecture` | Architecture overview: modules, node/edge breakdown, schema | `project` |
 | `marm_graph_impact` | Blast radius of code changes: git diff → affected symbols + risk | `since`, `base_branch`, `depth` |
@@ -996,7 +996,17 @@ Two features use it, both only when asked per call, and both degrade rather than
 
 **Every failure is a `None`, never an exception.** A cold model, a busy GPU, a stopped container and a malformed reply all degrade to "no model answer this time". Callers branch on the `None`; they do not catch. A memory tool must not stop working because an unrelated container was restarted.
 
-**An answer is labelled grounded only when its citations check out.** `answer_status` is `ok` when the answer cites symbols from the context it was written from and names nothing outside it. Otherwise it is `unverified`: the text is still returned, `answer_unresolved` lists any cited identifier the context does not contain, and `answer_hint` says why. The Console's stream carries the same verdict in its final `done` event, and calls an answer grounded only once that verdict is `ok`.
+#### Local evidence analyst
+
+`marm_code_context(answer=true)` is a bounded, read-only analyst. MARM retrieves; the local model reads only what MARM retrieved; deterministic code judges every result before it is returned. The model never searches, fetches more context, writes memory or calls a tool.
+
+- **One evidence packet.** The composition is frozen into a packet with citable handles, `S1`… for symbols and `M1`… for memories, and a content hash, `packet_id`. The profile caps what the packet holds, whatever `budget` the caller asked for; `answer_packet` reports its size and what the cap left out.
+- **Profiles, chosen by the operator.** `general` writes one free-form answer, as before. `small` runs five narrow operations, one per call: a summary, supported facts with a verbatim `quote`, call and memory relations, missing evidence, and low-risk next steps (read, compare, verify or ask). `large` runs the same five in one call. Each operation returns JSON in a fixed schema, requested from the server as `json_schema` where it is supported and validated either way; an entry that does not fit is dropped and counted, never repaired. The profile is set in System > Controls or with `MARM_ANALYST_PROFILE`, and is never inferred from the model.
+- **Hard limits.** Every call asks for the profile's cap, answer tokens plus any reasoning allowance, and is never retried wider. No call starts after the time limit, and none may run past it. `answer_model_info` reports the cap, the number of calls, the elapsed time and whether the run stopped early; a cut-off answer is never verified.
+- **Every result verified on its own.** A cited handle the packet does not contain rejects. A fact is supported only when its quote is verbatim in an item it cites, a call relation only when the packet has that edge, a memory relation only when the memory is bound to or names the symbol, and every claim only when the words it asserts appear in the evidence it cites. A claim with nothing a check could fail is not verified. An answer is `verified` only when every substantive result is, and every operation completed; otherwise it is `uncertain`, reported in `answer_status` as `ok`, `unverified` or `rejected`. `answer_items` carries each result with its state and what supported it.
+- **Code-memory disagreement.** A memory that states a call the packet's graph contradicts, or does not show, is listed in `answer_disagreements` without asking the model.
+
+The JSON response and the stream share one implementation and return the same verification. A reader who closes the stream stops the generation. `scripts/eval-analyst.py` runs the evaluation matrix in `tests/fixtures/analyst_eval.json` against a live local model under any profile.
 
 That is the contract for `marm_code_context(answer=true)`, which returns `"answer": null` when a model is unreachable or answers with nothing. The Console's streaming route cannot use it, because a stream has already started by the time generation fails: it emits an SSE `error` event whose JSON `data` carries a `message`, plus a `hint` when no model is reachable at all. Same outcome either way -- the ranked context stands and only the answer is missing -- but a client reading the stream branches on the event, not on a null.
 
@@ -1064,7 +1074,11 @@ Packaged docs are indexed into the `marm_system` memory namespace on startup and
 | `MARM_LLM_URL` | `http://127.0.0.1:18080` | Local OpenAI-compatible endpoint for optional generation. A stated address wins over discovery, so one that is dead surfaces rather than being silently replaced |
 | `MARM_LLM_ALLOW_REMOTE` | unset | Must be the exact string `i-understand-this-leaves-my-machine` to permit a non-loopback endpoint. Anything else, including `1` or `true`, is refused |
 | `MARM_LLM_TIMEOUT` | `120` | Seconds to wait for a completion. Generous on purpose: a shared GPU makes a slow answer normal rather than broken |
-| `MARM_LLM_MAX_RETRY_TOKENS` | `8192` | Ceiling for the single wider retry issued when a model spends its whole budget without producing content |
+| `MARM_LLM_MAX_RETRY_TOKENS` | `8192` | Ceiling for the single wider retry issued when a model spends its whole budget without producing content (never used by the analyst, whose cap is hard) |
+| `MARM_ANALYST_PROFILE` | `general` | Analyst profile: `general`, `small` or `large`. A choice saved in System > Controls wins |
+| `MARM_CODE_CONTEXT_ANSWER_TOKENS` | `900` | Answer tokens per call for the `general` profile, 64 to 8192. The structured profiles are sized to their schemas |
+| `MARM_ANALYST_TIME_BUDGET` | profile (`90`/`60`/`180`) | Seconds an analyst answer may take, 5 to 600. No model call starts after it |
+| `MARM_ANALYST_REASONING_TOKENS` | profile (`0`/`0`/`8192`) | Extra tokens per call a reasoning model may spend before answering, up to 32768. Added to the answer tokens in the requested cap |
 | `GRAPH_ENABLED` | `true` | Kill switch for the 6 code-graph tools |
 | `GRAPH_AUTO_INDEX` | `true` | Automatic re-indexing of repos already in the code graph. A saved switch from `projects auto off` or `marm_graph_index(action="auto_off")` overrides this, so a value set here cannot re-enable what a user turned off |
 | `GRAPH_AUTO_INDEX_DEBOUNCE_SECONDS` | `2` | Quiet period after a watcher event before a repo is evaluated, so a burst of saves becomes one re-index. Minimum 0.5 |
