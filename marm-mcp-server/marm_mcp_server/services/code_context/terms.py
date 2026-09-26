@@ -235,6 +235,38 @@ def seed_query(task: str) -> str:
     return " ".join(terms) if terms else (task or "")
 
 
+# Only a category may stand between the question word and the verb: in
+# "which functions call X" the functions are the callers, but in "what target
+# calls" the named symbol is the subject and the question asks for callees.
+_CALLER_MODIFIER = (
+    r"(?:internal|external|private|public|exported|async|local|nested|"
+    r"top-level|helper|other)"
+)
+_CALLER_CATEGORY = (
+    r"(?:else|other|functions?|methods?|code|symbols?|modules?|classes?|files?|"
+    r"handlers?|helpers?|routes?|tests?|places?|parts?|components?|things?)"
+)
+_CALLER_QUESTION = re.compile(
+    r"\bcallers?\b"
+    rf"|\b(?:what|who|which)\s+(?:{_CALLER_MODIFIER}\s+){{0,2}}"
+    rf"(?:{_CALLER_CATEGORY}\s+){{0,2}}"
+    r"(?:calls?|invokes?|uses?)\b"
+    r"|\bwhere\b[^?.]*\b(?:called|used|invoked)\b"
+    # Passive voice keeps the direction only when the unknown follows it:
+    # "X is called by what" wants callers, "what is called by X" callees.
+    # A stranded "by" ("who is X called by?") leaves the caller unknown too.
+    r"|\b(?:called|invoked|used)\s+(?:by|from)\s+"
+    r"(?:what|which|whom|who|where|anything|anyone|something)\b"
+    r"|\b(?:called|invoked|used)\s+(?:by|from)\s*(?:[?.!]|$)",
+    re.I,
+)
+
+
+def asks_for_callers(task: str) -> bool:
+    """True when the task asks what calls something rather than what it does."""
+    return bool(_CALLER_QUESTION.search(task or ""))
+
+
 def is_distinctive(word: str) -> bool:
     """True when `word` identifies something, rather than being boilerplate."""
     low = word.lower().strip("_")

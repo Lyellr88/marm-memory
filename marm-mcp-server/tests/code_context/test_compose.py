@@ -850,3 +850,213 @@ async def test_a_missed_qualified_trace_is_not_retried_by_bare_name(repo):
     await build(_Tracer(repo, results=results), "handler", cwd=str(repo))
 
     assert traced == ["proj.a.handler"], f"unexpected trace calls: {traced}"
+
+
+@pytest.mark.asyncio
+async def test_a_traced_caller_ranked_past_the_top_dozen_is_still_shown(tmp_path):
+    """Asking "what calls X" is answered by X's callers, and a popular X has
+    more of them than a fixed backfill window. A caller left without a file is
+    never emitted, while seeded symbols ranked far below it are."""
+    names = [f"c{i}" for i in range(16)]
+    (tmp_path / "m.py").write_text(
+        "def target():\n    return 1\n\n"
+        + "".join(f"def {n}():\n    return target()\n\n" for n in names)
+    )
+    rows = {
+        n: _row(n, f"proj.m.{n}", 4 + 3 * i, 5 + 3 * i) for i, n in enumerate(names)
+    }
+    trace = {
+        "proj.m.target": {
+            "callers": [
+                {"qualified_name": f"proj.m.{n}", "name": n, "hop": 1} for n in names
+            ]
+        }
+    }
+
+    class Resolving(Stub):
+        def search(self, project, query, limit=25, semantic=None):
+            self.searches.append(query)
+            # Bare names only: a parent-qualified query that never matches must
+            # not spend the search budget the bare-name fallback needs.
+            if query in rows:
+                return [rows[query]]
+            return self._results
+
+    c = Resolving(
+        tmp_path, results=[_row("target", "proj.m.target", 1, 2)], trace=trace
+    )
+    ctx = await build(c, "target", cwd=str(tmp_path))
+
+    shown = {s.name for s in ctx.symbols}
+    assert set(names) <= shown, sorted(set(names) - shown)
+
+
+@pytest.mark.asyncio
+async def test_backfill_finds_a_common_name_behind_its_namesakes(repo):
+    """A bare-name search for `request` returns every `request` in the
+    project; the traced one is rarely among the first three."""
+    trace = {
+        "proj.m.helper": {
+            "callers": [{"qualified_name": "proj.m.caller", "name": "caller", "hop": 1}]
+        }
+    }
+    namesakes = [_row("caller", f"proj.other{i}.caller") for i in range(4)]
+
+    class Crowded(Stub):
+        def search(self, project, query, limit=25, semantic=None):
+            self.searches.append(query)
+            if query == "caller":
+                return [*namesakes, _row("caller", "proj.m.caller", 7, 8)][:limit]
+            return self._results
+
+    c = Crowded(repo, results=[_row("helper", "proj.m.helper", 1, 2)], trace=trace)
+    ctx = await build(c, "helper", cwd=str(repo))
+
+    caller = next((s for s in ctx.symbols if s.qualified_name == "proj.m.caller"), None)
+    assert caller is not None
+    assert (caller.start_line, caller.end_line) == (7, 8)
+
+
+def _hub(tmp_path):
+    """`target` calls six helpers and is called by one entry point."""
+    helpers = [f"h{i}" for i in range(6)]
+    (tmp_path / "m.py").write_text(
+        "def target():\n"
+        + "".join(f"    {h}()\n" for h in helpers)
+        + "\ndef entry():\n    target()\n\n"
+        + "".join(f"def {h}():\n    pass\n\n" for h in helpers)
+    )
+    trace = {
+        "proj.m.target": {
+            "callees": [
+                {"qualified_name": f"proj.m.{h}", "name": h, "hop": 1} for h in helpers
+            ],
+            "callers": [{"qualified_name": "proj.m.entry", "name": "entry", "hop": 1}],
+        }
+    }
+    rows = {
+        h: _row(h, f"proj.m.{h}", 12 + 3 * i, 13 + 3 * i) for i, h in enumerate(helpers)
+    }
+    rows["entry"] = _row("entry", "proj.m.entry", 9, 10)
+
+    class Resolving(Stub):
+        def search(self, project, query, limit=25, semantic=None):
+            self.searches.append(query)
+            return [rows[query]] if query in rows else self._results
+
+    return Resolving(
+        tmp_path, results=[_row("target", "proj.m.target", 1, 7)], trace=trace
+    )
+
+
+@pytest.mark.asyncio
+async def test_asking_what_calls_a_symbol_ranks_its_callers_first(tmp_path):
+    """A caller and a callee of the seed tie in the call graph; the question
+    is what breaks the tie."""
+    ctx = await build(_hub(tmp_path), "what calls target", cwd=str(tmp_path))
+    names = [s.name for s in ctx.symbols]
+    assert names.index("entry") < min(names.index(f"h{i}") for i in range(6)), names
+
+
+@pytest.mark.asyncio
+async def test_asking_how_a_symbol_works_does_not_promote_its_callers(tmp_path):
+    """Without the question, the call graph decides, and it weights what the
+    seed calls above what calls the seed."""
+    ctx = await build(_hub(tmp_path), "how does target work", cwd=str(tmp_path))
+    names = [s.name for s in ctx.symbols]
+    assert names.index("entry") > max(names.index(f"h{i}") for i in range(6)), names
+
+
+def _one_each(tmp_path, caller_strategy="lsp"):
+    """`target` calls `helper` and is called by `entry`: one of each."""
+    (tmp_path / "m.py").write_text(
+        "def target():\n    helper()\n\ndef entry():\n    target()\n\n"
+        "def helper():\n    pass\n"
+    )
+    trace = {
+        "proj.m.target": {
+            "callees": [
+                {
+                    "qualified_name": "proj.m.helper",
+                    "name": "helper",
+                    "hop": 1,
+                    "strategy": "lsp",
+                }
+            ],
+            "callers": [
+                {
+                    "qualified_name": "proj.m.entry",
+                    "name": "entry",
+                    "hop": 1,
+                    "strategy": caller_strategy,
+                }
+            ],
+        }
+    }
+    rows = {
+        "helper": _row("helper", "proj.m.helper", 7, 8),
+        "entry": _row("entry", "proj.m.entry", 4, 5),
+    }
+
+    class Resolving(Stub):
+        def search(self, project, query, limit=25, semantic=None):
+            self.searches.append(query)
+            return [rows[query]] if query in rows else self._results
+
+    return Resolving(
+        tmp_path, results=[_row("target", "proj.m.target", 1, 2)], trace=trace
+    )
+
+
+@pytest.mark.asyncio
+async def test_a_single_caller_outranks_a_single_callee_for_a_caller_question(tmp_path):
+    ctx = await build(_one_each(tmp_path), "what calls target", cwd=str(tmp_path))
+    names = [s.name for s in ctx.symbols]
+    assert names.index("entry") < names.index("helper"), names
+
+
+@pytest.mark.asyncio
+async def test_an_unresolved_caller_is_not_promoted(tmp_path):
+    """The engine reporting that it does not know a caller is not a caller."""
+    asked = await build(
+        _one_each(tmp_path, caller_strategy="unresolved"),
+        "what calls target",
+        cwd=str(tmp_path),
+    )
+    plain = await build(
+        _one_each(tmp_path, caller_strategy="unresolved"),
+        "how does target work",
+        cwd=str(tmp_path),
+    )
+
+    def score(ctx):
+        return next((s.score for s in ctx.symbols if s.name == "entry"), 0.0)
+
+    assert score(asked) == score(plain)
+
+
+@pytest.mark.asyncio
+async def test_backfill_finds_a_name_with_more_namesakes_than_rows(repo):
+    """`build` has dozens of namesakes; no row limit reaches the traced one, but
+    naming its parent does."""
+    trace = {
+        "proj.m.helper": {
+            "callers": [{"qualified_name": "proj.m.caller", "name": "caller", "hop": 1}]
+        }
+    }
+
+    class Crowded(Stub):
+        def search(self, project, query, limit=25, semantic=None):
+            self.searches.append(query)
+            if query == "caller":
+                return [_row("caller", f"proj.x{i}.caller") for i in range(limit)]
+            if query == "m caller":
+                return [_row("caller", "proj.m.caller", 7, 8)]
+            return self._results
+
+    c = Crowded(repo, results=[_row("helper", "proj.m.helper", 1, 2)], trace=trace)
+    ctx = await build(c, "helper", cwd=str(repo))
+
+    caller = next((s for s in ctx.symbols if s.qualified_name == "proj.m.caller"), None)
+    assert caller is not None
+    assert (caller.start_line, caller.end_line) == (7, 8)
