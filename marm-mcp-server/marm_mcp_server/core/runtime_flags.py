@@ -23,6 +23,8 @@ LLM_ENDPOINT = "llm.endpoint"
 LLM_MODEL = "llm.model"
 #: Extra directories to scan for models, joined with `os.pathsep`.
 LLM_MODEL_ROOTS = "llm.model_roots"
+#: Which analyst profile bounds a local answer: general, small or large.
+ANALYST_PROFILE = "analyst.profile"
 
 _SUPPRESS_PREFIX = "watch_suppressed."
 _UNINDEXABLE_PREFIX = "unindexable."
