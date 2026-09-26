@@ -30,8 +30,25 @@ def _stub(monkeypatch, reply: str) -> list[str]:
             project={"name": "p", "root_path": "/x/proj"},
             task=task,
             symbols=[
-                Symbol("svc.apply", "apply", "Function", "svc.py", 10, 40, seeded=True),
-                Symbol("svc.claim_row", "claim_row", "Function", "svc.py", 50, 60),
+                Symbol(
+                    "svc.apply",
+                    "apply",
+                    "Function",
+                    "svc.py",
+                    10,
+                    40,
+                    seeded=True,
+                    source="def apply(row):\n    # take the row first\n    claim_row(row)\n",
+                ),
+                Symbol(
+                    "svc.claim_row",
+                    "claim_row",
+                    "Function",
+                    "svc.py",
+                    50,
+                    60,
+                    source="def claim_row(row):\n    return row\n",
+                ),
             ],
         )
 
@@ -43,6 +60,7 @@ def _stub(monkeypatch, reply: str) -> list[str]:
     monkeypatch.setattr(cc, "build", build)
     monkeypatch.setattr(cc, "LocalBackend", lambda: object())
     monkeypatch.setattr(local_llm, "available", lambda *a, **k: "stub-model")
+    monkeypatch.setattr(local_llm, "endpoint_source", lambda: "environment")
     monkeypatch.setattr(local_llm, "complete", lambda *a, **k: reply)
     monkeypatch.setattr(local_llm, "stream", stream)
     return composed
@@ -57,7 +75,7 @@ def _events(body: str) -> list[tuple[str, dict]]:
 
 
 @pytest.mark.parametrize(
-    ("reply", "status"), [(GROUNDED, "ok"), (INVENTED, "unverified")]
+    ("reply", "status"), [(GROUNDED, "ok"), (INVENTED, "rejected")]
 )
 def test_http_tool_reports_the_verdict(monkeypatch, tmp_path, reply, status):
     client = local_client(load_isolated_server(monkeypatch, tmp_path).app)
@@ -68,12 +86,12 @@ def test_http_tool_reports_the_verdict(monkeypatch, tmp_path, reply, status):
     ).json()
 
     assert body["answer_status"] == status
-    if status == "unverified":
+    if status == "rejected":
         assert body["answer_unresolved"] == ["persist_all_rows"]
 
 
 @pytest.mark.parametrize(
-    ("reply", "status"), [(GROUNDED, "ok"), (INVENTED, "unverified")]
+    ("reply", "status"), [(GROUNDED, "ok"), (INVENTED, "rejected")]
 )
 def test_http_stream_sends_one_composition_then_the_verdict(
     monkeypatch, tmp_path, reply, status
@@ -95,7 +113,7 @@ def test_http_stream_sends_one_composition_then_the_verdict(
 
 
 @pytest.mark.parametrize(
-    ("reply", "status"), [(GROUNDED, "ok"), (INVENTED, "unverified")]
+    ("reply", "status"), [(GROUNDED, "ok"), (INVENTED, "rejected")]
 )
 def test_stdio_tool_reports_the_verdict(monkeypatch, tmp_path, reply, status):
     from test_stdio_transport import _isolated_stdio
