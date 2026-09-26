@@ -45,6 +45,9 @@ class RelationshipPair(NamedTuple):
 class ExtractionResult(NamedTuple):
     entities: list[Entity]
     relationship_pairs: list[RelationshipPair]
+    # False when no model could run: the result is empty for lack of a model,
+    # not because the text held nothing.
+    available: bool = True
 
 
 _nlp = None
@@ -164,14 +167,15 @@ def extract_entities(content: str) -> ExtractionResult:
     """
     nlp = _load_nlp_lazily()
     if nlp is None:
-        return ExtractionResult(entities=[], relationship_pairs=[])
+        return ExtractionResult(entities=[], relationship_pairs=[], available=False)
 
     doc = nlp(content)
     seen_names: dict[str, str] = {}
     seen_spans: dict[str, "Span"] = {}
 
     for ent in doc.ents:
-        name = ent.text.strip()
+        # A span can straddle a line wrap; the name must not carry it.
+        name = " ".join(ent.text.split())
         if not name or name in seen_names:
             continue
         label = ent.label_ if ent.label_ in _KEPT_NER_LABELS else None
@@ -183,7 +187,7 @@ def extract_entities(content: str) -> ExtractionResult:
         seen_spans[name] = ent
 
     for chunk in doc.noun_chunks:
-        name = chunk.text.strip()
+        name = " ".join(chunk.text.split())
         if not name or name in seen_names:
             continue
         if _STOPWORD_ONLY_SKIP and all(tok.is_stop or tok.is_punct for tok in chunk):

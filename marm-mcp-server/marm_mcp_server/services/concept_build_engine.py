@@ -1,3 +1,4 @@
+import html
 import threading
 from collections.abc import Callable, Iterable, Iterator
 from typing import Optional
@@ -268,7 +269,12 @@ def _run_build(
                     mem_platform = row[4] if len(row) > 4 else None
                     memories_processed += 1
                     try:
-                        result = extract_entities(content)
+                        # Stored content is HTML-escaped; parse what was written.
+                        result = extract_entities(html.unescape(content))
+                        # It fails open with an empty result; that is a failure
+                        # to retry, not a memory with nothing in it.
+                        if not result.available:
+                            raise RuntimeError("concept extraction unavailable")
                     except Exception as e:
                         _safe_print(
                             f"Concept extraction failed for memory {mem_id}: {e}"
@@ -343,11 +349,13 @@ def _run_build(
                                     {"entity": canonical_name, "candidates": candidates}
                                 )
 
+                    asserted: set[tuple[int, int, str]] = set()
                     for name_a, name_b, predicate in result.relationship_pairs:
                         id_a = name_to_id.get(name_a)
                         id_b = name_to_id.get(name_b)
                         if id_a is None or id_b is None:
                             continue
+                        asserted.add((id_a, id_b, predicate))
                         try:
                             if concept_db.store_relationship(
                                 conn,
@@ -364,6 +372,18 @@ def _run_build(
                                 f"Concept relationship write failed for memory {mem_id}: {e}"
                             )
                             memory_failed = True
+
+                    # An edited memory replaces what it said: withdraw whatever
+                    # its previous text contributed and this extraction did
+                    # not repeat. Skipped after a failed write, which would
+                    # otherwise strip citations that are still true.
+                    if not memory_failed:
+                        concept_db.retract_memory_provenance(
+                            conn,
+                            [mem_id],
+                            keep_entities=name_to_id.values(),
+                            keep_relationships=asserted,
+                        )
 
                     binding = None
                     if mem_project:

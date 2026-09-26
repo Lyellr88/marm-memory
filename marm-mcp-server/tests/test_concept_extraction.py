@@ -116,8 +116,11 @@ def unavailable_concept_model(monkeypatch):
 
 
 def test_extract_entities_fails_open_when_model_unavailable(unavailable_concept_model):
+    """Fail-open, but not silently: the empty result says it had no model."""
     result = extract_entities("MARM stores memories with fastembed embeddings.")
-    assert result == ExtractionResult(entities=[], relationship_pairs=[])
+    assert result == ExtractionResult(
+        entities=[], relationship_pairs=[], available=False
+    )
 
 
 def test_load_nlp_lazily_returns_none_without_model(unavailable_concept_model):
@@ -147,6 +150,48 @@ def test_extract_entities_real_typed_predicate():
     result = extract_entities("The team fixed the auth bug yesterday.")
     predicates = {(p.source, p.target): p.predicate for p in result.relationship_pairs}
     assert any(pred == "fixes" for pred in predicates.values())
+
+
+@pytest.mark.skipif(
+    not _SPACY_INSTALLED,
+    reason="spaCy is not installed in this test environment",
+)
+def test_a_name_wrapped_across_lines_is_stored_on_one_line():
+    """Memories are often hard-wrapped, and a noun phrase that straddles the
+    wrap came back with the newline inside it, as a different entity from the
+    same phrase on one line."""
+    wrapped_only = extract_entities(
+        "The team measured the rendering-heavy\nbench on the new frame\nscheduler."
+    )
+    assert "the rendering-heavy bench" in [e.name for e in wrapped_only.entities]
+
+    result = extract_entities(
+        "The team measured the rendering-heavy\nbench on the new frame\n"
+        "scheduler, then reran the rendering-heavy bench."
+    )
+    names = [e.name for e in result.entities]
+    assert names, "the model extracted nothing, so this proves nothing"
+    assert not [n for n in names if any(c.isspace() and c != " " for c in n)]
+    assert not [n for n in names if "  " in n]
+    # The wrapped and the one-line mention are one entity, not two.
+    assert names.count("the rendering-heavy bench") == 1
+    pairs = {(p.source, p.target) for p in result.relationship_pairs}
+    assert ("the rendering-heavy bench", "the new frame scheduler") in pairs
+    for source, target in pairs:
+        assert "\n" not in source and "\n" not in target
+
+
+@pytest.mark.skipif(
+    not _SPACY_INSTALLED,
+    reason="spaCy is not installed in this test environment",
+)
+def test_a_named_entity_wrapped_across_lines_is_stored_on_one_line():
+    """The NER path, separately: a person's name split by the wrap."""
+    names = {
+        e.name for e in extract_entities("Ryan met Ada\nLovelace yesterday.").entities
+    }
+    assert "Ada Lovelace" in names
+    assert not [n for n in names if "\n" in n]
 
 
 def test_lowest_common_ancestor_finds_shared_verb_root():

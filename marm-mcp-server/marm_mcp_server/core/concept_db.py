@@ -1,6 +1,7 @@
 import json
 import os
 import sqlite3
+from collections.abc import Iterable
 from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
@@ -840,53 +841,83 @@ class ConceptDB:
                 "entities_updated": 0,
                 "entities_deleted": 0,
             }
-
         with self.get_connection() as conn:
-            placeholders = ",".join("?" for _ in deleted_ids)
-            rel_cursor = conn.execute(
-                f"DELETE FROM relationships WHERE memory_id IN ({placeholders})",
-                list(deleted_ids),
-            )
+            counts = self.retract_memory_provenance(conn, deleted_ids)
+        return {"status": "success", **counts}
 
-            entities_updated = 0
-            entities_deleted = 0
-            entity_rows = conn.execute(
-                "SELECT id, source_memory_ids FROM entities"
+    def retract_memory_provenance(
+        self,
+        conn: sqlite3.Connection,
+        memory_ids: Iterable[str],
+        *,
+        keep_entities: Iterable[int] = (),
+        keep_relationships: Iterable[tuple[int, int, str]] = (),
+    ) -> dict:
+        """Withdraw what these memories contributed to the graph, on `conn`.
+
+        What `keep_*` names is what a re-extraction just re-asserted, so it
+        stays, with its ids. An entity another memory still cites keeps that
+        citation; one left citing nothing goes, with its relationships and
+        code links.
+        """
+        kept_entities = set(keep_entities)
+        kept_relationships = set(keep_relationships)
+        ids = {str(memory_id) for memory_id in memory_ids}
+        if not ids:
+            return {
+                "relationships_deleted": 0,
+                "entities_updated": 0,
+                "entities_deleted": 0,
+            }
+        placeholders = ",".join("?" for _ in ids)
+        stale = [
+            rel_id
+            for rel_id, source_id, target_id, predicate in conn.execute(
+                "SELECT id, source_id, target_id, predicate FROM relationships "
+                f"WHERE memory_id IN ({placeholders})",
+                list(ids),
             ).fetchall()
-            for entity_id, source_json in entity_rows:
-                try:
-                    source_ids = [str(item) for item in json.loads(source_json or "[]")]
-                except (TypeError, ValueError, json.JSONDecodeError):
-                    source_ids = []
-                remaining = [
-                    memory_id
-                    for memory_id in source_ids
-                    if memory_id not in deleted_ids
-                ]
-                if remaining == source_ids:
-                    continue
-                if remaining:
-                    conn.execute(
-                        "UPDATE entities SET source_memory_ids = ? WHERE id = ?",
-                        (json.dumps(remaining), entity_id),
-                    )
-                    entities_updated += 1
-                    continue
-
+            if (source_id, target_id, predicate) not in kept_relationships
+        ]
+        conn.executemany(
+            "DELETE FROM relationships WHERE id = ?", [(rel_id,) for rel_id in stale]
+        )
+        # A textual prefilter; the JSON parse below is the real test.
+        where = " OR ".join("source_memory_ids LIKE ?" for _ in ids)
+        entity_rows = conn.execute(
+            f"SELECT id, source_memory_ids FROM entities WHERE {where}",
+            [f'%"{memory_id}"%' for memory_id in ids],
+        ).fetchall()
+        entities_updated = 0
+        entities_deleted = 0
+        for entity_id, source_json in entity_rows:
+            if entity_id in kept_entities:
+                continue
+            try:
+                source_ids = [str(item) for item in json.loads(source_json or "[]")]
+            except (TypeError, ValueError, json.JSONDecodeError):
+                source_ids = []
+            remaining = [memory_id for memory_id in source_ids if memory_id not in ids]
+            if remaining == source_ids:
+                continue
+            if remaining:
                 conn.execute(
-                    "DELETE FROM relationships WHERE source_id = ? OR target_id = ?",
-                    (entity_id, entity_id),
+                    "UPDATE entities SET source_memory_ids = ? WHERE id = ?",
+                    (json.dumps(remaining), entity_id),
                 )
-                conn.execute(
-                    "DELETE FROM entity_code_links WHERE entity_id = ?",
-                    (entity_id,),
-                )
-                conn.execute("DELETE FROM entities WHERE id = ?", (entity_id,))
-                entities_deleted += 1
-
+                entities_updated += 1
+                continue
+            conn.execute(
+                "DELETE FROM relationships WHERE source_id = ? OR target_id = ?",
+                (entity_id, entity_id),
+            )
+            conn.execute(
+                "DELETE FROM entity_code_links WHERE entity_id = ?", (entity_id,)
+            )
+            conn.execute("DELETE FROM entities WHERE id = ?", (entity_id,))
+            entities_deleted += 1
         return {
-            "status": "success",
-            "relationships_deleted": rel_cursor.rowcount,
+            "relationships_deleted": len(stale),
             "entities_updated": entities_updated,
             "entities_deleted": entities_deleted,
         }
