@@ -10,14 +10,22 @@ happens to match will outrank the class everything calls.
 """
 
 import asyncio
-import re
-from collections.abc import Iterator
+from collections.abc import Callable, Coroutine, Iterator
+from typing import TYPE_CHECKING, Any
+
+import anyio.from_thread
+import structlog
 
 from ...config.env_parsing import _safe_int
 from .backend import GraphUnavailable, LocalBackend
 from .compose import Context, Symbol, build
 from .format import render
 from .project import short_name
+
+logger = structlog.get_logger(__name__)
+
+if TYPE_CHECKING:
+    from ..analyst import Brief
 
 #: Server-wide floor for how much `marm_code_context` returns, so an operator
 #: can quiet every agent at once instead of each caller passing `detail`.
@@ -50,6 +58,7 @@ async def build_code_context(
     include_graph: bool = False,
     detail: int | None = None,
     answer: bool = False,
+    analyst_mode: str = "read_only",
 ) -> dict:
     """Run the pipeline and return both the rendered text and its structure.
 
@@ -62,9 +71,72 @@ async def build_code_context(
     except GraphUnavailable as exc:
         return _unavailable_payload(exc)
     payload = serialise(ctx, task, include_graph=include_graph, detail=detail)
-    if answer:
-        payload.update(await answer_from_context(ctx, task))
+    if not answer:
+        if analyst_mode != "read_only":
+            payload["analyst"] = _analyst_result(
+                analyst_mode, [], [{"content": "", "reason": "answer not requested"}]
+            )
+        return payload
+    brief = await _analyse_brief(
+        ctx, task, backend=backend, project=project, cwd=cwd, budget=budget
+    )
+    payload.update(brief.to_answer_fields())
+    if analyst_mode != "read_only":
+        payload["analyst"] = await _review_brief(brief, task, ctx, analyst_mode)
     return payload
+
+
+async def _review_brief(
+    brief: "Brief", task: str, ctx: "Context", analyst_mode: str
+) -> dict:
+    """Stage the brief's verified conclusions; under guardrails, decide them."""
+    from ...core.memory import memory
+    from ..analyst.review import auto_apply, stage_conclusions
+
+    # The answer is already verified; a failure here must cost the review only.
+    try:
+        staged = await stage_conclusions(
+            memory,
+            brief,
+            task,
+            session_name=f"analyst:{short_name(ctx.project)}",
+            project=_memory_scope(ctx),
+        )
+        result = _analyst_result(analyst_mode, staged["staged"], staged["skipped"])
+        if analyst_mode == "guardrails":
+            result["decisions"] = await auto_apply(
+                memory, staged["staged"], source_text=None
+            )
+    except Exception:
+        logger.exception("analyst.review_failed", mode=analyst_mode)
+        return _analyst_result(
+            analyst_mode, [], [{"content": "", "reason": "review failed"}]
+        )
+    return result
+
+
+def _on_server_loop(make: Callable[[], Coroutine[Any, Any, dict]]) -> dict:
+    """Run a coroutine on the server's own loop from the stream's worker thread.
+
+    Guardrails may write through the write queue, which is bound to that loop.
+    A caller with no worker thread (a direct call) has no loop to reach.
+    """
+    try:
+        return anyio.from_thread.run(make)
+    except RuntimeError:
+        return asyncio.run(make())
+
+
+def _analyst_result(mode: str, staged: list, skipped: list) -> dict:
+    return {"mode": mode, "staged": staged, "skipped": skipped, "decisions": []}
+
+
+def _memory_scope(ctx: "Context") -> str:
+    """The memory scope bound to this graph; staged rows are recalled by it."""
+    from ...core.code_project_bindings import get_by_graph_project
+
+    binding = get_by_graph_project(ctx.project.get("name", ""))
+    return binding.memory_project if binding else short_name(ctx.project)
 
 
 def _unavailable_payload(exc: GraphUnavailable) -> dict:
@@ -186,168 +258,53 @@ def serialise(
 # ---------------------------------------------------------------------------
 # Grounded answering.
 #
-# The retrieval half of RAG has been here since `marm_code_context` shipped:
-# seed on the task, expand through the call graph, rank by personalised
-# PageRank, read the source, join memory. What was missing was the generation
-# half, and the reason was that MARM has no model. When a local one is
-# reachable, this closes the loop -- and it answers ONLY from the composed
-# context, so the ranking is what decides what the answer can be about.
-
-_ANSWER_SYSTEM = """\
-You answer questions about a specific codebase, using ONLY the context below.
-
-RULES
-1. Use only the provided symbols, their source, and the recorded memories. If \
-the context does not contain the answer, say exactly what is missing and stop. \
-Never fill a gap from general knowledge of similar projects -- a plausible \
-answer about code that is not this code is the worst outcome here.
-2. Cite the symbols you used in square brackets inline, spelled exactly as \
-the context spells them: [build_code_context]. Cite only names that appear in \
-the context above.
-3. Be concrete: name files, functions, and line numbers where the context \
-gives them.
-4. Be brief. Lead with the answer, then the evidence for it.
-5. If recorded memory and the source disagree, say so -- that disagreement is \
-usually the most useful thing you can report.\
-"""
-
-#: Generation is the slow step and the context is already budgeted, so the
-#: answer gets its own modest ceiling rather than the model's full window.
-_ANSWER_TOKENS = _safe_int("MARM_CODE_CONTEXT_ANSWER_TOKENS", 900)
+# MARM retrieves; a local model, when the operator has enabled one, answers
+# only from what MARM retrieved; and deterministic code judges the answer
+# before it is returned. The analyst package owns all three steps -- the
+# evidence packet, the bounded model call, and the verification -- so both
+# paths below share one implementation and one verdict.
 
 
-async def answer_from_context(ctx: "Context", task: str) -> dict:
+async def answer_from_context(
+    ctx: "Context",
+    task: str,
+    *,
+    backend: LocalBackend | None = None,
+    project: str | None = None,
+    cwd: str | None = None,
+    budget: int | None = None,
+) -> dict:
     """Answer `task` from the composed context, or explain why it could not.
 
     Returns keys to merge into the response. The absence of a model is a
     reported state rather than an error: every other part of the composition
-    is still valid and useful without it, and failing the whole call because an
-    optional container is down would be a poor trade.
+    is still valid and useful without it.
     """
-    from ...services import local_llm
-
-    model = await asyncio.to_thread(local_llm.available)
-    if model is None:
-        return {
-            "answer": None,
-            "answer_status": "unavailable",
-            "answer_hint": (
-                "No local model is reachable, so the ranked context above is "
-                "the whole answer. Set MARM_LLM_URL to an OpenAI-compatible "
-                "server on loopback to enable grounded answering."
-            ),
-        }
-
-    grounding = render(ctx)
-    text = await asyncio.to_thread(
-        local_llm.complete,
-        _ANSWER_SYSTEM,
-        f"{grounding}\n\n---\n\nQuestion: {task}\n\nAnswer, citing symbols:",
-        max_tokens=_ANSWER_TOKENS,
+    brief = await _analyse_brief(
+        ctx, task, backend=backend, project=project, cwd=cwd, budget=budget
     )
-    if not text:
-        return {
-            "answer": None,
-            "answer_status": "failed",
-            "answer_hint": (
-                "The local model did not return an answer in time. The ranked "
-                "context above is unaffected."
-            ),
-        }
-
-    citations, unresolved = _check_citations(text, ctx)
-    status, hint = _grounding(citations, unresolved)
-    out = {
-        "answer": text,
-        "answer_status": status,
-        "answer_model": model,
-        "answer_citations": citations,
-        "answer_unresolved": unresolved,
-    }
-    if hint:
-        out["answer_hint"] = hint
-    return out
+    return brief.to_answer_fields()
 
 
-# `[name]`, `[`name`]` or `[a, b]`, but not the text of a markdown link.
-_CITATION = re.compile(r"\[([^\[\]\n]{1,200})\](?!\()")
-_CITATION_SEPARATOR = re.compile(r"[,;]")
-_IDENTIFIER = re.compile(r"[A-Za-z_][\w.:]*")
-# What separates a cited identifier from a bracketed word: an underscore, a
-# qualifying separator, or an inner capital. `[optional]` and `[1]` are prose.
-_IDENTIFIER_MARK = re.compile(r"[_.:]|[a-z][A-Z]")
+async def _analyse_brief(
+    ctx: "Context",
+    task: str,
+    *,
+    backend: LocalBackend | None,
+    project: str | None,
+    cwd: str | None,
+    budget: int | None,
+) -> "Brief":
+    from ..analyst import Budget, analyse
 
-
-def _check_citations(text: str, ctx: "Context") -> tuple[list[dict], list[str]]:
-    """Map the names a model cited onto real symbols, and report the rest.
-
-    Resolution is against the BARE name, because that is what the model can
-    see: `format.render` writes `**name** (Kind)` and never the qualified name.
-
-    An identifier-shaped citation that resolves to nothing is returned in the
-    second list, never as a citation: the Console renders citations as links
-    to source, and an invented one would be a dead link presented as evidence.
-    """
-    by_name: dict[str, Symbol] = {}
-    for symbol in ctx.symbols:
-        for key in (symbol.name, symbol.qualified_name):
-            if key:
-                by_name.setdefault(key.casefold(), symbol)
-
-    seen: set[str] = set()
-    out: list[dict] = []
-    unresolved: list[str] = []
-    for match in _CITATION.finditer(text):
-        # Each name in `[a, b]` is its own citation, so an invented one cannot
-        # ride along beside a real one.
-        for part in _CITATION_SEPARATOR.split(match.group(1)):
-            part = part.strip()
-            backticked = part.startswith("`")
-            name = part.strip("`").split("(")[0].strip()
-            if not name:
-                continue
-            resolved = by_name.get(name.casefold())
-            if resolved is None:
-                if (
-                    _IDENTIFIER.fullmatch(name)
-                    and (backticked or _IDENTIFIER_MARK.search(name))
-                    and name not in unresolved
-                ):
-                    unresolved.append(name)
-                continue
-            if resolved.qualified_name in seen:
-                continue
-            seen.add(resolved.qualified_name)
-            out.append(
-                {
-                    "name": resolved.name,
-                    "qualified_name": resolved.qualified_name,
-                    "file_path": resolved.file_path,
-                    "start_line": resolved.start_line,
-                }
-            )
-    return out, unresolved
-
-
-def _grounding(citations: list[dict], unresolved: list[str]) -> tuple[str, str | None]:
-    """`ok` only when the answer cites the context and cites nothing else.
-
-    The same verdict on both paths, so the Console cannot call one answer
-    grounded that an agent would be told is not.
-    """
-    if unresolved:
-        return "unverified", (
-            "The answer cites "
-            + ", ".join(unresolved[:5])
-            + ", which the composed context does not contain, so it is not "
-            "grounded in the evidence shown."
-        )
-    if not citations:
-        return "unverified", (
-            "No citation in the answer resolves to a symbol in the composed "
-            "context, so it is not grounded in the evidence shown."
-        )
-    return "ok", None
+    return await analyse(
+        ctx,
+        task,
+        budget=Budget.from_env(context_chars=budget),
+        backend=backend,
+        project=project,
+        cwd=cwd,
+    )
 
 
 def stream_answer(
@@ -358,25 +315,17 @@ def stream_answer(
     *,
     include_graph: bool = False,
     detail: int | None = None,
+    analyst_mode: str = "read_only",
 ) -> Iterator[tuple[str, dict]]:
     """Compose ONCE, send that composition, then answer from it as it is written.
 
     The first event is `context`: the same payload `build_code_context` would
     return, for the caller to render. The answer that follows is written from
-    that very composition, so what is displayed and what the answer is grounded
-    in cannot be two different retrievals.
-
-    Split from `answer_from_context` rather than sharing it, because the two
-    have genuinely different shapes: that one returns a finished dict, this one
-    is a generator whose caller is a response body. What they DO share -- the
-    system prompt, the token ceiling, the grounding text and the citation
-    check -- is imported, not duplicated.
-
-    Yields `(event, payload)` tuples. The citation pass runs on the assembled
-    text at the end, because a citation cannot be resolved from a fragment: the
-    marker may still be arriving one character at a time.
+    that very composition -- or, after an allowed follow-up, from its merged
+    successor, which is re-sent as `context` first -- so what is displayed and
+    what the answer is grounded in are never two different retrievals.
     """
-    from ...services import local_llm
+    from ..analyst import Budget, stream_analysis
 
     backend = LocalBackend()
     try:
@@ -391,81 +340,21 @@ def stream_answer(
             {"message": unavailable["message"], "hint": unavailable["hint"]},
         )
         return
-    yield ("context", serialise(ctx, task, include_graph=include_graph, detail=detail))
 
-    if local_llm.available() is None:
-        yield (
-            "error",
-            {
-                "message": "No local model is reachable.",
-                "hint": (
-                    "Set MARM_LLM_URL to an OpenAI-compatible server on loopback "
-                    "to enable grounded answering. The ranked context is "
-                    "unaffected."
-                ),
-            },
-        )
-        return
+    def render_context(current: "Context") -> dict:
+        return serialise(current, task, include_graph=include_graph, detail=detail)
 
-    # The reader gets the shape of the answer before its first word: which
-    # project, how many symbols it is grounded in, which model is writing.
-    yield (
-        "start",
-        {
-            "project": short_name(ctx.project),
-            "symbol_count": len(ctx.symbols),
-            "model": local_llm.available(),
-        },
+    def review(brief: "Brief") -> dict:
+        return _on_server_loop(lambda: _review_brief(brief, task, ctx, analyst_mode))
+
+    yield ("context", render_context(ctx))
+    yield from stream_analysis(
+        ctx,
+        task,
+        budget=Budget.from_env(context_chars=budget),
+        render_context=render_context,
+        backend=backend,
+        project=project,
+        cwd=cwd,
+        after=None if analyst_mode == "read_only" else review,
     )
-
-    prompt = f"{render(ctx)}\n\n---\n\nQuestion: {task}\n\nAnswer, citing symbols:"
-    max_tokens = _ANSWER_TOKENS
-    finished: dict = {}
-    pieces: list[str] = []
-    for attempt in range(2):
-        finished.clear()
-        pieces = []
-        for piece in local_llm.stream(
-            _ANSWER_SYSTEM, prompt, max_tokens=max_tokens, finished=finished
-        ):
-            pieces.append(piece)
-            yield ("delta", {"text": piece})
-        wider = min(max_tokens * 4, local_llm.MAX_RETRY_TOKENS)
-        if attempt or finished.get("reason") != "length" or wider <= max_tokens:
-            break
-        # The same one wider retry `complete` makes when a reasoning model
-        # spends its budget before it finishes writing. Text already sent is
-        # withdrawn first, so the reader never sees two answers spliced.
-        max_tokens = wider
-        yield ("restart", {"reason": "length", "max_tokens": max_tokens})
-
-    answer = "".join(pieces)
-    if not answer.strip():
-        # A reasoning model can spend its whole budget in `reasoning` and emit no
-        # content at all. Reporting that as a successful `done` with length 0
-        # hands the reader a confident blank, and disagrees with the
-        # non-streaming path, which already treats empty content as no answer.
-        yield (
-            "error",
-            {
-                "message": (
-                    "the model produced no answer text. A reasoning model may "
-                    "have spent its budget before writing; raise "
-                    "MARM_CODE_CONTEXT_ANSWER_TOKENS. The ranked context is "
-                    "unaffected."
-                )
-            },
-        )
-        return
-    citations, unresolved = _check_citations(answer, ctx)
-    status, hint = _grounding(citations, unresolved)
-    done: dict = {
-        "citations": citations,
-        "unresolved": unresolved,
-        "status": status,
-        "length": len(answer),
-        "truncated": finished.get("reason") == "length",
-    }
-    if hint:
-        done["hint"] = hint
-    yield ("done", done)

@@ -170,6 +170,9 @@ afterEach(() => {
   answerState.model = undefined;
   answerState.start = vi.fn();
   answerState.reset = vi.fn();
+  for (const key of ['grounding', 'unresolved', 'hint', 'packet', 'verification', 'modelInfo', 'analyst']) {
+    delete (answerState as Record<string, unknown>)[key];
+  }
   projectState.status = 'ready';
   window.history.replaceState(null, '', '/');
 });
@@ -701,4 +704,177 @@ describe('CodeContextPage', () => {
     expect(screen.getByText('reached via the call graph')).toBeTruthy();
   });
 
+
+  describe('the local evidence analyst', () => {
+    const PACKET = {
+      packet_id: 'pkt-7c1e',
+      project: 'marm-systems',
+      task: 'how does recall rank',
+      symbols: [
+        { handle: 'S1', qualified_name: 'marm.recall.rank_memories', name: 'rank_memories', file_path: 'marm/recall.py', start_line: 10, end_line: 11 },
+      ],
+      memories: [{ handle: 'M1', memory_id: 'm1', content: 'ranking is personalised PageRank' }],
+    };
+    const VERIFIED = {
+      state: 'verified', score: 1, citation_coverage: 1, source_span_support: 1,
+      graph_memory_consistency: 1, claims: 1, cited_claims: 1, failures: [], hard_failures: [], abstained: false,
+    };
+
+    function finished(over: Record<string, unknown>) {
+      answerState.status = 'done';
+      Object.assign(answerState as Record<string, unknown>, over);
+    }
+
+    it('labels a rejected answer as rejected, never grounded, and says why', () => {
+      finished({
+        grounding: 'rejected',
+        hint: 'The answer cites persist_all, which the evidence packet does not contain.',
+        verification: { ...VERIFIED, state: 'rejected', score: 0, hard_failures: ['reference not in packet: [persist_all]'] },
+      });
+      answerState.text = 'It calls [persist_all].';
+      render(<CodeContextPage />);
+
+      expect(screen.getByText('rejected answer')).toBeTruthy();
+      expect(screen.queryByText('grounded answer')).toBeNull();
+      expect(screen.getAllByText(/persist_all/).length).toBeGreaterThan(0);
+      expect(screen.getByText('Rejected')).toBeTruthy();
+    });
+
+    it('shows how a finished answer was verified', () => {
+      finished({ grounding: 'ok', verification: VERIFIED });
+      answerState.text = 'It sorts [S1].';
+      render(<CodeContextPage />);
+
+      expect(screen.getByText('Verified')).toBeTruthy();
+      expect(screen.getByText('citation coverage')).toBeTruthy();
+    });
+
+    it('links a cited handle while the answer is still arriving', () => {
+      answerState.status = 'streaming';
+      answerState.text = 'It sorts [S1] by score';
+      (answerState as Record<string, unknown>).packet = PACKET;
+      render(<CodeContextPage />);
+
+      expect(screen.getByRole('button', { name: 'rank_memories' })).toBeTruthy();
+    });
+
+    it('links a cited handle once the server has resolved it', () => {
+      finished({ grounding: 'ok' });
+      answerState.text = 'It sorts [S1].';
+      answerState.citations = [
+        { handle: 'S1', kind: 'symbol', name: 'rank_memories', qualified_name: 'marm.recall.rank_memories', file_path: 'marm/recall.py', start_line: 10 },
+      ];
+      render(<CodeContextPage />);
+
+      expect(screen.getByRole('button', { name: 'rank_memories' })).toBeTruthy();
+    });
+
+    it('lists a cited memory without pretending it is a file', () => {
+      finished({ grounding: 'ok' });
+      answerState.text = 'It ranks by PageRank [M1].';
+      answerState.citations = [{ handle: 'M1', kind: 'memory', name: 'M1', memory_id: 'm1' }];
+      (answerState as Record<string, unknown>).packet = PACKET;
+      render(<CodeContextPage />);
+
+      expect(screen.queryByText(/:undefined/)).toBeNull();
+      // Linked inline and listed under the answer; never as a source file.
+      expect(screen.getAllByRole('button', { name: /M1/ }).length).toBeGreaterThan(0);
+      expect(screen.queryByText('Sources it used')).toBeNull();
+    });
+
+    it('jumps to the cited memory, not just to its tab', async () => {
+      const user = userEvent.setup();
+      const scrolled: Element[] = [];
+      const original = Element.prototype.scrollIntoView;
+      Element.prototype.scrollIntoView = function (this: Element) {
+        scrolled.push(this);
+      };
+      try {
+        buildState.data = SUCCESS;
+        finished({ grounding: 'ok' });
+        answerState.text = 'It ranks by PageRank [M1].';
+        answerState.citations = [{ handle: 'M1', kind: 'memory', name: 'M1', memory_id: 'm1' }];
+        (answerState as Record<string, unknown>).packet = PACKET;
+        render(<CodeContextPage />);
+
+        await user.click(screen.getAllByRole('button', { name: /M1/ })[0]);
+        await waitFor(() =>
+          expect(scrolled.some((el) => el.getAttribute('data-memory') === 'm1')).toBe(true),
+        );
+      } finally {
+        Element.prototype.scrollIntoView = original;
+      }
+    });
+
+    it('shows which model answered, how long it took, and from which packet', () => {
+      finished({
+        grounding: 'ok',
+        verification: VERIFIED,
+        packet: PACKET,
+        modelInfo: { id: 'local-model', endpoint_source: 'discovery', max_tokens: 900, elapsed_ms: 2240, stopped: null },
+      });
+      answerState.text = 'It sorts [S1].';
+      render(<CodeContextPage />);
+
+      expect(screen.getByText(/pkt-7c1e/)).toBeTruthy();
+      expect(screen.getByText(/2\.2 s/)).toBeTruthy();
+    });
+
+    it('says when the answer was cut off by its time budget', () => {
+      finished({
+        grounding: 'unverified',
+        modelInfo: { id: 'm', endpoint_source: null, max_tokens: 900, elapsed_ms: 90000, stopped: 'deadline' },
+      });
+      answerState.text = 'It sorts';
+      render(<CodeContextPage />);
+
+      expect(screen.getByText(/time budget/i)).toBeTruthy();
+    });
+
+    it('defaults the analyst to read-only and sends that mode with an answer', async () => {
+      const user = userEvent.setup();
+      render(<CodeContextPage />);
+
+      const mode = screen.getByRole('combobox', { name: /analyst/i }) as HTMLSelectElement;
+      expect(mode.value).toBe('read_only');
+      expect(mode.disabled).toBe(true);
+
+      await user.click(screen.getByRole('checkbox', { name: /answer it too/i }));
+      expect(mode.disabled).toBe(false);
+      await user.selectOptions(mode, 'manual_review');
+      await user.type(screen.getByLabelText('Task'), 'how does recall rank');
+      await user.click(screen.getByRole('button', { name: /compose context/i }));
+
+      await waitFor(() => expect(answerState.start).toHaveBeenCalledTimes(1));
+      expect(answerState.start.mock.calls[0][0]).toMatchObject({ analyst_mode: 'manual_review' });
+    });
+
+    it('points to the Distill queue when conclusions were staged', () => {
+      finished({
+        grounding: 'ok',
+        analyst: { mode: 'manual_review', staged: ['a', 'b'], skipped: [], decisions: [] },
+      });
+      answerState.text = 'It sorts [S1].';
+      render(<CodeContextPage />);
+
+      const link = screen.getByRole('link', { name: /2 conclusions staged for review/i });
+      expect(link.getAttribute('href')).toContain('/distill');
+    });
+
+    it('says what guardrails decided, applied or not', () => {
+      finished({
+        grounding: 'ok',
+        analyst: {
+          mode: 'guardrails',
+          staged: ['a'],
+          skipped: [],
+          decisions: [{ proposal_id: 'a', applied: false, decision: { apply: false, checks: {}, reason: 'review required: automatic apply is off (MARM_ANALYST_AUTO_APPLY is not 1)' } }],
+        },
+      });
+      answerState.text = 'It sorts [S1].';
+      render(<CodeContextPage />);
+
+      expect(screen.getByText(/automatic apply is off/)).toBeTruthy();
+    });
+  });
 });

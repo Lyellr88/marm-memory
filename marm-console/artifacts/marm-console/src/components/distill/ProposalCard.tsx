@@ -3,6 +3,7 @@ import { Badge, Button, cn } from '@/components/ui/core';
 import { Check, ChevronDown, ChevronRight, GitCompareArrows, Quote, Trash2, Wand2 } from 'lucide-react';
 import type { DistillProposal } from '@/lib/marm-types';
 import { CopyButton } from '@/components/code-context/shared';
+import { VerificationPanel } from '@/components/code-context/VerificationPanel';
 import { memoryContext } from '@/components/memory/shared';
 
 /** Verdict drives the whole card, so it gets the colour vocabulary the rest of
@@ -110,6 +111,15 @@ export function ProposalCard({
             {proposal.context_type}
           </Badge>
         )}
+        {proposal.origin === 'analyst' && (
+          <Badge
+            variant="outline"
+            className="border-cyan-400/40 text-[10px] text-cyan-200"
+            title="Staged by the Code Context analyst from a verified answer"
+          >
+            Analyst
+          </Badge>
+        )}
         {proposal.mode === 'generated' && (
           <Badge
             variant="outline"
@@ -148,6 +158,18 @@ export function ProposalCard({
         <Reasons reasons={proposal.reasons} />
       </div>
 
+      {proposal.verification && (
+        <div className="mt-3">
+          <VerificationPanel verification={proposal.verification} />
+        </div>
+      )}
+
+      {proposal.decision && (
+        <p className="mt-3 text-[11px] text-muted-foreground">
+          Guardrails: {proposal.decision.reason}
+        </p>
+      )}
+
       {proposal.evidence && (
         <div className="mt-3">
           <button
@@ -158,10 +180,15 @@ export function ProposalCard({
           >
             {showEvidence ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
             <Quote className="h-3 w-3" />
-            What was actually said
+            {proposal.origin === 'analyst' ? 'The source it cites' : 'What was actually said'}
           </button>
           {showEvidence && (
-            <blockquote className="mt-2 border-l-2 border-primary/30 bg-background/30 py-2 pl-3 pr-2 text-[12px] leading-relaxed text-muted-foreground">
+            <blockquote
+              className={cn(
+                'mt-2 border-l-2 border-primary/30 bg-background/30 py-2 pl-3 pr-2 text-[12px] leading-relaxed text-muted-foreground',
+                proposal.origin === 'analyst' && 'whitespace-pre-wrap font-mono text-[11px]',
+              )}
+            >
               {proposal.evidence}
             </blockquote>
           )}

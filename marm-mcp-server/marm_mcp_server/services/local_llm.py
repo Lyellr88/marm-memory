@@ -33,7 +33,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from typing import Any, Iterator, Optional
+from typing import Any, Generator, Optional
 
 import structlog
 
@@ -482,7 +482,7 @@ def stream(
     temperature: float = 0.0,
     timeout: Optional[float] = None,
     finished: Optional[dict[str, Any]] = None,
-) -> Iterator[str]:
+) -> Generator[str, None, None]:
     """Yield the reply in pieces as the model produces them.
 
     Total time is the same as `complete`; what changes is that a reader sees

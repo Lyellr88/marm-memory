@@ -68,3 +68,42 @@ describe('applyAnswerEvent', () => {
     expect(applyStreamEnd(failed)).toBe(failed);
   });
 });
+
+describe('the analyst fields', () => {
+  const packet = {
+    packet_id: 'p1',
+    project: 'demo',
+    task: 'how',
+    symbols: [{ handle: 'S1', qualified_name: 'pkg.apply', name: 'apply', file_path: 'a.py', start_line: 1, end_line: 9 }],
+    memories: [],
+  };
+  const verification = {
+    state: 'verified', score: 1, citation_coverage: 1, source_span_support: 1,
+    graph_memory_consistency: 1, claims: 1, cited_claims: 1, failures: [], hard_failures: [], abstained: false,
+  };
+
+  it('records the evidence packet', () => {
+    expect(applyAnswerEvent(streaming, 'packet', packet).packet?.packet_id).toBe('p1');
+  });
+
+  it('replaces the packet when a follow-up sends a new one', () => {
+    const first = applyAnswerEvent(streaming, 'packet', packet);
+    expect(applyAnswerEvent(first, 'packet', { ...packet, packet_id: 'p2' }).packet?.packet_id).toBe('p2');
+  });
+
+  it('takes the verification, model and analyst result from done', () => {
+    const analyst = { mode: 'manual_review', staged: ['x'], skipped: [], decisions: [] };
+    const done = applyAnswerEvent(streaming, 'done', {
+      citations: [], status: 'ok', verification, packet_id: 'p1',
+      model_info: { id: 'm', endpoint_source: 'discovery', max_tokens: 900, elapsed_ms: 12, stopped: null },
+      analyst,
+    });
+    expect(done.verification?.state).toBe('verified');
+    expect(done.modelInfo?.id).toBe('m');
+    expect(done.analyst).toEqual(analyst);
+  });
+
+  it('keeps a rejection a rejection', () => {
+    expect(applyAnswerEvent(streaming, 'done', { citations: [], status: 'rejected' }).grounding).toBe('rejected');
+  });
+});

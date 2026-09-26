@@ -1,4 +1,12 @@
-import type { AnswerGrounding, CodeContextCitation, CodeContextResult } from '@/lib/marm-types';
+import type {
+  AnalystResult,
+  AnswerGrounding,
+  AnswerModelInfo,
+  AnswerPacket,
+  AnswerVerification,
+  CodeContextCitation,
+  CodeContextResult,
+} from '@/lib/marm-types';
 
 /** The state of one streamed answer, as the Console renders it. */
 export interface AnswerStreamState {
@@ -15,6 +23,12 @@ export interface AnswerStreamState {
   truncated?: boolean;
   /** The composition the answer is written from: the stream's first event. */
   context?: CodeContextResult;
+  /** The evidence the model was given; a follow-up replaces it. */
+  packet?: AnswerPacket;
+  verification?: AnswerVerification;
+  modelInfo?: AnswerModelInfo;
+  /** Staged conclusions and guardrails decisions, when a mode asked for them. */
+  analyst?: AnalystResult;
 }
 
 export const IDLE_ANSWER: AnswerStreamState = { status: 'idle', text: '', citations: [] };
@@ -29,6 +43,8 @@ export function applyAnswerEvent(
   switch (name) {
     case 'context':
       return { ...prev, context: payload as unknown as CodeContextResult };
+    case 'packet':
+      return { ...prev, packet: payload as unknown as AnswerPacket };
     case 'start':
       return { ...prev, model: payload.model as string };
     case 'delta':
@@ -47,6 +63,9 @@ export function applyAnswerEvent(
         unresolved: (payload.unresolved as string[] | undefined) ?? [],
         hint: payload.hint as string | undefined,
         truncated: Boolean(payload.truncated),
+        verification: payload.verification as AnswerVerification | undefined,
+        modelInfo: payload.model_info as AnswerModelInfo | undefined,
+        analyst: payload.analyst as AnalystResult | undefined,
       };
     case 'error':
       return {
