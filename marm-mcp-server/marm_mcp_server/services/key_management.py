@@ -180,17 +180,20 @@ def keychain_lookup() -> tuple[str, str]:
     """Return ``(key, problem)`` for the key stored in the OS keychain.
 
     ``problem`` is empty when a key was found, and also when the keychain is
-    merely not installed -- the optional extra being absent is a supported
-    configuration, not a fault, and must not become startup noise for the many
+    not installed or has no usable OS backend. Both are supported
+    configurations, not faults, and must not become startup noise for the many
     installs that never opted in.
 
-    A keychain that *is* installed but broken (no backend, locked collection, a
-    read that raises) does come back with a reason, so a silent fall through to
+    A keychain that *is* installed but broken (backend resolution failure,
+    locked collection, a read that raises) does come back with a reason, so a
+    silent fall through to
     the plaintext file is never the only clue the user gets.
     """
     usable, reason = keychain_status()
     if not usable:
-        return "", "" if not keychain_installed() else reason
+        if not keychain_installed() or reason == "no OS keychain backend is available":
+            return "", ""
+        return "", reason
     keyring = _load_keyring()
     if keyring is None:
         return "", ""

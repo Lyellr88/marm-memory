@@ -145,6 +145,18 @@ def test_lookup_is_quiet_when_the_optional_extra_is_missing(monkeypatch):
     assert key_management.keychain_available() is False
 
 
+def test_lookup_is_quiet_when_keyring_has_no_os_backend(monkeypatch, memory_keychain):
+    """An installed optional extra without a usable backend still falls back."""
+    from conftest import _FailKeyring
+
+    monkeypatch.setattr(memory_keychain, "get_keyring", _FailKeyring)
+    key_management.reset_keychain_cache()
+
+    assert key_management.keychain_lookup() == ("", "")
+    assert key_management.keychain_installed() is True
+    assert key_management.keychain_available() is False
+
+
 def test_lookup_reports_a_broken_backend(monkeypatch, memory_keychain):
     def explode(service, username):
         raise RuntimeError("collection is locked")
