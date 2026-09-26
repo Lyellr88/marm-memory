@@ -33,7 +33,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from typing import Any, Iterator, Optional
+from typing import Any, Generator, Optional
 
 import structlog
 
@@ -310,7 +310,14 @@ def endpoint() -> Optional[str]:
     return url
 
 
-def _request(path: str, payload: Optional[dict], timeout: float) -> Optional[dict]:
+def _request(
+    path: str,
+    payload: Optional[dict],
+    timeout: float,
+    failure: Optional[dict[str, Any]] = None,
+) -> Optional[dict]:
+    """`failure`, when given, receives `http_status` for a refusal, which a
+    timeout or a dead connection does not have."""
     base = endpoint()
     if base is None:
         return None
@@ -325,6 +332,8 @@ def _request(path: str, payload: Optional[dict], timeout: float) -> Optional[dic
             decoded = json.loads(response.read().decode())
         return decoded if isinstance(decoded, dict) else None
     except (urllib.error.URLError, OSError, TimeoutError, ValueError) as exc:
+        if failure is not None and isinstance(exc, urllib.error.HTTPError):
+            failure["http_status"] = exc.code
         logger.debug("local_llm: request failed", path=path, error=str(exc))
         return None
 
@@ -387,6 +396,9 @@ def complete(
     temperature: float = 0.0,
     timeout: Optional[float] = None,
     json_object: bool = False,
+    schema: Optional[dict[str, Any]] = None,
+    widen: bool = True,
+    finished: Optional[dict[str, Any]] = None,
     _retrying: bool = False,
 ) -> Optional[str]:
     """One turn of chat completion. Returns the text, or None on any failure.
@@ -395,6 +407,11 @@ def complete(
     or grounded answering, where the same input should give the same output --
     a memory proposal that changes between two runs over one transcript is not
     a proposal a reviewer can act on.
+
+    `schema` asks the server to constrain the reply to a JSON schema, and is
+    dropped if the server refuses it; callers validate the reply either way.
+    `widen=False` makes `max_tokens` a hard cap: no wider retry. `finished`,
+    when given, receives the server's `finish_reason` as `finished["reason"]`.
     """
     model = available()
     if model is None:
@@ -410,11 +427,22 @@ def complete(
         "temperature": temperature,
         "stream": False,
     }
-    if json_object:
+    if schema is not None:
+        # The OpenAI shape, which LM Studio and llama.cpp both accept.
+        payload["response_format"] = {
+            "type": "json_schema",
+            "json_schema": {"name": "reply", "strict": True, "schema": schema},
+        }
+    elif json_object:
         payload["response_format"] = {"type": "json_object"}
 
-    body = _request("/v1/chat/completions", payload, timeout or TIMEOUT)
-    if body is None and json_object:
+    failure: dict[str, Any] = {}
+    body = _request(
+        "/v1/chat/completions", payload, timeout or TIMEOUT, failure=failure
+    )
+    # Only a refusal is retried: after a timeout the retry would spend the
+    # caller's time limit a second time.
+    if body is None and "response_format" in payload and "http_status" in failure:
         # `json_object` is an optimisation, not a requirement -- callers parse
         # defensively anyway. LM Studio REJECTS it outright: measured against
         # 0.3.x, `{"type":"json_object"}` returns HTTP 400
@@ -433,6 +461,8 @@ def complete(
     except (KeyError, IndexError, TypeError):
         logger.debug("local_llm: unexpected response shape")
         return None
+    if finished is not None:
+        finished["reason"] = choice.get("finish_reason")
     if isinstance(text, str) and text.strip():
         return text.strip()
 
@@ -442,7 +472,7 @@ def complete(
     # finish_reason="length" with content still "". Returning "" would hand
     # the caller a confident blank; None is the state every caller already
     # falls back from.
-    if choice.get("finish_reason") == "length" and not _retrying:
+    if choice.get("finish_reason") == "length" and widen and not _retrying:
         # A reasoning model can spend its whole budget in `reasoning` and
         # return content="", and auto-selection means the model can change
         # underneath this call -- so coping belongs here, not in each caller's
@@ -463,6 +493,8 @@ def complete(
                 temperature=temperature,
                 timeout=timeout,
                 json_object=json_object,
+                schema=schema,
+                finished=finished,
                 _retrying=True,
             )
     if choice.get("finish_reason") == "length":
@@ -482,7 +514,7 @@ def stream(
     temperature: float = 0.0,
     timeout: Optional[float] = None,
     finished: Optional[dict[str, Any]] = None,
-) -> Iterator[str]:
+) -> Generator[str, None, None]:
     """Yield the reply in pieces as the model produces them.
 
     Total time is the same as `complete`; what changes is that a reader sees
