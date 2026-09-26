@@ -80,6 +80,7 @@ async def propose(
     limit: int = DEFAULT_LIMIT,
     include_duplicates: bool = False,
     use_llm: bool = False,
+    review_mode: str = "manual",
 ) -> dict[str, Any]:
     """Extract, resolve, stage. Returns the proposals with their verdicts.
 
@@ -109,6 +110,8 @@ async def propose(
             "staged": 0,
             "session_name": session_name,
             "mode": mode,
+            "review_mode": review_mode,
+            **({"guardrails": []} if review_mode == "guardrails" else {}),
             "note": (
                 "Nothing in this text reads like a durable fact. That is the "
                 "usual outcome for a conversation that was mostly doing rather "
@@ -195,14 +198,21 @@ async def propose(
                 record["note"] = "already proposed, or already reviewed"
             proposals.append(record)
 
-    return {
+    result: dict[str, Any] = {
         "status": "success",
         "proposals": proposals,
         "extracted": len(candidates),
         "staged": staged,
         "session_name": session_name,
         "mode": mode,
+        "review_mode": review_mode,
     }
+    if review_mode == "guardrails":
+        from .analyst.review import auto_apply
+
+        staged_ids = [p["id"] for p in proposals if p.get("staged")]
+        result["guardrails"] = await auto_apply(memory, staged_ids, source_text=text)
+    return result
 
 
 def review(
@@ -227,7 +237,7 @@ def review(
         rows = conn.execute(
             "SELECT id, session_name, content, score, reasons, verdict, cosine, "
             "neighbour_id, neighbour_content, project, context_type, created_at, "
-            "evidence, mode "
+            "evidence, mode, origin, verification, decision "
             f"FROM distill_staging WHERE {' AND '.join(clauses)} "
             "ORDER BY score DESC, created_at DESC LIMIT ?",
             params,
@@ -254,6 +264,11 @@ def review(
         if row[12]:
             entry["evidence"] = row[12]
         entry["mode"] = row[13] or "selected"
+        entry["origin"] = row[14] or "distill"
+        if row[15]:
+            entry["verification"] = json.loads(row[15])
+        if row[16]:
+            entry["decision"] = json.loads(row[16])
         pending.append(entry)
 
     return {"status": "success", "pending": pending, "count": len(pending)}
@@ -333,7 +348,7 @@ async def apply(memory: MARMMemory, proposal_id: str) -> dict[str, Any]:
         try:
             row = conn.execute(
                 "SELECT content, session_name, context_type, project, status, "
-                "expires_at, updated_at, evidence, mode "
+                "expires_at, updated_at, evidence, mode, origin, verification "
                 "FROM distill_staging WHERE id = ?",
                 (proposal_id,),
             ).fetchone()
@@ -350,6 +365,8 @@ async def apply(memory: MARMMemory, proposal_id: str) -> dict[str, Any]:
                 claimed_at,
                 evidence,
                 mode,
+                origin,
+                verification,
             ) = row
             if status == "applying":
                 # Left behind by a crash between the memory write and the
@@ -418,7 +435,10 @@ async def apply(memory: MARMMemory, proposal_id: str) -> dict[str, Any]:
         "source": "marm_distill",
         "proposal_id": proposal_id,
         "extraction": mode,
+        "origin": origin or "distill",
     }
+    if verification:
+        metadata["verification"] = json.loads(verification)
     if project:
         metadata["project"] = project
     if evidence:
