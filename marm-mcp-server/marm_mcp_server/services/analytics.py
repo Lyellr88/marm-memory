@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 import structlog
 
-from ..config.settings import ANALYTICS_DB_PATH
+from ..config.settings import get_analytics_db_path
 
 logger = structlog.get_logger()
 
@@ -13,7 +13,9 @@ def track_usage(
 ) -> None:
     """Track MCP usage events for launch analytics"""
     try:
-        usage_db = ANALYTICS_DB_PATH
+        # Resolved per write: bound at import, it predates any fixture or
+        # environment change that should redirect it.
+        usage_db = get_analytics_db_path()
 
         with sqlite3.connect(usage_db) as conn:
             conn.execute("""
