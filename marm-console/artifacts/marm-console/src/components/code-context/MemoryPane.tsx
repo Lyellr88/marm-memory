@@ -19,7 +19,10 @@ function MemoryCard({ memory }: { memory: CodeContextMemory }) {
   const Icon = context.icon;
   const stamp = when(memory.timestamp);
   return (
-    <div className={cn('rounded-lg border border-l-2 border-border/70 bg-card/45 p-4', context.rail)}>
+    <div
+      data-memory={memory.id ?? undefined}
+      className={cn('rounded-lg border border-l-2 border-border/70 bg-card/45 p-4', context.rail)}
+    >
       <div className="mb-2 flex flex-wrap items-center gap-2">
         <span className={cn('flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase', context.tone)}>
           <Icon className="h-3 w-3" />
