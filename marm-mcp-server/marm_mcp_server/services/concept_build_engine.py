@@ -411,6 +411,7 @@ def _run_build(
                                         linked_entity_id,
                                         binding.graph_project,
                                         match,
+                                        binding.root_path,
                                     )
                                     if reconciliation == "created":
                                         code_links_created += 1

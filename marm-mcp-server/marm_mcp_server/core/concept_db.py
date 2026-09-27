@@ -9,6 +9,7 @@ from typing import Optional
 
 import numpy as np
 
+from .code_anchor import span_hash
 from .concept_names import numbers_differ
 from .memory_db import ConnectionContext, SQLiteConnectionPool
 from .memory_utils import _safe_print
@@ -107,6 +108,8 @@ def init_concept_database(db_path: str, mark_current: bool = True) -> None:
                 link_method TEXT NOT NULL DEFAULT 'legacy_exact_symbol',
                 resolved_at TEXT,
                 last_verified_at TEXT,
+                anchor_hash TEXT,
+                code_changed_at TEXT,
                 created_at TEXT DEFAULT CURRENT_TIMESTAMP,
                 FOREIGN KEY(entity_id) REFERENCES entities(id)
             )
@@ -125,6 +128,9 @@ def init_concept_database(db_path: str, mark_current: bool = True) -> None:
             conn.execute(
                 "ALTER TABLE entity_code_links ADD COLUMN last_verified_at TEXT"
             )
+        for column in ("anchor_hash", "code_changed_at"):
+            if column not in existing_link_cols:
+                conn.execute(f"ALTER TABLE entity_code_links ADD COLUMN {column} TEXT")
         conn.execute(
             "UPDATE entity_code_links SET resolved_at = created_at "
             "WHERE resolved_at IS NULL"
@@ -702,6 +708,7 @@ class ConceptDB:
         label: Optional[str] = None,
         file_path: Optional[str] = None,
         link_method: str = "exact_symbol",
+        anchor_hash: Optional[str] = None,
     ) -> bool:
         """label/file_path are denormalized from marm-graph's response at build
         time (not in the original spec schema) so marm_concept_recall's
@@ -719,14 +726,23 @@ class ConceptDB:
         conn.execute(
             "INSERT INTO entity_code_links "
             "(entity_id, graph_qualified_name, project, confidence, label, file_path, "
-            "link_method, resolved_at, last_verified_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "
+            "link_method, resolved_at, last_verified_at, anchor_hash) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(entity_id, graph_qualified_name) DO UPDATE SET "
             "project = excluded.project, confidence = excluded.confidence, "
             "label = excluded.label, file_path = excluded.file_path, "
             "link_method = excluded.link_method, "
             "resolved_at = COALESCE(entity_code_links.resolved_at, excluded.resolved_at), "
-            "last_verified_at = excluded.last_verified_at",
+            "last_verified_at = excluded.last_verified_at, "
+            # The anchor is the code the link was first made against; a later
+            # hash that differs marks the code changed, and it stays changed.
+            "anchor_hash = COALESCE(entity_code_links.anchor_hash, "
+            "excluded.anchor_hash), "
+            "code_changed_at = CASE WHEN entity_code_links.anchor_hash IS NOT NULL "
+            "AND excluded.anchor_hash IS NOT NULL "
+            "AND excluded.anchor_hash != entity_code_links.anchor_hash "
+            "THEN COALESCE(entity_code_links.code_changed_at, excluded.last_verified_at) "
+            "ELSE entity_code_links.code_changed_at END",
             (
                 entity_id,
                 graph_qualified_name,
@@ -737,6 +753,7 @@ class ConceptDB:
                 link_method,
                 now,
                 now,
+                anchor_hash,
             ),
         )
         return existing is None
@@ -763,6 +780,7 @@ class ConceptDB:
         entity_id: int,
         project: str,
         outcome: dict,
+        root_path: Optional[str] = None,
     ) -> str:
         """Persist only authoritative resolutions for one entity/project pair."""
         status = outcome.get("status")
@@ -778,6 +796,14 @@ class ConceptDB:
                 label=outcome.get("label"),
                 file_path=outcome.get("file_path"),
                 link_method="exact_symbol",
+                anchor_hash=span_hash(
+                    root_path,
+                    outcome.get("file_path"),
+                    outcome.get("start_line"),
+                    outcome.get("end_line"),
+                )
+                if root_path
+                else None,
             )
             conn.execute(
                 "DELETE FROM entity_code_links WHERE entity_id = ? AND project = ? "

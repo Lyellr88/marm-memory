@@ -148,6 +148,29 @@ def test_find_code_match_filters_exact_results(monkeypatch):
     }
 
 
+def test_find_code_match_keeps_the_symbol_span_when_the_engine_sends_it(monkeypatch):
+    monkeypatch.setattr(graph_supervisor, "is_available", lambda: True)
+    monkeypatch.setattr(graph_supervisor, "get_client", lambda: _FakeClient())
+    monkeypatch.setattr(
+        graph_client.R,
+        "do_lookup",
+        lambda client, req: {
+            "results": [
+                {
+                    "qualified_name": "marm_graph.core.auth.AuthMiddleware",
+                    "name": "AuthMiddleware",
+                    "label": "class",
+                    "file_path": "marm_graph/core/auth.py",
+                    "start_line": 12,
+                    "end_line": 40,
+                }
+            ]
+        },
+    )
+    match = graph_client.find_code_match("AuthMiddleware", "proj-a")
+    assert (match["start_line"], match["end_line"]) == (12, 40)
+
+
 def test_find_code_match_refuses_a_name_that_is_not_distinctive(monkeypatch):
     """An ordinary English word matches a symbol in almost any large repository,
     so an exact match on one is not evidence that the memory is about it.

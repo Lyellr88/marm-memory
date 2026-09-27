@@ -279,7 +279,7 @@ class ConceptIndexWorker:
                 if outcome.get("status") == "ambiguous":
                     continue
                 concept_db.reconcile_code_link(
-                    conn, entity_id, task.graph_project, outcome
+                    conn, entity_id, task.graph_project, outcome, task.root_path
                 )
 
         if abort.is_set():

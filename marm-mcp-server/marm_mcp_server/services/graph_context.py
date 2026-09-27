@@ -61,6 +61,13 @@ def _scope_sql(
     return conditions, params
 
 
+def _freshness(row: sqlite3.Row) -> str:
+    """Whether the linked code changed since the link was first made."""
+    if row["code_changed_at"]:
+        return "changed"
+    return "unchanged" if row["anchor_hash"] else "unknown"
+
+
 def _entity(row: sqlite3.Row) -> dict:
     try:
         mention_count = len(json.loads(row["source_memory_ids"] or "[]"))
@@ -262,7 +269,8 @@ def get_graph_context(
             if link_ids:
                 placeholders = ",".join("?" for _ in link_ids)
                 link_rows = conn.execute(
-                    f"""SELECT graph_qualified_name, label, file_path
+                    f"""SELECT graph_qualified_name, label, file_path,
+                               anchor_hash, code_changed_at
                         FROM entity_code_links
                         WHERE entity_id IN ({placeholders})
                         ORDER BY entity_id, graph_qualified_name LIMIT ?""",
@@ -273,6 +281,7 @@ def get_graph_context(
                         "qualified_name": row["graph_qualified_name"],
                         "label": row["label"],
                         "file_path": row["file_path"],
+                        "freshness": _freshness(row),
                     }
                     for row in link_rows[:code_limit]
                 ]
