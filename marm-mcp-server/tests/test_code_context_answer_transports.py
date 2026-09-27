@@ -7,6 +7,8 @@ model are stubbed; the transports, request models and routing are real.
 import asyncio
 import importlib
 import json
+import sys
+import types
 
 import pytest
 from conftest import load_isolated_server, local_client
@@ -57,13 +59,34 @@ def _stub(monkeypatch, reply: str) -> list[str]:
             finished["reason"] = "stop"
         yield from (reply[i : i + 9] for i in range(0, len(reply), 9))
 
+    def complete(*_a, finished=None, **_k):
+        if finished is not None:
+            finished["reason"] = "stop"
+        return reply
+
     monkeypatch.setattr(cc, "build", build)
     monkeypatch.setattr(cc, "LocalBackend", lambda: object())
-    monkeypatch.setattr(local_llm, "available", lambda *a, **k: "stub-model")
-    monkeypatch.setattr(local_llm, "endpoint_source", lambda: "environment")
-    monkeypatch.setattr(local_llm, "complete", lambda *a, **k: reply)
-    monkeypatch.setattr(local_llm, "stream", stream)
+    for llm in _every_local_llm(local_llm):
+        monkeypatch.setattr(llm, "available", lambda *a, **k: "stub-model")
+        monkeypatch.setattr(llm, "endpoint_source", lambda: "environment")
+        monkeypatch.setattr(llm, "complete", complete)
+        monkeypatch.setattr(llm, "stream", stream)
     return composed
+
+
+def _every_local_llm(current):
+    """Each generation of `local_llm` a loaded module refers to.
+
+    Modules that import `local_llm` at load time keep the generation they were
+    loaded with, and an earlier test's isolated server load can leave one
+    behind. Stubbing only the current module would miss the model call.
+    """
+    found = {id(current): current}
+    for mod in list(sys.modules.values()):
+        ref = getattr(mod, "local_llm", None)
+        if isinstance(ref, types.ModuleType):
+            found[id(ref)] = ref
+    return list(found.values())
 
 
 def _events(body: str) -> list[tuple[str, dict]]:
