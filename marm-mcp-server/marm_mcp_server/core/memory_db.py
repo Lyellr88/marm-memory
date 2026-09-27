@@ -543,6 +543,14 @@ def init_database(db_path: str) -> None:
         conn.execute("DROP TABLE IF EXISTS session_summary_chunks")
 
         conn.execute("""
+            CREATE TABLE IF NOT EXISTS memory_usage (
+                memory_id TEXT PRIMARY KEY,
+                recall_count INTEGER NOT NULL DEFAULT 0,
+                last_recalled_at TEXT
+            )
+            """)
+
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS session_summary_cache (
                 session_name TEXT PRIMARY KEY,
                 raw_digest TEXT NOT NULL DEFAULT '',

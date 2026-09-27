@@ -1,6 +1,7 @@
 import asyncio
 
 from ..core.memory import memory
+from ..core.memory_usage import record_recalled
 from ..core.memory_utils import build_log_search
 from ..core.response_limiter import MCPResponseLimiter
 from .graph_context import attach_graph_context, get_graph_context
@@ -185,6 +186,7 @@ async def smart_recall(
                 response_data["_log_results_truncated"] = True
 
         response_data = attach_graph_context(response_data, graph_context)
+        record_recalled(r.get("id") for r in limited_results)
 
         return response_data
 

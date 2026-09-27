@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from ..core.concept_db import ConceptDB, get_concept_db_path
 from ..core.memory import memory
+from ..core.memory_usage import record_recalled
 from ..core.memory_utils import build_log_search
 from ..core.models import SmartRecallRequest
 from ..core.response_limiter import MCPResponseLimiter
@@ -337,6 +338,7 @@ async def marm_smart_recall(request: SmartRecallRequest, http_request: Request) 
 
         base_response["context_summary"] = "\n".join(context_lines)
         base_response["results"] = limited_memories
+        record_recalled(m.get("id") for m in limited_memories)
 
         final_response = MCPResponseLimiter.add_truncation_notice(
             base_response, was_truncated, len(similar_memories)

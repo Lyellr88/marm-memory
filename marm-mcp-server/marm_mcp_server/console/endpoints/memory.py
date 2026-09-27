@@ -38,6 +38,20 @@ def get_memories(
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
+@router.get("/api/memories/cold")
+def get_cold_memories(
+    days: int = Query(30, ge=1, le=3650),
+    limit: int = Query(50, ge=1, le=200),
+    project: str | None = None,
+) -> dict:
+    try:
+        return memory_store.cold_memories(
+            get_memory_db_path(), days=days, limit=limit, project=project
+        )
+    except memory_store.MemoryStoreUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
 @router.get("/api/memories/{memory_id}")
 def get_memory(memory_id: str) -> dict:
     try:
