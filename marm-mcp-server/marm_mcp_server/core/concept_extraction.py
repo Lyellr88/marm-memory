@@ -161,7 +161,7 @@ def _classify_predicate(span_a: "Span", span_b: "Span") -> str:
 def _entity_name(text: str) -> str:
     """The name a span denotes, without the markdown it was written in.
 
-    Empty for a table row: its cells are separate names, not one.
+    Empty for a span across table cells: its cells are separate names.
     """
     name = " ".join(_MARKUP.sub("", text).split())
     for opening, closing in _BRACKETS:
