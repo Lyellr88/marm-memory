@@ -398,7 +398,7 @@ def test_a_supported_structured_fact_is_verified_by_its_quote(apply_packet):
         text="apply returns 1",
         packet=apply_packet,
         cites=("S1",),
-        quote="def apply():  return 1",
+        quote="def apply(): return 1",
     )
     assert (check.state, check.support) == ("verified", "quote")
 
@@ -554,3 +554,106 @@ def test_a_quoted_memory_statement_is_reported_not_claimed(packet):
 def test_ing_and_ed_forms_meet_their_e_stem():
     assert unsupported_terms("writing", "def write(): pass") == []
     assert unsupported_terms("initialized", "def initialize(): pass") == []
+
+
+# --- second review round -----------------------------------------------------
+
+
+def test_a_real_edge_does_not_verify_what_its_text_claims(packet):
+    """A packet edge proves the call, not the words written beside it."""
+    check = check_item(
+        "relations",
+        text="apply deletes every memory",
+        packet=packet,
+        kind="calls",
+        source="S1",
+        target="S2",
+    )
+    assert check.state == "uncertain"
+    assert any("deletes" in f for f in check.failures)
+
+
+def test_a_quote_must_match_character_for_character(apply_packet):
+    check = check_item(
+        "facts",
+        text="apply returns 1",
+        packet=apply_packet,
+        cites=("S1",),
+        quote="def apply():  return 1",
+    )
+    assert check.state == "uncertain"
+
+
+def test_a_subscript_inside_code_is_not_a_citation(packet):
+    """`cache[row_id]` is quoted code, not an invented reference."""
+    v = verify("apply reads `cache[row_id]` [S1].", packet)
+    assert v.state != "rejected"
+    assert extract_citations("see `d[some_key]`", packet)[1] == []
+
+
+def test_a_backticked_citation_still_counts(packet):
+    cites, unresolved = extract_citations("apply does it [`claim`].", packet)
+    assert [c.name for c in cites] == ["claim"] and unresolved == []
+
+
+# --- negation: every word supported, the meaning inverted --------------------
+
+
+def _commented(source):
+    return build_packet(
+        Context(
+            project={"name": "demo"},
+            task="what does sweep do",
+            symbols=[
+                Symbol("pkg.sweep", "sweep", "Function", "a.py", 1, 5, source=source),
+            ],
+            memories=[{"id": "m1", "content": "sweep never deletes every memory row."}],
+        )
+    )
+
+
+NEGATED = "def sweep():\n    # never deletes every memory row\n    return scan()\n"
+
+
+def test_a_claim_the_cited_comment_negates_is_not_verified():
+    packet = _commented(NEGATED)
+    v = verify("sweep deletes every memory row [S1].", packet)
+    assert v.state != "verified"
+    assert any("opposite" in f for f in v.failures)
+
+
+def test_a_structured_fact_the_evidence_negates_is_not_verified():
+    check = check_item(
+        "facts",
+        text="sweep deletes every memory row",
+        packet=_commented(NEGATED),
+        cites=("M1",),
+        quote="sweep never deletes every memory row.",
+    )
+    assert check.state == "uncertain"
+
+
+def test_a_claim_that_keeps_the_negation_is_verified():
+    v = verify("sweep never deletes every memory row [S1].", _commented(NEGATED))
+    assert v.state == "verified", v.failures
+
+
+def test_a_negation_elsewhere_in_the_sentence_does_not_count(packet):
+    """ "marks the row applied so a caller cannot write it" negates the
+    writing, not the marking."""
+    source = (
+        'def mark():\n    """Mark the row applied so a second caller cannot write '
+        'it again."""\n'
+    )
+    p = _commented(source)
+    v = verify("mark marks the row applied [S1].", p)
+    assert not any("opposite" in f for f in v.failures), v.failures
+
+
+def test_code_is_not_read_for_negation():
+    """`if not rows` is an operator, not a denial."""
+    p = _commented(
+        "def sweep(rows):\n    return None if not rows else delete_rows(rows)\n"
+    )
+    v = verify("sweep deletes rows [S1].", p)
+    assert not any("opposite" in f for f in v.failures), v.failures

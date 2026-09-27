@@ -150,7 +150,12 @@ def extract_citations(
     resolved: list[Citation] = []
     unresolved: list[str] = []
     seen: set[str] = set()
+    # `cache[row_id]` is code, not a citation. `[`name`]` still is: its
+    # bracket opens before the backtick.
+    spans = [m.span() for m in _CODE_SPAN.finditer(text)]
     for match in _BRACKET.finditer(text):
+        if any(a < match.start() < b for a, b in spans):
+            continue
         for part in _SEPARATOR.split(match.group(1)):
             part = part.strip()
             backticked = part.startswith("`")
@@ -248,7 +253,8 @@ _GENERIC = frozenset(
     according agree agrees evidence argument arguments attribute before after begin
     begins call called caller callee calls check checks class code constant
     defined
-    defines definition each end ends entry every field file first function
+    defines definition describe describes each end ends entry every field file
+    first function
     helper instance line lines list located loop method module name named
     object parameter parameters recorded return returns say says show shows
     start starts
@@ -260,6 +266,7 @@ _GENERIC = frozenset(
 #: Distinctive words a claim may leave unsupported. Zero: one unsupported
 #: verb is enough to turn a cited claim false.
 _TERM_SLACK = 0
+_OPPOSITE = "the cited evidence says the opposite"
 _WORD = re.compile(r"[A-Za-z][A-Za-z0-9]*")
 _CAMEL = re.compile(r"(?<=[a-z0-9])(?=[A-Z])")
 
@@ -371,6 +378,87 @@ def _call_failure(text: str, packet: EvidencePacket) -> str | None:
     return None
 
 
+#: Negation in prose. In code `not` and `None` are an operator and a value,
+#: so only comments, docstrings and memory text are read for polarity.
+_NEGATOR = re.compile(
+    r"(?:not|never|no|cannot|without|nothing|neither|nor|.+n't)", re.I
+)
+_TOKEN = re.compile(r"[A-Za-z][A-Za-z0-9']*")
+_COMMENT = re.compile(r"^\s*(?:#|//|/\*|\*)\s?(.*)$")
+_DOCSTRING = re.compile(r'"""(.*?)"""|\'\'\'(.*?)\'\'\'', re.S)
+_UNIT_END = re.compile(r"(?<=[.!?])\s+|\n")
+#: How far before the claim's first word a negator still governs it:
+#: "never deletes", "does not ever delete".
+_SCOPE = 3
+
+
+def _prose_units(
+    handles: list[str] | tuple[str, ...], packet: EvidencePacket
+) -> list[str]:
+    """Sentences of natural language in the cited evidence."""
+    blocks: list[str] = []
+    for h in handles:
+        sym = packet.symbol(h)
+        if sym:
+            blocks += [a or b for a, b in _DOCSTRING.findall(sym.source)]
+            blocks += [
+                m.group(1) for m in map(_COMMENT.match, sym.source.splitlines()) if m
+            ]
+        mem = packet.memory(h)
+        if mem:
+            blocks.append(mem.content)
+    return [u.strip() for b in blocks for u in _UNIT_END.split(b) if u.strip()]
+
+
+def _negated(tokens: list[str], lo: int, hi: int) -> bool:
+    return any(_NEGATOR.fullmatch(t) for t in tokens[max(0, lo) : hi + 1])
+
+
+def negated_by_evidence(
+    text: str, handles: list[str] | tuple[str, ...], packet: EvidencePacket
+) -> bool:
+    """Whether the prose carrying a claim's words says the opposite.
+
+    `deletes every memory row [S1]` over `# never deletes every memory row`
+    has every word supported and the meaning inverted. Only a negator that
+    governs those words counts: "marks the row applied so a caller cannot
+    write it" negates the writing, not the marking.
+    """
+    claim = _CODE_SPAN.sub(" ", _BRACKET.sub(" ", text))
+    # A comment inside `sweep` does not name `sweep`: the cited symbols are the
+    # subject, not words the prose has to repeat.
+    subject: set[str] = set()
+    for h in handles:
+        sym = packet.symbol(h)
+        if sym:
+            subject |= _stems(sym.qualified_name.replace("_", " "))
+    words = [
+        w
+        for term in content_terms(claim)
+        for w in _WORD.findall(term.replace("_", " "))
+        if len(w) >= 3 and not _forms(w) & (_GENERIC | subject)
+    ]
+    if not words:
+        return False
+    claim_tokens = _TOKEN.findall(claim)
+    claim_negated = _negated(claim_tokens, 0, len(claim_tokens) - 1)
+    for unit in _prose_units(handles, packet):
+        tokens = _TOKEN.findall(unit)
+        forms = [_forms(t) for t in tokens]
+        spots = []
+        for w in words:
+            want = _forms(w)
+            at = next((i for i, f in enumerate(forms) if f & want), None)
+            if at is None:
+                break
+            spots.append(at)
+        else:
+            lo, hi = min(spots) - _SCOPE, max(spots)
+            if _negated(tokens, lo, hi) != claim_negated:
+                return True
+    return False
+
+
 def _term_support(
     claims: list[str], packet: EvidencePacket
 ) -> tuple[int, int, list[str]]:
@@ -384,8 +472,11 @@ def _term_support(
         missing = unsupported_terms(
             claim, cited_text([c.handle for c in cites], packet)
         )
+        handles = [c.handle for c in cites]
         if not checkable(claim):
             failures.append("claim has nothing a check could fail")
+        elif negated_by_evidence(claim, handles, packet):
+            failures.append(_OPPOSITE)
         elif len(missing) <= _TERM_SLACK:
             supported += 1
         else:
@@ -478,10 +569,6 @@ def verify(text: str, packet: EvidencePacket) -> Verification:
     )
 
 
-def _normalise(text: str) -> str:
-    return " ".join((text or "").split()).casefold()
-
-
 def _evidence_text(handle: str, packet: EvidencePacket) -> str:
     sym = packet.symbol(handle)
     if sym:
@@ -537,10 +624,15 @@ def check_item(
         return ItemCheck("proposal", "citation", tuple(failures), ())
 
     support = "citation"
-    if op in ("summary", "facts"):
-        missing = unsupported_terms(text, cited_text(cites, packet))
+    if op in ("summary", "facts", "relations"):
+        # A relation's text is a claim too: a real edge proves the call, not
+        # the words written beside it.
+        claim_handles = cites or tuple(h for h in (source, target) if h)
+        missing = unsupported_terms(text, cited_text(claim_handles, packet))
         if not checkable(text):
             failures.append("claim has nothing a check could fail")
+        elif negated_by_evidence(text, claim_handles, packet):
+            failures.append(_OPPOSITE)
         elif len(missing) > _TERM_SLACK:
             failures.append(
                 "claim words not in the cited evidence: " + ", ".join(missing[:5])
@@ -550,10 +642,8 @@ def check_item(
         if call:
             failures.append(call)
     if op == "facts":
-        wanted = _normalise(quote or "")
-        if wanted and any(
-            wanted in _normalise(_evidence_text(h, packet)) for h in cites
-        ):
+        # Character for character, as the contract promises.
+        if quote and any(quote in _evidence_text(h, packet) for h in cites):
             support = "quote"
         else:
             failures.append("quote is not verbatim in the cited evidence")
