@@ -238,6 +238,8 @@ def rank_metrics(ranked_ids, gold_ids, k):
     """recall@k, MRR and binary nDCG@k of one ranked list; None without gold."""
     if not gold_ids:
         return None
+    if k < 1:
+        return {"recall_at_k": 0.0, "mrr": 0.0, "ndcg_at_k": 0.0}
     top = list(ranked_ids)[:k]
     hits = [i for i, mid in enumerate(top) if mid in gold_ids]
     dcg = sum(1 / math.log2(i + 2) for i in hits)

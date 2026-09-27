@@ -52,3 +52,12 @@ def test_several_gold_items_share_the_ideal():
 
 def test_an_empty_gold_set_is_not_scored():
     assert run_eval.rank_metrics(["x"], set(), k=5) is None
+
+
+@pytest.mark.parametrize("k", [0, -1])
+def test_an_empty_top_k_scores_zero_instead_of_dividing_by_zero(k):
+    assert run_eval.rank_metrics(["g"], {"g"}, k=k) == {
+        "recall_at_k": 0.0,
+        "mrr": 0.0,
+        "ndcg_at_k": 0.0,
+    }
