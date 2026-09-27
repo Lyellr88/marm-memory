@@ -724,3 +724,32 @@ def test_negated_relation_text_contradicts_its_own_edge():
     )
     assert denied.state == "uncertain"
     assert plain.state == "verified"
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "apply claims first [S1]. apply deletes every row, and there is no "
+        "evidence it retries.",
+        "apply claims first [S1]. The packet does not show retries, but apply "
+        "deletes every row.",
+        "apply claims first [S1]. apply deletes every row; the packet does not "
+        "show retries.",
+    ],
+)
+def test_an_abstention_clause_does_not_exempt_the_claim_beside_it(packet, text):
+    v = verify(text, packet)
+    assert "uncited claims" in v.failures, v.failures
+    assert v.state != "verified"
+
+
+def test_an_abstention_clause_beside_a_cited_claim_still_verifies(packet):
+    v = verify("apply claims first [S1], but the packet does not show retries.", packet)
+    assert v.state == "verified", (v.state, v.failures)
+
+
+def test_a_sentence_without_an_abstention_keeps_its_clauses_together(packet):
+    """Splitting every sentence would strand a short cited clause, dropping
+    its citation from the claim it completes."""
+    v = verify("apply calls claim; see [S1].", packet)
+    assert "uncited claims" not in v.failures, v.failures
