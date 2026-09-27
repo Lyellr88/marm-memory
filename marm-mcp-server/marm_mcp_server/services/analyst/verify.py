@@ -49,6 +49,10 @@ _ABSTAIN = re.compile(
     re.I,
 )
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
+# Only an abstention's own clause is exempt, never the claim joined to it.
+_CLAUSE = re.compile(
+    r";\s+|,\s+(?=(?:but|and|while|although|though|whereas|yet)\b)", re.I
+)
 # A quoted statement is reported, not claimed: `M1 says "a does not call b"`.
 _QUOTED = re.compile(r"\"[^\"\n]*\"|\u201c[^\u201d\n]*\u201d")
 
@@ -187,7 +191,14 @@ def _claims(text: str) -> list[str]:
     out: list[str] = []
     for line in text.split("\n"):
         pending: list[str] = []
-        for part in _SENTENCE_END.split(line):
+        parts = [
+            clause
+            for sentence in _SENTENCE_END.split(line)
+            for clause in (
+                _CLAUSE.split(sentence) if _ABSTAIN.search(sentence) else [sentence]
+            )
+        ]
+        for part in parts:
             s = part.strip().lstrip("-*# ").strip()
             # A list lead-in ("It works as follows:") announces claims; the
             # items under it make them.
