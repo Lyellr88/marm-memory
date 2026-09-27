@@ -1,12 +1,13 @@
 """The registry entry must launch the transport it declares."""
 
+import importlib
 import json
 import sys
+import types
 from pathlib import Path
 
 import pytest
 
-from marm_mcp_server import cli, server_stdio
 from marm_mcp_server.services import docker_commands
 
 SERVER_JSON = Path(__file__).resolve().parents[1] / "server.json"
@@ -38,7 +39,15 @@ def _launch(monkeypatch, argv: list[str]) -> str:
     async def http() -> None:
         raise _Reached("http")
 
-    monkeypatch.setattr(server_stdio, "main", stdio)
+    # Resolved now, not at import: other tests reload the package, and cli's
+    # `from . import server_stdio` reads whichever package object is current.
+    # The real module reroutes print() process-wide, so it is never imported.
+    cli = importlib.import_module("marm_mcp_server.cli")
+    package = sys.modules["marm_mcp_server"]
+    fake = types.ModuleType("marm_mcp_server.server_stdio")
+    fake.main = stdio
+    monkeypatch.setitem(sys.modules, "marm_mcp_server.server_stdio", fake)
+    monkeypatch.setattr(package, "server_stdio", fake, raising=False)
     monkeypatch.setattr(cli, "run_server_with_shutdown", http)
     monkeypatch.setattr(sys, "argv", argv)
     with pytest.raises(_Reached) as reached:
