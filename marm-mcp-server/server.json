@@ -18,12 +18,28 @@
       "registryType": "pypi",
       "identifier": "marm-mcp-server",
       "version": "2.56.2",
-      "transport": { "type": "stdio" }
+      "runtimeHint": "uvx",
+      "transport": { "type": "stdio" },
+      "packageArguments": [
+        { "type": "positional", "value": "stdio" }
+      ]
     },
     {
       "registryType": "oci",
       "identifier": "lyellr88/marm-mcp-server:2.56.2",
-      "transport": { "type": "stdio" }
+      "runtimeHint": "docker",
+      "transport": { "type": "stdio" },
+      "runtimeArguments": [
+        {
+          "type": "named",
+          "name": "--mount",
+          "description": "Keep memory in a named volume across the short-lived STDIO containers",
+          "value": "type=volume,src=marm-data,dst=/home/marm/.marm"
+        }
+      ],
+      "packageArguments": [
+        { "type": "positional", "value": "stdio" }
+      ]
     }
   ],
   "tools": [
