@@ -657,3 +657,24 @@ def test_code_is_not_read_for_negation():
     )
     v = verify("sweep deletes rows [S1].", p)
     assert not any("opposite" in f for f in v.failures), v.failures
+
+
+def test_a_negation_on_the_previous_comment_line_still_governs():
+    """A comment sentence wraps: `# must never` / `# write the row directly`."""
+    p = _commented(
+        "def sweep():\n    # Callers must never\n    # write the row directly.\n"
+        "    return 1\n"
+    )
+    v = verify("sweep writes the row directly [S1].", p)
+    assert v.state != "verified"
+    assert any("opposite" in f for f in v.failures)
+
+
+def test_a_wrapped_docstring_is_one_block_too():
+    p = _commented(
+        'def sweep():\n    """Callers must never\n    write the row directly."""\n'
+    )
+    assert any(
+        "opposite" in f
+        for f in verify("sweep writes the row directly [S1].", p).failures
+    )

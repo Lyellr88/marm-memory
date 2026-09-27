@@ -386,10 +386,31 @@ _NEGATOR = re.compile(
 _TOKEN = re.compile(r"[A-Za-z][A-Za-z0-9']*")
 _COMMENT = re.compile(r"^\s*(?:#|//|/\*|\*)\s?(.*)$")
 _DOCSTRING = re.compile(r'"""(.*?)"""|\'\'\'(.*?)\'\'\'', re.S)
-_UNIT_END = re.compile(r"(?<=[.!?])\s+|\n")
 #: How far before the claim's first word a negator still governs it:
 #: "never deletes", "does not ever delete".
 _SCOPE = 3
+
+
+def prose_blocks(source: str) -> list[str]:
+    """The natural language in source code, one block per comment or docstring.
+
+    Consecutive comment lines are one block, and so is a docstring, because a
+    sentence wraps: `# must never` / `# write the row directly` is one
+    sentence whose negation a line split would cut off.
+    """
+    blocks = [" ".join((a or b).split()) for a, b in _DOCSTRING.findall(source)]
+    run: list[str] = []
+    for line in source.splitlines():
+        m = _COMMENT.match(line)
+        if m:
+            run.append(m.group(1).strip())
+            continue
+        if run:
+            blocks.append(" ".join(run))
+            run = []
+    if run:
+        blocks.append(" ".join(run))
+    return [b for b in blocks if b]
 
 
 def _prose_units(
@@ -400,14 +421,11 @@ def _prose_units(
     for h in handles:
         sym = packet.symbol(h)
         if sym:
-            blocks += [a or b for a, b in _DOCSTRING.findall(sym.source)]
-            blocks += [
-                m.group(1) for m in map(_COMMENT.match, sym.source.splitlines()) if m
-            ]
+            blocks += prose_blocks(sym.source)
         mem = packet.memory(h)
         if mem:
             blocks.append(mem.content)
-    return [u.strip() for b in blocks for u in _UNIT_END.split(b) if u.strip()]
+    return [u.strip() for b in blocks for u in _SENTENCE_END.split(b) if u.strip()]
 
 
 def _negated(tokens: list[str], lo: int, hi: int) -> bool:
