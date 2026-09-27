@@ -83,11 +83,29 @@ def _call_edge(a: SymbolItem, b: SymbolItem, source: str) -> Conclusion:
 
 _SENTENCE = re.compile(r"(?<=[.!?])\s+")
 _COMMENT_LINE = re.compile(r"^\s*(?:#|//|/\*|\*)")
+# A list item or heading starts its own block, as a blank line does.
+_BLOCK_START = re.compile(r"^\s*(?:[-*\u2022#>]+\s+|\d+[.)]\s+)")
+_HEADING = re.compile(r"^\s*#+\s")
 
 
 def _sentences(text: str) -> list[str]:
     joined = " ".join(text.split())
     return [u.rstrip(".").strip() for u in _SENTENCE.split(joined) if u.strip()]
+
+
+def _source_sentences(text: str) -> list[str]:
+    """Whole sentences of a transcript, joined across line wraps."""
+    blocks: list[list[str]] = [[]]
+    for line in text.splitlines():
+        if not line.strip() or _BLOCK_START.match(line):
+            blocks.append([])
+        if line.strip():
+            blocks[-1].append(line)
+        if _HEADING.match(line):
+            blocks.append([])
+    return [
+        u for b in blocks if b for u in _SENTENCE.split(" ".join(" ".join(b).split()))
+    ]
 
 
 def _statements(handles: list[str], packet: EvidencePacket) -> list[str]:
@@ -347,8 +365,7 @@ def guardrail_decision(
         span = _norm(_distill_normalise(evidence or content).rstrip("."))
         units = {
             _norm(_distill_normalise(u).rstrip("."))
-            for line in (source_text or "").splitlines()
-            for u in _SENTENCE.split(line)
+            for u in _source_sentences(source_text or "")
         }
         checks["evidence_verbatim"] = bool(span) and span in units
         # Generated content is prose the model wrote; only its span is
