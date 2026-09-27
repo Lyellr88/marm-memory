@@ -1,5 +1,6 @@
 """Secrets never reach the store, and ordinary text about secrets does."""
 
+import json
 import sqlite3
 
 import pytest
@@ -37,6 +38,14 @@ PEM = (
         ("Authorization: Bearer " + "q" * 32, "bearer-token"),
         ("MARM_API_KEY=" + "s3cr3tValue1234567", "assigned-secret"),
         ('db_password: "' + "Hunter2Hunter2!" + '"', "assigned-secret"),
+        ("TOKEN=" + "abc123", "assigned-secret"),
+        ("password: " + "hunter2", "assigned-secret"),
+        (
+            "AWS_SECRET_ACCESS_KEY=" + "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+            "assigned-secret",
+        ),
+        ("SSH_PRIVATE_KEY=" + "b3BlbnNzaC1rZXk", "assigned-secret"),
+        ("GCP_CREDENTIALS=" + "correcthorsebatterystaple", "assigned-secret"),
     ],
 )
 def test_a_secret_is_replaced_by_its_kind(text, kind):
@@ -73,6 +82,10 @@ def test_an_assignment_keeps_its_name_and_loses_its_value():
         "password must be at least 12 characters",
         "the bearer of bad news",
         "we rotate every secret quarterly",
+        "the session token: invalidated after logout",
+        "MAX_TOKEN=128000 per request",
+        "REQUIRE_PASSWORD=true in production",
+        "AWS_ACCESS_KEY_ID is read from the environment",
     ],
 )
 def test_ordinary_text_about_secrets_is_untouched(text):
@@ -237,3 +250,22 @@ async def test_promoting_an_existing_scratch_entry_redacts_what_it_saves(
     assert seen["source_notebook_name"] == "creds"
     assert GITHUB not in seen["content"]
     assert "[redacted:github-token]" in seen["content"]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("action", ["add", "save"])
+async def test_a_notebook_name_holding_a_credential_is_refused(
+    monkeypatch, tmp_path, action
+):
+    """A redacted name could never be looked up again, so it is refused."""
+    import importlib
+
+    load_isolated_server(monkeypatch, tmp_path)
+    notebook = importlib.import_module("marm_mcp_server.services.notebook")
+
+    result = await getattr(notebook, f"_{action}")(f"key {GITHUB}", "some data")
+
+    assert result["status"] == "error"
+    assert GITHUB not in json.dumps(result)
+    rows = _stored(str(tmp_path / "marm_memory.db"), "notebook_entries", "name")
+    assert not any(GITHUB in row for row in rows)

@@ -40,10 +40,18 @@ _PATTERNS: list[tuple[str, re.Pattern[str]]] = [
 ]
 
 # `NAME=value` where NAME ends in a secret word; the name stays, the value
-# goes. Templates (`${VAR}`, `<placeholder>`) are not values.
+# goes. Templates (`${VAR}`, `<placeholder>`), numbers and booleans are not
+# values, and a value must look like a credential rather than a word: it has a
+# digit or symbol, or is long. "session token: invalidated" stays prose.
+_SECRET_NAME = (
+    r"API[_-]?KEY|ACCESS[_-]?KEY|PRIVATE[_-]?KEY|SECRET|TOKEN|PASSWORD|PASSWD"
+    r"|CREDENTIALS?"
+)
 _ASSIGNED = re.compile(
-    r"(?i)(\b[A-Z0-9_]*(?:API[_-]?KEY|SECRET|TOKEN|PASSWORD|PASSWD)\s*[:=]\s*[\"']?)"
-    r"(?![$<{%])([^\s\"'`]{12,})"
+    rf"(?i)(\b[A-Z0-9_]*(?:{_SECRET_NAME})\s*[:=]\s*[\"']?)"
+    r"(?![$<{%])(?!(?:\d+|true|false|null|none|yes|no)\b)"
+    r"(?=[^\s\"'`]*[\d/+=._-]|[^\s\"'`]{16,})"
+    r"([^\s\"'`]{6,})"
 )
 
 

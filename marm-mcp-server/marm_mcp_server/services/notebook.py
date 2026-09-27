@@ -36,6 +36,16 @@ def _scope_or_detected(value: Optional[str], detected: Optional[str]) -> Optiona
     return value or None
 
 
+def _name_holds_a_secret(name: str) -> Optional[dict]:
+    # Refused rather than redacted: a redacted name could not be found again.
+    if redact_secrets(name)[1]:
+        return {
+            "status": "error",
+            "message": "That name contains a credential; choose a different name.",
+        }
+    return None
+
+
 async def _add(
     name: Optional[str],
     data: Optional[str],
@@ -50,6 +60,8 @@ async def _add(
             "message": "name and data are required for action='add'",
         }
     name = name.strip()
+    if refused := _name_holds_a_secret(name):
+        return refused
     data = redact_secrets(data)[0]
     project = _scope_or_detected(project, MARM_PROJECT)
     platform = _scope_or_detected(platform, MARM_PLATFORM)
@@ -195,6 +207,8 @@ async def _save(
     if not name or not name.strip():
         return {"status": "error", "message": "name is required for action='save'"}
     name = name.strip()
+    if refused := _name_holds_a_secret(name):
+        return refused
     if session_name == _RESERVED_SESSION_NAME:
         return {
             "status": "error",
