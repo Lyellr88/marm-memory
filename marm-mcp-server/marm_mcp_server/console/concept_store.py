@@ -8,6 +8,7 @@ from math import sqrt
 from pathlib import Path
 
 from ..core.concept_db import CONCEPT_SCHEMA_VERSION
+from ..core.concept_names import numbers_differ
 
 _CURRENT_CONCEPT_SCHEMA_VERSION = str(CONCEPT_SCHEMA_VERSION)
 
@@ -380,6 +381,9 @@ def _duplicate_candidates(db_path: Path, threshold: float) -> tuple[list[dict], 
                     entity_a["platform"],
                 )
                 if dismissal_key in dismissed:
+                    continue
+                # An embedding cannot tell `v2.1.0` from `v2.0.0`.
+                if numbers_differ(*names):
                     continue
                 similarity = sum(a * b for a, b in zip(vector_a, vector_b))
                 if similarity >= threshold:
