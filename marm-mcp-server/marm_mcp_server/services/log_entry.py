@@ -8,6 +8,7 @@ from ..config.settings import MARM_PLATFORM, MARM_PROJECT
 from ..core.events import events
 from ..core.memory import memory
 from ..core.memory_utils import _safe_print
+from ..core.redaction import redact_secrets
 
 _SESSION_PREFIXES = ("Session: ", "Topic: ")
 _SESSION_INACTIVITY_NOTICE_SECONDS = 3600
@@ -35,7 +36,7 @@ async def create_log_entry(
     explicit = bool(project)
 
     try:
-        formatted_entry = entry.strip()
+        formatted_entry = redact_secrets(entry)[0].strip()
 
         for prefix in _SESSION_PREFIXES:
             if formatted_entry.startswith(prefix):

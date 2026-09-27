@@ -7,6 +7,7 @@ from ..core.docs_db import DocsDB
 from ..core.events import events
 from ..core.memory import memory
 from ..core.memory_utils import _safe_print
+from ..core.redaction import redact_secrets
 
 _RESERVED_SESSION_NAME = "marm_system"
 
@@ -49,6 +50,7 @@ async def _add(
             "message": "name and data are required for action='add'",
         }
     name = name.strip()
+    data = redact_secrets(data)[0]
     project = _scope_or_detected(project, MARM_PROJECT)
     platform = _scope_or_detected(platform, MARM_PLATFORM)
     now = datetime.now(timezone.utc).isoformat()
@@ -225,6 +227,7 @@ async def _save(
             }
         content = row[0]
         source_notebook_name = name
+    content = redact_secrets(content)[0]
 
     docs_db = _get_docs_db()
     with docs_db.get_connection() as conn:

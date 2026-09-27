@@ -883,6 +883,7 @@ Full platform walkthroughs, key setup, and OS-specific notes: [Windows](docs/INS
 - **Backup**: Copy the entire `~/.marm/` directory to preserve all data
 - **Privacy**: Everything stays on your machine, no cloud sync or external storage
 - **Knows which memories go unused**: each memory records how often recall returned it and when, and the Console lists cold memories (`GET /api/memories/cold?days=30`) so old, never-recalled entries can be reviewed. Counting never slows or fails a recall and does not change ranking
+- **Credentials are redacted before storage**: API keys, tokens, private keys and `NAME=value` secrets in anything written to memory, the log, or the notebook are replaced with `[redacted:<kind>]`, so a key pasted into a session is never recalled into another agent
 
 **Verify installation**
 
