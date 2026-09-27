@@ -285,6 +285,7 @@ async def marm_smart_recall(request: SmartRecallRequest, http_request: Request) 
                         }
                         for m in system_memories
                     ]
+                    record_recalled(m.get("id") for m in system_memories)
                 else:
                     response["message"] = (
                         f"🤔 No memories found for query: '{request.query}'. "

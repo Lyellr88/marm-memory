@@ -106,6 +106,7 @@ async def smart_recall(
                         {**m, "content": _apply_detail_level(m["content"], detail)}
                         for m in system_memories
                     ]
+                    record_recalled(m.get("id") for m in system_memories)
                 else:
                     response["message"] = f"No memories found for query: '{query}'"
             else:

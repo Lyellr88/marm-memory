@@ -138,3 +138,147 @@ def test_cold_memories_are_the_ones_nobody_recalls(monkeypatch, tmp_path):
     assert folded not in ids, "recall never returns compacted sources"
     assert cold["memories"][0]["recall_count"] == 0
     assert cold["memories"][1]["recall_count"] == 3
+
+
+def test_http_shutdown_drains_counts_before_closing_the_pool(monkeypatch, tmp_path):
+    load_isolated_server(monkeypatch, tmp_path)
+    usage = importlib.import_module("marm_mcp_server.core.memory_usage")
+    shutdown = importlib.import_module("marm_mcp_server.core.shutdown_manager")
+    memory = importlib.import_module("marm_mcp_server.core.memory").memory
+    events = []
+
+    async def drain():
+        events.append("drain")
+
+    close = memory.connection_pool.close_all
+    monkeypatch.setattr(usage, "drain", drain)
+    monkeypatch.setattr(
+        memory.connection_pool,
+        "close_all",
+        lambda: (events.append("close"), close())[1],
+    )
+
+    asyncio.run(shutdown.ShutdownManager().graceful_shutdown())
+
+    assert events.index("drain") < events.index("close")
+
+
+def test_stdio_teardown_drains_counts(monkeypatch, tmp_path):
+    load_isolated_server(monkeypatch, tmp_path)
+    usage = importlib.import_module("marm_mcp_server.core.memory_usage")
+    # Imported inside the test, as test_chunk_durability does.
+    server_stdio = importlib.import_module("marm_mcp_server.server_stdio")
+    drained = []
+
+    async def drain():
+        drained.append(True)
+
+    monkeypatch.setattr(usage, "drain", drain)
+
+    async def run():
+        async with server_stdio._stdio_lifespan(server_stdio.mcp):
+            pass
+
+    asyncio.run(run())
+    assert drained
+
+
+def test_system_documentation_returned_by_the_fallback_is_counted(
+    monkeypatch, tmp_path
+):
+    server = load_isolated_server(monkeypatch, tmp_path)
+    client = local_client(server.app)
+    memory = importlib.import_module("marm_mcp_server.core.memory").memory
+    doc_id = "doc-row"
+
+    doc = {
+        "id": doc_id,
+        "content": "MARM protocol text",
+        "session_name": "marm_system",
+        "similarity": 0.9,
+        "timestamp": "2026-09-27T00:00:00+00:00",
+        "context_type": "general",
+    }
+
+    # The main lane returns (results, meta); the documentation fallback takes
+    # the session positionally and a bare list.
+    async def recall_similar(query, session=None, *args, **kwargs):
+        if session == "marm_system":
+            return [doc]
+        return [], {}
+
+    monkeypatch.setattr(memory, "recall_similar", recall_similar)
+    response = client.post(
+        "/marm_smart_recall", json={"query": "protocol", "session_name": "usage"}
+    )
+    _drain()
+
+    assert response.status_code == 200
+    assert doc_id in [r.get("id") for r in response.json().get("system_results", [])]
+    assert _usage(tmp_path / "marm_memory.db")[doc_id][0] == 1
+
+
+def test_the_cold_route_answers_over_http(monkeypatch, tmp_path):
+    load_isolated_server(monkeypatch, tmp_path)
+    monkeypatch.setenv("MARM_DB_PATH", str(tmp_path / "marm_memory.db"))
+    from fastapi.testclient import TestClient
+
+    console = importlib.import_module("marm_mcp_server.console.endpoints.memory")
+    from fastapi import FastAPI
+
+    app = FastAPI()
+    app.include_router(console.router)
+    client = TestClient(app)
+
+    ok = client.get("/api/memories/cold", params={"days": 30, "limit": 5})
+    assert ok.status_code == 200, ok.text
+    assert set(ok.json()) == {"days", "cutoff", "memories"}
+    assert client.get("/api/memories/cold", params={"days": 0}).status_code == 422
+
+    with sqlite3.connect(tmp_path / "marm_memory.db") as conn:
+        conn.execute("DROP TABLE memory_usage")
+    assert client.get("/api/memories/cold").status_code == 503
+
+
+def test_stdio_counts_system_documentation_the_same_way(monkeypatch, tmp_path):
+    load_isolated_server(monkeypatch, tmp_path)
+    memory = importlib.import_module("marm_mcp_server.core.memory").memory
+    recall = importlib.import_module("marm_mcp_server.services.recall")
+    doc = {
+        "id": "doc-row",
+        "content": "MARM protocol text",
+        "session_name": "marm_system",
+        "similarity": 0.9,
+        "timestamp": "2026-09-27T00:00:00+00:00",
+        "context_type": "general",
+    }
+
+    async def recall_similar(query, session=None, *args, **kwargs):
+        if session == "marm_system":
+            return [doc]
+        return [], {}
+
+    monkeypatch.setattr(memory, "recall_similar", recall_similar)
+
+    async def run():
+        result = await recall.smart_recall("protocol", session_name="usage")
+        await importlib.import_module("marm_mcp_server.core.memory_usage").drain()
+        return result
+
+    result = asyncio.run(run())
+    assert [r["id"] for r in result["system_results"]] == ["doc-row"]
+    assert _usage(tmp_path / "marm_memory.db")["doc-row"][0] == 1
+
+
+def test_finished_counts_leave_nothing_pending(monkeypatch, tmp_path):
+    """The future joins the pending set before its callback is registered, and
+    a callback on a future that has already finished runs at once, so no
+    completed future can be left behind."""
+    load_isolated_server(monkeypatch, tmp_path)
+    usage = importlib.import_module("marm_mcp_server.core.memory_usage")
+
+    for i in range(500):
+        usage.record_recalled([f"m{i % 7}"])
+    asyncio.run(usage.drain())
+
+    assert usage._pending == set()

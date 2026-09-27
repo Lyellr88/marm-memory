@@ -26,6 +26,7 @@ from marm_mcp_server.config.settings import (  # noqa: E402
     SEMANTIC_SEARCH_AVAILABLE,
     SERVER_VERSION,
 )
+from marm_mcp_server.core import memory_usage  # noqa: E402
 from marm_mcp_server.core.concept_worker import concept_worker  # noqa: E402
 from marm_mcp_server.core.graph_index_worker import graph_index_worker  # noqa: E402
 from marm_mcp_server.core.graph_supervisor import graph_supervisor  # noqa: E402
@@ -87,6 +88,10 @@ async def _stdio_lifespan(_server: FastMCP) -> AsyncIterator[None]:
                 )
             except Exception as exc:
                 _stdio_log.warning("chunk drain failed: %s", exc)
+            try:
+                await memory_usage.drain()
+            except Exception as exc:
+                _stdio_log.warning("recall count drain failed: %s", exc)
 
 
 mcp = FastMCP("MARM MCP Server", lifespan=_stdio_lifespan)
