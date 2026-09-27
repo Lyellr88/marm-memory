@@ -894,3 +894,39 @@ def test_a_fragment_of_a_source_sentence_is_not_verbatim(monkeypatch):
         )
     )
     assert d.apply is False and d.checks["evidence_verbatim"] is False
+
+
+def test_a_fragment_of_a_wrapped_source_sentence_is_not_verbatim(monkeypatch):
+    monkeypatch.setenv(review.AUTO_APPLY_ENV, "1")
+    d = guardrail_decision(
+        **_ok(
+            content="write the row directly",
+            source_text="Callers must never\nwrite the row directly.",
+        )
+    )
+    assert d.apply is False and d.checks["evidence_verbatim"] is False
+
+
+def test_a_whole_sentence_that_wraps_is_still_verbatim(monkeypatch):
+    monkeypatch.setenv(review.AUTO_APPLY_ENV, "1")
+    d = guardrail_decision(
+        **_ok(
+            content="Callers must never write the row directly",
+            source_text="Callers must never write\nthe row directly.",
+        )
+    )
+    assert d.checks["evidence_verbatim"] is True, d.checks
+
+
+@pytest.mark.parametrize(
+    "source_text",
+    [
+        "- apply claims the row before writing it\n- then it retries",
+        "## apply\napply claims the row before writing it",
+        "Notes\n\napply claims the row before writing it",
+    ],
+)
+def test_list_items_and_headings_stay_separate_units(monkeypatch, source_text):
+    monkeypatch.setenv(review.AUTO_APPLY_ENV, "1")
+    d = guardrail_decision(**_ok(source_text=source_text))
+    assert d.checks["evidence_verbatim"] is True, d.checks
