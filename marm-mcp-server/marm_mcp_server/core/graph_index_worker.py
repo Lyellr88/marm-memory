@@ -667,6 +667,7 @@ class GraphIndexWorker:
                 root=state.root,
                 reason=reason,
                 message=result.get("message"),
+                hint=result.get("hint"),
                 retry_in_seconds=GRAPH_AUTO_INDEX_RECONCILE_SECONDS,
             )
             return

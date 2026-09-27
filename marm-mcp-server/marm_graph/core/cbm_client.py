@@ -414,7 +414,12 @@ class CbmClient:
 
         if result.get("isError"):
             if isinstance(payload, dict):
-                message = payload.get("error")
+                # A contained worker failure names itself by `outcome`.
+                message = (
+                    payload.get("error")
+                    or payload.get("outcome")
+                    or json.dumps(payload, sort_keys=True)
+                )
             else:
                 message = _field_from_truncated(str(payload), "error") or str(payload)
             raise CbmToolError(f"{tool}: {message}", payload=payload)
