@@ -753,3 +753,83 @@ def test_a_sentence_without_an_abstention_keeps_its_clauses_together(packet):
     its citation from the claim it completes."""
     v = verify("apply calls claim; see [S1].", packet)
     assert "uncited claims" not in v.failures, v.failures
+
+
+def _never_retries_packet():
+    return build_packet(
+        Context(
+            project={"name": "demo"},
+            task="t",
+            symbols=[
+                Symbol(
+                    "pkg.apply",
+                    "apply",
+                    "Function",
+                    "a.py",
+                    1,
+                    3,
+                    source="def apply():\n    # never retries\n    claim()\n",
+                ),
+                Symbol("pkg.claim", "claim", "Function", "a.py", 4, 5, source="x"),
+            ],
+            graph_edges=[("pkg.apply", "pkg.claim", 1.0)],
+        )
+    )
+
+
+@pytest.mark.parametrize(
+    "text", ["apply calls claim and never retries", "calls claim, not a retry"]
+)
+def test_a_negation_of_a_separate_action_does_not_deny_the_link(text):
+    check = check_item(
+        "relations",
+        text=text,
+        packet=_never_retries_packet(),
+        kind="calls",
+        source="S1",
+        target="S2",
+    )
+    assert "the relation's text denies its own link" not in check.failures
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "does not call",
+        "never invokes",
+        "is not called",
+        "apply never, under any condition, calls claim",
+    ],
+)
+def test_a_negated_link_verb_denies_the_link(text):
+    check = check_item(
+        "relations",
+        text=text,
+        packet=_never_retries_packet(),
+        kind="calls",
+        source="S1",
+        target="S2",
+    )
+    assert "the relation's text denies its own link" in check.failures
+
+
+def test_an_abstention_joined_by_a_bare_but_does_not_exempt_the_claim(packet):
+    v = verify(
+        "apply claims first [S1]. The packet does not show retries but apply "
+        "deletes every row.",
+        packet,
+    )
+    assert "uncited claims" in v.failures, v.failures
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "There is no evidence that apply and claim share a lock.",
+        "The packet does not show whether apply retries while holding the row.",
+    ],
+)
+def test_a_bare_and_or_while_inside_an_abstention_is_not_a_claim(packet, text):
+    v = verify(text, packet)
+    assert v.abstained is True, v
+    assert "uncited claims" not in v.failures, v.failures
