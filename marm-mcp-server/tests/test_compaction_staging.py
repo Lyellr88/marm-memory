@@ -1346,3 +1346,40 @@ def test_claim_pending_compaction_prompt_concurrent_claims_one(monkeypatch, tmp_
             (row_id,),
         ).fetchone()[0]
     assert nudge_count == 1
+
+
+@pytest.mark.asyncio
+async def test_a_staged_summary_is_redacted_before_it_is_stored(monkeypatch, tmp_path):
+    """Staging is storage: the Console shows a staged summary before apply."""
+    import marm_mcp_server.endpoints.compaction as ep
+    from marm_mcp_server.core.models import (
+        StageCompactionSummariesRequest,
+        StagedSummaryItem,
+    )
+
+    mem = MARMMemory(str(tmp_path / "memory.db"))
+    monkeypatch.setattr(ep, "memory", mem)
+    similar = _make_similar_embeddings(3)
+    ids = [
+        _insert_memory_row(mem, "sess", f"c{i}", similar[i], content_hash=f"ch{i}")
+        for i in range(3)
+    ]
+    row_id = _insert_staging_row(
+        mem, "sess", ids, snapshot={ids[i]: f"ch{i}" for i in range(3)}
+    )
+    key = "AKIA" + "IOSFODNN7" + "EXAMPLE"
+
+    await ep.marm_stage_compaction_summaries(
+        StageCompactionSummariesRequest(
+            summaries=[
+                StagedSummaryItem(
+                    candidate_id=row_id,
+                    source_memory_ids=ids,
+                    suggested_summary=f"Deploys use {key} now.",
+                )
+            ]
+        )
+    )
+
+    stored = _get_staging_row(mem, row_id)["suggested_summary"]
+    assert key not in stored and "[redacted:aws-access-key]" in stored

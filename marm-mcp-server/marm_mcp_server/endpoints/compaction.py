@@ -10,6 +10,7 @@ from ..core.models import (
     CompactionRequest,
     StageCompactionSummariesRequest,
 )
+from ..core.redaction import redact_secrets
 from ..services.compaction_apply import apply_compaction_write
 
 router = APIRouter(prefix="", tags=["Compaction"])
@@ -229,7 +230,7 @@ async def marm_stage_compaction_summaries(
                 "UPDATE compaction_staging "
                 "SET suggested_summary = ?, status = 'summary_staged', updated_at = ? "
                 "WHERE id = ?",
-                (suggested_summary, now, candidate_id),
+                (redact_secrets(suggested_summary)[0], now, candidate_id),
             )
             results.append({"candidate_id": candidate_id, "status": "summary_staged"})
 

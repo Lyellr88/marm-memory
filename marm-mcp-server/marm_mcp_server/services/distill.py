@@ -28,6 +28,7 @@ from ..core.distill import (
     resolve,
 )
 from ..core.memory import MARMMemory, sanitize_content
+from ..core.redaction import redact_secrets
 
 # A proposal nobody reviewed is not worth keeping indefinitely; the transcript
 # it came from is long gone and its neighbour may have moved.
@@ -94,6 +95,8 @@ async def propose(
     # written, so a fact stated across two turns is invisible to it, while
     # generation rewrites facts to stand alone. Which one ran is reported, so a
     # reviewer is never guessing why the proposals look different today.
+    # Before extraction: a pasted key must reach neither a model nor staging.
+    text = redact_secrets(text)[0]
     mode = "generated"
     candidates = None
     if use_llm:

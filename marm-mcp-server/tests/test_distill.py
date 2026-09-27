@@ -1203,3 +1203,33 @@ async def test_containment_needs_a_span_long_enough_to_be_a_memory():
         [Candidate("a wholly novel fact", 1.0, (), evidence="to systemd")],
     )
     assert only.verdict == "new"
+
+
+def test_a_transcript_is_redacted_before_anything_is_extracted_or_staged(
+    monkeypatch, tmp_path
+):
+    """Transcripts are where pasted keys live; the extractor, a local model
+    and the staging table must all see the redacted text."""
+    import sqlite3
+
+    from conftest import load_isolated_server
+
+    load_isolated_server(monkeypatch, tmp_path)
+    from marm_mcp_server.core.memory import memory as live
+    from marm_mcp_server.services import distill as service
+
+    key = "AKIA" + "IOSFODNN7" + "EXAMPLE"
+    seen = []
+
+    def extract(text, **_kwargs):
+        seen.append(text)
+        return [Candidate(content=text.strip(), score=0.9, reasons=("fixture",))]
+
+    monkeypatch.setattr(service, "extract_candidates", extract)
+    _propose(service, live, f"The deploy key was rotated to {key} after the leak.")
+
+    with sqlite3.connect(str(tmp_path / "marm_memory.db")) as conn:
+        staged = [row[0] for row in conn.execute("SELECT content FROM distill_staging")]
+    assert seen and all(key not in text for text in seen)
+    assert staged and all(key not in row for row in staged)
+    assert any("[redacted:aws-access-key]" in row for row in staged)
