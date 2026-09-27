@@ -27,7 +27,9 @@ _SHORT = 160
 
 
 class _Item(BaseModel):
-    model_config = ConfigDict(extra="ignore", populate_by_name=True)
+    # Forbid, as the schema does: a server that ignores `json_schema` must not
+    # get entries through that a server honouring it would have refused.
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
 
 
 class SummaryItem(_Item):
@@ -332,17 +334,23 @@ def _call(
         schema=schema(ops),
         widen=False,
         finished=finished,
+        deadline=run.deadline,
     )
     elapsed = int((time.monotonic() - started) * 1000)
     value = local_llm._first_json_value(text) if text else None
     return value, finished.get("reason"), elapsed, len(text or "")
 
 
+#: Finishes that mean the reply was cut off. A structured reply that parsed
+#: is otherwise complete: a truncated JSON document does not parse.
+_CUT_OFF = ("length", "deadline", "error")
+
+
 def _unanswered(
     op: Operation, finish: str | None, elapsed: int, chars: int
 ) -> OpResult:
     # A reply cut off at the cap is incomplete, not merely badly shaped.
-    status = "failed" if finish == "length" or not chars else "malformed"
+    status = "failed" if finish in _CUT_OFF or not chars else "malformed"
     return OpResult(
         op.name,
         status,
@@ -370,7 +378,7 @@ def run_operations(
             continue
         value, finish, elapsed, chars = _call(ops, packet, task, run)
         for op in ops:
-            if finish == "length" or not isinstance(value, dict):
+            if finish in _CUT_OFF or not isinstance(value, dict):
                 yield _unanswered(op, finish, elapsed, chars)
                 continue
             result = parse(op, value, packet)
