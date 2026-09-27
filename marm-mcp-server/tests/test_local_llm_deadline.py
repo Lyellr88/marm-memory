@@ -78,3 +78,66 @@ def test_a_stream_that_fails_says_so(monkeypatch):
     finished: dict = {}
     assert list(local_llm.stream("s", "u", timeout=1.0, finished=finished)) == []
     assert finished["reason"] == "error"
+
+
+@pytest.fixture
+def trickling_headers(monkeypatch):
+    """A peer that never finishes its headers, one byte at a time."""
+    import socket
+
+    listener = socket.socket()
+    listener.bind(("127.0.0.1", 0))
+    listener.listen()
+    stop = threading.Event()
+
+    def serve():
+        listener.settimeout(0.2)
+        while not stop.is_set():
+            try:
+                conn, _ = listener.accept()
+            except OSError:
+                continue
+            try:
+                conn.recv(65536)
+                conn.sendall(b"HTTP/1.1 200 OK\r\nX-Slow: ")
+                for _ in range(400):
+                    conn.sendall(b"a")
+                    time.sleep(0.05)
+            except OSError:
+                pass
+            finally:
+                conn.close()
+
+    thread = threading.Thread(target=serve, daemon=True)
+    thread.start()
+    base = f"http://127.0.0.1:{listener.getsockname()[1]}"
+    monkeypatch.setattr(local_llm, "endpoint", lambda: base)
+    monkeypatch.setattr(local_llm, "available", lambda *a, **k: "m")
+    yield
+    stop.set()
+    listener.close()
+
+
+def test_a_completion_stuck_in_its_headers_stops_at_the_deadline(trickling_headers):
+    finished: dict = {}
+    started = time.monotonic()
+    assert (
+        local_llm.complete(
+            "s", "u", timeout=5.0, deadline=started + 0.4, finished=finished
+        )
+        is None
+    )
+    assert time.monotonic() - started < 1.5, "header parsing ran past the deadline"
+    assert finished["reason"] == "deadline"
+
+
+def test_a_stream_stuck_in_its_headers_stops_at_the_deadline(trickling_headers):
+    finished: dict = {}
+    started = time.monotonic()
+    list(
+        local_llm.stream(
+            "s", "u", timeout=5.0, deadline=started + 0.4, finished=finished
+        )
+    )
+    assert time.monotonic() - started < 1.5, "header parsing ran past the deadline"
+    assert finished["reason"] == "deadline"
