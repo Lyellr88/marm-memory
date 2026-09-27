@@ -61,6 +61,15 @@ def _scope_sql(
     return conditions, params
 
 
+def _freshness_columns(conn: sqlite3.Connection) -> str:
+    # Recall can read a graph before ConceptDB has migrated it.
+    present = {row[1] for row in conn.execute("PRAGMA table_info(entity_code_links)")}
+    return ", ".join(
+        column if column in present else f"NULL AS {column}"
+        for column in ("anchor_hash", "code_changed_at")
+    )
+
+
 def _freshness(row: sqlite3.Row) -> str:
     """Whether the linked code changed since the link was first made."""
     if row["code_changed_at"]:
@@ -270,7 +279,7 @@ def get_graph_context(
                 placeholders = ",".join("?" for _ in link_ids)
                 link_rows = conn.execute(
                     f"""SELECT graph_qualified_name, label, file_path,
-                               anchor_hash, code_changed_at
+                               {_freshness_columns(conn)}
                         FROM entity_code_links
                         WHERE entity_id IN ({placeholders})
                         ORDER BY entity_id, graph_qualified_name LIMIT ?""",

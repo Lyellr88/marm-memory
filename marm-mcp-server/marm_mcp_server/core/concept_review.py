@@ -115,9 +115,12 @@ def merge_entities(
             conn.execute(
                 "INSERT OR IGNORE INTO entity_code_links "
                 "(entity_id, graph_qualified_name, project, confidence, label, "
-                "file_path, created_at) "
+                "file_path, link_method, resolved_at, last_verified_at, "
+                "anchor_hash, code_changed_at, created_at) "
                 "SELECT ?, graph_qualified_name, project, confidence, label, "
-                "file_path, created_at FROM entity_code_links WHERE entity_id = ?",
+                "file_path, link_method, resolved_at, last_verified_at, "
+                "anchor_hash, code_changed_at, created_at "
+                "FROM entity_code_links WHERE entity_id = ?",
                 (winner_id, loser_id),
             )
             _ensure_lease(lease_lost)
