@@ -72,6 +72,20 @@ def _call_edge(a: SymbolItem, b: SymbolItem, source: str) -> Conclusion:
     )
 
 
+_UNIT_END = re.compile(r"(?<=[.!?])\s+|\n")
+
+
+def _statements(texts: list[str]) -> list[str]:
+    """Whole sentences and whole lines, stripped of comment markers."""
+    out = []
+    for t in texts:
+        for unit in _UNIT_END.split(t):
+            unit = unit.strip().lstrip("#/*- ").rstrip(".").strip()
+            if unit:
+                out.append(unit)
+    return out
+
+
 def _cited_texts(handles: list[str], packet: EvidencePacket) -> list[str]:
     out = []
     for h in handles:
@@ -94,10 +108,12 @@ def _classify(
     """The strongest claim kind MARM can check for a verified result."""
     content = _without_handles(text).rstrip(".")
     cited = _cited_texts(handles, packet)
-    if any(_norm(content) in _norm(t) for t in cited):
-        return Conclusion(content, content, "verbatim_statement", source)
-    if quote and _norm(content.strip("`\"' ")) == _norm(quote):
-        return Conclusion(content, quote, "quoted_span", source)
+    want = _norm(content.strip("`\"' "))
+    # A whole statement only: a fragment can drop the `never` that governs it.
+    for unit in _statements(cited):
+        if want and _norm(unit) == want:
+            kind = "quoted_span" if quote and _norm(quote) == want else None
+            return Conclusion(content, unit, kind or "verbatim_statement", source)
     call = named_call(content, packet)
     if call and not call[2]:
         a, b, _ = call
@@ -261,8 +277,10 @@ def _provable(kind: str, content: str, evidence: str) -> bool:
     if kind == "identifier_in_range":
         return bool(_IN_RANGE.match(content)) and content.endswith(evidence)
     if kind in ("quoted_span", "verbatim_statement"):
+        # Equality: the stored evidence is the whole statement, so containment
+        # would accept a claim cut out of a sentence that negates it.
         core = _norm(content.strip("`\"' "))
-        return bool(core) and core in _norm(evidence)
+        return bool(core) and core == _norm(evidence.rstrip("."))
     return False
 
 
