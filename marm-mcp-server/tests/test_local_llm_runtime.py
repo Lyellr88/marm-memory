@@ -112,9 +112,12 @@ def test_a_preference_is_ignored_on_a_runtime_that_cannot_honour_it(monkeypatch)
         def get(_key):
             return "some-other-model"
 
-    monkeypatch.setattr(
-        "marm_mcp_server.core.runtime_flags.get", staticmethod(_Flags.get)
-    )
+    # The module `preferred_model` imports, not a dotted path: after another
+    # test's isolated server load the package attributes that path walks can
+    # belong to a different module generation.
+    from marm_mcp_server.core import runtime_flags
+
+    monkeypatch.setattr(runtime_flags, "get", _Flags.get)
     assert local_llm.preferred_model() is None
 
 
@@ -290,14 +293,16 @@ def _save_endpoint(monkeypatch, url, *, allow_remote):
     from marm_mcp_server.endpoints import system
     from marm_mcp_server.endpoints.system import RuntimeLlmRequest
 
-    monkeypatch.setattr(local_llm, "ALLOW_REMOTE", allow_remote)
+    # `system.local_llm`, not this file's import: the route reads its own
+    # reference, which another test's isolated load may have replaced.
+    monkeypatch.setattr(system.local_llm, "ALLOW_REMOTE", allow_remote)
     saved: dict[str, str] = {}
     monkeypatch.setattr(
         system.runtime_flags, "set_", lambda key, value: saved.update({key: value})
     )
     monkeypatch.setattr(system.runtime_flags, "clear", lambda key: None)
     monkeypatch.setattr(system.runtime_flags, "set_bool", lambda key, value: None)
-    monkeypatch.setattr(local_llm, "invalidate_settings_cache", lambda: None)
+    monkeypatch.setattr(system.local_llm, "invalidate_settings_cache", lambda: None)
     monkeypatch.setattr(system, "_llm_status", lambda: {})
 
     result = asyncio.run(system.update_runtime_llm(RuntimeLlmRequest(endpoint=url)))
@@ -368,7 +373,7 @@ def _save_profile(monkeypatch, profile):
     monkeypatch.setattr(
         system.runtime_flags, "clear", lambda key: saved.update({key: None})
     )
-    monkeypatch.setattr(local_llm, "invalidate_settings_cache", lambda: None)
+    monkeypatch.setattr(system.local_llm, "invalidate_settings_cache", lambda: None)
     monkeypatch.setattr(system, "_llm_status", lambda: {})
     asyncio.run(system.update_runtime_llm(RuntimeLlmRequest(profile=profile)))
     return saved
