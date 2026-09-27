@@ -647,7 +647,9 @@ def check_item(
         # the words written beside it.
         claim_handles = cites or tuple(h for h in (source, target) if h)
         missing = unsupported_terms(text, cited_text(claim_handles, packet))
-        if not checkable(text):
+        # A relation's edge is its checkable content, so only its text may be
+        # empty; a summary or fact that asserts nothing cannot be verified.
+        if op != "relations" and not checkable(text):
             failures.append("claim has nothing a check could fail")
         elif negated_by_evidence(text, claim_handles, packet):
             failures.append(_OPPOSITE)

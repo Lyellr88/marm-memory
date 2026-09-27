@@ -678,3 +678,12 @@ def test_a_wrapped_docstring_is_one_block_too():
         "opposite" in f
         for f in verify("sweep writes the row directly [S1].", p).failures
     )
+
+
+def test_a_relation_is_checked_by_its_edge_even_with_empty_text(packet):
+    """The edge is a relation's checkable content; placeholder text asserts
+    nothing that could be false."""
+    check = check_item(
+        "relations", text="...", packet=packet, kind="calls", source="S1", target="S2"
+    )
+    assert (check.state, check.support) == ("verified", "edge")
