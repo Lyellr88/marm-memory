@@ -148,7 +148,7 @@ def test_a_negative_probe_is_cached(monkeypatch, generation_on):
     before falling back, turning a working feature into a slow one."""
     calls = []
 
-    def fake_request(path, payload, timeout, failure=None):
+    def fake_request(path, payload, timeout, failure=None, deadline=None):
         calls.append(path)
         return None
 
@@ -229,7 +229,7 @@ def test_json_object_is_retried_without_it_when_the_server_refuses(monkeypatch):
     monkeypatch.setattr(local_llm, "available", lambda *a, **k: "gpt-oss-20b")
     sent = []
 
-    def fake_request(path, payload, timeout, failure=None):
+    def fake_request(path, payload, timeout, failure=None, deadline=None):
         # A snapshot: the retry pops `response_format` off the same dict, so
         # storing the reference would show both calls without it.
         sent.append(dict(payload))
@@ -250,7 +250,7 @@ def _recording(monkeypatch, replies):
     monkeypatch.setattr(local_llm, "available", lambda *a, **k: "m")
     sent = []
 
-    def fake_request(path, payload, timeout, failure=None):
+    def fake_request(path, payload, timeout, failure=None, deadline=None):
         sent.append(dict(payload))
         reply = replies.pop(0)
         if isinstance(reply, int):
