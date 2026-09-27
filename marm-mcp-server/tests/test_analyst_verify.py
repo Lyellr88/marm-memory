@@ -687,3 +687,40 @@ def test_a_relation_is_checked_by_its_edge_even_with_empty_text(packet):
         "relations", text="...", packet=packet, kind="calls", source="S1", target="S2"
     )
     assert (check.state, check.support) == ("verified", "edge")
+
+
+def test_negated_relation_text_contradicts_its_own_edge():
+    """ "never calls" beside a real S1 -> S2 edge denies the relation it
+    labels, even when `never` appears elsewhere in the cited prose."""
+    p = build_packet(
+        Context(
+            project={"name": "demo"},
+            task="t",
+            symbols=[
+                Symbol(
+                    "pkg.apply",
+                    "apply",
+                    "Function",
+                    "a.py",
+                    1,
+                    3,
+                    source="def apply():\n    # never retries\n    claim()\n",
+                ),
+                Symbol("pkg.claim", "claim", "Function", "a.py", 4, 5, source="x"),
+            ],
+            graph_edges=[("pkg.apply", "pkg.claim", 1.0)],
+        )
+    )
+    denied = check_item(
+        "relations",
+        text="never calls",
+        packet=p,
+        kind="calls",
+        source="S1",
+        target="S2",
+    )
+    plain = check_item(
+        "relations", text="calls", packet=p, kind="calls", source="S1", target="S2"
+    )
+    assert denied.state == "uncertain"
+    assert plain.state == "verified"

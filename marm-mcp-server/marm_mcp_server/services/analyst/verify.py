@@ -671,6 +671,11 @@ def check_item(
         support, failure = _relation(kind, source, target, packet)
         if failure:
             failures.append(failure)
+        # A relation asserts its link, so text that negates it ("never calls")
+        # contradicts the relation whatever its endpoints are named.
+        tokens = _TOKEN.findall(_BRACKET.sub(" ", text))
+        if tokens and _negated(tokens, 0, len(tokens) - 1):
+            failures.append("the relation's text denies its own link")
     state = "uncertain" if failures else "verified"
     return ItemCheck(
         state, support if state == "verified" else "none", tuple(failures), ()
