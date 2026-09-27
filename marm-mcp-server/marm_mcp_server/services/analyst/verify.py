@@ -399,11 +399,71 @@ _NEGATOR = re.compile(
     r"(?:not|never|no|cannot|without|nothing|neither|nor|.+n't)", re.I
 )
 _TOKEN = re.compile(r"[A-Za-z][A-Za-z0-9']*")
-_LINK_VERB = re.compile(
-    r"call(?:s|ed|ing)?|invok(?:e|es|ed|ing)|delegat(?:e|es|ed|ing)"
-    r"|about|describ\w*|document\w*|mention\w*|refer\w*",
-    re.I,
+#: The words that state each relation kind's link.
+_LINK_VERB = {
+    "calls": re.compile(
+        r"call(?:s|ed|ing)?|invok(?:e|es|ed|ing)|delegat(?:e|es|ed|ing)", re.I
+    ),
+    "memory_about": re.compile(
+        r"about|describ\w*|document\w*|mention\w*|refer\w*", re.I
+    ),
+}
+#: A contrast starts a clause that negates something else; a comma does not,
+#: or "never, under any condition, calls" would lose its negator.
+_CONTRAST = re.compile(r";|\b(?:but|although|though|whereas|yet)\b", re.I)
+#: Closed-class words: they can follow a link verb without naming its object.
+_FUNCTION_WORDS = frozenset(
+    """
+    a an the it its them they this that these those any anything anyone
+    something nothing everything one ones itself themselves by to from of in on
+    at into onto with for as again ever still yet once twice here there
+    """.split()
 )
+
+
+def _denies_link(
+    text: str,
+    kind: str | None,
+    source: str | None,
+    target: str | None,
+    packet: EvidencePacket,
+) -> bool:
+    """Whether the relation's text negates the link it labels.
+
+    A negated link verb denies this relation unless its clause names another
+    object and neither endpoint: "does not call it", "is not called by apply"
+    deny it; "but does not call retry" denies a different call.
+    """
+    verb = _LINK_VERB.get(kind or "")
+    if verb is None:
+        return False
+    own: set[str] = set()
+    for h in (source, target):
+        if not h:
+            continue
+        own.add(h.casefold())
+        sym = packet.symbol(h)
+        if sym:
+            own |= _stems(sym.name.replace("_", " "))
+    for clause in _CONTRAST.split(text):
+        tokens = _TOKEN.findall(clause)
+        for i, t in enumerate(tokens):
+            if not (verb.fullmatch(t) and _negated(tokens, 0, i - 1)):
+                continue
+            if any(_forms(w) & own for w in tokens):
+                return True
+            objects = [
+                w
+                for w in tokens[i + 1 :]
+                if w.casefold() not in _FUNCTION_WORDS
+                and not w.casefold().endswith("ly")
+                and not _forms(w) & _GENERIC
+            ]
+            if not objects:
+                return True
+    return False
+
+
 _COMMENT = re.compile(r"^\s*(?:#|//|/\*|\*)\s?(.*)$")
 _DOCSTRING = re.compile(r'"""(.*?)"""|\'\'\'(.*?)\'\'\'', re.S)
 #: How far before the claim's first word a negator still governs it:
@@ -691,14 +751,8 @@ def check_item(
         support, failure = _relation(kind, source, target, packet)
         if failure:
             failures.append(failure)
-        # Text that negates the link ("never calls") contradicts the relation;
-        # a negation after it ("and never retries") is of another action. Any
-        # negator before the verb counts, so a long aside cannot hide one.
-        tokens = _TOKEN.findall(_BRACKET.sub(" ", text))
-        if any(
-            _LINK_VERB.fullmatch(t) and _negated(tokens, 0, i - 1)
-            for i, t in enumerate(tokens)
-        ):
+        # Text that negates the link ("never calls") contradicts the relation.
+        if _denies_link(text, kind, source, target, packet):
             failures.append("the relation's text denies its own link")
     state = "uncertain" if failures else "verified"
     return ItemCheck(

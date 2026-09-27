@@ -778,7 +778,16 @@ def _never_retries_packet():
 
 
 @pytest.mark.parametrize(
-    "text", ["apply calls claim and never retries", "calls claim, not a retry"]
+    "text",
+    [
+        "apply calls claim and never retries",
+        "calls claim, not a retry",
+        "apply calls claim but does not describe retries",
+        "apply does not retry but calls claim",
+        "apply does not retry; it calls claim",
+        "apply calls claim but does not call retry",
+        "[S1] calls [S2] but never invokes the database",
+    ],
 )
 def test_a_negation_of_a_separate_action_does_not_deny_the_link(text):
     check = check_item(
@@ -799,6 +808,12 @@ def test_a_negation_of_a_separate_action_does_not_deny_the_link(text):
         "never invokes",
         "is not called",
         "apply never, under any condition, calls claim",
+        "does not call claim",
+        "does not call it directly",
+        "never calls the helper function",
+        "is not called by apply",
+        "[S1] never calls [S2]",
+        "calls nothing, and never invokes anything",
     ],
 )
 def test_a_negated_link_verb_denies_the_link(text):
@@ -833,3 +848,15 @@ def test_a_bare_and_or_while_inside_an_abstention_is_not_a_claim(packet, text):
     v = verify(text, packet)
     assert v.abstained is True, v
     assert "uncited claims" not in v.failures, v.failures
+
+
+def test_a_memory_relation_whose_text_denies_it_is_not_verified(packet):
+    check = check_item(
+        "relations",
+        text="M1 is not about apply",
+        packet=packet,
+        kind="memory_about",
+        source="M1",
+        target="S1",
+    )
+    assert "the relation's text denies its own link" in check.failures
