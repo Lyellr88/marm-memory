@@ -368,3 +368,46 @@ def test_disagreements_ride_on_the_answer(llm):
     fields = _run(ctx).to_answer_fields()
     (d,) = fields["answer_disagreements"]
     assert d["severity"] == "contradicted"
+
+
+# --- a reply that did not finish is never verified ---------------------------
+
+
+@pytest.mark.parametrize("finish", ["error", "deadline", None])
+def test_a_stream_that_did_not_finish_is_never_verified(llm, finish):
+    """A dropped connection leaves a prefix that can look complete."""
+    llm.streamed = ["apply calls claim first [S1] [S2]."]
+    llm.finish = finish
+    done = _stream(_ctx())[-1][1]
+    assert done["truncated"] is True
+    assert done["verification"]["state"] != "verified"
+
+
+@pytest.mark.parametrize("finish", ["error", "deadline", None])
+def test_a_completion_that_did_not_finish_is_never_verified(llm, finish):
+    llm.replies = ["apply calls claim first [S1] [S2]."]
+    llm.finish = finish
+    b = _run(_ctx())
+    assert b.verification.state != "verified"
+
+
+@pytest.mark.parametrize("profile", [GENERAL, SMALL], ids=lambda p: p.name)
+def test_every_call_carries_the_wall_clock_deadline(llm, profile):
+    import time
+
+    llm.by_op = _GOOD
+    llm.replies = ["apply [S1]."]
+    before = time.monotonic()
+    _run(_ctx(), profile)
+    assert llm.calls
+    for call in llm.calls:
+        assert before < call["deadline"] <= time.monotonic() + profile.time_s
+
+
+def test_a_field_outside_the_contract_is_dropped_and_counted(llm):
+    """Fallback parsing enforces what the schema forbids."""
+    extra = dict(_GOOD["facts"][0], confidence=0.99)
+    llm.by_op = dict(_GOOD, facts=[extra])
+    b = _run(_ctx(), SMALL)
+    facts = next(r for r in b.operations if r.op == "facts")
+    assert facts.malformed == 1 and facts.items == []

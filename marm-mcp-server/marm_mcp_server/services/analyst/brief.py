@@ -41,6 +41,9 @@ packet.
 """
 
 _STATUS = {"verified": "ok", "uncertain": "unverified", "rejected": "rejected"}
+#: The only finish that means the model ended the reply itself. A length cap,
+#: a deadline, a dropped stream or a missing reason all leave it incomplete.
+_FINISHED = ("stop",)
 _SUBSTANTIVE = ("summary", "facts", "relations")
 
 _UNAVAILABLE_HINT = (
@@ -208,13 +211,13 @@ def _judge_text(
         brief.hint = _EMPTY_HINT
         return brief
     brief.answer = text
-    brief.truncated = finish == "length" or brief.model_info["stopped"] is not None
+    brief.truncated = finish not in _FINISHED or brief.model_info["stopped"] is not None
     v = verify(text, brief.packet)
     if brief.truncated and v.state == "verified":
         v = replace(
             v,
             state="uncertain",
-            failures=(*v.failures, "the answer was cut off at the profile's limit"),
+            failures=(*v.failures, f"the answer did not finish ({finish})"),
         )
     brief.verification = v
     brief.citations, brief.unresolved = extract_citations(text, brief.packet)
@@ -356,6 +359,7 @@ def _general(brief: Brief, run: Run, task: str) -> Brief:
         timeout=run.remaining(),
         widen=False,
         finished=finished,
+        deadline=run.deadline,
     )
     return _judge_text(brief, run, text, finished.get("reason"), calls=1)
 
@@ -442,6 +446,7 @@ def _stream_general(
         max_tokens=brief.profile.max_tokens,
         timeout=run.remaining(),
         finished=finished,
+        deadline=run.deadline,
     )
     try:
         for piece in upstream:

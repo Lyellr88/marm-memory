@@ -161,6 +161,11 @@ class Run:
     cancel: threading.Event = field(default_factory=threading.Event)
     started: float = field(default_factory=time.monotonic)
 
+    @property
+    def deadline(self) -> float:
+        """The monotonic instant the run must end by; passed to every call."""
+        return self.started + self.profile.time_s
+
     def remaining(self) -> float:
         return max(0.0, self.profile.time_s - (time.monotonic() - self.started))
 

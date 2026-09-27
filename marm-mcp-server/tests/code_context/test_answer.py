@@ -49,11 +49,20 @@ def model(monkeypatch):
     reply = {"text": ""}
     monkeypatch.setattr(local_llm, "available", lambda *a, **k: "stub-model")
     monkeypatch.setattr(local_llm, "endpoint_source", lambda: "environment")
-    monkeypatch.setattr(local_llm, "complete", lambda *a, **k: reply["text"])
 
-    def stream(*_a, **_k):
+    def complete(*_a, finished=None, **_k):
+        # A real server always reports how the reply ended.
+        if finished is not None:
+            finished["reason"] = "stop"
+        return reply["text"]
+
+    monkeypatch.setattr(local_llm, "complete", complete)
+
+    def stream(*_a, finished=None, **_k):
         text = reply["text"]
         yield from (text[i : i + 7] for i in range(0, len(text), 7))
+        if finished is not None:
+            finished["reason"] = "stop"
 
     monkeypatch.setattr(local_llm, "stream", stream)
     return reply
