@@ -279,6 +279,22 @@ def _rank_rates(bucket, n):
     }
 
 
+def table_header():
+    return (
+        f"{'category':<14}{'n':>6}{'any-hit':>10}{'all-hit':>10}{'ev-recall':>11}"
+        f"{'sem-any':>10}{'log-any':>10}{'sem-R@k':>9}{'MRR':>8}{'nDCG':>8}"
+    )
+
+
+def table_row(cat, d):
+    return (
+        f"{cat:<14}{d['total']:>6}{d['any_hit_rate']:>10.1%}{d['all_hit_rate']:>10.1%}"
+        f"{d['evidence_recall']:>11.1%}{d['semantic_any_hit_rate']:>10.1%}"
+        f"{d['log_any_hit_rate']:>10.1%}{d['semantic_recall_at_k']:>9.1%}"
+        f"{d['mrr']:>8.3f}{d['ndcg_at_k']:>8.3f}"
+    )
+
+
 def recall_and_score(base_url, api_key, limit_k, limit_samples=None):
     if not STATE_PATH.exists():
         print(
@@ -455,15 +471,10 @@ def recall_and_score(base_url, api_key, limit_k, limit_samples=None):
     )
 
     print(f"\n=== LoCoMo retrieval results (limit={limit_k}) ===")
-    header = f"{'category':<14}{'n':>6}{'any-hit':>10}{'all-hit':>10}{'ev-recall':>11}{'sem-any':>10}{'log-any':>10}{'MRR':>8}{'nDCG':>8}"
-    print(header)
+    print(table_header())
     rows = [*list(report["per_category"].items()), ("OVERALL", summary)]
     for cat, d in rows:
-        print(
-            f"{cat:<14}{d['total']:>6}{d['any_hit_rate']:>10.1%}{d['all_hit_rate']:>10.1%}"
-            f"{d['evidence_recall']:>11.1%}{d['semantic_any_hit_rate']:>10.1%}{d['log_any_hit_rate']:>10.1%}"
-            f"{d['mrr']:>8.3f}{d['ndcg_at_k']:>8.3f}"
-        )
+        print(table_row(cat, d))
     if skipped_no_evidence:
         print(
             f"\nSkipped {skipped_no_evidence} questions with no evidence annotations."

@@ -61,3 +61,22 @@ def test_an_empty_top_k_scores_zero_instead_of_dividing_by_zero(k):
         "mrr": 0.0,
         "ndcg_at_k": 0.0,
     }
+
+
+def test_the_summary_table_shows_semantic_recall_at_k():
+    row = {
+        "total": 4,
+        "any_hit_rate": 0.5,
+        "all_hit_rate": 0.25,
+        "evidence_recall": 0.4,
+        "semantic_any_hit_rate": 0.5,
+        "log_any_hit_rate": 0.25,
+        "semantic_recall_at_k": 0.375,
+        "mrr": 0.3,
+        "ndcg_at_k": 0.35,
+    }
+    header = run_eval.table_header()
+    line = run_eval.table_row("OVERALL", row)
+    assert "sem-R@k" in header
+    assert "37.5%" in line
+    assert len(header) == len(line)
