@@ -274,7 +274,9 @@ def composed(staged_memory, monkeypatch):
             graph_edges=[("pkg.apply", "pkg.claim", 1.0)],
         )
 
-    def complete(system, *_a, **_k):
+    def complete(system, *_a, finished=None, **_k):
+        if finished is not None:
+            finished["reason"] = "stop"
         return "apply calls claim [S1] [S2]."
 
     monkeypatch.setattr(cc, "build", build)
@@ -626,7 +628,9 @@ def _streamed(monkeypatch, tmp_path, **server_kw):
             graph_edges=[("pkg.apply", "pkg.claim", 1.0)],
         )
 
-    def complete(system, *_a, **_k):
+    def complete(system, *_a, finished=None, **_k):
+        if finished is not None:
+            finished["reason"] = "stop"
         return "apply calls claim [S1] [S2]."
 
     def stream(*_a, finished=None, **_k):
@@ -794,3 +798,46 @@ def test_a_review_failure_keeps_the_verified_answer(composed, monkeypatch):
     skipped = out["analyst"]["skipped"]
     assert skipped and skipped[0]["reason"] == "review failed"
     assert "locked" not in json.dumps(out["analyst"])
+
+
+# --- a verbatim statement is a whole statement --------------------------------
+
+
+def _sweep_packet():
+    return _packet(
+        source="def apply():\n    # never deletes every memory row\n    claim()\n",
+        memories=[{"id": "m1", "content": "apply claims the row. It writes once."}],
+    )
+
+
+def test_a_fragment_of_a_negated_comment_is_not_a_verbatim_statement():
+    """The review's case: the claim sits inside the comment, minus `never`."""
+    c = review._classify("deletes every memory row", ["S1"], _sweep_packet(), "A1")
+    assert c.claim_kind == "paraphrase"
+
+
+def test_a_whole_sentence_is_a_verbatim_statement_and_is_its_evidence():
+    c = review._classify("apply claims the row", ["M1"], _sweep_packet(), "A1")
+    assert c.claim_kind == "verbatim_statement"
+    assert c.evidence == "apply claims the row"
+
+
+def test_a_quote_is_a_span_only_when_it_is_a_whole_source_line():
+    whole = review._classify("claim()", ["S1"], _sweep_packet(), "F1", quote="claim()")
+    part = review._classify("laim(", ["S1"], _sweep_packet(), "F1", quote="laim(")
+    assert whole.claim_kind in ("quoted_span", "verbatim_statement")
+    assert part.claim_kind == "paraphrase"
+
+
+def test_the_recheck_needs_equality_not_containment(monkeypatch):
+    """The stored shape the old re-check could never catch: the claim inside
+    its own negated evidence."""
+    monkeypatch.setenv(review.AUTO_APPLY_ENV, "1")
+    d = guardrail_decision(
+        **_analyst(
+            "verbatim_statement",
+            "deletes every memory row",
+            "never deletes every memory row",
+        )
+    )
+    assert d.apply is False and d.checks["mechanically_provable"] is False
