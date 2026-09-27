@@ -26,6 +26,7 @@ WHY EVERY FAILURE IS A `None` AND NEVER AN EXCEPTION
 
 from __future__ import annotations
 
+import http.client
 import ipaddress
 import json
 import os
@@ -312,31 +313,79 @@ def endpoint() -> Optional[str]:
     return url
 
 
-def _arm_deadline(
-    response: Any, deadline: Optional[float], fired: dict[str, Any]
-) -> Optional[threading.Timer]:
-    """Shut the response's socket at `deadline` (monotonic), whatever arrives.
+class _Deadline:
+    """Cut a request's socket at a monotonic instant, headers included.
 
     A socket timeout fires only on silence, so a server that keeps sending
-    bytes would otherwise hold the call past the caller's limit.
+    bytes, even one header byte at a time, would otherwise hold the call past
+    the caller's limit. The timer is armed before connecting, and the
+    connection hands over its socket as soon as it has one.
     """
-    if deadline is None:
-        return None
 
-    def cut() -> None:
-        fired["deadline"] = True
-        raw = getattr(getattr(response, "fp", None), "raw", None)
-        sock = getattr(raw, "_sock", None)
+    def __init__(self, deadline: Optional[float]) -> None:
+        self.deadline = deadline
+        self.fired = False
+        self._sock: Optional[socket.socket] = None
+        self._lock = threading.Lock()
+        self._timer: Optional[threading.Timer] = None
+
+    def __enter__(self) -> "_Deadline":
+        if self.deadline is not None:
+            delay = max(0.0, self.deadline - time.monotonic())
+            self._timer = threading.Timer(delay, self._cut)
+            self._timer.daemon = True
+            self._timer.start()
+        return self
+
+    def __exit__(self, *_exc: Any) -> None:
+        if self._timer is not None:
+            self._timer.cancel()
+
+    def _shut(self, sock: socket.socket) -> None:
+        try:
+            sock.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass
+
+    def _cut(self) -> None:
+        with self._lock:
+            self.fired = True
+            sock = self._sock
         if sock is not None:
-            try:
-                sock.shutdown(socket.SHUT_RDWR)
-            except OSError:
-                pass
+            self._shut(sock)
 
-    timer = threading.Timer(max(0.0, deadline - time.monotonic()), cut)
-    timer.daemon = True
-    timer.start()
-    return timer
+    def _attach(self, sock: socket.socket) -> None:
+        with self._lock:
+            self._sock = sock
+            fired = self.fired
+        if fired:
+            self._shut(sock)
+
+    def open(self, request: urllib.request.Request, timeout: float) -> Any:
+        if self.deadline is None:
+            return urllib.request.urlopen(request, timeout=timeout)
+        watch = self
+
+        class _Conn(http.client.HTTPConnection):
+            def connect(self) -> None:
+                super().connect()
+                watch._attach(self.sock)
+
+        class _TlsConn(http.client.HTTPSConnection):
+            def connect(self) -> None:
+                super().connect()
+                watch._attach(self.sock)
+
+        class _Http(urllib.request.HTTPHandler):
+            def http_open(self, req: Any) -> Any:
+                return self.do_open(_Conn, req)
+
+        class _Https(urllib.request.HTTPSHandler):
+            def https_open(self, req: Any) -> Any:
+                return self.do_open(_TlsConn, req)
+
+        opener = urllib.request.build_opener(_Http, _Https)
+        return opener.open(request, timeout=timeout)
 
 
 def _within(timeout: float, deadline: Optional[float]) -> float:
@@ -364,25 +413,18 @@ def _request(
         headers={"Content-Type": "application/json"},
         method="POST" if payload is not None else "GET",
     )
-    fired: dict[str, Any] = {}
+    watch = _Deadline(deadline)
     try:
-        with urllib.request.urlopen(
-            request, timeout=_within(timeout, deadline)
-        ) as response:
-            timer = _arm_deadline(response, deadline, fired)
-            try:
-                raw = response.read()
-            finally:
-                if timer is not None:
-                    timer.cancel()
-        if fired:
+        with watch, watch.open(request, _within(timeout, deadline)) as response:
+            raw = response.read()
+        if watch.fired:
             raise TimeoutError("deadline")
         decoded = json.loads(raw.decode())
         return decoded if isinstance(decoded, dict) else None
     except (urllib.error.URLError, OSError, TimeoutError, ValueError) as exc:
         if failure is not None and isinstance(exc, urllib.error.HTTPError):
             failure["http_status"] = exc.code
-        if failure is not None and fired:
+        if failure is not None and watch.fired:
             failure["deadline"] = True
         logger.debug("local_llm: request failed", path=path, error=str(exc))
         return None
@@ -621,15 +663,14 @@ def stream(
         headers={"Content-Type": "application/json"},
         method="POST",
     )
-    fired: dict[str, Any] = {}
-    timer: Optional[threading.Timer] = None
+    watch = _Deadline(deadline)
     try:
-        with urllib.request.urlopen(
-            request, timeout=_within(timeout or TIMEOUT, deadline)
-        ) as response:
-            timer = _arm_deadline(response, deadline, fired)
+        with (
+            watch,
+            watch.open(request, _within(timeout or TIMEOUT, deadline)) as response,
+        ):
             for raw in response:
-                if fired:
+                if watch.fired:
                     break
                 line = raw.decode("utf-8", "replace").strip()
                 if not line.startswith("data:"):
@@ -652,13 +693,11 @@ def stream(
         # A stream that dies mid-answer has already yielded real text, so the
         # caller keeps what arrived, told that it is incomplete. Logged, not
         # raised, like every other failure.
-        if finished is not None and not fired:
+        if finished is not None and not watch.fired:
             finished["reason"] = "error"
         logger.debug("local_llm: stream failed", error=str(exc))
     finally:
-        if timer is not None:
-            timer.cancel()
-        if fired and finished is not None:
+        if watch.fired and finished is not None:
             finished["reason"] = "deadline"
 
 
