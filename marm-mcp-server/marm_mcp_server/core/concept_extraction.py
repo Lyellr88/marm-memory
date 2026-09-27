@@ -1,3 +1,4 @@
+import re
 import threading
 from typing import TYPE_CHECKING, NamedTuple, Optional
 
@@ -25,6 +26,10 @@ _PREDICATE_TRIGGERS = [
     ("replaces", ("replace", "supersede", "deprecate")),
     ("extends", ("extend", "inherit", "subclass")),
 ]
+
+_MARKUP = re.compile(r"\*\*|`")
+_BULLET = re.compile(r"^(?:[-*+>#|\u2013\u2014\u2022]+\s+)+")
+_BRACKETS = (("(", ")"), ("[", "]"), ("{", "}"))
 
 _MIN_CHUNK_TOKENS = 1
 _STOPWORD_ONLY_SKIP = True
@@ -153,6 +158,19 @@ def _classify_predicate(span_a: "Span", span_b: "Span") -> str:
     return "related_to"
 
 
+def _entity_name(text: str) -> str:
+    """The name a span denotes, without the markdown it was written in.
+
+    Empty for a table row: its cells are separate names, not one.
+    """
+    name = " ".join(_MARKUP.sub("", text).split())
+    for opening, closing in _BRACKETS:
+        if name.count(opening) != name.count(closing):
+            name = name.replace(opening, "").replace(closing, "")
+    name = _BULLET.sub("", " ".join(name.split()))
+    return "" if "|" in name else name
+
+
 def extract_entities(content: str) -> ExtractionResult:
     """Extract entities + relationship pairs from one memory's content
     string. Fail-open: returns an empty result if spaCy/the model isn't
@@ -175,7 +193,7 @@ def extract_entities(content: str) -> ExtractionResult:
 
     for ent in doc.ents:
         # A span can straddle a line wrap; the name must not carry it.
-        name = " ".join(ent.text.split())
+        name = _entity_name(ent.text)
         if not name or name in seen_names:
             continue
         label = ent.label_ if ent.label_ in _KEPT_NER_LABELS else None
@@ -187,7 +205,7 @@ def extract_entities(content: str) -> ExtractionResult:
         seen_spans[name] = ent
 
     for chunk in doc.noun_chunks:
-        name = " ".join(chunk.text.split())
+        name = _entity_name(chunk.text)
         if not name or name in seen_names:
             continue
         if _STOPWORD_ONLY_SKIP and all(tok.is_stop or tok.is_punct for tok in chunk):

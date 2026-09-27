@@ -8,6 +8,7 @@ from marm_mcp_server.core.concept_extraction import (
     ExtractionResult,
     _classify_chunk,
     _classify_predicate,
+    _entity_name,
     _lowest_common_ancestor,
     _nearest_verb_ancestor,
     _same_sentence,
@@ -267,3 +268,44 @@ def test_same_sentence_false_when_sent_is_none():
     span_a = _FakeSpan(root=_FakeToken(0), sent=None)
     span_b = _FakeSpan(root=_FakeToken(1), sent=_FakeSent(start=0))
     assert _same_sentence(span_a, span_b) is False
+
+
+@pytest.mark.parametrize(
+    ("span", "name"),
+    [
+        ("**Cleanup", "Cleanup"),
+        ("- **3 residuals", "3 residuals"),
+        ("\u2014 Consolidation", "Consolidation"),
+        ("the (MIT license", "the MIT license"),
+        ("`marm_delete`", "marm_delete"),
+        ("the `--force` flag", "the --force flag"),
+        ("| Column | Value", ""),
+        ("**", ""),
+        ("__init__", "__init__"),
+        (".env", ".env"),
+        ("-1 offset", "-1 offset"),
+        ("MARM (Memory)", "MARM (Memory)"),
+        ("v2.6.21", "v2.6.21"),
+    ],
+)
+def test_entity_name_drops_the_markdown_a_span_was_written_in(span, name):
+    assert _entity_name(span) == name
+
+
+@pytest.mark.skipif(
+    not _SPACY_INSTALLED,
+    reason="spaCy is not installed in this test environment",
+)
+def test_markdown_is_not_stored_as_part_of_a_concept_name():
+    result = extract_entities(
+        "**Cleanup** of the store: - **3 residuals** remain under the (MIT "
+        "license. | Column | Value |"
+    )
+    names = {e.name for e in result.entities}
+    assert "Cleanup" in names
+    assert "3 residuals" in names
+    assert not [
+        n for n in names if "**" in n or "|" in n or n.count("(") != n.count(")")
+    ]
+    for pair in result.relationship_pairs:
+        assert pair.source in names and pair.target in names
