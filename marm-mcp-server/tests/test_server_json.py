@@ -28,7 +28,8 @@ def _values(arguments: list[dict]) -> list[str]:
     for argument in arguments:
         if argument["type"] == "named":
             out.append(argument["name"])
-        out.append(argument["value"])
+        if "value" in argument:
+            out.append(argument["value"])
     return out
 
 
@@ -89,3 +90,19 @@ def test_the_oci_image_keeps_memory_in_its_data_directory():
         f"dst={docker_commands.CONTAINER_DATA_DIR}" in m and "type=volume" in m
         for m in mounts
     )
+
+
+def test_the_docker_command_a_client_builds_is_interactive_and_removed():
+    # A registry client builds `docker run <runtimeArguments> <image> <args>`.
+    package = _packages()["oci"]
+    command = [
+        "docker",
+        "run",
+        *_values(package["runtimeArguments"]),
+        package["identifier"],
+        *_values(package["packageArguments"]),
+    ]
+    image = command.index(package["identifier"])
+    assert "-i" in command[:image], "STDIO needs the container's stdin open"
+    assert "--rm" in command[:image], "each session would leave a container"
+    assert command[image + 1 :] == ["stdio"]

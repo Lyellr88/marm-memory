@@ -30,6 +30,8 @@
       "runtimeHint": "docker",
       "transport": { "type": "stdio" },
       "runtimeArguments": [
+        { "type": "named", "name": "-i", "description": "Keep stdin open for the STDIO session" },
+        { "type": "named", "name": "--rm", "description": "Remove the container when the session ends; memory stays in the volume" },
         {
           "type": "named",
           "name": "--mount",
