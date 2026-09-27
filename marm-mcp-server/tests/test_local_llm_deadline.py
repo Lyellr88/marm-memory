@@ -141,3 +141,49 @@ def test_a_stream_stuck_in_its_headers_stops_at_the_deadline(trickling_headers):
     )
     assert time.monotonic() - started < 1.5, "header parsing ran past the deadline"
     assert finished["reason"] == "deadline"
+
+
+@pytest.fixture
+def trickling_handshake(monkeypatch):
+    """A TLS peer that never finishes its handshake, one byte at a time: a
+    record header announcing 16 KiB, then the body a byte at a time."""
+    import socket
+
+    listener = socket.socket()
+    listener.bind(("127.0.0.1", 0))
+    listener.listen()
+    stop = threading.Event()
+
+    def serve():
+        listener.settimeout(0.2)
+        while not stop.is_set():
+            try:
+                conn, _ = listener.accept()
+            except OSError:
+                continue
+            try:
+                conn.recv(65536)
+                conn.sendall(b"\x16\x03\x03\x40\x00")
+                for _ in range(400):
+                    conn.sendall(b"\x00")
+                    time.sleep(0.05)
+            except OSError:
+                pass
+            finally:
+                conn.close()
+
+    threading.Thread(target=serve, daemon=True).start()
+    base = f"https://127.0.0.1:{listener.getsockname()[1]}"
+    monkeypatch.setattr(local_llm, "endpoint", lambda: base)
+    monkeypatch.setattr(local_llm, "available", lambda *a, **k: "m")
+    yield
+    stop.set()
+    listener.close()
+
+
+def test_a_tls_handshake_that_trickles_stops_at_the_deadline(trickling_handshake):
+    finished: dict = {}
+    started = time.monotonic()
+    local_llm.complete("s", "u", timeout=5.0, deadline=started + 0.4, finished=finished)
+    assert time.monotonic() - started < 1.5, "the TLS handshake ran past the deadline"
+    assert finished["reason"] == "deadline"
