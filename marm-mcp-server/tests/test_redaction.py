@@ -199,3 +199,41 @@ async def test_a_notebook_save_hands_the_docs_store_redacted_content(
 
     assert GITHUB not in seen["content"]
     assert "[redacted:github-token]" in seen["content"]
+
+
+@pytest.mark.asyncio
+async def test_promoting_an_existing_scratch_entry_redacts_what_it_saves(
+    monkeypatch, tmp_path
+):
+    """A scratch entry written before redaction existed still holds the raw
+    secret; promoting it with no data= must not carry that into the docs."""
+    import contextlib
+    import importlib
+
+    load_isolated_server(monkeypatch, tmp_path)
+    notebook = importlib.import_module("marm_mcp_server.services.notebook")
+    added = await notebook._add("creds", "placeholder")
+    assert added["status"] == "success", added
+    with sqlite3.connect(str(tmp_path / "marm_memory.db")) as conn:
+        changed = conn.execute(
+            "UPDATE notebook_entries SET data = ? WHERE name = 'creds'",
+            (f"github: {GITHUB}",),
+        ).rowcount
+    assert changed == 1
+    seen = {}
+
+    class _Docs:
+        def get_connection(self):
+            return contextlib.nullcontext(None)
+
+        def save_doc(self, _conn, **kwargs):
+            seen.update(kwargs)
+            raise _Captured
+
+    monkeypatch.setattr(notebook, "_get_docs_db", lambda: _Docs())
+    with pytest.raises(_Captured):
+        await notebook._save("creds", None)
+
+    assert seen["source_notebook_name"] == "creds"
+    assert GITHUB not in seen["content"]
+    assert "[redacted:github-token]" in seen["content"]
