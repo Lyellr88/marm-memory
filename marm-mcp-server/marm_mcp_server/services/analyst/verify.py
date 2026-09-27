@@ -50,8 +50,12 @@ _ABSTAIN = re.compile(
 )
 _SENTENCE_END = re.compile(r"(?<=[.!?])\s+")
 # Only an abstention's own clause is exempt, never the claim joined to it.
+# Only contrast words split without a comma: a bare "and" or "while" is more
+# often inside the abstention ("no evidence that a and b share a lock").
 _CLAUSE = re.compile(
-    r";\s+|,\s+(?=(?:but|and|while|although|though|whereas|yet)\b)", re.I
+    r";\s+|,\s+(?=(?:but|and|while|although|though|whereas|yet)\b)"
+    r"|\s+(?=(?:but|although|though|whereas)\b)",
+    re.I,
 )
 # A quoted statement is reported, not claimed: `M1 says "a does not call b"`.
 _QUOTED = re.compile(r"\"[^\"\n]*\"|\u201c[^\u201d\n]*\u201d")
@@ -395,6 +399,11 @@ _NEGATOR = re.compile(
     r"(?:not|never|no|cannot|without|nothing|neither|nor|.+n't)", re.I
 )
 _TOKEN = re.compile(r"[A-Za-z][A-Za-z0-9']*")
+_LINK_VERB = re.compile(
+    r"call(?:s|ed|ing)?|invok(?:e|es|ed|ing)|delegat(?:e|es|ed|ing)"
+    r"|about|describ\w*|document\w*|mention\w*|refer\w*",
+    re.I,
+)
 _COMMENT = re.compile(r"^\s*(?:#|//|/\*|\*)\s?(.*)$")
 _DOCSTRING = re.compile(r'"""(.*?)"""|\'\'\'(.*?)\'\'\'', re.S)
 #: How far before the claim's first word a negator still governs it:
@@ -682,10 +691,14 @@ def check_item(
         support, failure = _relation(kind, source, target, packet)
         if failure:
             failures.append(failure)
-        # A relation asserts its link, so text that negates it ("never calls")
-        # contradicts the relation whatever its endpoints are named.
+        # Text that negates the link ("never calls") contradicts the relation;
+        # a negation after it ("and never retries") is of another action. Any
+        # negator before the verb counts, so a long aside cannot hide one.
         tokens = _TOKEN.findall(_BRACKET.sub(" ", text))
-        if tokens and _negated(tokens, 0, len(tokens) - 1):
+        if any(
+            _LINK_VERB.fullmatch(t) and _negated(tokens, 0, i - 1)
+            for i, t in enumerate(tokens)
+        ):
             failures.append("the relation's text denies its own link")
     state = "uncertain" if failures else "verified"
     return ItemCheck(
