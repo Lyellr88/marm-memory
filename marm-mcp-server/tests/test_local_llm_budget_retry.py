@@ -24,7 +24,7 @@ def _reply(content, finish):
 def test_an_empty_length_capped_reply_is_retried_once_with_more_room(monkeypatch):
     seen = []
 
-    def fake(path, payload, timeout, failure=None):
+    def fake(path, payload, timeout, failure=None, deadline=None):
         seen.append(payload["max_tokens"])
         return _reply("", "length") if len(seen) == 1 else _reply("the answer", "stop")
 
@@ -37,7 +37,7 @@ def test_the_retry_does_not_recurse(monkeypatch):
     """A model that cannot answer in 4x its budget is not going to."""
     calls = {"n": 0}
 
-    def always_length(path, payload, timeout, failure=None):
+    def always_length(path, payload, timeout, failure=None, deadline=None):
         calls["n"] += 1
         return _reply("", "length")
 
@@ -49,7 +49,7 @@ def test_the_retry_does_not_recurse(monkeypatch):
 def test_a_normal_reply_is_not_retried(monkeypatch):
     calls = {"n": 0}
 
-    def ok(path, payload, timeout, failure=None):
+    def ok(path, payload, timeout, failure=None, deadline=None):
         calls["n"] += 1
         return _reply("done", "stop")
 
@@ -61,7 +61,7 @@ def test_a_normal_reply_is_not_retried(monkeypatch):
 def test_the_retry_is_capped_not_merely_multiplied(monkeypatch):
     seen = []
 
-    def fake(path, payload, timeout, failure=None):
+    def fake(path, payload, timeout, failure=None, deadline=None):
         seen.append(payload["max_tokens"])
         return _reply("", "length")
 
@@ -74,7 +74,7 @@ def test_the_retry_is_capped_not_merely_multiplied(monkeypatch):
 def test_no_retry_when_the_budget_is_already_at_the_cap(monkeypatch):
     calls = {"n": 0}
 
-    def fake(path, payload, timeout, failure=None):
+    def fake(path, payload, timeout, failure=None, deadline=None):
         calls["n"] += 1
         return _reply("", "length")
 

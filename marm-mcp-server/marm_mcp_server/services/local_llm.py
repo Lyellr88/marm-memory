@@ -29,6 +29,8 @@ from __future__ import annotations
 import ipaddress
 import json
 import os
+import socket
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -310,14 +312,49 @@ def endpoint() -> Optional[str]:
     return url
 
 
+def _arm_deadline(
+    response: Any, deadline: Optional[float], fired: dict[str, Any]
+) -> Optional[threading.Timer]:
+    """Shut the response's socket at `deadline` (monotonic), whatever arrives.
+
+    A socket timeout fires only on silence, so a server that keeps sending
+    bytes would otherwise hold the call past the caller's limit.
+    """
+    if deadline is None:
+        return None
+
+    def cut() -> None:
+        fired["deadline"] = True
+        raw = getattr(getattr(response, "fp", None), "raw", None)
+        sock = getattr(raw, "_sock", None)
+        if sock is not None:
+            try:
+                sock.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
+
+    timer = threading.Timer(max(0.0, deadline - time.monotonic()), cut)
+    timer.daemon = True
+    timer.start()
+    return timer
+
+
+def _within(timeout: float, deadline: Optional[float]) -> float:
+    if deadline is None:
+        return timeout
+    return max(0.001, min(timeout, deadline - time.monotonic()))
+
+
 def _request(
     path: str,
     payload: Optional[dict],
     timeout: float,
     failure: Optional[dict[str, Any]] = None,
+    deadline: Optional[float] = None,
 ) -> Optional[dict]:
     """`failure`, when given, receives `http_status` for a refusal, which a
-    timeout or a dead connection does not have."""
+    timeout or a dead connection does not have, and `deadline` when the
+    wall-clock `deadline` cut the response off."""
     base = endpoint()
     if base is None:
         return None
@@ -327,13 +364,26 @@ def _request(
         headers={"Content-Type": "application/json"},
         method="POST" if payload is not None else "GET",
     )
+    fired: dict[str, Any] = {}
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            decoded = json.loads(response.read().decode())
+        with urllib.request.urlopen(
+            request, timeout=_within(timeout, deadline)
+        ) as response:
+            timer = _arm_deadline(response, deadline, fired)
+            try:
+                raw = response.read()
+            finally:
+                if timer is not None:
+                    timer.cancel()
+        if fired:
+            raise TimeoutError("deadline")
+        decoded = json.loads(raw.decode())
         return decoded if isinstance(decoded, dict) else None
     except (urllib.error.URLError, OSError, TimeoutError, ValueError) as exc:
         if failure is not None and isinstance(exc, urllib.error.HTTPError):
             failure["http_status"] = exc.code
+        if failure is not None and fired:
+            failure["deadline"] = True
         logger.debug("local_llm: request failed", path=path, error=str(exc))
         return None
 
@@ -399,6 +449,7 @@ def complete(
     schema: Optional[dict[str, Any]] = None,
     widen: bool = True,
     finished: Optional[dict[str, Any]] = None,
+    deadline: Optional[float] = None,
     _retrying: bool = False,
 ) -> Optional[str]:
     """One turn of chat completion. Returns the text, or None on any failure.
@@ -411,7 +462,8 @@ def complete(
     `schema` asks the server to constrain the reply to a JSON schema, and is
     dropped if the server refuses it; callers validate the reply either way.
     `widen=False` makes `max_tokens` a hard cap: no wider retry. `finished`,
-    when given, receives the server's `finish_reason` as `finished["reason"]`.
+    when given, receives the server's `finish_reason` as `finished["reason"]`,
+    or `deadline` when the monotonic `deadline` cut the reply off.
     """
     model = available()
     if model is None:
@@ -438,8 +490,16 @@ def complete(
 
     failure: dict[str, Any] = {}
     body = _request(
-        "/v1/chat/completions", payload, timeout or TIMEOUT, failure=failure
+        "/v1/chat/completions",
+        payload,
+        timeout or TIMEOUT,
+        failure=failure,
+        deadline=deadline,
     )
+    if failure.get("deadline"):
+        if finished is not None:
+            finished["reason"] = "deadline"
+        return None
     # Only a refusal is retried: after a timeout the retry would spend the
     # caller's time limit a second time.
     if body is None and "response_format" in payload and "http_status" in failure:
@@ -452,7 +512,13 @@ def complete(
         # without it costs one request on servers that refuse, and nothing on
         # servers that do not.
         payload.pop("response_format", None)
-        body = _request("/v1/chat/completions", payload, timeout or TIMEOUT)
+        body = _request(
+            "/v1/chat/completions",
+            payload,
+            timeout or TIMEOUT,
+            failure=failure,
+            deadline=deadline,
+        )
     if not isinstance(body, dict):
         return None
     try:
@@ -495,6 +561,7 @@ def complete(
                 json_object=json_object,
                 schema=schema,
                 finished=finished,
+                deadline=deadline,
                 _retrying=True,
             )
     if choice.get("finish_reason") == "length":
@@ -514,6 +581,7 @@ def stream(
     temperature: float = 0.0,
     timeout: Optional[float] = None,
     finished: Optional[dict[str, Any]] = None,
+    deadline: Optional[float] = None,
 ) -> Generator[str, None, None]:
     """Yield the reply in pieces as the model produces them.
 
@@ -528,7 +596,9 @@ def stream(
 
     `finished`, when given, receives the server's `finish_reason` as
     `finished["reason"]`. A generator cannot return it, and `length` is how a
-    caller learns the answer was cut off rather than complete.
+    caller learns the answer was cut off rather than complete. A failed or
+    dropped connection sets `error`, and the monotonic `deadline` sets
+    `deadline`; either way what arrived is incomplete.
     """
     base = endpoint()
     model = available()
@@ -551,9 +621,16 @@ def stream(
         headers={"Content-Type": "application/json"},
         method="POST",
     )
+    fired: dict[str, Any] = {}
+    timer: Optional[threading.Timer] = None
     try:
-        with urllib.request.urlopen(request, timeout=timeout or TIMEOUT) as response:
+        with urllib.request.urlopen(
+            request, timeout=_within(timeout or TIMEOUT, deadline)
+        ) as response:
+            timer = _arm_deadline(response, deadline, fired)
             for raw in response:
+                if fired:
+                    break
                 line = raw.decode("utf-8", "replace").strip()
                 if not line.startswith("data:"):
                     continue
@@ -573,10 +650,16 @@ def stream(
                     yield piece
     except (urllib.error.URLError, OSError, TimeoutError, ValueError) as exc:
         # A stream that dies mid-answer has already yielded real text, so the
-        # caller keeps what arrived rather than losing the answer to a
-        # truncated connection. Logged, not raised, like every other failure.
+        # caller keeps what arrived, told that it is incomplete. Logged, not
+        # raised, like every other failure.
+        if finished is not None and not fired:
+            finished["reason"] = "error"
         logger.debug("local_llm: stream failed", error=str(exc))
-        return
+    finally:
+        if timer is not None:
+            timer.cancel()
+        if fired and finished is not None:
+            finished["reason"] = "deadline"
 
 
 def complete_json(
