@@ -29,7 +29,9 @@ def _increment(memory_ids: list[str], at: str) -> None:
             "INSERT INTO memory_usage (memory_id, recall_count, last_recalled_at) "
             "VALUES (?, 1, ?) ON CONFLICT(memory_id) DO UPDATE SET "
             "recall_count = recall_count + 1, "
-            "last_recalled_at = excluded.last_recalled_at",
+            # Another process may write later with an earlier time.
+            "last_recalled_at = MAX(COALESCE(last_recalled_at, ''), "
+            "excluded.last_recalled_at)",
             [(memory_id, at) for memory_id in memory_ids],
         )
 

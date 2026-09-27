@@ -282,3 +282,16 @@ def test_finished_counts_leave_nothing_pending(monkeypatch, tmp_path):
     asyncio.run(usage.drain())
 
     assert usage._pending == set()
+
+
+def test_an_older_count_never_moves_last_recalled_backwards(monkeypatch, tmp_path):
+    """HTTP and STDIO are separate processes sharing one store, so a slower
+    writer can arrive with an earlier time than the one already recorded."""
+    load_isolated_server(monkeypatch, tmp_path)
+    usage = importlib.import_module("marm_mcp_server.core.memory_usage")
+
+    usage._increment(["m"], "2026-09-27T10:00:00+00:00")
+    usage._increment(["m"], "2026-09-27T09:00:00+00:00")
+
+    count, last = _usage(tmp_path / "marm_memory.db")["m"]
+    assert (count, last) == (2, "2026-09-27T10:00:00+00:00")
