@@ -20,6 +20,7 @@ os.environ["MARM_TRANSPORT"] = "stdio"
 from mcp.server.fastmcp import FastMCP  # noqa: E402
 from pydantic import ValidationError  # noqa: E402
 
+from marm_mcp_server.config.instructions import SERVER_INSTRUCTIONS  # noqa: E402
 from marm_mcp_server.config.settings import (  # noqa: E402
     CHUNK_DRAIN_TIMEOUT_SECONDS,
     DEFAULT_DB_PATH,
@@ -89,7 +90,9 @@ async def _stdio_lifespan(_server: FastMCP) -> AsyncIterator[None]:
                 _stdio_log.warning("chunk drain failed: %s", exc)
 
 
-mcp = FastMCP("MARM MCP Server", lifespan=_stdio_lifespan)
+mcp = FastMCP(
+    "MARM MCP Server", instructions=SERVER_INSTRUCTIONS, lifespan=_stdio_lifespan
+)
 
 
 @mcp.tool()

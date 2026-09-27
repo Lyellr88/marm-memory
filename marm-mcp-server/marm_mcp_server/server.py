@@ -7,6 +7,7 @@ import structlog
 from fastapi import FastAPI
 from fastapi_mcp import FastApiMCP
 
+from .config.instructions import SERVER_INSTRUCTIONS
 from .config.settings import (
     ANALYTICS_DB_PATH,
     DEFAULT_DB_PATH,
@@ -139,6 +140,8 @@ MCP_TOOL_OPERATIONS = [
 ]
 
 mcp = FastApiMCP(app, include_operations=MCP_TOOL_OPERATIONS)
+# FastApiMCP takes no instructions; its description argument becomes the version.
+mcp.server.instructions = SERVER_INSTRUCTIONS
 mcp.mount_http()
 
 
