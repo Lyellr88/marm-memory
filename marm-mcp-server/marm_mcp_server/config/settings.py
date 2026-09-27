@@ -1,6 +1,7 @@
 import importlib.util
 import os
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 from .api_key_bootstrap import resolve_marm_api_key
@@ -326,6 +327,29 @@ _raw_hld = _safe_float("TEMPORAL_HALF_LIFE_DAYS", 30)
 HYBRID_SEARCH_TEXT_WEIGHT = max(0.0, min(1.0, _raw_hsw))
 TEMPORAL_WEIGHT = max(0.0, min(1.0, _raw_tw))
 TEMPORAL_HALF_LIFE_DAYS = max(1.0, _raw_hld)
+
+
+def _parse_reference_time(raw: str) -> datetime | None:
+    if not raw:
+        return None
+    try:
+        parsed = datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError:
+        print(
+            f"WARNING: MARM_RECALL_REFERENCE_TIME={raw!r} is not ISO 8601, ignored",
+            file=sys.stderr,
+        )
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+# Scores recency against a fixed instant instead of the wall clock, so two
+# benchmark runs rank near-ties identically.
+RECALL_REFERENCE_TIME = _parse_reference_time(
+    os.environ.get("MARM_RECALL_REFERENCE_TIME", "").strip()
+)
 if not (0.0 <= _raw_hsw <= 1.0):
     print(
         f"WARNING: HYBRID_SEARCH_TEXT_WEIGHT={_raw_hsw} out of [0, 1], clamped to {HYBRID_SEARCH_TEXT_WEIGHT}",
