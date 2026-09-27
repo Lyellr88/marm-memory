@@ -15,6 +15,12 @@ from marm_mcp_server.core.concept_names import number_signature, numbers_differ
         ("second", "Third"),
         ("seven-day", "day"),
         ("NTFS", "ntfs3"),
+        ("v2.10", "v2.1"),
+        ("0.05 mg", "0.5 mg"),
+        ("id 9007199254740992", "id 9007199254740993"),
+        ("the nineteenth", "the twentieth"),
+        ("thirteen steps", "fourteen steps"),
+        ("eleventh hour", "twelfth hour"),
     ],
 )
 def test_names_whose_numbers_differ_are_different_things(a, b):
@@ -32,6 +38,10 @@ def test_names_whose_numbers_differ_are_different_things(a, b):
         ("v2.0", "version 2.0"),
         ("PRs", "PR"),
         ("1,000 rows", "1000 rows"),
+        ("Phase 2", "Phase two"),
+        ("first", "1"),
+        ("the twentieth", "20"),
+        ("v2", "v2.0"),
     ],
 )
 def test_names_with_the_same_numbers_are_left_to_the_similarity(a, b):

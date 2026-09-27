@@ -13,31 +13,31 @@ _NUMBER = re.compile(r"\d+(?:\.\d+)*")
 _THOUSANDS = re.compile(r"(?<=\d),(?=\d{3}(?!\d))")
 _WORD = re.compile(r"[A-Za-z]+")
 
+_UNITS = """_ _ two three four five six seven eight nine ten eleven twelve thirteen
+    fourteen fifteen sixteen seventeen eighteen nineteen""".split()
+_TENS = "_ _ twenty thirty forty fifty sixty seventy eighty ninety".split()
+_ORDINALS = """_ first second third fourth fifth sixth seventh eighth ninth tenth
+    eleventh twelfth thirteenth fourteenth fifteenth sixteenth seventeenth
+    eighteenth nineteenth""".split()
+_TENTHS = """_ _ twentieth thirtieth fortieth fiftieth sixtieth seventieth
+    eightieth ninetieth""".split()
+
 # Not "one" or "zero": "the real one" is a pronoun far more often than a count.
 _NUMBER_WORDS = {
-    word: str(value)
-    for value, word in enumerate(
-        "_ _ two three four five six seven eight nine ten eleven twelve".split()
-    )
+    word: str(value * scale)
+    for scale, words in ((1, _UNITS), (10, _TENS), (1, _ORDINALS), (10, _TENTHS))
+    for value, word in enumerate(words)
     if word != "_"
 }
-_NUMBER_WORDS.update(
-    {
-        word: str(value)
-        for value, word in enumerate(
-            "first second third fourth fifth sixth seventh eighth ninth tenth".split(),
-            start=1,
-        )
-    }
-)
 
 
 def _normalise(run: str) -> str:
-    parts = run.split(".")
-    if len(parts) <= 2:
-        # A number, not a version: 100 and 100.00 are one value.
-        return repr(float(".".join(parts)))
-    return ".".join(str(int(part)) for part in parts)
+    head, *rest = run.split(".")
+    head = head.lstrip("0") or "0"
+    if len(rest) == 1:
+        # 100 and 100.00 are one value; 2.10 and 2.1 are two releases.
+        return head if not rest[0].strip("0") else f"{head}.{rest[0]}"
+    return ".".join([head, *(part.lstrip("0") or "0" for part in rest)])
 
 
 def number_signature(name: str) -> tuple[str, ...]:
