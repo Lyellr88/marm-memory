@@ -2,6 +2,7 @@
 
 import asyncio
 import importlib
+import sqlite3
 import sys
 import threading
 
@@ -205,3 +206,70 @@ def test_recall_reports_whether_linked_code_changed(monkeypatch, tmp_path):
         "module.claim": "changed",
         "module.write row": "unknown",
     }
+
+
+def test_re_indenting_a_symbol_keeps_its_fingerprint(tmp_path):
+    _write(tmp_path)
+    before = span_hash(tmp_path, "module.py", 3, 5)
+    _write(
+        tmp_path,
+        "class Holder:\n    def apply():\n        claim()\n        write_row()\n",
+    )
+    assert span_hash(tmp_path, "module.py", 4, 6) == before
+
+
+def test_relative_indentation_still_counts(tmp_path):
+    _write(tmp_path)
+    before = span_hash(tmp_path, "module.py", 3, 5)
+    _write(tmp_path, "def apply():\n    claim()\nwrite_row()\n")
+    assert span_hash(tmp_path, "module.py", 3, 5) != before
+
+
+def test_merging_duplicates_keeps_every_link_column(tmp_path):
+    from marm_mcp_server.core import concept_review
+
+    db_path = str(tmp_path / "marm_index.db")
+    db = ConceptDB(db_path)
+    with db.get_connection() as conn:
+        winner, _ = db.get_or_create_entity(conn, "apply", "concept", "s", "p", "m1")
+        loser, _ = db.get_or_create_entity(conn, "apply()", "concept", "s", "p", "m2")
+        for anchor in ("aaa", "bbb"):
+            db.store_code_link(conn, loser, "module.apply", "graph", anchor_hash=anchor)
+        before = conn.execute(
+            "SELECT link_method, resolved_at, last_verified_at, anchor_hash, "
+            "code_changed_at FROM entity_code_links WHERE entity_id = ?",
+            (loser,),
+        ).fetchone()
+    db.close()
+
+    concept_review.merge_entities(db_path, winner, loser, "a")
+
+    with sqlite3.connect(db_path) as conn:
+        after = conn.execute(
+            "SELECT link_method, resolved_at, last_verified_at, anchor_hash, "
+            "code_changed_at FROM entity_code_links WHERE entity_id = ?",
+            (winner,),
+        ).fetchone()
+    assert after == before and after[4], "a detected change must survive a merge"
+
+
+def test_recall_before_the_link_columns_are_migrated_reports_unknown(
+    monkeypatch, tmp_path
+):
+    db_path = tmp_path / "marm_index.db"
+    monkeypatch.setenv("MARM_CONCEPT_DB_PATH", str(db_path))
+    graph = ConceptDB(str(db_path))
+    with graph.get_connection() as conn:
+        entity_id, _ = graph.get_or_create_entity(
+            conn, "apply", "concept", "s", "p", "m"
+        )
+        graph.store_code_link(conn, entity_id, "module.apply", "graph")
+    graph.close()
+    with sqlite3.connect(db_path) as conn:
+        conn.execute("ALTER TABLE entity_code_links DROP COLUMN anchor_hash")
+        conn.execute("ALTER TABLE entity_code_links DROP COLUMN code_changed_at")
+
+    context = get_graph_context(query="apply", session_name="s", project="p")
+
+    assert context["status"] == "available"
+    assert [c["freshness"] for c in context["linked_code"]] == ["unknown"]
