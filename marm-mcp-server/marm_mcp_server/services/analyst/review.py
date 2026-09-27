@@ -20,11 +20,20 @@ from typing import Any
 import structlog
 
 from ...core.distill import Candidate, resolve
+from ...core.distill import _normalise as _distill_normalise
 from .. import distill as distill_service
 from .brief import Brief
 from .ops import Item
 from .packet import EvidencePacket, SymbolItem
-from .verify import _LINE_REF, _claims, extract_citations, named_call, verify
+from .verify import (
+    _DOCSTRING,
+    _LINE_REF,
+    _claims,
+    extract_citations,
+    named_call,
+    prose_blocks,
+    verify,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -72,17 +81,38 @@ def _call_edge(a: SymbolItem, b: SymbolItem, source: str) -> Conclusion:
     )
 
 
-_UNIT_END = re.compile(r"(?<=[.!?])\s+|\n")
+_SENTENCE = re.compile(r"(?<=[.!?])\s+")
+_COMMENT_LINE = re.compile(r"^\s*(?:#|//|/\*|\*)")
 
 
-def _statements(texts: list[str]) -> list[str]:
-    """Whole sentences and whole lines, stripped of comment markers."""
-    out = []
-    for t in texts:
-        for unit in _UNIT_END.split(t):
-            unit = unit.strip().lstrip("#/*- ").rstrip(".").strip()
-            if unit:
-                out.append(unit)
+def _sentences(text: str) -> list[str]:
+    joined = " ".join(text.split())
+    return [u.rstrip(".").strip() for u in _SENTENCE.split(joined) if u.strip()]
+
+
+def _statements(handles: list[str], packet: EvidencePacket) -> list[str]:
+    """Whole statements in the cited evidence.
+
+    Prose is split only at sentence ends, so a comment that wraps (`# must
+    never` / `# write the row directly`) stays one sentence with its negation.
+    Code counts line by line, with its comments and docstrings removed first
+    so a line of prose cannot pass as a line of code.
+    """
+    out: list[str] = []
+    for h in handles:
+        sym = packet.symbol(h)
+        if sym:
+            for block in prose_blocks(sym.source):
+                out += _sentences(block)
+            code = _DOCSTRING.sub("", sym.source)
+            out += [
+                line.strip()
+                for line in code.splitlines()
+                if line.strip() and not _COMMENT_LINE.match(line)
+            ]
+        mem = packet.memory(h)
+        if mem:
+            out += _sentences(mem.content)
     return out
 
 
@@ -110,7 +140,7 @@ def _classify(
     cited = _cited_texts(handles, packet)
     want = _norm(content.strip("`\"' "))
     # A whole statement only: a fragment can drop the `never` that governs it.
-    for unit in _statements(cited):
+    for unit in _statements(handles, packet):
         if want and _norm(unit) == want:
             kind = "quoted_span" if quote and _norm(quote) == want else None
             return Conclusion(content, unit, kind or "verbatim_statement", source)
@@ -312,9 +342,18 @@ def guardrail_decision(
             kind, content, evidence
         )
     else:
-        checks["evidence_verbatim"] = bool(source_text) and _norm(
-            evidence or content
-        ) in _norm(source_text or "")
+        # A whole sentence of the source, never a fragment of one: a fragment
+        # can drop the `never` that governs it.
+        span = _norm(_distill_normalise(evidence or content).rstrip("."))
+        units = {
+            _norm(_distill_normalise(u).rstrip("."))
+            for line in (source_text or "").splitlines()
+            for u in _SENTENCE.split(line)
+        }
+        checks["evidence_verbatim"] = bool(span) and span in units
+        # Generated content is prose the model wrote; only its span is
+        # verbatim, so a reviewer judges it.
+        checks["content_is_span"] = not evidence or _norm(content.rstrip(".")) == span
     failed = [name for name, ok in checks.items() if not ok]
     if not failed:
         return Decision(True, checks, "all deterministic checks passed")

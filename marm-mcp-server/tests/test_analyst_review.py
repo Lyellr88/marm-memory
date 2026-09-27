@@ -350,8 +350,9 @@ def _ok(**over):
     kw = {
         "content": "apply claims the row before writing it",
         "verdict": "new",
-        "evidence": "apply claims the row before writing it",
-        "source_text": "... apply claims the row before writing it ...",
+        # The selection path: the content is the span, so evidence is empty.
+        "evidence": "",
+        "source_text": "We met. apply claims the row before writing it. Then lunch.",
         "verification": None,
         "origin": "distill",
     }
@@ -841,3 +842,55 @@ def test_the_recheck_needs_equality_not_containment(monkeypatch):
         )
     )
     assert d.apply is False and d.checks["mechanically_provable"] is False
+
+
+# --- statements are never cut out of a wrapped sentence ------------------------
+
+
+def _wrapped(source):
+    return _packet(source=source)
+
+
+def test_a_line_of_a_wrapped_comment_is_not_a_verbatim_statement():
+    p = _wrapped(
+        "def apply():\n    # Callers must never\n    # write the row directly.\n"
+    )
+    c = review._classify("write the row directly", ["S1"], p, "A1")
+    assert c.claim_kind == "paraphrase"
+
+
+def test_a_docstring_line_does_not_pass_as_a_line_of_code():
+    p = _wrapped(
+        'def apply():\n    """\n    Callers must never\n    write the row directly\n    """\n'
+    )
+    c = review._classify(
+        "write the row directly", ["S1"], p, "F1", quote="write the row directly"
+    )
+    assert c.claim_kind == "paraphrase"
+
+
+# --- distilled proposals: only a whole verbatim sentence may be applied --------
+
+
+def test_generated_distill_content_is_left_for_review(monkeypatch):
+    """The model wrote the content; only its evidence span is verbatim."""
+    monkeypatch.setenv(review.AUTO_APPLY_ENV, "1")
+    d = guardrail_decision(
+        **_ok(
+            content="apply always writes rows twice",
+            evidence="apply claims the row before writing it.",
+        )
+    )
+    assert d.apply is False
+    assert d.checks["content_is_span"] is False
+
+
+def test_a_fragment_of_a_source_sentence_is_not_verbatim(monkeypatch):
+    monkeypatch.setenv(review.AUTO_APPLY_ENV, "1")
+    d = guardrail_decision(
+        **_ok(
+            content="write the row directly",
+            source_text="Callers must never write the row directly.",
+        )
+    )
+    assert d.apply is False and d.checks["evidence_verbatim"] is False
