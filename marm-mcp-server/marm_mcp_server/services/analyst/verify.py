@@ -10,6 +10,7 @@ leaves the answer uncertain.
 from __future__ import annotations
 
 import re
+from collections import Counter
 from dataclasses import dataclass
 
 from ..code_context.terms import content_terms
@@ -224,40 +225,83 @@ def _claims(text: str) -> list[str]:
     return out
 
 
-def _span_support(text: str, packet: EvidencePacket) -> tuple[float, list[str]]:
-    corpus = "\n".join(
-        [s.source for s in packet.symbols]
-        + [s.qualified_name for s in packet.symbols]
-        + [s.file_path for s in packet.symbols]
+def _corpus(symbols: list[SymbolItem], memories: list) -> str:
+    return "\n".join(
+        [s.source for s in symbols]
+        + [s.qualified_name for s in symbols]
+        + [s.file_path for s in symbols]
         # The packet shows each symbol as `path:start-end`, so quoting that back
         # quotes the packet.
-        + [f"{s.file_path}:{s.start_line}-{s.end_line}" for s in packet.symbols]
-        + [m.content for m in packet.memories]
+        + [f"{s.file_path}:{s.start_line}-{s.end_line}" for s in symbols]
+        + [m.content for m in memories]
+    )
+
+
+def _spans_in(text: str) -> Counter[str]:
+    return Counter(
+        span.strip()
+        for span in _CODE_SPAN.findall(text)
+        if not _HANDLE.match(span.strip())
+    )
+
+
+def _span_support(text: str, packet: EvidencePacket) -> tuple[float, list[str]]:
+    # A cited claim's spans must be in what it cites, not anywhere in the
+    # packet; the rest of the text is held to the packet as a whole.
+    groups: list[
+        tuple[Counter[str], list[tuple[str, str]], list[SymbolItem], str, str]
+    ] = []
+    spans_left = _spans_in(text)
+    refs_left = Counter(_LINE_REF.findall(text))
+    for claim in _claims(text):
+        cites = extract_citations(claim, packet)[0]
+        if not cites:
+            continue
+        spans, refs = _spans_in(claim), Counter(_LINE_REF.findall(claim))
+        spans_left -= spans
+        refs_left -= refs
+        symbols = [s for c in cites if (s := packet.symbol(c.handle))]
+        memories = [m for c in cites if (m := packet.memory(c.handle))]
+        groups.append(
+            (
+                spans,
+                list(refs.elements()),
+                symbols,
+                _corpus(symbols, memories),
+                "the cited evidence",
+            )
+        )
+    groups.append(
+        (
+            spans_left,
+            list(refs_left.elements()),
+            list(packet.symbols),
+            _corpus(list(packet.symbols), list(packet.memories)),
+            "packet",
+        )
     )
     checked = supported = 0
     failures: list[str] = []
-    for span in _CODE_SPAN.findall(text):
-        span = span.strip()
-        if _HANDLE.match(span):
-            continue
-        checked += 1
-        # Prose writes a function as `name()`; its source never does once it
-        # takes arguments, so an empty call matches any call or definition.
-        if span in corpus or (_EMPTY_CALL.fullmatch(span) and span[:-1] in corpus):
-            supported += 1
-        else:
-            failures.append(f"code span not in packet: `{span}`")
-    for path, line in _LINE_REF.findall(text):
-        checked += 1
-        n = int(line)
-        if any(
-            s.file_path.endswith(path)
-            and s.start_line <= n <= max(s.end_line, s.start_line)
-            for s in packet.symbols
-        ):
-            supported += 1
-        else:
-            failures.append(f"line reference outside the packet: {path}:{n}")
+    for held_spans, held_refs, held_symbols, corpus, where in groups:
+        for span in held_spans.elements():
+            checked += 1
+            # Prose writes a function as `name()`; its source never does once
+            # it takes arguments, so an empty call matches any call or definition.
+            if span in corpus or (_EMPTY_CALL.fullmatch(span) and span[:-1] in corpus):
+                supported += 1
+            else:
+                failures.append(f"code span not in {where}: `{span}`")
+        for path, line in held_refs:
+            checked += 1
+            n = int(line)
+            if any(
+                s.file_path.endswith(path)
+                and s.start_line <= n <= max(s.end_line, s.start_line)
+                for s in held_symbols
+            ):
+                supported += 1
+            else:
+                failures.append(f"line reference outside {where}: {path}:{n}")
     return (1.0 if checked == 0 else supported / checked), failures
 
 
@@ -359,29 +403,42 @@ def checkable(text: str) -> bool:
 
 
 def named_call(
-    text: str, packet: EvidencePacket
+    text: str, packet: EvidencePacket, handles: tuple[str, ...] = ()
 ) -> tuple[SymbolItem, SymbolItem, bool] | None:
     """A call claim between two packet symbols named in the text, in order:
-    (caller, callee, negated), or None when the text makes no such claim."""
+    (caller, callee, negated), or None when the text makes no such claim.
+
+    A name several symbols share is resolved by the handles the claim cites or
+    names; if they do not settle it, the claim cannot be judged by name.
+    """
     text = _QUOTED.sub(" ", text)
     negated = bool(_NOT_CALL.search(text))
     if not (negated or _CALL.search(text)):
         return None
-    found: list[tuple[int, SymbolItem]] = []
+    at: dict[tuple[int, int], list[SymbolItem]] = {}
     for s in sorted(packet.symbols, key=lambda s: -len(s.name)):
         if not s.name:
             continue
         hit = re.search(rf"(?<![\w.]){re.escape(s.name)}\b", text)
-        if hit and all(s is not t for _, t in found):
-            found.append((hit.start(), s))
-    if len(found) < 2:
+        if hit:
+            at.setdefault(hit.span(), []).append(s)
+    if len(at) < 2:
         return None
-    found.sort(key=lambda p: p[0])
-    return found[0][1], found[1][1], negated
+    ends: list[SymbolItem] = []
+    for span in sorted(at)[:2]:
+        candidates = at[span]
+        if len(candidates) > 1:
+            candidates = [s for s in candidates if s.handle in handles]
+        if len(candidates) != 1:
+            return None
+        ends.append(candidates[0])
+    return ends[0], ends[1], negated
 
 
-def _call_failure(text: str, packet: EvidencePacket) -> str | None:
-    claim = named_call(text, packet)
+def _call_failure(
+    text: str, packet: EvidencePacket, handles: tuple[str, ...] = ()
+) -> str | None:
+    claim = named_call(text, packet, handles)
     if claim is None:
         return None
     a, b, negated = claim
@@ -738,7 +795,9 @@ def check_item(
                 "claim words not in the cited evidence: " + ", ".join(missing[:5])
             )
         # A quote proves what the evidence says, not that the graph agrees.
-        call = _call_failure(text, packet)
+        call = _call_failure(
+            text, packet, tuple(h for h in (*claim_handles, source, target) if h)
+        )
         if call:
             failures.append(call)
     if op == "facts":
