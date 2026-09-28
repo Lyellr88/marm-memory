@@ -2,6 +2,7 @@
 
 import importlib
 import json
+import re
 import sys
 import types
 from pathlib import Path
@@ -11,6 +12,7 @@ import pytest
 from marm_mcp_server.services import docker_commands
 
 SERVER_JSON = Path(__file__).resolve().parents[1] / "server.json"
+PYPROJECT = SERVER_JSON.with_name("pyproject.toml")
 
 
 class _Reached(BaseException):
@@ -68,11 +70,29 @@ def test_the_pypi_package_starts_stdio_not_http(monkeypatch):
     assert _launch(monkeypatch, argv) == "stdio"
 
 
-def test_the_oci_image_starts_stdio_not_http(monkeypatch):
-    # The image's entrypoint is `python -m marm_mcp_server`.
+def _named(arguments: list[dict], name: str) -> list[str]:
+    return [a["value"] for a in arguments if a.get("name") == name]
+
+
+def test_the_oci_image_starts_stdio_not_http():
+    # The image's default entrypoint imports the HTTP settings first, and on
+    # SERVER_HOST=0.0.0.0 those print a key banner to stdout.
     package = _packages()["oci"]
-    argv = ["__main__.py", *_values(package["packageArguments"])]
-    assert _launch(monkeypatch, argv) == "stdio"
+    assert _named(package["runtimeArguments"], "--entrypoint") == ["marm-mcp-stdio"]
+    script = re.search(
+        r'^marm-mcp-stdio = "([^"]+)"$',
+        PYPROJECT.read_text(encoding="utf-8"),
+        re.MULTILINE,
+    )
+    assert script and script.group(1) == "marm_mcp_server.server_stdio:main"
+    assert not package.get("packageArguments")
+
+
+def test_the_oci_entrypoint_is_the_supported_stdio_command(tmp_path):
+    supported = docker_commands.stdio_command(data_dir=tmp_path)["arguments"]
+    entrypoint = supported[supported.index("--entrypoint") + 1]
+    oci = _packages()["oci"]["runtimeArguments"]
+    assert _named(oci, "--entrypoint") == [entrypoint]
 
 
 def test_a_bare_launch_is_http_which_is_why_the_argument_is_needed(monkeypatch):
@@ -100,12 +120,12 @@ def test_the_docker_command_a_client_builds_is_interactive_and_removed():
         "run",
         *_values(package["runtimeArguments"]),
         package["identifier"],
-        *_values(package["packageArguments"]),
+        *_values(package.get("packageArguments", [])),
     ]
     image = command.index(package["identifier"])
     assert "-i" in command[:image], "STDIO needs the container's stdin open"
     assert "--rm" in command[:image], "each session would leave a container"
-    assert command[image + 1 :] == ["stdio"]
+    assert command[image + 1 :] == []
 
 
 def _environment(arguments: list) -> dict[str, str]:

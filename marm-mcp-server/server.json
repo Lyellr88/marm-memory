@@ -50,10 +50,13 @@
           "name": "-e",
           "description": "Keep code indexes in the data volume",
           "value": "CBM_CACHE_DIR=/home/marm/.marm/cache/codebase-memory-mcp"
+        },
+        {
+          "type": "named",
+          "name": "--entrypoint",
+          "description": "Start the STDIO server directly, so nothing written while the HTTP settings load reaches the protocol stream",
+          "value": "marm-mcp-stdio"
         }
-      ],
-      "packageArguments": [
-        { "type": "positional", "value": "stdio" }
       ]
     }
   ],

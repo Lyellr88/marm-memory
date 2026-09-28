@@ -915,8 +915,11 @@ def _registry_session(command, calls, timeout=180):
                 break
             try:
                 msg = json.loads(line)
-            except json.JSONDecodeError:
-                continue
+            except json.JSONDecodeError as exc:
+                # STDIO stdout is JSON-RPC only; anything else breaks a client.
+                raise AssertionError(
+                    f"STDIO output is not valid JSON: {line!r}"
+                ) from exc
             if "id" in msg:
                 responses[msg["id"]] = msg
         proc.stdin.close()
@@ -973,7 +976,7 @@ def test_docker_registry_command_keeps_code_index_across_sessions(
             "--mount",
             f"type=bind,src={repository.resolve()},dst=/repository/registry-repo,readonly",
             docker_image,
-            *[a["value"] for a in package["packageArguments"]],
+            *[a["value"] for a in package.get("packageArguments", [])],
         ]
 
     try:
