@@ -314,6 +314,18 @@ MARM uses a PR-first workflow for normal development. Do not push feature, fix, 
 
 No formal style guide beyond this: keep code readable, preserve current behavior unless the PR is explicitly changing it, and avoid broad refactors mixed into feature work.
 
+### Features Start as an Accepted Issue
+
+New features, new tools, new parameters, and changes to default behavior start as an issue. Open the issue first and describe the problem and the proposed approach, then wait for the maintainer to label it `accepted` before opening the PR, and link that issue from the PR. This settles scope before code is written, so the review is about the implementation rather than whether the feature belongs.
+
+Bug fixes, test fixes, and documentation corrections do not need an accepted issue and can go straight to a PR.
+
+### Open PR Limit
+
+Each contributor can have up to three open PRs at a time. Once three are open, keep further work in a draft PR or a branch until one of the open PRs is merged or closed. Draft PRs do not count toward the limit, but they are not reviewed until they are marked ready.
+
+MARM has one maintainer, and this limit keeps every PR reviewed with proper care instead of queued behind a backlog.
+
 ### Branch Naming
 
 Use short, descriptive branch names:
