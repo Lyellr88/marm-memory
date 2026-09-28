@@ -10,8 +10,6 @@ import pytest
 
 from marm_mcp_server.services import code_context as cc
 from marm_mcp_server.services import local_llm
-from marm_mcp_server.services.analyst import brief as brief_mod
-from marm_mcp_server.services.analyst import render_packet, resolve
 from marm_mcp_server.services.code_context.compose import Context, Symbol
 
 
@@ -20,25 +18,8 @@ def _ctx():
         project={"name": "p", "root_path": "/x/proj"},
         task="how does apply claim a row",
         symbols=[
-            Symbol(
-                "svc.apply",
-                "apply",
-                "Function",
-                "svc.py",
-                10,
-                40,
-                seeded=True,
-                source="def apply(row):\n    # take the row first\n    claim_row(row)\n",
-            ),
-            Symbol(
-                "svc.claim_row",
-                "claim_row",
-                "Function",
-                "svc.py",
-                50,
-                60,
-                source="def claim_row(row):\n    return row\n",
-            ),
+            Symbol("svc.apply", "apply", "Function", "svc.py", 10, 40, seeded=True),
+            Symbol("svc.claim_row", "claim_row", "Function", "svc.py", 50, 60),
         ],
     )
 
@@ -48,21 +29,11 @@ def model(monkeypatch):
     """A model that answers with whatever text a test gives it."""
     reply = {"text": ""}
     monkeypatch.setattr(local_llm, "available", lambda *a, **k: "stub-model")
-    monkeypatch.setattr(local_llm, "endpoint_source", lambda: "environment")
+    monkeypatch.setattr(local_llm, "complete", lambda *a, **k: reply["text"])
 
-    def complete(*_a, finished=None, **_k):
-        # A real server always reports how the reply ended.
-        if finished is not None:
-            finished["reason"] = "stop"
-        return reply["text"]
-
-    monkeypatch.setattr(local_llm, "complete", complete)
-
-    def stream(*_a, finished=None, **_k):
+    def stream(*_a, **_k):
         text = reply["text"]
         yield from (text[i : i + 7] for i in range(0, len(text), 7))
-        if finished is not None:
-            finished["reason"] = "stop"
 
     monkeypatch.setattr(local_llm, "stream", stream)
     return reply
@@ -118,10 +89,9 @@ def test_json_answer_with_no_resolving_citation_is_unverified(model):
     assert out["answer_hint"]
 
 
-def test_json_answer_citing_a_symbol_not_in_context_is_rejected(model):
-    """An invented reference contradicts the evidence, so it rejects."""
+def test_json_answer_citing_a_symbol_not_in_context_is_unverified(model):
     out = _json(INVENTED, model)
-    assert out["answer_status"] == "rejected"
+    assert out["answer_status"] == "unverified"
     assert out["answer_unresolved"] == ["persist_all_rows"]
     assert [c["name"] for c in out["answer_citations"]] == ["apply"]
 
@@ -153,9 +123,9 @@ def test_sse_answer_with_no_resolving_citation_is_unverified(model, composed):
     assert done["hint"]
 
 
-def test_sse_answer_citing_a_symbol_not_in_context_is_rejected(model, composed):
+def test_sse_answer_citing_a_symbol_not_in_context_is_unverified(model, composed):
     done = _done(_sse(INVENTED, model))
-    assert done["status"] == "rejected"
+    assert done["status"] == "unverified"
     assert done["unresolved"] == ["persist_all_rows"]
 
 
@@ -188,8 +158,7 @@ def test_the_answer_is_written_from_the_composition_it_sent(
         cc.stream_answer("how", None, None, 12000, include_graph=True, detail=3)
     )
 
-    packet = brief_mod._packet(_ctx(), resolve(context_chars=12000))
-    assert prompts and prompts[0].startswith(render_packet(packet))
+    assert prompts and prompts[0].startswith(cc.render(_ctx()))
     assert events[0][1]["markdown"] == cc.render(_ctx())
 
 
@@ -244,18 +213,18 @@ def test_no_model_still_delivers_the_context(composed, monkeypatch):
 
 
 def test_each_name_in_a_multi_name_bracket_is_a_citation(model):
-    out = _json("apply claims the row first [apply, `claim_row`].", model)
+    out = _json("apply claims first, then checks the row [apply, `claim_row`].", model)
     assert out["answer_status"] == "ok"
     assert [c["name"] for c in out["answer_citations"]] == ["apply", "claim_row"]
 
 
 def test_an_invented_name_cannot_hide_in_a_multi_name_bracket(model):
     out = _json("apply claims first, then persists [apply; persist_all_rows].", model)
-    assert out["answer_status"] == "rejected"
+    assert out["answer_status"] == "unverified"
     assert out["answer_unresolved"] == ["persist_all_rows"]
 
 
-# --- the answer's token cap is hard: no wider retry --------------------------
+# --- the stream gets the same one wider retry as `complete` ------------------
 
 
 @pytest.fixture
@@ -272,7 +241,6 @@ def budgeted(monkeypatch):
         yield from (text[i : i + 5] for i in range(0, len(text), 5))
 
     monkeypatch.setattr(local_llm, "available", lambda *a, **k: "stub-model")
-    monkeypatch.setattr(local_llm, "endpoint_source", lambda: "environment")
     monkeypatch.setattr(local_llm, "stream", stream)
     return attempts, replies
 
@@ -283,18 +251,21 @@ def _after_last_restart(events):
     return "".join(p["text"] for n, p in events[start:] if n == "delta")
 
 
-def test_a_stream_cut_off_at_its_cap_is_reported_not_retried(composed, budgeted):
-    """The cap the analyst reports is the one the server was held to."""
+def test_a_stream_cut_off_by_its_budget_is_retried_once_wider(composed, budgeted):
     attempts, replies = budgeted
-    replies[:] = [(GROUNDED, "length")]
+    replies[:] = [("The `apply`", "length"), (GROUNDED, "stop")]
     events = list(cc.stream_answer("how", None, None, 12000))
 
-    assert "restart" not in [n for n, _ in events]
-    assert attempts == [resolve().max_tokens]
+    names = [n for n, _ in events]
+    assert names.count("restart") == 1
+    assert attempts == [
+        cc._ANSWER_TOKENS,
+        min(cc._ANSWER_TOKENS * 4, local_llm.MAX_RETRY_TOKENS),
+    ]
+    assert _after_last_restart(events) == GROUNDED
     done = _done(events)
-    assert done["truncated"] is True
-    assert done["status"] != "ok", "a cut-off answer is never verified"
-    assert done["model_info"]["max_tokens"] == attempts[0]
+    assert done["status"] == "ok" and done["truncated"] is False
+    assert done["length"] == len(GROUNDED), "the verdict is on the retried text only"
 
 
 def test_a_stream_that_finishes_normally_is_not_retried(composed, budgeted):
@@ -307,14 +278,13 @@ def test_a_stream_that_finishes_normally_is_not_retried(composed, budgeted):
     assert _done(events)["truncated"] is False
 
 
-def test_the_json_path_holds_the_same_cap(model, monkeypatch):
-    seen = []
+def test_a_second_cut_off_is_reported_not_retried_again(composed, budgeted):
+    attempts, replies = budgeted
+    replies[:] = [
+        ("The `apply`", "length"),
+        ("The `apply` claims [apply] then", "length"),
+    ]
+    events = list(cc.stream_answer("how", None, None, 12000))
 
-    def complete(*_a, **kw):
-        seen.append((kw["max_tokens"], kw["widen"]))
-        return GROUNDED
-
-    monkeypatch.setattr(local_llm, "complete", complete)
-    out = asyncio.run(cc.answer_from_context(_ctx(), "how"))
-    assert seen == [(resolve().max_tokens, False)]
-    assert out["answer_model_info"]["max_tokens"] == resolve().max_tokens
+    assert len(attempts) == 2
+    assert _done(events)["truncated"] is True

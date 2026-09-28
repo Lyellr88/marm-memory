@@ -4,7 +4,6 @@ import type { QueryClient } from '@tanstack/react-query';
 import { useMarmClient } from '@/lib/use-marm-client';
 import { useConnection } from '@/lib/marm-connection';
 import type { 
-  AnalystProfileName,
   MemoryListParams, MemoryInput, MemoryId, LogListParams, NotebookDeleteRef, NotebookInput,
   CompactionAction, ConceptSearchParams, ConceptBuildInput, ConceptGraphParams,
   ProjectIndexInput, CodeSearchInput, CodeContextInput, DistillInput, TraceInput, ImpactInput, DuplicatePairInput,
@@ -265,7 +264,7 @@ export function useUpdateLlmSettings() {
   const { baseUrl, client } = useMarmConfig();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { enabled?: boolean; model?: string; endpoint?: string; profile?: AnalystProfileName | '' }) =>
+    mutationFn: (body: { enabled?: boolean; model?: string; endpoint?: string }) =>
       client.updateLlmSettings(body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.runtimeSettings(baseUrl) });

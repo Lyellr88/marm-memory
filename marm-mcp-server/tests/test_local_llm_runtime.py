@@ -112,12 +112,9 @@ def test_a_preference_is_ignored_on_a_runtime_that_cannot_honour_it(monkeypatch)
         def get(_key):
             return "some-other-model"
 
-    # The module `preferred_model` imports, not a dotted path: after another
-    # test's isolated server load the package attributes that path walks can
-    # belong to a different module generation.
-    from marm_mcp_server.core import runtime_flags
-
-    monkeypatch.setattr(runtime_flags, "get", _Flags.get)
+    monkeypatch.setattr(
+        "marm_mcp_server.core.runtime_flags.get", staticmethod(_Flags.get)
+    )
     assert local_llm.preferred_model() is None
 
 
@@ -293,16 +290,14 @@ def _save_endpoint(monkeypatch, url, *, allow_remote):
     from marm_mcp_server.endpoints import system
     from marm_mcp_server.endpoints.system import RuntimeLlmRequest
 
-    # `system.local_llm`, not this file's import: the route reads its own
-    # reference, which another test's isolated load may have replaced.
-    monkeypatch.setattr(system.local_llm, "ALLOW_REMOTE", allow_remote)
+    monkeypatch.setattr(local_llm, "ALLOW_REMOTE", allow_remote)
     saved: dict[str, str] = {}
     monkeypatch.setattr(
         system.runtime_flags, "set_", lambda key, value: saved.update({key: value})
     )
     monkeypatch.setattr(system.runtime_flags, "clear", lambda key: None)
     monkeypatch.setattr(system.runtime_flags, "set_bool", lambda key, value: None)
-    monkeypatch.setattr(system.local_llm, "invalidate_settings_cache", lambda: None)
+    monkeypatch.setattr(local_llm, "invalidate_settings_cache", lambda: None)
     monkeypatch.setattr(system, "_llm_status", lambda: {})
 
     result = asyncio.run(system.update_runtime_llm(RuntimeLlmRequest(endpoint=url)))
@@ -355,61 +350,3 @@ def test_another_loopback_port_is_still_saved(monkeypatch):
     )
     assert rejected is None
     assert saved
-
-
-# --- the analyst profile, chosen by the operator ------------------------------
-
-
-def _save_profile(monkeypatch, profile):
-    import asyncio
-
-    from marm_mcp_server.endpoints import system
-    from marm_mcp_server.endpoints.system import RuntimeLlmRequest
-
-    saved: dict[str, str | None] = {}
-    monkeypatch.setattr(
-        system.runtime_flags, "set_", lambda key, value: saved.update({key: value})
-    )
-    monkeypatch.setattr(
-        system.runtime_flags, "clear", lambda key: saved.update({key: None})
-    )
-    monkeypatch.setattr(system.local_llm, "invalidate_settings_cache", lambda: None)
-    monkeypatch.setattr(system, "_llm_status", lambda: {})
-    asyncio.run(system.update_runtime_llm(RuntimeLlmRequest(profile=profile)))
-    return saved
-
-
-def test_the_operator_saves_an_analyst_profile(monkeypatch):
-    from marm_mcp_server.core import runtime_flags
-
-    assert _save_profile(monkeypatch, "small") == {
-        runtime_flags.ANALYST_PROFILE: "small"
-    }
-
-
-def test_an_empty_profile_returns_to_the_environment(monkeypatch):
-    from marm_mcp_server.core import runtime_flags
-
-    assert _save_profile(monkeypatch, "") == {runtime_flags.ANALYST_PROFILE: None}
-
-
-def test_an_unknown_profile_is_refused():
-    import pydantic
-
-    from marm_mcp_server.endpoints.system import RuntimeLlmRequest
-
-    with pytest.raises(pydantic.ValidationError):
-        RuntimeLlmRequest(profile="huge")
-
-
-def test_the_status_reports_the_profile_and_its_limits(monkeypatch):
-    from marm_mcp_server.endpoints import system
-
-    monkeypatch.setattr(local_llm, "status", lambda: {})
-    monkeypatch.setattr(system.runtime_flags, "source", lambda key: "default")
-    monkeypatch.setattr(system.runtime_flags, "get", lambda key: None)
-    monkeypatch.delenv("MARM_ANALYST_PROFILE", raising=False)
-    status = system._llm_status()["analyst_profile"]
-    assert status["name"] == "general" and status["source"] == "default"
-    assert set(status["profiles"]) == {"general", "small", "large"}
-    assert status["active"]["max_tokens"] > 0
