@@ -317,4 +317,79 @@ describe('DistillPage', () => {
     render(<DistillPage />);
     expect(screen.getByText(/written to memory as mem-42/i)).toBeTruthy();
   });
+
+  describe('guardrails and the analyst', () => {
+    const SESSION_LOG = {
+      items: [{ topic: 't', summary: null, entry: 'The daemon reparents to systemd.' }],
+      total: 1,
+      limit: 200,
+      offset: 0,
+    };
+
+    it('reviews by hand unless guardrails are chosen, and sends the mode', async () => {
+      logsState.data = SESSION_LOG;
+      render(<DistillPage />);
+      const mode = screen.getByRole('combobox', { name: /review/i }) as HTMLSelectElement;
+      expect(mode.value).toBe('manual');
+
+      await userEvent.click(screen.getByRole('button', { name: /^distill$/i }));
+      expect(proposeState.mutate.mock.calls[0][0].review_mode).toBe('manual');
+
+      await userEvent.selectOptions(mode, 'guardrails');
+      await userEvent.click(screen.getByRole('button', { name: /^distill$/i }));
+      expect(proposeState.mutate.mock.calls[1][0].review_mode).toBe('guardrails');
+    });
+
+    it('marks a proposal the analyst staged, with how it was verified', () => {
+      pendingState.data = {
+        status: 'success',
+        pending: [
+          proposal({
+            origin: 'analyst',
+            verification: {
+              state: 'verified', score: 1, citation_coverage: 1, source_span_support: 1,
+              graph_memory_consistency: 1, claims: 1, cited_claims: 1, failures: [],
+              hard_failures: [], abstained: false,
+            },
+          }),
+        ],
+      };
+      render(<DistillPage />);
+      expect(screen.getByText('Analyst')).toBeTruthy();
+      expect(screen.getByText('Verified')).toBeTruthy();
+    });
+
+    it('lists what guardrails applied and why the rest were left', async () => {
+      logsState.data = SESSION_LOG;
+      proposeState.data = {
+        status: 'success',
+        review_mode: 'guardrails',
+        proposals: [proposal({ id: 'p-1' }), proposal({ id: 'p-2', content: 'A second durable fact.' })],
+        guardrails: [
+          { proposal_id: 'p-1', applied: true, memory_id: 'mem-9', decision: { apply: true, checks: {}, reason: 'all deterministic checks passed' } },
+          { proposal_id: 'p-2', applied: false, decision: { apply: false, checks: { novel: false }, reason: 'review required: failed novel' } },
+        ],
+      };
+      render(<DistillPage />);
+      await userEvent.click(screen.getByRole('tab', { name: /last run/i }));
+      expect(screen.getByText(/1 of 2 applied by guardrails/i)).toBeTruthy();
+      expect(screen.getByText(/review required: failed novel/)).toBeTruthy();
+    });
+
+    it('says plainly when guardrails are off at the operator', async () => {
+      logsState.data = SESSION_LOG;
+      proposeState.data = {
+        status: 'success',
+        review_mode: 'guardrails',
+        proposals: [proposal({ id: 'p-1' })],
+        guardrails: [
+          { proposal_id: 'p-1', applied: false, decision: { apply: false, checks: { operator_enabled: false }, reason: 'review required: automatic apply is off (MARM_ANALYST_AUTO_APPLY is not 1)' } },
+        ],
+      };
+      render(<DistillPage />);
+      await userEvent.click(screen.getByRole('tab', { name: /last run/i }));
+      expect(screen.getByText(/0 of 1 applied by guardrails/i)).toBeTruthy();
+      expect(screen.getAllByText(/MARM_ANALYST_AUTO_APPLY/).length).toBeGreaterThan(0);
+    });
+  });
 });

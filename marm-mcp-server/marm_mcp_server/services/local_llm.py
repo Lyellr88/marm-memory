@@ -26,14 +26,17 @@ WHY EVERY FAILURE IS A `None` AND NEVER AN EXCEPTION
 
 from __future__ import annotations
 
+import http.client
 import ipaddress
 import json
 import os
+import socket
+import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from typing import Any, Iterator, Optional
+from typing import Any, Generator, Optional
 
 import structlog
 
@@ -310,7 +313,97 @@ def endpoint() -> Optional[str]:
     return url
 
 
-def _request(path: str, payload: Optional[dict], timeout: float) -> Optional[dict]:
+class _Deadline:
+    """Cut a request's socket at a monotonic instant, headers included.
+
+    A socket timeout fires only on silence, so a server that keeps sending
+    bytes, even one header byte at a time, would otherwise hold the call past
+    the caller's limit. The timer is armed before connecting, and the
+    connection hands over its socket as soon as it has one.
+    """
+
+    def __init__(self, deadline: Optional[float]) -> None:
+        self.deadline = deadline
+        self.fired = False
+        self._sock: Optional[socket.socket] = None
+        self._lock = threading.Lock()
+        self._timer: Optional[threading.Timer] = None
+
+    def __enter__(self) -> "_Deadline":
+        if self.deadline is not None:
+            delay = max(0.0, self.deadline - time.monotonic())
+            self._timer = threading.Timer(delay, self._cut)
+            self._timer.daemon = True
+            self._timer.start()
+        return self
+
+    def __exit__(self, *_exc: Any) -> None:
+        if self._timer is not None:
+            self._timer.cancel()
+
+    def _shut(self, sock: socket.socket) -> None:
+        try:
+            sock.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass
+
+    def _cut(self) -> None:
+        with self._lock:
+            self.fired = True
+            sock = self._sock
+        if sock is not None:
+            self._shut(sock)
+
+    def _attach(self, sock: socket.socket) -> None:
+        with self._lock:
+            self._sock = sock
+            fired = self.fired
+        if fired:
+            self._shut(sock)
+
+    def open(self, request: urllib.request.Request, timeout: float) -> Any:
+        if self.deadline is None:
+            return urllib.request.urlopen(request, timeout=timeout)
+        watch = self
+
+        class _Conn(http.client.HTTPConnection):
+            def connect(self) -> None:
+                super().connect()
+                watch._attach(self.sock)
+
+        class _TlsConn(http.client.HTTPSConnection):
+            def connect(self) -> None:
+                super().connect()
+                watch._attach(self.sock)
+
+        class _Http(urllib.request.HTTPHandler):
+            def http_open(self, req: Any) -> Any:
+                return self.do_open(_Conn, req)
+
+        class _Https(urllib.request.HTTPSHandler):
+            def https_open(self, req: Any) -> Any:
+                return self.do_open(_TlsConn, req)
+
+        opener = urllib.request.build_opener(_Http, _Https)
+        return opener.open(request, timeout=timeout)
+
+
+def _within(timeout: float, deadline: Optional[float]) -> float:
+    if deadline is None:
+        return timeout
+    return max(0.001, min(timeout, deadline - time.monotonic()))
+
+
+def _request(
+    path: str,
+    payload: Optional[dict],
+    timeout: float,
+    failure: Optional[dict[str, Any]] = None,
+    deadline: Optional[float] = None,
+) -> Optional[dict]:
+    """`failure`, when given, receives `http_status` for a refusal, which a
+    timeout or a dead connection does not have, and `deadline` when the
+    wall-clock `deadline` cut the response off."""
     base = endpoint()
     if base is None:
         return None
@@ -320,11 +413,19 @@ def _request(path: str, payload: Optional[dict], timeout: float) -> Optional[dic
         headers={"Content-Type": "application/json"},
         method="POST" if payload is not None else "GET",
     )
+    watch = _Deadline(deadline)
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            decoded = json.loads(response.read().decode())
+        with watch, watch.open(request, _within(timeout, deadline)) as response:
+            raw = response.read()
+        if watch.fired:
+            raise TimeoutError("deadline")
+        decoded = json.loads(raw.decode())
         return decoded if isinstance(decoded, dict) else None
     except (urllib.error.URLError, OSError, TimeoutError, ValueError) as exc:
+        if failure is not None and isinstance(exc, urllib.error.HTTPError):
+            failure["http_status"] = exc.code
+        if failure is not None and watch.fired:
+            failure["deadline"] = True
         logger.debug("local_llm: request failed", path=path, error=str(exc))
         return None
 
@@ -387,6 +488,10 @@ def complete(
     temperature: float = 0.0,
     timeout: Optional[float] = None,
     json_object: bool = False,
+    schema: Optional[dict[str, Any]] = None,
+    widen: bool = True,
+    finished: Optional[dict[str, Any]] = None,
+    deadline: Optional[float] = None,
     _retrying: bool = False,
 ) -> Optional[str]:
     """One turn of chat completion. Returns the text, or None on any failure.
@@ -395,6 +500,12 @@ def complete(
     or grounded answering, where the same input should give the same output --
     a memory proposal that changes between two runs over one transcript is not
     a proposal a reviewer can act on.
+
+    `schema` asks the server to constrain the reply to a JSON schema, and is
+    dropped if the server refuses it; callers validate the reply either way.
+    `widen=False` makes `max_tokens` a hard cap: no wider retry. `finished`,
+    when given, receives the server's `finish_reason` as `finished["reason"]`,
+    or `deadline` when the monotonic `deadline` cut the reply off.
     """
     model = available()
     if model is None:
@@ -410,11 +521,30 @@ def complete(
         "temperature": temperature,
         "stream": False,
     }
-    if json_object:
+    if schema is not None:
+        # The OpenAI shape, which LM Studio and llama.cpp both accept.
+        payload["response_format"] = {
+            "type": "json_schema",
+            "json_schema": {"name": "reply", "strict": True, "schema": schema},
+        }
+    elif json_object:
         payload["response_format"] = {"type": "json_object"}
 
-    body = _request("/v1/chat/completions", payload, timeout or TIMEOUT)
-    if body is None and json_object:
+    failure: dict[str, Any] = {}
+    body = _request(
+        "/v1/chat/completions",
+        payload,
+        timeout or TIMEOUT,
+        failure=failure,
+        deadline=deadline,
+    )
+    if failure.get("deadline"):
+        if finished is not None:
+            finished["reason"] = "deadline"
+        return None
+    # Only a refusal is retried: after a timeout the retry would spend the
+    # caller's time limit a second time.
+    if body is None and "response_format" in payload and "http_status" in failure:
         # `json_object` is an optimisation, not a requirement -- callers parse
         # defensively anyway. LM Studio REJECTS it outright: measured against
         # 0.3.x, `{"type":"json_object"}` returns HTTP 400
@@ -424,7 +554,13 @@ def complete(
         # without it costs one request on servers that refuse, and nothing on
         # servers that do not.
         payload.pop("response_format", None)
-        body = _request("/v1/chat/completions", payload, timeout or TIMEOUT)
+        body = _request(
+            "/v1/chat/completions",
+            payload,
+            timeout or TIMEOUT,
+            failure=failure,
+            deadline=deadline,
+        )
     if not isinstance(body, dict):
         return None
     try:
@@ -433,6 +569,8 @@ def complete(
     except (KeyError, IndexError, TypeError):
         logger.debug("local_llm: unexpected response shape")
         return None
+    if finished is not None:
+        finished["reason"] = choice.get("finish_reason")
     if isinstance(text, str) and text.strip():
         return text.strip()
 
@@ -442,7 +580,7 @@ def complete(
     # finish_reason="length" with content still "". Returning "" would hand
     # the caller a confident blank; None is the state every caller already
     # falls back from.
-    if choice.get("finish_reason") == "length" and not _retrying:
+    if choice.get("finish_reason") == "length" and widen and not _retrying:
         # A reasoning model can spend its whole budget in `reasoning` and
         # return content="", and auto-selection means the model can change
         # underneath this call -- so coping belongs here, not in each caller's
@@ -463,6 +601,9 @@ def complete(
                 temperature=temperature,
                 timeout=timeout,
                 json_object=json_object,
+                schema=schema,
+                finished=finished,
+                deadline=deadline,
                 _retrying=True,
             )
     if choice.get("finish_reason") == "length":
@@ -482,7 +623,8 @@ def stream(
     temperature: float = 0.0,
     timeout: Optional[float] = None,
     finished: Optional[dict[str, Any]] = None,
-) -> Iterator[str]:
+    deadline: Optional[float] = None,
+) -> Generator[str, None, None]:
     """Yield the reply in pieces as the model produces them.
 
     Total time is the same as `complete`; what changes is that a reader sees
@@ -496,7 +638,9 @@ def stream(
 
     `finished`, when given, receives the server's `finish_reason` as
     `finished["reason"]`. A generator cannot return it, and `length` is how a
-    caller learns the answer was cut off rather than complete.
+    caller learns the answer was cut off rather than complete. A failed or
+    dropped connection sets `error`, and the monotonic `deadline` sets
+    `deadline`; either way what arrived is incomplete.
     """
     base = endpoint()
     model = available()
@@ -519,9 +663,15 @@ def stream(
         headers={"Content-Type": "application/json"},
         method="POST",
     )
+    watch = _Deadline(deadline)
     try:
-        with urllib.request.urlopen(request, timeout=timeout or TIMEOUT) as response:
+        with (
+            watch,
+            watch.open(request, _within(timeout or TIMEOUT, deadline)) as response,
+        ):
             for raw in response:
+                if watch.fired:
+                    break
                 line = raw.decode("utf-8", "replace").strip()
                 if not line.startswith("data:"):
                     continue
@@ -541,10 +691,14 @@ def stream(
                     yield piece
     except (urllib.error.URLError, OSError, TimeoutError, ValueError) as exc:
         # A stream that dies mid-answer has already yielded real text, so the
-        # caller keeps what arrived rather than losing the answer to a
-        # truncated connection. Logged, not raised, like every other failure.
+        # caller keeps what arrived, told that it is incomplete. Logged, not
+        # raised, like every other failure.
+        if finished is not None and not watch.fired:
+            finished["reason"] = "error"
         logger.debug("local_llm: stream failed", error=str(exc))
-        return
+    finally:
+        if watch.fired and finished is not None:
+            finished["reason"] = "deadline"
 
 
 def complete_json(

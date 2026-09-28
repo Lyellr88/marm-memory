@@ -1,4 +1,16 @@
-import type { AnswerGrounding, CodeContextCitation, CodeContextResult } from '@/lib/marm-types';
+import type {
+  AnalystResult,
+  AnswerDisagreement,
+  AnswerGrounding,
+  AnswerItem,
+  AnswerModelInfo,
+  AnswerOperation,
+  AnswerPacket,
+  AnswerProfile,
+  AnswerVerification,
+  CodeContextCitation,
+  CodeContextResult,
+} from '@/lib/marm-types';
 
 /** The state of one streamed answer, as the Console renders it. */
 export interface AnswerStreamState {
@@ -11,10 +23,22 @@ export interface AnswerStreamState {
   /** The server's verdict on the finished text; absent until `done`. */
   grounding?: AnswerGrounding;
   unresolved?: string[];
-  /** The model stopped at its token budget even after the wider retry. */
+  /** Cut off by the profile's token cap or time limit. Never retried wider. */
   truncated?: boolean;
   /** The composition the answer is written from: the stream's first event. */
   context?: CodeContextResult;
+  /** The evidence the model was given, built once by MARM. */
+  packet?: AnswerPacket;
+  verification?: AnswerVerification;
+  modelInfo?: AnswerModelInfo;
+  /** The operator's profile and the limits it held the model to. */
+  profile?: AnswerProfile;
+  /** Structured profiles: each operation as it finishes, then every item. */
+  operations?: AnswerOperation[];
+  items?: AnswerItem[];
+  disagreements?: AnswerDisagreement[];
+  /** Staged results and guardrails decisions, when a mode asked for them. */
+  analyst?: AnalystResult;
 }
 
 export const IDLE_ANSWER: AnswerStreamState = { status: 'idle', text: '', citations: [] };
@@ -29,12 +53,24 @@ export function applyAnswerEvent(
   switch (name) {
     case 'context':
       return { ...prev, context: payload as unknown as CodeContextResult };
+    case 'packet':
+      return { ...prev, packet: payload as unknown as AnswerPacket };
     case 'start':
-      return { ...prev, model: payload.model as string };
+      return {
+        ...prev,
+        model: payload.model as string,
+        profile: payload.profile as AnswerProfile | undefined,
+      };
+    case 'operation':
+      return {
+        ...prev,
+        operations: [...(prev.operations ?? []), payload as unknown as AnswerOperation],
+      };
     case 'delta':
       return { ...prev, text: prev.text + (payload.text as string) };
     case 'restart':
-      // The server is retrying with a wider budget; what was sent is withdrawn.
+      // Sent only by a server that still widened its budget; what was sent is
+      // withdrawn.
       return { ...prev, status: 'streaming', text: '' };
     case 'done':
       return {
@@ -47,6 +83,13 @@ export function applyAnswerEvent(
         unresolved: (payload.unresolved as string[] | undefined) ?? [],
         hint: payload.hint as string | undefined,
         truncated: Boolean(payload.truncated),
+        verification: payload.verification as AnswerVerification | undefined,
+        modelInfo: payload.model_info as AnswerModelInfo | undefined,
+        profile: (payload.profile as AnswerProfile | undefined) ?? prev.profile,
+        operations: (payload.operations as AnswerOperation[] | undefined) ?? prev.operations,
+        items: payload.items as AnswerItem[] | undefined,
+        disagreements: payload.disagreements as AnswerDisagreement[] | undefined,
+        analyst: payload.analyst as AnalystResult | undefined,
       };
     case 'error':
       return {

@@ -2,6 +2,7 @@
 
 import json
 from collections.abc import Iterator
+from typing import Literal
 
 import structlog
 from fastapi import APIRouter
@@ -58,11 +59,23 @@ class CodeContextRequest(BaseModel):
             "Also answer the task from the composed context using a local "
             "model, with citations to the symbols it used. Off by default: it "
             "is the slow step, and the ranked context is already the answer "
-            "for a caller that reads code. `answer_status` is 'ok' only when "
-            "the answer's citations resolve to composed symbols and none name "
-            "anything else; otherwise 'unverified', with `answer_unresolved`. "
-            "'unavailable' rather than a failure when generation is off or no "
-            "model is reachable."
+            "for a caller that reads code. The operator's analyst profile "
+            "bounds it. `answer_status` is 'ok' when every result is verified "
+            "against the composed context, 'unverified' when support is "
+            "incomplete, and 'rejected' when it cites something the context "
+            "does not contain (`answer_unresolved` names it). 'unavailable' "
+            "rather than a failure when generation is off or no model is "
+            "reachable."
+        ),
+    )
+    analyst_mode: Literal["read_only", "manual_review", "guardrails"] = Field(
+        default="read_only",
+        description=(
+            "With `answer`: read_only returns the verified answer only; "
+            "manual_review also stages its verified results as marm_distill "
+            "proposals for approval; guardrails lets MARM apply the ones it "
+            "can prove mechanically, only where the operator set "
+            "MARM_ANALYST_AUTO_APPLY=1. The model never applies anything."
         ),
     )
     include_graph: bool = Field(
@@ -102,6 +115,7 @@ async def marm_code_context(req: CodeContextRequest) -> dict:
         include_graph=req.include_graph,
         detail=req.detail or None,
         answer=req.answer,
+        analyst_mode=req.analyst_mode,
     )
 
 
@@ -135,6 +149,7 @@ def stream_code_context_answer(req: CodeContextRequest) -> StreamingResponse:
                 budget=req.budget,
                 include_graph=req.include_graph,
                 detail=req.detail or None,
+                analyst_mode=req.analyst_mode,
             ):
                 if name == "context" and payload.get("status") in {
                     "unavailable",

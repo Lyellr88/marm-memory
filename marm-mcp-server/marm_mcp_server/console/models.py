@@ -15,6 +15,7 @@ class CodeContextPayload(BaseModel):
     #: Ask the local model to answer the task from the composed context. Off
     #: unless requested, here and in the tool.
     answer: bool = False
+    analyst_mode: Literal["read_only", "manual_review", "guardrails"] = "read_only"
 
 
 class DistillPayload(BaseModel):
@@ -37,6 +38,7 @@ class DistillPayload(BaseModel):
     # Pydantic drops an undeclared field silently, so an option missing here
     # never reaches the server: the page's checkbox would do nothing.
     use_llm: bool = False
+    review_mode: Literal["manual", "guardrails"] = "manual"
 
 
 class ConceptBuildPayload(BaseModel):
@@ -117,6 +119,7 @@ class RuntimeLlmPayload(BaseModel):
     enabled: bool | None = None
     model: str | None = Field(default=None, max_length=512)
     endpoint: str | None = Field(default=None, max_length=512)
+    profile: Literal["", "general", "small", "large"] | None = None
 
 
 class RuntimeLlmRootPayload(BaseModel):
