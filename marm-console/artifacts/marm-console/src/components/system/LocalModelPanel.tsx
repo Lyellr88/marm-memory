@@ -29,7 +29,7 @@ import {
 import { CopyButton } from '@/components/code-context/shared';
 import { GpuList, formatBytes } from './gpu';
 import { ServerPicker } from './ServerPicker';
-import type { AnalystProfileName, HardwareStatus, LocalLlmStatus } from '@/lib/marm-types';
+import type { HardwareStatus, LocalLlmStatus } from '@/lib/marm-types';
 
 /** The command that actually changes a llama.cpp model.
  *
@@ -41,54 +41,6 @@ import type { AnalystProfileName, HardwareStatus, LocalLlmStatus } from '@/lib/m
  */
 function reloadCommand(path: string | null): string {
   return `llama-server -m ${path ?? '<path to your .gguf>'} -c 65536`;
-}
-
-const PROFILE_LABEL: Record<AnalystProfileName, string> = {
-  general: 'General — one free-form answer',
-  small: 'Small — one narrow operation per call',
-  large: 'Large — narrow operations batched in one call',
-};
-
-/** The analyst profile. The operator picks it; nothing reads it off the model,
- *  because a model's name says nothing about how it behaves under a budget. */
-export function ProfilePicker({ llm }: { llm: LocalLlmStatus }) {
-  const update = useUpdateLlmSettings();
-  const profile = llm.analyst_profile;
-  if (!profile) return null;
-  const active = profile.active;
-  return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap items-center gap-2">
-        <Select
-          value={profile.name}
-          onValueChange={(value) => update.mutate({ profile: value as AnalystProfileName })}
-        >
-          <SelectTrigger aria-label="Analyst profile" className="w-[320px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {(Object.keys(PROFILE_LABEL) as AnalystProfileName[]).map((name) => (
-              <SelectItem key={name} value={name}>
-                {PROFILE_LABEL[name]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {profile.source === 'runtime' && (
-          <Button size="sm" variant="outline" onClick={() => update.mutate({ profile: '' })}>
-            Use environment
-          </Button>
-        )}
-      </div>
-      <p className="font-mono text-[10px] text-muted-foreground">
-        {`reads ≤ ${active.context_chars.toLocaleString()} chars · `}
-        {`≤ ${active.max_tokens.toLocaleString()} tokens per call`}
-        {active.reasoning_tokens > 0 &&
-          ` (${active.output_tokens.toLocaleString()} answer + ${active.reasoning_tokens.toLocaleString()} reasoning)`}
-        {` · ${active.time_s}s wall time · ${profile.source}`}
-      </p>
-    </div>
-  );
 }
 
 function ModelSwitcher({ llm }: { llm: LocalLlmStatus }) {
@@ -540,13 +492,6 @@ export function LocalModelPanels({
                 Model
               </div>
               <ModelSwitcher llm={llm} />
-            </div>
-
-            <div className="mt-4 border-t border-border/60 pt-4">
-              <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                Analyst profile
-              </div>
-              <ProfilePicker llm={llm} />
             </div>
           </>
         )}

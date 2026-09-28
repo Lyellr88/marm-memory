@@ -148,7 +148,7 @@ def test_a_negative_probe_is_cached(monkeypatch, generation_on):
     before falling back, turning a working feature into a slow one."""
     calls = []
 
-    def fake_request(path, payload, timeout, failure=None, deadline=None):
+    def fake_request(path, payload, timeout):
         calls.append(path)
         return None
 
@@ -229,13 +229,12 @@ def test_json_object_is_retried_without_it_when_the_server_refuses(monkeypatch):
     monkeypatch.setattr(local_llm, "available", lambda *a, **k: "gpt-oss-20b")
     sent = []
 
-    def fake_request(path, payload, timeout, failure=None, deadline=None):
+    def fake_request(path, payload, timeout):
         # A snapshot: the retry pops `response_format` off the same dict, so
         # storing the reference would show both calls without it.
         sent.append(dict(payload))
         if "response_format" in payload:
-            failure["http_status"] = 400
-            return None
+            return None  # the 400
         return {"choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}]}
 
     monkeypatch.setattr(local_llm, "_request", fake_request)
@@ -243,66 +242,6 @@ def test_json_object_is_retried_without_it_when_the_server_refuses(monkeypatch):
     assert local_llm.complete("sys", "user", json_object=True) == "ok"
     assert len(sent) == 2, "the refusal must be retried without response_format"
     assert "response_format" in sent[0] and "response_format" not in sent[1]
-
-
-def _recording(monkeypatch, replies):
-    """Serve `replies` in order; each is a body, or an int HTTP status."""
-    monkeypatch.setattr(local_llm, "available", lambda *a, **k: "m")
-    sent = []
-
-    def fake_request(path, payload, timeout, failure=None, deadline=None):
-        sent.append(dict(payload))
-        reply = replies.pop(0)
-        if isinstance(reply, int):
-            failure["http_status"] = reply
-            return None
-        return reply
-
-    monkeypatch.setattr(local_llm, "_request", fake_request)
-    return sent
-
-
-def _body(content, reason="stop"):
-    return {"choices": [{"message": {"content": content}, "finish_reason": reason}]}
-
-
-def test_a_schema_is_requested_in_the_openai_json_schema_shape(monkeypatch):
-    sent = _recording(monkeypatch, [_body('{"a": 1}')])
-    schema = {"type": "object", "properties": {"a": {"type": "integer"}}}
-    assert local_llm.complete("s", "u", schema=schema) == '{"a": 1}'
-    fmt = sent[0]["response_format"]
-    assert fmt["type"] == "json_schema"
-    assert fmt["json_schema"]["schema"] == schema
-
-
-def test_a_refused_schema_is_retried_without_one(monkeypatch):
-    sent = _recording(monkeypatch, [400, _body("{}")])
-    assert local_llm.complete("s", "u", schema={"type": "object"}) == "{}"
-    assert "response_format" not in sent[1]
-
-
-def test_a_timeout_is_not_retried_without_the_schema(monkeypatch):
-    """A retry after a timeout would spend the caller's time limit twice."""
-    sent = _recording(monkeypatch, [None])
-    assert local_llm.complete("s", "u", schema={"type": "object"}) is None
-    assert len(sent) == 1
-
-
-def test_widen_false_makes_max_tokens_a_hard_cap(monkeypatch):
-    sent = _recording(monkeypatch, [_body("", "length")])
-    finished = {}
-    assert (
-        local_llm.complete("s", "u", max_tokens=100, widen=False, finished=finished)
-        is None
-    )
-    assert [p["max_tokens"] for p in sent] == [100]
-    assert finished["reason"] == "length"
-
-
-def test_the_default_still_widens_once(monkeypatch):
-    sent = _recording(monkeypatch, [_body("", "length"), _body("ok")])
-    assert local_llm.complete("s", "u", max_tokens=100) == "ok"
-    assert [p["max_tokens"] for p in sent] == [100, 400]
 
 
 def test_a_reasoning_model_that_never_reached_content_is_a_failure(monkeypatch):
