@@ -73,7 +73,8 @@ class Score:
     status: str
     useful: bool
     verified_claims: int
-    citation_precision: float
+    # None when the run attempted no citation: nothing to be precise about.
+    citation_precision: float | None
     false_grounded: int
     disagreements: int
     latency_ms: int
@@ -100,20 +101,21 @@ def _verified_claims(brief: Brief) -> list[str]:
     return []
 
 
-def _precision(brief: Brief) -> float:
+def _precision(brief: Brief) -> float | None:
     if brief.operations:
         cites = [h for i in brief.items for h in (*i.cites, i.source, i.target) if h]
         bad = {f for i in brief.items for f in i.hard_failures}
-        return 1.0 if not cites else 1 - len(bad) / len(cites)
+        return None if not cites else 1 - len(bad) / len(cites)
     if not brief.answer:
-        return 1.0
+        return None
     good, unresolved = extract_citations(brief.answer, brief.packet)
     total = len(good) + len(unresolved)
-    return 1.0 if not total else len(good) / total
+    return None if not total else len(good) / total
 
 
 def score(case: dict[str, Any], brief: Brief) -> Score:
     claims = _verified_claims(brief)
+    precision = _precision(brief)
     forbidden = [re.compile(p, re.I) for p in case.get("forbidden", [])]
     # Wording is free; a verified claim the case says is false is not.
     false = sum(1 for c in claims if any(f.search(c) for f in forbidden))
@@ -130,7 +132,7 @@ def score(case: dict[str, Any], brief: Brief) -> Score:
         status=brief.status,
         useful=bool(claims),
         verified_claims=len(claims),
-        citation_precision=round(_precision(brief), 4),
+        citation_precision=None if precision is None else round(precision, 4),
         false_grounded=false,
         disagreements=len(brief.disagreements),
         latency_ms=int(info.get("elapsed_ms") or 0),
@@ -147,13 +149,13 @@ def summarise(scores: list[Score]) -> dict[str, Any]:
     out: dict[str, Any] = {}
     for name in sorted({s.profile for s in scores}):
         rows = [s for s in scores if s.profile == name]
+        cited = [s.citation_precision for s in rows if s.citation_precision is not None]
         answerable = [s for s in rows if s.category in ("supported", "conflicting")]
         out[name] = {
             "cases": len(rows),
             "false_grounded": sum(s.false_grounded for s in rows),
-            "citation_precision": round(
-                sum(s.citation_precision for s in rows) / len(rows), 4
-            ),
+            "citation_precision": round(sum(cited) / len(cited), 4) if cited else None,
+            "uncited": len(rows) - len(cited),
             "useful": sum(1 for s in answerable if s.useful),
             "useful_of": len(answerable),
             "verified": sum(1 for s in rows if s.state == "verified"),
