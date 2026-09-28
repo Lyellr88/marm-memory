@@ -860,3 +860,104 @@ def test_a_memory_relation_whose_text_denies_it_is_not_verified(packet):
         target="S1",
     )
     assert "the relation's text denies its own link" in check.failures
+
+
+# --- a claim's code spans come from what it cites ------------------------------
+
+
+def test_a_code_span_must_be_in_the_item_its_claim_cites(packet):
+    # `pass` is in claim's source only.
+    wrong = verify("apply returns `pass` [S1].", packet)
+    right = verify("claim returns `pass` [S2].", packet)
+    assert wrong.source_span_support < 1.0
+    assert wrong.state == "uncertain"
+    assert "code span not in the cited evidence: `pass`" in wrong.failures
+    assert (right.source_span_support, right.state) == (1.0, "verified"), right
+
+
+def test_a_line_reference_must_fall_inside_the_cited_symbol(packet):
+    # Line 55 is inside claim (S2), not apply (S1).
+    assert verify("It begins at pkg/svc.py:55 [S2].", packet).source_span_support == 1
+    assert verify("It begins at pkg/svc.py:55 [S1].", packet).source_span_support < 1
+
+
+def test_a_span_outside_any_cited_claim_is_still_held_to_the_packet(packet):
+    assert verify("- `write_row()`", packet).source_span_support == 1.0
+    assert verify("- `drop_table()`", packet).source_span_support < 1.0
+
+
+# --- a name two symbols share ---------------------------------------------------
+
+
+def _shared_name_packet(memory="foo calls bar."):
+    return build_packet(
+        Context(
+            project={"name": "demo"},
+            task="t",
+            symbols=[
+                Symbol("pkg.A.foo", "foo", "Method", "a.py", 1, 2, source="bar()"),
+                Symbol("pkg.B.foo", "foo", "Method", "b.py", 1, 2, source="pass"),
+                Symbol("pkg.bar", "bar", "Function", "c.py", 1, 2, source="pass"),
+            ],
+            memories=[{"id": "m1", "content": memory}],
+            graph_edges=[("pkg.A.foo", "pkg.bar", 1.0)],
+        )
+    )
+
+
+def test_a_shared_name_resolves_through_the_relation_handles():
+    p = _shared_name_packet()
+    a_foo, b_foo, bar = (p.symbols[i].handle for i in range(3))
+    ok = check_item(
+        "relations",
+        text="foo calls bar",
+        packet=p,
+        kind="calls",
+        source=a_foo,
+        target=bar,
+    )
+    wrong = check_item(
+        "relations",
+        text="foo calls bar",
+        packet=p,
+        kind="calls",
+        source=b_foo,
+        target=bar,
+    )
+    assert (ok.state, ok.support) == ("verified", "edge"), ok
+    assert wrong.state == "uncertain"
+
+
+def test_a_shared_name_nothing_resolves_is_no_disagreement():
+    # Which foo the memory means is unknowable, so no pair is reported.
+    assert disagreements(_shared_name_packet("foo does not call bar.")) == []
+    assert disagreements(_shared_name_packet("foo calls bar.")) == []
+
+
+def test_a_summary_naming_a_shared_name_is_judged_on_the_foo_it_cites():
+    p = _shared_name_packet()
+    a_foo, b_foo, bar = (p.symbols[i].handle for i in range(3))
+    ok = check_item("summary", text="foo calls bar", packet=p, cites=(a_foo, bar))
+    wrong = check_item("summary", text="foo calls bar", packet=p, cites=(b_foo, bar))
+    assert ok.state == "verified", ok
+    assert wrong.state == "uncertain"
+    assert f"no call edge {b_foo} -> {bar} in the packet" in wrong.failures
+
+
+def test_citing_both_symbols_of_a_shared_name_picks_neither():
+    # The edge is B.foo's; guessing the first foo would call the claim false.
+    p = build_packet(
+        Context(
+            project={"name": "demo"},
+            task="t",
+            symbols=[
+                Symbol("pkg.A.foo", "foo", "Method", "a.py", 1, 2, source="pass"),
+                Symbol("pkg.B.foo", "foo", "Method", "b.py", 1, 2, source="bar()"),
+                Symbol("pkg.bar", "bar", "Function", "c.py", 1, 2, source="pass"),
+            ],
+            graph_edges=[("pkg.B.foo", "pkg.bar", 1.0)],
+        )
+    )
+    handles = tuple(s.handle for s in p.symbols)
+    check = check_item("summary", text="foo calls bar", packet=p, cites=handles)
+    assert not any("call edge" in f for f in check.failures), check
