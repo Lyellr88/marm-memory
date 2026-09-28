@@ -1,9 +1,10 @@
-# MARM Memory v2.54.0 - Give your AI Agents a permanent memory in 60 seconds
+# MARM Memory v2.54.1 - Give your AI Agents a permanent memory in 60 seconds
 
 ## Table of Contents
 
 - [Quick Start](#quick-start)
 - [Why MARM Memory](#why-marm-memory)
+- [MARM Console](#marm-console-your-local-control-plane)
 - [Performance & Scaling Benchmarks](#performance--scaling-benchmarks)
 - [MCP Client Setup](#mcp-client-setup-for-http--stdio)
 - [Runtime CLI Commands](#runtime-cli-commands)
@@ -62,7 +63,7 @@ It brings three things together:
 - 💻 **Code Graph (6 tools)** maps your repository so agents can find symbols, follow code paths, and understand the project without rereading it all. Point it at a repo once and it keeps itself current as you work.
 - 🧩 **Concept Graph (2 tools)** connects people, decisions, errors, and ideas from your stored memories, with links back to relevant code when available. It builds itself as you store memories.
 
-All 16 tools work over HTTP and STDIO. Your agents share the same local memory across sessions instead of starting from scratch each time. The bundled Console App provides a browsable view of **Memories**, the **Knowledge Graph**, and **Indexed Projects**, including progress for graph builds and repository indexing. Indexing a repository creates its independent Code Graph, which you can explore from Knowledge Graph → Code Explorer even before storing any memories.
+All 16 tools work over HTTP and STDIO. Your agents share the same local memory across sessions instead of starting from scratch each time. The bundled Console App provides a local control plane for memory, graphs, code context, distillation, runtime controls, and the integrated terminal. Indexing a repository creates its independent Code Graph, which you can explore from Knowledge Graph → Code Explorer even before storing any memories.
 
 ### How It Works
 
@@ -77,6 +78,18 @@ All 16 tools work over HTTP and STDIO. Your agents share the same local memory a
 | **Deployment layer** | Pip, Docker, STDIO, HTTP, and managed `swarm`, `swarm-max`, and `trusted` profiles | Lets you run private local memory or shared multi-agent memory with the same MCP surface |
 
 See [Performance & Scaling Benchmarks](#performance--scaling-benchmarks) for retrieval latency, concurrency, and write-cost numbers, and [Architecture & Internals](#architecture--internals) for the mechanisms behind each layer.
+
+## MARM Console: Your Local Control Plane
+
+Run `marm-memory console` to open the bundled web app at `http://127.0.0.1:8002`. It ships with MARM, needs no Node.js installation, stays on your machine, and works with the same local stores and MCP runtime your agents use.
+
+| Workspace | What it gives you |
+| --- | --- |
+| **Memories and Knowledge Graph** | Browse, filter, edit, and clean up memory, logs, notebooks, extracted concepts, duplicates, concept builds, and code links. |
+| **Indexed Projects and Project Explorer** | Index local repositories, inspect architecture, impact, coverage, decisions, runtime traces, symbol search, and code-graph topology. |
+| **Code Context** | Build one bounded view of task-ranked symbols, source, and related memory. An optional local model can answer from that same context, with its citations checked. |
+| **Distill** | Turn transcripts into durable-memory proposals. Review, apply, or discard them with duplicate evidence visible. |
+| **System and Terminal** | Manage runtime health, indexing, local-model settings, backups, diagnostics, and maintenance. The docked terminal provides a real local shell with persistent sessions and a searchable MARM command menu. |
 
 ### Runtime CLI Commands
 
@@ -1147,7 +1160,7 @@ It re-splits stale chunks, fills in any lost to an interrupted write, and drops 
 
 **An index returns `index_in_progress`**
 
-- Another MARM process holds the indexing gate, usually the other transport's poller or a Console index job. Deleting a project reports the same thing, since a delete during an index would be undone by it. Run it again in a moment.
+- Another MARM process holds the indexing gate, usually the other transport's index worker or a Console index job. Deleting a project reports the same thing, since a delete during an index would be undone by it. Run it again in a moment.
 
 **A build returns `build_in_progress`**
 

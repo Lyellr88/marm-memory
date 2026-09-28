@@ -1,5 +1,7 @@
 # marm-memory FAQ
 
+_Last updated: September 28, 2026 (v2.54.1)_
+
 Common questions about MARM MCP, memory behavior, transports, supported clients, and local deployment.
 
 ---
@@ -50,6 +52,7 @@ Use the README quick start for the shortest path, then use the install docs when
 - `docs/INSTALL-DOCKER.md` - Docker HTTP and Docker STDIO
 - `docs/INSTALL-WINDOWS.md` - Windows local install
 - `docs/INSTALL-LINUX.md` - Linux local install
+- `docs/INSTALL-MACOS.md` - macOS local install
 - `docs/INSTALL-PLATFORMS.md` - Claude, Codex, Gemini, Qwen, VS Code, Cursor, and Grok notes
 
 #### Q: Which AI platforms work with MARM MCP?
@@ -99,11 +102,15 @@ No. Session startup, protocol delivery, protocol-lite refresh, and documentation
 
 #### Q: When should I use `marm_code_context` instead of `marm_code_lookup`?
 
-Use `marm_code_lookup` when you know what you are looking for -- a symbol name, a text pattern, one function's source. Use `marm_code_context` when you do not: "how does X work", "where is X handled", "what would changing X affect". It answers the whole question in one call, returning the symbols that matter for the task, their source read from disk, and what memory records about them, so there is no search-then-fetch-then-recall loop to run by hand.
+Use `marm_code_lookup` when you know what you are looking for: a symbol name, a text pattern, one function's source. Use `marm_code_context` when you do not: "how does X work", "where is X handled", "what would changing X affect". It answers the whole question in one call, returning the symbols that matter for the task, their source read from disk, and what memory records about them, so there is no search-then-fetch-then-recall loop to run by hand.
 
-The difference is ranking, not convenience. Lexical search answers "which symbols mention these words", which is a different question from "which symbols matter here" -- a private helper whose name happens to match the task will outrank the class everything calls. `marm_code_context` seeds on the task's own terms, expands through callers and callees, and ranks that subgraph by personalised PageRank, so centrality is measured relative to the task rather than to the repository. Each returned symbol says which way it arrived: `seeded` means it matched the task's words, and the rest were pulled in by the call graph.
+The difference is ranking, not convenience. Lexical search answers "which symbols mention these words", which is a different question from "which symbols matter here". A private helper whose name happens to match the task will outrank the class everything calls. `marm_code_context` seeds on the task's own terms, expands through callers and callees, and ranks that subgraph by personalised PageRank, so centrality is measured relative to the task rather than to the repository. Each returned symbol says which way it arrived: `seeded` means it matched the task's words, and the rest were pulled in by the call graph.
 
-It needs an indexed project, which it resolves from `cwd` unless you name one. When no *indexed project* matches it returns `no_project` rather than an error, with the next step to take -- an indexed project that simply has no symbols matching the task returns a successful, empty composition instead. The Console renders the same composition under **Code Context**.
+It needs an indexed project, which it resolves from `cwd` unless you name one. When no *indexed project* matches it returns `no_project` rather than an error, with the next step to take. An indexed project that simply has no symbols matching the task returns a successful, empty composition instead. The Console renders the same composition under **Code Context**.
+
+#### Q: Can MARM use a local model?
+
+Yes, optionally. MARM can send Distill fact proposals and Code Context answers to a local OpenAI-compatible model server running on your machine. It is off by default, each request must opt in, and model endpoints are loopback-only unless you deliberately set the remote override. The Console can discover local model servers, show accelerator details, and turn local generation on or off. If the model is unavailable or replies badly, MARM falls back and memory and code-context workflows keep working.
 
 #### Q: What is the concept graph and how do I use it?
 
@@ -115,7 +122,7 @@ The spaCy runtime and English extraction model are bundled with MARM and load on
 
 #### Q: What happens if a graph engine fails to start?
 
-Nothing breaks. The code-graph engine starts lazily on the first graph-tool use, or when the auto-index poller finds it already downloaded; if it cannot start (no network for the first-run download, disk full, `GRAPH_ENABLED=false`), graph tools return `{"status": "error", "message": "graph backend unavailable"}` while all other tools keep working. The concept graph stores its data in a separate SQLite database (`~/.marm/index/`) with its own connection pool, so it can never block the main memory database.
+Nothing breaks. The code-graph engine starts lazily on the first graph-tool use, or when the background indexer finds it already downloaded; if it cannot start (no network for the first-run download, disk full, `GRAPH_ENABLED=false`), graph tools return `{"status": "error", "message": "graph backend unavailable"}` while all other tools keep working. The concept graph stores its data in a separate SQLite database (`~/.marm/index/`) with its own connection pool, so it can never block the main memory database.
 
 ---
 
@@ -187,7 +194,7 @@ For normal use, wait for MARM to surface compaction candidates. For heavy shared
 
 #### Q: Can I back up my MARM memory?
 
-Yes. Back up the `~/.marm/` directory to preserve your database and related local MARM state.
+Yes. The Console's System page takes point-in-time snapshots of the memory database while the server keeps running, and lists and deletes them. For a full copy, back up the `~/.marm/` directory, which holds your databases and related local MARM state. To restore, stop MARM, replace the database file, then start it again.
 
 #### Q: Can memories override system or developer instructions?
 

@@ -1,22 +1,27 @@
 # marm-memory - Agent Instructions
 
+_Last updated: September 28, 2026 (v2.54.1)_
+
 Instructions for AI coding agents working on this repo. Keep changes surgical: touch only what the task requires, match existing style, preserve behavior in refactors.
 
 ## Architecture
 
 MARM is a local-first MCP memory server: Python FastAPI in `marm-mcp-server/`, package `marm_mcp_server/`.
 
-- **14 public MCP tools**: 7 core memory, 5 code graph, 2 concept graph. HTTP and STDIO must stay in exact parity.
+- **16 public MCP tools**: 8 core memory, 6 code graph, 2 concept graph. HTTP and STDIO must stay in exact parity.
 - **HTTP transport**: `marm_mcp_server/server.py`; tools are whitelisted in `MCP_TOOL_OPERATIONS`. A tool not in that list does not exist over HTTP.
-- **STDIO transport**: `marm_mcp_server/server_stdio.py` owns the `FastMCP` app and seven core `@mcp.tool()` wrappers. Graph/concept bodies live in `services/stdio_graph_tools.py` and are explicitly registered after the core tools so `tools/list` order stays stable. Never fork behavior between transports.
-- **Endpoint logic** lives in `marm_mcp_server/endpoints/` split by surface (memory, logging, notebook, session, compaction, graph, concepts, system). Shared helpers stay in `core/`.
+- **STDIO transport**: `marm_mcp_server/server_stdio.py` owns the `FastMCP` app and eight core `@mcp.tool()` wrappers. Graph/concept bodies live in `services/stdio_graph_tools.py` and are explicitly registered after the core tools so `tools/list` order stays stable. Never fork behavior between transports.
+- **Endpoint logic** lives in `marm_mcp_server/endpoints/` split by surface (memory, logging, notebook, session, compaction, distill, graph, code_context, concepts, system). Shared helpers stay in `core/`.
 - **Storage**: SQLite WAL at `~/.marm/marm_memory.db` (connection pool, FTS5 external-content index `memories_fts`, `memory_chunks` for long-memory chunking). The concept graph uses its own database `~/.marm/index/marm_index.db` with its own pool. Never share connections between the two.
 - **Write path**: all memory writes go through the serialized async write queue (one worker). Do not add write paths that bypass it. `marm_log_entry` dual-writes: a `log_entries` row plus a semantic memory in `memories` (via the queue); a semantic-store failure must never fail the log write.
-- **Code graph**: a pinned external binary (codebase-memory-mcp) supervised as a child process over newline-delimited JSON-RPC (`core/graph_supervisor.py`, `core/graph_client.py`). It starts lazily and runs degraded on failure. Graph or concept failures must never break the 7 core memory tools.
-- **Both graphs index themselves**, on by default, one background worker each on both transports. Concept extraction is queue-driven: a write enqueues a durable outbox row in the same transaction as the memory (`core/concept_worker.py`). Code indexing is poll-driven: a git signature per indexed repo, re-indexing on a commit and every cycle while the tree is dirty (`core/graph_index_worker.py`). Neither may be made to block a write, a recall, or startup.
+- **Code graph**: a pinned external binary (codebase-memory-mcp) supervised as a child process over newline-delimited JSON-RPC (`core/graph_supervisor.py`, `core/graph_client.py`). It starts lazily and runs degraded on failure. Graph or concept failures must never break the 8 core memory tools.
+- **Both graphs index themselves**, on by default, one background worker each on both transports. Concept extraction is queue-driven: a write enqueues a durable outbox row in the same transaction as the memory (`core/concept_worker.py`). Code indexing is watcher-driven: a filesystem watcher (`core/graph_index_watcher.py`) wakes the worker on a real change, debounced so a burst of edits becomes one re-index, and a periodic git-signature reconciliation pass catches missed events and covers non-git or unwatchable directories (`core/graph_index_worker.py`). Neither may be made to block a write, a recall, or startup.
 - **Cross-process serialization is a leased DB row, never an asyncio lock.** `core/lease_lock.py` owns the mechanics; `concept_build_lock` and `graph_index_lock` are its two bindings, deliberately separate rows. HTTP and STDIO are separate processes, so an in-process lock protects nothing. Every code-index call AND `delete_project` take the graph gate. Release is driven by the engine call's completion, not the awaiting task: `asyncio.to_thread` cancellation cancels the await and leaves the thread writing.
 - **Runtime switches live in the DB, not just the environment** (`core/runtime_flags.py`). A saved override beats the env var so a Dockerfile cannot silently re-enable what a user turned off, and both workers re-read per cycle so no restart is needed. Any new background worker follows this: read the flag every cycle, and start the loop even when off so it can be turned on from another process.
 - **Graph-aware recall**: `marm_smart_recall` keeps primary memory ranking authoritative and may add bounded `graph_context` from the isolated concept database. Graph enrichment is read-only and fail-open; trim graph details before primary results when enforcing response limits.
+- **Distill**: `marm_distill` stages proposals and never writes a memory itself. Only an explicit `apply` writes (through the queue); a discarded proposal is never offered again.
+- **Local generation** (`services/local_llm.py`): optional OpenAI-compatible backend for Distill proposals and Code Context answers. Off by default, opt-in per request, loopback-only unless an explicit remote override is set, and every failure falls back without breaking memory or code-context workflows.
+- **Console**: `marm_mcp_server/console/` is the human-facing app on port 8002 (`marm-memory console`), with its frontend source in `marm-console/`. Its routes call the existing MCP tool paths for mutations instead of writing SQLite directly. Some features have a Console route beside the MCP endpoint (for example `console/endpoints/code_context.py`), so a fix to one usually needs the other.
 - **Embeddings**: one fastembed `jinaai/jina-embeddings-v2-small-en` encoder (512 dimensions), lazy-loaded and serialized behind a lock. Writes must succeed even when the encoder is unavailable. Existing data requires `marm-mcp-server --migrate-embeddings` before restart when upgrading from MiniLM.
 
 ## Consistency Rules
@@ -51,7 +56,7 @@ Then run `python scripts/find-tools.py`; every surface must report OK.
 3. `marm-mcp-server/marm_mcp_server/__init__.py` (`__version__` and docstring)
 4. `marm-mcp-server/marm_mcp_server/config/settings.py` (`SERVER_VERSION`)
 5. `marm-mcp-server/Dockerfile` version label and `docker-compose.yml`
-6. The h1 in `README.md`, `marm-mcp-server/README.md`, and `marm-mcp-server/marm_mcp_server/resources/marm-docs/README.md` (each maintained separately), plus the version headers in `docs/INSTALL-*.md`
+6. The h1 in `README.md`, `marm-mcp-server/README.md`, and `marm-mcp-server/marm_mcp_server/resources/marm-docs/README.md` (each maintained separately), plus the example `server.json` version in `docs/INSTALL-LINUX.md` and `docs/INSTALL-WINDOWS.md`
 
 Semver: MAJOR = breaking (schema renames, parameter removals), MINOR = new tools/parameters/features, PATCH = fixes and doc updates.
 
@@ -64,7 +69,7 @@ Semver: MAJOR = breaking (schema renames, parameter removals), MINOR = new tools
 
 ## Testing
 
-- Tests live in `marm-mcp-server/tests/`; run with `pytest` from `marm-mcp-server/`.
+- Tests live in `marm-mcp-server/tests/`, and Console API tests in `marm-console/tests/`. Run `python scripts/run-tests.py` from the repo root; for ad hoc pytest runs, never pass a `--basetemp` inside the repository.
 - Run `python scripts/test-scripts/smoke-commands.py` from the repo root for the local CLI smoke suite. It uses `smoke`, `smoke_lifecycle`, `smoke_docker`, and `smoke_destructive` markers. `--docker` and `--destructive` are explicit opt-ins; destructive mode uses a disposable virtual environment rather than the active package.
 - Hit real FastAPI endpoints and real SQLite. Mock only when it meaningfully speeds the test AND matches real behavior with at least 95% fidelity.
 - Every new MARM Console API route needs at least one happy-path FastAPI response-contract test with the MCP adapter stubbed. This verifies the actual response model without requiring a live graph backend.
@@ -79,8 +84,8 @@ Semver: MAJOR = breaking (schema renames, parameter removals), MINOR = new tools
 
 ## Current Stats
 
-- 14 MCP tools over HTTP + STDIO
+- 16 MCP tools over HTTP + STDIO
 - 3 isolated SQLite databases (memory + concept graph + analytics), no shared pools. The code graph engine owns its own store outside all three
 - Hybrid recall: FTS5 BM25 exact lane + bounded semantic rerank
 - Bundled concept extraction: spaCy plus the `en_core_web_sm` pipeline, both loaded lazily; Docker image includes the graph engine
-- Two background indexers, both on by default: concept extraction from a durable outbox, code re-indexing from a git-signature poll
+- Two background indexers, both on by default: concept extraction from a durable outbox, code re-indexing from a filesystem watcher with periodic reconciliation

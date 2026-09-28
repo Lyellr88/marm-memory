@@ -40,6 +40,7 @@ Thank you to everyone helping push local-first, persistent AI memory forward.
   - [#237](https://github.com/Lyellr88/marm-memory/pull/237): Improved Code Context caller discovery and ranking, including shared symbol names and alternate graph-search matches.
   - [#247](https://github.com/Lyellr88/marm-memory/pull/247): Resolved the analytics database path at write time so runtime configuration changes are honored.
   - [#248](https://github.com/Lyellr88/marm-memory/pull/248): Added missing Console regression coverage for decoded memory content in the Code Context memory pane.
+  - [#255](https://github.com/Lyellr88/marm-memory/pull/255): Made auto-index failures report the engine's outcome and hint instead of `index_repository: None`, so a contained worker crash or hang is diagnosable from the log.
 - **Stefano Maffeis** ([@lesbass](https://github.com/lesbass)) - Investigated the Docker auto-index path and contributed a solid implementation for honoring the configured code-graph binary. A parallel implementation was selected for merge, but the work helped validate the correct Docker boundary and resolution path ([#203](https://github.com/Lyellr88/marm-memory/pull/203)).
 - **Kevin Lozada Santos** ([@kevin-lozada-santos](https://github.com/kevin-lozada-santos)) - Fixed Docker code-graph auto-indexing so the configured graph engine is available when the background worker evaluates an indexed repository. Added container-focused regression coverage for the runtime lifecycle ([#204](https://github.com/Lyellr88/marm-memory/pull/204)).
 

@@ -1,6 +1,24 @@
 # Changelog
 
 <details>
+<summary><strong>September 28th, 2026: Clearer Auto-Index Failures and a Documentation Refresh (v2.54.1)</strong></summary>
+
+### Fixed
+
+- Auto-index failures now log the engine's outcome and hint instead of `index_repository: None`. A contained worker crash or hang reads `index_repository: crash`, and the hint is logged alongside the message.
+
+### Documentation
+
+- `CONTRIBUTING.md`, `AGENTS.md`, and the FAQ were audited against the current code. The project structure, tool counts, code-indexing description, test commands, and version checklist are current again, and each now carries a last-updated date.
+- The FAQ adds local-model and backup answers, and the README gains a MARM Console section.
+
+### Acknowledgment
+
+Thank you to [@doublegate](https://github.com/doublegate) for [#255](https://github.com/Lyellr88/marm-memory/pull/255).
+
+</details>
+
+<details>
 <summary><strong>September 26th, 2026: Optional OS Keychain API Keys (v2.54.0)</strong></summary>
 
 ### Added
