@@ -94,6 +94,20 @@ def test_linux_plans_map_bind_mount_writes_to_the_host_user(monkeypatch, tmp_pat
     assert compose["services"]["marm-mcp-server"]["environment"]["HOME"] == "/home/marm"
 
 
+def test_every_container_keeps_its_code_indexes_under_the_mount(tmp_path):
+    # A container recreated on upgrade, or removed after a STDIO session,
+    # otherwise starts with no indexed projects.
+    store = "CBM_CACHE_DIR=/home/marm/.marm/cache/codebase-memory-mcp"
+    plan = docker_commands.build_run_plan(_options(tmp_path))
+    compose = docker_commands.compose_document(_options(tmp_path))["document"]
+    stdio = docker_commands.stdio_command(data_dir=tmp_path)
+
+    assert store in plan["arguments"]
+    assert store in stdio["arguments"]
+    environment = compose["services"]["marm-mcp-server"]["environment"]
+    assert f"CBM_CACHE_DIR={environment['CBM_CACHE_DIR']}" == store
+
+
 def test_docker_run_plan_rejects_invalid_inputs(tmp_path):
     with pytest.raises(docker_commands.DockerCommandError, match="--port"):
         docker_commands.build_run_plan(_options(tmp_path, port=0))
@@ -286,6 +300,7 @@ def test_compose_document_matches_safe_run_defaults(tmp_path):
         "SERVER_HOST": "0.0.0.0",
         "HOME": "/home/marm",
         "XDG_CACHE_HOME": "/home/marm/.marm/cache",
+        "CBM_CACHE_DIR": "/home/marm/.marm/cache/codebase-memory-mcp",
     }
     assert service["env_file"] == [str((tmp_path / ".env").resolve())]
     assert service["volumes"][0]["target"] == "/home/marm/.marm"

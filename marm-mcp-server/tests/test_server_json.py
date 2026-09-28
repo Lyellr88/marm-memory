@@ -106,3 +106,23 @@ def test_the_docker_command_a_client_builds_is_interactive_and_removed():
     assert "-i" in command[:image], "STDIO needs the container's stdin open"
     assert "--rm" in command[:image], "each session would leave a container"
     assert command[image + 1 :] == ["stdio"]
+
+
+def _environment(arguments: list) -> dict[str, str]:
+    names = ("-e", "--env")
+    pairs: list[str] = []
+    for i, argument in enumerate(arguments):
+        if isinstance(argument, dict) and argument.get("name") in names:
+            pairs.append(argument["value"])
+        elif argument in names:
+            pairs.append(arguments[i + 1])
+    return dict(pair.split("=", 1) for pair in pairs)
+
+
+def test_the_oci_image_keeps_its_cache_in_the_data_directory(tmp_path):
+    # The graph engine keeps its project store under the cache directory.
+    env = _environment(_packages()["oci"]["runtimeArguments"])
+    supported = docker_commands.stdio_command(data_dir=tmp_path)["arguments"]
+    assert env == _environment(supported)
+    for name in ("XDG_CACHE_HOME", "CBM_CACHE_DIR"):
+        assert env[name].startswith(f"{docker_commands.CONTAINER_DATA_DIR}/")

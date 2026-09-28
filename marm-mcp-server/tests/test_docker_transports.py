@@ -870,3 +870,127 @@ def _read_generated_key(container):
         if line.strip().startswith("MARM_API_KEY="):
             return line.split("=", 1)[1].strip()
     return ""
+
+
+def _registry_session(command, calls, timeout=180):
+    """Run one STDIO session and return the text of each tools/call result."""
+
+    def message(msg):
+        return (json.dumps(msg) + "\n").encode("utf-8")
+
+    last = len(calls) + 1
+    stdin_data = message(
+        {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "initialize",
+            "params": {
+                "protocolVersion": "2024-11-05",
+                "capabilities": {},
+                "clientInfo": {"name": "docker-test-client", "version": "0.1"},
+            },
+        }
+    ) + message({"jsonrpc": "2.0", "method": "notifications/initialized"})
+    for offset, (name, arguments) in enumerate(calls, start=2):
+        stdin_data += message(
+            {
+                "jsonrpc": "2.0",
+                "id": offset,
+                "method": "tools/call",
+                "params": {"name": name, "arguments": arguments},
+            }
+        )
+    proc = subprocess.Popen(
+        command, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+    )
+    watchdog = threading.Timer(timeout, proc.kill)
+    responses = {}
+    try:
+        watchdog.start()
+        proc.stdin.write(stdin_data)
+        proc.stdin.flush()
+        while last not in responses:
+            line = proc.stdout.readline()
+            if not line:
+                break
+            try:
+                msg = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if "id" in msg:
+                responses[msg["id"]] = msg
+        proc.stdin.close()
+        proc.wait(timeout=60)
+    finally:
+        watchdog.cancel()
+        proc.kill()
+        proc.stdout.close()
+        stderr_text = proc.stderr.read().decode("utf-8", errors="replace")[-800:]
+        proc.stderr.close()
+    assert last in responses, f"session ended early; stderr: {stderr_text}"
+    return [
+        "".join(c.get("text", "") for c in responses[i]["result"]["content"])
+        for i in range(2, last + 1)
+    ]
+
+
+def test_docker_registry_command_keeps_code_index_across_sessions(
+    docker_image, tmp_path
+):
+    """Build `docker run` from server.json as a registry client does; an index
+    made in one short-lived STDIO container must still be listed by the next."""
+    package = next(
+        p
+        for p in json.loads(
+            (Path(__file__).resolve().parents[1] / "server.json").read_text()
+        )["packages"]
+        if p["registryType"] == "oci"
+    )
+    volume = f"marm-test-registry-{uuid.uuid4().hex[:10]}"
+    runtime = []
+    for argument in package["runtimeArguments"]:
+        runtime.append(argument["name"])
+        if "value" in argument:
+            runtime.append(
+                argument["value"].replace("src=marm-data,", f"src={volume},")
+            )
+    assert f"src={volume}," in " ".join(runtime)
+
+    repository = tmp_path / "registry-repo"
+    repository.mkdir()
+    (repository / "example.py").write_text(
+        "def kept_across_sessions():\n    return 1\n", encoding="utf-8"
+    )
+    tmp_path.chmod(0o755)
+    repository.chmod(0o755)
+    (repository / "example.py").chmod(0o644)
+
+    def command():
+        return [
+            "docker",
+            "run",
+            *runtime,
+            "--mount",
+            f"type=bind,src={repository.resolve()},dst=/repository/registry-repo,readonly",
+            docker_image,
+            *[a["value"] for a in package["packageArguments"]],
+        ]
+
+    try:
+        (indexed,) = _registry_session(
+            command(),
+            [
+                (
+                    "marm_graph_index",
+                    {"repo_path": "/repository/registry-repo", "action": "index"},
+                )
+            ],
+        )
+        project = json.loads(indexed).get("project")
+        assert project, indexed
+        (listed,) = _registry_session(
+            command(), [("marm_graph_index", {"action": "list"})]
+        )
+        assert project in listed, listed
+    finally:
+        _run_docker(["volume", "rm", "-f", volume], timeout=30)

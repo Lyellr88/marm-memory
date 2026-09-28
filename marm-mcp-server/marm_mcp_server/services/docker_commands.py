@@ -27,6 +27,21 @@ CONTAINER_DATA_DIR = "/home/marm/.marm"
 MAX_LOG_LINES = 1000
 DOCKER_TIMEOUT_SECONDS = 60
 DOCKER_PULL_TIMEOUT_SECONDS = 1800
+# Everything the container keeps across restarts must land under the mount.
+CONTAINER_ENVIRONMENT = {
+    "HOME": "/home/marm",
+    "XDG_CACHE_HOME": f"{CONTAINER_DATA_DIR}/cache",
+    # The graph engine reads its store location here, not from XDG_CACHE_HOME.
+    "CBM_CACHE_DIR": f"{CONTAINER_DATA_DIR}/cache/codebase-memory-mcp",
+}
+
+
+def _environment_arguments() -> list[str]:
+    return [
+        part
+        for name, value in CONTAINER_ENVIRONMENT.items()
+        for part in ("-e", f"{name}={value}")
+    ]
 
 
 class DockerCommandError(RuntimeError):
@@ -163,10 +178,7 @@ def build_run_plan(
         str(env_file),
         "-e",
         "SERVER_HOST=0.0.0.0",
-        "-e",
-        "HOME=/home/marm",
-        "-e",
-        "XDG_CACHE_HOME=/home/marm/.marm/cache",
+        *_environment_arguments(),
         "-p",
         f"{host_binding}:{options.port}:8001",
     ]
@@ -399,10 +411,7 @@ def stdio_command(
         "--rm",
         "--mount",
         f"type=bind,src={resolved_data_dir},dst={CONTAINER_DATA_DIR}",
-        "-e",
-        "HOME=/home/marm",
-        "-e",
-        "XDG_CACHE_HOME=/home/marm/.marm/cache",
+        *_environment_arguments(),
     ]
     container_user = _container_user()
     if container_user:
@@ -432,11 +441,7 @@ def compose_document(options: DockerRunOptions) -> dict[str, Any]:
         "swarm-max": ["--swarm-max"],
         "trusted": ["--trusted"],
     }[options.profile]
-    environment = {
-        "SERVER_HOST": "0.0.0.0",
-        "HOME": "/home/marm",
-        "XDG_CACHE_HOME": "/home/marm/.marm/cache",
-    }
+    environment = {"SERVER_HOST": "0.0.0.0", **CONTAINER_ENVIRONMENT}
     if options.rate_limit_rpm is not None:
         environment["MARM_RATE_LIMIT_RPM"] = str(options.rate_limit_rpm)
     service: dict[str, Any] = {

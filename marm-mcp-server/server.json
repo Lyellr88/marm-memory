@@ -37,6 +37,19 @@
           "name": "--mount",
           "description": "Keep memory in a named volume across the short-lived STDIO containers",
           "value": "type=volume,src=marm-data,dst=/home/marm/.marm"
+        },
+        { "type": "named", "name": "-e", "description": "Home directory of the image's user", "value": "HOME=/home/marm" },
+        {
+          "type": "named",
+          "name": "-e",
+          "description": "Keep model and download caches in the data volume",
+          "value": "XDG_CACHE_HOME=/home/marm/.marm/cache"
+        },
+        {
+          "type": "named",
+          "name": "-e",
+          "description": "Keep code indexes in the data volume",
+          "value": "CBM_CACHE_DIR=/home/marm/.marm/cache/codebase-memory-mcp"
         }
       ],
       "packageArguments": [
