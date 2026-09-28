@@ -25,6 +25,9 @@ from marm_mcp_server.core.concept_names import number_signature, numbers_differ
         ("Phase twenty one", "Phase 20"),
         ("twenty-first", "twenty-second"),
         ("thirty seven", "thirty"),
+        # Digits stay reliable beside a word the rules cannot read.
+        ("Hundred Days v2", "Hundred Days v3"),
+        ("one hundred rows v2", "100 rows v3"),
     ],
 )
 def test_names_whose_numbers_differ_are_different_things(a, b):
@@ -52,6 +55,11 @@ def test_names_whose_numbers_differ_are_different_things(a, b):
         ("Phase twenty first", "Phase 21"),
         ("Phase Twenty-First", "Phase 21"),
         ("ninety nine steps", "99 steps"),
+        # After a count, "second" may be a unit of time rather than an ordinal.
+        ("twenty second timeout", "20 second timeout"),
+        ("20 second timeout", "20 seconds timeout"),
+        ("one hundred rows v2", "100 rows v2"),
+        ("Phase twenty second", "Phase 22nd"),
     ],
 )
 def test_names_with_the_same_numbers_are_left_to_the_similarity(a, b):
@@ -78,3 +86,9 @@ def test_number_words_it_cannot_read_are_left_to_the_similarity(a, b):
 def test_only_adjacent_words_form_one_number():
     assert number_signature("twenty, one") == number_signature("twenty")
     assert number_signature("twenty steps, first") == ("1", "20")
+
+
+def test_second_after_a_count_is_not_read_as_an_ordinal():
+    assert number_signature("twenty second timeout") is None
+    assert number_signature("20 second timeout") is None
+    assert number_signature("the second pass") == ("2",)

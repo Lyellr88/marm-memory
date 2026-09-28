@@ -7,7 +7,9 @@ name different things, however close their vectors are.
 
 from __future__ import annotations
 
+import itertools
 import re
+from collections import Counter
 
 _NUMBER = re.compile(r"\d+(?:\.\d+)*")
 _THOUSANDS = re.compile(r"(?<=\d),(?=\d{3}(?!\d))")
@@ -36,6 +38,8 @@ _ONES = {
 }
 # Spoken forms these rules do not compose; such a name has no reliable number.
 _UNREAD = frozenset("hundred hundredth thousand thousandth million billion".split())
+# After a count, "second" may be a unit of time rather than an ordinal.
+_AFTER_COUNT = re.compile(r"(?:\d|\b(?:%s))[\s-]+$" % "|".join(_TENS[2:]), re.I)
 
 
 def _normalise(run: str) -> str:
@@ -47,43 +51,74 @@ def _normalise(run: str) -> str:
     return ".".join([head, *(part.lstrip("0") or "0" for part in rest)])
 
 
-def _word_numbers(name: str) -> list[str] | None:
+def _digits(name: str) -> tuple[str, ...]:
+    return tuple(
+        sorted(_normalise(run) for run in _NUMBER.findall(_THOUSANDS.sub("", name)))
+    )
+
+
+def _readings(name: str) -> set[tuple[str, ...]] | None:
+    """Every way the name's numbers can be read, or None when a number word
+    is one these rules cannot compose."""
     words = list(_WORD.finditer(name))
-    found: list[str] = []
+    if any(w.group().casefold() in _UNREAD for w in words):
+        return None
+    # One entry per number in the name: the readings it allows.
+    options: list[list[tuple[str, ...]]] = []
     i = 0
     while i < len(words):
         word = words[i].group().casefold()
-        if word in _UNREAD:
-            return None
         value = _NUMBER_WORDS.get(word)
+        # After a count, "second" may be a unit of time, which adds no number.
+        if word == "second" and _AFTER_COUNT.search(name[: words[i].start()]):
+            options.append([("2",), ()])
+            i += 1
+            continue
         if value is not None and word in _TENS_WORDS and i + 1 < len(words):
             nxt = words[i + 1]
             gap = name[words[i].end() : nxt.start()]
-            ones = _ONES.get(nxt.group().casefold())
+            follower = nxt.group().casefold()
+            ones = _ONES.get(follower)
             if ones is not None and not gap.strip(" -"):
-                value += ones
-                i += 1
+                composed = (str(value + ones),)
+                duration = (str(value),)
+                options.append(
+                    [composed, duration] if follower == "second" else [composed]
+                )
+                i += 2
+                continue
         if value is not None:
-            found.append(str(value))
+            options.append([(str(value),)])
         i += 1
-    return found
+    digits = _digits(name)
+    return {
+        tuple(sorted(digits + sum(combo, ()))) for combo in itertools.product(*options)
+    }
 
 
 def number_signature(name: str) -> tuple[str, ...] | None:
     """The numbers a name carries, in digits or words, order-free.
 
-    None when it spells a number these rules cannot read.
+    None when they cannot be read one way only.
     """
-    words = _word_numbers(name)
-    if words is None:
+    readings = _readings(name)
+    if readings is None or len(readings) != 1:
         return None
-    found = [_normalise(run) for run in _NUMBER.findall(_THOUSANDS.sub("", name))]
-    return tuple(sorted(found + words))
+    return next(iter(readings))
 
 
 def numbers_differ(a: str, b: str) -> bool:
     """Whether two names carry different numbers, so cannot be one entity."""
-    sig_a, sig_b = number_signature(a), number_signature(b)
-    if sig_a is None or sig_b is None:
-        return False
-    return bool(sig_a or sig_b) and sig_a != sig_b
+    read_a, read_b = _readings(a), _readings(b)
+    if read_a is not None and read_b is not None:
+        return not read_a & read_b
+    # Where a number word cannot be read, only the digits are known, and they
+    # may belong to that word's number: differ only if no reading of either
+    # side fits inside one of the other's.
+    known_a = (
+        [Counter(r) for r in read_a] if read_a is not None else [Counter(_digits(a))]
+    )
+    known_b = (
+        [Counter(r) for r in read_b] if read_b is not None else [Counter(_digits(b))]
+    )
+    return not any(x <= y or y <= x for x in known_a for y in known_b)
