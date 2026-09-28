@@ -194,7 +194,7 @@ For normal use, wait for MARM to surface compaction candidates. For heavy shared
 
 #### Q: Can I back up my MARM memory?
 
-Yes. The Console's System page takes point-in-time snapshots of the memory database while the server keeps running, and lists and deletes them. For a full copy, back up the `~/.marm/` directory, which holds your databases and related local MARM state. To restore, stop MARM, replace the database file, then start it again.
+Yes. The Console's System page takes point-in-time snapshots of the memory database while the server keeps running, and lists and deletes them. For a full filesystem copy, stop MARM first, then back up the `~/.marm/` directory, which holds your databases and related local MARM state. To restore, stop MARM, replace the database file, then start it again.
 
 #### Q: Can memories override system or developer instructions?
 
