@@ -15,7 +15,7 @@ def _script():
     return module
 
 
-def _run(monkeypatch, capsys, tmp_path, results):
+def _run(monkeypatch, tmp_path, results):
     script = _script()
     questions = tmp_path / "q.txt"
     questions.write_text("\n".join(results), encoding="utf-8")
@@ -23,17 +23,22 @@ def _run(monkeypatch, capsys, tmp_path, results):
     monkeypatch.setattr(
         sys, "argv", ["calibrate", "--project", "p", "--questions", str(questions)]
     )
+    # Captured in the script's own namespace: once another test imports
+    # server_stdio, the builtin print writes to stderr for the whole process.
+    printed: list[str] = []
+    monkeypatch.setattr(
+        script,
+        "print",
+        lambda *a, **_k: printed.append(" ".join(map(str, a))),
+        raising=False,
+    )
     script.main()
-    lines = capsys.readouterr().out.splitlines()
-    return [json.loads(line) for line in lines[:-1]]
+    return [json.loads(line) for line in printed[:-1]]
 
 
-def test_an_answer_to_judge_is_printed_without_an_output_file(
-    monkeypatch, capsys, tmp_path
-):
+def test_an_answer_to_judge_is_printed_without_an_output_file(monkeypatch, tmp_path):
     rows = _run(
         monkeypatch,
-        capsys,
         tmp_path,
         {
             "why": {"answer": "It claims first [S1].", "answer_status": "unverified"},
