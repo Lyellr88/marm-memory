@@ -1,5 +1,6 @@
 import asyncio
 import json
+import time
 import types
 from dataclasses import replace
 
@@ -201,6 +202,24 @@ def test_operations_stop_when_the_deadline_passes_between_them(llm, monkeypatch)
     assert len(llm.calls) == 1
     assert [r.status for r in b.operations][1:] == ["skipped"] * 4
     assert b.verification.state != "verified", "an incomplete run is not verified"
+
+
+@pytest.mark.parametrize("path", ["json", "stream"])
+def test_the_model_probe_is_charged_to_the_run(llm, monkeypatch, path):
+    # A probe that outlasts the budget leaves no time for a model call.
+    def slow_probe(*_a, **_k):
+        time.sleep(0.3)
+        return llm.model
+
+    monkeypatch.setattr(brief_mod.local_llm, "available", slow_probe)
+    profile = replace(GENERAL, time_s=0.2)
+    if path == "json":
+        b = _run(_ctx(), profile)
+        assert b.model_info["stopped"] == "deadline"
+        assert b.model_info["elapsed_ms"] >= 300
+    else:
+        assert _stream(_ctx(), profile)[-1][0] == "error"
+    assert llm.calls == []
 
 
 def test_each_call_gets_only_the_time_that_remains(llm):
