@@ -370,7 +370,7 @@ async def marm_distill(
     review, and only `apply` writes one -- the same contract as
     marm_compaction, for the same reason: a similarity score is not evidence
     enough to change memory unattended. The one exception is
-    review_mode="guardrails" with MARM_ANALYST_AUTO_APPLY=1, where `propose`
+    review_mode="guardrails" with auto-apply switched on, where `propose`
     also applies each proposal that passes every deterministic check.
 
     Parameters:
@@ -391,7 +391,7 @@ async def marm_distill(
       operator to have enabled generation, and falls back to selection)
     - review_mode: "manual" (default) stages everything for review;
       "guardrails" also applies a proposal that passes every deterministic
-      check, only when the operator set MARM_ANALYST_AUTO_APPLY=1
+      check, only when the operator has switched auto-apply on
 
     Returns: status plus `proposals` (propose) or `pending` (review), each
     carrying content, score, the reasons it scored, verdict, cosine, and the

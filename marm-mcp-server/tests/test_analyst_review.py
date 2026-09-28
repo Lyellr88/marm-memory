@@ -1,5 +1,6 @@
 import asyncio
 import json
+import sys
 
 import pytest
 
@@ -20,6 +21,32 @@ def staged_memory(monkeypatch, tmp_path):
     from marm_mcp_server.core.memory import memory as live
 
     return live
+
+
+@pytest.fixture(autouse=True)
+def env_only_switch(monkeypatch):
+    """Unit tests decide the operator switch from the environment alone; the
+    tests of the saved override ask for `saved_switch`."""
+    import types
+
+    from marm_mcp_server.core import runtime_flags
+
+    monkeypatch.setattr(
+        review,
+        "runtime_flags",
+        types.SimpleNamespace(
+            ANALYST_AUTO_APPLY=runtime_flags.ANALYST_AUTO_APPLY,
+            get_bool=lambda _key, env_default: env_default,
+        ),
+    )
+
+
+@pytest.fixture
+def saved_switch(monkeypatch, staged_memory):
+    from marm_mcp_server.core import runtime_flags
+
+    monkeypatch.setattr(review, "runtime_flags", runtime_flags)
+    return runtime_flags
 
 
 @pytest.fixture(autouse=True)
@@ -474,7 +501,7 @@ def test_guardrails_without_operator_switch_writes_nothing(staged_memory, monkey
     assert out["review_mode"] == "guardrails"
     assert out["guardrails"], "nothing was staged, so nothing was decided"
     assert all(not d["applied"] for d in out["guardrails"])
-    assert "MARM_ANALYST_AUTO_APPLY" in out["guardrails"][0]["decision"]["reason"]
+    assert "automatic apply is off" in out["guardrails"][0]["decision"]["reason"]
     with staged_memory.get_connection() as conn:
         assert conn.execute("SELECT COUNT(*) FROM memories").fetchone()[0] == 0
         statuses = {r[0] for r in conn.execute("SELECT status FROM distill_staging")}
@@ -930,3 +957,150 @@ def test_list_items_and_headings_stay_separate_units(monkeypatch, source_text):
     monkeypatch.setenv(review.AUTO_APPLY_ENV, "1")
     d = guardrail_decision(**_ok(source_text=source_text))
     assert d.checks["evidence_verbatim"] is True, d.checks
+
+
+# --- the operator switch is a runtime flag ---------------------------------------
+
+
+def test_a_saved_off_beats_an_environment_on(saved_switch, monkeypatch):
+    monkeypatch.setenv(review.AUTO_APPLY_ENV, "1")
+    saved_switch.set_bool(saved_switch.ANALYST_AUTO_APPLY, False)
+    assert review.auto_apply_allowed() is False
+    assert guardrail_decision(**_ok()).checks["operator_enabled"] is False
+
+
+def test_a_saved_on_needs_no_environment(saved_switch, monkeypatch):
+    monkeypatch.delenv(review.AUTO_APPLY_ENV, raising=False)
+    saved_switch.set_bool(saved_switch.ANALYST_AUTO_APPLY, True)
+    assert review.auto_apply_allowed() is True
+
+
+def test_an_unreadable_switch_never_authorizes_a_write(saved_switch, monkeypatch):
+    monkeypatch.setenv(review.AUTO_APPLY_ENV, "1")
+    monkeypatch.setattr(saved_switch, "_read", lambda _key: (False, None))
+    assert review.auto_apply_allowed() is False
+
+
+def test_the_switch_is_saved_and_reported_over_http(monkeypatch, tmp_path):
+    from conftest import load_isolated_server, local_client
+
+    server = load_isolated_server(monkeypatch, tmp_path)
+    monkeypatch.setattr(
+        review, "runtime_flags", sys.modules["marm_mcp_server.core.runtime_flags"]
+    )
+    monkeypatch.delenv(review.AUTO_APPLY_ENV, raising=False)
+    client = local_client(server.app)
+    system = sys.modules["marm_mcp_server.endpoints.system"]
+    monkeypatch.setattr(system.local_llm, "status", lambda: {})
+
+    saved = client.put("/internal/runtime/settings/llm", json={"auto_apply": True})
+    assert saved.status_code == 200, saved.text
+    assert review.auto_apply_allowed() is True
+    status = system._llm_status()["analyst_auto_apply"]
+    assert status == {"enabled": True, "source": "override"}
+
+    client.put("/internal/runtime/settings/llm", json={"auto_apply": None})
+    assert review.auto_apply_allowed() is True, "null leaves the switch alone"
+
+
+# --- credentials without a label ------------------------------------------------
+
+
+# Built from parts so the file itself carries no scannable secret.
+_JWT = (
+    "eyJhbGciOiJIUzI1NiJ9"
+    + "."
+    + "eyJzdWIiOiIxMjM0NTY3ODkwIn0"
+    + "."
+    + "dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"
+)
+
+
+@pytest.mark.parametrize(
+    "secret",
+    [
+        "sk-" + "proj-" + "4f9aZbQ2x7LmN1cV" + "8tR3wY6uP0sK5dE2",
+        "ghp_" + "16C7e42F292c6912" + "E7710c838347Ae178B4a",
+        "AKIA" + "IOSFODNN7" + "EXAMPLE",
+        "Bearer " + _JWT,
+        _JWT,
+        "postgres://" + "admin:" + "hunter2secret" + "@db.internal:5432/app",
+        "xox" + "b-2748-39201-" + "Fk2d9QmZpL0aXv7T",
+    ],
+)
+def test_a_raw_credential_blocks_automatic_apply(monkeypatch, secret):
+    monkeypatch.setenv(review.AUTO_APPLY_ENV, "1")
+    content = f"the deploy step uses {secret} to connect"
+    d = guardrail_decision(**_ok(content=content, source_text=f"We met. {content}."))
+    assert d.checks["no_secret"] is False, secret
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "the token bucket refills every second",
+        "apply reads the password policy before it writes",
+        "see https://example.com/docs/setup for the steps",
+        "the sk-learn pipeline runs nightly",
+    ],
+)
+def test_ordinary_prose_is_not_a_credential(monkeypatch, text):
+    monkeypatch.setenv(review.AUTO_APPLY_ENV, "1")
+    d = guardrail_decision(**_ok(content=text, source_text=f"We met. {text}. Then."))
+    assert d.checks["no_secret"] is True, text
+
+
+# --- decided at apply time, recorded as it happened ------------------------------
+
+
+def _staged_only(memory):
+    from marm_mcp_server.services import distill
+
+    out = asyncio.run(
+        distill.propose(
+            memory, FACT, session_name="s", use_llm=False, review_mode="manual"
+        )
+    )
+    return next(p["id"] for p in out["proposals"] if p.get("staged"))
+
+
+def test_a_distilled_proposal_is_re_resolved_before_it_is_applied(
+    staged_memory, monkeypatch
+):
+    monkeypatch.setenv(review.AUTO_APPLY_ENV, "1")
+    pid = _staged_only(staged_memory)
+    # Staged as new; another process stores the same fact before apply runs.
+    _resolving(monkeypatch, "duplicate", "apply claims the row before writing it.")
+
+    (entry,) = asyncio.run(review.auto_apply(staged_memory, [pid], source_text=FACT))
+    assert entry["applied"] is False
+    assert entry["decision"]["checks"]["novel"] is False
+
+
+def test_a_failed_apply_is_recorded_as_failed(staged_memory, monkeypatch):
+    monkeypatch.setenv(review.AUTO_APPLY_ENV, "1")
+    pid = _staged_only(staged_memory)
+
+    async def failing_apply(_memory, _pid):
+        return {"status": "error", "message": "write queue timed out"}
+
+    monkeypatch.setattr(review.distill_service, "apply", failing_apply)
+    (entry,) = asyncio.run(review.auto_apply(staged_memory, [pid], source_text=FACT))
+
+    assert entry["applied"] is False
+    assert entry["decision"]["status"] == "apply_failed"
+    assert "write queue timed out" in entry["error"]
+    with staged_memory.get_connection() as conn:
+        (decision,) = conn.execute(
+            "SELECT decision FROM distill_staging WHERE id = ?", (pid,)
+        ).fetchone()
+    assert json.loads(decision)["status"] == "apply_failed"
+
+
+def test_an_applied_proposal_is_not_left_awaiting_review(staged_memory, monkeypatch):
+    monkeypatch.setenv(review.AUTO_APPLY_ENV, "1")
+    out = _propose(staged_memory)
+    (applied,) = [p for p in out["proposals"] if p.get("applied")]
+    assert applied["applied_memory_id"]
+    assert out["applied"] == 1
+    assert out["staged"] == 0, "staged counts only what awaits review"

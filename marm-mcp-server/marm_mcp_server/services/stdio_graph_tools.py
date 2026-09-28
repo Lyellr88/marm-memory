@@ -397,8 +397,8 @@ async def marm_code_context(
     - analyst_mode: with `answer`, "read_only" (default) returns the verified
       answer only; "manual_review" also stages its verified results as
       marm_distill proposals for approval; "guardrails" lets MARM apply the
-      ones it can prove mechanically, only where the operator set
-      MARM_ANALYST_AUTO_APPLY=1. The model never applies anything
+      ones it can prove mechanically, only where the operator switched
+      auto-apply on. The model never applies anything
     - detail: how much to return. 1 is markdown only and is the default,
       because `markdown` already contains the source and the memory text --
       asking for 3 means paying for the same bytes twice. 2 adds symbol and

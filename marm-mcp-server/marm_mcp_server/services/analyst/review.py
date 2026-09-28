@@ -19,6 +19,7 @@ from typing import Any
 
 import structlog
 
+from ...core import runtime_flags
 from ...core.distill import Candidate, resolve
 from ...core.distill import _normalise as _distill_normalise
 from .. import distill as distill_service
@@ -38,7 +39,21 @@ from .verify import (
 logger = structlog.get_logger(__name__)
 
 AUTO_APPLY_ENV = "MARM_ANALYST_AUTO_APPLY"
-_SECRET = re.compile(r"(?i)(api[_-]?key|secret|password|token)\s*[:=]|-----BEGIN")
+_SECRET = re.compile(
+    r"(?i:(?:api[_-]?key|secret|password|token)\s*[:=])"
+    r"|-----BEGIN"
+    # Credentials that need no label: provider token formats, a bearer
+    # value, a JWT, and a URL carrying a password.
+    r"|\bsk-(?:proj-|live-|test-)?[A-Za-z0-9_-]{20,}"
+    r"|\bgh[pousr]_[A-Za-z0-9]{20,}"
+    r"|\bgithub_pat_[A-Za-z0-9_]{20,}"
+    r"|\b(?:AKIA|ASIA)[A-Z0-9]{16}\b"
+    r"|\bAIza[0-9A-Za-z_-]{35}"
+    r"|\bxox[abprs]-[A-Za-z0-9-]{10,}"
+    r"|(?i:\bbearer\s+)[A-Za-z0-9._~+/=-]{16,}"
+    r"|\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}"
+    r"|\b[a-z][a-z0-9+.-]*://[^\s/:@]+:[^\s/@]+@"
+)
 
 #: Claim kinds whose truth MARM can check without judging prose. Only these
 #: may be applied without a reviewer.
@@ -300,7 +315,10 @@ async def stage_conclusions(
 
 
 def auto_apply_allowed() -> bool:
-    return os.environ.get(AUTO_APPLY_ENV) == "1"
+    """A saved switch wins; the environment is only its default."""
+    return runtime_flags.get_bool(
+        runtime_flags.ANALYST_AUTO_APPLY, os.environ.get(AUTO_APPLY_ENV) == "1"
+    )
 
 
 @dataclass(frozen=True)
@@ -375,7 +393,10 @@ def guardrail_decision(
     if not failed:
         return Decision(True, checks, "all deterministic checks passed")
     if failed == ["operator_enabled"]:
-        reason = f"review required: automatic apply is off ({AUTO_APPLY_ENV} is not 1)"
+        reason = (
+            "review required: automatic apply is off "
+            f"(the saved switch, or {AUTO_APPLY_ENV}=1 when none is saved)"
+        )
     elif "mechanically_provable" in failed:
         reason = f"review required: MARM cannot prove a {kind} claim mechanically"
         rest = [f for f in failed if f != "mechanically_provable"]
@@ -400,15 +421,15 @@ async def auto_apply(
         if row is None:
             continue
         content, verdict, evidence, origin, verification, project = row
-        if origin == "analyst":
-            # Novelty at decision time: the store may have moved since staging.
-            (resolution,) = await resolve(
-                memory,
-                [Candidate(content=content, score=1.0, reasons=())],
-                session=None,
-                project=project,
-            )
-            verdict = resolution.verdict
+        # Novelty at decision time, whatever staged it: another process may
+        # have stored the same fact since.
+        (resolution,) = await resolve(
+            memory,
+            [Candidate(content=content, score=1.0, reasons=())],
+            session=None,
+            project=project,
+        )
+        verdict = resolution.verdict
         decision = guardrail_decision(
             content=content,
             verdict=verdict,
@@ -429,15 +450,26 @@ async def auto_apply(
             apply=decision.apply,
             checks=decision.checks,
         )
+        public = decision.to_public()
         entry: dict[str, Any] = {
             "proposal_id": pid,
             "applied": False,
-            "decision": decision.to_public(),
+            "decision": public,
         }
         if decision.apply:
             result = await distill_service.apply(memory, pid)
             entry["applied"] = result.get("status") == "success"
             if entry["applied"]:
                 entry["memory_id"] = result["memory_id"]
+            else:
+                # Eligible is not written: the record says what happened.
+                error = str(result.get("message") or "apply failed")
+                public["status"] = "apply_failed"
+                public["error"] = entry["error"] = error
+                with memory.get_connection() as conn:
+                    conn.execute(
+                        "UPDATE distill_staging SET decision = ? WHERE id = ?",
+                        (json.dumps(public), pid),
+                    )
         out.append(entry)
     return out

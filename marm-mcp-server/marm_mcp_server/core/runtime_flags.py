@@ -25,6 +25,9 @@ LLM_MODEL = "llm.model"
 LLM_MODEL_ROOTS = "llm.model_roots"
 #: Which analyst profile bounds a local answer: general, small or large.
 ANALYST_PROFILE = "analyst.profile"
+#: Whether Automated Guardrails may apply a proposal unattended. The env var
+#: is only the default, so a saved "off" cannot be re-enabled by a container.
+ANALYST_AUTO_APPLY = "analyst.auto_apply"
 
 _SUPPRESS_PREFIX = "watch_suppressed."
 _UNINDEXABLE_PREFIX = "unindexable."

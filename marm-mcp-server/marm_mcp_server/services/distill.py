@@ -211,7 +211,16 @@ async def propose(
         from .analyst.review import auto_apply
 
         staged_ids = [p["id"] for p in proposals if p.get("staged")]
-        result["guardrails"] = await auto_apply(memory, staged_ids, source_text=text)
+        decisions = await auto_apply(memory, staged_ids, source_text=text)
+        result["guardrails"] = decisions
+        # An applied proposal no longer awaits review.
+        applied = {d["proposal_id"]: d["memory_id"] for d in decisions if d["applied"]}
+        for record in proposals:
+            if record.get("id") in applied:
+                record["applied"] = True
+                record["applied_memory_id"] = applied[record["id"]]
+        result["staged"] = staged - len(applied)
+        result["applied"] = len(applied)
     return result
 
 

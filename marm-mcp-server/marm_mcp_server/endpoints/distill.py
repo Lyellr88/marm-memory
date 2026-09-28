@@ -80,7 +80,7 @@ class DistillRequest(BaseModel):
             "manual stages every proposal for review. guardrails also applies "
             "a proposal that passes every deterministic check (new, one line, "
             "verbatim in the text, no secret), and only when the operator has "
-            "set MARM_ANALYST_AUTO_APPLY=1; otherwise each stays pending with "
+            "switched auto-apply on; otherwise each stays pending with "
             "the failing check named."
         ),
     )
@@ -109,7 +109,7 @@ async def marm_distill(req: DistillRequest) -> dict:
     for review and only `apply` writes one, for the same reason
     `marm_compaction` stages: a similarity score is not evidence enough to
     modify memory unattended. The exception is `review_mode="guardrails"` with
-    MARM_ANALYST_AUTO_APPLY=1, which also applies each proposal that passes
+    auto-apply switched on, which also applies each proposal that passes
     every deterministic check.
     """
     if req.action == "propose":

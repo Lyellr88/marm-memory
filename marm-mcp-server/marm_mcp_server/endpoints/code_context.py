@@ -74,8 +74,8 @@ class CodeContextRequest(BaseModel):
             "With `answer`: read_only returns the verified answer only; "
             "manual_review also stages its verified results as marm_distill "
             "proposals for approval; guardrails lets MARM apply the ones it "
-            "can prove mechanically, only where the operator set "
-            "MARM_ANALYST_AUTO_APPLY=1. The model never applies anything."
+            "can prove mechanically, only where the operator switched "
+            "auto-apply on. The model never applies anything."
         ),
     )
     include_graph: bool = Field(
