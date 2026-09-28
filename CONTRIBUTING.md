@@ -1,5 +1,7 @@
 # Contributing to marm-memory
 
+_Last updated: September 28, 2026 (v2.54.1)_
+
 You do not need to write code to contribute. Testing MARM with your client setup, reporting what broke, sharing your workflow in [Discussions](https://github.com/Lyellr88/marm-memory/discussions), or jumping into [Discord](https://discord.gg/nhyJWPz2cf) to help someone get unstuck are all real contributions.
 
 If you do want to go deeper, MARM is focused on the MCP server, local memory workflows, the code and concept knowledge graphs, Docker/STDIO transports, IDE and client integrations, and marm-console for inspecting local memory data. This guide covers that practical development workflow. For project history and community recognition, see [ACKNOWLEDGMENTS.md](docs/ACKNOWLEDGMENTS.md).
@@ -52,6 +54,13 @@ Generate an API key when using exposed HTTP mode or Docker HTTP:
 python -m marm_mcp_server --generate-key
 ```
 
+To work on the Console frontend, you also need Node.js 20+ and pnpm 10+. From `marm-console/`, run the dev launcher, which starts the Console API on `127.0.0.1:8002` and the frontend dev server. See [marm-console/README.md](marm-console/README.md) for details.
+
+```powershell
+cd marm-console
+.\run-dev.ps1
+```
+
 ## Development
 
 ### Project Structure
@@ -63,7 +72,10 @@ marm-mcp-server/
     cli.py                     # HTTP CLI, dependency checks, and server factory
     server.py                  # FastAPI HTTP composition root
     server_stdio.py            # STDIO bootstrap and core-tool registration
-    config/settings.py         # Paths, host/port, auth, feature flags
+    config/
+      settings.py              # Paths, host/port, auth, feature flags
+      env_parsing.py           # Safe typed parsing of environment variables
+      api_key_bootstrap.py     # Private key directory and key file writes
     core/
       memory.py                # MARMMemory facade and public memory object wiring
       memory_utils.py          # Shared memory helpers, chunking, and encoding utilities
@@ -82,11 +94,17 @@ marm-mcp-server/
       concept_queue.py         # Durable outbox: one indexing task per stored memory
       concept_worker.py        # Background worker draining that queue into the graph
       concept_build_lock.py    # Concept-graph binding of the cross-process lease
+      concept_review.py        # Duplicate-concept review decisions
       lease_lock.py            # Leased-row mutual exclusion, shared by both graphs
       graph_supervisor.py      # Lazy singleton supervisor for the embedded graph engine
       graph_client.py          # Concept graph's in-process link into the code graph
       graph_index_lock.py      # The one gate every code-graph store mutation takes
-      graph_index_worker.py    # Git-signature poller that keeps code graphs current
+      graph_index_worker.py    # Keeps code graphs current: watcher wakeups plus reconciliation
+      graph_index_watcher.py   # Filesystem watcher that wakes the worker on a real change
+      code_project_bindings.py # Links code-graph projects to memory projects
+      code_link_queue.py       # Queue of memory-to-code link refreshes
+      _link_distinctiveness.py # Gate that keeps generic words from linking to code
+      distill.py               # Proposes durable memories from conversation text
       runtime_flags.py         # Persisted on/off switches and watch suppressions
       runtime_manager.py       # Local runtime discovery and background start/stop
       protocol_delivery_state.py  # Bounded HTTP protocol-delivery state
@@ -106,6 +124,8 @@ marm-mcp-server/
       compaction.py            # Unified compaction tool and hidden helper routes
       graph.py                 # 5 bundled code-graph tools (routed through marm_graph)
       concepts.py              # 2 concept-graph tools (build + recall)
+      code_context.py          # Task-scoped code context in one call
+      distill.py               # Propose, review, apply, and discard memory candidates
       system.py                # Health/system tools
     middleware/
       auth.py                  # Bearer auth for HTTP mode
@@ -122,6 +142,13 @@ marm-mcp-server/
       log_entry.py             # Shared log-entry/notebook data ops, both transports
       compaction_apply.py      # Atomic compaction apply transaction
       compaction_summarize.py  # Compaction cluster summarization helpers
+      concept_build_engine.py  # Concept extraction loop for manual and background builds
+      code_context/            # Seeding, ranking, snippets, and formatting for code context
+      distill.py               # Stages distill proposals and applies the kept ones
+      local_llm.py             # Optional local OpenAI-compatible generation backend
+      model_discovery.py       # Finds language models already on this machine
+      hardware.py              # Accelerator and free-memory detection
+      backup.py                # Online snapshots of the memory database
       stdio_entry_tools.py     # STDIO log entry/show/delete workflow bodies
       stdio_graph_tools.py     # STDIO graph/concept bodies and registration helper
       cli_parser.py            # Argument parsers for the product and legacy CLIs
@@ -146,6 +173,13 @@ marm-mcp-server/
       embedding_state.py       # Inspect persisted embedding compatibility, no runtime init
       embedding_migration.py   # Resumable stopped-server embedding vector migration
       chunk_backfill.py        # Stopped-server backfill of memory_chunks after config change
+    console/                   # Console API served on :8002 (`marm-memory console`)
+      app.py                   # FastAPI app, auth, and static frontend serving
+      endpoints/               # Console REST routes, one file per workspace
+      terminal/                # Embedded terminal over WebSocket
+      static/                  # Built frontend bundle shipped in the wheel
+    resources/                 # Bundled docs and the marm-init skill
+    models/                    # Bundled concept extraction model
   marm_graph/                  # Embedded marm-graph wrapper: subprocess JSON-RPC client,
                                #   tool router, and backend verification for the pinned
                                #   codebase-memory-mcp binary
@@ -155,7 +189,7 @@ marm-mcp-server/
 
 docs/                          # User-facing docs and project docs
 scripts/                       # Local validation, release, and maintenance helpers
-marm-console/                  # Standalone local Console app in active development (:8002)
+marm-console/                  # Console frontend source (React, pnpm); built into console/static
 ```
 
 ### Key Patterns
@@ -164,7 +198,7 @@ marm-console/                  # Standalone local Console app in active developm
 
 HTTP mode lives in `marm_mcp_server/server.py` and is mounted through FastAPI/FastApiMCP at `/mcp`.
 
-STDIO mode lives in `marm_mcp_server/server_stdio.py` and uses the official MCP Python SDK over standard input/output. It owns the FastMCP app and registers the seven core tools first; `services/stdio_graph_tools.py` supplies the graph/concept tool bodies through explicit registration so `tools/list` order remains stable. STDIO must keep stdout clean for JSON-RPC messages; logs and incidental `print()` output belong on stderr.
+STDIO mode lives in `marm_mcp_server/server_stdio.py` and uses the official MCP Python SDK over standard input/output. It owns the FastMCP app and registers the eight core tools first; `services/stdio_graph_tools.py` supplies the graph/concept tool bodies through explicit registration so `tools/list` order remains stable. STDIO must keep stdout clean for JSON-RPC messages; logs and incidental `print()` output belong on stderr.
 
 If a tool behavior changes, check whether the HTTP endpoint and STDIO tool both need the same update.
 
@@ -218,11 +252,12 @@ Current supported connection paths are HTTP and STDIO. Do not reintroduce retire
 
 1. Find the current HTTP behavior in `marm_mcp_server/endpoints/`.
 2. Find the matching STDIO behavior in `marm_mcp_server/server_stdio.py`.
-3. Keep request/response field names aligned where possible.
-4. Prefer parameterized actions for closely related operations, following existing tools such as `marm_notebook(action=...)`, `marm_delete(type=...)`, and `marm_compaction(action=...)`.
-5. Update or add focused tests in `marm-mcp-server/tests/`.
-6. Update docs if the command shape, transport setup, auth behavior, or user-facing workflow changes.
-7. Run the local test runner before submitting changes.
+3. If the Console exposes the same feature, check the matching route in `marm_mcp_server/console/endpoints/`.
+4. Keep request/response field names aligned where possible.
+5. Prefer parameterized actions for closely related operations, following existing tools such as `marm_notebook(action=...)`, `marm_delete(type=...)`, `marm_compaction(action=...)`, and `marm_distill(action=...)`.
+6. Update or add focused tests in `marm-mcp-server/tests/`.
+7. Update docs if the command shape, transport setup, auth behavior, or user-facing workflow changes.
+8. Run the local test runner before submitting changes.
 
 ## Testing
 
@@ -240,7 +275,8 @@ This runs:
 For targeted ad hoc pytest runs, use `--basetemp C:\tmp\...` or clean repo-local pytest artifacts afterward:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts\clean-pytest-artifacts.ps1
+python scripts/clean-pytest-artifacts.py --what-if
+python scripts/clean-pytest-artifacts.py
 ```
 
 Current expectations:
@@ -376,6 +412,7 @@ Use normal branch pushes for review. Use tag pushes only for intentional release
 
 - **[INSTALL-DOCKER.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-DOCKER.md)** - Docker deployment (recommended)
 - **[INSTALL-WINDOWS.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-WINDOWS.md)** - Windows installation guide
+- **[INSTALL-MACOS.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-MACOS.md)** - macOS installation guide
 - **[INSTALL-LINUX.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-LINUX.md)** - Linux installation guide
 - **[INSTALL-PLATFORMS.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-PLATFORMS.md)** - Platform installation guide
 
