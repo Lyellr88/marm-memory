@@ -1136,11 +1136,14 @@ export interface GuardrailDecision {
   memory_id?: string;
   decision: {
     apply: boolean;
-    /** `review_required` whenever MARM could not prove the claim mechanically. */
-    status?: 'applied' | 'review_required';
+    /** `review_required` whenever MARM could not prove the claim mechanically;
+     *  `apply_failed` when it was eligible but the write did not happen. */
+    status?: 'applied' | 'review_required' | 'apply_failed';
     checks: Record<string, boolean>;
     reason: string;
+    error?: string;
   };
+  error?: string;
 }
 
 export interface AnalystResult {
@@ -1149,6 +1152,16 @@ export interface AnalystResult {
   staged: string[];
   skipped: Array<{ content: string; reason: string }>;
   decisions: GuardrailDecision[];
+}
+
+/** How an analyst result was judged when it was staged. The answer's own
+ *  verdict is nested, and is empty when the answer carried none. */
+export interface StagedVerification {
+  state: AnswerVerification['state'];
+  claim_kind?: string;
+  result?: string;
+  packet_id?: string;
+  answer?: Partial<AnswerVerification>;
 }
 
 /** One distilled proposal, before or after it has been staged. */
@@ -1178,7 +1191,10 @@ export interface DistillProposal {
   created_at?: string;
   /** `analyst` when the Code Context analyst staged it. */
   origin?: 'distill' | 'analyst';
-  verification?: AnswerVerification & { claim_kind?: string };
+  verification?: StagedVerification;
+  /** Set when guardrails applied it during this run; it no longer awaits review. */
+  applied?: boolean;
+  applied_memory_id?: string;
   /** A guardrails decision, recorded whether or not it applied. */
   decision?: GuardrailDecision['decision'];
 }
@@ -1205,6 +1221,8 @@ export interface DistillResult {
   count?: number;
   extracted?: number;
   staged?: number;
+  /** Applied by guardrails during this run, so not counted in `staged`. */
+  applied?: number;
   session_name?: string;
   memory_id?: string;
   proposal_id?: string;

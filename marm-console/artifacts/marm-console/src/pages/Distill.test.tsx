@@ -346,10 +346,14 @@ describe('DistillPage', () => {
         pending: [
           proposal({
             origin: 'analyst',
+            // The shape the server stores: the answer's verdict is nested.
             verification: {
-              state: 'verified', score: 1, citation_coverage: 1, source_span_support: 1,
-              graph_memory_consistency: 1, claims: 1, cited_claims: 1, failures: [],
-              hard_failures: [], abstained: false,
+              state: 'verified', claim_kind: 'call_edge', result: 'relations', packet_id: 'pk-1',
+              answer: {
+                state: 'verified', score: 1, citation_coverage: 1, source_span_support: 1,
+                graph_memory_consistency: 1, claims: 1, cited_claims: 1, failures: [],
+                hard_failures: [], abstained: false,
+              },
             },
           }),
         ],
