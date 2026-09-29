@@ -30,6 +30,7 @@ DETECT_DIRS = {
     "qwen": ".qwen",
     "devin": "AppData/Roaming/devin",
     "kiro": ".kiro",
+    "zed": "AppData/Roaming/Zed",
 }
 
 USER_FILES = {
@@ -45,6 +46,7 @@ USER_FILES = {
     "qwen": ".qwen/settings.json",
     "devin": "AppData/Roaming/devin/mcp_config.json",
     "kiro": ".kiro/settings/mcp.json",
+    "zed": "AppData/Roaming/Zed/settings.json",
 }
 
 PROJECT_FILES = {
@@ -64,6 +66,7 @@ CONTAINER = {
     "codex": "mcp_servers",
     "grok": "mcp_servers",
     "opencode": "mcp",
+    "zed": "context_servers",
 }
 TYPED = {"claude", "vscode", "cline"}
 HTTP_TYPE = {"cline": "streamableHttp"}
@@ -155,7 +158,7 @@ def docker_args_for(tmp_path: Path) -> list[str]:
 
 def unavailable(client: str, transport: str, auth: bool) -> bool:
     return (client == "claude-desktop" and transport == "http") or (
-        client in {"antigravity", "qwen", "cline", "devin"}
+        client in {"antigravity", "qwen", "cline", "devin", "zed"}
         and transport == "http"
         and auth
     )
@@ -2454,3 +2457,253 @@ def test_devin_skill_lands_in_the_devin_config_skills_folder(isolated_home):
     expected = isolated_home / "AppData" / "Roaming" / "devin" / "skills" / "marm-init"
     assert result["target"] == str(expected / "SKILL.md")
     assert skill_install.is_installed("devin") is True
+
+
+# --- Zed -----------------------------------------------------------------------------
+
+ZED_HEADER = (
+    "// Zed settings\n"
+    "//\n"
+    "// For information on how to configure Zed, see the Zed\n"
+    "// documentation: https://zed.dev/docs/configuring-zed\n"
+    '// "context_servers": { "decoy": {} }\n'
+    "{\n"
+    '  "theme": "One Dark", // my theme\n'
+    '  "buffer_font_size": 15,\n'
+    "}\n"
+)
+
+
+def zed_file(home: Path) -> Path:
+    return home / "AppData" / "Roaming" / "Zed" / "settings.json"
+
+
+def put_text(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(text.encode())
+
+
+def get_text(path: Path) -> str:
+    return path.read_bytes().decode()
+
+
+def jsonc_doc(text: str) -> dict:
+    return client_config._jsonc_doc(text)
+
+
+def test_zed_creates_plain_settings_with_context_servers(isolated_home):
+    detect(isolated_home, "zed")
+
+    result = client_config.configure("zed", URL, False)
+
+    assert result["action"] == "create"
+    assert json.loads(get_text(zed_file(isolated_home))) == {
+        "context_servers": {"marm-memory": {"url": URL}}
+    }
+
+
+def test_zed_adding_and_removing_keeps_every_comment_and_setting(isolated_home):
+    path = zed_file(isolated_home)
+    put_text(path, ZED_HEADER)
+
+    added = client_config.configure("zed", URL, False)
+    after_add = get_text(path)
+    removed = client_config.remove("zed")
+    after_remove = get_text(path)
+
+    assert added["action"] == "add" and added["verified"] is True
+    assert removed["verified"] is True
+    assert client_config.status("zed")["state"] == "missing"
+    assert get_text(client_config._backup_path(path)) == after_add
+    for text in (after_add, after_remove):
+        assert set(ZED_HEADER.splitlines()) <= set(text.splitlines())
+    assert jsonc_doc(after_add)["context_servers"] == {"marm-memory": {"url": URL}}
+    assert jsonc_doc(after_remove)["context_servers"] == {}
+    assert jsonc_doc(after_remove)["theme"] == "One Dark"
+
+
+@pytest.mark.parametrize(
+    "original",
+    [
+        '{\n  "context_servers": {\n    "github": {\n      "url": "https://g.test/mcp",\n    },\n  },\n  "theme": "x"\n}\n',
+        '{\n    "context_servers": {\n        "github": { "command": "npx" }\n    }\n}\n',
+        '{\n  "context_servers": {},\n  "a": 1\n}\n',
+        '{\n  "context_servers": { // none yet\n  },\n  "a": 1\n}\n',
+        '{"a": 1}',
+        "{}",
+        '{\n\t"context_servers": {\n\t\t"g": {"command": "x"}\n\t}\n}\n',
+        '{\r\n  "a": 1,\r\n  "context_servers": {\r\n    "g": {"command": "x"}\r\n  }\r\n}\r\n',
+        '{\n  "a": 1 // note\n}\n',
+        '\ufeff{\n  "a": 1\n}\n',
+    ],
+)
+def test_zed_every_layout_stays_valid_and_only_marms_entry_moves(
+    isolated_home, original
+):
+    path = zed_file(isolated_home)
+    put_text(path, original)
+    before = jsonc_doc(original)
+
+    client_config.configure("zed", URL, False)
+    after_add = get_text(path)
+    client_config.remove("zed")
+    after_remove = get_text(path)
+
+    servers = dict(before.get("context_servers") or {})
+    assert jsonc_doc(after_add) == {
+        **before,
+        "context_servers": {**servers, "marm-memory": {"url": URL}},
+    }
+    assert jsonc_doc(after_remove) == {**before, "context_servers": servers}
+    if "\r\n" in original:
+        assert "\n" not in after_add.replace("\r\n", "")
+        assert "\n" not in after_remove.replace("\r\n", "")
+    for comment in ("// none yet", "// note"):
+        if comment in original:
+            assert comment in after_add and comment in after_remove
+
+
+def test_zed_differing_entry_is_replaced_in_place_with_neighbours_kept(isolated_home):
+    path = zed_file(isolated_home)
+    put_text(
+        path,
+        '{\n  "context_servers": {\n    // mine\n    "marm-memory": {"url": "http://127.0.0.1:9/mcp"},\n    "other": {"command": "x"}\n  }\n}\n',
+    )
+
+    assert client_config.status("zed", url=URL)["state"] == "different"
+    result = client_config.configure("zed", URL, False)
+
+    text = get_text(path)
+    assert result["action"] == "replace" and result["verified"] is True
+    assert "// mine" in text
+    assert jsonc_doc(text)["context_servers"] == {
+        "marm-memory": {"url": URL},
+        "other": {"command": "x"},
+    }
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        '{"context_servers": []}',
+        '{"context_servers": 3}',
+        "[]",
+        '{"a": 1} {"b": 2}',
+        '{"a": ',
+        '{"a": 1 /* never closed }',
+        "{not json}",
+    ],
+)
+def test_zed_unreadable_or_unexpected_settings_are_refused_and_untouched(
+    isolated_home, text
+):
+    path = zed_file(isolated_home)
+    put_text(path, text)
+
+    with pytest.raises(client_config.ClientNotConfigurable):
+        client_config.configure("zed", URL, False)
+
+    assert get_text(path) == text
+    assert not client_config._backup_path(path).exists()
+
+
+def test_zed_restores_the_file_when_the_edit_would_change_anything_else(
+    isolated_home, monkeypatch
+):
+    path = zed_file(isolated_home)
+    original = '{\n  "theme": "x"\n}\n'
+    put_text(path, original)
+    monkeypatch.setattr(
+        client_config,
+        "_jsonc_put",
+        lambda text, key, entry: (
+            '{"theme": "y", "context_servers": {"marm-memory": '
+            + json.dumps(entry)
+            + "}}"
+        ),
+    )
+
+    with pytest.raises(client_config.ClientNotConfigurable, match="left as it was"):
+        client_config.configure("zed", URL, False)
+
+    assert get_text(path) == original
+
+
+def test_zed_removes_a_file_it_created_when_the_entry_does_not_land(
+    isolated_home, monkeypatch
+):
+    detect(isolated_home, "zed")
+    monkeypatch.setattr(client_config, "_jsonc_put", lambda text, key, entry: "{}")
+
+    with pytest.raises(client_config.ClientNotConfigurable, match="left as it was"):
+        client_config.configure("zed", URL, False)
+
+    assert not zed_file(isolated_home).exists()
+
+
+def test_zed_keyed_http_is_manual_and_suggests_stdio(isolated_home):
+    detect(isolated_home, "zed")
+
+    with pytest.raises(client_config.ClientNotConfigurable, match="STDIO"):
+        client_config.configure("zed", URL, True)
+    stdio = client_config.configure("zed", URL, True, transport="stdio")
+
+    assert stdio["verified"] is True
+    agent = next(a for a in client_config.list_agents(URL, True) if a["id"] == "zed")
+    assert "Zed expands" in agent["unavailable"]["http"]
+    assert any("Settings, AI, MCP Servers" in note for note in agent["notes"])
+    assert not any("MARM_API_KEY" in note for note in agent["notes"])
+
+
+def test_zed_only_supports_the_user_scope(isolated_home):
+    with pytest.raises(client_config.InvalidRequest, match="user scope only"):
+        client_config.configure(
+            "zed", URL, False, scope="project", project=str(isolated_home)
+        )
+
+
+@pytest.mark.parametrize(
+    ("platform", "expected"),
+    [
+        ("win32", "AppData/Roaming/Zed/settings.json"),
+        ("darwin", ".config/zed/settings.json"),
+        ("linux", ".config/zed/settings.json"),
+    ],
+)
+def test_zed_settings_path_per_platform(isolated_home, monkeypatch, platform, expected):
+    monkeypatch.setattr(client_config, "_platform", lambda: platform)
+
+    assert client_config.status("zed")["config_path"] == str(isolated_home / expected)
+
+
+def test_zed_xdg_config_home_moves_the_file_on_linux_only(isolated_home, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(isolated_home / "xdg"))
+    monkeypatch.setattr(client_config, "_platform", lambda: "linux")
+    assert client_config.zed_home() == isolated_home / "xdg" / "zed"
+
+    monkeypatch.setenv("XDG_CONFIG_HOME", "  ")
+    assert client_config.zed_home() == isolated_home / ".config" / "zed"
+
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(isolated_home / "xdg"))
+    monkeypatch.setattr(client_config, "_platform", lambda: "darwin")
+    assert client_config.zed_home() == isolated_home / ".config" / "zed"
+
+
+def test_zed_is_detected_from_its_settings_folder(isolated_home):
+    agent = next(a for a in client_config.list_agents(URL, False) if a["id"] == "zed")
+    assert agent["detected"] is False
+
+    detect(isolated_home, "zed")
+
+    agent = next(a for a in client_config.list_agents(URL, False) if a["id"] == "zed")
+    assert agent["detected"] is True and agent["scopes"] == ["user"]
+
+
+def test_zed_skill_lands_in_the_shared_agents_skills_folder(isolated_home):
+    from marm_mcp_server.services import skill_install
+
+    result = skill_install.install_for_agent("zed")
+
+    expected = isolated_home / ".agents" / "skills" / "marm-init" / "SKILL.md"
+    assert result["target"] == str(expected)
+    assert skill_install.is_installed("zed") is True

@@ -56,6 +56,11 @@ _OS_APPDATA_DISPLAY: dict[str, dict[str, str | None]] = {
         "macos": "~/.hermes/config.yaml",
         "linux": "~/.hermes/config.yaml",
     },
+    "zed": {
+        "windows": "%APPDATA%\\Zed\\settings.json",
+        "macos": "~/.config/zed/settings.json",
+        "linux": "~/.config/zed/settings.json",
+    },
     "devin": {
         "windows": "%APPDATA%\\devin\\mcp_config.json",
         "macos": "~/.config/devin/mcp_config.json",
@@ -63,6 +68,7 @@ _OS_APPDATA_DISPLAY: dict[str, dict[str, str | None]] = {
     },
 }
 _NO_CLI = {
+    "zed": "Zed has no command for adding a server. Use the config file snippet.",
     "opencode": "OpenCode's add command differs between versions. Use the config file snippet.",
     "cursor": "Cursor has no command for adding a server. Use the config file snippet.",
     "kiro": "Kiro has no command for adding a server. Use the config file snippet.",
@@ -229,6 +235,10 @@ def _snippet_notes(
         )
     if spec.id == "codex" and scope == "project":
         notes.append(client_config._CODEX_TRUST_NOTE)
+    if spec.id == "zed":
+        notes.append(
+            "Merge context_servers into your existing settings.json. On Linux, if XDG_CONFIG_HOME is set, the file is $XDG_CONFIG_HOME/zed/settings.json."
+        )
     if spec.id == "devin":
         notes.append(client_config._DEVIN_SHARED_NOTE)
         notes.append(

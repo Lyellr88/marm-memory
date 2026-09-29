@@ -208,6 +208,29 @@ def test_devin_snippet_and_commands_cover_transports_and_defer_keyed_http() -> N
     )
 
 
+def test_zed_snippet_uses_context_servers_and_has_no_add_command() -> None:
+    http = make("zed", "linux", "http", "user", False)
+    assert http["path"] == "~/.config/zed/settings.json"
+    assert json.loads(http["text"])["context_servers"]["marm-memory"] == {"url": URL}
+    assert make("zed", "windows", "http", "user", False)["path"] == (
+        "%APPDATA%\\Zed\\settings.json"
+    )
+    assert any("XDG_CONFIG_HOME" in n for n in http["notes"])
+    stdio = json.loads(make("zed", "macos", "stdio", "user", False)["text"])
+    assert stdio["context_servers"]["marm-memory"] == {
+        "command": "marm-mcp-stdio",
+        "args": [],
+    }
+    with pytest.raises(client_config.InvalidRequest, match="STDIO"):
+        make("zed", "linux", "http", "user", True)
+    with pytest.raises(client_config.InvalidRequest, match="user scope only"):
+        make("zed", "linux", "http", "project", False)
+    for auth in (False, True):
+        entry = commands("http", "user", auth=auth)["zed"]
+        assert entry["command"] is None
+        assert SECRET not in json.dumps(entry)
+
+
 def test_cline_json_fragment_and_paths() -> None:
     http = make("cline", "linux", "http", "user", False)
     assert http["path"] == "~/.cline/data/settings/cline_mcp_settings.json"

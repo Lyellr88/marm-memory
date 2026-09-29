@@ -26,7 +26,7 @@ pip install marm-mcp-server
 marm-memory init --g-claude --g-codex --g-antigravity
 ```
 
-> **Also available: --g-qwen and --g-kiro. Run without flags to install into your current project folder instead of home**
+> **Also available: --g-cursor, --g-grok, --g-hermes, --g-opencode, --g-devin, --g-cline, --g-qwen, --g-kiro and --g-zed. Run without flags to install into your current project folder instead of home**
 
 1. Hand off to your AI companion. Tell your agent:
 
@@ -92,7 +92,7 @@ Run `marm-memory console` to open the bundled web app at `http://127.0.0.1:8002`
 | **Code Context** | Build one bounded view of task-ranked symbols, source, and related memory. An optional local model can answer from that same context, with its citations checked. |
 | **Distill** | Turn transcripts into durable-memory proposals. Review, apply, or discard them with duplicate evidence visible. |
 | **System and Terminal** | Manage runtime health, indexing, local-model settings, backups, diagnostics, and maintenance. The docked terminal provides a real local shell with persistent sessions and a searchable MARM command menu. |
-| **Connections** | Set up MARM end to end in one place. **Setup** connects Claude Code, Claude Desktop, Cursor, VS Code, Codex CLI, Grok Build, Hermes Agent, OpenCode, Cline, Antigravity, Qwen Code, Devin, and Kiro over HTTP, STDIO, or Docker STDIO, tests each connection, and saves server settings to `~/.marm/settings.json`. **Docker** pulls, starts, and stops the MARM container and writes a compose file. **Manual** gives copy-ready config for each client and OS, every CLI command, and every HTTP endpoint. |
+| **Connections** | Set up MARM end to end in one place. **Setup** connects Claude Code, Claude Desktop, Cursor, VS Code, Codex CLI, Grok Build, Hermes Agent, OpenCode, Cline, Antigravity, Qwen Code, Devin, Kiro, and Zed over HTTP, STDIO, or Docker STDIO, tests each connection, and saves server settings to `~/.marm/settings.json`. **Docker** pulls, starts, and stops the MARM container and writes a compose file. **Manual** gives copy-ready config for each client and OS, every CLI command, and every HTTP endpoint. |
 
 ### Runtime CLI Commands
 
@@ -670,6 +670,53 @@ Docker or `SERVER_HOST=0.0.0.0` (key required): MARM has not confirmed that Devi
 ```json
 {
   "mcpServers": {
+    "marm-memory": {
+      "url": "http://localhost:8001/mcp",
+      "headers": {
+        "Authorization": "Bearer your-generated-key"
+      }
+    }
+  }
+}
+```
+
+</details>
+
+<details>
+<summary><strong>Zed</strong></summary>
+
+Zed reads MCP servers from `context_servers` in its user `settings.json`: `~/.config/zed/settings.json` on macOS and Linux (or `$XDG_CONFIG_HOME/zed/settings.json` on Linux), `%APPDATA%\Zed\settings.json` on Windows. Run `zed: open settings file` from the command palette to open it. Zed has no add command, and MARM has not confirmed that Zed expands environment variables in headers, so keyed setups use STDIO. Connecting from the Console edits only the `marm-memory` entry as text, so comments and the rest of your settings stay as they were, and it restores the file if anything else changed. Zed lists the server under Settings, AI, MCP Servers, with a green dot when it is running. Zed's own agent reads the MARM skill from `~/.agents/skills` once you install it from the Console.
+
+STDIO, no key needed:
+
+```json
+{
+  "context_servers": {
+    "marm-memory": {
+      "command": "marm-mcp-stdio",
+      "args": []
+    }
+  }
+}
+```
+
+HTTP, direct Python install (no key needed):
+
+```json
+{
+  "context_servers": {
+    "marm-memory": {
+      "url": "http://localhost:8001/mcp"
+    }
+  }
+}
+```
+
+Docker or `SERVER_HOST=0.0.0.0` (key required): use STDIO, or paste the key into the entry by hand. Zed keeps it as plain text in `settings.json`:
+
+```json
+{
+  "context_servers": {
     "marm-memory": {
       "url": "http://localhost:8001/mcp",
       "headers": {

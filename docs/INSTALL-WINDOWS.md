@@ -337,6 +337,50 @@ Docker or `SERVER_HOST=0.0.0.0` (key required): MARM has not confirmed that Devi
 }
 ```
 
+### **Zed**
+
+Zed reads MCP servers from `context_servers` in its user `settings.json`: `~/.config/zed/settings.json` on macOS and Linux (or `$XDG_CONFIG_HOME/zed/settings.json` on Linux), `%APPDATA%\Zed\settings.json` on Windows. Run `zed: open settings file` from the command palette to open it. Zed has no add command, and MARM has not confirmed that Zed expands environment variables in headers, so keyed setups use STDIO. Connecting from the Console edits only the `marm-memory` entry as text, so comments and the rest of your settings stay as they were, and it restores the file if anything else changed. Zed lists the server under Settings, AI, MCP Servers, with a green dot when it is running. Zed's own agent reads the MARM skill from `~/.agents/skills` once you install it from the Console.
+
+STDIO, no key needed:
+
+```json
+{
+  "context_servers": {
+    "marm-memory": {
+      "command": "marm-mcp-stdio",
+      "args": []
+    }
+  }
+}
+```
+
+HTTP, direct Python install (no key needed):
+
+```json
+{
+  "context_servers": {
+    "marm-memory": {
+      "url": "http://localhost:8001/mcp"
+    }
+  }
+}
+```
+
+Docker or `SERVER_HOST=0.0.0.0` (key required): use STDIO, or paste the key into the entry by hand. Zed keeps it as plain text in `settings.json`:
+
+```json
+{
+  "context_servers": {
+    "marm-memory": {
+      "url": "http://localhost:8001/mcp",
+      "headers": {
+        "Authorization": "Bearer your-generated-key"
+      }
+    }
+  }
+}
+```
+
 ### **Cline CLI**
 
 Cline CLI (`cline`, installed with `npm install -g cline`) reads MCP servers from `~/.cline/data/settings/cline_mcp_settings.json`, the same file the Cline extensions in VS Code and JetBrains use (`%USERPROFILE%\.cline` on Windows, or `$CLINE_DATA_DIR/settings` if you set it). Cline's own MCP page still says `~/.cline/mcp.json`, but the CLI never reads that file. HTTP entries need `"type": "streamableHttp"`: leaving `type` out selects the legacy SSE transport. The extensions in VS Code and JetBrains show the server in their MCP Servers panel. Cline 4.x or later shares this file and moves an older file from VS Code's extension storage into it on first launch. Older builds keep reading their own file, so upgrade Cline first.

@@ -97,7 +97,7 @@ describe('AgentsGrid', () => {
     expect(screen.getAllByRole('button', { name: 'Docker STDIO' })).toHaveLength(1);
   });
 
-  it('groups agents under CLI, app and IDE headings and sends unknown ids to Other', () => {
+  it('groups agents under CLI and IDE headings and sends Claude Desktop and unknown ids to Other', () => {
     agentsState.data = response({
       clients: [
         agent({ id: 'codex', label: 'Codex CLI' }),
@@ -109,12 +109,12 @@ describe('AgentsGrid', () => {
     render(<AgentsGrid onRequest={() => {}} allowedTransports={['http', 'stdio']} />);
 
     const headings = screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent);
-    expect(headings).toEqual(['CLI tools', 'Apps', 'IDEs', 'Other']);
+    expect(headings).toEqual(['CLI tools', 'IDEs', 'Other']);
     const order = screen.getAllByText(/^(Codex CLI|Claude Desktop|VS Code|New Tool)$/).map((el) => el.textContent);
-    expect(order).toEqual(['Codex CLI', 'Claude Desktop', 'VS Code', 'New Tool']);
+    expect(order).toEqual(['Codex CLI', 'VS Code', 'Claude Desktop', 'New Tool']);
   });
 
-  it('puts Grok Build and OpenCode under CLI tools, Cline, Antigravity, Cursor and Devin under CLI and IDE, and Claude Desktop under Apps', () => {
+  it('puts Grok Build and OpenCode under CLI tools, Cline, Antigravity, Cursor and Devin under CLI and IDE, and Claude Desktop under Other', () => {
     agentsState.data = response({
       clients: [
         agent({ id: 'claude-desktop', label: 'Claude Desktop' }),
@@ -130,9 +130,20 @@ describe('AgentsGrid', () => {
     render(<AgentsGrid onRequest={() => {}} allowedTransports={['http', 'stdio']} />);
 
     const headings = screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent);
-    expect(headings).toEqual(['CLI tools', 'CLI and IDE', 'Apps', 'Other']);
+    expect(headings).toEqual(['CLI tools', 'CLI and IDE', 'Other']);
     const order = screen.getAllByText(/^(Grok Build|Hermes Agent|OpenCode|Cline|Antigravity|Cursor|Devin|Claude Desktop)$/).map((el) => el.textContent);
     expect(order).toEqual(['Grok Build', 'Hermes Agent', 'OpenCode', 'Cline', 'Antigravity', 'Cursor', 'Devin', 'Claude Desktop']);
+  });
+
+  it('puts Zed under IDEs beside VS Code', () => {
+    agentsState.data = response({
+      clients: [agent({ id: 'vscode', label: 'VS Code' }), agent({ id: 'zed', label: 'Zed', scopes: ['user'] })],
+    });
+    render(<AgentsGrid onRequest={() => {}} allowedTransports={['http', 'stdio']} />);
+
+    const headings = screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent);
+    expect(headings).toEqual(['IDEs', 'Other']);
+    expect(screen.getAllByText(/^(VS Code|Zed)$/).map((el) => el.textContent)).toEqual(['VS Code', 'Zed']);
   });
 
   it('hides a group with no agents', () => {

@@ -47,6 +47,7 @@ CLIENT_IDS = [
     "qwen",
     "devin",
     "kiro",
+    "zed",
 ]
 CLIENT_ALIASES = {"windsurf": "devin"}
 TRANSPORTS = ("http", "stdio", "docker-stdio")
@@ -122,6 +123,17 @@ def _xdg_config_home() -> Path:
 
 def opencode_home() -> Path:
     return _xdg_config_home() / "opencode"
+
+
+def zed_home() -> Path:
+    if _platform() == "win32":
+        return _appdata() / "Zed"
+    base = _home() / ".config" if _platform() == "darwin" else _xdg_config_home()
+    return base / "zed"
+
+
+def _zed_path() -> Path:
+    return zed_home() / "settings.json"
 
 
 def _opencode_path() -> Path:
@@ -372,6 +384,16 @@ REGISTRY: dict[str, ClientSpec] = {
             _markers(".kiro"),
             auth_ref="${MARM_API_KEY}",
         ),
+        ClientSpec(
+            "zed",
+            "Zed",
+            "zed",
+            "jsonc",
+            "context_servers",
+            _zed_path,
+            None,
+            lambda: [zed_home()],
+        ),
     ]
 }
 
@@ -382,6 +404,7 @@ _CLINE_SHARED_NOTE = (
     "The Cline extensions in VS Code and JetBrains read this same file."
 )
 _DEVIN_SHARED_NOTE = "Devin CLI and the Devin Local agent in Devin Desktop (formerly Windsurf) read this same file. The older Cascade agent keeps its own file under ~/.codeium, which MARM does not write."
+_ZED_NOTE = "Zed lists MARM under Settings, AI, MCP Servers. Open the file from Zed with the zed: open settings file action."
 _OPENCODE_RELOAD_NOTE = "Start a new OpenCode session to load it."
 _OPENCODE_COMMENTS_NOTE = "This file had comments or trailing commas, which MARM does not keep. The original is saved next to it as a .marm-backup copy."
 _HERMES_RELOAD_NOTE = "Run /reload-mcp in Hermes, or start a new session, to load it."
@@ -477,8 +500,8 @@ def transport_unavailable(
     if transport == "http":
         if spec.id == "claude-desktop":
             return "Needs the mcp-remote bridge. Use STDIO."
-        if auth_required and spec.id in {"cline", "devin"}:
-            name = "Cline CLI" if spec.id == "cline" else "Devin"
+        if auth_required and spec.id in {"cline", "devin", "zed"}:
+            name = "Cline CLI" if spec.id == "cline" else spec.label
             return (
                 f"MARM has not confirmed that {name} expands environment variables in headers, "
                 "so HTTP with a key must be added by hand. Use STDIO, which needs no key."
@@ -636,7 +659,7 @@ def _strip_jsonc(text: str) -> str:
 
 
 def _parse_json(spec: ClientSpec, text: str) -> Any:
-    if spec.id == "opencode":
+    if spec.id == "opencode" or spec.format == "jsonc":
         text = _strip_jsonc(text.lstrip("\ufeff"))
     return json.loads(text)
 
@@ -921,6 +944,273 @@ def _write_yaml(path: Path, entry: dict | None, spec: ClientSpec) -> None:
     )
 
 
+def _skip_ws(text: str, i: int) -> int:
+    n = len(text)
+    while i < n:
+        if text[i] in " \t\r\n\ufeff":
+            i += 1
+        elif text.startswith("//", i):
+            end = text.find("\n", i)
+            i = n if end == -1 else end
+        elif text.startswith("/*", i):
+            end = text.find("*/", i + 2)
+            if end == -1:
+                raise _Unreadable("The file has an unterminated comment.")
+            i = end + 2
+        else:
+            break
+    return i
+
+
+def _string_end(text: str, i: int) -> int:
+    j = i + 1
+    while j < len(text) and text[j] != '"':
+        j += 2 if text[j] == "\\" else 1
+    if j >= len(text):
+        raise _Unreadable("The file has an unterminated string.")
+    return j + 1
+
+
+def _value_end(text: str, i: int) -> int:
+    i = _skip_ws(text, i)
+    if i >= len(text):
+        raise _Unreadable("The file ends where a value was expected.")
+    if text[i] == '"':
+        return _string_end(text, i)
+    if text[i] == "{":
+        return _object_members(text, i)[1] + 1
+    if text[i] == "[":
+        i += 1
+        while True:
+            i = _skip_ws(text, i)
+            if i >= len(text):
+                raise _Unreadable("The file ends inside a list.")
+            if text[i] == "]":
+                return i + 1
+            i = _skip_ws(text, _value_end(text, i))
+            if i < len(text) and text[i] == ",":
+                i += 1
+    start = i
+    while (
+        i < len(text)
+        and text[i] not in " \t\r\n,}]"
+        and not text.startswith(("//", "/*"), i)
+    ):
+        i += 1
+    if i == start:
+        raise _Unreadable("The file has an unexpected token.")
+    return i
+
+
+def _object_members(
+    text: str, start: int
+) -> tuple[list[tuple[str, int, int, int]], int]:
+    """Members as (key, key start, value start, value end), plus the closing brace index."""
+    members: list[tuple[str, int, int, int]] = []
+    i = start + 1
+    while True:
+        i = _skip_ws(text, i)
+        if i >= len(text):
+            raise _Unreadable("The file ends inside an object.")
+        if text[i] == "}":
+            return members, i
+        if text[i] != '"':
+            raise _Unreadable("The file has an unexpected token.")
+        key_end = _string_end(text, i)
+        try:
+            key = json.loads(text[i:key_end])
+        except json.JSONDecodeError as exc:
+            raise _Unreadable("The file has an invalid key.") from exc
+        colon = _skip_ws(text, key_end)
+        if colon >= len(text) or text[colon] != ":":
+            raise _Unreadable("The file has a key with no value.")
+        value_start = _skip_ws(text, colon + 1)
+        value_end = _value_end(text, value_start)
+        members.append((key, i, value_start, value_end))
+        i = _skip_ws(text, value_end)
+        if i < len(text) and text[i] == ",":
+            i += 1
+        elif i >= len(text) or text[i] != "}":
+            raise _Unreadable("The file has a missing comma.")
+
+
+def _root_object(text: str) -> tuple[int, list[tuple[str, int, int, int]], int]:
+    start = _skip_ws(text, 0)
+    if start >= len(text) or text[start] != "{":
+        raise _Unreadable("The file is not a JSON object.")
+    members, close = _object_members(text, start)
+    if _skip_ws(text, close + 1) != len(text):
+        raise _Unreadable("The file has content after its object.")
+    return start, members, close
+
+
+def _line_start(text: str, i: int) -> int:
+    return text.rfind("\n", 0, i) + 1
+
+
+def _first_on_line(text: str, i: int) -> bool:
+    return not text[_line_start(text, i) : i].strip()
+
+
+def _line_indent(text: str, i: int) -> str:
+    start = _line_start(text, i)
+    end = text.find("\n", start)
+    line = text[start : len(text) if end == -1 else end]
+    return line[: len(line) - len(line.lstrip(" \t"))]
+
+
+def _indents(text: str, obj_start: int, members: list) -> tuple[str, str, str]:
+    """Indent of the object's line, of its members, and one indent step."""
+    parent = _line_indent(text, obj_start)
+    if members and _first_on_line(text, members[0][1]):
+        member = _line_indent(text, members[0][1])
+    else:
+        member = parent + "  "
+    unit = (
+        member[len(parent) :]
+        if member.startswith(parent) and len(member) > len(parent)
+        else "  "
+    )
+    return parent, member, unit
+
+
+def _entry_block(entry: dict, indent: str, unit: str, newline: str) -> str:
+    lines = json.dumps(entry, indent=unit, ensure_ascii=False).split("\n")
+    return f'"{SERVER_NAME}": ' + (newline + indent).join(lines)
+
+
+def _add_member(text: str, obj_start: int, members: list, close: int, render) -> str:
+    newline = "\r\n" if "\r\n" in text else "\n"
+    parent, member, unit = _indents(text, obj_start, members)
+    body = render(member, unit, newline)
+    edits: list[tuple[int, str]] = []
+    if _first_on_line(text, close):
+        edits.append((_line_start(text, close), member + body + newline))
+    else:
+        edits.append((close, newline + member + body + newline + parent))
+    if members and text[_skip_ws(text, members[-1][3])] != ",":
+        edits.append((members[-1][3], ","))
+    for pos, inserted in sorted(edits, key=lambda edit: edit[0], reverse=True):
+        text = text[:pos] + inserted + text[pos:]
+    return text
+
+
+def _jsonc_put(text: str, key: str, entry: dict) -> str:
+    if not text.strip():
+        content = {key: {SERVER_NAME: entry}}
+        return json.dumps(content, indent=2, ensure_ascii=False) + "\n"
+    root_start, members, root_close = _root_object(text)
+    servers = next((m for m in members if m[0] == key), None)
+    if servers is None:
+
+        def render_root(member: str, unit: str, newline: str) -> str:
+            inner = member + unit
+            block = _entry_block(entry, inner, unit, newline)
+            return f'"{key}": {{' + newline + inner + block + newline + member + "}"
+
+        return _add_member(text, root_start, members, root_close, render_root)
+    if text[servers[2]] != "{":
+        raise _Unreadable(f"The {key} setting is not an object.")
+    inner_members, close = _object_members(text, servers[2])
+    existing = next((m for m in inner_members if m[0] == SERVER_NAME), None)
+    if existing is not None:
+        newline = "\r\n" if "\r\n" in text else "\n"
+        _parent, member, unit = _indents(text, servers[2], inner_members)
+        block = _entry_block(entry, member, unit, newline)
+        return text[: existing[2]] + block.split(": ", 1)[1] + text[existing[3] :]
+    return _add_member(
+        text,
+        servers[2],
+        inner_members,
+        close,
+        lambda member, unit, newline: _entry_block(entry, member, unit, newline),
+    )
+
+
+def _jsonc_remove(text: str, key: str) -> str:
+    _root_start, members, _root_close = _root_object(text)
+    servers = next((m for m in members if m[0] == key), None)
+    if servers is None or text[servers[2]] != "{":
+        raise _Unreadable(f"There is no {key} object to remove from.")
+    inner, close = _object_members(text, servers[2])
+    index = next((i for i, m in enumerate(inner) if m[0] == SERVER_NAME), None)
+    if index is None:
+        raise _Unreadable("MARM is not in this file.")
+    _name, start, _value_start, end = inner[index]
+    if (
+        len(inner) == 1
+        and not text[servers[2] + 1 : start].strip()
+        and text[end:close].strip() in {"", ","}
+    ):
+        return text[: servers[2] + 1] + text[close:]
+    edits: list[tuple[int, int]] = []
+    after = _skip_ws(text, end)
+    if after < len(text) and text[after] == ",":
+        span_end = after + 1
+    else:
+        span_end = end
+        if index > 0:
+            comma = _skip_ws(text, inner[index - 1][3])
+            edits.append((comma, comma + 1))
+    line_end = text.find("\n", span_end)
+    line_end = len(text) if line_end == -1 else line_end + 1
+    if _first_on_line(text, start) and not text[span_end:line_end].strip():
+        edits.append((_line_start(text, start), line_end))
+    else:
+        edits.append((start, span_end))
+    for first, last in sorted(edits, reverse=True):
+        text = text[:first] + text[last:]
+    return text
+
+
+def _jsonc_doc(text: str) -> dict:
+    if not text.strip():
+        return {}
+    data = json.loads(_strip_jsonc(text.lstrip("\ufeff")))
+    return data if isinstance(data, dict) else {}
+
+
+def _expected_jsonc_doc(before: dict, key: str, entry: dict | None) -> dict:
+    servers = before.get(key)
+    servers = dict(servers) if isinstance(servers, dict) else {}
+    if entry is None:
+        servers.pop(SERVER_NAME, None)
+    else:
+        servers[SERVER_NAME] = entry
+    return {**before, key: servers}
+
+
+def _write_jsonc(path: Path, entry: dict | None, spec: ClientSpec) -> None:
+    """Insert or remove the MARM entry as text, then re-parse the whole file and restore the original if anything else moved."""
+    original = _read_text(path) if path.exists() else None
+    key = spec.container_key or "mcpServers"
+    try:
+        updated = (
+            _jsonc_put(original or "", key, entry)
+            if entry is not None
+            else _jsonc_remove(original or "", key)
+        )
+    except _Unreadable as exc:
+        raise ClientNotConfigurable(f"{exc} Edit {path} by hand.") from exc
+    _backup(path)
+    _atomic_write_text(path, updated)
+    try:
+        expected = _expected_jsonc_doc(_jsonc_doc(original or ""), key, entry)
+        landed = _jsonc_doc(_read_text(path)) == expected
+    except (OSError, ValueError):
+        landed = False
+    if landed:
+        return
+    if original is None:
+        with contextlib.suppress(OSError):
+            path.unlink()
+    else:
+        _atomic_write_text(path, original)
+    raise ClientNotConfigurable(
+        f"MARM could not change {path} safely, so it was left as it was. Edit it by hand."
+    )
+
+
 def _read_text(path: Path) -> str:
     with path.open(encoding="utf-8", newline="") as handle:
         return handle.read()
@@ -1109,6 +1399,8 @@ def configure(
         _append_codex(path, entry)
     elif spec.format == "yaml":
         _write_yaml(path, entry, spec)
+    elif spec.format == "jsonc":
+        _write_jsonc(path, entry, spec)
     else:
         content, container = _load_json(spec, path)
         _backup(path)
@@ -1190,6 +1482,8 @@ def remove(
         _run_cli([*argv, SERVER_NAME], f"{spec.binary} mcp remove")
     elif spec.format == "yaml":
         _write_yaml(path, None, spec)
+    elif spec.format == "jsonc":
+        _write_jsonc(path, None, spec)
     else:
         content, container = _load_json(spec, path)
         _backup(path)
@@ -1316,6 +1610,7 @@ def _agent_notes(
         "qwen",
         "cline",
         "devin",
+        "zed",
     }:
         notes.append(_auth_note(spec))
     if spec.id == "codex":
@@ -1326,6 +1621,8 @@ def _agent_notes(
         notes.append(_CURSOR_SHARED_NOTE)
     if spec.id == "devin":
         notes.append(_DEVIN_SHARED_NOTE)
+    if spec.id == "zed":
+        notes.append(_ZED_NOTE)
     if spec.id == "antigravity":
         notes.append(_ANTIGRAVITY_SHARED_NOTE)
     if spec.id == "grok" and state["state"] == "missing" and _claude_has_user_entry():

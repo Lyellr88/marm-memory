@@ -99,6 +99,8 @@ def test_list_agents_shape(app_client, isolated_home):
     cline = next(c for c in body["clients"] if c["id"] == "cline")
     assert cline["label"] == "Cline"
     assert cline["scopes"] == ["user"]
+    zed = next(c for c in body["clients"] if c["id"] == "zed")
+    assert zed["label"] == "Zed" and zed["scopes"] == ["user"]
     opencode = next(c for c in body["clients"] if c["id"] == "opencode")
     assert opencode["label"] == "OpenCode"
     assert opencode["scopes"] == ["user", "project"]
@@ -619,6 +621,29 @@ def test_opencode_test_route_resolves_its_env_reference_in_headers(
 
     assert response.json()["ok"] is True
     assert SECRET not in response.text
+
+
+def test_zed_configure_keeps_comments_and_installs_the_skill(app_client, isolated_home):
+    base = isolated_home / "AppData" / "Roaming" / "Zed"
+    base.mkdir(parents=True)
+    original = '// my settings\n{\n  "theme": "x", // keep\n}\n'
+    (base / "settings.json").write_bytes(original.encode())
+
+    configured = app_client.post(
+        "/api/connections/agents/zed/configure", json={"dry_run": False}
+    )
+    skill = app_client.post("/api/connections/agents/zed/skill")
+    removed = app_client.post(
+        "/api/connections/agents/zed/remove", json={"scope": "user"}
+    )
+
+    text = (base / "settings.json").read_bytes().decode()
+    assert configured.status_code == 200 and configured.json()["verified"] is True
+    assert removed.json()["verified"] is True
+    assert "// my settings" in text and "// keep" in text
+    assert skill.json()["target"] == str(
+        isolated_home / ".agents" / "skills" / "marm-init" / "SKILL.md"
+    )
 
 
 def test_cursor_skill_route_installs_and_the_card_reports_it(app_client, isolated_home):

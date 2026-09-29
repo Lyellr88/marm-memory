@@ -17,6 +17,7 @@ AGENTS: dict[str, str] = {
     "antigravity": ".gemini/config",
     "qwen": ".qwen",
     "kiro": ".kiro",
+    "zed": ".agents",
 }
 
 SKILL_SUBPATH = Path("skills") / "marm-init" / "SKILL.md"

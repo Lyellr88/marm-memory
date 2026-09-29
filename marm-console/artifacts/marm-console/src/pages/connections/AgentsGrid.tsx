@@ -10,7 +10,6 @@ import { ErrorState } from './controls';
 const GROUPS = [
   { id: 'cli', label: 'CLI tools' },
   { id: 'shared', label: 'CLI and IDE' },
-  { id: 'app', label: 'Apps' },
   { id: 'ide', label: 'IDEs' },
   { id: 'other', label: 'Other' },
 ] as const;
@@ -24,11 +23,12 @@ const GROUP_BY_ID: Record<string, (typeof GROUPS)[number]['id']> = {
   cline: 'shared',
   antigravity: 'shared',
   qwen: 'cli',
-  'claude-desktop': 'app',
+  'claude-desktop': 'other',
   cursor: 'shared',
   devin: 'shared',
   vscode: 'ide',
   kiro: 'ide',
+  zed: 'ide',
 };
 
 const groupOf = (id: string) => GROUP_BY_ID[id] ?? 'other';
