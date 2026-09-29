@@ -46,6 +46,11 @@ _OS_APPDATA_DISPLAY: dict[str, dict[str, str | None]] = {
         "macos": "~/.cline/data/settings/cline_mcp_settings.json",
         "linux": "~/.cline/data/settings/cline_mcp_settings.json",
     },
+    "opencode": {
+        "windows": "~\\.config\\opencode\\opencode.json",
+        "macos": "~/.config/opencode/opencode.json",
+        "linux": "~/.config/opencode/opencode.json",
+    },
     "hermes": {
         "windows": "%LOCALAPPDATA%\\hermes\\config.yaml",
         "macos": "~/.hermes/config.yaml",
@@ -58,6 +63,7 @@ _OS_APPDATA_DISPLAY: dict[str, dict[str, str | None]] = {
     },
 }
 _NO_CLI = {
+    "opencode": "OpenCode's add command differs between versions. Use the config file snippet.",
     "cursor": "Cursor has no command for adding a server. Use the config file snippet.",
     "windsurf": "Windsurf has no command for adding a server. Use the config file snippet.",
     "kiro": "Kiro has no command for adding a server. Use the config file snippet.",
@@ -194,7 +200,9 @@ def _json_text(
                 "password": True,
             }
         ]
-    content[spec.container_key or "mcpServers"] = {SERVER_NAME: entry}
+    content[spec.container_key or "mcpServers"] = {
+        SERVER_NAME: client_config._native_entry(spec, entry)
+    }
     return json.dumps(content, indent=2, ensure_ascii=False) + "\n"
 
 
@@ -238,6 +246,10 @@ def _snippet_notes(
     if spec.id == "cline":
         notes.append(
             "The Cline extensions in VS Code and JetBrains read this same file. If CLINE_DATA_DIR is set, it is $CLINE_DATA_DIR/settings/cline_mcp_settings.json."
+        )
+    if spec.id == "opencode":
+        notes.append(
+            "If XDG_CONFIG_HOME is set, the file is $XDG_CONFIG_HOME/opencode/opencode.json. An existing opencode.jsonc works the same."
         )
     if spec.id == "hermes":
         notes.append(

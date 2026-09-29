@@ -30,6 +30,7 @@ def isolated_home(tmp_path, monkeypatch):
     monkeypatch.setenv("APPDATA", str(tmp_path / "AppData" / "Roaming"))
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "AppData" / "Local"))
     monkeypatch.delenv("HERMES_HOME", raising=False)
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
     monkeypatch.delenv("CLINE_DIR", raising=False)
     monkeypatch.delenv("CLINE_DATA_DIR", raising=False)
     monkeypatch.delenv("CLINE_MCP_SETTINGS_PATH", raising=False)
@@ -98,6 +99,9 @@ def test_list_agents_shape(app_client, isolated_home):
     cline = next(c for c in body["clients"] if c["id"] == "cline")
     assert cline["label"] == "Cline"
     assert cline["scopes"] == ["user"]
+    opencode = next(c for c in body["clients"] if c["id"] == "opencode")
+    assert opencode["label"] == "OpenCode"
+    assert opencode["scopes"] == ["user", "project"]
     hermes = next(c for c in body["clients"] if c["id"] == "hermes")
     assert hermes["label"] == "Hermes Agent"
     assert hermes["scopes"] == ["user"]
@@ -562,6 +566,59 @@ def test_cline_configure_and_skill_round_trip(app_client, isolated_home):
     )
     assert removed.json()["verified"] is True
     assert json.loads(settings.read_text())["mcpServers"] == {}
+
+
+def test_opencode_configure_skill_and_remove_round_trip(app_client, isolated_home):
+    base = isolated_home / ".config" / "opencode"
+    base.mkdir(parents=True)
+    (base / "opencode.jsonc").write_text('{\n  // mine\n  "theme": "x",\n}\n')
+
+    configured = app_client.post(
+        "/api/connections/agents/opencode/configure", json={"dry_run": False}
+    )
+    skill = app_client.post("/api/connections/agents/opencode/skill")
+    removed = app_client.post(
+        "/api/connections/agents/opencode/remove", json={"scope": "user"}
+    )
+
+    assert configured.status_code == 200
+    assert configured.json()["verified"] is True
+    assert configured.json()["config_path"] == str(base / "opencode.jsonc")
+    assert skill.json()["target"] == str(base / "skills" / "marm-init" / "SKILL.md")
+    assert removed.json()["verified"] is True
+    assert json.loads((base / "opencode.jsonc").read_text()) == {
+        "theme": "x",
+        "mcp": {},
+    }
+
+
+def test_opencode_test_route_resolves_its_env_reference_in_headers(
+    app_client, isolated_home, monkeypatch
+):
+    monkeypatch.setattr(key_management, "read_managed_key", lambda: SECRET)
+    base = isolated_home / ".config" / "opencode"
+    base.mkdir(parents=True)
+    with FakeMcp(key=SECRET) as fake:
+        (base / "opencode.json").write_text(
+            json.dumps(
+                {
+                    "mcp": {
+                        "marm-memory": {
+                            "type": "remote",
+                            "url": fake.url,
+                            "oauth": False,
+                            "headers": {"Authorization": "Bearer {env:MARM_API_KEY}"},
+                        }
+                    }
+                }
+            )
+        )
+        response = app_client.post(
+            "/api/connections/agents/opencode/test", json={"scope": "user"}
+        )
+
+    assert response.json()["ok"] is True
+    assert SECRET not in response.text
 
 
 def test_cursor_skill_route_installs_and_the_card_reports_it(app_client, isolated_home):

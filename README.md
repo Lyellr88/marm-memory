@@ -117,7 +117,7 @@ Run `marm-memory console` to open the bundled web app at `http://127.0.0.1:8002`
 | **Code Context** | Build one bounded view of task-ranked symbols, source, and related memory. An optional local model can answer from that same context, with its citations checked. |
 | **Distill** | Turn transcripts into durable-memory proposals. Review, apply, or discard them with duplicate evidence visible. |
 | **System and Terminal** | Manage runtime health, indexing, local-model settings, backups, diagnostics, and maintenance. The docked terminal provides a real local shell with persistent sessions and a searchable MARM command menu. |
-| **Connections** | Set up MARM end to end in one place. **Setup** connects Claude Code, Claude Desktop, Cursor, VS Code, Codex CLI, Grok Build, Hermes Agent, Cline, Antigravity, Qwen Code, Windsurf, and Kiro over HTTP, STDIO, or Docker STDIO, tests each connection, and saves server settings to `~/.marm/settings.json`. **Docker** pulls, starts, and stops the MARM container and writes a compose file. **Manual** gives copy-ready config for each client and OS, every CLI command, and every HTTP endpoint. |
+| **Connections** | Set up MARM end to end in one place. **Setup** connects Claude Code, Claude Desktop, Cursor, VS Code, Codex CLI, Grok Build, Hermes Agent, OpenCode, Cline, Antigravity, Qwen Code, Windsurf, and Kiro over HTTP, STDIO, or Docker STDIO, tests each connection, and saves server settings to `~/.marm/settings.json`. **Docker** pulls, starts, and stops the MARM container and writes a compose file. **Manual** gives copy-ready config for each client and OS, every CLI command, and every HTTP endpoint. |
 
 ### Runtime CLI Commands
 
@@ -623,6 +623,57 @@ mcp_servers:
 ```
 
 Run `/reload-mcp` in Hermes, or start a new session, to load it.
+
+</details>
+
+<details>
+<summary><strong>OpenCode</strong></summary>
+
+OpenCode (`opencode`, installed with `npm install -g opencode-ai`) reads MCP servers from `mcp` in `opencode.json` or `opencode.jsonc`: `~/.config/opencode/` on every platform including Windows (`%USERPROFILE%\.config\opencode`), or `$XDG_CONFIG_HOME/opencode/` if you set it, and `opencode.json` in a project root for one project. It supports STDIO (`type: local`) and HTTP (`type: remote`) and expands `{env:VAR}` in headers, so the key stays in your environment and never lands in the file. Remote servers try OAuth by default, so MARM writes `oauth: false`. OpenCode 2 nests servers under `mcp.servers` and still reads the layout below, and MARM writes into whichever layout the file already uses. Connecting from the Console rewrites the file as plain JSON, so comments in a `.jsonc` file are not kept, and the original is saved beside it as `.marm-backup`. Start a new OpenCode session to load it, and run `opencode mcp list` to check.
+
+STDIO, no key needed:
+
+```json
+{
+  "mcp": {
+    "marm-memory": {
+      "type": "local",
+      "command": ["marm-mcp-stdio"]
+    }
+  }
+}
+```
+
+HTTP, direct Python install (no key needed):
+
+```json
+{
+  "mcp": {
+    "marm-memory": {
+      "type": "remote",
+      "url": "http://localhost:8001/mcp",
+      "oauth": false
+    }
+  }
+}
+```
+
+Docker or `SERVER_HOST=0.0.0.0` (key required): set `MARM_API_KEY`, then add the same HTTP entry with a header:
+
+```json
+{
+  "mcp": {
+    "marm-memory": {
+      "type": "remote",
+      "url": "http://localhost:8001/mcp",
+      "oauth": false,
+      "headers": {
+        "Authorization": "Bearer {env:MARM_API_KEY}"
+      }
+    }
+  }
+}
+```
 
 </details>
 

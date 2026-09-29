@@ -41,6 +41,7 @@ CLIENT_IDS = [
     "codex",
     "grok",
     "hermes",
+    "opencode",
     "cline",
     "antigravity",
     "qwen",
@@ -111,6 +112,18 @@ def cline_mcp_settings_path() -> Path:
 
 def _cline_markers() -> list[Path]:
     return [cline_home(), cline_data_dir(), cline_mcp_settings_path().parent]
+
+
+def opencode_home() -> Path:
+    base = os.environ.get("XDG_CONFIG_HOME", "").strip()
+    return (Path(base).expanduser() if base else _home() / ".config") / "opencode"
+
+
+def _opencode_path() -> Path:
+    for name in ("opencode.jsonc", "opencode.json"):
+        if (opencode_home() / name).exists():
+            return opencode_home() / name
+    return opencode_home() / "opencode.json"
 
 
 def _antigravity_path() -> Path:
@@ -203,6 +216,7 @@ class ClientSpec:
     typed: bool = False
     http_key: str = "url"
     http_type: str = "http"
+    stdio_type: str = "stdio"
     auth_ref: str | None = None
 
 
@@ -286,6 +300,20 @@ REGISTRY: dict[str, ClientSpec] = {
             auth_ref="${MARM_API_KEY}",
         ),
         ClientSpec(
+            "opencode",
+            "OpenCode",
+            "opencode",
+            "json",
+            "mcp",
+            _opencode_path,
+            "opencode.json",
+            lambda: [opencode_home()],
+            typed=True,
+            http_type="remote",
+            stdio_type="local",
+            auth_ref="{env:MARM_API_KEY}",
+        ),
+        ClientSpec(
             "cline",
             "Cline",
             "cline",
@@ -351,6 +379,8 @@ _CURSOR_SHARED_NOTE = "The Cursor CLI (agent) reads this same file. Servers in t
 _CLINE_SHARED_NOTE = (
     "The Cline extensions in VS Code and JetBrains read this same file."
 )
+_OPENCODE_RELOAD_NOTE = "Start a new OpenCode session to load it."
+_OPENCODE_COMMENTS_NOTE = "This file had comments or trailing commas, which MARM does not keep. The original is saved next to it as a .marm-backup copy."
 _HERMES_RELOAD_NOTE = "Run /reload-mcp in Hermes, or start a new session, to load it."
 _CODEX_TRUST_NOTE = (
     "Codex only loads a project's .codex/config.toml for projects it trusts."
@@ -400,6 +430,8 @@ def _build_entry(
             return entry
         entry = {"type": spec.http_type} if spec.typed else {}
         entry[spec.http_key] = url
+        if spec.id == "opencode":
+            entry["oauth"] = False
         if auth_required and spec.auth_ref:
             entry["headers"] = {"Authorization": f"Bearer {spec.auth_ref}"}
         return entry
@@ -410,7 +442,7 @@ def _build_entry(
         command, args = _docker_parts(docker_tag, docker_data_dir)
     else:
         raise InvalidRequest(f"Unknown transport: {transport}")
-    entry = {"type": "stdio"} if spec.typed else {}
+    entry = {"type": spec.stdio_type} if spec.typed else {}
     entry["command"] = command
     entry["args"] = args
     return entry
@@ -479,6 +511,8 @@ def _configure_notes(
         notes.append(_CODEX_TRUST_NOTE)
     if spec.id == "hermes":
         notes.append(_HERMES_RELOAD_NOTE)
+    if spec.id == "opencode":
+        notes.append(_OPENCODE_RELOAD_NOTE)
     return notes
 
 
@@ -490,6 +524,24 @@ def _detected(spec: ClientSpec) -> bool:
 
 def _command_name(value: str) -> str:
     return Path(value.replace("\\", "/")).stem.lower()
+
+
+def _native_entry(spec: ClientSpec, entry: dict) -> dict:
+    """OpenCode keeps the command and its arguments in one list; every other client uses the flat shape."""
+    if spec.id != "opencode" or "command" not in entry:
+        return entry
+    native = {k: v for k, v in entry.items() if k not in {"command", "args"}}
+    native["command"] = [entry["command"], *(entry.get("args") or [])]
+    return native
+
+
+def _flat_command(entry: dict) -> dict:
+    command = entry.get("command")
+    if not isinstance(command, list) or not command:
+        return entry
+    flat = {k: v for k, v in entry.items() if k != "command"}
+    flat["command"], flat["args"] = command[0], command[1:]
+    return flat
 
 
 def _same_value(key: str, current: Any, expected: Any) -> bool:
@@ -539,6 +591,8 @@ def _target(spec: ClientSpec, scope: str, project: str | None) -> Path | None:
     assert spec.project_path is not None
     root = _project_root(project)
     target = root / spec.project_path
+    if spec.id == "opencode" and (root / "opencode.jsonc").exists():
+        target = root / "opencode.jsonc"
     if not Path(os.path.realpath(target)).is_relative_to(root):
         raise ClientNotConfigurable(
             f"{target} resolves outside the project; refusing to use it."
@@ -546,23 +600,85 @@ def _target(spec: ClientSpec, scope: str, project: str | None) -> Path | None:
     return target
 
 
+def _strip_jsonc(text: str) -> str:
+    """Drop comments and trailing commas outside strings so OpenCode's JSONC files parse."""
+    chunks: list[str] = []
+    plain: list[str] = []
+
+    def flush() -> None:
+        chunks.append(re.sub(r",(\s*[}\]])", r"\1", "".join(plain)))
+        plain.clear()
+
+    i, n = 0, len(text)
+    while i < n:
+        if text[i] == '"':
+            j = i + 1
+            while j < n and text[j] != '"':
+                j += 2 if text[j] == "\\" else 1
+            flush()
+            chunks.append(text[i : j + 1])
+            i = j + 1
+        elif text.startswith("//", i):
+            end = text.find("\n", i)
+            i = n if end == -1 else end
+        elif text.startswith("/*", i):
+            end = text.find("*/", i + 2)
+            i = n if end == -1 else end + 2
+        else:
+            plain.append(text[i])
+            i += 1
+    flush()
+    return "".join(chunks)
+
+
+def _parse_json(spec: ClientSpec, text: str) -> Any:
+    if spec.id == "opencode":
+        text = _strip_jsonc(text.lstrip("\ufeff"))
+    return json.loads(text)
+
+
+def _servers_path(spec: ClientSpec, content: dict) -> tuple[str, ...]:
+    """OpenCode 2 nests servers under mcp.servers; OpenCode 1 lists them directly under mcp."""
+    if spec.id == "opencode":
+        mcp = content.get("mcp")
+        if isinstance(mcp, dict):
+            servers, timeout = mcp.get("servers"), mcp.get("timeout")
+            if isinstance(servers, dict) and servers.get("type") not in {
+                "local",
+                "remote",
+            }:
+                return ("mcp", "servers")
+            if servers is None and isinstance(timeout, dict) and "type" not in timeout:
+                return ("mcp", "servers")
+    assert spec.container_key is not None
+    return (spec.container_key,)
+
+
+def _with_servers(spec: ClientSpec, content: dict, servers: dict) -> dict:
+    path = _servers_path(spec, content)
+    if len(path) == 1:
+        return {**content, path[0]: servers}
+    return {**content, "mcp": {**content["mcp"], "servers": servers}}
+
+
 def _load_json(spec: ClientSpec, path: Path) -> tuple[dict, dict]:
     """Return (content, servers container). Raises _Unreadable for shapes MARM will not edit."""
     if not path.exists():
         return {}, {}
     try:
-        content = json.loads(path.read_text(encoding="utf-8"))
+        content = _parse_json(spec, path.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError, UnicodeDecodeError) as exc:
         raise _Unreadable(f"{spec.label} config could not be read: {path}") from exc
     if not isinstance(content, dict):
         raise _Unreadable(f"{spec.label} config is not a JSON object: {path}")
-    container = content.get(spec.container_key)
-    if container is None:
-        container = {}
-    elif not isinstance(container, dict):
-        raise _Unreadable(
-            f"{spec.label} config has an unexpected '{spec.container_key}' value."
-        )
+    container: Any = content
+    for key in _servers_path(spec, content):
+        container = container.get(key)
+        if container is None:
+            container = {}
+            break
+        if not isinstance(container, dict):
+            raise _Unreadable(f"{spec.label} config has an unexpected '{key}' value.")
     if spec.id == "vscode" and not isinstance(content.get("inputs", []), list):
         raise _Unreadable("VS Code config has an unexpected 'inputs' value.")
     return content, container
@@ -614,6 +730,8 @@ def _read_current(spec: ClientSpec, path: Path) -> tuple[dict | None, bool, str 
     current = container.get(SERVER_NAME)
     if spec.id == "cline" and isinstance(current, dict):
         current = _flat_transport(current)
+    if spec.id == "opencode" and isinstance(current, dict):
+        current = _flat_command(current)
     return (current if isinstance(current, dict) else None), True, None
 
 
@@ -940,13 +1058,20 @@ def configure(
         "scope": scope,
         "config_path": str(path),
         "action": action,
-        "entry": entry,
+        "entry": _native_entry(spec, entry),
         "backup_path": str(_backup_path(path))
         if (not use_cli and exists and action != "none")
         else None,
         "method": "cli" if use_cli else "file",
         "notes": _configure_notes(spec, transport, scope, auth_required),
     }
+    if (
+        spec.id == "opencode"
+        and exists
+        and action != "none"
+        and _strip_jsonc(_read_text(path)) != _read_text(path)
+    ):
+        result["notes"].append(_OPENCODE_COMMENTS_NOTE)
     if dry_run:
         return result
     binary = shutil.which("claude") if use_cli else None
@@ -983,8 +1108,9 @@ def configure(
     else:
         content, container = _load_json(spec, path)
         _backup(path)
-        new_content = dict(content)
-        new_content[spec.container_key] = {**container, SERVER_NAME: entry}
+        new_content = _with_servers(
+            spec, content, {**container, SERVER_NAME: _native_entry(spec, entry)}
+        )
         if spec.id == "vscode" and transport == "http" and auth_required:
             inputs = list(new_content.get("inputs", []))
             if not any(
@@ -1064,7 +1190,7 @@ def remove(
         content, container = _load_json(spec, path)
         _backup(path)
         remaining = {k: v for k, v in container.items() if k != SERVER_NAME}
-        _write_json(path, {**content, spec.container_key: remaining})
+        _write_json(path, _with_servers(spec, content, remaining))
     remaining_entry, _exists, _problem = _read_current(spec, path)
     result["written"] = True
     result["verified"] = remaining_entry is None

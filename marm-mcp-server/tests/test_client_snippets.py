@@ -73,8 +73,12 @@ def test_every_supported_combination_parses_with_container_key_and_url() -> None
         if transport == "http":
             assert URL in json.dumps(entry)
         else:
-            assert isinstance(entry["command"], str)
-            assert isinstance(entry["args"], list)
+            if spec.id == "opencode":
+                assert entry["type"] == "local"
+                assert all(isinstance(part, str) for part in entry["command"])
+            else:
+                assert isinstance(entry["command"], str)
+                assert isinstance(entry["args"], list)
         assert SECRET not in result["text"]
         assert all(SECRET not in note for note in result["notes"])
         assert result["client"] == client and result["os"] == os_name
@@ -131,6 +135,39 @@ def test_cursor_snippet_mentions_the_cli_and_still_has_no_add_command() -> None:
     entry = json.loads(result["text"])["mcpServers"]["marm-memory"]
     assert "type" not in entry
     assert commands("http", "user")["cursor"]["command"] is None
+
+
+def test_opencode_snippet_uses_native_shapes_and_has_no_add_command() -> None:
+    http = make("opencode", "linux", "http", "user", True)
+    assert http["path"] == "~/.config/opencode/opencode.json"
+    assert json.loads(http["text"])["mcp"]["marm-memory"] == {
+        "type": "remote",
+        "url": URL,
+        "oauth": False,
+        "headers": {"Authorization": "Bearer {env:MARM_API_KEY}"},
+    }
+    assert make("opencode", "windows", "http", "user", False)["path"] == (
+        "~\\.config\\opencode\\opencode.json"
+    )
+    assert make("opencode", "linux", "http", "project", False)["path"] == (
+        "<project>/opencode.json"
+    )
+    assert any("XDG_CONFIG_HOME" in note for note in http["notes"])
+    stdio = json.loads(make("opencode", "macos", "stdio", "user", False)["text"])
+    assert stdio["mcp"]["marm-memory"] == {
+        "type": "local",
+        "command": ["marm-mcp-stdio"],
+    }
+    docker = json.loads(
+        make("opencode", "linux", "docker-stdio", "user", False)["text"]
+    )
+    assert docker["mcp"]["marm-memory"]["command"][0] == "docker"
+    for auth in (False, True):
+        for transport in ("http", "stdio", "docker-stdio"):
+            entry = commands(transport, "user", auth=auth)["opencode"]
+            assert entry["command"] is None
+            assert "config file snippet" in entry["note"]
+            assert SECRET not in json.dumps(entry)
 
 
 def test_cline_json_fragment_and_paths() -> None:

@@ -162,6 +162,34 @@ def test_cursor_skill_installs_into_cursor_skills_globally_and_per_project(
     assert _read(project, ".cursor") == skill_install._bundled_skill_text()
 
 
+def test_opencode_skill_installs_under_its_config_home_and_per_project(
+    tmp_path, monkeypatch
+):
+    home = tmp_path / "home"
+    project = tmp_path / "project"
+    (project / ".opencode").mkdir(parents=True)
+    home.mkdir()
+    monkeypatch.setattr(skill_install.Path, "home", classmethod(lambda cls: home))
+    monkeypatch.setattr("marm_mcp_server.services.client_config._home", lambda: home)
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    monkeypatch.chdir(project)
+
+    result = skill_install.install_for_agent("opencode")
+    skill_install.install_skill(_args())
+
+    assert result["target"] == str(home / ".config" / "opencode" / SKILL_REL)
+    assert skill_install.is_installed("opencode") is True
+    assert _read(project, ".opencode") == skill_install._bundled_skill_text()
+
+
+def test_opencode_skill_follows_xdg_config_home(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+
+    result = skill_install.install_for_agent("opencode")
+
+    assert result["target"] == str(tmp_path / "xdg" / "opencode" / SKILL_REL)
+
+
 def test_fail_open_when_a_target_is_unwritable(tmp_path, monkeypatch):
     (tmp_path / ".claude").mkdir()
     (tmp_path / ".codex").mkdir()

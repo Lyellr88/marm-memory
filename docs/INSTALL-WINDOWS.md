@@ -262,6 +262,54 @@ mcp_servers:
 
 Run `/reload-mcp` in Hermes, or start a new session, to load it.
 
+### **OpenCode**
+
+OpenCode (`opencode`, installed with `npm install -g opencode-ai`) reads MCP servers from `mcp` in `opencode.json` or `opencode.jsonc`: `~/.config/opencode/` on every platform including Windows (`%USERPROFILE%\.config\opencode`), or `$XDG_CONFIG_HOME/opencode/` if you set it, and `opencode.json` in a project root for one project. It supports STDIO (`type: local`) and HTTP (`type: remote`) and expands `{env:VAR}` in headers, so the key stays in your environment and never lands in the file. Remote servers try OAuth by default, so MARM writes `oauth: false`. OpenCode 2 nests servers under `mcp.servers` and still reads the layout below, and MARM writes into whichever layout the file already uses. Connecting from the Console rewrites the file as plain JSON, so comments in a `.jsonc` file are not kept, and the original is saved beside it as `.marm-backup`. Start a new OpenCode session to load it, and run `opencode mcp list` to check.
+
+STDIO, no key needed:
+
+```json
+{
+  "mcp": {
+    "marm-memory": {
+      "type": "local",
+      "command": ["marm-mcp-stdio"]
+    }
+  }
+}
+```
+
+HTTP, direct Python install (no key needed):
+
+```json
+{
+  "mcp": {
+    "marm-memory": {
+      "type": "remote",
+      "url": "http://localhost:8001/mcp",
+      "oauth": false
+    }
+  }
+}
+```
+
+Docker or `SERVER_HOST=0.0.0.0` (key required): set `MARM_API_KEY`, then add the same HTTP entry with a header:
+
+```json
+{
+  "mcp": {
+    "marm-memory": {
+      "type": "remote",
+      "url": "http://localhost:8001/mcp",
+      "oauth": false,
+      "headers": {
+        "Authorization": "Bearer {env:MARM_API_KEY}"
+      }
+    }
+  }
+}
+```
+
 ### **Cline CLI**
 
 Cline CLI (`cline`, installed with `npm install -g cline`) reads MCP servers from `~/.cline/data/settings/cline_mcp_settings.json`, the same file the Cline extensions in VS Code and JetBrains use (`%USERPROFILE%\.cline` on Windows, or `$CLINE_DATA_DIR/settings` if you set it). Cline's own MCP page still says `~/.cline/mcp.json`, but the CLI never reads that file. HTTP entries need `"type": "streamableHttp"`: leaving `type` out selects the legacy SSE transport. The extensions in VS Code and JetBrains show the server in their MCP Servers panel. Cline 4.x or later shares this file and moves an older file from VS Code's extension storage into it on first launch. Older builds keep reading their own file, so upgrade Cline first.

@@ -259,6 +259,7 @@ def agent_homes_off_the_real_machine(tmp_path_factory, monkeypatch) -> None:
     """A developer's own Hermes or Cline install must never be written by a test."""
     monkeypatch.setenv("HERMES_HOME", str(tmp_path_factory.mktemp("hermes-home")))
     monkeypatch.setenv("CLINE_DIR", str(tmp_path_factory.mktemp("cline-home")))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path_factory.mktemp("xdg-config")))
     monkeypatch.delenv("CLINE_DATA_DIR", raising=False)
     monkeypatch.delenv("CLINE_MCP_SETTINGS_PATH", raising=False)
 

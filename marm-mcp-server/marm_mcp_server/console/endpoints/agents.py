@@ -23,7 +23,12 @@ router = APIRouter()
 
 T = TypeVar("T")
 
-_KEY_REFS = ("${MARM_API_KEY}", "${env:MARM_API_KEY}", "${input:marm-api-key}")
+_KEY_REFS = (
+    "${MARM_API_KEY}",
+    "${env:MARM_API_KEY}",
+    "{env:MARM_API_KEY}",
+    "${input:marm-api-key}",
+)
 
 
 Target = Literal["local", "docker"]

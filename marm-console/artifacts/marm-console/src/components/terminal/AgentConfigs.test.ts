@@ -1,6 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { AGENT_CONFIGS } from './AgentConfigs';
 
+describe('OpenCode terminal onboarding', () => {
+  const opencode = AGENT_CONFIGS.find((agent) => agent.id === 'opencode');
+
+  it('installs through npm and verifies and launches the opencode binary on every platform', () => {
+    for (const platform of ['windows', 'macos', 'linux'] as const) {
+      expect(opencode?.commands[platform].install).toBe('npm install -g opencode-ai');
+      expect(opencode?.commands[platform].launch).toBe('opencode');
+      expect(opencode?.commands[platform].verify).toBe('opencode --version');
+    }
+  });
+});
+
 describe('Cursor terminal onboarding', () => {
   const cursor = AGENT_CONFIGS.find((agent) => agent.id === 'cursor');
 

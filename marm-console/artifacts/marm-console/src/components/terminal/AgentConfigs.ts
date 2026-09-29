@@ -90,6 +90,28 @@ export const AGENT_CONFIGS: AgentConfig[] = [
     },
   },
   {
+    id: 'opencode',
+    name: 'OpenCode',
+    description: 'Open source coding agent for the terminal (needs Node.js)',
+    commands: {
+      windows: {
+        install: 'npm install -g opencode-ai',
+        launch: 'opencode',
+        verify: 'opencode --version',
+      },
+      macos: {
+        install: 'npm install -g opencode-ai',
+        launch: 'opencode',
+        verify: 'opencode --version',
+      },
+      linux: {
+        install: 'npm install -g opencode-ai',
+        launch: 'opencode',
+        verify: 'opencode --version',
+      },
+    },
+  },
+  {
     id: 'cline',
     name: 'Cline',
     description: 'Cline agent for the terminal (needs Node.js)',

@@ -24,6 +24,7 @@ DETECT_DIRS = {
     "codex": ".codex",
     "grok": ".grok",
     "hermes": "AppData/Local/hermes",
+    "opencode": ".config/opencode",
     "cline": ".cline",
     "antigravity": ".gemini/config",
     "qwen": ".qwen",
@@ -38,6 +39,7 @@ USER_FILES = {
     "codex": ".codex/config.toml",
     "grok": ".grok/config.toml",
     "hermes": "AppData/Local/hermes/config.yaml",
+    "opencode": ".config/opencode/opencode.json",
     "cline": ".cline/data/settings/cline_mcp_settings.json",
     "antigravity": ".gemini/config/mcp_config.json",
     "qwen": ".qwen/settings.json",
@@ -51,12 +53,18 @@ PROJECT_FILES = {
     "vscode": ".vscode/mcp.json",
     "codex": ".codex/config.toml",
     "grok": ".grok/config.toml",
+    "opencode": "opencode.json",
     "antigravity": ".agents/mcp_config.json",
     "qwen": ".qwen/settings.json",
     "kiro": ".kiro/settings/mcp.json",
 }
 
-CONTAINER = {"vscode": "servers", "codex": "mcp_servers", "grok": "mcp_servers"}
+CONTAINER = {
+    "vscode": "servers",
+    "codex": "mcp_servers",
+    "grok": "mcp_servers",
+    "opencode": "mcp",
+}
 TYPED = {"claude", "vscode", "cline"}
 HTTP_TYPE = {"cline": "streamableHttp"}
 URL_KEY = {
@@ -70,6 +78,7 @@ AUTH_REF = {
     "vscode": "${input:marm-api-key}",
     "windsurf": "${env:MARM_API_KEY}",
     "hermes": "${MARM_API_KEY}",
+    "opencode": "{env:MARM_API_KEY}",
     "kiro": "${MARM_API_KEY}",
 }
 
@@ -84,6 +93,7 @@ def isolated_home(tmp_path, monkeypatch):
     monkeypatch.setenv("APPDATA", str(tmp_path / "AppData" / "Roaming"))
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "AppData" / "Local"))
     monkeypatch.delenv("HERMES_HOME", raising=False)
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
     monkeypatch.delenv("CLINE_DIR", raising=False)
     monkeypatch.delenv("CLINE_DATA_DIR", raising=False)
     monkeypatch.delenv("CLINE_MCP_SETTINGS_PATH", raising=False)
@@ -96,6 +106,16 @@ def detect(home: Path, client: str) -> None:
 
 
 def expected_entry(client: str, transport: str, auth: bool, docker_args=None) -> dict:
+    if client == "opencode":
+        if transport == "http":
+            entry = {"type": "remote", "url": URL, "oauth": False}
+            if auth:
+                entry["headers"] = {"Authorization": "Bearer {env:MARM_API_KEY}"}
+            return entry
+        command = (
+            ["marm-mcp-stdio"] if transport == "stdio" else ["docker", *docker_args]
+        )
+        return {"type": "local", "command": command}
     if transport == "http":
         if client in {"codex", "grok"}:
             entry: dict = {"url": URL}
@@ -2009,3 +2029,289 @@ def test_key_value_absent_from_files_and_responses(isolated_home):
     with pytest.raises(client_config.ClientNotConfigurable) as excinfo:
         client_config.configure("antigravity", URL, True)
     assert SECRET not in str(excinfo.value)
+
+
+# --- OpenCode ------------------------------------------------------------------------
+
+
+def opencode_dir(home: Path) -> Path:
+    return home / ".config" / "opencode"
+
+
+def test_opencode_http_and_stdio_entries_use_its_native_shapes(isolated_home):
+    detect(isolated_home, "opencode")
+
+    http = client_config.configure("opencode", URL, False, dry_run=True)
+    stdio = client_config.configure(
+        "opencode", URL, False, transport="stdio", dry_run=True
+    )
+
+    assert http["entry"] == {"type": "remote", "url": URL, "oauth": False}
+    assert stdio["entry"] == {"type": "local", "command": ["marm-mcp-stdio"]}
+    assert any("new OpenCode session" in note for note in http["notes"])
+
+
+def test_opencode_keyed_http_is_one_click_and_never_writes_the_key(isolated_home):
+    detect(isolated_home, "opencode")
+
+    result = client_config.configure("opencode", URL, True)
+
+    text = (opencode_dir(isolated_home) / "opencode.json").read_text()
+    assert result["verified"] is True
+    assert result["entry"]["headers"] == {"Authorization": "Bearer {env:MARM_API_KEY}"}
+    assert SECRET not in text
+    agent = next(
+        a for a in client_config.list_agents(URL, True) if a["id"] == "opencode"
+    )
+    assert agent["unavailable"] == {}
+
+
+def test_opencode_reads_a_jsonc_file_and_says_its_comments_are_not_kept(isolated_home):
+    path = opencode_dir(isolated_home) / "opencode.jsonc"
+    path.parent.mkdir(parents=True)
+    original = (
+        "{\n"
+        "  // my providers\n"
+        '  "provider": {"note": "see http://x//y, and }"},\n'
+        '  "mcp": {\n'
+        '    "github": {"type": "remote", "url": "https://g.test/mcp",}, /* keep */\n'
+        "  },\n"
+        "}\n"
+    )
+    path.write_text(original)
+
+    result = client_config.configure("opencode", URL, False)
+
+    data = json.loads(path.read_text())
+    assert result["action"] == "add"
+    assert any("comments or trailing commas" in note for note in result["notes"])
+    assert data["provider"] == {"note": "see http://x//y, and }"}
+    assert data["mcp"]["github"] == {"type": "remote", "url": "https://g.test/mcp"}
+    assert data["mcp"]["marm-memory"]["url"] == URL
+    assert Path(result["backup_path"]).read_text() == original
+
+
+def test_opencode_plain_json_gets_no_comment_warning(isolated_home):
+    path = opencode_dir(isolated_home) / "opencode.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps({"mcp": {}}))
+
+    result = client_config.configure("opencode", URL, False)
+
+    assert not any("comments" in note for note in result["notes"])
+
+
+def test_opencode_writes_into_the_v2_servers_map_and_keeps_its_siblings(isolated_home):
+    path = opencode_dir(isolated_home) / "opencode.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        json.dumps(
+            {
+                "mcp": {
+                    "timeout": {"startup": 45000},
+                    "servers": {
+                        "sentry": {"type": "remote", "url": "https://s.test/mcp"}
+                    },
+                }
+            }
+        )
+    )
+
+    client_config.configure("opencode", URL, False)
+    added = json.loads(path.read_text())["mcp"]
+    client_config.remove("opencode")
+    removed = json.loads(path.read_text())["mcp"]
+
+    assert added["timeout"] == {"startup": 45000}
+    assert set(added["servers"]) == {"sentry", "marm-memory"}
+    assert "marm-memory" not in added
+    assert removed["servers"] == {
+        "sentry": {"type": "remote", "url": "https://s.test/mcp"}
+    }
+    assert removed["timeout"] == {"startup": 45000}
+
+
+def test_opencode_v2_settings_without_a_servers_map_get_the_native_layout(
+    isolated_home,
+):
+    path = opencode_dir(isolated_home) / "opencode.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps({"mcp": {"timeout": {"startup": 45000}}}))
+
+    client_config.configure("opencode", URL, False)
+    added = json.loads(path.read_text())["mcp"]
+    client_config.remove("opencode")
+    removed = json.loads(path.read_text())["mcp"]
+
+    assert added["timeout"] == {"startup": 45000}
+    assert set(added["servers"]) == {"marm-memory"}
+    assert "marm-memory" not in added
+    assert removed == {"timeout": {"startup": 45000}, "servers": {}}
+
+
+def test_opencode_server_named_timeout_stays_in_the_v1_layout(isolated_home):
+    path = opencode_dir(isolated_home) / "opencode.json"
+    path.parent.mkdir(parents=True)
+    other = {"type": "remote", "url": "https://t.test/mcp"}
+    path.write_text(json.dumps({"mcp": {"timeout": other}}))
+
+    client_config.configure("opencode", URL, False)
+
+    mcp = json.loads(path.read_text())["mcp"]
+    assert mcp["timeout"] == other
+    assert mcp["marm-memory"]["url"] == URL
+    assert "servers" not in mcp
+
+
+def test_opencode_project_scope_uses_an_existing_jsonc_file(isolated_home):
+    project = isolated_home / "repo"
+    project.mkdir()
+    (project / "opencode.jsonc").write_text('{\n  // mine\n  "theme": "x",\n}\n')
+
+    result = client_config.configure(
+        "opencode", URL, False, scope="project", project=str(project)
+    )
+
+    assert Path(result["config_path"]) == project / "opencode.jsonc"
+    assert not (project / "opencode.json").exists()
+    data = json.loads((project / "opencode.jsonc").read_text())
+    assert data["theme"] == "x" and data["mcp"]["marm-memory"]["url"] == URL
+    assert (
+        client_config.status("opencode", "project", str(project), URL)["state"]
+        == "configured"
+    )
+
+
+def test_opencode_v1_layout_keeps_other_servers_on_add_and_remove(isolated_home):
+    path = opencode_dir(isolated_home) / "opencode.json"
+    path.parent.mkdir(parents=True)
+    other = {"type": "local", "command": ["npx", "-y", "x"], "enabled": True}
+    path.write_text(json.dumps({"$schema": "s", "mcp": {"x": other}}))
+
+    client_config.configure("opencode", URL, False, transport="stdio")
+    client_config.remove("opencode")
+
+    assert json.loads(path.read_text()) == {"$schema": "s", "mcp": {"x": other}}
+
+
+def test_opencode_command_list_reads_back_as_the_flat_shape(isolated_home):
+    detect(isolated_home, "opencode")
+    client_config.configure("opencode", URL, False, transport="stdio")
+
+    state = client_config.status("opencode", url=URL)
+
+    assert state["state"] == "configured"
+    assert state["transport_detected"] == "stdio"
+    assert client_config.read_entry("opencode") == {
+        "type": "local",
+        "command": "marm-mcp-stdio",
+        "args": [],
+    }
+
+
+def test_opencode_docker_command_list_is_detected_as_docker_stdio(isolated_home):
+    detect(isolated_home, "opencode")
+    client_config.configure(
+        "opencode", URL, False, transport="docker-stdio", docker_data_dir=isolated_home
+    )
+
+    state = client_config.status("opencode", url=URL)
+
+    assert state["transport_detected"] == "docker-stdio"
+    assert state["state"] == "configured"
+
+
+def test_opencode_entry_without_oauth_off_is_replaced(isolated_home):
+    path = opencode_dir(isolated_home) / "opencode.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        json.dumps({"mcp": {"marm-memory": {"type": "remote", "url": URL}}})
+    )
+
+    assert client_config.status("opencode", url=URL)["state"] == "different"
+    result = client_config.configure("opencode", URL, False)
+
+    assert result["action"] == "replace"
+    assert json.loads(path.read_text())["mcp"]["marm-memory"]["oauth"] is False
+
+
+def test_opencode_entry_with_extra_user_keys_counts_as_configured(isolated_home):
+    path = opencode_dir(isolated_home) / "opencode.json"
+    path.parent.mkdir(parents=True)
+    entry = {
+        "type": "remote",
+        "url": URL,
+        "oauth": False,
+        "enabled": True,
+        "timeout": 9,
+    }
+    path.write_text(json.dumps({"mcp": {"marm-memory": entry}}))
+
+    assert client_config.configure("opencode", URL, False)["action"] == "none"
+    assert json.loads(path.read_text())["mcp"]["marm-memory"] == entry
+
+
+def test_opencode_prefers_an_existing_jsonc_then_json_then_defaults_to_json(
+    isolated_home,
+):
+    base = opencode_dir(isolated_home)
+    assert client_config._opencode_path() == base / "opencode.json"
+
+    base.mkdir(parents=True)
+    (base / "opencode.json").write_text("{}")
+    assert client_config._opencode_path() == base / "opencode.json"
+
+    (base / "opencode.jsonc").write_text("{}")
+    assert client_config._opencode_path() == base / "opencode.jsonc"
+
+
+def test_opencode_xdg_config_home_moves_the_file_and_detection(
+    isolated_home, monkeypatch
+):
+    xdg = isolated_home / "xdg"
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
+    (xdg / "opencode").mkdir(parents=True)
+
+    result = client_config.configure("opencode", URL, False)
+
+    assert Path(result["config_path"]) == xdg / "opencode" / "opencode.json"
+    assert (xdg / "opencode" / "opencode.json").is_file()
+    assert not opencode_dir(isolated_home).exists()
+    monkeypatch.setenv("XDG_CONFIG_HOME", "   ")
+    assert client_config.opencode_home() == opencode_dir(isolated_home)
+
+
+@pytest.mark.parametrize("text", ['{"mcp": []}', '{"mcp": 3}', '{"mcp": "x"}'])
+def test_opencode_unexpected_mcp_shape_is_refused_and_untouched(isolated_home, text):
+    path = opencode_dir(isolated_home) / "opencode.json"
+    path.parent.mkdir(parents=True)
+    path.write_text(text)
+
+    with pytest.raises(client_config.ClientNotConfigurable):
+        client_config.configure("opencode", URL, False)
+
+    assert path.read_text() == text
+    assert not (path.parent / "opencode.json.marm-backup").exists()
+
+
+def test_opencode_project_scope_writes_opencode_json_in_the_project(isolated_home):
+    project = isolated_home / "repo"
+    project.mkdir()
+
+    result = client_config.configure(
+        "opencode", URL, False, scope="project", project=str(project)
+    )
+
+    assert Path(result["config_path"]) == project / "opencode.json"
+    assert json.loads((project / "opencode.json").read_text())["mcp"]["marm-memory"]
+
+
+def test_opencode_skill_lands_in_the_opencode_config_skills_folder(isolated_home):
+    from marm_mcp_server.services import skill_install
+
+    assert skill_install.is_installed("opencode") is False
+    result = skill_install.install_for_agent("opencode")
+
+    expected = opencode_dir(isolated_home) / "skills" / "marm-init" / "SKILL.md"
+    assert result["target"] == str(expected)
+    assert skill_install.is_installed("opencode") is True

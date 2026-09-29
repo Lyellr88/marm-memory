@@ -38,6 +38,7 @@ def home(tmp_path, monkeypatch):
     monkeypatch.setenv("APPDATA", str(tmp_path / "AppData" / "Roaming"))
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "AppData" / "Local"))
     monkeypatch.delenv("HERMES_HOME", raising=False)
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
     monkeypatch.delenv("CLINE_DIR", raising=False)
     monkeypatch.delenv("CLINE_DATA_DIR", raising=False)
     monkeypatch.delenv("CLINE_MCP_SETTINGS_PATH", raising=False)
@@ -175,8 +176,8 @@ def test_overview_counts_every_skill_agent_and_never_leaks_the_key(
 ) -> None:
     monkeypatch.setattr(marm_settings, "MARM_API_KEY", SECRET)
     monkeypatch.setenv("HERMES_HOME", str(home / ".hermes"))
-    for directory in skill_install.AGENTS.values():
-        target = home / directory / "skills" / "marm-init"
+    for agent in skill_install.AGENTS:
+        target = skill_install._global_dir(agent) / "skills" / "marm-init"
         target.mkdir(parents=True)
         (target / "SKILL.md").write_text("skill")
     (home / ".marm").mkdir()
