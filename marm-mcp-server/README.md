@@ -23,7 +23,6 @@ mcp-name: io.github.Lyellr88/marm-mcp-server
 [![CodeQL](https://github.com/Lyellr88/marm-memory/actions/workflows/github-code-scanning/codeql/badge.svg?branch=MARM-main)](https://github.com/Lyellr88/marm-memory/security/code-scanning)
 [![marm-memory MCP server](https://glama.ai/mcp/servers/Lyellr88/marm-memory/badges/score.svg)](https://glama.ai/mcp/servers/Lyellr88/marm-memory)
 
-
 > Contributions welcome! Browse [open issues](https://github.com/Lyellr88/marm-memory/issues) to contribute, or join the [MARM Discord](https://discord.gg/nhyJWPz2cf) to share workflows, get setup help, and connect with other builders.
 
 </div>
@@ -51,7 +50,7 @@ mcp-name: io.github.Lyellr88/marm-mcp-server
 
 ```bash
 pip install marm-mcp-server
-marm-memory init --g-claude --g-codex --g-gemini
+marm-memory init --g-claude --g-codex --g-antigravity
 ```
 
 > **Also available: --g-qwen and --g-kiro. Run without flags to install into your current project folder instead of home**
@@ -66,7 +65,7 @@ marm-memory init --g-claude --g-codex --g-gemini
 
 Prefer to wire it up yourself:
 
-> Replace "agent" with your client’s CLI command (for example, claude, gemini, or qwen). For Codex, use codex mcp add marm-memory --url http://localhost:8001/mcp instead.
+> Replace "agent" with your client’s CLI command (for example, claude, agy, or qwen). For Codex, use codex mcp add marm-memory --url http://localhost:8001/mcp instead.
 
 | If you are... | Start the server | Connect your MCP client |
 | --------------- | ------------------ | ------------------------- |
@@ -120,7 +119,7 @@ Run `marm-memory console` to open the bundled web app at `http://127.0.0.1:8002`
 | **Code Context** | Build one bounded view of task-ranked symbols, source, and related memory. An optional local model can answer from that same context, with its citations checked. |
 | **Distill** | Turn transcripts into durable-memory proposals. Review, apply, or discard them with duplicate evidence visible. |
 | **System and Terminal** | Manage runtime health, indexing, local-model settings, backups, diagnostics, and maintenance. The docked terminal provides a real local shell with persistent sessions and a searchable MARM command menu. |
-| **Connections** | Set up MARM end to end in one place. **Setup** connects Claude Code, Claude Desktop, Cursor, VS Code, Codex CLI, Gemini CLI, Qwen Code, Windsurf, and Kiro over HTTP, STDIO, or Docker STDIO, tests each connection, and saves server settings to `~/.marm/settings.json`. **Docker** pulls, starts, and stops the MARM container and writes a compose file. **Manual** gives copy-ready config for each client and OS, every CLI command, and every HTTP endpoint. |
+| **Connections** | Set up MARM end to end in one place. **Setup** connects Claude Code, Claude Desktop, Cursor, VS Code, Codex CLI, Grok Build, Antigravity CLI, Qwen Code, Windsurf, and Kiro over HTTP, STDIO, or Docker STDIO, tests each connection, and saves server settings to `~/.marm/settings.json`. **Docker** pulls, starts, and stops the MARM container and writes a compose file. **Manual** gives copy-ready config for each client and OS, every CLI command, and every HTTP endpoint. |
 
 ### Runtime CLI Commands
 
@@ -177,7 +176,7 @@ Docker commands are documented separately below because they require explicit da
 
 MARM is tuned for fast recall first, even as memory grows and long memories are chunked behind the scenes.
 
-These measurements use the fastembed-backed `jinaai/jina-embeddings-v2-small-en` encoder and a throwaway local SQLite database. Every timed path calls the shipped `MARMMemory` code, not a benchmark-local reimplementation. Sections 1-4 are timings from a single run of [`scripts/benchmarking/performance/bench_hotpath.py`](https://github.com/Lyellr88/marm-memory/blob/MARM-main/scripts/benchmarking/performance/bench_hotpath.py) on local hardware; absolute milliseconds vary by machine, so treat the scaling shape as the signal. Section 5 is a separate accuracy benchmark ([`run_eval.py`](https://github.com/Lyellr88/marm-memory/blob/MARM-main/scripts/benchmarking/accuracy/locomo/run_eval.py)) measuring retrieval rather than speed, and its latest row is a controlled before and after, explained there.
+These measurements use the fastembed-backed `jinaai/jina-embeddings-v2-small-en` encoder and a throwaway local SQLite database. Every timed path calls the shipped `MARMMemory` code, not a benchmark-local reimplementation. Sections 1-4 are timings from a single run of [`scripts/benchmarking/performance/bench_hotpath.py`](scripts/benchmarking/performance/bench_hotpath.py) on local hardware; absolute milliseconds vary by machine, so treat the scaling shape as the signal. Section 5 is a separate accuracy benchmark ([`run_eval.py`](scripts/benchmarking/accuracy/locomo/run_eval.py)) measuring retrieval rather than speed, and its latest row is a controlled before and after, explained there.
 
 ### 1. Retrieval Latency Scaling
 
@@ -234,7 +233,7 @@ All 10 LoCoMo conversations are ingested through `marm_log_entry` (5,882 memorie
 
 The last row is a controlled comparison, same build and data with the log lane as the only variable. That lane previously substring-matched the whole query against log topics and summaries, so a natural-language question never matched and it scored 0.0% on all 1,977 questions. It now tokenizes the query and reaches 53.3% on its own. Ranges rather than single figures because the semantic lane varies about half a point between runs, so a sub-point difference is not a result.
 
-Multi-hop remains the weakest category at 44.9%, and single-hop evidence recall is 36.6% against a 66.2% any-hit rate, so the lane often surfaces some of a question's evidence rather than all of it. Reproduce with [`run_eval.py`](https://github.com/Lyellr88/marm-memory/blob/MARM-main/scripts/benchmarking/accuracy/locomo/run_eval.py).
+Multi-hop remains the weakest category at 44.9%, and single-hop evidence recall is 36.6% against a 66.2% any-hit rate, so the lane often surfaces some of a question's evidence rather than all of it. Reproduce with [`run_eval.py`](scripts/benchmarking/accuracy/locomo/run_eval.py).
 
 ### 6. vs Competitors: Architecture
 
@@ -271,7 +270,7 @@ pip install marm-mcp-server
 <details>
 <summary><strong>Local pip HTTP </strong></summary>
 
-> "agent" refers to claude, gemini, grok, qwen, or any MCP client. Codex uses --url instead of --transport to add MCP tools.
+> "agent" refers to claude, gemini (agy), grok, qwen, or any MCP client. Codex uses --url instead of --transport to add MCP tools.
 
 ```bash
 pip install marm-mcp-server
@@ -297,7 +296,7 @@ python -m marm_mcp_server.server_stdio
 codex mcp add marm-memory-stdio -- marm-mcp-stdio
 ```
 
-Replace `marm-mcp-stdio` with `python -m marm_mcp_server.server_stdio` if using a virtualenv or a path-based setup. Works with Claude Code, Cursor, VS Code, Qwen, and Gemini CLI. STDIO stays a single local process with no port and no API key, and exposes the same 16 tools as HTTP.
+Replace `marm-mcp-stdio` with `python -m marm_mcp_server.server_stdio` if using a virtualenv or a path-based setup. Works with Claude Code, Cursor, VS Code, Qwen, and Antigravity CLI. STDIO stays a single local process with no port and no API key, and exposes the same 16 tools as HTTP.
 
 </details>
 
@@ -475,7 +474,7 @@ docker run --rm -i \
 
 - Docker HTTP requires a key; Docker STDIO does not.
 - If you get `401`, verify key match and client restart after env var changes.
-- For full key setup, rotation, and troubleshooting: [INSTALL-DOCKER.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-DOCKER.md)
+- For full key setup, rotation, and troubleshooting: [INSTALL-DOCKER.md](docs/INSTALL-DOCKER.md)
 
 </details>
 
@@ -579,23 +578,47 @@ bearer_token_env_var = "MARM_API_KEY"
 </details>
 
 <details>
-<summary><strong>Gemini CLI</strong></summary>
+<summary><strong>Grok Build</strong></summary>
+
+Grok Build (`grok`), xAI's terminal coding agent, supports STDIO and HTTP MCP servers and reads `~/.grok/config.toml`. MARM sets `bearer_token_env_var`, so the key stays in your environment and never lands in the file.
 
 ```bash
 # Direct Python install - no key needed
-gemini mcp add --transport http marm-memory http://localhost:8001/mcp
-
-# Docker or SERVER_HOST=0.0.0.0 - key required
-gemini mcp add --transport http marm-memory http://localhost:8001/mcp --header "Authorization: Bearer your-generated-key"
+grok mcp add --transport http marm-memory http://localhost:8001/mcp
 ```
 
-Equivalent `~/.gemini/settings.json` (user scope) or project `.gemini/settings.json`:
+Docker or `SERVER_HOST=0.0.0.0` (key required): set `MARM_API_KEY`, then add this to `~/.grok/config.toml` (or `.grok/config.toml` for one project):
+
+```toml
+[mcp_servers.marm-memory]
+url = "http://localhost:8001/mcp"
+bearer_token_env_var = "MARM_API_KEY"
+```
+
+Grok Build also reads MCP servers from `~/.claude.json`, `.cursor/mcp.json`, and project `.mcp.json`, so MARM may already load if Claude Code or Cursor has it. Run `grok mcp list` to see what it loaded.
+
+</details>
+
+<details>
+<summary><strong>Antigravity CLI</strong></summary>
+
+Antigravity CLI (`agy`) replaced Gemini CLI in June 2026. It supports STDIO and HTTP MCP servers. Use HTTP for MARM.
+
+```bash
+# Direct Python install - no key needed
+agy mcp add marm-memory --type http http://localhost:8001/mcp
+
+# Docker or SERVER_HOST=0.0.0.0 - key required
+agy mcp add marm-memory --type http http://localhost:8001/mcp --header "Authorization: Bearer your-generated-key"
+```
+
+Equivalent `~/.gemini/config/mcp_config.json` (user scope) or project `.agents/mcp_config.json`. Antigravity reads `serverUrl`, not `url` or `httpUrl`, and does not expand `${VAR}` in this file, so paste the real key:
 
 ```json
 {
   "mcpServers": {
     "marm-memory": {
-      "httpUrl": "http://localhost:8001/mcp",
+      "serverUrl": "http://localhost:8001/mcp",
       "headers": {
         "Authorization": "Bearer your-generated-key"
       }
@@ -635,9 +658,11 @@ Equivalent `.qwen/settings.json` (project) or `~/.qwen/settings.json` (user):
 </details>
 
 <details>
-<summary><strong>xAI / Grok Remote MCP</strong></summary>
+<summary><strong>Grok app and API</strong></summary>
 
-xAI connects from its own infrastructure, so `localhost` will not work. Expose MARM behind HTTPS and set `MARM_API_KEY`.
+The Grok app (grok.com, iOS, Android) supports custom MCP servers: open grok.com/connectors, click **New Connector**, choose **Custom**, and enter your MARM URL. The xAI API supports Remote MCP Tools over Streamable HTTP or SSE only.
+
+Both run on xAI's infrastructure, so `localhost` will not work. Expose MARM behind HTTPS (a tunnel or your own domain) and set `MARM_API_KEY`. MARM has not been tested through the app's connector form. For the API, send this tool payload:
 
 ```json
 {
@@ -650,7 +675,7 @@ xAI connects from its own infrastructure, so `localhost` will not work. Expose M
 
 </details>
 
-Full platform walkthroughs, key setup, and OS-specific notes: [Windows](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-WINDOWS.md#client-connections) · [macOS](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-MACOS.md#start-marm-yourself) · [Linux](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-LINUX.md#client-connections) · [Docker/key mode](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-DOCKER.md#client-connections) · [Other platforms](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-PLATFORMS.md)
+Full platform walkthroughs, key setup, and OS-specific notes: [Windows](docs/INSTALL-WINDOWS.md#client-connections) · [macOS](docs/INSTALL-MACOS.md#start-marm-yourself) · [Linux](docs/INSTALL-LINUX.md#client-connections) · [Docker/key mode](docs/INSTALL-DOCKER.md#client-connections) · [Other platforms](docs/INSTALL-PLATFORMS.md)
 
 > Using a client that isn't listed? [Open an issue](https://github.com/Lyellr88/marm-memory/issues/new/choose) and let us know; client adapters are a first-class feature request.
 
@@ -1133,7 +1158,7 @@ It re-splits stale chunks, fills in any lost to an interrupted write, and drops 
 - Check Python version: `python --version` (must be 3.10+)
 - Verify port 8001 isn't in use: `lsof -i :8001` (macOS/Linux) or `netstat -ano | findstr :8001` (Windows)
 - Check for permission errors in home directory (`~/.marm/` must be readable/writable)
-- See platform-specific troubleshooting: [INSTALL-DOCKER.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-DOCKER.md), [INSTALL-WINDOWS.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-WINDOWS.md), [INSTALL-MACOS.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-MACOS.md), [INSTALL-LINUX.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-LINUX.md)
+- See platform-specific troubleshooting: [INSTALL-DOCKER.md](docs/INSTALL-DOCKER.md), [INSTALL-WINDOWS.md](docs/INSTALL-WINDOWS.md), [INSTALL-MACOS.md](docs/INSTALL-MACOS.md), [INSTALL-LINUX.md](docs/INSTALL-LINUX.md)
 
 **STDIO connection fails**
 
@@ -1278,7 +1303,7 @@ It re-splits stale chunks, fills in any lost to an interrupted write, and drops 
 
 </details>
 
-For memory behavior, transports, supported clients, compaction, and backup questions, see the [FAQ](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/FAQ.md).
+For memory behavior, transports, supported clients, compaction, and backup questions, see the [FAQ](docs/FAQ.md).
 
 ## Star History
 
@@ -1312,7 +1337,7 @@ Good places to help:
 
 ## License & Usage Notice
 
-Copyright © 2026 Ryan A. Lyell. MARM is released under the [Apache 2.0 License](https://github.com/Lyellr88/marm-memory/blob/MARM-main/LICENSE) (see [NOTICE](https://github.com/Lyellr88/marm-memory/blob/MARM-main/NOTICE) for the copyright statement), and forks, experiments, and integrations are welcome. MARM also wraps third-party open-source components such as `codebase-memory-mcp` under MIT; see [THIRD_PARTY_NOTICES.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/THIRD_PARTY_NOTICES.md) for attribution. If you build on it, please make unofficial versions easy to distinguish from releases published by the [official MARM repository](https://github.com/Lyellr88/marm-memory) so users know what they are installing.
+Copyright © 2026 Ryan A. Lyell. MARM is released under the [Apache 2.0 License](LICENSE) (see [NOTICE](NOTICE) for the copyright statement), and forks, experiments, and integrations are welcome. MARM also wraps third-party open-source components such as `codebase-memory-mcp` under MIT; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for attribution. If you build on it, please make unofficial versions easy to distinguish from releases published by the [official MARM repository](https://github.com/Lyellr88/marm-memory) so users know what they are installing.
 
 ## Project Documentation
 

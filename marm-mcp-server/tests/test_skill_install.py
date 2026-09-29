@@ -36,7 +36,7 @@ def test_project_scan_installs_into_present_agents(tmp_path, monkeypatch):
     expected = skill_install._bundled_skill_text()
     assert _read(tmp_path, ".claude") == expected
     assert _read(tmp_path, ".codex") == expected
-    assert not (tmp_path / ".gemini").exists()
+    assert not (tmp_path / ".qwen").exists()
     assert not (tmp_path / skill_install.FALLBACK_DIR).exists()
 
 
@@ -75,7 +75,7 @@ def test_fallback_not_used_when_one_agent_present(tmp_path, monkeypatch):
 def test_global_flags_install_into_home_and_skip_project(tmp_path, monkeypatch):
     home = tmp_path / "home"
     project = tmp_path / "project"
-    (project / ".gemini").mkdir(parents=True)
+    (project / ".qwen").mkdir(parents=True)
     home.mkdir()
     monkeypatch.setattr(skill_install.Path, "home", classmethod(lambda cls: home))
     monkeypatch.chdir(project)
@@ -85,8 +85,18 @@ def test_global_flags_install_into_home_and_skip_project(tmp_path, monkeypatch):
     assert code == 0
     assert _read(home, ".claude") == skill_install._bundled_skill_text()
     assert _read(home, ".codex") == skill_install._bundled_skill_text()
-    assert not (project / ".gemini" / SKILL_REL).exists()
-    assert not (home / ".gemini").exists()
+    assert not (project / ".qwen" / SKILL_REL).exists()
+    assert not (home / ".qwen").exists()
+
+
+def test_grok_skill_installs_into_its_skills_folder(tmp_path, monkeypatch):
+    monkeypatch.setattr(skill_install.Path, "home", classmethod(lambda cls: tmp_path))
+
+    result = skill_install.install_for_agent("grok")
+
+    assert result["state"] == "installed"
+    assert result["target"] == str(tmp_path / ".grok" / SKILL_REL)
+    assert skill_install.is_installed("grok") is True
 
 
 def test_fail_open_when_a_target_is_unwritable(tmp_path, monkeypatch):
@@ -138,15 +148,15 @@ def test_install_for_agent_installs_then_refreshes_and_is_installed_follows(
 ):
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
 
-    assert skill_install.is_installed("gemini") is False
-    first = skill_install.install_for_agent("gemini")
-    second = skill_install.install_for_agent("gemini")
+    assert skill_install.is_installed("antigravity") is False
+    first = skill_install.install_for_agent("antigravity")
+    second = skill_install.install_for_agent("antigravity")
 
     assert first["state"] == "installed"
     assert second["state"] == "refreshed"
-    assert first["target"] == str(tmp_path / ".gemini" / SKILL_REL)
-    assert _read(tmp_path, ".gemini") == skill_install._bundled_skill_text()
-    assert skill_install.is_installed("gemini") is True
+    assert first["target"] == str(tmp_path / ".gemini" / "config" / SKILL_REL)
+    assert _read(tmp_path, ".gemini/config") == skill_install._bundled_skill_text()
+    assert skill_install.is_installed("antigravity") is True
     assert skill_install.is_installed("qwen") is False
 
 

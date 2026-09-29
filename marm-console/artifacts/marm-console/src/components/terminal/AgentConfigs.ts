@@ -46,6 +46,28 @@ export const AGENT_CONFIGS: AgentConfig[] = [
     },
   },
   {
+    id: 'grok',
+    name: 'Grok Build',
+    description: "xAI's terminal coding agent",
+    commands: {
+      windows: {
+        install: 'irm https://x.ai/cli/install.ps1 | iex',
+        launch: 'grok',
+        verify: 'grok --version',
+      },
+      macos: {
+        install: 'curl -fsSL https://x.ai/cli/install.sh | bash',
+        launch: 'grok',
+        verify: 'grok --version',
+      },
+      linux: {
+        install: 'curl -fsSL https://x.ai/cli/install.sh | bash',
+        launch: 'grok',
+        verify: 'grok --version',
+      },
+    },
+  },
+  {
     id: 'antigravity',
     name: 'Antigravity (was Gemini CLI)',
     description: "Google's agentic CLI, formerly Gemini CLI",

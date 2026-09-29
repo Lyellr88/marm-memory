@@ -31,7 +31,6 @@ const TARGET_OPTIONS: Array<{ value: ManualTarget; label: string }> = [
   { value: 'docker', label: 'Docker' },
 ];
 
-const EXCLUDED_AGENTS = ['xai'];
 
 export function detectOs(label: string | undefined): ManualOs {
   const text = (label ?? '').toLowerCase();
@@ -82,7 +81,7 @@ export function ManualTab() {
 function ConfigSection() {
   const agents = useAgents();
   const overview = useConnectionsOverview();
-  const clients = useMemo(() => (agents.data?.clients ?? []).filter((client) => !EXCLUDED_AGENTS.includes(client.id)), [agents.data]);
+  const clients = useMemo(() => agents.data?.clients ?? [], [agents.data]);
   const [clientId, setClientId] = useState('');
   const [os, setOs] = useState<ManualOs | ''>('');
   const [transport, setTransport] = useState<AgentTransport | ''>('');

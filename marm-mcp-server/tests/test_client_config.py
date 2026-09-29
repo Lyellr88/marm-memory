@@ -22,7 +22,8 @@ DETECT_DIRS = {
     "cursor": ".cursor",
     "vscode": "AppData/Roaming/Code/User",
     "codex": ".codex",
-    "gemini": ".gemini",
+    "grok": ".grok",
+    "antigravity": ".gemini/config",
     "qwen": ".qwen",
     "windsurf": ".codeium/windsurf",
     "kiro": ".kiro",
@@ -33,7 +34,8 @@ USER_FILES = {
     "cursor": ".cursor/mcp.json",
     "vscode": "AppData/Roaming/Code/User/mcp.json",
     "codex": ".codex/config.toml",
-    "gemini": ".gemini/settings.json",
+    "grok": ".grok/config.toml",
+    "antigravity": ".gemini/config/mcp_config.json",
     "qwen": ".qwen/settings.json",
     "windsurf": ".codeium/windsurf/mcp_config.json",
     "kiro": ".kiro/settings/mcp.json",
@@ -44,14 +46,19 @@ PROJECT_FILES = {
     "cursor": ".cursor/mcp.json",
     "vscode": ".vscode/mcp.json",
     "codex": ".codex/config.toml",
-    "gemini": ".gemini/settings.json",
+    "grok": ".grok/config.toml",
+    "antigravity": ".agents/mcp_config.json",
     "qwen": ".qwen/settings.json",
     "kiro": ".kiro/settings/mcp.json",
 }
 
-CONTAINER = {"vscode": "servers", "codex": "mcp_servers"}
+CONTAINER = {"vscode": "servers", "codex": "mcp_servers", "grok": "mcp_servers"}
 TYPED = {"claude", "vscode"}
-URL_KEY = {"gemini": "httpUrl", "qwen": "httpUrl", "windsurf": "serverUrl"}
+URL_KEY = {
+    "antigravity": "serverUrl",
+    "qwen": "httpUrl",
+    "windsurf": "serverUrl",
+}
 AUTH_REF = {
     "claude": "${MARM_API_KEY}",
     "cursor": "${env:MARM_API_KEY}",
@@ -79,7 +86,7 @@ def detect(home: Path, client: str) -> None:
 
 def expected_entry(client: str, transport: str, auth: bool, docker_args=None) -> dict:
     if transport == "http":
-        if client == "codex":
+        if client in {"codex", "grok"}:
             entry: dict = {"url": URL}
             if auth:
                 entry["bearer_token_env_var"] = "MARM_API_KEY"
@@ -98,7 +105,7 @@ def expected_entry(client: str, transport: str, auth: bool, docker_args=None) ->
 
 
 def read_marm_entry(home: Path, client: str, path: Path) -> dict:
-    if client == "codex":
+    if client in {"codex", "grok"}:
         tomllib = pytest.importorskip("tomllib")
         return tomllib.loads(path.read_text(encoding="utf-8"))["mcp_servers"][
             "marm-memory"
@@ -114,7 +121,7 @@ def docker_args_for(tmp_path: Path) -> list[str]:
 
 def unavailable(client: str, transport: str, auth: bool) -> bool:
     return (client == "claude-desktop" and transport == "http") or (
-        client in {"gemini", "qwen"} and transport == "http" and auth
+        client in {"antigravity", "qwen"} and transport == "http" and auth
     )
 
 
@@ -464,10 +471,10 @@ def test_project_scope_creates_the_client_directory(isolated_home):
     assert (project / ".cursor" / "mcp.json").is_file()
 
 
-def test_gemini_and_qwen_http_with_auth_are_unavailable_and_suggest_stdio(
+def test_antigravity_and_qwen_http_with_auth_are_unavailable_and_suggest_stdio(
     isolated_home,
 ):
-    for client in ("gemini", "qwen"):
+    for client in ("antigravity", "qwen"):
         detect(isolated_home, client)
         with pytest.raises(client_config.ClientNotConfigurable, match="STDIO"):
             client_config.configure(client, URL, True)
@@ -479,7 +486,7 @@ def test_gemini_and_qwen_http_with_auth_are_unavailable_and_suggest_stdio(
         )
         assert "STDIO" in agent["unavailable"]["http"]
         assert "stdio" not in agent["unavailable"]
-    assert not (isolated_home / ".gemini" / "settings.json.marm-backup").exists()
+    assert not (isolated_home / ".qwen" / "settings.json.marm-backup").exists()
 
 
 def test_claude_desktop_http_is_unavailable_with_the_reason(isolated_home):
@@ -742,18 +749,18 @@ def test_codex_project_scope_notes_the_trust_requirement(isolated_home):
 
 
 def test_json_merge_keeps_non_ascii_text(isolated_home):
-    path = isolated_home / ".gemini" / "settings.json"
+    path = isolated_home / ".gemini" / "config" / "mcp_config.json"
     path.parent.mkdir(parents=True)
     path.write_text(
         json.dumps({"ui": {"greeting": "héllo 世界"}}, ensure_ascii=False),
         encoding="utf-8",
     )
 
-    client_config.configure("gemini", URL, False)
+    client_config.configure("antigravity", URL, False)
 
     text = path.read_text(encoding="utf-8")
     assert "héllo 世界" in text
-    assert json.loads(text)["mcpServers"]["marm-memory"] == {"httpUrl": URL}
+    assert json.loads(text)["mcpServers"]["marm-memory"] == {"serverUrl": URL}
 
 
 # --- Status ------------------------------------------------------------------------------
@@ -903,26 +910,22 @@ def test_agent_list_shape(isolated_home):
     assert by_id["cursor"]["scopes"] == ["user", "project"]
     assert by_id["cursor"]["transports"] == ["http", "stdio", "docker-stdio"]
     assert by_id["cursor"]["skill"] == {"supported": False, "installed": False}
-    assert by_id["gemini"]["skill"] == {"supported": True, "installed": False}
+    assert by_id["antigravity"]["skill"] == {"supported": True, "installed": False}
     assert by_id["kiro"]["skill"]["supported"] is True
-    xai = by_id["xai"]
-    assert xai["transports"] == []
-    assert xai["detected"] is False
-    assert xai["user"]["expected_entry"]["authorization"] == "Bearer YOUR_KEY"
-    assert "headers" not in xai["user"]["expected_entry"]
+    assert by_id["grok"]["skill"] == {"supported": True, "installed": False}
 
 
 def test_skill_state_follows_the_installed_file(isolated_home):
-    detect(isolated_home, "gemini")
-    skill = isolated_home / ".gemini" / "skills" / "marm-init" / "SKILL.md"
+    detect(isolated_home, "antigravity")
+    skill = isolated_home / ".gemini" / "config" / "skills" / "marm-init" / "SKILL.md"
     skill.parent.mkdir(parents=True)
     skill.write_text("skill")
 
-    gemini = next(
-        a for a in client_config.list_agents(URL, False) if a["id"] == "gemini"
+    agent = next(
+        a for a in client_config.list_agents(URL, False) if a["id"] == "antigravity"
     )
 
-    assert gemini["skill"] == {"supported": True, "installed": True}
+    assert agent["skill"] == {"supported": True, "installed": True}
 
 
 # --- Remove ------------------------------------------------------------------------------
@@ -1083,6 +1086,121 @@ def test_codex_remove_project_scope_is_manual(isolated_home):
         client_config.remove("codex", "project", str(project))
 
 
+# --- Grok Build TOML -----------------------------------------------------------------
+
+
+def test_grok_append_keeps_prior_content_and_writes_the_bearer_env_var(isolated_home):
+    path = isolated_home / ".grok" / "config.toml"
+    path.parent.mkdir(parents=True)
+    original = '[models]\ndefault = "grok-build"\n'
+    path.write_text(original)
+
+    result = client_config.configure("grok", URL, True)
+
+    assert result["action"] == "add"
+    assert result["verified"] is True
+    text = path.read_text()
+    assert text.startswith(original)
+    tomllib = pytest.importorskip("tomllib")
+    table = tomllib.loads(text)["mcp_servers"]["marm-memory"]
+    assert table == {"url": URL, "bearer_token_env_var": "MARM_API_KEY"}
+
+
+def test_grok_project_scope_writes_grok_config_without_a_trust_note(isolated_home):
+    project = isolated_home / "repo"
+    project.mkdir()
+
+    result = client_config.configure(
+        "grok", URL, False, scope="project", project=str(project)
+    )
+
+    assert (project / ".grok" / "config.toml").is_file()
+    assert result["verified"] is True
+    assert not any("trust" in note for note in result["notes"])
+
+
+def test_grok_existing_differing_table_is_refused(isolated_home):
+    path = isolated_home / ".grok" / "config.toml"
+    path.parent.mkdir(parents=True)
+    path.write_text('[mcp_servers.marm-memory]\nurl = "http://127.0.0.1:9999/mcp"\n')
+    before = path.read_text()
+
+    with pytest.raises(client_config.ClientNotConfigurable, match="edit it manually"):
+        client_config.configure("grok", URL, False)
+
+    assert path.read_text() == before
+
+
+def test_grok_docs_entry_with_headers_instead_of_the_env_var_is_different(
+    isolated_home,
+):
+    path = isolated_home / ".grok" / "config.toml"
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        f'[mcp_servers.marm-memory]\nurl = "{URL}"\n'
+        'headers = { Authorization = "Bearer ${MARM_API_KEY}" }\n'
+    )
+
+    state = client_config.status("grok", url=URL, auth_required=True)
+
+    assert state["state"] == "different"
+    assert client_config.status("grok", url=URL, auth_required=False)["state"] == (
+        "configured"
+    )
+
+
+def test_grok_remove_uses_the_cli_and_project_scope_is_manual(
+    isolated_home, monkeypatch
+):
+    path = isolated_home / ".grok" / "config.toml"
+    path.parent.mkdir(parents=True)
+    path.write_text(f'other = 1\n\n[mcp_servers.marm-memory]\nurl = "{URL}"\n')
+    with pytest.raises(client_config.ClientNotConfigurable, match="by hand"):
+        client_config.remove("grok")
+
+    monkeypatch.setattr(client_config.shutil, "which", lambda name: "C:/bin/grok.exe")
+    calls: list[list[str]] = []
+
+    def fake_runner(argv, timeout=20.0):
+        calls.append(argv)
+        path.write_text("other = 1\n")
+        return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(client_config, "run_cli_subprocess", fake_runner)
+    result = client_config.remove("grok")
+
+    assert calls == [["C:/bin/grok.exe", "mcp", "remove", "marm-memory"]]
+    assert result["verified"] is True
+
+    project = isolated_home / "repo"
+    (project / ".grok").mkdir(parents=True)
+    (project / ".grok" / "config.toml").write_text(
+        f'[mcp_servers.marm-memory]\nurl = "{URL}"\n'
+    )
+    with pytest.raises(
+        client_config.ClientNotConfigurable, match="Grok Build cannot edit"
+    ):
+        client_config.remove("grok", "project", str(project))
+
+
+def test_grok_notes_when_claude_code_already_lists_marm(isolated_home):
+    detect(isolated_home, "grok")
+
+    def grok_notes():
+        agent = next(
+            a for a in client_config.list_agents(URL, False) if a["id"] == "grok"
+        )
+        return agent["notes"]
+
+    assert not any("Claude Code" in note for note in grok_notes())
+    (isolated_home / ".claude.json").write_text(
+        json.dumps({"mcpServers": {"marm-memory": {"type": "http", "url": URL}}})
+    )
+    assert any("Claude Code" in note for note in grok_notes())
+    client_config.configure("grok", URL, False)
+    assert not any("Claude Code" in note for note in grok_notes())
+
+
 # --- Claude Code via subprocess -----------------------------------------------------------
 
 
@@ -1191,10 +1309,5 @@ def test_key_value_absent_from_files_and_responses(isolated_home):
     assert "${env:MARM_API_KEY}" in path.read_text()
 
     with pytest.raises(client_config.ClientNotConfigurable) as excinfo:
-        client_config.configure("gemini", URL, True)
+        client_config.configure("antigravity", URL, True)
     assert SECRET not in str(excinfo.value)
-
-
-def test_xai_is_not_configurable(isolated_home):
-    with pytest.raises(client_config.ClientNotConfigurable):
-        client_config.configure("xai", URL, True)

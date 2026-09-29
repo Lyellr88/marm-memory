@@ -68,10 +68,6 @@ def _check_os(os_name: str) -> None:
 
 
 def _spec(client_id: str) -> ClientSpec:
-    if client_id == "xai":
-        raise InvalidRequest(
-            "Grok (xAI API) has no config file. It needs a public HTTPS URL sent as a tool payload."
-        )
     spec = REGISTRY.get(client_id)
     if spec is None:
         raise client_config.ClientNotFound(client_id)
@@ -307,6 +303,24 @@ def _gemini_command(
     return _join([binary, "mcp", "add", "--scope", scope, SERVER_NAME, *tail], os_name)
 
 
+def _grok_command(
+    transport: str, scope: str, url: str, argv: list[str], os_name: str
+) -> str:
+    base = ["grok", "mcp", "add"]
+    where = ["--scope", "project"] if scope == "project" else []
+    if transport == "http":
+        return _join([*base, "--transport", "http", *where, SERVER_NAME, url], os_name)
+    return _join([*base, *where, SERVER_NAME, "--", *argv], os_name)
+
+
+def _agy_command(transport: str, url: str, argv: list[str], os_name: str) -> str:
+    if transport == "http":
+        return _join(["agy", "mcp", "add", SERVER_NAME, "--type", "http", url], os_name)
+    return _join(
+        ["agy", "mcp", "add", SERVER_NAME, "--type", "stdio", "--", *argv], os_name
+    )
+
+
 def _one_command(
     client_id: str,
     transport: str,
@@ -341,7 +355,27 @@ def _one_command(
         return _codex_command(
             transport, url, auth_required, argv, os_name
         ), "Adds MARM for every project."
-    if client_id in {"gemini", "qwen"}:
+    if client_id == "grok":
+        if transport == "http" and auth_required:
+            return (
+                None,
+                "The key is read from MARM_API_KEY by the config file snippet, so it never lands in the file. Use that snippet.",
+            )
+        return _grok_command(transport, scope, url, argv, os_name), (
+            "Adds MARM for every project."
+            if scope == "user"
+            else "Adds MARM to the current project (writes .grok/config.toml)."
+        )
+    if client_id == "antigravity":
+        if scope == "project":
+            return (
+                None,
+                "The Antigravity CLI adds servers to your user config. Use the config file snippet for one project.",
+            )
+        return _agy_command(
+            transport, url, argv, os_name
+        ), "Adds MARM for every project."
+    if client_id == "qwen":
         return _gemini_command(client_id, transport, scope, url, argv, os_name), (
             "Adds MARM for every project."
             if scope == "user"
@@ -392,8 +426,6 @@ def agent_commands(
         raise InvalidRequest(f"Unknown scope: {scope}")
     commands = []
     for client_id in client_config.CLIENT_IDS:
-        if client_id == "xai":
-            continue
         command, note = _one_command(
             client_id, transport, scope, url, auth_required, os_name, docker_tag
         )

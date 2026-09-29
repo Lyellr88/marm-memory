@@ -43,6 +43,8 @@ HEADING_RE = re.compile(r"^(#{2,3})\s+(.+?)\s*$")
 REF_STOPLIST = {
     ".mcp.json",
     ".cursor/mcp.json",
+    ".agents/mcp_config.json",
+    ".grok/config.toml",
     ".gemini/settings.json",
     ".qwen/settings.json",
     ".vscode/mcp.json",

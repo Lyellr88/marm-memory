@@ -317,25 +317,6 @@ describe('AgentCard skill', () => {
 });
 
 describe('AgentCard special states', () => {
-  it('renders xai as info only with its payload and no controls', () => {
-    renderCard(
-      agent({
-        id: 'xai',
-        label: 'Grok (xAI API)',
-        transports: [],
-        scopes: ['user'],
-        notes: ['Grok needs a public HTTPS URL.'],
-        user: scopeState({ config_path: null, expected_entry: { type: 'mcp', authorization: 'Bearer YOUR_KEY' } }),
-      }),
-    );
-
-    expect(screen.getByText('Grok needs a public HTTPS URL.')).toBeTruthy();
-    expect(screen.getByText(/"authorization": "Bearer YOUR_KEY"/)).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Connect' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Test' })).toBeNull();
-    expect(screen.queryByLabelText('Scope')).toBeNull();
-  });
-
   it('disables every action when configuring is blocked', () => {
     renderCard(agent(), { allowedConfigure: false });
 

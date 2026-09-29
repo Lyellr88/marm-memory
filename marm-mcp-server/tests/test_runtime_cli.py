@@ -664,15 +664,6 @@ def test_docker_stdio_command_client_failure_prints_and_returns_1(
     assert not (tmp_path / ".cursor").exists()
 
 
-def test_docker_stdio_command_rejects_a_client_that_has_no_entry_to_write():
-    active_cli, _runtime = _active_modules()
-
-    with pytest.raises(SystemExit):
-        active_cli._product_parser().parse_args(
-            ["docker", "stdio-command", "--client", "xai"]
-        )
-
-
 def test_fast_start_client_failure_leaves_runtime_running(
     monkeypatch, capsys, tmp_path
 ):

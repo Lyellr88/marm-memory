@@ -17,7 +17,7 @@ from marm_mcp_server.services import client_config, client_snippets
 URL = "http://127.0.0.1:8001/mcp"
 DOCKER_URL = "http://127.0.0.1:9001/mcp"
 SECRET = "sk-marm-snippet-secret-value"
-CLIENTS = [c for c in client_config.CLIENT_IDS if c != "xai"]
+CLIENTS = list(client_config.CLIENT_IDS)
 OSES = client_snippets.OS_NAMES
 
 
@@ -76,8 +76,8 @@ def test_every_supported_combination_parses_with_container_key_and_url() -> None
 
 
 def test_entries_match_what_configure_would_write() -> None:
-    for client in ("cursor", "vscode", "gemini", "windsurf", "kiro", "claude"):
-        auth = client != "gemini"
+    for client in ("cursor", "vscode", "antigravity", "windsurf", "kiro", "claude"):
+        auth = client != "antigravity"
         expected = client_config.build_entry(client, "http", URL, auth)
         spec = client_config.REGISTRY[client]
         entry = json.loads(make(client, "linux", "http", "user", auth)["text"])[
@@ -98,8 +98,8 @@ def test_container_keys_and_key_references() -> None:
     }
     windsurf = json.loads(make("windsurf", "linux", "http", "user", True)["text"])
     assert windsurf["mcpServers"]["marm-memory"]["serverUrl"] == URL
-    gemini = json.loads(make("gemini", "linux", "http", "user", False)["text"])
-    assert gemini["mcpServers"]["marm-memory"] == {"httpUrl": URL}
+    agy = json.loads(make("antigravity", "linux", "http", "user", False)["text"])
+    assert agy["mcpServers"]["marm-memory"] == {"serverUrl": URL}
 
 
 def test_codex_toml_fragment() -> None:
@@ -116,6 +116,20 @@ def test_codex_toml_fragment() -> None:
     assert stdio["path"] == "<project>/.codex/config.toml"
     assert 'command = "marm-mcp-stdio"' in stdio["text"]
     assert any("trust" in note for note in stdio["notes"])
+
+
+def test_grok_toml_fragment_and_paths() -> None:
+    keyed = make("grok", "linux", "http", "user", True)
+    assert keyed["format"] == "toml"
+    assert keyed["path"] == "~/.grok/config.toml"
+    assert keyed["text"] == (
+        '[mcp_servers.marm-memory]\nurl = "http://127.0.0.1:8001/mcp"\n'
+        'bearer_token_env_var = "MARM_API_KEY"\n'
+    )
+    project = make("grok", "windows", "stdio", "project", False)
+    assert project["path"] == "<project>\\.grok\\config.toml"
+    assert 'command = "marm-mcp-stdio"' in project["text"]
+    assert not any("trust" in note for note in project["notes"])
 
 
 @pytest.mark.parametrize(
@@ -136,7 +150,8 @@ def test_codex_toml_fragment() -> None:
         ("cursor", "linux", "~/.cursor/mcp.json"),
         ("claude", "macos", "~/.claude.json"),
         ("kiro", "windows", "~\\.kiro\\settings\\mcp.json"),
-        ("gemini", "macos", "~/.gemini/settings.json"),
+        ("antigravity", "macos", "~/.gemini/config/mcp_config.json"),
+        ("antigravity", "windows", "~\\.gemini\\config\\mcp_config.json"),
         ("codex", "linux", "~/.codex/config.toml"),
     ],
 )
@@ -174,15 +189,13 @@ def test_unsupported_combinations_are_422_with_a_reason() -> None:
     with pytest.raises(client_config.InvalidRequest, match="user scope only"):
         make("windsurf", "linux", "http", "project", False)
     with pytest.raises(client_config.InvalidRequest, match="STDIO"):
-        make("gemini", "linux", "http", "user", True)
+        make("antigravity", "linux", "http", "user", True)
     with pytest.raises(client_config.InvalidRequest, match="Unknown transport"):
         make("cursor", "linux", "carrier-pigeon", "user", False)
     with pytest.raises(client_config.InvalidRequest, match="Unknown scope"):
         make("cursor", "linux", "http", "team", False)
     with pytest.raises(client_config.InvalidRequest, match="Unknown os"):
         make("cursor", "plan9", "http", "user", False)
-    with pytest.raises(client_config.InvalidRequest, match="Grok"):
-        make("xai", "linux", "http", "user", False)
     with pytest.raises(client_config.ClientNotFound):
         make("nope", "linux", "http", "user", False)
 
@@ -253,8 +266,8 @@ def test_agent_commands_http_exact_strings() -> None:
         f"claude mcp add --transport http --scope user marm-memory {URL}"
     )
     assert plain["codex"]["command"] == f"codex mcp add marm-memory --url {URL}"
-    assert plain["gemini"]["command"] == (
-        f"gemini mcp add --transport http --scope user marm-memory {URL}"
+    assert plain["antigravity"]["command"] == (
+        f"agy mcp add marm-memory --type http {URL}"
     )
     assert plain["qwen"]["command"] == (
         f"qwen mcp add --transport http --scope user marm-memory {URL}"
@@ -267,6 +280,28 @@ def test_agent_commands_http_exact_strings() -> None:
         assert "config file snippet" in plain[client]["note"]
 
 
+def test_grok_commands_cover_transports_scopes_and_the_key_reference() -> None:
+    plain = commands("http", "user")["grok"]["command"]
+    assert plain == f"grok mcp add --transport http marm-memory {URL}"
+    keyed = commands("http", "user", auth=True)["grok"]
+    assert keyed["command"] is None
+    assert "MARM_API_KEY" in keyed["note"] and "snippet" in keyed["note"]
+    assert SECRET not in json.dumps(keyed)
+    assert commands("http", "project")["grok"]["command"] == (
+        f"grok mcp add --transport http --scope project marm-memory {URL}"
+    )
+    assert commands("stdio", "user")["grok"]["command"] == (
+        "grok mcp add marm-memory -- marm-mcp-stdio"
+    )
+    assert commands("stdio", "project")["grok"]["command"] == (
+        "grok mcp add --scope project marm-memory -- marm-mcp-stdio"
+    )
+    tail = shlex.join(client_snippets._docker_argv("linux", "latest"))
+    assert commands("docker-stdio", "user")["grok"]["command"] == (
+        f"grok mcp add marm-memory -- {tail}"
+    )
+
+
 def test_agent_commands_with_a_key_use_references_only() -> None:
     keyed = commands("http", "user", auth=True)
     assert keyed["claude"]["command"] == (
@@ -276,7 +311,8 @@ def test_agent_commands_with_a_key_use_references_only() -> None:
     assert keyed["codex"]["command"] == (
         f"codex mcp add marm-memory --url {URL} --bearer-token-env-var MARM_API_KEY"
     )
-    assert keyed["gemini"]["command"] is None and "STDIO" in keyed["gemini"]["note"]
+    assert keyed["antigravity"]["command"] is None
+    assert "STDIO" in keyed["antigravity"]["note"]
     assert keyed["qwen"]["command"] is None
     assert keyed["vscode"]["command"] is None
     assert SECRET not in json.dumps(keyed)
@@ -288,8 +324,8 @@ def test_agent_commands_stdio_and_project_scope() -> None:
         "claude mcp add --transport stdio --scope user marm-memory -- marm-mcp-stdio"
     )
     assert stdio["codex"]["command"] == "codex mcp add marm-memory -- marm-mcp-stdio"
-    assert stdio["gemini"]["command"] == (
-        "gemini mcp add --scope user marm-memory marm-mcp-stdio"
+    assert stdio["antigravity"]["command"] == (
+        "agy mcp add marm-memory --type stdio -- marm-mcp-stdio"
     )
     assert json.loads(stdio["vscode"]["command"].split("'")[1]) == {
         "name": "marm-memory",
@@ -301,9 +337,8 @@ def test_agent_commands_stdio_and_project_scope() -> None:
     assert project["claude"]["command"] == (
         "claude mcp add --transport stdio --scope project marm-memory -- marm-mcp-stdio"
     )
-    assert project["gemini"]["command"] == (
-        "gemini mcp add --scope project marm-memory marm-mcp-stdio"
-    )
+    assert project["antigravity"]["command"] is None
+    assert "config file snippet" in project["antigravity"]["note"]
     assert project["codex"]["command"] is None
     assert project["vscode"]["command"] is None
 
@@ -316,8 +351,8 @@ def test_agent_commands_docker_stdio_put_the_argv_after_double_dash() -> None:
         f"claude mcp add --transport stdio --scope user marm-memory -- {tail}"
     )
     assert docker["codex"]["command"] == f"codex mcp add marm-memory -- {tail}"
-    assert docker["gemini"]["command"] == (
-        f"gemini mcp add --scope user marm-memory -- {tail}"
+    assert docker["antigravity"]["command"] == (
+        f"agy mcp add marm-memory --type stdio -- {tail}"
     )
     payload = json.loads(docker["vscode"]["command"].split("'")[1])
     assert payload["command"] == "docker" and payload["args"] == argv[1:]

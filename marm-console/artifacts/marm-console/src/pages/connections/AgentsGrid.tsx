@@ -17,7 +17,8 @@ const GROUPS = [
 const GROUP_BY_ID: Record<string, (typeof GROUPS)[number]['id']> = {
   claude: 'cli',
   codex: 'cli',
-  gemini: 'cli',
+  grok: 'cli',
+  antigravity: 'cli',
   qwen: 'cli',
   'claude-desktop': 'app',
   cursor: 'ide',
@@ -32,7 +33,7 @@ export function AgentsGrid({ onRequest, allowedTransports, target, title = 'Agen
   const agents = useAgents(target);
   const data = agents.data;
   const errorMessage = agents.error instanceof Error ? agents.error.message : 'Agents are unavailable.';
-  const visible = data?.clients.filter((client) => client.id === 'xai' || client.transports.some((t) => allowedTransports.includes(t))) ?? [];
+  const visible = data?.clients.filter((client) => client.transports.some((t) => allowedTransports.includes(t))) ?? [];
 
   return (
     <section className="space-y-5">

@@ -86,7 +86,7 @@ function lastCall<T>(calls: unknown[]) {
 
 beforeEach(() => {
   state.overview = overview();
-  state.agents = [agent({}), agent({ id: 'xai', label: 'xAI' }), agent({ id: 'codex', label: 'Codex', transports: ['stdio'], scopes: ['user'] })];
+  state.agents = [agent({}), agent({ id: 'codex', label: 'Codex', transports: ['stdio'], scopes: ['user'] })];
   state.commands = [
     { client: 'claude', label: 'Claude Code', command: 'claude mcp add marm --transport http http://127.0.0.1:8001/mcp', note: '' },
     { client: 'cursor', label: 'Cursor', command: null, note: 'Cursor has no command line. Use the config file.' },

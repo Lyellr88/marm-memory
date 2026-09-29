@@ -33,13 +33,12 @@ CLIENT_IDS = [
     "cursor",
     "vscode",
     "codex",
-    "gemini",
+    "grok",
+    "antigravity",
     "qwen",
     "windsurf",
     "kiro",
-    "xai",
 ]
-DOCKER_STDIO_CLIENT_IDS = [client_id for client_id in CLIENT_IDS if client_id != "xai"]
 TRANSPORTS = ("http", "stdio", "docker-stdio")
 SCOPES = ("user", "project")
 SERVER_NAME = "marm-memory"
@@ -207,15 +206,28 @@ REGISTRY: dict[str, ClientSpec] = {
             _markers(".codex"),
         ),
         ClientSpec(
-            "gemini",
-            "Gemini CLI",
-            "gemini",
+            "grok",
+            "Grok Build",
+            "grok",
+            "toml",
+            None,
+            _under_home(".grok", "config.toml"),
+            ".grok/config.toml",
+            _markers(".grok"),
+        ),
+        ClientSpec(
+            "antigravity",
+            "Antigravity CLI",
+            "agy",
             "json",
             "mcpServers",
-            _under_home(".gemini", "settings.json"),
-            ".gemini/settings.json",
-            _markers(".gemini"),
-            http_key="httpUrl",
+            _under_home(".gemini", "config", "mcp_config.json"),
+            ".agents/mcp_config.json",
+            lambda: [
+                _home() / ".gemini" / "config",
+                _home() / ".gemini" / "antigravity-cli",
+            ],
+            http_key="serverUrl",
         ),
         ClientSpec(
             "qwen",
@@ -254,16 +266,7 @@ REGISTRY: dict[str, ClientSpec] = {
     ]
 }
 
-_XAI_PAYLOAD = {
-    "type": "mcp",
-    "server_label": "marm-memory",
-    "server_url": "https://YOUR_PUBLIC_HTTPS_URL/mcp",
-    "authorization": "Bearer YOUR_KEY",
-}
-_XAI_NOTE = (
-    "Grok's Responses API needs a public HTTPS URL, not a loopback address. "
-    "Expose MARM publicly, then send this tool payload with your MARM API key."
-)
+_GROK_CLAUDE_NOTE = "Grok Build also reads Claude Code's MCP list, so MARM may already load here. Connect adds its own entry."
 _CODEX_TRUST_NOTE = (
     "Codex only loads a project's .codex/config.toml for projects it trusts."
 )
@@ -272,10 +275,6 @@ _CODEX_TRUST_NOTE = (
 def _spec(client_id: str) -> ClientSpec:
     spec = REGISTRY.get(client_id)
     if spec is None:
-        if client_id == "xai":
-            raise ClientNotConfigurable(
-                "Grok (xAI API) needs a public HTTPS URL; configure it manually."
-            )
         raise ClientNotFound(client_id)
     return spec
 
@@ -309,7 +308,7 @@ def _build_entry(
 ) -> dict[str, Any]:
     entry: dict[str, Any]
     if transport == "http":
-        if spec.id == "codex":
+        if spec.format == "toml":
             entry = {"url": url}
             if auth_required:
                 entry["bearer_token_env_var"] = "MARM_API_KEY"
@@ -358,7 +357,7 @@ def transport_unavailable(
     if transport == "http":
         if spec.id == "claude-desktop":
             return "Needs the mcp-remote bridge. Use STDIO."
-        if auth_required and spec.id in {"gemini", "qwen"}:
+        if auth_required and spec.id in {"antigravity", "qwen"}:
             return (
                 f"{spec.label} cannot reference an environment variable in a header, "
                 "so HTTP with a key must be added by hand. Use STDIO, which needs no key."
@@ -743,7 +742,7 @@ def remove(
     }
     if action == "remove" and spec.format == "toml" and scope == "project":
         raise ClientNotConfigurable(
-            f"The Codex CLI cannot edit a project file. Remove the [mcp_servers.{SERVER_NAME}] table from {path} by hand."
+            f"The {spec.label} cannot edit a project file. Remove the [mcp_servers.{SERVER_NAME}] table from {path} by hand."
         )
     if dry_run:
         return result
@@ -840,22 +839,7 @@ def status(
     auth_required: bool = False,
 ) -> dict[str, Any]:
     """One ScopeState. Without a url the entry counts as configured whenever it exists."""
-    if client_id == "xai":
-        return _xai_state()
     return _scope_state(client_id, scope, project, url, auth_required)
-
-
-def _xai_state() -> dict[str, Any]:
-    return {
-        "scope": "user",
-        "project": None,
-        "config_path": None,
-        "config_exists": False,
-        "state": "missing",
-        "transport_detected": None,
-        "current_entry": None,
-        "expected_entry": _XAI_PAYLOAD,
-    }
 
 
 def _claude_has_project_entry(path: Path) -> bool:
@@ -875,6 +859,17 @@ def _claude_has_project_entry(path: Path) -> bool:
     )
 
 
+def _claude_has_user_entry() -> bool:
+    path = REGISTRY["claude"].user_path()
+    if path is None or not path.exists():
+        return False
+    try:
+        _content, container = _load_json(REGISTRY["claude"], path)
+    except _Unreadable:
+        return False
+    return SERVER_NAME in container
+
+
 def _agent_notes(
     spec: ClientSpec, detected: bool, state: dict[str, Any], auth_required: bool
 ) -> list[str]:
@@ -890,10 +885,12 @@ def _agent_notes(
                 "The 'claude' binary was not found on PATH. Every-project setup needs it; "
                 "a single project writes .mcp.json directly."
             )
-    if auth_required and spec.id not in {"claude-desktop", "gemini", "qwen"}:
+    if auth_required and spec.id not in {"claude-desktop", "antigravity", "qwen"}:
         notes.append(_auth_note(spec))
     if spec.id == "codex":
         notes.append(_CODEX_TRUST_NOTE)
+    if spec.id == "grok" and state["state"] == "missing" and _claude_has_user_entry():
+        notes.append(_GROK_CLAUDE_NOTE)
     return notes
 
 
@@ -906,18 +903,6 @@ def _skill_state(client_id: str) -> dict[str, bool]:
 
 
 def _agent(client_id: str, url: str, auth_required: bool) -> dict[str, Any]:
-    if client_id == "xai":
-        return {
-            "id": "xai",
-            "label": "Grok (xAI API)",
-            "detected": False,
-            "transports": [],
-            "scopes": ["user"],
-            "user": _xai_state(),
-            "skill": {"supported": False, "installed": False},
-            "notes": [_XAI_NOTE],
-            "unavailable": {},
-        }
     spec = REGISTRY[client_id]
     detected = _detected(spec)
     user = _scope_state(client_id, "user", None, url, auth_required)

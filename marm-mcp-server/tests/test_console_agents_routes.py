@@ -90,9 +90,9 @@ def test_list_agents_shape(app_client, isolated_home):
         "notes",
         "unavailable",
     }
-    xai = next(c for c in body["clients"] if c["id"] == "xai")
-    assert xai["transports"] == []
-    assert xai["user"]["expected_entry"]["server_label"] == "marm-memory"
+    grok = next(c for c in body["clients"] if c["id"] == "grok")
+    assert grok["label"] == "Grok Build"
+    assert grok["scopes"] == ["user", "project"]
 
 
 def test_list_reports_the_bound_state(app_client, monkeypatch):
@@ -274,10 +274,10 @@ def test_bad_transport_scope_or_project_is_422(app_client, isolated_home, body):
 def test_409_manual_client_with_auth_suggests_stdio(
     app_client, isolated_home, monkeypatch
 ):
-    detect(isolated_home, ".gemini")
+    detect(isolated_home, ".gemini/config")
     monkeypatch.setattr("marm_mcp_server.config.settings.MARM_API_KEY", SECRET)
     response = app_client.post(
-        "/api/connections/agents/gemini/configure", json={"dry_run": False}
+        "/api/connections/agents/antigravity/configure", json={"dry_run": False}
     )
 
     assert response.status_code == 409
@@ -311,13 +311,6 @@ def test_409_os_error_leaves_no_tmp(app_client, isolated_home, monkeypatch):
     assert response.status_code == 409
     assert "Could not write" in response.json()["detail"]
     assert not (isolated_home / ".cursor" / "mcp.json.tmp").exists()
-
-
-def test_409_xai_is_not_configurable(app_client):
-    response = app_client.post(
-        "/api/connections/agents/xai/configure", json={"dry_run": True}
-    )
-    assert response.status_code == 409
 
 
 def test_remove_deletes_only_marms_entry(app_client, isolated_home):
@@ -454,6 +447,46 @@ def test_test_route_resolves_codex_bearer_token_env_var(
     assert SECRET not in response.text
 
 
+def test_grok_configure_then_test_resolves_the_bearer_env_var(
+    app_client, isolated_home, monkeypatch
+):
+    pytest.importorskip("tomllib")
+    monkeypatch.setattr(key_management, "read_managed_key", lambda: SECRET)
+    (isolated_home / ".grok").mkdir()
+    with FakeMcp(key=SECRET) as fake:
+        (isolated_home / ".grok" / "config.toml").write_text(
+            f'[mcp_servers.marm-memory]\nurl = "{fake.url}"\n'
+            'bearer_token_env_var = "MARM_API_KEY"\n'
+        )
+        response = app_client.post(
+            "/api/connections/agents/grok/test", json={"scope": "user"}
+        )
+
+    assert response.json()["ok"] is True
+    assert SECRET not in response.text
+
+
+def test_grok_configure_writes_its_toml_and_the_skill_lands_in_grok_skills(
+    app_client, isolated_home
+):
+    (isolated_home / ".grok").mkdir()
+
+    configured = app_client.post(
+        "/api/connections/agents/grok/configure", json={"dry_run": False}
+    )
+    skill = app_client.post("/api/connections/agents/grok/skill")
+
+    assert configured.status_code == 200
+    assert configured.json()["verified"] is True
+    assert (
+        "[mcp_servers.marm-memory]"
+        in (isolated_home / ".grok" / "config.toml").read_text()
+    )
+    assert skill.json()["target"] == str(
+        isolated_home / ".grok" / "skills" / "marm-init" / "SKILL.md"
+    )
+
+
 def test_test_route_wrong_key_is_unauthorized_without_echo(
     app_client, isolated_home, monkeypatch
 ):
@@ -585,20 +618,20 @@ def test_test_route_stdio_spawn_failure(app_client, isolated_home):
 
 
 def test_skill_install_then_refresh(app_client, isolated_home):
-    first = app_client.post("/api/connections/agents/gemini/skill")
-    second = app_client.post("/api/connections/agents/gemini/skill")
+    first = app_client.post("/api/connections/agents/antigravity/skill")
+    second = app_client.post("/api/connections/agents/antigravity/skill")
 
-    target = isolated_home / ".gemini" / "skills" / "marm-init" / "SKILL.md"
+    target = isolated_home / ".gemini" / "config" / "skills" / "marm-init" / "SKILL.md"
     assert first.status_code == 200
     assert first.json() == {"state": "installed", "target": str(target)}
     assert second.json()["state"] == "refreshed"
     assert target.is_file()
-    gemini = next(
+    agent = next(
         c
         for c in app_client.get("/api/connections/agents").json()["clients"]
-        if c["id"] == "gemini"
+        if c["id"] == "antigravity"
     )
-    assert gemini["skill"] == {"supported": True, "installed": True}
+    assert agent["skill"] == {"supported": True, "installed": True}
 
 
 def test_skill_install_error_state_carries_the_detail(app_client, isolated_home):
@@ -613,7 +646,7 @@ def test_skill_install_error_state_carries_the_detail(app_client, isolated_home)
 
 
 def test_skill_install_is_409_for_agents_without_support(app_client):
-    for client_id in ("cursor", "vscode", "windsurf", "claude-desktop", "xai"):
+    for client_id in ("cursor", "vscode", "windsurf", "claude-desktop"):
         response = app_client.post(f"/api/connections/agents/{client_id}/skill")
         assert response.status_code == 409, client_id
 

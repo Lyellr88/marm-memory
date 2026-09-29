@@ -49,24 +49,7 @@ function initials(label: string) {
 }
 
 export function AgentCard({ agent, allowedTransports, configureAllowed, target }: { agent: Agent; allowedTransports: AgentTransport[]; configureAllowed: boolean; target?: AgentTarget }) {
-  if (agent.id === 'xai') return <InfoCard agent={agent} />;
   return <ControlCard agent={agent} allowedTransports={allowedTransports} configureAllowed={configureAllowed} target={target} />;
-}
-
-function InfoCard({ agent }: { agent: Agent }) {
-  const payload = JSON.stringify(agent.user.expected_entry ?? null, null, 2);
-  return (
-    <Card className="flex flex-col">
-      <CardContent className="flex flex-1 flex-col gap-3 p-5">
-        <p className="font-medium">{agent.label}</p>
-        {agent.notes.map((note) => <p key={note} className="text-xs text-muted-foreground">{note}</p>)}
-        <div className="relative">
-          <pre className="max-h-48 overflow-auto rounded-lg border border-border/60 bg-background/60 p-3 pr-10 font-mono text-[11px] leading-relaxed text-muted-foreground">{payload}</pre>
-          <CopyButton value={payload} label="Copy payload" className="absolute right-1 top-1" />
-        </div>
-      </CardContent>
-    </Card>
-  );
 }
 
 function ControlCard({ agent, allowedTransports, configureAllowed, target }: { agent: Agent; allowedTransports: AgentTransport[]; configureAllowed: boolean; target?: AgentTarget }) {

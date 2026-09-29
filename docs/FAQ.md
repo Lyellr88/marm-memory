@@ -10,7 +10,7 @@ Common questions about MARM MCP, memory behavior, transports, supported clients,
 
 ### Q: What is marm-memory?
 
-marm-memory is a persistent memory layer for AI agents. The MCP server gives Claude, Codex, Gemini, Qwen, VS Code, Cursor, and other MCP-compatible clients a shared way to store, recall, organize, and reuse project context across sessions.
+marm-memory is a persistent memory layer for AI agents. The MCP server gives Claude, Codex, Gemini (Antigravity), Qwen, VS Code, Cursor, and other MCP-compatible clients a shared way to store, recall, organize, and reuse project context across sessions.
 
 | Component | Description | Best For |
 |-----------|-------------|----------|
@@ -53,11 +53,11 @@ Use the README quick start for the shortest path, then use the install docs when
 - `docs/INSTALL-WINDOWS.md` - Windows local install
 - `docs/INSTALL-LINUX.md` - Linux local install
 - `docs/INSTALL-MACOS.md` - macOS local install
-- `docs/INSTALL-PLATFORMS.md` - Claude, Codex, Gemini, Qwen, VS Code, Cursor, and Grok notes
+- `docs/INSTALL-PLATFORMS.md` - Claude, Codex, Gemini (Antigravity), Qwen, VS Code, Cursor, and Grok notes
 
 #### Q: Which AI platforms work with MARM MCP?
 
-MARM has been tested with Claude Code, Codex, Gemini CLI, Qwen CLI, VS Code MCP, and Cursor MCP. Any client that supports standard MCP HTTP or STDIO transports should be able to connect with the right command or config.
+MARM has been tested with Claude Code, Codex, Antigravity CLI, Qwen CLI, VS Code MCP, and Cursor MCP. Any client that supports standard MCP HTTP or STDIO transports should be able to connect with the right command or config.
 
 #### Q: Can I connect my AI tool without editing config files by hand?
 

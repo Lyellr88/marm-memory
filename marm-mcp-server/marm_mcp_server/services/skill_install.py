@@ -8,7 +8,8 @@ from pathlib import Path
 AGENTS: dict[str, str] = {
     "claude": ".claude",
     "codex": ".codex",
-    "gemini": ".gemini",
+    "grok": ".grok",
+    "antigravity": ".gemini/config",
     "qwen": ".qwen",
     "kiro": ".kiro",
 }

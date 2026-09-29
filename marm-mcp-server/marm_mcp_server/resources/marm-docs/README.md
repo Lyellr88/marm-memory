@@ -23,7 +23,7 @@
 
 ```bash
 pip install marm-mcp-server
-marm-memory init --g-claude --g-codex --g-gemini
+marm-memory init --g-claude --g-codex --g-antigravity
 ```
 
 > **Also available: --g-qwen and --g-kiro. Run without flags to install into your current project folder instead of home**
@@ -38,7 +38,7 @@ marm-memory init --g-claude --g-codex --g-gemini
 
 Prefer to wire it up yourself:
 
-> Replace "agent" with your client’s CLI command (for example, claude, gemini, or qwen). For Codex, use codex mcp add marm-memory --url http://localhost:8001/mcp instead.
+> Replace "agent" with your client’s CLI command (for example, claude, agy, or qwen). For Codex, use codex mcp add marm-memory --url http://localhost:8001/mcp instead.
 
 | If you are... | Start the server | Connect your MCP client |
 | --------------- | ------------------ | ------------------------- |
@@ -92,7 +92,7 @@ Run `marm-memory console` to open the bundled web app at `http://127.0.0.1:8002`
 | **Code Context** | Build one bounded view of task-ranked symbols, source, and related memory. An optional local model can answer from that same context, with its citations checked. |
 | **Distill** | Turn transcripts into durable-memory proposals. Review, apply, or discard them with duplicate evidence visible. |
 | **System and Terminal** | Manage runtime health, indexing, local-model settings, backups, diagnostics, and maintenance. The docked terminal provides a real local shell with persistent sessions and a searchable MARM command menu. |
-| **Connections** | Set up MARM end to end in one place. **Setup** connects Claude Code, Claude Desktop, Cursor, VS Code, Codex CLI, Gemini CLI, Qwen Code, Windsurf, and Kiro over HTTP, STDIO, or Docker STDIO, tests each connection, and saves server settings to `~/.marm/settings.json`. **Docker** pulls, starts, and stops the MARM container and writes a compose file. **Manual** gives copy-ready config for each client and OS, every CLI command, and every HTTP endpoint. |
+| **Connections** | Set up MARM end to end in one place. **Setup** connects Claude Code, Claude Desktop, Cursor, VS Code, Codex CLI, Grok Build, Antigravity CLI, Qwen Code, Windsurf, and Kiro over HTTP, STDIO, or Docker STDIO, tests each connection, and saves server settings to `~/.marm/settings.json`. **Docker** pulls, starts, and stops the MARM container and writes a compose file. **Manual** gives copy-ready config for each client and OS, every CLI command, and every HTTP endpoint. |
 
 ### Runtime CLI Commands
 
@@ -243,7 +243,7 @@ pip install marm-mcp-server
 <details>
 <summary><strong>Local pip HTTP </strong></summary>
 
-> "agent" refers to claude, gemini, grok, qwen, or any MCP client. Codex uses --url instead of --transport to add MCP tools.
+> "agent" refers to claude, gemini (agy), grok, qwen, or any MCP client. Codex uses --url instead of --transport to add MCP tools.
 
 ```bash
 pip install marm-mcp-server
@@ -269,7 +269,7 @@ python -m marm_mcp_server.server_stdio
 codex mcp add marm-memory-stdio -- marm-mcp-stdio
 ```
 
-Replace `marm-mcp-stdio` with `python -m marm_mcp_server.server_stdio` if using a virtualenv or a path-based setup. Works with Claude Code, Cursor, VS Code, Qwen, and Gemini CLI. STDIO stays a single local process with no port and no API key, and exposes the same 16 tools as HTTP.
+Replace `marm-mcp-stdio` with `python -m marm_mcp_server.server_stdio` if using a virtualenv or a path-based setup. Works with Claude Code, Cursor, VS Code, Qwen, and Antigravity CLI. STDIO stays a single local process with no port and no API key, and exposes the same 16 tools as HTTP.
 
 </details>
 
@@ -551,23 +551,47 @@ bearer_token_env_var = "MARM_API_KEY"
 </details>
 
 <details>
-<summary><strong>Gemini CLI</strong></summary>
+<summary><strong>Grok Build</strong></summary>
+
+Grok Build (`grok`), xAI's terminal coding agent, supports STDIO and HTTP MCP servers and reads `~/.grok/config.toml`. MARM sets `bearer_token_env_var`, so the key stays in your environment and never lands in the file.
 
 ```bash
 # Direct Python install - no key needed
-gemini mcp add --transport http marm-memory http://localhost:8001/mcp
-
-# Docker or SERVER_HOST=0.0.0.0 - key required
-gemini mcp add --transport http marm-memory http://localhost:8001/mcp --header "Authorization: Bearer your-generated-key"
+grok mcp add --transport http marm-memory http://localhost:8001/mcp
 ```
 
-Equivalent `~/.gemini/settings.json` (user scope) or project `.gemini/settings.json`:
+Docker or `SERVER_HOST=0.0.0.0` (key required): set `MARM_API_KEY`, then add this to `~/.grok/config.toml` (or `.grok/config.toml` for one project):
+
+```toml
+[mcp_servers.marm-memory]
+url = "http://localhost:8001/mcp"
+bearer_token_env_var = "MARM_API_KEY"
+```
+
+Grok Build also reads MCP servers from `~/.claude.json`, `.cursor/mcp.json`, and project `.mcp.json`, so MARM may already load if Claude Code or Cursor has it. Run `grok mcp list` to see what it loaded.
+
+</details>
+
+<details>
+<summary><strong>Antigravity CLI</strong></summary>
+
+Antigravity CLI (`agy`) replaced Gemini CLI in June 2026. It supports STDIO and HTTP MCP servers. Use HTTP for MARM.
+
+```bash
+# Direct Python install - no key needed
+agy mcp add marm-memory --type http http://localhost:8001/mcp
+
+# Docker or SERVER_HOST=0.0.0.0 - key required
+agy mcp add marm-memory --type http http://localhost:8001/mcp --header "Authorization: Bearer your-generated-key"
+```
+
+Equivalent `~/.gemini/config/mcp_config.json` (user scope) or project `.agents/mcp_config.json`. Antigravity reads `serverUrl`, not `url` or `httpUrl`, and does not expand `${VAR}` in this file, so paste the real key:
 
 ```json
 {
   "mcpServers": {
     "marm-memory": {
-      "httpUrl": "http://localhost:8001/mcp",
+      "serverUrl": "http://localhost:8001/mcp",
       "headers": {
         "Authorization": "Bearer your-generated-key"
       }
@@ -607,9 +631,11 @@ Equivalent `.qwen/settings.json` (project) or `~/.qwen/settings.json` (user):
 </details>
 
 <details>
-<summary><strong>xAI / Grok Remote MCP</strong></summary>
+<summary><strong>Grok app and API</strong></summary>
 
-xAI connects from its own infrastructure, so `localhost` will not work. Expose MARM behind HTTPS and set `MARM_API_KEY`.
+The Grok app (grok.com, iOS, Android) supports custom MCP servers: open grok.com/connectors, click **New Connector**, choose **Custom**, and enter your MARM URL. The xAI API supports Remote MCP Tools over Streamable HTTP or SSE only.
+
+Both run on xAI's infrastructure, so `localhost` will not work. Expose MARM behind HTTPS (a tunnel or your own domain) and set `MARM_API_KEY`. MARM has not been tested through the app's connector form. For the API, send this tool payload:
 
 ```json
 {

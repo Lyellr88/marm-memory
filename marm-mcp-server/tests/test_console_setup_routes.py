@@ -102,7 +102,7 @@ def test_overview_reports_a_fully_set_up_machine(client, home) -> None:
     claude_dir = home / ".claude"
     (claude_dir / "skills" / "marm-init").mkdir(parents=True)
     (claude_dir / "skills" / "marm-init" / "SKILL.md").write_text("skill")
-    (home / ".gemini").mkdir()
+    (home / ".gemini" / "config").mkdir(parents=True)
     entry = client_config.build_entry(
         "claude", "http", "http://127.0.0.1:8123/mcp", False
     )

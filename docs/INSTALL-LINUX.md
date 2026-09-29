@@ -196,11 +196,11 @@ Verified with Cursor MCP. Add this to `.cursor/mcp.json` in your workspace. Use 
 
 Cursor uses `mcpServers`, not VS Code's `servers` root. For Docker/key mode, launch Cursor with `MARM_API_KEY` set in the environment.
 
-### **xAI / Grok Remote MCP**
+### **Grok app and API**
 
-xAI's official Grok MCP integration uses Remote MCP Tools through the xAI API. Only Streaming HTTP and SSE transports are supported.
+The Grok app (grok.com, iOS, Android) supports custom MCP servers: open grok.com/connectors, click **New Connector**, choose **Custom**, and enter your MARM URL. The xAI API supports Remote MCP Tools over Streamable HTTP or SSE only.
 
-Because xAI connects to the MCP server from its own infrastructure, `localhost` will not work for Grok Remote MCP. Expose MARM behind HTTPS and set `MARM_API_KEY`.
+Both run on xAI's infrastructure, so `localhost` will not work. Expose MARM behind HTTPS (a tunnel or your own domain) and set `MARM_API_KEY`. MARM has not been tested through the app's connector form. For the API, send this tool payload:
 
 ```json
 {
@@ -231,25 +231,44 @@ enabled = true
 bearer_token_env_var = "MARM_API_KEY"
 ```
 
-### **Gemini CLI**
+### **Grok Build**
 
-Gemini CLI supports STDIO, SSE, and streamable HTTP MCP transports. Use HTTP for MARM.
+Grok Build (`grok`), xAI's terminal coding agent, supports STDIO and HTTP MCP servers and reads `~/.grok/config.toml`. MARM sets `bearer_token_env_var`, so the key stays in your environment and never lands in the file.
 
 ```bash
 # Direct Python install - no key needed
-gemini mcp add --transport http marm-memory http://localhost:8001/mcp
-
-# Docker or SERVER_HOST=0.0.0.0 - key required
-gemini mcp add --transport http marm-memory http://localhost:8001/mcp --header "Authorization: Bearer your-generated-key"
+grok mcp add --transport http marm-memory http://localhost:8001/mcp
 ```
 
-Equivalent `~/.gemini/settings.json` or project `.gemini/settings.json`:
+Docker or `SERVER_HOST=0.0.0.0` (key required): set `MARM_API_KEY`, then add this to `~/.grok/config.toml` (or `.grok/config.toml` for one project):
+
+```toml
+[mcp_servers.marm-memory]
+url = "http://localhost:8001/mcp"
+bearer_token_env_var = "MARM_API_KEY"
+```
+
+Grok Build also reads MCP servers from `~/.claude.json`, `.cursor/mcp.json`, and project `.mcp.json`, so MARM may already load if Claude Code or Cursor has it. Run `grok mcp list` to see what it loaded.
+
+### **Antigravity CLI**
+
+Antigravity CLI (`agy`) replaced Gemini CLI in June 2026. It supports STDIO and HTTP MCP servers. Use HTTP for MARM.
+
+```bash
+# Direct Python install - no key needed
+agy mcp add marm-memory --type http http://localhost:8001/mcp
+
+# Docker or SERVER_HOST=0.0.0.0 - key required
+agy mcp add marm-memory --type http http://localhost:8001/mcp --header "Authorization: Bearer your-generated-key"
+```
+
+Equivalent `~/.gemini/config/mcp_config.json` (user scope) or project `.agents/mcp_config.json`. Antigravity reads `serverUrl`, not `url` or `httpUrl`, and does not expand `${VAR}` in this file, so paste the real key:
 
 ```json
 {
   "mcpServers": {
     "marm-memory": {
-      "httpUrl": "http://localhost:8001/mcp",
+      "serverUrl": "http://localhost:8001/mcp",
       "headers": {
         "Authorization": "Bearer your-generated-key"
       }

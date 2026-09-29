@@ -56,7 +56,7 @@ describe('AgentsGrid', () => {
       clients: [
         agent({ id: 'cursor', label: 'Cursor' }),
         agent({ id: 'codex', label: 'Codex CLI', user: { ...agent().user, state: 'configured' } }),
-        agent({ id: 'gemini', label: 'Gemini CLI', user: { ...agent().user, state: 'different' } }),
+        agent({ id: 'antigravity', label: 'Antigravity CLI', user: { ...agent().user, state: 'different' } }),
         agent({ id: 'qwen', label: 'Qwen Code', user: { ...agent().user, state: 'unreadable' } }),
       ],
     });
@@ -83,19 +83,17 @@ describe('AgentsGrid', () => {
     connects.forEach((button) => expect((button as HTMLButtonElement).disabled).toBe(true));
   });
 
-  it('hides agents with no transport on this tab but keeps the info-only card', () => {
+  it('shows agents that have a transport allowed on this tab', () => {
     agentsState.data = response({
       clients: [
         agent({ id: 'cursor', label: 'Cursor' }),
         agent({ id: 'claude-desktop', label: 'Claude Desktop', transports: ['stdio', 'docker-stdio'] }),
-        agent({ id: 'xai', label: 'Grok (xAI API)', transports: [], notes: ['Grok needs a public HTTPS URL.'] }),
       ],
     });
     render(<AgentsGrid onRequest={() => {}} allowedTransports={['http', 'docker-stdio']} />);
 
     expect(screen.getByText('Cursor')).toBeTruthy();
     expect(screen.getByText('Claude Desktop')).toBeTruthy();
-    expect(screen.getByText('Grok needs a public HTTPS URL.')).toBeTruthy();
     expect(screen.getAllByRole('button', { name: 'Docker STDIO' })).toHaveLength(1);
   });
 
@@ -114,6 +112,21 @@ describe('AgentsGrid', () => {
     expect(headings).toEqual(['CLI tools', 'Apps', 'IDEs', 'Other']);
     const order = screen.getAllByText(/^(Codex CLI|Claude Desktop|Cursor|New Tool)$/).map((el) => el.textContent);
     expect(order).toEqual(['Codex CLI', 'Claude Desktop', 'Cursor', 'New Tool']);
+  });
+
+  it('puts Grok Build under CLI tools and Claude Desktop under Apps', () => {
+    agentsState.data = response({
+      clients: [
+        agent({ id: 'claude-desktop', label: 'Claude Desktop' }),
+        agent({ id: 'grok', label: 'Grok Build' }),
+      ],
+    });
+    render(<AgentsGrid onRequest={() => {}} allowedTransports={['http', 'stdio']} />);
+
+    const headings = screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent);
+    expect(headings).toEqual(['CLI tools', 'Apps', 'Other']);
+    const order = screen.getAllByText(/^(Grok Build|Claude Desktop)$/).map((el) => el.textContent);
+    expect(order).toEqual(['Grok Build', 'Claude Desktop']);
   });
 
   it('hides a group with no agents', () => {

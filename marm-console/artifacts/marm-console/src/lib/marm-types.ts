@@ -1129,7 +1129,6 @@ export interface AgentScopeState {
   state: AgentState;
   transport_detected: AgentTransport | null;
   current_entry: Record<string, unknown> | null;
-  expected_entry?: Record<string, unknown> | null;
 }
 
 export interface Agent {

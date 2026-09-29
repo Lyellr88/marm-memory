@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 from typing import Callable
 
-from .client_config import DOCKER_STDIO_CLIENT_IDS
+from .client_config import CLIENT_IDS
 
 
 def add_docker_commands(
@@ -52,7 +52,7 @@ def add_docker_commands(
     docker_stdio.add_argument("--data-dir", type=Path, default=Path.home() / ".marm")
     docker_stdio.add_argument(
         "--client",
-        choices=DOCKER_STDIO_CLIENT_IDS,
+        choices=CLIENT_IDS,
         help="Write the Docker STDIO entry into this client's user config",
     )
     docker_logs = docker_sub.add_parser("logs", help="Read managed container logs")

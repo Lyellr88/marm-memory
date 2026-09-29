@@ -64,7 +64,6 @@ def test_snippet_route_errors(client) -> None:
     assert status(client="windsurf", scope="project") == 422
     assert status(client="cursor", transport="pigeon") == 422
     assert status(client="cursor", os="dos") == 422
-    assert status(client="xai") == 422
     assert status() == 422
     detail = client.get(
         f"{BASE}/snippet",
@@ -118,9 +117,7 @@ def test_agent_commands_route(client) -> None:
         f"{BASE}/agent-commands", params={"transport": "stdio", "os": "linux"}
     )
     body = response.json()
-    assert [c["client"] for c in body["commands"]] == [
-        c for c in client_config.CLIENT_IDS if c != "xai"
-    ]
+    assert [c["client"] for c in body["commands"]] == client_config.CLIENT_IDS
     assert all(
         set(c) == {"client", "label", "command", "note"} for c in body["commands"]
     )
