@@ -4,6 +4,7 @@ import argparse
 from pathlib import Path
 
 from ..config.settings import SERVER_VERSION
+from .client_config import CLIENT_IDS
 
 
 def _add_profile_arguments(parser: argparse.ArgumentParser) -> None:
@@ -77,7 +78,17 @@ def _product_parser() -> argparse.ArgumentParser:
         "fast-start-http", help="Start HTTP, Console, and optional client setup"
     )
     _add_profile_arguments(fast_start)
-    fast_start.add_argument("--client", help="Configure a supported MCP client")
+    fast_start.add_argument(
+        "--client",
+        choices=CLIENT_IDS,
+        help="Write MARM's entry into a supported MCP client's config",
+    )
+    fast_start.add_argument(
+        "--transport",
+        choices=["http", "stdio"],
+        default="http",
+        help="Transport written into the client's config (with --client)",
+    )
     fast_start.add_argument("--no-console", action="store_true")
     fast_start.add_argument("--no-browser", action="store_true")
 

@@ -4,7 +4,7 @@ import { Link, useLocation } from 'wouter';
 import { useOverview, isAuthError } from '@/hooks/use-marm-queries';
 import { SettingsDialog } from './SettingsDialog';
 import { TerminalDock, readPersistedDockOpen } from '@/components/terminal/TerminalDock';
-import { Settings, Database, Activity, Compass, Network, FolderCode, Sparkles, FlaskConical, ServerCog, AppWindowMac, ChevronRight } from 'lucide-react';
+import { Settings, Database, Activity, Compass, Network, FolderCode, Sparkles, FlaskConical, ServerCog, Plug, AppWindowMac, ChevronRight } from 'lucide-react';
 import { cn } from '@/components/ui/core';
 
 const THEME_STORAGE_KEY = 'marm-console-accent';
@@ -90,6 +90,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
     { name: 'Code Context', href: '/code-context', icon: Sparkles },
     { name: 'Distill', href: '/distill', icon: FlaskConical },
     { name: 'System', href: '/system', icon: ServerCog },
+    { name: 'Connections', href: '/connections', icon: Plug },
   ];
 
   return (
@@ -236,7 +237,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
         </main>
 
         <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
-        <TerminalDock open={terminalOpen} onClose={() => setTerminalOpen(false)} />
+        <TerminalDock open={terminalOpen} onClose={() => setTerminalOpen(false)} onOpen={() => setTerminalOpen(true)} />
       </div>
     </DialogPrimitive.Root>
   );

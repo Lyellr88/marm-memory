@@ -498,17 +498,17 @@ def test_stdio_alias_uses_existing_stdio_entry_point(monkeypatch):
     assert calls == ["stdio"]
 
 
-def test_fast_start_reuses_runtime_and_leaves_it_running_on_client_gap(
-    monkeypatch, capsys
-):
+def _fast_start_with_client(monkeypatch, tmp_path, client, transport="http"):
     active_cli, active_runtime = _active_modules()
+    from marm_mcp_server.services import client_config
+
     calls = []
     monkeypatch.setattr(
         active_runtime,
         "inspect_runtime",
         lambda: {
             "state": "ready",
-            "metadata": {"port": 8001, "profile": "swarm"},
+            "metadata": {"port": 8123, "profile": "swarm"},
         },
     )
     monkeypatch.setattr(
@@ -523,6 +523,8 @@ def test_fast_start_reuses_runtime_and_leaves_it_running_on_client_gap(
         lambda **kwargs: calls.append(("console", kwargs)) or 0,
     )
     monkeypatch.setattr(active_cli.settings, "MARM_API_KEY", "")
+    monkeypatch.setattr(client_config, "_home", lambda: tmp_path)
+    monkeypatch.setattr(client_config.shutil, "which", lambda name: None)
 
     result = active_cli._fast_start_http(
         SimpleNamespace(
@@ -530,15 +532,158 @@ def test_fast_start_reuses_runtime_and_leaves_it_running_on_client_gap(
             rate_limit_rpm=None,
             no_console=False,
             no_browser=False,
-            client="claude",
+            client=client,
+            transport=transport,
         )
     )
+    return result, calls
+
+
+def test_fast_start_client_writes_entry_for_the_runtime_port(
+    monkeypatch, capsys, tmp_path
+):
+    (tmp_path / ".cursor").mkdir()
+
+    result, calls = _fast_start_with_client(monkeypatch, tmp_path, "cursor")
+
+    assert result == 0
+    assert calls == [("console", {"open_browser": True, "import_key": False})]
+    written = json.loads((tmp_path / ".cursor" / "mcp.json").read_text())
+    assert written["mcpServers"]["marm-memory"] == {"url": "http://127.0.0.1:8123/mcp"}
+    captured = capsys.readouterr()
+    assert "verified=True" in captured.out + captured.err
+
+
+def test_fast_start_client_stdio_transport_writes_a_command_entry(
+    monkeypatch, capsys, tmp_path
+):
+    (tmp_path / ".cursor").mkdir()
+
+    result, _calls = _fast_start_with_client(
+        monkeypatch, tmp_path, "cursor", transport="stdio"
+    )
+
+    assert result == 0
+    written = json.loads((tmp_path / ".cursor" / "mcp.json").read_text())
+    assert written["mcpServers"]["marm-memory"] == {
+        "command": "marm-mcp-stdio",
+        "args": [],
+    }
+    captured = capsys.readouterr()
+    assert "bare command name" in captured.out + captured.err
+
+
+def test_fast_start_client_write_failure_is_a_message_not_a_traceback(
+    monkeypatch, capsys, tmp_path
+):
+    from marm_mcp_server.services import client_config
+
+    (tmp_path / ".cursor").mkdir()
+
+    def locked(src, dst):
+        raise PermissionError(13, "locked")
+
+    monkeypatch.setattr(client_config.os, "replace", locked)
+
+    result, _calls = _fast_start_with_client(monkeypatch, tmp_path, "cursor")
+
+    assert result == 1
+    assert "Client setup failed: Could not write" in capsys.readouterr().err
+    assert not (tmp_path / ".cursor" / "mcp.json.tmp").exists()
+
+
+def test_fast_start_transport_flag_defaults_to_http_and_rejects_others():
+    active_cli, _runtime = _active_modules()
+    parser = active_cli._product_parser()
+
+    assert parser.parse_args(["fast-start-http"]).transport == "http"
+    assert (
+        parser.parse_args(["fast-start-http", "--transport", "stdio"]).transport
+        == "stdio"
+    )
+    with pytest.raises(SystemExit):
+        parser.parse_args(["fast-start-http", "--transport", "docker-stdio"])
+
+
+def _docker_stdio_command(monkeypatch, tmp_path, *arguments):
+    from marm_mcp_server.services import client_config, docker_cli
+
+    active_cli, _runtime = _active_modules()
+    monkeypatch.setattr(client_config, "_home", lambda: tmp_path)
+    monkeypatch.setattr(client_config.shutil, "which", lambda name: None)
+    data_dir = tmp_path / "marm-data"
+    data_dir.mkdir()
+    args = active_cli._product_parser().parse_args(
+        ["docker", "stdio-command", "--data-dir", str(data_dir), *arguments]
+    )
+    return docker_cli.dispatch_docker(args, print_payload=print), data_dir
+
+
+def test_docker_stdio_command_client_writes_the_docker_entry(
+    monkeypatch, capsys, tmp_path
+):
+    (tmp_path / ".cursor").mkdir()
+
+    code, data_dir = _docker_stdio_command(
+        monkeypatch, tmp_path, "--client", "cursor", "--tag", "9.9.9"
+    )
+
+    assert code == 0
+    entry = json.loads((tmp_path / ".cursor" / "mcp.json").read_text())["mcpServers"][
+        "marm-memory"
+    ]
+    assert entry["command"] == "docker"
+    assert entry["args"][-2:] == ["marm-mcp-stdio", "lyellr88/marm-mcp-server:9.9.9"]
+    mount = entry["args"][entry["args"].index("--mount") + 1]
+    assert str(data_dir.resolve()) in mount
+    assert "~" not in mount
+    captured = capsys.readouterr()
+    out = captured.out + captured.err
+    assert "verified=True" in out
+    assert "docker run" in out
+
+
+def test_docker_stdio_command_without_client_writes_nothing(
+    monkeypatch, capsys, tmp_path
+):
+    (tmp_path / ".cursor").mkdir()
+
+    code, _data_dir = _docker_stdio_command(monkeypatch, tmp_path)
+
+    assert code == 0
+    assert not (tmp_path / ".cursor" / "mcp.json").exists()
+
+
+def test_docker_stdio_command_client_failure_prints_and_returns_1(
+    monkeypatch, capsys, tmp_path
+):
+    code, _data_dir = _docker_stdio_command(monkeypatch, tmp_path, "--client", "cursor")
+
+    assert code == 1
+    assert "Client setup failed: Cursor was not detected" in capsys.readouterr().err
+    assert not (tmp_path / ".cursor").exists()
+
+
+def test_docker_stdio_command_rejects_a_client_that_has_no_entry_to_write():
+    active_cli, _runtime = _active_modules()
+
+    with pytest.raises(SystemExit):
+        active_cli._product_parser().parse_args(
+            ["docker", "stdio-command", "--client", "xai"]
+        )
+
+
+def test_fast_start_client_failure_leaves_runtime_running(
+    monkeypatch, capsys, tmp_path
+):
+    result, calls = _fast_start_with_client(monkeypatch, tmp_path, "claude")
 
     assert result == 1
     assert calls == [("console", {"open_browser": True, "import_key": False})]
     captured = capsys.readouterr()
-    assert "Runtime:" in (captured.out or captured.err)
-    assert "Client setup is not available" in captured.err
+    assert "Runtime: http://127.0.0.1:8123/mcp (reused)" in captured.out + captured.err
+    assert "Client setup failed" in captured.err
+    assert not (tmp_path / ".claude.json").exists()
 
 
 def test_fast_start_rejects_busy_port_before_starting(monkeypatch):

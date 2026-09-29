@@ -9,6 +9,11 @@ import time
 import types
 from pathlib import Path
 
+# A developer's saved Console settings must not change test results.
+os.environ["MARM_SETTINGS_PATH"] = str(
+    Path(tempfile.gettempdir()) / "marm-pytest-no-settings" / "settings.json"
+)
+
 import pytest
 from fastapi.testclient import TestClient
 

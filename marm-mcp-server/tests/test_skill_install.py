@@ -131,3 +131,32 @@ def test_init_parser_registers_all_global_flags():
     assert args.global_claude is True
     assert args.global_kiro is True
     assert args.global_codex is False
+
+
+def test_install_for_agent_installs_then_refreshes_and_is_installed_follows(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+    assert skill_install.is_installed("gemini") is False
+    first = skill_install.install_for_agent("gemini")
+    second = skill_install.install_for_agent("gemini")
+
+    assert first["state"] == "installed"
+    assert second["state"] == "refreshed"
+    assert first["target"] == str(tmp_path / ".gemini" / SKILL_REL)
+    assert _read(tmp_path, ".gemini") == skill_install._bundled_skill_text()
+    assert skill_install.is_installed("gemini") is True
+    assert skill_install.is_installed("qwen") is False
+
+
+def test_install_for_agent_reports_a_write_failure_without_raising(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    (tmp_path / ".kiro").write_text("a file, not a directory")
+
+    result = skill_install.install_for_agent("kiro")
+
+    assert result["state"] == "error"
+    assert result["detail"]

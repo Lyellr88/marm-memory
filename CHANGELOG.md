@@ -1,6 +1,24 @@
 # Changelog
 
 <details>
+<summary><strong>September 28th, 2026: Console Connections Tab (v2.55.0)</strong></summary>
+
+### Added
+
+- The Console has a **Connections** tab for setting MARM up end to end. **Setup** connects Claude Code, Claude Desktop, Cursor, VS Code, Codex CLI, Gemini CLI, Qwen Code, Windsurf, and Kiro over HTTP, STDIO, or Docker STDIO at user or project scope, tests each connection with a real MCP handshake, removes entries, and installs the MARM skill per client. Configs are merged beside other servers, backed up as `.marm-backup`, and read back to confirm.
+- Server settings saved from the Console live in `~/.marm/settings.json` and apply to every way MARM runs. A saved setting beats the matching environment variable and the page marks each override. **Setup** restarts the managed runtime in the background so the Console stays up. An explicit `MARM_API_KEY` is the one exception: saving "Require a key" off never removes it, and the page says so.
+- **Docker** pulls, starts, stops, restarts, and recreates the MARM container from a saved run config, shows recent logs, and writes a compose file. It is read-only when the Console runs inside a container.
+- **Manual** gives copy-ready config per client and OS, each client's own add command, the full `marm-memory` CLI, every HTTP endpoint from the running server, and the environment-variable reference. **Add a connection** emails support to request an unlisted client.
+- `marm-memory fast-start-http --client <id>` accepts every supported client, and `--transport stdio` writes a STDIO entry instead of HTTP.
+- Every Connections action that writes a file, restarts the runtime, or drives Docker is refused unless the Console is bound to loopback. Key values are never written to client files, sent to the browser, or logged.
+
+### Fixed
+
+- On Windows, background MARM processes no longer flash a console window each time they run `docker` or `nvidia-smi`.
+
+</details>
+
+<details>
 <summary><strong>September 28th, 2026: Clearer Auto-Index Failures and a Documentation Refresh (v2.54.1)</strong></summary>
 
 ### Fixed

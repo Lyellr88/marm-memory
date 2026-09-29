@@ -1,6 +1,6 @@
 # marm-memory FAQ
 
-_Last updated: September 28, 2026 (v2.54.1)_
+_Last updated: September 28, 2026 (v2.55.0)_
 
 Common questions about MARM MCP, memory behavior, transports, supported clients, and local deployment.
 
@@ -16,7 +16,7 @@ marm-memory is a persistent memory layer for AI agents. The MCP server gives Cla
 |-----------|-------------|----------|
 | **MARM MCP Server** | Persistent memory server with 16 MCP tools (HTTP + STDIO): 8 core memory tools, 6 bundled code-graph tools, and 2 concept-graph tools | AI agents, IDEs, local workflows, shared team memory |
 | **MARM Protocol** | Runtime guidance delivered automatically by the MCP server | Keeping agents aligned on what to store, recall, and trust |
-| **MARM Console** | Local browser UI for viewing memory, knowledge, projects, and server health | Inspection, cleanup, and quick status checks |
+| **MARM Console** | Local browser UI for memory, knowledge, projects, server health, and connecting your AI tools | Setup, inspection, cleanup, and quick status checks |
 
 ### Q: How is MARM different from built-in AI memory?
 
@@ -58,6 +58,24 @@ Use the README quick start for the shortest path, then use the install docs when
 #### Q: Which AI platforms work with MARM MCP?
 
 MARM has been tested with Claude Code, Codex, Gemini CLI, Qwen CLI, VS Code MCP, and Cursor MCP. Any client that supports standard MCP HTTP or STDIO transports should be able to connect with the right command or config.
+
+#### Q: Can I connect my AI tool without editing config files by hand?
+
+Yes. Open the Console (`marm-memory console`) and go to **Connections → Setup**. Each supported client has a card that shows whether it is installed and already connected. Pick HTTP, STDIO, or Docker STDIO, preview the entry, and click **Configure**. MARM adds its entry beside your other MCP servers, keeps the old file as `.marm-backup`, and reads the file back to confirm. **Test** then runs a real MCP handshake and reports how many tools answered. Restart the client afterward so it loads the new entry.
+
+From the terminal, `marm-memory fast-start-http --client <id>` does the same for one client, with `--transport stdio` for STDIO. If your tool is not listed, **Connections → Manual** has copy-ready config for each client and OS, and **Add a connection** emails support to request it.
+
+#### Q: Where does the Console save server settings?
+
+In `~/.marm/settings.json`. Settings such as the port, network exposure, semantic search, and compaction apply to every way MARM runs, and a saved setting beats the matching environment variable; the page marks each one that does. They take effect on the next start, and **Setup** can restart the runtime for you. Delete a setting from the file to fall back to the environment or the default.
+
+#### Q: Why does "Require a key" stay on after I turn it off?
+
+Because `MARM_API_KEY` is set outside the Console, either in your shell or because the server is exposed on the network, which always requires a key. A saved setting never removes a key someone set on purpose, so the page shows the setting as on and says why. Unset `MARM_API_KEY` and keep the server on `127.0.0.1` to run without one.
+
+#### Q: Can the Console run MARM in Docker for me?
+
+Yes, when Docker is installed and running. **Connections → Docker** saves the container's port, data folder, repositories, and resource limits, then pulls the image and starts, stops, restarts, or recreates the container. It shows recent logs and can write a compose file (`~/.marm/marm-compose.yaml`) from the same settings. When the Console itself runs inside a container, this tab is read-only.
 
 #### Q: What is the difference between HTTP and STDIO?
 

@@ -5,7 +5,7 @@
      width="900"
      height="250">
 </picture>
-<h1 align="center">marm-memory v2.54.1 - Give your AI Agents a permanent memory in 60 seconds</h1>
+<h1 align="center">marm-memory v2.55.0 - Give your AI Agents a permanent memory in 60 seconds</h1>
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/Lyellr88/marm-memory/blob/MARM-main/LICENSE)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/)
@@ -14,7 +14,7 @@
 [![PyPI Downloads](https://static.pepy.tech/personalized-badge/marm-mcp-server?period=total&units=NONE&left_color=GREY&right_color=BLUE&left_text=pip-downloads)](https://pepy.tech/projects/marm-mcp-server)
 [![PyPI Version](https://img.shields.io/pypi/v/marm-mcp-server)](https://pypi.org/project/marm-mcp-server/)
 [![MCP Registry](https://img.shields.io/badge/MCP%20Registry-LIVE-blue)](https://registry.modelcontextprotocol.io/?q=marm-mcp)
-![Updated](https://img.shields.io/badge/updated-Sep%2028%2C%202026-0ea5e9)
+![Updated](https://img.shields.io/badge/Last%20Updated-Sep%2029%2C%202026-0ea5e9)
 
 [![Discord](https://img.shields.io/badge/Discord-Join%20Community-5865F2?logo=discord&logoColor=white)](https://discord.gg/nhyJWPz2cf)
 [![Publish](https://github.com/Lyellr88/marm-memory/actions/workflows/publish-mcp.yml/badge.svg?branch=MARM-main)](https://github.com/Lyellr88/marm-memory/actions/workflows/publish-mcp.yml)
@@ -117,6 +117,7 @@ Run `marm-memory console` to open the bundled web app at `http://127.0.0.1:8002`
 | **Code Context** | Build one bounded view of task-ranked symbols, source, and related memory. An optional local model can answer from that same context, with its citations checked. |
 | **Distill** | Turn transcripts into durable-memory proposals. Review, apply, or discard them with duplicate evidence visible. |
 | **System and Terminal** | Manage runtime health, indexing, local-model settings, backups, diagnostics, and maintenance. The docked terminal provides a real local shell with persistent sessions and a searchable MARM command menu. |
+| **Connections** | Set up MARM end to end in one place. **Setup** connects Claude Code, Claude Desktop, Cursor, VS Code, Codex CLI, Gemini CLI, Qwen Code, Windsurf, and Kiro over HTTP, STDIO, or Docker STDIO, tests each connection, and saves server settings to `~/.marm/settings.json`. **Docker** pulls, starts, and stops the MARM container and writes a compose file. **Manual** gives copy-ready config for each client and OS, every CLI command, and every HTTP endpoint. |
 
 ### Runtime CLI Commands
 
@@ -126,6 +127,7 @@ Run `marm-memory console` to open the bundled web app at `http://127.0.0.1:8002`
 
 ```bash
 marm-memory fast-start-http                # start HTTP, Console, and open the browser
+marm-memory fast-start-http --client cursor # also connect one client (add --transport stdio for STDIO)
 marm-memory start                          # start or reuse the managed HTTP runtime
 marm-memory start --profile swarm          # shared multi-agent preset
 marm-memory stop                           # stop the managed runtime safely

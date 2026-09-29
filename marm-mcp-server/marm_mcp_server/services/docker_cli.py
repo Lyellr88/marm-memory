@@ -6,6 +6,8 @@ import sys
 from pathlib import Path
 from typing import Callable
 
+from .client_config import DOCKER_STDIO_CLIENT_IDS
+
 
 def add_docker_commands(
     subparsers: argparse._SubParsersAction,
@@ -48,7 +50,11 @@ def add_docker_commands(
     )
     docker_stdio.add_argument("--tag", default="latest")
     docker_stdio.add_argument("--data-dir", type=Path, default=Path.home() / ".marm")
-    docker_stdio.add_argument("--client")
+    docker_stdio.add_argument(
+        "--client",
+        choices=DOCKER_STDIO_CLIENT_IDS,
+        help="Write the Docker STDIO entry into this client's user config",
+    )
     docker_logs = docker_sub.add_parser("logs", help="Read managed container logs")
     docker_logs.add_argument("--name", default="marm-mcp-server")
     docker_logs.add_argument("--follow", action="store_true")
@@ -130,8 +136,26 @@ def dispatch_docker(args: argparse.Namespace, *, print_payload: Callable) -> int
         plan = docker_commands.stdio_command(tag=args.tag, data_dir=args.data_dir)
         print(docker_commands.shell_command(plan["arguments"]))
         if args.client:
+            from . import client_config
+
+            try:
+                result = client_config.configure(
+                    args.client,
+                    "",
+                    False,
+                    transport="docker-stdio",
+                    docker_tag=args.tag,
+                    docker_data_dir=args.data_dir,
+                )
+            except (
+                client_config.ClientNotFound,
+                client_config.ClientNotConfigurable,
+            ) as exc:
+                print(f"Client setup failed: {exc}", file=sys.stderr)
+                return 1
             print(
-                f"Configure {args.client} with the command above as its STDIO transport."
+                f"Client: {result['config_path']} ({result['action']}, "
+                f"verified={result['verified']})"
             )
         return 0
     if args.docker_command == "logs":

@@ -56,6 +56,24 @@ def _write_skill(agent_dir: Path, text: str) -> dict[str, str]:
     return {"target": str(target), "state": "refreshed" if existed else "installed"}
 
 
+def is_installed(agent: str) -> bool:
+    return (Path.home() / AGENTS[agent] / SKILL_SUBPATH).is_file()
+
+
+def install_for_agent(agent: str) -> dict[str, str]:
+    """Install or refresh the skill globally for one agent key from AGENTS."""
+    agent_dir = Path.home() / AGENTS[agent]
+    try:
+        text = _bundled_skill_text()
+    except OSError as exc:
+        return {
+            "target": str(agent_dir / SKILL_SUBPATH),
+            "state": "error",
+            "detail": str(exc),
+        }
+    return _write_skill(agent_dir, text)
+
+
 def _selected_globals(args: argparse.Namespace) -> list[str]:
     return [name for name in AGENTS if getattr(args, f"global_{name}", False)]
 
