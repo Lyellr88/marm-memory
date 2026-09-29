@@ -68,6 +68,28 @@ export const AGENT_CONFIGS: AgentConfig[] = [
     },
   },
   {
+    id: 'hermes',
+    name: 'Hermes Agent',
+    description: "Nous Research's self-improving agent",
+    commands: {
+      windows: {
+        install: 'iex (irm https://hermes-agent.nousresearch.com/install.ps1)',
+        launch: 'hermes',
+        verify: 'hermes --version',
+      },
+      macos: {
+        install: 'curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash',
+        launch: 'hermes',
+        verify: 'hermes --version',
+      },
+      linux: {
+        install: 'curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash',
+        launch: 'hermes',
+        verify: 'hermes --version',
+      },
+    },
+  },
+  {
     id: 'antigravity',
     name: 'Antigravity (was Gemini CLI)',
     description: "Google's agentic CLI, formerly Gemini CLI",

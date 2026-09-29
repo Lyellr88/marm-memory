@@ -45,6 +45,7 @@ REF_STOPLIST = {
     ".cursor/mcp.json",
     ".agents/mcp_config.json",
     ".grok/config.toml",
+    "config.yaml",
     ".gemini/settings.json",
     ".qwen/settings.json",
     ".vscode/mcp.json",

@@ -57,7 +57,7 @@ Use the README quick start for the shortest path, then use the install docs when
 
 #### Q: Which AI platforms work with MARM MCP?
 
-MARM has been tested with Claude Code, Codex, Antigravity CLI, Qwen CLI, VS Code MCP, and Cursor MCP. Any client that supports standard MCP HTTP or STDIO transports should be able to connect with the right command or config.
+MARM has been tested with Claude Code, Codex, Antigravity CLI, Qwen CLI,Grok Build, Hermes, VS Code, Windsurf, Kiro and Cursor. Any client that supports standard MCP HTTP or STDIO transports should be able to connect with the right command or config.
 
 #### Q: Can I connect my AI tool without editing config files by hand?
 

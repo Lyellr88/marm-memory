@@ -254,6 +254,12 @@ def memory_keychain(monkeypatch) -> MemoryKeychain:
     return install_memory_keychain(monkeypatch)
 
 
+@pytest.fixture(autouse=True)
+def hermes_home_off_the_real_machine(tmp_path_factory, monkeypatch) -> None:
+    """A developer's own Hermes install must never be written by a test."""
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path_factory.mktemp("hermes-home")))
+
+
 def load_isolated_server(monkeypatch, tmp_path, api_key="", write_queue_enabled=False):
     """Import the server after pointing global state at a temporary database.
 

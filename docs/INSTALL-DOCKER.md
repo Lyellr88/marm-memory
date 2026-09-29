@@ -398,6 +398,22 @@ bearer_token_env_var = "MARM_API_KEY"
 
 Grok Build also reads MCP servers from `~/.claude.json`, `.cursor/mcp.json`, and project `.mcp.json`, so MARM may already load if Claude Code or Cursor has it. Run `grok mcp list` to see what it loaded.
 
+### **Hermes Agent**
+
+Hermes Agent (`hermes`) by Nous Research reads MCP servers from `mcp_servers` in `config.yaml`: `~/.hermes/config.yaml` on macOS and Linux, `%LOCALAPPDATA%\hermes\config.yaml` on native Windows, or `$HERMES_HOME/config.yaml` if you set it. It supports STDIO and HTTP and expands `${VAR}` in headers, so the key stays in your environment or `~/.hermes/.env` and never lands in the file.
+
+Set `MARM_API_KEY`, then add this under `mcp_servers` in `config.yaml`:
+
+```yaml
+mcp_servers:
+  marm-memory:
+    url: "http://localhost:8001/mcp"
+    headers:
+      Authorization: "Bearer ${MARM_API_KEY}"
+```
+
+Run `/reload-mcp` in Hermes, or start a new session, to load it.
+
 ### **Antigravity CLI**
 
 Antigravity CLI (`agy`) replaced Gemini CLI in June 2026. It supports STDIO and HTTP MCP servers. Use HTTP for MARM.

@@ -11,6 +11,7 @@ from __future__ import annotations
 import contextlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -27,6 +28,11 @@ try:
 except ModuleNotFoundError:
     tomllib = None  # type: ignore[assignment]
 
+try:
+    import yaml
+except ModuleNotFoundError:
+    yaml = None  # type: ignore[assignment]
+
 CLIENT_IDS = [
     "claude",
     "claude-desktop",
@@ -34,6 +40,7 @@ CLIENT_IDS = [
     "vscode",
     "codex",
     "grok",
+    "hermes",
     "antigravity",
     "qwen",
     "windsurf",
@@ -72,6 +79,16 @@ def _platform() -> str:
 def _appdata() -> Path:
     appdata = os.environ.get("APPDATA")
     return Path(appdata) if appdata else _home() / "AppData" / "Roaming"
+
+
+def hermes_home() -> Path:
+    override = os.environ.get("HERMES_HOME")
+    if override:
+        return Path(override).expanduser()
+    if _platform() == "win32":
+        local = os.environ.get("LOCALAPPDATA")
+        return (Path(local) if local else _home() / "AppData" / "Local") / "hermes"
+    return _home() / ".hermes"
 
 
 def _vscode_config_path() -> Path:
@@ -137,7 +154,7 @@ class ClientSpec:
     id: str
     label: str
     binary: str | None
-    format: str  # "cli" | "json" | "toml"
+    format: str  # "cli" | "json" | "toml" | "yaml"
     container_key: str | None
     user_path: Callable[[], Path | None]
     project_path: str | None
@@ -216,6 +233,17 @@ REGISTRY: dict[str, ClientSpec] = {
             _markers(".grok"),
         ),
         ClientSpec(
+            "hermes",
+            "Hermes Agent",
+            "hermes",
+            "yaml",
+            "mcp_servers",
+            lambda: hermes_home() / "config.yaml",
+            None,
+            lambda: [hermes_home()],
+            auth_ref="${MARM_API_KEY}",
+        ),
+        ClientSpec(
             "antigravity",
             "Antigravity CLI",
             "agy",
@@ -267,6 +295,7 @@ REGISTRY: dict[str, ClientSpec] = {
 }
 
 _GROK_CLAUDE_NOTE = "Grok Build also reads Claude Code's MCP list, so MARM may already load here. Connect adds its own entry."
+_HERMES_RELOAD_NOTE = "Run /reload-mcp in Hermes, or start a new session, to load it."
 _CODEX_TRUST_NOTE = (
     "Codex only loads a project's .codex/config.toml for projects it trusts."
 )
@@ -387,6 +416,8 @@ def _configure_notes(
         )
     if spec.id == "codex" and scope == "project":
         notes.append(_CODEX_TRUST_NOTE)
+    if spec.id == "hermes":
+        notes.append(_HERMES_RELOAD_NOTE)
     return notes
 
 
@@ -506,11 +537,195 @@ def _read_current(spec: ClientSpec, path: Path) -> tuple[dict | None, bool, str 
     try:
         if spec.format == "toml":
             return _codex_entry(path, spec), True, None
+        if spec.format == "yaml":
+            return _yaml_entry(path, spec), True, None
         _content, container = _load_json(spec, path)
     except _Unreadable as exc:
         return None, True, str(exc)
     current = container.get(SERVER_NAME)
     return (current if isinstance(current, dict) else None), True, None
+
+
+_MCP_HEADER = re.compile(
+    r"^((?:mcp_servers|\"mcp_servers\"|'mcp_servers')[ \t]*):(.*)$"
+)
+_TRAILING_COMMENT = re.compile(r"\s+#.*$")
+_LINES = re.compile(r"[^\n]*\n|[^\n]+")
+
+
+def _yaml_entry(path: Path, spec: ClientSpec) -> dict | None:
+    """The entry as a dict, {} when present in an unexpected shape, None when absent."""
+    if yaml is None:
+        raise _Unreadable(
+            f"PyYAML is not installed, so {spec.label} config cannot be read."
+        )
+    try:
+        content = yaml.safe_load(_read_text(path))
+    except (OSError, UnicodeDecodeError, yaml.YAMLError) as exc:
+        raise _Unreadable(f"{spec.label} config could not be read: {path}") from exc
+    if content is None:
+        return None
+    if not isinstance(content, dict):
+        raise _Unreadable(f"{spec.label} config is not a YAML mapping: {path}")
+    servers = content.get("mcp_servers")
+    if servers is None:
+        return None
+    if not isinstance(servers, dict):
+        raise _Unreadable(f"{spec.label} config has an unexpected 'mcp_servers' value.")
+    if SERVER_NAME not in servers:
+        return None
+    current = servers[SERVER_NAME]
+    return current if isinstance(current, dict) else {}
+
+
+def _yaml_emit(entry: dict, indent: int) -> list[str]:
+    pad = " " * indent
+    lines: list[str] = []
+    for key, value in entry.items():
+        if isinstance(value, dict):
+            lines.append(f"{pad}{key}:")
+            lines.extend(_yaml_emit(value, indent + 2))
+        else:
+            lines.append(f"{pad}{key}: {json.dumps(value)}")
+    return lines
+
+
+def _yaml_block(entry: dict, indent: int) -> list[str]:
+    return [f"{' ' * indent}{SERVER_NAME}:", *_yaml_emit(entry, indent + 2)]
+
+
+def _is_content(line: str) -> bool:
+    stripped = line.strip()
+    return bool(stripped) and not stripped.startswith("#")
+
+
+def _indent_of(line: str) -> int:
+    return len(line) - len(line.lstrip(" "))
+
+
+def _split_yaml(text: str) -> tuple[list[str], str]:
+    return _LINES.findall(text), ("\r\n" if "\r\n" in text else "\n")
+
+
+def _yaml_header(lines: list[str]) -> tuple[int, str, str, str] | None:
+    """Line index, inline value, trailing comment, and the key text exactly as written."""
+    for index, line in enumerate(lines):
+        match = _MCP_HEADER.match(line.rstrip("\r\n"))
+        if match:
+            body = match.group(2)
+            found = _TRAILING_COMMENT.search(body)
+            comment = found.group(0) if found else ""
+            rest = (body[: found.start()] if found else body).strip()
+            return index, rest, comment, match.group(1)
+    return None
+
+
+def _region_end(lines: list[str], header: int) -> int:
+    for index in range(header + 1, len(lines)):
+        if _is_content(lines[index]) and _indent_of(lines[index]) == 0:
+            return index
+    return len(lines)
+
+
+def _child_indent(lines: list[str], header: int, end: int) -> int:
+    for index in range(header + 1, end):
+        if _is_content(lines[index]):
+            return _indent_of(lines[index]) or 2
+    return 2
+
+
+def _yaml_insert(text: str, entry: dict) -> str:
+    lines, newline = _split_yaml(text)
+    found = _yaml_header(lines)
+    if found is None:
+        if lines and not lines[-1].endswith("\n"):
+            lines[-1] += newline
+        head = [newline] if lines and lines[-1].strip() else []
+        new = ["mcp_servers:", *_yaml_block(entry, 2)]
+        return "".join([*lines, *head, *(line + newline for line in new)])
+    header, rest, comment, key_text = found
+    if rest and rest not in {"{}", "null", "~"}:
+        raise _Unreadable("The mcp_servers section uses a layout MARM will not edit.")
+    if not lines[header].endswith("\n"):
+        lines[header] += newline
+    indent = 2 if rest else _child_indent(lines, header, _region_end(lines, header))
+    if rest:
+        lines[header] = f"{key_text}:{comment}{newline}"
+    block = [line + newline for line in _yaml_block(entry, indent)]
+    return "".join([*lines[: header + 1], *block, *lines[header + 1 :]])
+
+
+def _yaml_remove(text: str) -> str:
+    lines, newline = _split_yaml(text)
+    found = _yaml_header(lines)
+    if found is None or found[1]:
+        raise _Unreadable("The mcp_servers section uses a layout MARM will not edit.")
+    header, _rest, comment, key_text = found
+    end = _region_end(lines, header)
+    indent = _child_indent(lines, header, end)
+    name = re.escape(SERVER_NAME)
+    key = re.compile(rf"^ {{{indent}}}(?:{name}|\"{name}\"|'{name}')[ \t]*:")
+    start = next((i for i in range(header + 1, end) if key.match(lines[i])), None)
+    if start is None:
+        raise _Unreadable("The mcp_servers section uses a layout MARM will not edit.")
+    stop = start + 1
+    while stop < end and (
+        not _is_content(lines[stop]) or _indent_of(lines[stop]) > indent
+    ):
+        stop += 1
+    while stop > start + 1 and not _is_content(lines[stop - 1]):
+        stop -= 1
+    del lines[start:stop]
+    end -= stop - start
+    if not any(_is_content(line) for line in lines[header + 1 : end]):
+        lines[header] = f"{key_text}: {{}}{comment}{newline}"
+    return "".join(lines)
+
+
+def _yaml_doc(text: str) -> dict:
+    data = yaml.safe_load(text)
+    return data if isinstance(data, dict) else {}
+
+
+def _expected_yaml_doc(before: dict, entry: dict | None) -> dict:
+    """The whole document as it should read after the edit: only MARM's entry differs."""
+    servers = before.get("mcp_servers")
+    servers = dict(servers) if isinstance(servers, dict) else {}
+    if entry is None:
+        servers.pop(SERVER_NAME, None)
+    else:
+        servers[SERVER_NAME] = entry
+    return {**before, "mcp_servers": servers}
+
+
+def _write_yaml(path: Path, entry: dict | None, spec: ClientSpec) -> None:
+    """Insert or remove the MARM entry as text, then re-parse the whole file and restore the original if anything else moved."""
+    original = _read_text(path) if path.exists() else None
+    try:
+        updated = (
+            _yaml_insert(original or "", entry)
+            if entry is not None
+            else _yaml_remove(original or "")
+        )
+    except _Unreadable as exc:
+        raise ClientNotConfigurable(f"{exc} Edit {path} by hand.") from exc
+    _backup(path)
+    _atomic_write_text(path, updated)
+    try:
+        expected = _expected_yaml_doc(_yaml_doc(original or ""), entry)
+        landed = _yaml_doc(_read_text(path)) == expected
+    except (OSError, UnicodeDecodeError, yaml.YAMLError):
+        landed = False
+    if landed:
+        return
+    if original is None:
+        with contextlib.suppress(OSError):
+            path.unlink()
+    else:
+        _atomic_write_text(path, original)
+    raise ClientNotConfigurable(
+        f"MARM could not change {path} safely, so it was left as it was. Edit it by hand."
+    )
 
 
 def _read_text(path: Path) -> str:
@@ -637,9 +852,14 @@ def configure(
         if current is None
         else ("configured" if _matches(current, entry) else "different")
     )
-    if spec.format == "toml" and state == "different":
+    if spec.format in {"toml", "yaml"} and state == "different":
+        shape = (
+            f"[mcp_servers.{SERVER_NAME}] table"
+            if spec.format == "toml"
+            else f"mcp_servers.{SERVER_NAME} entry"
+        )
         raise ClientNotConfigurable(
-            f"{path} already has a [mcp_servers.{SERVER_NAME}] table that differs; edit it manually."
+            f"{path} already has a {shape} that differs; edit it manually."
         )
     action = _plan_action(state, exists)
     use_cli = _is_cli_method(spec, scope)
@@ -687,6 +907,8 @@ def configure(
     elif spec.format == "toml":
         _backup(path)
         _append_codex(path, entry)
+    elif spec.format == "yaml":
+        _write_yaml(path, entry, spec)
     else:
         content, container = _load_json(spec, path)
         _backup(path)
@@ -765,6 +987,8 @@ def remove(
         if spec.format == "cli":
             argv += ["--scope", "user"]
         _run_cli([*argv, SERVER_NAME], f"{spec.binary} mcp remove")
+    elif spec.format == "yaml":
+        _write_yaml(path, None, spec)
     else:
         content, container = _load_json(spec, path)
         _backup(path)

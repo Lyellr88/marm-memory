@@ -1357,7 +1357,7 @@ export interface ManualSnippet {
   client: string;
   os: ManualOs;
   path: string;
-  format: 'json' | 'toml';
+  format: 'json' | 'toml' | 'yaml';
   text: string;
   notes: string | string[] | null;
 }

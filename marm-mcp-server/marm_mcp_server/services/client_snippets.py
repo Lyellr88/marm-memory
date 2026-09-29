@@ -41,6 +41,11 @@ _OS_APPDATA_DISPLAY: dict[str, dict[str, str | None]] = {
         "macos": "~/Library/Application Support/Claude/claude_desktop_config.json",
         "linux": None,
     },
+    "hermes": {
+        "windows": "%LOCALAPPDATA%\\hermes\\config.yaml",
+        "macos": "~/.hermes/config.yaml",
+        "linux": "~/.hermes/config.yaml",
+    },
     "windsurf": {
         "windows": "%APPDATA%\\devin\\mcp_config.json",
         "macos": "~/.config/devin/mcp_config.json",
@@ -54,6 +59,7 @@ _NO_CLI = {
     "claude-desktop": "Claude Desktop has no command for adding a server. Use the config file snippet.",
 }
 _TOML_TABLE = f"[mcp_servers.{SERVER_NAME}]"
+_KEYED_SNIPPET_NOTE = "The config file snippet reads the key from MARM_API_KEY, so it never lands in the file. Use that snippet."
 
 
 def host_os() -> str:
@@ -166,6 +172,10 @@ def _toml_text(entry: dict[str, Any]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _yaml_text(entry: dict[str, Any]) -> str:
+    return "\n".join(["mcp_servers:", *client_config._yaml_block(entry, 2)]) + "\n"
+
+
 def _json_text(
     spec: ClientSpec, entry: dict[str, Any], transport: str, auth: bool
 ) -> str:
@@ -214,6 +224,10 @@ def _snippet_notes(
         notes.append(
             "Older Windsurf installs use ~/.codeium/windsurf/mcp_config.json instead."
         )
+    if spec.id == "hermes":
+        notes.append(
+            "If HERMES_HOME is set, the file is $HERMES_HOME/config.yaml. Run /reload-mcp in Hermes after saving."
+        )
     return notes
 
 
@@ -230,15 +244,16 @@ def snippet(
     spec = _spec(client_id)
     _validate(spec, os_name, transport, scope, auth_required)
     entry = _entry(client_id, os_name, transport, url, auth_required, docker_tag)
-    is_toml = spec.format == "toml"
+    text = {
+        "toml": lambda: _toml_text(entry),
+        "yaml": lambda: _yaml_text(entry),
+    }.get(spec.format, lambda: _json_text(spec, entry, transport, auth_required))()
     return {
         "client": spec.id,
         "os": os_name,
         "path": _config_path(spec, os_name, scope),
-        "format": "toml" if is_toml else "json",
-        "text": _toml_text(entry)
-        if is_toml
-        else _json_text(spec, entry, transport, auth_required),
+        "format": spec.format if spec.format in {"toml", "yaml"} else "json",
+        "text": text,
         "notes": _snippet_notes(spec, os_name, transport, scope, auth_required),
     }
 
@@ -313,6 +328,14 @@ def _grok_command(
     return _join([*base, *where, SERVER_NAME, "--", *argv], os_name)
 
 
+def _hermes_command(transport: str, url: str, argv: list[str], os_name: str) -> str:
+    base = ["hermes", "mcp", "add", SERVER_NAME]
+    if transport == "http":
+        return _join([*base, "--url", url], os_name)
+    rest = ["--args", *argv[1:]] if argv[1:] else []
+    return _join([*base, "--command", argv[0], *rest], os_name)
+
+
 def _agy_command(transport: str, url: str, argv: list[str], os_name: str) -> str:
     if transport == "http":
         return _join(["agy", "mcp", "add", SERVER_NAME, "--type", "http", url], os_name)
@@ -355,11 +378,20 @@ def _one_command(
         return _codex_command(
             transport, url, auth_required, argv, os_name
         ), "Adds MARM for every project."
+    if client_id == "hermes":
+        if scope == "project":
+            return None, "Hermes Agent has one user config. Use the user scope."
+        if transport == "http" and auth_required:
+            return None, _KEYED_SNIPPET_NOTE
+        return (
+            _hermes_command(transport, url, argv, os_name),
+            "Adds MARM to your Hermes config. Then run /reload-mcp.",
+        )
     if client_id == "grok":
         if transport == "http" and auth_required:
             return (
                 None,
-                "The key is read from MARM_API_KEY by the config file snippet, so it never lands in the file. Use that snippet.",
+                _KEYED_SNIPPET_NOTE,
             )
         return _grok_command(transport, scope, url, argv, os_name), (
             "Adds MARM for every project."

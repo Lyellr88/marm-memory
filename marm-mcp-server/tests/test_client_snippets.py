@@ -12,6 +12,8 @@ try:
 except ModuleNotFoundError:
     tomllib = None
 
+import yaml
+
 from marm_mcp_server.services import client_config, client_snippets
 
 URL = "http://127.0.0.1:8001/mcp"
@@ -45,6 +47,8 @@ def parsed(result):
     if result["format"] == "toml":
         assert tomllib is not None
         return tomllib.loads(result["text"])
+    if result["format"] == "yaml":
+        return yaml.safe_load(result["text"])
     return json.loads(result["text"])
 
 
@@ -61,7 +65,9 @@ def test_every_supported_combination_parses_with_container_key_and_url() -> None
             continue
         data = parsed(result)
         servers = (
-            data["mcp_servers"] if spec.format == "toml" else data[spec.container_key]
+            data["mcp_servers"]
+            if spec.format in {"toml", "yaml"}
+            else data[spec.container_key]
         )
         entry = servers["marm-memory"]
         if transport == "http":
@@ -116,6 +122,59 @@ def test_codex_toml_fragment() -> None:
     assert stdio["path"] == "<project>/.codex/config.toml"
     assert 'command = "marm-mcp-stdio"' in stdio["text"]
     assert any("trust" in note for note in stdio["notes"])
+
+
+def test_hermes_yaml_fragment_and_paths() -> None:
+    keyed = make("hermes", "linux", "http", "user", True)
+    assert keyed["format"] == "yaml"
+    assert keyed["path"] == "~/.hermes/config.yaml"
+    assert keyed["text"] == (
+        "mcp_servers:\n"
+        "  marm-memory:\n"
+        f'    url: "{URL}"\n'
+        "    headers:\n"
+        '      Authorization: "Bearer ${MARM_API_KEY}"\n'
+    )
+    assert parsed(keyed)["mcp_servers"]["marm-memory"]["headers"] == {
+        "Authorization": "Bearer ${MARM_API_KEY}"
+    }
+    assert SECRET not in keyed["text"]
+    assert any("HERMES_HOME" in note for note in keyed["notes"])
+    assert make("hermes", "windows", "http", "user", False)["path"] == (
+        "%LOCALAPPDATA%\\hermes\\config.yaml"
+    )
+    assert make("hermes", "macos", "http", "user", False)["path"] == (
+        "~/.hermes/config.yaml"
+    )
+    stdio = parsed(make("hermes", "linux", "stdio", "user", False))
+    assert stdio["mcp_servers"]["marm-memory"] == {
+        "command": "marm-mcp-stdio",
+        "args": [],
+    }
+
+
+def test_hermes_snippet_is_user_scope_only() -> None:
+    with pytest.raises(client_config.InvalidRequest, match="user scope only"):
+        make("hermes", "linux", "http", "project", False)
+
+
+def test_hermes_commands_cover_transports_and_defer_keyed_http_to_the_snippet() -> None:
+    assert commands("http", "user")["hermes"]["command"] == (
+        f"hermes mcp add marm-memory --url {URL}"
+    )
+    keyed = commands("http", "user", auth=True)["hermes"]
+    assert keyed["command"] is None
+    assert "MARM_API_KEY" in keyed["note"] and "snippet" in keyed["note"]
+    assert SECRET not in json.dumps(keyed)
+    assert commands("stdio", "user")["hermes"]["command"] == (
+        "hermes mcp add marm-memory --command marm-mcp-stdio"
+    )
+    argv = client_snippets._docker_argv("linux", "latest")
+    assert commands("docker-stdio", "user")["hermes"]["command"] == (
+        f"hermes mcp add marm-memory --command docker --args {shlex.join(argv[1:])}"
+    )
+    project = commands("stdio", "project")["hermes"]
+    assert project["command"] is None and "user scope" in project["note"]
 
 
 def test_grok_toml_fragment_and_paths() -> None:

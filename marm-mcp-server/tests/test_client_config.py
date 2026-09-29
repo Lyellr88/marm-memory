@@ -23,6 +23,7 @@ DETECT_DIRS = {
     "vscode": "AppData/Roaming/Code/User",
     "codex": ".codex",
     "grok": ".grok",
+    "hermes": "AppData/Local/hermes",
     "antigravity": ".gemini/config",
     "qwen": ".qwen",
     "windsurf": ".codeium/windsurf",
@@ -35,6 +36,7 @@ USER_FILES = {
     "vscode": "AppData/Roaming/Code/User/mcp.json",
     "codex": ".codex/config.toml",
     "grok": ".grok/config.toml",
+    "hermes": "AppData/Local/hermes/config.yaml",
     "antigravity": ".gemini/config/mcp_config.json",
     "qwen": ".qwen/settings.json",
     "windsurf": ".codeium/windsurf/mcp_config.json",
@@ -64,6 +66,7 @@ AUTH_REF = {
     "cursor": "${env:MARM_API_KEY}",
     "vscode": "${input:marm-api-key}",
     "windsurf": "${env:MARM_API_KEY}",
+    "hermes": "${MARM_API_KEY}",
     "kiro": "${MARM_API_KEY}",
 }
 
@@ -76,6 +79,8 @@ def isolated_home(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("USERPROFILE", str(tmp_path))
     monkeypatch.setenv("APPDATA", str(tmp_path / "AppData" / "Roaming"))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "AppData" / "Local"))
+    monkeypatch.delenv("HERMES_HOME", raising=False)
     monkeypatch.setattr(client_config.shutil, "which", lambda name: None)
     return tmp_path
 
@@ -105,6 +110,11 @@ def expected_entry(client: str, transport: str, auth: bool, docker_args=None) ->
 
 
 def read_marm_entry(home: Path, client: str, path: Path) -> dict:
+    if client == "hermes":
+        yaml = pytest.importorskip("yaml")
+        return yaml.safe_load(path.read_text(encoding="utf-8"))["mcp_servers"][
+            "marm-memory"
+        ]
     if client in {"codex", "grok"}:
         tomllib = pytest.importorskip("tomllib")
         return tomllib.loads(path.read_text(encoding="utf-8"))["mcp_servers"][
@@ -1199,6 +1209,438 @@ def test_grok_notes_when_claude_code_already_lists_marm(isolated_home):
     assert any("Claude Code" in note for note in grok_notes())
     client_config.configure("grok", URL, False)
     assert not any("Claude Code" in note for note in grok_notes())
+
+
+# --- Hermes Agent YAML ---------------------------------------------------------------
+
+
+def hermes_file(home: Path) -> Path:
+    return home / "AppData" / "Local" / "hermes" / "config.yaml"
+
+
+def load_yaml(path: Path) -> dict:
+    yaml = pytest.importorskip("yaml")
+    return yaml.safe_load(path.read_text(encoding="utf-8"))
+
+
+def test_hermes_creates_the_file_with_a_keyed_http_entry(isolated_home):
+    detect(isolated_home, "hermes")
+
+    result = client_config.configure("hermes", URL, True)
+
+    assert result["action"] == "create"
+    assert result["verified"] is True
+    entry = load_yaml(hermes_file(isolated_home))["mcp_servers"]["marm-memory"]
+    assert entry == {"url": URL, "headers": {"Authorization": "Bearer ${MARM_API_KEY}"}}
+    assert SECRET not in hermes_file(isolated_home).read_text()
+    assert any("/reload-mcp" in note for note in result["notes"])
+
+
+def test_hermes_appends_without_touching_comments_or_other_content(isolated_home):
+    path = hermes_file(isolated_home)
+    path.parent.mkdir(parents=True)
+    original = "# my hermes setup\nmodel:   gpt-x   # keep spacing\nterminal:\n    backend: docker\n"
+    path.write_text(original)
+
+    result = client_config.configure("hermes", URL, False)
+
+    assert result["action"] == "add"
+    text = path.read_text()
+    assert text.startswith(original)
+    assert load_yaml(path)["mcp_servers"]["marm-memory"] == {"url": URL}
+    assert load_yaml(path)["terminal"] == {"backend": "docker"}
+
+
+def test_hermes_appends_after_a_file_with_no_final_newline(isolated_home):
+    path = hermes_file(isolated_home)
+    path.parent.mkdir(parents=True)
+    path.write_bytes(b"model: gpt-x")
+
+    client_config.configure("hermes", URL, False)
+
+    assert load_yaml(path)["model"] == "gpt-x"
+    assert load_yaml(path)["mcp_servers"]["marm-memory"] == {"url": URL}
+
+
+def test_hermes_keeps_crlf_line_endings(isolated_home):
+    path = hermes_file(isolated_home)
+    path.parent.mkdir(parents=True)
+    path.write_bytes(b"model: gpt-x\r\n")
+
+    client_config.configure("hermes", URL, False)
+
+    data = path.read_bytes()
+    assert b"\r\n" in data
+    assert data.count(b"\n") == data.count(b"\r\n")
+
+
+@pytest.mark.parametrize("indent", [2, 4])
+def test_hermes_inserts_under_an_existing_mcp_servers_block(isolated_home, indent):
+    pad = " " * indent
+    path = hermes_file(isolated_home)
+    path.parent.mkdir(parents=True)
+    original = (
+        "model: gpt-x\n"
+        "mcp_servers:\n"
+        f"{pad}# my other server\n"
+        f"{pad}github:\n"
+        f"{pad}{pad}command: npx\n"
+        f'{pad}{pad}args: ["-y", "gh"]\n'
+        "terminal:\n"
+        f"{pad}backend: local\n"
+    )
+    path.write_text(original)
+
+    client_config.configure("hermes", URL, False)
+
+    text = path.read_text()
+    data = load_yaml(path)
+    assert data["mcp_servers"]["github"] == {"command": "npx", "args": ["-y", "gh"]}
+    assert data["mcp_servers"]["marm-memory"] == {"url": URL}
+    assert data["terminal"] == {"backend": "local"}
+    assert f"{pad}# my other server\n{pad}github:" in text
+    assert text.count("mcp_servers:") == 1
+
+
+@pytest.mark.parametrize(
+    "header",
+    [
+        "mcp_servers: {}",
+        "mcp_servers:",
+        "mcp_servers: null",
+        "mcp_servers: {}  # none yet",
+    ],
+)
+def test_hermes_fills_an_empty_mcp_servers_section(isolated_home, header):
+    path = hermes_file(isolated_home)
+    path.parent.mkdir(parents=True)
+    path.write_text(f"model: gpt-x\n{header}\nterminal:\n  backend: local\n")
+
+    client_config.configure("hermes", URL, False)
+
+    data = load_yaml(path)
+    assert data["mcp_servers"] == {"marm-memory": {"url": URL}}
+    assert data["terminal"] == {"backend": "local"}
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "mcp_servers: {github: {command: npx}}\n",
+        "mcp_servers: &servers\n  github:\n    command: npx\n",
+        "mcp_servers:\n  - github\n",
+        "mcp_servers: nope\n",
+        "- just\n- a list\n",
+        "model: [unclosed\n",
+    ],
+)
+def test_hermes_refuses_layouts_it_will_not_edit_and_leaves_the_file_alone(
+    isolated_home, body
+):
+    path = hermes_file(isolated_home)
+    path.parent.mkdir(parents=True)
+    path.write_text(body)
+
+    with pytest.raises(client_config.ClientNotConfigurable):
+        client_config.configure("hermes", URL, False)
+
+    assert path.read_text() == body
+    assert not (path.parent / "config.yaml.marm-backup").exists()
+
+
+def test_hermes_existing_differing_entry_is_refused_even_at_preview(isolated_home):
+    path = hermes_file(isolated_home)
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        'mcp_servers:\n  marm-memory:\n    url: "http://127.0.0.1:9999/mcp"\n'
+    )
+    before = path.read_text()
+
+    for dry_run in (False, True):
+        with pytest.raises(
+            client_config.ClientNotConfigurable, match="edit it manually"
+        ):
+            client_config.configure("hermes", URL, False, dry_run=dry_run)
+
+    assert path.read_text() == before
+
+
+def test_hermes_entry_with_extra_keys_counts_as_configured(isolated_home):
+    path = hermes_file(isolated_home)
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        f'mcp_servers:\n  marm-memory:\n    url: "{URL}"\n    timeout: 300\n'
+    )
+
+    assert client_config.status("hermes", url=URL)["state"] == "configured"
+    assert client_config.configure("hermes", URL, False)["action"] == "none"
+
+
+def test_hermes_backs_up_before_editing(isolated_home):
+    path = hermes_file(isolated_home)
+    path.parent.mkdir(parents=True)
+    path.write_text("model: gpt-x\n")
+
+    result = client_config.configure("hermes", URL, False)
+
+    assert result["backup_path"] == str(path) + ".marm-backup"
+    assert (path.parent / "config.yaml.marm-backup").read_text() == "model: gpt-x\n"
+
+
+def test_hermes_restores_the_file_when_the_entry_does_not_land(
+    isolated_home, monkeypatch
+):
+    path = hermes_file(isolated_home)
+    path.parent.mkdir(parents=True)
+    path.write_text("model: gpt-x\n")
+    monkeypatch.setattr(
+        client_config, "_yaml_insert", lambda text, entry: text + "other: 1\n"
+    )
+
+    with pytest.raises(client_config.ClientNotConfigurable, match="left as it was"):
+        client_config.configure("hermes", URL, False)
+
+    assert path.read_text() == "model: gpt-x\n"
+
+
+def test_hermes_removes_a_file_it_created_when_the_entry_does_not_land(
+    isolated_home, monkeypatch
+):
+    detect(isolated_home, "hermes")
+    monkeypatch.setattr(
+        client_config, "_yaml_insert", lambda text, entry: "model: gpt-x\n"
+    )
+
+    with pytest.raises(client_config.ClientNotConfigurable):
+        client_config.configure("hermes", URL, False)
+
+    assert not hermes_file(isolated_home).exists()
+
+
+def test_hermes_without_pyyaml_is_unreadable_not_a_crash(isolated_home, monkeypatch):
+    path = hermes_file(isolated_home)
+    path.parent.mkdir(parents=True)
+    path.write_text("model: gpt-x\n")
+    monkeypatch.setattr(client_config, "yaml", None)
+
+    with pytest.raises(client_config.ClientNotConfigurable, match="PyYAML"):
+        client_config.configure("hermes", URL, False)
+
+    assert client_config.status("hermes", url=URL)["state"] == "unreadable"
+
+
+def test_hermes_home_env_var_moves_the_config_and_detection(isolated_home, monkeypatch):
+    custom = isolated_home / "elsewhere" / "hermes-data"
+    monkeypatch.setenv("HERMES_HOME", str(custom))
+    assert client_config.status("hermes")["config_path"] == str(custom / "config.yaml")
+    agent = next(
+        a for a in client_config.list_agents(URL, False) if a["id"] == "hermes"
+    )
+    assert agent["detected"] is False
+
+    custom.mkdir(parents=True)
+    result = client_config.configure("hermes", URL, False)
+
+    assert result["config_path"] == str(custom / "config.yaml")
+    assert load_yaml(custom / "config.yaml")["mcp_servers"]["marm-memory"] == {
+        "url": URL
+    }
+    assert not hermes_file(isolated_home).exists()
+
+
+def test_hermes_default_home_per_platform(isolated_home, monkeypatch):
+    assert client_config.hermes_home() == isolated_home / "AppData" / "Local" / "hermes"
+    monkeypatch.delenv("LOCALAPPDATA")
+    assert client_config.hermes_home() == isolated_home / "AppData" / "Local" / "hermes"
+    monkeypatch.setattr(client_config, "_platform", lambda: "linux")
+    assert client_config.hermes_home() == isolated_home / ".hermes"
+    monkeypatch.setattr(client_config, "_platform", lambda: "darwin")
+    assert client_config.hermes_home() == isolated_home / ".hermes"
+
+
+def test_hermes_only_supports_the_user_scope(isolated_home):
+    project = isolated_home / "repo"
+    project.mkdir()
+    agent = next(
+        a for a in client_config.list_agents(URL, False) if a["id"] == "hermes"
+    )
+
+    assert agent["scopes"] == ["user"]
+    with pytest.raises(client_config.InvalidRequest, match="user scope only"):
+        client_config.configure(
+            "hermes", URL, False, scope="project", project=str(project)
+        )
+
+
+@pytest.mark.parametrize("key", ["'mcp_servers'", '"mcp_servers"'])
+def test_hermes_quoted_mcp_servers_key_keeps_existing_servers(isolated_home, key):
+    path = hermes_file(isolated_home)
+    path.parent.mkdir(parents=True)
+    path.write_text(f"model: gpt-x\n{key}:\n  github:\n    command: npx\n")
+
+    client_config.configure("hermes", URL, False)
+
+    text = path.read_text()
+    data = load_yaml(path)
+    assert data["mcp_servers"]["github"] == {"command": "npx"}
+    assert data["mcp_servers"]["marm-memory"] == {"url": URL}
+    assert text.count("mcp_servers") == 1
+    assert f"{key}:" in text
+    client_config.remove("hermes")
+    assert set(load_yaml(path)["mcp_servers"]) == {"github"}
+
+
+@pytest.mark.parametrize(
+    ("header", "comment"),
+    [
+        ("mcp_servers: {}  # none yet", "# none yet"),
+        ("mcp_servers: ~ # nothing", "# nothing"),
+        ("mcp_servers: null   # empty", "# empty"),
+        ("mcp_servers:  # my servers", "# my servers"),
+        ("'mcp_servers': {}  # quoted", "# quoted"),
+    ],
+)
+def test_hermes_keeps_the_comment_on_the_mcp_servers_line(
+    isolated_home, header, comment
+):
+    path = hermes_file(isolated_home)
+    path.parent.mkdir(parents=True)
+    path.write_text(f"model: gpt-x\n{header}\nterminal:\n  backend: local\n")
+
+    client_config.configure("hermes", URL, False)
+
+    assert comment in path.read_text()
+    assert load_yaml(path)["mcp_servers"] == {"marm-memory": {"url": URL}}
+    client_config.remove("hermes")
+    text = path.read_text()
+    assert comment in text
+    assert load_yaml(path)["mcp_servers"] == {}
+    assert load_yaml(path)["terminal"] == {"backend": "local"}
+
+
+def test_hermes_refuses_any_edit_that_changes_more_than_marms_entry(
+    isolated_home, monkeypatch
+):
+    path = hermes_file(isolated_home)
+    path.parent.mkdir(parents=True)
+    original = "mcp_servers:\n  github:\n    command: npx\nmodel: gpt-x\n"
+    path.write_text(original)
+    monkeypatch.setattr(
+        client_config,
+        "_yaml_insert",
+        lambda text, entry: text + f'mcp_servers:\n  marm-memory:\n    url: "{URL}"\n',
+    )
+
+    with pytest.raises(client_config.ClientNotConfigurable, match="left as it was"):
+        client_config.configure("hermes", URL, False)
+
+    assert path.read_text() == original
+    assert load_yaml(path)["mcp_servers"]["github"] == {"command": "npx"}
+
+
+def test_hermes_remove_takes_only_marms_entry_and_keeps_the_rest(isolated_home):
+    path = hermes_file(isolated_home)
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        "# top\n"
+        "mcp_servers:\n"
+        "  github:\n"
+        "    command: npx\n"
+        "  marm-memory:\n"
+        f'    url: "{URL}"\n'
+        "    headers:\n"
+        '      Authorization: "Bearer ${MARM_API_KEY}"\n'
+        "  # trailing note for the next server\n"
+        "  docs:\n"
+        "    url: http://x\n"
+        "terminal:\n"
+        "  backend: local\n"
+    )
+
+    result = client_config.remove("hermes")
+
+    assert result["action"] == "remove"
+    assert result["verified"] is True
+    data = load_yaml(path)
+    assert set(data["mcp_servers"]) == {"github", "docs"}
+    assert data["terminal"] == {"backend": "local"}
+    text = path.read_text()
+    assert text.startswith("# top\n")
+    assert "  # trailing note for the next server\n  docs:" in text
+    assert (path.parent / "config.yaml.marm-backup").exists()
+
+
+def test_hermes_remove_of_the_last_server_leaves_an_empty_mapping(isolated_home):
+    path = hermes_file(isolated_home)
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        f'model: gpt-x\nmcp_servers:\n  marm-memory:\n    url: "{URL}"\nterminal:\n  backend: local\n'
+    )
+
+    client_config.remove("hermes")
+
+    data = load_yaml(path)
+    assert data["mcp_servers"] == {}
+    assert data["terminal"] == {"backend": "local"}
+    assert "mcp_servers: {}" in path.read_text()
+
+
+def test_hermes_remove_is_a_no_op_when_the_entry_is_absent(isolated_home):
+    path = hermes_file(isolated_home)
+    path.parent.mkdir(parents=True)
+    path.write_text("model: gpt-x\n")
+
+    result = client_config.remove("hermes")
+
+    assert result["action"] == "none"
+    assert path.read_text() == "model: gpt-x\n"
+
+
+def test_hermes_remove_refuses_a_flow_style_section(isolated_home):
+    path = hermes_file(isolated_home)
+    path.parent.mkdir(parents=True)
+    body = f'mcp_servers: {{marm-memory: {{url: "{URL}"}}}}\n'
+    path.write_text(body)
+
+    with pytest.raises(client_config.ClientNotConfigurable, match="by hand"):
+        client_config.remove("hermes")
+
+    assert path.read_text() == body
+
+
+def test_hermes_install_then_remove_round_trips_the_original_file(isolated_home):
+    path = hermes_file(isolated_home)
+    path.parent.mkdir(parents=True)
+    original = "# keep me\nmodel: gpt-x\n"
+    path.write_text(original)
+
+    client_config.configure("hermes", URL, True)
+    client_config.remove("hermes")
+
+    data = load_yaml(path)
+    assert data["model"] == "gpt-x"
+    assert data["mcp_servers"] == {}
+    assert path.read_text().startswith(original)
+
+
+def test_hermes_skill_lands_in_hermes_home_skills(isolated_home, monkeypatch):
+    custom = isolated_home / "data" / "hermes"
+    monkeypatch.setenv("HERMES_HOME", str(custom))
+    detect_dir = custom
+    detect_dir.mkdir(parents=True)
+
+    agent = next(
+        a for a in client_config.list_agents(URL, False) if a["id"] == "hermes"
+    )
+    assert agent["skill"] == {"supported": True, "installed": False}
+
+    result = client_config.skill_install.install_for_agent("hermes")
+
+    assert result["target"] == str(custom / "skills" / "marm-init" / "SKILL.md")
+    agent = next(
+        a for a in client_config.list_agents(URL, False) if a["id"] == "hermes"
+    )
+    assert agent["skill"] == {"supported": True, "installed": True}
 
 
 # --- Claude Code via subprocess -----------------------------------------------------------

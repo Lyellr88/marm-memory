@@ -9,6 +9,7 @@ AGENTS: dict[str, str] = {
     "claude": ".claude",
     "codex": ".codex",
     "grok": ".grok",
+    "hermes": ".hermes",
     "antigravity": ".gemini/config",
     "qwen": ".qwen",
     "kiro": ".kiro",
@@ -57,13 +58,21 @@ def _write_skill(agent_dir: Path, text: str) -> dict[str, str]:
     return {"target": str(target), "state": "refreshed" if existed else "installed"}
 
 
+def _global_dir(agent: str) -> Path:
+    if agent == "hermes":
+        from . import client_config
+
+        return client_config.hermes_home()
+    return Path.home() / AGENTS[agent]
+
+
 def is_installed(agent: str) -> bool:
-    return (Path.home() / AGENTS[agent] / SKILL_SUBPATH).is_file()
+    return (_global_dir(agent) / SKILL_SUBPATH).is_file()
 
 
 def install_for_agent(agent: str) -> dict[str, str]:
     """Install or refresh the skill globally for one agent key from AGENTS."""
-    agent_dir = Path.home() / AGENTS[agent]
+    agent_dir = _global_dir(agent)
     try:
         text = _bundled_skill_text()
     except OSError as exc:
@@ -85,12 +94,15 @@ def install_skill(args: argparse.Namespace) -> int:
     selected = _selected_globals(args)
 
     if selected:
-        home = Path.home()
-        results = [_write_skill(home / AGENTS[name], text) for name in selected]
+        results = [_write_skill(_global_dir(name), text) for name in selected]
         mode = "global"
     else:
         cwd = Path.cwd()
-        found = [name for name in AGENTS if (cwd / AGENTS[name]).is_dir()]
+        found = [
+            name
+            for name in AGENTS
+            if name != "hermes" and (cwd / AGENTS[name]).is_dir()
+        ]
         if found:
             results = [_write_skill(cwd / AGENTS[name], text) for name in found]
         else:

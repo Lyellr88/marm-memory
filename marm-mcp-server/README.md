@@ -119,7 +119,7 @@ Run `marm-memory console` to open the bundled web app at `http://127.0.0.1:8002`
 | **Code Context** | Build one bounded view of task-ranked symbols, source, and related memory. An optional local model can answer from that same context, with its citations checked. |
 | **Distill** | Turn transcripts into durable-memory proposals. Review, apply, or discard them with duplicate evidence visible. |
 | **System and Terminal** | Manage runtime health, indexing, local-model settings, backups, diagnostics, and maintenance. The docked terminal provides a real local shell with persistent sessions and a searchable MARM command menu. |
-| **Connections** | Set up MARM end to end in one place. **Setup** connects Claude Code, Claude Desktop, Cursor, VS Code, Codex CLI, Grok Build, Antigravity CLI, Qwen Code, Windsurf, and Kiro over HTTP, STDIO, or Docker STDIO, tests each connection, and saves server settings to `~/.marm/settings.json`. **Docker** pulls, starts, and stops the MARM container and writes a compose file. **Manual** gives copy-ready config for each client and OS, every CLI command, and every HTTP endpoint. |
+| **Connections** | Set up MARM end to end in one place. **Setup** connects Claude Code, Claude Desktop, Cursor, VS Code, Codex CLI, Grok Build, Hermes Agent, Antigravity CLI, Qwen Code, Windsurf, and Kiro over HTTP, STDIO, or Docker STDIO, tests each connection, and saves server settings to `~/.marm/settings.json`. **Docker** pulls, starts, and stops the MARM container and writes a compose file. **Manual** gives copy-ready config for each client and OS, every CLI command, and every HTTP endpoint. |
 
 ### Runtime CLI Commands
 
@@ -596,6 +596,33 @@ bearer_token_env_var = "MARM_API_KEY"
 ```
 
 Grok Build also reads MCP servers from `~/.claude.json`, `.cursor/mcp.json`, and project `.mcp.json`, so MARM may already load if Claude Code or Cursor has it. Run `grok mcp list` to see what it loaded.
+
+</details>
+
+<details>
+<summary><strong>Hermes Agent</strong></summary>
+
+Hermes Agent (`hermes`) by Nous Research reads MCP servers from `mcp_servers` in `config.yaml`: `~/.hermes/config.yaml` on macOS and Linux, `%LOCALAPPDATA%\hermes\config.yaml` on native Windows, or `$HERMES_HOME/config.yaml` if you set it. It supports STDIO and HTTP and expands `${VAR}` in headers, so the key stays in your environment or `~/.hermes/.env` and never lands in the file.
+
+```bash
+# STDIO - no key needed
+hermes mcp add marm-memory --command marm-mcp-stdio
+
+# HTTP, direct Python install - no key needed
+hermes mcp add marm-memory --url http://localhost:8001/mcp
+```
+
+Docker or `SERVER_HOST=0.0.0.0` (key required): set `MARM_API_KEY`, then add this under `mcp_servers` in `config.yaml`:
+
+```yaml
+mcp_servers:
+  marm-memory:
+    url: "http://localhost:8001/mcp"
+    headers:
+      Authorization: "Bearer ${MARM_API_KEY}"
+```
+
+Run `/reload-mcp` in Hermes, or start a new session, to load it.
 
 </details>
 

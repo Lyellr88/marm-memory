@@ -28,6 +28,8 @@ def isolated_home(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("USERPROFILE", str(tmp_path))
     monkeypatch.setenv("APPDATA", str(tmp_path / "AppData" / "Roaming"))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "AppData" / "Local"))
+    monkeypatch.delenv("HERMES_HOME", raising=False)
     monkeypatch.setattr(client_config.shutil, "which", lambda name: None)
     monkeypatch.setattr(key_management, "read_managed_key", lambda: "")
     return tmp_path
@@ -90,6 +92,9 @@ def test_list_agents_shape(app_client, isolated_home):
         "notes",
         "unavailable",
     }
+    hermes = next(c for c in body["clients"] if c["id"] == "hermes")
+    assert hermes["label"] == "Hermes Agent"
+    assert hermes["scopes"] == ["user"]
     grok = next(c for c in body["clients"] if c["id"] == "grok")
     assert grok["label"] == "Grok Build"
     assert grok["scopes"] == ["user", "project"]
@@ -485,6 +490,66 @@ def test_grok_configure_writes_its_toml_and_the_skill_lands_in_grok_skills(
     assert skill.json()["target"] == str(
         isolated_home / ".grok" / "skills" / "marm-init" / "SKILL.md"
     )
+
+
+def test_hermes_configure_then_remove_round_trip(app_client, isolated_home):
+    home = isolated_home / "AppData" / "Local" / "hermes"
+    home.mkdir(parents=True)
+    config = home / "config.yaml"
+    config.write_text("# mine\nmodel: gpt-x\n")
+
+    configured = app_client.post(
+        "/api/connections/agents/hermes/configure", json={"dry_run": False}
+    )
+    removed = app_client.post(
+        "/api/connections/agents/hermes/remove", json={"scope": "user"}
+    )
+
+    assert configured.status_code == 200
+    assert configured.json()["verified"] is True
+    assert configured.json()["config_path"] == str(config)
+    assert removed.status_code == 200
+    assert removed.json()["verified"] is True
+    assert config.read_text().startswith("# mine\nmodel: gpt-x\n")
+
+
+def test_hermes_test_route_resolves_the_key_reference_in_headers(
+    app_client, isolated_home, monkeypatch
+):
+    monkeypatch.setattr(key_management, "read_managed_key", lambda: SECRET)
+    home = isolated_home / "AppData" / "Local" / "hermes"
+    home.mkdir(parents=True)
+    with FakeMcp(key=SECRET) as fake:
+        (home / "config.yaml").write_text(
+            "mcp_servers:\n"
+            "  marm-memory:\n"
+            f'    url: "{fake.url}"\n'
+            "    headers:\n"
+            '      Authorization: "Bearer ${MARM_API_KEY}"\n'
+        )
+        response = app_client.post(
+            "/api/connections/agents/hermes/test", json={"scope": "user"}
+        )
+
+    assert response.json()["ok"] is True
+    assert SECRET not in response.text
+
+
+def test_hermes_skill_installs_under_hermes_home(app_client, isolated_home):
+    (isolated_home / "AppData" / "Local" / "hermes").mkdir(parents=True)
+
+    response = app_client.post("/api/connections/agents/hermes/skill")
+
+    target = (
+        isolated_home
+        / "AppData"
+        / "Local"
+        / "hermes"
+        / "skills"
+        / "marm-init"
+        / "SKILL.md"
+    )
+    assert response.json() == {"state": "installed", "target": str(target)}
 
 
 def test_test_route_wrong_key_is_unauthorized_without_echo(

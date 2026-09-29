@@ -99,6 +99,29 @@ def test_grok_skill_installs_into_its_skills_folder(tmp_path, monkeypatch):
     assert skill_install.is_installed("grok") is True
 
 
+def test_hermes_skill_follows_hermes_home_and_is_never_a_project_install(
+    tmp_path, monkeypatch
+):
+    home = tmp_path / "home"
+    project = tmp_path / "project"
+    (project / ".hermes").mkdir(parents=True)
+    home.mkdir()
+    custom = tmp_path / "hermes-data"
+    monkeypatch.setattr(skill_install.Path, "home", classmethod(lambda cls: home))
+    monkeypatch.setenv("HERMES_HOME", str(custom))
+    monkeypatch.chdir(project)
+
+    result = skill_install.install_for_agent("hermes")
+
+    assert result["target"] == str(custom / SKILL_REL)
+    assert skill_install.is_installed("hermes") is True
+    assert not (home / ".hermes").exists()
+
+    skill_install.install_skill(_args())
+    assert not (project / ".hermes" / SKILL_REL).exists()
+    assert _read(project, ".agents") == skill_install._bundled_skill_text()
+
+
 def test_fail_open_when_a_target_is_unwritable(tmp_path, monkeypatch):
     (tmp_path / ".claude").mkdir()
     (tmp_path / ".codex").mkdir()

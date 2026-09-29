@@ -44,12 +44,7 @@ def _runtime_url_and_auth() -> tuple[str, bool]:
 
 
 def _skills_installed() -> int:
-    home = client_config._home()
-    return sum(
-        1
-        for directory in skill_install.AGENTS.values()
-        if (home / directory / skill_install.SKILL_SUBPATH).is_file()
-    )
+    return sum(1 for agent in skill_install.AGENTS if skill_install.is_installed(agent))
 
 
 def _project_step(runtime_ready: bool) -> dict[str, Any]:
