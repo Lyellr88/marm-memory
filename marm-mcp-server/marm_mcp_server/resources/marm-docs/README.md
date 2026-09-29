@@ -92,7 +92,7 @@ Run `marm-memory console` to open the bundled web app at `http://127.0.0.1:8002`
 | **Code Context** | Build one bounded view of task-ranked symbols, source, and related memory. An optional local model can answer from that same context, with its citations checked. |
 | **Distill** | Turn transcripts into durable-memory proposals. Review, apply, or discard them with duplicate evidence visible. |
 | **System and Terminal** | Manage runtime health, indexing, local-model settings, backups, diagnostics, and maintenance. The docked terminal provides a real local shell with persistent sessions and a searchable MARM command menu. |
-| **Connections** | Set up MARM end to end in one place. **Setup** connects Claude Code, Claude Desktop, Cursor, VS Code, Codex CLI, Grok Build, Hermes Agent, Antigravity CLI, Qwen Code, Windsurf, and Kiro over HTTP, STDIO, or Docker STDIO, tests each connection, and saves server settings to `~/.marm/settings.json`. **Docker** pulls, starts, and stops the MARM container and writes a compose file. **Manual** gives copy-ready config for each client and OS, every CLI command, and every HTTP endpoint. |
+| **Connections** | Set up MARM end to end in one place. **Setup** connects Claude Code, Claude Desktop, Cursor, VS Code, Codex CLI, Grok Build, Hermes Agent, OpenCode, Cline, Antigravity, Qwen Code, Devin, and Kiro over HTTP, STDIO, or Docker STDIO, tests each connection, and saves server settings to `~/.marm/settings.json`. **Docker** pulls, starts, and stops the MARM container and writes a compose file. **Manual** gives copy-ready config for each client and OS, every CLI command, and every HTTP endpoint. |
 
 ### Runtime CLI Commands
 
@@ -269,7 +269,7 @@ python -m marm_mcp_server.server_stdio
 codex mcp add marm-memory-stdio -- marm-mcp-stdio
 ```
 
-Replace `marm-mcp-stdio` with `python -m marm_mcp_server.server_stdio` if using a virtualenv or a path-based setup. Works with Claude Code, Cursor, VS Code, Qwen, and Antigravity CLI. STDIO stays a single local process with no port and no API key, and exposes the same 16 tools as HTTP.
+Replace `marm-mcp-stdio` with `python -m marm_mcp_server.server_stdio` if using a virtualenv or a path-based setup. Works with Claude Code, Cursor, VS Code, Qwen, and Antigravity. STDIO stays a single local process with no port and no API key, and exposes the same 16 tools as HTTP.
 
 </details>
 
@@ -526,6 +526,8 @@ Add to `.cursor/mcp.json` in your workspace. Cursor uses `mcpServers`, not VS Co
 
 For Docker/key mode, launch Cursor with `MARM_API_KEY` set in the environment.
 
+The Cursor CLI (`agent`) reads the same `mcp.json` files, so a server added for the editor is already available there. Run `agent mcp list` to check. A server in the global `~/.cursor/mcp.json` loads without approval. A server in a project's `.cursor/mcp.json` asks you to trust the folder and approve it on first use, and headless runs need `--trust --approve-mcps`. If it lists no servers, look in `mcp.json` for an entry with an unknown `type` such as `streamable-http`: the CLI drops the whole file when one entry fails to parse. Install it with `curl https://cursor.com/install -fsS | bash` on macOS, Linux and WSL, or `irm 'https://cursor.com/install?win32=true' | iex` in Windows PowerShell.
+
 </details>
 
 <details>
@@ -600,9 +602,121 @@ Run `/reload-mcp` in Hermes, or start a new session, to load it.
 </details>
 
 <details>
+<summary><strong>OpenCode</strong></summary>
+
+OpenCode (`opencode`, installed with `npm install -g opencode-ai`) reads MCP servers from `mcp` in `opencode.json` or `opencode.jsonc`: `~/.config/opencode/` on every platform including Windows (`%USERPROFILE%\.config\opencode`), or `$XDG_CONFIG_HOME/opencode/` if you set it, and `opencode.json` in a project root for one project. It supports STDIO (`type: local`) and HTTP (`type: remote`) and expands `{env:VAR}` in headers, so the key stays in your environment and never lands in the file. Remote servers try OAuth by default, so MARM writes `oauth: false`. OpenCode 2 nests servers under `mcp.servers` and still reads the layout below, and MARM writes into whichever layout the file already uses. Connecting from the Console rewrites the file as plain JSON, so comments in a `.jsonc` file are not kept, and the original is saved beside it as `.marm-backup`. Start a new OpenCode session to load it, and run `opencode mcp list` to check.
+
+STDIO, no key needed:
+
+```json
+{
+  "mcp": {
+    "marm-memory": {
+      "type": "local",
+      "command": ["marm-mcp-stdio"]
+    }
+  }
+}
+```
+
+HTTP, direct Python install (no key needed):
+
+```json
+{
+  "mcp": {
+    "marm-memory": {
+      "type": "remote",
+      "url": "http://localhost:8001/mcp",
+      "oauth": false
+    }
+  }
+}
+```
+
+Docker or `SERVER_HOST=0.0.0.0` (key required): set `MARM_API_KEY`, then add the same HTTP entry with a header:
+
+```json
+{
+  "mcp": {
+    "marm-memory": {
+      "type": "remote",
+      "url": "http://localhost:8001/mcp",
+      "oauth": false,
+      "headers": {
+        "Authorization": "Bearer {env:MARM_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+</details>
+
+<details>
+<summary><strong>Devin</strong></summary>
+
+Devin CLI (`devin`) and the Devin Local agent in Devin Desktop, the IDE formerly called Windsurf, read MCP servers from the same `mcp_config.json`: `~/.config/devin/mcp_config.json` on macOS and Linux (or `$XDG_CONFIG_HOME/devin/mcp_config.json` if you set it), `%APPDATA%\devin\mcp_config.json` on Windows. Connecting once covers both. The older Cascade agent in Devin Desktop keeps its MCP servers in its own file under `~/.codeium`, which MARM does not write. Devin CLI v3000.3 or later reads this dedicated file, and older builds keep `mcpServers` in `config.json` and migrate it on startup. `devin mcp add` saves to a gitignored project file unless you pass `-s user`.
+
+```bash
+# STDIO - no key needed
+devin mcp add -s user marm-memory -- marm-mcp-stdio
+
+# HTTP, direct Python install - no key needed
+devin mcp add -s user marm-memory http://localhost:8001/mcp
+```
+
+Docker or `SERVER_HOST=0.0.0.0` (key required): MARM has not confirmed that Devin expands environment variables in headers, so use STDIO, or add the key by hand under `mcpServers` in that file:
+
+```json
+{
+  "mcpServers": {
+    "marm-memory": {
+      "url": "http://localhost:8001/mcp",
+      "headers": {
+        "Authorization": "Bearer your-generated-key"
+      }
+    }
+  }
+}
+```
+
+</details>
+
+<details>
+<summary><strong>Cline CLI</strong></summary>
+
+Cline CLI (`cline`, installed with `npm install -g cline`) reads MCP servers from `~/.cline/data/settings/cline_mcp_settings.json`, the same file the Cline extensions in VS Code and JetBrains use (`%USERPROFILE%\.cline` on Windows, or `$CLINE_DATA_DIR/settings` if you set it). Cline's own MCP page still says `~/.cline/mcp.json`, but the CLI never reads that file. HTTP entries need `"type": "streamableHttp"`: leaving `type` out selects the legacy SSE transport. The extensions in VS Code and JetBrains show the server in their MCP Servers panel. Cline 4.x or later shares this file and moves an older file from VS Code's extension storage into it on first launch. Older builds keep reading their own file, so upgrade Cline first.
+
+```bash
+# STDIO - no key needed
+cline mcp install marm-memory --yes -- marm-mcp-stdio
+
+# HTTP, direct Python install - no key needed
+cline mcp install marm-memory --yes --transport http http://localhost:8001/mcp
+```
+
+Docker or `SERVER_HOST=0.0.0.0` (key required): MARM has not confirmed that Cline CLI expands environment variables in headers, so use STDIO, or add the key by hand under `mcpServers` in that file:
+
+```json
+{
+  "mcpServers": {
+    "marm-memory": {
+      "type": "streamableHttp",
+      "url": "http://localhost:8001/mcp",
+      "headers": {
+        "Authorization": "Bearer your-generated-key"
+      }
+    }
+  }
+}
+```
+
+</details>
+
+<details>
 <summary><strong>Antigravity CLI</strong></summary>
 
-Antigravity CLI (`agy`) replaced Gemini CLI in June 2026. It supports STDIO and HTTP MCP servers. Use HTTP for MARM.
+Antigravity CLI (`agy`) replaced Gemini CLI in June 2026. It supports STDIO and HTTP MCP servers. Use HTTP for MARM. The Antigravity IDE and 2.0 app read this same file (in the IDE, open "..." then MCP Servers, then Manage MCP Servers). Antigravity 2.x or later reads it. Older IDE builds used `~/.gemini/antigravity/mcp_config.json`, and MARM writes that file only when it is the only one present.
 
 ```bash
 # Direct Python install - no key needed

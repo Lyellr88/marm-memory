@@ -117,7 +117,7 @@ Run `marm-memory console` to open the bundled web app at `http://127.0.0.1:8002`
 | **Code Context** | Build one bounded view of task-ranked symbols, source, and related memory. An optional local model can answer from that same context, with its citations checked. |
 | **Distill** | Turn transcripts into durable-memory proposals. Review, apply, or discard them with duplicate evidence visible. |
 | **System and Terminal** | Manage runtime health, indexing, local-model settings, backups, diagnostics, and maintenance. The docked terminal provides a real local shell with persistent sessions and a searchable MARM command menu. |
-| **Connections** | Set up MARM end to end in one place. **Setup** connects Claude Code, Claude Desktop, Cursor, VS Code, Codex CLI, Grok Build, Hermes Agent, OpenCode, Cline, Antigravity, Qwen Code, Windsurf, and Kiro over HTTP, STDIO, or Docker STDIO, tests each connection, and saves server settings to `~/.marm/settings.json`. **Docker** pulls, starts, and stops the MARM container and writes a compose file. **Manual** gives copy-ready config for each client and OS, every CLI command, and every HTTP endpoint. |
+| **Connections** | Set up MARM end to end in one place. **Setup** connects Claude Code, Claude Desktop, Cursor, VS Code, Codex CLI, Grok Build, Hermes Agent, OpenCode, Cline, Antigravity, Qwen Code, Devin, and Kiro over HTTP, STDIO, or Docker STDIO, tests each connection, and saves server settings to `~/.marm/settings.json`. **Docker** pulls, starts, and stops the MARM container and writes a compose file. **Manual** gives copy-ready config for each client and OS, every CLI command, and every HTTP endpoint. |
 
 ### Runtime CLI Commands
 
@@ -669,6 +669,36 @@ Docker or `SERVER_HOST=0.0.0.0` (key required): set `MARM_API_KEY`, then add the
       "oauth": false,
       "headers": {
         "Authorization": "Bearer {env:MARM_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+</details>
+
+<details>
+<summary><strong>Devin</strong></summary>
+
+Devin CLI (`devin`) and the Devin Local agent in Devin Desktop, the IDE formerly called Windsurf, read MCP servers from the same `mcp_config.json`: `~/.config/devin/mcp_config.json` on macOS and Linux (or `$XDG_CONFIG_HOME/devin/mcp_config.json` if you set it), `%APPDATA%\devin\mcp_config.json` on Windows. Connecting once covers both. The older Cascade agent in Devin Desktop keeps its MCP servers in its own file under `~/.codeium`, which MARM does not write. Devin CLI v3000.3 or later reads this dedicated file, and older builds keep `mcpServers` in `config.json` and migrate it on startup. `devin mcp add` saves to a gitignored project file unless you pass `-s user`.
+
+```bash
+# STDIO - no key needed
+devin mcp add -s user marm-memory -- marm-mcp-stdio
+
+# HTTP, direct Python install - no key needed
+devin mcp add -s user marm-memory http://localhost:8001/mcp
+```
+
+Docker or `SERVER_HOST=0.0.0.0` (key required): MARM has not confirmed that Devin expands environment variables in headers, so use STDIO, or add the key by hand under `mcpServers` in that file:
+
+```json
+{
+  "mcpServers": {
+    "marm-memory": {
+      "url": "http://localhost:8001/mcp",
+      "headers": {
+        "Authorization": "Bearer your-generated-key"
       }
     }
   }

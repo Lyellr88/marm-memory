@@ -464,6 +464,33 @@ Docker or `SERVER_HOST=0.0.0.0` (key required): set `MARM_API_KEY`, then add the
 }
 ```
 
+### **Devin**
+
+Devin CLI (`devin`) and the Devin Local agent in Devin Desktop, the IDE formerly called Windsurf, read MCP servers from the same `mcp_config.json`: `~/.config/devin/mcp_config.json` on macOS and Linux (or `$XDG_CONFIG_HOME/devin/mcp_config.json` if you set it), `%APPDATA%\devin\mcp_config.json` on Windows. Connecting once covers both. The older Cascade agent in Devin Desktop keeps its MCP servers in its own file under `~/.codeium`, which MARM does not write. Devin CLI v3000.3 or later reads this dedicated file, and older builds keep `mcpServers` in `config.json` and migrate it on startup. `devin mcp add` saves to a gitignored project file unless you pass `-s user`.
+
+```bash
+# STDIO - no key needed
+devin mcp add -s user marm-memory -- marm-mcp-stdio
+
+# HTTP, direct Python install - no key needed
+devin mcp add -s user marm-memory http://localhost:8001/mcp
+```
+
+Docker or `SERVER_HOST=0.0.0.0` (key required): MARM has not confirmed that Devin expands environment variables in headers, so use STDIO, or add the key by hand under `mcpServers` in that file:
+
+```json
+{
+  "mcpServers": {
+    "marm-memory": {
+      "url": "http://localhost:8001/mcp",
+      "headers": {
+        "Authorization": "Bearer your-generated-key"
+      }
+    }
+  }
+}
+```
+
 ### **Cline CLI**
 
 Cline CLI (`cline`, installed with `npm install -g cline`) reads MCP servers from `~/.cline/data/settings/cline_mcp_settings.json`, the same file the Cline extensions in VS Code and JetBrains use (`%USERPROFILE%\.cline` on Windows, or `$CLINE_DATA_DIR/settings` if you set it). Cline's own MCP page still says `~/.cline/mcp.json`, but the CLI never reads that file. HTTP entries need `"type": "streamableHttp"`: leaving `type` out selects the legacy SSE transport. The extensions in VS Code and JetBrains show the server in their MCP Servers panel. Cline 4.x or later shares this file and moves an older file from VS Code's extension storage into it on first launch. Older builds keep reading their own file, so upgrade Cline first.

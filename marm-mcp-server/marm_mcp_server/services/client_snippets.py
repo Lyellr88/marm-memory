@@ -56,7 +56,7 @@ _OS_APPDATA_DISPLAY: dict[str, dict[str, str | None]] = {
         "macos": "~/.hermes/config.yaml",
         "linux": "~/.hermes/config.yaml",
     },
-    "windsurf": {
+    "devin": {
         "windows": "%APPDATA%\\devin\\mcp_config.json",
         "macos": "~/.config/devin/mcp_config.json",
         "linux": "~/.config/devin/mcp_config.json",
@@ -65,7 +65,6 @@ _OS_APPDATA_DISPLAY: dict[str, dict[str, str | None]] = {
 _NO_CLI = {
     "opencode": "OpenCode's add command differs between versions. Use the config file snippet.",
     "cursor": "Cursor has no command for adding a server. Use the config file snippet.",
-    "windsurf": "Windsurf has no command for adding a server. Use the config file snippet.",
     "kiro": "Kiro has no command for adding a server. Use the config file snippet.",
     "claude-desktop": "Claude Desktop has no command for adding a server. Use the config file snippet.",
 }
@@ -85,10 +84,7 @@ def _check_os(os_name: str) -> None:
 
 
 def _spec(client_id: str) -> ClientSpec:
-    spec = REGISTRY.get(client_id)
-    if spec is None:
-        raise client_config.ClientNotFound(client_id)
-    return spec
+    return client_config._spec(client_id)
 
 
 def _sep(os_name: str, text: str) -> str:
@@ -233,9 +229,10 @@ def _snippet_notes(
         )
     if spec.id == "codex" and scope == "project":
         notes.append(client_config._CODEX_TRUST_NOTE)
-    if spec.id == "windsurf":
+    if spec.id == "devin":
+        notes.append(client_config._DEVIN_SHARED_NOTE)
         notes.append(
-            "Older Windsurf installs use ~/.codeium/windsurf/mcp_config.json instead."
+            "On macOS and Linux, if XDG_CONFIG_HOME is set, the file is $XDG_CONFIG_HOME/devin/mcp_config.json."
         )
     if spec.id == "antigravity":
         notes.append("The Antigravity IDE, CLI and 2.0 app read this same file.")
@@ -362,6 +359,15 @@ def _cline_command(transport: str, url: str, argv: list[str], os_name: str) -> s
     return _join([*base, "--", *argv], os_name)
 
 
+def _devin_command(
+    transport: str, scope: str, url: str, argv: list[str], os_name: str
+) -> str:
+    base = ["devin", "mcp", "add", "-s", scope, SERVER_NAME]
+    if transport == "http":
+        return _join([*base, url], os_name)
+    return _join([*base, "--", *argv], os_name)
+
+
 def _hermes_command(transport: str, url: str, argv: list[str], os_name: str) -> str:
     base = ["hermes", "mcp", "add", SERVER_NAME]
     if transport == "http":
@@ -448,6 +454,12 @@ def _one_command(
         return _agy_command(
             transport, url, argv, os_name
         ), "Adds MARM for every project."
+    if client_id == "devin":
+        return _devin_command(transport, scope, url, argv, os_name), (
+            "Adds MARM for every project."
+            if scope == "user"
+            else "Adds MARM to this project's shared .devin/mcp_config.json."
+        )
     if client_id == "qwen":
         return _gemini_command(client_id, transport, scope, url, argv, os_name), (
             "Adds MARM for every project."

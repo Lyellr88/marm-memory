@@ -12,6 +12,7 @@ AGENTS: dict[str, str] = {
     "grok": ".grok",
     "hermes": ".hermes",
     "opencode": ".opencode",
+    "devin": ".devin",
     "cline": ".cline",
     "antigravity": ".gemini/config",
     "qwen": ".qwen",
@@ -62,7 +63,7 @@ def _write_skill(agent_dir: Path, text: str) -> dict[str, str]:
 
 
 def _global_dir(agent: str) -> Path:
-    if agent in {"hermes", "cline", "opencode"}:
+    if agent in {"hermes", "cline", "opencode", "devin"}:
         from . import client_config
 
         return getattr(client_config, f"{agent}_home")()

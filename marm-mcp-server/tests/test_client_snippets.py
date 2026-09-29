@@ -86,8 +86,8 @@ def test_every_supported_combination_parses_with_container_key_and_url() -> None
 
 
 def test_entries_match_what_configure_would_write() -> None:
-    for client in ("cursor", "vscode", "antigravity", "windsurf", "kiro", "claude"):
-        auth = client != "antigravity"
+    for client in ("cursor", "vscode", "antigravity", "devin", "kiro", "claude"):
+        auth = client not in {"antigravity", "devin"}
         expected = client_config.build_entry(client, "http", URL, auth)
         spec = client_config.REGISTRY[client]
         entry = json.loads(make(client, "linux", "http", "user", auth)["text"])[
@@ -106,8 +106,8 @@ def test_container_keys_and_key_references() -> None:
     assert cursor["mcpServers"]["marm-memory"]["headers"] == {
         "Authorization": "Bearer ${env:MARM_API_KEY}"
     }
-    windsurf = json.loads(make("windsurf", "linux", "http", "user", True)["text"])
-    assert windsurf["mcpServers"]["marm-memory"]["serverUrl"] == URL
+    devin = json.loads(make("devin", "linux", "http", "user", False)["text"])
+    assert devin["mcpServers"]["marm-memory"] == {"url": URL}
     agy = json.loads(make("antigravity", "linux", "http", "user", False)["text"])
     assert agy["mcpServers"]["marm-memory"] == {"serverUrl": URL}
 
@@ -168,6 +168,44 @@ def test_opencode_snippet_uses_native_shapes_and_has_no_add_command() -> None:
             assert entry["command"] is None
             assert "config file snippet" in entry["note"]
             assert SECRET not in json.dumps(entry)
+
+
+def test_devin_snippet_and_commands_cover_transports_and_defer_keyed_http() -> None:
+    assert make("devin", "windows", "http", "user", False)["path"] == (
+        "%APPDATA%\\devin\\mcp_config.json"
+    )
+    assert any(
+        "Devin Desktop" in n
+        for n in make("devin", "linux", "http", "user", False)["notes"]
+    )
+    assert any(
+        "XDG_CONFIG_HOME" in n
+        for n in make("devin", "linux", "http", "user", False)["notes"]
+    )
+    with pytest.raises(client_config.InvalidRequest, match="STDIO"):
+        make("devin", "linux", "http", "user", True)
+    assert commands("http", "user")["devin"]["command"] == (
+        f"devin mcp add -s user marm-memory {URL}"
+    )
+    assert commands("stdio", "user")["devin"]["command"] == (
+        "devin mcp add -s user marm-memory -- marm-mcp-stdio"
+    )
+    argv = client_snippets._docker_argv("linux", "latest")
+    assert commands("docker-stdio", "user")["devin"]["command"] == (
+        f"devin mcp add -s user marm-memory -- {shlex.join(argv)}"
+    )
+    keyed = commands("http", "user", auth=True)["devin"]
+    assert keyed["command"] is None and "Devin" in keyed["note"]
+    assert SECRET not in json.dumps(keyed)
+    assert commands("http", "project")["devin"]["command"] == (
+        f"devin mcp add -s project marm-memory {URL}"
+    )
+    assert (
+        client_snippets.snippet("windsurf", "linux", "http", "user", URL, False)[
+            "client"
+        ]
+        == "devin"
+    )
 
 
 def test_cline_json_fragment_and_paths() -> None:
@@ -286,8 +324,8 @@ def test_grok_toml_fragment_and_paths() -> None:
             "macos",
             "~/Library/Application Support/Claude/claude_desktop_config.json",
         ),
-        ("windsurf", "windows", "%APPDATA%\\devin\\mcp_config.json"),
-        ("windsurf", "linux", "~/.config/devin/mcp_config.json"),
+        ("devin", "windows", "%APPDATA%\\devin\\mcp_config.json"),
+        ("devin", "linux", "~/.config/devin/mcp_config.json"),
         ("cursor", "windows", "~\\.cursor\\mcp.json"),
         ("cursor", "linux", "~/.cursor/mcp.json"),
         ("claude", "macos", "~/.claude.json"),
@@ -329,7 +367,7 @@ def test_unsupported_combinations_are_422_with_a_reason() -> None:
     with pytest.raises(client_config.InvalidRequest, match="STDIO"):
         make("claude-desktop", "macos", "http", "user", False)
     with pytest.raises(client_config.InvalidRequest, match="user scope only"):
-        make("windsurf", "linux", "http", "project", False)
+        make("devin", "linux", "http", "project", False)
     with pytest.raises(client_config.InvalidRequest, match="STDIO"):
         make("antigravity", "linux", "http", "user", True)
     with pytest.raises(client_config.InvalidRequest, match="Unknown transport"):
@@ -417,7 +455,7 @@ def test_agent_commands_http_exact_strings() -> None:
     assert plain["vscode"]["command"] == (
         f'code --add-mcp \'{{"name":"marm-memory","type":"http","url":"{URL}"}}\''
     )
-    for client in ("cursor", "windsurf", "kiro", "claude-desktop"):
+    for client in ("cursor", "kiro", "claude-desktop"):
         assert plain[client]["command"] is None
         assert "config file snippet" in plain[client]["note"]
 

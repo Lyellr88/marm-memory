@@ -28,7 +28,7 @@ DETECT_DIRS = {
     "cline": ".cline",
     "antigravity": ".gemini/config",
     "qwen": ".qwen",
-    "windsurf": ".codeium/windsurf",
+    "devin": "AppData/Roaming/devin",
     "kiro": ".kiro",
 }
 
@@ -43,7 +43,7 @@ USER_FILES = {
     "cline": ".cline/data/settings/cline_mcp_settings.json",
     "antigravity": ".gemini/config/mcp_config.json",
     "qwen": ".qwen/settings.json",
-    "windsurf": ".codeium/windsurf/mcp_config.json",
+    "devin": "AppData/Roaming/devin/mcp_config.json",
     "kiro": ".kiro/settings/mcp.json",
 }
 
@@ -70,13 +70,11 @@ HTTP_TYPE = {"cline": "streamableHttp"}
 URL_KEY = {
     "antigravity": "serverUrl",
     "qwen": "httpUrl",
-    "windsurf": "serverUrl",
 }
 AUTH_REF = {
     "claude": "${MARM_API_KEY}",
     "cursor": "${env:MARM_API_KEY}",
     "vscode": "${input:marm-api-key}",
-    "windsurf": "${env:MARM_API_KEY}",
     "hermes": "${MARM_API_KEY}",
     "opencode": "{env:MARM_API_KEY}",
     "kiro": "${MARM_API_KEY}",
@@ -157,7 +155,9 @@ def docker_args_for(tmp_path: Path) -> list[str]:
 
 def unavailable(client: str, transport: str, auth: bool) -> bool:
     return (client == "claude-desktop" and transport == "http") or (
-        client in {"antigravity", "qwen", "cline"} and transport == "http" and auth
+        client in {"antigravity", "qwen", "cline", "devin"}
+        and transport == "http"
+        and auth
     )
 
 
@@ -582,7 +582,7 @@ def test_bad_transport_scope_and_project_are_invalid_requests(isolated_home, tmp
             client_config.configure("cursor", URL, False, **case)
     with pytest.raises(client_config.InvalidRequest, match="user scope only"):
         client_config.configure(
-            "windsurf", URL, False, scope="project", project=str(tmp_path)
+            "devin", URL, False, scope="project", project=str(tmp_path)
         )
     with pytest.raises(client_config.InvalidRequest):
         client_config.status("cursor", "project", str(tmp_path / "nope"))
@@ -909,40 +909,13 @@ def test_claude_detection_is_not_the_home_directory(isolated_home, monkeypatch):
     assert claude_agent()["detected"] is True
 
 
-def test_windsurf_prefers_the_devin_file_then_codeium(isolated_home):
-    codeium = isolated_home / ".codeium" / "windsurf" / "mcp_config.json"
-    devin = isolated_home / "AppData" / "Roaming" / "devin" / "mcp_config.json"
-
-    assert client_config.status("windsurf")["config_path"] == str(codeium)
-
-    devin.parent.mkdir(parents=True)
-    assert client_config.status("windsurf")["config_path"] == str(devin)
-
-    codeium.parent.mkdir(parents=True)
-    assert client_config.status("windsurf")["config_path"] == str(codeium)
-
-    codeium.write_text("{}")
-    assert client_config.status("windsurf")["config_path"] == str(codeium)
-
-    devin.write_text("{}")
-    assert client_config.status("windsurf")["config_path"] == str(devin)
-
-
-def test_windsurf_devin_path_on_posix(isolated_home, monkeypatch):
-    monkeypatch.setattr(client_config, "_platform", lambda: "linux")
-    devin = isolated_home / ".config" / "devin" / "mcp_config.json"
-    devin.parent.mkdir(parents=True)
-    devin.write_text("{}")
-
-    assert client_config.status("windsurf")["config_path"] == str(devin)
-
-
 def test_agent_list_shape(isolated_home):
     agents = client_config.list_agents(URL, False)
 
     assert [a["id"] for a in agents] == client_config.CLIENT_IDS
     by_id = {a["id"]: a for a in agents}
-    assert by_id["windsurf"]["scopes"] == ["user"]
+    assert by_id["devin"]["scopes"] == ["user"]
+    assert by_id["devin"]["skill"] == {"supported": True, "installed": False}
     assert by_id["cursor"]["scopes"] == ["user", "project"]
     assert by_id["cursor"]["transports"] == ["http", "stdio", "docker-stdio"]
     assert by_id["cursor"]["skill"] == {"supported": True, "installed": False}
@@ -2315,3 +2288,169 @@ def test_opencode_skill_lands_in_the_opencode_config_skills_folder(isolated_home
     expected = opencode_dir(isolated_home) / "skills" / "marm-init" / "SKILL.md"
     assert result["target"] == str(expected)
     assert skill_install.is_installed("opencode") is True
+
+
+# --- Devin ---------------------------------------------------------------------------
+
+
+def devin_file(home: Path) -> Path:
+    return home / "AppData" / "Roaming" / "devin" / "mcp_config.json"
+
+
+def test_devin_writes_url_for_http_and_plain_command_and_args_for_stdio(isolated_home):
+    detect(isolated_home, "devin")
+
+    http = client_config.configure("devin", URL, False)
+    stdio = client_config.configure("devin", URL, False, transport="stdio")
+
+    assert http["entry"] == {"url": URL}
+    assert stdio["entry"] == {"command": "marm-mcp-stdio", "args": []}
+    data = json.loads(devin_file(isolated_home).read_text())
+    assert data["mcpServers"]["marm-memory"] == stdio["entry"]
+    agent = next(a for a in client_config.list_agents(URL, False) if a["id"] == "devin")
+    assert any("Devin Desktop" in note for note in agent["notes"])
+
+
+def test_devin_keyed_http_is_manual_and_suggests_stdio(isolated_home):
+    detect(isolated_home, "devin")
+
+    with pytest.raises(client_config.ClientNotConfigurable, match="STDIO"):
+        client_config.configure("devin", URL, True)
+    stdio = client_config.configure("devin", URL, True, transport="stdio")
+
+    assert stdio["verified"] is True
+    agent = next(a for a in client_config.list_agents(URL, True) if a["id"] == "devin")
+    assert "Devin expands" in agent["unavailable"]["http"]
+    assert not any("MARM_API_KEY" in note for note in agent["notes"])
+
+
+def test_devin_keeps_other_servers_and_top_level_keys(isolated_home):
+    path = devin_file(isolated_home)
+    path.parent.mkdir(parents=True)
+    other = {"url": "https://mcp.notion.com/mcp", "transport": "http"}
+    path.write_text(json.dumps({"other": 1, "mcpServers": {"notion": other}}))
+
+    client_config.configure("devin", URL, False)
+    client_config.remove("devin")
+
+    assert json.loads(path.read_text()) == {"other": 1, "mcpServers": {"notion": other}}
+
+
+def test_devin_old_serverurl_entry_is_replaced_with_url(isolated_home):
+    path = devin_file(isolated_home)
+    path.parent.mkdir(parents=True)
+    path.write_text(json.dumps({"mcpServers": {"marm-memory": {"serverUrl": URL}}}))
+
+    assert client_config.status("devin", url=URL)["state"] == "different"
+    result = client_config.configure("devin", URL, False)
+
+    assert result["action"] == "replace"
+    assert json.loads(path.read_text())["mcpServers"]["marm-memory"] == {"url": URL}
+
+
+def test_devin_never_uses_the_old_codeium_windsurf_file(isolated_home):
+    codeium = isolated_home / ".codeium" / "windsurf" / "mcp_config.json"
+    codeium.parent.mkdir(parents=True)
+    codeium.write_text(json.dumps({"mcpServers": {"marm-memory": {"serverUrl": URL}}}))
+
+    state = client_config.status("devin")
+
+    assert state["config_path"] == str(devin_file(isolated_home))
+    assert state["state"] == "missing"
+    assert (
+        client_config.list_agents(URL, False)[client_config.CLIENT_IDS.index("devin")][
+            "detected"
+        ]
+        is False
+    )
+
+
+@pytest.mark.parametrize(
+    ("platform", "marker"),
+    [
+        ("win32", "AppData/Roaming/Devin"),
+        ("darwin", "Library/Application Support/Devin"),
+        ("linux", ".config/Devin"),
+    ],
+)
+def test_devin_is_detected_from_the_desktop_data_folder(
+    isolated_home, monkeypatch, platform, marker
+):
+    monkeypatch.setattr(client_config, "_platform", lambda: platform)
+    (isolated_home / marker).mkdir(parents=True)
+
+    agent = next(a for a in client_config.list_agents(URL, False) if a["id"] == "devin")
+
+    assert agent["detected"] is True
+
+
+def test_devin_connect_leaves_an_old_codeium_windsurf_file_untouched(isolated_home):
+    codeium = isolated_home / ".codeium" / "windsurf" / "mcp_config.json"
+    codeium.parent.mkdir(parents=True)
+    codeium.write_text(json.dumps({"mcpServers": {"marm-memory": {"serverUrl": URL}}}))
+    before = codeium.read_bytes()
+    detect(isolated_home, "devin")
+
+    client_config.configure("devin", URL, False)
+
+    assert codeium.read_bytes() == before
+    assert not codeium.with_name(codeium.name + ".marm-backup").exists()
+
+
+def test_devin_path_on_posix_is_the_xdg_style_config_folder(isolated_home, monkeypatch):
+    monkeypatch.setattr(client_config, "_platform", lambda: "linux")
+
+    assert client_config.status("devin")["config_path"] == str(
+        isolated_home / ".config" / "devin" / "mcp_config.json"
+    )
+    assert client_config.devin_home() == isolated_home / ".config" / "devin"
+
+
+def test_devin_xdg_config_home_moves_the_file_detection_and_skill(
+    isolated_home, monkeypatch
+):
+    from marm_mcp_server.services import skill_install
+
+    monkeypatch.setattr(client_config, "_platform", lambda: "linux")
+    xdg = isolated_home / "xdg"
+    (xdg / "devin").mkdir(parents=True)
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
+
+    result = client_config.configure("devin", URL, False)
+    skill = skill_install.install_for_agent("devin")
+
+    assert Path(result["config_path"]) == xdg / "devin" / "mcp_config.json"
+    assert skill["target"] == str(xdg / "devin" / "skills" / "marm-init" / "SKILL.md")
+    assert not (isolated_home / ".config" / "devin").exists()
+    monkeypatch.setenv("XDG_CONFIG_HOME", "   ")
+    assert client_config.devin_home() == isolated_home / ".config" / "devin"
+
+
+def test_devin_windows_ignores_xdg_config_home(isolated_home, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(isolated_home / "xdg"))
+
+    assert client_config.devin_home() == isolated_home / "AppData" / "Roaming" / "devin"
+
+
+def test_devin_only_supports_the_user_scope_and_windsurf_is_an_alias(isolated_home):
+    with pytest.raises(client_config.InvalidRequest, match="user scope only"):
+        client_config.configure(
+            "devin", URL, False, scope="project", project=str(isolated_home)
+        )
+    detect(isolated_home, "devin")
+
+    result = client_config.configure("windsurf", URL, False)
+
+    assert result["client"] == "devin"
+    assert "windsurf" not in client_config.CLIENT_IDS
+    assert client_config.status("windsurf")["state"] == "configured"
+
+
+def test_devin_skill_lands_in_the_devin_config_skills_folder(isolated_home):
+    from marm_mcp_server.services import skill_install
+
+    result = skill_install.install_for_agent("devin")
+
+    expected = isolated_home / "AppData" / "Roaming" / "devin" / "skills" / "marm-init"
+    assert result["target"] == str(expected / "SKILL.md")
+    assert skill_install.is_installed("devin") is True

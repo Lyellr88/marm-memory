@@ -13,6 +13,23 @@ describe('OpenCode terminal onboarding', () => {
   });
 });
 
+describe('Devin terminal onboarding', () => {
+  const devin = AGENT_CONFIGS.find((agent) => agent.id === 'devin');
+
+  it('installs with the documented per-OS commands', () => {
+    expect(devin?.commands.windows.install).toBe('irm https://static.devin.ai/cli/setup.ps1 | iex');
+    expect(devin?.commands.macos.install).toBe('curl -fsSL https://cli.devin.ai/install.sh | bash');
+    expect(devin?.commands.linux.install).toBe('curl -fsSL https://cli.devin.ai/install.sh | bash');
+  });
+
+  it('launches and verifies through the devin binary on every platform', () => {
+    for (const platform of ['windows', 'macos', 'linux'] as const) {
+      expect(devin?.commands[platform].launch).toBe('devin');
+      expect(devin?.commands[platform].verify).toBe('devin --version');
+    }
+  });
+});
+
 describe('Cursor terminal onboarding', () => {
   const cursor = AGENT_CONFIGS.find((agent) => agent.id === 'cursor');
 

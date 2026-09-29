@@ -156,6 +156,28 @@ export const AGENT_CONFIGS: AgentConfig[] = [
     },
   },
   {
+    id: 'devin',
+    name: 'Devin',
+    description: "Cognition's coding agent for the terminal",
+    commands: {
+      windows: {
+        install: 'irm https://static.devin.ai/cli/setup.ps1 | iex',
+        launch: 'devin',
+        verify: 'devin --version',
+      },
+      macos: {
+        install: 'curl -fsSL https://cli.devin.ai/install.sh | bash',
+        launch: 'devin',
+        verify: 'devin --version',
+      },
+      linux: {
+        install: 'curl -fsSL https://cli.devin.ai/install.sh | bash',
+        launch: 'devin',
+        verify: 'devin --version',
+      },
+    },
+  },
+  {
     id: 'antigravity',
     name: 'Antigravity',
     description: "Google's agentic CLI, formerly Gemini CLI",

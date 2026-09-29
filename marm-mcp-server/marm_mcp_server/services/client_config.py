@@ -45,9 +45,10 @@ CLIENT_IDS = [
     "cline",
     "antigravity",
     "qwen",
-    "windsurf",
+    "devin",
     "kiro",
 ]
+CLIENT_ALIASES = {"windsurf": "devin"}
 TRANSPORTS = ("http", "stdio", "docker-stdio")
 SCOPES = ("user", "project")
 SERVER_NAME = "marm-memory"
@@ -114,9 +115,13 @@ def _cline_markers() -> list[Path]:
     return [cline_home(), cline_data_dir(), cline_mcp_settings_path().parent]
 
 
-def opencode_home() -> Path:
+def _xdg_config_home() -> Path:
     base = os.environ.get("XDG_CONFIG_HOME", "").strip()
-    return (Path(base).expanduser() if base else _home() / ".config") / "opencode"
+    return Path(base).expanduser() if base else _home() / ".config"
+
+
+def opencode_home() -> Path:
+    return _xdg_config_home() / "opencode"
 
 
 def _opencode_path() -> Path:
@@ -174,25 +179,24 @@ def _claude_desktop_markers() -> list[Path]:
     return [path.parent] if path else []
 
 
-def _devin_path() -> Path:
+def devin_home() -> Path:
     if _platform() == "win32":
-        return _appdata() / "devin" / "mcp_config.json"
-    return _home() / ".config" / "devin" / "mcp_config.json"
+        return _appdata() / "devin"
+    return _xdg_config_home() / "devin"
 
 
-def _codeium_path() -> Path:
-    return _home() / ".codeium" / "windsurf" / "mcp_config.json"
+def _devin_path() -> Path:
+    return devin_home() / "mcp_config.json"
 
 
-def _windsurf_path() -> Path:
-    devin, codeium = _devin_path(), _codeium_path()
-    if devin.exists():
-        return devin
-    if codeium.exists():
-        return codeium
-    if devin.parent.is_dir() and not codeium.parent.is_dir():
-        return devin
-    return codeium
+def _devin_markers() -> list[Path]:
+    if _platform() == "darwin":
+        desktop = _home() / "Library" / "Application Support" / "Devin"
+    elif _platform() == "win32":
+        desktop = _appdata() / "Devin"
+    else:
+        desktop = _xdg_config_home() / "Devin"
+    return [devin_home(), desktop]
 
 
 def _under_home(*parts: str) -> Callable[[], Path]:
@@ -348,16 +352,14 @@ REGISTRY: dict[str, ClientSpec] = {
             http_key="httpUrl",
         ),
         ClientSpec(
-            "windsurf",
-            "Windsurf",
-            "windsurf",
+            "devin",
+            "Devin",
+            "devin",
             "json",
             "mcpServers",
-            _windsurf_path,
+            _devin_path,
             None,
-            lambda: [_devin_path().parent, _codeium_path().parent],
-            http_key="serverUrl",
-            auth_ref="${env:MARM_API_KEY}",
+            _devin_markers,
         ),
         ClientSpec(
             "kiro",
@@ -379,6 +381,7 @@ _CURSOR_SHARED_NOTE = "The Cursor CLI (agent) reads this same file. Servers in t
 _CLINE_SHARED_NOTE = (
     "The Cline extensions in VS Code and JetBrains read this same file."
 )
+_DEVIN_SHARED_NOTE = "Devin CLI and the Devin Local agent in Devin Desktop (formerly Windsurf) read this same file. The older Cascade agent keeps its own file under ~/.codeium, which MARM does not write."
 _OPENCODE_RELOAD_NOTE = "Start a new OpenCode session to load it."
 _OPENCODE_COMMENTS_NOTE = "This file had comments or trailing commas, which MARM does not keep. The original is saved next to it as a .marm-backup copy."
 _HERMES_RELOAD_NOTE = "Run /reload-mcp in Hermes, or start a new session, to load it."
@@ -388,7 +391,7 @@ _CODEX_TRUST_NOTE = (
 
 
 def _spec(client_id: str) -> ClientSpec:
-    spec = REGISTRY.get(client_id)
+    spec = REGISTRY.get(CLIENT_ALIASES.get(client_id, client_id))
     if spec is None:
         raise ClientNotFound(client_id)
     return spec
@@ -474,9 +477,10 @@ def transport_unavailable(
     if transport == "http":
         if spec.id == "claude-desktop":
             return "Needs the mcp-remote bridge. Use STDIO."
-        if auth_required and spec.id == "cline":
+        if auth_required and spec.id in {"cline", "devin"}:
+            name = "Cline CLI" if spec.id == "cline" else "Devin"
             return (
-                "MARM has not confirmed that Cline CLI expands environment variables in headers, "
+                f"MARM has not confirmed that {name} expands environment variables in headers, "
                 "so HTTP with a key must be added by hand. Use STDIO, which needs no key."
             )
         if auth_required and spec.id in {"antigravity", "qwen"}:
@@ -1311,6 +1315,7 @@ def _agent_notes(
         "antigravity",
         "qwen",
         "cline",
+        "devin",
     }:
         notes.append(_auth_note(spec))
     if spec.id == "codex":
@@ -1319,6 +1324,8 @@ def _agent_notes(
         notes.append(_CLINE_SHARED_NOTE)
     if spec.id == "cursor":
         notes.append(_CURSOR_SHARED_NOTE)
+    if spec.id == "devin":
+        notes.append(_DEVIN_SHARED_NOTE)
     if spec.id == "antigravity":
         notes.append(_ANTIGRAVITY_SHARED_NOTE)
     if spec.id == "grok" and state["state"] == "missing" and _claude_has_user_entry():

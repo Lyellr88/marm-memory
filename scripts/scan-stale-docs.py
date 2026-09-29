@@ -47,6 +47,8 @@ REF_STOPLIST = {
     ".grok/config.toml",
     "config.yaml",
     "opencode.json",
+    "mcp_config.json",
+    "config.json",
     ".gemini/settings.json",
     ".qwen/settings.json",
     ".vscode/mcp.json",

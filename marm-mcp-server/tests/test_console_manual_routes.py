@@ -61,7 +61,7 @@ def test_snippet_route_errors(client) -> None:
     assert status(client="nope") == 404
     assert status(client="claude-desktop", os="linux", transport="stdio") == 422
     assert status(client="claude-desktop", transport="http") == 422
-    assert status(client="windsurf", scope="project") == 422
+    assert status(client="devin", scope="project") == 422
     assert status(client="cursor", transport="pigeon") == 422
     assert status(client="cursor", os="dos") == 422
     assert status() == 422

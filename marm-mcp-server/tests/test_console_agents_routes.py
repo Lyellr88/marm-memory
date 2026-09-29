@@ -811,7 +811,7 @@ def test_skill_install_error_state_carries_the_detail(app_client, isolated_home)
 
 
 def test_skill_install_is_409_for_agents_without_support(app_client):
-    for client_id in ("vscode", "windsurf", "claude-desktop"):
+    for client_id in ("vscode", "claude-desktop"):
         response = app_client.post(f"/api/connections/agents/{client_id}/skill")
         assert response.status_code == 409, client_id
 
