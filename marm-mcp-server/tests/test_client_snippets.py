@@ -124,6 +124,15 @@ def test_codex_toml_fragment() -> None:
     assert any("trust" in note for note in stdio["notes"])
 
 
+def test_cursor_snippet_mentions_the_cli_and_still_has_no_add_command() -> None:
+    result = make("cursor", "linux", "http", "user", False)
+
+    assert any("agent mcp list" in note for note in result["notes"])
+    entry = json.loads(result["text"])["mcpServers"]["marm-memory"]
+    assert "type" not in entry
+    assert commands("http", "user")["cursor"]["command"] is None
+
+
 def test_cline_json_fragment_and_paths() -> None:
     http = make("cline", "linux", "http", "user", False)
     assert http["path"] == "~/.cline/data/settings/cline_mcp_settings.json"

@@ -231,6 +231,10 @@ def _snippet_notes(
         )
     if spec.id == "antigravity":
         notes.append("The Antigravity IDE, CLI and 2.0 app read this same file.")
+    if spec.id == "cursor":
+        notes.append(
+            "The Cursor CLI (agent) reads this same file. Run `agent mcp list` to check it."
+        )
     if spec.id == "cline":
         notes.append(
             "The Cline extensions in VS Code and JetBrains read this same file. If CLINE_DATA_DIR is set, it is $CLINE_DATA_DIR/settings/cline_mcp_settings.json."

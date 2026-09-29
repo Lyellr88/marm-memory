@@ -347,6 +347,7 @@ REGISTRY: dict[str, ClientSpec] = {
 
 _GROK_CLAUDE_NOTE = "Grok Build also reads Claude Code's MCP list, so MARM may already load here. Connect adds its own entry."
 _ANTIGRAVITY_SHARED_NOTE = "The Antigravity IDE, CLI and 2.0 app read this same file."
+_CURSOR_SHARED_NOTE = "The Cursor CLI (agent) reads this same file. Servers in the global file load without approval; project servers ask you to approve them on first use."
 _CLINE_SHARED_NOTE = (
     "The Cline extensions in VS Code and JetBrains read this same file."
 )
@@ -1190,6 +1191,8 @@ def _agent_notes(
         notes.append(_CODEX_TRUST_NOTE)
     if spec.id == "cline":
         notes.append(_CLINE_SHARED_NOTE)
+    if spec.id == "cursor":
+        notes.append(_CURSOR_SHARED_NOTE)
     if spec.id == "antigravity":
         notes.append(_ANTIGRAVITY_SHARED_NOTE)
     if spec.id == "grok" and state["state"] == "missing" and _claude_has_user_entry():

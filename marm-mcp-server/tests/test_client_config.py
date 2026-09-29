@@ -925,7 +925,8 @@ def test_agent_list_shape(isolated_home):
     assert by_id["windsurf"]["scopes"] == ["user"]
     assert by_id["cursor"]["scopes"] == ["user", "project"]
     assert by_id["cursor"]["transports"] == ["http", "stdio", "docker-stdio"]
-    assert by_id["cursor"]["skill"] == {"supported": False, "installed": False}
+    assert by_id["cursor"]["skill"] == {"supported": True, "installed": False}
+    assert by_id["vscode"]["skill"] == {"supported": False, "installed": False}
     assert by_id["antigravity"]["skill"] == {"supported": True, "installed": False}
     assert by_id["kiro"]["skill"]["supported"] is True
     assert by_id["grok"]["skill"] == {"supported": True, "installed": False}

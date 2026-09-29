@@ -102,7 +102,7 @@ describe('AgentsGrid', () => {
       clients: [
         agent({ id: 'codex', label: 'Codex CLI' }),
         agent({ id: 'claude-desktop', label: 'Claude Desktop' }),
-        agent({ id: 'cursor', label: 'Cursor' }),
+        agent({ id: 'vscode', label: 'VS Code' }),
         agent({ id: 'newtool', label: 'New Tool' }),
       ],
     });
@@ -110,11 +110,11 @@ describe('AgentsGrid', () => {
 
     const headings = screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent);
     expect(headings).toEqual(['CLI tools', 'Apps', 'IDEs', 'Other']);
-    const order = screen.getAllByText(/^(Codex CLI|Claude Desktop|Cursor|New Tool)$/).map((el) => el.textContent);
-    expect(order).toEqual(['Codex CLI', 'Claude Desktop', 'Cursor', 'New Tool']);
+    const order = screen.getAllByText(/^(Codex CLI|Claude Desktop|VS Code|New Tool)$/).map((el) => el.textContent);
+    expect(order).toEqual(['Codex CLI', 'Claude Desktop', 'VS Code', 'New Tool']);
   });
 
-  it('puts Grok Build under CLI tools, Cline and Antigravity under CLI and IDE, and Claude Desktop under Apps', () => {
+  it('puts Grok Build under CLI tools, Cline, Antigravity and Cursor under CLI and IDE, and Claude Desktop under Apps', () => {
     agentsState.data = response({
       clients: [
         agent({ id: 'claude-desktop', label: 'Claude Desktop' }),
@@ -122,18 +122,19 @@ describe('AgentsGrid', () => {
         agent({ id: 'hermes', label: 'Hermes Agent', scopes: ['user'] }),
         agent({ id: 'cline', label: 'Cline', scopes: ['user'] }),
         agent({ id: 'antigravity', label: 'Antigravity' }),
+        agent({ id: 'cursor', label: 'Cursor' }),
       ],
     });
     render(<AgentsGrid onRequest={() => {}} allowedTransports={['http', 'stdio']} />);
 
     const headings = screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent);
     expect(headings).toEqual(['CLI tools', 'CLI and IDE', 'Apps', 'Other']);
-    const order = screen.getAllByText(/^(Grok Build|Hermes Agent|Cline|Antigravity|Claude Desktop)$/).map((el) => el.textContent);
-    expect(order).toEqual(['Grok Build', 'Hermes Agent', 'Cline', 'Antigravity', 'Claude Desktop']);
+    const order = screen.getAllByText(/^(Grok Build|Hermes Agent|Cline|Antigravity|Cursor|Claude Desktop)$/).map((el) => el.textContent);
+    expect(order).toEqual(['Grok Build', 'Hermes Agent', 'Cline', 'Antigravity', 'Cursor', 'Claude Desktop']);
   });
 
   it('hides a group with no agents', () => {
-    agentsState.data = response({ clients: [agent({ id: 'cursor' })] });
+    agentsState.data = response({ clients: [agent({ id: 'vscode' })] });
     render(<AgentsGrid onRequest={() => {}} allowedTransports={['http', 'stdio']} />);
 
     const headings = screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent);

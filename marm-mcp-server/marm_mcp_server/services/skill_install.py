@@ -7,6 +7,7 @@ from pathlib import Path
 
 AGENTS: dict[str, str] = {
     "claude": ".claude",
+    "cursor": ".cursor",
     "codex": ".codex",
     "grok": ".grok",
     "hermes": ".hermes",

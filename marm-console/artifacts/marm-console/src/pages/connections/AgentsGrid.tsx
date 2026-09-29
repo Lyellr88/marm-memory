@@ -24,7 +24,7 @@ const GROUP_BY_ID: Record<string, (typeof GROUPS)[number]['id']> = {
   antigravity: 'shared',
   qwen: 'cli',
   'claude-desktop': 'app',
-  cursor: 'ide',
+  cursor: 'shared',
   vscode: 'ide',
   windsurf: 'ide',
   kiro: 'ide',

@@ -144,6 +144,24 @@ def test_cline_skill_goes_to_its_home_and_project_mode_uses_dot_cline(
     assert _read(project, ".cline") == skill_install._bundled_skill_text()
 
 
+def test_cursor_skill_installs_into_cursor_skills_globally_and_per_project(
+    tmp_path, monkeypatch
+):
+    home = tmp_path / "home"
+    project = tmp_path / "project"
+    (project / ".cursor").mkdir(parents=True)
+    home.mkdir()
+    monkeypatch.setattr(skill_install.Path, "home", classmethod(lambda cls: home))
+    monkeypatch.chdir(project)
+
+    result = skill_install.install_for_agent("cursor")
+    skill_install.install_skill(_args())
+
+    assert result["target"] == str(home / ".cursor" / SKILL_REL)
+    assert skill_install.is_installed("cursor") is True
+    assert _read(project, ".cursor") == skill_install._bundled_skill_text()
+
+
 def test_fail_open_when_a_target_is_unwritable(tmp_path, monkeypatch):
     (tmp_path / ".claude").mkdir()
     (tmp_path / ".codex").mkdir()

@@ -112,6 +112,28 @@ export const AGENT_CONFIGS: AgentConfig[] = [
     },
   },
   {
+    id: 'cursor',
+    name: 'Cursor',
+    description: 'Cursor agent for the terminal',
+    commands: {
+      windows: {
+        install: "irm 'https://cursor.com/install?win32=true' | iex",
+        launch: 'agent',
+        verify: 'agent --version',
+      },
+      macos: {
+        install: 'curl https://cursor.com/install -fsS | bash',
+        launch: 'agent',
+        verify: 'agent --version',
+      },
+      linux: {
+        install: 'curl https://cursor.com/install -fsS | bash',
+        launch: 'agent',
+        verify: 'agent --version',
+      },
+    },
+  },
+  {
     id: 'antigravity',
     name: 'Antigravity',
     description: "Google's agentic CLI, formerly Gemini CLI",

@@ -182,6 +182,8 @@ Verified with Cursor MCP. Add this to `.cursor\mcp.json` in your workspace. Use 
 
 Cursor uses `mcpServers`, not VS Code's `servers` root. For Docker/key mode, launch Cursor with `MARM_API_KEY` set in the environment.
 
+The Cursor CLI (`agent`) reads the same `mcp.json` files, so a server added for the editor is already available there. Run `agent mcp list` to check. A server in the global `~/.cursor/mcp.json` loads without approval. A server in a project's `.cursor/mcp.json` asks you to trust the folder and approve it on first use, and headless runs need `--trust --approve-mcps`. If it lists no servers, look in `mcp.json` for an entry with an unknown `type` such as `streamable-http`: the CLI drops the whole file when one entry fails to parse. Install it with `curl https://cursor.com/install -fsS | bash` on macOS, Linux and WSL, or `irm 'https://cursor.com/install?win32=true' | iex` in Windows PowerShell.
+
 ### **Grok app and API**
 
 The Grok app (grok.com, iOS, Android) supports custom MCP servers: open grok.com/connectors, click **New Connector**, choose **Custom**, and enter your MARM URL. The xAI API supports Remote MCP Tools over Streamable HTTP or SSE only.

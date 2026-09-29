@@ -38,7 +38,7 @@ A real shell, backed by a native PTY (ConPTY on Windows, `pty`/`termios` on Linu
 - A session survives closing the dock or refreshing the page: the backend detaches rather than kills the shell on disconnect, buffers its output, and replays it on reattach. A session is only killed after 10 minutes with nothing reattached, or when its tab is explicitly closed.
 - Settings (font, cursor, clipboard, scrollback, bell), keyboard shortcuts, and search (`Ctrl+F` in the terminal) are available from the dock header.
 - A searchable MARM Commands menu lists the `marm-memory` CLI grouped by task, each command with a short description and its flags shown alongside it; clicking one inserts it into the active session without running it. Commands that need a second look (key reveal, uninstall) sit in their own flagged section.
-- A first-run guide walks through picking an OS and installing/launching Claude Code, Codex, Grok Build, Hermes Agent, Cline, or Antigravity, with per-OS install commands and a dependency check for Node.js/npm and Git. It reappears on every launch unless "Don't launch on startup" is checked.
+- A first-run guide walks through picking an OS and installing/launching Claude Code, Codex, Grok Build, Hermes Agent, Cline, Cursor, or Antigravity, with per-OS install commands and a dependency check for Node.js/npm and Git. It reappears on every launch unless "Don't launch on startup" is checked.
 
 ## Run Console
 

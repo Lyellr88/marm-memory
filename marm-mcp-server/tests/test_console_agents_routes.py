@@ -564,6 +564,20 @@ def test_cline_configure_and_skill_round_trip(app_client, isolated_home):
     assert json.loads(settings.read_text())["mcpServers"] == {}
 
 
+def test_cursor_skill_route_installs_and_the_card_reports_it(app_client, isolated_home):
+    response = app_client.post("/api/connections/agents/cursor/skill")
+
+    target = isolated_home / ".cursor" / "skills" / "marm-init" / "SKILL.md"
+    assert response.json() == {"state": "installed", "target": str(target)}
+    cursor = next(
+        c
+        for c in app_client.get("/api/connections/agents").json()["clients"]
+        if c["id"] == "cursor"
+    )
+    assert cursor["skill"] == {"supported": True, "installed": True}
+    assert any("Cursor CLI" in note for note in cursor["notes"])
+
+
 def test_hermes_skill_installs_under_hermes_home(app_client, isolated_home):
     (isolated_home / "AppData" / "Local" / "hermes").mkdir(parents=True)
 
@@ -740,7 +754,7 @@ def test_skill_install_error_state_carries_the_detail(app_client, isolated_home)
 
 
 def test_skill_install_is_409_for_agents_without_support(app_client):
-    for client_id in ("cursor", "vscode", "windsurf", "claude-desktop"):
+    for client_id in ("vscode", "windsurf", "claude-desktop"):
         response = app_client.post(f"/api/connections/agents/{client_id}/skill")
         assert response.status_code == 409, client_id
 
