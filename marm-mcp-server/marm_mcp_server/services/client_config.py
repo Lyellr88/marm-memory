@@ -113,6 +113,25 @@ def _cline_markers() -> list[Path]:
     return [cline_home(), cline_data_dir(), cline_mcp_settings_path().parent]
 
 
+def _antigravity_path() -> Path:
+    gemini = _home() / ".gemini"
+    legacy = gemini / "antigravity" / "mcp_config.json"
+    if legacy.exists() and not (gemini / "config").is_dir():
+        return legacy
+    return gemini / "config" / "mcp_config.json"
+
+
+def _antigravity_markers() -> list[Path]:
+    gemini = _home() / ".gemini"
+    return [
+        gemini / "config",
+        gemini / "antigravity",
+        gemini / "antigravity-cli",
+        gemini / "antigravity-ide",
+        _home() / ".antigravity",
+    ]
+
+
 def _vscode_config_path() -> Path:
     if _platform() == "win32":
         return _appdata() / "Code" / "User" / "mcp.json"
@@ -268,7 +287,7 @@ REGISTRY: dict[str, ClientSpec] = {
         ),
         ClientSpec(
             "cline",
-            "Cline CLI",
+            "Cline",
             "cline",
             "json",
             "mcpServers",
@@ -280,16 +299,13 @@ REGISTRY: dict[str, ClientSpec] = {
         ),
         ClientSpec(
             "antigravity",
-            "Antigravity CLI",
+            "Antigravity",
             "agy",
             "json",
             "mcpServers",
-            _under_home(".gemini", "config", "mcp_config.json"),
+            _antigravity_path,
             ".agents/mcp_config.json",
-            lambda: [
-                _home() / ".gemini" / "config",
-                _home() / ".gemini" / "antigravity-cli",
-            ],
+            _antigravity_markers,
             http_key="serverUrl",
         ),
         ClientSpec(
@@ -330,6 +346,7 @@ REGISTRY: dict[str, ClientSpec] = {
 }
 
 _GROK_CLAUDE_NOTE = "Grok Build also reads Claude Code's MCP list, so MARM may already load here. Connect adds its own entry."
+_ANTIGRAVITY_SHARED_NOTE = "The Antigravity IDE, CLI and 2.0 app read this same file."
 _CLINE_SHARED_NOTE = (
     "The Cline extensions in VS Code and JetBrains read this same file."
 )
@@ -1173,6 +1190,8 @@ def _agent_notes(
         notes.append(_CODEX_TRUST_NOTE)
     if spec.id == "cline":
         notes.append(_CLINE_SHARED_NOTE)
+    if spec.id == "antigravity":
+        notes.append(_ANTIGRAVITY_SHARED_NOTE)
     if spec.id == "grok" and state["state"] == "missing" and _claude_has_user_entry():
         notes.append(_GROK_CLAUDE_NOTE)
     return notes

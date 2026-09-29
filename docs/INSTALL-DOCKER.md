@@ -416,7 +416,7 @@ Run `/reload-mcp` in Hermes, or start a new session, to load it.
 
 ### **Cline CLI**
 
-Cline CLI (`cline`, installed with `npm install -g cline`) reads MCP servers from `~/.cline/data/settings/cline_mcp_settings.json`, the same file the Cline extensions in VS Code and JetBrains use (`%USERPROFILE%\.cline` on Windows, or `$CLINE_DATA_DIR/settings` if you set it). Cline's own MCP page still says `~/.cline/mcp.json`, but the CLI never reads that file. HTTP entries need `"type": "streamableHttp"`: leaving `type` out selects the legacy SSE transport.
+Cline CLI (`cline`, installed with `npm install -g cline`) reads MCP servers from `~/.cline/data/settings/cline_mcp_settings.json`, the same file the Cline extensions in VS Code and JetBrains use (`%USERPROFILE%\.cline` on Windows, or `$CLINE_DATA_DIR/settings` if you set it). Cline's own MCP page still says `~/.cline/mcp.json`, but the CLI never reads that file. HTTP entries need `"type": "streamableHttp"`: leaving `type` out selects the legacy SSE transport. The extensions in VS Code and JetBrains show the server in their MCP Servers panel. Cline 4.x or later shares this file and moves an older file from VS Code's extension storage into it on first launch. Older builds keep reading their own file, so upgrade Cline first.
 
 Docker or `SERVER_HOST=0.0.0.0` (key required): MARM has not confirmed that Cline CLI expands environment variables in headers, so use STDIO, or add the key by hand under `mcpServers` in that file:
 
@@ -436,7 +436,7 @@ Docker or `SERVER_HOST=0.0.0.0` (key required): MARM has not confirmed that Clin
 
 ### **Antigravity CLI**
 
-Antigravity CLI (`agy`) replaced Gemini CLI in June 2026. It supports STDIO and HTTP MCP servers. Use HTTP for MARM.
+Antigravity CLI (`agy`) replaced Gemini CLI in June 2026. It supports STDIO and HTTP MCP servers. Use HTTP for MARM. The Antigravity IDE and 2.0 app read this same file (in the IDE, open "..." then MCP Servers, then Manage MCP Servers). Antigravity 2.x or later reads it. Older IDE builds used `~/.gemini/antigravity/mcp_config.json`, and MARM writes that file only when it is the only one present.
 
 ```bash
 agy mcp add marm-memory --type http http://localhost:8001/mcp --header "Authorization: Bearer your-generated-key"

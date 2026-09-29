@@ -1823,6 +1823,68 @@ def test_cline_data_dir_override_does_not_move_the_skill_folder(
     )
 
 
+@pytest.mark.parametrize(
+    "marker",
+    [
+        ".gemini/config",
+        ".gemini/antigravity",
+        ".gemini/antigravity-cli",
+        ".gemini/antigravity-ide",
+        ".antigravity",
+    ],
+)
+def test_antigravity_is_detected_from_any_of_its_install_folders(isolated_home, marker):
+    def detected() -> bool:
+        return next(
+            a for a in client_config.list_agents(URL, False) if a["id"] == "antigravity"
+        )["detected"]
+
+    assert detected() is False
+    (isolated_home / marker).mkdir(parents=True)
+    assert detected() is True
+
+
+def test_antigravity_writes_the_old_ide_file_only_when_it_is_the_one_in_use(
+    isolated_home,
+):
+    gemini = isolated_home / ".gemini"
+    current = gemini / "config" / "mcp_config.json"
+    legacy = gemini / "antigravity" / "mcp_config.json"
+
+    assert client_config.status("antigravity")["config_path"] == str(current)
+
+    legacy.parent.mkdir(parents=True)
+    legacy.write_text(json.dumps({"mcpServers": {"other": {"command": "x"}}}))
+    assert client_config.status("antigravity")["config_path"] == str(legacy)
+    result = client_config.configure("antigravity", URL, False)
+    assert result["config_path"] == str(legacy)
+    written = json.loads(legacy.read_text())["mcpServers"]
+    assert written["other"] == {"command": "x"}
+    assert written["marm-memory"] == {"serverUrl": URL}
+    assert not current.exists()
+
+    current.parent.mkdir(parents=True)
+    assert client_config.status("antigravity")["config_path"] == str(current)
+
+
+def test_old_gemini_cli_folder_alone_is_not_taken_for_antigravity(isolated_home):
+    (isolated_home / ".gemini").mkdir()
+    (isolated_home / ".gemini" / "settings.json").write_text("{}")
+
+    agent = next(
+        a for a in client_config.list_agents(URL, False) if a["id"] == "antigravity"
+    )
+
+    assert agent["detected"] is False
+
+
+def test_shared_file_agents_say_which_surfaces_read_it(isolated_home):
+    agents = {a["id"]: a for a in client_config.list_agents(URL, False)}
+
+    assert any("IDE, CLI and 2.0 app" in n for n in agents["antigravity"]["notes"])
+    assert any("VS Code and JetBrains" in n for n in agents["cline"]["notes"])
+
+
 def test_cline_only_supports_the_user_scope(isolated_home):
     project = isolated_home / "repo"
     project.mkdir()

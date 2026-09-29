@@ -56,7 +56,7 @@ describe('AgentsGrid', () => {
       clients: [
         agent({ id: 'cursor', label: 'Cursor' }),
         agent({ id: 'codex', label: 'Codex CLI', user: { ...agent().user, state: 'configured' } }),
-        agent({ id: 'antigravity', label: 'Antigravity CLI', user: { ...agent().user, state: 'different' } }),
+        agent({ id: 'antigravity', label: 'Antigravity', user: { ...agent().user, state: 'different' } }),
         agent({ id: 'qwen', label: 'Qwen Code', user: { ...agent().user, state: 'unreadable' } }),
       ],
     });
@@ -114,21 +114,22 @@ describe('AgentsGrid', () => {
     expect(order).toEqual(['Codex CLI', 'Claude Desktop', 'Cursor', 'New Tool']);
   });
 
-  it('puts Grok Build under CLI tools and Claude Desktop under Apps', () => {
+  it('puts Grok Build under CLI tools, Cline and Antigravity under CLI and IDE, and Claude Desktop under Apps', () => {
     agentsState.data = response({
       clients: [
         agent({ id: 'claude-desktop', label: 'Claude Desktop' }),
         agent({ id: 'grok', label: 'Grok Build' }),
         agent({ id: 'hermes', label: 'Hermes Agent', scopes: ['user'] }),
-        agent({ id: 'cline', label: 'Cline CLI', scopes: ['user'] }),
+        agent({ id: 'cline', label: 'Cline', scopes: ['user'] }),
+        agent({ id: 'antigravity', label: 'Antigravity' }),
       ],
     });
     render(<AgentsGrid onRequest={() => {}} allowedTransports={['http', 'stdio']} />);
 
     const headings = screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent);
-    expect(headings).toEqual(['CLI tools', 'Apps', 'Other']);
-    const order = screen.getAllByText(/^(Grok Build|Hermes Agent|Cline CLI|Claude Desktop)$/).map((el) => el.textContent);
-    expect(order).toEqual(['Grok Build', 'Hermes Agent', 'Cline CLI', 'Claude Desktop']);
+    expect(headings).toEqual(['CLI tools', 'CLI and IDE', 'Apps', 'Other']);
+    const order = screen.getAllByText(/^(Grok Build|Hermes Agent|Cline|Antigravity|Claude Desktop)$/).map((el) => el.textContent);
+    expect(order).toEqual(['Grok Build', 'Hermes Agent', 'Cline', 'Antigravity', 'Claude Desktop']);
   });
 
   it('hides a group with no agents', () => {

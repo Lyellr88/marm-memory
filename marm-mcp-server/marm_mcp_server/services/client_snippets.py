@@ -229,6 +229,8 @@ def _snippet_notes(
         notes.append(
             "Older Windsurf installs use ~/.codeium/windsurf/mcp_config.json instead."
         )
+    if spec.id == "antigravity":
+        notes.append("The Antigravity IDE, CLI and 2.0 app read this same file.")
     if spec.id == "cline":
         notes.append(
             "The Cline extensions in VS Code and JetBrains read this same file. If CLINE_DATA_DIR is set, it is $CLINE_DATA_DIR/settings/cline_mcp_settings.json."
@@ -396,7 +398,7 @@ def _one_command(
         ), "Adds MARM for every project."
     if client_id == "cline":
         if scope == "project":
-            return None, "Cline CLI has one user settings file. Use the user scope."
+            return None, "Cline has one user settings file. Use the user scope."
         return (
             _cline_command(transport, url, argv, os_name),
             "Adds MARM to your Cline settings.",

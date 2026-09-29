@@ -96,7 +96,7 @@ def test_list_agents_shape(app_client, isolated_home):
         "unavailable",
     }
     cline = next(c for c in body["clients"] if c["id"] == "cline")
-    assert cline["label"] == "Cline CLI"
+    assert cline["label"] == "Cline"
     assert cline["scopes"] == ["user"]
     hermes = next(c for c in body["clients"] if c["id"] == "hermes")
     assert hermes["label"] == "Hermes Agent"

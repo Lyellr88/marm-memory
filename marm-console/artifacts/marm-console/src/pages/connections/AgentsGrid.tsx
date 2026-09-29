@@ -9,6 +9,7 @@ import { ErrorState } from './controls';
 
 const GROUPS = [
   { id: 'cli', label: 'CLI tools' },
+  { id: 'shared', label: 'CLI and IDE' },
   { id: 'app', label: 'Apps' },
   { id: 'ide', label: 'IDEs' },
   { id: 'other', label: 'Other' },
@@ -19,8 +20,8 @@ const GROUP_BY_ID: Record<string, (typeof GROUPS)[number]['id']> = {
   codex: 'cli',
   grok: 'cli',
   hermes: 'cli',
-  cline: 'cli',
-  antigravity: 'cli',
+  cline: 'shared',
+  antigravity: 'shared',
   qwen: 'cli',
   'claude-desktop': 'app',
   cursor: 'ide',
