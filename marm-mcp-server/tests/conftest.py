@@ -255,9 +255,12 @@ def memory_keychain(monkeypatch) -> MemoryKeychain:
 
 
 @pytest.fixture(autouse=True)
-def hermes_home_off_the_real_machine(tmp_path_factory, monkeypatch) -> None:
-    """A developer's own Hermes install must never be written by a test."""
+def agent_homes_off_the_real_machine(tmp_path_factory, monkeypatch) -> None:
+    """A developer's own Hermes or Cline install must never be written by a test."""
     monkeypatch.setenv("HERMES_HOME", str(tmp_path_factory.mktemp("hermes-home")))
+    monkeypatch.setenv("CLINE_DIR", str(tmp_path_factory.mktemp("cline-home")))
+    monkeypatch.delenv("CLINE_DATA_DIR", raising=False)
+    monkeypatch.delenv("CLINE_MCP_SETTINGS_PATH", raising=False)
 
 
 def load_isolated_server(monkeypatch, tmp_path, api_key="", write_queue_enabled=False):

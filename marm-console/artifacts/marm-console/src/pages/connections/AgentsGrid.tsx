@@ -19,6 +19,7 @@ const GROUP_BY_ID: Record<string, (typeof GROUPS)[number]['id']> = {
   codex: 'cli',
   grok: 'cli',
   hermes: 'cli',
+  cline: 'cli',
   antigravity: 'cli',
   qwen: 'cli',
   'claude-desktop': 'app',

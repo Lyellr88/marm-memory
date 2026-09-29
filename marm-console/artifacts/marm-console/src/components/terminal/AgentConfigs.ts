@@ -90,6 +90,28 @@ export const AGENT_CONFIGS: AgentConfig[] = [
     },
   },
   {
+    id: 'cline',
+    name: 'Cline CLI',
+    description: 'Cline agent for the terminal (needs Node.js)',
+    commands: {
+      windows: {
+        install: 'npm install -g cline',
+        launch: 'cline',
+        verify: 'cline version',
+      },
+      macos: {
+        install: 'npm install -g cline',
+        launch: 'cline',
+        verify: 'cline version',
+      },
+      linux: {
+        install: 'npm install -g cline',
+        launch: 'cline',
+        verify: 'cline version',
+      },
+    },
+  },
+  {
     id: 'antigravity',
     name: 'Antigravity (was Gemini CLI)',
     description: "Google's agentic CLI, formerly Gemini CLI",

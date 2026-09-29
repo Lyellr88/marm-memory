@@ -120,14 +120,15 @@ describe('AgentsGrid', () => {
         agent({ id: 'claude-desktop', label: 'Claude Desktop' }),
         agent({ id: 'grok', label: 'Grok Build' }),
         agent({ id: 'hermes', label: 'Hermes Agent', scopes: ['user'] }),
+        agent({ id: 'cline', label: 'Cline CLI', scopes: ['user'] }),
       ],
     });
     render(<AgentsGrid onRequest={() => {}} allowedTransports={['http', 'stdio']} />);
 
     const headings = screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent);
     expect(headings).toEqual(['CLI tools', 'Apps', 'Other']);
-    const order = screen.getAllByText(/^(Grok Build|Hermes Agent|Claude Desktop)$/).map((el) => el.textContent);
-    expect(order).toEqual(['Grok Build', 'Hermes Agent', 'Claude Desktop']);
+    const order = screen.getAllByText(/^(Grok Build|Hermes Agent|Cline CLI|Claude Desktop)$/).map((el) => el.textContent);
+    expect(order).toEqual(['Grok Build', 'Hermes Agent', 'Cline CLI', 'Claude Desktop']);
   });
 
   it('hides a group with no agents', () => {

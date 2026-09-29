@@ -274,6 +274,34 @@ mcp_servers:
 
 Run `/reload-mcp` in Hermes, or start a new session, to load it.
 
+### **Cline CLI**
+
+Cline CLI (`cline`, installed with `npm install -g cline`) reads MCP servers from `~/.cline/data/settings/cline_mcp_settings.json`, the same file the Cline extensions in VS Code and JetBrains use (`%USERPROFILE%\.cline` on Windows, or `$CLINE_DATA_DIR/settings` if you set it). Cline's own MCP page still says `~/.cline/mcp.json`, but the CLI never reads that file. HTTP entries need `"type": "streamableHttp"`: leaving `type` out selects the legacy SSE transport.
+
+```bash
+# STDIO - no key needed
+cline mcp install marm-memory --yes -- marm-mcp-stdio
+
+# HTTP, direct Python install - no key needed
+cline mcp install marm-memory --yes --transport http http://localhost:8001/mcp
+```
+
+Docker or `SERVER_HOST=0.0.0.0` (key required): MARM has not confirmed that Cline CLI expands environment variables in headers, so use STDIO, or add the key by hand under `mcpServers` in that file:
+
+```json
+{
+  "mcpServers": {
+    "marm-memory": {
+      "type": "streamableHttp",
+      "url": "http://localhost:8001/mcp",
+      "headers": {
+        "Authorization": "Bearer your-generated-key"
+      }
+    }
+  }
+}
+```
+
 ### **Antigravity CLI**
 
 Antigravity CLI (`agy`) replaced Gemini CLI in June 2026. It supports STDIO and HTTP MCP servers. Use HTTP for MARM.

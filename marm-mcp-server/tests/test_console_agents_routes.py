@@ -30,6 +30,9 @@ def isolated_home(tmp_path, monkeypatch):
     monkeypatch.setenv("APPDATA", str(tmp_path / "AppData" / "Roaming"))
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "AppData" / "Local"))
     monkeypatch.delenv("HERMES_HOME", raising=False)
+    monkeypatch.delenv("CLINE_DIR", raising=False)
+    monkeypatch.delenv("CLINE_DATA_DIR", raising=False)
+    monkeypatch.delenv("CLINE_MCP_SETTINGS_PATH", raising=False)
     monkeypatch.setattr(client_config.shutil, "which", lambda name: None)
     monkeypatch.setattr(key_management, "read_managed_key", lambda: "")
     return tmp_path
@@ -92,6 +95,9 @@ def test_list_agents_shape(app_client, isolated_home):
         "notes",
         "unavailable",
     }
+    cline = next(c for c in body["clients"] if c["id"] == "cline")
+    assert cline["label"] == "Cline CLI"
+    assert cline["scopes"] == ["user"]
     hermes = next(c for c in body["clients"] if c["id"] == "hermes")
     assert hermes["label"] == "Hermes Agent"
     assert hermes["scopes"] == ["user"]
@@ -533,6 +539,29 @@ def test_hermes_test_route_resolves_the_key_reference_in_headers(
 
     assert response.json()["ok"] is True
     assert SECRET not in response.text
+
+
+def test_cline_configure_and_skill_round_trip(app_client, isolated_home):
+    (isolated_home / ".cline").mkdir()
+
+    configured = app_client.post(
+        "/api/connections/agents/cline/configure", json={"dry_run": False}
+    )
+    skill = app_client.post("/api/connections/agents/cline/skill")
+    removed = app_client.post(
+        "/api/connections/agents/cline/remove", json={"scope": "user"}
+    )
+
+    settings = (
+        isolated_home / ".cline" / "data" / "settings" / "cline_mcp_settings.json"
+    )
+    assert configured.status_code == 200
+    assert configured.json()["verified"] is True
+    assert skill.json()["target"] == str(
+        isolated_home / ".cline" / "skills" / "marm-init" / "SKILL.md"
+    )
+    assert removed.json()["verified"] is True
+    assert json.loads(settings.read_text())["mcpServers"] == {}
 
 
 def test_hermes_skill_installs_under_hermes_home(app_client, isolated_home):

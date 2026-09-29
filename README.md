@@ -117,7 +117,7 @@ Run `marm-memory console` to open the bundled web app at `http://127.0.0.1:8002`
 | **Code Context** | Build one bounded view of task-ranked symbols, source, and related memory. An optional local model can answer from that same context, with its citations checked. |
 | **Distill** | Turn transcripts into durable-memory proposals. Review, apply, or discard them with duplicate evidence visible. |
 | **System and Terminal** | Manage runtime health, indexing, local-model settings, backups, diagnostics, and maintenance. The docked terminal provides a real local shell with persistent sessions and a searchable MARM command menu. |
-| **Connections** | Set up MARM end to end in one place. **Setup** connects Claude Code, Claude Desktop, Cursor, VS Code, Codex CLI, Grok Build, Hermes Agent, Antigravity CLI, Qwen Code, Windsurf, and Kiro over HTTP, STDIO, or Docker STDIO, tests each connection, and saves server settings to `~/.marm/settings.json`. **Docker** pulls, starts, and stops the MARM container and writes a compose file. **Manual** gives copy-ready config for each client and OS, every CLI command, and every HTTP endpoint. |
+| **Connections** | Set up MARM end to end in one place. **Setup** connects Claude Code, Claude Desktop, Cursor, VS Code, Codex CLI, Grok Build, Hermes Agent, Cline CLI, Antigravity CLI, Qwen Code, Windsurf, and Kiro over HTTP, STDIO, or Docker STDIO, tests each connection, and saves server settings to `~/.marm/settings.json`. **Docker** pulls, starts, and stops the MARM container and writes a compose file. **Manual** gives copy-ready config for each client and OS, every CLI command, and every HTTP endpoint. |
 
 ### Runtime CLI Commands
 
@@ -621,6 +621,37 @@ mcp_servers:
 ```
 
 Run `/reload-mcp` in Hermes, or start a new session, to load it.
+
+</details>
+
+<details>
+<summary><strong>Cline CLI</strong></summary>
+
+Cline CLI (`cline`, installed with `npm install -g cline`) reads MCP servers from `~/.cline/data/settings/cline_mcp_settings.json`, the same file the Cline extensions in VS Code and JetBrains use (`%USERPROFILE%\.cline` on Windows, or `$CLINE_DATA_DIR/settings` if you set it). Cline's own MCP page still says `~/.cline/mcp.json`, but the CLI never reads that file. HTTP entries need `"type": "streamableHttp"`: leaving `type` out selects the legacy SSE transport.
+
+```bash
+# STDIO - no key needed
+cline mcp install marm-memory --yes -- marm-mcp-stdio
+
+# HTTP, direct Python install - no key needed
+cline mcp install marm-memory --yes --transport http http://localhost:8001/mcp
+```
+
+Docker or `SERVER_HOST=0.0.0.0` (key required): MARM has not confirmed that Cline CLI expands environment variables in headers, so use STDIO, or add the key by hand under `mcpServers` in that file:
+
+```json
+{
+  "mcpServers": {
+    "marm-memory": {
+      "type": "streamableHttp",
+      "url": "http://localhost:8001/mcp",
+      "headers": {
+        "Authorization": "Bearer your-generated-key"
+      }
+    }
+  }
+}
+```
 
 </details>
 

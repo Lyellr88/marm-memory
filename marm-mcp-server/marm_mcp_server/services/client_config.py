@@ -41,6 +41,7 @@ CLIENT_IDS = [
     "codex",
     "grok",
     "hermes",
+    "cline",
     "antigravity",
     "qwen",
     "windsurf",
@@ -89,6 +90,27 @@ def hermes_home() -> Path:
         local = os.environ.get("LOCALAPPDATA")
         return (Path(local) if local else _home() / "AppData" / "Local") / "hermes"
     return _home() / ".hermes"
+
+
+def cline_home() -> Path:
+    override = os.environ.get("CLINE_DIR")
+    return Path(override).expanduser() if override else _home() / ".cline"
+
+
+def cline_data_dir() -> Path:
+    data = os.environ.get("CLINE_DATA_DIR")
+    return Path(data).expanduser() if data else cline_home() / "data"
+
+
+def cline_mcp_settings_path() -> Path:
+    explicit = os.environ.get("CLINE_MCP_SETTINGS_PATH")
+    if explicit:
+        return Path(explicit).expanduser()
+    return cline_data_dir() / "settings" / "cline_mcp_settings.json"
+
+
+def _cline_markers() -> list[Path]:
+    return [cline_home(), cline_data_dir(), cline_mcp_settings_path().parent]
 
 
 def _vscode_config_path() -> Path:
@@ -161,6 +183,7 @@ class ClientSpec:
     markers: Callable[[], list[Path]]
     typed: bool = False
     http_key: str = "url"
+    http_type: str = "http"
     auth_ref: str | None = None
 
 
@@ -244,6 +267,18 @@ REGISTRY: dict[str, ClientSpec] = {
             auth_ref="${MARM_API_KEY}",
         ),
         ClientSpec(
+            "cline",
+            "Cline CLI",
+            "cline",
+            "json",
+            "mcpServers",
+            cline_mcp_settings_path,
+            None,
+            _cline_markers,
+            typed=True,
+            http_type="streamableHttp",
+        ),
+        ClientSpec(
             "antigravity",
             "Antigravity CLI",
             "agy",
@@ -295,6 +330,9 @@ REGISTRY: dict[str, ClientSpec] = {
 }
 
 _GROK_CLAUDE_NOTE = "Grok Build also reads Claude Code's MCP list, so MARM may already load here. Connect adds its own entry."
+_CLINE_SHARED_NOTE = (
+    "The Cline extensions in VS Code and JetBrains read this same file."
+)
 _HERMES_RELOAD_NOTE = "Run /reload-mcp in Hermes, or start a new session, to load it."
 _CODEX_TRUST_NOTE = (
     "Codex only loads a project's .codex/config.toml for projects it trusts."
@@ -342,7 +380,7 @@ def _build_entry(
             if auth_required:
                 entry["bearer_token_env_var"] = "MARM_API_KEY"
             return entry
-        entry = {"type": "http"} if spec.typed else {}
+        entry = {"type": spec.http_type} if spec.typed else {}
         entry[spec.http_key] = url
         if auth_required and spec.auth_ref:
             entry["headers"] = {"Authorization": f"Bearer {spec.auth_ref}"}
@@ -386,6 +424,11 @@ def transport_unavailable(
     if transport == "http":
         if spec.id == "claude-desktop":
             return "Needs the mcp-remote bridge. Use STDIO."
+        if auth_required and spec.id == "cline":
+            return (
+                "MARM has not confirmed that Cline CLI expands environment variables in headers, "
+                "so HTTP with a key must be added by hand. Use STDIO, which needs no key."
+            )
         if auth_required and spec.id in {"antigravity", "qwen"}:
             return (
                 f"{spec.label} cannot reference an environment variable in a header, "
@@ -530,6 +573,14 @@ def _codex_entry(path: Path, spec: ClientSpec) -> dict | None:
     return current if isinstance(current, dict) else {}
 
 
+def _flat_transport(entry: dict) -> dict:
+    """Cline's own installer nests the connection under "transport"; read it as the flat shape."""
+    transport = entry.get("transport")
+    if not isinstance(transport, dict):
+        return entry
+    return {**{k: v for k, v in entry.items() if k != "transport"}, **transport}
+
+
 def _read_current(spec: ClientSpec, path: Path) -> tuple[dict | None, bool, str | None]:
     """Return (current entry, file exists, unreadable reason)."""
     if not path.exists():
@@ -543,6 +594,8 @@ def _read_current(spec: ClientSpec, path: Path) -> tuple[dict | None, bool, str 
     except _Unreadable as exc:
         return None, True, str(exc)
     current = container.get(SERVER_NAME)
+    if spec.id == "cline" and isinstance(current, dict):
+        current = _flat_transport(current)
     return (current if isinstance(current, dict) else None), True, None
 
 
@@ -1109,10 +1162,17 @@ def _agent_notes(
                 "The 'claude' binary was not found on PATH. Every-project setup needs it; "
                 "a single project writes .mcp.json directly."
             )
-    if auth_required and spec.id not in {"claude-desktop", "antigravity", "qwen"}:
+    if auth_required and spec.id not in {
+        "claude-desktop",
+        "antigravity",
+        "qwen",
+        "cline",
+    }:
         notes.append(_auth_note(spec))
     if spec.id == "codex":
         notes.append(_CODEX_TRUST_NOTE)
+    if spec.id == "cline":
+        notes.append(_CLINE_SHARED_NOTE)
     if spec.id == "grok" and state["state"] == "missing" and _claude_has_user_entry():
         notes.append(_GROK_CLAUDE_NOTE)
     return notes

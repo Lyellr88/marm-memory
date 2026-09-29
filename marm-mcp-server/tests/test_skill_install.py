@@ -122,6 +122,28 @@ def test_hermes_skill_follows_hermes_home_and_is_never_a_project_install(
     assert _read(project, ".agents") == skill_install._bundled_skill_text()
 
 
+def test_cline_skill_goes_to_its_home_and_project_mode_uses_dot_cline(
+    tmp_path, monkeypatch
+):
+    home = tmp_path / "home"
+    project = tmp_path / "project"
+    (project / ".cline").mkdir(parents=True)
+    home.mkdir()
+    custom = tmp_path / "cline-base"
+    monkeypatch.setattr(skill_install.Path, "home", classmethod(lambda cls: home))
+    monkeypatch.setenv("CLINE_DIR", str(custom))
+    monkeypatch.chdir(project)
+
+    result = skill_install.install_for_agent("cline")
+
+    assert result["target"] == str(custom / SKILL_REL)
+    assert skill_install.is_installed("cline") is True
+    assert not (home / ".cline").exists()
+
+    skill_install.install_skill(_args())
+    assert _read(project, ".cline") == skill_install._bundled_skill_text()
+
+
 def test_fail_open_when_a_target_is_unwritable(tmp_path, monkeypatch):
     (tmp_path / ".claude").mkdir()
     (tmp_path / ".codex").mkdir()

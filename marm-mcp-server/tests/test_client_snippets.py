@@ -124,6 +124,43 @@ def test_codex_toml_fragment() -> None:
     assert any("trust" in note for note in stdio["notes"])
 
 
+def test_cline_json_fragment_and_paths() -> None:
+    http = make("cline", "linux", "http", "user", False)
+    assert http["path"] == "~/.cline/data/settings/cline_mcp_settings.json"
+    assert json.loads(http["text"])["mcpServers"]["marm-memory"] == {
+        "type": "streamableHttp",
+        "url": URL,
+    }
+    assert make("cline", "windows", "http", "user", False)["path"] == (
+        "~\\.cline\\data\\settings\\cline_mcp_settings.json"
+    )
+    assert any("VS Code and JetBrains" in note for note in http["notes"])
+    stdio = json.loads(make("cline", "macos", "stdio", "user", False)["text"])
+    assert stdio["mcpServers"]["marm-memory"]["type"] == "stdio"
+    with pytest.raises(client_config.InvalidRequest, match="user scope only"):
+        make("cline", "linux", "http", "project", False)
+    with pytest.raises(client_config.InvalidRequest, match="STDIO"):
+        make("cline", "linux", "http", "user", True)
+
+
+def test_cline_commands_cover_transports_and_never_carry_a_key() -> None:
+    assert commands("http", "user")["cline"]["command"] == (
+        f"cline mcp install marm-memory --yes --transport http {URL}"
+    )
+    keyed = commands("http", "user", auth=True)["cline"]
+    assert keyed["command"] is None and "STDIO" in keyed["note"]
+    assert SECRET not in json.dumps(keyed)
+    assert commands("stdio", "user")["cline"]["command"] == (
+        "cline mcp install marm-memory --yes -- marm-mcp-stdio"
+    )
+    argv = client_snippets._docker_argv("linux", "latest")
+    assert commands("docker-stdio", "user")["cline"]["command"] == (
+        f"cline mcp install marm-memory --yes -- {shlex.join(argv)}"
+    )
+    project = commands("stdio", "project")["cline"]
+    assert project["command"] is None and "user scope" in project["note"]
+
+
 def test_hermes_yaml_fragment_and_paths() -> None:
     keyed = make("hermes", "linux", "http", "user", True)
     assert keyed["format"] == "yaml"

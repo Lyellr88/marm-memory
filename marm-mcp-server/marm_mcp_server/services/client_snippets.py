@@ -41,6 +41,11 @@ _OS_APPDATA_DISPLAY: dict[str, dict[str, str | None]] = {
         "macos": "~/Library/Application Support/Claude/claude_desktop_config.json",
         "linux": None,
     },
+    "cline": {
+        "windows": "~\\.cline\\data\\settings\\cline_mcp_settings.json",
+        "macos": "~/.cline/data/settings/cline_mcp_settings.json",
+        "linux": "~/.cline/data/settings/cline_mcp_settings.json",
+    },
     "hermes": {
         "windows": "%LOCALAPPDATA%\\hermes\\config.yaml",
         "macos": "~/.hermes/config.yaml",
@@ -224,6 +229,10 @@ def _snippet_notes(
         notes.append(
             "Older Windsurf installs use ~/.codeium/windsurf/mcp_config.json instead."
         )
+    if spec.id == "cline":
+        notes.append(
+            "The Cline extensions in VS Code and JetBrains read this same file. If CLINE_DATA_DIR is set, it is $CLINE_DATA_DIR/settings/cline_mcp_settings.json."
+        )
     if spec.id == "hermes":
         notes.append(
             "If HERMES_HOME is set, the file is $HERMES_HOME/config.yaml. Run /reload-mcp in Hermes after saving."
@@ -328,6 +337,13 @@ def _grok_command(
     return _join([*base, *where, SERVER_NAME, "--", *argv], os_name)
 
 
+def _cline_command(transport: str, url: str, argv: list[str], os_name: str) -> str:
+    base = ["cline", "mcp", "install", SERVER_NAME, "--yes"]
+    if transport == "http":
+        return _join([*base, "--transport", "http", url], os_name)
+    return _join([*base, "--", *argv], os_name)
+
+
 def _hermes_command(transport: str, url: str, argv: list[str], os_name: str) -> str:
     base = ["hermes", "mcp", "add", SERVER_NAME]
     if transport == "http":
@@ -378,6 +394,13 @@ def _one_command(
         return _codex_command(
             transport, url, auth_required, argv, os_name
         ), "Adds MARM for every project."
+    if client_id == "cline":
+        if scope == "project":
+            return None, "Cline CLI has one user settings file. Use the user scope."
+        return (
+            _cline_command(transport, url, argv, os_name),
+            "Adds MARM to your Cline settings.",
+        )
     if client_id == "hermes":
         if scope == "project":
             return None, "Hermes Agent has one user config. Use the user scope."

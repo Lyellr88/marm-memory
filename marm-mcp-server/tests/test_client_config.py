@@ -24,6 +24,7 @@ DETECT_DIRS = {
     "codex": ".codex",
     "grok": ".grok",
     "hermes": "AppData/Local/hermes",
+    "cline": ".cline",
     "antigravity": ".gemini/config",
     "qwen": ".qwen",
     "windsurf": ".codeium/windsurf",
@@ -37,6 +38,7 @@ USER_FILES = {
     "codex": ".codex/config.toml",
     "grok": ".grok/config.toml",
     "hermes": "AppData/Local/hermes/config.yaml",
+    "cline": ".cline/data/settings/cline_mcp_settings.json",
     "antigravity": ".gemini/config/mcp_config.json",
     "qwen": ".qwen/settings.json",
     "windsurf": ".codeium/windsurf/mcp_config.json",
@@ -55,7 +57,8 @@ PROJECT_FILES = {
 }
 
 CONTAINER = {"vscode": "servers", "codex": "mcp_servers", "grok": "mcp_servers"}
-TYPED = {"claude", "vscode"}
+TYPED = {"claude", "vscode", "cline"}
+HTTP_TYPE = {"cline": "streamableHttp"}
 URL_KEY = {
     "antigravity": "serverUrl",
     "qwen": "httpUrl",
@@ -81,6 +84,9 @@ def isolated_home(tmp_path, monkeypatch):
     monkeypatch.setenv("APPDATA", str(tmp_path / "AppData" / "Roaming"))
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "AppData" / "Local"))
     monkeypatch.delenv("HERMES_HOME", raising=False)
+    monkeypatch.delenv("CLINE_DIR", raising=False)
+    monkeypatch.delenv("CLINE_DATA_DIR", raising=False)
+    monkeypatch.delenv("CLINE_MCP_SETTINGS_PATH", raising=False)
     monkeypatch.setattr(client_config.shutil, "which", lambda name: None)
     return tmp_path
 
@@ -96,7 +102,7 @@ def expected_entry(client: str, transport: str, auth: bool, docker_args=None) ->
             if auth:
                 entry["bearer_token_env_var"] = "MARM_API_KEY"
             return entry
-        entry = {"type": "http"} if client in TYPED else {}
+        entry = {"type": HTTP_TYPE.get(client, "http")} if client in TYPED else {}
         entry[URL_KEY.get(client, "url")] = URL
         if auth and client in AUTH_REF:
             entry["headers"] = {"Authorization": f"Bearer {AUTH_REF[client]}"}
@@ -131,7 +137,7 @@ def docker_args_for(tmp_path: Path) -> list[str]:
 
 def unavailable(client: str, transport: str, auth: bool) -> bool:
     return (client == "claude-desktop" and transport == "http") or (
-        client in {"antigravity", "qwen"} and transport == "http" and auth
+        client in {"antigravity", "qwen", "cline"} and transport == "http" and auth
     )
 
 
@@ -1641,6 +1647,193 @@ def test_hermes_skill_lands_in_hermes_home_skills(isolated_home, monkeypatch):
         a for a in client_config.list_agents(URL, False) if a["id"] == "hermes"
     )
     assert agent["skill"] == {"supported": True, "installed": True}
+
+
+# --- Cline CLI -----------------------------------------------------------------------
+
+
+def cline_file(home: Path) -> Path:
+    return home / ".cline" / "data" / "settings" / "cline_mcp_settings.json"
+
+
+def test_cline_http_entry_names_the_streamable_transport_explicitly(isolated_home):
+    detect(isolated_home, "cline")
+
+    result = client_config.configure("cline", URL, False)
+
+    assert result["entry"] == {"type": "streamableHttp", "url": URL}
+    data = json.loads(cline_file(isolated_home).read_text())
+    assert data["mcpServers"]["marm-memory"] == {"type": "streamableHttp", "url": URL}
+
+
+def test_cline_keeps_other_servers_and_top_level_keys(isolated_home):
+    path = cline_file(isolated_home)
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        json.dumps(
+            {
+                "$schema": "x",
+                "mcpServers": {"github": {"command": "npx", "autoApprove": ["a"]}},
+            }
+        )
+    )
+
+    client_config.configure("cline", URL, False, transport="stdio")
+    client_config.remove("cline")
+
+    data = json.loads(path.read_text())
+    assert data["$schema"] == "x"
+    assert data["mcpServers"] == {"github": {"command": "npx", "autoApprove": ["a"]}}
+
+
+def test_cline_keyed_http_is_manual_and_suggests_stdio(isolated_home):
+    detect(isolated_home, "cline")
+
+    with pytest.raises(client_config.ClientNotConfigurable, match="STDIO"):
+        client_config.configure("cline", URL, True)
+    stdio = client_config.configure("cline", URL, True, transport="stdio")
+
+    assert stdio["verified"] is True
+    assert "headers" not in stdio["entry"]
+    agent = next(a for a in client_config.list_agents(URL, True) if a["id"] == "cline")
+    assert "has not confirmed" in agent["unavailable"]["http"]
+    assert "stdio" not in agent["unavailable"]
+
+
+def test_cline_entry_from_its_own_installer_counts_as_configured(isolated_home):
+    path = cline_file(isolated_home)
+    path.parent.mkdir(parents=True)
+    nested = {
+        "mcpServers": {
+            "marm-memory": {"transport": {"type": "streamableHttp", "url": URL}}
+        }
+    }
+    path.write_text(json.dumps(nested))
+
+    assert client_config.status("cline", url=URL)["state"] == "configured"
+    result = client_config.configure("cline", URL, False)
+
+    assert result["action"] == "none"
+    assert json.loads(path.read_text()) == nested
+    assert client_config.read_entry("cline") == {"type": "streamableHttp", "url": URL}
+
+
+def test_cline_nested_entry_for_another_url_is_replaced_with_the_flat_shape(
+    isolated_home,
+):
+    path = cline_file(isolated_home)
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        json.dumps(
+            {
+                "mcpServers": {
+                    "marm-memory": {
+                        "transport": {"type": "sse", "url": "http://127.0.0.1:9/mcp"}
+                    }
+                }
+            }
+        )
+    )
+
+    result = client_config.configure("cline", URL, False)
+
+    assert result["action"] == "replace"
+    assert json.loads(path.read_text())["mcpServers"]["marm-memory"] == {
+        "type": "streamableHttp",
+        "url": URL,
+    }
+
+
+def test_cline_path_precedence_across_its_environment_overrides(
+    isolated_home, monkeypatch
+):
+    default = isolated_home / ".cline" / "data" / "settings" / "cline_mcp_settings.json"
+    assert client_config.cline_mcp_settings_path() == default
+
+    monkeypatch.setenv("CLINE_DIR", str(isolated_home / "base"))
+    assert client_config.cline_home() == isolated_home / "base"
+    assert client_config.cline_mcp_settings_path() == (
+        isolated_home / "base" / "data" / "settings" / "cline_mcp_settings.json"
+    )
+    monkeypatch.setenv("CLINE_DATA_DIR", str(isolated_home / "datadir"))
+    assert client_config.cline_mcp_settings_path() == (
+        isolated_home / "datadir" / "settings" / "cline_mcp_settings.json"
+    )
+    monkeypatch.setenv("CLINE_MCP_SETTINGS_PATH", str(isolated_home / "one.json"))
+    assert client_config.cline_mcp_settings_path() == isolated_home / "one.json"
+
+
+def test_cline_override_moves_detection_config_and_skill(isolated_home, monkeypatch):
+    base = isolated_home / "elsewhere"
+    monkeypatch.setenv("CLINE_DIR", str(base))
+    agent = next(a for a in client_config.list_agents(URL, False) if a["id"] == "cline")
+    assert agent["detected"] is False
+
+    base.mkdir()
+    result = client_config.configure("cline", URL, False)
+    skill = client_config.skill_install.install_for_agent("cline")
+
+    assert result["config_path"] == str(
+        base / "data" / "settings" / "cline_mcp_settings.json"
+    )
+    assert skill["target"] == str(base / "skills" / "marm-init" / "SKILL.md")
+    assert not (isolated_home / ".cline").exists()
+
+
+def test_cline_is_detected_through_data_dir_and_settings_path_overrides(
+    isolated_home, monkeypatch
+):
+    def detected() -> bool:
+        return next(
+            a for a in client_config.list_agents(URL, False) if a["id"] == "cline"
+        )["detected"]
+
+    assert detected() is False
+    data = isolated_home / "data-elsewhere"
+    monkeypatch.setenv("CLINE_DATA_DIR", str(data))
+    assert detected() is False
+    data.mkdir()
+    assert detected() is True
+    result = client_config.configure("cline", URL, False)
+    assert result["config_path"] == str(data / "settings" / "cline_mcp_settings.json")
+    assert (data / "settings" / "cline_mcp_settings.json").is_file()
+    assert not (isolated_home / ".cline").exists()
+
+    monkeypatch.delenv("CLINE_DATA_DIR")
+    assert detected() is False
+    custom = isolated_home / "custom" / "mcp.json"
+    monkeypatch.setenv("CLINE_MCP_SETTINGS_PATH", str(custom))
+    assert detected() is False
+    custom.parent.mkdir()
+    assert detected() is True
+    assert client_config.configure("cline", URL, False)["config_path"] == str(custom)
+
+
+def test_cline_data_dir_override_does_not_move_the_skill_folder(
+    isolated_home, monkeypatch
+):
+    data = isolated_home / "data-elsewhere"
+    data.mkdir()
+    monkeypatch.setenv("CLINE_DATA_DIR", str(data))
+
+    skill = client_config.skill_install.install_for_agent("cline")
+
+    assert skill["target"] == str(
+        isolated_home / ".cline" / "skills" / "marm-init" / "SKILL.md"
+    )
+
+
+def test_cline_only_supports_the_user_scope(isolated_home):
+    project = isolated_home / "repo"
+    project.mkdir()
+    agent = next(a for a in client_config.list_agents(URL, False) if a["id"] == "cline")
+
+    assert agent["scopes"] == ["user"]
+    assert any("Cline extensions" in note for note in agent["notes"])
+    with pytest.raises(client_config.InvalidRequest, match="user scope only"):
+        client_config.configure(
+            "cline", URL, False, scope="project", project=str(project)
+        )
 
 
 # --- Claude Code via subprocess -----------------------------------------------------------
