@@ -1,10 +1,22 @@
 """Pipeline behaviour, against a stub engine so the assertions are about ranking."""
 
 import pytest
+from conftest import bind_live_attrs
 
 from marm_mcp_server.services.code_context.backend import GraphUnavailable
 from marm_mcp_server.services.code_context.compose import build
 from marm_mcp_server.services.code_context.format import render
+
+
+@pytest.fixture(autouse=True)
+def _live_names(monkeypatch):
+    bind_live_attrs(
+        monkeypatch,
+        globals(),
+        GraphUnavailable="marm_mcp_server.services.code_context.backend.GraphUnavailable",
+        build="marm_mcp_server.services.code_context.compose.build",
+        render="marm_mcp_server.services.code_context.format.render",
+    )
 
 
 class Stub:

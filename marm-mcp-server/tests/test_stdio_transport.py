@@ -1411,7 +1411,9 @@ def test_stdio_trace_docstring_documents_the_evidence_flags(module_path):
 
 
 @pytest.mark.parametrize("module_path", _TRACE_WRAPPER_MODULES)
-def test_stdio_trace_wrapper_forwards_non_default_flags(module_path, monkeypatch):
+def test_stdio_trace_wrapper_forwards_non_default_flags(
+    module_path, monkeypatch, tmp_path
+):
     """Accepting a parameter is not the same as passing it on.
 
     The signature check above passes even if a wrapper takes include_tests and
@@ -1422,6 +1424,7 @@ def test_stdio_trace_wrapper_forwards_non_default_flags(module_path, monkeypatch
     """
     import importlib
 
+    _isolated_stdio(monkeypatch, tmp_path)
     module = importlib.import_module(module_path)
     router = module.graph_router if hasattr(module, "graph_router") else module.R
     received = {}

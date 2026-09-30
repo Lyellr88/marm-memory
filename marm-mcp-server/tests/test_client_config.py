@@ -9,8 +9,21 @@ import sys
 from pathlib import Path
 
 import pytest
+from conftest import bind_live_modules
 
 from marm_mcp_server.services import client_config, docker_commands
+
+
+@pytest.fixture(autouse=True)
+def _live_modules(monkeypatch):
+    bind_live_modules(
+        monkeypatch,
+        globals(),
+        client_config="marm_mcp_server.services.client_config",
+        docker_commands="marm_mcp_server.services.docker_commands",
+        skill_install="marm_mcp_server.services.skill_install",
+    )
+
 
 URL = "http://127.0.0.1:8001/mcp"
 SECRET = "sk-marm-test-secret-value"

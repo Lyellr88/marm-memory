@@ -7,6 +7,7 @@ it was written from. Neither path contacts a model or a graph backend here.
 import asyncio
 
 import pytest
+from conftest import bind_live_modules
 
 from marm_mcp_server.services import code_context as cc
 from marm_mcp_server.services import local_llm
@@ -40,6 +41,17 @@ def _ctx():
                 source="def claim_row(row):\n    return row\n",
             ),
         ],
+    )
+
+
+@pytest.fixture(autouse=True)
+def _live_modules(monkeypatch):
+    bind_live_modules(
+        monkeypatch,
+        globals(),
+        cc="marm_mcp_server.services.code_context",
+        local_llm="marm_mcp_server.services.local_llm",
+        brief_mod="marm_mcp_server.services.analyst.brief",
     )
 
 

@@ -277,6 +277,14 @@ def bind_live_modules(monkeypatch, namespace, **paths) -> None:
         monkeypatch.setitem(namespace, name, module)
 
 
+def bind_live_attrs(monkeypatch, namespace, **paths) -> None:
+    """Point a test file's imported classes and functions at the live module's copy."""
+    for name, path in paths.items():
+        module_path, _, attr = path.rpartition(".")
+        module = importlib.import_module(module_path)
+        monkeypatch.setitem(namespace, name, getattr(module, attr))
+
+
 def load_isolated_server(monkeypatch, tmp_path, api_key="", write_queue_enabled=False):
     """Import the server after pointing global state at a temporary database.
 

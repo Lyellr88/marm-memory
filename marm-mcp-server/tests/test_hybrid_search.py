@@ -8,12 +8,32 @@ from datetime import timezone as _timezone
 
 import numpy as np
 import pytest
+from conftest import bind_live_attrs, bind_live_modules
 
 from marm_mcp_server.core.memory import (
     MARMMemory,
     _safe_fts_query,
 )
 from marm_mcp_server.core.memory_recall import _recall_text_search
+
+
+@pytest.fixture(autouse=True)
+def _live_modules(monkeypatch):
+    bind_live_modules(
+        monkeypatch,
+        {},
+        memory="marm_mcp_server.core.memory",
+        memory_recall="marm_mcp_server.core.memory_recall",
+        memory_scoring="marm_mcp_server.core.memory_scoring",
+        memory_utils="marm_mcp_server.core.memory_utils",
+    )
+    bind_live_attrs(
+        monkeypatch,
+        globals(),
+        MARMMemory="marm_mcp_server.core.memory.MARMMemory",
+        _safe_fts_query="marm_mcp_server.core.memory._safe_fts_query",
+        _recall_text_search="marm_mcp_server.core.memory_recall._recall_text_search",
+    )
 
 
 def test_safe_fts_query_returns_none_for_empty_string():
