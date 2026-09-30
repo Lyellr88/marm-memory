@@ -1,6 +1,38 @@
 # Changelog
 
 <details>
+<summary><strong>September 30th, 2026: CI and Code Scanning on Every Branch (v2.56.1)</strong></summary>
+
+### Changed
+
+- CodeQL runs from a repository workflow, `.github/workflows/codeql.yml`, in place of GitHub's default setup. GitHub only accepts its results once Default setup is switched off in Settings, Code security. It scans pull requests into any branch, pushes to `MARM-main`, and a weekly schedule, covering Python, JavaScript and TypeScript, and the workflow files with the default query suite. The generated Console bundle and `node_modules` are excluded, and tests are scanned.
+- Ruff, dependency review, and the sensitive-path check run on pull requests into any branch. They previously ran only for pull requests into `MARM-main`.
+- CodeRabbit reviews pull requests into any base branch automatically.
+
+### Fixed
+
+- Manual CLI command quoting follows the host shell. On a Windows host, where the Console's terminal is PowerShell, values that need quoting use single quotes and backslashes stay literal, so paths and UNC shares reach `marm-memory` unchanged. On Linux and macOS values are double-quoted with every backslash escaped.
+
+</details>
+
+<details>
+<summary><strong>September 30th, 2026: Bounded Local Analyst Foundation (v2.56.0)</strong></summary>
+
+### Added
+
+- Code Context can use bounded local analyst profiles for general, small, and large local models. Answers carry resolvable symbol and memory citations, structured analysis, model details, evidence disagreements, and verification results instead of treating local generation as authority.
+- Analyst profiles enforce their own context, output-token, and time budgets. Truncated answers are identified rather than retried with a wider limit.
+- The Console shows analyst profile limits, answer verification, source support, rejected-answer state, and linked memory citations.
+
+### Fixed
+
+- Manual CLI command quoting now escapes backslashes explicitly inside double-quoted values, making the shell boundary clear to both readers and CodeQL.
+
+Thank you to [@doublegate](https://github.com/doublegate) for the bounded local analyst foundation restored in [#269](https://github.com/Lyellr88/marm-memory/pull/269).
+
+</details>
+
+<details>
 <summary><strong>September 28th, 2026: Console Connections Tab (v2.55.0)</strong></summary>
 
 ### Added

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { TriangleAlert } from 'lucide-react';
-import { useManualCli } from '@/hooks/use-marm-queries';
+import { useConnectionsOverview, useManualCli } from '@/hooks/use-marm-queries';
 import { Button, Input } from '@/components/ui/core';
 import { CopyButton } from '@/components/code-context/shared';
 import type { ManualCliArg, ManualCliCommand } from '@/lib/marm-types';
@@ -12,10 +12,14 @@ const CLI_NAME = 'marm-memory';
 type ArgValue = boolean | string | string[];
 type Values = Record<string, ArgValue>;
 
-export function quoteArg(value: string) {
+export type QuoteShell = 'posix' | 'powershell';
+
+export function quoteArg(value: string, shell: QuoteShell = 'posix') {
   if (/^[\w@%+=:,./\\-]+$/.test(value)) return value;
+  if (shell === 'powershell') return `'${value.replace(/'/g, "''")}'`;
   if (/[$`]/.test(value) && !value.includes("'")) return `'${value}'`;
-  return `"${value.replace(/\\(?=["$`\\]|$)/g, '\\\\').replace(/["$`]/g, '\\$&')}"`;
+  const escaped = value.replace(/\\/g, '\\\\').replace(/["$`]/g, '\\$&');
+  return `"${escaped}"`;
 }
 
 function valuesOf(arg: ManualCliArg, values: Values): string[] {
@@ -24,17 +28,17 @@ function valuesOf(arg: ManualCliArg, values: Values): string[] {
   return list.map((item) => item.trim()).filter(Boolean);
 }
 
-export function buildCommandLine(command: ManualCliCommand, values: Values) {
+export function buildCommandLine(command: ManualCliCommand, values: Values, shell: QuoteShell = 'posix') {
   const parts = [CLI_NAME, command.command];
   const positionals = command.args.filter((arg) => arg.kind === 'positional');
   const others = command.args.filter((arg) => arg.kind !== 'positional');
-  for (const arg of positionals) parts.push(...valuesOf(arg, values).map(quoteArg));
+  for (const arg of positionals) parts.push(...valuesOf(arg, values).map((value) => quoteArg(value, shell)));
   for (const arg of others) {
     const flag = arg.flag ?? `--${arg.name}`;
     if (arg.kind === 'flag') {
       if (values[arg.name] === true) parts.push(flag);
     } else {
-      for (const value of valuesOf(arg, values)) parts.push(flag, quoteArg(value));
+      for (const value of valuesOf(arg, values)) parts.push(flag, quoteArg(value, shell));
     }
   }
   return parts.join(' ');
@@ -46,6 +50,8 @@ function groupOf(command: ManualCliCommand) {
 
 export function CliSection() {
   const cli = useManualCli();
+  const overview = useConnectionsOverview();
+  const shell: QuoteShell = /^windows/i.test(overview.data?.os ?? '') ? 'powershell' : 'posix';
   const commands = useMemo(() => cli.data?.commands ?? [], [cli.data]);
   const buildable = commands.filter((command) => !command.cli_only);
   const cliOnly = commands.filter((command) => command.cli_only);
@@ -62,7 +68,7 @@ export function CliSection() {
   if (cli.isLoading) return <p className="text-sm text-muted-foreground">Loading commands...</p>;
   if (cli.isError) return <ErrorState message={mutationMessage(cli.error)} />;
 
-  const line = command ? buildCommandLine(command, values) : '';
+  const line = command ? buildCommandLine(command, values, shell) : '';
   const setValue = (name: string, value: ArgValue) => setValues((current) => ({ ...current, [name]: value }));
   const ordered = command ? [...command.args.filter((arg) => arg.kind === 'positional'), ...command.args.filter((arg) => arg.kind !== 'positional')] : [];
 

@@ -2,7 +2,6 @@ name: Supply Chain CI
 
 on:
   pull_request:
-    branches: [ MARM-main ]
 
 # No `paths:` filter, for the reason given in python.yml.
 permissions:

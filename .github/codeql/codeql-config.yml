@@ -1,0 +1,5 @@
+name: marm-memory CodeQL config
+
+paths-ignore:
+  - marm-mcp-server/marm_mcp_server/console/static/**
+  - '**/node_modules/**'
