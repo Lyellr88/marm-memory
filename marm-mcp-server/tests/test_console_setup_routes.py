@@ -8,6 +8,7 @@ import threading
 import time
 
 import pytest
+from conftest import bind_live_modules
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -20,6 +21,24 @@ from marm_mcp_server.core import runtime_flags, runtime_manager
 from marm_mcp_server.services import client_config, key_management, skill_install
 
 SECRET = "sk-marm-setup-secret-value"
+
+
+@pytest.fixture(autouse=True)
+def _live_modules(monkeypatch):
+    bind_live_modules(
+        monkeypatch,
+        globals(),
+        marm_settings="marm_mcp_server.config.settings",
+        user_settings="marm_mcp_server.config.user_settings",
+        mcp_client="marm_mcp_server.console.mcp_client",
+        runtime_control="marm_mcp_server.console.runtime_control",
+        setup="marm_mcp_server.console.endpoints.setup",
+        runtime_flags="marm_mcp_server.core.runtime_flags",
+        runtime_manager="marm_mcp_server.core.runtime_manager",
+        client_config="marm_mcp_server.services.client_config",
+        key_management="marm_mcp_server.services.key_management",
+        skill_install="marm_mcp_server.services.skill_install",
+    )
 
 
 @pytest.fixture

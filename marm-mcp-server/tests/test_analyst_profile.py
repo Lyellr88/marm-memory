@@ -1,6 +1,7 @@
 import time
 
 import pytest
+from conftest import bind_live_modules
 
 from marm_mcp_server.core import runtime_flags
 from marm_mcp_server.services import local_llm
@@ -23,6 +24,12 @@ _ENV = (
 
 @pytest.fixture(autouse=True)
 def clean(monkeypatch):
+    bind_live_modules(
+        monkeypatch,
+        globals(),
+        runtime_flags="marm_mcp_server.core.runtime_flags",
+        local_llm="marm_mcp_server.services.local_llm",
+    )
     for key in _ENV:
         monkeypatch.delenv(key, raising=False)
     saved = {}
