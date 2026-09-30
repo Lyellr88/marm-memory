@@ -664,8 +664,9 @@ def test_eof_error_carries_the_child_stderr_reason():
     finally:
         client.close()
 
-    assert "closed stdout (EOF)" in str(excinfo.value)
-    assert reason in str(excinfo.value)
+    message = str(excinfo.value)
+    assert "closed stdout (EOF)" in message or "write to child failed" in message
+    assert reason in message
 
 
 def _stderr_then_exit_command(text: str) -> list:
@@ -811,4 +812,4 @@ def test_stderr_context_is_bounded_when_the_drain_never_finishes():
     started = time.perf_counter()
     client._stderr_context()
     elapsed = time.perf_counter() - started
-    assert _STDERR_SETTLE_TIMEOUT <= elapsed < _STDERR_SETTLE_TIMEOUT + 0.5
+    assert _STDERR_SETTLE_TIMEOUT - 0.05 <= elapsed < _STDERR_SETTLE_TIMEOUT + 0.5

@@ -7,6 +7,8 @@ model are stubbed; the transports, request models and routing are real.
 import asyncio
 import importlib
 import json
+import sys
+import types
 
 import pytest
 from conftest import load_isolated_server, local_client
@@ -30,8 +32,25 @@ def _stub(monkeypatch, reply: str) -> list[str]:
             project={"name": "p", "root_path": "/x/proj"},
             task=task,
             symbols=[
-                Symbol("svc.apply", "apply", "Function", "svc.py", 10, 40, seeded=True),
-                Symbol("svc.claim_row", "claim_row", "Function", "svc.py", 50, 60),
+                Symbol(
+                    "svc.apply",
+                    "apply",
+                    "Function",
+                    "svc.py",
+                    10,
+                    40,
+                    seeded=True,
+                    source="def apply(row):\n    # take the row first\n    claim_row(row)\n",
+                ),
+                Symbol(
+                    "svc.claim_row",
+                    "claim_row",
+                    "Function",
+                    "svc.py",
+                    50,
+                    60,
+                    source="def claim_row(row):\n    return row\n",
+                ),
             ],
         )
 
@@ -40,12 +59,34 @@ def _stub(monkeypatch, reply: str) -> list[str]:
             finished["reason"] = "stop"
         yield from (reply[i : i + 9] for i in range(0, len(reply), 9))
 
+    def complete(*_a, finished=None, **_k):
+        if finished is not None:
+            finished["reason"] = "stop"
+        return reply
+
     monkeypatch.setattr(cc, "build", build)
     monkeypatch.setattr(cc, "LocalBackend", lambda: object())
-    monkeypatch.setattr(local_llm, "available", lambda *a, **k: "stub-model")
-    monkeypatch.setattr(local_llm, "complete", lambda *a, **k: reply)
-    monkeypatch.setattr(local_llm, "stream", stream)
+    for llm in _every_local_llm(local_llm):
+        monkeypatch.setattr(llm, "available", lambda *a, **k: "stub-model")
+        monkeypatch.setattr(llm, "endpoint_source", lambda: "environment")
+        monkeypatch.setattr(llm, "complete", complete)
+        monkeypatch.setattr(llm, "stream", stream)
     return composed
+
+
+def _every_local_llm(current):
+    """Each generation of `local_llm` a loaded module refers to.
+
+    Modules that import `local_llm` at load time keep the generation they were
+    loaded with, and an earlier test's isolated server load can leave one
+    behind. Stubbing only the current module would miss the model call.
+    """
+    found = {id(current): current}
+    for mod in list(sys.modules.values()):
+        ref = getattr(mod, "local_llm", None)
+        if isinstance(ref, types.ModuleType) and ref.__name__ == current.__name__:
+            found[id(ref)] = ref
+    return list(found.values())
 
 
 def _events(body: str) -> list[tuple[str, dict]]:
@@ -57,7 +98,7 @@ def _events(body: str) -> list[tuple[str, dict]]:
 
 
 @pytest.mark.parametrize(
-    ("reply", "status"), [(GROUNDED, "ok"), (INVENTED, "unverified")]
+    ("reply", "status"), [(GROUNDED, "ok"), (INVENTED, "rejected")]
 )
 def test_http_tool_reports_the_verdict(monkeypatch, tmp_path, reply, status):
     client = local_client(load_isolated_server(monkeypatch, tmp_path).app)
@@ -68,12 +109,12 @@ def test_http_tool_reports_the_verdict(monkeypatch, tmp_path, reply, status):
     ).json()
 
     assert body["answer_status"] == status
-    if status == "unverified":
+    if status == "rejected":
         assert body["answer_unresolved"] == ["persist_all_rows"]
 
 
 @pytest.mark.parametrize(
-    ("reply", "status"), [(GROUNDED, "ok"), (INVENTED, "unverified")]
+    ("reply", "status"), [(GROUNDED, "ok"), (INVENTED, "rejected")]
 )
 def test_http_stream_sends_one_composition_then_the_verdict(
     monkeypatch, tmp_path, reply, status
@@ -95,7 +136,7 @@ def test_http_stream_sends_one_composition_then_the_verdict(
 
 
 @pytest.mark.parametrize(
-    ("reply", "status"), [(GROUNDED, "ok"), (INVENTED, "unverified")]
+    ("reply", "status"), [(GROUNDED, "ok"), (INVENTED, "rejected")]
 )
 def test_stdio_tool_reports_the_verdict(monkeypatch, tmp_path, reply, status):
     from test_stdio_transport import _isolated_stdio

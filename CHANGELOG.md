@@ -1,6 +1,38 @@
 # Changelog
 
 <details>
+<summary><strong>September 28th, 2026: Console Connections Tab (v2.55.0)</strong></summary>
+
+### Added
+
+- The Console has a **Connections** tab for setting MARM up end to end. **Setup** connects Claude Code, Claude Desktop, Cursor, VS Code, Codex CLI, Grok Build, Hermes Agent, OpenCode, Cline, Antigravity, Qwen Code, Devin, Kiro, and Zed over HTTP, STDIO, or Docker STDIO at user or project scope, tests each connection with a real MCP handshake, removes entries, and installs the MARM skill per client. Configs are merged beside other servers, backed up as `.marm-backup`, and read back to confirm.
+- Server settings saved from the Console live in `~/.marm/settings.json` and apply to every way MARM runs. A saved setting beats the matching environment variable and the page marks each override. **Setup** restarts the managed runtime in the background so the Console stays up. An explicit `MARM_API_KEY` is the one exception: saving "Require a key" off never removes it, and the page says so.
+- **Docker** pulls, starts, stops, restarts, and recreates the MARM container from a saved run config, shows recent logs, and writes a compose file. It is read-only when the Console runs inside a container.
+- **Manual** gives copy-ready config per client and OS, each client's own add command, the full `marm-memory` CLI, every HTTP endpoint from the running server, and the environment-variable reference. **Add a connection** emails support to request an unlisted client.
+- `marm-memory fast-start-http --client <id>` accepts every supported client, and `--transport stdio` writes a STDIO entry instead of HTTP.
+- Grok Build, xAI's terminal coding agent, has its own CLI card. MARM writes `~/.grok/config.toml` (or `.grok/config.toml` for one project) with the key read from `MARM_API_KEY`, and installs the MARM skill into `~/.grok/skills/`. Use `marm-memory init --g-grok` for the skill.
+- Hermes Agent by Nous Research has its own CLI card. MARM edits `mcp_servers` in Hermes's `config.yaml` as text, so comments and the rest of the file stay as they were, then re-reads it and restores the original if the entry did not land. The file is found through `HERMES_HOME`, or `%LOCALAPPDATA%\hermes` on native Windows and `~/.hermes` elsewhere, and the skill installs into its `skills` folder. Keyed HTTP uses `Authorization: Bearer ${MARM_API_KEY}` so the key stays out of the file. Use `marm-memory init --g-hermes` for the skill. MARM now declares PyYAML as a dependency so it can read that file.
+- Cline has its own card. MARM edits `~/.cline/data/settings/cline_mcp_settings.json`, the file the CLI and the Cline extensions in VS Code and JetBrains share, and writes `type: streamableHttp` for HTTP because Cline treats an entry with no type as legacy SSE. An entry written by Cline's own installer counts as configured. `CLINE_MCP_SETTINGS_PATH`, `CLINE_DATA_DIR` and `CLINE_DIR` move the settings file and Cline detection, and `CLINE_DIR` also moves the skill folder (`~/.cline/skills`). HTTP with a key stays manual until the CLI is confirmed to expand environment variables in headers. Use `marm-memory init --g-cline` for the skill.
+- Agents that share one settings file between their IDE and CLI, Cline and Antigravity, sit in their own **CLI and IDE** group. Connecting once covers the IDE, the CLI and the Antigravity 2.0 app, in either order, and Antigravity is detected from an IDE install that has not been opened yet.
+- Cursor joins the **CLI and IDE** group because the Cursor CLI (`agent`) reads the same `mcp.json` as the editor. The Cursor card can now install the MARM skill into `~/.cursor/skills`, `marm-memory init --g-cursor` does the same, and the first-run install guide lists the Cursor CLI.
+- OpenCode has its own CLI card. MARM edits `mcp` in `~/.config/opencode/opencode.json` (or an existing `opencode.jsonc`, `$XDG_CONFIG_HOME/opencode/`, or `opencode.json` for one project) and writes into OpenCode 2's `mcp.servers` layout when the file already uses it. HTTP entries carry `oauth: false` so a stopped MARM server does not surface as an OAuth error, and keyed HTTP is one click because OpenCode expands `{env:MARM_API_KEY}` in headers. Comments in a `.jsonc` file are not kept, so the original is saved as `.marm-backup` and the result says so. The card installs the MARM skill into `~/.config/opencode/skills`, and `marm-memory init --g-opencode` does the same.
+- Windsurf is now **Devin**. Cognition renamed Windsurf to Devin Desktop, and Devin CLI and Desktop's Devin Local agent read the same MCP file, so one card in the **CLI and IDE** group covers both. The older Cascade agent keeps its own file, which MARM does not write. MARM writes `mcp_config.json` under `~/.config/devin` (`%APPDATA%\devin` on Windows) with `url` for HTTP, and no longer looks in the old `~/.codeium/windsurf` folder. An entry MARM wrote there earlier is left as it was, and Devin CLI imports that file by default, so click Connect once to add MARM to the Devin file. `--client windsurf` still works as an alias. Keyed HTTP is manual with STDIO suggested, because Devin's docs do not show environment variables in headers. The card installs the MARM skill into `~/.config/devin/skills`, and `marm-memory init --g-devin` does the same.
+- Zed has its own card in the **IDEs** group. MARM edits `context_servers` in Zed's `settings.json` (`~/.config/zed`, `$XDG_CONFIG_HOME/zed` on Linux, `%APPDATA%\Zed` on Windows) as text, so the header comment, every other comment and each other setting stay as they were, and it restores the file if anything else changed. Keyed HTTP is manual with STDIO suggested. The card installs the MARM skill into `~/.agents/skills` for Zed's own agent, and `marm-memory init --g-zed` does the same.
+- Every Connections action that writes a file, restarts the runtime, or drives Docker is refused unless the Console is bound to loopback. Key values are never written to client files, sent to the browser, or logged.
+
+### Changed
+
+- Antigravity replaces Gemini CLI, which Google retired on June 18, 2026. MARM writes `~/.gemini/config/mcp_config.json` (or `.agents/mcp_config.json` for one project) with the `serverUrl` key, and installs the MARM skill into `~/.gemini/config/skills/`. HTTP with a key stays a manual step because Antigravity does not expand `${VAR}` in that file.
+- `marm-memory init --g-gemini` is now `--g-antigravity`, and `fast-start-http --client gemini` is now `--client antigravity`.
+- `python scripts/run-tests.py` runs the server suite in parallel on `pytest-xdist` workers, which cut a full run from about 10 minutes to under 3. `--workers N` sets the worker count (default 4, and 1 runs serially), and `--durations [N]` lists the slowest tests. `pytest-xdist` is now a dev dependency.
+
+### Fixed
+
+- On Windows, background MARM processes no longer flash a console window each time they run `docker` or `nvidia-smi`.
+
+</details>
+
+<details>
 <summary><strong>September 28th, 2026: Clearer Auto-Index Failures and a Documentation Refresh (v2.54.1)</strong></summary>
 
 ### Fixed

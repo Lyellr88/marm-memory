@@ -25,6 +25,17 @@ class McpRequestError(McpUnavailable):
 _projects_cache: tuple[float, list[dict]] | None = None
 
 
+def _base_url() -> str:
+    configured = os.environ.get("MARM_MCP_URL")
+    if configured:
+        return configured.rstrip("/")
+    from ..core.runtime_manager import read_state
+
+    state = read_state() or {}
+    port = state.get("port") or 8001
+    return f"http://127.0.0.1:{port}"
+
+
 def _api_key() -> str:
     explicit = os.environ.get("MARM_API_KEY", "")
     if explicit:
@@ -56,7 +67,7 @@ def request(
     method: str = "POST",
     timeout: float = 10.0,
 ) -> dict:
-    base_url = os.environ.get("MARM_MCP_URL", "http://127.0.0.1:8001").rstrip("/")
+    base_url = _base_url()
     headers = {"Content-Type": "application/json", "Accept": "application/json"}
     api_key = _api_key()
     if api_key:
@@ -96,7 +107,7 @@ def delete(
 
 
 def get(operation: str, *, query: dict | None = None, timeout: float = 10.0) -> dict:
-    base_url = os.environ.get("MARM_MCP_URL", "http://127.0.0.1:8001").rstrip("/")
+    base_url = _base_url()
     headers = {"Accept": "application/json"}
     api_key = _api_key()
     if api_key:
@@ -268,7 +279,7 @@ def stream(
     The timeout is long because the whole point is a slow response. It bounds a
     hung connection, not a working one.
     """
-    base_url = os.environ.get("MARM_MCP_URL", "http://127.0.0.1:8001").rstrip("/")
+    base_url = _base_url()
     headers = {"Content-Type": "application/json", "Accept": "text/event-stream"}
     api_key = _api_key()
     if api_key:

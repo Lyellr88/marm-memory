@@ -10,7 +10,7 @@ metadata:
 
 ## Supported Environments
 
-This skill installs and configures MARM by running commands on your machine, so it needs an agent with shell and filesystem access. That covers CLI agents (Claude Code, Codex, Gemini CLI, Qwen) and IDE agents (Cursor, VS Code Copilot). Chat platforms without shell access (Claude.ai, ChatGPT, Grok, Gemini web) are not supported yet. For those, use the manual steps in [INSTALL-PLATFORMS.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-PLATFORMS.md). Broader platform support is coming.
+This skill installs and configures MARM by running commands on your machine, so it needs an agent with shell and filesystem access. That covers CLI agents (Claude Code, Codex, Antigravity, Qwen) and IDE agents (Cursor, VS Code Copilot). Chat platforms without shell access (Claude.ai, ChatGPT, Grok, Gemini web) are not supported yet. For those, use the manual steps in [INSTALL-PLATFORMS.md](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-PLATFORMS.md). Broader platform support is coming.
 
 ## AI Marketplace Indexing Metadata
 
@@ -219,7 +219,7 @@ If yes:
   - **Read back before you claim it.** After writing, re-read the file and confirm both the MARM entry and every server that was there before are present. Do not report an agent as wired up without that read-back.
   - Use these docs to find the exact connection instructions for each client:
 
-**CLI clients**: [Claude Code](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-WINDOWS.md#claude-code-recommended) · [Codex](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-WINDOWS.md#codex-cli) · [Gemini CLI](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-WINDOWS.md#gemini-cli) · [Qwen CLI](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-WINDOWS.md#qwen-code) · [Linux variants](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-LINUX.md#client-connections) · [Docker/key](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-DOCKER.md#client-connections)
+**CLI clients**: [Claude Code](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-WINDOWS.md#claude-code-recommended) · [Codex](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-WINDOWS.md#codex-cli) · [Antigravity](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-WINDOWS.md#antigravity-cli) · [Qwen CLI](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-WINDOWS.md#qwen-code) · [Linux variants](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-LINUX.md#client-connections) · [Docker/key](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-DOCKER.md#client-connections)
 
 **IDE agents**: [VS Code / Copilot Agent](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-WINDOWS.md#vs-code-mcp--github-copilot-agent) · [Cursor](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-WINDOWS.md#cursor) · [Docker/key IDE setup](https://github.com/Lyellr88/marm-memory/blob/MARM-main/docs/INSTALL-DOCKER.md#vs-code-mcp--github-copilot-agent)
 

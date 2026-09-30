@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Route, Switch, Router as WouterRouter } from 'wouter';
 import { ConnectionProvider } from '@/lib/marm-connection';
+import { TerminalBridgeProvider } from '@/lib/terminal-bridge';
 
 import { Shell } from '@/components/layout/Shell';
 import { OverviewPage } from '@/pages/Overview';
@@ -12,6 +13,7 @@ import { ExplorerPage } from '@/pages/Explorer';
 import { CodeContextPage } from '@/pages/CodeContext';
 import { DistillPage } from '@/pages/Distill';
 import { SystemPage } from '@/pages/System';
+import { ConnectionsPage } from '@/pages/connections';
 import NotFound from '@/pages/not-found';
 
 const queryClient = new QueryClient({
@@ -37,6 +39,7 @@ function Router() {
         <Route path="/code-context" component={CodeContextPage} />
         <Route path="/distill" component={DistillPage} />
         <Route path="/system" component={SystemPage} />
+        <Route path="/connections" component={ConnectionsPage} />
         <Route component={NotFound} />
       </Switch>
     </Shell>
@@ -74,9 +77,11 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ConnectionProvider>
-        <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
-          <Router />
-        </WouterRouter>
+        <TerminalBridgeProvider>
+          <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, '')}>
+            <Router />
+          </WouterRouter>
+        </TerminalBridgeProvider>
       </ConnectionProvider>
     </QueryClientProvider>
   );

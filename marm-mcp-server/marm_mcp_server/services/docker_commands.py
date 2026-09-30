@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import shlex
+import shutil
 import subprocess
 import sys
 import time
@@ -12,6 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from ..utils.subprocess_flags import no_window_flags
 from .key_management import (
     initialize_managed_key,
     keychain_lookup,
@@ -22,6 +24,9 @@ from .key_management import (
 DEFAULT_IMAGE_REPOSITORY = "lyellr88/marm-mcp-server"
 DEFAULT_CONTAINER_NAME = "marm-mcp-server"
 CONTAINER_DATA_DIR = "/home/marm/.marm"
+MAX_LOG_LINES = 1000
+DOCKER_TIMEOUT_SECONDS = 60
+DOCKER_PULL_TIMEOUT_SECONDS = 1800
 
 
 class DockerCommandError(RuntimeError):
@@ -54,7 +59,7 @@ def managed_env_file() -> Path:
 def image_reference(tag: str) -> str:
     if not tag or any(char.isspace() for char in tag):
         raise DockerCommandError("Docker image tag must be a non-empty single token.")
-    repository = os.environ.get("MARM_DOCKER_REPOSITORY", DEFAULT_IMAGE_REPOSITORY)
+    repository = os.environ.get("MARM_DOCKER_REPOSITORY") or DEFAULT_IMAGE_REPOSITORY
     return f"{repository}:{tag}"
 
 
@@ -204,10 +209,28 @@ def shell_command(arguments: list[str], *, windows: bool | None = None) -> str:
 
 
 def _run(
-    arguments: list[str], *, check: bool = True
+    arguments: list[str],
+    *,
+    check: bool = True,
+    timeout: float | None = DOCKER_TIMEOUT_SECONDS,
+    merge_stderr: bool = False,
 ) -> subprocess.CompletedProcess[str]:
+    streams: dict[str, Any] = (
+        {"stdout": subprocess.PIPE, "stderr": subprocess.STDOUT}
+        if merge_stderr
+        else {"capture_output": True}
+    )
     try:
-        result = subprocess.run(arguments, capture_output=True, text=True, check=False)
+        result = subprocess.run(
+            arguments,
+            text=True,
+            check=False,
+            timeout=timeout,
+            creationflags=no_window_flags(),
+            **streams,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise DockerCommandError("Docker did not answer in time.") from exc
     except OSError as exc:
         raise DockerCommandError(
             "Docker is not installed or is not available on PATH."
@@ -235,10 +258,64 @@ def _is_marm_container(payload: dict[str, Any]) -> bool:
     config = payload.get("Config", {})
     image = str(config.get("Image", ""))
     labels = config.get("Labels") or {}
+    repositories = (
+        DEFAULT_IMAGE_REPOSITORY,
+        os.environ.get("MARM_DOCKER_REPOSITORY") or DEFAULT_IMAGE_REPOSITORY,
+    )
     return (
-        image.startswith(DEFAULT_IMAGE_REPOSITORY)
+        any(
+            image == repository
+            or image.startswith((f"{repository}:", f"{repository}@"))
+            for repository in repositories
+        )
         or labels.get("mcp.name") == "marm-mcp-server"
     )
+
+
+def engine_status() -> dict[str, Any]:
+    """Distinguish a missing Docker binary from a stopped daemon."""
+    result: dict[str, Any] = {
+        "available": False,
+        "daemon": False,
+        "version": None,
+        "reason": None,
+    }
+    try:
+        completed = subprocess.run(
+            ["docker", "version", "--format", "json"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=5,
+            creationflags=no_window_flags(),
+        )
+    except OSError:
+        result["reason"] = "Docker is not installed or is not on PATH."
+        return result
+    except subprocess.TimeoutExpired:
+        result["available"] = True
+        result["reason"] = "Docker did not answer in 5 seconds."
+        return result
+    result["available"] = True
+    try:
+        payload = json.loads(completed.stdout or "{}")
+    except json.JSONDecodeError:
+        payload = {}
+    if not isinstance(payload, dict):
+        payload = {}
+    server = payload.get("Server")
+    if completed.returncode == 0 and isinstance(server, dict):
+        result["daemon"] = True
+        result["version"] = server.get("Version")
+        return result
+    client = payload.get("Client")
+    if isinstance(client, dict):
+        result["version"] = client.get("Version")
+    result["reason"] = (
+        "Docker is installed but its daemon is not running. "
+        "Start Docker Desktop or the docker service."
+    )
+    return result
 
 
 def docker_status(name: str = DEFAULT_CONTAINER_NAME) -> dict[str, Any]:
@@ -273,7 +350,7 @@ def docker_status(name: str = DEFAULT_CONTAINER_NAME) -> dict[str, Any]:
 
 def pull_image(tag: str = "latest") -> str:
     image = image_reference(tag)
-    _run(["docker", "pull", image])
+    _run(["docker", "pull", image], timeout=DOCKER_PULL_TIMEOUT_SECONDS)
     return image
 
 
@@ -304,7 +381,7 @@ def run_container(options: DockerRunOptions) -> dict[str, Any]:
         )
     plan = build_run_plan(options, create_data_dir=True)
     ensure_managed_env_file(options.env_file)
-    _run(plan["arguments"])
+    _run(plan["arguments"], timeout=DOCKER_PULL_TIMEOUT_SECONDS)
     _wait_for_health(options.port)
     return plan
 
@@ -438,10 +515,12 @@ def compose_yaml(document: dict[str, Any]) -> str:
     return "\n".join(render(document)) + "\n"
 
 
-def write_compose_file(options: DockerRunOptions, output: Path) -> dict[str, Any]:
-    """Write a new Compose file only after validating data and managed auth."""
+def write_compose_file(
+    options: DockerRunOptions, output: Path, *, overwrite: bool = False
+) -> dict[str, Any]:
+    """Write a Compose file after validating data and managed auth; overwriting backs up first."""
     resolved_output = output.expanduser().resolve()
-    if resolved_output.exists():
+    if resolved_output.exists() and not overwrite:
         raise DockerCommandError(
             f"Compose file already exists: {resolved_output}. MARM will not overwrite it."
         )
@@ -449,6 +528,10 @@ def write_compose_file(options: DockerRunOptions, output: Path) -> dict[str, Any
     ensure_managed_env_file(options.env_file)
     payload = compose_document(options)
     resolved_output.parent.mkdir(parents=True, exist_ok=True)
+    if resolved_output.exists():
+        backup = resolved_output.with_name(resolved_output.name + ".marm-backup")
+        shutil.copy2(resolved_output, backup)
+        payload["backup_path"] = str(backup)
     resolved_output.write_text(compose_yaml(payload["document"]), encoding="utf-8")
     payload["path"] = str(resolved_output)
     payload["command"] = [
@@ -506,11 +589,54 @@ def docker_logs(name: str, *, follow: bool = False) -> int:
         ) from exc
 
 
-def stop_container(name: str) -> bool:
+def _marm_container_present(name: str) -> bool:
     payload = container_inspect(name)
     if payload is None:
         return False
     if not _is_marm_container(payload):
         raise DockerCommandError(f"Container {name!r} is not a MARM container.")
+    return True
+
+
+def stop_container(name: str) -> bool:
+    if not _marm_container_present(name):
+        return False
     _run(["docker", "stop", name])
     return True
+
+
+def start_container(name: str) -> bool:
+    if not _marm_container_present(name):
+        return False
+    _run(["docker", "start", name])
+    return True
+
+
+def restart_container(name: str) -> bool:
+    if not _marm_container_present(name):
+        return False
+    _run(["docker", "restart", name])
+    return True
+
+
+def remove_container(name: str) -> bool:
+    """Remove a stopped MARM container; a running one is refused rather than forced."""
+    payload = container_inspect(name)
+    if payload is None:
+        return False
+    if not _is_marm_container(payload):
+        raise DockerCommandError(f"Container {name!r} is not a MARM container.")
+    if (payload.get("State") or {}).get("Running"):
+        raise DockerCommandError(f"Container {name!r} is running. Stop it first.")
+    _run(["docker", "rm", name])
+    return True
+
+
+def logs_tail(name: str, lines: int = 200) -> list[str]:
+    if not _marm_container_present(name):
+        return []
+    count = max(1, min(int(lines), MAX_LOG_LINES))
+    result = _run(
+        ["docker", "logs", "--tail", str(count), name], timeout=15, merge_stderr=True
+    )
+    return result.stdout.splitlines()[-count:]

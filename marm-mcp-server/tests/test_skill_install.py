@@ -36,7 +36,7 @@ def test_project_scan_installs_into_present_agents(tmp_path, monkeypatch):
     expected = skill_install._bundled_skill_text()
     assert _read(tmp_path, ".claude") == expected
     assert _read(tmp_path, ".codex") == expected
-    assert not (tmp_path / ".gemini").exists()
+    assert not (tmp_path / ".qwen").exists()
     assert not (tmp_path / skill_install.FALLBACK_DIR).exists()
 
 
@@ -75,7 +75,7 @@ def test_fallback_not_used_when_one_agent_present(tmp_path, monkeypatch):
 def test_global_flags_install_into_home_and_skip_project(tmp_path, monkeypatch):
     home = tmp_path / "home"
     project = tmp_path / "project"
-    (project / ".gemini").mkdir(parents=True)
+    (project / ".qwen").mkdir(parents=True)
     home.mkdir()
     monkeypatch.setattr(skill_install.Path, "home", classmethod(lambda cls: home))
     monkeypatch.chdir(project)
@@ -85,8 +85,108 @@ def test_global_flags_install_into_home_and_skip_project(tmp_path, monkeypatch):
     assert code == 0
     assert _read(home, ".claude") == skill_install._bundled_skill_text()
     assert _read(home, ".codex") == skill_install._bundled_skill_text()
-    assert not (project / ".gemini" / SKILL_REL).exists()
-    assert not (home / ".gemini").exists()
+    assert not (project / ".qwen" / SKILL_REL).exists()
+    assert not (home / ".qwen").exists()
+
+
+def test_grok_skill_installs_into_its_skills_folder(tmp_path, monkeypatch):
+    monkeypatch.setattr(skill_install.Path, "home", classmethod(lambda cls: tmp_path))
+
+    result = skill_install.install_for_agent("grok")
+
+    assert result["state"] == "installed"
+    assert result["target"] == str(tmp_path / ".grok" / SKILL_REL)
+    assert skill_install.is_installed("grok") is True
+
+
+def test_hermes_skill_follows_hermes_home_and_is_never_a_project_install(
+    tmp_path, monkeypatch
+):
+    home = tmp_path / "home"
+    project = tmp_path / "project"
+    (project / ".hermes").mkdir(parents=True)
+    home.mkdir()
+    custom = tmp_path / "hermes-data"
+    monkeypatch.setattr(skill_install.Path, "home", classmethod(lambda cls: home))
+    monkeypatch.setenv("HERMES_HOME", str(custom))
+    monkeypatch.chdir(project)
+
+    result = skill_install.install_for_agent("hermes")
+
+    assert result["target"] == str(custom / SKILL_REL)
+    assert skill_install.is_installed("hermes") is True
+    assert not (home / ".hermes").exists()
+
+    skill_install.install_skill(_args())
+    assert not (project / ".hermes" / SKILL_REL).exists()
+    assert _read(project, ".agents") == skill_install._bundled_skill_text()
+
+
+def test_cline_skill_goes_to_its_home_and_project_mode_uses_dot_cline(
+    tmp_path, monkeypatch
+):
+    home = tmp_path / "home"
+    project = tmp_path / "project"
+    (project / ".cline").mkdir(parents=True)
+    home.mkdir()
+    custom = tmp_path / "cline-base"
+    monkeypatch.setattr(skill_install.Path, "home", classmethod(lambda cls: home))
+    monkeypatch.setenv("CLINE_DIR", str(custom))
+    monkeypatch.chdir(project)
+
+    result = skill_install.install_for_agent("cline")
+
+    assert result["target"] == str(custom / SKILL_REL)
+    assert skill_install.is_installed("cline") is True
+    assert not (home / ".cline").exists()
+
+    skill_install.install_skill(_args())
+    assert _read(project, ".cline") == skill_install._bundled_skill_text()
+
+
+def test_cursor_skill_installs_into_cursor_skills_globally_and_per_project(
+    tmp_path, monkeypatch
+):
+    home = tmp_path / "home"
+    project = tmp_path / "project"
+    (project / ".cursor").mkdir(parents=True)
+    home.mkdir()
+    monkeypatch.setattr(skill_install.Path, "home", classmethod(lambda cls: home))
+    monkeypatch.chdir(project)
+
+    result = skill_install.install_for_agent("cursor")
+    skill_install.install_skill(_args())
+
+    assert result["target"] == str(home / ".cursor" / SKILL_REL)
+    assert skill_install.is_installed("cursor") is True
+    assert _read(project, ".cursor") == skill_install._bundled_skill_text()
+
+
+def test_opencode_skill_installs_under_its_config_home_and_per_project(
+    tmp_path, monkeypatch
+):
+    home = tmp_path / "home"
+    project = tmp_path / "project"
+    (project / ".opencode").mkdir(parents=True)
+    home.mkdir()
+    monkeypatch.setattr(skill_install.Path, "home", classmethod(lambda cls: home))
+    monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
+    monkeypatch.chdir(project)
+
+    result = skill_install.install_for_agent("opencode")
+    skill_install.install_skill(_args())
+
+    assert result["target"] == str(home / ".config" / "opencode" / SKILL_REL)
+    assert skill_install.is_installed("opencode") is True
+    assert _read(project, ".opencode") == skill_install._bundled_skill_text()
+
+
+def test_opencode_skill_follows_xdg_config_home(tmp_path, monkeypatch):
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "xdg"))
+
+    result = skill_install.install_for_agent("opencode")
+
+    assert result["target"] == str(tmp_path / "xdg" / "opencode" / SKILL_REL)
 
 
 def test_fail_open_when_a_target_is_unwritable(tmp_path, monkeypatch):
@@ -131,3 +231,32 @@ def test_init_parser_registers_all_global_flags():
     assert args.global_claude is True
     assert args.global_kiro is True
     assert args.global_codex is False
+
+
+def test_install_for_agent_installs_then_refreshes_and_is_installed_follows(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+    assert skill_install.is_installed("antigravity") is False
+    first = skill_install.install_for_agent("antigravity")
+    second = skill_install.install_for_agent("antigravity")
+
+    assert first["state"] == "installed"
+    assert second["state"] == "refreshed"
+    assert first["target"] == str(tmp_path / ".gemini" / "config" / SKILL_REL)
+    assert _read(tmp_path, ".gemini/config") == skill_install._bundled_skill_text()
+    assert skill_install.is_installed("antigravity") is True
+    assert skill_install.is_installed("qwen") is False
+
+
+def test_install_for_agent_reports_a_write_failure_without_raising(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    (tmp_path / ".kiro").write_text("a file, not a directory")
+
+    result = skill_install.install_for_agent("kiro")
+
+    assert result["state"] == "error"
+    assert result["detail"]

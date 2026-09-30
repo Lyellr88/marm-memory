@@ -25,6 +25,7 @@ from ..core.memory import memory
 from ..core.rate_limiter import rate_limiter
 from ..core.shutdown_manager import shutdown_manager
 from ..services import hardware, local_llm, model_discovery
+from ..services.analyst import profile as analyst_profile
 from ..services.documentation import reload_marm_documentation
 from ..services.runtime_status import knowledge_status, maintenance_status
 
@@ -56,6 +57,8 @@ class RuntimeLlmRequest(BaseModel):
     model: str | None = Field(default=None, max_length=512)
     #: An empty string clears the override and returns to MARM_LLM_URL.
     endpoint: str | None = Field(default=None, max_length=512)
+    #: The analyst profile. An empty string returns to MARM_ANALYST_PROFILE.
+    profile: Literal["", "general", "small", "large"] | None = None
 
 
 class RuntimeLlmRootRequest(BaseModel):
@@ -237,6 +240,13 @@ def _llm_status() -> dict:
     """Generation status, with the saved switch folded in."""
     status = local_llm.status()
     status["source"] = runtime_flags.source(runtime_flags.LLM_ENABLED)
+    name, source = analyst_profile.selected_name()
+    status["analyst_profile"] = {
+        "name": name,
+        "source": source,
+        "profiles": {key: p.to_public() for key, p in analyst_profile.PROFILES.items()},
+        "active": analyst_profile.resolve(name).to_public(),
+    }
     return status
 
 
@@ -330,6 +340,12 @@ async def update_runtime_llm(req: RuntimeLlmRequest) -> dict:
     """Turn generation on or off, and choose which served model answers."""
     if req.enabled is not None:
         runtime_flags.set_bool(runtime_flags.LLM_ENABLED, req.enabled)
+    if req.profile is not None:
+        # Chosen by the operator, never derived from the model being served.
+        if req.profile:
+            runtime_flags.set_(runtime_flags.ANALYST_PROFILE, req.profile)
+        else:
+            runtime_flags.clear(runtime_flags.ANALYST_PROFILE)
 
     applied_model: str | None = None
     rejected: str | None = None

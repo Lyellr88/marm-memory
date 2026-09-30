@@ -330,7 +330,7 @@ def _plain_models(root: Path, source: str) -> list[dict[str, Any]]:
         if not _is_model_file(path):
             continue
         try:
-            name = str(path.relative_to(root))
+            name = path.relative_to(root).as_posix()
         except ValueError:
             name = path.name
         found.append(

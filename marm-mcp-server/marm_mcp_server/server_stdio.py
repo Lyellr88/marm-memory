@@ -15,6 +15,7 @@ import anyio  # noqa: E402
 from anyio import BrokenResourceError, ClosedResourceError, EndOfStream  # noqa: E402
 
 os.environ["SERVER_HOST"] = "127.0.0.1"
+os.environ["MARM_TRANSPORT"] = "stdio"
 
 from mcp.server.fastmcp import FastMCP  # noqa: E402
 from pydantic import ValidationError  # noqa: E402

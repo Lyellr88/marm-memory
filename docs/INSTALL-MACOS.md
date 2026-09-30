@@ -9,7 +9,7 @@ Install [Homebrew](https://brew.sh/) if needed, then run:
 ```bash
 brew install uv
 uv tool install --python 3.12 marm-mcp-server
-marm-memory init --g-claude --g-codex --g-gemini
+marm-memory init --g-claude --g-codex --g-antigravity
 ```
 
 If `uv` says that `marm-memory` is not on your `PATH`, run this once and open a new terminal:

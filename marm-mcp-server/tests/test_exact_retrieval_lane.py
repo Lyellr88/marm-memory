@@ -579,10 +579,11 @@ async def test_marm_system_fallback_preserves_exact_mode(monkeypatch, tmp_path):
     """When a session returns no results, the marm_system fallback recall must
     preserve the caller's exact_mode — not silently drop it back to 'auto'.
     """
-    from marm_mcp_server.services.recall import smart_recall
+    import importlib
 
-    mem_module = pytest.importorskip("marm_mcp_server.core.memory")
-    real_mem = mem_module.memory
+    recall_module = importlib.import_module("marm_mcp_server.services.recall")
+    smart_recall = recall_module.smart_recall
+    real_mem = recall_module.memory
 
     recorded: list[dict] = []
     original_recall = real_mem.recall_similar

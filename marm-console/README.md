@@ -24,6 +24,7 @@ MARM Console is a separate localhost application that reads the same local MARM 
 - **Code Context** builds one bounded view of a code task: task-ranked symbols, source, and related memory. An optional local model can answer from that same context, with its citations checked.
 - **Distill** turns transcripts into staged durable-memory proposals. You can review, apply, or discard proposals, with duplicate evidence shown before a memory changes.
 - **System** covers Health, Controls, Maintenance, and Diagnostics: runtime status, automatic-indexing and local-model controls, backups, doctor diagnostics, runtime logs, compaction dry-runs, and upgrade checks.
+- **Connections** is the one place to set MARM up. **Setup** has a readiness checklist, server settings saved to `~/.marm/settings.json` with a one-click runtime restart, and a card per client (Claude Code, Claude Desktop, Cursor, VS Code, Codex CLI, Grok Build, Hermes Agent, OpenCode, Cline, Antigravity, Qwen Code, Devin, Kiro, Zed) that connects it over HTTP, STDIO, or Docker STDIO, tests the connection, removes it, or installs the MARM skill. **Docker** drives the MARM container: pull, start, stop, restart, recreate, logs, and a compose file. **Manual** covers setups the Console cannot write: config snippets per client and OS, each client's own add command, the full `marm-memory` CLI, every HTTP endpoint, and the environment variables. **Add a connection** emails support to request a client that is not listed.
 - **Settings** (dialog) manages the Console connection and reports runtime, write-queue, automatic-indexing, storage/model, and project-watch health. Its automatic-indexing controls use MARM's existing durable runtime flags.
 
 Console currently indexes existing local directories. GitHub URL cloning, private-repository credentials, and remote polling are planned separately and are not accepted as repository paths.
@@ -37,7 +38,7 @@ A real shell, backed by a native PTY (ConPTY on Windows, `pty`/`termios` on Linu
 - A session survives closing the dock or refreshing the page: the backend detaches rather than kills the shell on disconnect, buffers its output, and replays it on reattach. A session is only killed after 10 minutes with nothing reattached, or when its tab is explicitly closed.
 - Settings (font, cursor, clipboard, scrollback, bell), keyboard shortcuts, and search (`Ctrl+F` in the terminal) are available from the dock header.
 - A searchable MARM Commands menu lists the `marm-memory` CLI grouped by task, each command with a short description and its flags shown alongside it; clicking one inserts it into the active session without running it. Commands that need a second look (key reveal, uninstall) sit in their own flagged section.
-- A first-run guide walks through picking an OS and installing/launching Claude Code, Codex, or Antigravity CLI, with per-OS install commands and a dependency check for Node.js/npm and Git. It reappears on every launch unless "Don't launch on startup" is checked.
+- A first-run guide walks through picking an OS and installing/launching Claude Code, Codex, Grok Build, Hermes Agent, OpenCode, Cline, Cursor, Devin, or Antigravity, with per-OS install commands and a dependency check for Node.js/npm and Git. It reappears on every launch unless "Don't launch on startup" is checked.
 
 ## Run Console
 
@@ -109,6 +110,14 @@ The frontend defaults to the Console API at `http://127.0.0.1:8002`.
 | `WS /api/terminal/ws` | Interactive PTY session: spawn, attach (reattach after disconnect), input, resize, kill |
 | `POST /api/distill` | Propose durable memories from raw conversation, review the staged queue, apply one, or discard one. Accepts `action`, `text`, `session_name`, `proposal_id`, `project`, `threshold`, `limit`, `include_duplicates`, `use_llm` |
 | `POST /api/terminal/check` | Run one of the Console's fixed dependency probes outside the interactive stream; any other command is refused |
+| `GET /api/connections/overview` | Runtime, transport, auth, and Docker summary for the Connections status strip |
+| `GET`, `PUT /api/connections/settings` | Read or save the boot-time server settings in `~/.marm/settings.json` |
+| `POST /api/connections/runtime/restart`; `GET /api/connections/runtime/restart/{job_id}` | Restart the managed runtime in the background and poll the job |
+| `GET /api/connections/agents`; `/api/connections/agents/{id}/*` | Client detection and entry state, plus `scope`, `configure` (preview or write), `remove`, `test`, and `skill` per client |
+| `/api/connections/docker/*` | Engine and container state, saved run config, `pull`, `start`, `recreate`, `stop`, `restart`, job status, `logs`, and `compose` |
+| `GET /api/connections/manual/*` | `snippet`, `agent-commands`, `cli`, `endpoints`, and `env` reference data for the Manual tab |
+
+Every Connections route that writes a file, restarts the runtime, or drives Docker is refused unless the Console is bound to loopback. Client configs are merged, never replaced: MARM's entry is added beside other servers, the previous file is kept as `.marm-backup`, and the result is read back to confirm. A key value is never written to a client file, sent to the browser, or logged; clients that can reference `MARM_API_KEY` get a reference instead.
 
 `GET /api/memories` supports `q`, `session`, `project`, `platform`, `context_type`, `compaction_role`, `limit`, and `offset` query parameters. Results are capped at 200 records per request.
 

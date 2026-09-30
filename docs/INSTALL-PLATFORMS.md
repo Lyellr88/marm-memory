@@ -148,9 +148,9 @@ Claude Desktop's `claude_desktop_config.json` only accepts `command`-based (stdi
 
 #### **Grok Base App (grok.com & Mobile)**
 
-**Supported:** ❌ Not compatible with standard MARM deployment
+**Supported:** ⚠️ Custom MCP connectors, with a public HTTPS URL
 
-Grok's MCP connector support requires a **public HTTPS URL**. MARM runs on `localhost:8001` by default and Docker binds to `127.0.0.1`, xAI's servers cannot reach either. You would need to host MARM on a public server with a domain and TLS certificate for this to work.
+Open grok.com/connectors, click **New Connector**, choose **Custom**, and enter your MARM URL. The app connects from xAI's servers, so `localhost` will not work. MARM runs on `localhost:8001` by default and Docker binds to `127.0.0.1`, so you need a tunnel or a public server with a domain and TLS certificate. MARM has not been tested through the connector form.
 
 #### **Grok Developer Platform**
 
@@ -209,7 +209,7 @@ Each provider has different API patterns, but the MARM connection stays the same
 | **Claude** | ✅ Full (Remote) | ✅ Full | ✅ Yes | Best MCP support |
 | **ChatGPT** | ⚠️ Developer Mode | ✅ API + Playground | ⚠️ Basic | Sept 2025 addition |
 | **Gemini** | ❌ None | ⚠️ Function Calling | ❌ No | Manual definitions required |
-| **Grok** | ❌ None (requires public HTTPS) | ✅ API Remote MCP | ✅ Yes | Requires public HTTPS endpoint; no localhost |
+| **Grok** | ⚠️ Custom connector (requires public HTTPS) | ✅ API Remote MCP | ✅ Yes | Requires public HTTPS endpoint; no localhost. Grok Build CLI connects locally |
 
 ---
 

@@ -59,8 +59,8 @@ jobs:
             echo "run=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          files=$(gh pr diff "${{ github.event.number }}" --name-only)
-          if printf '%s\n' "$files" | grep -qE '^(marm-mcp-server/|scripts/|\.github/workflows/python\.yml$)'; then
+          files=$(gh api --paginate "repos/${{ github.repository }}/pulls/${{ github.event.number }}/files" --jq '.[].filename')
+          if [ "$(printf '%s\n' "$files" | grep -c .)" -ge 3000 ] || printf '%s\n' "$files" | grep -qE '^(marm-mcp-server/|scripts/|\.github/workflows/python\.yml$)'; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
             echo "run=false" >> "$GITHUB_OUTPUT"

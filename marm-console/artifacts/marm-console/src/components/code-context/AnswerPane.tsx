@@ -1,14 +1,36 @@
 import { useMemo } from 'react';
 import { Badge, Button, cn } from '@/components/ui/core';
 import { MemoryEmptyState } from '@/components/memory/shared';
-import { Sparkles, CircleAlert, FileCode2 } from 'lucide-react';
+import { Sparkles, CircleAlert, FileCode2, Brain, ShieldAlert } from 'lucide-react';
 import type {
+  AnswerDisagreement,
   AnswerGrounding,
+  AnswerItem,
+  AnswerModelInfo,
+  AnswerPacket,
+  AnswerVerification,
   CodeContextCitation,
   CodeContextResult,
   CodeContextSymbol,
 } from '@/lib/marm-types';
 import { CopyButton } from './shared';
+import { AnalysisItems } from './AnalysisItems';
+import { VerificationPanel } from './VerificationPanel';
+
+const HANDLE = /^[SM]\d+$/i;
+
+/** The packet as citations, so `[S1]` links while the answer is still arriving. */
+function packetCitations(packet: AnswerPacket): CodeContextCitation[] {
+  return [
+    ...packet.symbols.map((s) => ({ ...s, kind: 'symbol' as const })),
+    ...packet.memories.map((m) => ({
+      handle: m.handle,
+      kind: 'memory' as const,
+      name: m.handle,
+      memory_id: m.memory_id,
+    })),
+  ];
+}
 
 /** The model writes markdown. Rendering it as literal asterisks is not a small
  *  cosmetic issue: `**Immediate assertion:**` in the middle of a technical
@@ -56,14 +78,23 @@ function withCitations(
   onCite: (citation: CodeContextCitation) => void,
 ) {
   const byName = new Map(citations.map((c) => [c.name.toLowerCase(), c]));
-  const lookup = (raw: string) =>
-    byName.get(raw.trim().replace(/`/g, '').split('(')[0].trim().toLowerCase());
+  const byHandle = new Map(
+    citations.filter((c) => c.handle).map((c) => [(c.handle as string).toUpperCase(), c]),
+  );
+  const lookup = (raw: string) => {
+    const name = raw.trim().replace(/`/g, '').split('(')[0].trim();
+    return HANDLE.test(name) ? byHandle.get(name.toUpperCase()) : byName.get(name.toLowerCase());
+  };
   const link = (citation: CodeContextCitation, key: string) => (
     <button
       key={key}
       type="button"
       onClick={() => onCite(citation)}
-      title={`${citation.file_path}:${citation.start_line}`}
+      title={
+        citation.kind === 'memory'
+          ? `memory ${citation.memory_id ?? citation.handle}`
+          : `${citation.file_path}:${citation.start_line}`
+      }
       className="mx-0.5 rounded border border-primary/30 bg-primary/10 px-1 font-mono text-[0.85em] text-primary-highlight transition-colors hover:bg-primary/20"
     >
       {citation.name}
@@ -110,6 +141,15 @@ export interface AnswerStream {
   grounding?: AnswerGrounding;
   unresolved?: string[];
   truncated?: boolean;
+  packet?: AnswerPacket;
+  verification?: AnswerVerification;
+  modelInfo?: AnswerModelInfo;
+  items?: AnswerItem[];
+  disagreements?: AnswerDisagreement[];
+}
+
+function elapsed(info: AnswerModelInfo) {
+  return `${(info.elapsed_ms / 1000).toFixed(1)} s`;
 }
 
 export function AnswerPane({
@@ -150,15 +190,24 @@ export function AnswerPane({
   // are already on the page, so the same resolution is available locally.
   // Once the server has ruled, only what it resolved is linked.
   const arriving = stream?.status === 'streaming';
+  const packet = streaming ? stream.packet : result?.answer_packet;
   const citations = useMemo(() => {
-    if (!arriving || !symbols?.length) return settled;
+    if (!arriving) return settled;
+    if (packet) return packetCitations(packet);
+    if (!symbols?.length) return settled;
     return symbols.map((symbol) => ({
       name: symbol.name,
       qualified_name: symbol.qualified_name,
       file_path: symbol.file_path,
       start_line: symbol.start_line,
     }));
-  }, [arriving, settled, symbols]);
+  }, [arriving, settled, symbols, packet]);
+  const sources = settled.filter((c) => c.kind !== 'memory' && c.file_path);
+  const cited = settled.filter((c) => c.kind === 'memory');
+  const verification = streaming ? stream.verification : result?.answer_verification;
+  const modelInfo = streaming ? stream.modelInfo : result?.answer_model_info;
+  const items = streaming ? stream.items : result?.answer_items;
+  const disagreements = streaming ? stream.disagreements : result?.answer_disagreements;
   const model = streaming ? stream.model : result?.answer_model;
   // `answering` is not a verdict: grounding is decided on the finished text.
   const status = streaming
@@ -240,6 +289,11 @@ export function AnswerPane({
             <Sparkles className="mr-1 h-3 w-3" />
             grounded answer
           </Badge>
+        ) : status === 'rejected' ? (
+          <Badge variant="outline" className="border-red-500/50 text-red-300">
+            <ShieldAlert className="mr-1 h-3 w-3" />
+            rejected answer
+          </Badge>
         ) : status === 'answering' ? (
           <Badge variant="outline" className="text-muted-foreground">
             <Sparkles className="mr-1 h-3 w-3" />
@@ -257,7 +311,7 @@ export function AnswerPane({
           </Badge>
         )}
         <span className="text-[11px] text-muted-foreground">
-          {status === 'unverified'
+          {status === 'unverified' || status === 'rejected'
             ? hint
             : typeof result?.symbol_count === 'number'
               ? `Written only from the ${result.symbol_count.toLocaleString()} ranked symbols above — not from general knowledge of similar projects.`
@@ -267,6 +321,8 @@ export function AnswerPane({
           <CopyButton className="h-7 w-7" value={text} label="Copy the answer" />
         </div>
       </div>
+
+      {verification && !arriving && <VerificationPanel verification={verification} />}
 
       <div className="space-y-1 rounded-xl border border-border/80 bg-card/45 p-4 text-[13px] leading-relaxed">
         {withCitations(text, citations, onCite)}
@@ -279,19 +335,50 @@ export function AnswerPane({
 
       {stream?.status === 'done' && stream.truncated && (
         <p className="text-[11px] text-amber-200/90">
-          The model stopped at its token budget, even after one retry with a wider one, so this answer
-          ends early. Raise <code className="font-mono">MARM_CODE_CONTEXT_ANSWER_TOKENS</code> for a
-          reasoning model.
+          The model stopped at the profile's limit, so this answer ends early and is not verified.
+          Nothing retries it wider: the cap shown below is the one it was held to. A reasoning model
+          needs <code className="font-mono">MARM_ANALYST_REASONING_TOKENS</code>.
         </p>
       )}
 
-      {settled.length > 0 && (
+      {(modelInfo || packet) && !arriving && (
+        <p className="font-mono text-[10px] text-muted-foreground">
+          {modelInfo && `${modelInfo.id} · ${elapsed(modelInfo)}`}
+          {modelInfo?.profile && ` · ${modelInfo.profile} profile`}
+          {modelInfo && ` · ≤ ${modelInfo.max_tokens.toLocaleString()} tokens`}
+          {modelInfo?.calls !== undefined && ` · ${modelInfo.calls} call${modelInfo.calls === 1 ? '' : 's'}`}
+          {modelInfo && packet && ' · '}
+          {packet && `packet ${packet.packet_id}`}
+          {modelInfo?.stopped === 'deadline' && ' · stopped at its time budget'}
+          {modelInfo?.stopped === 'cancelled' && ' · stopped when the reader left'}
+        </p>
+      )}
+
+      {!arriving && <AnalysisItems items={items} disagreements={disagreements} />}
+
+      {cited.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+          <Brain className="h-3 w-3" />
+          {cited.map((citation) => (
+            <button
+              key={citation.handle ?? citation.name}
+              type="button"
+              onClick={() => onCite(citation)}
+              className="rounded-lg border border-border/70 bg-card/45 px-2 py-0.5 font-mono"
+            >
+              memory {citation.handle}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {sources.length > 0 && (
         <div className="rounded-xl border border-border/70 bg-background/25 p-3">
           <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
             Sources it used
           </div>
           <div className="flex flex-wrap gap-2">
-            {settled.map((citation) => (
+            {sources.map((citation) => (
               <button
                 key={citation.qualified_name}
                 type="button"

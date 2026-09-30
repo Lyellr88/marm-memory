@@ -1,4 +1,6 @@
-# MARM Memory v2.54.1 - Give your AI Agents a permanent memory in 60 seconds
+# MARM Memory v2.55.0
+
+> Give your AI Agents a permanent memory in 60 seconds
 
 ## Table of Contents
 
@@ -21,10 +23,10 @@
 
 ```bash
 pip install marm-mcp-server
-marm-memory init --g-claude --g-codex --g-gemini
+marm-memory init --g-claude --g-codex --g-antigravity
 ```
 
-> **Also available: --g-qwen and --g-kiro. Run without flags to install into your current project folder instead of home**
+> **Also available: --g-cursor, --g-grok, --g-hermes, --g-opencode, --g-devin, --g-cline, --g-qwen, --g-kiro and --g-zed. Run without flags to install into your current project folder instead of home**
 
 1. Hand off to your AI companion. Tell your agent:
 
@@ -36,7 +38,7 @@ marm-memory init --g-claude --g-codex --g-gemini
 
 Prefer to wire it up yourself:
 
-> Replace "agent" with your client’s CLI command (for example, claude, gemini, or qwen). For Codex, use codex mcp add marm-memory --url http://localhost:8001/mcp instead.
+> Replace "agent" with your client’s CLI command (for example, claude, agy, or qwen). For Codex, use codex mcp add marm-memory --url http://localhost:8001/mcp instead.
 
 | If you are... | Start the server | Connect your MCP client |
 | --------------- | ------------------ | ------------------------- |
@@ -90,6 +92,7 @@ Run `marm-memory console` to open the bundled web app at `http://127.0.0.1:8002`
 | **Code Context** | Build one bounded view of task-ranked symbols, source, and related memory. An optional local model can answer from that same context, with its citations checked. |
 | **Distill** | Turn transcripts into durable-memory proposals. Review, apply, or discard them with duplicate evidence visible. |
 | **System and Terminal** | Manage runtime health, indexing, local-model settings, backups, diagnostics, and maintenance. The docked terminal provides a real local shell with persistent sessions and a searchable MARM command menu. |
+| **Connections** | Set up MARM end to end in one place. **Setup** connects Claude Code, Claude Desktop, Cursor, VS Code, Codex CLI, Grok Build, Hermes Agent, OpenCode, Cline, Antigravity, Qwen Code, Devin, Kiro, and Zed over HTTP, STDIO, or Docker STDIO, tests each connection, and saves server settings to `~/.marm/settings.json`. **Docker** pulls, starts, and stops the MARM container and writes a compose file. **Manual** gives copy-ready config for each client and OS, every CLI command, and every HTTP endpoint. |
 
 ### Runtime CLI Commands
 
@@ -99,6 +102,7 @@ Run `marm-memory console` to open the bundled web app at `http://127.0.0.1:8002`
 
 ```bash
 marm-memory fast-start-http                # start HTTP, Console, and open the browser
+marm-memory fast-start-http --client cursor # also connect one client (add --transport stdio for STDIO)
 marm-memory start                          # start or reuse the managed HTTP runtime
 marm-memory start --profile swarm          # shared multi-agent preset
 marm-memory stop                           # stop the managed runtime safely
@@ -239,7 +243,7 @@ pip install marm-mcp-server
 <details>
 <summary><strong>Local pip HTTP </strong></summary>
 
-> "agent" refers to claude, gemini, grok, qwen, or any MCP client. Codex uses --url instead of --transport to add MCP tools.
+> "agent" refers to claude, gemini (agy), grok, qwen, or any MCP client. Codex uses --url instead of --transport to add MCP tools.
 
 ```bash
 pip install marm-mcp-server
@@ -265,7 +269,7 @@ python -m marm_mcp_server.server_stdio
 codex mcp add marm-memory-stdio -- marm-mcp-stdio
 ```
 
-Replace `marm-mcp-stdio` with `python -m marm_mcp_server.server_stdio` if using a virtualenv or a path-based setup. Works with Claude Code, Cursor, VS Code, Qwen, and Gemini CLI. STDIO stays a single local process with no port and no API key, and exposes the same 16 tools as HTTP.
+Replace `marm-mcp-stdio` with `python -m marm_mcp_server.server_stdio` if using a virtualenv or a path-based setup. Works with Claude Code, Cursor, VS Code, Qwen, and Antigravity. STDIO stays a single local process with no port and no API key, and exposes the same 16 tools as HTTP.
 
 </details>
 
@@ -522,6 +526,8 @@ Add to `.cursor/mcp.json` in your workspace. Cursor uses `mcpServers`, not VS Co
 
 For Docker/key mode, launch Cursor with `MARM_API_KEY` set in the environment.
 
+The Cursor CLI (`agent`) reads the same `mcp.json` files, so a server added for the editor is already available there. Run `agent mcp list` to check. A server in the global `~/.cursor/mcp.json` loads without approval. A server in a project's `.cursor/mcp.json` asks you to trust the folder and approve it on first use, and headless runs need `--trust --approve-mcps`. If it lists no servers, look in `mcp.json` for an entry with an unknown `type` such as `streamable-http`: the CLI drops the whole file when one entry fails to parse. Install it with `curl https://cursor.com/install -fsS | bash` on macOS, Linux and WSL, or `irm 'https://cursor.com/install?win32=true' | iex` in Windows PowerShell.
+
 </details>
 
 <details>
@@ -547,23 +553,233 @@ bearer_token_env_var = "MARM_API_KEY"
 </details>
 
 <details>
-<summary><strong>Gemini CLI</strong></summary>
+<summary><strong>Grok Build</strong></summary>
+
+Grok Build (`grok`), xAI's terminal coding agent, supports STDIO and HTTP MCP servers and reads `~/.grok/config.toml`. MARM sets `bearer_token_env_var`, so the key stays in your environment and never lands in the file.
 
 ```bash
 # Direct Python install - no key needed
-gemini mcp add --transport http marm-memory http://localhost:8001/mcp
-
-# Docker or SERVER_HOST=0.0.0.0 - key required
-gemini mcp add --transport http marm-memory http://localhost:8001/mcp --header "Authorization: Bearer your-generated-key"
+grok mcp add --transport http marm-memory http://localhost:8001/mcp
 ```
 
-Equivalent `~/.gemini/settings.json` (user scope) or project `.gemini/settings.json`:
+Docker or `SERVER_HOST=0.0.0.0` (key required): set `MARM_API_KEY`, then add this to `~/.grok/config.toml` (or `.grok/config.toml` for one project):
+
+```toml
+[mcp_servers.marm-memory]
+url = "http://localhost:8001/mcp"
+bearer_token_env_var = "MARM_API_KEY"
+```
+
+Grok Build also reads MCP servers from `~/.claude.json`, `.cursor/mcp.json`, and project `.mcp.json`, so MARM may already load if Claude Code or Cursor has it. Run `grok mcp list` to see what it loaded.
+
+</details>
+
+<details>
+<summary><strong>Hermes Agent</strong></summary>
+
+Hermes Agent (`hermes`) by Nous Research reads MCP servers from `mcp_servers` in `config.yaml`: `~/.hermes/config.yaml` on macOS and Linux, `%LOCALAPPDATA%\hermes\config.yaml` on native Windows, or `$HERMES_HOME/config.yaml` if you set it. It supports STDIO and HTTP and expands `${VAR}` in headers, so the key stays in your environment or `~/.hermes/.env` and never lands in the file.
+
+```bash
+# STDIO - no key needed
+hermes mcp add marm-memory --command marm-mcp-stdio
+
+# HTTP, direct Python install - no key needed
+hermes mcp add marm-memory --url http://localhost:8001/mcp
+```
+
+Docker or `SERVER_HOST=0.0.0.0` (key required): set `MARM_API_KEY`, then add this under `mcp_servers` in `config.yaml`:
+
+```yaml
+mcp_servers:
+  marm-memory:
+    url: "http://localhost:8001/mcp"
+    headers:
+      Authorization: "Bearer ${MARM_API_KEY}"
+```
+
+Run `/reload-mcp` in Hermes, or start a new session, to load it.
+
+</details>
+
+<details>
+<summary><strong>OpenCode</strong></summary>
+
+OpenCode (`opencode`, installed with `npm install -g opencode-ai`) reads MCP servers from `mcp` in `opencode.json` or `opencode.jsonc`: `~/.config/opencode/` on every platform including Windows (`%USERPROFILE%\.config\opencode`), or `$XDG_CONFIG_HOME/opencode/` if you set it, and `opencode.json` in a project root for one project. It supports STDIO (`type: local`) and HTTP (`type: remote`) and expands `{env:VAR}` in headers, so the key stays in your environment and never lands in the file. Remote servers try OAuth by default, so MARM writes `oauth: false`. OpenCode 2 nests servers under `mcp.servers` and still reads the layout below, and MARM writes into whichever layout the file already uses. Connecting from the Console rewrites the file as plain JSON, so comments in a `.jsonc` file are not kept, and the original is saved beside it as `.marm-backup`. Start a new OpenCode session to load it, and run `opencode mcp list` to check.
+
+STDIO, no key needed:
+
+```json
+{
+  "mcp": {
+    "marm-memory": {
+      "type": "local",
+      "command": ["marm-mcp-stdio"]
+    }
+  }
+}
+```
+
+HTTP, direct Python install (no key needed):
+
+```json
+{
+  "mcp": {
+    "marm-memory": {
+      "type": "remote",
+      "url": "http://localhost:8001/mcp",
+      "oauth": false
+    }
+  }
+}
+```
+
+Docker or `SERVER_HOST=0.0.0.0` (key required): set `MARM_API_KEY`, then add the same HTTP entry with a header:
+
+```json
+{
+  "mcp": {
+    "marm-memory": {
+      "type": "remote",
+      "url": "http://localhost:8001/mcp",
+      "oauth": false,
+      "headers": {
+        "Authorization": "Bearer {env:MARM_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+</details>
+
+<details>
+<summary><strong>Devin</strong></summary>
+
+Devin CLI (`devin`) and the Devin Local agent in Devin Desktop, the IDE formerly called Windsurf, read MCP servers from the same `mcp_config.json`: `~/.config/devin/mcp_config.json` on macOS and Linux (or `$XDG_CONFIG_HOME/devin/mcp_config.json` if you set it), `%APPDATA%\devin\mcp_config.json` on Windows. Connecting once covers both. The older Cascade agent in Devin Desktop keeps its MCP servers in its own file under `~/.codeium`, which MARM does not write. Devin CLI v3000.3 or later reads this dedicated file, and older builds keep `mcpServers` in `config.json` and migrate it on startup. `devin mcp add` saves to a gitignored project file unless you pass `-s user`.
+
+```bash
+# STDIO - no key needed
+devin mcp add -s user marm-memory -- marm-mcp-stdio
+
+# HTTP, direct Python install - no key needed
+devin mcp add -s user marm-memory http://localhost:8001/mcp
+```
+
+Docker or `SERVER_HOST=0.0.0.0` (key required): MARM has not confirmed that Devin expands environment variables in headers, so use STDIO, or add the key by hand under `mcpServers` in that file:
 
 ```json
 {
   "mcpServers": {
     "marm-memory": {
-      "httpUrl": "http://localhost:8001/mcp",
+      "url": "http://localhost:8001/mcp",
+      "headers": {
+        "Authorization": "Bearer your-generated-key"
+      }
+    }
+  }
+}
+```
+
+</details>
+
+<details>
+<summary><strong>Zed</strong></summary>
+
+Zed reads MCP servers from `context_servers` in its user `settings.json`: `~/.config/zed/settings.json` on macOS and Linux (or `$XDG_CONFIG_HOME/zed/settings.json` on Linux), `%APPDATA%\Zed\settings.json` on Windows. Run `zed: open settings file` from the command palette to open it. Zed has no add command, and MARM has not confirmed that Zed expands environment variables in headers, so keyed setups use STDIO. Connecting from the Console edits only the `marm-memory` entry as text, so comments and the rest of your settings stay as they were, and it restores the file if anything else changed. Zed lists the server under Settings, AI, MCP Servers, with a green dot when it is running. Zed's own agent reads the MARM skill from `~/.agents/skills` once you install it from the Console.
+
+STDIO, no key needed:
+
+```json
+{
+  "context_servers": {
+    "marm-memory": {
+      "command": "marm-mcp-stdio",
+      "args": []
+    }
+  }
+}
+```
+
+HTTP, direct Python install (no key needed):
+
+```json
+{
+  "context_servers": {
+    "marm-memory": {
+      "url": "http://localhost:8001/mcp"
+    }
+  }
+}
+```
+
+Docker or `SERVER_HOST=0.0.0.0` (key required): use STDIO, or paste the key into the entry by hand. Zed keeps it as plain text in `settings.json`:
+
+```json
+{
+  "context_servers": {
+    "marm-memory": {
+      "url": "http://localhost:8001/mcp",
+      "headers": {
+        "Authorization": "Bearer your-generated-key"
+      }
+    }
+  }
+}
+```
+
+</details>
+
+<details>
+<summary><strong>Cline CLI</strong></summary>
+
+Cline CLI (`cline`, installed with `npm install -g cline`) reads MCP servers from `~/.cline/data/settings/cline_mcp_settings.json`, the same file the Cline extensions in VS Code and JetBrains use (`%USERPROFILE%\.cline` on Windows, or `$CLINE_DATA_DIR/settings` if you set it). Cline's own MCP page still says `~/.cline/mcp.json`, but the CLI never reads that file. HTTP entries need `"type": "streamableHttp"`: leaving `type` out selects the legacy SSE transport. The extensions in VS Code and JetBrains show the server in their MCP Servers panel. Cline 4.x or later shares this file and moves an older file from VS Code's extension storage into it on first launch. Older builds keep reading their own file, so upgrade Cline first.
+
+```bash
+# STDIO - no key needed
+cline mcp install marm-memory --yes -- marm-mcp-stdio
+
+# HTTP, direct Python install - no key needed
+cline mcp install marm-memory --yes --transport http http://localhost:8001/mcp
+```
+
+Docker or `SERVER_HOST=0.0.0.0` (key required): MARM has not confirmed that Cline CLI expands environment variables in headers, so use STDIO, or add the key by hand under `mcpServers` in that file:
+
+```json
+{
+  "mcpServers": {
+    "marm-memory": {
+      "type": "streamableHttp",
+      "url": "http://localhost:8001/mcp",
+      "headers": {
+        "Authorization": "Bearer your-generated-key"
+      }
+    }
+  }
+}
+```
+
+</details>
+
+<details>
+<summary><strong>Antigravity CLI</strong></summary>
+
+Antigravity CLI (`agy`) replaced Gemini CLI in June 2026. It supports STDIO and HTTP MCP servers. Use HTTP for MARM. The Antigravity IDE and 2.0 app read this same file (in the IDE, open "..." then MCP Servers, then Manage MCP Servers). Antigravity 2.x or later reads it. Older IDE builds used `~/.gemini/antigravity/mcp_config.json`, and MARM writes that file only when it is the only one present.
+
+```bash
+# Direct Python install - no key needed
+agy mcp add marm-memory --type http http://localhost:8001/mcp
+
+# Docker or SERVER_HOST=0.0.0.0 - key required
+agy mcp add marm-memory --type http http://localhost:8001/mcp --header "Authorization: Bearer your-generated-key"
+```
+
+Equivalent `~/.gemini/config/mcp_config.json` (user scope) or project `.agents/mcp_config.json`. Antigravity reads `serverUrl`, not `url` or `httpUrl`, and does not expand `${VAR}` in this file, so paste the real key:
+
+```json
+{
+  "mcpServers": {
+    "marm-memory": {
+      "serverUrl": "http://localhost:8001/mcp",
       "headers": {
         "Authorization": "Bearer your-generated-key"
       }
@@ -603,9 +819,11 @@ Equivalent `.qwen/settings.json` (project) or `~/.qwen/settings.json` (user):
 </details>
 
 <details>
-<summary><strong>xAI / Grok Remote MCP</strong></summary>
+<summary><strong>Grok app and API</strong></summary>
 
-xAI connects from its own infrastructure, so `localhost` will not work. Expose MARM behind HTTPS and set `MARM_API_KEY`.
+The Grok app (grok.com, iOS, Android) supports custom MCP servers: open grok.com/connectors, click **New Connector**, choose **Custom**, and enter your MARM URL. The xAI API supports Remote MCP Tools over Streamable HTTP or SSE only.
+
+Both run on xAI's infrastructure, so `localhost` will not work. Expose MARM behind HTTPS (a tunnel or your own domain) and set `MARM_API_KEY`. MARM has not been tested through the app's connector form. For the API, send this tool payload:
 
 ```json
 {
@@ -681,7 +899,7 @@ The AI agent will automatically use the appropriate tools. Manual tool access is
 | ------ | -------------- | ---------------- |
 | `marm_graph_index` | Index a repo into the code-structure graph, check status, list projects, or turn automatic re-indexing on and off | `repo_path`, `project`, `action` |
 | `marm_code_lookup` | Find symbols, text patterns, or a symbol's source; use instead of grep/glob | `kind="auto"\|"symbol"\|"text"\|"snippet"` |
-| `marm_code_context` | Composed context for a task in one call: symbols ranked by personalised PageRank, their source read from disk, and what memory records about them | `task`, `project`, `cwd`, `budget`, `detail` (0-3; `0` uses `MARM_CODE_CONTEXT_DETAIL`, the server default), `include_graph` (default `false`) |
+| `marm_code_context` | Composed context for a task in one call: symbols ranked by personalised PageRank, their source read from disk, and what memory records about them | `task`, `project`, `cwd`, `budget`, `detail` (0-3; `0` uses `MARM_CODE_CONTEXT_DETAIL`, the server default), `include_graph` (default `false`), `answer` (default `false`) |
 | `marm_graph_trace` | Trace call paths and data flow from a function | `direction`, `mode` |
 | `marm_graph_architecture` | Architecture overview: modules, node/edge breakdown, schema | `project` |
 | `marm_graph_impact` | Blast radius of code changes: git diff → affected symbols + risk | `since`, `base_branch`, `depth` |
@@ -975,13 +1193,23 @@ MARM has never shipped a generative model. Concept extraction is spaCy and searc
 Two features use it, both only when asked per call, and both degrade rather than fail:
 
 - `marm_distill(use_llm=true)` writes self-contained facts instead of lifting sentences, and keeps the verbatim span each one came from. The proposal's `mode` says which happened: `generated` means a model answered, `selected` means it did not.
-- `marm_code_context(answer=true)` closes the loop and answers the task in prose, grounded **only** in the context it just composed — so the ranking decides what the answer is allowed to be about. The Console streams that answer over an internal route, so text appears while the rest is still being written. That stream is the only request: its first event, `context`, is the composition itself (the payload `marm_code_context` returns, or its `no_project`/`unavailable` status), and the answer is written from exactly that composition, so what the Console displays and what the answer is grounded in are one retrieval. If the model spends its token budget before it finishes writing, the stream sends `restart`, withdrawing the text it sent, and retries once at the wider budget the non-streaming path uses; `done` carries `truncated` when even that was not enough.
+- `marm_code_context(answer=true)` closes the loop and answers the task in prose, grounded **only** in the context it just composed — so the ranking decides what the answer is allowed to be about. The Console streams that answer over an internal route, so text appears while the rest is still being written. That stream is the only request: its first event, `context`, is the composition itself (the payload `marm_code_context` returns, or its `no_project`/`unavailable` status), and the answer is written from exactly that composition, so what the Console displays and what the answer is grounded in are one retrieval. Each call is held to the operator's profile: a reply the model does not finish within its token cap or time limit, or a stream that drops, is never retried wider; `done` carries `truncated`, and a truncated answer is never verified.
 
 **Loopback is enforced, not documented.** A non-loopback host is refused outright rather than warned about, because a configuration mistake pointing this at a hosted endpoint would ship transcripts and source off the machine quietly, with no other symptom. The override exists, requires stating the intent in full (`MARM_LLM_ALLOW_REMOTE=i-understand-this-leaves-my-machine`), and is named in the refusal.
 
 **Every failure is a `None`, never an exception.** A cold model, a busy GPU, a stopped container and a malformed reply all degrade to "no model answer this time". Callers branch on the `None`; they do not catch. A memory tool must not stop working because an unrelated container was restarted.
 
-**An answer is labelled grounded only when its citations check out.** `answer_status` is `ok` when the answer cites symbols from the context it was written from and names nothing outside it. Otherwise it is `unverified`: the text is still returned, `answer_unresolved` lists any cited identifier the context does not contain, and `answer_hint` says why. The Console's stream carries the same verdict in its final `done` event, and calls an answer grounded only once that verdict is `ok`.
+#### Local evidence analyst
+
+`marm_code_context(answer=true)` is a bounded, read-only analyst. MARM retrieves; the local model reads only what MARM retrieved; deterministic code judges every result before it is returned. The model never searches, fetches more context, writes memory or calls a tool.
+
+- **One evidence packet.** The composition is frozen into a packet with citable handles, `S1`… for symbols and `M1`… for memories, and a content hash, `packet_id`. The profile caps what the packet holds, whatever `budget` the caller asked for; `answer_packet` reports its size and what the cap left out.
+- **Profiles, chosen by the operator.** `general` writes one free-form answer, as before. `small` runs five narrow operations, one per call: a summary, supported facts with a verbatim `quote`, call and memory relations, missing evidence, and low-risk next steps (read, compare, verify or ask). `large` runs the same five in one call. Each operation returns JSON in a fixed schema, requested from the server as `json_schema` where it is supported and validated either way; an entry that does not fit is dropped and counted, never repaired. The profile is set in System > Controls or with `MARM_ANALYST_PROFILE`, and is never inferred from the model.
+- **Hard limits.** Every call asks for the profile's cap, answer tokens plus any reasoning allowance, and is never retried wider. No call starts after the time limit, and none may run past it. `answer_model_info` reports the cap, the number of calls, the elapsed time and whether the run stopped early; a cut-off answer is never verified.
+- **Every result verified on its own.** A cited handle the packet does not contain rejects. A fact is supported only when its quote is verbatim in an item it cites, a call relation only when the packet has that edge, a memory relation only when the memory is bound to or names the symbol, and every claim only when the words it asserts appear in the evidence it cites. A claim with nothing a check could fail is not verified. An answer is `verified` only when every substantive result is, and every operation completed; otherwise it is `uncertain`, reported in `answer_status` as `ok`, `unverified` or `rejected`. `answer_items` carries each result with its state and what supported it.
+- **Code-memory disagreement.** A memory that states a call the packet's graph contradicts, or does not show, is listed in `answer_disagreements` without asking the model.
+
+The JSON response and the stream share one implementation and return the same verification. A reader who closes the stream stops the generation. `scripts/eval-analyst.py` runs the evaluation matrix in `tests/fixtures/analyst_eval.json` against a live local model under any profile.
 
 That is the contract for `marm_code_context(answer=true)`, which returns `"answer": null` when a model is unreachable or answers with nothing. The Console's streaming route cannot use it, because a stream has already started by the time generation fails: it emits an SSE `error` event whose JSON `data` carries a `message`, plus a `hint` when no model is reachable at all. Same outcome either way -- the ranked context stands and only the answer is missing -- but a client reading the stream branches on the event, not on a null.
 
@@ -1049,7 +1277,11 @@ Packaged docs are indexed into the `marm_system` memory namespace on startup and
 | `MARM_LLM_URL` | `http://127.0.0.1:18080` | Local OpenAI-compatible endpoint for optional generation. A stated address wins over discovery, so one that is dead surfaces rather than being silently replaced |
 | `MARM_LLM_ALLOW_REMOTE` | unset | Must be the exact string `i-understand-this-leaves-my-machine` to permit a non-loopback endpoint. Anything else, including `1` or `true`, is refused |
 | `MARM_LLM_TIMEOUT` | `120` | Seconds to wait for a completion. Generous on purpose: a shared GPU makes a slow answer normal rather than broken |
-| `MARM_LLM_MAX_RETRY_TOKENS` | `8192` | Ceiling for the single wider retry issued when a model spends its whole budget without producing content |
+| `MARM_LLM_MAX_RETRY_TOKENS` | `8192` | Ceiling for the single wider retry issued when a model spends its whole budget without producing content (never used by the analyst, whose cap is hard) |
+| `MARM_ANALYST_PROFILE` | `general` | Analyst profile: `general`, `small` or `large`. A choice saved in System > Controls wins |
+| `MARM_CODE_CONTEXT_ANSWER_TOKENS` | `900` | Answer tokens per call for the `general` profile, 64 to 8192. The structured profiles are sized to their schemas |
+| `MARM_ANALYST_TIME_BUDGET` | profile (`90`/`60`/`180`) | Seconds an analyst answer may take, 5 to 600. No model call starts after it |
+| `MARM_ANALYST_REASONING_TOKENS` | profile (`0`/`0`/`8192`) | Extra tokens per call a reasoning model may spend before answering, up to 32768. Added to the answer tokens in the requested cap |
 | `GRAPH_ENABLED` | `true` | Kill switch for the 6 code-graph tools |
 | `GRAPH_AUTO_INDEX` | `true` | Automatic re-indexing of repos already in the code graph. A saved switch from `projects auto off` or `marm_graph_index(action="auto_off")` overrides this, so a value set here cannot re-enable what a user turned off |
 | `GRAPH_AUTO_INDEX_DEBOUNCE_SECONDS` | `2` | Quiet period after a watcher event before a repo is evaluated, so a burst of saves becomes one re-index. Minimum 0.5 |
