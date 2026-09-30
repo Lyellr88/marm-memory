@@ -297,6 +297,30 @@ def test_require_key_keeps_an_existing_managed_key(client, home) -> None:
     assert SECRET not in response.text
 
 
+def test_overview_follows_the_saved_key_requirement_without_a_console_restart(
+    client,
+) -> None:
+    path = "/api/connections/overview"
+    assert client.get(path).json()["auth"]["mode"] == "local"
+
+    client.put("/api/connections/settings", json={"values": {"auth.require_key": True}})
+    assert client.get(path).json()["auth"]["mode"] == "key"
+
+    client.put(
+        "/api/connections/settings", json={"values": {"auth.require_key": False}}
+    )
+    assert client.get(path).json()["auth"]["mode"] == "local"
+
+
+def test_overview_drops_a_key_the_overlay_supplied_once_it_is_saved_off(
+    client, monkeypatch
+) -> None:
+    monkeypatch.setattr(marm_settings, "MARM_API_KEY", SECRET)
+    monkeypatch.setenv(user_settings.SHADOW_ENV, '{"MARM_API_KEY": null}')
+
+    assert client.get("/api/connections/overview").json()["auth"]["mode"] == "local"
+
+
 def test_require_key_failure_is_409_without_the_key(client, monkeypatch) -> None:
     def broken(path=None):
         raise RuntimeError(f"cannot secure {SECRET}")

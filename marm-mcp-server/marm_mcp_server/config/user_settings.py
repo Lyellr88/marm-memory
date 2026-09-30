@@ -505,6 +505,18 @@ def apply_overlay() -> None:
         logger.warning("Settings overlay failed; applying nothing more", exc_info=True)
 
 
+def key_required(current_key: str) -> bool:
+    try:
+        saved = load()
+    except (SettingsError, OSError, ValueError):
+        return bool(current_key)
+    if any(saved.get(s.key) for s in SETTINGS if s.encoding == "key"):
+        return True
+    if current_key and _KEY_ENV in _read_shadow():
+        return False
+    return bool(current_key)
+
+
 def describe() -> dict[str, Any]:
     saved = load()
     shadow = _read_shadow()

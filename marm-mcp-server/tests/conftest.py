@@ -260,6 +260,10 @@ def agent_homes_off_the_real_machine(tmp_path_factory, monkeypatch) -> None:
     monkeypatch.setenv("HERMES_HOME", str(tmp_path_factory.mktemp("hermes-home")))
     monkeypatch.setenv("CLINE_DIR", str(tmp_path_factory.mktemp("cline-home")))
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path_factory.mktemp("xdg-config")))
+    monkeypatch.setenv(
+        "MARM_SETTINGS_PATH",
+        str(tmp_path_factory.mktemp("marm-settings") / "settings.json"),
+    )
     monkeypatch.delenv("CLINE_DATA_DIR", raising=False)
     monkeypatch.delenv("CLINE_MCP_SETTINGS_PATH", raising=False)
 

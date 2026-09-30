@@ -221,6 +221,27 @@ def test_require_key_loads_managed_key_when_env_lacks_one(home, monkeypatch) -> 
     assert os.environ["MARM_API_KEY"] == "managed-secret"
 
 
+def test_key_required_follows_the_saved_setting_not_the_startup_key(
+    home, monkeypatch
+) -> None:
+    assert user_settings.key_required("") is False
+    assert user_settings.key_required("explicit") is True
+
+    write_settings(home, {"auth": {"require_key": True}})
+    assert user_settings.key_required("") is True
+
+    write_settings(home, {"auth": {"require_key": False}})
+    assert user_settings.key_required("explicit") is True
+    monkeypatch.setenv(user_settings.SHADOW_ENV, json.dumps({"MARM_API_KEY": None}))
+    assert user_settings.key_required("overlaid") is False
+
+
+def test_key_required_survives_an_unreadable_settings_file(home) -> None:
+    write_settings(home, "{not json")
+    assert user_settings.key_required("explicit") is True
+    assert user_settings.key_required("") is False
+
+
 def test_require_key_keeps_an_explicit_env_key(home, monkeypatch) -> None:
     monkeypatch.setenv("MARM_API_KEY", "explicit")
 

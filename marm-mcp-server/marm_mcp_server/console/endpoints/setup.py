@@ -40,7 +40,7 @@ def _runtime_url_and_auth() -> tuple[str, bool]:
     runtime = runtime_manager.inspect_runtime()
     metadata = runtime.get("metadata") or {}
     port = metadata.get("port") or SERVER_PORT
-    return f"http://127.0.0.1:{port}/mcp", bool(MARM_API_KEY)
+    return f"http://127.0.0.1:{port}/mcp", user_settings.key_required(MARM_API_KEY)
 
 
 def _skills_installed() -> int:
@@ -89,7 +89,7 @@ def get_overview() -> dict:
             "profile": profile,
         },
         "auth": {
-            "mode": "key" if marm_settings.MARM_API_KEY else "local",
+            "mode": "key" if auth_required else "local",
             "key_file_exists": key_management.managed_key_path().exists(),
         },
         "agents": {"connected": connected, "detected": len(detected)},
