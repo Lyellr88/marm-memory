@@ -270,7 +270,20 @@ python scripts/run-tests.py
 This runs:
 
 - Python compile check for `marm_mcp_server` and `tests`
-- Pytest suite with a controlled temp directory
+- Pytest suite with a controlled temp directory, run in parallel on 4 `pytest-xdist` workers with one test file per worker at a time
+- Console route contracts and the Console frontend checks
+
+Use the runner for full runs. It sets up the parallel workers, the temp directories, and the marker filters for you. Install the dev dependencies (`pip install -e ".[dev]"` from `marm-mcp-server`) so `pytest-xdist` is available.
+
+Useful runner options:
+
+```powershell
+python scripts/run-tests.py --workers 8      # more workers if your machine has the cores and RAM
+python scripts/run-tests.py --workers 1      # serial, for reproducing an order-dependent failure
+python scripts/run-tests.py --durations 40   # list the 40 slowest tests
+```
+
+Each worker imports the whole server, so RAM use grows with the worker count. Tests must not depend on another test file's state, because files run on separate worker processes in any order.
 
 For targeted ad hoc pytest runs, use `--basetemp C:\tmp\...` or clean repo-local pytest artifacts afterward:
 

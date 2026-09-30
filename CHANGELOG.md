@@ -24,6 +24,7 @@
 
 - Antigravity replaces Gemini CLI, which Google retired on June 18, 2026. MARM writes `~/.gemini/config/mcp_config.json` (or `.agents/mcp_config.json` for one project) with the `serverUrl` key, and installs the MARM skill into `~/.gemini/config/skills/`. HTTP with a key stays a manual step because Antigravity does not expand `${VAR}` in that file.
 - `marm-memory init --g-gemini` is now `--g-antigravity`, and `fast-start-http --client gemini` is now `--client antigravity`.
+- `python scripts/run-tests.py` runs the server suite in parallel on `pytest-xdist` workers, which cut a full run from about 10 minutes to under 3. `--workers N` sets the worker count (default 4, and 1 runs serially), and `--durations [N]` lists the slowest tests. `pytest-xdist` is now a dev dependency.
 
 ### Fixed
 
