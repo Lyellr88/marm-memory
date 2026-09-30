@@ -5,7 +5,7 @@
 
 ### Internal
 
-- Split the text-level config editors out of `services/client_config.py` into `services/client_config_text.py`: the surgical JSONC editor (OpenCode, Zed and other comment-tolerant JSON) and the block-level YAML editor (Hermes). They are pure string-in, string-out; `client_config.py` keeps the client registry, path resolution, backups, atomic writes, and the read-back check that confirms an edit landed. No behavior change. `client_config.py` drops from 1,670 to 1,306 lines.
+- Split the text-level config editors out of `services/client_config.py` into `services/client_config_text.py`: the JSONC comment stripper (OpenCode, Zed), the surgical JSONC editor (Zed), and the block-level YAML editor (Hermes). They are pure string-in, string-out; `client_config.py` keeps the client registry, path resolution, backups, atomic writes, and the read-back check that confirms an edit landed. No behavior change. `client_config.py` drops from 1,670 to 1,306 lines.
 
 </details>
 
