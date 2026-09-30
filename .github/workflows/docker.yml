@@ -61,7 +61,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           files=$(gh api --paginate "repos/${{ github.repository }}/pulls/${{ github.event.number }}/files" --jq '.[].filename')
-          if printf '%s\n' "$files" | grep -qvE '^(docs/|marm-console/|\.claude/|\.codex/|\.kiro/|scripts/benchmarking/|[^/]*\.md$)'; then
+          if [ "$(printf '%s\n' "$files" | grep -c .)" -ge 3000 ] || printf '%s\n' "$files" | grep -qvE '^(docs/|marm-console/|\.claude/|\.codex/|\.kiro/|scripts/benchmarking/|[^/]*\.md$)'; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
             echo "run=false" >> "$GITHUB_OUTPUT"
