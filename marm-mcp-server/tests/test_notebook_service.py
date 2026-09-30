@@ -1,13 +1,15 @@
 import sqlite3
+import sys
 import uuid
 
 import pytest
-from conftest import drop_package_modules
 
 
 @pytest.fixture
 def notebook_svc(monkeypatch, tmp_path):
-    drop_package_modules(monkeypatch)
+    for name in list(sys.modules):
+        if name == "marm_mcp_server" or name.startswith("marm_mcp_server."):
+            del sys.modules[name]
 
     monkeypatch.setenv("MARM_DB_PATH", str(tmp_path / "nb-test.db"))
     monkeypatch.setenv("MARM_ANALYTICS_DB_PATH", str(tmp_path / "nb-analytics.db"))

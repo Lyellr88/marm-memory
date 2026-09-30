@@ -277,30 +277,18 @@ def bind_live_modules(monkeypatch, namespace, **paths) -> None:
         monkeypatch.setitem(namespace, name, module)
 
 
-def drop_package_modules(monkeypatch) -> None:
-    """Drop marm_mcp_server from sys.modules for one test; teardown restores the modules and the package attributes that name them."""
-    doomed = [
-        name
-        for name, module in sys.modules.items()
-        if module is not None
-        and (name == "marm_mcp_server" or name.startswith("marm_mcp_server."))
-    ]
-    for name in doomed:
-        parent_name, _, child = name.rpartition(".")
-        parent = sys.modules.get(parent_name)
-        if parent is not None and getattr(parent, child, None) is sys.modules[name]:
-            monkeypatch.setattr(parent, child, sys.modules[name])
-    for name in doomed:
-        monkeypatch.delitem(sys.modules, name)
-
-
 def load_isolated_server(monkeypatch, tmp_path, api_key="", write_queue_enabled=False):
     """Import the server after pointing global state at a temporary database.
 
-    Teardown restores the original modules, or later tests that bound symbols
-    (e.g. MARMMemory) at import time would silently reference the stale generation.
+    Modules are dropped via monkeypatch.delitem, not a bare del, so the original
+    module objects are restored at teardown. Otherwise the isolated re-import
+    below leaves a new module generation in sys.modules for the rest of the
+    session, and later tests that bound symbols (e.g. MARMMemory) at import time
+    would silently reference the stale generation.
     """
-    drop_package_modules(monkeypatch)
+    for name in list(sys.modules):
+        if name == "marm_mcp_server" or name.startswith("marm_mcp_server."):
+            monkeypatch.delitem(sys.modules, name)
 
     monkeypatch.setenv("MARM_DB_PATH", str(tmp_path / "marm_memory.db"))
     monkeypatch.setenv("MARM_ANALYTICS_DB_PATH", str(tmp_path / "analytics.db"))
