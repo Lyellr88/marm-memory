@@ -60,7 +60,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          files=$(gh pr diff "${{ github.event.number }}" --name-only)
+          files=$(gh api --paginate "repos/${{ github.repository }}/pulls/${{ github.event.number }}/files" --jq '.[].filename')
           if printf '%s\n' "$files" | grep -qvE '^(docs/|marm-console/|\.claude/|\.codex/|\.kiro/|scripts/benchmarking/|[^/]*\.md$)'; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
