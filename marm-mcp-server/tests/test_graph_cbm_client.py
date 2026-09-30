@@ -664,8 +664,9 @@ def test_eof_error_carries_the_child_stderr_reason():
     finally:
         client.close()
 
-    assert "closed stdout (EOF)" in str(excinfo.value)
-    assert reason in str(excinfo.value)
+    message = str(excinfo.value)
+    assert "closed stdout (EOF)" in message or "write to child failed" in message
+    assert reason in message
 
 
 def _stderr_then_exit_command(text: str) -> list:

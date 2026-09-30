@@ -295,7 +295,9 @@ class CbmClient:
             stdin.write(line)
             stdin.flush()
         except (BrokenPipeError, OSError) as e:
-            raise CbmError(f"write to child failed: {e}") from e
+            raise CbmError(
+                f"write to child failed: {e}" + self._stderr_context()
+            ) from e
 
     def _read_response(self, expect_id: int, timeout: float) -> dict:
         """Read lines until the response with `expect_id` arrives.
