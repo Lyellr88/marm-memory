@@ -1,7 +1,7 @@
 """Text-level editors for the config formats client_config writes.
 
-Pure string-in, string-out: the surgical JSONC editor (OpenCode, Zed and other
-comment-tolerant JSON) and the block-level YAML editor (Hermes). Neither touches
+Pure string-in, string-out: the JSONC comment stripper (OpenCode, Zed), the
+surgical JSONC editor (Zed), and the block-level YAML editor (Hermes). None touch
 the filesystem; client_config owns reading, backing up, writing, and confirming
 the edit landed.
 """
