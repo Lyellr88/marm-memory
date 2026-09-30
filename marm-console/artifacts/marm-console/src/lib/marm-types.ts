@@ -362,6 +362,14 @@ export interface LocalLlmStatus {
   source?: string;
   rejected?: string;
   applied_model?: string;
+  /** Which analyst profile bounds an answer. Chosen by the operator, never
+   *  inferred from the model being served. */
+  analyst_profile?: {
+    name: AnalystProfileName;
+    source: 'runtime' | 'environment' | 'default';
+    profiles: Record<AnalystProfileName, AnswerProfile>;
+    active: AnswerProfile;
+  };
 }
 
 /** A local OpenAI-compatible server found by scanning loopback ports.
@@ -975,25 +983,144 @@ export interface CodeContextResult {
   /** Grounded answer, present only when `answer` was requested. `null` with a
    *  status of `unavailable`/`failed` means the retrieval above still stands. */
   answer?: string | null;
-  /** `ok` only when the citations resolve to the composed symbols and none
-   *  name anything else; `unverified` otherwise. */
+  /** `ok` when verified against the composed context, `unverified` when its
+   *  support is weak, `rejected` when it cites something the context does
+   *  not contain. */
   answer_status?: AnswerGrounding | 'unavailable' | 'failed';
   answer_hint?: string;
   answer_model?: string;
-  /** Only symbols that are actually in the context; an invented name is
-   *  dropped server-side rather than rendered as a dead link. */
+  answer_model_info?: AnswerModelInfo;
+  /** Only what is actually in the context; an invented name is dropped
+   *  server-side rather than rendered as a dead link. */
   answer_citations?: CodeContextCitation[];
   /** Identifier-shaped citations that resolved to nothing in the context. */
   answer_unresolved?: string[];
+  answer_verification?: AnswerVerification;
+  answer_packet?: AnswerPacket;
+  /** The operator's profile, with the limits it held the model to. */
+  answer_profile?: AnswerProfile;
+  /** Structured profiles only: what each narrow operation returned. */
+  answer_operations?: AnswerOperation[];
+  answer_items?: AnswerItem[];
+  /** Memories that state a call the packet's graph does not show. */
+  answer_disagreements?: AnswerDisagreement[];
 }
 
-export type AnswerGrounding = 'ok' | 'unverified';
+export type AnswerGrounding = 'ok' | 'unverified' | 'rejected';
 
 export interface CodeContextCitation {
+  /** `S1`/`M1`: the packet handle the answer cited. Absent from an older server. */
+  handle?: string;
+  kind?: 'symbol' | 'memory';
   name: string;
-  qualified_name: string;
-  file_path: string;
-  start_line: number;
+  qualified_name?: string;
+  file_path?: string;
+  start_line?: number;
+  memory_id?: string;
+}
+
+export interface AnswerVerification {
+  state: 'verified' | 'uncertain' | 'rejected';
+  /** The minimum of the three checks, never their average. */
+  score: number;
+  citation_coverage: number;
+  source_span_support: number;
+  graph_memory_consistency: number;
+  claims: number;
+  cited_claims: number;
+  failures: string[];
+  hard_failures: string[];
+  abstained: boolean;
+}
+
+export interface AnswerModelInfo {
+  id: string;
+  endpoint_source: string | null;
+  profile?: string;
+  /** The cap each call requested: output plus reasoning. Never widened. */
+  max_tokens: number;
+  output_tokens?: number;
+  reasoning_tokens?: number;
+  time_s?: number;
+  calls?: number;
+  output_chars?: number;
+  elapsed_ms: number;
+  stopped: 'cancelled' | 'deadline' | null;
+}
+
+export type AnalystProfileName = 'general' | 'small' | 'large';
+
+export interface AnswerProfile {
+  name: AnalystProfileName;
+  context_chars: number;
+  max_symbols: number;
+  max_memories: number;
+  output_tokens: number;
+  reasoning_tokens: number;
+  max_tokens: number;
+  time_s: number;
+  structured: boolean;
+  batch: boolean;
+}
+
+export type AnswerOp = 'summary' | 'facts' | 'relations' | 'gaps' | 'next_steps';
+
+export interface AnswerItem {
+  /** Stable within one answer: A1 summary, F1 fact, R1 relation, G1 gap, N1 step. */
+  id: string;
+  op: AnswerOp;
+  text: string;
+  state: 'verified' | 'uncertain' | 'rejected' | 'missing' | 'proposal';
+  /** What decided a verified state: a verbatim quote, a call edge, a memory
+   *  link, or only resolved citations. */
+  support: 'quote' | 'edge' | 'link' | 'citation' | 'none';
+  cites: string[];
+  quote?: string;
+  kind?: 'calls' | 'memory_about';
+  from?: string;
+  to?: string;
+  action?: 'read' | 'compare' | 'verify' | 'ask';
+  failures: string[];
+}
+
+export interface AnswerOperation {
+  op: AnswerOp;
+  status: 'ok' | 'empty' | 'malformed' | 'failed' | 'skipped';
+  malformed: number;
+  dropped: number;
+  finish: string | null;
+  elapsed_ms: number;
+  output_chars: number;
+  items?: AnswerItem[];
+}
+
+export interface AnswerDisagreement {
+  memory: string;
+  from: string;
+  to: string;
+  memory_says?: 'calls' | 'does not call';
+  graph?: 'edge' | 'no edge';
+  severity: 'contradicted' | 'unconfirmed';
+  sentence?: string;
+}
+
+export interface AnswerPacket {
+  packet_id: string;
+  project: string;
+  task: string;
+  symbols: Array<{
+    handle: string;
+    qualified_name: string;
+    name: string;
+    file_path: string;
+    start_line: number;
+    end_line: number;
+  }>;
+  memories: Array<{ handle: string; memory_id: string; content: string }>;
+  /** Rendered size of what the model read, and what the profile's cap left out. */
+  chars?: number;
+  omitted_symbols?: number;
+  omitted_memories?: number;
 }
 
 /** One distilled proposal, before or after it has been staged. */
