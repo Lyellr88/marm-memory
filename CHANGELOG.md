@@ -1,6 +1,15 @@
 # Changelog
 
 <details>
+<summary><strong>September 30th, 2026: Client Config Module Split (v2.56.2)</strong></summary>
+
+### Internal
+
+- Split the text-level config editors out of `services/client_config.py` into `services/client_config_text.py`: the surgical JSONC editor (OpenCode, Zed and other comment-tolerant JSON) and the block-level YAML editor (Hermes). They are pure string-in, string-out; `client_config.py` keeps the client registry, path resolution, backups, atomic writes, and the read-back check that confirms an edit landed. No behavior change. `client_config.py` drops from 1,670 to 1,306 lines.
+
+</details>
+
+<details>
 <summary><strong>September 30th, 2026: CI and Code Scanning on Every Branch (v2.56.1)</strong></summary>
 
 ### Changed

@@ -23,6 +23,7 @@ from .client_config import (
     ClientSpec,
     InvalidRequest,
 )
+from .client_config_text import _yaml_block
 
 OS_NAMES = ("windows", "macos", "linux")
 
@@ -187,7 +188,7 @@ def _toml_text(entry: dict[str, Any]) -> str:
 
 
 def _yaml_text(entry: dict[str, Any]) -> str:
-    return "\n".join(["mcp_servers:", *client_config._yaml_block(entry, 2)]) + "\n"
+    return "\n".join(["mcp_servers:", *_yaml_block(entry, 2)]) + "\n"
 
 
 def _json_text(
