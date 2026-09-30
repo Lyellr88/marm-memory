@@ -41,8 +41,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          files=$(gh pr diff "${{ github.event.number }}" --name-only)
-          if printf '%s\n' "$files" | grep -qE '^(marm-console/|\.github/workflows/console\.yml$)'; then
+          files=$(gh api --paginate "repos/${{ github.repository }}/pulls/${{ github.event.number }}/files" --jq '.[].filename')
+          if [ "$(printf '%s\n' "$files" | grep -c .)" -ge 3000 ] || printf '%s\n' "$files" | grep -qE '^(marm-console/|\.github/workflows/console\.yml$)'; then
             echo "run=true" >> "$GITHUB_OUTPUT"
           else
             echo "run=false" >> "$GITHUB_OUTPUT"

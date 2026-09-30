@@ -8,7 +8,7 @@ MARM is focused on one clear goal: make AI memory practical across real tools, r
 
 The active product direction has two tracks:
 
-- **MARM MCP Server**: the agent-facing memory layer used by Claude, Codex, Gemini, Qwen, VS Code, Cursor, and other MCP clients.
+- **MARM MCP Server**: the agent-facing memory layer used by Claude, Codex, Gemini (Antigravity), Qwen, VS Code, Cursor, and other MCP clients.
 - **MARM Console**: the human-facing local admin UI for inspecting, editing, exporting, and maintaining the same memory database.
 
 MARM is not currently being built as a paid upgrade product. The near-term focus is a strong open base: reliable local memory, clean transports, useful console workflows, and future extension points for plugins, SDKs, research, and team workflows.

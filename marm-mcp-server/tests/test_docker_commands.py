@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -314,3 +315,285 @@ def test_write_compose_file_refuses_overwrite_before_creating_a_key(
 
     with pytest.raises(docker_commands.DockerCommandError, match="already exists"):
         docker_commands.write_compose_file(_options(tmp_path), output)
+
+
+class FakeDocker:
+    """Records argv lists passed to subprocess.run and answers from a script."""
+
+    def __init__(self, monkeypatch, responder):
+        self.calls: list[list[str]] = []
+        self.timeouts: list[object] = []
+        self.kwargs: list[dict] = []
+        self._responder = responder
+        monkeypatch.setattr(docker_commands.subprocess, "run", self._run)
+
+    def _run(self, arguments, **kwargs):
+        assert isinstance(arguments, list)
+        assert not kwargs.get("shell")
+        self.calls.append(arguments)
+        self.timeouts.append(kwargs.get("timeout"))
+        self.kwargs.append(kwargs)
+        return self._responder(arguments)
+
+
+def _completed(stdout="", stderr="", returncode=0):
+    return docker_commands.subprocess.CompletedProcess([], returncode, stdout, stderr)
+
+
+def _marm_payload(running=True, image="lyellr88/marm-mcp-server:latest"):
+    return [
+        {
+            "Config": {"Image": image, "Labels": {}},
+            "State": {"Status": "running" if running else "exited", "Running": running},
+        }
+    ]
+
+
+def _foreign_payload():
+    return [{"Config": {"Image": "postgres:16", "Labels": {}}, "State": {}}]
+
+
+def _marm_ok(arguments):
+    if arguments[:3] == ["docker", "container", "inspect"]:
+        return _completed(stdout=json.dumps(_marm_payload()))
+    return None
+
+
+def test_engine_status_not_installed_is_distinct_from_daemon_down(monkeypatch):
+    def missing(*_args, **_kwargs):
+        raise FileNotFoundError("docker")
+
+    monkeypatch.setattr(docker_commands.subprocess, "run", missing)
+    not_installed = docker_commands.engine_status()
+
+    FakeDocker(
+        monkeypatch,
+        lambda _a: _completed(
+            stdout=json.dumps({"Client": {"Version": "27.1.1"}}),
+            stderr="failed to connect to the docker API",
+            returncode=1,
+        ),
+    )
+    daemon_down = docker_commands.engine_status()
+
+    assert not_installed["available"] is False
+    assert "not installed" in not_installed["reason"]
+    assert daemon_down["available"] is True
+    assert daemon_down["daemon"] is False
+    assert daemon_down["version"] == "27.1.1"
+    assert "daemon is not running" in daemon_down["reason"]
+    assert not_installed["reason"] != daemon_down["reason"]
+
+
+def test_engine_status_healthy_uses_the_server_version_and_a_5s_timeout(monkeypatch):
+    fake = FakeDocker(
+        monkeypatch,
+        lambda _a: _completed(
+            stdout=json.dumps(
+                {"Client": {"Version": "27.1.1"}, "Server": {"Version": "27.0.3"}}
+            )
+        ),
+    )
+
+    status = docker_commands.engine_status()
+
+    assert status == {
+        "available": True,
+        "daemon": True,
+        "version": "27.0.3",
+        "reason": None,
+    }
+    assert fake.calls == [["docker", "version", "--format", "json"]]
+    assert fake.timeouts == [5]
+
+
+def test_engine_status_hung_daemon_times_out_as_unavailable_daemon(monkeypatch):
+    def hang(arguments, **kwargs):
+        raise docker_commands.subprocess.TimeoutExpired(arguments, kwargs["timeout"])
+
+    monkeypatch.setattr(docker_commands.subprocess, "run", hang)
+
+    status = docker_commands.engine_status()
+
+    assert status["available"] is True
+    assert status["daemon"] is False
+    assert "5 seconds" in status["reason"]
+
+
+def test_logs_tail_reads_one_merged_stream_and_caps_lines(monkeypatch):
+    merged = "\n".join(f"out {i}" for i in range(1500)) + "\nerr last\n"
+    fake = FakeDocker(monkeypatch, lambda a: _marm_ok(a) or _completed(stdout=merged))
+
+    lines = docker_commands.logs_tail("marm-mcp-server", 5000)
+    small = docker_commands.logs_tail("marm-mcp-server", 3)
+
+    log_calls = [c for c in fake.calls if c[:2] == ["docker", "logs"]]
+    assert log_calls[0] == ["docker", "logs", "--tail", "1000", "marm-mcp-server"]
+    assert log_calls[1] == ["docker", "logs", "--tail", "3", "marm-mcp-server"]
+    log_kwargs = [
+        k
+        for a, k in zip(fake.calls, fake.kwargs, strict=True)
+        if a[:2] == ["docker", "logs"]
+    ]
+    assert all(k["stderr"] == docker_commands.subprocess.STDOUT for k in log_kwargs)
+    assert len(lines) == 1000
+    assert lines[-1] == "err last"
+    assert small == ["out 1498", "out 1499", "err last"]
+
+
+def test_docker_commands_have_a_finite_timeout_and_pull_gets_a_longer_one(monkeypatch):
+    fake = FakeDocker(
+        monkeypatch,
+        lambda a: _marm_ok(a) or _completed(),
+    )
+
+    docker_commands.stop_container("marm-mcp-server")
+    docker_commands.start_container("marm-mcp-server")
+    docker_commands.restart_container("marm-mcp-server")
+    docker_commands.pull_image("1.0")
+
+    by_verb = {call[1]: t for call, t in zip(fake.calls, fake.timeouts, strict=True)}
+    assert by_verb["container"] == docker_commands.DOCKER_TIMEOUT_SECONDS
+    assert by_verb["stop"] == docker_commands.DOCKER_TIMEOUT_SECONDS
+    assert by_verb["start"] == docker_commands.DOCKER_TIMEOUT_SECONDS
+    assert by_verb["restart"] == docker_commands.DOCKER_TIMEOUT_SECONDS
+    assert by_verb["pull"] == docker_commands.DOCKER_PULL_TIMEOUT_SECONDS
+
+
+def test_lifecycle_commands_refuse_a_container_that_is_not_marm(monkeypatch):
+    fake = FakeDocker(
+        monkeypatch, lambda _a: _completed(stdout=json.dumps(_foreign_payload()))
+    )
+
+    for action in (
+        docker_commands.start_container,
+        docker_commands.restart_container,
+        docker_commands.remove_container,
+        docker_commands.stop_container,
+        docker_commands.logs_tail,
+    ):
+        with pytest.raises(docker_commands.DockerCommandError, match="not a MARM"):
+            action("postgres")
+
+    assert all(call[:3] == ["docker", "container", "inspect"] for call in fake.calls)
+
+
+def test_lifecycle_commands_on_a_marm_container_use_the_right_argv(monkeypatch):
+    fake = FakeDocker(monkeypatch, lambda a: _marm_ok(a) or _completed())
+
+    assert docker_commands.start_container("marm-mcp-server") is True
+    assert docker_commands.restart_container("marm-mcp-server") is True
+
+    actions = [c for c in fake.calls if c[1] in {"start", "restart"}]
+    assert actions == [
+        ["docker", "start", "marm-mcp-server"],
+        ["docker", "restart", "marm-mcp-server"],
+    ]
+
+
+def test_lifecycle_commands_report_absent_container_without_acting(monkeypatch):
+    fake = FakeDocker(monkeypatch, lambda _a: _completed(returncode=1, stderr="none"))
+
+    assert docker_commands.start_container("marm-mcp-server") is False
+    assert docker_commands.restart_container("marm-mcp-server") is False
+    assert docker_commands.remove_container("marm-mcp-server") is False
+    assert docker_commands.logs_tail("marm-mcp-server") == []
+    assert all(call[:3] == ["docker", "container", "inspect"] for call in fake.calls)
+
+
+def test_remove_container_refuses_a_running_container_and_removes_a_stopped_one(
+    monkeypatch,
+):
+    state = {"running": True}
+
+    def responder(arguments):
+        if arguments[:3] == ["docker", "container", "inspect"]:
+            return _completed(stdout=json.dumps(_marm_payload(state["running"])))
+        return _completed()
+
+    fake = FakeDocker(monkeypatch, responder)
+
+    with pytest.raises(docker_commands.DockerCommandError, match="Stop it first"):
+        docker_commands.remove_container("marm-mcp-server")
+    assert not any(call[:2] == ["docker", "rm"] for call in fake.calls)
+
+    state["running"] = False
+    assert docker_commands.remove_container("marm-mcp-server") is True
+    assert ["docker", "rm", "marm-mcp-server"] in fake.calls
+    assert not any("-f" in call or "--force" in call for call in fake.calls)
+
+
+def test_is_marm_container_honors_the_repository_override(monkeypatch):
+    private = _marm_payload(image="registry.example.com/team/marm:1.0")[0]
+
+    assert docker_commands._is_marm_container(private) is False
+
+    monkeypatch.setenv("MARM_DOCKER_REPOSITORY", "registry.example.com/team/marm")
+    assert docker_commands._is_marm_container(private) is True
+    assert docker_commands._is_marm_container(_marm_payload()[0]) is True
+    assert docker_commands._is_marm_container(_foreign_payload()[0]) is False
+
+
+def test_is_marm_container_ignores_an_empty_override_and_a_shared_prefix(monkeypatch):
+    monkeypatch.setenv("MARM_DOCKER_REPOSITORY", "")
+
+    assert docker_commands._is_marm_container(_foreign_payload()[0]) is False
+    assert docker_commands.image_reference("1.0") == "lyellr88/marm-mcp-server:1.0"
+
+    fork = _marm_payload(image="lyellr88/marm-mcp-server-fork:1")[0]
+    assert docker_commands._is_marm_container(fork) is False
+    for image in (
+        "lyellr88/marm-mcp-server",
+        "lyellr88/marm-mcp-server:1.0",
+        "lyellr88/marm-mcp-server@sha256:abc",
+    ):
+        assert docker_commands._is_marm_container(_marm_payload(image=image)[0]) is True
+
+
+def test_write_compose_file_overwrite_backs_up_the_previous_file(monkeypatch, tmp_path):
+    monkeypatch.setattr(docker_commands, "ensure_managed_env_file", lambda *_a: None)
+    output = tmp_path / "marm-compose.yaml"
+    output.write_text("old: content\n", encoding="utf-8")
+
+    payload = docker_commands.write_compose_file(
+        _options(tmp_path), output, overwrite=True
+    )
+
+    backup = Path(str(output.resolve()) + ".marm-backup")
+    assert payload["backup_path"] == str(backup)
+    assert backup.read_text(encoding="utf-8") == "old: content\n"
+    assert output.read_text(encoding="utf-8").startswith("services:\n")
+
+
+def test_write_compose_file_without_an_existing_file_makes_no_backup(
+    monkeypatch, tmp_path
+):
+    monkeypatch.setattr(docker_commands, "ensure_managed_env_file", lambda *_a: None)
+    output = tmp_path / "fresh.yaml"
+
+    payload = docker_commands.write_compose_file(
+        _options(tmp_path), output, overwrite=True
+    )
+
+    assert "backup_path" not in payload
+    assert not Path(str(output.resolve()) + ".marm-backup").exists()
+
+
+def test_polled_docker_calls_never_open_a_console_window(monkeypatch):
+    from marm_mcp_server.utils.subprocess_flags import no_window_flags
+
+    seen = []
+
+    def fake_run(arguments, **kwargs):
+        seen.append((arguments[1], kwargs.get("creationflags")))
+        return subprocess.CompletedProcess(arguments, 1, "", "no such container")
+
+    monkeypatch.setattr(docker_commands.subprocess, "run", fake_run)
+
+    docker_commands.engine_status()
+    docker_commands.container_inspect("marm-mcp-server")
+
+    assert seen == [
+        ("version", no_window_flags()),
+        ("container", no_window_flags()),
+    ]

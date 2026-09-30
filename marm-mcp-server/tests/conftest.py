@@ -9,6 +9,11 @@ import time
 import types
 from pathlib import Path
 
+# A developer's saved Console settings must not change test results.
+os.environ["MARM_SETTINGS_PATH"] = str(
+    Path(tempfile.gettempdir()) / "marm-pytest-no-settings" / "settings.json"
+)
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -247,6 +252,37 @@ def memory_keychain(monkeypatch) -> MemoryKeychain:
     true. Tests that need a stored key seed this fixture.
     """
     return install_memory_keychain(monkeypatch)
+
+
+@pytest.fixture(autouse=True)
+def agent_homes_off_the_real_machine(tmp_path_factory, monkeypatch) -> None:
+    """A developer's own Hermes or Cline install must never be written by a test."""
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path_factory.mktemp("hermes-home")))
+    monkeypatch.setenv("CLINE_DIR", str(tmp_path_factory.mktemp("cline-home")))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path_factory.mktemp("xdg-config")))
+    monkeypatch.setenv(
+        "MARM_SETTINGS_PATH",
+        str(tmp_path_factory.mktemp("marm-settings") / "settings.json"),
+    )
+    monkeypatch.delenv("CLINE_DATA_DIR", raising=False)
+    monkeypatch.delenv("CLINE_MCP_SETTINGS_PATH", raising=False)
+
+
+def bind_live_modules(monkeypatch, namespace, **paths) -> None:
+    """Point a test file's module globals, and the package attributes lazy imports read, at sys.modules."""
+    for name, path in paths.items():
+        module = importlib.import_module(path)
+        parent_path, _, child = path.rpartition(".")
+        monkeypatch.setattr(importlib.import_module(parent_path), child, module)
+        monkeypatch.setitem(namespace, name, module)
+
+
+def bind_live_attrs(monkeypatch, namespace, **paths) -> None:
+    """Point a test file's imported classes and functions at the live module's copy."""
+    for name, path in paths.items():
+        module_path, _, attr = path.rpartition(".")
+        module = importlib.import_module(module_path)
+        monkeypatch.setitem(namespace, name, getattr(module, attr))
 
 
 def load_isolated_server(monkeypatch, tmp_path, api_key="", write_queue_enabled=False):

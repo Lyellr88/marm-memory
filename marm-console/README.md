@@ -21,7 +21,10 @@ MARM Console is a separate localhost application that reads the same local MARM 
 - **Knowledge Graph** provides separate Memory and Code Explorers: inspect extracted entities and relationships by project or session, review potential duplicates with provenance, manage concept builds, and explore a bounded file-import topology for an indexed repository. The Code Explorer remains independent of memory-derived concepts.
 - **Indexed Projects** indexes an existing local repository and shows graph size and health. Project labels are derived from repository paths for readability, while MARM keeps the engine ID for routing and destructive actions; duplicate folder names gain only enough parent context to stay distinct.
 - **Project Explorer** provides per-project code intelligence: Architecture (with rows that expand inline into a file's direct imports/importers), Impact, Coverage, Decisions (an editable architecture decision record), and Runtime traces. Code search and symbol tracing are combined into one `Ctrl+K` command palette.
-- **System** covers Health, Controls, Maintenance, and Diagnostics: runtime status, automatic-indexing controls, backups, doctor diagnostics, runtime logs, compaction dry-runs, and upgrade checks.
+- **Code Context** builds one bounded view of a code task: task-ranked symbols, source, and related memory. An optional local model can answer from that same context, with its citations checked.
+- **Distill** turns transcripts into staged durable-memory proposals. You can review, apply, or discard proposals, with duplicate evidence shown before a memory changes.
+- **System** covers Health, Controls, Maintenance, and Diagnostics: runtime status, automatic-indexing and local-model controls, backups, doctor diagnostics, runtime logs, compaction dry-runs, and upgrade checks.
+- **Connections** is the one place to set MARM up. **Setup** has a readiness checklist, server settings saved to `~/.marm/settings.json` with a one-click runtime restart, and a card per client (Claude Code, Claude Desktop, Cursor, VS Code, Codex CLI, Grok Build, Hermes Agent, OpenCode, Cline, Antigravity, Qwen Code, Devin, Kiro, Zed) that connects it over HTTP, STDIO, or Docker STDIO, tests the connection, removes it, or installs the MARM skill. **Docker** drives the MARM container: pull, start, stop, restart, recreate, logs, and a compose file. **Manual** covers setups the Console cannot write: config snippets per client and OS, each client's own add command, the full `marm-memory` CLI, every HTTP endpoint, and the environment variables. **Add a connection** emails support to request a client that is not listed.
 - **Settings** (dialog) manages the Console connection and reports runtime, write-queue, automatic-indexing, storage/model, and project-watch health. Its automatic-indexing controls use MARM's existing durable runtime flags.
 
 Console currently indexes existing local directories. GitHub URL cloning, private-repository credentials, and remote polling are planned separately and are not accepted as repository paths.
@@ -35,7 +38,7 @@ A real shell, backed by a native PTY (ConPTY on Windows, `pty`/`termios` on Linu
 - A session survives closing the dock or refreshing the page: the backend detaches rather than kills the shell on disconnect, buffers its output, and replays it on reattach. A session is only killed after 10 minutes with nothing reattached, or when its tab is explicitly closed.
 - Settings (font, cursor, clipboard, scrollback, bell), keyboard shortcuts, and search (`Ctrl+F` in the terminal) are available from the dock header.
 - A searchable MARM Commands menu lists the `marm-memory` CLI grouped by task, each command with a short description and its flags shown alongside it; clicking one inserts it into the active session without running it. Commands that need a second look (key reveal, uninstall) sit in their own flagged section.
-- A first-run guide walks through picking an OS and installing/launching Claude Code, Codex, or Antigravity CLI, with per-OS install commands and a dependency check for Node.js/npm and Git. It reappears on every launch unless "Don't launch on startup" is checked.
+- A first-run guide walks through picking an OS and installing/launching Claude Code, Codex, Grok Build, Hermes Agent, OpenCode, Cline, Cursor, Devin, or Antigravity, with per-OS install commands and a dependency check for Node.js/npm and Git. It reappears on every launch unless "Don't launch on startup" is checked.
 
 ## Run Console
 
@@ -95,6 +98,7 @@ The frontend defaults to the Console API at `http://127.0.0.1:8002`.
 | `GET /api/compaction` | Compaction pipeline history and per-candidate actions |
 | `/api/concepts/*` | Concept summary, graph, search, neighborhood, duplicate review, build lifecycle, and graph reset routes |
 | `POST /api/code-context` | Composed code context for a task: symbols ranked by personalised PageRank, their source, and joined memory. Accepts `task`, `project`, `cwd`, `budget`, `include_graph`, `answer` |
+| `POST /api/code-context/answer` | Server-sent Console stream: sends the composed context first, then an optional local-model answer written from that same context |
 | `/api/projects/*` | Local-repository indexing, job status, project health, delete, architecture, bounded graph snapshots and file neighborhoods, code search, trace, impact, coverage, decisions, and runtime trace routes |
 | `GET /api/settings/runtime` | Runtime, queue, graph, storage, embedding, automation, and watch-health diagnostics |
 | `PUT /api/settings/automation` | Enable or pause durable automatic code or concept indexing |
@@ -106,35 +110,26 @@ The frontend defaults to the Console API at `http://127.0.0.1:8002`.
 | `WS /api/terminal/ws` | Interactive PTY session: spawn, attach (reattach after disconnect), input, resize, kill |
 | `POST /api/distill` | Propose durable memories from raw conversation, review the staged queue, apply one, or discard one. Accepts `action`, `text`, `session_name`, `proposal_id`, `project`, `threshold`, `limit`, `include_duplicates`, `use_llm` |
 | `POST /api/terminal/check` | Run one of the Console's fixed dependency probes outside the interactive stream; any other command is refused |
+| `GET /api/connections/overview` | Runtime, transport, auth, and Docker summary for the Connections status strip |
+| `GET`, `PUT /api/connections/settings` | Read or save the boot-time server settings in `~/.marm/settings.json` |
+| `POST /api/connections/runtime/restart`; `GET /api/connections/runtime/restart/{job_id}` | Restart the managed runtime in the background and poll the job |
+| `GET /api/connections/agents`; `/api/connections/agents/{id}/*` | Client detection and entry state, plus `scope`, `configure` (preview or write), `remove`, `test`, and `skill` per client |
+| `/api/connections/docker/*` | Engine and container state, saved run config, `pull`, `start`, `recreate`, `stop`, `restart`, job status, `logs`, and `compose` |
+| `GET /api/connections/manual/*` | `snippet`, `agent-commands`, `cli`, `endpoints`, and `env` reference data for the Manual tab |
+
+Every Connections route that writes a file, restarts the runtime, or drives Docker is refused unless the Console is bound to loopback. Client configs are merged, never replaced: MARM's entry is added beside other servers, the previous file is kept as `.marm-backup`, and the result is read back to confirm. A key value is never written to a client file, sent to the browser, or logged; clients that can reference `MARM_API_KEY` get a reference instead.
 
 `GET /api/memories` supports `q`, `session`, `project`, `platform`, `context_type`, `compaction_role`, `limit`, and `offset` query parameters. Results are capped at 200 records per request.
 
-Local generation is opt-in twice over. The operator switches it on (System → Controls, or
-`MARM_LLM_ENABLED=1`), and each request then asks for it. Finding a running model enables
-nothing.
+Local generation is opt-in twice over. The operator switches it on (System → Controls, or `MARM_LLM_ENABLED=1`), and each request then asks for it. Finding a running model enables nothing.
 
-`POST /api/code-context` accepts `answer`, which asks a **local** model to answer the task
-from the composed context and cite the symbols it used. It defaults to false, in the tool and
-in the Console, where **Answer it too** starts unchecked. The proxy allows 150s when
-answering and 60s otherwise, because generation runs after retrieval. `answer_status` is
-`unavailable` rather than an error when generation is off or no model is reachable — the
-ranked context is still the answer a reader needs.
+`POST /api/code-context` accepts `answer`, which asks a **local** model to answer the task from the composed context and cite the symbols it used. It defaults to false, in the tool and in the Console, where **Answer it too** starts unchecked. The Console receives the composed context before the answer stream begins, so the visible symbols and memory are the same context the model sees. The proxy allows 150s when answering and 60s otherwise, because generation runs after retrieval. `answer_status` is `unavailable` rather than an error when generation is off or no model is reachable; the ranked context is still the answer a reader needs.
 
-`POST /api/distill` selects sentences verbatim by default. It uses the local model to WRITE
-self-contained facts only when the request sets `use_llm=true` (the page's **Write facts
-with the local model**, unchecked by default) *and* local generation is enabled; otherwise,
-or when no model is reachable, it selects. The response says which path ran in `mode`.
-Every generated fact carries the verbatim span it came from, and a fact whose span is not
-actually in the transcript is dropped server-side.
+`POST /api/distill` selects sentences verbatim by default. It uses the local model to WRITE self-contained facts only when the request sets `use_llm=true` (the page's **Write facts with the local model**, unchecked by default) *and* local generation is enabled; otherwise, or when no model is reachable, it selects. The response says which path ran in `mode`. Every generated fact carries the verbatim span it came from, and a fact whose span is not actually in the transcript is dropped server-side.
 
-`POST /api/distill` returns a tool refusal as **400**, not 503 -- applying a proposal that is
-already applied is the caller's mistake and is fixable by changing the request, which is a
-different thing from the server being unreachable. Collapsing the two would have the page tell a
-reviewer to retry something that can never succeed.
+`POST /api/distill` returns a tool refusal as **400**, not 503. Applying a proposal that is already applied is the caller's mistake and is fixable by changing the request, which is a different thing from the server being unreachable. Collapsing the two would have the page tell a reviewer to retry something that can never succeed.
 
-Nothing on that route writes to memory except `action="apply"`. `propose` stages only, for the
-same reason `marm_compaction` stages: a similarity score is not evidence enough to modify memory
-unattended. A discarded proposal is never proposed again.
+Nothing on that route writes to memory except `action="apply"`. `propose` stages only, for the same reason `marm_compaction` stages: a similarity score is not evidence enough to modify memory unattended. A discarded proposal is never proposed again.
 
 `POST /api/code-context` returns the ranked call neighbourhood as `graph_edges` only when `include_graph` is set. It is off by default because an agent reads the composed `markdown` and stops, so the edge list would be several KB it never looks at.
 

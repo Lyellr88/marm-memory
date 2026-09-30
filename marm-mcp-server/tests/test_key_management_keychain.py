@@ -7,10 +7,19 @@ the developer's real Credential Manager, Keychain, or Secret Service.
 
 from __future__ import annotations
 
+import importlib
+
 import pytest
 from conftest import uninstall_keychain
 
 from marm_mcp_server.services import key_management
+
+
+@pytest.fixture(autouse=True)
+def _current_key_management(monkeypatch):
+    """Other tests replace this module in sys.modules, so the import above can go stale."""
+    module = importlib.import_module("marm_mcp_server.services.key_management")
+    monkeypatch.setitem(globals(), "key_management", module)
 
 
 def _managed_env_file(tmp_path, key: str | None = "plaintext-key"):

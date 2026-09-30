@@ -37,6 +37,8 @@ from typing import Any, Optional
 
 import structlog
 
+from ..utils.subprocess_flags import no_window_flags
+
 logger = structlog.get_logger(__name__)
 
 #: A probe costs a process spawn. Utilisation moves fast, totals never do, and
@@ -60,6 +62,7 @@ def _run(argv: list[str]) -> Optional[str]:
             text=True,
             timeout=_TIMEOUT,
             check=False,
+            creationflags=no_window_flags(),
         )
     except (OSError, subprocess.SubprocessError) as exc:
         logger.debug("hardware: probe failed", tool=argv[0], error=str(exc))

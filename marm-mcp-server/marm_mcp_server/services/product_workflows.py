@@ -110,12 +110,28 @@ def fast_start_http(args: argparse.Namespace) -> int:
         print("Console: skipped (--no-console)")
     print("Recovery: marm-memory doctor")
     if args.client:
+        from . import client_config
+
+        client_url = f"http://127.0.0.1:{runtime_port or SERVER_PORT}/mcp"
+        try:
+            result = client_config.configure(
+                args.client,
+                client_url,
+                bool(settings.MARM_API_KEY),
+                transport=args.transport,
+            )
+        except (
+            client_config.ClientNotFound,
+            client_config.ClientNotConfigurable,
+        ) as exc:
+            print(f"Client setup failed: {exc}", file=sys.stderr)
+            return 1
         print(
-            f"Client setup is not available for '{args.client}'. MARM is running; "
-            "configure the client manually, then run `marm-memory status`.",
-            file=sys.stderr,
+            f"Client: {result['config_path']} ({result['action']}, "
+            f"verified={result['verified']})"
         )
-        return 1
+        for note in result["notes"]:
+            print(f"Note: {note}")
     return 0
 
 

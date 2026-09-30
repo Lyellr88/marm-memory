@@ -20,17 +20,21 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from . import auth, mcp_client
 from .endpoints import (
+    agents,
     code_context,
     compaction,
     concepts,
     distill,
+    docker,
     logs,
+    manual,
     memory,
     notebook,
     overview,
     projects,
     sessions,
     settings,
+    setup,
 )
 from .terminal.router import router as terminal_router
 from .terminal.router import start_sweep as start_terminal_sweep
@@ -154,6 +158,10 @@ app.include_router(concepts.router)
 app.include_router(projects.router)
 app.include_router(code_context.router)
 app.include_router(distill.router)
+app.include_router(agents.router)
+app.include_router(setup.router)
+app.include_router(docker.router)
+app.include_router(manual.router)
 app.include_router(settings.router)
 app.include_router(terminal_router)
 

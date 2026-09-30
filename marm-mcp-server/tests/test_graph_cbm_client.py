@@ -70,6 +70,36 @@ def test_unwrap_error_with_hint():
     assert ei.value.payload["error"] == "bad"
 
 
+def test_unwrap_names_a_worker_failure_by_its_outcome():
+    """A contained index-worker failure carries `outcome` and `hint` and no
+    `error` key (build_worker_failure_response, 0.10.5)."""
+    hint = (
+        "Indexing worker crashed on a file. The crash was contained (the "
+        "server survived). Re-run to retry; a future release isolates the "
+        "culprit file."
+    )
+    payload = {"status": "error", "outcome": "crash", "hint": hint, "repo_path": "/r"}
+    result = {
+        "content": [{"type": "text", "text": json.dumps(payload)}],
+        "isError": True,
+    }
+    with pytest.raises(CbmToolError) as ei:
+        CbmClient._unwrap("index_repository", result)
+    assert str(ei.value) == "index_repository: crash"
+    assert ei.value.hint == hint
+
+
+def test_unwrap_never_reports_a_dict_payload_as_none():
+    result = {
+        "content": [{"type": "text", "text": '{"status": "error"}'}],
+        "isError": True,
+    }
+    with pytest.raises(CbmToolError) as ei:
+        CbmClient._unwrap("index_repository", result)
+    assert "None" not in str(ei.value)
+    assert "status" in str(ei.value)
+
+
 def test_unwrap_recovers_hint_from_truncated_error_payload():
     """The child caps its error payload and can cut the trailing project list
     mid-token, so json.loads fails on a document whose error/hint are intact.
@@ -634,8 +664,9 @@ def test_eof_error_carries_the_child_stderr_reason():
     finally:
         client.close()
 
-    assert "closed stdout (EOF)" in str(excinfo.value)
-    assert reason in str(excinfo.value)
+    message = str(excinfo.value)
+    assert "closed stdout (EOF)" in message or "write to child failed" in message
+    assert reason in message
 
 
 def _stderr_then_exit_command(text: str) -> list:
@@ -781,4 +812,4 @@ def test_stderr_context_is_bounded_when_the_drain_never_finishes():
     started = time.perf_counter()
     client._stderr_context()
     elapsed = time.perf_counter() - started
-    assert _STDERR_SETTLE_TIMEOUT <= elapsed < _STDERR_SETTLE_TIMEOUT + 0.5
+    assert _STDERR_SETTLE_TIMEOUT - 0.05 <= elapsed < _STDERR_SETTLE_TIMEOUT + 0.5

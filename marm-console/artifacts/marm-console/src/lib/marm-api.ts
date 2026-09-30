@@ -80,13 +80,43 @@ import type {
   SessionSummary,
   TraceInput,
   TraceResult,
+  AgentsResponse,
+  AgentScopeName,
+  AgentScopeState,
+  AgentConfigureBody,
+  AgentConfigureResult,
+  AgentRemoveBody,
+  AgentRemoveResult,
+  AgentTestBody,
+  AgentTestResult,
+  AgentSkillResult,
+  AgentTarget,
+  DockerOverview,
+  DockerConfig,
+  DockerJob,
+  DockerLogs,
+  DockerCompose,
+  DockerComposeWritten,
+  ConnectionsOverview,
+  SetupSettings,
+  SetupSettingValue,
+  RuntimeRestartJob,
+  ManualSnippetParams,
+  ManualSnippet,
+  ManualAgentCommandParams,
+  ManualAgentCommand,
+  ManualCliCommand,
+  ManualEndpoints,
+  ManualEnvItem,
 } from './marm-types';
 
 export class MarmApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  body: unknown;
+  constructor(status: number, message: string, body?: unknown) {
     super(message);
     this.name = 'MarmApiError';
+    this.body = body;
     this.status = status;
   }
 }
@@ -132,14 +162,16 @@ async function request<T>(
 
     if (!res.ok) {
       let message = res.statusText;
+      let body: unknown;
       try {
         const data = await res.json();
+        body = data;
         message = data?.error ?? data?.detail ?? message;
       } catch (err) {
         if (controller.signal.aborted) throw err;
         // Ignore a malformed error body and retain the response status text.
       }
-      throw new MarmApiError(res.status, message || `Request failed (${res.status})`);
+      throw new MarmApiError(res.status, message || `Request failed (${res.status})`, body);
     }
 
     if (res.status === 204) return undefined as T;
@@ -447,6 +479,45 @@ export function createMarmClient(config: MarmClientConfig) {
       request<void>(config, 'DELETE', `/projects/${encodeURIComponent(project)}`, {
         body: { name, confirm: true },
       }),
+
+    // Connections
+    getAgents: (target?: AgentTarget) => request<AgentsResponse>(config, 'GET', '/connections/agents', { query: { target } }),
+    getAgentScope: (id: string, scope: AgentScopeName, project?: string, target?: AgentTarget) =>
+      request<AgentScopeState>(config, 'GET', `/connections/agents/${encodeURIComponent(id)}/scope`, { query: { scope, project, target } }),
+    configureAgent: (id: string, body: AgentConfigureBody) =>
+      request<AgentConfigureResult>(config, 'POST', `/connections/agents/${encodeURIComponent(id)}/configure`, { body }),
+    removeAgent: (id: string, body: AgentRemoveBody) =>
+      request<AgentRemoveResult>(config, 'POST', `/connections/agents/${encodeURIComponent(id)}/remove`, { body }),
+    testAgent: (id: string, body: AgentTestBody) =>
+      request<AgentTestResult>(config, 'POST', `/connections/agents/${encodeURIComponent(id)}/test`, { body }),
+    installAgentSkill: (id: string) =>
+      request<AgentSkillResult>(config, 'POST', `/connections/agents/${encodeURIComponent(id)}/skill`, { body: {} }),
+    getConnectionsOverview: () => request<ConnectionsOverview>(config, 'GET', '/connections/overview'),
+    getSetupSettings: () => request<SetupSettings>(config, 'GET', '/connections/settings'),
+    updateSetupSettings: (values: Record<string, SetupSettingValue>) =>
+      request<SetupSettings>(config, 'PUT', '/connections/settings', { body: { values } }),
+    startRuntimeRestart: () =>
+      request<{ job_id: string }>(config, 'POST', '/connections/runtime/restart', { body: {} }),
+    getRuntimeRestartJob: (jobId: string) =>
+      request<RuntimeRestartJob>(config, 'GET', `/connections/runtime/restart/${encodeURIComponent(jobId)}`),
+
+    getDocker: () => request<DockerOverview>(config, 'GET', '/connections/docker'),
+    updateDockerConfig: (body: DockerConfig) => request<DockerOverview>(config, 'PUT', '/connections/docker/config', { body }),
+    dockerPull: () => request<{ job_id: string }>(config, 'POST', '/connections/docker/pull', { body: {} }),
+    dockerStart: () => request<{ job_id: string }>(config, 'POST', '/connections/docker/start', { body: {} }),
+    dockerRecreate: () => request<{ job_id: string }>(config, 'POST', '/connections/docker/recreate', { body: {} }),
+    dockerStop: () => request<DockerOverview>(config, 'POST', '/connections/docker/stop', { body: {} }),
+    dockerRestart: () => request<DockerOverview>(config, 'POST', '/connections/docker/restart', { body: {} }),
+    getDockerJob: (jobId: string) => request<DockerJob>(config, 'GET', `/connections/docker/jobs/${encodeURIComponent(jobId)}`),
+    getDockerLogs: (lines = 200) => request<DockerLogs>(config, 'GET', '/connections/docker/logs', { query: { lines } }),
+    getManualSnippet: (params: ManualSnippetParams) => request<ManualSnippet>(config, 'GET', '/connections/manual/snippet', { query: params }),
+    getManualAgentCommands: (params: ManualAgentCommandParams) =>
+      request<{ commands: ManualAgentCommand[] }>(config, 'GET', '/connections/manual/agent-commands', { query: params }),
+    getManualCli: () => request<{ commands: ManualCliCommand[] }>(config, 'GET', '/connections/manual/cli'),
+    getManualEndpoints: () => request<ManualEndpoints>(config, 'GET', '/connections/manual/endpoints'),
+    getManualEnv: () => request<{ items: ManualEnvItem[] }>(config, 'GET', '/connections/manual/env'),
+    getDockerCompose: () => request<DockerCompose>(config, 'GET', '/connections/docker/compose'),
+    writeDockerCompose: (overwrite: boolean) => request<DockerComposeWritten>(config, 'POST', '/connections/docker/compose', { body: { overwrite } }),
   };
 }
 

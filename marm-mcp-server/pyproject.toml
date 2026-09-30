@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "marm-mcp-server"
-version = "2.54.0"
+version = "2.55.0"
 description = "Local-first 3-in-1 AI memory layer & MCP server for Claude Code, Codex, Grok, Gemini, VS Code and Cursor. Fuses session history, codebase indexing & concept graphs in SQLite. Enables zero-cloud, privacy-first context & instant recall also works with multi-agent swarms."
 readme = "README.md"
 license = "Apache-2.0"
@@ -41,6 +41,7 @@ dependencies = [
     "structlog>=24.4.0",
     "httpx>=0.28.1",
     "packaging>=24.0,<27.0",
+    "pyyaml>=6.0,<7.0",
     "mcp>=1.26.0,<2.0.0",
     "codebase-memory-mcp==0.10.5",
     "spacy>=3.8.0,<3.9.0",
@@ -71,6 +72,7 @@ dev = [
     "pytest>=7.0.0",
     "pytest-asyncio>=0.21.0",
     "pytest-cov>=4.0.0",
+    "pytest-xdist>=3.5.0",
     # starlette 1.x drives TestClient with httpx2 and warns on every import when
     # only httpx 0.x is present. The runtime deliberately stays on httpx<1.0.0,
     # so this is a test-only dependency that keeps the suite's output clean

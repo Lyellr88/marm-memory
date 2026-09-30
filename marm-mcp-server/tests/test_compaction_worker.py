@@ -5,12 +5,23 @@ from datetime import datetime, timedelta, timezone
 
 import numpy as np
 import pytest
+from conftest import bind_live_modules
 
 from marm_mcp_server.core.compaction import (
     find_compaction_candidates,
     run_compaction_dry_run,
 )
 from marm_mcp_server.core.memory import MARMMemory
+
+
+@pytest.fixture(autouse=True)
+def _live_modules(monkeypatch):
+    bind_live_modules(
+        monkeypatch,
+        {},
+        settings="marm_mcp_server.config.settings",
+        memory="marm_mcp_server.core.memory",
+    )
 
 
 def _make_embedding(direction: int, dim: int = 384) -> bytes:
@@ -396,8 +407,11 @@ async def test_counter_threshold_default_mode_is_5(monkeypatch, tmp_path):
 
 @pytest.mark.asyncio
 async def test_counter_threshold_set_to_20_for_swarm_preset():
-    import marm_mcp_server.config.settings as s
-    from marm_mcp_server.cli import apply_runtime_preset
+    import importlib
+
+    cli = importlib.import_module("marm_mcp_server.cli")
+    s = cli.settings
+    apply_runtime_preset = cli.apply_runtime_preset
     from marm_mcp_server.core import memory as memory_module
 
     original = s.COMPACTION_TRIGGER_COUNT
@@ -412,8 +426,11 @@ async def test_counter_threshold_set_to_20_for_swarm_preset():
 
 @pytest.mark.asyncio
 async def test_counter_threshold_set_to_20_for_trusted_preset():
-    import marm_mcp_server.config.settings as s
-    from marm_mcp_server.cli import apply_runtime_preset
+    import importlib
+
+    cli = importlib.import_module("marm_mcp_server.cli")
+    s = cli.settings
+    apply_runtime_preset = cli.apply_runtime_preset
     from marm_mcp_server.core import memory as memory_module
 
     original = s.COMPACTION_TRIGGER_COUNT
@@ -428,8 +445,11 @@ async def test_counter_threshold_set_to_20_for_trusted_preset():
 
 @pytest.mark.asyncio
 async def test_counter_threshold_set_to_20_for_custom_preset():
-    import marm_mcp_server.config.settings as s
-    from marm_mcp_server.cli import apply_runtime_preset
+    import importlib
+
+    cli = importlib.import_module("marm_mcp_server.cli")
+    s = cli.settings
+    apply_runtime_preset = cli.apply_runtime_preset
     from marm_mcp_server.core import memory as memory_module
 
     original = s.COMPACTION_TRIGGER_COUNT

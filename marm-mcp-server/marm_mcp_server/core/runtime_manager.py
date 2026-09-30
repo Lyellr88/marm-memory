@@ -56,8 +56,16 @@ def _probe_host(host: str) -> str:
 
 def _headers() -> dict[str, str]:
     headers = {"Accept": "application/json"}
-    if MARM_API_KEY:
-        headers["Authorization"] = f"Bearer {MARM_API_KEY}"
+    key = MARM_API_KEY
+    if not key:
+        from ..config import user_settings
+
+        if user_settings.key_required(""):
+            from ..services.key_management import read_managed_key
+
+            key = read_managed_key()
+    if key:
+        headers["Authorization"] = f"Bearer {key}"
     return headers
 
 

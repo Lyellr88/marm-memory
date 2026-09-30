@@ -84,7 +84,7 @@ def _every_local_llm(current):
     found = {id(current): current}
     for mod in list(sys.modules.values()):
         ref = getattr(mod, "local_llm", None)
-        if isinstance(ref, types.ModuleType):
+        if isinstance(ref, types.ModuleType) and ref.__name__ == current.__name__:
             found[id(ref)] = ref
     return list(found.values())
 

@@ -1,4 +1,4 @@
-export type AgentType = 'claude' | 'codex' | 'antigravity';
+export type AgentType = 'claude' | 'codex' | 'grok' | 'hermes' | 'opencode' | 'cline' | 'cursor' | 'devin' | 'antigravity';
 
 export type Platform = 'windows' | 'macos' | 'linux';
 

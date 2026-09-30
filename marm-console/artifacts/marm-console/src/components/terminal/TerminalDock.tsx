@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { CircleAlert, Eraser, Keyboard, Minus, Plus, Settings2, Sparkles, Square, SquareTerminal, X } from 'lucide-react';
 import { cn } from '@/components/ui/core';
 import { useMarmConfig } from '@/hooks/use-marm-queries';
+import { useTerminalBridge } from '@/lib/terminal-bridge';
 import { CliCommandsDialog } from './CliCommandsDialog';
 import { KeyboardShortcutsDialog } from './KeyboardShortcutsDialog';
 import { OnboardingOverlay } from './OnboardingOverlay';
@@ -80,10 +81,13 @@ function nextSessionLabel(format: string, sessionNumber: number) {
 interface TerminalDockProps {
   open: boolean;
   onClose: () => void;
+  onOpen?: () => void;
 }
 
-export function TerminalDock({ open, onClose }: TerminalDockProps) {
+export function TerminalDock({ open, onClose, onOpen }: TerminalDockProps) {
   const { baseUrl } = useMarmConfig();
+  const { register, setUnavailable } = useTerminalBridge();
+  const pendingCommand = useRef<string | null>(null);
   const [status, setStatus] = useState<TerminalStatus | null>(null);
   const [statusError, setStatusError] = useState('');
   const [minimized, setMinimized] = useState(() => loadPersistedDockState()?.minimized ?? false);
@@ -264,6 +268,37 @@ export function TerminalDock({ open, onClose }: TerminalDockProps) {
     if (!activeSessionId) return false;
     return sessionRefs.current[activeSessionId]?.sendInput(command) ?? false;
   };
+
+  const sendToTerminal = (command: string): boolean => {
+    if (status && !status.available) return false;
+    if (open && !minimized && insertCommand(command)) return true;
+    pendingCommand.current = command;
+    setMinimized(false);
+    onOpen?.();
+    return true;
+  };
+  const sendToTerminalRef = useRef(sendToTerminal);
+  sendToTerminalRef.current = sendToTerminal;
+
+  useEffect(() => {
+    register((command) => sendToTerminalRef.current(command));
+    return () => register(null);
+  }, [register]);
+
+  useEffect(() => {
+    setUnavailable(Boolean(statusError) || (status !== null && !status.available));
+  }, [status, statusError, setUnavailable]);
+
+  const activeOpen = sessions.find((session) => session.id === activeSessionId)?.connectionState === 'open';
+  useEffect(() => {
+    if (!pendingCommand.current || !open || minimized) return;
+    if (statusError || (status && !status.available)) {
+      pendingCommand.current = null;
+      return;
+    }
+    if (activeOpen && insertCommand(pendingCommand.current)) pendingCommand.current = null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, minimized, activeOpen, activeSessionId, status, statusError]);
 
   const showNotice = statusError || !status || !status.available;
   const activeConnectionState = sessions.find((session) => session.id === activeSessionId)?.connectionState ?? 'idle';

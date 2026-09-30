@@ -5,11 +5,28 @@ import uuid
 import anyio
 import numpy as np
 import pytest
+from conftest import bind_live_attrs, bind_live_modules
 
 from marm_mcp_server.config.settings import DEFAULT_SEMANTIC_DIM
 from marm_mcp_server.core import memory as memory_module
 from marm_mcp_server.core.memory import MEMORY_CHUNK_THRESHOLD_WORDS, MARMMemory
 from marm_mcp_server.core.memory_utils import _write_chunks, drain_chunk_writes
+
+
+@pytest.fixture(autouse=True)
+def _live_modules(monkeypatch):
+    bind_live_modules(
+        monkeypatch,
+        globals(),
+        memory_module="marm_mcp_server.core.memory",
+    )
+    bind_live_attrs(
+        monkeypatch,
+        globals(),
+        MARMMemory="marm_mcp_server.core.memory.MARMMemory",
+        _write_chunks="marm_mcp_server.core.memory_utils._write_chunks",
+        drain_chunk_writes="marm_mcp_server.core.memory_utils.drain_chunk_writes",
+    )
 
 
 def _long_content() -> str:

@@ -2341,3 +2341,43 @@ async def test_an_ordinary_failure_still_advances_the_baseline_for_backoff(
     assert state.git_head is not None, (
         "an attempted-but-failed index must still record what was observed"
     )
+
+
+def test_a_failed_index_logs_why_it_failed(shared_db, tmp_path, monkeypatch):
+    """The engine explains a contained worker failure in `hint`; a log that
+    keeps only `message` reads `index_repository: crash` and nothing else."""
+    import structlog
+
+    from marm_mcp_server.core import graph_index_worker as module
+
+    plain = tmp_path / "plain"
+    plain.mkdir()
+    hint = "Indexing worker crashed on a file. Re-run to retry."
+
+    async def failing(purpose, fn, *args, **kwargs):
+        return {
+            "status": "error",
+            "message": "index_repository: crash",
+            "hint": hint,
+            "payload": {"status": "error", "outcome": "crash", "hint": hint},
+        }
+
+    monkeypatch.setattr(module, "run_exclusive", failing)
+    monkeypatch.setattr(
+        module.graph_supervisor, "get_client", lambda: object(), raising=False
+    )
+    monkeypatch.setattr(
+        module.graph_supervisor, "snapshot", lambda: {"available": True}
+    )
+
+    worker = module.GraphIndexWorker()
+    state = module._Watched(str(plain))
+    worker._watched[state.root] = state
+    worker._projects_loaded_at = time.monotonic()
+
+    with structlog.testing.capture_logs() as logs:
+        asyncio.run(worker._tick())
+
+    failed = [e for e in logs if e.get("event") == "graph_auto_index.index_failed"]
+    assert len(failed) == 1
+    assert failed[0]["hint"] == hint

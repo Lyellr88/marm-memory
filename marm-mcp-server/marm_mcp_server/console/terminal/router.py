@@ -13,6 +13,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel
 
+from ...utils.subprocess_flags import no_window_flags
 from .. import auth
 from .pty_session import (
     DEFAULT_COLS,
@@ -186,6 +187,7 @@ def check_dependency(req: DependencyCheckRequest) -> dict:
             text=True,
             timeout=_CHECK_TIMEOUT_SECONDS,
             cwd=default_cwd(),
+            creationflags=no_window_flags(),
         )
     except subprocess.TimeoutExpired:
         return {

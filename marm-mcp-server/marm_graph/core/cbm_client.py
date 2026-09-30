@@ -295,7 +295,9 @@ class CbmClient:
             stdin.write(line)
             stdin.flush()
         except (BrokenPipeError, OSError) as e:
-            raise CbmError(f"write to child failed: {e}") from e
+            raise CbmError(
+                f"write to child failed: {e}" + self._stderr_context()
+            ) from e
 
     def _read_response(self, expect_id: int, timeout: float) -> dict:
         """Read lines until the response with `expect_id` arrives.
@@ -414,7 +416,12 @@ class CbmClient:
 
         if result.get("isError"):
             if isinstance(payload, dict):
-                message = payload.get("error")
+                # A contained worker failure names itself by `outcome`.
+                message = (
+                    payload.get("error")
+                    or payload.get("outcome")
+                    or json.dumps(payload, sort_keys=True)
+                )
             else:
                 message = _field_from_truncated(str(payload), "error") or str(payload)
             raise CbmToolError(f"{tool}: {message}", payload=payload)
