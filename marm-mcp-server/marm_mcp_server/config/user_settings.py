@@ -517,6 +517,7 @@ def describe() -> dict[str, Any]:
         )
         env_value = _decode(setting, original) if original is not None else None
         help_text = setting.help
+        value: bool | int | str
         if (
             setting.encoding == "key"
             and os.environ.get(_KEY_ENV)

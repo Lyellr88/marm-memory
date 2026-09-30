@@ -67,7 +67,8 @@ def _global_dir(agent: str) -> Path:
     if agent in {"hermes", "cline", "opencode", "devin"}:
         from . import client_config
 
-        return getattr(client_config, f"{agent}_home")()
+        home: Path = getattr(client_config, f"{agent}_home")()
+        return home
     return Path.home() / AGENTS[agent]
 
 

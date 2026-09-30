@@ -29,7 +29,7 @@ except ModuleNotFoundError:
     tomllib = None  # type: ignore[assignment]
 
 try:
-    import yaml
+    import yaml  # type: ignore[import-untyped,unused-ignore]
 except ModuleNotFoundError:
     yaml = None  # type: ignore[assignment]
 
@@ -1079,7 +1079,13 @@ def _entry_block(entry: dict, indent: str, unit: str, newline: str) -> str:
     return f'"{SERVER_NAME}": ' + (newline + indent).join(lines)
 
 
-def _add_member(text: str, obj_start: int, members: list, close: int, render) -> str:
+def _add_member(
+    text: str,
+    obj_start: int,
+    members: list,
+    close: int,
+    render: Callable[[str, str, str], str],
+) -> str:
     newline = "\r\n" if "\r\n" in text else "\n"
     parent, member, unit = _indents(text, obj_start, members)
     body = render(member, unit, newline)
