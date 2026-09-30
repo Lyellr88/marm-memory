@@ -20,6 +20,7 @@ reviews:
     - "!**/.pytest_cache/**"
     - "!**/scripts/out/**"
     - "!**/*.egg-info/**"
+    - "!**/*.md"
 
   pre_merge_checks:
     docstrings:

@@ -102,7 +102,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r marm-mcp-server/requirements.txt
           pip install -e './marm-mcp-server' --no-deps
-          pip install pytest pytest-asyncio pytest-cov jsonschema requests mypy==2.1.0 types-psutil==7.2.2.20260518
+          pip install pytest pytest-asyncio pytest-cov pytest-xdist jsonschema requests mypy==2.1.0 types-psutil==7.2.2.20260518
 
       - name: Validate server.json
         if: steps.scope.outputs.run == 'true'
@@ -124,4 +124,4 @@ jobs:
       - name: Run tests
         if: steps.scope.outputs.run == 'true' && github.event_name == 'pull_request'
         working-directory: marm-mcp-server
-        run: python -m pytest tests/ -q -m "not docker and not smoke_lifecycle"
+        run: python -m pytest tests/ -q -n 4 --dist loadfile -m "not docker and not smoke_lifecycle"
