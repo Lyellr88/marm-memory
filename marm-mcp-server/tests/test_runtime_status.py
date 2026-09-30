@@ -117,6 +117,44 @@ def test_inspect_runtime_still_probes_another_process(monkeypatch):
     assert result["state"] == "stale"
 
 
+def _live(path):
+    import importlib
+
+    return importlib.import_module(path)
+
+
+def _save_require_key(value: bool) -> None:
+    import json
+    import os
+    from pathlib import Path
+
+    Path(os.environ["MARM_SETTINGS_PATH"]).write_text(
+        json.dumps({"auth": {"require_key": value}}), encoding="utf-8"
+    )
+
+
+def test_probe_sends_the_managed_key_once_saved_settings_require_one(monkeypatch):
+    """A Console that started keyless must still authenticate to a runtime it just restarted with a key."""
+    runtime_manager = _live("marm_mcp_server.core.runtime_manager")
+    key_management = _live("marm_mcp_server.services.key_management")
+    monkeypatch.setattr(runtime_manager, "MARM_API_KEY", "")
+    monkeypatch.setattr(key_management, "read_managed_key", lambda: "managed-key")
+
+    _save_require_key(True)
+    assert runtime_manager._headers()["Authorization"] == "Bearer managed-key"
+
+    _save_require_key(False)
+    assert "Authorization" not in runtime_manager._headers()
+
+
+def test_probe_keeps_the_key_the_process_already_has(monkeypatch):
+    runtime_manager = _live("marm_mcp_server.core.runtime_manager")
+    monkeypatch.setattr(runtime_manager, "MARM_API_KEY", "explicit-key")
+
+    _save_require_key(False)
+    assert runtime_manager._headers()["Authorization"] == "Bearer explicit-key"
+
+
 def test_inspect_runtime_does_not_trust_a_reused_pid(monkeypatch):
     """A stale runtime.json whose pid the OS reused must not look like us.
 
