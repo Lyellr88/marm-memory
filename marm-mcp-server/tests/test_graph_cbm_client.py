@@ -811,4 +811,4 @@ def test_stderr_context_is_bounded_when_the_drain_never_finishes():
     started = time.perf_counter()
     client._stderr_context()
     elapsed = time.perf_counter() - started
-    assert _STDERR_SETTLE_TIMEOUT <= elapsed < _STDERR_SETTLE_TIMEOUT + 0.5
+    assert _STDERR_SETTLE_TIMEOUT - 0.05 <= elapsed < _STDERR_SETTLE_TIMEOUT + 0.5

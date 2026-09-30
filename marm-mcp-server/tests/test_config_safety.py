@@ -21,6 +21,7 @@ def _reload_settings_with_env(env: dict[str, str]):
         sys.modules.pop(module_name, None)
         if original is not None:
             sys.modules[module_name] = original
+            sys.modules["marm_mcp_server.config"].settings = original
 
 
 def test_rate_limit_rpm_zero_disables_limiting():

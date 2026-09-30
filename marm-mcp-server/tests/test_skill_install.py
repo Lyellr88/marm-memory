@@ -170,7 +170,6 @@ def test_opencode_skill_installs_under_its_config_home_and_per_project(
     (project / ".opencode").mkdir(parents=True)
     home.mkdir()
     monkeypatch.setattr(skill_install.Path, "home", classmethod(lambda cls: home))
-    monkeypatch.setattr("marm_mcp_server.services.client_config._home", lambda: home)
     monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
     monkeypatch.chdir(project)
 

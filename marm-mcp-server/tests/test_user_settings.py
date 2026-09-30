@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 import json
 import os
 import subprocess
@@ -11,7 +12,12 @@ from pathlib import Path
 import pytest
 
 from marm_mcp_server.config import user_settings
-from marm_mcp_server.services import key_management
+
+
+def _key_management():
+    """Resolve at call time: other tests replace this module, so a bound import goes stale."""
+    return importlib.import_module("marm_mcp_server.services.key_management")
+
 
 ALL_ENV = [s.env for s in user_settings.SETTINGS] + [
     user_settings.SHADOW_ENV,
@@ -207,7 +213,7 @@ def test_absent_env_is_recorded_as_none_in_shadow(home) -> None:
 
 
 def test_require_key_loads_managed_key_when_env_lacks_one(home, monkeypatch) -> None:
-    monkeypatch.setattr(key_management, "read_managed_key", lambda: "managed-secret")
+    monkeypatch.setattr(_key_management(), "read_managed_key", lambda: "managed-secret")
     write_settings(home, {"auth": {"require_key": True}})
 
     user_settings.apply_overlay()
@@ -221,7 +227,7 @@ def test_require_key_keeps_an_explicit_env_key(home, monkeypatch) -> None:
     def boom() -> str:
         raise AssertionError("managed key must not be read when env has one")
 
-    monkeypatch.setattr(key_management, "read_managed_key", boom)
+    monkeypatch.setattr(_key_management(), "read_managed_key", boom)
     write_settings(home, {"auth": {"require_key": True}})
 
     user_settings.apply_overlay()
@@ -230,7 +236,7 @@ def test_require_key_keeps_an_explicit_env_key(home, monkeypatch) -> None:
 
 
 def test_require_key_without_a_managed_key_creates_nothing(home, monkeypatch) -> None:
-    monkeypatch.setattr(key_management, "read_managed_key", lambda: "")
+    monkeypatch.setattr(_key_management(), "read_managed_key", lambda: "")
     write_settings(home, {"auth": {"require_key": True}})
 
     user_settings.apply_overlay()
@@ -240,7 +246,7 @@ def test_require_key_without_a_managed_key_creates_nothing(home, monkeypatch) ->
 
 
 def test_require_key_false_leaves_the_env_alone(home, monkeypatch) -> None:
-    monkeypatch.setattr(key_management, "read_managed_key", lambda: "managed-secret")
+    monkeypatch.setattr(_key_management(), "read_managed_key", lambda: "managed-secret")
     write_settings(home, {"auth": {"require_key": False}})
     user_settings.apply_overlay()
     assert "MARM_API_KEY" not in os.environ
@@ -447,7 +453,7 @@ def test_setting_removed_from_file_is_undone_on_the_next_overlay(
 
 
 def test_turning_require_key_off_removes_the_overlaid_key(home, monkeypatch) -> None:
-    monkeypatch.setattr(key_management, "read_managed_key", lambda: "managed-secret")
+    monkeypatch.setattr(_key_management(), "read_managed_key", lambda: "managed-secret")
     write_settings(home, {"auth": {"require_key": True}})
     user_settings.apply_overlay()
     assert os.environ["MARM_API_KEY"] == "managed-secret"

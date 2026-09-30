@@ -1,7 +1,6 @@
 from fastapi.testclient import TestClient
 
 from marm_mcp_server.console import concept_graph_overview
-from marm_mcp_server.console.app import app
 from marm_mcp_server.core.concept_db import ConceptDB
 
 
@@ -29,6 +28,7 @@ def test_full_atlas_is_only_returned_when_explicitly_requested(tmp_path):
 
 
 def test_graph_endpoint_forwards_the_explicit_full_request(monkeypatch):
+    from marm_mcp_server.console.app import app
     from marm_mcp_server.console.endpoints import concepts
 
     seen: dict[str, bool | None] = {}
