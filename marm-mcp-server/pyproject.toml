@@ -72,6 +72,7 @@ dev = [
     "pytest>=7.0.0",
     "pytest-asyncio>=0.21.0",
     "pytest-cov>=4.0.0",
+    "pytest-xdist>=3.5.0",
     # starlette 1.x drives TestClient with httpx2 and warns on every import when
     # only httpx 0.x is present. The runtime deliberately stays on httpx<1.0.0,
     # so this is a test-only dependency that keeps the suite's output clean

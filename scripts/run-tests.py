@@ -24,6 +24,7 @@ CONSOLE_APP_ROOT = CONSOLE_ROOT / "artifacts" / "marm-console"
 BASE_TEMP = Path(r"C:\tmp\marm-pytest") if os.name == "nt" else Path("/tmp/marm-pytest")
 FAST_TEMP_ROOT = BASE_TEMP.parent / "marm-pytest-fast"
 DOCKER_IMAGE = "lyellr88/marm-mcp-server:latest"
+PYTEST_WORKERS = 4
 
 
 def pytest_env() -> dict[str, str]:
@@ -83,6 +84,8 @@ def pytest_base_command(args: argparse.Namespace) -> list[str]:
         command.extend(["--basetemp", str(BASE_TEMP)])
     if args.last_failed:
         command.append("--lf")
+    if args.durations is not None:
+        command.extend([f"--durations={args.durations}", "--durations-min=0.5"])
     marker_filters = []
     include_docker = args.docker or args.slow
     if not include_docker:
@@ -99,6 +102,8 @@ def run_pytest_all(args: argparse.Namespace) -> bool:
     if args.docker or args.slow:
         environment["MARM_SMOKE_DOCKER"] = "1"
     command = pytest_base_command(args)
+    if args.workers > 1:
+        command.extend(["-n", str(args.workers), "--dist", "loadfile"])
     command.append("tests")
     return run_step("Pytest suite", command, SERVER_ROOT, env=environment)
 
@@ -168,6 +173,22 @@ def parse_args() -> argparse.Namespace:
         "--last-failed",
         action="store_true",
         help="Pass --lf to pytest.",
+    )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=PYTEST_WORKERS,
+        metavar="N",
+        help=f"Server suite pytest-xdist workers (default {PYTEST_WORKERS}). 1 runs serially.",
+    )
+    parser.add_argument(
+        "--durations",
+        nargs="?",
+        type=int,
+        const=40,
+        default=None,
+        metavar="N",
+        help="List the N slowest tests (default 40), skipping any under 0.5s.",
     )
     parser.add_argument(
         "--show-warnings",
