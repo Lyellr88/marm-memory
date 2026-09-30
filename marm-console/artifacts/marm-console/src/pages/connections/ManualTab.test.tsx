@@ -239,7 +239,7 @@ describe('ManualTab', () => {
     expect(command()).toBe('marm-memory start --profile swarm --port 9000');
   });
 
-  it('CLI builder puts the positional first, quotes values with spaces and edits repeatable lists', async () => {
+  it('CLI builder puts the positional first, quotes values with spaces for a Windows host, and edits repeatable lists', async () => {
     const user = userEvent.setup();
     render(<ManualTab />);
     await openSection(user, 'MARM CLI');
@@ -254,10 +254,21 @@ describe('ManualTab', () => {
     await user.click(screen.getByRole('button', { name: 'Add --tag' }));
     await user.type(screen.getByLabelText('--tag 1'), 'alpha');
     await user.type(screen.getByLabelText('--tag 2'), 'two words');
-    expect(command()).toBe('marm-memory recall "hello world" --tag alpha --tag "two words"');
+    expect(command()).toBe("marm-memory recall 'hello world' --tag alpha --tag 'two words'");
 
     await user.click(screen.getByRole('button', { name: 'Remove --tag 1' }));
-    expect(command()).toBe('marm-memory recall "hello world" --tag "two words"');
+    expect(command()).toBe("marm-memory recall 'hello world' --tag 'two words'");
+  });
+
+  it('CLI builder double-quotes values with spaces for a Linux host', async () => {
+    state.overview = overview({ os: 'Linux' });
+    const user = userEvent.setup();
+    render(<ManualTab />);
+    await openSection(user, 'MARM CLI');
+
+    await user.selectOptions(screen.getByLabelText('Command'), 'recall');
+    await user.type(screen.getByLabelText('query'), 'hello world');
+    expect(document.querySelector('pre')?.textContent).toBe('marm-memory recall "hello world"');
   });
 
   it('groups commands by top-level word and lists cli_only commands as copy-only', async () => {
@@ -418,6 +429,14 @@ describe('quoteArg', () => {
   it('keeps a backslash before a double quote as one literal backslash and one literal quote', () => {
     expect(quoteArg('a\\"b c')).toBe('"a\\\\\\"b c"');
     expect(quoteArg('x\\\\"y z')).toBe('"x\\\\\\\\\\"y z"');
+  });
+
+  it('quotes for PowerShell with single quotes and leaves backslashes and expansion characters literal', () => {
+    expect(quoteArg('swarm', 'powershell')).toBe('swarm');
+    expect(quoteArg('C:\\Program Files\\x', 'powershell')).toBe("'C:\\Program Files\\x'");
+    expect(quoteArg('\\\\server\\Share Name\\repo', 'powershell')).toBe("'\\\\server\\Share Name\\repo'");
+    expect(quoteArg('$env:HOME and `tick`', 'powershell')).toBe("'$env:HOME and `tick`'");
+    expect(quoteArg("it's here", 'powershell')).toBe("'it''s here'");
   });
 
   it('single-quotes a value that would otherwise expand', () => {

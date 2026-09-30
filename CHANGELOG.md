@@ -5,9 +5,13 @@
 
 ### Changed
 
-- CodeQL runs from a repository workflow, `.github/workflows/codeql.yml`, in place of GitHub's default setup. It scans pull requests into any branch, pushes to `MARM-main`, and a weekly schedule, covering Python, JavaScript and TypeScript, and the workflow files with the default query suite. The generated Console bundle and `node_modules` are excluded, and tests are scanned.
+- CodeQL runs from a repository workflow, `.github/workflows/codeql.yml`, in place of GitHub's default setup. GitHub only accepts its results once Default setup is switched off in Settings, Code security. It scans pull requests into any branch, pushes to `MARM-main`, and a weekly schedule, covering Python, JavaScript and TypeScript, and the workflow files with the default query suite. The generated Console bundle and `node_modules` are excluded, and tests are scanned.
 - Ruff, dependency review, and the sensitive-path check run on pull requests into any branch. They previously ran only for pull requests into `MARM-main`.
 - CodeRabbit reviews pull requests into any base branch automatically.
+
+### Fixed
+
+- Manual CLI command quoting follows the host shell. On a Windows host, where the Console's terminal is PowerShell, values that need quoting use single quotes and backslashes stay literal, so paths and UNC shares reach `marm-memory` unchanged. On Linux and macOS values are double-quoted with every backslash escaped.
 
 </details>
 
