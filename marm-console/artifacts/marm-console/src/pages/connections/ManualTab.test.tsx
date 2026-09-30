@@ -410,9 +410,9 @@ describe('quoteArg', () => {
     expect(quoteArg('say "hi"')).toBe('"say \\"hi\\""');
   });
 
-  it('doubles a trailing backslash so it cannot escape the closing quote', () => {
-    expect(quoteArg('C:\\Program Files\\')).toBe('"C:\\Program Files\\\\"');
-    expect(quoteArg('C:\\Program Files\\x')).toBe('"C:\\Program Files\\x"');
+  it('escapes backslashes in double-quoted values', () => {
+    expect(quoteArg('C:\\Program Files\\')).toBe('"C:\\\\Program Files\\\\"');
+    expect(quoteArg('C:\\Program Files\\x')).toBe('"C:\\\\Program Files\\\\x"');
   });
 
   it('keeps a backslash before a double quote as one literal backslash and one literal quote', () => {

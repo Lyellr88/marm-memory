@@ -13,6 +13,11 @@ reviews:
   suggested_labels: false
   suggested_reviewers: false
 
+  auto_review:
+    enabled: true
+    base_branches:
+      - ".*"
+
   path_filters:
     - "!**/dist/**"
     - "!**/build/**"

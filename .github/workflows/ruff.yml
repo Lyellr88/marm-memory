@@ -4,7 +4,6 @@ on:
   push:
     branches: [ MARM-main ]
   pull_request:
-    branches: [ MARM-main ]
 
 permissions:
   contents: read

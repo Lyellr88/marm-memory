@@ -15,7 +15,8 @@ type Values = Record<string, ArgValue>;
 export function quoteArg(value: string) {
   if (/^[\w@%+=:,./\\-]+$/.test(value)) return value;
   if (/[$`]/.test(value) && !value.includes("'")) return `'${value}'`;
-  return `"${value.replace(/\\(?=["$`\\]|$)/g, '\\\\').replace(/["$`]/g, '\\$&')}"`;
+  const escaped = value.replace(/\\/g, '\\\\').replace(/["$`]/g, '\\$&');
+  return `"${escaped}"`;
 }
 
 function valuesOf(arg: ManualCliArg, values: Values): string[] {
