@@ -213,6 +213,7 @@ def test_adding_a_too_broad_root_is_refused_with_a_reason(wide, tmp_path, monkey
 
     (tmp_path / "home").mkdir()  # importing the endpoints creates ~/.marm
     monkeypatch.setenv("HOME", str(tmp_path / "home"))  # what `~` expands to
+    monkeypatch.setenv("USERPROFILE", str(tmp_path / "home"))  # same, on Windows
 
     from fastapi import HTTPException
 
