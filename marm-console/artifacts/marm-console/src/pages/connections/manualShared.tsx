@@ -40,18 +40,20 @@ export function CodeBlock({ text, label }: { text: string; label: string }) {
 export function SendToTerminal({ command }: { command: string }) {
   const { available, sendToTerminal } = useTerminalBridge();
   const [sent, setSent] = useState<'idle' | 'sent' | 'failed'>('idle');
-  if (!available || sent === 'failed') {
-    return <span className="text-xs text-amber-300">Terminal unavailable. Copy the command instead.</span>;
-  }
+  const unavailable = <span className="text-xs text-amber-300">Terminal unavailable. Copy the command instead.</span>;
+  if (!available) return unavailable;
   return (
-    <Button
-      type="button"
-      variant="outline"
-      size="sm"
-      onClick={() => setSent(sendToTerminal(command) ? 'sent' : 'failed')}
-    >
-      <Send className="mr-1.5 h-3.5 w-3.5" />
-      {sent === 'sent' ? 'Sent to terminal' : 'Send to terminal'}
-    </Button>
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={() => setSent(sendToTerminal(command) ? 'sent' : 'failed')}
+      >
+        <Send className="mr-1.5 h-3.5 w-3.5" />
+        {sent === 'sent' ? 'Sent to terminal' : 'Send to terminal'}
+      </Button>
+      {sent === 'failed' && unavailable}
+    </>
   );
 }

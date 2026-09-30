@@ -463,6 +463,20 @@ def commands(transport, scope, auth=False, url=URL, os_name="linux"):
     }
 
 
+def test_vscode_add_mcp_keeps_a_single_quote_in_the_payload_on_posix() -> None:
+    url = "http://127.0.0.1:8001/it's"
+
+    command = commands("http", "user", url=url, os_name="linux")["vscode"]["command"]
+
+    assert shlex.split(command) == [
+        "code",
+        "--add-mcp",
+        json.dumps(
+            {"name": "marm-memory", "type": "http", "url": url}, separators=(",", ":")
+        ),
+    ]
+
+
 def test_agent_commands_http_exact_strings() -> None:
     plain = commands("http", "user")
     assert plain["claude"]["command"] == (

@@ -605,6 +605,18 @@ def test_fast_start_transport_flag_defaults_to_http_and_rejects_others():
         parser.parse_args(["fast-start-http", "--transport", "docker-stdio"])
 
 
+def test_fast_start_client_flag_accepts_an_alias_and_rejects_an_unknown_client():
+    active_cli, _runtime = _active_modules()
+    parser = active_cli._product_parser()
+
+    assert (
+        parser.parse_args(["fast-start-http", "--client", "windsurf"]).client
+        == "windsurf"
+    )
+    with pytest.raises(SystemExit):
+        parser.parse_args(["fast-start-http", "--client", "not-a-client"])
+
+
 def _docker_stdio_command(monkeypatch, tmp_path, *arguments):
     from marm_mcp_server.services import client_config, docker_cli
 

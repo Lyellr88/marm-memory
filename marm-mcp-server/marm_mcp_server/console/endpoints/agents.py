@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ipaddress
 import os
+import shutil
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Literal, TypeVar
@@ -14,7 +15,13 @@ from pydantic import BaseModel
 
 from ...config import settings as marm_settings
 from ...config import user_settings
-from ...services import client_config, key_management, mcp_probe, skill_install
+from ...services import (
+    client_config,
+    docker_commands,
+    key_management,
+    mcp_probe,
+    skill_install,
+)
 from ..terminal.router import _loopback_only
 from .docker import docker_url
 from .setup import _require_loopback, _runtime_url_and_auth
@@ -194,15 +201,36 @@ def _probe_http(entry: dict, docker: bool = False) -> dict:
     return result
 
 
+def _trusted_stdio(entry: dict, transport: str) -> bool:
+    command = entry.get("command")
+    args = [str(a) for a in entry.get("args") or []]
+    if transport == "stdio":
+        return not args and command in {
+            client_config.STDIO_COMMAND,
+            shutil.which(client_config.STDIO_COMMAND),
+        }
+    if command not in {"docker", shutil.which("docker")}:
+        return False
+    tag = args[-1].rpartition(":")[2] if args else ""
+    try:
+        data_dir = Path(user_settings.load_docker()["data_dir"])
+        expected = docker_commands.stdio_command(tag=tag, data_dir=data_dir)
+    except (docker_commands.DockerCommandError, KeyError, OSError):
+        return False
+    return bool(args == expected["arguments"][1:])
+
+
 def _probe_stdio(entry: dict, transport: str) -> dict:
     command = entry.get("command")
     args = entry.get("args") or []
     if not isinstance(command, str) or not isinstance(args, list):
         return _unsupported(transport, "The entry has no command to run.")
-    env = dict(os.environ)
-    if isinstance(entry.get("env"), dict):
-        env.update({str(k): str(v) for k, v in entry["env"].items()})
-    return mcp_probe.probe_stdio([command, *[str(a) for a in args]], env)
+    if not _trusted_stdio(entry, transport):
+        return _unsupported(
+            transport,
+            "This entry is not the command MARM writes, so Test will not run it. Click Connect to rewrite it.",
+        )
+    return mcp_probe.probe_stdio([command, *[str(a) for a in args]], dict(os.environ))
 
 
 def _unsupported(transport: str, detail: str) -> dict:

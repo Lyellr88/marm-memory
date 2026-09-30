@@ -25,6 +25,8 @@ DEFAULT_IMAGE_REPOSITORY = "lyellr88/marm-mcp-server"
 DEFAULT_CONTAINER_NAME = "marm-mcp-server"
 CONTAINER_DATA_DIR = "/home/marm/.marm"
 MAX_LOG_LINES = 1000
+DOCKER_TIMEOUT_SECONDS = 60
+DOCKER_PULL_TIMEOUT_SECONDS = 1800
 
 
 class DockerCommandError(RuntimeError):
@@ -57,7 +59,7 @@ def managed_env_file() -> Path:
 def image_reference(tag: str) -> str:
     if not tag or any(char.isspace() for char in tag):
         raise DockerCommandError("Docker image tag must be a non-empty single token.")
-    repository = os.environ.get("MARM_DOCKER_REPOSITORY", DEFAULT_IMAGE_REPOSITORY)
+    repository = os.environ.get("MARM_DOCKER_REPOSITORY") or DEFAULT_IMAGE_REPOSITORY
     return f"{repository}:{tag}"
 
 
@@ -207,16 +209,25 @@ def shell_command(arguments: list[str], *, windows: bool | None = None) -> str:
 
 
 def _run(
-    arguments: list[str], *, check: bool = True, timeout: float | None = None
+    arguments: list[str],
+    *,
+    check: bool = True,
+    timeout: float | None = DOCKER_TIMEOUT_SECONDS,
+    merge_stderr: bool = False,
 ) -> subprocess.CompletedProcess[str]:
+    streams: dict[str, Any] = (
+        {"stdout": subprocess.PIPE, "stderr": subprocess.STDOUT}
+        if merge_stderr
+        else {"capture_output": True}
+    )
     try:
         result = subprocess.run(
             arguments,
-            capture_output=True,
             text=True,
             check=False,
             timeout=timeout,
             creationflags=no_window_flags(),
+            **streams,
         )
     except subprocess.TimeoutExpired as exc:
         raise DockerCommandError("Docker did not answer in time.") from exc
@@ -249,10 +260,14 @@ def _is_marm_container(payload: dict[str, Any]) -> bool:
     labels = config.get("Labels") or {}
     repositories = (
         DEFAULT_IMAGE_REPOSITORY,
-        os.environ.get("MARM_DOCKER_REPOSITORY", DEFAULT_IMAGE_REPOSITORY),
+        os.environ.get("MARM_DOCKER_REPOSITORY") or DEFAULT_IMAGE_REPOSITORY,
     )
     return (
-        any(image.startswith(repository) for repository in repositories)
+        any(
+            image == repository
+            or image.startswith((f"{repository}:", f"{repository}@"))
+            for repository in repositories
+        )
         or labels.get("mcp.name") == "marm-mcp-server"
     )
 
@@ -335,7 +350,7 @@ def docker_status(name: str = DEFAULT_CONTAINER_NAME) -> dict[str, Any]:
 
 def pull_image(tag: str = "latest") -> str:
     image = image_reference(tag)
-    _run(["docker", "pull", image])
+    _run(["docker", "pull", image], timeout=DOCKER_PULL_TIMEOUT_SECONDS)
     return image
 
 
@@ -366,7 +381,7 @@ def run_container(options: DockerRunOptions) -> dict[str, Any]:
         )
     plan = build_run_plan(options, create_data_dir=True)
     ensure_managed_env_file(options.env_file)
-    _run(plan["arguments"])
+    _run(plan["arguments"], timeout=DOCKER_PULL_TIMEOUT_SECONDS)
     _wait_for_health(options.port)
     return plan
 
@@ -621,5 +636,7 @@ def logs_tail(name: str, lines: int = 200) -> list[str]:
     if not _marm_container_present(name):
         return []
     count = max(1, min(int(lines), MAX_LOG_LINES))
-    result = _run(["docker", "logs", "--tail", str(count), name], timeout=15)
-    return [*result.stdout.splitlines(), *result.stderr.splitlines()][-count:]
+    result = _run(
+        ["docker", "logs", "--tail", str(count), name], timeout=15, merge_stderr=True
+    )
+    return result.stdout.splitlines()[-count:]

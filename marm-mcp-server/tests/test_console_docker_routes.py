@@ -602,6 +602,10 @@ def test_compose_write_conflicts_then_overwrites_with_a_backup(client, home):
     default_body = client.post(f"{BASE}/compose", json={})
 
     assert conflict.status_code == default_body.status_code == 409
+    detail = conflict.json()["detail"]
+    assert detail["reason"] == "exists"
+    assert detail["path"].endswith("marm-compose.yaml")
+    assert "already exists" in detail["message"]
     assert path.read_text("utf-8") == original
 
     replaced = client.post(f"{BASE}/compose", json={"overwrite": True})
@@ -620,6 +624,7 @@ def test_compose_with_an_invalid_saved_repo_is_409_and_writes_nothing(client, ho
     response = client.post(f"{BASE}/compose", json={"overwrite": False})
 
     assert response.status_code == 409
+    assert isinstance(response.json()["detail"], str)
     assert "Repository path" in response.json()["detail"]
     assert not (home / ".marm" / "marm-compose.yaml").exists()
 

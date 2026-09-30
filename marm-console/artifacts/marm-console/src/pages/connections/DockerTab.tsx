@@ -84,11 +84,11 @@ function portBindings(container: DockerContainer) {
   return Object.entries(container.ports ?? {}).flatMap(([inner, bindings]) => (bindings ?? []).map((binding) => `${binding.HostIp || '0.0.0.0'}:${binding.HostPort} to ${inner}`));
 }
 
-function conflictPath(err: unknown): string | null {
-  if (!(err instanceof MarmApiError)) return null;
-  const body = err.body as { path?: unknown; detail?: { path?: unknown } } | undefined;
-  const path = body?.path ?? body?.detail?.path;
-  return typeof path === 'string' ? path : null;
+function existingFilePath(err: unknown): string | null | undefined {
+  if (!(err instanceof MarmApiError) || err.status !== 409) return undefined;
+  const body = err.body as { detail?: { reason?: unknown; path?: unknown } } | undefined;
+  if (body?.detail?.reason !== 'exists') return undefined;
+  return typeof body.detail.path === 'string' ? body.detail.path : null;
 }
 
 export function DockerTab({ onRequestConnection }: { onRequestConnection: () => void }) {
@@ -167,7 +167,8 @@ export function DockerTab({ onRequestConnection }: { onRequestConnection: () => 
     writeCompose.mutate(overwrite, {
       onSuccess: (res) => setWritten({ path: res.path, command: res.command }),
       onError: (err) => {
-        if (err instanceof MarmApiError && err.status === 409) setConflict({ path: conflictPath(err) ?? compose.data?.path ?? null });
+        const existing = existingFilePath(err);
+        if (existing !== undefined) setConflict({ path: existing ?? compose.data?.path ?? null });
         else setActionError(mutationMessage(err));
       },
     });

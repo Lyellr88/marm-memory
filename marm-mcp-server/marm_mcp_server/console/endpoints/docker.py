@@ -232,7 +232,11 @@ def post_compose(payload: ComposePayload) -> dict:
     if path.exists() and not payload.overwrite:
         raise HTTPException(
             status_code=409,
-            detail=f"{path} already exists. Overwrite it to replace it.",
+            detail={
+                "reason": "exists",
+                "path": str(path),
+                "message": f"{path} already exists. Overwrite it to replace it.",
+            },
         )
     try:
         written = docker_commands.write_compose_file(

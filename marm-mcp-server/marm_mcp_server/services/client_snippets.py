@@ -7,6 +7,7 @@ snippet always matches what Connect would write, with key references and never k
 from __future__ import annotations
 
 import json
+import shlex
 import sys
 import tempfile
 from pathlib import Path
@@ -501,7 +502,8 @@ def _one_command(
     note = "Adds MARM to your VS Code user profile."
     if os_name == "windows":
         note += " In cmd or PowerShell the single quotes may not work, so use the config file snippet instead."
-    return f"code --add-mcp '{payload}'", note
+    quoted = f"'{payload}'" if os_name == "windows" else shlex.quote(payload)
+    return f"code --add-mcp {quoted}", note
 
 
 def agent_commands(

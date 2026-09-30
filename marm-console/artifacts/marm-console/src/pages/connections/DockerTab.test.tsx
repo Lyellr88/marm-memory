@@ -460,7 +460,7 @@ describe('DockerTab compose file', () => {
 
   it('on 409 names the existing file and re-posts with overwrite true', async () => {
     const mutate = vi.fn((overwrite: boolean, opts?: Callbacks) => {
-      if (!overwrite) opts?.onError?.(new MarmApiError(409, 'exists', { path: 'C:\\Users\\me\\.marm\\docker-compose.yml' }));
+      if (!overwrite) opts?.onError?.(new MarmApiError(409, 'exists', { detail: { reason: 'exists', path: 'C:\\Users\\me\\.marm\\docker-compose.yml' } }));
       else opts?.onSuccess?.({ path: 'C:\\Users\\me\\.marm\\docker-compose.yml', command: 'docker compose up -d', backup_path: 'C:\\Users\\me\\.marm\\docker-compose.yml.marm-backup' });
     });
     state.write = { mutate, isPending: false };
@@ -475,6 +475,15 @@ describe('DockerTab compose file', () => {
     expect(mutate.mock.calls[1][0]).toBe(true);
     expect(screen.queryByText(/already exists/)).toBeNull();
     expect(screen.getByText(/Compose file written to/)).toBeTruthy();
+  });
+
+  it('shows a 409 that is not an existing file as an error instead of an overwrite prompt', async () => {
+    state.write = { mutate: failing(new MarmApiError(409, 'Repository path must exist.', { detail: 'Repository path must exist.' })), isPending: false };
+    renderTab();
+    await userEvent.setup().click(button('Write compose file'));
+    expect(screen.getByText('Repository path must exist.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Overwrite' })).toBeNull();
+    expect(screen.queryByText(/already exists/)).toBeNull();
   });
 
   it('shows other write failures as errors instead of an overwrite prompt', async () => {

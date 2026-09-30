@@ -2,6 +2,7 @@ import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ManualTab } from './ManualTab';
+import { quoteArg } from './ManualCli';
 import { MarmApiError } from '@/lib/marm-api';
 import type { Agent, ConnectionsOverview, ManualAgentCommand, ManualCliCommand, ManualEndpoints, ManualEnvItem, ManualSnippetParams } from '@/lib/marm-types';
 
@@ -378,5 +379,53 @@ describe('ManualTab', () => {
 
     await user.click(screen.getByRole('button', { name: 'Send to terminal' }));
     expect(screen.getByText(/Terminal unavailable/)).toBeTruthy();
+  });
+
+  it('keeps the send button after a refused send so the next click can retry', async () => {
+    state.send.mockReturnValueOnce(false).mockReturnValueOnce(true);
+    const user = userEvent.setup();
+    render(<ManualTab />);
+    await openSection(user, 'Agent commands');
+
+    await user.click(screen.getByRole('button', { name: 'Send to terminal' }));
+    expect(screen.getByText(/Terminal unavailable/)).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: 'Send to terminal' }));
+    expect(state.send).toHaveBeenCalledTimes(2);
+    expect(screen.queryByText(/Terminal unavailable/)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Sent to terminal' })).toBeTruthy();
+  });
+});
+
+describe('quoteArg', () => {
+  it('leaves plain values and Windows paths alone', () => {
+    expect(quoteArg('swarm')).toBe('swarm');
+    expect(quoteArg('C:\\Users\\me\\.marm')).toBe('C:\\Users\\me\\.marm');
+    expect(quoteArg('http://127.0.0.1:8001/mcp')).toBe('http://127.0.0.1:8001/mcp');
+  });
+
+  it('double-quotes whitespace and shell separators', () => {
+    expect(quoteArg('hello world')).toBe('"hello world"');
+    expect(quoteArg('a;b')).toBe('"a;b"');
+    expect(quoteArg('say "hi"')).toBe('"say \\"hi\\""');
+  });
+
+  it('doubles a trailing backslash so it cannot escape the closing quote', () => {
+    expect(quoteArg('C:\\Program Files\\')).toBe('"C:\\Program Files\\\\"');
+    expect(quoteArg('C:\\Program Files\\x')).toBe('"C:\\Program Files\\x"');
+  });
+
+  it('keeps a backslash before a double quote as one literal backslash and one literal quote', () => {
+    expect(quoteArg('a\\"b c')).toBe('"a\\\\\\"b c"');
+    expect(quoteArg('x\\\\"y z')).toBe('"x\\\\\\\\\\"y z"');
+  });
+
+  it('single-quotes a value that would otherwise expand', () => {
+    expect(quoteArg('$(id)')).toBe("'$(id)'");
+    expect(quoteArg('`whoami`')).toBe("'`whoami`'");
+  });
+
+  it('escapes the expanding characters when a single quote rules out single quoting', () => {
+    expect(quoteArg("it's $HOME")).toBe('"it\'s \\$HOME"');
   });
 });

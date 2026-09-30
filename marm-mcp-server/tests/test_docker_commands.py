@@ -323,6 +323,7 @@ class FakeDocker:
     def __init__(self, monkeypatch, responder):
         self.calls: list[list[str]] = []
         self.timeouts: list[object] = []
+        self.kwargs: list[dict] = []
         self._responder = responder
         monkeypatch.setattr(docker_commands.subprocess, "run", self._run)
 
@@ -331,6 +332,7 @@ class FakeDocker:
         assert not kwargs.get("shell")
         self.calls.append(arguments)
         self.timeouts.append(kwargs.get("timeout"))
+        self.kwargs.append(kwargs)
         return self._responder(arguments)
 
 
@@ -418,16 +420,9 @@ def test_engine_status_hung_daemon_times_out_as_unavailable_daemon(monkeypatch):
     assert "5 seconds" in status["reason"]
 
 
-def test_logs_tail_argv_merges_streams_and_caps_lines(monkeypatch):
-    fake = FakeDocker(
-        monkeypatch,
-        lambda a: (
-            _marm_ok(a)
-            or _completed(
-                stdout="\n".join(f"out {i}" for i in range(1500)), stderr="err last\n"
-            )
-        ),
-    )
+def test_logs_tail_reads_one_merged_stream_and_caps_lines(monkeypatch):
+    merged = "\n".join(f"out {i}" for i in range(1500)) + "\nerr last\n"
+    fake = FakeDocker(monkeypatch, lambda a: _marm_ok(a) or _completed(stdout=merged))
 
     lines = docker_commands.logs_tail("marm-mcp-server", 5000)
     small = docker_commands.logs_tail("marm-mcp-server", 3)
@@ -435,9 +430,34 @@ def test_logs_tail_argv_merges_streams_and_caps_lines(monkeypatch):
     log_calls = [c for c in fake.calls if c[:2] == ["docker", "logs"]]
     assert log_calls[0] == ["docker", "logs", "--tail", "1000", "marm-mcp-server"]
     assert log_calls[1] == ["docker", "logs", "--tail", "3", "marm-mcp-server"]
+    log_kwargs = [
+        k
+        for a, k in zip(fake.calls, fake.kwargs, strict=True)
+        if a[:2] == ["docker", "logs"]
+    ]
+    assert all(k["stderr"] == docker_commands.subprocess.STDOUT for k in log_kwargs)
     assert len(lines) == 1000
     assert lines[-1] == "err last"
     assert small == ["out 1498", "out 1499", "err last"]
+
+
+def test_docker_commands_have_a_finite_timeout_and_pull_gets_a_longer_one(monkeypatch):
+    fake = FakeDocker(
+        monkeypatch,
+        lambda a: _marm_ok(a) or _completed(),
+    )
+
+    docker_commands.stop_container("marm-mcp-server")
+    docker_commands.start_container("marm-mcp-server")
+    docker_commands.restart_container("marm-mcp-server")
+    docker_commands.pull_image("1.0")
+
+    by_verb = {call[1]: t for call, t in zip(fake.calls, fake.timeouts, strict=True)}
+    assert by_verb["container"] == docker_commands.DOCKER_TIMEOUT_SECONDS
+    assert by_verb["stop"] == docker_commands.DOCKER_TIMEOUT_SECONDS
+    assert by_verb["start"] == docker_commands.DOCKER_TIMEOUT_SECONDS
+    assert by_verb["restart"] == docker_commands.DOCKER_TIMEOUT_SECONDS
+    assert by_verb["pull"] == docker_commands.DOCKER_PULL_TIMEOUT_SECONDS
 
 
 def test_lifecycle_commands_refuse_a_container_that_is_not_marm(monkeypatch):
@@ -512,6 +532,22 @@ def test_is_marm_container_honors_the_repository_override(monkeypatch):
     assert docker_commands._is_marm_container(private) is True
     assert docker_commands._is_marm_container(_marm_payload()[0]) is True
     assert docker_commands._is_marm_container(_foreign_payload()[0]) is False
+
+
+def test_is_marm_container_ignores_an_empty_override_and_a_shared_prefix(monkeypatch):
+    monkeypatch.setenv("MARM_DOCKER_REPOSITORY", "")
+
+    assert docker_commands._is_marm_container(_foreign_payload()[0]) is False
+    assert docker_commands.image_reference("1.0") == "lyellr88/marm-mcp-server:1.0"
+
+    fork = _marm_payload(image="lyellr88/marm-mcp-server-fork:1")[0]
+    assert docker_commands._is_marm_container(fork) is False
+    for image in (
+        "lyellr88/marm-mcp-server",
+        "lyellr88/marm-mcp-server:1.0",
+        "lyellr88/marm-mcp-server@sha256:abc",
+    ):
+        assert docker_commands._is_marm_container(_marm_payload(image=image)[0]) is True
 
 
 def test_write_compose_file_overwrite_backs_up_the_previous_file(monkeypatch, tmp_path):

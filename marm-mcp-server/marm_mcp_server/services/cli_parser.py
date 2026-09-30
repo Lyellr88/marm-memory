@@ -4,7 +4,7 @@ import argparse
 from pathlib import Path
 
 from ..config.settings import SERVER_VERSION
-from .client_config import CLIENT_IDS
+from .client_config import CLIENT_ALIASES, CLIENT_IDS
 
 
 def _add_profile_arguments(parser: argparse.ArgumentParser) -> None:
@@ -80,7 +80,7 @@ def _product_parser() -> argparse.ArgumentParser:
     _add_profile_arguments(fast_start)
     fast_start.add_argument(
         "--client",
-        choices=CLIENT_IDS,
+        choices=[*CLIENT_IDS, *CLIENT_ALIASES],
         help="Write MARM's entry into a supported MCP client's config",
     )
     fast_start.add_argument(

@@ -13,7 +13,9 @@ type ArgValue = boolean | string | string[];
 type Values = Record<string, ArgValue>;
 
 export function quoteArg(value: string) {
-  return /[\s"']/.test(value) ? `"${value.replace(/"/g, '\\"')}"` : value;
+  if (/^[\w@%+=:,./\\-]+$/.test(value)) return value;
+  if (/[$`]/.test(value) && !value.includes("'")) return `'${value}'`;
+  return `"${value.replace(/\\(?=["$`\\]|$)/g, '\\\\').replace(/["$`]/g, '\\$&')}"`;
 }
 
 function valuesOf(arg: ManualCliArg, values: Values): string[] {
