@@ -28,7 +28,7 @@ _PREDICATE_TRIGGERS = [
 ]
 
 _MARKUP = re.compile(r"\*\*|`")
-_BULLET = re.compile(r"^(?:[-*+>#|\u2013\u2014\u2022]+\s+)+")
+_BULLET = re.compile(r"^(?:[-*+>#\u2013\u2014\u2022]+\s+)+")
 _BRACKETS = (("(", ")"), ("[", "]"), ("{", "}"))
 
 _MIN_CHUNK_TOKENS = 1
@@ -161,7 +161,8 @@ def _classify_predicate(span_a: "Span", span_b: "Span") -> str:
 def _entity_name(text: str) -> str:
     """The name a span denotes, without the markdown it was written in.
 
-    Empty for a span across table cells: its cells are separate names.
+    Empty for any span holding a table pipe: it came from a table, whose cells
+    are separate names.
     """
     name = " ".join(_MARKUP.sub("", text).split())
     for opening, closing in _BRACKETS:

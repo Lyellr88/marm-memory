@@ -280,8 +280,9 @@ def test_same_sentence_false_when_sent_is_none():
         ("`marm_delete`", "marm_delete"),
         ("the `--force` flag", "the --force flag"),
         ("| Column | Value", ""),
-        # One cell names one thing; only a span across cells is discarded.
-        ("| Column", "Column"),
+        # A leading pipe is a table too; stripping it as a bullet would let a
+        # table-derived span through.
+        ("| Column", ""),
         ("**", ""),
         ("__init__", "__init__"),
         (".env", ".env"),
