@@ -1,5 +1,6 @@
 import json
 from datetime import datetime, timezone
+from typing import Any
 
 from fastapi import APIRouter
 
@@ -10,7 +11,7 @@ from ..core.models import (
     CompactionRequest,
     StageCompactionSummariesRequest,
 )
-from ..core.redaction import redact_secrets
+from ..core.redaction import redact_secrets, summarize
 from ..services.compaction_apply import apply_compaction_write
 
 router = APIRouter(prefix="", tags=["Compaction"])
@@ -90,7 +91,7 @@ async def marm_stage_compaction_summaries(
     candidate is not past expires_at.
     """
     now = datetime.now(timezone.utc).isoformat()
-    results = []
+    results: list[dict[str, Any]] = []
 
     items_to_process = []
     for item in request.summaries:
@@ -226,13 +227,20 @@ async def marm_stage_compaction_summaries(
                 )
                 continue
 
+            staged_summary, redacted = redact_secrets(suggested_summary)
             conn.execute(
                 "UPDATE compaction_staging "
                 "SET suggested_summary = ?, status = 'summary_staged', updated_at = ? "
                 "WHERE id = ?",
-                (redact_secrets(suggested_summary)[0], now, candidate_id),
+                (staged_summary, now, candidate_id),
             )
-            results.append({"candidate_id": candidate_id, "status": "summary_staged"})
+            results.append(
+                {
+                    "candidate_id": candidate_id,
+                    "status": "summary_staged",
+                    **({"redacted": summarize(redacted)} if redacted else {}),
+                }
+            )
 
     return {"results": results}
 

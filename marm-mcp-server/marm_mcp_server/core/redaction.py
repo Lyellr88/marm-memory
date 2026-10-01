@@ -49,9 +49,16 @@ _SECRET_NAME = (
 )
 _ASSIGNED = re.compile(
     rf"(?i)(\b[A-Z0-9_]*(?:{_SECRET_NAME})\s*[:=]\s*[\"']?)"
-    r"(?![$<{%])(?!(?:\d+|true|false|null|none|yes|no)\b)"
+    r"(?![$<{%]|\[redacted:)(?!(?:\d+|true|false|null|none|yes|no)\b)"
     r"(?=[^\s\"'`]*[\d/+=._-]|[^\s\"'`]{16,})"
     r"([^\s\"'`]{6,})"
+)
+# The same rule for a quoted value, which may hold spaces; the quotes stay.
+_ASSIGNED_QUOTED = re.compile(
+    rf"(?i)(\b[A-Z0-9_]*(?:{_SECRET_NAME})\s*[:=]\s*)([\"'])"
+    r"(?![$<{%]|\[redacted:)(?!(?:\d+|true|false|null|none|yes|no)\2)"
+    r"(?=[^\"'\n]*[\d/+=._-]|[^\"'\n]{16,})"
+    r"([^\"'\n]{6,})\2"
 )
 
 
@@ -64,20 +71,55 @@ def redact_secrets(text: str) -> tuple[str, dict[str, int]]:
         text, n = pattern.subn(f"[redacted:{kind}]", text)
         if n:
             counts[kind] = n
-    text, n = _ASSIGNED.subn(r"\1[redacted:assigned-secret]", text)
-    if n:
-        counts["assigned-secret"] = n
+    text, quoted = _ASSIGNED_QUOTED.subn(r"\1\2[redacted:assigned-secret]\2", text)
+    text, bare = _ASSIGNED.subn(r"\1[redacted:assigned-secret]", text)
+    if quoted + bare:
+        counts["assigned-secret"] = quoted + bare
     if counts:
         logger.warning("memory.secrets_redacted", kinds=counts)
     return text, counts
 
 
-def redact_value(value: Any) -> Any:
-    """Redact every string inside a JSON-shaped value."""
+def _assigned(name: str, value: str) -> bool:
+    """Whether `value` under the field `name` is a credential, by the same rule
+    as `NAME=value` in text: templates, numbers and ordinary words are not."""
+    if '"' not in value and _ASSIGNED_QUOTED.fullmatch(f'{name}="{value}"'):
+        return True
+    return bool(_ASSIGNED.fullmatch(f"{name}={value}"))
+
+
+def _redact(value: Any, counts: dict[str, int], name: str = "") -> Any:
     if isinstance(value, str):
-        return redact_secrets(value)[0]
+        text, found = redact_secrets(value)
+        for kind, n in found.items():
+            counts[kind] = counts.get(kind, 0) + n
+        if not found and name and _assigned(name, value):
+            counts["assigned-secret"] = counts.get("assigned-secret", 0) + 1
+            return "[redacted:assigned-secret]"
+        return text
     if isinstance(value, dict):
-        return {key: redact_value(item) for key, item in value.items()}
+        return {key: _redact(item, counts, str(key)) for key, item in value.items()}
     if isinstance(value, list):
-        return [redact_value(item) for item in value]
+        return [_redact(item, counts, name) for item in value]
     return value
+
+
+def redact_value(value: Any) -> Any:
+    """Redact every string inside a JSON-shaped value, reading each one with
+    the field name it is stored under."""
+    return _redact(value, {})
+
+
+def summarize(counts: dict[str, int]) -> dict[str, Any] | None:
+    """What a write tells its caller: a count and kinds, never the values."""
+    if not counts:
+        return None
+    return {"count": sum(counts.values()), "kinds": dict(counts)}
+
+
+def redaction_summary(*values: Any) -> dict[str, Any] | None:
+    """What storing these would redact; None when nothing would be."""
+    counts: dict[str, int] = {}
+    for value in values:
+        _redact(value, counts)
+    return summarize(counts)

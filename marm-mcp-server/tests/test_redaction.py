@@ -6,7 +6,11 @@ import sqlite3
 import pytest
 from conftest import load_isolated_server, local_client
 
-from marm_mcp_server.core.redaction import redact_secrets, redact_value
+from marm_mcp_server.core.redaction import (
+    redact_secrets,
+    redact_value,
+    redaction_summary,
+)
 
 # Built from parts so the file itself carries no scannable secret.
 AWS = "AKIA" + "IOSFODNN7" + "EXAMPLE"
@@ -120,6 +124,7 @@ def test_a_logged_secret_is_stored_and_recalled_redacted(monkeypatch, tmp_path):
         },
     )
     assert logged.status_code == 200, logged.text
+    assert logged.json()["redacted"] == {"count": 1, "kinds": {"aws-access-key": 1}}
 
     db = str(tmp_path / "marm_memory.db")
     stored = _stored(db, "log_entries", "full_entry") + _stored(
@@ -145,6 +150,7 @@ def test_a_notebook_secret_is_stored_redacted(monkeypatch, tmp_path):
         json={"action": "add", "name": "creds", "data": f"github: {GITHUB}"},
     )
     assert added.status_code == 200, added.text
+    assert added.json()["redacted"] == {"count": 1, "kinds": {"github-token": 1}}
 
     stored = _stored(str(tmp_path / "marm_memory.db"), "notebook_entries", "data")
     assert stored and not any(GITHUB in row for row in stored)
@@ -163,6 +169,7 @@ def test_console_writes_redact_content_and_metadata(monkeypatch, tmp_path):
         },
     )
     assert created.status_code == 201, created.text
+    assert created.json()["redacted"] == {"count": 1, "kinds": {"aws-access-key": 1}}
     memory_id = created.json()["id"]
     db = str(tmp_path / "marm_memory.db")
     assert not any(AWS in row for row in _stored(db, "memories", "metadata"))
@@ -176,6 +183,8 @@ def test_console_writes_redact_content_and_metadata(monkeypatch, tmp_path):
         },
     )
     assert updated.status_code == 200, updated.text
+    # Content and metadata both: the caller is told about each.
+    assert updated.json()["redacted"] == {"count": 2, "kinds": {"github-token": 2}}
 
     rows = _stored(db, "memories", "content") + _stored(db, "memories", "metadata")
     assert not any(AWS in row or GITHUB in row for row in rows)
@@ -269,3 +278,87 @@ async def test_a_notebook_name_holding_a_credential_is_refused(
     assert GITHUB not in json.dumps(result)
     rows = _stored(str(tmp_path / "marm_memory.db"), "notebook_entries", "name")
     assert not any(GITHUB in row for row in rows)
+
+
+# --- quoted values, metadata keys, and what the caller is told -------------------
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        (
+            'password: "correct horse battery staple"',
+            'password: "[redacted:assigned-secret]"',
+        ),
+        ("PASSWORD='hunter two 2'", "PASSWORD='[redacted:assigned-secret]'"),
+        ('password: "nothing"', 'password: "nothing"'),
+        ('password: "123456"', 'password: "123456"'),
+        ('password: "false"', 'password: "false"'),
+        (
+            'message: "ordinary words here today"',
+            'message: "ordinary words here today"',
+        ),
+        ('token: "${API_TOKEN}"', 'token: "${API_TOKEN}"'),
+    ],
+)
+def test_a_quoted_secret_with_spaces_is_redacted_and_keeps_its_quotes(text, expected):
+    assert redact_secrets(text)[0] == expected
+
+
+def test_redaction_is_idempotent():
+    once = redact_secrets(f'password: "correct horse battery staple" and {AWS}')[0]
+    assert redact_secrets(once) == (once, {})
+
+
+@pytest.mark.parametrize(
+    ("metadata", "expected"),
+    [
+        ({"password": "hunter2x9"}, {"password": "[redacted:assigned-secret]"}),
+        (
+            {"auth": {"api_key": "abcdefghijklmnop1234"}},
+            {"auth": {"api_key": "[redacted:assigned-secret]"}},
+        ),
+        ({"password": "nothing"}, {"password": "nothing"}),
+        ({"token": "${TOKEN}"}, {"token": "${TOKEN}"}),
+        ({"tokens": 1024}, {"tokens": 1024}),
+        ({"note": "hunter2x9"}, {"note": "hunter2x9"}),
+    ],
+)
+def test_a_metadata_value_is_judged_with_its_field_name(metadata, expected):
+    assert redact_value(metadata) == expected
+
+
+def test_the_summary_counts_what_content_and_metadata_lose():
+    summary = redaction_summary(f"deploy with {AWS}", {"password": "hunter2x9"})
+    assert summary == {
+        "count": 2,
+        "kinds": {"aws-access-key": 1, "assigned-secret": 1},
+    }
+    assert redaction_summary("nothing to see", {"note": "fine"}) is None
+
+
+def test_a_clean_write_reports_no_redaction(monkeypatch, tmp_path):
+    server = load_isolated_server(monkeypatch, tmp_path)
+    client = local_client(server.app)
+    logged = client.post(
+        "/marm_log_entry",
+        json={"entry": "2026-09-27-deploy-nothing secret here", "session_name": "r"},
+    )
+    assert logged.status_code == 200
+    assert "redacted" not in logged.json()
+
+
+def test_distill_reports_what_it_redacted_before_staging(monkeypatch, tmp_path):
+    server = load_isolated_server(monkeypatch, tmp_path)
+    client = local_client(server.app)
+    proposed = client.post(
+        "/marm_distill",
+        json={
+            "action": "propose",
+            "text": f"We decided to rotate the deploy key {AWS} every month.",
+            "session_name": "redaction",
+        },
+    )
+    assert proposed.status_code == 200, proposed.text
+    assert proposed.json()["redacted"] == {"count": 1, "kinds": {"aws-access-key": 1}}
+    assert AWS not in proposed.text

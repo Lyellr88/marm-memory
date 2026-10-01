@@ -1369,7 +1369,7 @@ async def test_a_staged_summary_is_redacted_before_it_is_stored(monkeypatch, tmp
     )
     key = "AKIA" + "IOSFODNN7" + "EXAMPLE"
 
-    await ep.marm_stage_compaction_summaries(
+    result = await ep.marm_stage_compaction_summaries(
         StageCompactionSummariesRequest(
             summaries=[
                 StagedSummaryItem(
@@ -1383,3 +1383,5 @@ async def test_a_staged_summary_is_redacted_before_it_is_stored(monkeypatch, tmp
 
     stored = _get_staging_row(mem, row_id)["suggested_summary"]
     assert key not in stored and "[redacted:aws-access-key]" in stored
+    (staged,) = result["results"]
+    assert staged["redacted"] == {"count": 1, "kinds": {"aws-access-key": 1}}

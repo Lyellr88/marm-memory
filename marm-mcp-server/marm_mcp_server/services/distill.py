@@ -28,7 +28,7 @@ from ..core.distill import (
     resolve,
 )
 from ..core.memory import MARMMemory, sanitize_content
-from ..core.redaction import redact_secrets
+from ..core.redaction import redact_secrets, summarize
 
 # A proposal nobody reviewed is not worth keeping indefinitely; the transcript
 # it came from is long gone and its neighbour may have moved.
@@ -96,7 +96,8 @@ async def propose(
     # generation rewrites facts to stand alone. Which one ran is reported, so a
     # reviewer is never guessing why the proposals look different today.
     # Before extraction: a pasted key must reach neither a model nor staging.
-    text = redact_secrets(text)[0]
+    text, redacted = redact_secrets(text)
+    report = {"redacted": summarize(redacted)} if redacted else {}
     mode = "generated"
     candidates = None
     if use_llm:
@@ -115,6 +116,7 @@ async def propose(
             "mode": mode,
             "review_mode": review_mode,
             **({"guardrails": []} if review_mode == "guardrails" else {}),
+            **report,
             "note": (
                 "Nothing in this text reads like a durable fact. That is the "
                 "usual outcome for a conversation that was mostly doing rather "
@@ -209,6 +211,7 @@ async def propose(
         "session_name": session_name,
         "mode": mode,
         "review_mode": review_mode,
+        **report,
     }
     if review_mode == "guardrails":
         from .analyst.review import auto_apply

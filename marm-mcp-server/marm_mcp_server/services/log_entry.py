@@ -8,7 +8,7 @@ from ..config.settings import MARM_PLATFORM, MARM_PROJECT
 from ..core.events import events
 from ..core.memory import memory
 from ..core.memory_utils import _safe_print
-from ..core.redaction import redact_secrets
+from ..core.redaction import redact_secrets, summarize
 
 _SESSION_PREFIXES = ("Session: ", "Topic: ")
 _SESSION_INACTIVITY_NOTICE_SECONDS = 3600
@@ -36,7 +36,8 @@ async def create_log_entry(
     explicit = bool(project)
 
     try:
-        formatted_entry = redact_secrets(entry)[0].strip()
+        formatted_entry, redacted = redact_secrets(entry)
+        formatted_entry = formatted_entry.strip()
 
         for prefix in _SESSION_PREFIXES:
             if formatted_entry.startswith(prefix):
@@ -233,6 +234,7 @@ async def create_log_entry(
             "entry_id": entry_id,
             "memory_id": memory_id,
             "formatted_entry": formatted_entry,
+            **({"redacted": summarize(redacted)} if redacted else {}),
         }
     except sqlite3.Error as e:
         log_warning(f"Database error creating log entry: {e}")
