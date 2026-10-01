@@ -80,3 +80,38 @@ def test_the_summary_table_shows_semantic_recall_at_k():
     assert "sem-R@k" in header
     assert "37.5%" in line
     assert len(header) == len(line)
+
+
+def test_a_question_with_no_semantic_gold_is_left_out_of_rank_averages():
+    # Its semantic write failed: it counts for coverage, not for ranking.
+    bucket = run_eval._blank_bucket()
+    run_eval._add_ranks(bucket, {"recall_at_k": 1.0, "mrr": 1.0, "ndcg_at_k": 1.0})
+    run_eval._add_ranks(bucket, None)
+    assert bucket["semantic_rank_total"] == 1
+    assert run_eval._rank_rates(bucket) == {
+        "semantic_recall_at_k": 1.0,
+        "mrr": 1.0,
+        "ndcg_at_k": 1.0,
+    }
+
+
+def test_a_category_with_nothing_to_rank_reports_none_not_zero():
+    rates = run_eval._rank_rates(run_eval._blank_bucket())
+    assert rates == {"semantic_recall_at_k": None, "mrr": None, "ndcg_at_k": None}
+
+
+def test_the_table_shows_unavailable_rank_values_as_na():
+    row = {
+        "total": 4,
+        "any_hit_rate": 0.5,
+        "all_hit_rate": 0.25,
+        "evidence_recall": 0.4,
+        "semantic_any_hit_rate": 0.0,
+        "log_any_hit_rate": 0.25,
+        "semantic_recall_at_k": None,
+        "mrr": None,
+        "ndcg_at_k": None,
+    }
+    line = run_eval.table_row("OVERALL", row)
+    assert line.count("n/a") == 3
+    assert len(line) == len(run_eval.table_header())

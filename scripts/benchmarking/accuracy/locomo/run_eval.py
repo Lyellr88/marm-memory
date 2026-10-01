@@ -254,6 +254,9 @@ def rank_metrics(ranked_ids, gold_ids, k):
 def _blank_bucket():
     return {
         "total": 0,
+        # Questions with semantic gold to rank against; the rank averages'
+        # denominator, since a question whose semantic write failed has none.
+        "semantic_rank_total": 0,
         "any_hit": 0,
         "all_hit": 0,
         "evidence_recall_sum": 0.0,
@@ -268,9 +271,20 @@ def _blank_bucket():
     }
 
 
-def _rank_rates(bucket, n):
+def _add_ranks(bucket, ranks):
+    if ranks is None:
+        return
+    bucket["semantic_rank_total"] += 1
+    bucket["semantic_recall_at_k_sum"] += ranks["recall_at_k"]
+    bucket["mrr_sum"] += ranks["mrr"]
+    bucket["ndcg_at_k_sum"] += ranks["ndcg_at_k"]
+
+
+def _rank_rates(bucket):
+    n = bucket["semantic_rank_total"]
+
     def rate(key):
-        return round(bucket[key] / n, 3) if n else 0
+        return round(bucket[key] / n, 3) if n else None
 
     return {
         "semantic_recall_at_k": rate("semantic_recall_at_k_sum"),
@@ -286,12 +300,17 @@ def table_header():
     )
 
 
+def _rank_cell(value, width, spec):
+    return f"{'n/a':>{width}}" if value is None else f"{value:>{width}{spec}}"
+
+
 def table_row(cat, d):
     return (
         f"{cat:<14}{d['total']:>6}{d['any_hit_rate']:>10.1%}{d['all_hit_rate']:>10.1%}"
         f"{d['evidence_recall']:>11.1%}{d['semantic_any_hit_rate']:>10.1%}"
-        f"{d['log_any_hit_rate']:>10.1%}{d['semantic_recall_at_k']:>9.1%}"
-        f"{d['mrr']:>8.3f}{d['ndcg_at_k']:>8.3f}"
+        f"{d['log_any_hit_rate']:>10.1%}"
+        f"{_rank_cell(d['semantic_recall_at_k'], 9, '.1%')}"
+        f"{_rank_cell(d['mrr'], 8, '.3f')}{_rank_cell(d['ndcg_at_k'], 8, '.3f')}"
     )
 
 
@@ -374,7 +393,7 @@ def recall_and_score(base_url, api_key, limit_k, limit_samples=None):
 
             ranks = rank_metrics(
                 ranked_ids, {g["memory_id"] for g in gold if g["memory_id"]}, limit_k
-            ) or {"recall_at_k": 0.0, "mrr": 0.0, "ndcg_at_k": 0.0}
+            )
 
             hit_any = any(covered)
             hit_all = all(covered)
@@ -389,9 +408,7 @@ def recall_and_score(base_url, api_key, limit_k, limit_samples=None):
             bucket["semantic_all_hit"] += int(all(sem_covered))
             bucket["log_any_hit"] += int(any(log_covered))
             bucket["log_all_hit"] += int(all(log_covered))
-            bucket["semantic_recall_at_k_sum"] += ranks["recall_at_k"]
-            bucket["mrr_sum"] += ranks["mrr"]
-            bucket["ndcg_at_k_sum"] += ranks["ndcg_at_k"]
+            _add_ranks(bucket, ranks)
             if len(covered) > limit_k:
                 # all-hit cannot be satisfied when a question has more
                 # evidence turns than the recall top-K
@@ -408,8 +425,10 @@ def recall_and_score(base_url, api_key, limit_k, limit_samples=None):
                     "evidence_recall": round(recall_frac, 3),
                     "semantic_hit_any": any(sem_covered),
                     "log_hit_any": any(log_covered),
-                    "semantic_mrr": round(ranks["mrr"], 3),
-                    "semantic_ndcg_at_k": round(ranks["ndcg_at_k"], 3),
+                    "semantic_mrr": round(ranks["mrr"], 3) if ranks else None,
+                    "semantic_ndcg_at_k": (
+                        round(ranks["ndcg_at_k"], 3) if ranks else None
+                    ),
                     "unresolved_evidence": unresolved,
                 }
             )
@@ -434,7 +453,8 @@ def recall_and_score(base_url, api_key, limit_k, limit_samples=None):
             "semantic_any_hit_rate": round(d["semantic_any_hit"] / n, 3) if n else 0,
             "log_any_hit_rate": round(d["log_any_hit"] / n, 3) if n else 0,
             "all_hit_impossible": d["all_hit_impossible"],
-            **_rank_rates(d, n),
+            "semantic_rank_total": d["semantic_rank_total"],
+            **_rank_rates(d),
         }
         for key in (
             "total",
@@ -446,6 +466,7 @@ def recall_and_score(base_url, api_key, limit_k, limit_samples=None):
             "log_any_hit",
             "log_all_hit",
             "all_hit_impossible",
+            "semantic_rank_total",
             "semantic_recall_at_k_sum",
             "mrr_sum",
             "ndcg_at_k_sum",
@@ -461,7 +482,8 @@ def recall_and_score(base_url, api_key, limit_k, limit_samples=None):
         "semantic_any_hit_rate": round(overall["semantic_any_hit"] / n, 3) if n else 0,
         "log_any_hit_rate": round(overall["log_any_hit"] / n, 3) if n else 0,
         "all_hit_impossible": overall["all_hit_impossible"],
-        **_rank_rates(overall, n),
+        "semantic_rank_total": overall["semantic_rank_total"],
+        **_rank_rates(overall),
     }
     report["overall"] = summary
 
