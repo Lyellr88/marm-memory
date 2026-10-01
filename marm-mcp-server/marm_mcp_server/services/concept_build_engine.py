@@ -338,6 +338,7 @@ def _run_build(
                                     CONCEPT_DUPLICATE_SIMILARITY_THRESHOLD,
                                     exclude_id=entity_id,
                                     platform=mem_platform,
+                                    name=canonical_name,
                                 )
                             except Exception as e:
                                 _safe_print(

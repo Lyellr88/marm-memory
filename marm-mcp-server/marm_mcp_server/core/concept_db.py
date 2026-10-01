@@ -9,6 +9,7 @@ from typing import Optional
 
 import numpy as np
 
+from .concept_names import numbers_differ
 from .memory_db import ConnectionContext, SQLiteConnectionPool
 from .memory_utils import _safe_print
 
@@ -594,12 +595,16 @@ class ConceptDB:
         threshold: float,
         exclude_id: Optional[int] = None,
         platform: Optional[str] = None,
+        name: Optional[str] = None,
     ) -> list[dict]:
         """Linear cosine-similarity scan against same-scope entities' stored
         name embeddings -- bounded by deployment scale (personal/small-team
         memory stores, CONCEPT_BUILD_ROW_CAP=500 memories/build), no vector
         index needed at this scale. Mirrors memory_scoring.py's batched-numpy
-        cosine pattern. Returns candidates >= threshold, most-similar-first."""
+        cosine pattern. Returns candidates >= threshold, most-similar-first.
+
+        With `name`, entities whose name carries different numbers are
+        skipped: an embedding cannot tell `v2.1.0` from `v2.0.0`."""
         rows = conn.execute(
             "SELECT id, name, name_embedding FROM entities "
             "WHERE session_name IS ? AND project IS ? AND platform IS ? "
@@ -623,7 +628,7 @@ class ConceptDB:
         vectors = []
         kept_rows = []
         dim_skipped = 0
-        for entity_id, name, emb_bytes in rows:
+        for entity_id, row_name, emb_bytes in rows:
             try:
                 vector = np.frombuffer(emb_bytes, dtype=np.float32)
             except Exception:
@@ -632,7 +637,7 @@ class ConceptDB:
                 dim_skipped += 1
                 continue
             vectors.append(vector)
-            kept_rows.append((entity_id, name))
+            kept_rows.append((entity_id, row_name))
 
         if dim_skipped:
             _safe_print(
@@ -657,6 +662,7 @@ class ConceptDB:
             }
             for i in range(len(kept_rows))
             if scores[i] >= threshold
+            and not (name is not None and numbers_differ(name, kept_rows[i][1]))
         ]
         candidates.sort(key=lambda c: c["similarity"], reverse=True)
         return candidates

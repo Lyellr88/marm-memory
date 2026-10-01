@@ -617,3 +617,36 @@ def test_abandon_unowned_build_runs_leaves_terminal_history(concept_db):
             ("orphaned-run",),
         ).fetchone()
     assert tuple(row) == ("stale_run", "2026-08-21T12:05:00+00:00")
+
+
+def test_find_similar_entities_skips_names_whose_numbers_differ(concept_db):
+    """The build-time scan applies the same rule as the Console panel."""
+    with concept_db.get_connection() as conn:
+        concept_db.get_or_create_entity(
+            conn,
+            "v2.0.0",
+            "concept",
+            "sess-1",
+            None,
+            "mem-1",
+            name_embedding=_vec(1.0, 0.0, 0.0),
+        )
+        concept_db.get_or_create_entity(
+            conn,
+            "release v2.1.0",
+            "concept",
+            "sess-1",
+            None,
+            "mem-1",
+            name_embedding=_vec(0.999, 0.01, 0.0),
+        )
+        candidates = concept_db.find_similar_entities(
+            conn,
+            _vec(0.999, 0.02, 0.0),
+            "sess-1",
+            None,
+            threshold=0.9,
+            name="v2.1.0",
+        )
+
+    assert [c["name"] for c in candidates] == ["release v2.1.0"]

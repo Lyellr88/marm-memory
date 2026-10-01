@@ -787,6 +787,36 @@ def test_run_build_reports_possible_duplicate_when_similar_entity_exists(
     assert dup["candidates"][0]["similarity"] >= 0.9
 
 
+def test_run_build_does_not_report_versions_as_duplicates(concepts_env, monkeypatch):
+    """Two releases embed within 0.99 of each other and are still two releases."""
+    _server, concepts, _memory_module = concepts_env
+    from marm_mcp_server.core.concept_extraction import Entity, ExtractionResult
+
+    fake_vectors = {
+        "v2.0.0": np.asarray([1.0, 0.0, 0.0], dtype=np.float32).tobytes(),
+        "v2.1.0": np.asarray([0.999, 0.01, 0.0], dtype=np.float32).tobytes(),
+    }
+    monkeypatch.setattr(_engine(), "_try_embed", lambda name: fake_vectors[name])
+    monkeypatch.setattr(
+        _engine(),
+        "extract_entities",
+        lambda content: ExtractionResult(
+            entities=[Entity(content.split()[0], "concept")], relationship_pairs=[]
+        ),
+    )
+
+    result = concepts._run_build(
+        [
+            [
+                ("m1", "v2.0.0 notes", "sess-a", None),
+                ("m2", "v2.1.0 notes", "sess-a", None),
+            ]
+        ]
+    )
+
+    assert result["possible_duplicates"] == []
+
+
 def test_run_build_caches_embed_calls_across_repeated_entity_names(
     concepts_env, monkeypatch
 ):

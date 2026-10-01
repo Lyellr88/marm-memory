@@ -44,7 +44,7 @@ The atlas keeps relationship lines hidden until a node is hovered or selected. T
 
 ### Knowledge Graph: Potential Duplicates
 
-Potential Duplicates finds similar concept names in the concept graph. Review the source memories before changing anything. You can merge two concepts, remove an unwanted concept, or mark the pair as distinct so future builds keep them separate.
+Potential Duplicates finds similar concept names in the concept graph. Names that carry different numbers, in digits or words (`v2.1.0` and `v2.0.0`, `first` and `second`), are never offered: an embedding scores them as near-identical, but they name different things. Review the source memories before changing anything. You can merge two concepts, remove an unwanted concept, or mark the pair as distinct so future builds keep them separate.
 
 ### Indexed Projects
 
