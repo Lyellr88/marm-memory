@@ -736,10 +736,20 @@ class ConceptDB:
             "last_verified_at = excluded.last_verified_at, "
             # The anchor is the code the link was first made against; a later
             # hash that differs marks the code changed, and it stays changed.
-            "anchor_hash = COALESCE(entity_code_links.anchor_hash, "
-            "excluded.anchor_hash), "
+            # A fingerprint from another hashing version is replaced, never
+            # compared: the version is the text before the first ':'.
+            "anchor_hash = CASE WHEN entity_code_links.anchor_hash IS NULL "
+            "OR (excluded.anchor_hash IS NOT NULL "
+            "AND substr(excluded.anchor_hash, 1, instr(excluded.anchor_hash, ':')) "
+            "!= substr(entity_code_links.anchor_hash, 1, "
+            "instr(entity_code_links.anchor_hash, ':'))) "
+            "THEN COALESCE(excluded.anchor_hash, entity_code_links.anchor_hash) "
+            "ELSE entity_code_links.anchor_hash END, "
             "code_changed_at = CASE WHEN entity_code_links.anchor_hash IS NOT NULL "
             "AND excluded.anchor_hash IS NOT NULL "
+            "AND substr(excluded.anchor_hash, 1, instr(excluded.anchor_hash, ':')) "
+            "= substr(entity_code_links.anchor_hash, 1, "
+            "instr(entity_code_links.anchor_hash, ':')) "
             "AND excluded.anchor_hash != entity_code_links.anchor_hash "
             "THEN COALESCE(entity_code_links.code_changed_at, excluded.last_verified_at) "
             "ELSE entity_code_links.code_changed_at END",
@@ -781,6 +791,7 @@ class ConceptDB:
         project: str,
         outcome: dict,
         root_path: Optional[str] = None,
+        not_after: Optional[float] = None,
     ) -> str:
         """Persist only authoritative resolutions for one entity/project pair."""
         status = outcome.get("status")
@@ -801,6 +812,7 @@ class ConceptDB:
                     outcome.get("file_path"),
                     outcome.get("start_line"),
                     outcome.get("end_line"),
+                    not_after,
                 )
                 if root_path
                 else None,

@@ -21,6 +21,9 @@ class ClaimedRefresh(NamedTuple):
     cursor_entity_id: int
     enqueued_at: str
     lease_token: str
+    #: When the index that queued this started reading the tree; None when no
+    #: index ran, and then no fingerprint is taken.
+    snapshot_at: str | None = None
 
 
 def _connection() -> Any:
@@ -34,31 +37,42 @@ def _now() -> datetime:
 
 
 def enqueue(
-    conn: sqlite3.Connection, graph_project: str, memory_project: str, root_path: str
+    conn: sqlite3.Connection,
+    graph_project: str,
+    memory_project: str,
+    root_path: str,
+    snapshot_at: str | None = None,
 ) -> None:
     now = _now().isoformat()
     conn.execute(
         """
         INSERT INTO code_link_refresh_queue
-            (graph_project, memory_project, root_path, cursor_entity_id, enqueued_at, state, attempts)
-        VALUES (?, ?, ?, 0, ?, 'pending', 0)
+            (graph_project, memory_project, root_path, cursor_entity_id, enqueued_at,
+             state, attempts, snapshot_at)
+        VALUES (?, ?, ?, 0, ?, 'pending', 0, ?)
         ON CONFLICT(graph_project) DO UPDATE SET
             memory_project = excluded.memory_project,
             root_path = excluded.root_path,
             cursor_entity_id = 0,
             enqueued_at = excluded.enqueued_at,
+            snapshot_at = excluded.snapshot_at,
             state = CASE WHEN code_link_refresh_queue.state = 'leased' THEN 'leased' ELSE 'pending' END,
             attempts = CASE WHEN code_link_refresh_queue.state = 'leased' THEN code_link_refresh_queue.attempts ELSE 0 END,
             leased_until = CASE WHEN code_link_refresh_queue.state = 'leased' THEN code_link_refresh_queue.leased_until ELSE NULL END,
             last_error = NULL
         """,
-        (graph_project, memory_project, root_path, now),
+        (graph_project, memory_project, root_path, now, snapshot_at),
     )
 
 
-def enqueue_refresh(graph_project: str, memory_project: str, root_path: str) -> None:
+def enqueue_refresh(
+    graph_project: str,
+    memory_project: str,
+    root_path: str,
+    snapshot_at: str | None = None,
+) -> None:
     with _connection() as conn:
-        enqueue(conn, graph_project, memory_project, root_path)
+        enqueue(conn, graph_project, memory_project, root_path, snapshot_at)
 
 
 def claim(limit: int = 1) -> list[ClaimedRefresh]:
@@ -72,7 +86,8 @@ def claim(limit: int = 1) -> list[ClaimedRefresh]:
         try:
             rows = conn.execute(
                 """
-                SELECT graph_project, memory_project, root_path, cursor_entity_id, enqueued_at
+                SELECT graph_project, memory_project, root_path, cursor_entity_id,
+                       enqueued_at, snapshot_at
                 FROM code_link_refresh_queue
                 WHERE state IN ('pending', 'leased')
                   AND (leased_until IS NULL OR leased_until <= ?)
@@ -97,7 +112,13 @@ def claim(limit: int = 1) -> list[ClaimedRefresh]:
             raise
     return [
         ClaimedRefresh(
-            str(row[0]), str(row[1]), str(row[2]), int(row[3]), str(row[4]), token
+            str(row[0]),
+            str(row[1]),
+            str(row[2]),
+            int(row[3]),
+            str(row[4]),
+            token,
+            row[5],
         )
         for row in rows
     ]

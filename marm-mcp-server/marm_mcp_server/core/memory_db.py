@@ -492,9 +492,17 @@ def init_database(db_path: str) -> None:
                 lease_token      TEXT,
                 leased_until     TEXT,
                 attempts         INTEGER NOT NULL DEFAULT 0,
-                last_error       TEXT
+                last_error       TEXT,
+                snapshot_at      TEXT
             )
             """)
+        queue_cols = {
+            row[1] for row in conn.execute("PRAGMA table_info(code_link_refresh_queue)")
+        }
+        if "snapshot_at" not in queue_cols:
+            conn.execute(
+                "ALTER TABLE code_link_refresh_queue ADD COLUMN snapshot_at TEXT"
+            )
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_code_link_refresh_ready"
             " ON code_link_refresh_queue(state, leased_until, enqueued_at)"

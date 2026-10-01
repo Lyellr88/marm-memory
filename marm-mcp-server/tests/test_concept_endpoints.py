@@ -696,9 +696,12 @@ def test_run_build_links_code_when_graph_available(concepts_env, monkeypatch):
     assert result["code_links_created"] == 1
 
 
-def test_run_build_records_the_code_a_link_was_made_against(
+def test_run_build_takes_no_fingerprint_from_lines_it_cannot_date(
     concepts_env, monkeypatch, tmp_path
 ):
+    """A build may run between a save and the re-index that moves the graph's
+    line numbers, so hashing here could read the wrong lines; only a refresh
+    after a completed index anchors a link."""
     _server, concepts, _memory_module = concepts_env
     from marm_mcp_server.core.concept_extraction import Entity, ExtractionResult
 
@@ -729,7 +732,7 @@ def test_run_build_records_the_code_a_link_was_made_against(
     concepts._run_build([[("m1", "CbmClient reference", "sess-a", "proj-a")]])
 
     result = concepts._run_recall("CbmClient", session_name=None, limit=10)
-    assert [c["freshness"] for c in result["linked_code"]] == ["unchanged"]
+    assert [c["freshness"] for c in result["linked_code"]] == ["unknown"]
 
 
 def test_run_build_removes_stale_exact_link_after_an_authoritative_no_match(
