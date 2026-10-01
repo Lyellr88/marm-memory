@@ -9,6 +9,7 @@ verified answer's own results, never a rewrite of them.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import re
@@ -350,6 +351,13 @@ def _provable(kind: str, content: str, evidence: str) -> bool:
     return False
 
 
+def source_units(text: str | None) -> frozenset[str]:
+    """The source's whole sentences, normalised as a distilled span is."""
+    return frozenset(
+        _norm(_distill_normalise(u).rstrip(".")) for u in _source_sentences(text or "")
+    )
+
+
 def guardrail_decision(
     *,
     content: str,
@@ -358,6 +366,7 @@ def guardrail_decision(
     source_text: str | None,
     verification: dict[str, Any] | None,
     origin: str,
+    units: frozenset[str] | None = None,
 ) -> Decision:
     headline = content.strip()
     checks = {
@@ -381,10 +390,8 @@ def guardrail_decision(
         # A whole sentence of the source, never a fragment of one: a fragment
         # can drop the `never` that governs it.
         span = _norm(_distill_normalise(evidence or content).rstrip("."))
-        units = {
-            _norm(_distill_normalise(u).rstrip("."))
-            for u in _source_sentences(source_text or "")
-        }
+        if units is None:
+            units = source_units(source_text)
         checks["evidence_verbatim"] = bool(span) and span in units
         # Generated content is prose the model wrote; only its span is
         # verbatim, so a reviewer judges it.
@@ -411,67 +418,81 @@ async def auto_apply(
     memory: Any, proposal_ids: list[str], *, source_text: str | None
 ) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
+    # Once per run and off the event loop: a transcript may be 400,000 chars.
+    units = await asyncio.to_thread(source_units, source_text)
     for pid in proposal_ids:
-        with memory.get_connection() as conn:
-            row = conn.execute(
-                "SELECT content, verdict, evidence, origin, verification, project "
-                "FROM distill_staging WHERE id = ? AND status = 'pending'",
-                (pid,),
-            ).fetchone()
-        if row is None:
-            continue
-        content, verdict, evidence, origin, verification, project = row
-        # Novelty at decision time, whatever staged it: another process may
-        # have stored the same fact since.
-        (resolution,) = await resolve(
-            memory,
-            [Candidate(content=content, score=1.0, reasons=())],
-            session=None,
-            project=project,
-        )
-        verdict = resolution.verdict
-        decision = guardrail_decision(
-            content=content,
-            verdict=verdict,
-            evidence=evidence or "",
-            source_text=source_text,
-            verification=json.loads(verification) if verification else None,
-            origin=origin or "distill",
-        )
-        # Recorded before any write, so an apply that fails still leaves its reason.
-        with memory.get_connection() as conn:
-            conn.execute(
-                "UPDATE distill_staging SET decision = ? WHERE id = ?",
-                (json.dumps(decision.to_public()), pid),
-            )
-        logger.info(
-            "guardrails.decision",
-            proposal_id=pid,
-            apply=decision.apply,
-            checks=decision.checks,
-        )
-        public = decision.to_public()
-        entry: dict[str, Any] = {
-            "proposal_id": pid,
-            "applied": False,
-            "decision": public,
-        }
-        if decision.apply:
-            result = await distill_service.apply(memory, pid)
-            entry["applied"] = result.get("status") == "success"
-            if entry["applied"]:
-                entry["memory_id"] = result["memory_id"]
-            else:
-                # Eligible is not written: the record says what happened.
-                error = str(
-                    result.get("error") or result.get("message") or "apply failed"
-                )
-                public["status"] = "apply_failed"
-                public["error"] = entry["error"] = error
-                with memory.get_connection() as conn:
-                    conn.execute(
-                        "UPDATE distill_staging SET decision = ? WHERE id = ?",
-                        (json.dumps(public), pid),
-                    )
-        out.append(entry)
+        # One proposal failing must not hide the decisions already made.
+        try:
+            entry = await _decide(memory, pid, source_text, units)
+        except Exception:
+            logger.exception("guardrails.decision_failed", proposal_id=pid)
+            entry = {"proposal_id": pid, "applied": False, "error": "decision failed"}
+        if entry is not None:
+            out.append(entry)
     return out
+
+
+async def _decide(
+    memory: Any, pid: str, source_text: str | None, units: frozenset[str]
+) -> dict[str, Any] | None:
+    with memory.get_connection() as conn:
+        row = conn.execute(
+            "SELECT content, verdict, evidence, origin, verification, project "
+            "FROM distill_staging WHERE id = ? AND status = 'pending'",
+            (pid,),
+        ).fetchone()
+    if row is None:
+        return None
+    content, verdict, evidence, origin, verification, project = row
+    # Novelty at decision time, whatever staged it: another process may
+    # have stored the same fact since.
+    (resolution,) = await resolve(
+        memory,
+        [Candidate(content=content, score=1.0, reasons=())],
+        session=None,
+        project=project,
+    )
+    verdict = resolution.verdict
+    decision = guardrail_decision(
+        content=content,
+        verdict=verdict,
+        evidence=evidence or "",
+        source_text=source_text,
+        verification=json.loads(verification) if verification else None,
+        origin=origin or "distill",
+        units=units,
+    )
+    # Recorded before any write, so an apply that fails still leaves its reason.
+    with memory.get_connection() as conn:
+        conn.execute(
+            "UPDATE distill_staging SET decision = ? WHERE id = ?",
+            (json.dumps(decision.to_public()), pid),
+        )
+    logger.info(
+        "guardrails.decision",
+        proposal_id=pid,
+        apply=decision.apply,
+        checks=decision.checks,
+    )
+    public = decision.to_public()
+    entry: dict[str, Any] = {
+        "proposal_id": pid,
+        "applied": False,
+        "decision": public,
+    }
+    if decision.apply:
+        result = await distill_service.apply(memory, pid)
+        entry["applied"] = result.get("status") == "success"
+        if entry["applied"]:
+            entry["memory_id"] = result["memory_id"]
+        else:
+            # Eligible is not written: the record says what happened.
+            error = str(result.get("error") or result.get("message") or "apply failed")
+            public["status"] = "apply_failed"
+            public["error"] = entry["error"] = error
+            with memory.get_connection() as conn:
+                conn.execute(
+                    "UPDATE distill_staging SET decision = ? WHERE id = ?",
+                    (json.dumps(public), pid),
+                )
+    return entry

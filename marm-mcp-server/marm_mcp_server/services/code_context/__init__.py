@@ -104,16 +104,24 @@ async def _review_brief(
             session_name=f"analyst:{short_name(ctx.project)}",
             project=_memory_scope(ctx),
         )
-        result = _analyst_result(analyst_mode, staged["staged"], staged["skipped"])
-        if analyst_mode == "guardrails":
-            result["decisions"] = await auto_apply(
-                memory, staged["staged"], source_text=None
-            )
     except Exception:
         logger.exception("analyst.review_failed", mode=analyst_mode)
         return _analyst_result(
             analyst_mode, [], [{"content": "", "reason": "review failed"}]
         )
+    result = _analyst_result(analyst_mode, staged["staged"], staged["skipped"])
+    if analyst_mode == "guardrails":
+        # What was staged stays reported, and waits for review, if deciding fails.
+        try:
+            result["decisions"] = await auto_apply(
+                memory, staged["staged"], source_text=None
+            )
+        except Exception:
+            logger.exception("analyst.guardrails_failed")
+            result["skipped"] = [
+                *result["skipped"],
+                {"content": "", "reason": "guardrails failed; staged for review"},
+            ]
     return result
 
 
