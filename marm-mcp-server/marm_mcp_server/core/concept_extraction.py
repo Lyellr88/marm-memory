@@ -28,7 +28,7 @@ _PREDICATE_TRIGGERS = [
 ]
 
 _MARKUP = re.compile(r"\*\*|`")
-_BULLET = re.compile(r"^(?:[-*+>#\u2013\u2014\u2022]+\s+)+")
+_BULLET = re.compile(r"^(?:[-*+\u2013\u2014\u2022]+\s+)+")
 _BRACKETS = (("(", ")"), ("[", "]"), ("{", "}"))
 
 _MIN_CHUNK_TOKENS = 1

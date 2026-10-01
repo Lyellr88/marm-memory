@@ -289,6 +289,12 @@ def test_same_sentence_false_when_sent_is_none():
         ("-1 offset", "-1 offset"),
         ("MARM (Memory)", "MARM (Memory)"),
         ("v2.6.21", "v2.6.21"),
+        # Only list bullets and dashes are scaffolding (#252); other leading
+        # characters belong to the text and stay.
+        ("# Heading", "# Heading"),
+        ("> Quoted name", "> Quoted name"),
+        ("+ plus item", "plus item"),
+        ("\u2022 dotted item", "dotted item"),
     ],
 )
 def test_entity_name_drops_the_markdown_a_span_was_written_in(span, name):
