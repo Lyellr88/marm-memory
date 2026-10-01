@@ -2,6 +2,8 @@
 
 A count that is late or lost costs nothing; a recall that waits on one would,
 so writes are queued to one background thread and failures are only logged.
+The queue is bounded: while the store cannot keep up, counts are dropped
+rather than held.
 """
 
 import asyncio
@@ -19,6 +21,9 @@ _executor = concurrent.futures.ThreadPoolExecutor(
 )
 _pending: set[concurrent.futures.Future] = set()
 _pending_lock = threading.Lock()
+#: Count jobs allowed to wait for the store; beyond this a recall goes uncounted.
+MAX_PENDING = 64
+_dropped = 0
 
 
 def _increment(memory_ids: list[str], at: str) -> None:
@@ -45,12 +50,30 @@ def _record(memory_ids: list[str], at: str) -> None:
 
 def record_recalled(memory_ids: Iterable[object]) -> None:
     """Count one recall of each returned memory, without waiting for it."""
+    global _dropped
     ids = list(dict.fromkeys(i for i in memory_ids if isinstance(i, str) and i))
     if not ids:
         return
-    future = _executor.submit(_record, ids, datetime.now(timezone.utc).isoformat())
+    dropped = recovered = 0
     with _pending_lock:
-        _pending.add(future)
+        if len(_pending) >= MAX_PENDING:
+            _dropped += 1
+            dropped = _dropped
+            future = None
+        else:
+            recovered, _dropped = _dropped, 0
+            future = _executor.submit(
+                _record, ids, datetime.now(timezone.utc).isoformat()
+            )
+            _pending.add(future)
+    if recovered:
+        logger.info("memory_usage.recovered", dropped=recovered)
+    if future is None:
+        # Once per overload and then sparingly: a stalled store must not also
+        # flood the log.
+        if dropped == 1 or dropped % 100 == 0:
+            logger.warning("memory_usage.dropped", dropped=dropped, pending=MAX_PENDING)
+        return
     future.add_done_callback(_forget)
 
 

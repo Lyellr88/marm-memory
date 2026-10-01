@@ -3,6 +3,7 @@
 import asyncio
 import importlib
 import sqlite3
+import threading
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -18,6 +19,16 @@ def _usage(db: Path) -> dict[str, tuple[int, str]]:
                 "SELECT memory_id, recall_count, last_recalled_at FROM memory_usage"
             )
         }
+
+
+def _memory_row(db: Path, memory_id: str) -> None:
+    """A real memories row: usage rows reference one."""
+    with sqlite3.connect(db) as conn:
+        conn.execute(
+            "INSERT INTO memories (id, session_name, content, timestamp) "
+            "VALUES (?, 'marm_system', 'MARM protocol text', ?)",
+            (memory_id, datetime.now(timezone.utc).isoformat()),
+        )
 
 
 def _drain() -> None:
@@ -190,6 +201,7 @@ def test_system_documentation_returned_by_the_fallback_is_counted(
     client = local_client(server.app)
     memory = importlib.import_module("marm_mcp_server.core.memory").memory
     doc_id = "doc-row"
+    _memory_row(tmp_path / "marm_memory.db", doc_id)
 
     doc = {
         "id": doc_id,
@@ -242,6 +254,7 @@ def test_the_cold_route_answers_over_http(monkeypatch, tmp_path):
 
 def test_stdio_counts_system_documentation_the_same_way(monkeypatch, tmp_path):
     load_isolated_server(monkeypatch, tmp_path)
+    _memory_row(tmp_path / "marm_memory.db", "doc-row")
     memory = importlib.import_module("marm_mcp_server.core.memory").memory
     recall = importlib.import_module("marm_mcp_server.services.recall")
     doc = {
@@ -290,8 +303,50 @@ def test_an_older_count_never_moves_last_recalled_backwards(monkeypatch, tmp_pat
     load_isolated_server(monkeypatch, tmp_path)
     usage = importlib.import_module("marm_mcp_server.core.memory_usage")
 
+    _memory_row(tmp_path / "marm_memory.db", "m")
     usage._increment(["m"], "2026-09-27T10:00:00+00:00")
     usage._increment(["m"], "2026-09-27T09:00:00+00:00")
 
     count, last = _usage(tmp_path / "marm_memory.db")["m"]
     assert (count, last) == (2, "2026-09-27T10:00:00+00:00")
+
+
+def test_deleting_a_memory_removes_its_usage(monkeypatch, tmp_path):
+    server = load_isolated_server(monkeypatch, tmp_path)
+    client = local_client(server.app)
+    wanted = _log(client, "the write queue serialises memory writes")
+    client.post(
+        "/marm_smart_recall",
+        json={"query": "write queue serialises", "session_name": "usage", "limit": 1},
+    )
+    _drain()
+    db = tmp_path / "marm_memory.db"
+    assert wanted in _usage(db)
+
+    memory = importlib.import_module("marm_mcp_server.core.memory").memory
+    with memory.get_connection() as conn:
+        conn.execute("DELETE FROM memories WHERE id = ?", (wanted,))
+
+    assert wanted not in _usage(db), "a deleted memory left a usage row behind"
+
+
+def test_an_overloaded_store_drops_counts_instead_of_queueing_them(
+    monkeypatch, tmp_path
+):
+    """Recall must not build a backlog while the store cannot take writes."""
+    load_isolated_server(monkeypatch, tmp_path)
+    usage = importlib.import_module("marm_mcp_server.core.memory_usage")
+    release = threading.Event()
+    monkeypatch.setattr(usage, "_increment", lambda *_a: release.wait(30))
+    try:
+        with structlog.testing.capture_logs() as logs:
+            for i in range(usage.MAX_PENDING * 3):
+                usage.record_recalled([f"m{i}"])
+            pending = len(usage._pending)
+    finally:
+        release.set()
+    asyncio.run(usage.drain())
+
+    assert pending <= usage.MAX_PENDING
+    assert any(e.get("event") == "memory_usage.dropped" for e in logs)
+    assert usage._pending == set()

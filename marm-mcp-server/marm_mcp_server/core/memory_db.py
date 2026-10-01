@@ -544,7 +544,8 @@ def init_database(db_path: str) -> None:
 
         conn.execute("""
             CREATE TABLE IF NOT EXISTS memory_usage (
-                memory_id TEXT PRIMARY KEY,
+                memory_id TEXT PRIMARY KEY
+                    REFERENCES memories(id) ON DELETE CASCADE,
                 recall_count INTEGER NOT NULL DEFAULT 0,
                 last_recalled_at TEXT
             )
