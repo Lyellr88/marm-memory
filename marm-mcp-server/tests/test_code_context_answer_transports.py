@@ -6,6 +6,7 @@ model are stubbed; the transports, request models and routing are real.
 
 import asyncio
 import importlib
+import inspect
 import json
 import sys
 import types
@@ -64,14 +65,32 @@ def _stub(monkeypatch, reply: str) -> list[str]:
             finished["reason"] = "stop"
         return reply
 
-    monkeypatch.setattr(cc, "build", build)
-    monkeypatch.setattr(cc, "LocalBackend", lambda: object())
+    for space in _every_code_context_namespace(cc):
+        monkeypatch.setitem(space, "build", build)
+        monkeypatch.setitem(space, "LocalBackend", lambda: object())
     for llm in _every_local_llm(local_llm):
         monkeypatch.setattr(llm, "available", lambda *a, **k: "stub-model")
         monkeypatch.setattr(llm, "endpoint_source", lambda: "environment")
         monkeypatch.setattr(llm, "complete", complete)
         monkeypatch.setattr(llm, "stream", stream)
     return composed
+
+
+def _every_code_context_namespace(current):
+    """The globals of every loaded copy of build_code_context, live or stale.
+
+    A tool module that imported build_code_context keeps the copy it was loaded
+    with, and that function reads build and LocalBackend from its own globals.
+    """
+    found = {id(current.__dict__): current.__dict__}
+    for mod in list(sys.modules.values()):
+        if not isinstance(mod, types.ModuleType):
+            continue
+        fn = vars(mod).get("build_code_context")
+        space = fn.__globals__ if inspect.isfunction(fn) else None
+        if space is not None and space.get("__name__") == current.__name__:
+            found[id(space)] = space
+    return list(found.values())
 
 
 def _every_local_llm(current):

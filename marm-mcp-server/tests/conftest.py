@@ -273,7 +273,9 @@ def bind_live_modules(monkeypatch, namespace, **paths) -> None:
     for name, path in paths.items():
         module = importlib.import_module(path)
         parent_path, _, child = path.rpartition(".")
-        monkeypatch.setattr(importlib.import_module(parent_path), child, module)
+        monkeypatch.setattr(
+            importlib.import_module(parent_path), child, module, raising=False
+        )
         monkeypatch.setitem(namespace, name, module)
 
 

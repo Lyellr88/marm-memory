@@ -1,4 +1,5 @@
 import asyncio
+import importlib
 import json
 import os
 import sqlite3
@@ -12,11 +13,11 @@ from mcp.shared.memory import create_connected_server_and_client_session
 
 
 def _isolated_stdio(monkeypatch, tmp_path):
-    import marm_mcp_server.core.stdio_tool_lifecycle as lifecycle
-    import marm_mcp_server.server_stdio as stdio
-    import marm_mcp_server.services.log_entry as log_entry
-    import marm_mcp_server.services.notebook as notebook_service
-    from marm_mcp_server.core.memory import MARMMemory
+    lifecycle = importlib.import_module("marm_mcp_server.core.stdio_tool_lifecycle")
+    stdio = importlib.import_module("marm_mcp_server.server_stdio")
+    log_entry = importlib.import_module("marm_mcp_server.services.log_entry")
+    notebook_service = importlib.import_module("marm_mcp_server.services.notebook")
+    MARMMemory = importlib.import_module("marm_mcp_server.core.memory").MARMMemory
 
     mem = MARMMemory(str(tmp_path / "stdio-inprocess.db"))
     mem._encoder_failed = True

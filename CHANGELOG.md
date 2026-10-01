@@ -1,6 +1,19 @@
 # Changelog
 
 <details>
+<summary><strong>October 1st, 2026: Concept Duplicate Accuracy (v2.56.2)</strong></summary>
+
+### Fixed
+
+- Potential Duplicates no longer offers concept names whose numeric values differ, such as distinct version numbers, counts, or ordinals. This keeps semantically similar but meaningfully different entities separate.
+
+### Acknowledgment
+
+Thank you to [@doublegate](https://github.com/doublegate) for [#251](https://github.com/Lyellr88/marm-memory/pull/251).
+
+</details>
+
+<details>
 <summary><strong>September 30th, 2026: CI and Code Scanning on Every Branch (v2.56.1)</strong></summary>
 
 ### Changed

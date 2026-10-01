@@ -496,8 +496,8 @@ def test_neighborhood_respects_direction_and_predicate_filters(tmp_path):
 
 def test_build_runs_and_duplicate_candidates_are_readable(tmp_path):
     db = make_db(tmp_path)
-    first = add_entity(db, "first")
-    second = add_entity(db, "second")
+    first = add_entity(db, "alpha")
+    second = add_entity(db, "beta")
     other_scope = add_entity(db, "other")
     set_embedding(db, first, 1.0, 0.0, 0.0)
     set_embedding(db, second, 0.99, 0.01, 0.0)
@@ -532,8 +532,8 @@ def test_build_runs_and_duplicate_candidates_are_readable(tmp_path):
 
 def test_dismissed_duplicate_candidate_stays_hidden(tmp_path):
     db = make_db(tmp_path)
-    first = add_entity(db, "first", session="sess-a")
-    second = add_entity(db, "second", session="sess-a")
+    first = add_entity(db, "alpha", session="sess-a")
+    second = add_entity(db, "beta", session="sess-a")
     set_embedding(db, first, 1.0, 0.0)
     set_embedding(db, second, 0.99, 0.01)
     with sqlite3.connect(db) as conn:
@@ -543,7 +543,7 @@ def test_dismissed_duplicate_candidate_stays_hidden(tmp_path):
         )
         conn.execute(
             "INSERT INTO concept_duplicate_dismissals "
-            "(name_a, name_b, session_name) VALUES ('first', 'second', 'sess-a')"
+            "(name_a, name_b, session_name) VALUES ('alpha', 'beta', 'sess-a')"
         )
 
     assert concept_store.duplicates(db, threshold=0.9) == []
@@ -551,8 +551,8 @@ def test_dismissed_duplicate_candidate_stays_hidden(tmp_path):
 
 def test_duplicate_report_exposes_threshold_and_total(tmp_path):
     db = make_db(tmp_path)
-    for index in range(3):
-        entity_id = add_entity(db, f"entity-{index}", session="sess-a")
+    for name in ("alpha", "beta", "gamma"):
+        entity_id = add_entity(db, name, session="sess-a")
         set_embedding(db, entity_id, 1.0, 0.0)
 
     report = concept_store.duplicate_report(db, limit=1, offset=1, threshold=0.9)
