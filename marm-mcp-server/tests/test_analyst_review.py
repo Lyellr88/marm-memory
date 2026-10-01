@@ -1002,6 +1002,14 @@ def test_the_switch_is_saved_and_reported_over_http(monkeypatch, tmp_path):
     client.put("/internal/runtime/settings/llm", json={"auto_apply": None})
     assert review.auto_apply_allowed() is True, "null leaves the switch alone"
 
+    # An empty string returns the switch to MARM_ANALYST_AUTO_APPLY.
+    cleared = client.put("/internal/runtime/settings/llm", json={"auto_apply": ""})
+    assert cleared.status_code == 200, cleared.text
+    assert system._llm_status()["analyst_auto_apply"] == {
+        "enabled": False,
+        "source": "environment",
+    }
+
 
 # --- credentials without a label ------------------------------------------------
 
@@ -1081,20 +1089,23 @@ def test_a_failed_apply_is_recorded_as_failed(staged_memory, monkeypatch):
     monkeypatch.setenv(review.AUTO_APPLY_ENV, "1")
     pid = _staged_only(staged_memory)
 
-    async def failing_apply(_memory, _pid):
-        return {"status": "error", "message": "write queue timed out"}
+    # The real apply, failing only the memory write: its error envelope is the
+    # contract this has to read, not one invented here.
+    async def failing_write(*_a, **_k):
+        raise TimeoutError("write queue timed out")
 
-    monkeypatch.setattr(review.distill_service, "apply", failing_apply)
+    monkeypatch.setattr(staged_memory, "store_memory_queued", failing_write)
     (entry,) = asyncio.run(review.auto_apply(staged_memory, [pid], source_text=FACT))
 
     assert entry["applied"] is False
     assert entry["decision"]["status"] == "apply_failed"
-    assert "write queue timed out" in entry["error"]
+    assert entry["error"] == "write failed: write queue timed out"
     with staged_memory.get_connection() as conn:
-        (decision,) = conn.execute(
-            "SELECT decision FROM distill_staging WHERE id = ?", (pid,)
+        decision, status = conn.execute(
+            "SELECT decision, status FROM distill_staging WHERE id = ?", (pid,)
         ).fetchone()
-    assert json.loads(decision)["status"] == "apply_failed"
+    assert json.loads(decision)["error"] == "write failed: write queue timed out"
+    assert status == "pending", "a failed write leaves the proposal reviewable"
 
 
 def test_an_applied_proposal_is_not_left_awaiting_review(staged_memory, monkeypatch):

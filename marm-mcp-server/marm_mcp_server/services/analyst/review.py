@@ -463,7 +463,9 @@ async def auto_apply(
                 entry["memory_id"] = result["memory_id"]
             else:
                 # Eligible is not written: the record says what happened.
-                error = str(result.get("message") or "apply failed")
+                error = str(
+                    result.get("error") or result.get("message") or "apply failed"
+                )
                 public["status"] = "apply_failed"
                 public["error"] = entry["error"] = error
                 with memory.get_connection() as conn:
