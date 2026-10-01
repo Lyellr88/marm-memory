@@ -370,6 +370,13 @@ export interface LocalLlmStatus {
     profiles: Record<AnalystProfileName, AnswerProfile>;
     active: AnswerProfile;
   };
+  /** Whether Guardrails may apply provable results without review. Off unless
+   *  the operator turns it on; `unknown` when the saved switch is unreadable,
+   *  in which case nothing is applied. */
+  analyst_auto_apply?: {
+    enabled: boolean;
+    source: 'override' | 'environment' | 'unknown';
+  };
 }
 
 /** A local OpenAI-compatible server found by scanning loopback ports.

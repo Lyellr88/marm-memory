@@ -120,6 +120,8 @@ class RuntimeLlmPayload(BaseModel):
     model: str | None = Field(default=None, max_length=512)
     endpoint: str | None = Field(default=None, max_length=512)
     profile: Literal["", "general", "small", "large"] | None = None
+    #: Guardrails auto-apply; an empty string returns to the environment.
+    auto_apply: bool | Literal[""] | None = None
 
 
 class RuntimeLlmRootPayload(BaseModel):
