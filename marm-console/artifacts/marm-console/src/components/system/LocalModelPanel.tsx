@@ -588,14 +588,18 @@ export function LocalModelPanels({
               </div>
               <ProfilePicker llm={llm} />
             </div>
-
-            <div className="mt-4 border-t border-border/60 pt-4">
-              <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                Automated Guardrails
-              </div>
-              <AutoApplyToggle llm={llm} />
-            </div>
           </>
+        )}
+
+        {/* Also outside the gate: verbatim distill can run Guardrails with no
+            model at all. */}
+        {llm.analyst_auto_apply && (
+          <div className="mt-4 border-t border-border/60 pt-4">
+            <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              Automated Guardrails
+            </div>
+            <AutoApplyToggle llm={llm} />
+          </div>
         )}
 
         {/* Outside the `configured` gate on purpose: a deployment with no

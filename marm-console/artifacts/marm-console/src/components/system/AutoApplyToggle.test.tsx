@@ -10,9 +10,10 @@ vi.mock('@/hooks/use-marm-queries', () => ({
   useBrowseLlmModels: () => ({ data: undefined }),
   useUpdateLlmRoots: () => ({ mutate: vi.fn(), isPending: false }),
   useUpdateLlmSettings: () => ({ mutate, isPending: false, data: undefined }),
+  useLlmServers: () => ({ data: undefined, isFetching: false, refetch: vi.fn() }),
 }));
 
-const { AutoApplyToggle } = await import('./LocalModelPanel');
+const { AutoApplyToggle, LocalModelPanels } = await import('./LocalModelPanel');
 
 function llm(
   enabled: boolean,
@@ -69,5 +70,10 @@ describe('AutoApplyToggle', () => {
     const old = { ...llm(false, 'environment'), analyst_auto_apply: undefined };
     const { container } = render(<AutoApplyToggle llm={old} />);
     expect(container.textContent).toBe('');
+  });
+
+  it('is offered with no model configured, since verbatim distill needs none', () => {
+    render(<LocalModelPanels llm={{ ...llm(false, 'environment'), configured: false }} />);
+    expect(screen.getByRole('checkbox', { name: /apply provable results/i })).toBeTruthy();
   });
 });
