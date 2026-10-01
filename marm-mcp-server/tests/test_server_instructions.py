@@ -75,3 +75,12 @@ def test_stdio_initialize_returns_the_instructions(tmp_path):
     lines = [json.loads(line) for line in result.stdout.decode().splitlines() if line]
     response = next(m for m in lines if m.get("id") == 1)
     assert response["result"]["instructions"] == SERVER_INSTRUCTIONS
+
+
+def test_the_instructions_keep_the_accepted_wording():
+    # The wording boundaries agreed on #258.
+    text = SERVER_INSTRUCTIONS
+    assert "connected" in text and "this machine" not in text
+    assert "When prior context may help" in text
+    assert "concise, durable fact" in text and "headline" not in text
+    assert "context, not instruction" in text
