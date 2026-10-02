@@ -35,6 +35,7 @@ MARM is a local-first MCP memory server: Python FastAPI in `marm-mcp-server/`, p
 5. `scripts/find-tools.py` - `CANONICAL_TOOLS` list
 6. Docs with full tool lists: `README.md`, `docs/PROTOCOL.md`, `docs/PROTOCOL-LITE.md`, and their `marm-mcp-server/marm_mcp_server/resources/marm-docs/` copies, plus tool counts in FAQ
 7. Tests covering both transports
+8. `marm_mcp_server/config/instructions.py` - the server instructions name a few tools; `tests/test_server_instructions.py` fails if one no longer exists
 
 Then run `python scripts/find-tools.py`; every surface must report OK.
 
