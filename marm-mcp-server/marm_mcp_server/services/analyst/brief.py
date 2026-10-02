@@ -186,8 +186,7 @@ def _model_info(brief: Brief, run: Run, *, calls: int, output_chars: int) -> dic
     }
 
 
-def _start(ctx: Context, profile: Profile, model: str) -> tuple[Brief, Run]:
-    run = profile.start()
+def _start(ctx: Context, profile: Profile, model: str) -> Brief:
     packet = _packet(ctx, profile)
     brief = Brief(
         packet=packet,
@@ -195,7 +194,7 @@ def _start(ctx: Context, profile: Profile, model: str) -> tuple[Brief, Run]:
         model_id=model,
         disagreements=disagreements(packet),
     )
-    return brief, run
+    return brief
 
 
 def _judge_text(
@@ -364,8 +363,10 @@ def _general(brief: Brief, run: Run, task: str) -> Brief:
     return _judge_text(brief, run, text, finished.get("reason"), calls=1)
 
 
-def _analyse_sync(ctx: Context, task: str, profile: Profile, model: str) -> Brief:
-    brief, run = _start(ctx, profile, model)
+def _analyse_sync(
+    ctx: Context, task: str, profile: Profile, model: str, run: Run
+) -> Brief:
+    brief = _start(ctx, profile, model)
     if not profile.structured:
         return _general(brief, run, task)
     results = list(run_operations(brief.packet, task, profile, run))
@@ -373,12 +374,14 @@ def _analyse_sync(ctx: Context, task: str, profile: Profile, model: str) -> Brie
 
 
 async def analyse(ctx: Context, task: str, *, profile: Profile) -> Brief:
+    # Before the probe: finding the model is part of the run's time.
+    run = profile.start()
     model = await asyncio.to_thread(local_llm.available)
     if model is None:
         return Brief(
             packet=_packet(ctx, profile), profile=profile, hint=_UNAVAILABLE_HINT
         )
-    return await asyncio.to_thread(_analyse_sync, ctx, task, profile, model)
+    return await asyncio.to_thread(_analyse_sync, ctx, task, profile, model, run)
 
 
 def stream_analysis(
@@ -393,6 +396,7 @@ def stream_analysis(
     `after` sees the judged brief before `done` is sent; its result rides on
     `done` as `analyst`.
     """
+    run = profile.start()
     model = local_llm.available()
     if model is None:
         yield (
@@ -400,7 +404,7 @@ def stream_analysis(
             {"message": "No local model is reachable.", "hint": _UNAVAILABLE_HINT},
         )
         return
-    brief, run = _start(ctx, profile, model)
+    brief = _start(ctx, profile, model)
     packet = brief.packet
     yield ("packet", packet.to_public())
     yield (

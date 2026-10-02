@@ -91,6 +91,46 @@ export function ProfilePicker({ llm }: { llm: LocalLlmStatus }) {
   );
 }
 
+/** Whether Guardrails may write without a reviewer. Saved, so it wins over
+ *  MARM_ANALYST_AUTO_APPLY; even on, only mechanically provable results apply. */
+export function AutoApplyToggle({ llm }: { llm: LocalLlmStatus }) {
+  const update = useUpdateLlmSettings();
+  const state = llm.analyst_auto_apply;
+  if (!state) return null;
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-3">
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            className="h-4 w-4 accent-primary"
+            checked={state.enabled}
+            disabled={update.isPending}
+            onChange={(event) => update.mutate({ auto_apply: event.target.checked })}
+          />
+          Let Guardrails apply provable results without review
+        </label>
+        {state.source === 'override' && (
+          <Button size="sm" variant="outline" onClick={() => update.mutate({ auto_apply: '' })}>
+            Use environment
+          </Button>
+        )}
+      </div>
+      {state.source === 'unknown' ? (
+        <p className="text-[11px] text-amber-300">
+          The saved setting could not be read, so nothing is applied automatically.
+        </p>
+      ) : (
+        <p className="text-[11px] text-muted-foreground">
+          Only a call edge, a defined-in range, or a whole verbatim sentence is applied, and every
+          decision is recorded on its proposal. Everything else waits for review.{' '}
+          <span className="font-mono">{state.source}</span>
+        </p>
+      )}
+    </div>
+  );
+}
+
 function ModelSwitcher({ llm }: { llm: LocalLlmStatus }) {
   const models = useLlmModels();
   const update = useUpdateLlmSettings();
@@ -549,6 +589,17 @@ export function LocalModelPanels({
               <ProfilePicker llm={llm} />
             </div>
           </>
+        )}
+
+        {/* Also outside the gate: verbatim distill can run Guardrails with no
+            model at all. */}
+        {llm.analyst_auto_apply && (
+          <div className="mt-4 border-t border-border/60 pt-4">
+            <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              Automated Guardrails
+            </div>
+            <AutoApplyToggle llm={llm} />
+          </div>
         )}
 
         {/* Outside the `configured` gate on purpose: a deployment with no

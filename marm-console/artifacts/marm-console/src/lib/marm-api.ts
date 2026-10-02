@@ -340,7 +340,13 @@ export function createMarmClient(config: MarmClientConfig) {
     // Only the fields actually being changed are sent: the toggle and the
     // picker are separate controls, and posting both every time would have
     // each silently overwrite whatever the other had set.
-    updateLlmSettings: (body: { enabled?: boolean; model?: string; endpoint?: string; profile?: AnalystProfileName | '' }) =>
+    updateLlmSettings: (body: {
+      enabled?: boolean;
+      model?: string;
+      endpoint?: string;
+      profile?: AnalystProfileName | '';
+      auto_apply?: boolean | '';
+    }) =>
       request<{ status: string; llm: LocalLlmStatus }>(config, 'PUT', '/settings/llm', { body }),
     updateLlmRoots: (path: string, remove = false) =>
       request<LlmModelsResponse & { configured_roots: string[] }>(

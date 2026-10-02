@@ -59,6 +59,9 @@ class RuntimeLlmRequest(BaseModel):
     endpoint: str | None = Field(default=None, max_length=512)
     #: The analyst profile. An empty string returns to MARM_ANALYST_PROFILE.
     profile: Literal["", "general", "small", "large"] | None = None
+    #: Whether Automated Guardrails may apply unattended; saved, so it beats
+    #: MARM_ANALYST_AUTO_APPLY. An empty string returns to the environment.
+    auto_apply: bool | Literal[""] | None = None
 
 
 class RuntimeLlmRootRequest(BaseModel):
@@ -247,6 +250,12 @@ def _llm_status() -> dict:
         "profiles": {key: p.to_public() for key, p in analyst_profile.PROFILES.items()},
         "active": analyst_profile.resolve(name).to_public(),
     }
+    from ..services.analyst import review
+
+    status["analyst_auto_apply"] = {
+        "enabled": review.auto_apply_allowed(),
+        "source": runtime_flags.source(runtime_flags.ANALYST_AUTO_APPLY),
+    }
     return status
 
 
@@ -346,6 +355,10 @@ async def update_runtime_llm(req: RuntimeLlmRequest) -> dict:
             runtime_flags.set_(runtime_flags.ANALYST_PROFILE, req.profile)
         else:
             runtime_flags.clear(runtime_flags.ANALYST_PROFILE)
+    if req.auto_apply == "":
+        runtime_flags.clear(runtime_flags.ANALYST_AUTO_APPLY)
+    elif req.auto_apply is not None:
+        runtime_flags.set_bool(runtime_flags.ANALYST_AUTO_APPLY, req.auto_apply)
 
     applied_model: str | None = None
     rejected: str | None = None

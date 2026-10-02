@@ -66,4 +66,59 @@ describe('ProposalCard', () => {
     expect(screen.getByRole('button', { name: /keep it/i }).hasAttribute('disabled')).toBe(true);
     expect(screen.getByRole('button', { name: /discard/i }).hasAttribute('disabled')).toBe(true);
   });
+
+  it('shows the answer verification nested in a staged analyst proposal', () => {
+    // The shape `stage_conclusions` stores: the answer's verdict sits under `answer`.
+    const verification = {
+      state: 'verified' as const,
+      claim_kind: 'call_edge',
+      result: 'relations',
+      packet_id: 'pk-1',
+      answer: {
+        state: 'verified' as const,
+        score: 0.92,
+        citation_coverage: 1,
+        source_span_support: 0.95,
+        graph_memory_consistency: 1,
+        claims: 2,
+        cited_claims: 2,
+        failures: [],
+        hard_failures: [],
+        abstained: false,
+      },
+    };
+    render(<ProposalCard proposal={proposal({ origin: 'analyst', verification })} />);
+    expect(screen.getByText('0.92')).toBeTruthy();
+  });
+
+  it('renders a staged analyst proposal whose answer verdict is empty', () => {
+    const verification = {
+      state: 'verified' as const,
+      claim_kind: 'call_edge',
+      result: 'relations',
+      packet_id: 'pk-1',
+      answer: {},
+    };
+    render(<ProposalCard proposal={proposal({ origin: 'analyst', verification })} />);
+    expect(screen.getByText(/186 edges per memory/)).toBeTruthy();
+  });
+
+  it('offers no actions on a proposal guardrails already applied', () => {
+    render(
+      <ProposalCard
+        proposal={proposal({ staged: true, applied: true, applied_memory_id: 'm-9' })}
+        onApply={vi.fn()}
+        onDiscard={vi.fn()}
+      />,
+    );
+    expect(screen.queryByRole('button', { name: /keep it/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /discard/i })).toBeNull();
+    expect(screen.getByText(/applied by guardrails/i)).toBeTruthy();
+  });
+
+  it('labels an analyst proposal\u2019s evidence as the source it cites', () => {
+    render(<ProposalCard proposal={proposal({ origin: 'analyst', evidence: 'def apply():\n    claim()' })} />);
+    expect(screen.getByText(/the source it cites/i)).toBeTruthy();
+    expect(screen.queryByText(/what was actually said/i)).toBeNull();
+  });
 });

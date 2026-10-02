@@ -405,7 +405,9 @@ def test_an_unknown_profile_is_refused():
 def test_the_status_reports_the_profile_and_its_limits(monkeypatch):
     from marm_mcp_server.endpoints import system
 
-    monkeypatch.setattr(local_llm, "status", lambda: {})
+    # system's own reference: an isolated load elsewhere can leave the test
+    # module's local_llm a different generation, and the real one probes ports.
+    monkeypatch.setattr(system.local_llm, "status", lambda: {})
     monkeypatch.setattr(system.runtime_flags, "source", lambda key: "default")
     monkeypatch.setattr(system.runtime_flags, "get", lambda key: None)
     monkeypatch.delenv("MARM_ANALYST_PROFILE", raising=False)

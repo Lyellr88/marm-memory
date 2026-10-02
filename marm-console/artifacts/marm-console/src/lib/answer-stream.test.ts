@@ -111,6 +111,11 @@ describe('the analyst fields', () => {
     expect(done.disagreements?.[0].severity).toBe('contradicted');
   });
 
+  it('takes the analyst result from done', () => {
+    const analyst = { mode: 'manual_review', staged: ['x'], skipped: [], decisions: [] };
+    expect(applyAnswerEvent(streaming, 'done', { citations: [], status: 'ok', analyst }).analyst).toEqual(analyst);
+  });
+
   it('keeps a rejection a rejection', () => {
     expect(applyAnswerEvent(streaming, 'done', { citations: [], status: 'rejected' }).grounding).toBe('rejected');
   });

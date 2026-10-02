@@ -13,10 +13,14 @@ from collections.abc import Iterator
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
+from ...services.analyst.profile import MAX_TIME_S
 from .. import mcp_client
 from ..models import CodeContextPayload
 
 router = APIRouter()
+
+#: The longest run any analyst profile may be configured for, plus composition.
+ANSWER_TIMEOUT = MAX_TIME_S + 60.0
 
 
 @router.post("/api/code-context")
@@ -36,7 +40,7 @@ def build_code_context(payload: CodeContextPayload) -> dict:
         result = mcp_client.post(
             "marm_code_context",
             payload.model_dump(),
-            timeout=150.0 if payload.answer else 60.0,
+            timeout=ANSWER_TIMEOUT if payload.answer else 60.0,
         )
     except mcp_client.McpRequestError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
@@ -63,7 +67,9 @@ def stream_answer(payload: CodeContextPayload) -> StreamingResponse:
     def relay() -> Iterator[bytes]:
         try:
             yield from mcp_client.stream(
-                "internal/code-context/answer", payload.model_dump()
+                "internal/code-context/answer",
+                payload.model_dump(),
+                timeout=ANSWER_TIMEOUT,
             )
         except mcp_client.McpUnavailable:
             yield (

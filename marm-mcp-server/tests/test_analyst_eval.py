@@ -13,14 +13,19 @@ from pathlib import Path
 import pytest
 
 from marm_mcp_server.services.analyst import brief as brief_mod
+from marm_mcp_server.services.analyst.brief import Brief
 from marm_mcp_server.services.analyst.evaluate import (
     CATEGORIES,
+    Score,
+    _precision,
     context,
     load_cases,
     score,
     summarise,
 )
+from marm_mcp_server.services.analyst.packet import build_packet
 from marm_mcp_server.services.analyst.profile import PROFILES
+from marm_mcp_server.services.code_context.compose import Context
 
 CASES = load_cases(Path(__file__).parent / "fixtures" / "analyst_eval.json")
 
@@ -82,3 +87,40 @@ def test_the_summary_reports_safety_first(monkeypatch):
     assert summary["false_grounded"] == 0
     assert summary["useful"] >= 1
     assert list(summary)[:3] == ["cases", "false_grounded", "citation_precision"]
+
+
+def _scored(precision):
+    return Score(
+        case="c",
+        category="supported",
+        profile="p",
+        state="uncertain",
+        status="ok",
+        useful=False,
+        verified_claims=0,
+        citation_precision=precision,
+        false_grounded=0,
+        disagreements=0,
+        latency_ms=0,
+        packet_chars=0,
+        output_chars=0,
+        calls=0,
+        max_tokens=1,
+        stopped=None,
+    )
+
+
+def test_a_run_that_cited_nothing_has_no_citation_precision():
+    packet = build_packet(Context(project={"name": "demo"}, task="t"))
+    profile = PROFILES["general"]
+    assert _precision(Brief(packet=packet, profile=profile)) is None
+    uncited = Brief(packet=packet, profile=profile, answer="It is fine.")
+    assert _precision(uncited) is None
+
+
+def test_uncited_runs_are_counted_apart_from_precision():
+    # One unresolved citation and nine silent runs is not 0.9 precision.
+    summary = summarise([_scored(0.0)] + [_scored(None)] * 9)["p"]
+    assert summary["citation_precision"] == 0.0
+    assert summary["uncited"] == 9
+    assert summarise([_scored(None)])["p"]["citation_precision"] is None

@@ -21,6 +21,7 @@ import { ActionNoticePanel } from '@/components/memory/shared';
 import { Sparkles, FileCode2, Brain, FileText, AlertTriangle, Network, FolderCode } from 'lucide-react';
 import { useBuildCodeContext, useProjects, useRuntimeSettings, useStreamingAnswer } from '@/hooks/use-marm-queries';
 import { MarmApiError } from '@/lib/marm-api';
+import type { AnalystMode } from '@/lib/marm-types';
 import { CopyButton, LoadingState } from '@/components/code-context/shared';
 import { SymbolsPane } from '@/components/code-context/SymbolsPane';
 import { MemoryPane } from '@/components/code-context/MemoryPane';
@@ -156,6 +157,9 @@ export function CodeContextPage() {
   // who only wants the ranked symbols should not wait for it, and a running
   // model must not make it part of the workflow by default.
   const [wantAnswer, setWantAnswer] = useState(false);
+  // What happens to the answer's results. Read-only is the default: the
+  // other two stage proposals, and under guardrails MARM may apply them.
+  const [analystMode, setAnalystMode] = useState<AnalystMode>('read_only');
   const [tab, setTab] = useState('answer');
   const [task, setTask] = useState(() => params.get('task') ?? '');
   const [project, setProject] = useState(() => params.get('project') ?? '');
@@ -224,7 +228,7 @@ export function CodeContextPage() {
     if (withAnswer) {
       // One request. The stream's first event is the composition, which fills
       // the panes before generation starts; the answer is written from it.
-      answer.start(request);
+      answer.start({ ...request, analyst_mode: analystMode });
     } else {
       answer.reset();
       build.mutate(
@@ -397,6 +401,21 @@ export function CodeContextPage() {
                 className="h-3.5 w-3.5 accent-[hsl(var(--primary))]"
               />
               Answer it too
+            </label>
+            <label className="flex h-10 items-center gap-2 text-xs text-muted-foreground">
+              <span>Analyst</span>
+              <select
+                aria-label="Analyst"
+                value={analystMode}
+                disabled={!wantAnswer}
+                onChange={(event) => setAnalystMode(event.target.value as AnalystMode)}
+                title="Read-only returns the verified answer. Manual review also stages its verified results in Distill for you to approve. Guardrails lets MARM apply the ones it can prove mechanically, only where the operator enabled it. The model never applies anything."
+                className="h-10 rounded-md border border-border/70 bg-muted/40 px-2 text-xs text-foreground disabled:opacity-50"
+              >
+                <option value="read_only">Read-only</option>
+                <option value="manual_review">Manual review</option>
+                <option value="guardrails">Guardrails</option>
+              </select>
             </label>
             <Button type="submit" isLoading={composing} disabled={!task.trim()}>
               <Sparkles className="mr-2 h-4 w-4" /> Compose context

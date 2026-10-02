@@ -73,15 +73,11 @@ def main() -> None:
             ),
             "disagreements": len(result.get("answer_disagreements") or []),
         }
-        print(
-            json.dumps(
-                {
-                    k: row[k]
-                    for k in ("q", "profile", "state", "items", "failures", "seconds")
-                }
-            ),
-            flush=True,
-        )
+        shown = ["q", "profile", "state", "items", "failures", "seconds"]
+        # Every answer the verifier did not accept is one to read and judge.
+        if state != "verified":
+            shown.append("answer")
+        print(json.dumps({k: row[k] for k in shown}), flush=True)
         if out:
             out.write(json.dumps(row) + "\n")
             out.flush()

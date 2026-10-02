@@ -370,6 +370,13 @@ export interface LocalLlmStatus {
     profiles: Record<AnalystProfileName, AnswerProfile>;
     active: AnswerProfile;
   };
+  /** Whether Guardrails may apply provable results without review. Off unless
+   *  the operator turns it on; `unknown` when the saved switch is unreadable,
+   *  in which case nothing is applied. */
+  analyst_auto_apply?: {
+    enabled: boolean;
+    source: 'override' | 'environment' | 'unknown';
+  };
 }
 
 /** A local OpenAI-compatible server found by scanning loopback ports.
@@ -910,6 +917,9 @@ export interface CodeContextInput {
    *  The Console lays the parts out, so it always asks for 3; an agent reads
    *  the markdown and stops, which is why the server default is 1. */
   detail?: number;
+  /** With `answer`: also stage its verified results for review, or under
+   *  guardrails let MARM apply the ones it can prove mechanically. */
+  analyst_mode?: AnalystMode;
 }
 
 /** How a symbol was reached, when it arrived through the call graph rather than
@@ -1004,9 +1014,13 @@ export interface CodeContextResult {
   answer_items?: AnswerItem[];
   /** Memories that state a call the packet's graph does not show. */
   answer_disagreements?: AnswerDisagreement[];
+  /** Present when `analyst_mode` was not `read_only`. */
+  analyst?: AnalystResult;
 }
 
 export type AnswerGrounding = 'ok' | 'unverified' | 'rejected';
+
+export type AnalystMode = 'read_only' | 'manual_review' | 'guardrails';
 
 export interface CodeContextCitation {
   /** `S1`/`M1`: the packet handle the answer cited. Absent from an older server. */
@@ -1123,6 +1137,40 @@ export interface AnswerPacket {
   omitted_memories?: number;
 }
 
+export interface GuardrailDecision {
+  proposal_id: string;
+  applied: boolean;
+  memory_id?: string;
+  decision: {
+    apply: boolean;
+    /** `review_required` whenever MARM could not prove the claim mechanically;
+     *  `apply_failed` when it was eligible but the write did not happen. */
+    status?: 'applied' | 'review_required' | 'apply_failed';
+    checks: Record<string, boolean>;
+    reason: string;
+    error?: string;
+  };
+  error?: string;
+}
+
+export interface AnalystResult {
+  mode: AnalystMode;
+  /** Proposal ids staged into the Distill queue. */
+  staged: string[];
+  skipped: Array<{ content: string; reason: string }>;
+  decisions: GuardrailDecision[];
+}
+
+/** How an analyst result was judged when it was staged. The answer's own
+ *  verdict is nested, and is empty when the answer carried none. */
+export interface StagedVerification {
+  state: AnswerVerification['state'];
+  claim_kind?: string;
+  result?: string;
+  packet_id?: string;
+  answer?: Partial<AnswerVerification>;
+}
+
 /** One distilled proposal, before or after it has been staged. */
 export interface DistillProposal {
   /** Absent when the proposal was not staged (a duplicate, or already seen). */
@@ -1148,6 +1196,14 @@ export interface DistillProposal {
   project?: string | null;
   context_type?: string;
   created_at?: string;
+  /** `analyst` when the Code Context analyst staged it. */
+  origin?: 'distill' | 'analyst';
+  verification?: StagedVerification;
+  /** Set when guardrails applied it during this run; it no longer awaits review. */
+  applied?: boolean;
+  applied_memory_id?: string;
+  /** A guardrails decision, recorded whether or not it applied. */
+  decision?: GuardrailDecision['decision'];
 }
 
 export interface DistillInput {
@@ -1161,6 +1217,7 @@ export interface DistillInput {
   limit?: number;
   include_duplicates?: boolean;
   use_llm?: boolean;
+  review_mode?: 'manual' | 'guardrails';
 }
 
 export interface DistillResult {
@@ -1171,6 +1228,8 @@ export interface DistillResult {
   count?: number;
   extracted?: number;
   staged?: number;
+  /** Applied by guardrails during this run, so not counted in `staged`. */
+  applied?: number;
   session_name?: string;
   memory_id?: string;
   proposal_id?: string;
@@ -1178,6 +1237,9 @@ export interface DistillResult {
   note?: string;
   /** Which extraction path ran. `selected` means no local model was reachable. */
   mode?: 'generated' | 'selected';
+  review_mode?: 'manual' | 'guardrails';
+  /** Present in guardrails mode: one decision per staged proposal. */
+  guardrails?: GuardrailDecision[];
 }
 
 export interface CodeSearchInput {

@@ -275,7 +275,13 @@ export function useUpdateLlmSettings() {
   const { baseUrl, client } = useMarmConfig();
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { enabled?: boolean; model?: string; endpoint?: string; profile?: AnalystProfileName | '' }) =>
+    mutationFn: (body: {
+      enabled?: boolean;
+      model?: string;
+      endpoint?: string;
+      profile?: AnalystProfileName | '';
+      auto_apply?: boolean | '';
+    }) =>
       client.updateLlmSettings(body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.runtimeSettings(baseUrl) });
