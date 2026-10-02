@@ -14,6 +14,11 @@ Scoring then reads both lanes of `marm_smart_recall`:
   log lane      - `log_results` (substring match over topics/summaries, entry ids)
 plus the union an agent actually sees in one response.
 
+The semantic lane is ranked, so it also gets rank-aware scores: recall@k,
+MRR and nDCG@k over the gold memories. Recency moves near-ties as the wall
+clock advances; for comparable runs, start the server with
+MARM_RECALL_REFERENCE_TIME set to a fixed ISO 8601 instant.
+
 Usage:
     python scripts/benchmarking/accuracy/locomo/run_eval.py --ingest --recall --limit 5
     python scripts/benchmarking/accuracy/locomo/run_eval.py --recall --limit 5   # reuse prior ingest
@@ -23,6 +28,7 @@ Requires a running marm-memory HTTP server (default http://127.0.0.1:8001).
 
 import argparse
 import json
+import math
 import os
 import re
 import sys
@@ -228,9 +234,29 @@ def ingest(base_url, api_key, limit_samples=None):
     print(f"Ingest state saved to {STATE_PATH}")
 
 
+def rank_metrics(ranked_ids, gold_ids, k):
+    """recall@k, MRR and binary nDCG@k of one ranked list; None without gold."""
+    if not gold_ids:
+        return None
+    if k < 1:
+        return {"recall_at_k": 0.0, "mrr": 0.0, "ndcg_at_k": 0.0}
+    top = list(ranked_ids)[:k]
+    hits = [i for i, mid in enumerate(top) if mid in gold_ids]
+    dcg = sum(1 / math.log2(i + 2) for i in hits)
+    ideal = sum(1 / math.log2(i + 2) for i in range(min(len(gold_ids), k)))
+    return {
+        "recall_at_k": len(hits) / len(gold_ids),
+        "mrr": 1 / (hits[0] + 1) if hits else 0.0,
+        "ndcg_at_k": dcg / ideal,
+    }
+
+
 def _blank_bucket():
     return {
         "total": 0,
+        # Questions with semantic gold to rank against; the rank averages'
+        # denominator, since a question whose semantic write failed has none.
+        "semantic_rank_total": 0,
         "any_hit": 0,
         "all_hit": 0,
         "evidence_recall_sum": 0.0,
@@ -239,7 +265,53 @@ def _blank_bucket():
         "log_any_hit": 0,
         "log_all_hit": 0,
         "all_hit_impossible": 0,
+        "semantic_recall_at_k_sum": 0.0,
+        "mrr_sum": 0.0,
+        "ndcg_at_k_sum": 0.0,
     }
+
+
+def _add_ranks(bucket, ranks):
+    if ranks is None:
+        return
+    bucket["semantic_rank_total"] += 1
+    bucket["semantic_recall_at_k_sum"] += ranks["recall_at_k"]
+    bucket["mrr_sum"] += ranks["mrr"]
+    bucket["ndcg_at_k_sum"] += ranks["ndcg_at_k"]
+
+
+def _rank_rates(bucket):
+    n = bucket["semantic_rank_total"]
+
+    def rate(key):
+        return round(bucket[key] / n, 3) if n else None
+
+    return {
+        "semantic_recall_at_k": rate("semantic_recall_at_k_sum"),
+        "mrr": rate("mrr_sum"),
+        "ndcg_at_k": rate("ndcg_at_k_sum"),
+    }
+
+
+def table_header():
+    return (
+        f"{'category':<14}{'n':>6}{'any-hit':>10}{'all-hit':>10}{'ev-recall':>11}"
+        f"{'sem-any':>10}{'log-any':>10}{'sem-R@k':>9}{'MRR':>8}{'nDCG':>8}"
+    )
+
+
+def _rank_cell(value, width, spec):
+    return f"{'n/a':>{width}}" if value is None else f"{value:>{width}{spec}}"
+
+
+def table_row(cat, d):
+    return (
+        f"{cat:<14}{d['total']:>6}{d['any_hit_rate']:>10.1%}{d['all_hit_rate']:>10.1%}"
+        f"{d['evidence_recall']:>11.1%}{d['semantic_any_hit_rate']:>10.1%}"
+        f"{d['log_any_hit_rate']:>10.1%}"
+        f"{_rank_cell(d['semantic_recall_at_k'], 9, '.1%')}"
+        f"{_rank_cell(d['mrr'], 8, '.3f')}{_rank_cell(d['ndcg_at_k'], 8, '.3f')}"
+    )
 
 
 def recall_and_score(base_url, api_key, limit_k, limit_samples=None):
@@ -291,7 +363,8 @@ def recall_and_score(base_url, api_key, limit_k, limit_samples=None):
             if payload.get("_mcp_truncated") or payload.get("_log_results_truncated"):
                 truncated_responses += 1
 
-            semantic_ids = {r.get("id") for r in payload.get("results") or []}
+            ranked_ids = [r.get("id") for r in payload.get("results") or []]
+            semantic_ids = set(ranked_ids)
             semantic_ids.discard(None)
             log_ids = {r.get("id") for r in payload.get("log_results") or []}
             log_ids.discard(None)
@@ -318,6 +391,10 @@ def recall_and_score(base_url, api_key, limit_k, limit_samples=None):
             covered = [sem or log for sem, log in zip(sem_covered, log_covered)]
             covered += [False] * unresolved
 
+            ranks = rank_metrics(
+                ranked_ids, {g["memory_id"] for g in gold if g["memory_id"]}, limit_k
+            )
+
             hit_any = any(covered)
             hit_all = all(covered)
             recall_frac = sum(covered) / len(covered)
@@ -331,6 +408,7 @@ def recall_and_score(base_url, api_key, limit_k, limit_samples=None):
             bucket["semantic_all_hit"] += int(all(sem_covered))
             bucket["log_any_hit"] += int(any(log_covered))
             bucket["log_all_hit"] += int(all(log_covered))
+            _add_ranks(bucket, ranks)
             if len(covered) > limit_k:
                 # all-hit cannot be satisfied when a question has more
                 # evidence turns than the recall top-K
@@ -347,6 +425,10 @@ def recall_and_score(base_url, api_key, limit_k, limit_samples=None):
                     "evidence_recall": round(recall_frac, 3),
                     "semantic_hit_any": any(sem_covered),
                     "log_hit_any": any(log_covered),
+                    "semantic_mrr": round(ranks["mrr"], 3) if ranks else None,
+                    "semantic_ndcg_at_k": (
+                        round(ranks["ndcg_at_k"], 3) if ranks else None
+                    ),
                     "unresolved_evidence": unresolved,
                 }
             )
@@ -371,6 +453,8 @@ def recall_and_score(base_url, api_key, limit_k, limit_samples=None):
             "semantic_any_hit_rate": round(d["semantic_any_hit"] / n, 3) if n else 0,
             "log_any_hit_rate": round(d["log_any_hit"] / n, 3) if n else 0,
             "all_hit_impossible": d["all_hit_impossible"],
+            "semantic_rank_total": d["semantic_rank_total"],
+            **_rank_rates(d),
         }
         for key in (
             "total",
@@ -382,6 +466,10 @@ def recall_and_score(base_url, api_key, limit_k, limit_samples=None):
             "log_any_hit",
             "log_all_hit",
             "all_hit_impossible",
+            "semantic_rank_total",
+            "semantic_recall_at_k_sum",
+            "mrr_sum",
+            "ndcg_at_k_sum",
         ):
             overall[key] += d[key]
 
@@ -394,6 +482,8 @@ def recall_and_score(base_url, api_key, limit_k, limit_samples=None):
         "semantic_any_hit_rate": round(overall["semantic_any_hit"] / n, 3) if n else 0,
         "log_any_hit_rate": round(overall["log_any_hit"] / n, 3) if n else 0,
         "all_hit_impossible": overall["all_hit_impossible"],
+        "semantic_rank_total": overall["semantic_rank_total"],
+        **_rank_rates(overall),
     }
     report["overall"] = summary
 
@@ -403,14 +493,10 @@ def recall_and_score(base_url, api_key, limit_k, limit_samples=None):
     )
 
     print(f"\n=== LoCoMo retrieval results (limit={limit_k}) ===")
-    header = f"{'category':<14}{'n':>6}{'any-hit':>10}{'all-hit':>10}{'ev-recall':>11}{'sem-any':>10}{'log-any':>10}"
-    print(header)
+    print(table_header())
     rows = [*list(report["per_category"].items()), ("OVERALL", summary)]
     for cat, d in rows:
-        print(
-            f"{cat:<14}{d['total']:>6}{d['any_hit_rate']:>10.1%}{d['all_hit_rate']:>10.1%}"
-            f"{d['evidence_recall']:>11.1%}{d['semantic_any_hit_rate']:>10.1%}{d['log_any_hit_rate']:>10.1%}"
-        )
+        print(table_row(cat, d))
     if skipped_no_evidence:
         print(
             f"\nSkipped {skipped_no_evidence} questions with no evidence annotations."

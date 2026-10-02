@@ -10,6 +10,7 @@ from ..config.settings import (
     FTS_LONE_HIT_SCORE,
     FTS_QUERY_MODE,
     HYBRID_SEARCH_TEXT_WEIGHT,
+    RECALL_REFERENCE_TIME,
     RECALL_SCAN_LIMIT,
     TEMPORAL_HALF_LIFE_DAYS,
     TEMPORAL_WEIGHT,
@@ -301,7 +302,7 @@ async def _recall_similar(
 
         apply_bm25 = not use_semantic_fallback and bool(bm25_by_id)
 
-        scored_at = datetime.now(timezone.utc)
+        scored_at = _reference_time()
 
         combined: dict[str, tuple] = {}
         for mem_row, vec_score in similarities:
@@ -361,6 +362,10 @@ async def _recall_similar(
         )
 
 
+def _reference_time() -> datetime:
+    return RECALL_REFERENCE_TIME or datetime.now(timezone.utc)
+
+
 async def _recall_text_search(
     mem: "MARMMemory",
     query: str,
@@ -386,7 +391,7 @@ async def _recall_text_search(
         f"builder={'wide' if apply_temporal else 'strict'}"
     )
 
-    scored_at = datetime.now(timezone.utc) if apply_temporal else None
+    scored_at = _reference_time() if apply_temporal else None
 
     def _blend_temporal(base_sim: float, timestamp: str) -> float:
         if not apply_temporal:

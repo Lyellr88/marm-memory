@@ -233,7 +233,7 @@ All 10 LoCoMo conversations are ingested through `marm_log_entry` (5,882 memorie
 
 The last row is a controlled comparison, same build and data with the log lane as the only variable. That lane previously substring-matched the whole query against log topics and summaries, so a natural-language question never matched and it scored 0.0% on all 1,977 questions. It now tokenizes the query and reaches 53.3% on its own. Ranges rather than single figures because the semantic lane varies about half a point between runs, so a sub-point difference is not a result.
 
-Multi-hop remains the weakest category at 44.9%, and single-hop evidence recall is 36.6% against a 66.2% any-hit rate, so the lane often surfaces some of a question's evidence rather than all of it. Reproduce with [`run_eval.py`](scripts/benchmarking/accuracy/locomo/run_eval.py).
+Multi-hop remains the weakest category at 44.9%, and single-hop evidence recall is 36.6% against a 66.2% any-hit rate, so the lane often surfaces some of a question's evidence rather than all of it. Reproduce with [`run_eval.py`](scripts/benchmarking/accuracy/locomo/run_eval.py). It also reports MRR and nDCG@k for the ranked semantic lane; set `MARM_RECALL_REFERENCE_TIME` on the server so two runs rank near-ties identically.
 
 ### 6. vs Competitors: Architecture
 
@@ -1294,6 +1294,7 @@ Packaged docs are indexed into the `marm_system` memory namespace on startup and
 | `FTS_LONE_HIT_SCORE` | `1.0` | Keyword score used when only one memory matches, or when every match ties. Lower it on small stores if a single keyword match should not count as a perfect one. |
 | `SEMANTIC_SEARCH_ENABLED` | `1` | Set to `0` to run without the embedding model: nothing is loaded, no embeddings are written, and recall falls back to keyword matching. Useful on low-memory hosts, or to see how recall behaves when the model is unavailable. `marm-memory doctor` reports when it is off. |
 | `TEMPORAL_WEIGHT` / `TEMPORAL_HALF_LIFE_DAYS` | `0.1` / `30` | Strength and decay of the recency boost |
+| `MARM_RECALL_REFERENCE_TIME` | unset | ISO 8601 instant to score recency against instead of now, so benchmark runs are reproducible |
 | `CONSOLIDATION_ENABLED` | `0` | Write-time dedup + semantic merge |
 | `CONSOLIDATION_THRESHOLD` | `0.92` | Cosine similarity needed to merge near-duplicates. Compared against meaning-similarity alone, not the blended ranking score |
 | `COMPACTION_ENABLED` | `0` | Background cluster detection + agent-assisted compaction |
