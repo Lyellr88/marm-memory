@@ -1,6 +1,26 @@
 # Changelog
 
 <details>
+<summary><strong>October 2nd, 2026: Analyst Review Modes and Reproducible Recall (v2.57.0)</strong></summary>
+
+### Added
+
+- Local analyst results support Manual Review and Automated Guardrails modes. Manual Review stages verified conclusions as Distill proposals for explicit approval. Guardrails can apply eligible proposals through the existing queued write path only when the operator enables auto-apply and deterministic checks pass; other results remain available for review.
+- The Console exposes analyst review modes, staged proposal verification, apply outcomes, and a persisted Guardrails auto-apply switch under System controls.
+- HTTP and STDIO MCP initialization responses include server instructions describing MARM's memory workflow, Code Context, and proposal review, with recalled memory treated as context rather than instructions.
+- Recall accepts an optional reference time for reproducible recency scoring. LoCoMo reports semantic recall@k, MRR, and nDCG@k, with zero scores for empty ranked results and questions without semantic gold excluded from rank averages.
+
+### Fixed
+
+- The MCP Registry package entry launches the STDIO server it declares instead of the default HTTP entry point, with coverage for the generated launch configuration and managed Docker authentication.
+
+### Acknowledgment
+
+Thank you to [@doublegate](https://github.com/doublegate) for [#257](https://github.com/Lyellr88/marm-memory/pull/257), [#259](https://github.com/Lyellr88/marm-memory/pull/259), [#261](https://github.com/Lyellr88/marm-memory/pull/261), and the analyst review-mode work originally submitted in [#249](https://github.com/Lyellr88/marm-memory/pull/249), recovered through [#270](https://github.com/Lyellr88/marm-memory/pull/270), and merged in [#275](https://github.com/Lyellr88/marm-memory/pull/275).
+
+</details>
+
+<details>
 <summary><strong>October 1st, 2026: Concept Duplicate Accuracy (v2.56.2)</strong></summary>
 
 ### Fixed
