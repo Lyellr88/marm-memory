@@ -1,0 +1,148 @@
+"""The registry entry must launch the transport it declares."""
+
+import importlib
+import json
+import re
+import sys
+import types
+from pathlib import Path
+
+import pytest
+
+from marm_mcp_server.services import docker_commands
+
+SERVER_JSON = Path(__file__).resolve().parents[1] / "server.json"
+PYPROJECT = SERVER_JSON.with_name("pyproject.toml")
+
+
+class _Reached(BaseException):
+    # Not an Exception: the server launchers catch those and exit 1.
+    pass
+
+
+def _packages() -> dict[str, dict]:
+    config = json.loads(SERVER_JSON.read_text(encoding="utf-8"))
+    return {p["registryType"]: p for p in config["packages"]}
+
+
+def _values(arguments: list[dict]) -> list[str]:
+    out: list[str] = []
+    for argument in arguments:
+        if argument["type"] == "named":
+            out.append(argument["name"])
+        if "value" in argument:
+            out.append(argument["value"])
+    return out
+
+
+def _launch(monkeypatch, argv: list[str]) -> str:
+    def stdio() -> None:
+        raise _Reached("stdio")
+
+    async def http() -> None:
+        raise _Reached("http")
+
+    # Resolved now, not at import: other tests reload the package, and cli's
+    # `from . import server_stdio` reads whichever package object is current.
+    # The real module reroutes print() process-wide, so it is never imported.
+    cli = importlib.import_module("marm_mcp_server.cli")
+    package = sys.modules["marm_mcp_server"]
+    fake = types.ModuleType("marm_mcp_server.server_stdio")
+    fake.main = stdio
+    monkeypatch.setitem(sys.modules, "marm_mcp_server.server_stdio", fake)
+    monkeypatch.setattr(package, "server_stdio", fake, raising=False)
+    monkeypatch.setattr(cli, "run_server_with_shutdown", http)
+    monkeypatch.setattr(sys, "argv", argv)
+    with pytest.raises(_Reached) as reached:
+        cli.main()
+    return str(reached.value)
+
+
+@pytest.mark.parametrize("registry_type", ["pypi", "oci"])
+def test_every_package_declares_stdio(registry_type):
+    assert _packages()[registry_type]["transport"] == {"type": "stdio"}
+
+
+def test_the_pypi_package_starts_stdio_not_http(monkeypatch):
+    package = _packages()["pypi"]
+    assert package["runtimeHint"] == "uvx"
+    argv = [package["identifier"], *_values(package["packageArguments"])]
+    assert _launch(monkeypatch, argv) == "stdio"
+
+
+def _named(arguments: list[dict], name: str) -> list[str]:
+    return [a["value"] for a in arguments if a.get("name") == name]
+
+
+def test_the_oci_image_starts_stdio_not_http():
+    # The image's default entrypoint imports the HTTP settings first, and on
+    # SERVER_HOST=0.0.0.0 those print a key banner to stdout.
+    package = _packages()["oci"]
+    assert _named(package["runtimeArguments"], "--entrypoint") == ["marm-mcp-stdio"]
+    script = re.search(
+        r'^marm-mcp-stdio = "([^"]+)"$',
+        PYPROJECT.read_text(encoding="utf-8"),
+        re.MULTILINE,
+    )
+    assert script and script.group(1) == "marm_mcp_server.server_stdio:main"
+    assert not package.get("packageArguments")
+
+
+def test_the_oci_entrypoint_is_the_supported_stdio_command(tmp_path):
+    supported = docker_commands.stdio_command(data_dir=tmp_path)["arguments"]
+    entrypoint = supported[supported.index("--entrypoint") + 1]
+    oci = _packages()["oci"]["runtimeArguments"]
+    assert _named(oci, "--entrypoint") == [entrypoint]
+
+
+def test_a_bare_launch_is_http_which_is_why_the_argument_is_needed(monkeypatch):
+    assert _launch(monkeypatch, ["marm-mcp-server"]) == "http"
+
+
+def test_the_oci_image_keeps_memory_in_its_data_directory():
+    package = _packages()["oci"]
+    assert package["runtimeHint"] == "docker"
+    mounts = [
+        a["value"] for a in package["runtimeArguments"] if a.get("name") == "--mount"
+    ]
+    assert mounts, "a stdio container is removed after each session"
+    assert any(
+        f"dst={docker_commands.CONTAINER_DATA_DIR}" in m and "type=volume" in m
+        for m in mounts
+    )
+
+
+def test_the_docker_command_a_client_builds_is_interactive_and_removed():
+    # A registry client builds `docker run <runtimeArguments> <image> <args>`.
+    package = _packages()["oci"]
+    command = [
+        "docker",
+        "run",
+        *_values(package["runtimeArguments"]),
+        package["identifier"],
+        *_values(package.get("packageArguments", [])),
+    ]
+    image = command.index(package["identifier"])
+    assert "-i" in command[:image], "STDIO needs the container's stdin open"
+    assert "--rm" in command[:image], "each session would leave a container"
+    assert command[image + 1 :] == []
+
+
+def _environment(arguments: list) -> dict[str, str]:
+    names = ("-e", "--env")
+    pairs: list[str] = []
+    for i, argument in enumerate(arguments):
+        if isinstance(argument, dict) and argument.get("name") in names:
+            pairs.append(argument["value"])
+        elif argument in names:
+            pairs.append(arguments[i + 1])
+    return dict(pair.split("=", 1) for pair in pairs)
+
+
+def test_the_oci_image_keeps_its_cache_in_the_data_directory(tmp_path):
+    # The graph engine keeps its project store under the cache directory.
+    env = _environment(_packages()["oci"]["runtimeArguments"])
+    supported = docker_commands.stdio_command(data_dir=tmp_path)["arguments"]
+    assert env == _environment(supported)
+    for name in ("XDG_CACHE_HOME", "CBM_CACHE_DIR"):
+        assert env[name].startswith(f"{docker_commands.CONTAINER_DATA_DIR}/")

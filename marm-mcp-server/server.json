@@ -18,12 +18,46 @@
       "registryType": "pypi",
       "identifier": "marm-mcp-server",
       "version": "2.56.2",
-      "transport": { "type": "stdio" }
+      "runtimeHint": "uvx",
+      "transport": { "type": "stdio" },
+      "packageArguments": [
+        { "type": "positional", "value": "stdio" }
+      ]
     },
     {
       "registryType": "oci",
       "identifier": "lyellr88/marm-mcp-server:2.56.2",
-      "transport": { "type": "stdio" }
+      "runtimeHint": "docker",
+      "transport": { "type": "stdio" },
+      "runtimeArguments": [
+        { "type": "named", "name": "-i", "description": "Keep stdin open for the STDIO session" },
+        { "type": "named", "name": "--rm", "description": "Remove the container when the session ends; memory stays in the volume" },
+        {
+          "type": "named",
+          "name": "--mount",
+          "description": "Keep memory in a named volume across the short-lived STDIO containers",
+          "value": "type=volume,src=marm-data,dst=/home/marm/.marm"
+        },
+        { "type": "named", "name": "-e", "description": "Home directory of the image's user", "value": "HOME=/home/marm" },
+        {
+          "type": "named",
+          "name": "-e",
+          "description": "Keep model and download caches in the data volume",
+          "value": "XDG_CACHE_HOME=/home/marm/.marm/cache"
+        },
+        {
+          "type": "named",
+          "name": "-e",
+          "description": "Keep code indexes in the data volume",
+          "value": "CBM_CACHE_DIR=/home/marm/.marm/cache/codebase-memory-mcp"
+        },
+        {
+          "type": "named",
+          "name": "--entrypoint",
+          "description": "Start the STDIO server directly, so nothing written while the HTTP settings load reaches the protocol stream",
+          "value": "marm-mcp-stdio"
+        }
+      ]
     }
   ],
   "tools": [

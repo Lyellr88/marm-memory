@@ -193,15 +193,15 @@ Print the exact client command and wire it into the agent's MCP config yourself:
 #### STDIO + Docker, no helper CLI (cli = no from Step 00)
 Use this when Step 00 recorded cli = no. Do not issue `marm-memory` here. Write this as the agent's STDIO command, which is what `marm-memory docker stdio-command` would have printed:
 
-    docker run -i --rm --mount type=bind,src=<home>/.marm,dst=/home/marm/.marm -e HOME=/home/marm -e XDG_CACHE_HOME=/home/marm/.marm/cache --entrypoint marm-mcp-stdio lyellr88/marm-mcp-server:latest
+    docker run -i --rm --mount type=bind,src=<home>/.marm,dst=/home/marm/.marm -e HOME=/home/marm -e XDG_CACHE_HOME=/home/marm/.marm/cache -e CBM_CACHE_DIR=/home/marm/.marm/cache/codebase-memory-mcp --entrypoint marm-mcp-stdio lyellr88/marm-mcp-server:latest
 
 Substitute the user's real home directory for `<home>`. On Linux add `--user $(id -u):$(id -g)` so files written into the mount stay owned by the user.
 
 Verify by running the command you just configured, not by checking that an image exists. Take the line above, drop `-i`, and bound it:
 
-    timeout 90 docker run --rm --mount type=bind,src=<home>/.marm,dst=/home/marm/.marm -e HOME=/home/marm -e XDG_CACHE_HOME=/home/marm/.marm/cache --entrypoint marm-mcp-stdio lyellr88/marm-mcp-server:latest
+    timeout 90 docker run --rm --mount type=bind,src=<home>/.marm,dst=/home/marm/.marm -e HOME=/home/marm -e XDG_CACHE_HOME=/home/marm/.marm/cache -e CBM_CACHE_DIR=/home/marm/.marm/cache/codebase-memory-mcp --entrypoint marm-mcp-stdio lyellr88/marm-mcp-server:latest
 
-Keep the mount, both env vars, and the Linux `--user` flag exactly as configured. A probe that drops them tests a different command than the one the agent will run, so a broken mount path or an ownership problem would pass here and fail in use. Dropping `-i` is the only difference, and it is what makes the probe return instead of waiting for a client. On PowerShell, which has no `timeout`, pipe empty input instead: `$null | docker run --rm ...`.
+Keep the mount, all three env vars, and the Linux `--user` flag exactly as configured. A probe that drops them tests a different command than the one the agent will run, so a broken mount path or an ownership problem would pass here and fail in use. Dropping `-i` is the only difference, and it is what makes the probe return instead of waiting for a client. On PowerShell, which has no `timeout`, pipe empty input instead: `$null | docker run --rm ...`.
 
 Expect a full startup and shutdown, not a help screen. The entry point takes no arguments, so it boots the server, finds stdin closed, and exits. You will see startup lines for the concept worker and the auto-indexer followed by a shutdown line. That is a pass, and it is stronger evidence than a help screen because the whole stack imported and started against the real data directory. Judge it by the exit code, which must be 0. `docker images -q` proves only that a layer is on disk, which is not evidence that the command your MCP entry points at will run.
 
