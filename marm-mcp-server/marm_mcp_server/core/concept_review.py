@@ -115,10 +115,29 @@ def merge_entities(
             conn.execute(
                 "INSERT OR IGNORE INTO entity_code_links "
                 "(entity_id, graph_qualified_name, project, confidence, label, "
-                "file_path, created_at) "
+                "file_path, link_method, resolved_at, last_verified_at, "
+                "anchor_hash, code_changed_at, created_at) "
                 "SELECT ?, graph_qualified_name, project, confidence, label, "
-                "file_path, created_at FROM entity_code_links WHERE entity_id = ?",
+                "file_path, link_method, resolved_at, last_verified_at, "
+                "anchor_hash, code_changed_at, created_at "
+                "FROM entity_code_links WHERE entity_id = ?",
                 (winner_id, loser_id),
+            )
+            # Where both linked the same symbol the copy was ignored; a change
+            # either of them saw must survive the merge.
+            _ensure_lease(lease_lost)
+            conn.execute(
+                "UPDATE entity_code_links SET "
+                "code_changed_at = COALESCE(code_changed_at, ("
+                "SELECT l.code_changed_at FROM entity_code_links AS l "
+                "WHERE l.entity_id = ? AND l.graph_qualified_name = "
+                "entity_code_links.graph_qualified_name)), "
+                "anchor_hash = COALESCE(anchor_hash, ("
+                "SELECT l.anchor_hash FROM entity_code_links AS l "
+                "WHERE l.entity_id = ? AND l.graph_qualified_name = "
+                "entity_code_links.graph_qualified_name)) "
+                "WHERE entity_id = ?",
+                (loser_id, loser_id, winner_id),
             )
             _ensure_lease(lease_lost)
             conn.execute(

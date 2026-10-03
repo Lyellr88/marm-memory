@@ -148,6 +148,29 @@ def test_find_code_match_filters_exact_results(monkeypatch):
     }
 
 
+def test_find_code_match_keeps_the_symbol_span_when_the_engine_sends_it(monkeypatch):
+    monkeypatch.setattr(graph_supervisor, "is_available", lambda: True)
+    monkeypatch.setattr(graph_supervisor, "get_client", lambda: _FakeClient())
+    monkeypatch.setattr(
+        graph_client.R,
+        "do_lookup",
+        lambda client, req: {
+            "results": [
+                {
+                    "qualified_name": "marm_graph.core.auth.AuthMiddleware",
+                    "name": "AuthMiddleware",
+                    "label": "class",
+                    "file_path": "marm_graph/core/auth.py",
+                    "start_line": 12,
+                    "end_line": 40,
+                }
+            ]
+        },
+    )
+    match = graph_client.find_code_match("AuthMiddleware", "proj-a")
+    assert (match["start_line"], match["end_line"]) == (12, 40)
+
+
 def test_find_code_match_refuses_a_name_that_is_not_distinctive(monkeypatch):
     """An ordinary English word matches a symbol in almost any large repository,
     so an exact match on one is not evidence that the memory is about it.
@@ -270,4 +293,49 @@ def test_find_code_match_refuses_ambiguous_exact_symbols(monkeypatch):
     assert graph_client.find_code_match("CbmClient", "proj-a") == {
         "status": "ambiguous",
         "candidates": ["one.CbmClient", "two.CbmClient"],
+    }
+
+
+class _EngineClient:
+    """Answers like codebase-memory-mcp 0.10.5, so the real router runs."""
+
+    def __init__(self, reply):
+        self.reply = reply
+        self.calls = []
+
+    def call_tool(self, name, args):
+        self.calls.append((name, args))
+        return self.reply
+
+
+def test_find_code_match_reads_the_engines_grouped_name_pattern_reply(monkeypatch):
+    # search_graph's name-pattern reply in 0.10.5: grouped rows, a "lines"
+    # range string, and the qualified-name prefix on the group.
+    reply = {
+        "total": 1,
+        "count": 1,
+        "cols": ["name", "label", "lines", "in", "out"],
+        "groups": [
+            {
+                "qn_prefix": "pkg.mod.MARM",
+                "file": "pkg/mod.py",
+                "rows": [["store_memory", "Method", "274-281", 84, 1]],
+            }
+        ],
+        "has_more": False,
+    }
+    client = _EngineClient(reply)
+    monkeypatch.setattr(graph_supervisor, "is_available", lambda: True)
+    monkeypatch.setattr(graph_supervisor, "get_client", lambda: client)
+
+    match = graph_client.find_code_match("store_memory", "p")
+
+    assert client.calls and client.calls[0][0] == "search_graph"
+    assert match == {
+        "status": "matched",
+        "qualified_name": "pkg.mod.MARM.store_memory",
+        "label": "Method",
+        "file_path": "pkg/mod.py",
+        "start_line": 274,
+        "end_line": 281,
     }

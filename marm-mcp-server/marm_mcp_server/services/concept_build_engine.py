@@ -410,6 +410,8 @@ def _run_build(
                                         conn,
                                         linked_entity_id,
                                         binding.graph_project,
+                                        # No root: a build cannot tell whether
+                                        # the graph's lines predate the file.
                                         match,
                                     )
                                     if reconciliation == "created":

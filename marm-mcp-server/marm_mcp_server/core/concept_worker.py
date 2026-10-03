@@ -1,5 +1,6 @@
 import asyncio
 import threading
+from datetime import datetime
 from typing import Optional
 
 import structlog
@@ -258,6 +259,14 @@ class ConceptIndexWorker:
             await asyncio.to_thread(code_link_queue.complete, task)
             return
 
+        # Hash only what the completed index saw: a file saved after that index
+        # started may have moved under the graph's line numbers.
+        not_after = (
+            datetime.fromisoformat(task.snapshot_at).timestamp()
+            if task.snapshot_at
+            else None
+        )
+        root_path = task.root_path if not_after is not None else None
         concept_db = _get_concept_db()
         retry_reason: str | None = None
         with concept_db.get_connection() as conn:
@@ -279,7 +288,7 @@ class ConceptIndexWorker:
                 if outcome.get("status") == "ambiguous":
                     continue
                 concept_db.reconcile_code_link(
-                    conn, entity_id, task.graph_project, outcome
+                    conn, entity_id, task.graph_project, outcome, root_path, not_after
                 )
 
         if abort.is_set():

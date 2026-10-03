@@ -4,6 +4,7 @@ import os
 import subprocess
 import sys
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
@@ -188,6 +189,7 @@ def index_repository(client: "CbmClient", req: GraphIndexRequest) -> dict:
     One function rather than a rule at four call sites, because the rule is
     invisible at the call site and there is nothing to notice when it is skipped.
     """
+    snapshot_at = datetime.now(timezone.utc).isoformat()
     result: dict = R.do_index(client, req)
     # The set of indexed projects may have just changed, and code-context caches
     # it. Invalidated here rather than at each caller for the reason above: a
@@ -213,6 +215,7 @@ def index_repository(client: "CbmClient", req: GraphIndexRequest) -> dict:
                     binding.graph_project,
                     binding.memory_project,
                     binding.root_path,
+                    snapshot_at=snapshot_at,
                 )
                 result["memory_linking"]["memory_project"] = binding.memory_project
                 result["memory_linking"]["refresh_queued"] = True

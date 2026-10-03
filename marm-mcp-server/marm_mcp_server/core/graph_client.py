@@ -63,6 +63,11 @@ def find_code_match(entity_name: str, project: Optional[str]) -> dict[str, Any]:
                 "qualified_name": qualified_name,
                 "label": row.get("label"),
                 "file_path": row.get("file_path"),
+                **{
+                    key: row[key]
+                    for key in ("start_line", "end_line")
+                    if isinstance(row.get(key), int)
+                },
             }
     if not matches:
         return {"status": "no_match"}
