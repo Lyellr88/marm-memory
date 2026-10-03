@@ -434,3 +434,64 @@ def test_span_hash_is_versioned(tmp_path):
 
     value = span_hash(tmp_path, "module.py", 3, 5)
     assert value.startswith(f"{ANCHOR_VERSION}:")
+
+
+def _save_during_read(monkeypatch, path, how):
+    """Change the file while span_hash is reading it."""
+    from marm_mcp_server.core import code_anchor
+
+    real = code_anchor.itertools.islice
+
+    def islice(handle, *args):
+        out = list(real(handle, *args))
+        how(path)
+        return iter(out)
+
+    monkeypatch.setattr(code_anchor.itertools, "islice", islice)
+
+
+def test_a_save_during_the_read_takes_no_fingerprint(tmp_path, monkeypatch):
+    _write(tmp_path)
+    path = tmp_path / "module.py"
+
+    def save(p):
+        p.write_text("import os\n\ndef apply():\n    write_row()\n", encoding="utf-8")
+        later = time.time() + 1
+        os.utime(p, (later, later))
+
+    _save_during_read(monkeypatch, path, save)
+    # Inside the cutoff, and still refused: the file is not the one read.
+    assert span_hash(tmp_path, "module.py", 3, 5, not_after=time.time() + 60) is None
+
+
+def test_a_save_past_the_cutoff_during_the_read_takes_no_fingerprint(
+    tmp_path, monkeypatch
+):
+    _write(tmp_path)
+    cutoff = time.time() + 5
+
+    def save(p):
+        p.write_text(p.read_text(encoding="utf-8"), encoding="utf-8")
+        os.utime(p, (cutoff + 10, cutoff + 10))
+
+    _save_during_read(monkeypatch, tmp_path / "module.py", save)
+    assert span_hash(tmp_path, "module.py", 3, 5, not_after=cutoff) is None
+
+
+def test_a_file_replaced_during_the_read_takes_no_fingerprint(tmp_path, monkeypatch):
+    _write(tmp_path)
+
+    def replace(p):
+        fresh = p.with_name("module.py.new")
+        fresh.write_text(p.read_text(encoding="utf-8"), encoding="utf-8")
+        st = p.stat()
+        os.utime(fresh, ns=(st.st_atime_ns, st.st_mtime_ns))
+        os.replace(fresh, p)  # same content and time, a different file
+
+    _save_during_read(monkeypatch, tmp_path / "module.py", replace)
+    assert span_hash(tmp_path, "module.py", 3, 5) is None
+
+
+def test_an_undisturbed_read_still_fingerprints(tmp_path):
+    _write(tmp_path)
+    assert span_hash(tmp_path, "module.py", 3, 5, not_after=time.time() + 60)
