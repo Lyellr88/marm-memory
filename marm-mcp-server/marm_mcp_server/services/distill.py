@@ -28,7 +28,7 @@ from ..core.distill import (
     resolve,
 )
 from ..core.memory import MARMMemory, sanitize_content
-from ..core.redaction import redact_secrets, summarize
+from ..core.redaction import identifier_refusal, redact_secrets, summarize
 
 # A proposal nobody reviewed is not worth keeping indefinitely; the transcript
 # it came from is long gone and its neighbour may have moved.
@@ -95,6 +95,9 @@ async def propose(
     # written, so a fact stated across two turns is invisible to it, while
     # generation rewrites facts to stand alone. Which one ran is reported, so a
     # reviewer is never guessing why the proposals look different today.
+    refused = identifier_refusal(session_name=session_name, project=project)
+    if refused:
+        return refused
     # Before extraction: a pasted key must reach neither a model nor staging.
     text, redacted = redact_secrets(text)
     report = {"redacted": summarize(redacted)} if redacted else {}
@@ -383,6 +386,12 @@ async def apply(memory: MARMMemory, proposal_id: str) -> dict[str, Any]:
                 origin,
                 verification,
             ) = row
+            # A proposal staged before identifiers were checked must not
+            # carry a credential into a memory.
+            refused = identifier_refusal(session_name=session_name, project=project)
+            if refused:
+                conn.execute("ROLLBACK")
+                return {"status": "error", "error": refused["message"]}
             if status == "applying":
                 # Left behind by a crash between the memory write and the
                 # staging update. Decide from the store, not from the status:

@@ -425,3 +425,58 @@ def test_a_console_memory_naming_a_credential_is_refused(monkeypatch, tmp_path, 
         _count(str(tmp_path / "marm_memory.db"), "memories", "content", "deploy notes")
         == 0
     )
+
+
+@pytest.mark.parametrize("field", ["session_name", "project"])
+def test_distill_refuses_a_credential_in_an_identifier(monkeypatch, tmp_path, field):
+    server = load_isolated_server(monkeypatch, tmp_path)
+    client = local_client(server.app)
+    body = {
+        "action": "propose",
+        "text": "We decided to rotate the deploy key every month.",
+        "session_name": "redaction",
+        field: f"x-{AWS}",
+    }
+    response = client.post("/marm_distill", json=body)
+    assert "credential" in response.text
+    assert AWS not in response.text
+    db = str(tmp_path / "marm_memory.db")
+    with sqlite3.connect(db) as conn:
+        assert conn.execute("SELECT COUNT(*) FROM distill_staging").fetchone()[0] == 0
+
+
+@pytest.mark.parametrize("field", ["session_name", "project"])
+def test_a_staged_proposal_naming_a_credential_is_not_applied(
+    monkeypatch, tmp_path, field
+):
+    server = load_isolated_server(monkeypatch, tmp_path, write_queue_enabled=True)
+    client = local_client(server.app)
+    proposed = client.post(
+        "/marm_distill",
+        json={
+            "action": "propose",
+            "text": "We decided to rotate the deploy key every month.",
+            "session_name": "redaction",
+        },
+    )
+    assert proposed.status_code == 200, proposed.text
+    [proposal] = proposed.json()["proposals"]
+    db = str(tmp_path / "marm_memory.db")
+    # As a record staged before identifiers were checked would hold it.
+    with sqlite3.connect(db) as conn:
+        conn.execute(
+            f"UPDATE distill_staging SET {field} = ? WHERE id = ?",
+            (f"x-{AWS}", proposal["id"]),
+        )
+
+    applied = client.post(
+        "/marm_distill", json={"action": "apply", "proposal_id": proposal["id"]}
+    )
+
+    assert "credential" in applied.text
+    assert AWS not in applied.text
+    assert _count(db, "memories", "content", "rotate the deploy key") == 0
+    with sqlite3.connect(db) as conn:
+        assert conn.execute(
+            f"SELECT {field} FROM distill_staging WHERE id = ?", (proposal["id"],)
+        ).fetchone() == (f"x-{AWS}",)
