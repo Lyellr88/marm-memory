@@ -158,6 +158,19 @@ def _classify_predicate(span_a: "Span", span_b: "Span") -> str:
     return "related_to"
 
 
+def _balanced(name: str, opening: str, closing: str) -> bool:
+    """Every closing bracket follows its opening one, and all are closed."""
+    depth = 0
+    for char in name:
+        if char == opening:
+            depth += 1
+        elif char == closing:
+            depth -= 1
+            if depth < 0:
+                return False
+    return depth == 0
+
+
 def _entity_name(text: str) -> str:
     """The name a span denotes, without the markdown it was written in.
 
@@ -166,7 +179,7 @@ def _entity_name(text: str) -> str:
     """
     name = " ".join(_MARKUP.sub("", text).split())
     for opening, closing in _BRACKETS:
-        if name.count(opening) != name.count(closing):
+        if not _balanced(name, opening, closing):
             name = name.replace(opening, "").replace(closing, "")
     name = _BULLET.sub("", " ".join(name.split()))
     return "" if "|" in name else name

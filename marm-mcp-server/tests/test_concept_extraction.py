@@ -291,6 +291,10 @@ def test_same_sentence_false_when_sent_is_none():
         ("v2.6.21", "v2.6.21"),
         # Only list bullets and dashes are scaffolding (#252); other leading
         # characters belong to the text and stay.
+        # Equal counts in the wrong order are still an unbalanced wrapper.
+        (")MIT license(", "MIT license"),
+        ("]config[ file", "config file"),
+        ("f(x) and (y)", "f(x) and (y)"),
         ("# Heading", "# Heading"),
         ("> Quoted name", "> Quoted name"),
         ("+ plus item", "plus item"),
