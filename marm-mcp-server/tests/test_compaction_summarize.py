@@ -402,3 +402,12 @@ async def test_a_server_side_summary_is_staged_redacted(mem, monkeypatch):
     summary = _get_staging_row(mem, candidate_id)[1]
     assert summary and key not in summary
     assert "[redacted:aws-access-key]" in summary
+
+
+def test_dedup_keeps_the_copy_that_contains_the_other():
+    vec = _make_vec(seed=7).tobytes()
+    short = "relicensed to GPL-3.0-or-later"
+    full = short + " in v2.2.9 as a derivative work of GPL emulators"
+
+    for memories in ([(short, vec), (full, vec)], [(full, vec), (short, vec)]):
+        assert centroid_extract_summary(memories, top_n=5) == full

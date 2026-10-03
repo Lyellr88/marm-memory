@@ -32,6 +32,7 @@ def mem(tmp_path, monkeypatch):
     monkeypatch.setattr(s, "COMPACTION_MIN_CLUSTER_SIZE", 3)
     monkeypatch.setattr(s, "COMPACTION_MAX_CLUSTER_SIZE", 8)
     monkeypatch.setattr(s, "COMPACTION_SIMILARITY_THRESHOLD", 0.88)
+    monkeypatch.setattr(s, "COMPACTION_MIN_CONTAINMENT", 0.9)
     monkeypatch.setattr(s, "COMPACTION_MIN_AGE_HOURS", 24)
     store = MARMMemory(str(tmp_path / "memory.db"))
     store._encoder_failed = True
@@ -47,7 +48,11 @@ def _at(degrees: float, dim: int = 384) -> bytes:
 
 
 def _insert(
-    mem: MARMMemory, embedding: bytes, session: str = "sess", mem_id: str = ""
+    mem: MARMMemory,
+    embedding: bytes,
+    session: str = "sess",
+    content: str = "the release plan was approved",
+    mem_id: str = "",
 ) -> str:
     mem_id = mem_id or str(uuid.uuid4())
     ts = (datetime.now(timezone.utc) - timedelta(hours=48)).isoformat()
@@ -56,7 +61,7 @@ def _insert(
             "INSERT INTO memories (id, session_name, content, embedding, timestamp, "
             "context_type, metadata, content_hash) "
             "VALUES (?, ?, ?, ?, ?, 'general', '{}', ?)",
-            (mem_id, session, f"memory {mem_id}", embedding, ts, f"hash-{mem_id}"),
+            (mem_id, session, content, embedding, ts, f"hash-{mem_id}"),
         )
     return mem_id
 
@@ -325,3 +330,42 @@ def test_a_pair_rejected_during_a_scan_is_not_staged(mem):
         )
 
     assert compaction.persist_candidates_to_staging(mem, candidates) == 0
+
+
+def test_memories_that_embed_alike_but_say_different_things_do_not_cluster(mem):
+    for version, codename in (
+        ("1.3.0", "bedrock"),
+        ("1.4.0", "fidelity"),
+        ("1.5.0", "lens"),
+    ):
+        _insert(
+            mem,
+            _at(0.1),
+            content=f"Release v{version} {codename} shipped with its plan",
+        )
+
+    assert find_compaction_candidates(mem, "sess") == []
+
+
+def test_a_memory_restated_inside_another_clusters_with_it(mem):
+    short = "relicensed to GPL-3.0-or-later in v2.2.9"
+    for extra in (
+        "",
+        " as a derivative work",
+        " as a derivative work of GPL emulators",
+    ):
+        _insert(mem, _at(0.1), content=short + extra)
+
+    [cluster] = find_compaction_candidates(mem, "sess")
+
+    assert len(cluster["source_memory_ids"]) == 3
+
+
+def test_containment_zero_restores_similarity_alone(mem, monkeypatch):
+    import marm_mcp_server.config.settings as s
+
+    monkeypatch.setattr(s, "COMPACTION_MIN_CONTAINMENT", 0.0)
+    for version in ("1.3.0", "1.4.0", "1.5.0"):
+        _insert(mem, _at(0.1), content=f"Release v{version} shipped")
+
+    assert len(find_compaction_candidates(mem, "sess")) == 1

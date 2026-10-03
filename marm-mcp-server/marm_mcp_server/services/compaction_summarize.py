@@ -19,8 +19,8 @@ def centroid_extract_summary(
     """Extractive summary via embedding centroid with cosine-distance dedup.
 
     Ranks source memories by similarity to their centroid, then selects
-    top_n most representative — skipping any that are >dedup_threshold
-    similar to an already-selected memory.
+    top_n most representative. Of two memories more than dedup_threshold
+    similar, only the longer is kept.
     """
     parsed: list[tuple[str, np.ndarray]] = []
     unembedded: list[str] = []
@@ -60,13 +60,24 @@ def centroid_extract_summary(
     selected_vecs: list[np.ndarray] = []
 
     for idx in ranked:
-        if len(selected_content) >= top_n:
-            break
         vec = vecs_norm[idx]
-        if selected_vecs and np.any(np.array(selected_vecs) @ vec > dedup_threshold):
+        duplicate_of = next(
+            (
+                k
+                for k, chosen in enumerate(selected_vecs)
+                if float(chosen @ vec) > dedup_threshold
+            ),
+            None,
+        )
+        if duplicate_of is not None:
+            # The summary replaces its sources, so of two near-copies keep
+            # the one that says more.
+            if len(contents[idx]) > len(selected_content[duplicate_of]):
+                selected_content[duplicate_of] = contents[idx]
             continue
-        selected_content.append(contents[idx])
-        selected_vecs.append(vec)
+        if len(selected_content) < top_n:
+            selected_content.append(contents[idx])
+            selected_vecs.append(vec)
 
     remaining = top_n - len(selected_content)
     if remaining > 0:

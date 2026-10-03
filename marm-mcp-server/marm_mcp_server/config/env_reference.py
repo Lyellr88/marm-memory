@@ -119,6 +119,12 @@ ENV_REFERENCE: tuple[EnvVar, ...] = (
         "Most memories in a compaction cluster.",
     ),
     EnvVar(
+        "COMPACTION_MIN_CONTAINMENT",
+        "Memory",
+        "0.9",
+        "Share of words two memories must have in common before they can be compacted.",
+    ),
+    EnvVar(
         "COMPACTION_STAGING_TTL_HOURS",
         "Memory",
         "168",

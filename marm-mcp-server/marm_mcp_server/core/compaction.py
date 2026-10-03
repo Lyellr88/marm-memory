@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import html
 import json
 import re
 import sqlite3
@@ -46,6 +47,24 @@ def _cosine_similarity(a: bytes, b: bytes) -> float:
     if norm_a == 0.0 or norm_b == 0.0:
         return 0.0
     return float(np.dot(va, vb) / (norm_a * norm_b))
+
+
+_TOKEN = re.compile(r"[a-z0-9][a-z0-9._#/-]{2,}")
+
+
+def _tokens(content: str) -> frozenset:
+    return frozenset(_TOKEN.findall(html.unescape(content or "").lower()))
+
+
+def _containment(a: frozenset, b: frozenset) -> float:
+    """Share of the smaller memory's tokens that the larger one also holds.
+
+    Embeddings rate different documents on one subject as near-identical, so
+    similarity alone cannot tell a restatement from a different fact; a
+    restatement repeats the words.
+    """
+    smaller = min(len(a), len(b))
+    return len(a & b) / smaller if smaller else 1.0
 
 
 def _complete_linkage_groups(
@@ -135,6 +154,8 @@ def find_compaction_candidates(memory: _ConnectionSource, session_name: str) -> 
         return []
 
     threshold = settings.COMPACTION_SIMILARITY_THRESHOLD
+    min_containment = settings.COMPACTION_MIN_CONTAINMENT
+    tokens = [_tokens(c["content"]) for c in candidates]
     similar: dict = {i: {} for i in range(len(candidates))}
     for i in range(len(candidates)):
         for j in range(i + 1, len(candidates)):
@@ -144,7 +165,10 @@ def find_compaction_candidates(memory: _ConnectionSource, session_name: str) -> 
             score = _cosine_similarity(
                 candidates[i]["embedding"], candidates[j]["embedding"]
             )
-            if score >= threshold:
+            if (
+                score >= threshold
+                and _containment(tokens[i], tokens[j]) >= min_containment
+            ):
                 similar[i][j] = similar[j][i] = score
 
     groups = _complete_linkage_groups(
