@@ -119,7 +119,20 @@ def _redact(value: Any, counts: dict[str, int], name: str = "") -> Any:
             return "[redacted:assigned-secret]"
         return text
     if isinstance(value, dict):
-        return {key: _redact(item, counts, str(key)) for key, item in value.items()}
+        out: dict[Any, Any] = {}
+        next_suffix: dict[Any, int] = {}
+        for key, item in value.items():
+            new_key = _redact(key, counts) if isinstance(key, str) else key
+            # Two keys redacted alike must not overwrite one another. The
+            # suffix resumes where it stopped, so the keys are caller-supplied
+            # without the cost growing quadratically.
+            base = new_key
+            while new_key in out:
+                n = next_suffix.get(base, 2)
+                next_suffix[base] = n + 1
+                new_key = f"{base} #{n}"
+            out[new_key] = _redact(item, counts, str(key))
+        return out
     if isinstance(value, list):
         return [_redact(item, counts, name) for item in value]
     return value

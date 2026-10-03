@@ -107,6 +107,41 @@ def test_metadata_is_redacted_all_the_way_down():
     }
 
 
+def test_a_metadata_key_is_redacted_too():
+    assert redact_value({f"key {AWS}": "x", "n": 3}) == {
+        "key [redacted:aws-access-key]": "x",
+        "n": 3,
+    }
+
+
+def test_two_keys_redacting_alike_both_survive():
+    other = "AKIA" + "ABCDEFGHIJ" + "KLMNOP"
+    redacted = redact_value({f"key {AWS}": 1, f"key {other}": 2})
+    assert sorted(redacted.values()) == [1, 2]
+    assert not any(AWS in k or other in k for k in redacted)
+
+
+def test_many_colliding_keys_cost_linear_time():
+    # Restarting the suffix search at #2 for every key made this quadratic:
+    # 20,000 keys took about 28s. Linear is under a second.
+    import itertools
+    import string
+    import time
+
+    alphabet = string.ascii_uppercase + "234567"
+    keys = (
+        "AKIA" + "".join(combo)
+        for combo in itertools.islice(itertools.product(alphabet, repeat=16), 20000)
+    )
+    metadata = dict.fromkeys(keys, 1)
+
+    started = time.perf_counter()
+    redacted = redact_value(metadata)
+
+    assert time.perf_counter() - started < 5
+    assert len(redacted) == 20000
+
+
 def _stored(db_path: str, table: str, column: str) -> list[str]:
     with sqlite3.connect(db_path) as conn:
         return [row[0] for row in conn.execute(f"SELECT {column} FROM {table}")]
@@ -326,6 +361,23 @@ def test_redaction_is_idempotent():
 )
 def test_a_metadata_value_is_judged_with_its_field_name(metadata, expected):
     assert redact_value(metadata) == expected
+
+
+def test_a_console_write_redacts_a_metadata_key(monkeypatch, tmp_path):
+    server = load_isolated_server(monkeypatch, tmp_path, write_queue_enabled=True)
+    client = local_client(server.app)
+    created = client.post(
+        "/internal/memories",
+        json={
+            "content": "deploy notes",
+            "session_name": "redaction",
+            "metadata": {AWS: "the upload key"},
+        },
+    )
+    assert created.status_code == 201, created.text
+    assert created.json()["redacted"] == {"count": 1, "kinds": {"aws-access-key": 1}}
+    db = str(tmp_path / "marm_memory.db")
+    assert not any(AWS in row for row in _stored(db, "memories", "metadata"))
 
 
 def test_the_summary_counts_what_content_and_metadata_lose():
