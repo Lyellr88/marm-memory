@@ -4,6 +4,7 @@ import json
 import os
 import sqlite3
 from contextlib import closing
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 
@@ -265,6 +266,46 @@ def get_memory(db_path: Path, memory_id: str) -> dict | None:
         "chunk_count": row["chunk_count"],
         "has_embedding": row["embedding"] is not None,
         "concept_link_count": concept_counts.get(str(row["id"]), 0),
+    }
+
+
+def cold_memories(
+    db_path: Path, days: int = 30, limit: int = 50, project: str | None = None
+) -> dict:
+    """Memories older than `days` that no recall has returned in that time.
+
+    Never-recalled first, then the longest unrecalled. A memory younger than
+    the window has not had the chance to be recalled, so it is not listed.
+    """
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    try:
+        with closing(_connect(db_path)) as connection, connection:
+            rows = connection.execute(
+                """
+                SELECT m.id, m.content, m.session_name, m.project, m.timestamp,
+                       COALESCE(u.recall_count, 0) AS recall_count,
+                       u.last_recalled_at
+                FROM memories m LEFT JOIN memory_usage u ON u.memory_id = m.id
+                WHERE m.timestamp < ?
+                  AND COALESCE(m.compaction_role, 'none') != 'source'
+                  AND (u.last_recalled_at IS NULL OR u.last_recalled_at < ?)
+                  AND (? IS NULL OR m.project = ?)
+                ORDER BY u.last_recalled_at IS NOT NULL, u.last_recalled_at,
+                         m.timestamp, m.id
+                LIMIT ?
+                """,
+                (cutoff, cutoff, project, project, limit),
+            ).fetchall()
+    except sqlite3.OperationalError as exc:
+        if "memory_usage" not in str(exc):
+            raise
+        raise MemoryStoreUnavailable(
+            "Recall counts are not recorded yet. Restart marm-mcp-server."
+        ) from exc
+    return {
+        "days": days,
+        "cutoff": cutoff,
+        "memories": [dict(row) for row in rows],
     }
 
 

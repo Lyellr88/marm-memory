@@ -4,6 +4,7 @@ import signal
 import structlog
 
 from ..config.settings import CHUNK_DRAIN_TIMEOUT_SECONDS
+from . import memory_usage
 from .concept_worker import concept_worker
 from .graph_supervisor import graph_supervisor
 from .memory import memory
@@ -83,6 +84,11 @@ class ShutdownManager:
             await drain_chunk_writes(memory, CHUNK_DRAIN_TIMEOUT_SECONDS, logger.info)
         except Exception:
             logger.exception("Failed to drain pending chunk writes")
+
+        try:
+            await memory_usage.drain()
+        except Exception:
+            logger.exception("Failed to drain recall counts")
 
         try:
             await asyncio.to_thread(graph_supervisor.stop)
