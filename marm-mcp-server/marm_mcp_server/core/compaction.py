@@ -48,25 +48,45 @@ def _cosine_similarity(a: bytes, b: bytes) -> float:
     return float(np.dot(va, vb) / (norm_a * norm_b))
 
 
-def _connected_components(n: int, edges: list) -> list:
-    """Union-find connected components on n nodes with the given edge list."""
-    parent = list(range(n))
+def _complete_linkage_groups(
+    n: int, similar: dict, min_size: int, max_size: int
+) -> list:
+    """Disjoint groups in which every pair is similar, at most max_size each.
 
-    def find(x: int) -> int:
-        while parent[x] != x:
-            parent[x] = parent[parent[x]]
-            x = parent[x]
-        return x
+    Connected components would chain: A~B and B~C put A with C however far
+    apart they are, so a session collapses into one cluster.
+    """
+    by_degree = sorted(range(n), key=lambda i: (-len(similar[i]), i))
+    taken: set = set()
+    groups = []
+    for seed in by_degree:
+        if seed in taken:
+            continue
+        group = [seed]
+        for other in sorted(
+            similar[seed].keys() - taken, key=lambda j: (-similar[seed][j], j)
+        ):
+            if len(group) >= max_size:
+                break
+            if all(other in similar[member] for member in group):
+                group.append(other)
+        if len(group) >= min_size:
+            taken.update(group)
+            groups.append(group)
+    return groups
 
-    for i, j in edges:
-        ri, rj = find(i), find(j)
-        if ri != rj:
-            parent[ri] = rj
 
-    groups: dict = {}
-    for i in range(n):
-        groups.setdefault(find(i), []).append(i)
-    return list(groups.values())
+def _discarded_pairs(conn: sqlite3.Connection, session_name: str) -> set:
+    """Memory pairs a reviewer already rejected compacting together."""
+    pairs: set[tuple[str, str]] = set()
+    for (source_ids_json,) in conn.execute(
+        "SELECT source_memory_ids FROM compaction_staging "
+        "WHERE session_name = ? AND status = 'discarded'",
+        (session_name,),
+    ):
+        ids = sorted(json.loads(source_ids_json))
+        pairs.update((a, b) for i, a in enumerate(ids) for b in ids[i + 1 :])
+    return pairs
 
 
 def find_compaction_candidates(memory: _ConnectionSource, session_name: str) -> list:
@@ -90,6 +110,7 @@ def find_compaction_candidates(memory: _ConnectionSource, session_name: str) -> 
             """,
             (session_name, min_age_cutoff),
         ).fetchall()
+        dismissed = _discarded_pairs(conn, session_name)
 
     if not rows:
         return []
@@ -113,25 +134,28 @@ def find_compaction_candidates(memory: _ConnectionSource, session_name: str) -> 
         return []
 
     threshold = settings.COMPACTION_SIMILARITY_THRESHOLD
-    edges = []
+    similar: dict = {i: {} for i in range(len(candidates))}
     for i in range(len(candidates)):
         for j in range(i + 1, len(candidates)):
-            if (
-                _cosine_similarity(
-                    candidates[i]["embedding"], candidates[j]["embedding"]
-                )
-                >= threshold
-            ):
-                edges.append((i, j))
+            pair = tuple(sorted((candidates[i]["id"], candidates[j]["id"])))
+            if pair in dismissed:
+                continue
+            score = _cosine_similarity(
+                candidates[i]["embedding"], candidates[j]["embedding"]
+            )
+            if score >= threshold:
+                similar[i][j] = similar[j][i] = score
 
-    components = _connected_components(len(candidates), edges)
+    groups = _complete_linkage_groups(
+        len(candidates),
+        similar,
+        settings.COMPACTION_MIN_CLUSTER_SIZE,
+        max(settings.COMPACTION_MIN_CLUSTER_SIZE, settings.COMPACTION_MAX_CLUSTER_SIZE),
+    )
 
     result = []
-    for component in components:
-        if len(component) < settings.COMPACTION_MIN_CLUSTER_SIZE:
-            continue
-
-        cluster = [candidates[i] for i in component]
+    for group in groups:
+        cluster = [candidates[i] for i in group]
         timestamps = [r["timestamp"] for r in cluster]
 
         pair_sims = [
@@ -244,6 +268,27 @@ def persist_candidates_to_staging(memory: "MARMMemory", candidates: list) -> int
             ).fetchone()
             if existing:
                 continue
+
+            # A cluster that grew is a new hash, so without this every new
+            # member would queue another copy beside the old one.
+            overlapping = [
+                (row_id, status)
+                for row_id, status, ids_json in conn.execute(
+                    "SELECT id, status, source_memory_ids FROM compaction_staging "
+                    "WHERE session_name = ? AND status IN "
+                    "('pending_summary', 'nudge_exhausted', 'summary_staged')",
+                    (candidate["session_name"],),
+                )
+                if set(json.loads(ids_json)) & set(source_ids)
+            ]
+            if any(status == "summary_staged" for _, status in overlapping):
+                continue
+            for row_id, _ in overlapping:
+                conn.execute(
+                    "UPDATE compaction_staging SET status = 'stale', updated_at = ? "
+                    "WHERE id = ?",
+                    (now_iso, row_id),
+                )
 
             snapshot = _get_source_snapshot(conn, source_ids)
             row_id = str(uuid.uuid4())

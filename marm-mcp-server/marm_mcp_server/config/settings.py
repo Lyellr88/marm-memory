@@ -415,6 +415,14 @@ if _raw_cmcs < 1:
         file=sys.stderr,
     )
 
+_raw_cmxs = _safe_int("COMPACTION_MAX_CLUSTER_SIZE", 8)
+COMPACTION_MAX_CLUSTER_SIZE = max(COMPACTION_MIN_CLUSTER_SIZE, _raw_cmxs)
+if _raw_cmxs < COMPACTION_MIN_CLUSTER_SIZE:
+    print(
+        f"WARNING: COMPACTION_MAX_CLUSTER_SIZE={_raw_cmxs} below COMPACTION_MIN_CLUSTER_SIZE, clamped to {COMPACTION_MAX_CLUSTER_SIZE}",
+        file=sys.stderr,
+    )
+
 _raw_cmah = _safe_int("COMPACTION_MIN_AGE_HOURS", 24)
 COMPACTION_MIN_AGE_HOURS = max(0, _raw_cmah)
 if _raw_cmah < 0:
