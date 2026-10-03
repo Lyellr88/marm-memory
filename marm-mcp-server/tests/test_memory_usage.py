@@ -290,6 +290,9 @@ def test_finished_counts_leave_nothing_pending(monkeypatch, tmp_path):
     load_isolated_server(monkeypatch, tmp_path)
     usage = importlib.import_module("marm_mcp_server.core.memory_usage")
 
+    for i in range(7):
+        _memory_row(tmp_path / "marm_memory.db", f"m{i}")
+
     for i in range(500):
         usage.record_recalled([f"m{i % 7}"])
     asyncio.run(usage.drain())

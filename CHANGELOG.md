@@ -1,6 +1,29 @@
 # Changelog
 
 <details>
+<summary><strong>October 3rd, 2026: Memory Usage and Linked-Code Freshness (v2.58.0)</strong></summary>
+
+### Added
+
+- Linked code in recall reports `freshness` as `changed`, `unchanged`, or `unknown`. Versioned source-span fingerprints are captured after completed re-indexes, ignore formatting-only changes, and reject files modified or replaced during capture. A detected change stays set across refreshes and duplicate-entity merges, without changing memory content or recall ranking.
+- HTTP and STDIO recall record per-memory return counts and last-recalled times through a bounded background queue. The Console API lists cold memories for review with age and project filters, excluding compacted sources. Usage tracking failures do not fail recall, and deleting a memory removes its usage record.
+
+### Fixed
+
+- Concept extraction removes markdown emphasis, backticks, leading list bullets, and malformed brackets from names, and discards table-pipe spans. Legitimate identifiers, balanced brackets, headings, and quoted names are preserved, with entity deduplication and relationship endpoints using the same cleaned names.
+
+### Changed
+
+- `marm_log_show` has explicit HTTP response models for session lists, entry lists, and errors. Full-payload parity tests preserve the existing responses, MCP descriptions, and input schemas; undeclared or missing response fields fail validation instead of being silently dropped. The service and STDIO path remain unchanged.
+- The full and lite protocols tie `marm_code_context` and `marm_distill` into the mission, execution policy, and workflow triggers. Guidance covers code investigations and refactoring, recovering uncaptured facts from supplied conversation text, proposal approval, operator-enabled Guardrails, and verification of optional local-model results.
+
+### Acknowledgment
+
+Thank you to [@doublegate](https://github.com/doublegate) for [#253](https://github.com/Lyellr88/marm-memory/pull/253), [#265](https://github.com/Lyellr88/marm-memory/pull/265), and [#267](https://github.com/Lyellr88/marm-memory/pull/267), and [@erfou11](https://github.com/erfou11) for [#281](https://github.com/Lyellr88/marm-memory/pull/281).
+
+</details>
+
+<details>
 <summary><strong>October 2nd, 2026: Analyst Review Modes and Reproducible Recall (v2.57.0)</strong></summary>
 
 ### Added
