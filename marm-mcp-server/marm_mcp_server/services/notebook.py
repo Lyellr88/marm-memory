@@ -7,7 +7,7 @@ from ..core.docs_db import DocsDB
 from ..core.events import events
 from ..core.memory import memory
 from ..core.memory_utils import _safe_print
-from ..core.redaction import redact_secrets, summarize
+from ..core.redaction import identifier_refusal, redact_secrets, summarize
 
 _RESERVED_SESSION_NAME = "marm_system"
 
@@ -36,16 +36,6 @@ def _scope_or_detected(value: Optional[str], detected: Optional[str]) -> Optiona
     return value or None
 
 
-def _name_holds_a_secret(name: str) -> Optional[dict]:
-    # Refused rather than redacted: a redacted name could not be found again.
-    if redact_secrets(name)[1]:
-        return {
-            "status": "error",
-            "message": "That name contains a credential; choose a different name.",
-        }
-    return None
-
-
 async def _add(
     name: Optional[str],
     data: Optional[str],
@@ -60,7 +50,9 @@ async def _add(
             "message": "name and data are required for action='add'",
         }
     name = name.strip()
-    if refused := _name_holds_a_secret(name):
+    if refused := identifier_refusal(
+        name=name, session_name=session_name, project=project, platform=platform
+    ):
         return refused
     data, redacted = redact_secrets(data)
     project = _scope_or_detected(project, MARM_PROJECT)
@@ -208,7 +200,9 @@ async def _save(
     if not name or not name.strip():
         return {"status": "error", "message": "name is required for action='save'"}
     name = name.strip()
-    if refused := _name_holds_a_secret(name):
+    if refused := identifier_refusal(
+        name=name, session_name=session_name, project=project, platform=platform
+    ):
         return refused
     if session_name == _RESERVED_SESSION_NAME:
         return {

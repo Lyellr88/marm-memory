@@ -362,3 +362,66 @@ def test_distill_reports_what_it_redacted_before_staging(monkeypatch, tmp_path):
     assert proposed.status_code == 200, proposed.text
     assert proposed.json()["redacted"] == {"count": 1, "kinds": {"aws-access-key": 1}}
     assert AWS not in proposed.text
+
+
+# --- identifiers are refused, not redacted --------------------------------------
+# Redacting a session or scope name would break every later lookup by it.
+
+
+def _count(db, table, column, value):
+    with sqlite3.connect(db) as conn:
+        return conn.execute(
+            f"SELECT COUNT(*) FROM {table} WHERE {column} LIKE ?", (f"%{value}%",)
+        ).fetchone()[0]
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"entry": "2026-10-03-note-a plain entry", "session_name": f"ops {AWS}"},
+        {"entry": "2026-10-03-note-a plain entry", "project": f"proj-{AWS}"},
+        {"entry": f"Session: deploy {AWS}"},
+    ],
+)
+def test_a_log_write_naming_a_credential_is_refused(monkeypatch, tmp_path, body):
+    server = load_isolated_server(monkeypatch, tmp_path)
+    client = local_client(server.app)
+    response = client.post("/marm_log_entry", json=body)
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "error"
+    assert "credential" in response.json()["message"]
+    db = str(tmp_path / "marm_memory.db")
+    for table in ("log_entries", "sessions"):
+        assert _count(db, table, "session_name", "IOSFODNN7") == 0
+    assert _count(db, "log_entries", "project", "IOSFODNN7") == 0
+
+
+@pytest.mark.parametrize("field", ["session_name", "project", "platform"])
+def test_a_notebook_write_naming_a_credential_is_refused(monkeypatch, tmp_path, field):
+    server = load_isolated_server(monkeypatch, tmp_path)
+    client = local_client(server.app)
+    response = client.post(
+        "/marm_notebook",
+        json={"action": "add", "name": "notes", "data": "plain", field: AWS},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["status"] == "error"
+    assert "credential" in response.json()["message"]
+    assert (
+        _count(str(tmp_path / "marm_memory.db"), "notebook_entries", "data", "plain")
+        == 0
+    )
+
+
+@pytest.mark.parametrize("field", ["session_name", "project", "platform"])
+def test_a_console_memory_naming_a_credential_is_refused(monkeypatch, tmp_path, field):
+    server = load_isolated_server(monkeypatch, tmp_path, write_queue_enabled=True)
+    client = local_client(server.app)
+    body = {"content": "deploy notes", "session_name": "redaction", field: f"x-{AWS}"}
+    created = client.post("/internal/memories", json=body)
+    assert created.status_code == 422, created.text
+    assert "credential" in created.text
+    assert (
+        _count(str(tmp_path / "marm_memory.db"), "memories", "content", "deploy notes")
+        == 0
+    )

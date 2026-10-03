@@ -62,10 +62,7 @@ _ASSIGNED_QUOTED = re.compile(
 )
 
 
-def redact_secrets(text: str) -> tuple[str, dict[str, int]]:
-    """Return `text` with credentials replaced, and how many of each kind."""
-    if not text:
-        return text, {}
+def _scrub(text: str) -> tuple[str, dict[str, int]]:
     counts: dict[str, int] = {}
     for kind, pattern in _PATTERNS:
         text, n = pattern.subn(f"[redacted:{kind}]", text)
@@ -75,9 +72,33 @@ def redact_secrets(text: str) -> tuple[str, dict[str, int]]:
     text, bare = _ASSIGNED.subn(r"\1[redacted:assigned-secret]", text)
     if quoted + bare:
         counts["assigned-secret"] = quoted + bare
+    return text, counts
+
+
+def redact_secrets(text: str) -> tuple[str, dict[str, int]]:
+    """Return `text` with credentials replaced, and how many of each kind."""
+    if not text:
+        return text, {}
+    text, counts = _scrub(text)
     if counts:
         logger.warning("memory.secrets_redacted", kinds=counts)
     return text, counts
+
+
+def identifier_refusal(**fields: str | None) -> dict[str, str] | None:
+    """An error for the first identifier holding a credential, else None.
+
+    Identifiers are refused rather than redacted: a session, project or
+    entry renamed by redaction could not be looked up again.
+    """
+    for field, value in fields.items():
+        if isinstance(value, str) and value and _scrub(value)[1]:
+            label = field.replace("_", " ")
+            return {
+                "status": "error",
+                "message": f"That {label} contains a credential; choose a different {label}.",
+            }
+    return None
 
 
 def _assigned(name: str, value: str) -> bool:

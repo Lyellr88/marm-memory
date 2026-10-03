@@ -8,7 +8,7 @@ from ..config.settings import MARM_PLATFORM, MARM_PROJECT
 from ..core.events import events
 from ..core.memory import memory
 from ..core.memory_utils import _safe_print
-from ..core.redaction import redact_secrets, summarize
+from ..core.redaction import identifier_refusal, redact_secrets, summarize
 
 _SESSION_PREFIXES = ("Session: ", "Topic: ")
 _SESSION_INACTIVITY_NOTICE_SECONDS = 3600
@@ -34,6 +34,16 @@ async def create_log_entry(
     # semantic write, so the three cannot disagree about what scope means.
     scope = project or MARM_PROJECT or None
     explicit = bool(project)
+
+    if refused := identifier_refusal(session_name=session_name, project=project):
+        return refused
+    raw = entry.strip()
+    for prefix in _SESSION_PREFIXES:
+        # Checked before redaction, which would rename the new session.
+        if raw.startswith(prefix) and (
+            refused := identifier_refusal(session_name=raw[len(prefix) :].strip())
+        ):
+            return refused
 
     try:
         formatted_entry, redacted = redact_secrets(entry)
