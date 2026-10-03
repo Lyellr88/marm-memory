@@ -350,3 +350,29 @@ def test_an_overloaded_store_drops_counts_instead_of_queueing_them(
     assert pending <= usage.MAX_PENDING
     assert any(e.get("event") == "memory_usage.dropped" for e in logs)
     assert usage._pending == set()
+
+
+def test_drain_returns_with_nothing_pending_even_if_callbacks_lag(
+    monkeypatch, tmp_path
+):
+    """wait() can return before a done callback runs; drain must not rely on it."""
+    load_isolated_server(monkeypatch, tmp_path)
+    usage = importlib.import_module("marm_mcp_server.core.memory_usage")
+    started, released = threading.Event(), threading.Event()
+    real_forget = usage._forget
+
+    def late_forget(future):
+        released.wait(5)
+        real_forget(future)
+
+    # The write is still running when the callback is attached, so the
+    # callback runs on the worker after completion, and is held there.
+    monkeypatch.setattr(usage, "_increment", lambda *_a: started.wait(5))
+    monkeypatch.setattr(usage, "_forget", late_forget)
+    try:
+        usage.record_recalled(["m1"])
+        started.set()
+        asyncio.run(usage.drain())
+        assert usage._pending == set()
+    finally:
+        released.set()

@@ -88,3 +88,6 @@ async def drain() -> None:
         waiting = list(_pending)
     if waiting:
         await asyncio.to_thread(concurrent.futures.wait, waiting)
+        # wait() returns before done callbacks run, so _forget may not have yet.
+        with _pending_lock:
+            _pending.difference_update(waiting)
