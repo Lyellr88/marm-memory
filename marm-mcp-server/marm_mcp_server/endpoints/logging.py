@@ -34,6 +34,32 @@ class LogSessionSwitchedResponse(_ResponseModel):
     session_name: str
 
 
+class LogSessionSummary(_ResponseModel):
+    session_name: str
+    entry_count: int
+
+
+class LogEntryDetails(_ResponseModel):
+    id: str
+    entry_date: str
+    topic: str
+    summary: str
+    full_entry: str
+
+
+class LogSessionsResponse(_ResponseModel):
+    status: Literal["success"]
+    sessions: list[LogSessionSummary]
+    total_sessions: int
+
+
+class LogEntriesResponse(_ResponseModel):
+    status: Literal["success"]
+    session_name: str
+    entries: list[LogEntryDetails]
+    total_entries: int
+
+
 class LogDeleteResponse(_ResponseModel):
     status: Literal["success"]
     message: str
@@ -54,6 +80,7 @@ class NotebookDeleteResponse(_ResponseModel):
 LogEntryResponse = (
     LogEntryCreatedResponse | LogSessionSwitchedResponse | LoggingErrorResponse
 )
+LogShowResponse = LogSessionsResponse | LogEntriesResponse | LoggingErrorResponse
 DeleteResponse = LogDeleteResponse | NotebookDeleteResponse | LoggingErrorResponse
 
 
@@ -79,7 +106,11 @@ async def marm_log_entry(request: LogEntryRequest) -> dict:
     )
 
 
-@router.get("/marm_log_show", operation_id="marm_log_show")
+@router.get(
+    "/marm_log_show",
+    operation_id="marm_log_show",
+    response_model=LogShowResponse,
+)
 async def marm_log_show(
     session_name: Optional[str] = Query(
         None, description="Session to show logs for. If omitted, lists all sessions."
