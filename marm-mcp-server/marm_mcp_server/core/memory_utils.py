@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any, Callable
 import numpy as np
 
 from ..config.settings import FTS_EXTRA_STOPWORDS, FTS_QUERY_MODE
+from .redaction import redact_secrets
 
 if TYPE_CHECKING:
     from .memory import MARMMemory
@@ -365,6 +366,9 @@ def sanitize_content(content: str) -> str:
     """Sanitize content to prevent XSS attacks while preserving readability"""
     if not content:
         return content
+
+    # Before truncation, so a key cut off mid-block is still found.
+    content = redact_secrets(content)[0]
 
     if len(content) > 10000:
         content = content[:10000]

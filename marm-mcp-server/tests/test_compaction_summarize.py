@@ -383,3 +383,22 @@ async def test_does_not_touch_other_statuses(mem, monkeypatch):
     staged_row = _get_staging_row(mem, staged_id)
     assert staged_row[0] == "summary_staged"
     assert staged_row[1] == "existing summary"
+
+
+@pytest.mark.asyncio
+async def test_a_server_side_summary_is_staged_redacted(mem, monkeypatch):
+    """A memory written before redaction existed can still hold a key; the
+    summary built from it must not carry that into staging."""
+    monkeypatch.setattr(compaction_summarize, "COMPACTION_ENABLED", True)
+    key = "AKIA" + "IOSFODNN7" + "EXAMPLE"
+    ids = [
+        _insert_memory(mem, "s", f"deploy key {key} content {i}", _make_vec(seed=i))
+        for i in range(3)
+    ]
+    candidate_id = _insert_nudge_exhausted(mem, "s", ids)
+
+    await process_nudge_exhausted_candidates(mem)
+
+    summary = _get_staging_row(mem, candidate_id)[1]
+    assert summary and key not in summary
+    assert "[redacted:aws-access-key]" in summary

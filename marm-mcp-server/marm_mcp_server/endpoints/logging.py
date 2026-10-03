@@ -20,12 +20,19 @@ class LoggingErrorResponse(_ResponseModel):
     message: str
 
 
+class RedactionSummary(_ResponseModel):
+    count: int
+    kinds: dict[str, int]
+
+
 class LogEntryCreatedResponse(_ResponseModel):
     status: Literal["success"]
     message: str
     entry_id: str
     memory_id: Optional[str]
     formatted_entry: str
+    #: Present only when storage redacted something from the entry.
+    redacted: Optional[RedactionSummary] = None
 
 
 class LogSessionSwitchedResponse(_ResponseModel):
@@ -91,6 +98,7 @@ router = APIRouter(prefix="", tags=["Logging"])
     "/marm_log_entry",
     operation_id="marm_log_entry",
     response_model=LogEntryResponse,
+    response_model_exclude_unset=True,
 )
 async def marm_log_entry(request: LogEntryRequest) -> dict:
     """

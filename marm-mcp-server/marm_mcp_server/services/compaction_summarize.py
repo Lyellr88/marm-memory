@@ -8,6 +8,7 @@ import numpy as np
 
 from ..config.settings import COMPACTION_ENABLED
 from ..core.memory import MARMMemory, _safe_print
+from ..core.redaction import redact_secrets
 
 
 def centroid_extract_summary(
@@ -157,7 +158,7 @@ async def process_nudge_exhausted_candidates(memory_store: MARMMemory) -> int:
                     "UPDATE compaction_staging "
                     "SET status = 'summary_staged', suggested_summary = ?, updated_at = ? "
                     "WHERE id = ? AND status = 'nudge_exhausted'",
-                    (summary, now_inner, candidate_id),
+                    (redact_secrets(summary)[0], now_inner, candidate_id),
                 )
         except Exception as e:
             _safe_print(

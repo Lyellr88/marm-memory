@@ -7,6 +7,7 @@ from ..core.docs_db import DocsDB
 from ..core.events import events
 from ..core.memory import memory
 from ..core.memory_utils import _safe_print
+from ..core.redaction import identifier_refusal, redact_secrets, summarize
 
 _RESERVED_SESSION_NAME = "marm_system"
 
@@ -49,6 +50,11 @@ async def _add(
             "message": "name and data are required for action='add'",
         }
     name = name.strip()
+    if refused := identifier_refusal(
+        name=name, session_name=session_name, project=project, platform=platform
+    ):
+        return refused
+    data, redacted = redact_secrets(data)
     project = _scope_or_detected(project, MARM_PROJECT)
     platform = _scope_or_detected(platform, MARM_PLATFORM)
     now = datetime.now(timezone.utc).isoformat()
@@ -81,6 +87,7 @@ async def _add(
         "status": "success",
         "message": f"📓 Notebook entry '{name}' added",
         "name": name,
+        **({"redacted": summarize(redacted)} if redacted else {}),
     }
 
 
@@ -193,6 +200,10 @@ async def _save(
     if not name or not name.strip():
         return {"status": "error", "message": "name is required for action='save'"}
     name = name.strip()
+    if refused := identifier_refusal(
+        name=name, session_name=session_name, project=project, platform=platform
+    ):
+        return refused
     if session_name == _RESERVED_SESSION_NAME:
         return {
             "status": "error",
@@ -225,6 +236,7 @@ async def _save(
             }
         content = row[0]
         source_notebook_name = name
+    content, redacted = redact_secrets(content)
 
     docs_db = _get_docs_db()
     with docs_db.get_connection() as conn:
@@ -286,6 +298,7 @@ async def _save(
         if mirror_memory_id is not None
         else doc_row.memory_id,
         "mirror_status": mirror_status,
+        **({"redacted": summarize(redacted)} if redacted else {}),
     }
 
 
