@@ -11,6 +11,7 @@ from ..core.memory import memory
 from ..core.memory_usage import record_recalled
 from ..core.memory_utils import build_log_search
 from ..core.models import SmartRecallRequest
+from ..core.redaction import identifier_refusal, redaction_summary
 from ..core.response_limiter import MCPResponseLimiter
 from ..services.analytics import track_usage
 from ..services.graph_context import attach_graph_context, get_graph_context
@@ -97,6 +98,7 @@ def _memory_conflict(exc: RuntimeError) -> HTTPException:
 
 @router.post("/internal/memories", status_code=201)
 async def console_create_memory(payload: ConsoleMemoryPayload) -> dict:
+    _refuse_secret_identifiers(payload)
     try:
         memory_id = await memory.console_create_memory(
             payload.content,
@@ -108,11 +110,14 @@ async def console_create_memory(payload: ConsoleMemoryPayload) -> dict:
         )
     except RuntimeError as exc:
         raise _memory_conflict(exc) from exc
-    return memory.console_memory_row(memory_id) or {"id": memory_id}
+    return _with_redaction(
+        memory.console_memory_row(memory_id) or {"id": memory_id}, payload
+    )
 
 
 @router.put("/internal/memories/{memory_id}")
 async def console_replace_memory(memory_id: str, payload: ConsoleMemoryPayload) -> dict:
+    _refuse_secret_identifiers(payload)
     if memory.console_memory_row(memory_id) is not None:
         await _cleanup_deleted_concepts_async([memory_id])
     try:
@@ -129,7 +134,25 @@ async def console_replace_memory(memory_id: str, payload: ConsoleMemoryPayload) 
         raise _memory_conflict(exc) from exc
     if not updated:
         raise HTTPException(status_code=404, detail="Memory not found")
-    return memory.console_memory_row(memory_id) or {"id": memory_id}
+    return _with_redaction(
+        memory.console_memory_row(memory_id) or {"id": memory_id}, payload
+    )
+
+
+def _refuse_secret_identifiers(payload: ConsoleMemoryPayload) -> None:
+    refused = identifier_refusal(
+        session_name=payload.session_name,
+        project=payload.project,
+        platform=payload.platform,
+    )
+    if refused:
+        raise HTTPException(status_code=422, detail=refused["message"])
+
+
+def _with_redaction(row: dict, payload: ConsoleMemoryPayload) -> dict:
+    """Tell the caller what storage redacted from what it sent."""
+    summary = redaction_summary(payload.content, payload.metadata)
+    return {**row, "redacted": summary} if summary else row
 
 
 @router.delete("/internal/memories/{memory_id}")

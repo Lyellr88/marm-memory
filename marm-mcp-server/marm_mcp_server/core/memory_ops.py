@@ -32,6 +32,7 @@ from .memory_utils import (
     _spawn_chunk_write,
     sanitize_content,
 )
+from .redaction import redact_value
 
 logger = structlog.get_logger(__name__)
 
@@ -240,7 +241,7 @@ async def _store_memory(
 
     memory_id = str(uuid.uuid4())
     timestamp = datetime.now(timezone.utc).isoformat()
-    metadata = metadata or {}
+    metadata = redact_value(metadata or {})
 
     embedding_bytes = pre_embedding_bytes
 
@@ -379,7 +380,7 @@ async def _replace_memory(
                 sanitized_content,
                 session,
                 context_type,
-                json.dumps(metadata or {}),
+                json.dumps(redact_value(metadata or {})),
                 project,
                 platform,
                 content_hash,

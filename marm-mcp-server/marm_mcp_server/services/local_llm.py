@@ -41,6 +41,7 @@ from typing import Any, Generator, Optional
 import structlog
 
 from ..config.env_parsing import _safe_bool
+from ..core.redaction import redact_secrets
 
 logger = structlog.get_logger(__name__)
 
@@ -480,6 +481,15 @@ def available(force: bool = False) -> Optional[str]:
     return model
 
 
+def _messages(system: str, user: str) -> list[dict[str, str]]:
+    """The chat turn, with credentials redacted: every prompt leaves through
+    here, and a remote endpoint may be allowed."""
+    return [
+        {"role": "system", "content": redact_secrets(system)[0]},
+        {"role": "user", "content": redact_secrets(user)[0]},
+    ]
+
+
 def complete(
     system: str,
     user: str,
@@ -513,10 +523,7 @@ def complete(
 
     payload: dict[str, Any] = {
         "model": model,
-        "messages": [
-            {"role": "system", "content": system},
-            {"role": "user", "content": user},
-        ],
+        "messages": _messages(system, user),
         "max_tokens": max_tokens,
         "temperature": temperature,
         "stream": False,
@@ -649,10 +656,7 @@ def stream(
 
     payload = {
         "model": model,
-        "messages": [
-            {"role": "system", "content": system},
-            {"role": "user", "content": user},
-        ],
+        "messages": _messages(system, user),
         "max_tokens": max_tokens,
         "temperature": temperature,
         "stream": True,
