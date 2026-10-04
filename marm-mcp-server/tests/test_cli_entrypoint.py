@@ -270,9 +270,13 @@ def test_import_marm_mcp_server_succeeds_with_clean_stdout(tmp_path):
 
 
 def test_first_start_key_banner_goes_to_stderr_not_stdout(tmp_path):
+    from marm_mcp_server.config import api_key_bootstrap
+
     env = os.environ.copy()
     env["MARM_DB_PATH"] = str(tmp_path / "banner-memory.db")
     env["MARM_ANALYTICS_DB_PATH"] = str(tmp_path / "banner-analytics.db")
+    # A stored OS credential would skip generation and the banner with it.
+    env["PYTHON_KEYRING_BACKEND"] = "keyring.backends.null.Keyring"
     env["SERVER_HOST"] = "0.0.0.0"
     env["USERPROFILE"] = str(tmp_path)
     env["HOME"] = str(tmp_path)
@@ -290,7 +294,8 @@ def test_first_start_key_banner_goes_to_stderr_not_stdout(tmp_path):
     assert result.returncode == 0, result.stderr
     assert result.stdout == ""
     assert "API key auto-generated" in result.stderr
-    assert (tmp_path / ".marm" / ".env").exists()
+    if api_key_bootstrap._HAVE_DIR_FD:
+        assert (tmp_path / ".marm" / ".env").exists()
 
 
 def test_cli_stdio_keeps_stdout_for_json_rpc_on_a_first_start(tmp_path):
@@ -300,6 +305,8 @@ def test_cli_stdio_keeps_stdout_for_json_rpc_on_a_first_start(tmp_path):
     env = os.environ.copy()
     env["MARM_DB_PATH"] = str(tmp_path / "stdio-memory.db")
     env["MARM_ANALYTICS_DB_PATH"] = str(tmp_path / "stdio-analytics.db")
+    # A stored OS credential would skip generation and the banner with it.
+    env["PYTHON_KEYRING_BACKEND"] = "keyring.backends.null.Keyring"
     env["SERVER_HOST"] = "0.0.0.0"
     env["USERPROFILE"] = str(tmp_path)
     env["HOME"] = str(tmp_path)
