@@ -101,18 +101,15 @@ def legacy_names(db_path: Path, sample_limit: int = 5) -> dict:
         return report
     with closing(connection):
         try:
-            names = [
-                row[0]
-                for row in connection.execute("SELECT name FROM entities ORDER BY id")
-            ]
+            rows = connection.execute("SELECT name FROM entities ORDER BY id")
+            for (name,) in rows:
+                report["checked"] += 1
+                if _entity_name(name) != name:
+                    report["count"] += 1
+                    if len(report["sample"]) < sample_limit:
+                        report["sample"].append(name)
         except sqlite3.Error:
-            return report
-    for name in names:
-        report["checked"] += 1
-        if _entity_name(name) != name:
-            report["count"] += 1
-            if len(report["sample"]) < sample_limit:
-                report["sample"].append(name)
+            return {"count": 0, "checked": 0, "sample": []}
     return report
 
 
