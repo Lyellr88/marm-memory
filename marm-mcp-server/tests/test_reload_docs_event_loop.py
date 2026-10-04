@@ -12,14 +12,15 @@ import inspect
 import sqlite3
 
 import pytest
+import pytest_asyncio
 
 from marm_mcp_server.core.memory import memory
 from marm_mcp_server.core.memory_db import SQLiteConnectionPool, init_database
 from marm_mcp_server.endpoints import system
 
 
-@pytest.fixture(autouse=True)
-def schema(tmp_path, monkeypatch):
+@pytest_asyncio.fixture(autouse=True)
+async def schema(tmp_path, monkeypatch):
     """Point the pool at a temporary database, then create its tables.
 
     Redirecting HOME is not enough and the difference is not theoretical: this
@@ -38,7 +39,19 @@ def schema(tmp_path, monkeypatch):
     # The POOL, not its `db_path`: SQLiteConnectionPool opens its first
     # connections in __init__, so repointing the attribute afterwards leaves
     # every existing connection bound to the original file.
-    monkeypatch.setattr(memory, "connection_pool", SQLiteConnectionPool(str(db)))
+    pool = SQLiteConnectionPool(str(db))
+    monkeypatch.setattr(memory, "connection_pool", pool)
+    monkeypatch.setattr(memory, "_write_queue", None)
+    monkeypatch.setattr(memory, "_encoder_failed", True)
+    monkeypatch.setitem(
+        memory.start_write_queue.__func__.__globals__, "WRITE_QUEUE_ENABLED", True
+    )
+    try:
+        yield
+    finally:
+        await memory.stop_write_queue()
+        assert memory._write_queue is None
+        pool.close_all()
 
 
 def test_reload_docs_job_is_a_coroutine_not_a_thread_target():

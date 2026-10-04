@@ -1,6 +1,20 @@
 # Changelog
 
 <details>
+<summary><strong>October 3rd, 2026: Credential Redaction (v2.59.0)</strong></summary>
+
+### Added
+
+- Recognized credentials are redacted from new memory, log, notebook, Distill, and compaction writes, including nested metadata keys and values. Redaction also protects local-model prompts, and write responses report redaction counts and kinds without exposing the credentials. Existing stored data is not retroactively scrubbed.
+- Session, project, platform, and entry identifiers containing recognized credentials are refused rather than renamed, preserving lookup and scope consistency. Distill refuses credential-bearing scope names before staging or applying proposals.
+
+### Acknowledgment
+
+Thank you to [@doublegate](https://github.com/doublegate) for [#263](https://github.com/Lyellr88/marm-memory/pull/263).
+
+</details>
+
+<details>
 <summary><strong>October 3rd, 2026: Memory Usage and Linked-Code Freshness (v2.58.0)</strong></summary>
 
 ### Added

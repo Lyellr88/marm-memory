@@ -179,6 +179,46 @@ async def test_write_queue_propagates_worker_errors(monkeypatch, tmp_path):
         await memory.stop_write_queue()
 
 
+def test_write_queue_lifecycle_writes_on_successive_event_loops(monkeypatch, tmp_path):
+    memory = MARMMemory(str(tmp_path / "memory.db"))
+    memory._encoder_failed = True
+    monkeypatch.setitem(
+        memory.start_write_queue.__func__.__globals__, "WRITE_QUEUE_ENABLED", True
+    )
+
+    async def write(content):
+        await memory.start_write_queue()
+        worker = memory._write_queue._worker_task
+        try:
+            memory_id = await asyncio.wait_for(
+                memory.store_memory_queued(content, "queue-loop-lifecycle"), timeout=5
+            )
+            await asyncio.sleep(0)
+            assert not worker.done()
+            return memory_id
+        finally:
+            await memory.stop_write_queue()
+            assert worker.cancelled()
+            assert memory._write_queue is None
+
+    try:
+        first_id = asyncio.run(write("First lifecycle stores the deployment decision"))
+        second_id = asyncio.run(
+            write("Second lifecycle stores the database migration plan")
+        )
+        with memory.get_connection() as conn:
+            ids = {
+                row[0]
+                for row in conn.execute(
+                    "SELECT id FROM memories WHERE session_name = ?",
+                    ("queue-loop-lifecycle",),
+                )
+            }
+        assert ids == {first_id, second_id}
+    finally:
+        memory.connection_pool.close_all()
+
+
 @pytest.mark.asyncio
 async def test_memory_recall_respects_session_scope_and_search_all(tmp_path):
     db_path = tmp_path / "memory.db"

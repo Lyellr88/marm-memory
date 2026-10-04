@@ -25,6 +25,7 @@ Thank you to everyone helping push local-first, persistent AI memory forward.
   - [#185](https://github.com/Lyellr88/marm-memory/pull/185): Fixed Docker healthcheck validation so unhealthy service responses fail the container check, and added coverage for healthy, unhealthy, unavailable, and container-level cases.
   - [#192](https://github.com/Lyellr88/marm-memory/pull/192): Added Docker coverage proving exposed mode enforces authentication and that MARM's managed Docker path generates and persists a key when none is configured.
 - **DoubleGate** ([@doublegate](https://github.com/doublegate))
+  - [#263](https://github.com/Lyellr88/marm-memory/pull/263): Added credential redaction before storage, proposal staging, and local-model prompts, including nested metadata keys and values, identifier refusals, caller-visible redaction summaries, and regression coverage.
   - [#253](https://github.com/Lyellr88/marm-memory/pull/253): Cleaned markdown and malformed brackets from extracted concept names while preserving legitimate identifiers and keeping relationship endpoints consistent.
   - [#265](https://github.com/Lyellr88/marm-memory/pull/265): Added linked-code freshness signals through versioned source-span fingerprints, safe capture after re-indexing, and sticky change tracking that survives duplicate merges without changing recall ranking.
   - [#267](https://github.com/Lyellr88/marm-memory/pull/267): Added bounded background recall-usage tracking on HTTP and STDIO, deletion cleanup, and a project-filtered Console API for reviewing cold memories.

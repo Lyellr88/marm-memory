@@ -103,7 +103,9 @@ docs/future/
 .claude/
 .codex/
 .kiro/
+.gemini/
 .agents
+.geminignore
 .codexignore
 .claudeignore
 .kiroignore
@@ -124,6 +126,7 @@ marm-mcp-server/.pytest-review-*/
 marm-mcp-server/.pytest-smoke-*/
 marm-pytest-*/
 marm_usage_analytics.db
+AGENTS.md
 dump.md
 dump2.md
 marm-demo/
