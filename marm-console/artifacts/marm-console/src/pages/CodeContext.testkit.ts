@@ -165,7 +165,7 @@ export function resetCodeContextTest() {
   answerState.model = undefined;
   answerState.start = vi.fn();
   answerState.reset = vi.fn();
-  for (const key of ['grounding', 'unresolved', 'hint', 'packet', 'verification', 'modelInfo', 'items', 'disagreements', 'analyst']) {
+  for (const key of ['grounding', 'unresolved', 'hint', 'packet', 'verification', 'modelInfo', 'items', 'disagreements', 'analyst', 'message', 'context']) {
     delete (answerState as Record<string, unknown>)[key];
   }
   projectState.status = 'ready';

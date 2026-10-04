@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .env_reference import ENV_REFERENCE
+from .env_reference import EnvVar as EnvVar
 from .setting_definitions import KEY_ENV as _KEY_ENV
 from .setting_definitions import SETTINGS, Setting
 
