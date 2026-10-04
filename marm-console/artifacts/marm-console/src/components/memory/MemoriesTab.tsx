@@ -1,84 +1,15 @@
 import { useState, useEffect } from 'react';
 import { decodeEntities } from '@/lib/entities';
 import { useMemories, useFilters, useOverview, useCreateMemory, useUpdateMemory, useDeleteMemory, useBulkDeleteMemories } from '@/hooks/use-marm-queries';
-import { Badge, Button, Input, Select, SelectTrigger, SelectValue, SelectContent, SelectItem, Table, TableHeader, TableRow, TableHead, TableBody, TableCell, Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, Textarea, Label, cn } from '@/components/ui/core';
-import { format } from 'date-fns';
-import { Search, Trash2, Plus, Edit2 } from 'lucide-react';
+import { Table, TableHeader, TableRow, TableHead, TableBody, TableCell } from '@/components/ui/core';
 import type { Memory, MemoryId, MemoryListParams } from '@/lib/marm-types';
-import { type ActionNotice, mutationErrorMessage, deleteNotice, ActionNoticePanel, DeleteSelectionDialog, MemoryEmptyState, PageControls, memoryContext } from './shared';
+import { type ActionNotice, mutationErrorMessage, deleteNotice, ActionNoticePanel, DeleteSelectionDialog, MemoryEmptyState, PageControls } from './shared';
+import { MemoryRow } from './MemoryRow';
+import { MemoryToolbar } from './MemoryToolbar';
+import { CreateMemoryDialog } from './CreateMemoryDialog';
+import { MemoryDetailsDialog } from './MemoryDetailsDialog';
 
 const MEMORY_PAGE_SIZE = 100;
-
-function MemoryRow({ 
-  memory, 
-  onSelect,
-  selected,
-  fresh,
-  onToggleSelect 
-}: { 
-  memory: Memory, 
-  onSelect: (m: Memory) => void,
-  selected: boolean,
-  fresh: boolean,
-  onToggleSelect: (id: MemoryId) => void
-}) {
-  const context = memoryContext(memory.context_type);
-  const ContextIcon = context.icon;
-  return (
-    <TableRow
-      className={cn(
-        'group cursor-pointer border-l-2 transition-[background-color,border-color,box-shadow] duration-200 hover:bg-primary/[0.045] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring',
-        context.rail,
-        selected && 'bg-primary/[0.065] shadow-[inset_3px_0_0_rgba(var(--primary-rgb),0.75)]',
-        fresh && 'memory-new',
-      )}
-      onClick={() => onSelect(memory)}
-      tabIndex={0}
-      onKeyDown={(event) => {
-        if (event.currentTarget !== event.target) return;
-        if (event.key === 'Enter' || event.key === ' ') {
-          event.preventDefault();
-          onSelect(memory);
-        }
-      }}
-    >
-      <TableCell className="w-[40px] pl-4" onClick={(e) => e.stopPropagation()}>
-        <input 
-          type="checkbox" 
-          checked={selected}
-          onChange={() => onToggleSelect(memory.id)}
-          aria-label={`Select memory ${memory.id}`}
-          className="rounded border-input bg-background"
-        />
-      </TableCell>
-      <TableCell className="w-[100px] font-mono text-xs text-muted-foreground">{format(new Date(memory.created_at), 'MMM d, HH:mm')}</TableCell>
-      <TableCell>
-        <div className="flex gap-2 mb-1">
-          <Badge variant="outline" className="text-[10px] py-0">{memory.session_name}</Badge>
-          {memory.project && <Badge variant="secondary" className="text-[10px] py-0">{memory.project}</Badge>}
-          <Badge variant="outline" className={cn('gap-1 text-[10px] py-0', context.tone)}>
-            <ContextIcon className="h-2.5 w-2.5" /> {memory.context_type || 'general'}
-          </Badge>
-        </div>
-        <div className="line-clamp-2 text-sm leading-relaxed text-foreground/90 transition-colors group-hover:text-foreground">{decodeEntities(memory.content)}</div>
-      </TableCell>
-      <TableCell className="text-right">
-        {memory.compaction_role !== 'none' && (
-          <Badge variant={memory.compaction_role === 'summary' ? 'default' : 'outline'} className="text-[10px]">
-            {memory.compaction_role}
-          </Badge>
-        )}
-      </TableCell>
-    </TableRow>
-  );
-}
-
-/** Sentinel for "load every project's memories".
- *
- *  Radix forbids `value=""`, and the option needs to be explicit rather than
- *  the default: one project is a bounded page of rows, every project is the
- *  whole store, and the store is the thing that grows. */
-const ALL_PROJECTS = '__all__';
 
 export function MemoriesTab() {
   const [params, setParams] = useState<MemoryListParams>({ limit: MEMORY_PAGE_SIZE, offset: 0 });
@@ -298,64 +229,35 @@ export function MemoriesTab() {
         .slice(0, 3)
     : [];
 
+  const startCreate = () => {
+    setCreateMode(true);
+    setEditContent('');
+    setNewSession('');
+    setNewProject('');
+    setNewPlatform('');
+    setNewContextType('');
+  };
+
+  const startEdit = () => {
+    setEditMode(true);
+    setEditContent(decodeEntities(selectedMemory?.content));
+    setEditProject(selectedMemory?.project || '');
+    setEditPlatform(selectedMemory?.platform || '');
+    setEditContextType(selectedMemory?.context_type || '');
+  };
+
   return (
     <div className="flex h-full flex-col gap-4">
-      <div className="flex shrink-0 items-center gap-3 rounded-xl border border-card-border bg-card/70 p-2 shadow-[0_12px_34px_rgba(0,0,0,0.14)]">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input 
-            placeholder="Search memories..." 
-            className="border-transparent bg-background/65 pl-9 hover:border-primary/25"
-            value={params.q || ''}
-            onChange={e => updateFilters({ q: e.target.value || undefined })}
-          />
-        </div>
-        <Select
-          value={params.project || ALL_PROJECTS}
-          onValueChange={v => {
-            setScopedAll(v === ALL_PROJECTS);
-            updateFilters({ project: v === ALL_PROJECTS ? undefined : v });
-          }}
-        >
-          <SelectTrigger className="w-[210px] border-transparent bg-background/65" aria-label="Project scope">
-            <SelectValue placeholder="Project" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ALL_PROJECTS}>All projects (slower)</SelectItem>
-            {filters?.projects.map(p => <SelectItem key={p} value={p}>{p}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        <Select value={params.session || "all"} onValueChange={v => updateFilters({ session: v === "all" ? undefined : v })}>
-          <SelectTrigger className="w-[180px] border-transparent bg-background/65">
-            <SelectValue placeholder="Session" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Sessions</SelectItem>
-            {filters?.sessions.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        <Select value={params.compaction_role || "all"} onValueChange={v => updateFilters({ compaction_role: v === "all" ? undefined : v as any })}>
-          <SelectTrigger className="w-[180px] border-transparent bg-background/65">
-            <SelectValue placeholder="Compaction Role" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Any Role</SelectItem>
-            <SelectItem value="none">None</SelectItem>
-            <SelectItem value="source">Source</SelectItem>
-            <SelectItem value="summary">Summary</SelectItem>
-            <SelectItem value="compacted">Compacted (Virtual)</SelectItem>
-          </SelectContent>
-        </Select>
-        {selectedIds.size > 0 ? (
-          <Button className="bulk-action-enter" variant="destructive" onClick={requestBulkDelete} isLoading={bulkDelete.isPending}>
-            <Trash2 className="w-4 h-4 mr-2" /> Delete {selectedIds.size}
-          </Button>
-        ) : (
-          <Button onClick={() => { setCreateMode(true); setEditContent(''); setNewSession(''); setNewProject(''); setNewPlatform(''); setNewContextType(''); }}>
-            <Plus className="w-4 h-4 mr-2" /> New
-          </Button>
-        )}
-      </div>
+      <MemoryToolbar
+        params={params}
+        filters={filters}
+        selectedCount={selectedIds.size}
+        bulkPending={bulkDelete.isPending}
+        updateFilters={updateFilters}
+        setScopedAll={setScopedAll}
+        onBulkDelete={requestBulkDelete}
+        onNew={startCreate}
+      />
       <ActionNoticePanel notice={actionNotice} />
 
       <div className="min-h-0 flex flex-1 flex-col overflow-hidden rounded-xl border border-card-border border-t-primary/35 shadow-[0_18px_50px_rgba(0,0,0,0.16)]">
@@ -436,166 +338,49 @@ export function MemoriesTab() {
         )}
       </div>
 
-      <Dialog open={createMode} onOpenChange={setCreateMode}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>New Memory</DialogTitle>
-            <DialogDescription>Manually inject context into MARM. Blank scope fields are stored as null.</DialogDescription>
-          </DialogHeader>
-          <div className="py-4 space-y-4">
-            <div className="grid grid-cols-3 gap-2">
-              <div className="space-y-1">
-                <Label className="text-xs">Session name *</Label>
-                <Input placeholder="e.g. main" value={newSession} onChange={e => setNewSession(e.target.value)} className="font-mono text-xs" list="session-suggestions" />
-                <datalist id="session-suggestions">
-                  {filters?.sessions.map(s => <option key={s} value={s} />)}
-                </datalist>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Project</Label>
-                <Input placeholder="optional" value={newProject} onChange={e => setNewProject(e.target.value)} className="text-xs" list="project-suggestions" />
-                <datalist id="project-suggestions">
-                  {filters?.projects.map(p => <option key={p} value={p} />)}
-                </datalist>
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Platform</Label>
-                <Input placeholder="optional" value={newPlatform} onChange={e => setNewPlatform(e.target.value)} className="text-xs" list="platform-suggestions" />
-                <datalist id="platform-suggestions">
-                  {filters?.platforms.map(p => <option key={p} value={p} />)}
-                </datalist>
-              </div>
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">Context type</Label>
-              <Input placeholder="optional" value={newContextType} onChange={e => setNewContextType(e.target.value)} className="text-xs" list="context-type-suggestions" />
-              <datalist id="context-type-suggestions">
-                {filters?.context_types.map(c => <option key={c} value={c} />)}
-              </datalist>
-            </div>
-            <Textarea 
-              placeholder="Memory content..."
-              value={editContent}
-              onChange={(e) => setEditContent(e.target.value)}
-              className="min-h-[150px]"
-            />
-          </div>
-          <ActionNoticePanel notice={createMemory.error ? { kind: 'error', message: mutationErrorMessage(createMemory.error) } : null} />
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateMode(false)}>Cancel</Button>
-            <Button onClick={handleCreate} isLoading={createMemory.isPending} disabled={!editContent || !newSession.trim()}>Create</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <CreateMemoryDialog
+        open={createMode}
+        onOpenChange={setCreateMode}
+        filters={filters}
+        newSession={newSession}
+        setNewSession={setNewSession}
+        newProject={newProject}
+        setNewProject={setNewProject}
+        newPlatform={newPlatform}
+        setNewPlatform={setNewPlatform}
+        newContextType={newContextType}
+        setNewContextType={setNewContextType}
+        editContent={editContent}
+        setEditContent={setEditContent}
+        createError={createMemory.error}
+        isCreating={createMemory.isPending}
+        onCreate={handleCreate}
+      />
 
-      <Dialog open={!!selectedMemory && !createMode} onOpenChange={(o) => !o && setSelectedMemory(null)}>
-        <DialogContent className="max-w-2xl max-h-[80vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle>Memory Details</DialogTitle>
-            <DialogDescription className="font-mono text-xs">ID: {selectedMemory?.id} | Hash: {selectedMemory?.content_hash.substring(0,8)}</DialogDescription>
-          </DialogHeader>
-          <div className="flex-1 overflow-auto py-4 space-y-6">
-            <div>
-              <div className="flex justify-between items-center mb-2">
-                <div className="text-sm font-medium text-muted-foreground">Content</div>
-                {!editMode && (
-                  <Button variant="ghost" size="sm" className="h-6" onClick={() => {
-                    setEditMode(true);
-                    setEditContent(decodeEntities(selectedMemory?.content));
-                    setEditProject(selectedMemory?.project || '');
-                    setEditPlatform(selectedMemory?.platform || '');
-                    setEditContextType(selectedMemory?.context_type || '');
-                  }}>
-                    <Edit2 className="w-3 h-3 mr-1" /> Edit
-                  </Button>
-                )}
-              </div>
-              {editMode ? (
-                <div className="space-y-2">
-                  <Textarea 
-                    value={editContent}
-                    onChange={(e) => setEditContent(e.target.value)}
-                    className="min-h-[150px]"
-                  />
-                  <div className="grid grid-cols-3 gap-2">
-                    <Input placeholder="Project (blank = null)" value={editProject} onChange={e => setEditProject(e.target.value)} className="text-xs" />
-                    <Input placeholder="Platform (blank = null)" value={editPlatform} onChange={e => setEditPlatform(e.target.value)} className="text-xs" />
-                    <Input placeholder="Context type (blank = general)" value={editContextType} onChange={e => setEditContextType(e.target.value)} className="text-xs" />
-                  </div>
-                  <div className="flex justify-end gap-2">
-                    <Button variant="outline" size="sm" onClick={() => setEditMode(false)}>Cancel</Button>
-                    <Button size="sm" onClick={handleUpdate} isLoading={updateMemory.isPending}>Save</Button>
-                  </div>
-                </div>
-              ) : (
-                <div className="p-4 bg-muted/30 rounded-md font-mono text-sm whitespace-pre-wrap">
-                  {decodeEntities(selectedMemory?.content)}
-                </div>
-              )}
-            </div>
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <div>
-                <span className="text-muted-foreground">Session:</span>
-                <Badge variant="outline" className="ml-2">{selectedMemory?.session_name}</Badge>
-              </div>
-              {selectedMemory?.project && (
-                <div>
-                  <span className="text-muted-foreground">Project:</span>
-                  <Badge variant="outline" className="ml-2">{selectedMemory.project}</Badge>
-                </div>
-              )}
-              {selectedMemory?.platform && (
-                <div>
-                  <span className="text-muted-foreground">Platform:</span>
-                  <Badge variant="outline" className="ml-2">{selectedMemory.platform}</Badge>
-                </div>
-              )}
-              {selectedMemory?.context_type && (
-                <div>
-                  <span className="text-muted-foreground">Context type:</span>
-                  <Badge variant="outline" className="ml-2">{selectedMemory.context_type}</Badge>
-                </div>
-              )}
-              <div>
-                <span className="text-muted-foreground">Created:</span>
-                <span className="ml-2 font-mono">{selectedMemory && format(new Date(selectedMemory.created_at), 'PP pp')}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground">Concept Links:</span>
-                <span className="ml-2">{selectedMemory?.concept_link_count}</span>
-              </div>
-            </div>
-            {relatedMemories.length > 0 && (
-              <div>
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="text-sm font-medium text-muted-foreground">Related context in this view</span>
-                  <Badge variant="outline" className="text-[9px]">same session or project</Badge>
-                </div>
-                <div className="space-y-2">
-                  {relatedMemories.map((memory) => (
-                    <button
-                      key={memory.id}
-                      type="button"
-                      onClick={() => { setSelectedMemory(memory); setEditMode(false); }}
-                      className="group w-full rounded-lg border border-border/70 bg-background/40 p-3 text-left transition-[border-color,background-color,transform] duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:bg-primary/[0.035] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      <span className="line-clamp-2 text-xs leading-relaxed text-foreground/80 group-hover:text-foreground">{decodeEntities(memory.content)}</span>
-                      <span className="mt-2 block font-mono text-[10px] text-muted-foreground">{memory.session_name}{memory.project ? ` · ${memory.project}` : ''}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-            <ActionNoticePanel notice={updateMemory.error ? { kind: 'error', message: mutationErrorMessage(updateMemory.error) } : deleteMemory.error ? { kind: 'error', message: mutationErrorMessage(deleteMemory.error) } : null} />
-          </div>
-          <DialogFooter className="flex justify-between sm:justify-between items-center">
-            <Button variant="destructive" onClick={requestSingleDelete} isLoading={deleteMemory.isPending}>
-              <Trash2 className="w-4 h-4 mr-2" /> Delete
-            </Button>
-            <Button variant="outline" onClick={() => setSelectedMemory(null)}>Close</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <MemoryDetailsDialog
+        open={!!selectedMemory && !createMode}
+        selectedMemory={selectedMemory}
+        onClose={() => setSelectedMemory(null)}
+        editMode={editMode}
+        onStartEdit={startEdit}
+        onCancelEdit={() => setEditMode(false)}
+        editContent={editContent}
+        setEditContent={setEditContent}
+        editProject={editProject}
+        setEditProject={setEditProject}
+        editPlatform={editPlatform}
+        setEditPlatform={setEditPlatform}
+        editContextType={editContextType}
+        setEditContextType={setEditContextType}
+        onSave={handleUpdate}
+        isSaving={updateMemory.isPending}
+        relatedMemories={relatedMemories}
+        onSelectRelated={(memory) => { setSelectedMemory(memory); setEditMode(false); }}
+        updateError={updateMemory.error}
+        deleteError={deleteMemory.error}
+        onDelete={requestSingleDelete}
+        isDeleting={deleteMemory.isPending}
+      />
       <DeleteSelectionDialog
         open={!!deleteTarget}
         onOpenChange={(open) => !open && setDeleteTarget(null)}
