@@ -117,6 +117,13 @@ def main() -> int:
             [sys.executable, str(Path(__file__).parent / "find-versions.py")]
         )
 
+    print("Language threshold cheat sheet:")
+    print("  Rust (.rs):        1,500 lines")
+    print("  Python (.py):        700 lines")
+    print("  CSS (.css):          500 lines")
+    print("  TypeScript (.ts):    400 lines")
+    print("  React (.tsx):        400 lines")
+
     return 0
 
 
