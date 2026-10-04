@@ -18,7 +18,13 @@ from marm_mcp_server.console import mcp_client, runtime_control
 from marm_mcp_server.console.endpoints import setup
 from marm_mcp_server.console.terminal.router import HOST_ENV
 from marm_mcp_server.core import runtime_flags, runtime_manager
-from marm_mcp_server.services import client_config, key_management, skill_install
+from marm_mcp_server.services import (
+    client_config,
+    client_operations,
+    client_paths,
+    key_management,
+    skill_install,
+)
 
 SECRET = "sk-marm-setup-secret-value"
 
@@ -36,6 +42,8 @@ def _live_modules(monkeypatch):
         runtime_flags="marm_mcp_server.core.runtime_flags",
         runtime_manager="marm_mcp_server.core.runtime_manager",
         client_config="marm_mcp_server.services.client_config",
+        client_operations="marm_mcp_server.services.client_operations",
+        client_paths="marm_mcp_server.services.client_paths",
         key_management="marm_mcp_server.services.key_management",
         skill_install="marm_mcp_server.services.skill_install",
     )
@@ -63,7 +71,7 @@ def home(tmp_path, monkeypatch):
     monkeypatch.delenv("CLINE_MCP_SETTINGS_PATH", raising=False)
     monkeypatch.setattr(user_settings, "_home", lambda: tmp_path)
     monkeypatch.setattr(user_settings, "_in_container", lambda: False)
-    monkeypatch.setattr(client_config, "_home", lambda: tmp_path)
+    monkeypatch.setattr(client_paths, "_home", lambda: tmp_path)
     monkeypatch.setattr(client_config.shutil, "which", lambda name: None)
     monkeypatch.setattr(
         key_management, "managed_key_path", lambda: tmp_path / ".marm" / ".env"
@@ -167,7 +175,7 @@ def test_overview_on_an_empty_stopped_machine(client, runtime) -> None:
     assert body["runtime"]["url"] == f"http://127.0.0.1:{marm_settings.SERVER_PORT}/mcp"
     detected = [
         c
-        for c in client_config.list_agents(body["runtime"]["url"], False)
+        for c in client_operations.list_agents(body["runtime"]["url"], False)
         if c["detected"]
     ]
     assert body["agents"] == {"connected": 0, "detected": len(detected)}

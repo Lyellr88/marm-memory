@@ -500,7 +500,7 @@ def test_stdio_alias_uses_existing_stdio_entry_point(monkeypatch):
 
 def _fast_start_with_client(monkeypatch, tmp_path, client, transport="http"):
     active_cli, active_runtime = _active_modules()
-    from marm_mcp_server.services import client_config
+    from marm_mcp_server.services import client_config, client_paths
 
     calls = []
     monkeypatch.setattr(
@@ -523,7 +523,7 @@ def _fast_start_with_client(monkeypatch, tmp_path, client, transport="http"):
         lambda **kwargs: calls.append(("console", kwargs)) or 0,
     )
     monkeypatch.setattr(active_cli.settings, "MARM_API_KEY", "")
-    monkeypatch.setattr(client_config, "_home", lambda: tmp_path)
+    monkeypatch.setattr(client_paths, "_home", lambda: tmp_path)
     monkeypatch.setattr(client_config.shutil, "which", lambda name: None)
 
     result = active_cli._fast_start_http(
@@ -618,10 +618,10 @@ def test_fast_start_client_flag_accepts_an_alias_and_rejects_an_unknown_client()
 
 
 def _docker_stdio_command(monkeypatch, tmp_path, *arguments):
-    from marm_mcp_server.services import client_config, docker_cli
+    from marm_mcp_server.services import client_config, client_paths, docker_cli
 
     active_cli, _runtime = _active_modules()
-    monkeypatch.setattr(client_config, "_home", lambda: tmp_path)
+    monkeypatch.setattr(client_paths, "_home", lambda: tmp_path)
     monkeypatch.setattr(client_config.shutil, "which", lambda name: None)
     data_dir = tmp_path / "marm-data"
     data_dir.mkdir()

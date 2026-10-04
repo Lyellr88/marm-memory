@@ -14,7 +14,12 @@ from fastapi.testclient import TestClient
 from test_mcp_probe import FakeMcp, stdio_env
 
 from marm_mcp_server.console.endpoints import agents, setup
-from marm_mcp_server.services import client_config, key_management, mcp_probe
+from marm_mcp_server.services import (
+    client_config,
+    client_paths,
+    key_management,
+    mcp_probe,
+)
 
 SECRET = "sk-marm-route-secret"
 REAL_WHICH = shutil.which
@@ -23,8 +28,8 @@ REAL_APPDATA = os.environ.get("APPDATA")
 
 @pytest.fixture
 def isolated_home(tmp_path, monkeypatch):
-    monkeypatch.setattr(client_config, "_home", lambda: tmp_path)
-    monkeypatch.setattr(client_config, "_platform", lambda: "win32")
+    monkeypatch.setattr(client_paths, "_home", lambda: tmp_path)
+    monkeypatch.setattr(client_paths, "_platform", lambda: "win32")
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("USERPROFILE", str(tmp_path))
     monkeypatch.setenv("APPDATA", str(tmp_path / "AppData" / "Roaming"))

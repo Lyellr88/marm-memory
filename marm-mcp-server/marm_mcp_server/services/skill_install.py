@@ -65,9 +65,9 @@ def _write_skill(agent_dir: Path, text: str) -> dict[str, str]:
 
 def _global_dir(agent: str) -> Path:
     if agent in {"hermes", "cline", "opencode", "devin"}:
-        from . import client_config
+        from . import client_paths
 
-        home: Path = getattr(client_config, f"{agent}_home")()
+        home: Path = getattr(client_paths, f"{agent}_home")()
         return home
     return Path.home() / AGENTS[agent]
 

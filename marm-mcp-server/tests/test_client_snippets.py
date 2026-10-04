@@ -14,7 +14,7 @@ except ModuleNotFoundError:
 
 import yaml
 
-from marm_mcp_server.services import client_config, client_snippets
+from marm_mcp_server.services import client_config, client_paths, client_snippets
 
 URL = "http://127.0.0.1:8001/mcp"
 DOCKER_URL = "http://127.0.0.1:9001/mcp"
@@ -375,7 +375,7 @@ def test_project_paths_use_the_placeholder() -> None:
 
 
 def test_no_absolute_local_home_leaks_into_paths_or_text(tmp_path, monkeypatch) -> None:
-    monkeypatch.setattr(client_config, "_home", lambda: tmp_path)
+    monkeypatch.setattr(client_paths, "_home", lambda: tmp_path)
     for client, os_name, transport, scope, auth in all_cases():
         try:
             result = make(client, os_name, transport, scope, auth)

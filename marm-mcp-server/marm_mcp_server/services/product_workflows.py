@@ -110,11 +110,11 @@ def fast_start_http(args: argparse.Namespace) -> int:
         print("Console: skipped (--no-console)")
     print("Recovery: marm-memory doctor")
     if args.client:
-        from . import client_config
+        from . import client_config, client_operations
 
         client_url = f"http://127.0.0.1:{runtime_port or SERVER_PORT}/mcp"
         try:
-            result = client_config.configure(
+            result = client_operations.configure(
                 args.client,
                 client_url,
                 bool(settings.MARM_API_KEY),

@@ -17,6 +17,7 @@ from ...config import settings as marm_settings
 from ...config import user_settings
 from ...services import (
     client_config,
+    client_operations,
     docker_commands,
     key_management,
     mcp_probe,
@@ -115,7 +116,7 @@ def list_agents(target: Target = "local") -> dict:
         "configure_blocked_reason": None
         if allowed
         else "The Console is not bound to loopback.",
-        "clients": client_config.list_agents(url, auth_required),
+        "clients": client_operations.list_agents(url, auth_required),
     }
 
 
@@ -129,7 +130,7 @@ def get_scope(
     _require_known(client_id)
     url, auth_required = _target_url_and_auth(target)
     return _guarded(
-        lambda: client_config.status(client_id, scope, project, url, auth_required)
+        lambda: client_operations.status(client_id, scope, project, url, auth_required)
     )
 
 
@@ -139,7 +140,7 @@ def configure_agent(client_id: str, payload: ConfigurePayload) -> dict:
     _require_known(client_id)
     url, auth_required = _target_url_and_auth(payload.target)
     return _guarded(
-        lambda: client_config.configure(
+        lambda: client_operations.configure(
             client_id,
             url,
             auth_required,
@@ -157,7 +158,7 @@ def remove_agent(client_id: str, payload: RemovePayload) -> dict:
     _require_loopback("Remove")
     _require_known(client_id)
     return _guarded(
-        lambda: client_config.remove(
+        lambda: client_operations.remove(
             client_id, payload.scope, payload.project, payload.dry_run
         )
     )
@@ -248,7 +249,7 @@ def test_agent(client_id: str, payload: ProbePayload) -> dict:
     _require_loopback("Test")
     _require_known(client_id)
     try:
-        entry = client_config.read_entry(client_id, payload.scope, payload.project)
+        entry = client_operations.read_entry(client_id, payload.scope, payload.project)
     except client_config.ClientNotConfigurable as exc:
         return _missing_entry(str(exc))
     except client_config.ClientNotFound as exc:
