@@ -34,7 +34,11 @@ from .services.cli_output import (
     _print_payload,
     _print_status,
 )
-from .services.cli_parser import _compatibility_parser, _product_parser
+from .services.cli_parser import (
+    PRODUCT_COMMANDS,
+    _compatibility_parser,
+    _product_parser,
+)
 from .services.server_runner import run_server_with_shutdown
 from .utils.dependency_check import check_dependencies
 from .utils.security import generate_api_key
@@ -544,30 +548,7 @@ def main() -> None:
     """Dispatch the product CLI or preserve the legacy server command."""
     executable = Path(sys.argv[0]).name.lower()
     product_mode = executable.startswith("marm-memory") or (
-        len(sys.argv) > 1
-        and sys.argv[1]
-        in {
-            "start",
-            "fast-start-http",
-            "http",
-            "stdio",
-            "stop",
-            "restart",
-            "status",
-            "console",
-            "logs",
-            "doctor",
-            "knowledge",
-            "projects",
-            "maintenance",
-            "key",
-            "docker",
-            "upgrade",
-            "update",
-            "uninstall",
-            "init",
-            "version",
-        }
+        len(sys.argv) > 1 and sys.argv[1] in PRODUCT_COMMANDS
     )
     parser = _product_parser() if product_mode else _compatibility_parser()
     arguments = sys.argv[1:]
