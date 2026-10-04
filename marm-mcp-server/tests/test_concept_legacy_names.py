@@ -116,3 +116,17 @@ def test_the_check_cannot_write(graph, monkeypatch):
     concept_store.legacy_names(db_path)
 
     assert refused == [True]
+
+
+def test_a_name_in_several_scopes_is_sampled_once(graph):
+    concept_db, db_path = graph
+    with concept_db.get_connection() as conn:
+        for session in ("sess-a", "sess-b"):
+            concept_db.get_or_create_entity(
+                conn, "**apply**", "concept", session, None, "m1", platform="cli"
+            )
+
+    report = concept_store.legacy_names(db_path)
+
+    assert report["count"] == 2
+    assert report["sample"] == ["**apply**"]

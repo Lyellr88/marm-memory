@@ -106,7 +106,10 @@ def legacy_names(db_path: Path, sample_limit: int = 5) -> dict:
                 report["checked"] += 1
                 if _entity_name(name) != name:
                     report["count"] += 1
-                    if len(report["sample"]) < sample_limit:
+                    if (
+                        len(report["sample"]) < sample_limit
+                        and name not in report["sample"]
+                    ):
                         report["sample"].append(name)
         except sqlite3.Error:
             return {"count": 0, "checked": 0, "sample": []}
