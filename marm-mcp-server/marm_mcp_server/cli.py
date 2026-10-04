@@ -11,7 +11,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
 import structlog
-import uvicorn
 
 if TYPE_CHECKING:
     import sqlite3
@@ -35,7 +34,12 @@ from .services.cli_output import (
     _print_payload,
     _print_status,
 )
-from .services.cli_parser import _compatibility_parser, _product_parser
+from .services.cli_parser import (
+    PRODUCT_COMMANDS,
+    _compatibility_parser,
+    _product_parser,
+)
+from .services.server_runner import run_server_with_shutdown
 from .utils.dependency_check import check_dependencies
 from .utils.security import generate_api_key
 
@@ -49,42 +53,6 @@ def _write_generated_api_key() -> None:
         "\nSet this as your MARM_API_KEY environment variable.\n"
         "Keep it secret - this is the only time it will be shown.\n"
     )
-
-
-async def run_server_with_shutdown() -> None:
-    """Run the HTTP server with MARM's shared graceful-shutdown path."""
-    from .core.shutdown_manager import shutdown_manager
-    from .server import app
-
-    shutdown_manager.shutdown_event = asyncio.Event()
-    shutdown_manager.shutdown_initiated = False
-    shutdown_manager._cleanup_complete = False
-    await shutdown_manager.setup_signal_handlers()
-    server = uvicorn.Server(
-        uvicorn.Config(app, host=SERVER_HOST, port=SERVER_PORT, log_level="info")
-    )
-    server_task = asyncio.create_task(server.serve())
-    shutdown_task = asyncio.create_task(shutdown_manager.wait_for_shutdown())
-    done, _pending = await asyncio.wait(
-        [server_task, shutdown_task], return_when=asyncio.FIRST_COMPLETED
-    )
-    graceful_shutdown_signaled = shutdown_task in done
-    if graceful_shutdown_signaled:
-        logger.info("Shutdown signal received, closing server")
-        server.should_exit = True
-        await server_task
-    for task in (shutdown_task,):
-        if task.done():
-            continue
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            pass
-    if server_task in done and not graceful_shutdown_signaled:
-        await server_task
-    if graceful_shutdown_signaled:
-        logger.info("Server shutdown complete")
 
 
 def create_server() -> "FastAPI":
@@ -488,84 +456,7 @@ def _dispatch_product(args: argparse.Namespace) -> int:
             return _compaction_dry_run(args.session, args.as_json)
         return _migrate_embeddings()
     if args.command == "key":
-        if args.key_command == "generate":
-            _write_generated_api_key()
-            return 0
-        from .services import key_management
-
-        if args.key_command == "init":
-            if args.remove_plaintext and not args.keychain:
-                print(
-                    "--remove-plaintext only applies together with --keychain: the key "
-                    "has to be stored somewhere before the file can go.",
-                    file=sys.stderr,
-                )
-                return 2
-            if args.keychain:
-                keychain_key, keychain_problem = key_management.keychain_lookup()
-                if keychain_problem:
-                    print(
-                        f"Could not use the OS keychain: {keychain_problem}",
-                        file=sys.stderr,
-                    )
-                    return 1
-                if keychain_key and not key_management.read_managed_key_from_file(
-                    key_management.managed_key_path()
-                ):
-                    print(
-                        "Using existing MARM API key in the OS keychain "
-                        f"({key_management.KEYRING_SERVICE}/"
-                        f"{key_management.KEYRING_USERNAME})."
-                    )
-                    return 0
-            path, created = key_management.initialize_managed_key()
-            state = "Created" if created else "Using existing"
-            print(f"{state} MARM API key file: {path}")
-            if not args.keychain:
-                return 0
-            try:
-                _key, removed = key_management.migrate_managed_key_to_keychain(
-                    path, remove_plaintext=args.remove_plaintext
-                )
-            except key_management.KeychainUnavailable as exc:
-                print(
-                    f"Could not store the key in the OS keychain: {exc}",
-                    file=sys.stderr,
-                )
-                return 1
-            print(
-                "Stored the MARM API key in the OS keychain "
-                f"({key_management.KEYRING_SERVICE}/{key_management.KEYRING_USERNAME})."
-            )
-            if removed:
-                print(f"Removed the plaintext key file: {path}")
-            else:
-                print(f"Kept {path} as the backward-compatible fallback.")
-            return 0
-        if args.key_command == "path":
-            print(key_management.managed_key_path())
-            return 0
-        keychain_key, keychain_problem = key_management.keychain_lookup()
-        if keychain_problem:
-            print(
-                f"Could not read the MARM API key from the OS keychain: "
-                f"{keychain_problem}",
-                file=sys.stderr,
-            )
-            return 1
-        key = keychain_key or key_management.read_managed_key_from_file()
-        if not key:
-            print(
-                "No managed MARM API key exists. Run `marm-memory key init` first.",
-                file=sys.stderr,
-            )
-            return 1
-        print(
-            "Warning: terminal capture and shell history may retain this key.",
-            file=sys.stderr,
-        )
-        print(key)
-        return 0
+        return _dispatch_key(args)
     if args.command == "docker":
         return _dispatch_docker(args)
     if args.command in {"upgrade", "update"}:
@@ -578,6 +469,13 @@ def _dispatch_product(args: argparse.Namespace) -> int:
         print(SERVER_VERSION)
         return 0
     return 2
+
+
+def _dispatch_key(args: argparse.Namespace) -> int:
+    """Delegate API key commands to the focused key service."""
+    from .services.key_cli import dispatch_key
+
+    return dispatch_key(args, write_generated_key=_write_generated_api_key)
 
 
 def _dispatch_docker(args: argparse.Namespace) -> int:
@@ -650,30 +548,7 @@ def main() -> None:
     """Dispatch the product CLI or preserve the legacy server command."""
     executable = Path(sys.argv[0]).name.lower()
     product_mode = executable.startswith("marm-memory") or (
-        len(sys.argv) > 1
-        and sys.argv[1]
-        in {
-            "start",
-            "fast-start-http",
-            "http",
-            "stdio",
-            "stop",
-            "restart",
-            "status",
-            "console",
-            "logs",
-            "doctor",
-            "knowledge",
-            "projects",
-            "maintenance",
-            "key",
-            "docker",
-            "upgrade",
-            "update",
-            "uninstall",
-            "init",
-            "version",
-        }
+        len(sys.argv) > 1 and sys.argv[1] in PRODUCT_COMMANDS
     )
     parser = _product_parser() if product_mode else _compatibility_parser()
     arguments = sys.argv[1:]

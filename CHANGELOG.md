@@ -1,6 +1,24 @@
 # Changelog
 
 <details>
+<summary><strong>October 4th, 2026: Module Splits (v2.59.1)</strong></summary>
+
+### Added
+
+- `scripts/check-file-length.py` prints the per-language length thresholds after its report.
+
+### Changed
+
+- The Console frontend's largest files are split into focused modules with no change in behavior: the Knowledge build and duplicate review components, the Memory tab, the local model panel, the Code Context page, the query hooks (`use-marm-queries`), and the shared types (`marm-types`). Import paths are unchanged, and the Code Context tests are split into four files that share a test kit ([#292](https://github.com/Lyellr88/marm-memory/pull/292)).
+- Server modules over the length limit are split with no change in behavior. `cli.py` hands the `key` commands and the HTTP server runner to `services/`, and keeps its product command list in `services/cli_parser.py`. `user_settings.py` moves its setting and environment-variable tables to `config/setting_definitions.py` and `config/env_reference.py`. `concept_db.py` moves schema setup to `core/concept_schema.py` and build-run bookkeeping to `core/concept_build_runs.py`. Imports from the original modules still work.
+
+### Removed
+
+- `scripts/tui-launcher.py` and its test. The launcher was unused.
+
+</details>
+
+<details>
 <summary><strong>October 3rd, 2026: Credential Redaction (v2.59.0)</strong></summary>
 
 ### Added

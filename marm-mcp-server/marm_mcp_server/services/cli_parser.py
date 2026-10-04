@@ -6,6 +6,31 @@ from pathlib import Path
 from ..config.settings import SERVER_VERSION
 from .client_config import CLIENT_ALIASES, CLIENT_IDS
 
+PRODUCT_COMMANDS = frozenset(
+    {
+        "start",
+        "fast-start-http",
+        "http",
+        "stdio",
+        "stop",
+        "restart",
+        "status",
+        "console",
+        "logs",
+        "doctor",
+        "knowledge",
+        "projects",
+        "maintenance",
+        "key",
+        "docker",
+        "upgrade",
+        "update",
+        "uninstall",
+        "init",
+        "version",
+    }
+)
+
 
 def _add_profile_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument(
