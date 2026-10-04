@@ -369,3 +369,14 @@ def test_containment_zero_restores_similarity_alone(mem, monkeypatch):
         _insert(mem, _at(0.1), content=f"Release v{version} shipped")
 
     assert len(find_compaction_candidates(mem, "sess")) == 1
+
+
+def test_trailing_punctuation_does_not_change_a_token():
+    from marm_mcp_server.core.compaction import _containment, _tokens
+
+    short = _tokens("The release shipped.")
+    long = _tokens("The release shipped with tests")
+    assert _containment(short, long) == 1.0
+    assert {"v2.2.9", "gpl-3.0-or-later"} <= _tokens(
+        "Relicensed to gpl-3.0-or-later in v2.2.9."
+    )

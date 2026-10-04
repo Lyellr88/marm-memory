@@ -74,6 +74,7 @@ def centroid_extract_summary(
             # the one that says more.
             if len(contents[idx]) > len(selected_content[duplicate_of]):
                 selected_content[duplicate_of] = contents[idx]
+                selected_vecs[duplicate_of] = vec
             continue
         if len(selected_content) < top_n:
             selected_content.append(contents[idx])

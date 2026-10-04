@@ -49,11 +49,13 @@ def _cosine_similarity(a: bytes, b: bytes) -> float:
     return float(np.dot(va, vb) / (norm_a * norm_b))
 
 
-_TOKEN = re.compile(r"[a-z0-9][a-z0-9._#/-]{2,}")
+# Separators count only between characters, so "shipped." is "shipped".
+_TOKEN = re.compile(r"[a-z0-9]+(?:[._#/-][a-z0-9]+)*")
 
 
 def _tokens(content: str) -> frozenset:
-    return frozenset(_TOKEN.findall(html.unescape(content or "").lower()))
+    found = _TOKEN.findall(html.unescape(content or "").lower())
+    return frozenset(token for token in found if len(token) >= 3)
 
 
 def _containment(a: frozenset, b: frozenset) -> float:

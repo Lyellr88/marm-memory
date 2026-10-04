@@ -411,3 +411,21 @@ def test_dedup_keeps_the_copy_that_contains_the_other():
 
     for memories in ([(short, vec), (full, vec)], [(full, vec), (short, vec)]):
         assert centroid_extract_summary(memories, top_n=5) == full
+
+
+def test_dedup_compares_against_the_copy_it_kept():
+    def at(degrees: float) -> bytes:
+        v = np.zeros(384, dtype=np.float32)
+        v[0], v[1] = np.cos(np.radians(degrees)), np.sin(np.radians(degrees))
+        return v.tobytes()
+
+    short = "short"
+    kept = "the long version that replaces the short one"
+    other = "a different fact"
+    # `other` is similar only to `short`, which `kept` replaces.
+    memories = [(short, at(0)), (kept, at(20)), (other, at(-30))]
+
+    result = centroid_extract_summary(memories, top_n=5)
+
+    assert kept in result
+    assert other in result
