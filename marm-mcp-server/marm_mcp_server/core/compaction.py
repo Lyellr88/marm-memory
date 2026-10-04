@@ -107,6 +107,7 @@ def find_compaction_candidates(memory: _ConnectionSource, session_name: str) -> 
               AND session_name != 'marm_system'
               AND timestamp < ?
               AND embedding IS NOT NULL
+            ORDER BY id
             """,
             (session_name, min_age_cutoff),
         ).fetchall()
@@ -251,6 +252,10 @@ def persist_candidates_to_staging(memory: "MARMMemory", candidates: list) -> int
     inserted = 0
 
     with memory.get_connection() as conn:
+        # One write transaction: a review or another scan must not change a
+        # row between the overlap check and its supersession, and a failed
+        # insert must not leave the superseded row stale with no replacement.
+        conn.execute("BEGIN IMMEDIATE")
         for candidate in candidates:
             source_ids = candidate["source_memory_ids"]
             candidate_hash = _compute_candidate_hash(source_ids)
@@ -260,10 +265,12 @@ def persist_candidates_to_staging(memory: "MARMMemory", candidates: list) -> int
             # re-offer a rejected cluster. 'stale' is excluded because changed
             # sources are precisely what deserves a fresh look, and 'applied'
             # because apply marks its sources with compaction_role, which takes
-            # the cluster out of find_compaction_candidates anyway.
+            # the cluster out of find_compaction_candidates anyway. Re-staging an
+            # unchanged 'nudge_exhausted' row would reset its nudge budget.
             existing = conn.execute(
                 "SELECT id FROM compaction_staging WHERE candidate_hash = ? "
-                "AND status IN ('pending_summary', 'summary_staged', 'discarded')",
+                "AND status IN ('pending_summary', 'nudge_exhausted', "
+                "'summary_staged', 'discarded')",
                 (candidate_hash,),
             ).fetchone()
             if existing:

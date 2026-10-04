@@ -46,8 +46,10 @@ def _at(degrees: float, dim: int = 384) -> bytes:
     return v.tobytes()
 
 
-def _insert(mem: MARMMemory, embedding: bytes, session: str = "sess") -> str:
-    mem_id = str(uuid.uuid4())
+def _insert(
+    mem: MARMMemory, embedding: bytes, session: str = "sess", mem_id: str = ""
+) -> str:
+    mem_id = mem_id or str(uuid.uuid4())
     ts = (datetime.now(timezone.utc) - timedelta(hours=48)).isoformat()
     with mem.get_connection() as conn:
         conn.execute(
@@ -211,3 +213,96 @@ async def test_a_pending_candidate_can_be_discarded(mem, monkeypatch):
 
     assert result["status"] == "discarded"
     assert [status for _, status in _staged(mem)] == ["discarded"]
+
+
+def test_replacing_a_source_keeps_a_rejection(mem):
+    import asyncio
+
+    from marm_mcp_server.core.memory_ops import _replace_memory
+
+    ids = [_insert(mem, _at(i * 0.1)) for i in range(3)]
+    run_periodic_compaction_scan(mem)
+    with mem.get_connection() as conn:
+        conn.execute("UPDATE compaction_staging SET status = 'discarded'")
+
+    asyncio.run(
+        _replace_memory(mem, ids[0], "edited", "sess", "general", {}, None, None)
+    )
+
+    assert [status for _, status in _staged(mem)] == ["discarded"]
+
+
+def test_a_rescan_leaves_an_unchanged_exhausted_candidate_alone(mem):
+    for i in range(3):
+        _insert(mem, _at(i * 0.1))
+    run_periodic_compaction_scan(mem)
+    with mem.get_connection() as conn:
+        conn.execute(
+            "UPDATE compaction_staging SET status = 'nudge_exhausted', nudge_count = 5"
+        )
+
+    _rescan(mem)
+
+    assert [status for _, status in _staged(mem)] == ["nudge_exhausted"]
+
+
+def test_a_failed_insert_does_not_strand_a_superseded_candidate(mem, monkeypatch):
+    from marm_mcp_server.core import compaction
+
+    for i in range(3):
+        _insert(mem, _at(i * 0.1))
+    run_periodic_compaction_scan(mem)
+    _insert(mem, _at(0.05))
+
+    def fail(*_args):
+        raise RuntimeError("snapshot failed")
+
+    candidates = find_compaction_candidates(mem, "sess")
+    monkeypatch.setattr(compaction, "_get_source_snapshot", fail)
+    with pytest.raises(RuntimeError):
+        compaction.persist_candidates_to_staging(mem, candidates)
+
+    assert [status for _, status in _staged(mem)] == ["pending_summary"]
+
+
+def test_clusters_do_not_depend_on_row_order(mem, monkeypatch):
+    import marm_mcp_server.config.settings as s
+
+    monkeypatch.setattr(s, "COMPACTION_MAX_CLUSTER_SIZE", 3)
+    ids = [f"0000000{i}-0000-0000-0000-000000000000" for i in range(4)]
+    for mem_id in reversed(ids):
+        _insert(mem, _at(0.0), mem_id=mem_id)
+
+    [cluster] = find_compaction_candidates(mem, "sess")
+
+    assert sorted(cluster["source_memory_ids"]) == ids[:3]
+
+
+def test_replacing_a_doc_mirror_keeps_a_rejection_but_ends_a_proposal(mem):
+    import asyncio
+
+    from marm_mcp_server.core.memory_ops import _store_doc_mirror
+
+    mirror = _insert(mem, _at(0.0))
+    with mem.get_connection() as conn:
+        for row_id, status in (
+            ("rejected", "discarded"),
+            ("proposed", "pending_summary"),
+        ):
+            conn.execute(
+                "INSERT INTO compaction_staging (id, session_name, source_memory_ids, "
+                "preview, status, candidate_hash, source_updated_at_snapshot, "
+                "expires_at, created_at, updated_at) "
+                "VALUES (?, 'sess', ?, '[]', ?, ?, '{}', '2099-01-01', '', '')",
+                (row_id, json.dumps([mirror]), status, row_id),
+            )
+
+    asyncio.run(
+        _store_doc_mirror(
+            mem, "the doc, revised", "sess", None, None, {}, existing_memory_id=mirror
+        )
+    )
+
+    with mem.get_connection() as conn:
+        statuses = dict(conn.execute("SELECT id, status FROM compaction_staging"))
+    assert statuses == {"rejected": "discarded", "proposed": "stale"}
