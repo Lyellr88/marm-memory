@@ -24,7 +24,7 @@ def test_console_schema_version_tracks_mcp_source() -> None:
         / "marm-mcp-server"
         / "marm_mcp_server"
         / "core"
-        / "concept_db.py"
+        / "concept_schema.py"
     ).read_text(encoding="utf-8")
     match = re.search(r"CONCEPT_SCHEMA_VERSION = (\d+)", source)
 
