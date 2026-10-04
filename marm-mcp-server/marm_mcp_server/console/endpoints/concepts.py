@@ -112,6 +112,11 @@ def get_concept_graph(
     )
 
 
+@router.get("/api/concepts/legacy-names")
+def get_concept_legacy_names() -> dict:
+    return concept_store.legacy_names(get_concept_db_path())
+
+
 @router.get("/api/concepts/graph/version")
 def get_concept_graph_version() -> dict:
     """Polled while the Explorer is open so background indexing shows up

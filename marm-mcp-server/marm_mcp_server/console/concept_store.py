@@ -8,6 +8,7 @@ from math import sqrt
 from pathlib import Path
 
 from ..core.concept_db import CONCEPT_SCHEMA_VERSION
+from ..core.concept_extraction import _entity_name
 from ..core.concept_names import numbers_differ
 
 _CURRENT_CONCEPT_SCHEMA_VERSION = str(CONCEPT_SCHEMA_VERSION)
@@ -85,6 +86,34 @@ def _code_link_evidence_columns(connection: sqlite3.Connection) -> tuple[str, st
         if "last_verified_at" in columns
         else "NULL AS last_verified_at",
     )
+
+
+def legacy_names(db_path: Path, sample_limit: int = 5) -> dict:
+    """Entity names the extractor would now store differently, such as names
+    still carrying markdown from before it cleaned them. Advisory only, so
+    the database is opened read-only."""
+    report: dict = {"count": 0, "checked": 0, "sample": []}
+    if not db_path.exists():
+        return report
+    try:
+        connection = sqlite3.connect(f"{db_path.resolve().as_uri()}?mode=ro", uri=True)
+    except sqlite3.Error:
+        return report
+    with closing(connection):
+        try:
+            names = [
+                row[0]
+                for row in connection.execute("SELECT name FROM entities ORDER BY id")
+            ]
+        except sqlite3.Error:
+            return report
+    for name in names:
+        report["checked"] += 1
+        if _entity_name(name) != name:
+            report["count"] += 1
+            if len(report["sample"]) < sample_limit:
+                report["sample"].append(name)
+    return report
 
 
 def graph_version(db_path: Path) -> dict:
