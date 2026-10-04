@@ -429,3 +429,22 @@ def test_dedup_compares_against_the_copy_it_kept():
 
     assert kept in result
     assert other in result
+
+
+def test_a_memory_dropped_before_a_replacement_is_reconsidered():
+    def at(degrees: float) -> bytes:
+        v = np.zeros(384, dtype=np.float32)
+        v[0], v[1] = np.cos(np.radians(degrees)), np.sin(np.radians(degrees))
+        return v.tobytes()
+
+    first = "the first copy, ranked first"
+    dropped = "a near-copy"
+    longest = "the longest copy, which replaces the first one in the summary"
+    # Ranked 0, -18, +20: -18 is dropped against 0, then +20 replaces 0, and
+    # -18 is not a near-copy of +20.
+    memories = [(first, at(0)), (dropped, at(-18)), (longest, at(20))]
+
+    result = centroid_extract_summary(memories, top_n=5)
+
+    assert longest in result
+    assert dropped in result
