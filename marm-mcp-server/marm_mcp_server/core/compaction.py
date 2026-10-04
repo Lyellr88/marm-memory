@@ -256,9 +256,22 @@ def persist_candidates_to_staging(memory: "MARMMemory", candidates: list) -> int
         # row between the overlap check and its supersession, and a failed
         # insert must not leave the superseded row stale with no replacement.
         conn.execute("BEGIN IMMEDIATE")
+        rejected: dict[str, set] = {}
         for candidate in candidates:
             source_ids = candidate["source_memory_ids"]
             candidate_hash = _compute_candidate_hash(source_ids)
+
+            # Re-read under the lock: a discard can land after the scan read it.
+            session = candidate["session_name"]
+            if session not in rejected:
+                rejected[session] = _discarded_pairs(conn, session)
+            ordered = sorted(source_ids)
+            if any(
+                (a, b) in rejected[session]
+                for i, a in enumerate(ordered)
+                for b in ordered[i + 1 :]
+            ):
+                continue
 
             # 'discarded' is included because `discard` writes nothing to
             # `memories`: the sources stay eligible, so every later scan would

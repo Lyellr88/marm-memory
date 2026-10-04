@@ -306,3 +306,22 @@ def test_replacing_a_doc_mirror_keeps_a_rejection_but_ends_a_proposal(mem):
     with mem.get_connection() as conn:
         statuses = dict(conn.execute("SELECT id, status FROM compaction_staging"))
     assert statuses == {"rejected": "discarded", "proposed": "stale"}
+
+
+def test_a_pair_rejected_during_a_scan_is_not_staged(mem):
+    from marm_mcp_server.core import compaction
+
+    ids = [_insert(mem, _at(i * 0.1)) for i in range(3)]
+    candidates = find_compaction_candidates(mem, "sess")
+    # A reviewer rejects two of them between the scan and staging.
+    with mem.get_connection() as conn:
+        conn.execute(
+            "INSERT INTO compaction_staging (id, session_name, source_memory_ids, "
+            "preview, status, candidate_hash, source_updated_at_snapshot, "
+            "expires_at, created_at, updated_at) "
+            "VALUES ('rejected', 'sess', ?, '[]', 'discarded', 'other', '{}', "
+            "'2099-01-01', '', '')",
+            (json.dumps(ids[:2]),),
+        )
+
+    assert compaction.persist_candidates_to_staging(mem, candidates) == 0
