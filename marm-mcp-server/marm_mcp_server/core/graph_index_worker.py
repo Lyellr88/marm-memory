@@ -1,15 +1,7 @@
 import asyncio
-import hashlib
 import os
-import subprocess
-import sys
 import time
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import TYPE_CHECKING, Optional
-
-if TYPE_CHECKING:
-    from marm_graph.core.cbm_client import CbmClient
+from typing import Optional
 
 import structlog
 
@@ -24,241 +16,18 @@ from ..config.settings import (
     GRAPH_AUTO_INDEX_PROJECT_TTL,
     GRAPH_AUTO_INDEX_RECONCILE_SECONDS,
 )
-from . import code_link_queue, code_project_bindings, runtime_flags
+from . import runtime_flags
 from .graph_index_lock import GraphIndexBusy, run_exclusive
+from .graph_index_repository import index_repository
 from .graph_index_watcher import GraphIndexWatcher
 from .graph_supervisor import graph_supervisor
+from .graph_watch_state import _Watched, git_source_state
+from .graph_watch_state import is_git_repo as is_git_repo
 
 logger = structlog.get_logger(__name__)
 
-_GIT_TIMEOUT_SECONDS = 15
-
-_UNBORN_HEAD = ""
 
 _IDLE_POLL_SECONDS = 15.0
-
-
-def _git_env() -> dict[str, str]:
-    """A scrubbed environment for a git call on a user-chosen repository.
-
-    Inherited GIT_* variables belong to whatever launched the server, not to the
-    repo being polled, and GIT_DIR or GIT_WORK_TREE would point our -C somewhere
-    else entirely. GIT_OPTIONAL_LOCKS=0 keeps a status check from taking
-    .git/index.lock and rewriting the index -- which matters even more now than
-    it used to: a watcher would see that rewrite as a change and re-trigger the
-    very check that caused it.
-    """
-    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
-    env["GIT_OPTIONAL_LOCKS"] = "0"
-    return env
-
-
-def _git(root: str, *args: str) -> Optional[str]:
-    """Run one git command in `root`. None means "could not tell", never "no change".
-
-    core.fsmonitor names a program git will execute, and it is read from the
-    polled repository's own config: honoring it would let any repo MARM watches
-    run a program of its choosing whenever this fires.
-    """
-    creationflags = 0
-    if sys.platform == "win32":
-        creationflags = subprocess.CREATE_NO_WINDOW
-    try:
-        proc = subprocess.run(
-            ["git", "-c", "core.fsmonitor=false", "-C", root, *args],
-            capture_output=True,
-            text=True,
-            encoding="utf-8",
-            errors="surrogateescape",
-            timeout=_GIT_TIMEOUT_SECONDS,
-            env=_git_env(),
-            creationflags=creationflags,
-        )
-    except (OSError, subprocess.SubprocessError) as exc:
-        logger.debug("graph_auto_index.git_failed", root=root, error=str(exc))
-        return None
-    if proc.returncode != 0:
-        return None
-    return proc.stdout.strip()
-
-
-def is_git_repo(root: str) -> bool:
-    return (Path(root) / ".git").exists()
-
-
-def git_source_state(root: str) -> Optional[tuple[str, str]]:
-    """(HEAD, content_hash) for the repo AT `root`, or None if git could not answer.
-
-    content_hash is sensitive to the bytes that changed, not just which paths
-    are dirty. It combines the diff against HEAD -- covers staged and unstaged
-    changes to tracked files in one command -- with a content hash of every
-    non-ignored untracked path, so a second edit to an already-dirty file, or
-    a same-length edit to an untracked one, produces a new signature. Nothing
-    here is logged; only the digest is ever kept.
-
-    A None result must be treated as "no change". Re-indexing on a git error
-    would turn a broken repo into a re-index on every single evaluation.
-
-    The `.git` check is not redundant with the caller's. Git's repository
-    discovery walks upward from `-C`, so on a directory that is not itself a
-    repo this would report an ancestor's state: an indexed subdirectory of some
-    other repo would then re-index whenever anything anywhere in that parent
-    changed.
-    """
-    if not is_git_repo(root):
-        return None
-    head = _git(root, "rev-parse", "HEAD")
-    if head is None:
-        if _git(root, "rev-parse", "--is-inside-work-tree") != "true":
-            return None
-        head = _UNBORN_HEAD
-        unborn = True
-    else:
-        unborn = False
-
-    diff_output: str
-    if unborn:
-        diff_cached = _git(root, "diff", "--no-ext-diff", "--no-textconv", "--cached")
-        if diff_cached is None:
-            return None
-        diff_unstaged = _git(root, "diff", "--no-ext-diff", "--no-textconv")
-        if diff_unstaged is None:
-            return None
-        diff_output = diff_cached + "\x1e" + diff_unstaged
-    else:
-        diff_head = _git(root, "diff", "--no-ext-diff", "--no-textconv", "HEAD")
-        if diff_head is None:
-            return None
-        diff_output = diff_head
-
-    untracked_raw = _git(root, "ls-files", "--others", "--exclude-standard", "-z")
-    if untracked_raw is None:
-        return None
-    fingerprints = []
-    for path in untracked_raw.split("\x00"):
-        if not path:
-            continue
-        full_path = os.path.join(root, path)
-        try:
-            if os.path.islink(full_path):
-                target_text = os.readlink(full_path)
-                digest = hashlib.sha256(
-                    target_text.encode("utf-8", "surrogateescape")
-                ).hexdigest()
-            else:
-                hasher = hashlib.sha256()
-                with open(full_path, "rb") as fh:
-                    for chunk in iter(lambda: fh.read(1 << 20), b""):
-                        hasher.update(chunk)
-                digest = hasher.hexdigest()
-        except OSError:
-            continue
-        fingerprints.append(f"{path}:{digest}")
-
-    digest_input = "\x1f".join([diff_output, *sorted(fingerprints)])
-    content_hash = hashlib.sha256(
-        digest_input.encode("utf-8", "surrogateescape")
-    ).hexdigest()
-    return (head, content_hash)
-
-
-def _invalidate_code_context_projects() -> None:
-    """Drop the code-context project cache, tolerating its absence.
-
-    Imported lazily and guarded: this worker must not fail an index because an
-    optional consumer of the project list could not be imported.
-    """
-    try:
-        from ..services.code_context.backend import invalidate_projects_cache
-
-        invalidate_projects_cache()
-    except Exception:  # pragma: no cover - defensive
-        pass
-
-
-def index_repository(client: "CbmClient", req: GraphIndexRequest) -> dict:
-    """The callable every index path hands to the gate: index, then settle the
-    durable block state before the lease is released.
-
-    Settling it afterwards left the two blocks racing each other, because both
-    transports index concurrently by design. An automatic index that fails on the
-    path limit and a manual one that succeeds could release their gates in either
-    order, and the loser's write won: a recovered repository stayed marked
-    unindexable, silently, in both processes.
-
-    One function rather than a rule at four call sites, because the rule is
-    invisible at the call site and there is nothing to notice when it is skipped.
-    """
-    snapshot_at = datetime.now(timezone.utc).isoformat()
-    result: dict = R.do_index(client, req)
-    # The set of indexed projects may have just changed, and code-context caches
-    # it. Invalidated here rather than at each caller for the reason above: a
-    # rule at four call sites is invisible when it is skipped.
-    _invalidate_code_context_projects()
-    root = req.repo_path
-    if not root:
-        return result
-    if result.get("status") == "error":
-        if result.get("error_code") == "windows_path_too_long":
-            runtime_flags.mark_unindexable(root, "windows_path_too_long")
-        return result
-    runtime_flags.clear_index_blocks(root)
-    graph_project = result.get("project")
-    if isinstance(graph_project, str) and graph_project:
-        try:
-            binding_state, binding = code_project_bindings.auto_bind(
-                graph_project, root
-            )
-            result["memory_linking"] = {"state": binding_state}
-            if binding is not None:
-                code_link_queue.enqueue_refresh(
-                    binding.graph_project,
-                    binding.memory_project,
-                    binding.root_path,
-                    snapshot_at=snapshot_at,
-                )
-                result["memory_linking"]["memory_project"] = binding.memory_project
-                result["memory_linking"]["refresh_queued"] = True
-        except Exception as exc:
-            logger.warning("code_linking.enqueue_failed", error=str(exc))
-    return result
-
-
-class _Watched:
-    """Per-project watch state. Disposable in memory: the durable baseline
-    lives in graph_watch_state, so losing this costs at most one extra
-    re-index rather than a wrong "unchanged" verdict."""
-
-    __slots__ = (
-        "content_hash",
-        "debounce_deadline",
-        "evaluated_generation",
-        "failed",
-        "generation",
-        "git_head",
-        "is_git",
-        "last_index_reason",
-        "last_indexed",
-        "reconcile_deadline",
-        "retry_after",
-        "root",
-        "watch_mode",
-    )
-
-    def __init__(self, root: str) -> None:
-        self.root = root
-        self.is_git = is_git_repo(root)
-        self.git_head: Optional[str] = None
-        self.content_hash: Optional[str] = None
-        self.last_indexed: Optional[str] = None
-        self.last_index_reason: Optional[str] = None
-        self.retry_after: float = 0.0
-        self.failed = False
-        self.generation = 0
-        self.evaluated_generation = 0
-        self.debounce_deadline: Optional[float] = None
-        self.reconcile_deadline: float = float("-inf")
-        self.watch_mode = "disabled"
 
 
 class GraphIndexWorker:
