@@ -9,7 +9,7 @@ step -- and the preference order is deliberate, not alphabetical.
 
 import pytest
 
-from marm_mcp_server.services import local_llm
+from marm_mcp_server.services import local_llm, local_llm_discovery
 
 
 def _server(port, runtime, models=1):
@@ -169,7 +169,7 @@ def test_discovery_does_not_recurse_through_auto_selection(monkeypatch):
         return real(force=force)
 
     monkeypatch.setattr(local_llm, "discover_servers", counting)
-    monkeypatch.setattr(local_llm, "_port_open", lambda port: False)
-    local_llm._servers_cache.update({"at": 0.0, "value": None})
+    monkeypatch.setattr(local_llm_discovery, "_port_open", lambda port: False)
+    local_llm_discovery._servers_cache.update({"at": 0.0, "value": None})
     local_llm.discover_servers(force=True)
     assert calls["n"] == 1
