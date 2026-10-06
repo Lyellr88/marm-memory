@@ -27,15 +27,9 @@ from .. import distill as distill_service
 from .brief import Brief
 from .ops import Item
 from .packet import EvidencePacket, SymbolItem
-from .verify import (
-    _DOCSTRING,
-    _LINE_REF,
-    _claims,
-    extract_citations,
-    named_call,
-    prose_blocks,
-    verify,
-)
+from .verify import named_call, verify
+from .verify_citations import _LINE_REF, _claims, extract_citations
+from .verify_terms import _DOCSTRING, prose_blocks
 
 logger = structlog.get_logger(__name__)
 

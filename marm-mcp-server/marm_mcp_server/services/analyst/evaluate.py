@@ -15,7 +15,7 @@ from typing import Any
 
 from ..code_context.compose import Context, Symbol
 from .brief import Brief
-from .verify import _claims, extract_citations
+from .verify_citations import _claims, extract_citations
 
 CATEGORIES = (
     "supported",
