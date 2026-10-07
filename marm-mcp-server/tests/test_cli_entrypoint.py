@@ -1,4 +1,5 @@
 import importlib
+import json
 import os
 import re
 import socket
@@ -266,6 +267,155 @@ def test_import_marm_mcp_server_succeeds_with_clean_stdout(tmp_path):
 
     assert result.returncode == 0, result.stderr
     assert result.stdout == ""
+
+
+def test_first_start_key_banner_goes_to_stderr_not_stdout(tmp_path):
+    from marm_mcp_server.config import api_key_bootstrap
+
+    env = os.environ.copy()
+    env["MARM_DB_PATH"] = str(tmp_path / "banner-memory.db")
+    env["MARM_ANALYTICS_DB_PATH"] = str(tmp_path / "banner-analytics.db")
+    # A stored OS credential would skip generation and the banner with it.
+    env["PYTHON_KEYRING_BACKEND"] = "keyring.backends.null.Keyring"
+    env["SERVER_HOST"] = "0.0.0.0"
+    env["USERPROFILE"] = str(tmp_path)
+    env["HOME"] = str(tmp_path)
+    env.pop("MARM_API_KEY", None)
+
+    result = subprocess.run(
+        [sys.executable, "-c", "import marm_mcp_server.config.settings"],
+        cwd=os.getcwd(),
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == ""
+    assert "API key auto-generated" in result.stderr
+    if api_key_bootstrap._HAVE_DIR_FD:
+        assert (tmp_path / ".marm" / ".env").exists()
+
+
+def test_cli_stdio_keeps_stdout_for_json_rpc_on_a_first_start(tmp_path):
+    import queue
+    import threading
+
+    env = os.environ.copy()
+    env["MARM_DB_PATH"] = str(tmp_path / "stdio-memory.db")
+    env["MARM_ANALYTICS_DB_PATH"] = str(tmp_path / "stdio-analytics.db")
+    # A stored OS credential would skip generation and the banner with it.
+    env["PYTHON_KEYRING_BACKEND"] = "keyring.backends.null.Keyring"
+    env["SERVER_HOST"] = "0.0.0.0"
+    env["USERPROFILE"] = str(tmp_path)
+    env["HOME"] = str(tmp_path)
+    env.pop("MARM_API_KEY", None)
+
+    process = subprocess.Popen(
+        [sys.executable, "-m", "marm_mcp_server", "stdio"],
+        cwd=os.getcwd(),
+        env=env,
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    stdout_lines: queue.Queue = queue.Queue()
+    stderr_chunks: list[str] = []
+
+    def pump_stdout() -> None:
+        assert process.stdout is not None
+        for line in process.stdout:
+            stdout_lines.put(line)
+        stdout_lines.put(None)
+
+    def pump_stderr() -> None:
+        assert process.stderr is not None
+        stderr_chunks.append(process.stderr.read())
+
+    readers = [
+        threading.Thread(target=pump_stdout, daemon=True),
+        threading.Thread(target=pump_stderr, daemon=True),
+    ]
+    for reader in readers:
+        reader.start()
+    lines: list[str] = []
+
+    def send(message: dict) -> None:
+        assert process.stdin is not None
+        process.stdin.write(json.dumps(message) + "\n")
+        process.stdin.flush()
+
+    def read_until(message_id: int, timeout: float = 60.0) -> None:
+        deadline = time.monotonic() + timeout
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                pytest.fail(f"no response {message_id} within {timeout}s")
+            try:
+                line = stdout_lines.get(timeout=remaining)
+            except queue.Empty:
+                pytest.fail(f"no response {message_id} within {timeout}s")
+            if line is None:
+                pytest.fail(f"stdout closed before response {message_id}")
+            lines.append(line)
+            try:
+                if json.loads(line).get("id") == message_id:
+                    return
+            except ValueError:
+                continue
+
+    try:
+        send(
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {
+                    "protocolVersion": "2025-03-26",
+                    "capabilities": {},
+                    "clientInfo": {"name": "test", "version": "1"},
+                },
+            }
+        )
+        read_until(1)
+        send({"jsonrpc": "2.0", "method": "notifications/initialized"})
+        # A tool call is what surfaces anything left buffered on stdout.
+        send(
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {"name": "marm_log_show", "arguments": {}},
+            }
+        )
+        read_until(2)
+        assert process.stdin is not None
+        process.stdin.close()
+        process.wait(timeout=60)
+        for reader in readers:
+            reader.join(timeout=10)
+    finally:
+        if process.poll() is None:
+            process.kill()
+
+    while True:
+        try:
+            line = stdout_lines.get_nowait()
+        except queue.Empty:
+            break
+        if line is None:
+            break
+        lines.append(line)
+    not_json = []
+    for line in lines:
+        try:
+            json.loads(line)
+        except ValueError:
+            not_json.append(line)
+    assert not_json == []
+    assert "API key auto-generated" in "".join(stderr_chunks)
 
 
 def test_create_server_stays_importable_from_package_and_server_module(tmp_path):
