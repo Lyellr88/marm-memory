@@ -293,7 +293,7 @@ async def marm_compaction(
     action="stage"      — submit your summary: {candidate_id, suggested_summary}; source_memory_ids optional
     action="review"     — inspect staged summaries before committing
     action="apply"      — commit a staged summary; source memories are marked compacted
-    action="discard"    — reject a staged summary without touching source memories
+    action="discard"    — reject a candidate, staged or not, without touching source memories
     """
     try:
         from marm_mcp_server.core.models import CompactionRequest, StagedSummaryItem

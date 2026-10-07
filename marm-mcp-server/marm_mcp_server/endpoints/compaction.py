@@ -313,7 +313,8 @@ async def marm_apply_compaction(request: ApplyCompactionRequest) -> dict:
     through the write queue when available (V4), or executed directly with
     BEGIN IMMEDIATE when the queue is disabled.
 
-    action='discard': marks staging status to 'discarded'. No write to memories.
+    action='discard': marks a pending, nudge-exhausted or staged candidate
+    'discarded'. No write to memories.
 
     Validations on apply: candidate exists and is summary_staged, source rows exist
     and are not already compacted, source_updated_at_snapshot matches current
@@ -363,7 +364,14 @@ async def marm_apply_compaction(request: ApplyCompactionRequest) -> dict:
                 "summary_memory_id": summary_row[0] if summary_row else None,
             }
 
-        if status != "summary_staged":
+        discardable = ("pending_summary", "nudge_exhausted", "summary_staged")
+        if action == "discard" and status not in discardable:
+            return {
+                "candidate_id": candidate_id,
+                "status": "error",
+                "reason": f"candidate status is '{status}', which cannot be discarded",
+            }
+        if action == "apply" and status != "summary_staged":
             return {
                 "candidate_id": candidate_id,
                 "status": "error",
@@ -538,7 +546,7 @@ async def marm_compaction(request: CompactionRequest) -> dict:
     action="stage"      — submit your summary: {candidate_id, suggested_summary}; source_memory_ids optional
     action="review"     — inspect staged summaries before committing
     action="apply"      — commit a staged summary; source memories are marked compacted
-    action="discard"    — reject a staged summary without touching source memories
+    action="discard"    — reject a candidate, staged or not, without touching source memories
     """
     if request.action == "status":
         return _compaction_status()
