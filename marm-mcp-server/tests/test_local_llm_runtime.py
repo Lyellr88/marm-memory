@@ -2,7 +2,7 @@
 
 import pytest
 
-from marm_mcp_server.services import local_llm
+from marm_mcp_server.services import local_llm, local_llm_discovery
 
 
 @pytest.fixture(autouse=True)
@@ -23,7 +23,9 @@ def _serve(monkeypatch, responses: dict):
     # `_get_at`, not `_get`: detection is parameterised by base URL so the
     # server scan can reuse it against every candidate port.
     monkeypatch.setattr(
-        local_llm, "_get_at", lambda base, path, timeout=4.0: responses.get(path)
+        local_llm_discovery,
+        "_get_at",
+        lambda base, path, timeout=4.0: responses.get(path),
     )
 
 
@@ -208,7 +210,7 @@ def test_the_scan_never_probes_marms_own_ports(monkeypatch):
     monkeypatch.setenv("SERVER_PORT", "8001")
     monkeypatch.setenv("MARM_CONSOLE_PORT", "8002")
     monkeypatch.setattr(
-        local_llm,
+        local_llm_discovery,
         "KNOWN_PORTS",
         ((8001, "self"), (8002, "console"), (1234, "LM Studio")),
     )
@@ -217,7 +219,7 @@ def test_the_scan_never_probes_marms_own_ports(monkeypatch):
 
     probed = []
     monkeypatch.setattr(
-        local_llm, "_port_open", lambda port: (probed.append(port), False)[1]
+        local_llm_discovery, "_port_open", lambda port: (probed.append(port), False)[1]
     )
 
     result = local_llm.discover_servers(force=True)
@@ -232,12 +234,12 @@ def test_something_listening_that_is_not_an_llm_is_not_offered(monkeypatch):
     Offering one as a candidate hands the reader an endpoint that cannot
     generate, and they find out only when an answer never arrives.
     """
-    monkeypatch.setattr(local_llm, "KNOWN_PORTS", ((8384, "not an llm"),))
+    monkeypatch.setattr(local_llm_discovery, "KNOWN_PORTS", ((8384, "not an llm"),))
     monkeypatch.setattr(local_llm, "_chosen_endpoint", lambda: None)
     monkeypatch.setattr(local_llm, "DEFAULT_URL", "http://127.0.0.1:1234")
-    monkeypatch.setattr(local_llm, "_port_open", lambda _port: True)
+    monkeypatch.setattr(local_llm_discovery, "_port_open", lambda _port: True)
     monkeypatch.setattr(
-        local_llm, "_identify", lambda base, timeout=4.0: {"runtime": None}
+        local_llm_discovery, "_identify", lambda base, timeout=4.0: {"runtime": None}
     )
 
     assert local_llm.discover_servers(force=True)["servers"] == []
@@ -253,9 +255,9 @@ def test_the_configured_endpoint_is_reported_even_when_dead(monkeypatch):
     test asserted against whichever server the developer last picked in the
     Console and passed only on a machine that had never picked one.
     """
-    monkeypatch.setattr(local_llm, "KNOWN_PORTS", ())
+    monkeypatch.setattr(local_llm_discovery, "KNOWN_PORTS", ())
     monkeypatch.setattr(local_llm, "_chosen_endpoint", lambda: "http://127.0.0.1:18080")
-    monkeypatch.setattr(local_llm, "_port_open", lambda _port: False)
+    monkeypatch.setattr(local_llm_discovery, "_port_open", lambda _port: False)
 
     result = local_llm.discover_servers(force=True)
     assert 18080 in result["scanned_ports"]
@@ -263,12 +265,12 @@ def test_the_configured_endpoint_is_reported_even_when_dead(monkeypatch):
 
 
 def test_a_found_server_reports_what_it_serves(monkeypatch):
-    monkeypatch.setattr(local_llm, "KNOWN_PORTS", ((1234, "LM Studio"),))
+    monkeypatch.setattr(local_llm_discovery, "KNOWN_PORTS", ((1234, "LM Studio"),))
     monkeypatch.setattr(local_llm, "_chosen_endpoint", lambda: None)
     monkeypatch.setattr(local_llm, "DEFAULT_URL", "http://127.0.0.1:1234")
-    monkeypatch.setattr(local_llm, "_port_open", lambda _port: True)
+    monkeypatch.setattr(local_llm_discovery, "_port_open", lambda _port: True)
     monkeypatch.setattr(
-        local_llm,
+        local_llm_discovery,
         "_identify",
         lambda base, timeout=4.0: {
             "runtime": "LM Studio",

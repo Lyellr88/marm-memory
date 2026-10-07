@@ -348,6 +348,8 @@ def test_a_packet_id_covers_everything_the_model_is_shown():
 from marm_mcp_server.services.analyst.verify import (  # noqa: E402
     check_item,
     disagreements,
+)
+from marm_mcp_server.services.analyst.verify_terms import (  # noqa: E402
     unsupported_terms,
 )
 

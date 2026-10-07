@@ -344,7 +344,7 @@ def test_git_runs_with_a_scrubbed_environment(git_repo, monkeypatch, tmp_path):
 
 def test_git_poll_hides_its_windows_child_window(monkeypatch):
     """The poller runs git every cycle, so it must not flash a console window."""
-    from marm_mcp_server.core import graph_index_worker as module
+    from marm_mcp_server.core import graph_watch_state as module
 
     captured = {}
 
@@ -1525,9 +1525,11 @@ def test_a_repository_with_no_commits_is_still_polled(shared_db, tmp_path, monke
     _git(root, "init", "-q")
     (root / "a.py").write_text("def a():\n    return 1\n")
 
+    from marm_mcp_server.core.graph_watch_state import _UNBORN_HEAD
+
     state = module.git_source_state(str(root))
     assert state is not None
-    assert state[0] == module._UNBORN_HEAD
+    assert state[0] == _UNBORN_HEAD
 
     reasons = []
 

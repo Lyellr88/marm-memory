@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from ...config import settings as marm_settings
 from ...config import user_settings
 from ...core import runtime_flags, runtime_manager
-from ...services import client_config, key_management, skill_install
+from ...services import client_operations, key_management, skill_install
 from .. import mcp_client, runtime_control
 from ..terminal.router import _loopback_only
 
@@ -74,7 +74,7 @@ def get_overview() -> dict:
     runtime = runtime_manager.inspect_runtime()
     state = runtime.get("state", "stopped")
     profile = (runtime.get("metadata") or {}).get("profile")
-    agents = client_config.list_agents(url, auth_required)
+    agents = client_operations.list_agents(url, auth_required)
     detected = [agent for agent in agents if agent["detected"]]
     connected = sum(1 for agent in detected if agent["user"]["state"] == "configured")
     skills = _skills_installed()

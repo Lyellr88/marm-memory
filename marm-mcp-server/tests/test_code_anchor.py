@@ -383,15 +383,15 @@ def test_a_refresh_no_index_queued_takes_no_fingerprint(
 
 
 def test_an_index_queues_its_refresh_with_the_time_it_started(monkeypatch, tmp_path):
-    from marm_mcp_server.core import code_link_queue, graph_index_worker
+    from marm_mcp_server.core import code_link_queue, graph_index_repository
 
     queued = {}
     before = datetime.now(timezone.utc)
     monkeypatch.setattr(
-        graph_index_worker.R, "do_index", lambda *_: {"project": "graph"}
+        graph_index_repository.R, "do_index", lambda *_: {"project": "graph"}
     )
     monkeypatch.setattr(
-        graph_index_worker.code_project_bindings,
+        graph_index_repository.code_project_bindings,
         "auto_bind",
         lambda graph, root: (
             "bound",
@@ -404,10 +404,10 @@ def test_an_index_queues_its_refresh_with_the_time_it_started(monkeypatch, tmp_p
         code_link_queue, "enqueue_refresh", lambda *a, **k: queued.update(k)
     )
     monkeypatch.setattr(
-        graph_index_worker.runtime_flags, "clear_index_blocks", lambda _r: None
+        graph_index_repository.runtime_flags, "clear_index_blocks", lambda _r: None
     )
 
-    graph_index_worker.index_repository(
+    graph_index_repository.index_repository(
         object(), types.SimpleNamespace(repo_path=str(tmp_path))
     )
 

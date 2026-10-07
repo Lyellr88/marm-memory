@@ -16,7 +16,12 @@ from marm_mcp_server.config import settings as marm_settings
 from marm_mcp_server.config import user_settings
 from marm_mcp_server.console.endpoints import agents, docker, setup
 from marm_mcp_server.console.terminal.router import HOST_ENV
-from marm_mcp_server.services import client_config, docker_commands, key_management
+from marm_mcp_server.services import (
+    client_config,
+    client_paths,
+    docker_commands,
+    key_management,
+)
 
 SECRET = "sk-marm-docker-secret-value"
 NAME = docker_commands.DEFAULT_CONTAINER_NAME
@@ -107,8 +112,8 @@ def home(tmp_path, monkeypatch):
     monkeypatch.setenv("APPDATA", str(tmp_path / "AppData" / "Roaming"))
     monkeypatch.setattr(user_settings, "_home", lambda: tmp_path)
     monkeypatch.setattr(user_settings, "_in_container", lambda: False)
-    monkeypatch.setattr(client_config, "_home", lambda: tmp_path)
-    monkeypatch.setattr(client_config, "_platform", lambda: "win32")
+    monkeypatch.setattr(client_paths, "_home", lambda: tmp_path)
+    monkeypatch.setattr(client_paths, "_platform", lambda: "win32")
     monkeypatch.setattr(client_config.shutil, "which", lambda name: None)
     monkeypatch.setattr(
         key_management, "managed_key_path", lambda: tmp_path / ".marm" / ".env"

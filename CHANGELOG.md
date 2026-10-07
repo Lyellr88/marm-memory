@@ -1,6 +1,15 @@
 # Changelog
 
 <details>
+<summary><strong>October 6th, 2026: Module Splits, Part 2 (v2.59.2)</strong></summary>
+
+### Changed
+
+- Five more server modules over the length limit are split with no change in behavior. `endpoints/system.py` moves local-model switching to `services/runtime_llm.py`, background jobs to `services/runtime_jobs.py`, and the doctor, logs, and backups routes to `endpoints/system_ops.py`. `services/client_config.py` moves path lookup, the client registry, config-file editing, and the configure, remove, and status operations to `client_paths.py`, `client_registry.py`, `client_text_edit.py`, and `client_operations.py`. `services/local_llm.py` moves server discovery and its wire helpers to `local_llm_discovery.py` and `local_llm_wire.py`. `services/analyst/verify.py` moves citation and term checks to `verify_citations.py` and `verify_terms.py`. `core/graph_index_worker.py` moves its git state and `index_repository` to `core/graph_watch_state.py` and `core/graph_index_repository.py`. Callers of the `client_config` operations and path helpers now import them from the new modules.
+
+</details>
+
+<details>
 <summary><strong>October 4th, 2026: Module Splits (v2.59.1)</strong></summary>
 
 ### Added
@@ -9,8 +18,8 @@
 
 ### Changed
 
-- The Console frontend's largest files are split into focused modules with no change in behavior: the Knowledge build and duplicate review components, the Memory tab, the local model panel, the Code Context page, the query hooks (`use-marm-queries`), and the shared types (`marm-types`). Import paths are unchanged, and the Code Context tests are split into four files that share a test kit ([#292](https://github.com/Lyellr88/marm-memory/pull/292)).
-- Server modules over the length limit are split with no change in behavior. `cli.py` hands the `key` commands and the HTTP server runner to `services/`, and keeps its product command list in `services/cli_parser.py`. `user_settings.py` moves its setting and environment-variable tables to `config/setting_definitions.py` and `config/env_reference.py`. `concept_db.py` moves schema setup to `core/concept_schema.py` and build-run bookkeeping to `core/concept_build_runs.py`. Imports from the original modules still work.
+- The Console frontend's largest files are split into focused modules with no change in behavior: the Knowledge build and duplicate review components, the Memory tab, the local model panel, the Code Context page, the query hooks (`use-marm-queries`), and the shared types (`marm-types`). Import paths are unchanged, and the Code Context tests are split into four files that share a test kit ([#292](https://github.com/Lyellr88/marm-memory/pull/292), [#298](https://github.com/Lyellr88/marm-memory/pull/298)).
+- Server modules over the length limit are split with no change in behavior. `cli.py` hands the `key` commands and the HTTP server runner to `services/`, and keeps its product command list in `services/cli_parser.py`. `user_settings.py` moves its setting and environment-variable tables to `config/setting_definitions.py` and `config/env_reference.py`. `concept_db.py` moves schema setup to `core/concept_schema.py` and build-run bookkeeping to `core/concept_build_runs.py`. Imports from the original modules still work ([#298](https://github.com/Lyellr88/marm-memory/pull/298)).
 
 ### Removed
 

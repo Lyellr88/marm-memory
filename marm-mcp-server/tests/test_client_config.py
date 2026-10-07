@@ -11,7 +11,13 @@ from pathlib import Path
 import pytest
 from conftest import bind_live_modules
 
-from marm_mcp_server.services import client_config, docker_commands
+from marm_mcp_server.services import (
+    client_config,
+    client_operations,
+    client_paths,
+    docker_commands,
+    skill_install,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -20,6 +26,8 @@ def _live_modules(monkeypatch):
         monkeypatch,
         globals(),
         client_config="marm_mcp_server.services.client_config",
+        client_operations="marm_mcp_server.services.client_operations",
+        client_paths="marm_mcp_server.services.client_paths",
         docker_commands="marm_mcp_server.services.docker_commands",
         skill_install="marm_mcp_server.services.skill_install",
     )
@@ -100,8 +108,8 @@ AUTH_REF = {
 @pytest.fixture(autouse=True)
 def isolated_home(tmp_path, monkeypatch):
     """Point every path the module resolves at a tmp dir; never touch the real home."""
-    monkeypatch.setattr(client_config, "_home", lambda: tmp_path)
-    monkeypatch.setattr(client_config, "_platform", lambda: "win32")
+    monkeypatch.setattr(client_paths, "_home", lambda: tmp_path)
+    monkeypatch.setattr(client_paths, "_platform", lambda: "win32")
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("USERPROFILE", str(tmp_path))
     monkeypatch.setenv("APPDATA", str(tmp_path / "AppData" / "Roaming"))
@@ -190,11 +198,15 @@ def test_user_scope_entry_shape_written_to_the_client_file(
     kwargs = {"docker_data_dir": isolated_home} if transport == "docker-stdio" else {}
     if unavailable(client, transport, auth):
         with pytest.raises(client_config.ClientNotConfigurable):
-            client_config.configure(client, URL, auth, transport=transport, **kwargs)
+            client_operations.configure(
+                client, URL, auth, transport=transport, **kwargs
+            )
         assert not (isolated_home / USER_FILES[client]).exists()
         return
 
-    result = client_config.configure(client, URL, auth, transport=transport, **kwargs)
+    result = client_operations.configure(
+        client, URL, auth, transport=transport, **kwargs
+    )
 
     path = isolated_home / USER_FILES[client]
     want = expected_entry(client, transport, auth, docker_args_for(isolated_home))
@@ -219,7 +231,7 @@ def test_project_scope_entry_shape_written_inside_the_project(
     kwargs = {"docker_data_dir": isolated_home} if transport == "docker-stdio" else {}
     if unavailable(client, transport, auth):
         with pytest.raises(client_config.ClientNotConfigurable):
-            client_config.configure(
+            client_operations.configure(
                 client,
                 URL,
                 auth,
@@ -230,7 +242,7 @@ def test_project_scope_entry_shape_written_inside_the_project(
             )
         return
 
-    result = client_config.configure(
+    result = client_operations.configure(
         client,
         URL,
         auth,
@@ -270,7 +282,9 @@ def test_claude_user_scope_goes_through_the_cli_for_every_transport(
     monkeypatch.setattr(client_config, "run_cli_subprocess", fake_runner)
     kwargs = {"docker_data_dir": isolated_home} if transport == "docker-stdio" else {}
 
-    result = client_config.configure("claude", URL, True, transport=transport, **kwargs)
+    result = client_operations.configure(
+        "claude", URL, True, transport=transport, **kwargs
+    )
 
     want = expected_entry("claude", transport, True, docker_args_for(isolated_home))
     assert result["method"] == "cli"
@@ -286,7 +300,7 @@ def test_claude_user_scope_goes_through_the_cli_for_every_transport(
 def test_cursor_create_new_file(isolated_home):
     detect(isolated_home, "cursor")
 
-    result = client_config.configure("cursor", URL, False)
+    result = client_operations.configure("cursor", URL, False)
     path = isolated_home / ".cursor" / "mcp.json"
 
     assert result["action"] == "create"
@@ -306,7 +320,7 @@ def test_cursor_add_keeps_other_servers(isolated_home):
         )
     )
 
-    result = client_config.configure("cursor", URL, False)
+    result = client_operations.configure("cursor", URL, False)
 
     assert result["action"] == "add"
     data = json.loads(path.read_text())
@@ -317,11 +331,11 @@ def test_cursor_add_keeps_other_servers(isolated_home):
 
 def test_cursor_none_when_already_equal(isolated_home):
     detect(isolated_home, "cursor")
-    client_config.configure("cursor", URL, False)
+    client_operations.configure("cursor", URL, False)
     backup = isolated_home / ".cursor" / "mcp.json.marm-backup"
     assert not backup.exists()
 
-    result = client_config.configure("cursor", URL, False)
+    result = client_operations.configure("cursor", URL, False)
 
     assert result["action"] == "none"
     assert result["written"] is False
@@ -331,11 +345,11 @@ def test_cursor_none_when_already_equal(isolated_home):
 
 def test_cursor_replace_when_different_and_backs_up(isolated_home):
     detect(isolated_home, "cursor")
-    client_config.configure("cursor", "http://127.0.0.1:9999/mcp", False)
+    client_operations.configure("cursor", "http://127.0.0.1:9999/mcp", False)
     path = isolated_home / ".cursor" / "mcp.json"
     backup = isolated_home / ".cursor" / "mcp.json.marm-backup"
 
-    result = client_config.configure("cursor", URL, False)
+    result = client_operations.configure("cursor", URL, False)
 
     assert result["action"] == "replace"
     assert result["backup_path"] == str(backup)
@@ -348,9 +362,9 @@ def test_cursor_replace_when_different_and_backs_up(isolated_home):
 
 def test_switching_transport_replaces_the_entry(isolated_home):
     detect(isolated_home, "cursor")
-    client_config.configure("cursor", URL, False)
+    client_operations.configure("cursor", URL, False)
 
-    result = client_config.configure("cursor", URL, False, transport="stdio")
+    result = client_operations.configure("cursor", URL, False, transport="stdio")
 
     assert result["action"] == "replace"
     path = isolated_home / ".cursor" / "mcp.json"
@@ -363,7 +377,7 @@ def test_switching_transport_replaces_the_entry(isolated_home):
 def test_dry_run_writes_nothing_and_creates_no_directory(isolated_home):
     detect(isolated_home, "kiro")
 
-    result = client_config.configure("kiro", URL, False, dry_run=True)
+    result = client_operations.configure("kiro", URL, False, dry_run=True)
 
     assert result["action"] == "create"
     assert "written" not in result
@@ -374,7 +388,7 @@ def test_stdio_entry_uses_the_absolute_path_and_notes_the_bare_fallback(
     isolated_home, monkeypatch
 ):
     detect(isolated_home, "cursor")
-    bare = client_config.configure(
+    bare = client_operations.configure(
         "cursor", URL, False, transport="stdio", dry_run=True
     )
     assert bare["entry"]["command"] == "marm-mcp-stdio"
@@ -386,7 +400,7 @@ def test_stdio_entry_uses_the_absolute_path_and_notes_the_bare_fallback(
         "which",
         lambda name: found if name == "marm-mcp-stdio" else None,
     )
-    absolute = client_config.configure(
+    absolute = client_operations.configure(
         "cursor", URL, False, transport="stdio", dry_run=True
     )
     assert absolute["entry"]["command"] == found
@@ -396,7 +410,7 @@ def test_stdio_entry_uses_the_absolute_path_and_notes_the_bare_fallback(
 def test_docker_entry_uses_the_real_plan_with_an_absolute_data_dir(isolated_home):
     detect(isolated_home, "cursor")
 
-    result = client_config.configure(
+    result = client_operations.configure(
         "cursor",
         URL,
         False,
@@ -416,7 +430,7 @@ def test_docker_entry_uses_the_real_plan_with_an_absolute_data_dir(isolated_home
 def test_docker_entry_missing_data_dir_is_not_configurable(isolated_home):
     detect(isolated_home, "cursor")
     with pytest.raises(client_config.ClientNotConfigurable, match="existing directory"):
-        client_config.configure(
+        client_operations.configure(
             "cursor",
             URL,
             False,
@@ -438,12 +452,12 @@ def test_unreadable_or_wrong_shape_file_refused_and_untouched(isolated_home, tex
     path.write_text(text)
 
     with pytest.raises(client_config.ClientNotConfigurable):
-        client_config.configure("cursor", URL, False)
+        client_operations.configure("cursor", URL, False)
 
     assert path.read_text() == text
     assert not (path.parent / "mcp.json.marm-backup").exists()
     assert not (path.parent / "mcp.json.tmp").exists()
-    state = client_config.status("cursor")
+    state = client_operations.status("cursor")
     assert state["state"] == "unreadable"
 
 
@@ -453,7 +467,7 @@ def test_vscode_inputs_that_are_not_a_list_refused(isolated_home):
     path.write_text('{"servers": {}, "inputs": {"id": "x"}}')
 
     with pytest.raises(client_config.ClientNotConfigurable, match="inputs"):
-        client_config.configure("vscode", URL, True)
+        client_operations.configure("vscode", URL, True)
 
     assert path.read_text() == '{"servers": {}, "inputs": {"id": "x"}}'
 
@@ -462,8 +476,8 @@ def test_a_directory_where_the_file_should_be_is_unreadable_not_a_crash(isolated
     (isolated_home / ".cursor" / "mcp.json").mkdir(parents=True)
 
     with pytest.raises(client_config.ClientNotConfigurable):
-        client_config.configure("cursor", URL, False)
-    assert client_config.status("cursor")["state"] == "unreadable"
+        client_operations.configure("cursor", URL, False)
+    assert client_operations.status("cursor")["state"] == "unreadable"
 
 
 def test_os_error_while_writing_is_a_refusal_with_no_tmp_left(
@@ -480,7 +494,7 @@ def test_os_error_while_writing_is_a_refusal_with_no_tmp_left(
     monkeypatch.setattr(client_config.os, "replace", locked)
 
     with pytest.raises(client_config.ClientNotConfigurable, match="Could not write"):
-        client_config.configure("cursor", URL, False)
+        client_operations.configure("cursor", URL, False)
 
     assert path.read_text() == original
     assert not (path.parent / "mcp.json.tmp").exists()
@@ -499,7 +513,7 @@ def test_os_error_while_writing_codex_is_a_refusal_with_no_tmp_left(
     monkeypatch.setattr(client_config.os, "replace", locked)
 
     with pytest.raises(client_config.ClientNotConfigurable):
-        client_config.configure("codex", URL, False)
+        client_operations.configure("codex", URL, False)
 
     assert path.read_text() == 'model = "x"\n'
     assert not (path.parent / "config.toml.tmp").exists()
@@ -507,9 +521,9 @@ def test_os_error_while_writing_codex_is_a_refusal_with_no_tmp_left(
 
 def test_undetected_client_creates_no_directories(isolated_home):
     with pytest.raises(client_config.ClientNotConfigurable, match="not detected"):
-        client_config.configure("cursor", URL, False)
+        client_operations.configure("cursor", URL, False)
     with pytest.raises(client_config.ClientNotConfigurable, match="not detected"):
-        client_config.configure("cursor", URL, False, dry_run=True)
+        client_operations.configure("cursor", URL, False, dry_run=True)
 
     assert not (isolated_home / ".cursor").exists()
 
@@ -518,7 +532,9 @@ def test_project_scope_creates_the_client_directory(isolated_home):
     project = isolated_home / "repo"
     project.mkdir()
 
-    client_config.configure("cursor", URL, False, scope="project", project=str(project))
+    client_operations.configure(
+        "cursor", URL, False, scope="project", project=str(project)
+    )
 
     assert (project / ".cursor" / "mcp.json").is_file()
 
@@ -529,12 +545,12 @@ def test_antigravity_and_qwen_http_with_auth_are_unavailable_and_suggest_stdio(
     for client in ("antigravity", "qwen"):
         detect(isolated_home, client)
         with pytest.raises(client_config.ClientNotConfigurable, match="STDIO"):
-            client_config.configure(client, URL, True)
-        stdio = client_config.configure(client, URL, True, transport="stdio")
+            client_operations.configure(client, URL, True)
+        stdio = client_operations.configure(client, URL, True, transport="stdio")
         assert stdio["verified"] is True
         assert "headers" not in stdio["entry"]
         agent = next(
-            a for a in client_config.list_agents(URL, True) if a["id"] == client
+            a for a in client_operations.list_agents(URL, True) if a["id"] == client
         )
         assert "STDIO" in agent["unavailable"]["http"]
         assert "stdio" not in agent["unavailable"]
@@ -545,9 +561,11 @@ def test_claude_desktop_http_is_unavailable_with_the_reason(isolated_home):
     detect(isolated_home, "claude-desktop")
 
     with pytest.raises(client_config.ClientNotConfigurable, match="mcp-remote"):
-        client_config.configure("claude-desktop", URL, False)
+        client_operations.configure("claude-desktop", URL, False)
     agent = next(
-        a for a in client_config.list_agents(URL, False) if a["id"] == "claude-desktop"
+        a
+        for a in client_operations.list_agents(URL, False)
+        if a["id"] == "claude-desktop"
     )
     assert "mcp-remote" in agent["unavailable"]["http"]
     assert agent["scopes"] == ["user"]
@@ -555,23 +573,25 @@ def test_claude_desktop_http_is_unavailable_with_the_reason(isolated_home):
 
 
 def test_claude_desktop_has_no_config_on_linux(isolated_home, monkeypatch):
-    monkeypatch.setattr(client_config, "_platform", lambda: "linux")
+    monkeypatch.setattr(client_paths, "_platform", lambda: "linux")
 
     agent = next(
-        a for a in client_config.list_agents(URL, False) if a["id"] == "claude-desktop"
+        a
+        for a in client_operations.list_agents(URL, False)
+        if a["id"] == "claude-desktop"
     )
 
     assert agent["detected"] is False
     assert agent["user"]["config_path"] is None
     assert set(agent["unavailable"]) == {"http", "stdio", "docker-stdio"}
     with pytest.raises(client_config.ClientNotConfigurable):
-        client_config.configure("claude-desktop", URL, False, transport="stdio")
+        client_operations.configure("claude-desktop", URL, False, transport="stdio")
 
 
 def test_claude_desktop_mac_path(isolated_home, monkeypatch):
-    monkeypatch.setattr(client_config, "_platform", lambda: "darwin")
+    monkeypatch.setattr(client_paths, "_platform", lambda: "darwin")
 
-    state = client_config.status("claude-desktop")
+    state = client_operations.status("claude-desktop")
 
     assert state["config_path"] == str(
         isolated_home
@@ -595,15 +615,15 @@ def test_bad_transport_scope_and_project_are_invalid_requests(isolated_home, tmp
     ]
     for case in cases:
         with pytest.raises(client_config.InvalidRequest):
-            client_config.configure("cursor", URL, False, **case)
+            client_operations.configure("cursor", URL, False, **case)
     with pytest.raises(client_config.InvalidRequest, match="user scope only"):
-        client_config.configure(
+        client_operations.configure(
             "devin", URL, False, scope="project", project=str(tmp_path)
         )
     with pytest.raises(client_config.InvalidRequest):
-        client_config.status("cursor", "project", str(tmp_path / "nope"))
+        client_operations.status("cursor", "project", str(tmp_path / "nope"))
     with pytest.raises(client_config.ClientNotFound):
-        client_config.configure("nope", URL, False)
+        client_operations.configure("nope", URL, False)
 
 
 def make_dir_link(link: Path, target: Path) -> None:
@@ -630,7 +650,7 @@ def test_project_write_target_that_resolves_outside_is_refused(isolated_home):
     make_dir_link(project / ".cursor", outside)
 
     with pytest.raises(client_config.ClientNotConfigurable, match="outside"):
-        client_config.configure(
+        client_operations.configure(
             "cursor", URL, False, scope="project", project=str(project)
         )
 
@@ -648,7 +668,7 @@ def test_symlinked_file_keeps_its_link_and_updates_the_real_target(isolated_home
     except OSError:
         pytest.skip("this OS refuses to create symlinks")
 
-    result = client_config.configure("cursor", URL, False)
+    result = client_operations.configure("cursor", URL, False)
 
     assert link.is_symlink()
     assert result["verified"] is True
@@ -663,7 +683,7 @@ def test_write_through_a_linked_directory_lands_in_the_real_directory(isolated_h
     real_dir.mkdir(parents=True)
     make_dir_link(isolated_home / ".cursor", real_dir)
 
-    client_config.configure("cursor", URL, False)
+    client_operations.configure("cursor", URL, False)
 
     assert json.loads((real_dir / "mcp.json").read_text())["mcpServers"][
         "marm-memory"
@@ -675,14 +695,14 @@ def test_write_through_a_linked_directory_lands_in_the_real_directory(isolated_h
 
 def test_vscode_auth_adds_one_input_not_duplicated_on_replace(isolated_home):
     detect(isolated_home, "vscode")
-    first = client_config.configure("vscode", URL, True)
+    first = client_operations.configure("vscode", URL, True)
     path = isolated_home / DETECT_DIRS["vscode"] / "mcp.json"
     data = json.loads(path.read_text())
     assert first["action"] == "create"
     assert len(data["inputs"]) == 1
     assert data["inputs"][0]["id"] == "marm-api-key"
 
-    second = client_config.configure("vscode", "http://127.0.0.1:9999/mcp", True)
+    second = client_operations.configure("vscode", "http://127.0.0.1:9999/mcp", True)
     data = json.loads(path.read_text())
 
     assert second["action"] == "replace"
@@ -691,7 +711,7 @@ def test_vscode_auth_adds_one_input_not_duplicated_on_replace(isolated_home):
 
 def test_vscode_stdio_adds_no_input(isolated_home):
     detect(isolated_home, "vscode")
-    client_config.configure("vscode", URL, True, transport="stdio")
+    client_operations.configure("vscode", URL, True, transport="stdio")
     path = isolated_home / DETECT_DIRS["vscode"] / "mcp.json"
     assert "inputs" not in json.loads(path.read_text())
 
@@ -705,7 +725,7 @@ def test_codex_append_keeps_prior_content_byte_for_byte(isolated_home):
     original = '[some_other]\nfoo = "bar"\n'
     path.write_text(original)
 
-    result = client_config.configure("codex", URL, False)
+    result = client_operations.configure("codex", URL, False)
 
     assert result["action"] == "add"
     text = path.read_text()
@@ -722,15 +742,15 @@ def test_codex_existing_differing_table_refused_even_at_preview(isolated_home):
 
     for dry_run in (False, True):
         with pytest.raises(client_config.ClientNotConfigurable):
-            client_config.configure("codex", URL, False, dry_run=dry_run)
+            client_operations.configure("codex", URL, False, dry_run=dry_run)
 
     assert path.read_text() == before
 
 
 def test_codex_none_when_equal(isolated_home):
     detect(isolated_home, "codex")
-    client_config.configure("codex", URL, True)
-    result = client_config.configure("codex", URL, True)
+    client_operations.configure("codex", URL, True)
+    result = client_operations.configure("codex", URL, True)
     assert result["action"] == "none"
     assert result["written"] is False
 
@@ -744,7 +764,7 @@ def test_codex_stdio_table_escapes_windows_paths(isolated_home, monkeypatch):
         lambda name: exe if name == "marm-mcp-stdio" else None,
     )
 
-    result = client_config.configure("codex", URL, False, transport="stdio")
+    result = client_operations.configure("codex", URL, False, transport="stdio")
 
     assert result["verified"] is True
     tomllib = pytest.importorskip("tomllib")
@@ -760,7 +780,7 @@ def test_codex_append_preserves_bytes_and_line_endings(isolated_home, newline):
     original = f'model = "gpt-5"{newline}[some_other]{newline}foo = "bar"'.encode()
     path.write_bytes(original)
 
-    result = client_config.configure("codex", URL, False)
+    result = client_operations.configure("codex", URL, False)
 
     written = path.read_bytes()
     assert result["verified"] is True
@@ -781,8 +801,8 @@ def test_codex_docs_entry_with_extra_keys_counts_as_configured(isolated_home):
     )
     before = path.read_bytes()
 
-    state = client_config.status("codex", url=URL, auth_required=True)
-    result = client_config.configure("codex", URL, True)
+    state = client_operations.status("codex", url=URL, auth_required=True)
+    result = client_operations.configure("codex", URL, True)
 
     assert state["state"] == "configured"
     assert result["action"] == "none"
@@ -793,7 +813,7 @@ def test_codex_project_scope_notes_the_trust_requirement(isolated_home):
     project = isolated_home / "repo"
     project.mkdir()
 
-    result = client_config.configure(
+    result = client_operations.configure(
         "codex", URL, False, scope="project", project=str(project), dry_run=True
     )
 
@@ -808,7 +828,7 @@ def test_json_merge_keeps_non_ascii_text(isolated_home):
         encoding="utf-8",
     )
 
-    client_config.configure("antigravity", URL, False)
+    client_operations.configure("antigravity", URL, False)
 
     text = path.read_text(encoding="utf-8")
     assert "héllo 世界" in text
@@ -830,12 +850,12 @@ def test_docs_localhost_entries_count_as_configured(isolated_home):
     )
 
     states = {
-        a["id"]: a["user"]["state"] for a in client_config.list_agents(URL, False)
+        a["id"]: a["user"]["state"] for a in client_operations.list_agents(URL, False)
     }
 
     assert states["qwen"] == "configured"
     assert states["codex"] == "configured"
-    other = client_config.list_agents("http://127.0.0.1:9000/mcp", False)
+    other = client_operations.list_agents("http://127.0.0.1:9000/mcp", False)
     assert {a["id"]: a["user"]["state"] for a in other}["qwen"] == "different"
 
 
@@ -845,7 +865,7 @@ def test_status_reports_the_detected_transport(isolated_home):
 
     def write(entry):
         path.write_text(json.dumps({"mcpServers": {"marm-memory": entry}}))
-        return client_config.status("cursor", url=URL, auth_required=False)
+        return client_operations.status("cursor", url=URL, auth_required=False)
 
     stdio = write({"command": "C:\\tools\\marm-mcp-stdio.exe", "args": []})
     assert (stdio["state"], stdio["transport_detected"]) == ("configured", "stdio")
@@ -861,11 +881,11 @@ def test_status_reports_the_detected_transport(isolated_home):
     assert stale["current_entry"] == {"url": "http://127.0.0.1:1/mcp"}
     junk = write({"nothing": "useful"})
     assert (junk["state"], junk["transport_detected"]) == ("different", None)
-    assert client_config.status("cursor")["state"] == "configured"
+    assert client_operations.status("cursor")["state"] == "configured"
 
 
 def test_status_missing_before_any_file(isolated_home):
-    state = client_config.status("cursor", url=URL)
+    state = client_operations.status("cursor", url=URL)
     assert state == {
         "scope": "user",
         "project": None,
@@ -880,9 +900,11 @@ def test_status_missing_before_any_file(isolated_home):
 def test_project_status_reads_the_project_file(isolated_home):
     project = isolated_home / "repo"
     project.mkdir()
-    client_config.configure("claude", URL, False, scope="project", project=str(project))
+    client_operations.configure(
+        "claude", URL, False, scope="project", project=str(project)
+    )
 
-    state = client_config.status("claude", "project", str(project), URL)
+    state = client_operations.status("claude", "project", str(project), URL)
 
     assert state["state"] == "configured"
     assert state["project"] == str(project)
@@ -900,7 +922,7 @@ def test_claude_notes_project_scoped_entry(isolated_home):
     )
 
     claude = next(
-        a for a in client_config.list_agents(URL, False) if a["id"] == "claude"
+        a for a in client_operations.list_agents(URL, False) if a["id"] == "claude"
     )
 
     assert claude["user"]["state"] == "missing"
@@ -912,7 +934,7 @@ def test_claude_detection_is_not_the_home_directory(isolated_home, monkeypatch):
 
     def claude_agent():
         return next(
-            a for a in client_config.list_agents(URL, False) if a["id"] == "claude"
+            a for a in client_operations.list_agents(URL, False) if a["id"] == "claude"
         )
 
     assert claude_agent()["detected"] is False
@@ -926,7 +948,7 @@ def test_claude_detection_is_not_the_home_directory(isolated_home, monkeypatch):
 
 
 def test_agent_list_shape(isolated_home):
-    agents = client_config.list_agents(URL, False)
+    agents = client_operations.list_agents(URL, False)
 
     assert [a["id"] for a in agents] == client_config.CLIENT_IDS
     by_id = {a["id"]: a for a in agents}
@@ -948,7 +970,7 @@ def test_skill_state_follows_the_installed_file(isolated_home):
     skill.write_text("skill")
 
     agent = next(
-        a for a in client_config.list_agents(URL, False) if a["id"] == "antigravity"
+        a for a in client_operations.list_agents(URL, False) if a["id"] == "antigravity"
     )
 
     assert agent["skill"] == {"supported": True, "installed": True}
@@ -972,7 +994,7 @@ def test_remove_deletes_only_marms_entry(isolated_home):
         )
     )
 
-    result = client_config.remove("cursor")
+    result = client_operations.remove("cursor")
 
     assert result["action"] == "remove"
     assert result["method"] == "file"
@@ -988,13 +1010,13 @@ def test_remove_deletes_only_marms_entry(isolated_home):
 
 
 def test_remove_is_none_when_absent_and_dry_run_writes_nothing(isolated_home):
-    assert client_config.remove("cursor")["action"] == "none"
+    assert client_operations.remove("cursor")["action"] == "none"
     path = isolated_home / ".cursor" / "mcp.json"
     path.parent.mkdir(parents=True)
     path.write_text(json.dumps({"mcpServers": {"marm-memory": {"url": URL}}}))
     before = path.read_text()
 
-    result = client_config.remove("cursor", dry_run=True)
+    result = client_operations.remove("cursor", dry_run=True)
 
     assert result["action"] == "remove"
     assert "written" not in result
@@ -1008,7 +1030,7 @@ def test_remove_project_scope_json(isolated_home):
         json.dumps({"mcpServers": {"a": {"command": "x"}, "marm-memory": {"url": URL}}})
     )
 
-    result = client_config.remove("claude", "project", str(project))
+    result = client_operations.remove("claude", "project", str(project))
 
     assert result["method"] == "file"
     assert json.loads((project / ".mcp.json").read_text()) == {
@@ -1022,7 +1044,7 @@ def test_remove_unreadable_file_refused(isolated_home):
     path.write_text("[1, 2]")
 
     with pytest.raises(client_config.ClientNotConfigurable):
-        client_config.remove("cursor")
+        client_operations.remove("cursor")
     assert path.read_text() == "[1, 2]"
 
 
@@ -1037,7 +1059,7 @@ def test_remove_os_error_is_a_refusal_with_no_tmp_left(isolated_home, monkeypatc
     )
 
     with pytest.raises(client_config.ClientNotConfigurable):
-        client_config.remove("cursor")
+        client_operations.remove("cursor")
 
     assert not (path.parent / "mcp.json.tmp").exists()
     assert "marm-memory" in path.read_text()
@@ -1062,7 +1084,7 @@ def test_claude_remove_uses_the_cli_with_user_scope(isolated_home, monkeypatch):
 
     monkeypatch.setattr(client_config, "run_cli_subprocess", fake_runner)
 
-    result = client_config.remove("claude")
+    result = client_operations.remove("claude")
 
     assert calls == [
         ["C:/bin/claude.exe", "mcp", "remove", "--scope", "user", "marm-memory"]
@@ -1081,7 +1103,7 @@ def test_codex_remove_uses_the_cli_when_present_else_is_manual(
     path.write_text(original)
 
     with pytest.raises(client_config.ClientNotConfigurable, match="by hand"):
-        client_config.remove("codex")
+        client_operations.remove("codex")
     assert path.read_text() == original
 
     monkeypatch.setattr(client_config.shutil, "which", lambda name: "C:/bin/codex.exe")
@@ -1094,7 +1116,7 @@ def test_codex_remove_uses_the_cli_when_present_else_is_manual(
 
     monkeypatch.setattr(client_config, "run_cli_subprocess", fake_runner)
 
-    result = client_config.remove("codex")
+    result = client_operations.remove("codex")
 
     assert calls == [["C:/bin/codex.exe", "mcp", "remove", "marm-memory"]]
     assert result["method"] == "cli"
@@ -1109,7 +1131,7 @@ def test_codex_remove_project_scope_is_manual(isolated_home):
     )
 
     with pytest.raises(client_config.ClientNotConfigurable, match="by hand"):
-        client_config.remove("codex", "project", str(project))
+        client_operations.remove("codex", "project", str(project))
 
 
 # --- Grok Build TOML -----------------------------------------------------------------
@@ -1121,7 +1143,7 @@ def test_grok_append_keeps_prior_content_and_writes_the_bearer_env_var(isolated_
     original = '[models]\ndefault = "grok-build"\n'
     path.write_text(original)
 
-    result = client_config.configure("grok", URL, True)
+    result = client_operations.configure("grok", URL, True)
 
     assert result["action"] == "add"
     assert result["verified"] is True
@@ -1136,7 +1158,7 @@ def test_grok_project_scope_writes_grok_config_without_a_trust_note(isolated_hom
     project = isolated_home / "repo"
     project.mkdir()
 
-    result = client_config.configure(
+    result = client_operations.configure(
         "grok", URL, False, scope="project", project=str(project)
     )
 
@@ -1152,7 +1174,7 @@ def test_grok_existing_differing_table_is_refused(isolated_home):
     before = path.read_text()
 
     with pytest.raises(client_config.ClientNotConfigurable, match="edit it manually"):
-        client_config.configure("grok", URL, False)
+        client_operations.configure("grok", URL, False)
 
     assert path.read_text() == before
 
@@ -1167,10 +1189,10 @@ def test_grok_docs_entry_with_headers_instead_of_the_env_var_is_different(
         'headers = { Authorization = "Bearer ${MARM_API_KEY}" }\n'
     )
 
-    state = client_config.status("grok", url=URL, auth_required=True)
+    state = client_operations.status("grok", url=URL, auth_required=True)
 
     assert state["state"] == "different"
-    assert client_config.status("grok", url=URL, auth_required=False)["state"] == (
+    assert client_operations.status("grok", url=URL, auth_required=False)["state"] == (
         "configured"
     )
 
@@ -1182,7 +1204,7 @@ def test_grok_remove_uses_the_cli_and_project_scope_is_manual(
     path.parent.mkdir(parents=True)
     path.write_text(f'other = 1\n\n[mcp_servers.marm-memory]\nurl = "{URL}"\n')
     with pytest.raises(client_config.ClientNotConfigurable, match="by hand"):
-        client_config.remove("grok")
+        client_operations.remove("grok")
 
     monkeypatch.setattr(client_config.shutil, "which", lambda name: "C:/bin/grok.exe")
     calls: list[list[str]] = []
@@ -1193,7 +1215,7 @@ def test_grok_remove_uses_the_cli_and_project_scope_is_manual(
         return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
 
     monkeypatch.setattr(client_config, "run_cli_subprocess", fake_runner)
-    result = client_config.remove("grok")
+    result = client_operations.remove("grok")
 
     assert calls == [["C:/bin/grok.exe", "mcp", "remove", "marm-memory"]]
     assert result["verified"] is True
@@ -1206,7 +1228,7 @@ def test_grok_remove_uses_the_cli_and_project_scope_is_manual(
     with pytest.raises(
         client_config.ClientNotConfigurable, match="Grok Build cannot edit"
     ):
-        client_config.remove("grok", "project", str(project))
+        client_operations.remove("grok", "project", str(project))
 
 
 def test_grok_notes_when_claude_code_already_lists_marm(isolated_home):
@@ -1214,7 +1236,7 @@ def test_grok_notes_when_claude_code_already_lists_marm(isolated_home):
 
     def grok_notes():
         agent = next(
-            a for a in client_config.list_agents(URL, False) if a["id"] == "grok"
+            a for a in client_operations.list_agents(URL, False) if a["id"] == "grok"
         )
         return agent["notes"]
 
@@ -1223,7 +1245,7 @@ def test_grok_notes_when_claude_code_already_lists_marm(isolated_home):
         json.dumps({"mcpServers": {"marm-memory": {"type": "http", "url": URL}}})
     )
     assert any("Claude Code" in note for note in grok_notes())
-    client_config.configure("grok", URL, False)
+    client_operations.configure("grok", URL, False)
     assert not any("Claude Code" in note for note in grok_notes())
 
 
@@ -1242,7 +1264,7 @@ def load_yaml(path: Path) -> dict:
 def test_hermes_creates_the_file_with_a_keyed_http_entry(isolated_home):
     detect(isolated_home, "hermes")
 
-    result = client_config.configure("hermes", URL, True)
+    result = client_operations.configure("hermes", URL, True)
 
     assert result["action"] == "create"
     assert result["verified"] is True
@@ -1258,7 +1280,7 @@ def test_hermes_appends_without_touching_comments_or_other_content(isolated_home
     original = "# my hermes setup\nmodel:   gpt-x   # keep spacing\nterminal:\n    backend: docker\n"
     path.write_text(original)
 
-    result = client_config.configure("hermes", URL, False)
+    result = client_operations.configure("hermes", URL, False)
 
     assert result["action"] == "add"
     text = path.read_text()
@@ -1272,7 +1294,7 @@ def test_hermes_appends_after_a_file_with_no_final_newline(isolated_home):
     path.parent.mkdir(parents=True)
     path.write_bytes(b"model: gpt-x")
 
-    client_config.configure("hermes", URL, False)
+    client_operations.configure("hermes", URL, False)
 
     assert load_yaml(path)["model"] == "gpt-x"
     assert load_yaml(path)["mcp_servers"]["marm-memory"] == {"url": URL}
@@ -1283,7 +1305,7 @@ def test_hermes_keeps_crlf_line_endings(isolated_home):
     path.parent.mkdir(parents=True)
     path.write_bytes(b"model: gpt-x\r\n")
 
-    client_config.configure("hermes", URL, False)
+    client_operations.configure("hermes", URL, False)
 
     data = path.read_bytes()
     assert b"\r\n" in data
@@ -1307,7 +1329,7 @@ def test_hermes_inserts_under_an_existing_mcp_servers_block(isolated_home, inden
     )
     path.write_text(original)
 
-    client_config.configure("hermes", URL, False)
+    client_operations.configure("hermes", URL, False)
 
     text = path.read_text()
     data = load_yaml(path)
@@ -1332,7 +1354,7 @@ def test_hermes_fills_an_empty_mcp_servers_section(isolated_home, header):
     path.parent.mkdir(parents=True)
     path.write_text(f"model: gpt-x\n{header}\nterminal:\n  backend: local\n")
 
-    client_config.configure("hermes", URL, False)
+    client_operations.configure("hermes", URL, False)
 
     data = load_yaml(path)
     assert data["mcp_servers"] == {"marm-memory": {"url": URL}}
@@ -1358,7 +1380,7 @@ def test_hermes_refuses_layouts_it_will_not_edit_and_leaves_the_file_alone(
     path.write_text(body)
 
     with pytest.raises(client_config.ClientNotConfigurable):
-        client_config.configure("hermes", URL, False)
+        client_operations.configure("hermes", URL, False)
 
     assert path.read_text() == body
     assert not (path.parent / "config.yaml.marm-backup").exists()
@@ -1376,7 +1398,7 @@ def test_hermes_existing_differing_entry_is_refused_even_at_preview(isolated_hom
         with pytest.raises(
             client_config.ClientNotConfigurable, match="edit it manually"
         ):
-            client_config.configure("hermes", URL, False, dry_run=dry_run)
+            client_operations.configure("hermes", URL, False, dry_run=dry_run)
 
     assert path.read_text() == before
 
@@ -1388,8 +1410,8 @@ def test_hermes_entry_with_extra_keys_counts_as_configured(isolated_home):
         f'mcp_servers:\n  marm-memory:\n    url: "{URL}"\n    timeout: 300\n'
     )
 
-    assert client_config.status("hermes", url=URL)["state"] == "configured"
-    assert client_config.configure("hermes", URL, False)["action"] == "none"
+    assert client_operations.status("hermes", url=URL)["state"] == "configured"
+    assert client_operations.configure("hermes", URL, False)["action"] == "none"
 
 
 def test_hermes_backs_up_before_editing(isolated_home):
@@ -1397,7 +1419,7 @@ def test_hermes_backs_up_before_editing(isolated_home):
     path.parent.mkdir(parents=True)
     path.write_text("model: gpt-x\n")
 
-    result = client_config.configure("hermes", URL, False)
+    result = client_operations.configure("hermes", URL, False)
 
     assert result["backup_path"] == str(path) + ".marm-backup"
     assert (path.parent / "config.yaml.marm-backup").read_text() == "model: gpt-x\n"
@@ -1414,7 +1436,7 @@ def test_hermes_restores_the_file_when_the_entry_does_not_land(
     )
 
     with pytest.raises(client_config.ClientNotConfigurable, match="left as it was"):
-        client_config.configure("hermes", URL, False)
+        client_operations.configure("hermes", URL, False)
 
     assert path.read_text() == "model: gpt-x\n"
 
@@ -1428,7 +1450,7 @@ def test_hermes_removes_a_file_it_created_when_the_entry_does_not_land(
     )
 
     with pytest.raises(client_config.ClientNotConfigurable):
-        client_config.configure("hermes", URL, False)
+        client_operations.configure("hermes", URL, False)
 
     assert not hermes_file(isolated_home).exists()
 
@@ -1440,22 +1462,24 @@ def test_hermes_without_pyyaml_is_unreadable_not_a_crash(isolated_home, monkeypa
     monkeypatch.setattr(client_config, "yaml", None)
 
     with pytest.raises(client_config.ClientNotConfigurable, match="PyYAML"):
-        client_config.configure("hermes", URL, False)
+        client_operations.configure("hermes", URL, False)
 
-    assert client_config.status("hermes", url=URL)["state"] == "unreadable"
+    assert client_operations.status("hermes", url=URL)["state"] == "unreadable"
 
 
 def test_hermes_home_env_var_moves_the_config_and_detection(isolated_home, monkeypatch):
     custom = isolated_home / "elsewhere" / "hermes-data"
     monkeypatch.setenv("HERMES_HOME", str(custom))
-    assert client_config.status("hermes")["config_path"] == str(custom / "config.yaml")
+    assert client_operations.status("hermes")["config_path"] == str(
+        custom / "config.yaml"
+    )
     agent = next(
-        a for a in client_config.list_agents(URL, False) if a["id"] == "hermes"
+        a for a in client_operations.list_agents(URL, False) if a["id"] == "hermes"
     )
     assert agent["detected"] is False
 
     custom.mkdir(parents=True)
-    result = client_config.configure("hermes", URL, False)
+    result = client_operations.configure("hermes", URL, False)
 
     assert result["config_path"] == str(custom / "config.yaml")
     assert load_yaml(custom / "config.yaml")["mcp_servers"]["marm-memory"] == {
@@ -1465,25 +1489,25 @@ def test_hermes_home_env_var_moves_the_config_and_detection(isolated_home, monke
 
 
 def test_hermes_default_home_per_platform(isolated_home, monkeypatch):
-    assert client_config.hermes_home() == isolated_home / "AppData" / "Local" / "hermes"
+    assert client_paths.hermes_home() == isolated_home / "AppData" / "Local" / "hermes"
     monkeypatch.delenv("LOCALAPPDATA")
-    assert client_config.hermes_home() == isolated_home / "AppData" / "Local" / "hermes"
-    monkeypatch.setattr(client_config, "_platform", lambda: "linux")
-    assert client_config.hermes_home() == isolated_home / ".hermes"
-    monkeypatch.setattr(client_config, "_platform", lambda: "darwin")
-    assert client_config.hermes_home() == isolated_home / ".hermes"
+    assert client_paths.hermes_home() == isolated_home / "AppData" / "Local" / "hermes"
+    monkeypatch.setattr(client_paths, "_platform", lambda: "linux")
+    assert client_paths.hermes_home() == isolated_home / ".hermes"
+    monkeypatch.setattr(client_paths, "_platform", lambda: "darwin")
+    assert client_paths.hermes_home() == isolated_home / ".hermes"
 
 
 def test_hermes_only_supports_the_user_scope(isolated_home):
     project = isolated_home / "repo"
     project.mkdir()
     agent = next(
-        a for a in client_config.list_agents(URL, False) if a["id"] == "hermes"
+        a for a in client_operations.list_agents(URL, False) if a["id"] == "hermes"
     )
 
     assert agent["scopes"] == ["user"]
     with pytest.raises(client_config.InvalidRequest, match="user scope only"):
-        client_config.configure(
+        client_operations.configure(
             "hermes", URL, False, scope="project", project=str(project)
         )
 
@@ -1494,7 +1518,7 @@ def test_hermes_quoted_mcp_servers_key_keeps_existing_servers(isolated_home, key
     path.parent.mkdir(parents=True)
     path.write_text(f"model: gpt-x\n{key}:\n  github:\n    command: npx\n")
 
-    client_config.configure("hermes", URL, False)
+    client_operations.configure("hermes", URL, False)
 
     text = path.read_text()
     data = load_yaml(path)
@@ -1502,7 +1526,7 @@ def test_hermes_quoted_mcp_servers_key_keeps_existing_servers(isolated_home, key
     assert data["mcp_servers"]["marm-memory"] == {"url": URL}
     assert text.count("mcp_servers") == 1
     assert f"{key}:" in text
-    client_config.remove("hermes")
+    client_operations.remove("hermes")
     assert set(load_yaml(path)["mcp_servers"]) == {"github"}
 
 
@@ -1523,11 +1547,11 @@ def test_hermes_keeps_the_comment_on_the_mcp_servers_line(
     path.parent.mkdir(parents=True)
     path.write_text(f"model: gpt-x\n{header}\nterminal:\n  backend: local\n")
 
-    client_config.configure("hermes", URL, False)
+    client_operations.configure("hermes", URL, False)
 
     assert comment in path.read_text()
     assert load_yaml(path)["mcp_servers"] == {"marm-memory": {"url": URL}}
-    client_config.remove("hermes")
+    client_operations.remove("hermes")
     text = path.read_text()
     assert comment in text
     assert load_yaml(path)["mcp_servers"] == {}
@@ -1548,7 +1572,7 @@ def test_hermes_refuses_any_edit_that_changes_more_than_marms_entry(
     )
 
     with pytest.raises(client_config.ClientNotConfigurable, match="left as it was"):
-        client_config.configure("hermes", URL, False)
+        client_operations.configure("hermes", URL, False)
 
     assert path.read_text() == original
     assert load_yaml(path)["mcp_servers"]["github"] == {"command": "npx"}
@@ -1573,7 +1597,7 @@ def test_hermes_remove_takes_only_marms_entry_and_keeps_the_rest(isolated_home):
         "  backend: local\n"
     )
 
-    result = client_config.remove("hermes")
+    result = client_operations.remove("hermes")
 
     assert result["action"] == "remove"
     assert result["verified"] is True
@@ -1593,7 +1617,7 @@ def test_hermes_remove_of_the_last_server_leaves_an_empty_mapping(isolated_home)
         f'model: gpt-x\nmcp_servers:\n  marm-memory:\n    url: "{URL}"\nterminal:\n  backend: local\n'
     )
 
-    client_config.remove("hermes")
+    client_operations.remove("hermes")
 
     data = load_yaml(path)
     assert data["mcp_servers"] == {}
@@ -1606,7 +1630,7 @@ def test_hermes_remove_is_a_no_op_when_the_entry_is_absent(isolated_home):
     path.parent.mkdir(parents=True)
     path.write_text("model: gpt-x\n")
 
-    result = client_config.remove("hermes")
+    result = client_operations.remove("hermes")
 
     assert result["action"] == "none"
     assert path.read_text() == "model: gpt-x\n"
@@ -1619,7 +1643,7 @@ def test_hermes_remove_refuses_a_flow_style_section(isolated_home):
     path.write_text(body)
 
     with pytest.raises(client_config.ClientNotConfigurable, match="by hand"):
-        client_config.remove("hermes")
+        client_operations.remove("hermes")
 
     assert path.read_text() == body
 
@@ -1630,8 +1654,8 @@ def test_hermes_install_then_remove_round_trips_the_original_file(isolated_home)
     original = "# keep me\nmodel: gpt-x\n"
     path.write_text(original)
 
-    client_config.configure("hermes", URL, True)
-    client_config.remove("hermes")
+    client_operations.configure("hermes", URL, True)
+    client_operations.remove("hermes")
 
     data = load_yaml(path)
     assert data["model"] == "gpt-x"
@@ -1646,15 +1670,15 @@ def test_hermes_skill_lands_in_hermes_home_skills(isolated_home, monkeypatch):
     detect_dir.mkdir(parents=True)
 
     agent = next(
-        a for a in client_config.list_agents(URL, False) if a["id"] == "hermes"
+        a for a in client_operations.list_agents(URL, False) if a["id"] == "hermes"
     )
     assert agent["skill"] == {"supported": True, "installed": False}
 
-    result = client_config.skill_install.install_for_agent("hermes")
+    result = skill_install.install_for_agent("hermes")
 
     assert result["target"] == str(custom / "skills" / "marm-init" / "SKILL.md")
     agent = next(
-        a for a in client_config.list_agents(URL, False) if a["id"] == "hermes"
+        a for a in client_operations.list_agents(URL, False) if a["id"] == "hermes"
     )
     assert agent["skill"] == {"supported": True, "installed": True}
 
@@ -1669,7 +1693,7 @@ def cline_file(home: Path) -> Path:
 def test_cline_http_entry_names_the_streamable_transport_explicitly(isolated_home):
     detect(isolated_home, "cline")
 
-    result = client_config.configure("cline", URL, False)
+    result = client_operations.configure("cline", URL, False)
 
     assert result["entry"] == {"type": "streamableHttp", "url": URL}
     data = json.loads(cline_file(isolated_home).read_text())
@@ -1688,8 +1712,8 @@ def test_cline_keeps_other_servers_and_top_level_keys(isolated_home):
         )
     )
 
-    client_config.configure("cline", URL, False, transport="stdio")
-    client_config.remove("cline")
+    client_operations.configure("cline", URL, False, transport="stdio")
+    client_operations.remove("cline")
 
     data = json.loads(path.read_text())
     assert data["$schema"] == "x"
@@ -1700,12 +1724,14 @@ def test_cline_keyed_http_is_manual_and_suggests_stdio(isolated_home):
     detect(isolated_home, "cline")
 
     with pytest.raises(client_config.ClientNotConfigurable, match="STDIO"):
-        client_config.configure("cline", URL, True)
-    stdio = client_config.configure("cline", URL, True, transport="stdio")
+        client_operations.configure("cline", URL, True)
+    stdio = client_operations.configure("cline", URL, True, transport="stdio")
 
     assert stdio["verified"] is True
     assert "headers" not in stdio["entry"]
-    agent = next(a for a in client_config.list_agents(URL, True) if a["id"] == "cline")
+    agent = next(
+        a for a in client_operations.list_agents(URL, True) if a["id"] == "cline"
+    )
     assert "has not confirmed" in agent["unavailable"]["http"]
     assert "stdio" not in agent["unavailable"]
 
@@ -1720,12 +1746,15 @@ def test_cline_entry_from_its_own_installer_counts_as_configured(isolated_home):
     }
     path.write_text(json.dumps(nested))
 
-    assert client_config.status("cline", url=URL)["state"] == "configured"
-    result = client_config.configure("cline", URL, False)
+    assert client_operations.status("cline", url=URL)["state"] == "configured"
+    result = client_operations.configure("cline", URL, False)
 
     assert result["action"] == "none"
     assert json.loads(path.read_text()) == nested
-    assert client_config.read_entry("cline") == {"type": "streamableHttp", "url": URL}
+    assert client_operations.read_entry("cline") == {
+        "type": "streamableHttp",
+        "url": URL,
+    }
 
 
 def test_cline_nested_entry_for_another_url_is_replaced_with_the_flat_shape(
@@ -1745,7 +1774,7 @@ def test_cline_nested_entry_for_another_url_is_replaced_with_the_flat_shape(
         )
     )
 
-    result = client_config.configure("cline", URL, False)
+    result = client_operations.configure("cline", URL, False)
 
     assert result["action"] == "replace"
     assert json.loads(path.read_text())["mcpServers"]["marm-memory"] == {
@@ -1758,30 +1787,32 @@ def test_cline_path_precedence_across_its_environment_overrides(
     isolated_home, monkeypatch
 ):
     default = isolated_home / ".cline" / "data" / "settings" / "cline_mcp_settings.json"
-    assert client_config.cline_mcp_settings_path() == default
+    assert client_paths.cline_mcp_settings_path() == default
 
     monkeypatch.setenv("CLINE_DIR", str(isolated_home / "base"))
-    assert client_config.cline_home() == isolated_home / "base"
-    assert client_config.cline_mcp_settings_path() == (
+    assert client_paths.cline_home() == isolated_home / "base"
+    assert client_paths.cline_mcp_settings_path() == (
         isolated_home / "base" / "data" / "settings" / "cline_mcp_settings.json"
     )
     monkeypatch.setenv("CLINE_DATA_DIR", str(isolated_home / "datadir"))
-    assert client_config.cline_mcp_settings_path() == (
+    assert client_paths.cline_mcp_settings_path() == (
         isolated_home / "datadir" / "settings" / "cline_mcp_settings.json"
     )
     monkeypatch.setenv("CLINE_MCP_SETTINGS_PATH", str(isolated_home / "one.json"))
-    assert client_config.cline_mcp_settings_path() == isolated_home / "one.json"
+    assert client_paths.cline_mcp_settings_path() == isolated_home / "one.json"
 
 
 def test_cline_override_moves_detection_config_and_skill(isolated_home, monkeypatch):
     base = isolated_home / "elsewhere"
     monkeypatch.setenv("CLINE_DIR", str(base))
-    agent = next(a for a in client_config.list_agents(URL, False) if a["id"] == "cline")
+    agent = next(
+        a for a in client_operations.list_agents(URL, False) if a["id"] == "cline"
+    )
     assert agent["detected"] is False
 
     base.mkdir()
-    result = client_config.configure("cline", URL, False)
-    skill = client_config.skill_install.install_for_agent("cline")
+    result = client_operations.configure("cline", URL, False)
+    skill = skill_install.install_for_agent("cline")
 
     assert result["config_path"] == str(
         base / "data" / "settings" / "cline_mcp_settings.json"
@@ -1795,7 +1826,7 @@ def test_cline_is_detected_through_data_dir_and_settings_path_overrides(
 ):
     def detected() -> bool:
         return next(
-            a for a in client_config.list_agents(URL, False) if a["id"] == "cline"
+            a for a in client_operations.list_agents(URL, False) if a["id"] == "cline"
         )["detected"]
 
     assert detected() is False
@@ -1804,7 +1835,7 @@ def test_cline_is_detected_through_data_dir_and_settings_path_overrides(
     assert detected() is False
     data.mkdir()
     assert detected() is True
-    result = client_config.configure("cline", URL, False)
+    result = client_operations.configure("cline", URL, False)
     assert result["config_path"] == str(data / "settings" / "cline_mcp_settings.json")
     assert (data / "settings" / "cline_mcp_settings.json").is_file()
     assert not (isolated_home / ".cline").exists()
@@ -1816,7 +1847,9 @@ def test_cline_is_detected_through_data_dir_and_settings_path_overrides(
     assert detected() is False
     custom.parent.mkdir()
     assert detected() is True
-    assert client_config.configure("cline", URL, False)["config_path"] == str(custom)
+    assert client_operations.configure("cline", URL, False)["config_path"] == str(
+        custom
+    )
 
 
 def test_cline_data_dir_override_does_not_move_the_skill_folder(
@@ -1826,7 +1859,7 @@ def test_cline_data_dir_override_does_not_move_the_skill_folder(
     data.mkdir()
     monkeypatch.setenv("CLINE_DATA_DIR", str(data))
 
-    skill = client_config.skill_install.install_for_agent("cline")
+    skill = skill_install.install_for_agent("cline")
 
     assert skill["target"] == str(
         isolated_home / ".cline" / "skills" / "marm-init" / "SKILL.md"
@@ -1846,7 +1879,9 @@ def test_cline_data_dir_override_does_not_move_the_skill_folder(
 def test_antigravity_is_detected_from_any_of_its_install_folders(isolated_home, marker):
     def detected() -> bool:
         return next(
-            a for a in client_config.list_agents(URL, False) if a["id"] == "antigravity"
+            a
+            for a in client_operations.list_agents(URL, False)
+            if a["id"] == "antigravity"
         )["detected"]
 
     assert detected() is False
@@ -1861,12 +1896,12 @@ def test_antigravity_writes_the_old_ide_file_only_when_it_is_the_one_in_use(
     current = gemini / "config" / "mcp_config.json"
     legacy = gemini / "antigravity" / "mcp_config.json"
 
-    assert client_config.status("antigravity")["config_path"] == str(current)
+    assert client_operations.status("antigravity")["config_path"] == str(current)
 
     legacy.parent.mkdir(parents=True)
     legacy.write_text(json.dumps({"mcpServers": {"other": {"command": "x"}}}))
-    assert client_config.status("antigravity")["config_path"] == str(legacy)
-    result = client_config.configure("antigravity", URL, False)
+    assert client_operations.status("antigravity")["config_path"] == str(legacy)
+    result = client_operations.configure("antigravity", URL, False)
     assert result["config_path"] == str(legacy)
     written = json.loads(legacy.read_text())["mcpServers"]
     assert written["other"] == {"command": "x"}
@@ -1874,7 +1909,7 @@ def test_antigravity_writes_the_old_ide_file_only_when_it_is_the_one_in_use(
     assert not current.exists()
 
     current.parent.mkdir(parents=True)
-    assert client_config.status("antigravity")["config_path"] == str(current)
+    assert client_operations.status("antigravity")["config_path"] == str(current)
 
 
 def test_old_gemini_cli_folder_alone_is_not_taken_for_antigravity(isolated_home):
@@ -1882,14 +1917,14 @@ def test_old_gemini_cli_folder_alone_is_not_taken_for_antigravity(isolated_home)
     (isolated_home / ".gemini" / "settings.json").write_text("{}")
 
     agent = next(
-        a for a in client_config.list_agents(URL, False) if a["id"] == "antigravity"
+        a for a in client_operations.list_agents(URL, False) if a["id"] == "antigravity"
     )
 
     assert agent["detected"] is False
 
 
 def test_shared_file_agents_say_which_surfaces_read_it(isolated_home):
-    agents = {a["id"]: a for a in client_config.list_agents(URL, False)}
+    agents = {a["id"]: a for a in client_operations.list_agents(URL, False)}
 
     assert any("IDE, CLI and 2.0 app" in n for n in agents["antigravity"]["notes"])
     assert any("VS Code and JetBrains" in n for n in agents["cline"]["notes"])
@@ -1898,12 +1933,14 @@ def test_shared_file_agents_say_which_surfaces_read_it(isolated_home):
 def test_cline_only_supports_the_user_scope(isolated_home):
     project = isolated_home / "repo"
     project.mkdir()
-    agent = next(a for a in client_config.list_agents(URL, False) if a["id"] == "cline")
+    agent = next(
+        a for a in client_operations.list_agents(URL, False) if a["id"] == "cline"
+    )
 
     assert agent["scopes"] == ["user"]
     assert any("Cline extensions" in note for note in agent["notes"])
     with pytest.raises(client_config.InvalidRequest, match="user scope only"):
-        client_config.configure(
+        client_operations.configure(
             "cline", URL, False, scope="project", project=str(project)
         )
 
@@ -1913,7 +1950,7 @@ def test_cline_only_supports_the_user_scope(isolated_home):
 
 def test_claude_not_configurable_without_binary_or_home_dir(isolated_home):
     with pytest.raises(client_config.ClientNotConfigurable):
-        client_config.configure("claude", URL, False)
+        client_operations.configure("claude", URL, False)
 
 
 def test_claude_with_home_dir_but_no_binary_is_refused_at_write_not_preview(
@@ -1921,10 +1958,10 @@ def test_claude_with_home_dir_but_no_binary_is_refused_at_write_not_preview(
 ):
     detect(isolated_home, "claude")
 
-    preview = client_config.configure("claude", URL, False, dry_run=True)
+    preview = client_operations.configure("claude", URL, False, dry_run=True)
     assert preview["method"] == "cli"
     with pytest.raises(client_config.ClientNotConfigurable, match="binary"):
-        client_config.configure("claude", URL, False)
+        client_operations.configure("claude", URL, False)
 
 
 def test_claude_argv_built_correctly(isolated_home, monkeypatch):
@@ -1944,7 +1981,7 @@ def test_claude_argv_built_correctly(isolated_home, monkeypatch):
 
     monkeypatch.setattr(client_config, "run_cli_subprocess", fake_runner)
 
-    result = client_config.configure("claude", URL, True)
+    result = client_operations.configure("claude", URL, True)
 
     assert len(calls) == 1
     argv = calls[0]
@@ -1984,7 +2021,7 @@ def test_claude_different_entry_removes_before_adding(isolated_home, monkeypatch
 
     monkeypatch.setattr(client_config, "run_cli_subprocess", fake_runner)
 
-    result = client_config.configure("claude", URL, False)
+    result = client_operations.configure("claude", URL, False)
 
     assert result["action"] == "replace"
     assert calls[0][1:] == ["mcp", "remove", "--scope", "user", "marm-memory"]
@@ -2000,7 +2037,7 @@ def test_claude_cli_failure_is_a_refusal(isolated_home, monkeypatch):
     )
 
     with pytest.raises(client_config.ClientNotConfigurable, match="boom"):
-        client_config.configure("claude", URL, False)
+        client_operations.configure("claude", URL, False)
 
 
 # --- Key value never leaks -------------------------------------------------------------------
@@ -2008,7 +2045,7 @@ def test_claude_cli_failure_is_a_refusal(isolated_home, monkeypatch):
 
 def test_key_value_absent_from_files_and_responses(isolated_home):
     detect(isolated_home, "cursor")
-    result = client_config.configure("cursor", URL, True)
+    result = client_operations.configure("cursor", URL, True)
     path = isolated_home / ".cursor" / "mcp.json"
 
     assert SECRET not in json.dumps(result)
@@ -2016,7 +2053,7 @@ def test_key_value_absent_from_files_and_responses(isolated_home):
     assert "${env:MARM_API_KEY}" in path.read_text()
 
     with pytest.raises(client_config.ClientNotConfigurable) as excinfo:
-        client_config.configure("antigravity", URL, True)
+        client_operations.configure("antigravity", URL, True)
     assert SECRET not in str(excinfo.value)
 
 
@@ -2030,8 +2067,8 @@ def opencode_dir(home: Path) -> Path:
 def test_opencode_http_and_stdio_entries_use_its_native_shapes(isolated_home):
     detect(isolated_home, "opencode")
 
-    http = client_config.configure("opencode", URL, False, dry_run=True)
-    stdio = client_config.configure(
+    http = client_operations.configure("opencode", URL, False, dry_run=True)
+    stdio = client_operations.configure(
         "opencode", URL, False, transport="stdio", dry_run=True
     )
 
@@ -2043,14 +2080,14 @@ def test_opencode_http_and_stdio_entries_use_its_native_shapes(isolated_home):
 def test_opencode_keyed_http_is_one_click_and_never_writes_the_key(isolated_home):
     detect(isolated_home, "opencode")
 
-    result = client_config.configure("opencode", URL, True)
+    result = client_operations.configure("opencode", URL, True)
 
     text = (opencode_dir(isolated_home) / "opencode.json").read_text()
     assert result["verified"] is True
     assert result["entry"]["headers"] == {"Authorization": "Bearer {env:MARM_API_KEY}"}
     assert SECRET not in text
     agent = next(
-        a for a in client_config.list_agents(URL, True) if a["id"] == "opencode"
+        a for a in client_operations.list_agents(URL, True) if a["id"] == "opencode"
     )
     assert agent["unavailable"] == {}
 
@@ -2069,7 +2106,7 @@ def test_opencode_reads_a_jsonc_file_and_says_its_comments_are_not_kept(isolated
     )
     path.write_text(original)
 
-    result = client_config.configure("opencode", URL, False)
+    result = client_operations.configure("opencode", URL, False)
 
     data = json.loads(path.read_text())
     assert result["action"] == "add"
@@ -2085,7 +2122,7 @@ def test_opencode_plain_json_gets_no_comment_warning(isolated_home):
     path.parent.mkdir(parents=True)
     path.write_text(json.dumps({"mcp": {}}))
 
-    result = client_config.configure("opencode", URL, False)
+    result = client_operations.configure("opencode", URL, False)
 
     assert not any("comments" in note for note in result["notes"])
 
@@ -2106,9 +2143,9 @@ def test_opencode_writes_into_the_v2_servers_map_and_keeps_its_siblings(isolated
         )
     )
 
-    client_config.configure("opencode", URL, False)
+    client_operations.configure("opencode", URL, False)
     added = json.loads(path.read_text())["mcp"]
-    client_config.remove("opencode")
+    client_operations.remove("opencode")
     removed = json.loads(path.read_text())["mcp"]
 
     assert added["timeout"] == {"startup": 45000}
@@ -2127,9 +2164,9 @@ def test_opencode_v2_settings_without_a_servers_map_get_the_native_layout(
     path.parent.mkdir(parents=True)
     path.write_text(json.dumps({"mcp": {"timeout": {"startup": 45000}}}))
 
-    client_config.configure("opencode", URL, False)
+    client_operations.configure("opencode", URL, False)
     added = json.loads(path.read_text())["mcp"]
-    client_config.remove("opencode")
+    client_operations.remove("opencode")
     removed = json.loads(path.read_text())["mcp"]
 
     assert added["timeout"] == {"startup": 45000}
@@ -2144,7 +2181,7 @@ def test_opencode_server_named_timeout_stays_in_the_v1_layout(isolated_home):
     other = {"type": "remote", "url": "https://t.test/mcp"}
     path.write_text(json.dumps({"mcp": {"timeout": other}}))
 
-    client_config.configure("opencode", URL, False)
+    client_operations.configure("opencode", URL, False)
 
     mcp = json.loads(path.read_text())["mcp"]
     assert mcp["timeout"] == other
@@ -2157,7 +2194,7 @@ def test_opencode_project_scope_uses_an_existing_jsonc_file(isolated_home):
     project.mkdir()
     (project / "opencode.jsonc").write_text('{\n  // mine\n  "theme": "x",\n}\n')
 
-    result = client_config.configure(
+    result = client_operations.configure(
         "opencode", URL, False, scope="project", project=str(project)
     )
 
@@ -2166,7 +2203,7 @@ def test_opencode_project_scope_uses_an_existing_jsonc_file(isolated_home):
     data = json.loads((project / "opencode.jsonc").read_text())
     assert data["theme"] == "x" and data["mcp"]["marm-memory"]["url"] == URL
     assert (
-        client_config.status("opencode", "project", str(project), URL)["state"]
+        client_operations.status("opencode", "project", str(project), URL)["state"]
         == "configured"
     )
 
@@ -2177,21 +2214,21 @@ def test_opencode_v1_layout_keeps_other_servers_on_add_and_remove(isolated_home)
     other = {"type": "local", "command": ["npx", "-y", "x"], "enabled": True}
     path.write_text(json.dumps({"$schema": "s", "mcp": {"x": other}}))
 
-    client_config.configure("opencode", URL, False, transport="stdio")
-    client_config.remove("opencode")
+    client_operations.configure("opencode", URL, False, transport="stdio")
+    client_operations.remove("opencode")
 
     assert json.loads(path.read_text()) == {"$schema": "s", "mcp": {"x": other}}
 
 
 def test_opencode_command_list_reads_back_as_the_flat_shape(isolated_home):
     detect(isolated_home, "opencode")
-    client_config.configure("opencode", URL, False, transport="stdio")
+    client_operations.configure("opencode", URL, False, transport="stdio")
 
-    state = client_config.status("opencode", url=URL)
+    state = client_operations.status("opencode", url=URL)
 
     assert state["state"] == "configured"
     assert state["transport_detected"] == "stdio"
-    assert client_config.read_entry("opencode") == {
+    assert client_operations.read_entry("opencode") == {
         "type": "local",
         "command": "marm-mcp-stdio",
         "args": [],
@@ -2200,11 +2237,11 @@ def test_opencode_command_list_reads_back_as_the_flat_shape(isolated_home):
 
 def test_opencode_docker_command_list_is_detected_as_docker_stdio(isolated_home):
     detect(isolated_home, "opencode")
-    client_config.configure(
+    client_operations.configure(
         "opencode", URL, False, transport="docker-stdio", docker_data_dir=isolated_home
     )
 
-    state = client_config.status("opencode", url=URL)
+    state = client_operations.status("opencode", url=URL)
 
     assert state["transport_detected"] == "docker-stdio"
     assert state["state"] == "configured"
@@ -2217,8 +2254,8 @@ def test_opencode_entry_without_oauth_off_is_replaced(isolated_home):
         json.dumps({"mcp": {"marm-memory": {"type": "remote", "url": URL}}})
     )
 
-    assert client_config.status("opencode", url=URL)["state"] == "different"
-    result = client_config.configure("opencode", URL, False)
+    assert client_operations.status("opencode", url=URL)["state"] == "different"
+    result = client_operations.configure("opencode", URL, False)
 
     assert result["action"] == "replace"
     assert json.loads(path.read_text())["mcp"]["marm-memory"]["oauth"] is False
@@ -2236,7 +2273,7 @@ def test_opencode_entry_with_extra_user_keys_counts_as_configured(isolated_home)
     }
     path.write_text(json.dumps({"mcp": {"marm-memory": entry}}))
 
-    assert client_config.configure("opencode", URL, False)["action"] == "none"
+    assert client_operations.configure("opencode", URL, False)["action"] == "none"
     assert json.loads(path.read_text())["mcp"]["marm-memory"] == entry
 
 
@@ -2244,14 +2281,14 @@ def test_opencode_prefers_an_existing_jsonc_then_json_then_defaults_to_json(
     isolated_home,
 ):
     base = opencode_dir(isolated_home)
-    assert client_config._opencode_path() == base / "opencode.json"
+    assert client_paths._opencode_path() == base / "opencode.json"
 
     base.mkdir(parents=True)
     (base / "opencode.json").write_text("{}")
-    assert client_config._opencode_path() == base / "opencode.json"
+    assert client_paths._opencode_path() == base / "opencode.json"
 
     (base / "opencode.jsonc").write_text("{}")
-    assert client_config._opencode_path() == base / "opencode.jsonc"
+    assert client_paths._opencode_path() == base / "opencode.jsonc"
 
 
 def test_opencode_xdg_config_home_moves_the_file_and_detection(
@@ -2261,13 +2298,13 @@ def test_opencode_xdg_config_home_moves_the_file_and_detection(
     monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
     (xdg / "opencode").mkdir(parents=True)
 
-    result = client_config.configure("opencode", URL, False)
+    result = client_operations.configure("opencode", URL, False)
 
     assert Path(result["config_path"]) == xdg / "opencode" / "opencode.json"
     assert (xdg / "opencode" / "opencode.json").is_file()
     assert not opencode_dir(isolated_home).exists()
     monkeypatch.setenv("XDG_CONFIG_HOME", "   ")
-    assert client_config.opencode_home() == opencode_dir(isolated_home)
+    assert client_paths.opencode_home() == opencode_dir(isolated_home)
 
 
 @pytest.mark.parametrize("text", ['{"mcp": []}', '{"mcp": 3}', '{"mcp": "x"}'])
@@ -2277,7 +2314,7 @@ def test_opencode_unexpected_mcp_shape_is_refused_and_untouched(isolated_home, t
     path.write_text(text)
 
     with pytest.raises(client_config.ClientNotConfigurable):
-        client_config.configure("opencode", URL, False)
+        client_operations.configure("opencode", URL, False)
 
     assert path.read_text() == text
     assert not (path.parent / "opencode.json.marm-backup").exists()
@@ -2287,7 +2324,7 @@ def test_opencode_project_scope_writes_opencode_json_in_the_project(isolated_hom
     project = isolated_home / "repo"
     project.mkdir()
 
-    result = client_config.configure(
+    result = client_operations.configure(
         "opencode", URL, False, scope="project", project=str(project)
     )
 
@@ -2316,14 +2353,16 @@ def devin_file(home: Path) -> Path:
 def test_devin_writes_url_for_http_and_plain_command_and_args_for_stdio(isolated_home):
     detect(isolated_home, "devin")
 
-    http = client_config.configure("devin", URL, False)
-    stdio = client_config.configure("devin", URL, False, transport="stdio")
+    http = client_operations.configure("devin", URL, False)
+    stdio = client_operations.configure("devin", URL, False, transport="stdio")
 
     assert http["entry"] == {"url": URL}
     assert stdio["entry"] == {"command": "marm-mcp-stdio", "args": []}
     data = json.loads(devin_file(isolated_home).read_text())
     assert data["mcpServers"]["marm-memory"] == stdio["entry"]
-    agent = next(a for a in client_config.list_agents(URL, False) if a["id"] == "devin")
+    agent = next(
+        a for a in client_operations.list_agents(URL, False) if a["id"] == "devin"
+    )
     assert any("Devin Desktop" in note for note in agent["notes"])
 
 
@@ -2331,11 +2370,13 @@ def test_devin_keyed_http_is_manual_and_suggests_stdio(isolated_home):
     detect(isolated_home, "devin")
 
     with pytest.raises(client_config.ClientNotConfigurable, match="STDIO"):
-        client_config.configure("devin", URL, True)
-    stdio = client_config.configure("devin", URL, True, transport="stdio")
+        client_operations.configure("devin", URL, True)
+    stdio = client_operations.configure("devin", URL, True, transport="stdio")
 
     assert stdio["verified"] is True
-    agent = next(a for a in client_config.list_agents(URL, True) if a["id"] == "devin")
+    agent = next(
+        a for a in client_operations.list_agents(URL, True) if a["id"] == "devin"
+    )
     assert "Devin expands" in agent["unavailable"]["http"]
     assert not any("MARM_API_KEY" in note for note in agent["notes"])
 
@@ -2346,8 +2387,8 @@ def test_devin_keeps_other_servers_and_top_level_keys(isolated_home):
     other = {"url": "https://mcp.notion.com/mcp", "transport": "http"}
     path.write_text(json.dumps({"other": 1, "mcpServers": {"notion": other}}))
 
-    client_config.configure("devin", URL, False)
-    client_config.remove("devin")
+    client_operations.configure("devin", URL, False)
+    client_operations.remove("devin")
 
     assert json.loads(path.read_text()) == {"other": 1, "mcpServers": {"notion": other}}
 
@@ -2357,8 +2398,8 @@ def test_devin_old_serverurl_entry_is_replaced_with_url(isolated_home):
     path.parent.mkdir(parents=True)
     path.write_text(json.dumps({"mcpServers": {"marm-memory": {"serverUrl": URL}}}))
 
-    assert client_config.status("devin", url=URL)["state"] == "different"
-    result = client_config.configure("devin", URL, False)
+    assert client_operations.status("devin", url=URL)["state"] == "different"
+    result = client_operations.configure("devin", URL, False)
 
     assert result["action"] == "replace"
     assert json.loads(path.read_text())["mcpServers"]["marm-memory"] == {"url": URL}
@@ -2369,14 +2410,14 @@ def test_devin_never_uses_the_old_codeium_windsurf_file(isolated_home):
     codeium.parent.mkdir(parents=True)
     codeium.write_text(json.dumps({"mcpServers": {"marm-memory": {"serverUrl": URL}}}))
 
-    state = client_config.status("devin")
+    state = client_operations.status("devin")
 
     assert state["config_path"] == str(devin_file(isolated_home))
     assert state["state"] == "missing"
     assert (
-        client_config.list_agents(URL, False)[client_config.CLIENT_IDS.index("devin")][
-            "detected"
-        ]
+        client_operations.list_agents(URL, False)[
+            client_config.CLIENT_IDS.index("devin")
+        ]["detected"]
         is False
     )
 
@@ -2392,10 +2433,12 @@ def test_devin_never_uses_the_old_codeium_windsurf_file(isolated_home):
 def test_devin_is_detected_from_the_desktop_data_folder(
     isolated_home, monkeypatch, platform, marker
 ):
-    monkeypatch.setattr(client_config, "_platform", lambda: platform)
+    monkeypatch.setattr(client_paths, "_platform", lambda: platform)
     (isolated_home / marker).mkdir(parents=True)
 
-    agent = next(a for a in client_config.list_agents(URL, False) if a["id"] == "devin")
+    agent = next(
+        a for a in client_operations.list_agents(URL, False) if a["id"] == "devin"
+    )
 
     assert agent["detected"] is True
 
@@ -2407,19 +2450,19 @@ def test_devin_connect_leaves_an_old_codeium_windsurf_file_untouched(isolated_ho
     before = codeium.read_bytes()
     detect(isolated_home, "devin")
 
-    client_config.configure("devin", URL, False)
+    client_operations.configure("devin", URL, False)
 
     assert codeium.read_bytes() == before
     assert not codeium.with_name(codeium.name + ".marm-backup").exists()
 
 
 def test_devin_path_on_posix_is_the_xdg_style_config_folder(isolated_home, monkeypatch):
-    monkeypatch.setattr(client_config, "_platform", lambda: "linux")
+    monkeypatch.setattr(client_paths, "_platform", lambda: "linux")
 
-    assert client_config.status("devin")["config_path"] == str(
+    assert client_operations.status("devin")["config_path"] == str(
         isolated_home / ".config" / "devin" / "mcp_config.json"
     )
-    assert client_config.devin_home() == isolated_home / ".config" / "devin"
+    assert client_paths.devin_home() == isolated_home / ".config" / "devin"
 
 
 def test_devin_xdg_config_home_moves_the_file_detection_and_skill(
@@ -2427,39 +2470,39 @@ def test_devin_xdg_config_home_moves_the_file_detection_and_skill(
 ):
     from marm_mcp_server.services import skill_install
 
-    monkeypatch.setattr(client_config, "_platform", lambda: "linux")
+    monkeypatch.setattr(client_paths, "_platform", lambda: "linux")
     xdg = isolated_home / "xdg"
     (xdg / "devin").mkdir(parents=True)
     monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
 
-    result = client_config.configure("devin", URL, False)
+    result = client_operations.configure("devin", URL, False)
     skill = skill_install.install_for_agent("devin")
 
     assert Path(result["config_path"]) == xdg / "devin" / "mcp_config.json"
     assert skill["target"] == str(xdg / "devin" / "skills" / "marm-init" / "SKILL.md")
     assert not (isolated_home / ".config" / "devin").exists()
     monkeypatch.setenv("XDG_CONFIG_HOME", "   ")
-    assert client_config.devin_home() == isolated_home / ".config" / "devin"
+    assert client_paths.devin_home() == isolated_home / ".config" / "devin"
 
 
 def test_devin_windows_ignores_xdg_config_home(isolated_home, monkeypatch):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(isolated_home / "xdg"))
 
-    assert client_config.devin_home() == isolated_home / "AppData" / "Roaming" / "devin"
+    assert client_paths.devin_home() == isolated_home / "AppData" / "Roaming" / "devin"
 
 
 def test_devin_only_supports_the_user_scope_and_windsurf_is_an_alias(isolated_home):
     with pytest.raises(client_config.InvalidRequest, match="user scope only"):
-        client_config.configure(
+        client_operations.configure(
             "devin", URL, False, scope="project", project=str(isolated_home)
         )
     detect(isolated_home, "devin")
 
-    result = client_config.configure("windsurf", URL, False)
+    result = client_operations.configure("windsurf", URL, False)
 
     assert result["client"] == "devin"
     assert "windsurf" not in client_config.CLIENT_IDS
-    assert client_config.status("windsurf")["state"] == "configured"
+    assert client_operations.status("windsurf")["state"] == "configured"
 
 
 def test_devin_skill_lands_in_the_devin_config_skills_folder(isolated_home):
@@ -2507,7 +2550,7 @@ def jsonc_doc(text: str) -> dict:
 def test_zed_creates_plain_settings_with_context_servers(isolated_home):
     detect(isolated_home, "zed")
 
-    result = client_config.configure("zed", URL, False)
+    result = client_operations.configure("zed", URL, False)
 
     assert result["action"] == "create"
     assert json.loads(get_text(zed_file(isolated_home))) == {
@@ -2519,14 +2562,14 @@ def test_zed_adding_and_removing_keeps_every_comment_and_setting(isolated_home):
     path = zed_file(isolated_home)
     put_text(path, ZED_HEADER)
 
-    added = client_config.configure("zed", URL, False)
+    added = client_operations.configure("zed", URL, False)
     after_add = get_text(path)
-    removed = client_config.remove("zed")
+    removed = client_operations.remove("zed")
     after_remove = get_text(path)
 
     assert added["action"] == "add" and added["verified"] is True
     assert removed["verified"] is True
-    assert client_config.status("zed")["state"] == "missing"
+    assert client_operations.status("zed")["state"] == "missing"
     assert get_text(client_config._backup_path(path)) == after_add
     for text in (after_add, after_remove):
         assert set(ZED_HEADER.splitlines()) <= set(text.splitlines())
@@ -2557,9 +2600,9 @@ def test_zed_every_layout_stays_valid_and_only_marms_entry_moves(
     put_text(path, original)
     before = jsonc_doc(original)
 
-    client_config.configure("zed", URL, False)
+    client_operations.configure("zed", URL, False)
     after_add = get_text(path)
-    client_config.remove("zed")
+    client_operations.remove("zed")
     after_remove = get_text(path)
 
     servers = dict(before.get("context_servers") or {})
@@ -2583,8 +2626,8 @@ def test_zed_differing_entry_is_replaced_in_place_with_neighbours_kept(isolated_
         '{\n  "context_servers": {\n    // mine\n    "marm-memory": {"url": "http://127.0.0.1:9/mcp"},\n    "other": {"command": "x"}\n  }\n}\n',
     )
 
-    assert client_config.status("zed", url=URL)["state"] == "different"
-    result = client_config.configure("zed", URL, False)
+    assert client_operations.status("zed", url=URL)["state"] == "different"
+    result = client_operations.configure("zed", URL, False)
 
     text = get_text(path)
     assert result["action"] == "replace" and result["verified"] is True
@@ -2614,7 +2657,7 @@ def test_zed_unreadable_or_unexpected_settings_are_refused_and_untouched(
     put_text(path, text)
 
     with pytest.raises(client_config.ClientNotConfigurable):
-        client_config.configure("zed", URL, False)
+        client_operations.configure("zed", URL, False)
 
     assert get_text(path) == text
     assert not client_config._backup_path(path).exists()
@@ -2637,7 +2680,7 @@ def test_zed_restores_the_file_when_the_edit_would_change_anything_else(
     )
 
     with pytest.raises(client_config.ClientNotConfigurable, match="left as it was"):
-        client_config.configure("zed", URL, False)
+        client_operations.configure("zed", URL, False)
 
     assert get_text(path) == original
 
@@ -2649,7 +2692,7 @@ def test_zed_removes_a_file_it_created_when_the_entry_does_not_land(
     monkeypatch.setattr(client_config, "_jsonc_put", lambda text, key, entry: "{}")
 
     with pytest.raises(client_config.ClientNotConfigurable, match="left as it was"):
-        client_config.configure("zed", URL, False)
+        client_operations.configure("zed", URL, False)
 
     assert not zed_file(isolated_home).exists()
 
@@ -2658,11 +2701,13 @@ def test_zed_keyed_http_is_manual_and_suggests_stdio(isolated_home):
     detect(isolated_home, "zed")
 
     with pytest.raises(client_config.ClientNotConfigurable, match="STDIO"):
-        client_config.configure("zed", URL, True)
-    stdio = client_config.configure("zed", URL, True, transport="stdio")
+        client_operations.configure("zed", URL, True)
+    stdio = client_operations.configure("zed", URL, True, transport="stdio")
 
     assert stdio["verified"] is True
-    agent = next(a for a in client_config.list_agents(URL, True) if a["id"] == "zed")
+    agent = next(
+        a for a in client_operations.list_agents(URL, True) if a["id"] == "zed"
+    )
     assert "Zed expands" in agent["unavailable"]["http"]
     assert any("Settings, AI, MCP Servers" in note for note in agent["notes"])
     assert not any("MARM_API_KEY" in note for note in agent["notes"])
@@ -2670,7 +2715,7 @@ def test_zed_keyed_http_is_manual_and_suggests_stdio(isolated_home):
 
 def test_zed_only_supports_the_user_scope(isolated_home):
     with pytest.raises(client_config.InvalidRequest, match="user scope only"):
-        client_config.configure(
+        client_operations.configure(
             "zed", URL, False, scope="project", project=str(isolated_home)
         )
 
@@ -2684,31 +2729,37 @@ def test_zed_only_supports_the_user_scope(isolated_home):
     ],
 )
 def test_zed_settings_path_per_platform(isolated_home, monkeypatch, platform, expected):
-    monkeypatch.setattr(client_config, "_platform", lambda: platform)
+    monkeypatch.setattr(client_paths, "_platform", lambda: platform)
 
-    assert client_config.status("zed")["config_path"] == str(isolated_home / expected)
+    assert client_operations.status("zed")["config_path"] == str(
+        isolated_home / expected
+    )
 
 
 def test_zed_xdg_config_home_moves_the_file_on_linux_only(isolated_home, monkeypatch):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(isolated_home / "xdg"))
-    monkeypatch.setattr(client_config, "_platform", lambda: "linux")
-    assert client_config.zed_home() == isolated_home / "xdg" / "zed"
+    monkeypatch.setattr(client_paths, "_platform", lambda: "linux")
+    assert client_paths.zed_home() == isolated_home / "xdg" / "zed"
 
     monkeypatch.setenv("XDG_CONFIG_HOME", "  ")
-    assert client_config.zed_home() == isolated_home / ".config" / "zed"
+    assert client_paths.zed_home() == isolated_home / ".config" / "zed"
 
     monkeypatch.setenv("XDG_CONFIG_HOME", str(isolated_home / "xdg"))
-    monkeypatch.setattr(client_config, "_platform", lambda: "darwin")
-    assert client_config.zed_home() == isolated_home / ".config" / "zed"
+    monkeypatch.setattr(client_paths, "_platform", lambda: "darwin")
+    assert client_paths.zed_home() == isolated_home / ".config" / "zed"
 
 
 def test_zed_is_detected_from_its_settings_folder(isolated_home):
-    agent = next(a for a in client_config.list_agents(URL, False) if a["id"] == "zed")
+    agent = next(
+        a for a in client_operations.list_agents(URL, False) if a["id"] == "zed"
+    )
     assert agent["detected"] is False
 
     detect(isolated_home, "zed")
 
-    agent = next(a for a in client_config.list_agents(URL, False) if a["id"] == "zed")
+    agent = next(
+        a for a in client_operations.list_agents(URL, False) if a["id"] == "zed"
+    )
     assert agent["detected"] is True and agent["scopes"] == ["user"]
 
 

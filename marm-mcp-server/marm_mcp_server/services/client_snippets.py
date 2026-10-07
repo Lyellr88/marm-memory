@@ -13,7 +13,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from . import client_config, docker_commands
+from . import client_config, client_paths, docker_commands
 from .client_config import (
     REGISTRY,
     SCOPES,
@@ -23,6 +23,7 @@ from .client_config import (
     ClientSpec,
     InvalidRequest,
 )
+from .client_text_edit import _yaml_block
 
 OS_NAMES = ("windows", "macos", "linux")
 
@@ -106,7 +107,7 @@ def _user_path(spec: ClientSpec, os_name: str) -> str:
         return path
     host = spec.user_path()
     assert host is not None
-    relative = host.relative_to(client_config._home())
+    relative = host.relative_to(client_paths._home())
     return _sep(os_name, "/".join(("~", *relative.parts)))
 
 
@@ -187,7 +188,7 @@ def _toml_text(entry: dict[str, Any]) -> str:
 
 
 def _yaml_text(entry: dict[str, Any]) -> str:
-    return "\n".join(["mcp_servers:", *client_config._yaml_block(entry, 2)]) + "\n"
+    return "\n".join(["mcp_servers:", *_yaml_block(entry, 2)]) + "\n"
 
 
 def _json_text(

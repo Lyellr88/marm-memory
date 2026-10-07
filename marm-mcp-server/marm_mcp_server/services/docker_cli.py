@@ -136,10 +136,10 @@ def dispatch_docker(args: argparse.Namespace, *, print_payload: Callable) -> int
         plan = docker_commands.stdio_command(tag=args.tag, data_dir=args.data_dir)
         print(docker_commands.shell_command(plan["arguments"]))
         if args.client:
-            from . import client_config
+            from . import client_config, client_operations
 
             try:
-                result = client_config.configure(
+                result = client_operations.configure(
                     args.client,
                     "",
                     False,

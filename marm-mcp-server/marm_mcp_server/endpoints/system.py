@@ -1,16 +1,13 @@
 import asyncio
 import logging
 import os
-import sqlite3
 import threading
 import uuid
-from collections import deque
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from ..config import settings
 from ..config.settings import (
@@ -25,9 +22,27 @@ from ..core.memory import memory
 from ..core.rate_limiter import rate_limiter
 from ..core.shutdown_manager import shutdown_manager
 from ..services import hardware, local_llm, model_discovery
-from ..services.analyst import profile as analyst_profile
 from ..services.documentation import reload_marm_documentation
+from ..services.runtime_jobs import (
+    _dry_run_jobs,
+    _dry_run_jobs_lock,
+    _finish_job,
+    _now_iso,
+    _prune_dry_run_jobs,
+    _public_job,
+    _run_compaction_dry_run_job,
+    _update_job,
+)
+from ..services.runtime_llm import (
+    RuntimeLlmRequest,
+    RuntimeLlmRootRequest,
+    _llm_status,
+    _served_id_for,
+    apply_llm_update,
+    update_llm_roots,
+)
 from ..services.runtime_status import knowledge_status, maintenance_status
+from .system_ops import router as ops_router
 
 logger = logging.getLogger(__name__)
 
@@ -42,33 +57,6 @@ class RuntimeAutomationRequest(BaseModel):
 class RuntimeProfileRequest(BaseModel):
     profile: Literal["standard", "swarm", "swarm-max", "trusted"]
     rate_limit_rpm: int | None = None
-
-
-class RuntimeLlmRequest(BaseModel):
-    """A change to the optional local generative model.
-
-    Both fields are optional and only what is sent is applied, so the toggle
-    and the model picker do not each have to know the other's current value to
-    avoid clobbering it.
-    """
-
-    enabled: bool | None = None
-    #: An empty string clears the preference and returns to whatever is served.
-    model: str | None = Field(default=None, max_length=512)
-    #: An empty string clears the override and returns to MARM_LLM_URL.
-    endpoint: str | None = Field(default=None, max_length=512)
-    #: The analyst profile. An empty string returns to MARM_ANALYST_PROFILE.
-    profile: Literal["", "general", "small", "large"] | None = None
-    #: Whether Automated Guardrails may apply unattended; saved, so it beats
-    #: MARM_ANALYST_AUTO_APPLY. An empty string returns to the environment.
-    auto_apply: bool | Literal[""] | None = None
-
-
-class RuntimeLlmRootRequest(BaseModel):
-    """Add or remove a directory that Browse and discovery may look inside."""
-
-    path: str = Field(min_length=1, max_length=4096)
-    remove: bool = False
 
 
 def _model_state() -> str:
@@ -239,26 +227,6 @@ async def runtime_settings() -> dict:
     }
 
 
-def _llm_status() -> dict:
-    """Generation status, with the saved switch folded in."""
-    status = local_llm.status()
-    status["source"] = runtime_flags.source(runtime_flags.LLM_ENABLED)
-    name, source = analyst_profile.selected_name()
-    status["analyst_profile"] = {
-        "name": name,
-        "source": source,
-        "profiles": {key: p.to_public() for key, p in analyst_profile.PROFILES.items()},
-        "active": analyst_profile.resolve(name).to_public(),
-    }
-    from ..services.analyst import review
-
-    status["analyst_auto_apply"] = {
-        "enabled": review.auto_apply_allowed(),
-        "source": runtime_flags.source(runtime_flags.ANALYST_AUTO_APPLY),
-    }
-    return status
-
-
 @router.get("/internal/runtime/llm/models", include_in_schema=False)
 async def runtime_llm_models(refresh: bool = False) -> dict:
     """What is served now, and what else is on disk.
@@ -291,40 +259,6 @@ async def runtime_llm_models(refresh: bool = False) -> dict:
     }
 
 
-def _served_id_for(model: dict, served: list[dict]) -> str | None:
-    """The id a runtime would accept for this on-disk model, if any.
-
-    Clicking a row in the installed list should select that model, and this is
-    what decides whether it CAN be selected. A file on disk is only loadable by
-    name if the runtime already knows about it -- Ollama loads any pulled tag
-    on demand, LM Studio JIT-loads anything it has registered -- so a disk-only
-    model that the runtime has never seen is not selectable however switchable
-    the runtime is in general.
-
-    Matched three ways because the two sides name the same model differently:
-    Ollama's `llama3.2:8b` is exactly its manifest name, while LM Studio serves
-    `publisher/repo` for a file discovery reports as
-    `publisher/repo/weights.gguf`. Matching on path first is the most reliable
-    where the runtime reports one at all.
-    """
-    path = str(model.get("path") or "")
-    name = str(model.get("name") or "")
-    stem = name.rsplit("/", 1)[-1]
-    for entry in served:
-        served_id = entry.get("id")
-        if not served_id:
-            continue
-        served_path = entry.get("path")
-        if served_path and path and str(served_path) == path:
-            return str(served_id)
-        if served_id == name or served_id == stem:
-            return str(served_id)
-        # `publisher/repo` against `publisher/repo/file.gguf`.
-        if name.startswith(f"{served_id}/"):
-            return str(served_id)
-    return None
-
-
 @router.get("/internal/runtime/llm/servers", include_in_schema=False)
 async def runtime_llm_servers(refresh: bool = False) -> dict:
     """Every local OpenAI-compatible server this machine is running.
@@ -347,118 +281,13 @@ async def runtime_llm_browse(path: str | None = None) -> dict:
 @router.put("/internal/runtime/settings/llm", include_in_schema=False)
 async def update_runtime_llm(req: RuntimeLlmRequest) -> dict:
     """Turn generation on or off, and choose which served model answers."""
-    if req.enabled is not None:
-        runtime_flags.set_bool(runtime_flags.LLM_ENABLED, req.enabled)
-    if req.profile is not None:
-        # Chosen by the operator, never derived from the model being served.
-        if req.profile:
-            runtime_flags.set_(runtime_flags.ANALYST_PROFILE, req.profile)
-        else:
-            runtime_flags.clear(runtime_flags.ANALYST_PROFILE)
-    if req.auto_apply == "":
-        runtime_flags.clear(runtime_flags.ANALYST_AUTO_APPLY)
-    elif req.auto_apply is not None:
-        runtime_flags.set_bool(runtime_flags.ANALYST_AUTO_APPLY, req.auto_apply)
-
-    applied_model: str | None = None
-    rejected: str | None = None
-
-    if req.endpoint is not None:
-        chosen = req.endpoint.strip().rstrip("/")
-        if not chosen:
-            runtime_flags.clear(runtime_flags.LLM_ENDPOINT)
-        elif local_llm._host(chosen) is None:
-            rejected = f"{chosen} is not a valid URL: it has no host to connect to."
-        elif not local_llm._is_loopback(chosen) and not local_llm.ALLOW_REMOTE:
-            # Refused here as well as in `endpoint()`, so the Console gets a
-            # reason rather than silently saving a value that will be ignored.
-            # `ALLOW_REMOTE` has to be honoured for that to be true: `endpoint()`
-            # accepts a non-loopback URL once the operator has stated the
-            # override in full, and without this clause the Console refused to
-            # save the very endpoint the server would then have used.
-            rejected = (
-                f"{chosen} is not a loopback address. MARM only talks to a model "
-                "on this machine."
-            )
-        elif local_llm._is_marm_itself(chosen):
-            rejected = f"{chosen} is MARM's own port. Point it at the model server."
-        else:
-            runtime_flags.set_(runtime_flags.LLM_ENDPOINT, chosen)
-            # A different server serves different models, so a model chosen for
-            # the old one is meaningless against the new one.
-            runtime_flags.clear(runtime_flags.LLM_MODEL)
-        local_llm.invalidate_settings_cache()
-        local_llm.invalidate_servers_cache()
-    if req.model is not None:
-        chosen = req.model.strip()
-        if not chosen:
-            runtime_flags.clear(runtime_flags.LLM_MODEL)
-        else:
-            info = await asyncio.to_thread(local_llm.runtime_info, force=True)
-            if not info.get("can_switch"):
-                # Refusing rather than saving a preference that cannot take
-                # effect. A stored choice the runtime ignores is exactly the
-                # silent no-op this whole feature exists to avoid.
-                rejected = info.get("reason") or (
-                    "This runtime does not support selecting a model."
-                )
-            else:
-                served = {
-                    str(entry.get("id"))
-                    for entry in (info.get("served") or [])
-                    if entry.get("id")
-                }
-                if served and chosen not in served:
-                    rejected = (
-                        f"{chosen!r} is not served by {info.get('runtime')}. "
-                        "Load it in that runtime first."
-                    )
-                else:
-                    runtime_flags.set_(runtime_flags.LLM_MODEL, chosen)
-                    applied_model = chosen
-
-    local_llm.invalidate_settings_cache()
-    status = await asyncio.to_thread(_llm_status)
-    if rejected:
-        status["rejected"] = rejected
-    if applied_model:
-        status["applied_model"] = applied_model
-    return {"status": "success", "llm": status}
+    return await apply_llm_update(req, _llm_status)
 
 
 @router.post("/internal/runtime/settings/llm/roots", include_in_schema=False)
 async def update_runtime_llm_roots(req: RuntimeLlmRootRequest) -> dict:
     """Add or remove a directory that discovery and Browse may look inside."""
-    target = Path(req.path).expanduser()
-    saved = runtime_flags.get(runtime_flags.LLM_MODEL_ROOTS) or ""
-    roots = [r for r in saved.split(os.pathsep) if r]
-
-    if req.remove:
-        roots = [r for r in roots if r != str(target)]
-    else:
-        if model_discovery.too_broad(target):
-            raise HTTPException(
-                status_code=422,
-                detail=f"{target} is too broad to be a model directory.",
-            )
-        if not target.is_dir():
-            raise HTTPException(
-                status_code=422, detail=f"{target} is not a directory MARM can see."
-            )
-        if str(target) not in roots:
-            roots.append(str(target))
-
-    runtime_flags.set_(runtime_flags.LLM_MODEL_ROOTS, os.pathsep.join(roots))
-    # The scan caches a resolved root list, so it has to be told.
-    model_discovery.invalidate()
-    # Named `configured_roots` because `discover()` also returns `roots` -- the
-    # full candidate list with an `exists` flag -- and spreading it over a key
-    # of the same name silently changed the shape depending on ordering.
-    return {
-        "status": "success",
-        "configured_roots": roots,
-        **(await asyncio.to_thread(model_discovery.discover, force=True)),
-    }
+    return await update_llm_roots(req)
 
 
 @router.put("/internal/runtime/settings/automation", include_in_schema=False)
@@ -576,71 +405,7 @@ async def runtime_maintenance() -> dict:
     }
 
 
-_dry_run_jobs: dict[str, dict] = {}
-_dry_run_jobs_lock = threading.Lock()
-_DRY_RUN_JOB_TTL_SECONDS = 3600
 _reload_docs_tasks: set[asyncio.Task] = set()
-
-
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
-
-
-def _prune_dry_run_jobs() -> None:
-    cutoff = datetime.now(timezone.utc).timestamp() - _DRY_RUN_JOB_TTL_SECONDS
-    with _dry_run_jobs_lock:
-        for job_id, job in list(_dry_run_jobs.items()):
-            finished_at = job.get("_finished_timestamp")
-            if finished_at is not None and finished_at < cutoff:
-                _dry_run_jobs.pop(job_id, None)
-
-
-def _public_job(job: dict) -> dict:
-    return {key: value for key, value in job.items() if not key.startswith("_")}
-
-
-def _update_job(job_id: str, **fields: Any) -> None:
-    """Workers run off the event loop, so every mutation takes the same lock as reads."""
-    with _dry_run_jobs_lock:
-        job = _dry_run_jobs.get(job_id)
-        if job is not None:
-            job.update(fields)
-
-
-def _finish_job(job_id: str, **fields: Any) -> None:
-    _update_job(
-        job_id,
-        **fields,
-        finished_at=_now_iso(),
-        _finished_timestamp=datetime.now(timezone.utc).timestamp(),
-    )
-
-
-def _run_compaction_dry_run_job(job_id: str, session_name: str) -> None:
-    from ..cli import DEFAULT_DB_PATH, _ReadOnlyMemory
-    from ..core.compaction import run_compaction_dry_run
-
-    with _dry_run_jobs_lock:
-        if job_id not in _dry_run_jobs:
-            return
-    _update_job(job_id, status="running", started_at=_now_iso())
-    outcome: dict[str, Any]
-    try:
-        if not Path(DEFAULT_DB_PATH).exists():
-            outcome = {"status": "success", "candidates": [], "report_path": None}
-        else:
-            result = run_compaction_dry_run(
-                _ReadOnlyMemory(DEFAULT_DB_PATH), session_name
-            )
-            outcome = {
-                "status": "success",
-                "candidates": result.get("candidates", []),
-                "report_path": result.get("report_path"),
-            }
-    except Exception as exc:
-        logger.error("Compaction dry run failed", exc_info=True)
-        outcome = {"status": "error", "error": str(exc)}
-    _finish_job(job_id, **outcome)
 
 
 async def _run_reload_docs_job(job_id: str) -> None:
@@ -756,31 +521,6 @@ async def runtime_compaction_dry_run_status(job_id: str) -> dict:
         return _public_job(job)
 
 
-@router.get("/internal/runtime/doctor", include_in_schema=False)
-async def runtime_doctor() -> dict:
-    from ..services.runtime_status import doctor_status
-
-    return {"status": "success", **doctor_status()}
-
-
-@router.get("/internal/runtime/logs", include_in_schema=False)
-async def runtime_logs(lines: int = 200) -> dict:
-    from ..core.runtime_manager import log_path
-
-    capped = max(1, min(lines, 2000))
-    path = log_path()
-    if not path.exists():
-        return {"status": "success", "path": str(path), "lines": [], "exists": False}
-    with path.open("r", encoding="utf-8", errors="replace") as handle:
-        tail = deque(handle, maxlen=capped)
-    return {
-        "status": "success",
-        "path": str(path),
-        "exists": True,
-        "lines": [line.rstrip("\n") for line in tail],
-    }
-
-
 @router.get("/internal/runtime/upgrade/check", include_in_schema=False)
 async def runtime_upgrade_check() -> dict:
     from ..services.package_management import (
@@ -806,39 +546,4 @@ async def runtime_upgrade_check() -> dict:
     }
 
 
-@router.get("/internal/runtime/backups", include_in_schema=False)
-async def runtime_backups() -> dict:
-    from ..services import backup
-
-    return {
-        "status": "success",
-        "directory": str(backup.backup_dir()),
-        "items": backup.list_backups(),
-    }
-
-
-@router.post("/internal/runtime/backups", include_in_schema=False)
-async def runtime_create_backup() -> dict:
-    from ..services import backup
-
-    try:
-        created = await asyncio.to_thread(backup.create_backup)
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except sqlite3.Error as exc:
-        logger.error("Snapshot failed", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-    return {"status": "success", "backup": created}
-
-
-@router.delete("/internal/runtime/backups/{name}", include_in_schema=False)
-async def runtime_delete_backup(name: str) -> dict:
-    from ..services import backup
-
-    try:
-        removed = backup.delete_backup(name)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    if not removed:
-        raise HTTPException(status_code=404, detail="No such snapshot.")
-    return {"status": "success", "deleted": name}
+router.include_router(ops_router)
