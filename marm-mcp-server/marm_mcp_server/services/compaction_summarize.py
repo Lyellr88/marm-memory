@@ -19,8 +19,8 @@ def centroid_extract_summary(
     """Extractive summary via embedding centroid with cosine-distance dedup.
 
     Ranks source memories by similarity to their centroid, then selects
-    top_n most representative — skipping any that are >dedup_threshold
-    similar to an already-selected memory.
+    top_n most representative. Of two memories more than dedup_threshold
+    similar, only the longer is kept.
     """
     parsed: list[tuple[str, np.ndarray]] = []
     unembedded: list[str] = []
@@ -56,17 +56,37 @@ def centroid_extract_summary(
     scores = vecs_norm @ centroid
     ranked = np.argsort(scores)[::-1]
 
-    selected_content: list[str] = []
-    selected_vecs: list[np.ndarray] = []
+    selected: list[int] = []
+    # Repeat until nothing changes: a memory dropped as a near-copy of one
+    # that was later replaced must be judged again against what is kept.
+    # Replacements only lengthen a slot, so this terminates.
+    changed = True
+    while changed:
+        changed = False
+        for idx in ranked:
+            if idx in selected:
+                continue
+            vec = vecs_norm[idx]
+            duplicate_of = next(
+                (
+                    k
+                    for k, chosen in enumerate(selected)
+                    if float(vecs_norm[chosen] @ vec) > dedup_threshold
+                ),
+                None,
+            )
+            if duplicate_of is not None:
+                # The summary replaces its sources, so of two near-copies keep
+                # the one that says more.
+                if len(contents[idx]) > len(contents[selected[duplicate_of]]):
+                    selected[duplicate_of] = idx
+                    changed = True
+                continue
+            if len(selected) < top_n:
+                selected.append(idx)
+                changed = True
 
-    for idx in ranked:
-        if len(selected_content) >= top_n:
-            break
-        vec = vecs_norm[idx]
-        if selected_vecs and np.any(np.array(selected_vecs) @ vec > dedup_threshold):
-            continue
-        selected_content.append(contents[idx])
-        selected_vecs.append(vec)
+    selected_content = [contents[idx] for idx in selected]
 
     remaining = top_n - len(selected_content)
     if remaining > 0:

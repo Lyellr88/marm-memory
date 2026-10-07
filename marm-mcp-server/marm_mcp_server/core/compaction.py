@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import html
 import json
 import re
 import sqlite3
@@ -48,25 +49,65 @@ def _cosine_similarity(a: bytes, b: bytes) -> float:
     return float(np.dot(va, vb) / (norm_a * norm_b))
 
 
-def _connected_components(n: int, edges: list) -> list:
-    """Union-find connected components on n nodes with the given edge list."""
-    parent = list(range(n))
+# Separators count only between characters, so "shipped." is "shipped".
+_TOKEN = re.compile(r"[a-z0-9]+(?:[._#/-][a-z0-9]+)*")
 
-    def find(x: int) -> int:
-        while parent[x] != x:
-            parent[x] = parent[parent[x]]
-            x = parent[x]
-        return x
 
-    for i, j in edges:
-        ri, rj = find(i), find(j)
-        if ri != rj:
-            parent[ri] = rj
+def _tokens(content: str) -> frozenset:
+    found = _TOKEN.findall(html.unescape(content or "").lower())
+    return frozenset(token for token in found if len(token) >= 3)
 
-    groups: dict = {}
-    for i in range(n):
-        groups.setdefault(find(i), []).append(i)
-    return list(groups.values())
+
+def _containment(a: frozenset, b: frozenset) -> float:
+    """Share of the smaller memory's tokens that the larger one also holds.
+
+    Embeddings rate different documents on one subject as near-identical, so
+    similarity alone cannot tell a restatement from a different fact; a
+    restatement repeats the words.
+    """
+    smaller = min(len(a), len(b))
+    return len(a & b) / smaller if smaller else 1.0
+
+
+def _complete_linkage_groups(
+    n: int, similar: dict, min_size: int, max_size: int
+) -> list:
+    """Disjoint groups in which every pair is similar, at most max_size each.
+
+    Connected components would chain: A~B and B~C put A with C however far
+    apart they are, so a session collapses into one cluster.
+    """
+    by_degree = sorted(range(n), key=lambda i: (-len(similar[i]), i))
+    taken: set = set()
+    groups = []
+    for seed in by_degree:
+        if seed in taken:
+            continue
+        group = [seed]
+        for other in sorted(
+            similar[seed].keys() - taken, key=lambda j: (-similar[seed][j], j)
+        ):
+            if len(group) >= max_size:
+                break
+            if all(other in similar[member] for member in group):
+                group.append(other)
+        if len(group) >= min_size:
+            taken.update(group)
+            groups.append(group)
+    return groups
+
+
+def _discarded_pairs(conn: sqlite3.Connection, session_name: str) -> set:
+    """Memory pairs a reviewer already rejected compacting together."""
+    pairs: set[tuple[str, str]] = set()
+    for (source_ids_json,) in conn.execute(
+        "SELECT source_memory_ids FROM compaction_staging "
+        "WHERE session_name = ? AND status = 'discarded'",
+        (session_name,),
+    ):
+        ids = sorted(json.loads(source_ids_json))
+        pairs.update((a, b) for i, a in enumerate(ids) for b in ids[i + 1 :])
+    return pairs
 
 
 def find_compaction_candidates(memory: _ConnectionSource, session_name: str) -> list:
@@ -87,9 +128,11 @@ def find_compaction_candidates(memory: _ConnectionSource, session_name: str) -> 
               AND session_name != 'marm_system'
               AND timestamp < ?
               AND embedding IS NOT NULL
+            ORDER BY id
             """,
             (session_name, min_age_cutoff),
         ).fetchall()
+        dismissed = _discarded_pairs(conn, session_name)
 
     if not rows:
         return []
@@ -113,25 +156,33 @@ def find_compaction_candidates(memory: _ConnectionSource, session_name: str) -> 
         return []
 
     threshold = settings.COMPACTION_SIMILARITY_THRESHOLD
-    edges = []
+    min_containment = settings.COMPACTION_MIN_CONTAINMENT
+    tokens = [_tokens(c["content"]) for c in candidates]
+    similar: dict = {i: {} for i in range(len(candidates))}
     for i in range(len(candidates)):
         for j in range(i + 1, len(candidates)):
+            pair = tuple(sorted((candidates[i]["id"], candidates[j]["id"])))
+            if pair in dismissed:
+                continue
+            score = _cosine_similarity(
+                candidates[i]["embedding"], candidates[j]["embedding"]
+            )
             if (
-                _cosine_similarity(
-                    candidates[i]["embedding"], candidates[j]["embedding"]
-                )
-                >= threshold
+                score >= threshold
+                and _containment(tokens[i], tokens[j]) >= min_containment
             ):
-                edges.append((i, j))
+                similar[i][j] = similar[j][i] = score
 
-    components = _connected_components(len(candidates), edges)
+    groups = _complete_linkage_groups(
+        len(candidates),
+        similar,
+        settings.COMPACTION_MIN_CLUSTER_SIZE,
+        max(settings.COMPACTION_MIN_CLUSTER_SIZE, settings.COMPACTION_MAX_CLUSTER_SIZE),
+    )
 
     result = []
-    for component in components:
-        if len(component) < settings.COMPACTION_MIN_CLUSTER_SIZE:
-            continue
-
-        cluster = [candidates[i] for i in component]
+    for group in groups:
+        cluster = [candidates[i] for i in group]
         timestamps = [r["timestamp"] for r in cluster]
 
         pair_sims = [
@@ -227,23 +278,63 @@ def persist_candidates_to_staging(memory: "MARMMemory", candidates: list) -> int
     inserted = 0
 
     with memory.get_connection() as conn:
+        # One write transaction: a review or another scan must not change a
+        # row between the overlap check and its supersession, and a failed
+        # insert must not leave the superseded row stale with no replacement.
+        conn.execute("BEGIN IMMEDIATE")
+        rejected: dict[str, set] = {}
         for candidate in candidates:
             source_ids = candidate["source_memory_ids"]
             candidate_hash = _compute_candidate_hash(source_ids)
+
+            # Re-read under the lock: a discard can land after the scan read it.
+            session = candidate["session_name"]
+            if session not in rejected:
+                rejected[session] = _discarded_pairs(conn, session)
+            ordered = sorted(source_ids)
+            if any(
+                (a, b) in rejected[session]
+                for i, a in enumerate(ordered)
+                for b in ordered[i + 1 :]
+            ):
+                continue
 
             # 'discarded' is included because `discard` writes nothing to
             # `memories`: the sources stay eligible, so every later scan would
             # re-offer a rejected cluster. 'stale' is excluded because changed
             # sources are precisely what deserves a fresh look, and 'applied'
             # because apply marks its sources with compaction_role, which takes
-            # the cluster out of find_compaction_candidates anyway.
+            # the cluster out of find_compaction_candidates anyway. Re-staging an
+            # unchanged 'nudge_exhausted' row would reset its nudge budget.
             existing = conn.execute(
                 "SELECT id FROM compaction_staging WHERE candidate_hash = ? "
-                "AND status IN ('pending_summary', 'summary_staged', 'discarded')",
+                "AND status IN ('pending_summary', 'nudge_exhausted', "
+                "'summary_staged', 'discarded')",
                 (candidate_hash,),
             ).fetchone()
             if existing:
                 continue
+
+            # A cluster that grew is a new hash, so without this every new
+            # member would queue another copy beside the old one.
+            overlapping = [
+                (row_id, status)
+                for row_id, status, ids_json in conn.execute(
+                    "SELECT id, status, source_memory_ids FROM compaction_staging "
+                    "WHERE session_name = ? AND status IN "
+                    "('pending_summary', 'nudge_exhausted', 'summary_staged')",
+                    (candidate["session_name"],),
+                )
+                if set(json.loads(ids_json)) & set(source_ids)
+            ]
+            if any(status == "summary_staged" for _, status in overlapping):
+                continue
+            for row_id, _ in overlapping:
+                conn.execute(
+                    "UPDATE compaction_staging SET status = 'stale', updated_at = ? "
+                    "WHERE id = ?",
+                    (now_iso, row_id),
+                )
 
             snapshot = _get_source_snapshot(conn, source_ids)
             row_id = str(uuid.uuid4())

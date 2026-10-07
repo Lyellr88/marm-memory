@@ -402,3 +402,49 @@ async def test_a_server_side_summary_is_staged_redacted(mem, monkeypatch):
     summary = _get_staging_row(mem, candidate_id)[1]
     assert summary and key not in summary
     assert "[redacted:aws-access-key]" in summary
+
+
+def test_dedup_keeps_the_copy_that_contains_the_other():
+    vec = _make_vec(seed=7).tobytes()
+    short = "relicensed to GPL-3.0-or-later"
+    full = short + " in v2.2.9 as a derivative work of GPL emulators"
+
+    for memories in ([(short, vec), (full, vec)], [(full, vec), (short, vec)]):
+        assert centroid_extract_summary(memories, top_n=5) == full
+
+
+def test_dedup_compares_against_the_copy_it_kept():
+    def at(degrees: float) -> bytes:
+        v = np.zeros(384, dtype=np.float32)
+        v[0], v[1] = np.cos(np.radians(degrees)), np.sin(np.radians(degrees))
+        return v.tobytes()
+
+    short = "short"
+    kept = "the long version that replaces the short one"
+    other = "a different fact"
+    # `other` is similar only to `short`, which `kept` replaces.
+    memories = [(short, at(0)), (kept, at(20)), (other, at(-30))]
+
+    result = centroid_extract_summary(memories, top_n=5)
+
+    assert kept in result
+    assert other in result
+
+
+def test_a_memory_dropped_before_a_replacement_is_reconsidered():
+    def at(degrees: float) -> bytes:
+        v = np.zeros(384, dtype=np.float32)
+        v[0], v[1] = np.cos(np.radians(degrees)), np.sin(np.radians(degrees))
+        return v.tobytes()
+
+    first = "the first copy, ranked first"
+    dropped = "a near-copy"
+    longest = "the longest copy, which replaces the first one in the summary"
+    # Ranked 0, -18, +20: -18 is dropped against 0, then +20 replaces 0, and
+    # -18 is not a near-copy of +20.
+    memories = [(first, at(0)), (dropped, at(-18)), (longest, at(20))]
+
+    result = centroid_extract_summary(memories, top_n=5)
+
+    assert longest in result
+    assert dropped in result
