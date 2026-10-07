@@ -1,6 +1,15 @@
 # Changelog
 
 <details>
+<summary><strong>October 7th, 2026: Module Splits, Part 3 (v2.59.3)</strong></summary>
+
+### Changed
+
+- Two more server modules over the length limit are split with no change in behavior. `core/distill.py` moves its sentence scoring and text cleanup helpers to `core/distill_selection.py`. `endpoints/graph.py` moves the Console request and response models to `endpoints/graph_models.py` and the project root, delete, and memory-linking helpers to `endpoints/graph_projects.py`.
+
+</details>
+
+<details>
 <summary><strong>October 6th, 2026: Module Splits, Part 2 (v2.59.2)</strong></summary>
 
 ### Changed

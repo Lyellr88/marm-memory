@@ -1,4 +1,4 @@
-# MARM Memory v2.59.2
+# MARM Memory v2.59.3
 
 > Give your AI Agents a permanent memory in 60 seconds
 
