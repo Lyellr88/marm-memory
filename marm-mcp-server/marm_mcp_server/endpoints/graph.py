@@ -4,10 +4,8 @@ import threading
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Literal
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, ConfigDict, Field
 
 from marm_graph.core import code_graph_view
 from marm_graph.core import tool_router as R
@@ -20,7 +18,7 @@ from marm_graph.core.models import (
     GraphTraceRequest,
 )
 
-from ..core import code_link_queue, code_project_bindings, runtime_flags
+from ..core import code_link_queue, code_project_bindings
 from ..core.concept_db import ConceptDB, get_concept_db_path
 from ..core.graph_index_lock import GraphIndexBusy, gate_sync, run_exclusive
 from ..core.graph_index_worker import (
@@ -30,136 +28,32 @@ from ..core.graph_index_worker import (
     index_repository,
 )
 from ..core.graph_supervisor import graph_supervisor
-from ..services.code_context.backend import invalidate_projects_cache
+from .graph_models import (
+    ConsoleAdrUpdateRequest,
+    ConsoleCodeUnitEdgesRequest,
+    ConsoleDeleteProjectRequest,
+    ConsoleGraphNeighborhoodRequest,
+    ConsoleIndexRequest,
+    ConsoleMemoryBindingRequest,
+    ConsoleProjectIndexResponse,
+    ConsoleProjectJobResponse,
+    ConsoleProjectRequest,
+    ConsoleRuntimeTracesRequest,
+    ConsoleTraceRequest,
+)
+from .graph_projects import (
+    _UNAVAILABLE,
+    _memory_linking_status,
+    _project_root_path,
+    _resolve_and_delete,
+)
 
 router = APIRouter(prefix="", tags=["Graph"])
 
-_UNAVAILABLE = {"status": "error", "message": "graph backend unavailable"}
 _project_jobs: dict[str, dict] = {}
 _project_job_lock = threading.Lock()
 _project_jobs_lock = threading.Lock()
 _PROJECT_JOB_TTL_SECONDS = 3600
-
-
-class ConsoleIndexRequest(BaseModel):
-    repo_path: str = Field(..., min_length=1, max_length=4096)
-    mode: Literal["full", "moderate", "fast"] = "moderate"
-
-
-class ConsoleProjectRequest(BaseModel):
-    project: str = Field(..., min_length=1, max_length=512)
-
-
-class ConsoleMemoryBindingRequest(ConsoleProjectRequest):
-    memory_project: str = Field(..., min_length=1, max_length=512)
-
-
-class ConsoleGraphNeighborhoodRequest(ConsoleProjectRequest):
-    node_id: str = Field(
-        ...,
-        min_length=1,
-        max_length=1024,
-        pattern=r"^[A-Za-z0-9._/\\@+()\[\] -]+$",
-    )
-
-
-class ConsoleCodeUnitEdgesRequest(ConsoleProjectRequest):
-    unit: str = Field(
-        ...,
-        min_length=1,
-        max_length=1024,
-        pattern=r"^[A-Za-z0-9._/\\@+()\[\] -]+$",
-    )
-
-
-class ConsoleTraceRequest(BaseModel):
-    project: str = Field(..., min_length=1, max_length=512)
-    symbol: str = Field(..., min_length=1, max_length=1024)
-    direction: Literal["inbound", "outbound", "both"] = "both"
-    mode: Literal["calls", "data_flow", "cross_service"] = "calls"
-    depth: int = Field(3, ge=1, le=5)
-
-
-class ConsoleDeleteProjectRequest(BaseModel):
-    project: str = Field(..., min_length=1, max_length=512)
-    name: str = Field(..., min_length=1, max_length=512)
-    confirm: bool = False
-
-
-class ConsoleAdrUpdateRequest(BaseModel):
-    project: str = Field(..., min_length=1, max_length=512)
-    content: str = Field(..., min_length=1, max_length=200000)
-
-
-class ConsoleRuntimeTrace(BaseModel):
-    caller: str = Field(..., min_length=1, max_length=2048)
-    callee: str = Field(..., min_length=1, max_length=2048)
-    count: int = Field(..., ge=1, le=1000000)
-
-
-class ConsoleRuntimeTracesRequest(BaseModel):
-    project: str = Field(..., min_length=1, max_length=512)
-    traces: list[ConsoleRuntimeTrace] = Field(..., min_length=1, max_length=500)
-
-
-class _ResponseModel(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-
-class ConsoleProjectIndexResponse(_ResponseModel):
-    job_id: str
-
-
-class _ConsoleProjectJobResponse(_ResponseModel):
-    job_id: str
-    status: str
-    project: str | None
-    phase: str | None
-    error: str | None
-    created_at: str
-    started_at: str | None
-    finished_at: str | None
-
-
-class ConsoleProjectJobQueuedResponse(_ConsoleProjectJobResponse):
-    status: Literal["queued"]
-    project: None
-    phase: Literal["queued"]
-    error: None
-    started_at: None
-    finished_at: None
-
-
-class ConsoleProjectJobRunningResponse(_ConsoleProjectJobResponse):
-    status: Literal["running"]
-    project: None
-    phase: Literal["starting", "indexing"]
-    error: None
-    started_at: str
-    finished_at: None
-
-
-class ConsoleProjectJobSuccessResponse(_ConsoleProjectJobResponse):
-    status: Literal["success"]
-    phase: Literal["complete"]
-    error: None
-    started_at: str
-
-
-class ConsoleProjectJobErrorResponse(_ConsoleProjectJobResponse):
-    status: Literal["error"]
-    project: None
-    phase: Literal["unavailable", "busy", "failed"]
-    error: str
-    started_at: str
-
-
-ConsoleProjectJobResponse = (
-    ConsoleProjectJobQueuedResponse
-    | ConsoleProjectJobRunningResponse
-    | ConsoleProjectJobSuccessResponse
-    | ConsoleProjectJobErrorResponse
-)
 
 
 def _now_iso() -> str:
@@ -268,71 +162,6 @@ def _run_project_index(job_id: str, repo_path: str, mode: str) -> None:
             job["finished_at"] = _now_iso()
             job["_finished_timestamp"] = datetime.now(timezone.utc).timestamp()
         _project_job_lock.release()
-
-
-def _project_root_path(project: str) -> str | None:
-    client = graph_supervisor.get_client()
-    if client is None:
-        return None
-    result = R.do_index(client, GraphIndexRequest(action="list"))
-    if result.get("status") == "error":
-        return None
-    for entry in result.get("projects", []):
-        if (entry or {}).get("name") == project:
-            return (entry or {}).get("root_path")
-    return None
-
-
-def _resolve_and_delete(project: str) -> tuple[str | None, str | None, dict]:
-    """Resolve the root, delete the project, write its tombstone. Under the gate.
-
-    The root has to be read before the delete, because afterwards the project is
-    gone and its root path with it, and without the path there is nothing to
-    suppress: the poller would re-index the root from its cached watch set and
-    recreate what the user just deleted.
-
-    The tombstone is written here rather than by the caller for the same reason
-    the delete itself is gated. Writing it after the gate was released left a
-    window where the other transport's poller could take the gate and start an
-    opaque re-index of its cached root; a tombstone written after that call is
-    already running cannot stop it, and the project comes back.
-    """
-    client = graph_supervisor.get_client()
-    if client is None:
-        return None, None, dict(_UNAVAILABLE)
-    root_path = _project_root_path(project)
-    try:
-        result = client.call_tool("delete_project", {"project": project})
-    except CbmError as exc:
-        return None, None, {"status": "error", "message": f"delete failed: {exc}"}
-    failed = isinstance(result, dict) and result.get("status") == "error"
-    if failed:
-        return root_path, None, result
-    # Here rather than in the caller, for the same reason the tombstone is:
-    # `run_exclusive` awaits a shielded task, so a cancelled request detaches
-    # while the delete runs on. Anything after that await is skipped, and the
-    # deleted project would stay offered until the cache TTL expired.
-    invalidate_projects_cache()
-    try:
-        _cleanup_project_code_links(project)
-    except Exception:
-        if isinstance(result, dict):
-            result["code_link_cleanup"] = "failed"
-    if not root_path:
-        return None, "unresolved_root", result
-    try:
-        runtime_flags.suppress_watch(root_path)
-    except Exception:
-        return root_path, "failed", result
-    return root_path, None, result
-
-
-def _cleanup_project_code_links(project: str) -> None:
-    code_link_queue.drop_project(project)
-    code_project_bindings.drop_graph_project(project)
-    db_path = get_concept_db_path()
-    if os.path.exists(db_path):
-        ConceptDB(db_path).cleanup_graph_project_links(project)
 
 
 @router.post("/marm_graph_index", operation_id="marm_graph_index")
@@ -616,48 +445,6 @@ async def console_project_graph_neighborhood(
     return await asyncio.to_thread(
         code_graph_view.code_graph_neighborhood, client, req.project, req.node_id
     )
-
-
-def _memory_linking_status(project: str, root_path: str | None) -> dict:
-    try:
-        binding = code_project_bindings.get_by_graph_project(project)
-        queue = code_link_queue.status(project)
-    except Exception:
-        return {
-            "state": "unbound",
-            "binding": None,
-            "candidates": [],
-            "refresh": None,
-            "linked_entities": 0,
-        }
-    linked_entities = 0
-    db_path = get_concept_db_path()
-    if os.path.exists(db_path):
-        try:
-            linked_entities = ConceptDB(db_path).graph_project_link_count(project)
-        except Exception:
-            linked_entities = 0
-    if binding is None:
-        try:
-            candidates = code_project_bindings.matching_memory_project_scopes(
-                project, root_path
-            )
-        except Exception:
-            candidates = []
-        return {
-            "state": "ambiguous" if len(candidates) > 1 else "unbound",
-            "binding": None,
-            "candidates": candidates,
-            "refresh": queue,
-            "linked_entities": linked_entities,
-        }
-    return {
-        "state": "bound",
-        "binding": binding.as_dict(),
-        "candidates": [],
-        "refresh": queue,
-        "linked_entities": linked_entities,
-    }
 
 
 @router.post("/internal/projects/memory-linking")
