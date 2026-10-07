@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useBuildConcepts, useMarmConfig, useFilters, useConceptBuild, useConceptBuilds, useConceptsSummary, useStopConceptBuild, useRetryConceptBuild, useDeleteConceptGraph } from '@/hooks/use-marm-queries';
+import { useBuildConcepts, useMarmConfig, useFilters, useConceptBuild, useConceptBuilds, useConceptsSummary, useStopConceptBuild, useRetryConceptBuild, useDeleteConceptGraph, useConceptLegacyNames } from '@/hooks/use-marm-queries';
 import { Button, Badge, Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Select, SelectTrigger, SelectValue, SelectContent, SelectItem, Label } from '@/components/ui/core';
 import { Play, X, Trash2, Square, Database, Network, Waypoints, CircleCheck, CircleAlert, History, CheckCircle2 } from 'lucide-react';
 import type { ConceptBuildInput, ConceptBuildRun } from '@/lib/marm-types';
@@ -31,11 +31,13 @@ export function BuildConceptsDialog({
   const stopBuild = useStopConceptBuild();
   const retryBuild = useRetryConceptBuild();
   const deleteGraph = useDeleteConceptGraph();
+  const { data: legacyNames } = useConceptLegacyNames();
   const [scope, setScope] = useState<'session' | 'project' | 'all'>('session');
   const [scopeValue, setScopeValue] = useState('');
   const [confirmAll, setConfirmAll] = useState(false);
   const [now, setNow] = useState(Date.now());
   const [resetOpen, setResetOpen] = useState(false);
+  const [rebuildAfterReset, setRebuildAfterReset] = useState(false);
   const [lifecycleError, setLifecycleError] = useState('');
   const [runAccents, setRunAccents] = useState<Record<string, 'new' | 'success'>>({});
   const completedJobId = useRef<string | null>(null);
@@ -59,6 +61,7 @@ export function BuildConceptsDialog({
   useEffect(() => {
     if (!jobStatus || isRunning) return;
     queryClient.invalidateQueries({ queryKey: ['conceptsSummary', baseUrl] });
+    queryClient.invalidateQueries({ queryKey: ['conceptLegacyNames', baseUrl] });
     queryClient.invalidateQueries({ queryKey: ['conceptsSearch', baseUrl] });
     queryClient.invalidateQueries({ queryKey: ['conceptsGraph', baseUrl] });
     queryClient.invalidateQueries({ queryKey: ['duplicates', baseUrl] });
@@ -77,6 +80,7 @@ export function BuildConceptsDialog({
       setScopeValue('');
       setConfirmAll(false);
       setResetOpen(false);
+      setRebuildAfterReset(false);
     }
     wasOpen.current = open;
   }, [buildHistory, jobId, open]);
@@ -166,6 +170,13 @@ export function BuildConceptsDialog({
       onSuccess: () => {
         onJobIdChange(null);
         setResetOpen(false);
+        if (rebuildAfterReset) {
+          setRebuildAfterReset(false);
+          build.mutate({ search_all: true }, {
+            onSuccess: (res) => onJobIdChange(res.job_id),
+            onError: (error) => showLifecycleError(error, 'The graph was reset, but the rebuild could not start.'),
+          });
+        }
       },
       onError: (error) => showLifecycleError(error, 'Could not reset the concept graph.'),
     });
@@ -216,6 +227,24 @@ export function BuildConceptsDialog({
             <GraphMetric icon={<Waypoints className="h-3.5 w-3.5" />} label="Relationships" value={summary?.relationships ?? 0} delay={90} />
             <GraphMetric icon={<Database className="h-3.5 w-3.5" />} label="Code links" value={summary?.code_links ?? 0} delay={135} />
           </section>
+
+          {legacyNames && legacyNames.count > 0 && (
+            <section role="status" aria-label="Legacy concept names" className="concept-manager-panel flex flex-col gap-4 rounded-xl border border-amber-500/25 bg-amber-500/[0.06] p-5 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-sm font-semibold">Some concept names may contain legacy markdown formatting</h2>
+                <p className="mt-1 max-w-xl text-sm text-muted-foreground">
+                  {legacyNames.count.toLocaleString()} of {legacyNames.checked.toLocaleString()} names predate the extraction cleanup, for example{' '}
+                  {legacyNames.sample.slice(0, 3).map((name, index) => (
+                    <span key={name}>{index > 0 && ', '}<code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">{name}</code></span>
+                  ))}
+                  . Rebuild the graph to apply the cleanup; your memories are not changed.
+                </p>
+              </div>
+              <Button variant="outline" className="shrink-0" disabled={hasActiveBuild || lifecyclePending} onClick={() => { setRebuildAfterReset(true); setResetOpen(true); }}>
+                Rebuild graph
+              </Button>
+            </section>
+          )}
 
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1.08fr)_minmax(17rem,.92fr)]">
             <section className="concept-manager-panel rounded-xl border border-border/80 bg-card/60 p-5">
@@ -332,7 +361,7 @@ export function BuildConceptsDialog({
         </div>
       </DialogContent>
 
-      <Dialog open={resetOpen} onOpenChange={(nextOpen) => !deleteGraph.isPending && setResetOpen(nextOpen)}>
+      <Dialog open={resetOpen} onOpenChange={(nextOpen) => { if (deleteGraph.isPending) return; setResetOpen(nextOpen); if (!nextOpen) setRebuildAfterReset(false); }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Reset the concept graph?</DialogTitle>
@@ -341,8 +370,11 @@ export function BuildConceptsDialog({
           <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
             A timestamped backup is retained. Your duplicate-review choices remain, so future builds continue to respect them.
           </div>
+          {rebuildAfterReset && (
+            <p className="text-sm text-muted-foreground">Once the reset finishes, Build Concepts runs over all memory to rebuild the graph.</p>
+          )}
           <DialogFooter>
-            <Button variant="outline" disabled={deleteGraph.isPending} onClick={() => setResetOpen(false)}>Cancel</Button>
+            <Button variant="outline" disabled={deleteGraph.isPending} onClick={() => { setResetOpen(false); setRebuildAfterReset(false); }}>Cancel</Button>
             <Button variant="destructive" isLoading={deleteGraph.isPending} onClick={confirmGraphDeletion}>Reset graph</Button>
           </DialogFooter>
         </DialogContent>
