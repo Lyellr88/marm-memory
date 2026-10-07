@@ -108,6 +108,7 @@ marm-mcp-server/
       code_link_queue.py       # Queue of memory-to-code link refreshes
       _link_distinctiveness.py # Gate that keeps generic words from linking to code
       distill.py               # Proposes durable memories from conversation text
+      distill_selection.py     # Sentence scoring and cleanup behind distill proposals
       runtime_flags.py         # Persisted on/off switches and watch suppressions
       runtime_manager.py       # Local runtime discovery and background start/stop
       protocol_delivery_state.py  # Bounded HTTP protocol-delivery state
@@ -126,6 +127,8 @@ marm-mcp-server/
       memory.py                # Recall/search tools
       compaction.py            # Unified compaction tool and hidden helper routes
       graph.py                 # 5 bundled code-graph tools (routed through marm_graph)
+      graph_models.py          # Console request and response models for the graph routes
+      graph_projects.py        # Project root, delete, and memory-linking helpers
       concepts.py              # 2 concept-graph tools (build + recall)
       code_context.py          # Task-scoped code context in one call
       distill.py               # Propose, review, apply, and discard memory candidates

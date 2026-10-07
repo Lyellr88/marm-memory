@@ -1571,6 +1571,7 @@ async def test_the_deletion_tombstone_is_written_before_the_gate_is_released(
     from marm_mcp_server.core import graph_index_lock as lock
     from marm_mcp_server.core import runtime_flags
     from marm_mcp_server.endpoints import graph as endpoint
+    from marm_mcp_server.endpoints import graph_projects
 
     root = "/repo/doomed"
     seen = {}
@@ -1581,8 +1582,10 @@ async def test_the_deletion_tombstone_is_written_before_the_gate_is_released(
 
     monkeypatch.setattr(endpoint.graph_supervisor, "get_client", lambda: _Client())
     monkeypatch.setattr(endpoint.graph_supervisor, "is_available", lambda: True)
-    monkeypatch.setattr(endpoint, "_project_root_path", lambda project: root)
-    monkeypatch.setattr(endpoint, "_cleanup_project_code_links", lambda project: None)
+    monkeypatch.setattr(graph_projects, "_project_root_path", lambda project: root)
+    monkeypatch.setattr(
+        graph_projects, "_cleanup_project_code_links", lambda project: None
+    )
 
     real = endpoint.run_exclusive
 
