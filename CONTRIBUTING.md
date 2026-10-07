@@ -75,6 +75,7 @@ marm-mcp-server/
     config/
       settings.py              # Paths, host/port, auth, feature flags
       env_parsing.py           # Safe typed parsing of environment variables
+      env_reference.py         # Reference entries for every user-facing environment variable
       api_key_bootstrap.py     # Private key directory and key file writes
     core/
       memory.py                # MARMMemory facade and public memory object wiring
@@ -100,6 +101,8 @@ marm-mcp-server/
       graph_client.py          # Concept graph's in-process link into the code graph
       graph_index_lock.py      # The one gate every code-graph store mutation takes
       graph_index_worker.py    # Keeps code graphs current: watcher wakeups plus reconciliation
+      graph_watch_state.py     # Git source signature and per-project watch state
+      graph_index_repository.py  # One repository index pass and its follow-up refreshes
       graph_index_watcher.py   # Filesystem watcher that wakes the worker on a real change
       code_project_bindings.py # Links code-graph projects to memory projects
       code_link_queue.py       # Queue of memory-to-code link refreshes
@@ -127,6 +130,7 @@ marm-mcp-server/
       code_context.py          # Task-scoped code context in one call
       distill.py               # Propose, review, apply, and discard memory candidates
       system.py                # Health/system tools
+      system_ops.py            # Doctor, logs, and backup routes
     middleware/
       auth.py                  # Bearer auth for HTTP mode
       protocol_injection.py    # HTTP MCP protocol/compaction response injection
@@ -146,7 +150,18 @@ marm-mcp-server/
       code_context/            # Seeding, ranking, snippets, and formatting for code context
       distill.py               # Stages distill proposals and applies the kept ones
       local_llm.py             # Optional local OpenAI-compatible generation backend
+      local_llm_discovery.py   # Finds local OpenAI-compatible servers
+      local_llm_wire.py        # Host checks, deadlines, and JSON extraction for local calls
+      runtime_llm.py           # Local-model switching behind the system routes
+      runtime_jobs.py          # Background job tracking behind the system routes
+      analyst/                 # Evidence packets and deterministic answer checks
       model_discovery.py       # Finds language models already on this machine
+      client_config.py         # Wires MARM into supported AI client configs
+      client_paths.py          # Client config file locations
+      client_registry.py       # Supported-client registry
+      client_text_edit.py      # Merges edits into client config files
+      client_operations.py     # Configure, remove, and status operations
+      client_snippets.py       # Paste-ready config snippets
       hardware.py              # Accelerator and free-memory detection
       backup.py                # Online snapshots of the memory database
       stdio_entry_tools.py     # STDIO log entry/show/delete workflow bodies
