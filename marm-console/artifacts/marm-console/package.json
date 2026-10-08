@@ -16,8 +16,8 @@
     "@xterm/addon-webgl": "^0.19.0",
     "@xterm/xterm": "^6.0.0",
     "d3-force": "^3.0.0",
-    "force-graph": "^1.51.5",
-    "react-force-graph-2d": "^1.29.1"
+    "force-graph": "^1.52.0",
+    "react-force-graph-2d": "^1.29.2"
   },
   "devDependencies": {
     "@radix-ui/react-dialog": "catalog:",
