@@ -113,15 +113,19 @@ class TestCentroidExtractSummary:
             return (v / np.linalg.norm(v)).tobytes()
 
         memories = [
-            ("near-a", near(1)),
-            ("near-b", near(2)),
-            ("near-c", near(3)),
+            ("Release plan approved", near(1)),
+            ("Approved release plan", near(2)),
+            ("Plan release approved", near(3)),
             ("different-A", _make_vec(seed=200).tobytes()),
             ("different-B", _make_vec(seed=201).tobytes()),
         ]
         result = centroid_extract_summary(memories, top_n=3, dedup_threshold=0.85)
         parts = result.split("\n\n")
-        near_count = sum(1 for p in parts if p.startswith("near-"))
+        near_count = sum(
+            1
+            for p in parts
+            if set(p.lower().split()) == {"release", "plan", "approved"}
+        )
         assert near_count == 1
         assert len(parts) == 3
 
@@ -419,9 +423,9 @@ def test_dedup_compares_against_the_copy_it_kept():
         v[0], v[1] = np.cos(np.radians(degrees)), np.sin(np.radians(degrees))
         return v.tobytes()
 
-    short = "short"
-    kept = "the long version that replaces the short one"
-    other = "a different fact"
+    short = "Release plan approved"
+    kept = "Release plan approved by operations"
+    other = "Operations approved release plan"
     # `other` is similar only to `short`, which `kept` replaces.
     memories = [(short, at(0)), (kept, at(20)), (other, at(-30))]
 
@@ -437,9 +441,9 @@ def test_a_memory_dropped_before_a_replacement_is_reconsidered():
         v[0], v[1] = np.cos(np.radians(degrees)), np.sin(np.radians(degrees))
         return v.tobytes()
 
-    first = "the first copy, ranked first"
-    dropped = "a near-copy"
-    longest = "the longest copy, which replaces the first one in the summary"
+    first = "Release plan approved"
+    dropped = "Approved release plan"
+    longest = "Release plan approved unanimously by operations"
     # Ranked 0, -18, +20: -18 is dropped against 0, then +20 replaces 0, and
     # -18 is not a near-copy of +20.
     memories = [(first, at(0)), (dropped, at(-18)), (longest, at(20))]
@@ -464,3 +468,66 @@ def test_fallback_preserves_conflicting_short_numeric_values(prefix, values):
     for ordered in (texts, list(reversed(texts))):
         result = centroid_extract_summary([(text, vec) for text in ordered], top_n=5)
         assert all(text in result for text in texts)
+
+
+@pytest.mark.parametrize(
+    "short,long",
+    [
+        ("Cache timeout is 10", "Cache timeout is 100"),
+        ("Cache timeout is -1", "Cache timeout is -10"),
+        ("Cache timeout is 0.5", "Cache timeout is 0.55"),
+    ],
+)
+@pytest.mark.parametrize(
+    "prefix",
+    [
+        "",
+        "The production cache policy shared across all running application workers says ",
+    ],
+)
+@pytest.mark.parametrize("min_containment", [0, 0.9])
+def test_numeric_prefix_is_not_a_literal_fact_superset(
+    short, long, prefix, min_containment, monkeypatch
+):
+    from marm_mcp_server.config import settings
+
+    monkeypatch.setattr(settings, "COMPACTION_MIN_CONTAINMENT", min_containment)
+    short, long = prefix + short, prefix + long
+    vec = _make_vec(seed=7).tobytes()
+    for texts in ([short, long], [long, short]):
+        result = centroid_extract_summary([(text, vec) for text in texts], top_n=5)
+        assert set(result.split("\n\n")) == {short, long}
+
+
+def test_fallback_preserves_distinct_nonnumeric_facts_with_identical_embeddings():
+    vec = _make_vec(seed=7).tobytes()
+    texts = [
+        "The production cache uses local storage.",
+        "The production database requires remote replication.",
+    ]
+    for ordered in (texts, list(reversed(texts))):
+        result = centroid_extract_summary([(text, vec) for text in ordered], top_n=5)
+        assert set(result.split("\n\n")) == set(texts)
+
+
+def test_fallback_deduplicates_true_restatements():
+    vec = _make_vec(seed=7).tobytes()
+    texts = ["Release plan approved", "Approved release plan"]
+    for ordered in (texts, list(reversed(texts))):
+        result = centroid_extract_summary([(text, vec) for text in ordered], top_n=5)
+        assert len(result.split("\n\n")) == 1
+
+
+def test_fallback_zero_containment_allows_similarity_only(monkeypatch):
+    from marm_mcp_server.config import settings
+
+    monkeypatch.setattr(settings, "COMPACTION_MIN_CONTAINMENT", 0)
+    vec = _make_vec(seed=7).tobytes()
+    result = centroid_extract_summary(
+        [
+            ("The cache uses local storage.", vec),
+            ("Database requires replication.", vec),
+        ],
+        top_n=5,
+    )
+    assert len(result.split("\n\n")) == 1

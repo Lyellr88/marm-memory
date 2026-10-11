@@ -6,8 +6,9 @@ from datetime import datetime, timezone
 
 import numpy as np
 
+from ..config import settings
 from ..config.settings import COMPACTION_ENABLED
-from ..core.compaction import _numeric_facts
+from ..core.compaction import _containment, _numeric_facts, _tokens
 from ..core.memory import MARMMemory, _safe_print
 from ..core.redaction import redact_secrets
 
@@ -21,7 +22,9 @@ def centroid_extract_summary(
 
     Ranks source memories by similarity to their centroid, then selects
     top_n most representative. Of two memories more than dedup_threshold
-    similar, only the longer is kept.
+    similar, only the longer is kept when configured word containment and
+    numeric-fact agreement also support treating them as redundant. Token
+    agreement is a conservative heuristic, not proof of semantic equivalence.
     """
     parsed: list[tuple[str, np.ndarray]] = []
     unembedded: list[str] = []
@@ -58,6 +61,8 @@ def centroid_extract_summary(
     ranked = np.argsort(scores)[::-1]
 
     numeric_facts = [_numeric_facts(content) for content in contents]
+    tokens = [_tokens(content) for content in contents]
+    min_containment = settings.COMPACTION_MIN_CONTAINMENT
     selected: list[int] = []
     # Repeat until nothing changes: a memory dropped as a near-copy of one
     # that was later replaced must be judged again against what is kept.
@@ -75,9 +80,19 @@ def centroid_extract_summary(
                     for k, chosen in enumerate(selected)
                     if float(vecs_norm[chosen] @ vec) > dedup_threshold
                     and (
+                        min_containment == 0
+                        or _containment(tokens[chosen], tokens[idx]) >= min_containment
+                    )
+                    and (
                         numeric_facts[chosen] == numeric_facts[idx]
-                        or contents[chosen] in contents[idx]
-                        or contents[idx] in contents[chosen]
+                        or (
+                            contents[chosen] in contents[idx]
+                            and numeric_facts[chosen] <= numeric_facts[idx]
+                        )
+                        or (
+                            contents[idx] in contents[chosen]
+                            and numeric_facts[idx] <= numeric_facts[chosen]
+                        )
                     )
                 ),
                 None,
