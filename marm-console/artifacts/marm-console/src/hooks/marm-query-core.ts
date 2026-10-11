@@ -17,6 +17,7 @@ export const queryKeys = {
   summary: (baseUrl: string, session: string) => ['summary', baseUrl, session],
   compaction: (baseUrl: string) => ['compaction', baseUrl],
   conceptsSummary: (baseUrl: string) => ['conceptsSummary', baseUrl],
+  conceptLegacyNames: (baseUrl: string) => ['conceptLegacyNames', baseUrl],
   conceptsGraph: (baseUrl: string, params?: ConceptGraphParams) => ['conceptsGraph', baseUrl, params],
   conceptsGraphVersion: (baseUrl: string) => ['conceptsGraphVersion', baseUrl],
   conceptsSearch: (baseUrl: string, params?: ConceptSearchParams) => ['conceptsSearch', baseUrl, params],

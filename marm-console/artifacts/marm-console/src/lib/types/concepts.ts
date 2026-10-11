@@ -21,6 +21,14 @@ export interface ConceptBuildRun {
   finished_at: string | null;
 }
 
+/** Entity names the extractor would now store differently, e.g. names that
+ *  predate its markdown cleanup. Read-only; `sample` is capped. */
+export interface ConceptLegacyNames {
+  count: number;
+  checked: number;
+  sample: string[];
+}
+
 export interface ConceptsSummary {
   entities: number;
   relationships: number;

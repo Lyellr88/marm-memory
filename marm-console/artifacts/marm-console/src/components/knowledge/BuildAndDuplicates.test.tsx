@@ -6,9 +6,12 @@ import { BuildConceptsDialog } from './BuildAndDuplicates';
 
 const retryBuild = vi.fn();
 const deleteGraph = vi.fn();
+const startBuild = vi.fn();
+let legacyNames = { count: 0, checked: 0, sample: [] as string[] };
 
 vi.mock('@/hooks/use-marm-queries', () => ({
-  useBuildConcepts: () => ({ isPending: false, mutate: vi.fn() }),
+  useBuildConcepts: () => ({ isPending: false, mutate: startBuild }),
+  useConceptLegacyNames: () => ({ data: legacyNames }),
   useMarmConfig: () => ({ baseUrl: '/api' }),
   useFilters: () => ({ data: { sessions: [], projects: [] } }),
   useConceptsSummary: () => ({ data: { entities: 4, relationships: 2, code_links: 1, schema_status: 'current' } }),
@@ -44,7 +47,9 @@ vi.mock('@/hooks/use-marm-queries', () => ({
 afterEach(() => {
   cleanup();
   retryBuild.mockClear();
-  deleteGraph.mockClear();
+  deleteGraph.mockReset();
+  startBuild.mockClear();
+  legacyNames = { count: 0, checked: 0, sample: [] };
 });
 
 describe('BuildConceptsDialog', () => {
@@ -74,5 +79,53 @@ describe('BuildConceptsDialog', () => {
     const confirmation = screen.getByRole('dialog', { name: 'Reset the concept graph?' });
     await user.click(within(confirmation).getByRole('button', { name: 'Reset graph' }));
     expect(deleteGraph).toHaveBeenCalledWith(undefined, expect.any(Object));
+  });
+
+  function renderDialog() {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <BuildConceptsDialog open onOpenChange={vi.fn()} jobId={null} onJobIdChange={vi.fn()} onComplete={vi.fn()} />
+      </QueryClientProvider>,
+    );
+  }
+
+  it('shows no legacy-name notice for a clean graph', () => {
+    renderDialog();
+    expect(screen.queryByRole('status', { name: 'Legacy concept names' })).toBeNull();
+  });
+
+  it('advises a rebuild and runs it as a reset followed by the global build', async () => {
+    const user = userEvent.setup();
+    legacyNames = { count: 2, checked: 10, sample: ['**apply**', '`claim()`'] };
+    deleteGraph.mockImplementation((_input, options) => options?.onSuccess?.());
+    renderDialog();
+
+    const notice = screen.getByRole('status', { name: 'Legacy concept names' });
+    expect(within(notice).getByText('**apply**')).toBeTruthy();
+    await user.click(within(notice).getByRole('button', { name: 'Rebuild graph' }));
+
+    const confirmation = screen.getByRole('dialog', { name: 'Reset the concept graph?' });
+    expect(within(confirmation).getByText(/Build Concepts runs over all memory/)).toBeTruthy();
+    expect(startBuild).not.toHaveBeenCalled();
+    await user.click(within(confirmation).getByRole('button', { name: 'Reset graph' }));
+
+    expect(deleteGraph).toHaveBeenCalledTimes(1);
+    expect(startBuild).toHaveBeenCalledWith({ search_all: true }, expect.any(Object));
+  });
+
+  it('forgets a cancelled rebuild, so a later plain reset does not rebuild', async () => {
+    const user = userEvent.setup();
+    legacyNames = { count: 1, checked: 3, sample: ['**apply**'] };
+    deleteGraph.mockImplementation((_input, options) => options?.onSuccess?.());
+    renderDialog();
+
+    await user.click(screen.getByRole('button', { name: 'Rebuild graph' }));
+    await user.click(within(screen.getByRole('dialog', { name: 'Reset the concept graph?' })).getByRole('button', { name: 'Cancel' }));
+    await user.click(screen.getAllByRole('button', { name: 'Reset graph' })[0]);
+    await user.click(within(screen.getByRole('dialog', { name: 'Reset the concept graph?' })).getByRole('button', { name: 'Reset graph' }));
+
+    expect(deleteGraph).toHaveBeenCalledTimes(1);
+    expect(startBuild).not.toHaveBeenCalled();
   });
 });

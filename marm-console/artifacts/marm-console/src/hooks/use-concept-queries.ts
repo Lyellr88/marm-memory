@@ -10,6 +10,11 @@ export function useConceptsSummary() {
   return useQuery({ queryKey: queryKeys.conceptsSummary(baseUrl), queryFn: client.getConceptsSummary });
 }
 
+export function useConceptLegacyNames() {
+  const { baseUrl, client } = useMarmConfig();
+  return useQuery({ queryKey: queryKeys.conceptLegacyNames(baseUrl), queryFn: client.getConceptLegacyNames });
+}
+
 export function useSearchConcepts(params?: ConceptSearchParams) {
   const { baseUrl, client } = useMarmConfig();
   return useQuery({ queryKey: queryKeys.conceptsSearch(baseUrl, params), queryFn: () => client.searchConcepts(params) });
@@ -120,6 +125,7 @@ function invalidateConceptBuildLifecycle(qc: QueryClient, baseUrl: string) {
   qc.invalidateQueries({ queryKey: ['conceptsGraph', baseUrl] });
   qc.invalidateQueries({ queryKey: ['conceptsSearch', baseUrl] });
   qc.invalidateQueries({ queryKey: queryKeys.conceptsSummary(baseUrl) });
+  qc.invalidateQueries({ queryKey: queryKeys.conceptLegacyNames(baseUrl) });
   qc.invalidateQueries({ queryKey: queryKeys.duplicates(baseUrl) });
 }
 

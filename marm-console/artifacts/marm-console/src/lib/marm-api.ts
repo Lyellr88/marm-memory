@@ -28,6 +28,7 @@ import type {
   ConceptReviewResult,
   ConceptSearchParams,
   ConceptsSummary,
+  ConceptLegacyNames,
   ProjectMemoryCodeLink,
   ProjectMemoryLinking,
   DuplicateReport,
@@ -279,6 +280,7 @@ export function createMarmClient(config: MarmClientConfig) {
 
     // Concepts / knowledge graph
     getConceptsSummary: () => request<ConceptsSummary>(config, 'GET', '/concepts/summary'),
+    getConceptLegacyNames: () => request<ConceptLegacyNames>(config, 'GET', '/concepts/legacy-names'),
     searchConcepts: (params?: ConceptSearchParams) =>
       request<ConceptEntity[]>(config, 'GET', '/concepts/search', { query: params }),
     getConcept: (entityId: number) =>
