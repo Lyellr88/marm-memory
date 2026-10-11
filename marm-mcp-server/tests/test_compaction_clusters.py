@@ -496,3 +496,72 @@ def test_compound_negation_blocks_clustering_under_long_shared_prose(mem, pair):
     for text in [pair[0], pair[1], pair[0] + "."]:
         _insert(mem, _at(0), content=prefix + text)
     assert find_compaction_candidates(mem, "sess") == []
+
+
+@pytest.mark.parametrize(
+    "negative",
+    [
+        "can't",
+        "can\u2019t",
+        "cannot",
+        "can not",
+        "won't",
+        "won\u2019t",
+        "isn't",
+        "isn\u2019t",
+    ],
+)
+@pytest.mark.parametrize(
+    "prefix",
+    [
+        "",
+        "The production operational policy shared across every running application service and deployment environment states that ",
+    ],
+)
+def test_contracted_negation_does_not_cluster_with_positive(mem, negative, prefix):
+    for text in [
+        "The service can connect",
+        f"The service {negative} connect",
+        "The service can connect.",
+    ]:
+        _insert(mem, _at(0), content=prefix + text)
+    assert find_compaction_candidates(mem, "sess") == []
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_longer_repetitive_text_cannot_hide_distinct_short_fact(mem, reverse):
+    texts = ["Cache policy changed", "Cache " * 30, "Cache policy changed."]
+    if reverse:
+        texts.reverse()
+    for text in texts:
+        _insert(mem, _at(0), content=text)
+    assert find_compaction_candidates(mem, "sess") == []
+
+
+def test_contracted_and_uncontracted_negation_share_marker():
+    from marm_mcp_server.core.compaction import _polarity, _tokens
+
+    assert (
+        _polarity(_tokens("can't connect"))
+        == _polarity(_tokens("cannot connect"))
+        == _polarity(_tokens("can not connect"))
+        == {"not"}
+    )
+
+
+@pytest.mark.parametrize(
+    "texts",
+    [
+        ["Статус сервера \u0661", "Статус сервера ٢", "Статус сервера ٣"],
+        ["服务器状态１", "服务器状态２", "服务器状态３"],
+    ],
+)
+def test_unicode_digits_keep_numeric_veto_live(mem, texts, monkeypatch):
+    import marm_mcp_server.config.settings as s
+    from marm_mcp_server.core.compaction import _numeric_facts
+
+    monkeypatch.setattr(s, "COMPACTION_MIN_CONTAINMENT", 0.01)
+    assert len({_numeric_facts(text) for text in texts}) == 3
+    for text in texts:
+        _insert(mem, _at(0), content="Status " + text)
+    assert find_compaction_candidates(mem, "sess") == []

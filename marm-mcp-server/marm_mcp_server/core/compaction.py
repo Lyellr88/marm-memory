@@ -71,7 +71,10 @@ _POLARITY = frozenset(
 
 
 def _tokens(content: str) -> frozenset:
-    return frozenset(_TOKEN.findall(html.unescape(content or "").casefold()))
+    normalized = html.unescape(content or "").casefold()
+    normalized = re.sub(r"n['\u2019]t\b", " not", normalized)
+    normalized = re.sub(r"\bcannot\b", "can not", normalized)
+    return frozenset(_TOKEN.findall(normalized))
 
 
 def _polarity(tokens: frozenset) -> frozenset:
@@ -91,14 +94,13 @@ def _numeric_facts(content: str) -> frozenset[str]:
 
 
 def _containment(a: frozenset, b: frozenset) -> float:
-    """Share of the smaller memory's tokens that the larger one also holds.
+    """Share of the first (shorter text) memory's tokens held by the second.
 
     Embeddings rate different documents on one subject as near-identical, so
     similarity alone cannot tell a restatement from a different fact. Word
     agreement is only a heuristic; empty token sets provide no evidence.
     """
-    smaller = min(len(a), len(b))
-    return len(a & b) / smaller if smaller else 0.0
+    return len(a & b) / len(a) if a and b else 0.0
 
 
 def _complete_linkage_groups(
@@ -200,6 +202,9 @@ def find_compaction_candidates(memory: _ConnectionSource, session_name: str) -> 
             score = _cosine_similarity(
                 candidates[i]["embedding"], candidates[j]["embedding"]
             )
+            short, long = sorted(
+                (i, j), key=lambda k: (len(candidates[k]["content"]), -len(tokens[k]))
+            )
             if (
                 score >= threshold
                 and (
@@ -209,7 +214,7 @@ def find_compaction_candidates(memory: _ConnectionSource, session_name: str) -> 
                         and _polarity(tokens[i]) == _polarity(tokens[j])
                     )
                 )
-                and _containment(tokens[i], tokens[j]) >= min_containment
+                and _containment(tokens[short], tokens[long]) >= min_containment
             ):
                 similar[i][j] = similar[j][i] = score
 
