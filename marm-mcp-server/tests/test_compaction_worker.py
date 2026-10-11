@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 import numpy as np
 import pytest
-from conftest import bind_live_modules
+from conftest import bind_live_attrs, bind_live_modules
 
 from marm_mcp_server.core.compaction import (
     find_compaction_candidates,
@@ -16,12 +16,24 @@ from marm_mcp_server.core.memory import MARMMemory
 
 @pytest.fixture(autouse=True)
 def _live_modules(monkeypatch):
+    modules = {}
     bind_live_modules(
         monkeypatch,
-        {},
+        modules,
         settings="marm_mcp_server.config.settings",
         memory="marm_mcp_server.core.memory",
+        compaction="marm_mcp_server.core.compaction",
     )
+    # Isolated server imports can leave collected functions on an old module
+    # generation. Patch the settings used by the actual functions under test.
+    bind_live_attrs(
+        monkeypatch,
+        globals(),
+        find_compaction_candidates="marm_mcp_server.core.compaction.find_compaction_candidates",
+        run_compaction_dry_run="marm_mcp_server.core.compaction.run_compaction_dry_run",
+        MARMMemory="marm_mcp_server.core.memory.MARMMemory",
+    )
+    monkeypatch.setattr(modules["compaction"], "settings", modules["settings"])
 
 
 def _make_embedding(direction: int, dim: int = 384) -> bytes:
