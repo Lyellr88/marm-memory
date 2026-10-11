@@ -1,6 +1,24 @@
 # Changelog
 
 <details>
+<summary><strong>October 11th, 2026: Concept Graph Rebuild Guidance (v2.60.0)</strong></summary>
+
+### Added
+
+- The Concept Graph Manager detects legacy markdown-formatted entity names, shows examples, and offers a confirmed reset and global rebuild without renaming entities in place or changing source memories ([#300](https://github.com/Lyellr88/marm-memory/pull/300)).
+
+### Fixed
+
+- First-start API-key notices use the status output stream, keeping STDIO output free of non-JSON setup messages while preserving key-file creation ([#299](https://github.com/Lyellr88/marm-memory/pull/299)).
+- HTTP `marm_summary` responses have explicit success, truncated, empty, and error models, with SQLite-backed payload-parity and response-drift tests. STDIO behavior is unchanged ([#303](https://github.com/Lyellr88/marm-memory/pull/303)).
+
+### Maintenance
+
+- Updated mypy and Ruff, Console test dependencies, and Console runtime dependencies, including Vite, React Query, graph rendering, routing, icons, Radix components, and source-map-js ([#304](https://github.com/Lyellr88/marm-memory/pull/304), [#305](https://github.com/Lyellr88/marm-memory/pull/305), [#307](https://github.com/Lyellr88/marm-memory/pull/307), [#309](https://github.com/Lyellr88/marm-memory/pull/309), [#310](https://github.com/Lyellr88/marm-memory/pull/310)).
+
+</details>
+
+<details>
 <summary><strong>October 7th, 2026: Module Splits, Part 3 (v2.59.3)</strong></summary>
 
 ### Changed
