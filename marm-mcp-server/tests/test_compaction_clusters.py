@@ -412,3 +412,87 @@ def test_tokens_keep_short_numeric_values():
     from marm_mcp_server.core.compaction import _tokens
 
     assert {"1", "10", "30", "60", "0.5"} <= _tokens("1 10 30 60 0.5")
+
+
+@pytest.mark.parametrize(
+    "texts",
+    [
+        [
+            "Бюджет повторов увеличен для рабочего процесса.",
+            "Политика очистки кеша изменена для поиска.",
+            "Сертификат сервера успешно обновлён.",
+        ],
+        [
+            "摄取工作进程的重试预算已提高。",
+            "搜索索引的缓存淘汰策略已更改。",
+            "服务器证书已更新。",
+        ],
+        [
+            "The retry budget was raised for the ingest worker.",
+            "Политика очистки кеша изменена для поиска.",
+            "服务器证书已更新。",
+        ],
+        ["db up, ok to go", "api is on, we go", "ui is off, no go"],
+        ["...", "!!!", "???"],
+        ["", " ", "\t"],
+    ],
+)
+def test_unrelated_unicode_short_or_unrecognized_text_does_not_cluster(mem, texts):
+    for text in texts:
+        _insert(mem, _at(0), content=text)
+    assert find_compaction_candidates(mem, "sess") == []
+
+
+@pytest.mark.parametrize(
+    "pair",
+    [
+        ("Migration is ok", "Migration is not ok"),
+        ("The ingest worker is up.", "The ingest worker is down."),
+        ("Feature flag retry_budget is on.", "Feature flag retry_budget is off."),
+    ],
+)
+@pytest.mark.parametrize(
+    "prefix",
+    [
+        "",
+        "The production operational policy shared across every running application service and deployment environment states that ",
+    ],
+)
+def test_known_polarity_conflicts_do_not_cluster(mem, pair, prefix):
+    for text in [pair[0], pair[1], pair[0] + "."]:
+        _insert(mem, _at(0), content=prefix + text)
+    assert find_compaction_candidates(mem, "sess") == []
+
+
+def test_unicode_casefold_and_short_words_are_retained():
+    from marm_mcp_server.core.compaction import _containment, _tokens
+
+    assert {"db", "up", "ok", "to", "go"} <= _tokens("db up, ok to go")
+    assert _tokens("статус готов".upper()) == _tokens("статус готов")
+    assert _tokens("Straße") == _tokens("STRASSE")
+    assert _tokens("缓存策略已更改") == {"缓存策略已更改"}
+    assert _containment(frozenset(), frozenset()) == 0
+
+
+@pytest.mark.parametrize(
+    "text", ["статус готов".upper(), "缓存策略已更改", "db up, ok to go"]
+)
+def test_identical_unicode_and_short_word_facts_can_cluster(mem, text):
+    for _ in range(3):
+        _insert(mem, _at(0), content=text)
+    assert len(find_compaction_candidates(mem, "sess")) == 1
+
+
+@pytest.mark.parametrize(
+    "pair",
+    [
+        ("Migration is ok", "Migration is not-ok"),
+        ("Service is compliant", "Service is non-compliant"),
+        ("Telemetry is enabled", "Telemetry is not_enabled"),
+    ],
+)
+def test_compound_negation_blocks_clustering_under_long_shared_prose(mem, pair):
+    prefix = "The production operational policy shared across every running application service and deployment environment states that "
+    for text in [pair[0], pair[1], pair[0] + "."]:
+        _insert(mem, _at(0), content=prefix + text)
+    assert find_compaction_candidates(mem, "sess") == []

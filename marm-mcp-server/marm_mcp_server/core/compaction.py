@@ -50,14 +50,33 @@ def _cosine_similarity(a: bytes, b: bytes) -> float:
 
 
 # Separators count only between characters, so "shipped." is "shipped".
-_TOKEN = re.compile(r"[a-z0-9]+(?:[._#/-][a-z0-9]+)*")
+_TOKEN = re.compile(r"[^\W_]+(?:[._#/-][^\W_]+)*", re.UNICODE)
+_POLARITY = frozenset(
+    {
+        "not",
+        "non",
+        "no",
+        "never",
+        "on",
+        "off",
+        "up",
+        "down",
+        "enabled",
+        "disabled",
+        "не",
+        "нет",
+        "никогда",
+    }
+)
 
 
 def _tokens(content: str) -> frozenset:
-    found = _TOKEN.findall(html.unescape(content or "").lower())
-    return frozenset(
-        token for token in found if len(token) >= 3 or any(c.isdigit() for c in token)
-    )
+    return frozenset(_TOKEN.findall(html.unescape(content or "").casefold()))
+
+
+def _polarity(tokens: frozenset) -> frozenset:
+    parts = {part for token in tokens for part in re.split(r"[._#/-]", token)}
+    return frozenset(parts & _POLARITY)
 
 
 def _numeric_facts(content: str) -> frozenset[str]:
@@ -75,11 +94,11 @@ def _containment(a: frozenset, b: frozenset) -> float:
     """Share of the smaller memory's tokens that the larger one also holds.
 
     Embeddings rate different documents on one subject as near-identical, so
-    similarity alone cannot tell a restatement from a different fact; a
-    restatement repeats the words.
+    similarity alone cannot tell a restatement from a different fact. Word
+    agreement is only a heuristic; empty token sets provide no evidence.
     """
     smaller = min(len(a), len(b))
-    return len(a & b) / smaller if smaller else 1.0
+    return len(a & b) / smaller if smaller else 0.0
 
 
 def _complete_linkage_groups(
@@ -183,7 +202,13 @@ def find_compaction_candidates(memory: _ConnectionSource, session_name: str) -> 
             )
             if (
                 score >= threshold
-                and (min_containment == 0 or numeric_facts[i] == numeric_facts[j])
+                and (
+                    min_containment == 0
+                    or (
+                        numeric_facts[i] == numeric_facts[j]
+                        and _polarity(tokens[i]) == _polarity(tokens[j])
+                    )
+                )
                 and _containment(tokens[i], tokens[j]) >= min_containment
             ):
                 similar[i][j] = similar[j][i] = score

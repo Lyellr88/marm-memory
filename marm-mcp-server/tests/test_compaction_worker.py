@@ -36,8 +36,8 @@ def _live_modules(monkeypatch):
     monkeypatch.setattr(modules["compaction"], "settings", modules["settings"])
 
 
-# Synthetic restatement labels use letters: numeric suffixes would now be
-# conflicting facts, which these embedding/lifecycle tests do not model.
+# Embedding/lifecycle fixtures repeat a real statement: artificial per-row
+# suffixes would be different facts under the word-agreement gate.
 def _make_embedding(direction: int, dim: int = 384) -> bytes:
     """Unit vector pointing mostly in `direction` axis — easy to control similarity."""
     v = np.zeros(dim, dtype=np.float32)
@@ -108,8 +108,8 @@ def test_existing_embeddings_can_compact_when_encoder_unavailable(
     monkeypatch.setattr(s, "COMPACTION_MIN_AGE_HOURS", 0)
 
     similar = _make_similar_embeddings(3)
-    for i, emb in enumerate(similar):
-        _insert_memory_row(mem, "sess", f"content {chr(97 + i)}", emb)
+    for _i, emb in enumerate(similar):
+        _insert_memory_row(mem, "sess", "Release plan approved", emb)
 
     result = find_compaction_candidates(mem, "sess")
     assert len(result) == 1
@@ -127,8 +127,8 @@ def test_cluster_below_min_size_not_reported(monkeypatch, tmp_path):
     monkeypatch.setattr(s, "COMPACTION_MIN_AGE_HOURS", 0)
 
     similar = _make_similar_embeddings(2)
-    for i, emb in enumerate(similar):
-        _insert_memory_row(mem, "sess", f"content {chr(97 + i)}", emb, age_hours=48)
+    for _i, emb in enumerate(similar):
+        _insert_memory_row(mem, "sess", "Release plan approved", emb, age_hours=48)
 
     result = find_compaction_candidates(mem, "sess")
     assert result == []
@@ -145,8 +145,8 @@ def test_young_memories_excluded_from_candidates(monkeypatch, tmp_path):
     monkeypatch.setattr(s, "COMPACTION_MIN_AGE_HOURS", 24)
 
     similar = _make_similar_embeddings(3)
-    for i, emb in enumerate(similar):
-        _insert_memory_row(mem, "sess", f"content {chr(97 + i)}", emb, age_hours=12)
+    for _i, emb in enumerate(similar):
+        _insert_memory_row(mem, "sess", "Release plan approved", emb, age_hours=12)
 
     result = find_compaction_candidates(mem, "sess")
     assert result == []
@@ -163,9 +163,9 @@ def test_already_compacted_source_rows_excluded(monkeypatch, tmp_path):
     monkeypatch.setattr(s, "COMPACTION_MIN_AGE_HOURS", 0)
 
     similar = _make_similar_embeddings(3)
-    for i, emb in enumerate(similar):
+    for _i, emb in enumerate(similar):
         _insert_memory_row(
-            mem, "sess", f"content {chr(97 + i)}", emb, compaction_role="source"
+            mem, "sess", "Release plan approved", emb, compaction_role="source"
         )
 
     result = find_compaction_candidates(mem, "sess")
@@ -183,9 +183,9 @@ def test_already_compacted_summary_rows_excluded(monkeypatch, tmp_path):
     monkeypatch.setattr(s, "COMPACTION_MIN_AGE_HOURS", 0)
 
     similar = _make_similar_embeddings(3)
-    for i, emb in enumerate(similar):
+    for _i, emb in enumerate(similar):
         _insert_memory_row(
-            mem, "sess", f"content {chr(97 + i)}", emb, compaction_role="summary"
+            mem, "sess", "Release plan approved", emb, compaction_role="summary"
         )
 
     result = find_compaction_candidates(mem, "sess")
@@ -203,10 +203,10 @@ def test_cross_session_memories_never_grouped(monkeypatch, tmp_path):
     monkeypatch.setattr(s, "COMPACTION_MIN_AGE_HOURS", 0)
 
     similar = _make_similar_embeddings(6)
-    for i, emb in enumerate(similar[:3]):
-        _insert_memory_row(mem, "session-a", f"content {chr(97 + i)}", emb)
-    for i, emb in enumerate(similar[3:]):
-        _insert_memory_row(mem, "session-b", f"content {chr(97 + i)}", emb)
+    for _i, emb in enumerate(similar[:3]):
+        _insert_memory_row(mem, "session-a", "Release plan approved", emb)
+    for _i, emb in enumerate(similar[3:]):
+        _insert_memory_row(mem, "session-b", "Release plan approved", emb)
 
     result_a = find_compaction_candidates(mem, "session-a")
     result_b = find_compaction_candidates(mem, "session-b")
@@ -228,8 +228,8 @@ def test_qualifying_cluster_reported_with_correct_shape(monkeypatch, tmp_path):
     monkeypatch.setattr(s, "COMPACTION_MIN_AGE_HOURS", 0)
 
     similar = _make_similar_embeddings(3)
-    for i, emb in enumerate(similar):
-        _insert_memory_row(mem, "session-x", f"memory content {chr(97 + i)}", emb)
+    for _i, emb in enumerate(similar):
+        _insert_memory_row(mem, "session-x", "Release plan approved", emb)
 
     result = find_compaction_candidates(mem, "session-x")
 
@@ -257,9 +257,9 @@ def test_dry_run_does_not_mutate_db(monkeypatch, tmp_path):
 
     similar = _make_similar_embeddings(3)
     inserted_ids = []
-    for i, emb in enumerate(similar):
+    for _i, emb in enumerate(similar):
         inserted_ids.append(
-            _insert_memory_row(mem, "sess", f"content {chr(97 + i)}", emb)
+            _insert_memory_row(mem, "sess", "Release plan approved", emb)
         )
 
     run_compaction_dry_run(mem, "sess")
@@ -290,8 +290,8 @@ def test_dry_run_writes_report_file(monkeypatch, tmp_path):
     monkeypatch.setattr(s, "COMPACTION_MIN_AGE_HOURS", 0)
 
     similar = _make_similar_embeddings(3)
-    for i, emb in enumerate(similar):
-        _insert_memory_row(mem, "my-session", f"content {chr(97 + i)}", emb)
+    for _i, emb in enumerate(similar):
+        _insert_memory_row(mem, "my-session", "Release plan approved", emb)
 
     result = run_compaction_dry_run(mem, "my-session")
 
@@ -310,8 +310,8 @@ def test_dry_run_uses_existing_embeddings_when_encoder_unavailable(tmp_path):
     mem._encoder_failed = True
 
     similar = _make_similar_embeddings(3)
-    for i, emb in enumerate(similar):
-        _insert_memory_row(mem, "sess", f"content {chr(97 + i)}", emb)
+    for _i, emb in enumerate(similar):
+        _insert_memory_row(mem, "sess", "Release plan approved", emb)
 
     report = run_compaction_dry_run(mem, "sess")
     assert len(report["candidates"]) == 1
@@ -333,8 +333,8 @@ def test_dry_run_report_dir_creation_failure_returns_none_not_crash(
     mem._encoder_failed = True
 
     similar = _make_similar_embeddings(3)
-    for i, emb in enumerate(similar):
-        _insert_memory_row(mem, "sess", f"content {chr(97 + i)}", emb)
+    for _i, emb in enumerate(similar):
+        _insert_memory_row(mem, "sess", "Release plan approved", emb)
 
     result = run_compaction_dry_run(mem, "sess")
 
@@ -612,7 +612,7 @@ def _aged_session(mem: MARMMemory, session: str, age_hours: float = 48.0) -> lis
     """Three mutually-similar memories old enough to be compaction-eligible."""
     return [
         _insert_memory_row(
-            mem, session, f"{session} content {chr(97 + i)}", emb, age_hours=age_hours
+            mem, session, f"{session} release plan approved", emb, age_hours=age_hours
         )
         for i, emb in enumerate(_make_similar_embeddings(3))
     ]
@@ -791,9 +791,13 @@ def test_periodic_scan_picks_a_session_back_up_when_a_memory_ages_in(
     assert run_periodic_compaction_scan(mem)["scanned"] == []
 
     # Three more, just over the line: eligible now, and not at the last scan.
-    for i, emb in enumerate(_make_similar_embeddings(3, base_axis=40)):
+    for _i, emb in enumerate(_make_similar_embeddings(3, base_axis=40)):
         _insert_memory_row(
-            mem, "growing-session", f"later content {chr(97 + i)}", emb, age_hours=24.5
+            mem,
+            "growing-session",
+            "growing-session release plan approved",
+            emb,
+            age_hours=24.5,
         )
 
     assert run_periodic_compaction_scan(mem)["scanned"] == ["growing-session"]
@@ -818,9 +822,13 @@ def test_periodic_scan_sees_memories_imported_with_old_timestamps(
     assert run_periodic_compaction_scan(mem)["scanned"] == []
 
     # An archive import: inserted now, but timestamped weeks ago.
-    for i, emb in enumerate(_make_similar_embeddings(3, base_axis=60)):
+    for _i, emb in enumerate(_make_similar_embeddings(3, base_axis=60)):
         _insert_memory_row(
-            mem, "imported-session", f"archived {chr(97 + i)}", emb, age_hours=720.0
+            mem,
+            "imported-session",
+            "archived release plan approved",
+            emb,
+            age_hours=720.0,
         )
 
     result = run_periodic_compaction_scan(mem)

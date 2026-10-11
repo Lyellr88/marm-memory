@@ -122,7 +122,7 @@ ENV_REFERENCE: tuple[EnvVar, ...] = (
         "COMPACTION_MIN_CONTAINMENT",
         "Memory",
         "0.9",
-        "Share of words two memories must have in common before they can be compacted.",
+        "Share of the shorter Unicode word set repeated before clustering; empty sets, numeric differences and known polarity differences fail closed. Zero opts into similarity-only clustering.",
     ),
     EnvVar(
         "COMPACTION_STAGING_TTL_HOURS",
