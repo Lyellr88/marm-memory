@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 import numpy as np
 import pytest
-from conftest import bind_live_modules
+from conftest import bind_live_attrs, bind_live_modules
 
 from marm_mcp_server.core.compaction import (
     find_compaction_candidates,
@@ -16,12 +16,24 @@ from marm_mcp_server.core.memory import MARMMemory
 
 @pytest.fixture(autouse=True)
 def _live_modules(monkeypatch):
+    modules = {}
     bind_live_modules(
         monkeypatch,
-        {},
+        modules,
         settings="marm_mcp_server.config.settings",
         memory="marm_mcp_server.core.memory",
+        compaction="marm_mcp_server.core.compaction",
     )
+    # Isolated server imports can leave collected functions on an old module
+    # generation. Patch the settings used by the actual functions under test.
+    bind_live_attrs(
+        monkeypatch,
+        globals(),
+        find_compaction_candidates="marm_mcp_server.core.compaction.find_compaction_candidates",
+        run_periodic_compaction_scan="marm_mcp_server.core.compaction.run_periodic_compaction_scan",
+        MARMMemory="marm_mcp_server.core.memory.MARMMemory",
+    )
+    monkeypatch.setattr(modules["compaction"], "settings", modules["settings"])
 
 
 @pytest.fixture
@@ -380,3 +392,23 @@ def test_trailing_punctuation_does_not_change_a_token():
     assert {"v2.2.9", "gpl-3.0-or-later"} <= _tokens(
         "Relicensed to gpl-3.0-or-later in v2.2.9."
     )
+
+
+@pytest.mark.parametrize(
+    "prefix",
+    [
+        "",
+        "The production cache policy shared across all running application workers says ",
+    ],
+)
+@pytest.mark.parametrize("values", [(10, 30, 60), (-1, 1, 2), ("0.5", "0.7", "0.9")])
+def test_conflicting_short_numeric_facts_never_cluster(mem, prefix, values):
+    for value in values:
+        _insert(mem, _at(0), content=f"{prefix}Cache timeout is {value} seconds.")
+    assert find_compaction_candidates(mem, "sess") == []
+
+
+def test_tokens_keep_short_numeric_values():
+    from marm_mcp_server.core.compaction import _tokens
+
+    assert {"1", "10", "30", "60", "0.5"} <= _tokens("1 10 30 60 0.5")

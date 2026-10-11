@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 import numpy as np
 
 from ..config.settings import COMPACTION_ENABLED
+from ..core.compaction import _numeric_facts
 from ..core.memory import MARMMemory, _safe_print
 from ..core.redaction import redact_secrets
 
@@ -56,6 +57,7 @@ def centroid_extract_summary(
     scores = vecs_norm @ centroid
     ranked = np.argsort(scores)[::-1]
 
+    numeric_facts = [_numeric_facts(content) for content in contents]
     selected: list[int] = []
     # Repeat until nothing changes: a memory dropped as a near-copy of one
     # that was later replaced must be judged again against what is kept.
@@ -72,6 +74,11 @@ def centroid_extract_summary(
                     k
                     for k, chosen in enumerate(selected)
                     if float(vecs_norm[chosen] @ vec) > dedup_threshold
+                    and (
+                        numeric_facts[chosen] == numeric_facts[idx]
+                        or contents[chosen] in contents[idx]
+                        or contents[idx] in contents[chosen]
+                    )
                 ),
                 None,
             )

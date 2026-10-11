@@ -55,7 +55,20 @@ _TOKEN = re.compile(r"[a-z0-9]+(?:[._#/-][a-z0-9]+)*")
 
 def _tokens(content: str) -> frozenset:
     found = _TOKEN.findall(html.unescape(content or "").lower())
-    return frozenset(token for token in found if len(token) >= 3)
+    return frozenset(
+        token for token in found if len(token) >= 3 or any(c.isdigit() for c in token)
+    )
+
+
+def _numeric_facts(content: str) -> frozenset[str]:
+    """Conservatively distinguish values before treating text as redundant.
+
+    Shared prose can exceed containment thresholds despite conflicting values.
+    Different numeric sets (including signs and decimal fractions) therefore
+    veto clustering and extractive deduplication, even with identical embeddings.
+    The summary selector may still keep a literal superset of the other text.
+    """
+    return frozenset(re.findall(r"[+-]?\d+(?:[.,]\d+)*", html.unescape(content or "")))
 
 
 def _containment(a: frozenset, b: frozenset) -> float:
@@ -158,6 +171,7 @@ def find_compaction_candidates(memory: _ConnectionSource, session_name: str) -> 
     threshold = settings.COMPACTION_SIMILARITY_THRESHOLD
     min_containment = settings.COMPACTION_MIN_CONTAINMENT
     tokens = [_tokens(c["content"]) for c in candidates]
+    numeric_facts = [_numeric_facts(c["content"]) for c in candidates]
     similar: dict = {i: {} for i in range(len(candidates))}
     for i in range(len(candidates)):
         for j in range(i + 1, len(candidates)):
@@ -169,6 +183,7 @@ def find_compaction_candidates(memory: _ConnectionSource, session_name: str) -> 
             )
             if (
                 score >= threshold
+                and (min_containment == 0 or numeric_facts[i] == numeric_facts[j])
                 and _containment(tokens[i], tokens[j]) >= min_containment
             ):
                 similar[i][j] = similar[j][i] = score

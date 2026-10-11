@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 import numpy as np
 import pytest
-from conftest import bind_live_modules
+from conftest import bind_live_attrs, bind_live_modules
 
 from marm_mcp_server.core.compaction import (
     find_compaction_candidates,
@@ -16,14 +16,28 @@ from marm_mcp_server.core.memory import MARMMemory
 
 @pytest.fixture(autouse=True)
 def _live_modules(monkeypatch):
+    modules = {}
     bind_live_modules(
         monkeypatch,
-        {},
+        modules,
         settings="marm_mcp_server.config.settings",
         memory="marm_mcp_server.core.memory",
+        compaction="marm_mcp_server.core.compaction",
     )
+    # Isolated server imports can leave collected functions on an old module
+    # generation. Patch the settings used by the actual functions under test.
+    bind_live_attrs(
+        monkeypatch,
+        globals(),
+        find_compaction_candidates="marm_mcp_server.core.compaction.find_compaction_candidates",
+        run_compaction_dry_run="marm_mcp_server.core.compaction.run_compaction_dry_run",
+        MARMMemory="marm_mcp_server.core.memory.MARMMemory",
+    )
+    monkeypatch.setattr(modules["compaction"], "settings", modules["settings"])
 
 
+# Synthetic restatement labels use letters: numeric suffixes would now be
+# conflicting facts, which these embedding/lifecycle tests do not model.
 def _make_embedding(direction: int, dim: int = 384) -> bytes:
     """Unit vector pointing mostly in `direction` axis — easy to control similarity."""
     v = np.zeros(dim, dtype=np.float32)
@@ -95,7 +109,7 @@ def test_existing_embeddings_can_compact_when_encoder_unavailable(
 
     similar = _make_similar_embeddings(3)
     for i, emb in enumerate(similar):
-        _insert_memory_row(mem, "sess", f"content {i}", emb)
+        _insert_memory_row(mem, "sess", f"content {chr(97 + i)}", emb)
 
     result = find_compaction_candidates(mem, "sess")
     assert len(result) == 1
@@ -114,7 +128,7 @@ def test_cluster_below_min_size_not_reported(monkeypatch, tmp_path):
 
     similar = _make_similar_embeddings(2)
     for i, emb in enumerate(similar):
-        _insert_memory_row(mem, "sess", f"content {i}", emb, age_hours=48)
+        _insert_memory_row(mem, "sess", f"content {chr(97 + i)}", emb, age_hours=48)
 
     result = find_compaction_candidates(mem, "sess")
     assert result == []
@@ -132,7 +146,7 @@ def test_young_memories_excluded_from_candidates(monkeypatch, tmp_path):
 
     similar = _make_similar_embeddings(3)
     for i, emb in enumerate(similar):
-        _insert_memory_row(mem, "sess", f"content {i}", emb, age_hours=12)
+        _insert_memory_row(mem, "sess", f"content {chr(97 + i)}", emb, age_hours=12)
 
     result = find_compaction_candidates(mem, "sess")
     assert result == []
@@ -150,7 +164,9 @@ def test_already_compacted_source_rows_excluded(monkeypatch, tmp_path):
 
     similar = _make_similar_embeddings(3)
     for i, emb in enumerate(similar):
-        _insert_memory_row(mem, "sess", f"content {i}", emb, compaction_role="source")
+        _insert_memory_row(
+            mem, "sess", f"content {chr(97 + i)}", emb, compaction_role="source"
+        )
 
     result = find_compaction_candidates(mem, "sess")
     assert result == []
@@ -168,7 +184,9 @@ def test_already_compacted_summary_rows_excluded(monkeypatch, tmp_path):
 
     similar = _make_similar_embeddings(3)
     for i, emb in enumerate(similar):
-        _insert_memory_row(mem, "sess", f"content {i}", emb, compaction_role="summary")
+        _insert_memory_row(
+            mem, "sess", f"content {chr(97 + i)}", emb, compaction_role="summary"
+        )
 
     result = find_compaction_candidates(mem, "sess")
     assert result == []
@@ -186,9 +204,9 @@ def test_cross_session_memories_never_grouped(monkeypatch, tmp_path):
 
     similar = _make_similar_embeddings(6)
     for i, emb in enumerate(similar[:3]):
-        _insert_memory_row(mem, "session-a", f"content {i}", emb)
+        _insert_memory_row(mem, "session-a", f"content {chr(97 + i)}", emb)
     for i, emb in enumerate(similar[3:]):
-        _insert_memory_row(mem, "session-b", f"content {i}", emb)
+        _insert_memory_row(mem, "session-b", f"content {chr(97 + i)}", emb)
 
     result_a = find_compaction_candidates(mem, "session-a")
     result_b = find_compaction_candidates(mem, "session-b")
@@ -211,7 +229,7 @@ def test_qualifying_cluster_reported_with_correct_shape(monkeypatch, tmp_path):
 
     similar = _make_similar_embeddings(3)
     for i, emb in enumerate(similar):
-        _insert_memory_row(mem, "session-x", f"memory content {i}", emb)
+        _insert_memory_row(mem, "session-x", f"memory content {chr(97 + i)}", emb)
 
     result = find_compaction_candidates(mem, "session-x")
 
@@ -240,7 +258,9 @@ def test_dry_run_does_not_mutate_db(monkeypatch, tmp_path):
     similar = _make_similar_embeddings(3)
     inserted_ids = []
     for i, emb in enumerate(similar):
-        inserted_ids.append(_insert_memory_row(mem, "sess", f"content {i}", emb))
+        inserted_ids.append(
+            _insert_memory_row(mem, "sess", f"content {chr(97 + i)}", emb)
+        )
 
     run_compaction_dry_run(mem, "sess")
 
@@ -271,7 +291,7 @@ def test_dry_run_writes_report_file(monkeypatch, tmp_path):
 
     similar = _make_similar_embeddings(3)
     for i, emb in enumerate(similar):
-        _insert_memory_row(mem, "my-session", f"content {i}", emb)
+        _insert_memory_row(mem, "my-session", f"content {chr(97 + i)}", emb)
 
     result = run_compaction_dry_run(mem, "my-session")
 
@@ -291,7 +311,7 @@ def test_dry_run_uses_existing_embeddings_when_encoder_unavailable(tmp_path):
 
     similar = _make_similar_embeddings(3)
     for i, emb in enumerate(similar):
-        _insert_memory_row(mem, "sess", f"content {i}", emb)
+        _insert_memory_row(mem, "sess", f"content {chr(97 + i)}", emb)
 
     report = run_compaction_dry_run(mem, "sess")
     assert len(report["candidates"]) == 1
@@ -314,7 +334,7 @@ def test_dry_run_report_dir_creation_failure_returns_none_not_crash(
 
     similar = _make_similar_embeddings(3)
     for i, emb in enumerate(similar):
-        _insert_memory_row(mem, "sess", f"content {i}", emb)
+        _insert_memory_row(mem, "sess", f"content {chr(97 + i)}", emb)
 
     result = run_compaction_dry_run(mem, "sess")
 
@@ -592,7 +612,7 @@ def _aged_session(mem: MARMMemory, session: str, age_hours: float = 48.0) -> lis
     """Three mutually-similar memories old enough to be compaction-eligible."""
     return [
         _insert_memory_row(
-            mem, session, f"{session} content {i}", emb, age_hours=age_hours
+            mem, session, f"{session} content {chr(97 + i)}", emb, age_hours=age_hours
         )
         for i, emb in enumerate(_make_similar_embeddings(3))
     ]
@@ -773,7 +793,7 @@ def test_periodic_scan_picks_a_session_back_up_when_a_memory_ages_in(
     # Three more, just over the line: eligible now, and not at the last scan.
     for i, emb in enumerate(_make_similar_embeddings(3, base_axis=40)):
         _insert_memory_row(
-            mem, "growing-session", f"later content {i}", emb, age_hours=24.5
+            mem, "growing-session", f"later content {chr(97 + i)}", emb, age_hours=24.5
         )
 
     assert run_periodic_compaction_scan(mem)["scanned"] == ["growing-session"]
@@ -800,7 +820,7 @@ def test_periodic_scan_sees_memories_imported_with_old_timestamps(
     # An archive import: inserted now, but timestamped weeks ago.
     for i, emb in enumerate(_make_similar_embeddings(3, base_axis=60)):
         _insert_memory_row(
-            mem, "imported-session", f"archived {i}", emb, age_hours=720.0
+            mem, "imported-session", f"archived {chr(97 + i)}", emb, age_hours=720.0
         )
 
     result = run_periodic_compaction_scan(mem)

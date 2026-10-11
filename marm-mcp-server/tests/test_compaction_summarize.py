@@ -113,9 +113,9 @@ class TestCentroidExtractSummary:
             return (v / np.linalg.norm(v)).tobytes()
 
         memories = [
-            ("near-1", near(1)),
-            ("near-2", near(2)),
-            ("near-3", near(3)),
+            ("near-a", near(1)),
+            ("near-b", near(2)),
+            ("near-c", near(3)),
             ("different-A", _make_vec(seed=200).tobytes()),
             ("different-B", _make_vec(seed=201).tobytes()),
         ]
@@ -448,3 +448,19 @@ def test_a_memory_dropped_before_a_replacement_is_reconsidered():
 
     assert longest in result
     assert dropped in result
+
+
+@pytest.mark.parametrize(
+    "prefix",
+    [
+        "",
+        "The production cache policy shared across all running application workers says ",
+    ],
+)
+@pytest.mark.parametrize("values", [(10, 30, 60), (-1, 1, 2), ("0.5", "0.7", "0.9")])
+def test_fallback_preserves_conflicting_short_numeric_values(prefix, values):
+    vec = _make_vec(seed=7).tobytes()
+    texts = [f"{prefix}Cache timeout is {value} seconds." for value in values]
+    for ordered in (texts, list(reversed(texts))):
+        result = centroid_extract_summary([(text, vec) for text in ordered], top_n=5)
+        assert all(text in result for text in texts)
