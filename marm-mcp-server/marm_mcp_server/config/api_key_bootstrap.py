@@ -331,6 +331,12 @@ def _warn_key_kept_in_memory() -> None:
     )
 
 
+def _say(*args: object) -> None:
+    """Print to stderr: this runs on import, and under STDIO stdout is the
+    JSON-RPC stream."""
+    print(*args, file=sys.stderr)
+
+
 def resolve_marm_api_key(server_host: str) -> str:
     """Resolve MARM_API_KEY from env, keychain, file, or a new key."""
     marm_api_key = os.environ.get("MARM_API_KEY", "")
@@ -387,25 +393,25 @@ def resolve_marm_api_key(server_host: str) -> str:
                     else:
                         _warn_key_kept_in_memory()
         except Exception as e:
-            print(f"WARNING: Could not save API key to {_MARM_ENV_PATH}: {e}")
+            _say(f"WARNING: Could not save API key to {_MARM_ENV_PATH}: {e}")
 
-        print()
-        print(
+        _say()
+        _say(
             "MARM: SERVER_HOST=0.0.0.0 detected — API key auto-generated (first start)."
         )
         if key_persisted:
-            print(f"Saved to: {_file_link(_MARM_ENV_PATH)}")
-            print()
-            print(
+            _say(f"Saved to: {_file_link(_MARM_ENV_PATH)}")
+            _say()
+            _say(
                 "Add this to your MCP client (replace YOUR_KEY with the key from the file above):"
             )
-            print(
+            _say(
                 '  claude mcp add --transport http marm-memory http://localhost:8001/mcp --header "Authorization: Bearer YOUR_KEY"'
             )
-            print()
-            print("On subsequent starts the key loads silently from the file above.")
+            _say()
+            _say("On subsequent starts the key loads silently from the file above.")
         else:
-            print("Set MARM_API_KEY explicitly and restart to connect.")
-        print()
+            _say("Set MARM_API_KEY explicitly and restart to connect.")
+        _say()
 
     return marm_api_key
