@@ -146,7 +146,7 @@ async def marm_stage_compaction_summaries(
 
             if expires_at and now > expires_at:
                 conn.execute(
-                    "UPDATE compaction_staging SET status = 'stale', updated_at = ? WHERE id = ?",
+                    "UPDATE compaction_staging SET status = 'stale', updated_at = ? WHERE id = ? AND status = 'pending_summary'",
                     (now, candidate_id),
                 )
                 results.append(
@@ -183,7 +183,7 @@ async def marm_stage_compaction_summaries(
             missing = set(staged_source_ids) - found_ids
             if missing:
                 conn.execute(
-                    "UPDATE compaction_staging SET status = 'stale', updated_at = ? WHERE id = ?",
+                    "UPDATE compaction_staging SET status = 'stale', updated_at = ? WHERE id = ? AND status = 'pending_summary'",
                     (now, candidate_id),
                 )
                 results.append(
@@ -198,7 +198,7 @@ async def marm_stage_compaction_summaries(
             wrong_session = [r[0] for r in current_rows if r[1] != session_name]
             if wrong_session:
                 conn.execute(
-                    "UPDATE compaction_staging SET status = 'stale', updated_at = ? WHERE id = ?",
+                    "UPDATE compaction_staging SET status = 'stale', updated_at = ? WHERE id = ? AND status = 'pending_summary'",
                     (now, candidate_id),
                 )
                 results.append(
@@ -215,7 +215,7 @@ async def marm_stage_compaction_summaries(
             ]
             if already_compacted:
                 conn.execute(
-                    "UPDATE compaction_staging SET status = 'stale', updated_at = ? WHERE id = ?",
+                    "UPDATE compaction_staging SET status = 'stale', updated_at = ? WHERE id = ? AND status = 'pending_summary'",
                     (now, candidate_id),
                 )
                 results.append(
@@ -228,12 +228,21 @@ async def marm_stage_compaction_summaries(
                 continue
 
             staged_summary, redacted = redact_secrets(suggested_summary)
-            conn.execute(
+            updated = conn.execute(
                 "UPDATE compaction_staging "
                 "SET suggested_summary = ?, status = 'summary_staged', updated_at = ? "
-                "WHERE id = ?",
+                "WHERE id = ? AND status = 'pending_summary'",
                 (staged_summary, now, candidate_id),
             )
+            if updated.rowcount != 1:
+                results.append(
+                    {
+                        "candidate_id": candidate_id,
+                        "status": "error",
+                        "reason": "candidate status changed while staging",
+                    }
+                )
+                continue
             results.append(
                 {
                     "candidate_id": candidate_id,
@@ -313,7 +322,8 @@ async def marm_apply_compaction(request: ApplyCompactionRequest) -> dict:
     through the write queue when available (V4), or executed directly with
     BEGIN IMMEDIATE when the queue is disabled.
 
-    action='discard': marks staging status to 'discarded'. No write to memories.
+    action='discard': marks a pending, nudge-exhausted or staged candidate
+    'discarded'. No write to memories.
 
     Validations on apply: candidate exists and is summary_staged, source rows exist
     and are not already compacted, source_updated_at_snapshot matches current
@@ -363,7 +373,14 @@ async def marm_apply_compaction(request: ApplyCompactionRequest) -> dict:
                 "summary_memory_id": summary_row[0] if summary_row else None,
             }
 
-        if status != "summary_staged":
+        discardable = ("pending_summary", "nudge_exhausted", "summary_staged")
+        if action == "discard" and status not in discardable:
+            return {
+                "candidate_id": candidate_id,
+                "status": "error",
+                "reason": f"candidate status is '{status}', which cannot be discarded",
+            }
+        if action == "apply" and status != "summary_staged":
             return {
                 "candidate_id": candidate_id,
                 "status": "error",
@@ -371,17 +388,23 @@ async def marm_apply_compaction(request: ApplyCompactionRequest) -> dict:
             }
 
         if action == "discard":
-            conn.execute(
+            updated = conn.execute(
                 "UPDATE compaction_staging "
                 "SET status = 'discarded', reviewed_at = ?, updated_at = ? "
-                "WHERE id = ?",
+                "WHERE id = ? AND status IN ('pending_summary', 'nudge_exhausted', 'summary_staged')",
                 (now, now, candidate_id),
             )
+            if updated.rowcount != 1:
+                return {
+                    "candidate_id": candidate_id,
+                    "status": "error",
+                    "reason": "candidate status changed while discarding",
+                }
             return {"candidate_id": candidate_id, "status": "discarded"}
 
         if expires_at and now > expires_at:
             conn.execute(
-                "UPDATE compaction_staging SET status = 'stale', updated_at = ? WHERE id = ?",
+                "UPDATE compaction_staging SET status = 'stale', updated_at = ? WHERE id = ? AND status = 'summary_staged'",
                 (now, candidate_id),
             )
             return {
@@ -404,7 +427,7 @@ async def marm_apply_compaction(request: ApplyCompactionRequest) -> dict:
         missing = set(source_ids) - found_ids
         if missing:
             conn.execute(
-                "UPDATE compaction_staging SET status = 'stale', updated_at = ? WHERE id = ?",
+                "UPDATE compaction_staging SET status = 'stale', updated_at = ? WHERE id = ? AND status = 'summary_staged'",
                 (now, candidate_id),
             )
             return {
@@ -416,7 +439,7 @@ async def marm_apply_compaction(request: ApplyCompactionRequest) -> dict:
         wrong_session = [r[0] for r in current_rows if r[1] != session_name]
         if wrong_session:
             conn.execute(
-                "UPDATE compaction_staging SET status = 'stale', updated_at = ? WHERE id = ?",
+                "UPDATE compaction_staging SET status = 'stale', updated_at = ? WHERE id = ? AND status = 'summary_staged'",
                 (now, candidate_id),
             )
             return {
@@ -430,7 +453,7 @@ async def marm_apply_compaction(request: ApplyCompactionRequest) -> dict:
         ]
         if already_compacted:
             conn.execute(
-                "UPDATE compaction_staging SET status = 'stale', updated_at = ? WHERE id = ?",
+                "UPDATE compaction_staging SET status = 'stale', updated_at = ? WHERE id = ? AND status = 'summary_staged'",
                 (now, candidate_id),
             )
             return {
@@ -442,7 +465,7 @@ async def marm_apply_compaction(request: ApplyCompactionRequest) -> dict:
         for mem_id, _, content_hash, _, _ in current_rows:
             if snapshot.get(mem_id) != content_hash:
                 conn.execute(
-                    "UPDATE compaction_staging SET status = 'stale', updated_at = ? WHERE id = ?",
+                    "UPDATE compaction_staging SET status = 'stale', updated_at = ? WHERE id = ? AND status = 'summary_staged'",
                     (now, candidate_id),
                 )
                 return {
@@ -538,7 +561,7 @@ async def marm_compaction(request: CompactionRequest) -> dict:
     action="stage"      — submit your summary: {candidate_id, suggested_summary}; source_memory_ids optional
     action="review"     — inspect staged summaries before committing
     action="apply"      — commit a staged summary; source memories are marked compacted
-    action="discard"    — reject a staged summary without touching source memories
+    action="discard"    — reject a candidate, staged or not, without touching source memories
     """
     if request.action == "status":
         return _compaction_status()

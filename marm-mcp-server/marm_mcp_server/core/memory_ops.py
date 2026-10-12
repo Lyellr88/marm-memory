@@ -396,7 +396,7 @@ async def _replace_memory(
             """
             UPDATE compaction_staging
             SET status = 'stale', updated_at = ?
-            WHERE status != 'applied'
+            WHERE status IN ('pending_summary', 'nudge_exhausted', 'summary_staged')
               AND EXISTS (
                   SELECT 1 FROM json_each(compaction_staging.source_memory_ids)
                   WHERE value = ?
@@ -515,7 +515,7 @@ async def _store_doc_mirror(
                     """
                     UPDATE compaction_staging
                     SET status = 'stale', updated_at = ?
-                    WHERE status != 'applied'
+                    WHERE status IN ('pending_summary', 'nudge_exhausted', 'summary_staged')
                       AND EXISTS (
                           SELECT 1 FROM json_each(compaction_staging.source_memory_ids)
                           WHERE value = ?

@@ -65,7 +65,7 @@ def test_internal_memory_mutations_use_queue_and_keep_indexes(monkeypatch, tmp_p
                         json.dumps([memory_id]),
                         "Original console memory",
                         "Original summary",
-                        "ready",
+                        "summary_staged",
                         "candidate-hash",
                         "source-hash",
                         "2099-01-01T00:00:00+00:00",
@@ -378,7 +378,7 @@ def test_replace_keeps_the_timestamp_when_only_metadata_changes(monkeypatch, tmp
                        (id, session_name, source_memory_ids, preview, status,
                         candidate_hash, source_updated_at_snapshot, expires_at,
                         created_at, updated_at)
-                       VALUES (?, ?, ?, ?, 'pending_review', ?, ?, ?, ?, ?)""",
+                       VALUES (?, ?, ?, ?, 'pending_summary', ?, ?, ?, ?, ?)""",
                     (
                         "stage-1",
                         "s",

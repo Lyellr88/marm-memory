@@ -1,6 +1,8 @@
+import asyncio
 import json
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 
 import numpy as np
@@ -105,6 +107,138 @@ def _get_staging_row(mem: MARMMemory, row_id: str) -> dict | None:
         "suggested_summary": row[2],
         "reviewed_at": row[3],
     }
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("concurrent_action", ["discard", "supersede"])
+async def test_inflight_stage_cannot_resurrect_candidate(
+    monkeypatch, tmp_path, concurrent_action
+):
+    import marm_mcp_server.endpoints.compaction as ep
+    from marm_mcp_server.core.models import (
+        ApplyCompactionRequest,
+        StageCompactionSummariesRequest,
+        StagedSummaryItem,
+    )
+
+    mem = MARMMemory(str(tmp_path / "memory.db"))
+    monkeypatch.setattr(ep, "memory", mem)
+    embeddings = _make_similar_embeddings(4)
+    ids = [_insert_memory_row(mem, "sess", f"c{i}", embeddings[i]) for i in range(4)]
+    row_id = _insert_staging_row(mem, "sess", ids[:3])
+    original_redact = ep.redact_secrets
+
+    def concurrent_review(text):
+        if concurrent_action == "discard":
+            with ThreadPoolExecutor(max_workers=1) as pool:
+                result = pool.submit(
+                    asyncio.run,
+                    ep.marm_apply_compaction(
+                        ApplyCompactionRequest(candidate_id=row_id, action="discard")
+                    ),
+                ).result(timeout=10)
+            assert result["status"] == "discarded"
+        else:
+            persist_candidates_to_staging(
+                mem,
+                [
+                    {
+                        "session_name": "sess",
+                        "source_memory_ids": ids,
+                        "preview": ["c0", "c1", "c2", "c3"],
+                    }
+                ],
+            )
+        return original_redact(text)
+
+    monkeypatch.setattr(ep, "redact_secrets", concurrent_review)
+    result = await ep.marm_stage_compaction_summaries(
+        StageCompactionSummariesRequest(
+            summaries=[
+                StagedSummaryItem(candidate_id=row_id, suggested_summary="Summary.")
+            ]
+        )
+    )
+    assert result["results"][0]["status"] == "error"
+    row = _get_staging_row(mem, row_id)
+    assert row["status"] == ("discarded" if concurrent_action == "discard" else "stale")
+    assert row["suggested_summary"] is None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("concurrent_action", ["apply", "supersede"])
+async def test_inflight_discard_preserves_concurrent_terminal_state(
+    monkeypatch, tmp_path, concurrent_action
+):
+    import marm_mcp_server.endpoints.compaction as ep
+    from marm_mcp_server.core.models import ApplyCompactionRequest
+
+    mem = MARMMemory(str(tmp_path / "memory.db"))
+    mem._encoder_failed = True
+    monkeypatch.setattr(ep, "memory", mem)
+    embeddings = _make_similar_embeddings(4)
+    ids = [_insert_memory_row(mem, "sess", f"c{i}", embeddings[i]) for i in range(4)]
+    row_id = _insert_staging_row(
+        mem, "sess", ids[:3], status="summary_staged", suggested_summary="Summary."
+    )
+    original_connection = mem.get_connection
+    intercepted = False
+
+    class ConnectionProxy:
+        def __init__(self, conn):
+            self.conn = conn
+
+        def execute(self, sql, parameters=()):
+            nonlocal intercepted
+            if "SET status = 'discarded'" in sql and not intercepted:
+                intercepted = True
+                if concurrent_action == "apply":
+                    with ThreadPoolExecutor(max_workers=1) as pool:
+                        result = pool.submit(
+                            asyncio.run,
+                            ep.marm_apply_compaction(
+                                ApplyCompactionRequest(
+                                    candidate_id=row_id, action="apply"
+                                )
+                            ),
+                        ).result(timeout=10)
+                    assert result["status"] == "applied"
+                else:
+                    # A concurrent invalidation commits before the discard write.
+                    with original_connection() as other:
+                        other.execute(
+                            "UPDATE compaction_staging SET status = 'stale' "
+                            "WHERE id = ? AND status = 'summary_staged'",
+                            (row_id,),
+                        )
+            return self.conn.execute(sql, parameters)
+
+    @contextmanager
+    def racing_connection():
+        with original_connection() as conn:
+            yield ConnectionProxy(conn)
+
+    monkeypatch.setattr(mem, "get_connection", racing_connection)
+    result = await ep.marm_apply_compaction(
+        ApplyCompactionRequest(candidate_id=row_id, action="discard")
+    )
+    assert intercepted
+    assert result["status"] == "error"
+    with original_connection() as conn:
+        row = conn.execute(
+            "SELECT status, reviewed_at FROM compaction_staging WHERE id = ?", (row_id,)
+        ).fetchone()
+        sources = conn.execute(
+            "SELECT compacted_into FROM memories WHERE id IN (?, ?, ?)", tuple(ids[:3])
+        ).fetchall()
+    assert row[0] == ("applied" if concurrent_action == "apply" else "stale")
+    if concurrent_action == "apply":
+        assert row[1] is not None
+        assert all(source[0] == sources[0][0] for source in sources)
+        assert sources[0][0] is not None
+    else:
+        assert row[1] is None
+        assert all(source[0] is None for source in sources)
 
 
 def test_candidate_hash_is_order_independent():

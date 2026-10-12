@@ -156,7 +156,7 @@ async def _delete_memories(mem: "MARMMemory", memory_ids: list[str]) -> dict:
             f"""
             UPDATE compaction_staging
             SET status = 'stale', updated_at = ?
-            WHERE status != 'applied'
+            WHERE status IN ('pending_summary', 'nudge_exhausted', 'summary_staged')
               AND EXISTS (
                   SELECT 1 FROM json_each(compaction_staging.source_memory_ids)
                   WHERE value IN ({placeholders})
