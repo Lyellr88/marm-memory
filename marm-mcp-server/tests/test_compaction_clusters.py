@@ -44,6 +44,7 @@ def mem(tmp_path, monkeypatch):
     monkeypatch.setattr(s, "COMPACTION_MIN_CLUSTER_SIZE", 3)
     monkeypatch.setattr(s, "COMPACTION_MAX_CLUSTER_SIZE", 8)
     monkeypatch.setattr(s, "COMPACTION_SIMILARITY_THRESHOLD", 0.88)
+    monkeypatch.setattr(s, "COMPACTION_MIN_CONTAINMENT", 0.9)
     monkeypatch.setattr(s, "COMPACTION_MIN_AGE_HOURS", 24)
     store = MARMMemory(str(tmp_path / "memory.db"))
     store._encoder_failed = True
@@ -59,7 +60,11 @@ def _at(degrees: float, dim: int = 384) -> bytes:
 
 
 def _insert(
-    mem: MARMMemory, embedding: bytes, session: str = "sess", mem_id: str = ""
+    mem: MARMMemory,
+    embedding: bytes,
+    session: str = "sess",
+    content: str = "the release plan was approved",
+    mem_id: str = "",
 ) -> str:
     mem_id = mem_id or str(uuid.uuid4())
     ts = (datetime.now(timezone.utc) - timedelta(hours=48)).isoformat()
@@ -68,7 +73,7 @@ def _insert(
             "INSERT INTO memories (id, session_name, content, embedding, timestamp, "
             "context_type, metadata, content_hash) "
             "VALUES (?, ?, ?, ?, ?, 'general', '{}', ?)",
-            (mem_id, session, f"memory {mem_id}", embedding, ts, f"hash-{mem_id}"),
+            (mem_id, session, content, embedding, ts, f"hash-{mem_id}"),
         )
     return mem_id
 
@@ -337,3 +342,226 @@ def test_a_pair_rejected_during_a_scan_is_not_staged(mem):
         )
 
     assert compaction.persist_candidates_to_staging(mem, candidates) == 0
+
+
+def test_memories_that_embed_alike_but_say_different_things_do_not_cluster(mem):
+    for version, codename in (
+        ("1.3.0", "bedrock"),
+        ("1.4.0", "fidelity"),
+        ("1.5.0", "lens"),
+    ):
+        _insert(
+            mem,
+            _at(0.1),
+            content=f"Release v{version} {codename} shipped with its plan",
+        )
+
+    assert find_compaction_candidates(mem, "sess") == []
+
+
+def test_a_memory_restated_inside_another_clusters_with_it(mem):
+    short = "relicensed to GPL-3.0-or-later in v2.2.9"
+    for extra in (
+        "",
+        " as a derivative work",
+        " as a derivative work of GPL emulators",
+    ):
+        _insert(mem, _at(0.1), content=short + extra)
+
+    [cluster] = find_compaction_candidates(mem, "sess")
+
+    assert len(cluster["source_memory_ids"]) == 3
+
+
+def test_containment_zero_restores_similarity_alone(mem, monkeypatch):
+    import marm_mcp_server.config.settings as s
+
+    monkeypatch.setattr(s, "COMPACTION_MIN_CONTAINMENT", 0.0)
+    for version in ("1.3.0", "1.4.0", "1.5.0"):
+        _insert(mem, _at(0.1), content=f"Release v{version} shipped")
+
+    assert len(find_compaction_candidates(mem, "sess")) == 1
+
+
+def test_trailing_punctuation_does_not_change_a_token():
+    from marm_mcp_server.core.compaction import _containment, _tokens
+
+    short = _tokens("The release shipped.")
+    long = _tokens("The release shipped with tests")
+    assert _containment(short, long) == 1.0
+    assert {"v2.2.9", "gpl-3.0-or-later"} <= _tokens(
+        "Relicensed to gpl-3.0-or-later in v2.2.9."
+    )
+
+
+@pytest.mark.parametrize(
+    "prefix",
+    [
+        "",
+        "The production cache policy shared across all running application workers says ",
+    ],
+)
+@pytest.mark.parametrize("values", [(10, 30, 60), (-1, 1, 2), ("0.5", "0.7", "0.9")])
+def test_conflicting_short_numeric_facts_never_cluster(mem, prefix, values):
+    for value in values:
+        _insert(mem, _at(0), content=f"{prefix}Cache timeout is {value} seconds.")
+    assert find_compaction_candidates(mem, "sess") == []
+
+
+def test_tokens_keep_short_numeric_values():
+    from marm_mcp_server.core.compaction import _tokens
+
+    assert {"1", "10", "30", "60", "0.5"} <= _tokens("1 10 30 60 0.5")
+
+
+@pytest.mark.parametrize(
+    "texts",
+    [
+        [
+            "Бюджет повторов увеличен для рабочего процесса.",
+            "Политика очистки кеша изменена для поиска.",
+            "Сертификат сервера успешно обновлён.",
+        ],
+        [
+            "摄取工作进程的重试预算已提高。",
+            "搜索索引的缓存淘汰策略已更改。",
+            "服务器证书已更新。",
+        ],
+        [
+            "The retry budget was raised for the ingest worker.",
+            "Политика очистки кеша изменена для поиска.",
+            "服务器证书已更新。",
+        ],
+        ["db up, ok to go", "api is on, we go", "ui is off, no go"],
+        ["...", "!!!", "???"],
+        ["", " ", "\t"],
+    ],
+)
+def test_unrelated_unicode_short_or_unrecognized_text_does_not_cluster(mem, texts):
+    for text in texts:
+        _insert(mem, _at(0), content=text)
+    assert find_compaction_candidates(mem, "sess") == []
+
+
+@pytest.mark.parametrize(
+    "pair",
+    [
+        ("Migration is ok", "Migration is not ok"),
+        ("The ingest worker is up.", "The ingest worker is down."),
+        ("Feature flag retry_budget is on.", "Feature flag retry_budget is off."),
+    ],
+)
+@pytest.mark.parametrize(
+    "prefix",
+    [
+        "",
+        "The production operational policy shared across every running application service and deployment environment states that ",
+    ],
+)
+def test_known_polarity_conflicts_do_not_cluster(mem, pair, prefix):
+    for text in [pair[0], pair[1], pair[0] + "."]:
+        _insert(mem, _at(0), content=prefix + text)
+    assert find_compaction_candidates(mem, "sess") == []
+
+
+def test_unicode_casefold_and_short_words_are_retained():
+    from marm_mcp_server.core.compaction import _containment, _tokens
+
+    assert {"db", "up", "ok", "to", "go"} <= _tokens("db up, ok to go")
+    assert _tokens("статус готов".upper()) == _tokens("статус готов")
+    assert _tokens("Straße") == _tokens("STRASSE")
+    assert _tokens("缓存策略已更改") == {"缓存策略已更改"}
+    assert _containment(frozenset(), frozenset()) == 0
+
+
+@pytest.mark.parametrize(
+    "text", ["статус готов".upper(), "缓存策略已更改", "db up, ok to go"]
+)
+def test_identical_unicode_and_short_word_facts_can_cluster(mem, text):
+    for _ in range(3):
+        _insert(mem, _at(0), content=text)
+    assert len(find_compaction_candidates(mem, "sess")) == 1
+
+
+@pytest.mark.parametrize(
+    "pair",
+    [
+        ("Migration is ok", "Migration is not-ok"),
+        ("Service is compliant", "Service is non-compliant"),
+        ("Telemetry is enabled", "Telemetry is not_enabled"),
+    ],
+)
+def test_compound_negation_blocks_clustering_under_long_shared_prose(mem, pair):
+    prefix = "The production operational policy shared across every running application service and deployment environment states that "
+    for text in [pair[0], pair[1], pair[0] + "."]:
+        _insert(mem, _at(0), content=prefix + text)
+    assert find_compaction_candidates(mem, "sess") == []
+
+
+@pytest.mark.parametrize(
+    "negative",
+    [
+        "can't",
+        "can\u2019t",
+        "cannot",
+        "can not",
+        "won't",
+        "won\u2019t",
+        "isn't",
+        "isn\u2019t",
+    ],
+)
+@pytest.mark.parametrize(
+    "prefix",
+    [
+        "",
+        "The production operational policy shared across every running application service and deployment environment states that ",
+    ],
+)
+def test_contracted_negation_does_not_cluster_with_positive(mem, negative, prefix):
+    for text in [
+        "The service can connect",
+        f"The service {negative} connect",
+        "The service can connect.",
+    ]:
+        _insert(mem, _at(0), content=prefix + text)
+    assert find_compaction_candidates(mem, "sess") == []
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_longer_repetitive_text_cannot_hide_distinct_short_fact(mem, reverse):
+    texts = ["Cache policy changed", "Cache " * 30, "Cache policy changed."]
+    if reverse:
+        texts.reverse()
+    for text in texts:
+        _insert(mem, _at(0), content=text)
+    assert find_compaction_candidates(mem, "sess") == []
+
+
+def test_contracted_and_uncontracted_negation_share_marker():
+    from marm_mcp_server.core.compaction import _polarity, _tokens
+
+    assert (
+        _polarity(_tokens("can't connect"))
+        == _polarity(_tokens("cannot connect"))
+        == _polarity(_tokens("can not connect"))
+        == {"not"}
+    )
+
+
+@pytest.mark.parametrize(
+    "texts",
+    [
+        ["Статус сервера \u0661", "Статус сервера ٢", "Статус сервера ٣"],
+        ["服务器状态１", "服务器状态２", "服务器状态３"],
+    ],
+)
+def test_unicode_digits_keep_numeric_veto_live(mem, texts, monkeypatch):
+    import marm_mcp_server.config.settings as s
+    from marm_mcp_server.core.compaction import _numeric_facts
+
+    monkeypatch.setattr(s, "COMPACTION_MIN_CONTAINMENT", 0.01)
+    assert len({_numeric_facts(text) for text in texts}) == 3
+    for text in texts:
+        _insert(mem, _at(0), content="Status " + text)
+    assert find_compaction_candidates(mem, "sess") == []

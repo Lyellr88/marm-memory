@@ -1199,7 +1199,7 @@ Everything above runs on a small number of deliberate mechanisms. This section i
   - **Layer 2, semantic merge**: near-duplicates above `CONSOLIDATION_THRESHOLD` cosine similarity are merged rather than accumulated. This never blocks a write; if the encoder isn't available, the write proceeds unconsolidated.
   - The tradeoff is measured and published: roughly 9x median write cost (58ms vs 6.5ms) in exchange for a store that stays clean, because reads dominate memory workloads. See section 3 of the benchmarks above.
 - **Concept indexing is a durable outbox**: a write records an indexing task in the same transaction as the memory, so a memory cannot exist without one. A background worker drains that queue and writes the concept graph. Nothing on the write path waits for extraction, and a process killed mid-extraction loses no work because the task is a row rather than an in-memory job. Both transports run a worker, so the two coordinate through a leased lock in the memory database rather than an in-process lock, which would not span them.
-- **Compaction** (opt-in, `COMPACTION_ENABLED=1`) is Layer 3: after enough writes in a session, a background pass detects clusters of related memories in which every pair clears the cosine-similarity threshold, gated by minimum cluster size, minimum age, and an active-session grace period so it never compacts work in flight. MARM then injects a bounded request asking the connected agent to summarize each cluster: `candidates` → `stage` → `review` → `apply` or `discard`. Source memory IDs are preserved on apply, so compacted summaries stay traceable to their originals. Staged summaries expire (`COMPACTION_STAGING_TTL_HOURS`), nudges are capped and cooldown-limited, and the injection has a byte budget. The design is honest about what LLMs are for: MARM detects, the agent summarizes, and a human-reviewable stage/apply/discard loop gates the destructive step.
+- **Compaction** (opt-in, `COMPACTION_ENABLED=1`) is Layer 3: after enough writes in a session, a background pass detects clusters of memories that restate each other: every pair must clear the cosine-similarity threshold and share most of its words, gated by minimum cluster size, minimum age, and an active-session grace period so it never compacts work in flight. MARM then injects a bounded request asking the connected agent to summarize each cluster: `candidates` → `stage` → `review` → `apply` or `discard`. Source memory IDs are preserved on apply, so compacted summaries stay traceable to their originals. Staged summaries expire (`COMPACTION_STAGING_TTL_HOURS`), nudges are capped and cooldown-limited, and the injection has a byte budget. The design is honest about what LLMs are for: MARM detects, the agent summarizes, and a human-reviewable stage/apply/discard loop gates the destructive step.
 
 ### Recall path
 
@@ -1305,6 +1305,7 @@ Packaged docs are indexed into the `marm_system` memory namespace on startup and
 | `COMPACTION_TRIGGER_COUNT` | `5` | Writes per session before a compaction pass. A maintenance pass also runs on the scheduler interval, so a session that stops being written to is still scanned once its memories age past `COMPACTION_MIN_AGE_HOURS` |
 | `COMPACTION_SIMILARITY_THRESHOLD` / `COMPACTION_MIN_CLUSTER_SIZE` / `COMPACTION_MIN_AGE_HOURS` | `0.88` / `3` / `24` | Cluster detection gates |
 | `COMPACTION_MAX_CLUSTER_SIZE` | `8` | Most memories one compaction may fold into a summary. A discarded cluster is not offered again as it grows |
+| `COMPACTION_MIN_CONTAINMENT` | `0.9` | Share of the shorter text's Unicode casefolded word set repeated by the other memory before clustering (character length selects the shorter text; equal lengths use the larger token set). The threshold constrains only that shorter side, not the longer memory's extra content. All short words are retained; empty/unrecognized token sets fail closed, trading recall for safety when a restatement cannot be verified. Numeric-value differences and known polarity markers (such as not/no, contracted n't/n’t, on/off, up/down) independently veto clustering. `0` explicitly opts into similarity-only clustering. This lexical heuristic cannot prove semantic equivalence; CJK uses whole Unicode runs without dictionary segmentation and may conservatively miss restatements. |
 | `COMPACTION_STAGING_TTL_HOURS` | `168` | How long staged summaries wait before expiring |
 | `MARM_DISTILL_NUDGE` | `1` | Whether MARM may attach a review request for one waiting proposal to a tool response, asking the agent to `apply` or `discard` it. Set `0` to never ask |
 | `MARM_DISTILL_MAX_NUDGES` | `3` | Times a single proposal may be asked about before it is marked `nudge_exhausted` and stops being offered |
@@ -1335,6 +1336,18 @@ Packaged docs are indexed into the `marm_system` memory namespace on startup and
 | `CONCEPT_INDEX_BATCH_PAUSE_MS` | `250` | Pause between batches while clearing a backlog. Cuts worst-case recall during indexing from ~270ms to ~80ms for about 18% longer drain. `0` disables it |
 | `CONCEPT_INDEX_LEASE_SECONDS` | `300` | How long a claimed indexing task stays owned once nothing is renewing it. Work in progress renews its own lease, so this bounds how long a *killed* process holds tasks, not how long a batch may take. Reclaimed tasks spend no attempt |
 | `CONCEPT_INDEX_MAX_ATTEMPTS` | `3` | Failed attempts before a memory is parked with its error instead of retried |
+
+The extractive fallback uses a stricter rule independent of the clustering threshold:
+only a verbatim, word-boundary-aligned contained copy with preserved numeric facts
+and matching known polarity markers may be replaced by its fuller copy. Other
+statements, including contradictory historical corrections, remain separate.
+Centroid similarity ranks the bounded `top_n` selection; equal scores prefer newer
+stored timestamps (missing or invalid timestamps rank oldest). A newer shorter
+copy never erases extra facts in an older fuller copy. This budget is not a
+promise to preserve every fact in an arbitrarily large candidate. The polarity
+vocabulary is a conservative English/Russian check, not a general multilingual
+negation or semantic parser; human review remains necessary before applying summaries.
+
 
 </details>
 

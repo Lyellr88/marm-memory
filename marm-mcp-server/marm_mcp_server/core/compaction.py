@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import html
 import json
 import re
 import sqlite3
@@ -46,6 +47,60 @@ def _cosine_similarity(a: bytes, b: bytes) -> float:
     if norm_a == 0.0 or norm_b == 0.0:
         return 0.0
     return float(np.dot(va, vb) / (norm_a * norm_b))
+
+
+# Separators count only between characters, so "shipped." is "shipped".
+_TOKEN = re.compile(r"[^\W_]+(?:[._#/-][^\W_]+)*", re.UNICODE)
+_POLARITY = frozenset(
+    {
+        "not",
+        "non",
+        "no",
+        "never",
+        "on",
+        "off",
+        "up",
+        "down",
+        "enabled",
+        "disabled",
+        "не",
+        "нет",
+        "никогда",
+    }
+)
+
+
+def _tokens(content: str) -> frozenset:
+    normalized = html.unescape(content or "").casefold()
+    normalized = re.sub(r"n['\u2019]t\b", " not", normalized)
+    normalized = re.sub(r"\bcannot\b", "can not", normalized)
+    return frozenset(_TOKEN.findall(normalized))
+
+
+def _polarity(tokens: frozenset) -> frozenset:
+    parts = {part for token in tokens for part in re.split(r"[._#/-]", token)}
+    return frozenset(parts & _POLARITY)
+
+
+def _numeric_facts(content: str) -> frozenset[str]:
+    """Conservatively distinguish values before treating text as redundant.
+
+    Shared prose can exceed containment thresholds despite conflicting values.
+    Different numeric sets (including signs and decimal fractions) therefore
+    veto clustering and extractive deduplication, even with identical embeddings.
+    The summary selector may still keep a literal superset of the other text.
+    """
+    return frozenset(re.findall(r"[+-]?\d+(?:[.,]\d+)*", html.unescape(content or "")))
+
+
+def _containment(a: frozenset, b: frozenset) -> float:
+    """Share of the first (shorter text) memory's tokens held by the second.
+
+    Embeddings rate different documents on one subject as near-identical, so
+    similarity alone cannot tell a restatement from a different fact. Word
+    agreement is only a heuristic; empty token sets provide no evidence.
+    """
+    return len(a & b) / len(a) if a and b else 0.0
 
 
 def _complete_linkage_groups(
@@ -135,6 +190,9 @@ def find_compaction_candidates(memory: _ConnectionSource, session_name: str) -> 
         return []
 
     threshold = settings.COMPACTION_SIMILARITY_THRESHOLD
+    min_containment = settings.COMPACTION_MIN_CONTAINMENT
+    tokens = [_tokens(c["content"]) for c in candidates]
+    numeric_facts = [_numeric_facts(c["content"]) for c in candidates]
     similar: dict = {i: {} for i in range(len(candidates))}
     for i in range(len(candidates)):
         for j in range(i + 1, len(candidates)):
@@ -144,7 +202,20 @@ def find_compaction_candidates(memory: _ConnectionSource, session_name: str) -> 
             score = _cosine_similarity(
                 candidates[i]["embedding"], candidates[j]["embedding"]
             )
-            if score >= threshold:
+            short, long = sorted(
+                (i, j), key=lambda k: (len(candidates[k]["content"]), -len(tokens[k]))
+            )
+            if (
+                score >= threshold
+                and (
+                    min_containment == 0
+                    or (
+                        numeric_facts[i] == numeric_facts[j]
+                        and _polarity(tokens[i]) == _polarity(tokens[j])
+                    )
+                )
+                and _containment(tokens[short], tokens[long]) >= min_containment
+            ):
                 similar[i][j] = similar[j][i] = score
 
     groups = _complete_linkage_groups(

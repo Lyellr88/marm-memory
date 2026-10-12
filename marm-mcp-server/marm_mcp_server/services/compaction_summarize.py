@@ -1,5 +1,6 @@
 import asyncio
 import json
+import re
 import sqlite3
 import uuid
 from datetime import datetime, timezone
@@ -7,42 +8,70 @@ from datetime import datetime, timezone
 import numpy as np
 
 from ..config.settings import COMPACTION_ENABLED
+from ..core.compaction import _numeric_facts, _polarity, _tokens
 from ..core.memory import MARMMemory, _safe_print
 from ..core.redaction import redact_secrets
+
+
+def _literal_copy(short: str, long: str) -> bool:
+    return (
+        bool(short.strip())
+        and re.search(
+            r"(?<!\w)(?<!\w[._#/-])" + re.escape(short) + r"(?!\w)(?![._#/-]\w)",
+            long,
+        )
+        is not None
+    )
 
 
 def centroid_extract_summary(
     memories: list[tuple[str, bytes | None]],
     top_n: int = 5,
     dedup_threshold: float = 0.85,
+    timestamps: list[str | None] | None = None,
 ) -> str:
-    """Extractive summary via embedding centroid with cosine-distance dedup.
+    """Rank up to top_n memories by centroid similarity, then timestamp.
 
-    Ranks source memories by similarity to their centroid, then selects
-    top_n most representative — skipping any that are >dedup_threshold
-    similar to an already-selected memory.
+    Only a literal containing copy may replace a source, with numeric and
+    known-polarity preservation. Different statements retain their history;
+    top_n still bounds the number selected, not the number of facts preserved.
     """
-    parsed: list[tuple[str, np.ndarray]] = []
+    if timestamps is not None and len(timestamps) != len(memories):
+        raise ValueError("timestamps must align with memories")
+
+    def recorded_at(index: int) -> float:
+        value = timestamps[index] if timestamps is not None else None
+        try:
+            date = datetime.fromisoformat(value or "")
+            if date.tzinfo is None:
+                date = date.replace(tzinfo=timezone.utc)
+            return date.timestamp()
+        except (TypeError, ValueError, OverflowError, OSError):
+            return float("-inf")
+
+    parsed: list[tuple[str, np.ndarray, float]] = []
     unembedded: list[str] = []
-    for content, e in memories:
+    for index, (content, e) in enumerate(memories):
         if not e:
             unembedded.append(content)
             continue
         try:
-            parsed.append((content, np.frombuffer(e, dtype=np.float32)))
+            parsed.append(
+                (content, np.frombuffer(e, dtype=np.float32), recorded_at(index))
+            )
         except Exception:
             unembedded.append(content)
 
     if not parsed:
         return "\n\n".join(unembedded[:top_n])
 
-    dims = [v.shape[0] for _, v in parsed]
+    dims = [v.shape[0] for _, v, _ in parsed]
     expected_dim = max(set(dims), key=dims.count)
-    embedded = [(c, v) for c, v in parsed if v.shape[0] == expected_dim]
-    unembedded.extend(c for c, v in parsed if v.shape[0] != expected_dim)
+    embedded = [(c, v, t) for c, v, t in parsed if v.shape[0] == expected_dim]
+    unembedded.extend(c for c, v, _ in parsed if v.shape[0] != expected_dim)
 
-    contents = [c for c, _ in embedded]
-    vecs = np.array([v for _, v in embedded], dtype=np.float32)
+    contents = [c for c, _, _ in embedded]
+    vecs = np.array([v for _, v, _ in embedded], dtype=np.float32)
 
     norms = np.linalg.norm(vecs, axis=1, keepdims=True)
     norms = np.where(norms == 0, 1.0, norms)
@@ -54,19 +83,58 @@ def centroid_extract_summary(
         centroid = centroid / centroid_mag
 
     scores = vecs_norm @ centroid
-    ranked = np.argsort(scores)[::-1]
+    ranked = sorted(
+        range(len(embedded)),
+        key=lambda i: (float(scores[i]), embedded[i][2]),
+        reverse=True,
+    )
 
-    selected_content: list[str] = []
-    selected_vecs: list[np.ndarray] = []
+    numeric_facts = [_numeric_facts(content) for content in contents]
+    tokens = [_tokens(content) for content in contents]
+    selected: list[int] = []
+    # Repeat until nothing changes: a memory dropped as a near-copy of one
+    # that was later replaced must be judged again against what is kept.
+    # Replacements only lengthen a slot, so this terminates.
+    changed = True
+    while changed:
+        changed = False
+        for idx in ranked:
+            if idx in selected:
+                continue
+            vec = vecs_norm[idx]
+            duplicate_of = next(
+                (
+                    k
+                    for k, chosen in enumerate(selected)
+                    if float(vecs_norm[chosen] @ vec) > dedup_threshold
+                    and bool(contents[chosen].strip())
+                    and bool(contents[idx].strip())
+                    and _polarity(tokens[chosen]) == _polarity(tokens[idx])
+                    and (
+                        (
+                            _literal_copy(contents[chosen], contents[idx])
+                            and numeric_facts[chosen] <= numeric_facts[idx]
+                        )
+                        or (
+                            _literal_copy(contents[idx], contents[chosen])
+                            and numeric_facts[idx] <= numeric_facts[chosen]
+                        )
+                    )
+                ),
+                None,
+            )
+            if duplicate_of is not None:
+                # The summary replaces its sources, so of two near-copies keep
+                # the one that says more.
+                if len(contents[idx]) > len(contents[selected[duplicate_of]]):
+                    selected[duplicate_of] = idx
+                    changed = True
+                continue
+            if len(selected) < top_n:
+                selected.append(idx)
+                changed = True
 
-    for idx in ranked:
-        if len(selected_content) >= top_n:
-            break
-        vec = vecs_norm[idx]
-        if selected_vecs and np.any(np.array(selected_vecs) @ vec > dedup_threshold):
-            continue
-        selected_content.append(contents[idx])
-        selected_vecs.append(vec)
+    selected_content = [contents[idx] for idx in selected]
 
     remaining = top_n - len(selected_content)
     if remaining > 0:
@@ -128,7 +196,7 @@ async def process_nudge_exhausted_candidates(memory_store: MARMMemory) -> int:
 
             with memory_store.get_connection() as conn:
                 memory_rows = conn.execute(
-                    "SELECT content, embedding FROM memories "
+                    "SELECT content, embedding, timestamp FROM memories "
                     f"WHERE session_name = ? AND id IN ({placeholders})",
                     [session_name, *source_ids],
                 ).fetchall()
@@ -150,6 +218,7 @@ async def process_nudge_exhausted_candidates(memory_store: MARMMemory) -> int:
             summary = await asyncio.to_thread(
                 centroid_extract_summary,
                 [(row[0], row[1]) for row in memory_rows],
+                timestamps=[row[2] for row in memory_rows],
             )
 
             now_inner = datetime.now(timezone.utc).isoformat()

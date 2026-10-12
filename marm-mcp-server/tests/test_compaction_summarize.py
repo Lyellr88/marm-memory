@@ -113,15 +113,15 @@ class TestCentroidExtractSummary:
             return (v / np.linalg.norm(v)).tobytes()
 
         memories = [
-            ("near-1", near(1)),
-            ("near-2", near(2)),
-            ("near-3", near(3)),
+            ("Release plan approved", near(1)),
+            ("Release plan approved by operations", near(2)),
+            ("Release plan approved by operations unanimously", near(3)),
             ("different-A", _make_vec(seed=200).tobytes()),
             ("different-B", _make_vec(seed=201).tobytes()),
         ]
         result = centroid_extract_summary(memories, top_n=3, dedup_threshold=0.85)
         parts = result.split("\n\n")
-        near_count = sum(1 for p in parts if p.startswith("near-"))
+        near_count = sum(p.startswith("Release plan approved") for p in parts)
         assert near_count == 1
         assert len(parts) == 3
 
@@ -402,3 +402,266 @@ async def test_a_server_side_summary_is_staged_redacted(mem, monkeypatch):
     summary = _get_staging_row(mem, candidate_id)[1]
     assert summary and key not in summary
     assert "[redacted:aws-access-key]" in summary
+
+
+def test_dedup_keeps_the_copy_that_contains_the_other():
+    vec = _make_vec(seed=7).tobytes()
+    short = "relicensed to GPL-3.0-or-later"
+    full = short + " in v2.2.9 as a derivative work of GPL emulators"
+
+    for memories in ([(short, vec), (full, vec)], [(full, vec), (short, vec)]):
+        assert centroid_extract_summary(memories, top_n=5) == full
+
+
+def test_dedup_compares_against_the_copy_it_kept():
+    def at(degrees: float) -> bytes:
+        v = np.zeros(384, dtype=np.float32)
+        v[0], v[1] = np.cos(np.radians(degrees)), np.sin(np.radians(degrees))
+        return v.tobytes()
+
+    short = "Release plan approved"
+    kept = "Release plan approved by operations"
+    other = "Release plan approved for teams"
+    # `other` is similar only to `short`, which `kept` replaces.
+    memories = [(short, at(0)), (kept, at(20)), (other, at(-30))]
+
+    result = centroid_extract_summary(memories, top_n=5)
+
+    assert kept in result
+    assert other in result
+
+
+def test_a_memory_dropped_before_a_replacement_is_reconsidered():
+    def at(degrees: float) -> bytes:
+        v = np.zeros(384, dtype=np.float32)
+        v[0], v[1] = np.cos(np.radians(degrees)), np.sin(np.radians(degrees))
+        return v.tobytes()
+
+    first = "Release plan approved."
+    dropped = "Release plan approved"
+    longest = "Release plan approved unanimously by operations"
+    # Ranked 0, -18, +20: -18 is dropped against 0, then +20 replaces 0, and
+    # -18 is not a near-copy of +20.
+    memories = [(first, at(0)), (dropped, at(-18)), (longest, at(20))]
+
+    result = centroid_extract_summary(memories, top_n=5)
+
+    assert longest in result
+    assert dropped in result
+
+
+@pytest.mark.parametrize(
+    "prefix",
+    [
+        "",
+        "The production cache policy shared across all running application workers says ",
+    ],
+)
+@pytest.mark.parametrize("values", [(10, 30, 60), (-1, 1, 2), ("0.5", "0.7", "0.9")])
+def test_fallback_preserves_conflicting_short_numeric_values(prefix, values):
+    vec = _make_vec(seed=7).tobytes()
+    texts = [f"{prefix}Cache timeout is {value} seconds." for value in values]
+    for ordered in (texts, list(reversed(texts))):
+        result = centroid_extract_summary([(text, vec) for text in ordered], top_n=5)
+        assert all(text in result for text in texts)
+
+
+@pytest.mark.parametrize(
+    "short,long",
+    [
+        ("Cache timeout is 10", "Cache timeout is 100"),
+        ("Cache timeout is -1", "Cache timeout is -10"),
+        ("Cache timeout is 0.5", "Cache timeout is 0.55"),
+    ],
+)
+@pytest.mark.parametrize(
+    "prefix",
+    [
+        "",
+        "The production cache policy shared across all running application workers says ",
+    ],
+)
+@pytest.mark.parametrize("min_containment", [0, 0.9])
+def test_numeric_prefix_is_not_a_literal_fact_superset(
+    short, long, prefix, min_containment, monkeypatch
+):
+    from marm_mcp_server.config import settings
+
+    monkeypatch.setattr(settings, "COMPACTION_MIN_CONTAINMENT", min_containment)
+    short, long = prefix + short, prefix + long
+    vec = _make_vec(seed=7).tobytes()
+    for texts in ([short, long], [long, short]):
+        result = centroid_extract_summary([(text, vec) for text in texts], top_n=5)
+        assert set(result.split("\n\n")) == {short, long}
+
+
+def test_fallback_preserves_distinct_nonnumeric_facts_with_identical_embeddings():
+    vec = _make_vec(seed=7).tobytes()
+    texts = [
+        "The production cache uses local storage.",
+        "The production database requires remote replication.",
+    ]
+    for ordered in (texts, list(reversed(texts))):
+        result = centroid_extract_summary([(text, vec) for text in ordered], top_n=5)
+        assert set(result.split("\n\n")) == set(texts)
+
+
+def test_fallback_preserves_nonliteral_restatements():
+    vec = _make_vec(seed=7).tobytes()
+    texts = ["Release plan approved", "Approved release plan"]
+    for ordered in (texts, list(reversed(texts))):
+        result = centroid_extract_summary([(text, vec) for text in ordered], top_n=5)
+        assert set(result.split("\n\n")) == set(texts)
+
+
+def test_fallback_zero_containment_still_requires_literal_copy(monkeypatch):
+    from marm_mcp_server.config import settings
+
+    monkeypatch.setattr(settings, "COMPACTION_MIN_CONTAINMENT", 0)
+    vec = _make_vec(seed=7).tobytes()
+    result = centroid_extract_summary(
+        [
+            ("The cache uses local storage.", vec),
+            ("Database requires replication.", vec),
+        ],
+        top_n=5,
+    )
+    assert len(result.split("\n\n")) == 2
+
+
+@pytest.mark.parametrize(
+    "pair",
+    [
+        ("Migration is ok", "Migration is not ok"),
+        ("The ingest worker is up.", "The ingest worker is down."),
+        ("Feature flag retry_budget is on.", "Feature flag retry_budget is off."),
+        ("Бюджет повторов увеличен.", "Политика очистки кеша изменена."),
+        ("重试预算已提高。", "缓存淘汰策略已更改。"),
+        ("Retry budget raised.", "Политика кеша изменена."),
+        ("db up, ok to go", "api is on, we go"),
+        ("Release plan approved", "Approved release plan"),
+        ("...", "!!!"),
+    ],
+)
+@pytest.mark.parametrize(
+    "prefix",
+    [
+        "",
+        "The production operational policy shared across every running application service and deployment environment states that ",
+    ],
+)
+def test_fallback_preserves_nonliteral_and_conflicting_statements(pair, prefix):
+    vec = _make_vec(seed=7).tobytes()
+    texts = [prefix + text for text in pair]
+    for ordered in (texts, list(reversed(texts))):
+        result = centroid_extract_summary([(text, vec) for text in ordered], top_n=5)
+        assert set(result.split("\n\n")) == set(texts)
+
+
+def test_fallback_equal_similarity_prefers_newer_without_dropping_older():
+    vec = _make_vec(seed=7).tobytes()
+    older, newer = "Migration is not ok", "Migration is ok"
+    for texts, timestamps in [
+        ([older, newer], ["2026-10-10T12:00:00+00:00", "2026-10-11T12:00:00+00:00"]),
+        ([newer, older], ["2026-10-11T12:00:00+00:00", "2026-10-10T12:00:00+00:00"]),
+    ]:
+        result = centroid_extract_summary(
+            [(text, vec) for text in texts], top_n=5, timestamps=timestamps
+        )
+        assert result.split("\n\n") == [newer, older]
+
+
+def test_fallback_invalid_timestamp_ranks_oldest():
+    vec = _make_vec(seed=7).tobytes()
+    result = centroid_extract_summary(
+        [("Older different statement", vec), ("Recent correction", vec)],
+        timestamps=["invalid", "2026-10-11T12:00:00Z"],
+    )
+    assert result.split("\n\n") == ["Recent correction", "Older different statement"]
+
+
+def test_fallback_newer_short_copy_does_not_erase_extra_facts():
+    vec = _make_vec(seed=7).tobytes()
+    short = "Release plan approved"
+    full = short + ". Operations retains the audit history."
+    assert (
+        centroid_extract_summary(
+            [(full, vec), (short, vec)],
+            timestamps=["2026-10-10T12:00:00Z", "2026-10-11T12:00:00Z"],
+        )
+        == full
+    )
+
+
+@pytest.mark.asyncio
+async def test_fallback_worker_ranks_stored_timestamps(mem, monkeypatch):
+    monkeypatch.setattr(compaction_summarize, "COMPACTION_ENABLED", True)
+    mem._encoder_failed = True
+    vec = _make_vec(seed=7)
+    older = _insert_memory(mem, "test", "Migration is not ok", vec)
+    newer = _insert_memory(mem, "test", "Migration is ok", vec)
+    with mem.get_connection() as conn:
+        conn.execute(
+            "UPDATE memories SET timestamp = ? WHERE id = ?",
+            ("2026-10-10T12:00:00Z", older),
+        )
+        conn.execute(
+            "UPDATE memories SET timestamp = ? WHERE id = ?",
+            ("2026-10-11T12:00:00Z", newer),
+        )
+    candidate = _insert_nudge_exhausted(mem, "test", [older, newer])
+    assert await process_nudge_exhausted_candidates(mem) == 1
+    assert _get_staging_row(mem, candidate)[1].split("\n\n") == [
+        "Migration is ok",
+        "Migration is not ok",
+    ]
+
+
+@pytest.mark.parametrize(
+    "pair", [("The user is a man", "The user is a manager"), ("缓存", "缓存策略")]
+)
+def test_fallback_literal_copy_requires_word_boundaries(pair):
+    vec = _make_vec(seed=7).tobytes()
+    for ordered in (pair, tuple(reversed(pair))):
+        result = centroid_extract_summary([(text, vec) for text in ordered])
+        assert set(result.split("\n\n")) == set(pair)
+
+
+def test_fallback_malformed_timestamp_does_not_discard_valid_embedding():
+    def at(degrees):
+        vec = np.zeros(384, dtype=np.float32)
+        vec[0], vec[1] = np.cos(np.radians(degrees)), np.sin(np.radians(degrees))
+        return vec.tobytes()
+
+    assert (
+        centroid_extract_summary(
+            [
+                ("The central fact", at(0)),
+                ("Unrelated side fact", at(60)),
+                ("Another side fact", at(-60)),
+            ],
+            top_n=1,
+            timestamps=[123, None, None],
+        )
+        == "The central fact"
+    )
+
+
+@pytest.mark.parametrize(
+    "pair",
+    [
+        ("ok", "not-ok"),
+        ("compliant", "non-compliant"),
+        ("enabled", "not_enabled"),
+        ("safe", "not/safe"),
+    ],
+)
+def test_fallback_never_treats_compound_suffix_as_a_literal_copy(pair):
+    from marm_mcp_server.services.compaction_summarize import _literal_copy
+
+    assert not _literal_copy(pair[0], pair[1])
+    vec = _make_vec(seed=7).tobytes()
+    for ordered in (pair, tuple(reversed(pair))):
+        assert set(
+            centroid_extract_summary([(text, vec) for text in ordered]).split("\n\n")
+        ) == set(pair)
